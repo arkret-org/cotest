@@ -18,7 +18,8 @@
 # A finding is not automatically a leak: it depends on what the artifact is.
 #
 #   * `recovery_private_material` — mnemonics, seeds, PRKs, private JWK members,
-#     plaintext keybags, MLS private state. These are NEVER legitimate, in any
+#     plaintext keybags, MLS private state and provider private salt/pepper.
+#     These are NEVER legitimate in any published artifact,
 #     artifact. Always fail.
 #   * `credential_exposure` — bearer tokens, JWS, signed links, authorization
 #     fields. In a log or a telemetry stream these are a leak. In a durable
@@ -37,9 +38,14 @@
 # Callers declare the class per scan root. The default is `log_or_telemetry`,
 # the strict side, so a root added without thought fails closed.
 
-$script:JsonSecretFieldNames = "authorization|access_token|token|push_key|invite_token|signed_link|jws|sig|password|secret|secret_b64u|private_key|seed|mnemonic|recovery_key|recovery_phrase|recovery_secret|root_seed|root_private_key|hkdf_prk|prk|credential|plaintext_keybag|keybag_secret|mls_secret|epoch_secret|application_secret|confirmation_key|membership_key|init_secret|joiner_secret|welcome_secret|private_state"
-$script:QuerySecretFieldNames = "access_token|token|push_key|invite_token|signed_link|jws|sig|password|secret|secret_b64u|private_key|seed|mnemonic|recovery_key|recovery_phrase|recovery_secret|root_seed|root_private_key|hkdf_prk|prk|credential|plaintext_keybag|keybag_secret|mls_secret|epoch_secret|application_secret|confirmation_key|membership_key|init_secret|joiner_secret|welcome_secret|private_state"
-$script:RecoveryPrivateMaterialFieldNames = "private_key|seed|mnemonic|recovery_key|recovery_phrase|recovery_secret|root_seed|root_private_key|hkdf_prk|prk|plaintext_keybag|keybag_secret|mls_secret|epoch_secret|application_secret|confirmation_key|membership_key|init_secret|joiner_secret|welcome_secret|private_state"
+$script:JsonSecretFieldNames = "authorization|access_token|token|push_key|invite_token|oob_code|token_salt|code_salt|pepper|signing_seed|signed_link|jws|sig|password|secret|secret_b64u|private_key|seed|mnemonic|recovery_key|recovery_phrase|recovery_secret|root_seed|root_private_key|hkdf_prk|prk|credential|plaintext_keybag|keybag_secret|mls_secret|epoch_secret|application_secret|confirmation_key|membership_key|init_secret|joiner_secret|welcome_secret|private_state"
+$script:QuerySecretFieldNames = "access_token|token|push_key|invite_token|oob_code|token_salt|code_salt|pepper|signing_seed|signed_link|jws|sig|password|secret|secret_b64u|private_key|seed|mnemonic|recovery_key|recovery_phrase|recovery_secret|root_seed|root_private_key|hkdf_prk|prk|credential|plaintext_keybag|keybag_secret|mls_secret|epoch_secret|application_secret|confirmation_key|membership_key|init_secret|joiner_secret|welcome_secret|private_state"
+$script:RecoveryPrivateMaterialFieldNames = "private_key|seed|signing_seed|token_salt|code_salt|pepper|mnemonic|recovery_key|recovery_phrase|recovery_secret|root_seed|root_private_key|hkdf_prk|prk|plaintext_keybag|keybag_secret|mls_secret|epoch_secret|application_secret|confirmation_key|membership_key|init_secret|joiner_secret|welcome_secret|private_state"
+# Provider custody uses byte arrays as well as encoded strings. IDs such as
+# pepper_id and token_salt_id are public metadata and never match exact fields.
+$script:PrivateByteArrayPattern = '(?i)"(?:' + $script:RecoveryPrivateMaterialFieldNames + ')"\s*:\s*\[\s*\d+(?:\s*,\s*\d+){15,}\s*\]'
+$script:InviteDeliveryCodePattern = '\bYour invitation code is (?:[A-Z2-9]{40}|[A-Z2-9]{16}_[A-Z2-9]{8})\.'
+$script:InviteTokenPathPattern = '(/_arkret/open/third-party-invites/present/)(?:[A-Z2-9]{40}|[A-Z2-9]{16}_[A-Z2-9]{8})(?![A-Za-z0-9_-])'
 # Closed shapes emitted by Arkret sanitizers. The delimiter/end checks at each
 # use site are intentional: `[redacted]secret` is still a credential, while an
 # exact marker is already-safe evidence and must not fail a second scan.
@@ -148,6 +154,9 @@ function ConvertTo-RedactedLine {
     $preview = $preview -replace "(?i)((?:^|\s)dpop\s*:\s*)(?!$($script:RedactedValuePattern)(?:\s|$))\S+", '$1[redacted]'
     $preview = $preview -replace "(?i)(`"($script:JsonSecretFieldNames)`"\s*:\s*`")(?!$($script:RedactedValuePattern)`")([^`"]+)(`")", '$1[redacted]$4'
     $preview = $preview -replace "(?i)((?:^|[?&\s])($script:QuerySecretFieldNames)=)(?!$($script:RedactedValuePattern)(?:$script:QueryValueDelimiterPattern)|%5[Bb]redacted%5[Dd](?:$script:QueryValueDelimiterPattern))([^&\s`"\\]+)", '$1[redacted]'
+    $preview = $preview -replace $script:PrivateByteArrayPattern, '"private_material":"[redacted]"'
+    $preview = $preview -replace $script:InviteDeliveryCodePattern, 'Your invitation code is [redacted].'
+    $preview = $preview -replace $script:InviteTokenPathPattern, '$1[redacted]'
     $preview = $preview -replace "(?i)(\b($script:RecoveryPrivateMaterialFieldNames)\b\s*(?:=|:)\s*)(?!$($script:RedactedValuePattern)(?:\s|;|$))(?:'[^']*'|`"[^`"]*`"|\S+)", '$1[redacted]'
     # Over-redacts non-mnemonic candidates on purpose: a preview may lose
     # harmless words but must never keep a real mnemonic.
@@ -186,6 +195,9 @@ function Get-SecretLeakPatterns {
             $line -notmatch '^\s*(?:>\s*)?\d+\s*\|\s*dpop:\s*[A-Za-z_$][A-Za-z0-9_$]*\(\{\s*$'
         } },
         [pscustomobject]@{ name = "recovery_private_material_field"; category = $script:SecretCategoryPrivateMaterial; pattern = "(?i)`"($script:RecoveryPrivateMaterialFieldNames)`"\s*:\s*`"(?!$($script:RedactedValuePattern)`")[^`"]+`""; validate = $null },
+        [pscustomobject]@{ name = "private_material_byte_array"; category = $script:SecretCategoryPrivateMaterial; pattern = $script:PrivateByteArrayPattern; validate = $null },
+        [pscustomobject]@{ name = "invite_delivery_code"; category = $script:SecretCategoryCredential; pattern = $script:InviteDeliveryCodePattern; validate = $null },
+        [pscustomobject]@{ name = "invite_token_in_path"; category = $script:SecretCategoryCredential; pattern = $script:InviteTokenPathPattern; validate = $null },
         [pscustomobject]@{ name = "recovery_private_material_assignment"; category = $script:SecretCategoryPrivateMaterial; pattern = "(?i)\b($script:RecoveryPrivateMaterialFieldNames)\b\s*(?:=|:)\s*(?!$($script:RedactedValuePattern)(?:\s|;|$))(?:'[^']+'|`"[^`"]+`"|[A-Za-z0-9_-]{16,})"; validate = $null },
         [pscustomobject]@{ name = "jwk_private_member"; category = $script:SecretCategoryPrivateMaterial; pattern = $script:JwkPrivateMemberPattern; validate = $null },
         [pscustomobject]@{ name = "plaintext_keybag_object"; category = $script:SecretCategoryPrivateMaterial; pattern = $script:PlaintextKeybagPattern; validate = $null },

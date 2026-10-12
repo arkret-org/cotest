@@ -79,6 +79,21 @@ class PatchCoauthConfigTests(unittest.TestCase):
             )
             self.assertNotIn("password_login_session_grants_enabled:", arkret)
 
+            self.assertNotIn("third_party_invite_provider:", result)
+            governance = "postgres://test:governance@127.0.0.1/owning_station"
+            with patch("sys.argv", arguments + [
+                "--third-party-invite-governance-database-url", governance,
+            ]):
+                self.assertEqual(MODULE.main(), 0)
+            enabled = output.read_text(encoding="utf-8")
+            self.assertIn(f"governance_database_url: {json.dumps(governance)}", enabled)
+            for invalid in ("   ", "postgres://test:1amTester!@127.0.0.1/test"):
+                with patch("sys.argv", arguments + [
+                    "--third-party-invite-governance-database-url", invalid,
+                ]):
+                    with self.assertRaisesRegex(SystemExit, "explicit owning-Station governance store"):
+                        MODULE.main()
+
             with patch("sys.argv", arguments + [
                 "--mock-email-base-url", "http://127.0.0.1:4567",
             ]):

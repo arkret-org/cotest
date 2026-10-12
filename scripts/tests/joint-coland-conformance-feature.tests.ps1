@@ -53,4 +53,19 @@ Assert-True `
     ($producerProofMatch.Value -notmatch '\b(?:auth_context|authority_refs|key_epoch|key_id)\b') `
     "producer proof must not revive removed admission-context fields"
 
+# Bind the feature discriminator to a route that still exists in the selected
+# sibling source, rather than retaining a retired operation's literal.
+$colandHttp = Join-Path $PSScriptRoot "..\..\..\coland\crates\http\src\routing"
+$module = Get-Content -Raw -LiteralPath (Join-Path $colandHttp "mod.rs")
+$handlers = Get-Content -Raw -LiteralPath (Join-Path $colandHttp "conformance\handlers.rs")
+$routes = Get-Content -Raw -LiteralPath (Join-Path $colandHttp "conformance\mod.rs")
+Assert-True ($module -match '#\[cfg\(any\(test, feature = "conformance-harness"\)\)\]\s*(?:pub\([^)]*\)\s+)?mod conformance;') `
+    "the discriminator module must be compiled only for the harness feature or tests"
+Assert-True ($handlers -match 'operation_id = "org\.arkret\.coland\.conformance\.encode"') `
+    "the selected marker must identify an actual current operation"
+Assert-True ($routes -match 'with_path\("encode"\)\.post\(handlers::encode\)') `
+    "the selected operation must remain mounted in the conformance router"
+Assert-True ($runner -notmatch '\$colandConformanceHarnessMarker = "org\.arkret\.coland\.conformance\.realm_state_snapshot"') `
+    "a retired route must not identify the current harness binary"
+
 Write-Host "joint-coland-conformance-feature.tests.ps1: PASS"

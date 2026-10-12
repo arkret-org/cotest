@@ -16,14 +16,18 @@ foreach ($file in Get-ChildItem -LiteralPath $testsRoot -Recurse -File -Filter "
     # actual Garth constructor binding before applying the UI name heuristic;
     # mixed specs keep their independently named product page calls.
     $garthClientNames = @([regex]::Matches($source, '\b(?:const|let)\s+([A-Za-z_$][A-Za-z0-9_$]*)\s*=\s*new\s+GarthTestClient\s*\(') | ForEach-Object { $_.Groups[1].Value })
-    $usesGarthRuntime = $garthClientNames.Count -gt 0
+    $usesAgentRuntime = ($source -match '\.pairAgentRuntime\s*\(') -and ($source -match '\.submitAgentMessage\s*\(')
+    $usesGarthRuntime = $garthClientNames.Count -gt 0 -or $usesAgentRuntime
     $uiSource = $source
     foreach ($clientName in $garthClientNames) {
         $uiSource = [regex]::Replace($uiSource, '\b' + [regex]::Escape($clientName) + '\.createRealm\s*\(', '.createGarthRealm(')
     }
     $usesProductUi = $uiSource -match 'open(?:Dpop)?UserPage|openUserPage|\.goto(?:Home|Login|Setup|Timeline)|\.createRealm\(|\.sendTimelineMessage\('
     $usesRawHttp = $source -match '\brequest\.(?:get|post|put|patch|delete|fetch)\('
-    $usesCanonicalProvisioning = $usesGarthRuntime -or ($source -match 'ProvisioningBridge|canonicalProvisioning|provisioning-fixture')
+    # Agent pairing consumes an existing accepted fixture; the bridge class
+    # alone does not mean that this spec executes principal founding itself.
+    $usesCanonicalProvisioning = $garthClientNames.Count -gt 0 -or ($source -match '\.(?:provisionUnboundAccount|createAccountHandoff|foundPrincipal|recoverPrincipal)\s*\(|canonicalProvisioning|provisioning-fixture')
+    $usesRustBridge = $usesCanonicalProvisioning -or $usesAgentRuntime
     # The joint fixture injects the founding sessions before the spec body.
     # A later OAuth ceremony does not remove that earlier evidence boundary.
     $usesJointSessionFixture = $source -match 'helpers/joint-fixture' -and $source -match '\bjoint(?:Users|Realm)\b'
@@ -82,12 +86,12 @@ foreach ($file in Get-ChildItem -LiteralPath $testsRoot -Recurse -File -Filter "
     if ($usesGarthRuntime) { $producers.Add("garth_runtime") }
     if ($source -match 'cotestWire|signedEventEnvelope|canonicalJson') { $producers.Add("cotest_wire_oracle") }
     if ($usesRawHttp) { $producers.Add("raw_http_fixture") }
-    if ($usesCanonicalProvisioning) { $producers.Add("rust_provisioning_bridge") }
+    if ($usesRustBridge) { $producers.Add("rust_provisioning_bridge") }
     if ($producers.Count -eq 0) { $producers.Add("fixture_or_not_applicable") }
 
     $evidenceClass = if ($scenarioKey -eq "identity/recovery-key-to-encrypted-realm") {
         "live-product"
-    } elseif ($usesCanonicalProvisioning) {
+    } elseif ($usesCanonicalProvisioning -or $usesAgentRuntime) {
         # Real Coauth, real Coland, a real account and a real PCR genesis. The
         # `harness/` blanket below covers specs that only exercise fixtures;
         # this one exercises server contracts through the canonical chain.

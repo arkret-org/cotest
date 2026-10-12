@@ -18,6 +18,7 @@ type CotestWireCommand =
   | "mimi-request-consent-proof"
   | "mls-keypackage-upload-entry"
   | "mls-keypackages"
+  | "mls-genesis-material"
   | "mls-genesis"
   | "mls-keypackage-claim-request"
   | "mls-add-member"

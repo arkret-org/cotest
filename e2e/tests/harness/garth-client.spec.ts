@@ -9,6 +9,9 @@
 
 import { readFile, rename, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { isDeepStrictEqual } from "node:util";
+import { ProvisioningBridge } from "../../helpers/provisioning-bridge";
+import { newDeviceId } from "../../helpers/ids";
 
 import { expect, test } from "../../helpers/arkret-test";
 import {
@@ -102,6 +105,16 @@ test("Garth commits a two-member Realm, exchanges messages and resumes a rebuilt
     const resumed = await client.syncAccount(bob, realm);
     expect(resumed.hasCursor).toBe(true);
     expect(resumed.eventIds, "rebuilt runtime resumes the subscription and receives a new committed message").toContain(third.eventId);
+    const beforeCold = await client.durableCursor(bob);
+    const processRestart = await client.killAndReopen();
+    expect(processRestart.newPid).not.toBe(processRestart.oldPid);
+    expect(await client.durableCursor(bob), "whole bridge process restores its original committed cursor").toBe(beforeCold);
+    expect((await client.retainedMessage(bob, third.eventId)).commit.commit_id).toBe(third.commitId);
+    const fourth = await client.sendMessage(bob, realm, "bob after process SIGKILL");
+    expect((await client.readMessages(alice, realm)).map(row => row.event.event_id))
+      .toEqual([first.eventId, second.eventId, third.eventId, fourth.eventId]);
+    const coldResumed = await client.syncAccount(bob, realm);
+    expect(coldResumed.eventIds, "new process receives real committed delta with original cursor").toContain(fourth.eventId);
     const custody = client.custodyPaths(bob);
     if (process.platform !== "win32") {
       expect((await stat(custody.identitySnapshotPath)).mode & 0o077).toBe(0);
@@ -113,12 +126,12 @@ test("Garth commits a two-member Realm, exchanges messages and resumes a rebuilt
     await rename(custody.identitySnapshotPath, movedSnapshot);
     try {
       await expect(client.cursorAfterRestart(bob, realm)).rejects.toThrow("durable accepted identity snapshot unavailable");
-      expect(await readFile(queuePath), "missing custody causes no message, receipt, cache or cursor writes")
-        .toEqual(storedBeforeFailure);
+      expect((await readFile(queuePath)).equals(storedBeforeFailure),
+        "missing custody causes no message, receipt, cache or cursor writes").toBe(true);
     } finally {
       await rename(movedSnapshot, custody.identitySnapshotPath);
     }
-    expect(await client.cursorAfterRestart(bob, realm)).toBe(resumed.cursor);
+    expect(await client.cursorAfterRestart(bob, realm)).toBe(coldResumed.cursor);
     expect((await client.retainedMessage(bob, third.eventId)).commit.commit_id).toBe(third.commitId);
     const snapshotBytes = await readFile(custody.identitySnapshotPath);
     for (const corruptedKey of ["missing-grant", "session", "event"] as const) {
@@ -133,7 +146,8 @@ test("Garth commits a two-member Realm, exchanges messages and resumes a rebuilt
         await expect(client.cursorAfterRestart(bob, realm)).rejects.toThrow(corruptedKey === "missing-grant"
           ? "durable accepted initial session grant unavailable"
           : corruptedKey === "session" ? "session holder binding differs" : "private key or trust domain differs");
-        expect(await readFile(queuePath), "wrong key source cannot write durable Garth state").toEqual(queueBefore);
+        expect((await readFile(queuePath)).equals(queueBefore),
+          "wrong key source cannot write durable Garth state").toBe(true);
       } finally {
         await writeFile(custody.identitySnapshotPath, snapshotBytes);
       }
@@ -144,5 +158,59 @@ test("Garth commits a two-member Realm, exchanges messages and resumes a rebuilt
 
   } finally {
     await client.dispose();
+  }
+});
+
+// Independent host accepted-before-persist cut; not the issuer response-loss suite.
+test("accepted registration survives whole-process loss before host persistence @fully-implemented @garth-runtime @provisioning-cold", async () => {
+  test.setTimeout(180_000);
+  expect(coauthBaseUrl(), "canonical accepted custody requires Coauth").toBeTruthy();
+  expect(coauthOidcClientId(), "canonical accepted custody requires OIDC").toBeTruthy();
+  const endpoints = { coauthBaseUrl: coauthBaseUrl()!, colandBaseUrl: colandBaseUrl(), mockEmailBaseUrl: mockEmailBaseUrl() };
+  let bridge = ProvisioningBridge.start();
+  try {
+    const session = await bridge.custodySession();
+    // A valid but absent run-owned address must fail closed, never create a replacement store.
+    const absent = ProvisioningBridge.start(`ak:request:01904100-0000-7000-8000-${newDeviceId().slice(-12)}`);
+    try { await expect(absent.custodySession()).rejects.toThrow("cotest-provision exited"); }
+    finally { await absent.dispose(); }
+    const station = await bridge.describeStation(endpoints);
+    const handle = `cold-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    await bridge.provisionUnboundAccount(endpoints, { handle, password: "1amTester!" });
+    const handoff = await bridge.createAccountHandoff({ coauthBaseUrl: endpoints.coauthBaseUrl,
+      clientId: coauthOidcClientId()!, audienceId: station.serviceId, deviceLabel: handle });
+    const accepted = await bridge.acceptBeforePersist({ handoffId: handoff.handoffId, endpoints,
+      trustDomain: station.trustDomain, audienceId: station.serviceId,
+      deviceId: newDeviceId(), displayName: "Host persistence loss" });
+    const before = await bridge.registrationCustody(handoff.handoffId);
+    expect(before.requestDigest).toMatch(/^[a-f0-9]{64}$/);
+    expect(before.acceptedPersisted, "accepted outcome has not entered host custody at the cut").toBe(false);
+    expect(accepted.pid).toBe(session.pid);
+    await bridge.kill();
+    bridge = ProvisioningBridge.start(session.sessionId);
+    const reopened = await bridge.custodySession();
+    expect(reopened.sessionId).toBe(session.sessionId);
+    expect(reopened.pid).not.toBe(session.pid);
+    const diskBefore = await bridge.registrationCustody(handoff.handoffId);
+    expect(diskBefore).toEqual(before);
+    const recovered = await bridge.recoverPrincipal(handoff.handoffId);
+    expect(recovered.principal_id).toBe(accepted.outcome.principal_id);
+    expect(isDeepStrictEqual(recovered.binding_receipt, accepted.outcome.binding_receipt),
+      "recovery retains the complete original binding receipt").toBe(true);
+    expect(isDeepStrictEqual(recovered.pcr_genesis_commits, accepted.outcome.pcr_genesis_commits),
+      "recovery retains the complete original PCR Commit receipts").toBe(true);
+    expect(isDeepStrictEqual(recovered.accepted_outcome, accepted.outcome), "exact replay returns the original complete receipt/grant/PCR outcome").toBe(true);
+    expect(await bridge.registrationCustody(handoff.handoffId)).toEqual({ requestDigest: before.requestDigest, acceptedPersisted: true });
+    const replay = await bridge.recoverPrincipal(handoff.handoffId);
+    expect(isDeepStrictEqual(replay, recovered), "repeat recovery returns the exact original complete outcome").toBe(true);
+    expect((await bridge.readSelfAccountViewer({ handoffId: handoff.handoffId, colandBaseUrl: endpoints.colandBaseUrl })).status).toBe(200);
+    const opened = await bridge.openGarthClient({ handoffId: handoff.handoffId,
+      colandBaseUrl: endpoints.colandBaseUrl, accountId: recovered.account_id as { principal_id: string; station_id: string },
+      deviceId: String(recovered.device_id) });
+    expect(opened.identityRestoredFromDisk).toBe(true);
+    // No generated replacement handoff, account, session holder or registration window.
+    expect((await bridge.garthSyncAccount({ handoffId: handoff.handoffId })).cursor).toBeTruthy();
+  } finally {
+    await bridge.dispose();
   }
 });

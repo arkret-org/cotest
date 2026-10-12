@@ -1,11 +1,23 @@
 import { expect, test, operationSelector } from "./arkret-test";
 import type { Page, Response, Request, APIRequestContext } from "@playwright/test";
-import { assertAuthoritySubmitOutcome, authHeaders, canonicalJson, readCommitStreamHeadApi, scanRealmStreamApi, sdkEventDerivedIds, sha256CanonicalJson, wireErrCode } from "./coland-api";
+import { assertAuthoritySubmitOutcome, authHeaders, canonicalJson, readCommitStreamHeadApi, scanRealmStreamApi, sdkEventDerivedIds, sha256CanonicalJson, signedEventEnvelope, wireErrCode } from "./coland-api";
 import { decodeEventIngressBody, ingressEvents, type IngressEvent } from "./event-ingress";
 import { readFile, writeFile, rename, rm } from "node:fs/promises";
-import { randomUUID } from "node:crypto";
+import { randomBytes, randomUUID } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
-import { colandBaseUrl } from "./env";
+import { colandBaseUrl, colandServiceId, colandServiceResolution, type ColandKey } from "./env";
+import { cotestWire } from "./coland-api/wire-client";
+import type { ActorId } from "./generated/spec-wire-objects";
+
+// Refusal diagnostics must not dump unexpected accepted Commit signatures.
+function structureOutcomeDiagnostic(outcome: Record<string, unknown>): string {
+  const safe = Object.fromEntries(["status", "reason_code", "type", "code"].map(key => {
+    const value = outcome[key];
+    return [key, value === undefined || value === null || ["string", "number", "boolean"].includes(typeof value)
+      ? value : "[non-scalar metadata]"];
+  }));
+  return JSON.stringify(safe);
+}
 
 // Diagnostic pairing of one real self submit; not an independent authority/Ed verifier.
 async function observeSelectedHumanSend(page: Page, strandId: string) {
@@ -122,6 +134,167 @@ async function observeSelectedHumanSend(page: Page, strandId: string) {
   };
 }
 
+// These are observations of complete Station-signed cuts, not projected UI rows.
+// The WeakMap is process-only and tied to the actual page owning this fixture.
+const structuralBoundaries = new WeakMap<Page, DirectStructureProof>();
+type StructureCut = { rows: Array<Record<string, any>>; floor: unknown;
+  position: number; head: string; groups: Array<Record<string, unknown>> };
+async function structureCut(proof: DirectStructureProof, realm: string,
+  viewer?: { token: string; server: ColandKey }): Promise<StructureCut> {
+  let result!: StructureCut;
+  await expect(async () => {
+    const base = colandBaseUrl(viewer?.server);
+    const url = `${base}/_arkret/self/realm-state-snapshot/head?realm_id=${encodeURIComponent(realm)}`;
+    const response = await proof.request.get(url, { headers: authHeaders(viewer?.token ?? proof.token, "GET", url) });
+    expect(response.status(), "complete signed structure-boundary snapshot").toBe(200);
+    const snapshot = await response.json();
+    const authorityRequest = { realm_id: realm, nonce: randomBytes(32).toString("base64url") };
+    const authority = await proof.request.post(`${colandBaseUrl()}/_arkret/open/realm-authority/bundle`, {
+      headers: { "content-type": "application/json" }, data: canonicalJson(authorityRequest) });
+    expect(authority.status()).toBe(200);
+    const resolution = await proof.request.get(colandServiceResolution().resolution_url);
+    expect(resolution.status()).toBe(200);
+    expect(cotestWire<{ verified: boolean }>("verify-realm-state-snapshot", {
+      snapshot, expected_snapshot_id: snapshot.snapshot_id, authority_request: authorityRequest,
+      authority_bundle: await authority.json(), trusted_service_id: colandServiceId(),
+      service_resolution: await resolution.json(),
+    }).verified, "SDK must verify the whole current snapshot and native authority history").toBe(true);
+    const stream = { kind: "realm", realm_id: realm };
+    const heads = snapshot.visible_stream_heads.filter((head: any) => isDeepStrictEqual(head.stream_ref, stream));
+    expect(heads.length, "exact visible Realm head").toBe(1);
+    const scan = await scanRealmStreamApi(proof.request, viewer?.token ?? proof.token, realm,
+      { limit: 1000, server: viewer?.server });
+    expect(scan.truncated, "boundary requires the complete readable accepted prefix").toBe(false);
+    const last = scan.commits.at(-1) as Record<string, unknown> | undefined;
+    expect(last?.commit_id === heads[0].commit_id, "scan and complete current must cover one exact head").toBe(true);
+    const protectedKinds = ["member_state", "circle_member_state", "realm_history_access",
+      "direct_conversation_binding", "mls_group"];
+    const rows = snapshot.current_state_entries.filter((row: any) => protectedKinds.includes(row.selector.kind))
+      .sort((a: any, b: any) => canonicalJson(a.selector).localeCompare(canonicalJson(b.selector)));
+    expect(rows.filter((r: any) => r.selector.kind === "member_state").length).toBeGreaterThan(0);
+    expect(rows.filter((r: any) => r.selector.kind === "direct_conversation_binding").length).toBe(1);
+    const mls = rows.filter((r: any) => r.selector.kind === "mls_group");
+    expect(mls.filter((row: any) => isDeepStrictEqual(row.selector.scope_ref, stream)).length,
+      "the actual shared Realm MLS scope must exist").toBe(1);
+    const groups: Array<Record<string, unknown>> = [];
+    for (const row of mls) {
+      const scope = row.selector.scope_ref;
+      expect(isDeepStrictEqual(scope, row.value.effective_scope), "typed MLS selector must name its exact effective scope").toBe(true);
+      expect(row.value.covered_key_access_revision === row.value.current_key_access_revision,
+        "all real device Adds must finish before this boundary").toBe(true);
+      const scopeHeads = snapshot.visible_stream_heads.filter((head: any) => isDeepStrictEqual(head.stream_ref, scope));
+      expect(scopeHeads.length, "each disclosed MLS scope needs its actual visible accepted head").toBe(1);
+      const source = isDeepStrictEqual(scope, stream) ? scan : await scanRealmStreamApi(proof.request,
+        viewer?.token ?? proof.token, realm, { limit: 1000, server: viewer?.server, streamRef: scope });
+      expect(source.truncated, "qualify all visible scope groups through their complete accepted prefix").toBe(false);
+      expect(source.commits.at(-1)?.commit_id === scopeHeads[0].commit_id).toBe(true);
+      let genesis = source.events.find((event: any) => event.event_id === row.value.genesis_event_ref);
+      if (!genesis && viewer) {
+        // The founder qualifies the public Genesis; this never widens the
+        // peer's own readable prefix or its authenticated history floor.
+        const founderHistory = await scanRealmStreamApi(proof.request, proof.token, realm,
+          { limit: 1000, streamRef: scope });
+        expect(founderHistory.truncated).toBe(false);
+        genesis = founderHistory.events.find((event: any) => event.event_id === row.value.genesis_event_ref);
+      }
+      expect(genesis?.kind === "ak.mls.genesis", "group is sourced by the actual accepted Genesis").toBe(true);
+      const material = cotestWire<Record<string, unknown>>("mls-genesis-material", genesis!.payload);
+      expect(isDeepStrictEqual(material.effective_scope, row.value.effective_scope)).toBe(true);
+      groups.push(material);
+    }
+    result = { rows, floor: snapshot.retention_and_history_floor,
+      position: heads[0].stream_position, head: heads[0].commit_id, groups };
+  }).toPass({ timeout: 90_000 });
+  return result;
+}
+async function assertStructureBoundary(proof: DirectStructureProof, realm: string,
+  before: StructureCut[], event: IngressEvent) {
+  const viewers = [undefined, ...(proof.peer ? [proof.peer] : [])];
+  for (let index = 0; index < viewers.length; index++) {
+    const after = await structureCut(proof, realm, viewers[index]);
+    expect(isDeepStrictEqual(after.rows, before[index].rows),
+      "Chat/Topic writes preserve every visible member, binding, history and MLS typed row with exact source/revision").toBe(true);
+    expect(isDeepStrictEqual(after.floor, before[index].floor), "each participant's complete history floors stay exact").toBe(true);
+    expect(isDeepStrictEqual(after.groups, before[index].groups), "accepted SDK Genesis group identities stay exact").toBe(true);
+    const successor = await scanRealmStreamApi(proof.request, viewers[index]?.token ?? proof.token, realm,
+      { limit: 1000, server: viewers[index]?.server, afterPosition: before[index].position });
+    expect(successor.truncated).toBe(false);
+    expect(successor.events.some((row: any) => row.event_id === event.event_id)).toBe(true);
+    expect(successor.events.every((row: any) => ["ak.space.create", "ak.space.update", "ak.space.archive",
+      "ak.space.restore", "ak.space.tombstone", "ak.strand.create", "ak.strand.update", "ak.strand.archive",
+      "ak.strand.restore", "ak.strand.watch.set"].includes(row.kind)),
+      "structure interval cannot conceal a member/history/MLS/Realm transition").toBe(true);
+    await test.info().attach(`structure-custody-boundary-${index}-${event.event_id}`, {
+      body: JSON.stringify({ realm_id: realm, viewer_station: viewers[index]?.server ?? "default",
+        protected_rows: after.rows.length, groups: after.groups, history_floor_unchanged: true,
+        member_and_mls_rows_exact: true, before_head: before[index].head, after_head: after.head,
+        actual_structure_event: event.event_id, accepted_successors: successor.events.length }), contentType: "application/json" });
+  }
+}
+
+// Existing test-feature hook: actual Device/MLS sender; no private material crosses JS.
+async function realTyping(page: Page, realm: string, strand: string, typing: boolean) {
+  await expect.poll(() => page.evaluate(() => typeof (window as any).__inkson_signal_sender_evidence),
+    { timeout: 30_000 }).toBe("function");
+  return page.evaluate(async ({ realm, strand, typing }) => JSON.parse(await
+    (window as any).__inkson_signal_sender_evidence(realm, strand, typing)), { realm, strand, typing }) as Promise<{
+      accepted: boolean; dispatched_recipient_count?: number; envelope_digest: string;
+      group_id: string; epoch: number; sender_actor_id: unknown; sender_device_id: string;
+    }>;
+}
+async function realSignalReceiver(page: Page, clear = false): Promise<Array<Record<string, any>>> {
+  await expect.poll(() => page.evaluate(() => typeof (window as any).__inkson_signal_receiver_evidence),
+    { timeout: 30_000 }).toBe("function");
+  return page.evaluate(clear => JSON.parse((window as any).__inkson_signal_receiver_evidence(clear ? "clear" : "read")), clear);
+}
+async function assertWrongPlaintextStrand(alice: Page, bob: Page, realm: string, chat: string,
+  proof: DirectStructureProof) {
+  const target = proof.boundaryTargets?.realmStrand;
+  expect(target, "negative requires an actual accepted Strand in another Realm").toBeDefined();
+  const before = await readCommitStreamHeadApi(proof.request, proof.token, realm);
+  expect(before !== undefined).toBe(true);
+  await realSignalReceiver(bob, true);
+  const positive = await realTyping(alice, realm, chat, true);
+  expect(positive.accepted, "same-group positive Typing must reach the actual Station").toBe(true);
+  expect(positive.dispatched_recipient_count ?? 0).toBeGreaterThan(0);
+  await expect.poll(async () => (await realSignalReceiver(bob)).some(row => row.strand_id === chat
+    && isDeepStrictEqual(row.sender_actor_id, positive.sender_actor_id)
+    && row.sender_endpoint?.device_id === positive.sender_device_id
+    && row.admitted_and_decrypted === true && row.target_scope_matches === true
+    && row.live_applied === true && row.visible_count > 0), { timeout: 15_000 }).toBe(true);
+  await expect(bob.getByTestId("typing-indicator")).toHaveCount(1);
+  const negative = await realTyping(alice, realm, target!, true);
+  expect(negative.accepted, "wrong plaintext target must still have a legal encrypted outer Signal").toBe(true);
+  expect(negative.dispatched_recipient_count ?? 0).toBeGreaterThan(0);
+  expect(negative.group_id === positive.group_id && negative.epoch === positive.epoch,
+    "positive and negative use the same genuine MLS group/epoch").toBe(true);
+  let rows: Array<Record<string, any>> = [];
+  await expect.poll(async () => {
+    rows = (await realSignalReceiver(bob)).filter(row => row.strand_id === target
+      && isDeepStrictEqual(row.sender_actor_id, negative.sender_actor_id)
+      && row.sender_endpoint?.device_id === negative.sender_device_id);
+    return rows.some(row => row.admitted_and_decrypted === true && row.target_scope_matches === false);
+  }, { timeout: 15_000 }).toBe(true);
+  expect(rows.every(row => row.scope_ref?.kind === "realm" && row.scope_ref.realm_id === realm
+    && row.strand_id === target && row.live_applied === false && row.visible_count === 0),
+    "actual decrypted wrong-Strand Typing produces no live AppSink state").toBe(true);
+  // Stop the same actual positive indicator; no fabricated final Message is involved.
+  const stopped = await realTyping(alice, realm, chat, false);
+  expect(stopped.accepted).toBe(true);
+  await expect.poll(async () => (await realSignalReceiver(bob)).some(row => row.strand_id === chat
+    && row.typing === false && row.target_scope_matches === true && row.live_applied === true
+    && row.visible_count === 0 && isDeepStrictEqual(row.sender_actor_id, positive.sender_actor_id)
+    && row.sender_endpoint?.device_id === positive.sender_device_id), { timeout: 15_000 }).toBe(true);
+  await expect(bob.getByTestId("typing-indicator")).toHaveCount(0);
+  const after = await readCommitStreamHeadApi(proof.request, proof.token, realm);
+  expect(isDeepStrictEqual(after, before), "ephemeral Typing must not append Event/Commit").toBe(true);
+  await test.info().attach("encrypted-signal-actual-wrong-plaintext-strand", {
+    body: JSON.stringify({ group_id: positive.group_id, epoch: positive.epoch,
+      positive_delivered_and_applied: true, negative_delivered_and_decrypted: true,
+      negative_target_scope_rejected: true, app_sink_output_count: 0, event_commit_unchanged: true }),
+    contentType: "application/json" });
+}
+
 export async function structureWrite(page: Page, action: string, kind: string, title?: string, topic?: string, refusal?: string): Promise<IngressEvent> {
   const panel = page.getByTestId("direct-structure");
   await expect(panel).toBeVisible();
@@ -132,6 +305,10 @@ export async function structureWrite(page: Page, action: string, kind: string, t
   if (title) await panel.getByRole("textbox", { name: "Title", exact: true }).fill(title);
   if (topic) await panel.getByRole("combobox", { name: "Topic", exact: true }).selectOption(topic);
   await expect(panel.getByRole("button", { name: "Save", exact: true })).toBeEnabled({ timeout: 180_000 });
+  const boundaryProof = structuralBoundaries.get(page);
+  const boundaryRealm = decodeURIComponent(new URL(page.url()).pathname.split("/")[2] ?? "");
+  const boundaryBefore = boundaryProof ? await Promise.all([structureCut(boundaryProof, boundaryRealm),
+    ...(boundaryProof.peer ? [structureCut(boundaryProof, boundaryRealm, boundaryProof.peer)] : [])]) : undefined;
   const responses: Response[] = [];
   let wake: (() => void) | undefined;
   const capture = (response: Response) => {
@@ -161,10 +338,10 @@ export async function structureWrite(page: Page, action: string, kind: string, t
       if (accepted.status() === 503 && outcome.type === "https://arkret.org/problems/temporarily_unavailable"
         && outcome.status === 503) continue;
       if (refusal) {
-        expect(accepted.status(), JSON.stringify(outcome)).toBe(409);
+        expect(accepted.status(), structureOutcomeDiagnostic(outcome)).toBe(409);
         expect(wireErrCode(outcome)).toBe("failed_precondition");
         expect(outcome.reason_code).toBe(refusal);
-        expect(outcome.commit).toBeUndefined();
+        expect(outcome.commit === undefined, "refused write must omit Commit").toBe(true);
         await expect(panel.getByTestId("direct-structure-status")).not.toHaveText("Saved");
         return event;
       }
@@ -172,6 +349,7 @@ export async function structureWrite(page: Page, action: string, kind: string, t
       expect(outcome.status, `structure refusal: ${String(outcome.reason_code)}`).toBe("committed");
       assertAuthoritySubmitOutcome(outcome, event, action);
       await expect(panel.getByTestId("direct-structure-status")).toHaveText("Saved", { timeout: Math.max(1, deadline - Date.now()) });
+      if (boundaryProof && boundaryBefore) await assertStructureBoundary(boundaryProof, boundaryRealm, boundaryBefore, event);
       return event;
     }
     throw new Error("structure write did not commit within the original 90 second budget");
@@ -182,6 +360,7 @@ export async function structureWrite(page: Page, action: string, kind: string, t
 }
 
 export async function agentTopicChats(page: Page, receiptPath: string, proof: DirectStructureProof) {
+  structuralBoundaries.set(page, proof);
   expect(receiptPath, "actual runtime model receipt path").not.toBe("");
   const panel = page.getByTestId("direct-structure");
   const mainId = decodeURIComponent(new URL(page.url()).pathname.split("/")[3]);
@@ -189,8 +368,10 @@ export async function agentTopicChats(page: Page, receiptPath: string, proof: Di
   const topic = await structureWrite(page, "new_topic", "ak.space.create", `agent-topic-${suffix}`);
   const topicId = topic.event_id!.replace("ak:event:", "ak:space:");
   const chats: string[] = [];
+  let lastChat: IngressEvent | undefined;
   for (const name of ["a", "b"]) {
     const created = await structureWrite(page, "new_chat", "ak.strand.create", `agent-chat-${name}-${suffix}`);
+    lastChat = created;
     const id = created.event_id!.replace("ak:event:", "ak:strand:");
     const choose = panel.getByRole("combobox", { name: "Chat", exact: true });
     try {
@@ -366,15 +547,285 @@ export async function agentTopicChats(page: Page, receiptPath: string, proof: Di
   };
   await send(chats[0], markerA, undefined, markerB, chats[1]);
   await send(chats[1], markerB, undefined, markerA);
+  const movedTopic = await structureWrite(page, "new_topic", "ak.space.create", `agent-topic-moved-${suffix}`);
+  const movedTopicId = movedTopic.event_id!.replace("ak:event:", "ak:space:");
+  await panel.getByRole("combobox", { name: "Chat", exact: true }).selectOption(chats[0]);
+  const moved = await structureWrite(page, "place", "ak.strand.update", undefined, movedTopicId);
+  expect(moved.payload?.target_ref).toBe(chats[0]);
+  await send(chats[0], `moved-chat-a-${suffix}`, markerA, markerB);
+  await structureWrite(page, "place", "ak.strand.update", undefined, topicId);
   await structureWrite(page, "rename_topic_target", "ak.space.update", `agent-topic-renamed-${suffix}`, topicId);
   await structureWrite(page, "archive_topic_target", "ak.space.archive", undefined, topicId);
   await send(chats[0], `continued-chat-a-${suffix}`, markerA, markerB);
   await structureWrite(page, "unplace", "ak.strand.update");
   await send(chats[0], `unclassified-chat-a-${suffix}`, markerA, markerB);
+  const returnPath = new URL(page.url()).pathname;
+  const selectedAgent = proof.agentId ?? "";
+  await page.goto("/settings/agents", { waitUntil: "domcontentloaded" });
+  // The controller's ordinary registered administration UI changes the
+  // actual lifecycle; the rejected writes keep the previously valid binding.
+  expect(selectedAgent, "pause negative requires the exact Direct Agent").not.toBe("");
+  await page.locator(`[data-testid="agent-admin-row"][data-agent-id=${JSON.stringify(selectedAgent)}]`).click();
+  await page.getByTestId("agent-admin-enabled-switch").click();
+  await expect(page.getByTestId("agent-admin-last-op")).toContainText("Paused", { timeout: 180_000 });
+  try {
+    await rejectDirectStructureEvent(proof, lastChat!, "paused-agent-chat", "ak.strand.archive", { target_ref: chats[0] }, "direct_conversation_participant_authority_denied");
+    await rejectDirectStructureEvent(proof, topic, "paused-agent-topic", "ak.space.archive", { space_id: movedTopicId }, "direct_conversation_participant_authority_denied");
+  } finally {
+    await page.getByTestId("agent-admin-enabled-switch").click();
+    await expect(page.getByTestId("agent-admin-last-op")).toContainText("Resumed. Status: active.", { timeout: 180_000 });
+    await page.goto(returnPath, { waitUntil: "domcontentloaded" });
+  }
   await panel.getByRole("combobox", { name: "Chat", exact: true }).selectOption(mainId);
 }
 
-type DirectStructureProof = { request: APIRequestContext; token: string };
+type DirectStructureProof = { request: APIRequestContext; token: string; agentId?: string; peer?: { token: string; server: ColandKey }; boundaryTargets?: { realmStrand: string; circleStrand: string; thirdActor: ActorId; thirdToken: string } };
+
+export async function rejectDirectStructureEvent(proof: DirectStructureProof, template: IngressEvent,
+  name: string, kind: string, payload: Record<string, unknown>, reason?: string,
+  sender?: { token: string; server?: ColandKey; actor?: ActorId; scope?: Record<string, unknown> }) {
+  const realm = template.realm_id!;
+  const snapshot = async () => {
+    const url = new URL(`${colandBaseUrl()}/_arkret/self/realm-state-snapshot/head`);
+    url.searchParams.set("realm_id", realm);
+    const response = await proof.request.get(url.toString(), { headers: authHeaders(proof.token, "GET", url.toString()) });
+    expect(response.ok(), await response.text()).toBe(true);
+    return (await response.json()).current_state_entries;
+  };
+  const beforeHead = await readCommitStreamHeadApi(proof.request, proof.token, realm);
+  expect(beforeHead, "refusal must have a real observer's accepted head").toBeDefined();
+  const before = await snapshot();
+  const event = signedEventEnvelope({
+    actorId: sender?.actor ?? template.actor_id as ActorId, realmId: realm, kind, payload,
+    authorizationRef: template.authorization_ref as string,
+    semanticRefs: template.semantic_refs as Array<Record<string, unknown>>,
+    scopeRef: sender?.scope,
+    ...(!sender?.actor ? { proofVerificationMethod: (template.producer_proof as { verification_method: string }).verification_method } : {}),
+  });
+  const url = `${colandBaseUrl(sender?.server)}/_arkret/self/events`;
+  const response = await proof.request.post(url, {
+    headers: { ...authHeaders(sender?.token ?? proof.token, "POST", url), "content-type": "application/json" },
+    data: canonicalJson({ event }),
+  });
+  const body = await response.json() as Record<string, unknown>;
+  const outcomeDiagnostic = structureOutcomeDiagnostic(body);
+  if (reason?.startsWith("direct_conversation_")) {
+    expect(response.status(), outcomeDiagnostic).toBe(200);
+    expect(body.status, outcomeDiagnostic).toBe("rejected");
+    expect(Object.keys(body).sort()).toEqual(["reason_code", "status"]);
+    expect(body).toEqual({ status: "rejected", reason_code: reason });
+  } else {
+    expect(response.status(), outcomeDiagnostic).toBe(409);
+    expect(wireErrCode(body)).toBe("failed_precondition");
+    if (reason) expect(body.reason_code).toBe(reason);
+  }
+  expect(body.commit === undefined, "refused write must omit Commit").toBe(true);
+  expect(body.commits === undefined, "refused write must omit Commits").toBe(true);
+  expect(await readCommitStreamHeadApi(proof.request, proof.token, realm)).toEqual(beforeHead);
+  expect(await snapshot()).toEqual(before);
+  const after = await scanRealmStreamApi(proof.request, proof.token, realm, { afterPosition: beforeHead!.stream_position });
+  expect(after).toMatchObject({ truncated: false, events: [], commits: [] });
+  await test.info().attach(`direct-negative-${name}`, {
+    body: Buffer.from(JSON.stringify({ event_id: event.event_id, expected_reason: reason ?? "failed_precondition",
+      stream_head: beforeHead, current_unchanged: true, subsequent_events: 0, subsequent_commits: 0 })),
+    contentType: "application/json",
+  });
+}
+
+export async function directStructureLifecycleGate(alice: Page, bob: Page, proof: DirectStructureProof,
+  name: string, change: (author: IngressEvent) => Promise<void>) {
+  const topic = await structureWrite(alice, "new_topic", "ak.space.create", `${name}-topic-${Date.now()}`);
+  const chat = await structureWrite(bob, "new_chat", "ak.strand.create", `${name}-chat-${Date.now()}`);
+  const chatId = chat.event_id!.replace("ak:event:", "ak:strand:");
+  const topicId = topic.event_id!.replace("ak:event:", "ak:space:");
+  // These actual accepted participant commands are the positive controls.
+  // Change one authoritative prerequisite, then reuse their binding basis.
+  await change(chat);
+  await rejectDirectStructureEvent(proof, chat, `${name}-chat`, "ak.strand.archive", { target_ref: chatId },
+    "direct_conversation_participant_authority_denied", proof.peer);
+  // Membership activation is actor-specific; leave does not remove the stable pair.
+  const topicAuthor = name === "leave" ? chat : topic;
+  await rejectDirectStructureEvent(proof, topicAuthor, `${name}-topic`, "ak.space.archive", { space_id: topicId },
+    "direct_conversation_participant_authority_denied", name === "leave" ? proof.peer : undefined);
+  await rejectDirectStructureEvent(proof, chat, `${name}-watch`, "ak.strand.watch.set", {
+    strand_id: chatId, watcher_actor_id: chat.actor_id, level: "muted",
+  }, "direct_conversation_participant_authority_denied", proof.peer);
+  if (name === "leave") {
+    const accepted = await structureWrite(alice, "archive_topic_target", "ak.space.archive", undefined, topicId);
+    expect(accepted.actor_id).toEqual(topic.actor_id);
+    expect(accepted.payload?.space_id).toBe(topicId);
+    await test.info().attach("direct-positive-active-participant-after-peer-leave", {
+      body: Buffer.from(JSON.stringify({ event_id: accepted.event_id, actor_id: accepted.actor_id,
+        realm_id: accepted.realm_id, target_space_id: topicId, inactive_participant: chat.actor_id,
+        actor_membership_active_join: true, stable_pair_retained_after_peer_leave: true })),
+      contentType: "application/json",
+    });
+  }
+}
+
+async function ownWatchTransitions(page: Page, otherPages: Page[], strandId: string) {
+  let previous: Record<string, unknown> | null | undefined;
+  let last: IngressEvent | undefined;
+  const writes: Array<{ event_id: string | undefined; level: string | null; expected_value: unknown }> = [];
+  for (const level of ["all", "muted", "mentions_only", "participating", "default", "all"]) {
+    await page.getByTestId("watch-level-toggle").click();
+    const accepted = page.waitForResponse(response => response.request().method() === "POST"
+      && new URL(response.url()).pathname === "/_arkret/self/events"
+      && ingressEvents(decodeEventIngressBody(response.request().postDataJSON())).some(event => event.kind === "ak.strand.watch.set"));
+    await page.getByTestId("watch-level-menu").locator(`[data-watch-level="${level}"]`).click();
+    const response = await accepted;
+    expect(response.ok(), await response.text()).toBe(true);
+    const event = ingressEvents(decodeEventIngressBody(response.request().postDataJSON())).find(event => event.kind === "ak.strand.watch.set")!;
+    const outcome = await response.json() as Record<string, unknown>;
+    expect(outcome.status).toBe("committed");
+    assertAuthoritySubmitOutcome(outcome, event, `watch ${level}`);
+    last = event;
+    const payload = event.payload!;
+    expect(payload.strand_id).toBe(strandId);
+    expect(payload.watcher_actor_id).toEqual(event.actor_id);
+    expect(payload.level).toBe(level === "default" ? null : level);
+    if (writes.length) expect(payload.expected_value, "CAS is the entire previous cell, including a written null").toEqual(previous);
+    const label = { all: "All", muted: "Muted", mentions_only: "Mentions", participating: "Participating", default: "Default" }[level]!;
+    await expect(page.getByTestId("watch-level-toggle")).toContainText(label, { timeout: 90_000 });
+    previous = level === "default" ? null : {
+      level,
+      ...(Object.hasOwn(payload, "level_public") ? { level_public: payload.level_public } : {}),
+    };
+    writes.push({ event_id: event.event_id, level: payload.level as string | null, expected_value: payload.expected_value });
+  }
+  await page.reload();
+  await expect(page.getByTestId("watch-level-toggle")).toContainText("All", { timeout: 90_000 });
+  for (const other of otherPages) {
+    await expect(other.getByTestId("watch-level-toggle"), "another participant's private watch never changes this participant's cell").toContainText("Default", { timeout: 90_000 });
+  }
+  await test.info().attach("watch-whole-value-transitions", {
+    body: Buffer.from(JSON.stringify({ strand_id: strandId, writes, private_other_cells_unchanged: true, cold_level: "all" })),
+    contentType: "application/json",
+  });
+  return last!;
+}
+
+// A keepalive request holds a real IndexedDB transaction until the test aborts
+// it. No secret backend or durability acknowledgement is replaced. Router
+// navigation keeps this document alive while unmounting the settings component.
+async function indexedDbClearRecovery(page: Page, mainId: string, chatId: string, oldDraft: string, cancelSettings: boolean) {
+  const input = page.getByTestId("chat-input");
+  const choose = page.getByTestId("direct-structure").getByRole("combobox", { name: "Chat", exact: true });
+  await choose.selectOption(mainId);
+  await input.fill(oldDraft);
+  await expect(input).toHaveAttribute("data-draft-storage", "saved");
+  await page.evaluate(() => {
+    type Barrier = {
+      held: number; aborted: number; committed: number; armed: boolean;
+      release: () => void; dispose: () => void;
+    };
+    const target = window as typeof window & { __directCacheBarrier?: Barrier };
+    if (target.__directCacheBarrier) throw new Error("cache barrier already installed");
+    const originalPut = IDBObjectStore.prototype.put;
+    const originalDelete = IDBObjectStore.prototype.delete;
+    let heldTransaction: IDBTransaction | undefined;
+    const state: Barrier = {
+      held: 0, aborted: 0, committed: 0, armed: false,
+      release: () => {
+        const transaction = heldTransaction;
+        heldTransaction = undefined;
+        transaction?.abort();
+      },
+      dispose: () => {
+        state.release();
+        IDBObjectStore.prototype.put = originalPut;
+        IDBObjectStore.prototype.delete = originalDelete;
+        delete target.__directCacheBarrier;
+      },
+    };
+    target.__directCacheBarrier = state;
+    const observe = (store: IDBObjectStore, key: IDBValidKey | IDBKeyRange | undefined) => {
+      if (store.name !== "entries" || store.transaction.db.name !== "inkson.secret.inkson"
+        || typeof key !== "string" || !key.startsWith("inkson.e2ee_plaintext_cache.v1.")) return;
+      const transaction = store.transaction;
+      if (state.armed && state.held === 0) {
+        state.held += 1;
+        heldTransaction = transaction;
+        transaction.addEventListener("abort", () => { state.aborted += 1; }, { once: true });
+        const keepAlive = () => {
+          if (heldTransaction !== transaction) return;
+          const read = store.get(key);
+          read.onsuccess = keepAlive;
+          read.onerror = () => { heldTransaction = undefined; };
+        };
+        keepAlive();
+      } else {
+        transaction.addEventListener("complete", () => { state.committed += 1; }, { once: true });
+      }
+    };
+    IDBObjectStore.prototype.put = function (value, key) {
+      const request = originalPut.call(this, value, key);
+      observe(this, key);
+      return request;
+    };
+    IDBObjectStore.prototype.delete = function (key) {
+      const request = originalDelete.call(this, key);
+      observe(this, key);
+      return request;
+    };
+  });
+  const barrier = async () => page.evaluate(() => {
+    const value = (window as typeof window & { __directCacheBarrier?: { held: number; aborted: number; committed: number } }).__directCacheBarrier;
+    if (!value) throw new Error("router navigation replaced the IndexedDB barrier document");
+    return { held: value.held, aborted: value.aborted, committed: value.committed };
+  });
+  try {
+    await page.getByTestId("account-menu-button").click();
+    await page.getByTestId("account-menu-settings").click();
+    await page.getByTestId("settings-nav-item-storage").click();
+    await expect(page.getByTestId("e2ee-cache-clear-all")).toBeEnabled();
+    await page.evaluate(() => { (window as any).__directCacheBarrier.armed = true; });
+    await page.getByTestId("e2ee-cache-clear-all").click();
+    await page.getByTestId("e2ee-cache-clear-confirm").click();
+    await expect.poll(async () => (await barrier()).held).toBe(1);
+    if (cancelSettings) {
+      // Same-document back unmounts the pending settings component before the
+      // real transaction fails; the independent cache completion must survive.
+      await page.goBack();
+      await expect(page.getByTestId("e2ee-plaintext-cache")).toHaveCount(0);
+      await page.goBack();
+      await expect(choose).toBeVisible();
+      await choose.selectOption(chatId);
+      const newer = `${oldDraft}-new-chat`;
+      await input.fill(newer);
+      await expect(input).toHaveAttribute("data-draft-storage", "saving");
+      await page.evaluate(() => { (window as any).__directCacheBarrier.release(); });
+      await expect.poll(async () => (await barrier()).aborted).toBe(1);
+      await expect(input).toHaveAttribute("data-draft-storage", "saved");
+      await expect.poll(async () => (await barrier()).committed).toBeGreaterThan(0);
+      await page.reload();
+      await expect(input).toHaveValue(newer, { timeout: 90_000 });
+      await choose.selectOption(mainId);
+      await expect(input).toHaveValue(oldDraft);
+      await choose.selectOption(chatId);
+      await input.fill("");
+      await expect(input).toHaveAttribute("data-draft-storage", "saved");
+    } else {
+      await page.evaluate(() => { (window as any).__directCacheBarrier.release(); });
+      await expect.poll(async () => (await barrier()).aborted).toBe(1);
+      await expect(page.getByTestId("e2ee-plaintext-cache").getByRole("status")).toContainText("cleanup failed");
+      await expect.poll(async () => (await barrier()).committed).toBeGreaterThan(0);
+      await page.goBack();
+      await page.goBack();
+      await expect(choose).toBeVisible();
+      await page.reload();
+      await choose.selectOption(mainId);
+      await expect(input).toHaveValue(oldDraft, { timeout: 90_000 });
+    }
+    await test.info().attach(`indexeddb-clear-recovery-${cancelSettings ? "cancelled-page" : "visible-error"}`, {
+      body: Buffer.from(JSON.stringify({ native_indexeddb_transaction_aborts: 1, cold_old_draft_retained: true,
+        cold_new_chat_retained: cancelSettings, settings_unmounted_before_abort: cancelSettings })),
+      contentType: "application/json",
+    });
+  } finally {
+    await page.evaluate(() => { (window as any).__directCacheBarrier?.dispose(); });
+  }
+}
 
 export async function flatTopicChats(alice: Page, bob: Page, mainMessages: string[], extraDevices: Page[] = [], proof?: DirectStructureProof) {
   const pages = [alice, bob, ...extraDevices];
@@ -393,11 +844,14 @@ export async function flatTopicChats(alice: Page, bob: Page, mainMessages: strin
 }
 
 async function runFlatTopicChats(alice: Page, bob: Page, mainMessages: string[], extraDevices: Page[], proof?: DirectStructureProof) {
+  expect(proof, "structure coverage requires the actual accepted participant credentials").toBeDefined();
+  structuralBoundaries.set(alice, proof!);
+  await expect(alice.getByTestId("direct-structure").getByRole("combobox", { name: "Action", exact: true })).toHaveCount(0);
   const mainPath = new URL(alice.url()).pathname;
   const mainId = decodeURIComponent(mainPath.split("/")[3]);
   const suffix = Date.now();
   const topicName = `topic-${suffix}`;
-  const chatName = `chat-${suffix}`;
+  let chatName = `chat-${suffix}`;
   const topic = await structureWrite(alice, "new_topic", "ak.space.create", topicName);
   const topicId = topic.event_id!.replace("ak:event:", "ak:space:");
   const object = topic.payload?.object as Record<string, unknown>;
@@ -417,15 +871,99 @@ async function runFlatTopicChats(alice: Page, bob: Page, mainMessages: string[],
     await choose.selectOption(chatId);
     for (const message of mainMessages) await expect(page.getByTestId("chat-message").filter({ hasText: message })).toHaveCount(0);
   }
-  await bob.getByTestId("watch-level-toggle").click({ timeout: 30_000 });
-  await bob.getByTestId("watch-level-menu").locator('[data-watch-level="all"]').click();
-  await expect(bob.getByTestId("watch-level-toggle")).toContainText("All", { timeout: 90_000 });
+  const bobWatch = await ownWatchTransitions(bob, [alice, ...extraDevices], chatId);
+  await assertWrongPlaintextStrand(alice, bob, chat.realm_id!, chatId, proof!);
   const classified = await structureWrite(alice, "place", "ak.strand.update", undefined, topicId);
   expect(classified.payload?.target_ref).toBe(chatId);
   expect(classified.payload?.expected_state_digest).toMatch(/^sha256:[a-f0-9]{64}$/);
   const patch = classified.payload?.patch as Record<string, { $op: string; value?: { space_id: string } }>;
   expect(patch.topic.value?.space_id).toBe(topicId);
   const chooseAlice = alice.getByTestId("direct-structure").getByRole("combobox", { name: "Chat", exact: true });
+  const allPages = [alice, bob, ...extraDevices];
+  const chatOptions = (page: Page) => page.getByTestId("direct-structure").getByRole("combobox", { name: "Chat", exact: true });
+  const renamedChat = `${chatName}-renamed`;
+  const renameChat = await structureWrite(alice, "rename_chat", "ak.strand.update", renamedChat);
+  expect(renameChat.payload?.target_ref).toBe(chatId);
+  expect(Object.keys(renameChat.payload?.patch as object)).toEqual(["encrypted_metadata"]);
+  expect(JSON.stringify(renameChat.payload)).not.toContain(renamedChat);
+  chatName = renamedChat;
+  for (const page of allPages) await expect(chatOptions(page).locator(`option[value=${JSON.stringify(chatId)}]`)).toContainText(chatName, { timeout: 90_000 });
+
+  const secondTopicName = `${topicName}-second`;
+  const secondTopic = await structureWrite(alice, "new_topic", "ak.space.create", secondTopicName);
+  const secondTopicId = secondTopic.event_id!.replace("ak:event:", "ak:space:");
+  const secondChat = await structureWrite(alice, "new_chat", "ak.strand.create", `${chatName}-second`);
+  const secondChatId = secondChat.event_id!.replace("ak:event:", "ak:strand:");
+  await expect(chooseAlice).toHaveValue(secondChatId);
+  const secondClassification = await structureWrite(alice, "place", "ak.strand.update", undefined, topicId);
+  const secondRank = ((secondClassification.payload?.patch as any).topic.value as { rank: string }).rank;
+  const firstRank = (patch.topic.value as { space_id: string; rank: string }).rank;
+  expect(secondRank > firstRank, "new Chat receives a rank after the existing actual Chat").toBe(true);
+  await chooseAlice.selectOption(chatId);
+  const reorder = await structureWrite(alice, "reorder", "ak.strand.update", undefined, topicId);
+  const reordered = (reorder.payload?.patch as any).topic.value;
+  expect(reordered.space_id).toBe(topicId);
+  expect(reordered.rank > secondRank).toBe(true);
+  for (const page of allPages) {
+    await expect.poll(async () => {
+      const ids = await chatOptions(page).locator("option").evaluateAll(options => options.map(option => (option as HTMLOptionElement).value));
+      return ids.indexOf(secondChatId) < ids.indexOf(chatId);
+    }).toBe(true);
+  }
+  const topicReorder = await structureWrite(alice, "reorder_topic", "ak.space.update", undefined, topicId);
+  expect(Object.keys(topicReorder.payload?.patch as object)).toEqual(["rank"]);
+  expect((topicReorder.payload?.patch as any).rank.value).toMatch(/^[A-Za-z0-9]{1,128}$/);
+  for (const page of allPages) {
+    const manage = page.getByTestId("direct-structure");
+    if (!await manage.getByRole("combobox", { name: "Action", exact: true }).isVisible()) await manage.getByRole("button", { name: "Manage chats and topics" }).click();
+    await manage.getByRole("combobox", { name: "Action", exact: true }).selectOption("reorder_topic");
+    await expect.poll(async () => await manage.getByRole("combobox", { name: "Topic", exact: true }).locator("option").evaluateAll(options => options.map(option => (option as HTMLOptionElement).value))).toEqual(["", secondTopicId, topicId]);
+  }
+  const migrated = await structureWrite(alice, "place", "ak.strand.update", undefined, secondTopicId);
+  expect(migrated.payload?.target_ref).toBe(chatId);
+  expect((migrated.payload?.patch as any).topic.value.space_id).toBe(secondTopicId);
+  for (const page of allPages) {
+    await expect(chatOptions(page).locator(`option[value=${JSON.stringify(chatId)}]`)).toContainText(secondTopicName, { timeout: 90_000 });
+    await chatOptions(page).selectOption(chatId);
+    expect(decodeURIComponent(new URL(page.url()).pathname.split("/")[3])).toBe(chatId);
+  }
+  await structureWrite(alice, "archive_topic_target", "ak.space.archive", undefined, secondTopicId);
+  for (const page of allPages) {
+    const option = chatOptions(page).locator(`option[value=${JSON.stringify(chatId)}]`);
+    await expect(option).toContainText(secondTopicName);
+    await expect(option).not.toContainText("(archived)");
+  }
+  const currentUrl = new URL(`${colandBaseUrl()}/_arkret/self/realm-state-snapshot/head`);
+  currentUrl.searchParams.set("realm_id", migrated.realm_id!);
+  const rawCurrent = await proof!.request.get(currentUrl.toString(), { headers: authHeaders(proof!.token, "GET", currentUrl.toString()) });
+  expect(rawCurrent.ok(), await rawCurrent.text()).toBe(true);
+  const rawEntries = (await rawCurrent.json()).current_state_entries as Array<{ selector: { kind: string; strand_id?: string }; value: unknown }>;
+  const exactChat = rawEntries.filter(row => row.selector.kind === "strand" && row.selector.strand_id === chatId);
+  expect(exactChat).toHaveLength(1);
+  await rejectDirectStructureEvent(proof!, migrated, "classify-archived-topic", "ak.strand.update", {
+    target_ref: chatId, expected_state_digest: `sha256:${sha256CanonicalJson(exactChat[0].value)}`,
+    patch: { topic: { $op: "set", value: { space_id: secondTopicId, rank: "a0" } } },
+  }, "direct_conversation_participant_authority_denied");
+  const repaired = await structureWrite(alice, "unplace", "ak.strand.update");
+  expect(repaired.payload?.target_ref).toBe(chatId);
+  expect(repaired.payload?.patch).toEqual({ topic: { $op: "unset" } });
+  for (const page of allPages) {
+    await expect(chatOptions(page).locator(`option[value=${JSON.stringify(chatId)}]`)).not.toContainText(secondTopicName);
+    expect(decodeURIComponent(new URL(page.url()).pathname.split("/")[3])).toBe(chatId);
+  }
+  const restoredTopic = await structureWrite(alice, "restore_topic_target", "ak.space.restore", undefined, secondTopicId);
+  expect(restoredTopic.payload?.space_id).toBe(secondTopicId);
+  await structureWrite(alice, "place", "ak.strand.update", undefined, topicId);
+  for (const page of allPages) await expect(chatOptions(page).locator(`option[value=${JSON.stringify(chatId)}]`)).toContainText(topicName, { timeout: 90_000 });
+  await chooseAlice.selectOption(secondChatId);
+  await structureWrite(alice, "unplace", "ak.strand.update");
+  await chooseAlice.selectOption(chatId);
+  await structureWrite(alice, "delete_topic_target", "ak.space.tombstone", undefined, secondTopicId);
+  // Collapsing classification management is a local navigation preference;
+  // the selected actual Chat and its watch cell stay available.
+  await alice.getByTestId("direct-structure").getByRole("button", { name: "Manage chats and topics" }).click();
+  await expect(alice.getByTestId("direct-structure").getByRole("combobox", { name: "Action", exact: true })).toHaveCount(0);
+  await expect(chooseAlice).toHaveValue(chatId);
   const chatDraft = `draft-chat-${suffix}`;
   const mainDraft = `draft-main-${suffix}`;
   await alice.getByTestId("chat-input").fill(chatDraft);
@@ -456,7 +994,12 @@ async function runFlatTopicChats(alice: Page, bob: Page, mainMessages: string[],
   for (const [sender, recipient] of [[alice, bob], [bob, alice]] as const) {
     const text = `topic-chat-${sender === alice ? "a" : "b"}-${suffix}`;
     if (sender === alice) {
-      await bob.getByTestId("direct-structure").getByRole("combobox", { name: "Chat", exact: true }).selectOption(mainId);
+      const navigation = bob.getByTestId("direct-structure");
+      if (await navigation.getByRole("combobox", { name: "Action", exact: true }).isVisible()) {
+        await navigation.getByRole("button", { name: "Manage chats and topics" }).click();
+      }
+      await expect(navigation.getByRole("combobox", { name: "Action", exact: true })).toHaveCount(0);
+      await navigation.getByRole("combobox", { name: "Chat", exact: true }).selectOption(mainId);
     }
     await sender.getByTestId("chat-input").fill(text);
     const sending = sender.waitForResponse(response => response.request().method() === "POST"
@@ -492,6 +1035,9 @@ async function runFlatTopicChats(alice: Page, bob: Page, mainMessages: string[],
   await expect(alice.getByTestId("chat-input")).toHaveValue(mainDraft);
   await chooseAlice.selectOption(chatId);
   await expect(alice.getByTestId("chat-input")).toHaveValue("");
+  await indexedDbClearRecovery(alice, mainId, chatId, mainDraft, false);
+  await indexedDbClearRecovery(alice, mainId, chatId, mainDraft, true);
+  await chooseAlice.selectOption(chatId);
   const renamed = `${topicName}-renamed`;
   await structureWrite(bob, "rename_topic_target", "ak.space.update", renamed, topicId);
   await Promise.all([alice, bob, ...extraDevices].map(page => page.reload()));
@@ -501,15 +1047,109 @@ async function runFlatTopicChats(alice: Page, bob: Page, mainMessages: string[],
     await choose.selectOption(chatId);
   }
   const realmId = decodeURIComponent(mainPath.split("/")[2]);
-  const snapshot = async () => {
+  const snapshot = async (viewer?: { token: string; server: ColandKey }) => {
     if (!proof) return undefined;
-    const url = new URL(`${colandBaseUrl()}/_arkret/self/realm-state-snapshot/head`);
+    const url = new URL(`${colandBaseUrl(viewer?.server)}/_arkret/self/realm-state-snapshot/head`);
     url.searchParams.set("realm_id", realmId);
-    const response = await proof.request.get(url.toString(), { headers: authHeaders(proof.token, "GET", url.toString()) });
+    const response = await proof.request.get(url.toString(), { headers: authHeaders(viewer?.token ?? proof.token, "GET", url.toString()) });
     expect(response.ok(), await response.text()).toBeTruthy();
     const body = await response.json() as { current_state_entries: Array<Record<string, unknown>> };
     return body.current_state_entries;
   };
+  const rejectSigned = (name: string, template: IngressEvent, kind: string, payload: Record<string, unknown>, reason?: string) =>
+    rejectDirectStructureEvent(proof!, template, name, kind, payload, reason);
+  await rejectSigned("stale-full-chat-cas", classified, "ak.strand.update", classified.payload!);
+  await rejectSigned("own-watch-stale-whole-value", classified, "ak.strand.watch.set", {
+    strand_id: chatId, watcher_actor_id: classified.actor_id, level: "muted", expected_value: { level: "all" },
+  });
+  await rejectSigned("other-participant-watch", classified, "ak.strand.watch.set", {
+    strand_id: chatId, watcher_actor_id: bobWatch.actor_id, level: "muted", expected_value: { level: "all" },
+  }, "direct_conversation_participant_authority_denied");
+  await rejectSigned("main-archive", classified, "ak.strand.archive", { target_ref: mainId }, "direct_conversation_participant_authority_denied");
+  // Redaction is the registered cross-object command, not an invented Strand kind.
+  const acceptedHistory = await scanRealmStreamApi(proof!.request, proof!.token, realmId, { limit: 1000 });
+  expect(acceptedHistory.truncated).toBe(false);
+  const genesis = acceptedHistory.events.find(event => event.kind === "ak.realm.create")!;
+  expect(genesis).toBeDefined();
+  const founderTemplate = isDeepStrictEqual(genesis.actor_id, classified.actor_id) ? classified : bobWatch;
+  expect(founderTemplate.actor_id).toEqual(genesis.actor_id);
+  const founderSender = founderTemplate === classified ? undefined : proof!.peer;
+  await rejectDirectStructureEvent(proof!, founderTemplate, "technical-root-operational", "ak.realm.freeze", {},
+    "direct_conversation_root_mask_violation", founderSender);
+  await rejectDirectStructureEvent(proof!, founderTemplate, "main-redaction", "ak.redaction", { target_ref: mainId },
+    "direct_conversation_root_mask_violation", founderSender);
+  const boundary = proof!.boundaryTargets!;
+  expect(boundary, "full DM-P1 requires real registered third-party and outside targets").toBeDefined();
+  await rejectSigned("third-party-join", classified, "ak.member.state", { member_id: boundary.thirdActor, membership: "join" },
+    "direct_conversation_third_party_member_forbidden");
+  await rejectDirectStructureEvent(proof!, classified, "third-party-chat-write", "ak.strand.archive", { target_ref: chatId },
+    "direct_conversation_participant_authority_denied", { token: boundary.thirdToken, actor: boundary.thirdActor });
+  const privateCurrent = new URL(`${colandBaseUrl()}/_arkret/self/realm-state-snapshot/head`);
+  privateCurrent.searchParams.set("realm_id", realmId);
+  const hidden = await proof!.request.get(privateCurrent.toString(), {
+    headers: authHeaders(boundary.thirdToken, "GET", privateCurrent.toString()),
+  });
+  expect(hidden.status(), await hidden.text()).toBe(403);
+  const hiddenBody = await hidden.json();
+  expect(wireErrCode(hiddenBody)).toBe("capability_denied");
+  for (const secret of [chatId, topicId, chatName, topicName]) expect(JSON.stringify(hiddenBody)).not.toContain(secret);
+  for (const [name, target] of [["cross-realm", boundary.realmStrand], ["cross-circle", boundary.circleStrand]]) {
+    await rejectSigned(`${name}-chat-write`, classified, "ak.strand.archive", { target_ref: target }, "direct_conversation_participant_authority_denied");
+    await rejectSigned(`${name}-watch`, classified, "ak.strand.watch.set", {
+      strand_id: target, watcher_actor_id: classified.actor_id, level: "muted",
+    }, "direct_conversation_participant_authority_denied");
+  }
+  await rejectSigned("chat-track-overflow", classified, "ak.strand.update", {
+    target_ref: chatId, patch: { tracks: { $op: "set", value: (chat.payload!.object as Record<string, unknown>).tracks } },
+  }, "direct_conversation_participant_authority_denied");
+  await rejectSigned("chat-topic-subpath", classified, "ak.strand.update", {
+    target_ref: chatId, expected_state_digest: classified.payload!.expected_state_digest,
+    patch: { "topic.rank": { $op: "set", value: "a0" } },
+  }, "direct_conversation_participant_authority_denied");
+  await rejectSigned("topic-parent", topic, "ak.space.create", {
+    object: { ...object, parent_space_id: topicId },
+  }, "direct_conversation_participant_authority_denied");
+  await rejectSigned("unknown-topic-kind", topic, "ak.space.create", {
+    object: { ...object, kind: "unknown_topic_kind" },
+  }, "direct_conversation_space_forbidden");
+  await rejectSigned("topic-plaintext-mirror", topic, "ak.space.create", {
+    object: { ...object, title: `forbidden-plaintext-${suffix}` },
+  }, "direct_conversation_participant_authority_denied");
+  const visibleCurrent = await snapshot();
+  expect(JSON.stringify(visibleCurrent)).toContain(chatId);
+  expect(JSON.stringify(visibleCurrent)).toContain(topicId);
+  for (const title of [topicName, chatName, renamed, secondTopicName]) expect(JSON.stringify(visibleCurrent)).not.toContain(title);
+  const originalRead = await scanRealmStreamApi(proof!.request, proof!.token, realmId);
+  expect(originalRead.truncated, "full Direct history read cannot hide a truncated prefix").toBe(false);
+  if (proof?.peer) {
+    const structuralCurrent = (entries: Array<Record<string, unknown>> | undefined) => entries!
+      .filter(entry => ["strand", "space"].includes(String((entry.selector as { kind?: string })?.kind)))
+      .sort((left, right) => canonicalJson(left.selector).localeCompare(canonicalJson(right.selector)));
+    const shared = structuralCurrent(visibleCurrent);
+    expect(shared.length, "the complete typed current includes actual Chat and Topic results").toBeGreaterThan(0);
+    await expect.poll(async () => structuralCurrent(await snapshot(proof.peer)), { timeout: 90_000 }).toEqual(shared);
+    const structuralEvents = (events: Array<Record<string, unknown>>) => events
+      .filter(event => ["ak.strand.create", "ak.strand.update", "ak.strand.archive", "ak.strand.restore",
+        "ak.space.create", "ak.space.update", "ak.space.archive", "ak.space.restore", "ak.space.tombstone"].includes(String(event.kind)));
+    const sharedEvents = structuralEvents(originalRead.events);
+    let peerRead: Awaited<ReturnType<typeof scanRealmStreamApi>> | undefined;
+    await expect(async () => {
+      peerRead = await scanRealmStreamApi(proof.request, proof.peer!.token, realmId, { server: proof.peer!.server });
+      expect(peerRead.truncated, "the peer's own authenticated Station must supply complete history").toBe(false);
+      expect(structuralEvents(peerRead.events)).toEqual(sharedEvents);
+    }).toPass({ timeout: 90_000 });
+    for (const title of [topicName, chatName, renamed, secondTopicName]) expect(JSON.stringify(peerRead)).not.toContain(title);
+    await test.info().attach("direct-peer-station-full-current-read", {
+      body: Buffer.from(JSON.stringify({ peer_station: proof.peer.server, complete_structural_current_rows: shared.length,
+        complete_structural_events: sharedEvents.length, exact_revisions_values_events_equal: true,
+        peer_read_uses_own_station_and_credential: true, metadata_plaintext_mirrors: 0 })), contentType: "application/json",
+    });
+  }
+  for (const title of [topicName, chatName, renamed, secondTopicName]) expect(JSON.stringify(originalRead.events)).not.toContain(title);
+  await test.info().attach("direct-full-read-encrypted-metadata", {
+    body: Buffer.from(JSON.stringify({ realm_id: realmId, events: originalRead.events.length,
+      commits: originalRead.commits.length, complete_snapshot: true, metadata_plaintext_mirrors: 0 })), contentType: "application/json",
+  });
   const refusedTopic = async (referenceState: "active" | "archived") => {
     const head = proof && await readCommitStreamHeadApi(proof.request, proof.token, realmId);
     const current = await snapshot();

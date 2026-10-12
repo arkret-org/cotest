@@ -28,12 +28,14 @@ use std::collections::HashMap;
 use std::io::{BufRead, Write};
 
 use anyhow::{Context, Result, bail};
+use cotest_test_support::agent_runtime::{AgentRuntimeHandle, controller_transport};
 use cotest_test_support::garth_client::{GarthClientConfig, GarthClientHandle};
 use cotest_test_support::provisioning::{
     AccountHandoff, DeploymentEndpoints, FoundPrincipalRequest, FoundedPrincipal,
-    FoundingDeviceKey, MockEmailInbox, UnboundAccount, authorize_with_current_account,
-    create_account_handoff, describe_station, found_principal, provision_unbound_account,
-    read_self_account_viewer,
+    FoundingDeviceKey, MockEmailInbox, PreparedPrincipalRegistration, UnboundAccount,
+    authorize_with_current_account, create_account_handoff, describe_station,
+    prepare_principal_registration, provision_unbound_account, read_self_account_viewer,
+    submit_prepared_principal_registration,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
@@ -123,6 +125,33 @@ struct DurableIdentity {
     session_signing_seed_b64url: String,
 }
 
+/// Original private holder and SDK request, written before the registration HTTP call.
+/// This is test-run custody, never a product vault or a new wire carrier.
+#[derive(Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct DurableRegistration {
+    prepared: PreparedPrincipalRegistration,
+    request_id: String,
+    account_subject: arkret_identifiers::Hash,
+    account_handoff_grant: String,
+    expires_at: String,
+    binding: Value,
+    session_signing_seed_b64url: String,
+}
+
+impl DurableRegistration {
+    fn handoff(&self) -> Result<AccountHandoff> {
+        Ok(AccountHandoff {
+            request_id: self.request_id.clone(),
+            account_subject: self.account_subject.clone(),
+            account_handoff_grant: self.account_handoff_grant.clone(),
+            expires_at: self.expires_at.clone(),
+            binding: self.binding.clone(),
+            device_key: FoundingDeviceKey::restore(&self.session_signing_seed_b64url)?,
+        })
+    }
+}
+
 /// State that must live across requests.
 ///
 /// Handoffs are held by id because `found_principal` needs the one this session
@@ -143,7 +172,9 @@ struct Session {
     /// different process's view of the same account, which is the opposite of
     /// what a client is.
     garth_clients: HashMap<String, GarthClientHandle>,
+    agent_runtimes: HashMap<String, AgentRuntimeHandle>,
     store_root: std::path::PathBuf,
+    session_id: String,
 }
 
 impl Session {
@@ -164,8 +195,11 @@ impl Session {
             .redirect(reqwest::redirect::Policy::none())
             .build()
             .context("build the provisioning HTTP client")?;
-        let run_id =
-            arkret_wire::RequestId::new_v7_at(chrono::Utc::now().timestamp_millis() as u64);
+        let reopened_id = std::env::var("COTEST_PROVISION_SESSION_ID").ok();
+        let run_id = match &reopened_id {
+            Some(id) => arkret_wire::RequestId::new(id.clone()).map_err(anyhow::Error::msg)?,
+            None => arkret_wire::RequestId::new_v7_at(chrono::Utc::now().timestamp_millis() as u64),
+        };
         let custody_root =
             std::path::PathBuf::from(std::env::var_os("COTEST_PROVISION_CUSTODY_ROOT").context(
                 "COTEST_PROVISION_CUSTODY_ROOT must come from the canonical runner lifecycle",
@@ -184,18 +218,23 @@ impl Session {
             );
         }
         let store_root = custody_root.join(sanitize_path_component(run_id.as_str()));
-        std::fs::create_dir_all(&store_root)?;
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
-            std::fs::set_permissions(&store_root, std::fs::Permissions::from_mode(0o700))?;
+        if reopened_id.is_none() {
+            std::fs::create_dir(&store_root)?;
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::PermissionsExt;
+                std::fs::set_permissions(&store_root, std::fs::Permissions::from_mode(0o700))?;
+            }
         }
+        validate_private_path(&store_root, true)?;
         Ok(Self {
             http,
             handoffs: HashMap::new(),
             session_grants: HashMap::new(),
             garth_clients: HashMap::new(),
+            agent_runtimes: HashMap::new(),
             store_root,
+            session_id: run_id.as_str().to_owned(),
         })
     }
 
@@ -205,15 +244,27 @@ impl Session {
             .join("accepted-identity.json")
     }
 
-    fn persist_identity(&self, handoff_id: &str, identity: &DurableIdentity) -> Result<()> {
-        let path = self.identity_path(handoff_id);
-        let directory = path.parent().context("identity directory absent")?;
-        std::fs::create_dir_all(directory)?;
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
-            std::fs::set_permissions(directory, std::fs::Permissions::from_mode(0o700))?;
+    fn private_path(&self, handoff_id: &str, name: &str) -> Result<std::path::PathBuf> {
+        arkret_wire::RequestId::new(handoff_id.to_owned()).map_err(anyhow::Error::msg)?;
+        validate_private_path(&self.store_root, true)?;
+        Ok(self
+            .store_root
+            .join(sanitize_path_component(handoff_id))
+            .join(name))
+    }
+
+    fn persist_private<T: Serialize>(&self, handoff_id: &str, name: &str, value: &T) -> Result<()> {
+        let path = self.private_path(handoff_id, name)?;
+        let directory = path.parent().context("custody directory absent")?;
+        if !directory.exists() {
+            std::fs::create_dir(directory)?;
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::PermissionsExt;
+                std::fs::set_permissions(directory, std::fs::Permissions::from_mode(0o700))?;
+            }
         }
+        validate_private_path(directory, true)?;
         let mut options = std::fs::OpenOptions::new();
         options.write(true).create_new(true);
         #[cfg(unix)]
@@ -222,38 +273,92 @@ impl Session {
             options.mode(0o600);
         }
         let mut file = options
-            .open(path)
-            .context("create run-owned accepted identity snapshot")?;
-        file.write_all(&serde_json::to_vec(identity)?)?;
+            .open(&path)
+            .context("create private registration custody")?;
+        file.write_all(&serde_json::to_vec(value)?)?;
         file.sync_all()?;
+        // The filename must survive the same process crash as its contents.
+        #[cfg(unix)]
+        std::fs::File::open(directory)?.sync_all()?;
         Ok(())
     }
 
+    fn read_private<T: serde::de::DeserializeOwned>(
+        &self,
+        handoff_id: &str,
+        name: &str,
+    ) -> Result<T> {
+        let path = self.private_path(handoff_id, name)?;
+        validate_private_path(path.parent().context("custody parent absent")?, true)?;
+        validate_private_path(&path, false)?;
+        let bytes = std::fs::read(&path)?;
+        serde_json::from_slice(&bytes).context("decode private registration custody")
+    }
+
+    fn persist_identity(&self, handoff_id: &str, identity: &DurableIdentity) -> Result<()> {
+        self.persist_private(handoff_id, "accepted-identity.json", identity)
+    }
+
     fn read_identity(&self, handoff_id: &str) -> Result<DurableIdentity> {
-        // Validate the canonical key before filesystem normalization; arbitrary
-        // strings must not alias a different handoff's custody directory.
-        arkret_wire::RequestId::new(handoff_id.to_owned()).map_err(anyhow::Error::msg)?;
-        let path = self.identity_path(handoff_id);
-        let metadata = std::fs::symlink_metadata(&path)
-            .context("durable accepted identity snapshot unavailable")?;
-        anyhow::ensure!(
-            metadata.file_type().is_file() && !metadata.file_type().is_symlink(),
-            "accepted identity snapshot must be a run-owned regular file"
-        );
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
-            anyhow::ensure!(
-                metadata.permissions().mode() & 0o077 == 0,
-                "accepted identity snapshot custody permissions are too broad"
-            );
+        self.read_private(handoff_id, "accepted-identity.json")
+            .context("durable accepted identity snapshot unavailable")
+    }
+
+    /// Private test IPC consumes the already accepted controller fixture.
+    /// Runtime/DPoP keys are generated in Rust and only an opaque handle leaves.
+    async fn open_agent_runtime(&mut self, value: Value) -> Result<Value> {
+        #[derive(Deserialize)]
+        #[serde(deny_unknown_fields)]
+        struct Body {
+            station_base_url: String,
+            coauth_base_url: String,
+            controller_account_id: arkret_wire::AccountId,
+            controller_grant: String,
+            controller_holder_seed: String,
+            controller_event_seed: String,
+            controller_verification_method: arkret_wire::DidUrl,
+            agent_id: arkret_wire::DidCoreId,
+            realm_id: arkret_wire::RealmId,
+            strand_id: arkret_wire::StrandId,
         }
-        anyhow::ensure!(
-            metadata.len() <= 8 * 1024 * 1024,
-            "accepted identity snapshot exceeds its private host bound"
-        );
-        serde_json::from_slice(&std::fs::read(path)?)
-            .context("decode durable accepted identity snapshot")
+        fn key(seed: &str) -> Result<ed25519_dalek::SigningKey> {
+            let bytes = arkret_canonical::base64url_decode(seed)?;
+            let bytes: [u8; 32] = bytes
+                .try_into()
+                .map_err(|_| anyhow::anyhow!("invalid private key length"))?;
+            Ok(ed25519_dalek::SigningKey::from_bytes(&bytes))
+        }
+        let body: Body = serde_json::from_value(value)?;
+        let controller = controller_transport(
+            self.http.clone(),
+            &body.station_base_url,
+            body.controller_grant,
+            key(&body.controller_holder_seed)?,
+        )?;
+        let runtime_id =
+            arkret_wire::RequestId::new_v7_at(chrono::Utc::now().timestamp_millis() as u64);
+        let store = self
+            .store_root
+            .join("agent-runtime")
+            .join(sanitize_path_component(runtime_id.as_str()));
+        let runtime = AgentRuntimeHandle::pair(
+            self.http.clone(),
+            &body.station_base_url,
+            &body.coauth_base_url,
+            &controller,
+            &body.controller_account_id,
+            &body.controller_verification_method,
+            &key(&body.controller_event_seed)?,
+            body.agent_id,
+            body.realm_id,
+            body.strand_id,
+            &store,
+        )
+        .await?;
+        let authorization = runtime.authorization.clone();
+        self.agent_runtimes
+            .insert(runtime_id.as_str().to_owned(), runtime);
+        Ok(json!({"runtime_id":runtime_id,"authorization_event_id":authorization}))
     }
 
     // Separate operation state machines keep founding and restored-identity
@@ -263,6 +368,111 @@ impl Session {
         request: Request,
     ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<Value>> + '_>> {
         match request.op.as_str() {
+            "agent_runtime_pair" => Box::pin(async move {
+                self.open_agent_runtime(request.body).await.map_err(|_| {
+                    anyhow::anyhow!("accepted controller Agent pairing/session failed")
+                })
+            }),
+            "agent_runtime_prepare_message" => Box::pin(async move {
+                #[derive(Deserialize)]
+                #[serde(deny_unknown_fields)]
+                struct Body {
+                    runtime_id: String,
+                    realm_id: arkret_wire::RealmId,
+                    strand_id: arkret_wire::StrandId,
+                    text: String,
+                }
+                let result = async {
+                    let body: Body = serde_json::from_value(request.body)?;
+                    let runtime = self
+                        .agent_runtimes
+                        .get(&body.runtime_id)
+                        .context("runtime unavailable")?;
+                    let event = runtime
+                        .prepare_message(body.realm_id, body.strand_id, &body.text)
+                        .await?;
+                    Ok::<_, anyhow::Error>(json!({"event_id":event}))
+                }
+                .await;
+                result.map_err(|_| anyhow::anyhow!("Agent message preparation failed"))
+            }),
+            "agent_runtime_submit_message" => Box::pin(async move {
+                #[derive(Deserialize)]
+                #[serde(deny_unknown_fields)]
+                struct Body {
+                    runtime_id: String,
+                    event_id: arkret_wire::EventId,
+                }
+                let result = async {
+                    let body: Body = serde_json::from_value(request.body)?;
+                    self.agent_runtimes
+                        .get(&body.runtime_id)
+                        .context("runtime unavailable")?
+                        .submit_message(body.event_id)
+                        .await
+                }
+                .await;
+                result.map_err(|_| {
+                    anyhow::anyhow!("Agent message submission or exact read-back failed")
+                })
+            }),
+            "custody_session" => Box::pin(async move {
+                Ok(json!({ "session_id": self.session_id, "pid": std::process::id() }))
+            }),
+            "registration_custody" => Box::pin(async move {
+                use sha2::Digest;
+                let id = request
+                    .body
+                    .get("handoff_id")
+                    .and_then(Value::as_str)
+                    .context("handoff_id required")?;
+                let durable: DurableRegistration =
+                    self.read_private(id, "prepared-registration.json")?;
+                anyhow::ensure!(
+                    durable.request_id == id,
+                    "custody handoff address differs from original request"
+                );
+                Ok(
+                    json!({"request_digest": hex::encode(sha2::Sha256::digest(serde_json::to_vec(&durable.prepared.register_body)?)),
+                    "accepted_persisted":self.identity_path(id).exists()}),
+                )
+            }),
+            "recover_principal" => Box::pin(async move {
+                let id = request
+                    .body
+                    .get("handoff_id")
+                    .and_then(Value::as_str)
+                    .context("handoff_id required")?;
+                let durable: DurableRegistration =
+                    self.read_private(id, "prepared-registration.json")?;
+                anyhow::ensure!(
+                    durable.request_id == id,
+                    "custody handoff address differs from original request"
+                );
+                let handoff = durable.handoff()?;
+                let principal =
+                    submit_prepared_principal_registration(&self.http, &durable.prepared, &handoff)
+                        .await?;
+                let identity = DurableIdentity {
+                    principal,
+                    trust_domain: durable.prepared.trust_domain,
+                    station_base: durable.prepared.station_base,
+                    coauth_base: durable.prepared.coauth_base,
+                    session_signing_seed_b64url: durable.session_signing_seed_b64url,
+                };
+                // A completed local checkpoint is never silently overwritten by replay.
+                if self.identity_path(id).exists() {
+                    let prior = self.read_identity(id)?;
+                    anyhow::ensure!(
+                        serde_json::to_value(&prior.principal.outcome)?
+                            == serde_json::to_value(&identity.principal.outcome)?,
+                        "exact replay changed original accepted outcome"
+                    );
+                } else {
+                    self.persist_identity(id, &identity)?;
+                }
+                Ok(principal_response(&identity.principal))
+            }),
             "describe_station" => Box::pin(async move {
                 let endpoints: DeploymentEndpoints =
                     serde_json::from_value::<EndpointsBody>(request.body)
@@ -329,13 +539,15 @@ impl Session {
                     audience_id: String,
                     device_id: String,
                     display_name: String,
+                    #[serde(default)]
+                    stop_after_accept: bool,
                 }
                 let body: Body = serde_json::from_value(request.body).context("parse request")?;
                 let handoff = self
                     .handoffs
                     .get(&body.handoff_id)
                     .with_context(|| format!("no handoff {} in this session", body.handoff_id))?;
-                let principal = found_principal(
+                let prepared = prepare_principal_registration(
                     &self.http,
                     FoundPrincipalRequest {
                         coauth_base: &body.coauth_base_url,
@@ -348,6 +560,27 @@ impl Session {
                     handoff,
                 )
                 .await?;
+                self.persist_private(
+                    &body.handoff_id,
+                    "prepared-registration.json",
+                    &DurableRegistration {
+                        prepared: prepared.clone(),
+                        request_id: handoff.request_id.clone(),
+                        account_subject: handoff.account_subject.clone(),
+                        account_handoff_grant: handoff.account_handoff_grant.clone(),
+                        expires_at: handoff.expires_at.clone(),
+                        binding: handoff.binding.clone(),
+                        session_signing_seed_b64url: handoff.device_key.seed_b64url.clone(),
+                    },
+                )?;
+                let principal =
+                    submit_prepared_principal_registration(&self.http, &prepared, handoff).await?;
+                if body.stop_after_accept {
+                    // The service accepted the exact request, but the host has not
+                    // retained any outcome/grant. The caller now SIGKILLs this process.
+                    return Ok(json!({"accepted_before_persist":true,
+                        "outcome":principal.outcome,"pid":std::process::id()}));
+                }
                 // Retained so `read_self_account_viewer` can present it. It
                 // is also in the response — the caller needs to assert on the
                 // outcome — but the read is done here so the proof is signed by
@@ -370,24 +603,7 @@ impl Session {
                         session_signing_seed_b64url: handoff.device_key.seed_b64url.clone(),
                     },
                 )?;
-                Ok(json!({
-                    "principal_id": principal.outcome.principal_id,
-                    "did": principal.did,
-                    "device_id": principal.device_id,
-                    "account_id": principal.account_id(),
-                    "event_verification_method": principal.event_verification_method,
-                    "recovery_key": principal.recovery_key,
-                    "session_grant": {
-                        "session_grant": grant.session_grant,
-                        "session_grant_id": grant.session_grant_id,
-                        "audience_id": grant.audience_id,
-                        "device_id": grant.device_id,
-                        "granted_scope": grant.granted_scope,
-                        "expires_at": arkret_canonical::format_timestamp_canonical(grant.expires_at),
-                    },
-                    "binding_receipt": principal.outcome.binding_receipt,
-                    "pcr_genesis_commits": principal.outcome.pcr_genesis_commits,
-                }))
+                Ok(principal_response(&principal))
             }),
             "read_self_account_viewer" => Box::pin(async move {
                 #[derive(Deserialize)]
@@ -396,23 +612,25 @@ impl Session {
                     coland_base_url: String,
                 }
                 let body: Body = serde_json::from_value(request.body).context("parse request")?;
-                let handoff = self
-                    .handoffs
-                    .get(&body.handoff_id)
-                    .with_context(|| format!("no handoff {} in this session", body.handoff_id))?;
-                let grant = self.session_grants.get(&body.handoff_id).with_context(|| {
-                    format!(
-                        "handoff {} has no session grant; found_principal has not run for it",
-                        body.handoff_id
+                let identity = self.read_identity(&body.handoff_id)?;
+                anyhow::ensure!(
+                    identity.station_base == body.coland_base_url,
+                    "viewer origin differs from accepted custody"
+                );
+                let key = FoundingDeviceKey::restore(&identity.session_signing_seed_b64url)?;
+                identity
+                    .principal
+                    .validate_restored(
+                        &self.http,
+                        &identity.coauth_base,
+                        &identity.station_base,
+                        &identity.trust_domain,
+                        &key,
                     )
-                })?;
-                let read = read_self_account_viewer(
-                    &self.http,
-                    &body.coland_base_url,
-                    grant,
-                    &handoff.device_key,
-                )
-                .await?;
+                    .await?;
+                let grant = &identity.principal.session_grant().session_grant;
+                let read = read_self_account_viewer(&self.http, &body.coland_base_url, grant, &key)
+                    .await?;
                 Ok(json!({ "status": read.status, "body": read.body }))
             }),
             // --- Garth as a client -------------------------------------------
@@ -484,6 +702,196 @@ impl Session {
                 Ok(json!({ "store_root": store_root.to_string_lossy(),
                     "identity_snapshot_path":self.identity_path(&body.handoff_id).to_string_lossy(),
                     "identity_restored_from_disk":true }))
+            }),
+            "sign_invite_subject" => Box::pin(async move {
+                #[derive(Deserialize)]
+                #[serde(deny_unknown_fields)]
+                struct Body {
+                    handoff_id: String, invite_id: String, realm_id: String,
+                    token_commitment: String, claim_nonce: String, verification_id: String,
+                    binding_proof: arkret_models_collaboration::governance::membership_invite::InviteClaimBindingProof,
+                }
+                let body: Body = serde_json::from_value(request.body)?;
+                let identity = self.read_identity(&body.handoff_id)?;
+                let holder = FoundingDeviceKey::restore(&identity.session_signing_seed_b64url)?;
+                identity
+                    .principal
+                    .validate_restored(
+                        &self.http,
+                        &identity.coauth_base,
+                        &identity.station_base,
+                        &identity.trust_domain,
+                        &holder,
+                    )
+                    .await?;
+                let checkpoint = &identity.principal.checkpoint;
+                cotest_test_support::wire::invite_subject_proof(json!({
+                    "subject_account_id":identity.principal.account_id(), "invite_id":body.invite_id,
+                    "realm_id":body.realm_id,"token_commitment":body.token_commitment,
+                    "claim_nonce":body.claim_nonce,"verification_id":body.verification_id,
+                    "binding_proof":body.binding_proof,
+                    "verification_method":checkpoint.get("root_verification_method").context("original native root method absent")?,
+                    "subject_did":identity.principal.did,
+                    "root_public_key_multibase":checkpoint.get("root_public_key_multibase").context("original native root key absent")?,
+                    "recovery_key":identity.principal.recovery_key,
+                }))
+            }),
+            "sign_third_party_invite_provision" => Box::pin(async move {
+                use arkret_models_collaboration::governance::third_party_invite::{
+                    ThirdPartyInviteDeliveryTargetUri, ThirdPartyInviteOobKind,
+                    ThirdPartyInviteProvisionRequestBody,
+                };
+                #[derive(Deserialize)]
+                #[serde(deny_unknown_fields)]
+                struct Body {
+                    handoff_id: String,
+                    request_id: arkret_wire::RequestId,
+                    realm_id: arkret_wire::RealmId,
+                    verification_id: arkret_wire::DidCoreId,
+                    oob_code_kind: ThirdPartyInviteOobKind,
+                    delivery_target_uri: ThirdPartyInviteDeliveryTargetUri,
+                    expires_at: String,
+                    created_at: Option<String>,
+                    domain: String,
+                }
+                let body: Body = serde_json::from_value(request.body)?;
+                let identity = self.read_identity(&body.handoff_id)?;
+                let holder = FoundingDeviceKey::restore(&identity.session_signing_seed_b64url)?;
+                identity
+                    .principal
+                    .validate_restored(
+                        &self.http,
+                        &identity.coauth_base,
+                        &identity.station_base,
+                        &identity.trust_domain,
+                        &holder,
+                    )
+                    .await?;
+                let seed = identity
+                    .principal
+                    .checkpoint
+                    .get("device_signing_seed_b64url")
+                    .and_then(Value::as_str)
+                    .context("accepted Device signer absent")?;
+                let signer = FoundingDeviceKey::restore(seed)?.signing_key();
+                let now = chrono::Utc::now();
+                let created_at = body
+                    .created_at
+                    .as_deref()
+                    .map(arkret_canonical::parse_timestamp_canonical)
+                    .transpose()?
+                    .unwrap_or(now);
+                let mut signed = ThirdPartyInviteProvisionRequestBody {
+                    request_id: body.request_id,
+                    realm_id: body.realm_id,
+                    inviter_account_id: identity.principal.account_id().clone(),
+                    verification_id: body.verification_id.clone(),
+                    oob_code_kind: body.oob_code_kind,
+                    delivery_target_uri: body.delivery_target_uri,
+                    expires_at: arkret_canonical::parse_timestamp_canonical(&body.expires_at)?,
+                    signature: arkret_wire::PayloadProof {
+                        kind: arkret_wire::proof_kind::DETACHED_JWS.to_owned(),
+                        verification_method: arkret_wire::DidUrl::new(
+                            identity.principal.event_verification_method.clone(),
+                        )
+                        .map_err(anyhow::Error::msg)?,
+                        payload_digest: arkret_wire::Hash::new(format!(
+                            "sha256:{}",
+                            "0".repeat(64)
+                        ))?,
+                        created_at,
+                        domain: Some(body.domain),
+                        audience: Some(arkret_wire::Audience::Single(
+                            body.verification_id.to_string(),
+                        )),
+                        proof_purpose: None,
+                        jws: String::new(),
+                    },
+                };
+                signed.signature.payload_digest = signed.payload_digest()?;
+                let proof = signed.signature.unsigned();
+                let jws = arkret_signatures::proof::sign_ed25519_detached_jws(
+                    &signer,
+                    &signed.unsigned_proof_binding_bytes(&proof)?,
+                )
+                .map_err(anyhow::Error::msg)?;
+                signed.signature = proof.finalize(jws)?;
+                signed.validate_for_service(&body.verification_id)?;
+                Ok(serde_json::to_value(signed)?)
+            }),
+            "third_party_invite_acceptance_attestation" => Box::pin(async move {
+                let id = request
+                    .body
+                    .get("handoff_id")
+                    .and_then(Value::as_str)
+                    .context("handoff_id required")?;
+                let client = self
+                    .garth_clients
+                    .get(id)
+                    .context("Garth runtime not opened")?;
+                let body = serde_json::from_value(
+                    request
+                        .body
+                        .get("request")
+                        .cloned()
+                        .context("typed request required")?,
+                )?;
+                client
+                    .third_party_invite_acceptance_attestation(&body)
+                    .await
+            }),
+            "garth_submit_typed_event" => Box::pin(async move {
+                let id = request
+                    .body
+                    .get("handoff_id")
+                    .and_then(Value::as_str)
+                    .context("handoff_id required")?;
+                let client = self
+                    .garth_clients
+                    .get(id)
+                    .context("Garth runtime not opened")?;
+                let realm = serde_json::from_value(
+                    request
+                        .body
+                        .get("realm_id")
+                        .cloned()
+                        .context("realm_id required")?,
+                )?;
+                let kind = request
+                    .body
+                    .get("kind")
+                    .and_then(Value::as_str)
+                    .context("kind required")?;
+                client
+                    .submit_typed_event(
+                        realm,
+                        kind,
+                        request
+                            .body
+                            .get("payload")
+                            .cloned()
+                            .context("payload required")?,
+                        serde_json::from_value(
+                            request
+                                .body
+                                .get("semantic_refs")
+                                .cloned()
+                                .unwrap_or_else(|| json!([])),
+                        )?,
+                    )
+                    .await
+            }),
+            "garth_cursor" => Box::pin(async move {
+                let id = request
+                    .body
+                    .get("handoff_id")
+                    .and_then(Value::as_str)
+                    .context("handoff_id required")?;
+                let client = self
+                    .garth_clients
+                    .get(id)
+                    .context("Garth runtime not opened")?;
+                Ok(json!({"cursor":client.cursor().await?}))
             }),
             "garth_sync_account" => Box::pin(async move {
                 #[derive(Deserialize)]
@@ -618,9 +1026,51 @@ impl Session {
     }
 }
 
+fn validate_private_path(path: &std::path::Path, directory: bool) -> Result<()> {
+    let metadata = std::fs::symlink_metadata(path).context("private custody unavailable")?;
+    anyhow::ensure!(
+        !metadata.file_type().is_symlink()
+            && if directory {
+                metadata.is_dir()
+            } else {
+                metadata.is_file()
+            },
+        "custody must be a regular private path"
+    );
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        anyhow::ensure!(
+            metadata.permissions().mode() & 0o077 == 0,
+            "custody permissions must exclude other users"
+        );
+    }
+    anyhow::ensure!(
+        directory || metadata.len() <= 8 * 1024 * 1024,
+        "custody exceeds private host bound"
+    );
+    Ok(())
+}
+
+fn principal_response(principal: &FoundedPrincipal) -> Value {
+    let grant = principal.session_grant();
+    json!({
+        "principal_id":principal.outcome.principal_id,"did":principal.did,
+        "device_id":principal.device_id,"account_id":principal.account_id(),
+        "event_verification_method":principal.event_verification_method,
+        "recovery_key":principal.recovery_key,
+        "session_grant": {"session_grant":grant.session_grant,"session_grant_id":grant.session_grant_id,
+            "audience_id":grant.audience_id,"device_id":grant.device_id,"granted_scope":grant.granted_scope,
+            "expires_at":arkret_canonical::format_timestamp_canonical(grant.expires_at)},
+        "binding_receipt":principal.outcome.binding_receipt,"pcr_genesis_commits":principal.outcome.pcr_genesis_commits,
+        "accepted_outcome":principal.outcome,
+    })
+}
+
 impl Drop for Session {
     fn drop(&mut self) {
         self.garth_clients.clear();
+        self.agent_runtimes.clear();
         let _ = std::fs::remove_dir_all(&self.store_root);
     }
 }

@@ -11,6 +11,8 @@
 //     "token holder = did".
 //   GET  /jwks   → service public key for verifying binding_proof
 //   GET  /inspect → all sent emails + all token state (global dump)
+//   POST /inspect { delivery_failure: { to, enabled } }
+//     Configure 503 for exactly one recipient, through the local mock facade.
 //   DELETE /inspect → clear log
 //
 // In-memory only. State resets per harness run.
@@ -32,6 +34,7 @@ const inbox = new Map();
 const tokens = new Map();
 const sendLog = new InspectLog("sent");
 const claimLog = new InspectLog("claims");
+const failedRecipients = new Set();
 
 function signBindingProof({ token_commitment, did, issuer, audience }) {
   const header = { alg: "RS256", typ: "JWT", kid: "mock-email-key-1" };
@@ -103,6 +106,26 @@ const server = createServer(async (req, res) => {
   const issuer = `http://127.0.0.1:${server.address()?.port ?? port}`;
 
   if (url.pathname === "/inspect") {
+    if (req.method === "POST") {
+      const body = await readJson(req);
+      const fault = body?.delivery_failure;
+      const valid = body && Object.keys(body).length === 1 && fault
+        && Object.keys(fault).length === 2
+        && typeof fault.to === "string" && fault.to === fault.to.trim()
+        && /^[^<>@\s]+@[^<>@\s]+$/.test(fault.to) && fault.to.length <= 320
+        && typeof fault.enabled === "boolean";
+      if (!valid) {
+        res.statusCode = 400;
+        res.end(JSON.stringify({ error: "invalid_delivery_failure_control" }));
+        return;
+      }
+      if (fault.enabled) failedRecipients.add(fault.to);
+      else failedRecipients.delete(fault.to);
+      // No private recipient, attempted message or code appears in controls.
+      res.end(JSON.stringify({ configured: true, enabled: fault.enabled }));
+      return;
+    }
+    if (req.method === "DELETE") failedRecipients.clear();
     const handled = handleInspect(req, res, {
       service: "mock-email",
       logs: [sendLog, claimLog],
@@ -141,6 +164,7 @@ const server = createServer(async (req, res) => {
     const ttl = Number.isFinite(payload.ttl_seconds) ? payload.ttl_seconds : defaultTtlSeconds;
     const expiresAtMs = Date.now() + ttl * 1000;
     const message_id = `msg-${randomUUID()}`;
+    const failed = failedRecipients.has(payload.to);
     const message = {
       message_id,
       token: payload.token,
@@ -149,16 +173,24 @@ const server = createServer(async (req, res) => {
       body_html: payload.body_html,
       received_at: new Date().toISOString(),
       expires_at: new Date(expiresAtMs).toISOString(),
+      delivery_status: failed ? "failed" : "delivered",
     };
     const list = inbox.get(payload.to) ?? [];
     list.push(message);
     inbox.set(payload.to, list);
-    tokens.set(payload.token, {
+    if (!failed) tokens.set(payload.token, {
       to: payload.to,
       consumed: false,
       expires_at: message.expires_at,
       body_html: message.body_html,
     });
+    if (failed) {
+      // The transport actually fails; only the private in-memory inbox keeps
+      // attempted bodies so tests can distinguish attempts from delivery.
+      res.statusCode = 503;
+      res.end(JSON.stringify({ error: "mock_delivery_unavailable" }));
+      return;
+    }
     sendLog.record({
       to: payload.to,
       token: payload.token,

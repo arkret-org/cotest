@@ -43,7 +43,10 @@ try {
     # b64url of a synthetic 32-byte seed: the exact shape a private OKP JWK's
     # `d` member and a plaintext keybag entry carry.
     $jwkPrivateScalar = "c3ludGhldGljLXNlZWQtdmFsdWUtZm9yLXNjYW5uZXItdGVzdHM"
-    $plantedSecrets = @($mnemonic, $bearer, $dpop, $hexSecret, $didValue, $jwkPrivateScalar)
+    $inviteCode = 'ABCD' * 10
+    $lookupCode = 'ABCDEFGHJKLMNPQR_23456789'
+    $privateBytes = (1..32) -join ','
+    $plantedSecrets = @($mnemonic, $bearer, $dpop, $hexSecret, $didValue, $jwkPrivateScalar, $inviteCode, $lookupCode, $privateBytes)
 
     # One planted secret per line; the file name documents the vector.
     $planted = @(
@@ -52,6 +55,14 @@ try {
         [pscustomobject]@{ name = "json-recovery-key.log"; line = "{`"recovery_key`":`"$mnemonic`"}"; pattern = "json_secret_field" },
         [pscustomobject]@{ name = "json-hkdf-prk.log"; line = "{`"hkdf_prk`":`"$hexSecret`"}"; pattern = "json_secret_field" },
         [pscustomobject]@{ name = "json-secret-b64u.log"; line = "{`"secret_b64u`":`"$hexSecret`"}"; pattern = "json_secret_field" },
+        [pscustomobject]@{ name = "json-invite-code.log"; line = "{`"oob_code`":`"$inviteCode`"}"; pattern = "json_secret_field" },
+        [pscustomobject]@{ name = "json-token-salt.log"; line = "{`"token_salt`":`"$hexSecret`"}"; pattern = "recovery_private_material_field" },
+        [pscustomobject]@{ name = "json-pepper.log"; line = "{`"pepper`":`"$hexSecret`"}"; pattern = "recovery_private_material_field" },
+        [pscustomobject]@{ name = "json-signing-seed.log"; line = "{`"signing_seed`":[$privateBytes]}"; pattern = "private_material_byte_array" },
+        [pscustomobject]@{ name = "query-invite-code.log"; line = "GET /present?oob_code=$lookupCode"; pattern = "query_secret_field" },
+        [pscustomobject]@{ name = "delivered-offline-code.log"; line = "Your invitation code is $inviteCode."; pattern = "invite_delivery_code" },
+        [pscustomobject]@{ name = "delivered-lookup-code.log"; line = "Your invitation code is $lookupCode."; pattern = "invite_delivery_code" },
+        [pscustomobject]@{ name = "invite-token-url-path.log"; line = "POST /_arkret/open/third-party-invites/present/$inviteCode status=404"; pattern = "invite_token_in_path" },
         [pscustomobject]@{ name = "json-plaintext-keybag.log"; line = "{`"plaintext_keybag`":`"$hexSecret`"}"; pattern = "json_secret_field" },
         [pscustomobject]@{ name = "json-mls-epoch-secret.log"; line = "{`"epoch_secret`":`"$hexSecret`"}"; pattern = "json_secret_field" },
         [pscustomobject]@{ name = "json-mls-private-state.log"; line = "{`"private_state`":`"$hexSecret`"}"; pattern = "json_secret_field" },
@@ -96,6 +107,7 @@ try {
     # ordinary sentences, so the wordlist validator must reject them.
     $cleanLines = @(
         '{"status":"ok","principal_id":"ak:did_core:webvh:QmExample"}',
+        '{"pepper_id":"pepper-public-id","token_salt_id":"salt-public-id","oob_code_kind":"offline_token"}',
         'INFO completed request in 42ms path=/_arkret/describe',
         # A table whose name merely starts with a private-material word is not a
         # private-material column: `\bseed\b` must not match `seed_catalog`.
@@ -167,14 +179,14 @@ try {
         Assert-True ($leak.artifact_class -eq "log_or_telemetry") "a bare scan root must default to the strict artifact class, got '$($leak.artifact_class)'"
         Assert-True ($leak.verdict -eq "fail") "every finding in a log artifact must fail, got '$($leak.verdict)' for $($leak.pattern)"
     }
-    foreach ($privatePattern in @("recovery_private_material_field", "recovery_private_material_assignment", "bip39_mnemonic_sequence", "private_key_block", "jwk_private_member", "plaintext_keybag_object", "sql_private_material_column")) {
+    foreach ($privatePattern in @("recovery_private_material_field", "recovery_private_material_assignment", "private_material_byte_array", "bip39_mnemonic_sequence", "private_key_block", "jwk_private_member", "plaintext_keybag_object", "sql_private_material_column")) {
         $categorised = @($leaks | Where-Object { $_.pattern -eq $privatePattern })
         Assert-True ($categorised.Count -ge 1) "expected at least one $privatePattern finding to categorise"
         foreach ($leak in $categorised) {
             Assert-True ($leak.category -eq "recovery_private_material") "$privatePattern must be recovery_private_material, got '$($leak.category)'"
         }
     }
-    foreach ($credentialPattern in @("authorization_header", "dpop_header", "json_secret_field", "query_secret_field", "did_in_token_field")) {
+    foreach ($credentialPattern in @("authorization_header", "dpop_header", "invite_delivery_code", "invite_token_in_path", "json_secret_field", "query_secret_field", "did_in_token_field")) {
         $categorised = @($leaks | Where-Object { $_.pattern -eq $credentialPattern })
         Assert-True ($categorised.Count -ge 1) "expected at least one $credentialPattern finding to categorise"
         foreach ($leak in $categorised) {
@@ -241,6 +253,10 @@ try {
     Set-Content -Path $canaryFile -Value @(
         "Expected substring: not present",
         "Received: {`"invite_token`":`"$bearer`",`"mnemonic`":`"$mnemonic`"}",
+        "Received: {`"pepper`":`"$hexSecret`",`"signing_seed`":[$privateBytes]}",
+        "Your invitation code is $inviteCode.",
+        "Your invitation code is $lookupCode.",
+        "POST /_arkret/open/third-party-invites/present/$lookupCode status=404",
         "at contact-graph.spec.ts:222"
     ) -Encoding utf8
 
@@ -256,10 +272,15 @@ try {
     $canaryText = Get-Content -LiteralPath $canaryFile -Raw
     Assert-True (-not $canaryText.Contains($bearer)) "the redacted artifact must not retain the invite token"
     Assert-True (-not $canaryText.Contains($mnemonic)) "the redacted artifact must not retain the mnemonic"
+    foreach ($secret in @($hexSecret, $privateBytes, $inviteCode, $lookupCode)) {
+        Assert-True (-not $canaryText.Contains($secret)) "the redacted artifact must not retain provider private material"
+    }
     Assert-True ($canaryText.Contains("contact-graph.spec.ts:222")) "redaction must preserve the surrounding diagnostic"
 
     $canaryAfter = @(Find-SecretLeaks -ScanRoots @($canaryRoot))
     Assert-True ($canaryAfter.Count -eq 0) "a re-scan of the redacted artifact must be clean; got: $(@($canaryAfter | ForEach-Object { $_.pattern }) -join ', ')"
+    $runnerSource = Get-Content -LiteralPath (Join-Path $PSScriptRoot '..\run-joint-e2e.ps1') -Raw
+    Assert-True ($runnerSource.Contains("`$directory.Name -eq 'third-party-invites'")) "provider results, JUnit and summary must be included in strict artifact scanning"
 
     # Wordlist sanity: exactly the standard 2048-entry BIP-39 English list.
     $dpopPattern = Get-SecretLeakPatterns | Where-Object name -eq "dpop_header"

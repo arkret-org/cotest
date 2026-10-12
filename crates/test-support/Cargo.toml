@@ -49,6 +49,7 @@ ed25519-dalek = { workspace = true, default-features = false, features = ["alloc
 # reason — Garth is the UI-free engine to reuse, not a heavy UI dependency to
 # strip.
 garth = { workspace = true }
+getrandom = "0.4.3"
 hex = { workspace = true }
 # The provisioning module talks to Coauth and Coland over HTTP. The SDK's
 # client carries DPoP and the standard operations; `reqwest` is for Coauth's

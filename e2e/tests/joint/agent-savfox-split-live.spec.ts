@@ -12,6 +12,8 @@ import {
   type TestInfo,
 } from "../../helpers/arkret-test";
 import { readFile } from "node:fs/promises";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
 import type {
   ActorId,
   AccountId,
@@ -36,6 +38,7 @@ import {
   assertAuthoritySubmitOutcome,
   canonicalJson,
   expectJsonOk,
+  grantCapabilityEventApi,
   wireErrCode,
 } from "../../helpers/coland-api";
 import {
@@ -609,7 +612,7 @@ jointTest.describe("Agent Savfox split live @fully-implemented", () => {
           await accountOutage.restore();
         }
 
-        await agentTopicChats(inkson, process.env.COTEST_SAVFOX_MODEL_RECEIPTS?.trim() ?? "", { request, token: jointRealm.aliceSession.grantJwt });
+        await agentTopicChats(inkson, process.env.COTEST_SAVFOX_MODEL_RECEIPTS?.trim() ?? "", { request, token: jointRealm.aliceSession.grantJwt, agentId: firstPairing.agentId });
 
         if (lifecycleEvidenceOnly) {
           const directConversationUrl = inkson.url();
@@ -1319,6 +1322,24 @@ jointTest("fresh Agent pairing gates the first send until binding and answers on
   let releaseBinding!: () => void;
   const bindingGate = new Promise<void>((resolve) => { releaseBinding = resolve; });
   let heldBinding: SubmittedEvent | undefined;
+  let releaseSecondResolve!: () => void;
+  const secondResolveGate = new Promise<void>(resolve => { releaseSecondResolve = resolve; });
+  let foundingSubmitted = false;
+  let foundingAcceptedAt: number | undefined;
+  let foundingResponse: import("@playwright/test").Response | undefined;
+  let heldResolves = 0;
+  const holdSecondResolve = async (route: Route) => {
+    if (foundingSubmitted) { heldResolves += 1; await secondResolveGate; }
+    await route.continue();
+  };
+  const observeFounding = (response: import("@playwright/test").Response) => {
+    if (new URL(response.url()).pathname === EVENTS_SUBMIT_PATH && response.ok()
+      && response.request().postDataJSON()?.unit_kind === "direct_conversation_founding") {
+      foundingAcceptedAt ??= Date.now();
+      foundingResponse ??= response;
+    }
+  };
+  inkson.on("response", observeFounding);
   const messages: SubmittedEvent[] = [];
   const phases: string[] = [];
   const observeResolve = async (response: import("@playwright/test").Response) => {
@@ -1328,6 +1349,7 @@ jointTest("fresh Agent pairing gates the first send until binding and answers on
   };
   inkson.on("response", observeResolve);
   const holdBinding = async (route: Route) => {
+    if (route.request().postDataJSON()?.unit_kind === "direct_conversation_founding") foundingSubmitted = true;
     const submitted = eventSubmissions(route.request().postData());
     messages.push(...submitted.filter((event) => event.kind === "ak.message.create"));
     const binding = submitted.find((event) => event.kind === "ak.direct_conversation.bound");
@@ -1349,7 +1371,38 @@ jointTest("fresh Agent pairing gates the first send until binding and answers on
     // Delay the actual binding submission, never fabricate resolver state.
     // This exposes the durable-Welcome/unfinished-binding cold-start window.
     await inkson.route(`**${EVENTS_SUBMIT_PATH}`, holdBinding);
+    await inkson.route(`**${DIRECT_CONVERSATIONS_RESOLVE_PATH}`, holdSecondResolve);
     await openOwnAgentDirectChat(inkson, slug);
+    await expect.poll(() => foundingAcceptedAt, { timeout: 180_000 }).toBeDefined();
+    const founding = eventSubmissions(foundingResponse!.request().postData());
+    const foundingOutcome = await foundingResponse!.json() as { unit_kind: string; status: string; commits: Array<Record<string, unknown>> };
+    expect(foundingOutcome.unit_kind).toBe("direct_conversation_founding");
+    expect(foundingOutcome.status).toBe("committed");
+    expect(founding).toHaveLength(4);
+    expect(foundingOutcome.commits).toHaveLength(4);
+    for (let i = 0; i < 4; i += 1) {
+      expect(foundingOutcome.commits[i].event_ref).toBe(founding[i].event_id);
+      expect(foundingOutcome.commits[i].stream_position).toBe(i);
+      expect(foundingOutcome.commits[i].previous_commit_ref ?? null).toBe(i ? foundingOutcome.commits[i - 1].commit_id : null);
+    }
+    await expect.poll(() => heldResolves).toBeGreaterThan(0);
+    await expect(inkson.getByTestId("chat-panel")).toBeVisible();
+    const acceptedPath = new URL(inkson.url()).pathname;
+    const acceptedToVisibleMs = Date.now() - foundingAcceptedAt!;
+    await expect(inkson.getByTestId("send-chat-button")).toBeDisabled();
+    await expect(inkson.getByTestId("chat-panel")).not.toContainText("Strand not found");
+    await inkson.getByTestId("account-menu-button").click();
+    await inkson.getByTestId("account-menu-settings").click();
+    await expect(inkson.getByTestId("settings-panel")).toBeVisible();
+    await inkson.goBack();
+    await expect(inkson).toHaveURL(url => url.pathname === acceptedPath);
+    await expect(inkson.getByTestId("send-chat-button")).toBeDisabled();
+    await testInfo.attach("owned-agent-held-second-resolve", {
+      body: JSON.stringify({ accepted_to_visible_ms: acceptedToVisibleMs,
+        accepted_path: acceptedPath, pending_resolve_requests: heldResolves, send_disabled: true, shell_survived_page_navigation: true }),
+      contentType: "application/json",
+    });
+    releaseSecondResolve();
     await expect.poll(() => Boolean(heldBinding), { timeout: 180_000 }).toBe(true);
     await expect.poll(() => phases.includes("provisional:durable"), { timeout: 30_000 }).toBe(true);
     await expect(inkson.getByTestId("chat-panel")).toBeVisible();
@@ -1389,12 +1442,331 @@ jointTest("fresh Agent pairing gates the first send until binding and answers on
     }, null, 2), contentType: "application/json" });
     await testInfo.attach("cold-first-reply", { body: await inkson.screenshot(), contentType: "image/png" });
   } finally {
+    releaseSecondResolve();
     releaseBinding();
+    inkson.off("response", observeFounding);
+    await inkson.unroute(`**${DIRECT_CONVERSATIONS_RESOLVE_PATH}`, holdSecondResolve);
     inkson.off("response", observeResolve);
     await inkson.unroute(`**${EVENTS_SUBMIT_PATH}`, holdBinding);
     await context.close();
   }
 });
+
+// This is a separately selected native Public lane. The original two Agent
+// tests and normal12/management6/refusal50 selections retain their exact titles.
+jointTest.describe("Native public fixed reply @native-public-reply", () => {
+  jointTest.use({ trace: "off", screenshot: "off", video: "off" });
+  for (const restart of [false, true]) {
+    jointTest(
+      restart
+        ? "retains the accepted third-party public reply across the whole Main process restart and handles a new source once"
+        : "explicitly configures the first public native reply and answers an independent Human's encrypted shared Strand mention once",
+      async ({ browser, jointUsers, request }, testInfo) => {
+        const base = process.env.COTEST_SAVFOX_BASE_URL?.trim();
+        const token = process.env.COTEST_SAVFOX_TOKEN?.trim();
+        const receipts = process.env.COTEST_SAVFOX_MODEL_RECEIPTS?.trim();
+        const required = process.env.COTEST_REQUIRE_NATIVE_PUBLIC_REPLY === "1";
+        if (required && (!base || !token || !receipts || !process.env.COTEST_TOPOLOGY_PATH)) {
+          throw new Error("Native Public lane requires the runner-owned gateway, provider receipts and Station process control");
+        }
+        jointTest.skip(!required, "PRECONDITION_NATIVE_PUBLIC_REPLY: select the original runner with -StartNativeArkretPublicReply");
+        if (!base || !token || !receipts) throw new Error("Native Public runner inputs missing");
+        const realm = await jointUsers.alicePage.createRealm({
+          title: `Native public ${restart ? "restart" : "first"} ${Date.now()}`,
+          discoverability: "public", joinRule: "invite", historyAccess: "since_join", mlsActivated: true,
+        });
+        const jointRealm: JointRealmFixture = { ...jointUsers, realmId: realm };
+        const controller = jointUsers.alicePage.page;
+        const caller = jointUsers.bobPage.page;
+        expect(canonicalJson(jointUsers.aliceSession.accountId) === canonicalJson(jointUsers.bobSession.accountId)).toBe(false);
+        const consent = await grantInviteConsentArkret(request, jointUsers.bobToken, jointUsers.bob, jointUsers.alice.id);
+        const delivered = await deliverInviteWithConsentGrant(request, {
+          inviterId: jointUsers.alice.id, inviterToken: jointUsers.aliceToken, realmId: realm,
+          inviteeId: jointUsers.bob.id, consentGrantRef: consent.eventRef,
+          originServer: "server1", recipientServer: "server1",
+        });
+        expect(delivered.outcome.disclosed_outcome).toBe("delivered");
+        await jointUsers.bobPage.acceptInvite(realm);
+        // This is an ordinary accepted owner grant to the real member, never a
+        // fixture header or an impersonated controller/Agent Event producer.
+        await grantCapabilityEventApi(request, jointUsers.aliceToken, {
+          ownerId: jointUsers.alice.id, subjectId: jointUsers.bob.id,
+          realmId: realm, actions: ["ak.message.create"],
+        });
+        const context = await browser.newContext();
+        const savfox = await context.newPage();
+        try {
+          await openSavfoxArkretChannel(savfox, base, token);
+          const pairing = await provisionAgent(controller, `native-public-${Date.now().toString(36)}`);
+          await pairNativeManagedSavfoxAgent(controller, savfox, pairing);
+          await addAgentToRealm(controller, realm, pairing.agentId);
+          const publicResponse = controller.waitForResponse(response => {
+            const outgoing = response.request();
+            return outgoing.method() === "POST" && new URL(response.url()).pathname === EVENTS_SUBMIT_PATH
+              && eventSubmissions(outgoing.postData()).some(event => event.kind === "ak.agent.interaction.set"
+                && event.payload?.interaction_mode === "public");
+          }, { timeout: 180_000 });
+          const row = controller.locator(`[data-testid="member-self-agent-row"][data-agent-id="${pairing.agentId}"]`);
+          await row.getByTestId("member-agent-interaction-mode").getByRole("button", { name: /^(公开|Public)$/ }).click();
+          const response = await publicResponse;
+          expect(response.ok()).toBe(true);
+          const mode = eventSubmissions(response.request().postData()).find(event => event.kind === "ak.agent.interaction.set")!;
+          const modeOutcome = await response.json() as Record<string, unknown>;
+          assertAuthoritySubmitOutcome(modeOutcome, mode, "normal explicit native Public selection");
+          expect(canonicalJson(mode.actor_id) === canonicalJson({ kind: "account", account_id: jointUsers.aliceSession.accountId })).toBe(true);
+          expect(mode.payload?.interaction_mode).toBe("public");
+          const agentAccount = { principal_id: pairing.agentId, station_id: jointUsers.aliceSession.accountId.station_id };
+          const currentUrl = `${colandBaseUrl()}/_arkret/self/current-results/exact`;
+          const current = await request.post(currentUrl, {
+            headers: selfPathHeadersForDpopSession(jointUsers.aliceSession, "POST", currentUrl),
+            data: canonicalJson({ realm_id: realm, selector: { kind: "agent_interaction", agent_account_id: agentAccount } }),
+          });
+          expect(current.status()).toBe(200);
+          const modeCurrent = await current.json();
+          expect(modeCurrent.entry.value.interaction_mode).toBe("public");
+          expect(modeCurrent.entry.revision.commit_id).toBe((modeOutcome.commit as Record<string, unknown>).commit_id);
+          const card = await createSidecarSourceCard(controller, realm, `Native public source ${Date.now()}`);
+          await card.getByTestId("card-detail-tab-discussion").click();
+          const cardAddress = new URL(controller.url());
+          const strand = decodeURIComponent(cardAddress.pathname).split("/task/")[1];
+          expect(strand).toMatch(/^ak:strand:/);
+          await confirmNativePublicStrandAuthority(controller, jointRealm, pairing.agentId, strand);
+          // Explicit original UI Save invokes the configuration/onboarding
+          // owner AFTER real shared membership and the narrow owned source.
+          // It obtains actual accepted heads; startup never initializes.
+          await openSavfoxArkretChannel(savfox, base, token);
+          await saveSavfoxChannel(savfox);
+          await caller.goto(cardAddress.toString(), { waitUntil: "domcontentloaded" });
+          const callerCard = caller.getByTestId("card-detail-modal");
+          await expect(callerCard).toBeVisible({ timeout: 120_000 });
+          await callerCard.getByTestId("card-detail-tab-discussion").click();
+          const before = await receiptCount(receipts);
+          const firstPrompt = `native-public-first-${Date.now()} 请只回复 pong`;
+          const first = await nativePublicMentionAndReply(caller, callerCard, request, jointRealm,
+            pairing.agentId, strand, firstPrompt, 1);
+          await expect.poll(() => receiptCount(receipts), { timeout: 180_000 }).toBe(before + 1);
+          await assertNativeProviderReceipt(receipts, before, firstPrompt);
+          if (!restart) {
+            await testInfo.attach("native-public-first-accepted", { body: JSON.stringify({
+              realm_id: realm, strand_id: strand, agent_account_id: agentAccount,
+              caller_account_id: jointUsers.bobSession.accountId, source_event_id: first.sourceId,
+              reply_event_id: first.replyId, reply_commit_id: first.commitId, actual_provider_calls_delta: 1,
+              encrypted_source_and_reply: true, first_explicit_onboarding: true,
+            }), contentType: "application/json" });
+            return;
+          }
+          const restartProof = await restartNativeMain(request);
+          await caller.reload({ waitUntil: "domcontentloaded" });
+          const restoredCard = caller.getByTestId("card-detail-modal");
+          await expect(restoredCard).toBeVisible({ timeout: 120_000 });
+          await restoredCard.getByTestId("card-detail-tab-discussion").click();
+          const restored = restoredCard.getByTestId("chat-message").filter({
+            has: caller.getByTestId("content-block-text").filter({ hasText: /^pong(?:\r?\n|$)/ }),
+          });
+          await expect(restored).toHaveCount(1, { timeout: 180_000 });
+          expect(await eventIdFromMessage(restored)).toBe(first.replyId);
+          await expect(restored).toHaveAttribute("data-crypto-state", "plaintext");
+          await assertNativeProviderCountStable(receipts, before + 1);
+          // A fresh accepted source proves the same restarted Main resumed its
+          // original listener/MLS/ledger, rather than a dead process merely
+          // making the old-source no-call assertion trivially true.
+          const secondPrompt = `native-public-new-${Date.now()} 请只回复 pong`;
+          const second = await nativePublicMentionAndReply(caller, restoredCard, request, jointRealm,
+            pairing.agentId, strand, secondPrompt, 2);
+          expect(second.sourceId).not.toBe(first.sourceId);
+          expect(second.replyId).not.toBe(first.replyId);
+          await expect.poll(() => receiptCount(receipts), { timeout: 180_000 }).toBe(before + 2);
+          await assertNativeProviderReceipt(receipts, before + 1, secondPrompt);
+          const firstAfter = await readNativeCommittedEvent(request, jointUsers.bobSession, first.replyId);
+          expect(canonicalJson(firstAfter) === first.fullViewCanonical).toBe(true);
+          await assertNativeProviderCountStable(receipts, before + 2);
+          await testInfo.attach("native-public-retained-main-restart", { body: JSON.stringify({
+            ...restartProof, realm_id: realm, strand_id: strand, source_event_id: first.sourceId,
+            retained_reply_event_id: first.replyId, new_source_event_id: second.sourceId,
+            new_reply_event_id: second.replyId, prior_source_provider_calls_after_restart: 0,
+            new_source_provider_calls: 1, exact_old_signed_event_and_commit_preserved: true,
+          }), contentType: "application/json" });
+        } finally {
+          await context.close();
+        }
+      },
+    );
+  }
+});
+
+async function confirmNativePublicStrandAuthority(page: Page, realm: JointRealmFixture,
+  agentId: string, strand: string): Promise<void> {
+  await page.goto(`/realms/${realm.realmId}/members`, { waitUntil: "domcontentloaded" });
+  await expect(page.getByTestId("realm-members-panel")).toBeVisible({ timeout: 120_000 });
+  await page.getByTestId("members-section-my-agents").click();
+  const row = page.locator(`[data-testid="member-self-agent-row"][data-agent-id="${agentId}"]`);
+  const panel = row.getByTestId("member-agent-authority");
+  await expect(panel.getByTestId("owned-agent-scope")).toBeVisible({ timeout: 120_000 });
+  await panel.getByTestId("owned-agent-scope").selectOption(strand);
+  for (const label of ["发送消息", "读取 Strand", "读取事件", "读取对象"]) {
+    await panel.getByRole("checkbox", { name: label, exact: true }).check();
+  }
+  const accepted = page.waitForResponse(response => response.request().method() === "POST"
+    && new URL(response.url()).pathname === EVENTS_SUBMIT_PATH
+    && eventSubmissions(response.request().postData()).some(event => event.kind === "ak.capability.grant"),
+  { timeout: 180_000 });
+  await panel.getByTestId("owned-agent-confirm-authority").click();
+  const response = await accepted;
+  expect(response.ok()).toBe(true);
+  const event = eventSubmissions(response.request().postData()).find(event => event.kind === "ak.capability.grant")!;
+  assertAuthoritySubmitOutcome(await response.json() as Record<string, unknown>, event, "normal explicitly confirmed native reply owned source");
+  const grant = event.payload!.grant as Record<string, unknown>;
+  expect(canonicalJson(event.actor_id) === canonicalJson({ kind: "account", account_id: realm.aliceSession.accountId })).toBe(true);
+  expect(canonicalJson(grant.subject) === canonicalJson({ kind: "account", account_id: {
+    principal_id: agentId, station_id: realm.aliceSession.accountId.station_id,
+  } })).toBe(true);
+  expect(canonicalJson(grant.resources) === canonicalJson([{ kind: "strand", realm_id: realm.realmId, strand_id: strand }])).toBe(true);
+  expect(Array.isArray(grant.actions)).toBe(true);
+  expect(canonicalJson([...(grant.actions as string[])].sort()) === canonicalJson([
+    "ak.message.create", "ak.strand.read", "ak.event.read", "ak.object.read",
+  ].sort())).toBe(true);
+  const sources = grant.issuer_authority_refs as Array<Record<string, unknown>>;
+  expect(sources.length).toBe(1);
+  expect(sources[0].kind).toBe("owned_agent");
+  expect(canonicalJson(sources[0].controller_account_id) === canonicalJson(realm.aliceSession.accountId)).toBe(true);
+  expect(String(sources[0].controller_join_event_id)).toMatch(/^ak:event:/);
+  expect(String(sources[0].agent_join_event_id)).toMatch(/^ak:event:/);
+  expect(sources[0].controller_join_event_id === sources[0].agent_join_event_id).toBe(false);
+  await expect(panel.getByTestId("owned-agent-accepted-grant")).toContainText("Active", { timeout: 180_000 });
+}
+
+async function pairNativeManagedSavfoxAgent(
+  controller: Page, savfox: Page, pairing: PairingHandle & { pairingLink: string },
+): Promise<void> {
+  await startSavfoxPairing(savfox, pairing.pairingLink);
+  await expect(controller.getByTestId("agent-runtime-approval-modal")).toBeVisible({ timeout: 120_000 });
+  expect((await controller.getByTestId("agent-runtime-approval-code").innerText()).trim() === displayPairingCode(pairing.pairingCode)).toBe(true);
+  await controller.getByTestId("agent-runtime-approval-approve").click();
+  await expect(controller.getByTestId("agent-runtime-approval-modal")).toHaveCount(0, { timeout: 180_000 });
+  await expect(savfox.getByText("Agent paired and channel saved.", { exact: true })).toBeVisible({ timeout: 180_000 });
+  await saveSavfoxChannel(savfox);
+  // Native owner mode intentionally stops this gateway's account listener.
+  // No synthetic Listening assertion; only the real decrypted reply below is
+  // accepted as proof that Main's native consumer can handle this scope.
+}
+
+async function readNativeCommittedEvent(request: APIRequestContext, session: DpopUserSession, eventId: string) {
+  const url = `${colandBaseUrl()}/_arkret/self/committed-events/${encodeURIComponent(eventId)}`;
+  const response = await request.get(url, { headers: selfPathHeadersForDpopSession(session, "GET", url) });
+  expect(response.status()).toBe(200);
+  const view = await response.json() as { event: SubmittedEvent; commit: Record<string, unknown> };
+  expect(Boolean(view.event && view.commit)).toBe(true);
+  expect(view.event.event_id).toBe(eventId);
+  expect(view.commit.event_ref).toBe(eventId);
+  return view;
+}
+
+async function nativePublicMentionAndReply(page: Page, card: Locator, request: APIRequestContext,
+  realm: JointRealmFixture, agentId: string, strand: string, prompt: string, expectedReplies: number) {
+  await card.getByTestId("card-detail-sidebar-tab-members").click();
+  const agentRow = card.locator(`[data-testid="card-detail-agent-row"][data-agent-id="${agentId}"]`);
+  await expect(agentRow).toBeVisible({ timeout: 120_000 });
+  await composeSourceAgentMention(card, agentRow, agentId, prompt);
+  await card.getByTestId("card-detail-tab-discussion").click();
+  await expect(card.getByTestId("composer-send-scope")).toHaveAttribute("data-send-route", "Shared");
+  const sourceResponse = page.waitForResponse(response => {
+    const request = response.request();
+    return request.method() === "POST" && new URL(response.url()).pathname === EVENTS_SUBMIT_PATH
+      && eventSubmissions(request.postData()).some(event => event.kind === "ak.message.create" && event.payload?.strand_id === strand);
+  }, { timeout: 180_000 });
+  await expect(card.getByTestId("send-chat-button")).toBeEnabled({ timeout: 120_000 });
+  await card.getByTestId("send-chat-button").click();
+  const response = await sourceResponse;
+  expect(response.ok()).toBe(true);
+  const source = eventSubmissions(response.request().postData()).find(event => event.kind === "ak.message.create" && event.payload?.strand_id === strand)!;
+  assertAuthoritySubmitOutcome(await response.json() as Record<string, unknown>, source, "independent Human actual shared encrypted source");
+  expect(canonicalJson(source.actor_id) === canonicalJson({ kind: "account", account_id: realm.bobSession.accountId })).toBe(true);
+  expect(canonicalJson(source.scope_ref) === canonicalJson({ kind: "realm", realm_id: realm.realmId })).toBe(true);
+  expect(source.payload?.content === undefined).toBe(true);
+  expect(typeof source.payload?.encrypted_content === "object" && source.payload?.encrypted_content !== null).toBe(true);
+  const pong = card.getByTestId("chat-message").filter({
+    has: page.getByTestId("content-block-text").filter({ hasText: /^pong(?:\r?\n|$)/ }),
+  });
+  await expect(pong).toHaveCount(expectedReplies, { timeout: 180_000 });
+  const reply = pong.last();
+  await expect(reply).toHaveAttribute("data-crypto-state", "plaintext");
+  await expect(reply.getByTestId("member-badge-agent")).toBeVisible();
+  await expect(reply.getByTestId("crypto-status-needs-verification")).toHaveCount(0);
+  const replyId = await eventIdFromMessage(reply);
+  expect(replyId).toMatch(/^ak:event:/);
+  const view = await readNativeCommittedEvent(request, realm.bobSession, replyId);
+  expect(view.event.kind).toBe("ak.message.create");
+  expect(view.event.payload?.strand_id).toBe(strand);
+  expect(canonicalJson(view.event.actor_id) === canonicalJson({ kind: "account", account_id: {
+    principal_id: agentId, station_id: realm.aliceSession.accountId.station_id,
+  } })).toBe(true);
+  expect(canonicalJson(view.event.scope_ref) === canonicalJson(source.scope_ref)).toBe(true);
+  expect(view.event.producer_proof !== undefined && view.event.producer_proof !== null).toBe(true);
+  expect(view.event.payload?.content === undefined).toBe(true);
+  expect(typeof view.event.payload?.encrypted_content === "object" && view.event.payload?.encrypted_content !== null).toBe(true);
+  expect(canonicalJson(view.commit.stream_ref) === canonicalJson({ kind: "realm", realm_id: realm.realmId })).toBe(true);
+  return { sourceId: source.event_id!, replyId, commitId: String(view.commit.commit_id), fullViewCanonical: canonicalJson(view) };
+}
+
+async function assertNativeProviderReceipt(path: string, index: number, marker: string): Promise<void> {
+  // The original provider receipt is private. Inspect its real request in
+  // memory; failures and attachments never serialize instructions or input.
+  const lines = (await readFile(path, "utf8")).split("\n").filter(line => line.trim());
+  const request = (JSON.parse(lines[index]) as { request: Record<string, unknown> }).request;
+  const input = request.input as Array<{ role?: string; content?: Array<{ type?: string; text?: string }> }>;
+  expect(Array.isArray(input) && input.length === 1).toBe(true);
+  expect(input[0].role === "user").toBe(true);
+  expect(input[0].content?.some(item => item.type === "input_text" && typeof item.text === "string"
+    && item.text.includes(marker)) === true).toBe(true);
+  expect(Array.isArray(request.tools) && request.tools.length === 0).toBe(true);
+  expect(request.parallel_tool_calls === false).toBe(true);
+  expect(request.store === false).toBe(true);
+}
+
+async function assertNativeProviderCountStable(path: string, expected: number): Promise<void> {
+  const end = Date.now() + 5_000;
+  do {
+    expect(await receiptCount(path)).toBe(expected);
+    await new Promise(resolve => setTimeout(resolve, 250));
+  } while (Date.now() < end);
+}
+
+async function restartNativeMain(request: APIRequestContext) {
+  const topologyPath = process.env.COTEST_TOPOLOGY_PATH;
+  if (!topologyPath) throw new Error("Runner-owned Main restart control missing");
+  const topology = JSON.parse(await readFile(topologyPath, "utf8")) as {
+    servers: Array<{ name: string; coland: { process_id: number | null;
+      control?: { kind: string; script_path: string; state_path: string } } }>;
+  };
+  const server = topology.servers.find(server => server.name === "server1");
+  const control = server?.coland.control;
+  if (!server || !control || control.kind !== "process" || !server.coland.process_id) {
+    throw new Error("Native Public restart requires the original runner-owned process Station");
+  }
+  const originalState = await readFile(control.state_path, "utf8").then(text => JSON.parse(text)).catch(error => {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return {};
+    throw error;
+  }) as { current_process_id?: number };
+  const oldPid = originalState.current_process_id ?? server.coland.process_id;
+  // The original host controller identity-checks and kills the owned process
+  // tree, then restarts the exact recorded command/config/home/working dir.
+  await promisify(execFile)("pwsh", ["-NoProfile", "-File", control.script_path,
+    "-TopologyPath", topologyPath, "-ServerName", "server1", "-ServiceName", "coland", "-Action", "restart"],
+    { timeout: 90_000, windowsHide: true });
+  const state = JSON.parse(await readFile(control.state_path, "utf8")) as {
+    restarted?: boolean; current_process_id?: number; current_process_started_at?: string;
+    terminated_processes?: Array<{ process_id: number }>;
+  };
+  expect(state.restarted).toBe(true);
+  expect(Number.isInteger(state.current_process_id) && state.current_process_id! > 0).toBe(true);
+  expect(state.current_process_id).not.toBe(oldPid);
+  expect(typeof state.current_process_started_at).toBe("string");
+  expect(state.terminated_processes?.some(identity => identity.process_id === oldPid)).toBe(true);
+  await expect.poll(async () => {
+    try { return (await request.get(`${colandBaseUrl()}/health`, { timeout: 5_000 })).ok(); } catch { return false; }
+  }, { timeout: 120_000 }).toBe(true);
+  return { old_main_pid: oldPid, new_main_pid: state.current_process_id, whole_main_owned_tree_restarted: true };
+}
 
 async function openSavfoxArkretChannel(
   savfox: Page,

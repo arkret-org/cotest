@@ -78,10 +78,19 @@ const server = http.createServer((request, response) => {
     const events = [
       {
         type: "response.created",
-        response: { id: responseId },
+        response: { id: responseId, status: "in_progress" },
+      },
+      {
+        type: "response.output_text.delta",
+        response_id: responseId,
+        item_id: `msg_joint_${suffix}`,
+        output_index: 0,
+        content_index: 0,
+        delta: "pong",
       },
       {
         type: "response.output_item.done",
+        output_index: 0,
         item: {
           type: "message",
           role: "assistant",
@@ -93,6 +102,11 @@ const server = http.createServer((request, response) => {
         type: "response.completed",
         response: {
           id: responseId,
+          status: "completed",
+          output: [{
+            type: "message", role: "assistant", id: `msg_joint_${suffix}`,
+            content: [{ type: "output_text", text: "pong" }],
+          }],
           usage: {
             input_tokens: 0,
             input_tokens_details: null,

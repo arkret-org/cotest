@@ -77,6 +77,8 @@ param(
     [string]$CoauthCommand,
     [string]$CoauthHealthUrl,
     [switch]$StartCoauth,
+    # Explicit same-Station IVS delegation; no provider advertisement by default.
+    [switch]$EnableThirdPartyInviteProvider,
     # Start a second Coauth process with the same public origin, secrets, and
     # PostgreSQL database but a separate listener. Passkey E2E uses it to prove
     # that a ceremony started on one process can finish on another.
@@ -93,6 +95,7 @@ param(
     [string]$FlagonDatabaseUrl,
     [string]$FlagonServiceId = "did:webvh:z6mkfixture:flagon.joint-e2e.local",
     [switch]$StartSavfox,
+    [switch]$StartNativeArkretPublicReply,
     [string]$SavfoxRoot,
     [string]$SavfoxBin,
     [string]$SavfoxBaseUrl,
@@ -179,6 +182,59 @@ param(
     # topology-dependent skips and therefore do not enable it by default.
     [switch]$ForbidSkippedTests
 )
+
+function Prepare-JointPostNativeTools {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)][string]$RepositoryRoot,
+        [Parameter(Mandatory = $true)][string]$TargetDirectory,
+        [Parameter(Mandatory = $true)][string]$PrepareScriptPath,
+        [Parameter(Mandatory = $true)][string]$DiagnosticPath,
+        [string[]]$RepositoryRoots = @(),
+        [ValidateRange(1, 256)][int]$Jobs = 4
+    )
+    # Cargo integration tests build CARGO_BIN_EXE targets with their unified
+    # dev features. Finalize the ordinary product graph after every Rust gate,
+    # before any caller can spawn these run-owned tools.
+    $manifest = Join-Path $RepositoryRoot "Cargo.toml"
+    $tools = [System.Collections.Generic.List[object]]::new()
+    foreach ($name in @("cotest-wire", "cotest-provision")) {
+        $prepared = @(& $PrepareScriptPath -ManifestPath $manifest `
+            -BinaryName $name -PackageName "cotest-test-support" `
+            -TargetDirectory $TargetDirectory -Jobs $Jobs -RepositoryRoots $RepositoryRoots)
+        if ($prepared.Count -ne 1) { throw "Post-native preparation did not report one selected tool: $name" }
+        $expectedName = if ($IsWindows) { "$name.exe" } else { $name }
+        $expectedPath = Resolve-BuildInputPath -Path (Join-Path $TargetDirectory "debug/$expectedName")
+        if ((Resolve-BuildInputPath -Path $prepared[0].ArtifactPath) -cne $expectedPath) {
+            throw "Post-native preparation selected an unexpected tool path: $name"
+        }
+        $tools.Add([pscustomobject]@{ Name = $name; Prepared = $prepared[0] })
+    }
+    # Verify both once more after the last build, not just each immediately
+    # after its own Cargo invocation. A changed first executable fails closed.
+    $verified = [System.Collections.Generic.List[object]]::new()
+    foreach ($tool in $tools) {
+        $path = $tool.Prepared.ArtifactPath
+        $states = @(Get-ArtifactBuildRepositoryStates -ArtifactPath $path `
+            -RepositoryRoots (@($RepositoryRoot) + @($RepositoryRoots)))
+        $stamp = Test-ArtifactBuildStamp -ArtifactPath $path -RepositoryStates $states
+        $actualSha = (Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash.ToLowerInvariant()
+        if (-not $stamp.Matches -or $actualSha -cne $tool.Prepared.ArtifactSha256) {
+            throw "Post-native tool artifact/stamp mismatch: $($tool.Name): $($stamp.Detail)"
+        }
+        $verified.Add([pscustomobject]@{
+            name = $tool.Name
+            artifact_sha256 = $actualSha
+            stamp_sha256 = (Get-FileHash -LiteralPath $tool.Prepared.StampPath -Algorithm SHA256).Hash.ToLowerInvariant()
+            cargo_fresh = [bool]$tool.Prepared.CargoFresh
+            artifact_time_utc = $tool.Prepared.ArtifactTimeUtc
+            artifact_matches_stamp = $true
+        })
+    }
+    ConvertTo-Json -InputObject @($verified.ToArray()) -Depth 4 |
+        Set-Content -LiteralPath $DiagnosticPath -Encoding UTF8
+    return @($verified.ToArray())
+}
 
 function Resolve-ManagedCoauthEmailMockRequirement {
     param(
@@ -584,7 +640,8 @@ function Start-ManagedSavfoxGateway {
         [Parameter(Mandatory = $true)][int]$TimeoutSeconds,
         [Parameter(Mandatory = $true)][System.Collections.IList]$ManagedServices,
         [string]$TrustedCaFile,
-        [string]$DnsSuffix
+        [string]$DnsSuffix,
+        [string]$NativeOwnerHome
     )
 
     $caPrefix = if ($TrustedCaFile) {
@@ -601,7 +658,12 @@ function Start-ManagedSavfoxGateway {
     } else {
         ""
     }
-    $command = $caPrefix + $noProxyPrefix + ((
+    $nativeOwnerPrefix = if ($NativeOwnerHome) {
+        "`$env:SAVFOX_ARKRET_NATIVE_OWNER_HOME={0}; " -f (Quote-PsLiteral $NativeOwnerHome)
+    } else {
+        "Remove-Item Env:SAVFOX_ARKRET_NATIVE_OWNER_HOME -ErrorAction SilentlyContinue; "
+    }
+    $command = $caPrefix + $noProxyPrefix + $nativeOwnerPrefix + ((
             "`$env:SAVFOX_HOME={0}; `$env:RUST_LOG='info'; & {1} gateway --host 127.0.0.1 --port {2} --token {3}"
         ) -f (Quote-PsLiteral $Probe.Home), (Quote-PsLiteral $Binary), $Probe.Port, (Quote-PsLiteral $Probe.Token))
     $service = Start-ManagedCommand `
@@ -1419,30 +1481,35 @@ function Sync-JointControlledServices {
     $failures = [System.Collections.Generic.List[string]]::new()
     $topology = Get-Content -Raw -LiteralPath $TopologyPath | ConvertFrom-Json
     foreach ($server in @($topology.servers)) {
-        $controlProperty = $server.coland.PSObject.Properties["control"]
-        $control = if ($controlProperty) { $controlProperty.Value } else { $null }
-        if (-not $control -or -not $control.state_path -or -not (Test-Path -LiteralPath $control.state_path)) { continue }
-        $state = Get-Content -Raw -LiteralPath $control.state_path | ConvertFrom-Json
-        if ($state.status -eq "isolated") {
-            try {
-                & $control.script_path -TopologyPath $TopologyPath -ServerName $server.name -Action restore
-                if ($LASTEXITCODE -ne 0) { throw "controller exited with $LASTEXITCODE" }
-                $state = Get-Content -Raw -LiteralPath $control.state_path | ConvertFrom-Json
-            } catch {
-                $failures.Add("failed to restore isolated $($server.name): $($_.Exception.Message)")
-                continue
+        foreach ($serviceName in @("coland", "coauth")) {
+            $serviceProperty = $server.PSObject.Properties[$serviceName]
+            $service = if ($serviceProperty) { $serviceProperty.Value } else { $null }
+            if (-not $service) { continue }
+            $controlProperty = $service.PSObject.Properties["control"]
+            $control = if ($controlProperty) { $controlProperty.Value } else { $null }
+            if (-not $control -or -not $control.state_path -or -not (Test-Path -LiteralPath $control.state_path)) { continue }
+            $state = Get-Content -Raw -LiteralPath $control.state_path | ConvertFrom-Json
+            if ($state.status -eq "isolated") {
+                try {
+                    & $control.script_path -TopologyPath $TopologyPath -ServerName $server.name -ServiceName $serviceName -Action restore
+                    if ($LASTEXITCODE -ne 0) { throw "controller exited with $LASTEXITCODE" }
+                    $state = Get-Content -Raw -LiteralPath $control.state_path | ConvertFrom-Json
+                } catch {
+                    $failures.Add("failed to restore isolated $($server.name): $($_.Exception.Message)")
+                    continue
+                }
             }
-        }
-        if ($control.kind -eq "process" -and $state.current_process_id -and [int]$state.current_process_id -ne [int]$server.coland.process_id) {
-            $managed = @($ManagedServices | Where-Object { $_.Kind -eq "process" -and $_.Name -eq "coland-$($server.name)" }) | Select-Object -Last 1
-            $replacement = Get-CotestIdentityProcess -Identity ([pscustomobject]@{ process_id = [int]$state.current_process_id; started_at = $state.current_process_started_at })
-            if (-not $managed -or -not $replacement) {
-                $failures.Add("replacement process for $($server.name) is unavailable")
-                continue
+            if ($control.kind -eq "process" -and $state.current_process_id -and [int]$state.current_process_id -ne [int]$service.process_id) {
+                $managed = @($ManagedServices | Where-Object { $_.Kind -eq "process" -and $_.Name -eq "$serviceName-$($server.name)" }) | Select-Object -Last 1
+                $replacement = Get-CotestIdentityProcess -Identity ([pscustomobject]@{ process_id = [int]$state.current_process_id; started_at = $state.current_process_started_at })
+                if (-not $managed -or -not $replacement) {
+                    $failures.Add("replacement process for $($server.name) is unavailable")
+                    continue
+                }
+                $managed.Process = $replacement
+                if ($state.stdout) { $managed.Stdout = [string]$state.stdout }
+                if ($state.stderr) { $managed.Stderr = [string]$state.stderr }
             }
-            $managed.Process = $replacement
-            if ($state.stdout) { $managed.Stdout = [string]$state.stdout }
-            if ($state.stderr) { $managed.Stderr = [string]$state.stderr }
         }
     }
     return @($failures)
@@ -1997,7 +2064,8 @@ function New-CoauthJointConfig {
         [Parameter(Mandatory = $true)][object[]]$StationChannelBindings,
         [string]$OwningStation = "server1",
         [Parameter(Mandatory = $true)][string]$EmbeddedWebvhRegistrationBearer,
-        [string]$MockEmailBaseUrl
+        [string]$MockEmailBaseUrl,
+        [string]$ThirdPartyInviteGovernanceDatabaseUrl
     )
 
     $rawConfig = Join-Path $JointDir "coauth.raw.yaml"
@@ -2046,6 +2114,9 @@ function New-CoauthJointConfig {
     )
     if ($MockEmailBaseUrl) {
         $patchArgs += @("--mock-email-base-url", $MockEmailBaseUrl)
+    }
+    if ($ThirdPartyInviteGovernanceDatabaseUrl) {
+        $patchArgs += @("--third-party-invite-governance-database-url", $ThirdPartyInviteGovernanceDatabaseUrl)
     }
     # Filter before counting: a browserless lane passes an empty
     # `-InksonBaseUrls`, which PowerShell delivers as `$null` rather than an
@@ -3378,6 +3449,10 @@ if ($StartFlagon) {
     }
 }
 
+if ($StartNativeArkretPublicReply -and (-not $StartSavfox -or $ColandRuntime -ne "process" -or $ServerCount -ne 1 -or $null -eq $colandPort -or $ColandCommand)) {
+    throw "-StartNativeArkretPublicReply requires one runner-owned process Station and -StartSavfox"
+}
+
 $savfoxPort = $null
 $savfoxModelPort = $null
 $savfoxModelBaseUrl = $null
@@ -3532,11 +3607,15 @@ $exitCode = 1
 $runnerError = $null
 $provisionCustodyRoot = $null
 $previousProvisionCustodyRoot = $env:COTEST_PROVISION_CUSTODY_ROOT
+$previousReadonlyDatabaseControls = $env:COTEST_READONLY_DATABASE_CONTROLS
 $previousSdkTlsRoots = $env:SSL_CERT_FILE
 $startedAt = Get-Date
 $generatedColandCommand = $false
 $generatedInksonCommand = $false
 $willStartDefaultColand = (-not $ColandCommand -and $null -ne $colandPort)
+if ($EnableThirdPartyInviteProvider -and (-not $StartCoauth -or -not $willStartDefaultColand)) {
+    throw "-EnableThirdPartyInviteProvider requires managed Coauth and managed Coland with explicit owning-Station database custody."
+}
 $willStartDefaultInkson = ($requiresInkson -and -not $InksonCommand -and $null -ne $inksonPort)
 $willStartDockerColand = ($ColandRuntime -eq "docker" -and ($willStartDefaultColand -or ($multiServer -and $null -ne $colandServer2Port)))
 $startedColandRuntime = if ($willStartDockerColand) { "docker" } elseif ($willStartDefaultColand) { "process" } elseif ($ColandCommand) { "process-command" } else { "attached" }
@@ -3853,7 +3932,7 @@ try {
         }
         $artifactRoot = if ($task.PSObject.Properties["ArtifactRoot"]) { $task.ArtifactRoot } else { $null }
         $repositoryStates = @(Get-ArtifactBuildRepositoryStates -ArtifactPath $task.Artifact -RepositoryRoots $task.RepositoryRoots -ArtifactRoot $artifactRoot)
-        Assert-BuildInputStatesUnchanged -Before $task.BuildInputsBefore -After $repositoryStates
+        Assert-BuildInputStatesUnchanged -Before $task.BuildInputsBefore -After $repositoryStates -DiagnosticPath (Join-Path $jointDir ("preflight-build-input-mismatch-" + $task.Name + ".json"))
         $requiredArtifactPaths = if ($task.PSObject.Properties["RequiredArtifactPaths"]) { $task.RequiredArtifactPaths } else { @() }
         Write-ArtifactBuildStamp -ArtifactPath $task.Artifact -RepositoryStates $repositoryStates -ArtifactRoot $artifactRoot -RequiredArtifactPaths $requiredArtifactPaths | Out-Null
         $preparationTimings.Add([pscustomobject]@{ name = $task.Name; status = $status; duration_seconds = $duration; detail = $task.Artifact })
@@ -4164,6 +4243,29 @@ try {
         $savfoxUnaddressedModelReceipts = $savfoxUnaddressedProbe.ReceiptPath
     }
 
+    if ($willStartDefaultColand -and -not $colandDatabaseDsn) {
+        $ephemeralColandPostgres = Start-EphemeralPostgres `
+            -Image $ColandPostgresImage `
+            -NamePrefix "cotest-coland-$timestamp" `
+            -TimeoutSeconds $StartupTimeoutSeconds
+        $colandDatabaseDsn = $ephemeralColandPostgres.Url
+    }
+    if ($multiServer) {
+        $ephemeralColandServer2Postgres = Start-EphemeralPostgres `
+            -Image $ColandPostgresImage `
+            -NamePrefix "cotest-coland-server2-$timestamp" `
+            -TimeoutSeconds $StartupTimeoutSeconds
+        $colandServer2DatabaseDsn = $ephemeralColandServer2Postgres.Url
+    }
+    foreach ($server in $additionalServers) {
+        $server.ColandDatabase = Start-EphemeralPostgres `
+            -Image $ColandPostgresImage `
+            -NamePrefix "cotest-$($server.ColandName)-$timestamp" `
+            -TimeoutSeconds $StartupTimeoutSeconds
+        $server.ColandDatabaseDsn = $server.ColandDatabase.Url
+        $additionalPostgresContainers.Add($server.ColandDatabase)
+    }
+
     if ($StartCoauth) {
         if (-not $coauthPort) {
             $coauthUri = [System.Uri]$CoauthBaseUrl
@@ -4196,7 +4298,8 @@ try {
             -OAuthClientId $CoauthOAuthClientId `
             -StationChannelBindings $stationInternalChannelBindings `
             -EmbeddedWebvhRegistrationBearer $CoauthEmbeddedWebvhRegistrationBearer `
-            -MockEmailBaseUrl $mockEmailBaseUrl
+            -MockEmailBaseUrl $mockEmailBaseUrl `
+            -ThirdPartyInviteGovernanceDatabaseUrl $(if ($EnableThirdPartyInviteProvider) { $colandDatabaseDsn } else { $null })
         if ($multiServer) {
             # Each Station owns a separate Account Authority and durable account
             # store. DualCoauth remains a replica of Server1, not Server2's authority.
@@ -4210,7 +4313,8 @@ try {
                 -InksonBaseUrls $allInksonBaseUrls `
                 -OAuthClientId $CoauthOAuthClientId -StationChannelBindings $stationInternalChannelBindings `
                 -OwningStation "server2" `
-                -EmbeddedWebvhRegistrationBearer $CoauthEmbeddedWebvhRegistrationBearer -MockEmailBaseUrl $mockEmailBaseUrl
+                -EmbeddedWebvhRegistrationBearer $CoauthEmbeddedWebvhRegistrationBearer -MockEmailBaseUrl $mockEmailBaseUrl `
+                -ThirdPartyInviteGovernanceDatabaseUrl $(if ($EnableThirdPartyInviteProvider) { $colandServer2DatabaseDsn } else { $null })
             Invoke-CoauthMigrations -CoauthBinary $coauthBinary -ConfigPath $coauthServer2ConfigPath -LogDirectory $coauthServer2Dir -TimeoutSeconds $StartupTimeoutSeconds
         }
         foreach ($server in $additionalServers) {
@@ -4225,7 +4329,8 @@ try {
                 -OAuthClientId $CoauthOAuthClientId -StationChannelBindings $stationInternalChannelBindings `
                 -OwningStation $server.Name `
                 -EmbeddedWebvhRegistrationBearer $CoauthEmbeddedWebvhRegistrationBearer `
-                -MockEmailBaseUrl $mockEmailBaseUrl
+                -MockEmailBaseUrl $mockEmailBaseUrl `
+                -ThirdPartyInviteGovernanceDatabaseUrl $(if ($EnableThirdPartyInviteProvider) { $server.ColandDatabaseDsn } else { $null })
             Invoke-CoauthMigrations -CoauthBinary $coauthBinary -ConfigPath $server.CoauthConfigPath -LogDirectory $coauthServerDir -TimeoutSeconds $StartupTimeoutSeconds
         }
         if ($DualCoauth) {
@@ -4324,32 +4429,11 @@ try {
                 -TimeoutSeconds $StartupTimeoutSeconds `
                 -ManagedServices $managedServices `
                 -TrustedCaFile $(if ($jointTlsAssets) { $jointTlsAssets.CaPemPath } else { $null }) `
-                -DnsSuffix $DnsSuffix | Out-Null
+                -DnsSuffix $DnsSuffix `
+                -NativeOwnerHome $(if ($StartNativeArkretPublicReply -and $probe.Home -eq $savfoxAddressedProbe.Home) { $probe.Home } else { $null }) | Out-Null
         }
     }
 
-    if ($willStartDefaultColand -and -not $colandDatabaseDsn) {
-        $ephemeralColandPostgres = Start-EphemeralPostgres `
-            -Image $ColandPostgresImage `
-            -NamePrefix "cotest-coland-$timestamp" `
-            -TimeoutSeconds $StartupTimeoutSeconds
-        $colandDatabaseDsn = $ephemeralColandPostgres.Url
-    }
-    if ($multiServer) {
-        $ephemeralColandServer2Postgres = Start-EphemeralPostgres `
-            -Image $ColandPostgresImage `
-            -NamePrefix "cotest-coland-server2-$timestamp" `
-            -TimeoutSeconds $StartupTimeoutSeconds
-        $colandServer2DatabaseDsn = $ephemeralColandServer2Postgres.Url
-    }
-    foreach ($server in $additionalServers) {
-        $server.ColandDatabase = Start-EphemeralPostgres `
-            -Image $ColandPostgresImage `
-            -NamePrefix "cotest-$($server.ColandName)-$timestamp" `
-            -TimeoutSeconds $StartupTimeoutSeconds
-        $server.ColandDatabaseDsn = $server.ColandDatabase.Url
-        $additionalPostgresContainers.Add($server.ColandDatabase)
-    }
 
     function Build-ColandDockerEnvironment {
         param(
@@ -4383,6 +4467,7 @@ try {
             COLAND_KEYSTORE_MASTER_KEY = $KeyStoreMasterKey
             COLAND_SERVICE_IDENTITY_BUNDLE_DIR = "/tmp/coland-state/identity-bundle"
             COLAND_EMBEDDED_WEBVH_PROVIDER_ENABLED = "true"
+            COLAND_THIRD_PARTY_INVITE_PROVIDER_ENABLED = $(if ($EnableThirdPartyInviteProvider) { "true" } else { "false" })
             COLAND_EGRESS_ALLOW_PRIVATE_NETWORKS = "true"
             COLAND_CORS_ALLOW_ORIGIN = $CorsAllowOrigin
             COLAND_METRICS_BIND = "0.0.0.0:$MetricsPort"
@@ -4456,6 +4541,7 @@ try {
             COLAND_KEYSTORE_MASTER_KEY = $KeyStoreMasterKey
             COLAND_SERVICE_IDENTITY_BUNDLE_DIR = (Join-Path $StateRoot "identity-bundle")
             COLAND_EMBEDDED_WEBVH_PROVIDER_ENABLED = "true"
+            COLAND_THIRD_PARTY_INVITE_PROVIDER_ENABLED = $(if ($EnableThirdPartyInviteProvider) { "true" } else { "false" })
             COLAND_EGRESS_ALLOW_PRIVATE_NETWORKS = "true"
             COLAND_CORS_ALLOW_ORIGIN = $CorsAllowOrigin
             COLAND_METRICS_BIND = "127.0.0.1:$MetricsPort"
@@ -4486,6 +4572,9 @@ try {
         }
         if ($NotarySigningKey) {
             $values.COLAND_NOTARY_SIGNING_KEY = $NotarySigningKey
+        }
+        if ($StartNativeArkretPublicReply) {
+            $values.COLAND_ARKRET_RUNTIME_HOME = $savfoxAddressedProbe.Home
         }
         Write-DotEnvFile -Path $ConfigPath -Values $values
         return "& {{ Remove-Item Env:RUST_MIN_STACK -ErrorAction SilentlyContinue; `$env:COLAND_ENABLE_TEST_ENDPOINTS='1'; `$env:COLAND_TEST_CHAOS_CONTROL_FILE={0}; & {1} --config {2} --no-env-overrides --bind 127.0.0.1:{3} }}" -f `
@@ -4999,6 +5088,34 @@ try {
         if ($server.InksonBaseUrl) { Set-Item -Path "Env:COTEST_INKSON_$($server.Name.ToUpperInvariant())_BASE_URL" -Value $server.InksonBaseUrl }
         if ($server.CoauthBaseUrl) { Set-Item -Path "Env:COTEST_COAUTH_$($server.Name.ToUpperInvariant())_BASE_URL" -Value $server.CoauthBaseUrl }
     }
+    # Private test controls stay outside all publishable artifacts. Each lease
+    # binds its real database to the described Station, never an inherited admin
+    # connection or another Station's store. Custody cleanup removes them too.
+    Remove-Item Env:COTEST_READONLY_DATABASE_CONTROLS -ErrorAction SilentlyContinue
+    if ($provisionCustodyRoot) {
+        $readonlyControls = Join-Path $provisionCustodyRoot "controls"
+        $null = New-Item -ItemType Directory -Path $readonlyControls
+        if (-not $IsWindows) {
+            & chmod 700 $readonlyControls
+            if ($LASTEXITCODE -ne 0) { throw "cannot protect readonly database controls" }
+        }
+        foreach ($server in $runtimeServers) {
+            $databaseUrl = if ($server.Index -eq 1) { $colandDatabaseDsn } elseif ($server.Index -eq 2) { $colandServer2DatabaseDsn } else { $additionalServers[$server.Index - 3].ColandDatabaseDsn }
+            if (-not $databaseUrl) { continue }
+            # Only a runner-managed service has a known database lease. A
+            # caller-owned command's environment cannot be inferred here.
+            $ownedService = @($managedServices | Where-Object { $_.Name -eq "coland-$($server.Name)" }) | Select-Object -Last 1
+            if (-not $ownedService -or ($server.Index -eq 1 -and -not $generatedColandCommand -and -not $willStartDockerColand)) { continue }
+            $controlPath = Join-Path $readonlyControls "$($server.Name).json"
+            [pscustomobject]@{ server = $server.Name; station_id = $server.ColandServiceId; public_url = $server.ColandBaseUrl; database_url = $databaseUrl } |
+                ConvertTo-Json -Depth 3 | Set-Content -LiteralPath $controlPath -Encoding utf8NoBOM
+            if (-not $IsWindows) {
+                & chmod 600 $controlPath
+                if ($LASTEXITCODE -ne 0) { throw "cannot protect readonly database lease" }
+            }
+        }
+        $env:COTEST_READONLY_DATABASE_CONTROLS = $readonlyControls
+    }
     $topologyServers = @()
     foreach ($server in $runtimeServers) {
         $colandStoragePrefix = if ($server.Index -eq 1) { "coland" } else { "coland-$($server.Name)" }
@@ -5046,6 +5163,14 @@ try {
                 config_path = $server.CoauthConfigPath
                 log_directory = $serverServiceLogDirs[$server.Name]
                 process_id = if ($coauthManaged -and $coauthManaged.Kind -eq "process") { $coauthManaged.Process.Id } else { $null }
+                process_started_at = if ($coauthManaged -and $coauthManaged.Kind -eq "process") { $coauthManaged.Process.StartTime.ToUniversalTime().ToString('o') } else { $null }
+                control = if ($coauthManaged -and $coauthManaged.Kind -eq "process") { [pscustomobject]@{
+                    kind = "process"
+                    script_path = (Join-Path $PSScriptRoot "control-joint-e2e-service.ps1")
+                    state_path = (Join-Path $jointDir "controls\$($server.Name)-coauth.json")
+                    working_directory = $coauthManaged.WorkingDirectory
+                    command_log = $coauthManaged.CommandLog
+                } } else { $null }
                 container_id = $null
             } } else { $null }
             peers = $peerNames
@@ -5133,6 +5258,11 @@ try {
         $env:COTEST_FLAGON_METRICS_URL = $flagonMetricsBaseUrl
     } else {
         Remove-Item Env:COTEST_FLAGON_METRICS_URL -ErrorAction SilentlyContinue
+    }
+    if ($StartNativeArkretPublicReply) {
+        $env:COTEST_REQUIRE_NATIVE_PUBLIC_REPLY = "1"
+    } else {
+        Remove-Item Env:COTEST_REQUIRE_NATIVE_PUBLIC_REPLY -ErrorAction SilentlyContinue
     }
     if ($StartSavfox) {
         $env:COTEST_SAVFOX_BASE_URL = $SavfoxBaseUrl.TrimEnd("/")
@@ -5292,6 +5422,19 @@ try {
             if ($garthClientExit -ne 0) {
                 throw "Garth client check failed (exit=$garthClientExit); see $garthClientLog"
             }
+        }
+    }
+
+    if ($StartCoauth) {
+        Write-Host ""
+        Write-Host "=== Finalize canonical tools after Rust provisioning gates ==="
+        $postNativeTools = @(Prepare-JointPostNativeTools `
+            -RepositoryRoot $repoRoot -TargetDirectory $cotestTargetDirectory `
+            -PrepareScriptPath (Join-Path $repoRoot "scripts/prepare-cargo-artifact.ps1") `
+            -RepositoryRoots @((Join-Path $workspaceRoot "arkret-rust-sdk")) `
+            -DiagnosticPath (Join-Path $jointDir "preflight-post-native-tools.json"))
+        foreach ($tool in $postNativeTools) {
+            Write-Host ("{0}: actual artifact/stamp verified {1}" -f $tool.name, $tool.artifact_sha256)
         }
     }
 
@@ -5540,6 +5683,11 @@ finally {
         } else {
             $env:COTEST_PROVISION_CUSTODY_ROOT = $previousProvisionCustodyRoot
         }
+    }
+    if ($null -eq $previousReadonlyDatabaseControls) {
+        Remove-Item Env:COTEST_READONLY_DATABASE_CONTROLS -ErrorAction SilentlyContinue
+    } else {
+        $env:COTEST_READONLY_DATABASE_CONTROLS = $previousReadonlyDatabaseControls
     }
 
     foreach ($containerName in $storeDumpFailures) {
@@ -6192,7 +6340,7 @@ if (Test-Path -LiteralPath $serviceLogDir) {
     $secretScanRoots.Add($serviceLogDir)
 }
 foreach ($directory in Get-ChildItem -LiteralPath $jointDir -Directory -ErrorAction SilentlyContinue) {
-    if ($directory.Name -match '(?i)(state|objects|diagnostic|test-results|playwright-output|crash|checkpoint|telemetry)') {
+    if ($directory.Name -eq 'third-party-invites' -or $directory.Name -match '(?i)(state|objects|diagnostic|test-results|playwright-output|crash|checkpoint|telemetry)') {
         if ($directory.Name -match '(?i)^coland(?:-[a-z0-9_-]+)?-state$') {
             # The service identity bundle is a durable restore store whose
             # signed registration receipts and WebVH operations necessarily

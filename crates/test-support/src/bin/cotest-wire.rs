@@ -29,6 +29,7 @@ fn main() -> Result<()> {
         "mls-keypackage-upload-entry" => wire::mls_keypackage_upload_entry(input)?,
         "mls-keypackages" => mls_wire::mls_keypackages(input)?,
         "mls-genesis" => mls_wire::mls_genesis(input)?,
+        "mls-genesis-material" => mls_wire::mls_genesis_material(input)?,
         "mls-keypackage-claim-request" => mls_wire::mls_keypackage_claim_request(input)?,
         "mls-add-member" => mls_wire::mls_add_member(input)?,
         "mls-welcome-delivery" => mls_wire::mls_welcome_delivery(input)?,

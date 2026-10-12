@@ -921,3 +921,14 @@ mod scope_tests {
         );
     }
 }
+
+/// Read only the registered public Genesis binding; never create a new group.
+pub fn mls_genesis_material(input: Value) -> Result<Value> {
+    let payload: arkret_models_collaboration::events_payloads::MlsGenesisPayload =
+        serde_json::from_value(input)?;
+    payload.validate()?;
+    Ok(json!({ "effective_scope": payload.effective_scope(),
+        "mls_group_id": payload.mls_group_id()?,
+        "group_info_ref": payload.group_info_ref,
+        "ratchet_tree_ref": payload.ratchet_tree_ref }))
+}

@@ -131,15 +131,121 @@ export class ProvisioningBridge {
     });
   }
 
-  static start(): ProvisioningBridge {
+  static start(sessionId?: string): ProvisioningBridge {
     // The runner builds the binary and exports its path; `cargo run` here would
     // contend on the build-directory lock while holding a session open.
     const binary = requiredEnv("COTEST_PROVISION_BIN");
     const child = spawn(binary, [], {
       stdio: ["pipe", "pipe", "inherit"],
-      env: { ...process.env, SSL_CERT_FILE: requiredEnv("COTEST_RUN_SCOPED_CA_PEM") },
+      env: { ...process.env, SSL_CERT_FILE: requiredEnv("COTEST_RUN_SCOPED_CA_PEM"),
+        ...(sessionId ? { COTEST_PROVISION_SESSION_ID: sessionId } : {}) },
     });
     return new ProvisioningBridge(child);
+  }
+
+  /** Opaque run-owned address only; neither private keys nor a caller-selected path. */
+  async pairAgentRuntime(args: {
+    endpoints: DeploymentEndpoints;
+    controllerAccountId: AccountId;
+    controllerGrant: string;
+    controllerHolderSeed: string;
+    controllerEventSeed: string;
+    controllerVerificationMethod: string;
+    agentId: string; realmId: string; strandId: string;
+  }): Promise<{ runtimeId: string; authorizationEventId: string }> {
+    const result = await this.#call("agent_runtime_pair", {
+      station_base_url: args.endpoints.colandBaseUrl, coauth_base_url: args.endpoints.coauthBaseUrl,
+      controller_account_id: args.controllerAccountId, controller_grant: args.controllerGrant,
+      controller_holder_seed: args.controllerHolderSeed, controller_event_seed: args.controllerEventSeed,
+      controller_verification_method: args.controllerVerificationMethod,
+      agent_id: args.agentId, realm_id: args.realmId, strand_id: args.strandId,
+    });
+    return { runtimeId: String(result.runtime_id), authorizationEventId: String(result.authorization_event_id) };
+  }
+
+  /** Freeze original Agent-signed bytes in Garth before a readonly effect cut. */
+  async prepareAgentMessage(args: { runtimeId: string; realmId: string; strandId: string; text: string }): Promise<string> {
+    const result = await this.#call("agent_runtime_prepare_message", {
+      runtime_id: args.runtimeId, realm_id: args.realmId, strand_id: args.strandId, text: args.text,
+    });
+    return String(result.event_id);
+  }
+
+  async submitAgentMessage(runtimeId: string, eventId: string): Promise<{
+    eventId: string; accepted: boolean; commitId?: string; registeredCode?: string; httpStatus?: number;
+  }> {
+    const result = await this.#call("agent_runtime_submit_message", { runtime_id: runtimeId, event_id: eventId });
+    if (typeof result.accepted !== "boolean") throw new Error("Agent runtime omitted a definitive outcome");
+    return { eventId: String(result.event_id), accepted: result.accepted,
+      commitId: typeof result.commit_id === "string" ? result.commit_id : undefined,
+      registeredCode: typeof result.registered_code === "string" ? result.registered_code : undefined,
+      httpStatus: typeof result.http_status === "number" ? result.http_status : undefined };
+  }
+
+  /** Opaque run-owned address only; neither private keys nor a caller-selected path. */
+  async custodySession(): Promise<{ sessionId: string; pid: number }> {
+    const result = await this.#call("custody_session", {});
+    return { sessionId: String(result.session_id), pid: Number(result.pid) };
+  }
+
+  /** Real process crash. Await reaping before the same custody may be reopened. */
+  async kill(): Promise<void> {
+    if (this.#child.exitCode !== null || this.#child.signalCode !== null) return;
+    await new Promise<void>((resolve, reject) => {
+      this.#child.once("exit", (_code, signal) => {
+        this.#lines.close();
+        signal === "SIGKILL" ? resolve() : reject(new Error(`expected SIGKILL, got ${signal}`));
+      });
+      if (!this.#child.kill("SIGKILL")) reject(new Error("could not kill provisioning process"));
+    });
+  }
+
+  /** Registered claim-subject transcript using original accepted native control custody. */
+  async signInviteSubject(args: { handoffId: string; inviteId: string; realmId: string;
+    tokenCommitment: string; claimNonce: string; verificationId: string;
+    bindingProof: Record<string, unknown> }): Promise<Record<string, unknown>> {
+    return this.#call("sign_invite_subject", { handoff_id: args.handoffId, invite_id: args.inviteId,
+      realm_id: args.realmId, token_commitment: args.tokenCommitment, claim_nonce: args.claimNonce,
+      verification_id: args.verificationId, binding_proof: args.bindingProof });
+  }
+
+  /** SDK provision transcript signed by the accepted PCR Device; no key bytes leave Rust. */
+  async signThirdPartyInviteProvision(args: {
+    handoffId: string; requestId: string; realmId: string; verificationId: string;
+    oobCodeKind: string; deliveryTargetUri: string; expiresAt: string;
+    createdAt?: string; domain: string;
+  }): Promise<Record<string, unknown>> {
+    return this.#call("sign_third_party_invite_provision", {
+      handoff_id: args.handoffId, request_id: args.requestId, realm_id: args.realmId,
+      verification_id: args.verificationId, oob_code_kind: args.oobCodeKind,
+      delivery_target_uri: args.deliveryTargetUri, expires_at: args.expiresAt,
+      created_at: args.createdAt ?? null, domain: args.domain,
+    });
+  }
+
+  /** Rust dispatches only recognized SDK EventSpecs, then persists and submits through Garth. */
+  async submitTypedEvent(args: { handoffId: string; realmId: string; kind: string; payload: Record<string, unknown>; semanticRefs?: Array<Record<string, unknown>> }): Promise<Record<string, unknown>> {
+    return this.#call("garth_submit_typed_event", { handoff_id: args.handoffId, realm_id: args.realmId,
+      kind: args.kind, payload: args.payload, semantic_refs: args.semanticRefs ?? [] });
+  }
+
+  /** Closed SDK attestation reader over the original accepted holder's DPoP session. */
+  async thirdPartyInviteAcceptanceAttestation(args: {
+    handoffId: string; realmId: string; inviteId: string; verificationId: string; provisioningId: string;
+  }): Promise<Record<string, unknown>> {
+    return this.#call("third_party_invite_acceptance_attestation", {
+      handoff_id: args.handoffId, request: { realm_id: args.realmId, invite_id: args.inviteId,
+        verification_id: args.verificationId, provisioning_id: args.provisioningId },
+    });
+  }
+
+  async registrationCustody(handoffId: string): Promise<{ requestDigest: string; acceptedPersisted: boolean }> {
+    const result = await this.#call("registration_custody", { handoff_id: handoffId });
+    return { requestDigest: String(result.request_digest), acceptedPersisted: result.accepted_persisted === true };
+  }
+
+  async recoverPrincipal(handoffId: string): Promise<Record<string, unknown>> {
+    return this.#call("recover_principal", { handoff_id: handoffId });
   }
 
   #onLine(line: string) {
@@ -275,6 +381,21 @@ export class ProvisioningBridge {
     };
   }
 
+  /** Service accepted, host outcome not persisted. Caller must kill before recovery. */
+  async acceptBeforePersist(args: {
+    handoffId: string; endpoints: DeploymentEndpoints; trustDomain: string;
+    audienceId: string; deviceId: string; displayName: string;
+  }): Promise<{ outcome: Record<string, unknown>; pid: number }> {
+    const result = await this.#call("found_principal", {
+      handoff_id: args.handoffId, coauth_base_url: args.endpoints.coauthBaseUrl,
+      coland_base_url: args.endpoints.colandBaseUrl, trust_domain: args.trustDomain,
+      audience_id: args.audienceId, device_id: args.deviceId, display_name: args.displayName,
+      stop_after_accept: true,
+    });
+    if (result.accepted_before_persist !== true) throw new Error("host persistence cut was not reached");
+    return { outcome: result.outcome as Record<string, unknown>, pid: Number(result.pid) };
+  }
+
   /**
    * Read a founded principal's own account, as the Station sees it.
    *
@@ -315,7 +436,7 @@ export class ProvisioningBridge {
     colandBaseUrl: string;
     accountId: { principal_id: string; station_id: string };
     deviceId: string;
-  }): Promise<{ storeRoot: string; identitySnapshotPath: string }> {
+  }): Promise<{ storeRoot: string; identitySnapshotPath: string; identityRestoredFromDisk: boolean }> {
     const result = await this.#call("garth_client_open", {
       handoff_id: args.handoffId,
       coland_base_url: args.colandBaseUrl,
@@ -323,7 +444,12 @@ export class ProvisioningBridge {
       device_id: args.deviceId,
     });
     if (result.identity_restored_from_disk !== true) throw new Error("Garth identity was not restored from durable accepted material");
-    return { storeRoot: String(result.store_root), identitySnapshotPath: String(result.identity_snapshot_path) };
+    return { storeRoot: String(result.store_root), identitySnapshotPath: String(result.identity_snapshot_path), identityRestoredFromDisk: true };
+  }
+
+  async garthCursor(handoffId: string): Promise<string | undefined> {
+    const result = await this.#call("garth_cursor", { handoff_id: handoffId });
+    return typeof result.cursor === "string" ? result.cursor : undefined;
   }
 
   /** Run one bounded account-subscribe round through Garth's engine. */

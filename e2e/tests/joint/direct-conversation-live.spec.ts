@@ -1,13 +1,17 @@
 import { openAndPairSecondController } from "../../helpers/paired-controller";
 import { test, expect, type JointUsersFixture } from "../../helpers/joint-fixture";
 import type { APIRequestContext, Browser, Page, Response } from "@playwright/test";
-import { requestContactArkret, respondContactArkret } from "../../helpers/contact-api";
-import { accountActorId, assertAuthoritySubmitOutcome, canonicalJson } from "../../helpers/coland-api";
+import { requestContactArkret, respondContactArkret, resolvePrincipalLocator, tombstoneContactArkret } from "../../helpers/contact-api";
+import { accountActorId, assertAuthoritySubmitOutcome, canonicalJson, createRealmApi, resolveDefaultStrandId, scanRealmStreamApi, signedEventEnvelope, submitSignedEventApi } from "../../helpers/coland-api";
 import { decodeEventIngressBody, ingressEvents } from "../../helpers/event-ingress";
 
-import { flatTopicChats } from "../../helpers/direct-structure";
+import { approvePairingLinkOnAuthorizedDevice, createDpopUserSession, openUserPage, selfPathHeadersForDpopSession } from "../../helpers/users";
+import { serverLoginViaCoauth, submitCoauthPasswordCredentials } from "../../helpers/real-oidc-login";
+import { colandBaseUrl } from "../../helpers/env";
 
-function directConversationCase(mode: "normal" | "interrupted" | "offline") {
+import { directStructureLifecycleGate, flatTopicChats, rejectDirectStructureEvent } from "../../helpers/direct-structure";
+
+function directConversationCase(mode: "normal" | "interrupted" | "offline" | "lost" | "logout" | "account" | "withdrawal" | "leave", remoteBob = false) {
 return async ({ jointUsers, request, browser }: { jointUsers: JointUsersFixture; request: APIRequestContext; browser: Browser }) => {
   test.setTimeout(mode === "normal" ? 900_000 : 480_000);
   // A Contact pair must establish its own Direct Conversation without any
@@ -15,19 +19,24 @@ return async ({ jointUsers, request, browser }: { jointUsers: JointUsersFixture;
   const { alicePage, bobPage, aliceSession, bobSession } = jointUsers;
   const alice = alicePage.page;
   const bob = bobPage.page;
-  const interruptPreparation = mode !== "normal";
+  const interruptPreparation = mode === "interrupted" || mode === "offline";
+  const holdSecondResolve = mode === "normal" || mode === "logout" || mode === "account";
   await Promise.all([
     alicePage.completeRecoveryKeySetupIfPrompted(30_000),
     bobPage.completeRecoveryKeySetupIfPrompted(30_000),
   ]);
+  const remoteLocator = remoteBob && await resolvePrincipalLocator(request, bobSession.user.id, "server2", bobSession.grantJwt);
   const { outcome } = await requestContactArkret(request, aliceSession.grantJwt, bobSession.user.id, {
     requestedScopes: ["direct_message", "presence"],
+    ...(remoteBob ? { recipientServiceId: bobSession.accountId.station_id,
+      introductionEvidence: { kind: "locator_ref", principal_locator: remoteLocator } } : {}),
   });
   const accepted = await respondContactArkret(request, bobSession.grantJwt, {
     requestId: outcome.request_event_ref,
     requesterId: aliceSession.user.id,
     action: "accept",
     grantedScopes: ["direct_message", "presence"],
+    ...(remoteBob ? { server: "server2" as const, requesterServiceId: aliceSession.accountId.station_id } : {}),
   });
   expect(accepted.state).toBe("accepted");
 
@@ -56,13 +65,69 @@ return async ({ jointUsers, request, browser }: { jointUsers: JointUsersFixture;
   }
   await Promise.all([alice.reload(), bob.reload()]);
   let founder: Page | undefined;
+  let foundingAcceptedAt: number | undefined;
   let releaseResolve!: () => void;
   const resolveDelay = new Promise<void>(resolve => { releaseResolve = resolve; });
   let acceptFounding!: (response: Response) => void;
   const foundingAccepted = new Promise<Response>(resolve => { acceptFounding = resolve; });
   const resolvePath = "**/_arkret/self/direct-conversations/resolve";
   const pendingResolveRoutes = new Set<Promise<void>>();
-  if (mode === "normal") {
+  let browserCancelledOldResolves = 0;
+  let heldResolvedCoordinates: { realm_id: string; main_strand_id: string } | undefined;
+  let oldResolutionReady!: () => void;
+  const actualOldResolution = new Promise<void>(resolve => { oldResolutionReady = resolve; });
+  let lostAccepted!: () => void;
+  const lostAcceptance = new Promise<void>(resolve => { lostAccepted = resolve; });
+  let originalUnit: string | undefined;
+  const foundingIds: string[][] = [];
+  let observedUnitRaw: string | undefined;
+  let unchangedUnit = true;
+  const observeUnit = (request: import("@playwright/test").Request) => {
+    if (request.method() !== "POST" || new URL(request.url()).pathname !== "/_arkret/self/events"
+      || request.postDataJSON()?.unit_kind !== "direct_conversation_founding") return;
+    const raw = request.postData()!;
+    if (observedUnitRaw === undefined) observedUnitRaw = raw;
+    else unchangedUnit = unchangedUnit && observedUnitRaw === raw;
+    foundingIds.push(ingressEvents(decodeEventIngressBody(request.postDataJSON())).map(event => event.event_id!));
+  };
+  const originalCommits: string[] = [];
+  const lossRoutes: Array<{ page: Page; handler: (route: import("@playwright/test").Route) => Promise<void> }> = [];
+  if (mode === "lost") {
+    for (const page of [alice, bob]) {
+      page.on("request", observeUnit);
+      const handler = async (route: import("@playwright/test").Route) => {
+        if (route.request().postDataJSON()?.unit_kind !== "direct_conversation_founding") { await route.continue(); return; }
+        const raw = route.request().postData()!;
+        const events = ingressEvents(decodeEventIngressBody(route.request().postDataJSON()));
+        if (originalUnit !== undefined) {
+          expect(raw, "lost acceptance must replay the exact signed four-Event unit").toBe(originalUnit);
+          await route.continue();
+          return;
+        }
+        originalUnit = raw;
+        founder = page;
+        const response = await route.fetch();
+        expect(response.ok(), await response.text()).toBe(true);
+        const outcome = await response.json() as { unit_kind: string; status: string; commits: Array<Record<string, unknown>> };
+        expect(outcome.unit_kind).toBe("direct_conversation_founding");
+        expect(outcome.status).toBe("committed");
+        expect(outcome.commits).toHaveLength(4);
+        for (let i = 0; i < 4; i += 1) {
+          expect(outcome.commits[i].event_ref).toBe(events[i].event_id);
+          expect(outcome.commits[i].stream_position).toBe(i);
+          expect(outcome.commits[i].previous_commit_ref ?? null).toBe(i ? outcome.commits[i - 1].commit_id : null);
+          originalCommits.push(outcome.commits[i].commit_id as string);
+        }
+        // The Station really commits; only the browser's receipt is lost.
+        await route.abort("failed");
+        lostAccepted();
+      };
+      lossRoutes.push({ page, handler });
+      await page.route("**/_arkret/self/events", handler);
+    }
+  }
+
+  if (holdSecondResolve) {
     for (const page of [alice, bob]) {
       page.on("request", request => {
         if (request.method() !== "POST" || new URL(request.url()).pathname !== "/_arkret/self/events") return;
@@ -70,12 +135,35 @@ return async ({ jointUsers, request, browser }: { jointUsers: JointUsersFixture;
       });
       page.on("response", response => {
         if (response.request().method() !== "POST" || new URL(response.url()).pathname !== "/_arkret/self/events") return;
-        if (response.request().postDataJSON()?.unit_kind === "direct_conversation_founding") acceptFounding(response);
+        if (response.request().postDataJSON()?.unit_kind === "direct_conversation_founding" && response.ok()) {
+          foundingAcceptedAt ??= Date.now();
+          acceptFounding(response);
+        }
       });
       await page.route(resolvePath, async route => {
         const handling = (async () => {
+          const heldResponse = mode === "account" && founder === page ? await route.fetch() : undefined;
+          if (heldResponse) {
+            expect(heldResponse.ok(), "the old Account's actual resolver must answer before identity replacement").toBe(true);
+            const resolved = await heldResponse.json();
+            expect(["found", "provisional", "suspended"]).toContain(resolved.state);
+            expect(resolved.coordinates?.realm_id).toMatch(/^ak:realm:/);
+            expect(resolved.coordinates?.main_strand_id).toMatch(/^ak:strand:/);
+            heldResolvedCoordinates = resolved.coordinates;
+            oldResolutionReady();
+          }
           if (founder === page) await resolveDelay;
-          await route.continue();
+          try {
+            if (heldResponse) await route.fulfill({ response: heldResponse });
+            else await route.continue();
+          } catch (error) {
+            if (mode !== "account") throw error;
+            // Complete OIDC navigation may cancel the original document's
+            // fetch. Only actual browser cancellation is an accepted fence.
+            const failure = route.request().failure();
+            if (!failure || !/abort|cancel/i.test(failure.errorText)) throw error;
+            browserCancelledOldResolves += 1;
+          }
         })();
         pendingResolveRoutes.add(handling);
         try {
@@ -89,29 +177,158 @@ return async ({ jointUsers, request, browser }: { jointUsers: JointUsersFixture;
   try {
   for (const [page, peer] of [[alice, bobSession.user.id], [bob, aliceSession.user.id]] as const) {
     await page.getByTestId("realm-sidebar-tab-direct").click();
-    await page.locator(`[data-testid="direct-conversation-row"][data-peer=${JSON.stringify(canonicalJson(accountActorId(peer)))}]`).click();
+    await page.locator(`[data-testid="direct-conversation-row"][data-peer=${JSON.stringify(canonicalJson(accountActorId(peer, peer === bobSession.user.id && remoteBob ? "server2" : "default")))}]`).click();
   }
-  if (mode === "normal") {
+  if (mode === "lost") {
+    await lostAcceptance;
+    expect(founder).toBeDefined();
+    await founder!.reload();
+  }
+  if (holdSecondResolve) {
     const acceptedResponse = await foundingAccepted;
     expect(acceptedResponse.ok(), await acceptedResponse.text()).toBeTruthy();
-    const acceptedAt = Date.now();
+    const unit = ingressEvents(decodeEventIngressBody(acceptedResponse.request().postDataJSON()));
+    const acceptedBody = await acceptedResponse.json() as { unit_kind: string; status: string; commits: Array<Record<string, unknown>> };
+    expect(acceptedBody.unit_kind).toBe("direct_conversation_founding");
+    expect(acceptedBody.status).toBe("committed");
+    expect(unit).toHaveLength(4);
+    expect(acceptedBody.commits).toHaveLength(4);
+    for (let i = 0; i < 4; i += 1) {
+      expect(acceptedBody.commits[i].event_ref).toBe(unit[i].event_id);
+      expect(acceptedBody.commits[i].stream_position).toBe(i);
+      expect(acceptedBody.commits[i].previous_commit_ref ?? null).toBe(i ? acceptedBody.commits[i - 1].commit_id : null);
+    }
+    expect(foundingAcceptedAt).toBeDefined();
+    const acceptedAt = foundingAcceptedAt!;
     expect(founder).toBeDefined();
     await expect(founder!).toHaveURL(/\/direct\/ak:realm:.*\/ak:strand:/, { timeout: 15_000 });
     await expect(founder!.getByTestId("chat-panel")).toBeVisible();
     await expect(founder!.getByTestId("chat-panel")).toHaveAttribute("data-chat-mode", "direct");
-    test.info().annotations.push({ type: "founding-navigation-ms", description: String(Date.now() - acceptedAt) });
+    const acceptedToVisibleMs = Date.now() - acceptedAt;
+    test.info().annotations.push({ type: "founding-navigation-ms", description: String(acceptedToVisibleMs) });
+    await founder!.getByTestId("chat-input").fill("held-second-resolve-send-probe");
+    await expect(founder!.getByTestId("send-chat-button")).toBeDisabled();
+    await expect(founder!.getByTestId("chat-panel")).not.toContainText("Strand not found");
+    const firstPath = new URL(founder!.url()).pathname;
+    if (mode === "logout" || mode === "account") {
+      const previousIdentity = mode === "account" ? await founder!.evaluate(() => {
+        const config = JSON.parse(window.localStorage.getItem("inkson.config.v1") ?? "{}");
+        return { accountId: config.active_account?.authority, deviceId: config.active_account?.device_id };
+      }) : undefined;
+      if (previousIdentity) {
+        expect(previousIdentity.accountId).toEqual(founder === alice ? aliceSession.accountId : bobSession.accountId);
+        expect(previousIdentity.deviceId).toMatch(/^ak:device:/);
+        await actualOldResolution;
+      }
+      await founder!.getByTestId("account-menu-button").click();
+      await founder!.getByTestId("account-menu-session-logout").click();
+      await expect(founder!.getByTestId("login-panel")).toBeVisible({ timeout: 60_000 });
+      await expect(founder!.getByTestId("client-shell")).toHaveCount(0);
+      if (mode === "account") {
+        expect(heldResolvedCoordinates, "hold a real old resolution response, not an unissued request").toBeDefined();
+        const acceptedPathParts = firstPath.split("/").map(decodeURIComponent);
+        expect(heldResolvedCoordinates!.realm_id).toBe(acceptedPathParts[2]);
+        expect(heldResolvedCoordinates!.main_strand_id).toBe(acceptedPathParts[3]);
+        const replacement = founder === alice ? bobSession : aliceSession;
+        const authorized = founder === alice ? bobPage : alicePage;
+        expect(previousIdentity!.accountId).not.toEqual(replacement.accountId);
+        await founder!.getByTestId("login-server-url").fill(colandBaseUrl());
+        await founder!.getByTestId("start-server-login-button").click();
+        await submitCoauthPasswordCredentials(founder!, replacement.account);
+        const consent = founder!.getByTestId("coauth-oauth-approve");
+        if (await consent.waitFor({ state: "visible", timeout: 20_000 }).then(() => true).catch(() => false)) {
+          await consent.click();
+        }
+        await expect(founder!.getByTestId("device-setup-required")).toBeVisible({ timeout: 120_000 });
+        await expect(founder!.getByTestId("client-shell")).toHaveCount(0);
+        await founder!.getByTestId("device-setup-pairing-start").click();
+        const pairingCode = founder!.getByTestId("device-setup-pairing-code");
+        await expect(pairingCode).toBeVisible({ timeout: 30_000 });
+        const code = (await pairingCode.textContent())?.trim() ?? "";
+        expect(code).not.toBe("");
+        const pairingLink = await founder!.getByTestId("device-setup-pairing-link").inputValue();
+        await approvePairingLinkOnAuthorizedDevice(authorized, pairingLink, code);
+        await founder!.getByTestId("device-setup-pairing-status").click();
+        await expect(founder!.getByTestId("device-setup-status")).toContainText("Device authorization is accepted", { timeout: 90_000 });
+        await founder!.getByRole("link", { name: "Sign in again after approval" }).click();
+        await expect(founder!.getByTestId("login-panel")).toBeVisible({ timeout: 30_000 });
+        await serverLoginViaCoauth(founder!, replacement.account);
+        const currentIdentity = await founder!.evaluate(() => {
+          const config = JSON.parse(window.localStorage.getItem("inkson.config.v1") ?? "{}");
+          return { accountId: config.active_account?.authority, deviceId: config.active_account?.device_id };
+        });
+        expect(currentIdentity.accountId).toEqual(replacement.accountId);
+        expect(currentIdentity.deviceId).toMatch(/^ak:device:/);
+        expect(currentIdentity.deviceId).not.toBe(previousIdentity!.deviceId);
+        const viewerUrl = `${colandBaseUrl()}/_arkret/self/account/viewer`;
+        await expect.poll(async () => {
+          const response = await request.get(viewerUrl, {
+            headers: selfPathHeadersForDpopSession(replacement, "GET", viewerUrl),
+          });
+          expect(response.ok(), "the replacement Account must confirm its actual accepted Device").toBe(true);
+          const body = await response.json();
+          return body.devices?.find((device: { device_id?: string; status?: string }) => device.device_id === currentIdentity.deviceId)?.status;
+        }, { timeout: 90_000 }).toBe("active");
+        await expect(founder!.getByTestId("chat-panel")).toHaveCount(0);
+        const replacementPath = new URL(founder!.url()).pathname;
+        expect(replacementPath).not.toBe(firstPath);
+        releaseResolve();
+        await Promise.all([...pendingResolveRoutes]);
+        await expect(founder!).toHaveURL(url => url.pathname === replacementPath);
+        await expect(founder!.getByTestId("client-shell")).toBeVisible();
+        await expect(founder!.getByTestId("chat-panel")).toHaveCount(0);
+        await expect(founder!.getByTestId("chat-input")).toHaveCount(0);
+        await test.info().attach("founding-held-resolve-real-account-device-reentry", {
+          body: Buffer.from(JSON.stringify({ original_account: previousIdentity!.accountId,
+            original_device: previousIdentity!.deviceId, accepted_account: currentIdentity.accountId,
+            accepted_device: currentIdentity.deviceId, actual_hard_logout: true,
+            actual_oidc_and_authorized_device_pairing: true, accepted_device_status: "active",
+            actual_old_resolver_response_fetched_before_identity_replacement: true,
+            actual_old_resolver_coordinates: heldResolvedCoordinates,
+            old_resolve_released_after_new_account_device_acceptance: true,
+            browser_cancelled_old_requests: browserCancelledOldResolves,
+            old_chat_and_draft_not_installed: true, same_document_account_switch_claimed: false })),
+          contentType: "application/json",
+        });
+        return;
+      }
+      releaseResolve();
+      await Promise.all([...pendingResolveRoutes]);
+      await expect(founder!.getByTestId("login-panel")).toBeVisible();
+      await expect(founder!.getByTestId("chat-panel")).toHaveCount(0);
+      await expect(founder!.getByTestId("client-shell")).toHaveCount(0);
+      await test.info().attach("founding-held-resolve-session-terminated", {
+        body: Buffer.from(JSON.stringify({ accepted_path: firstPath, actual_hard_logout: true,
+          old_resolve_released_after_shell_unmount: true, old_chat_not_installed: true })),
+        contentType: "application/json",
+      });
+      return;
+    }
+    await founder!.getByTestId("account-menu-button").click();
+    await founder!.getByTestId("account-menu-settings").click();
+    await expect(founder!.getByTestId("settings-panel")).toBeVisible();
+    await founder!.goBack();
+    await expect(founder!).toHaveURL(url => url.pathname === firstPath);
+    await expect(founder!.getByTestId("chat-panel")).toBeVisible();
+    await expect(founder!.getByTestId("send-chat-button")).toBeDisabled();
+    await test.info().attach("founding-held-resolve-page-navigation", {
+      body: Buffer.from(JSON.stringify({ accepted_to_visible_ms: acceptedToVisibleMs,
+        accepted_path: firstPath, second_resolve_released: false, strict_send_gate: true, shell_survived_page_navigation: true })),
+      contentType: "application/json",
+    });
   }
   } finally {
     releaseResolve();
     await Promise.all([...pendingResolveRoutes]);
-    if (mode === "normal") await Promise.all([alice.unroute(resolvePath), bob.unroute(resolvePath)]);
+    if (holdSecondResolve) await Promise.all([alice.unroute(resolvePath), bob.unroute(resolvePath)]);
   }
   // The first click may belong to the non-founder. Once the selected founder
   // creates the pair, opening the same sidebar row must resolve its coordinates.
   for (const [page, peer] of [[alice, bobSession.user.id], [bob, aliceSession.user.id]] as const) {
     await expect(async () => {
       if (!new URL(page.url()).pathname.startsWith("/direct/")) {
-        await page.locator(`[data-testid="direct-conversation-row"][data-peer=${JSON.stringify(canonicalJson(accountActorId(peer)))}]`).click();
+        await page.getByTestId("realm-sidebar-tab-direct").click();
+        await page.locator(`[data-testid="direct-conversation-row"][data-peer=${JSON.stringify(canonicalJson(accountActorId(peer, peer === bobSession.user.id && remoteBob ? "server2" : "default")))}]`).click();
       }
       await expect(page).toHaveURL(/\/direct\/ak:realm:.*\/ak:strand:/, { timeout: 5_000 });
     }).toPass({ timeout: 180_000, intervals: [2_000] });
@@ -154,6 +371,13 @@ return async ({ jointUsers, request, browser }: { jointUsers: JointUsersFixture;
     expect(sentEvent, "the provisional submission carries its message").toBeTruthy();
     expect(submission.status, `provisional outcome reason: ${String(submission.reason_code ?? "none")}`).toBe("committed");
     assertAuthoritySubmitOutcome(submission, sentEvent!, "provisional Direct message");
+    const founding = await scanRealmStreamApi(request, bobSession.grantJwt, directRealm, { limit: 1000 });
+    expect(founding.truncated).toBe(false);
+    const mainCreate = founding.events.find(event => event.kind === "ak.strand.create");
+    expect(mainCreate).toBeDefined();
+    await rejectDirectStructureEvent({ request, token: bobSession.grantJwt }, sentEvent!,
+      `provisional-${mode}-structure`, "ak.strand.create", { object: (mainCreate!.payload as Record<string, unknown>).object },
+      "direct_conversation_participant_authority_denied");
     const envelope = sentEvent?.payload?.encrypted_content as { encryption_context?: { epoch?: number } } | undefined;
     if (mode === "offline") {
       expect(envelope?.encryption_context?.epoch).toBe(0);
@@ -226,6 +450,24 @@ return async ({ jointUsers, request, browser }: { jointUsers: JointUsersFixture;
   await bob.getByTestId("chat-input").fill(afterReload);
   await bob.getByTestId("send-chat-button").click();
   await expect(alice.getByTestId("chat-message").filter({ hasText: afterReload })).toBeVisible({ timeout: 90_000 });
+  if (mode === "withdrawal" || mode === "leave") {
+    await directStructureLifecycleGate(alice, bob, { request, token: aliceSession.grantJwt,
+      peer: { token: bobSession.grantJwt, server: "default" } }, mode, async author => {
+      if (mode === "withdrawal") {
+        const withdrawn = await tombstoneContactArkret(request, aliceSession.grantJwt, bobSession.user.id);
+        expect(withdrawn.state).toBe("tombstoned");
+      } else {
+        const event = signedEventEnvelope({ actorId: author.actor_id as ReturnType<typeof accountActorId>,
+          realmId: author.realm_id!, kind: "ak.member.state",
+          authorizationRef: author.authorization_ref as string, semanticRefs: author.semantic_refs as Array<Record<string, unknown>>,
+          proofVerificationMethod: (author.producer_proof as { verification_method: string }).verification_method,
+          payload: { member_id: author.actor_id, membership: "leave", reason: "self_leave" },
+        });
+        await submitSignedEventApi(request, bobSession.grantJwt, event, { context: "Direct participant self leave", controlObserverToken: aliceSession.grantJwt });
+      }
+    });
+    return;
+  }
   if (mode === "normal") {
     const paired = await openAndPairSecondController(browser, request, jointUsers);
     try {
@@ -234,14 +476,55 @@ return async ({ jointUsers, request, browser }: { jointUsers: JointUsersFixture;
       expect(jointUsers.aliceSession.recoveryKey).toBeTruthy();
       await paired.page.unlockMlsAccountSecret(jointUsers.aliceSession.recoveryKey!);
       await expect(paired.page.page.getByTestId("send-chat-button")).toBeEnabled({ timeout: 180_000 });
-      await flatTopicChats(alice, bob, [...messages, afterReload], [paired.page.page], { request, token: aliceSession.grantJwt });
+      const outsideRealm = await createRealmApi(request, aliceSession.grantJwt, {
+        title: `DM boundary outside ${Date.now()}`, mls_activated: false,
+      });
+      const outsideStrand = await resolveDefaultStrandId(request, aliceSession.grantJwt, outsideRealm);
+      const control = paired.page.page;
+      await control.goto(`/realms/${encodeURIComponent(outsideRealm)}/circles`, { waitUntil: "domcontentloaded" });
+      await control.getByTestId("circle-create-open").click();
+      await control.getByTestId("circle-create-title").fill(`DM boundary Circle ${Date.now()}`);
+      await expect(control.getByTestId("circle-create-encrypted")).not.toBeChecked();
+      await control.getByTestId("circle-create-submit").click();
+      await expect(control).toHaveURL(/\/realms\/[^/]+\/circles\/[^/]+$/);
+      const outsideCircle = decodeURIComponent(new URL(control.url()).pathname.split("/").at(-1)!);
+      let circleStrand: string | undefined;
+      await expect.poll(async () => {
+        const history = await scanRealmStreamApi(request, aliceSession.grantJwt, outsideRealm, {
+          streamRef: { kind: "circle", realm_id: outsideRealm, circle_id: outsideCircle }, limit: 1000,
+        });
+        expect(history.truncated).toBe(false);
+        const created = history.events.find(event => event.kind === "ak.strand.create");
+        circleStrand = typeof created?.event_id === "string" ? created.event_id.replace("ak:event:", "ak:strand:") : undefined;
+        return circleStrand;
+      }).toBeTruthy();
+      const third = await createDpopUserSession(request, "direct-outsider", {});
+      expect(third, "negative author must be a real registered principal/device").toBeDefined();
+      await control.goto(path, { waitUntil: "domcontentloaded" });
+      await flatTopicChats(alice, bob, [...messages, afterReload], [paired.page.page], { request, token: aliceSession.grantJwt,
+        peer: { token: bobSession.grantJwt, server: remoteBob ? "server2" : "default" }, boundaryTargets: {
+          realmStrand: outsideStrand, circleStrand: circleStrand!, thirdActor: accountActorId(third!.user.id), thirdToken: third!.grantJwt,
+        } });
     } finally {
       await paired.page.close();
     }
   }
   for (const [page, peer] of [[alice, bobSession.user.id], [bob, aliceSession.user.id]] as const) {
-    const presence = page.locator(`[data-testid="presence-row"][data-actor-id=${JSON.stringify(canonicalJson(accountActorId(peer)))}]`);
+    const presence = page.locator(`[data-testid="presence-row"][data-actor-id=${JSON.stringify(canonicalJson(accountActorId(peer, peer === bobSession.user.id && remoteBob ? "server2" : "default")))}]`);
     await expect.soft(presence).toHaveAttribute("data-presence-state", "online", { timeout: 90_000 });
+  }
+  if (mode === "lost") {
+    expect(unchangedUnit, "all founding submissions after restart preserve the original signed bytes").toBe(true);
+    expect(new Set(foundingIds.map(ids => canonicalJson(ids))).size).toBe(1);
+    await test.info().attach("founding-acceptance-lost-cold-resume", {
+      body: Buffer.from(JSON.stringify({ submitted_event_ids: foundingIds, original_commit_ids: originalCommits,
+        first_response_lost_after_actual_commit: true, process_restarted: true, unique_founding_unit: true })),
+      contentType: "application/json",
+    });
+  }
+  for (const { page, handler } of lossRoutes) {
+    await page.unroute("**/_arkret/self/events", handler);
+    page.off("request", observeUnit);
   }
 };
 }
@@ -249,3 +532,35 @@ return async ({ jointUsers, request, browser }: { jointUsers: JointUsersFixture;
 test("same-server Direct Conversation exchanges encrypted messages and retains them after reload", directConversationCase("normal"));
 test("same-server Direct Conversation resumes interrupted preparation and exchanges messages after reload", directConversationCase("interrupted"));
 test("same-server Direct Conversation founder sends while the peer device is offline and the peer decrypts after reconnect", directConversationCase("offline"));
+
+
+test("cross-station Direct Conversation preserves encrypted Chat and Topic state across participants and reload", async ({ jointUsers, request, browser }) => {
+  test.setTimeout(1_200_000);
+  const session = await createDpopUserSession(request, "direct-cross-bob", { server: "server2" });
+  expect(session, "the official two-Station runner must supply a real second Station").toBeDefined();
+  const remote = await openUserPage(browser, session!.user, {
+    server: "server2", grantJwt: session!.grantJwt, dpopSeedB64url: session!.dpopSeedB64url,
+    eventSigningSeedB64url: session!.eventSigningSeedB64url, grantId: session!.grantId,
+    accountId: session!.accountId, principalControlRealmId: session!.principalControlRealmId,
+    grantAudience: session!.grantAudience, recoveryKey: session!.recoveryKey,
+    recoveryMaterialEvidence: session!.recoveryMaterialEvidence,
+    onRecoveryKeyConfigured: key => { session!.recoveryKey = key; },
+  });
+  try {
+    await remote.gotoHome();
+    await directConversationCase("normal", true)({ browser, request, jointUsers: {
+      ...jointUsers, bob: session!.user, bobSession: session!, bobToken: session!.grantJwt, bobPage: remote,
+    } });
+  } finally {
+    await remote.close();
+  }
+});
+
+test("Direct Conversation resumes a genuinely lost founding acceptance after cold reload without creating another pair", directConversationCase("lost"));
+
+test("Direct Conversation rejects a delayed founding resolve after actual hard logout and shell termination", directConversationCase("logout"));
+
+test("Direct Conversation rejects its old delayed resolve after real OIDC Account and paired Device replacement", directConversationCase("account"));
+
+test("Direct Conversation rejects Chat Topic and own watch writes after known Contact withdrawal", directConversationCase("withdrawal"));
+test("Direct Conversation rejects Chat Topic and own watch writes after participant self leave", directConversationCase("leave"));

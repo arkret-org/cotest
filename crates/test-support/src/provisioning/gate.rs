@@ -591,11 +591,36 @@ pub struct FoundPrincipalRequest<'a> {
     pub display_name: &'a str,
 }
 
+/// Private host checkpoint containing the original request and local key custody.
+/// Protocol carriers inside this record are the SDK's existing types.
+#[derive(Clone, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct PreparedPrincipalRegistration {
+    pub coauth_base: String,
+    pub station_base: String,
+    pub trust_domain: String,
+    pub audience_id: String,
+    pub device_id: String,
+    pub checkpoint: Value,
+    pub recovery_key: String,
+    pub register_body: AccountRegisterRequestBody,
+}
+
 pub async fn found_principal(
     http: &reqwest::Client,
     request: FoundPrincipalRequest<'_>,
     handoff: &AccountHandoff,
 ) -> Result<FoundedPrincipal> {
+    let prepared = prepare_principal_registration(http, request, handoff).await?;
+    submit_prepared_principal_registration(http, &prepared, handoff).await
+}
+
+/// Prepare once. The host commits this checkpoint before the first register POST.
+pub async fn prepare_principal_registration(
+    http: &reqwest::Client,
+    request: FoundPrincipalRequest<'_>,
+    handoff: &AccountHandoff,
+) -> Result<PreparedPrincipalRegistration> {
     let FoundPrincipalRequest {
         coauth_base,
         station_base,
@@ -667,6 +692,43 @@ pub async fn found_principal(
     }))
     .context("build the identity-creation register request")?;
 
+    Ok(PreparedPrincipalRegistration {
+        coauth_base: coauth.to_owned(),
+        station_base: station_base.to_owned(),
+        trust_domain: trust_domain.to_owned(),
+        audience_id: audience_id.to_owned(),
+        device_id: device_id.to_owned(),
+        checkpoint: checkpoint.clone(),
+        recovery_key,
+        register_body: serde_json::from_value(register_body)?,
+    })
+}
+
+/// Submit or replay the exact frozen register request; never regenerate proofs.
+pub async fn submit_prepared_principal_registration(
+    http: &reqwest::Client,
+    prepared: &PreparedPrincipalRegistration,
+    handoff: &AccountHandoff,
+) -> Result<FoundedPrincipal> {
+    let coauth = prepared.coauth_base.as_str();
+    let station_base = prepared.station_base.as_str();
+    let audience_id = prepared.audience_id.as_str();
+    let device_id = prepared.device_id.as_str();
+    let checkpoint = &prepared.checkpoint;
+    let recovery_key = prepared.recovery_key.clone();
+    let register_body = serde_json::to_value(&prepared.register_body)?;
+    ensure!(
+        prepared
+            .register_body
+            .identity_creation
+            .as_ref()
+            .context("frozen creation request absent")?
+            .initial_session
+            .session_public_key
+            .as_str()
+            == handoff.device_key.canonical_public_jwk()?,
+        "frozen registration holder key differs from durable handoff"
+    );
     // Step 7.
     let registered = handoff
         .post_authorized(

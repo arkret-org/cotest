@@ -216,6 +216,9 @@ function Get-RepositoryBuildInputState {
         SourceSha256 = $sourceHash
         DirtySha256 = $dirtyHash
         BuildInputCount = $records.Count
+        # Diagnostic inventory only. Stamp identity remains the existing
+        # source/dirty digest; contents and link targets are never published.
+        BuildInputFiles = @($records.ToArray())
         BuildInputsDirty = -not [string]::IsNullOrEmpty($status)
         RequiredTimeUtc = $latest
         RequiredBy = $latestPath
@@ -234,10 +237,57 @@ function Get-ArtifactBuildRepositoryStates {
 }
 
 function Assert-BuildInputStatesUnchanged {
-    param([Parameter(Mandatory = $true)]$Before, [Parameter(Mandatory = $true)]$After)
+    param([Parameter(Mandatory = $true)]$Before, [Parameter(Mandatory = $true)]$After, [string]$DiagnosticPath)
     $beforeJson = ConvertTo-Json -InputObject @(ConvertTo-BuildStampInputs -RepositoryStates $Before) -Depth 4 -Compress
     $afterJson = ConvertTo-Json -InputObject @(ConvertTo-BuildStampInputs -RepositoryStates $After) -Depth 4 -Compress
-    if ($beforeJson -cne $afterJson) { throw 'Build inputs changed during the managed build; refusing to stamp the artifact' }
+    if ($beforeJson -cne $afterJson) {
+        if ($DiagnosticPath) {
+            try {
+                $snapshot = {
+                    param($states)
+                    @($states | ForEach-Object {
+                        $state = $_
+                        $files = if ($state.PSObject.Properties['BuildInputFiles']) { @($state.BuildInputFiles) } else { @() }
+                        [ordered]@{
+                            repository = Split-Path -Leaf ([string]$state.RepositoryRoot)
+                            head = [string]$state.Head
+                            source_sha256 = [string]$state.SourceSha256
+                            dirty_sha256 = if ($state.PSObject.Properties['DirtySha256']) { [string]$state.DirtySha256 } else { '' }
+                            inventory_available = [bool]$state.PSObject.Properties['BuildInputFiles']
+                            files = @($files | ForEach-Object {
+                                $record = $_
+                                $path = [string]$record.path
+                                # Ancestor Cargo config paths and link targets
+                                # may identify private directories. Publish an
+                                # opaque locator and digest, never that path.
+                                if ($path.StartsWith('cargo_configuration:', [StringComparison]::Ordinal)) {
+                                    $path = 'external_cargo_configuration:' + (Get-BuildInputDigest -Value $path)
+                                }
+                                [ordered]@{
+                                    path = $path
+                                    sha256 = [string]$record.sha256
+                                    record_sha256 = Get-BuildInputDigest -Value (ConvertTo-Json -InputObject $record -Depth 4 -Compress)
+                                }
+                            })
+                        }
+                    })
+                }
+                $diagnostic = [ordered]@{
+                    boundary = 'Managed build input mismatch; repository-relative paths and digests only. No source contents, link targets, credentials, or absolute paths.'
+                    before = @(& $snapshot $Before)
+                    after = @(& $snapshot $After)
+                }
+                $json = ConvertTo-Json -InputObject $diagnostic -Depth 8
+                [System.IO.File]::WriteAllText($DiagnosticPath, $json, [System.Text.UTF8Encoding]::new($false))
+                if (-not $IsWindows) {
+                    [System.IO.File]::SetUnixFileMode($DiagnosticPath, [System.IO.UnixFileMode]::UserRead -bor [System.IO.UnixFileMode]::UserWrite)
+                }
+            } catch {
+                # Diagnostic failure cannot authorize or stamp a changed build.
+            }
+        }
+        throw 'Build inputs changed during the managed build; refusing to stamp the artifact'
+    }
 }
 
 function Get-ArtifactContentIdentity {

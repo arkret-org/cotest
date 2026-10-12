@@ -121,6 +121,31 @@ export class GarthTestClient implements WritingTestClient {
     return outcome.cursor ?? undefined;
   }
 
+  async durableCursor(user: TestUser): Promise<string | undefined> {
+    return this.#bridge.garthCursor(this.#handoffFor(user));
+  }
+
+  /** Kill the entire owner process, then restore every runtime from its original disk custody. */
+  async killAndReopen(): Promise<{ oldPid: number; newPid: number; sessionId: string }> {
+    const old = await this.#bridge.custodySession();
+    await this.#bridge.kill();
+    this.#bridge = ProvisioningBridge.start(old.sessionId);
+    const reopened = await this.#bridge.custodySession();
+    if (reopened.sessionId !== old.sessionId || reopened.pid === old.pid) {
+      throw new Error("whole-process custody recovery did not create a new owner of the original session");
+    }
+    for (const retained of this.#handoffs.values()) {
+      const opened = await this.#bridge.openGarthClient({
+        handoffId: retained.handoffId, colandBaseUrl: this.#endpoints.colandBaseUrl,
+        accountId: { principal_id: retained.user.principalId, station_id: retained.user.stationId },
+        deviceId: retained.user.deviceId,
+      });
+      if (!opened.identityRestoredFromDisk || opened.identitySnapshotPath !== retained.identitySnapshotPath ||
+          opened.storeRoot !== retained.storeRoot) throw new Error("cold bridge changed original durable custody");
+    }
+    return { oldPid: old.pid, newPid: reopened.pid, sessionId: old.sessionId };
+  }
+
   /** Run-owned custody coordinates for failure probes; no key material crosses the bridge. */
   custodyPaths(user: TestUser): { identitySnapshotPath: string; storeRoot: string } {
     this.#handoffFor(user);

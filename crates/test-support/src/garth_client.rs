@@ -259,8 +259,36 @@ impl GarthClientHandle {
             OutboundEngineOutcome::Committed { item, .. } if item.event_id() == &expected => {
                 Ok(*item)
             }
-            outcome => {
-                anyhow::bail!("Garth outbound did not commit the requested Event: {outcome:?}")
+            OutboundEngineOutcome::Rejected { reason_code, .. } => {
+                // Queue items retain signed private payloads; diagnostics only
+                // expose a registered refusal, never the item or response text.
+                let code = if let Some(code) = arkret_wire::ErrorCode::from_wire(&reason_code) {
+                    code.as_str().to_owned()
+                } else {
+                    match arkret_wire::ReasonCode::from_wire(&reason_code) {
+                        arkret_wire::ReasonCode::Unknown(_) => "unregistered_refusal".to_owned(),
+                        code => code.as_str().to_owned(),
+                    }
+                };
+                anyhow::bail!("Garth outbound refused the requested Event: {code}")
+            }
+            OutboundEngineOutcome::Failed { problem, .. } => {
+                let code = problem
+                    .as_ref()
+                    .and_then(|problem| problem.error_code())
+                    .map(|code| code.as_str())
+                    .unwrap_or("local_or_unregistered_failure");
+                let status = problem.as_ref().map(|problem| problem.status);
+                anyhow::bail!("Garth outbound failed the requested Event: {code}, HTTP {status:?}")
+            }
+            OutboundEngineOutcome::Retry { .. } => {
+                anyhow::bail!("Garth outbound queued the requested Event for retry")
+            }
+            OutboundEngineOutcome::Idle => {
+                anyhow::bail!("Garth outbound has no due requested Event")
+            }
+            OutboundEngineOutcome::Committed { .. } => {
+                anyhow::bail!("Garth outbound committed a different Event")
             }
         }
     }
@@ -272,6 +300,63 @@ impl GarthClientHandle {
             )),
         )?)
         .await
+    }
+
+    /// Closed SDK EventSpecs for external business consumers of this bridge.
+    /// Payload parsing happens before authoring, and the normal persistent
+    /// outbound engine remains the only submitter.
+    pub async fn submit_typed_event(
+        &self,
+        realm: RealmId,
+        kind: &str,
+        payload: Value,
+        semantic_refs: Vec<arkret_wire::SemanticRef>,
+    ) -> Result<Value> {
+        let scope = ScopeRef::Realm { realm_id: realm };
+        macro_rules! author {
+            ($spec:ty) => {{
+                let payload = serde_json::from_value::<<$spec as EventSpec>::Payload>(payload)?;
+                let mut event =
+                    TypedEventDraft::<$spec>::new(scope, self.actor_id.clone(), payload)?
+                        .with_semantic_refs(semantic_refs)
+                        .author_with_digest_suite(
+                            chrono::Utc::now(),
+                            arkret_canonical::DigestSuite::Sha256,
+                        )?;
+                sign_event(&mut event, &self.signer, SignEventOptions::default())?;
+                event.into_event()
+            }};
+        }
+        let event = match kind {
+            "ak.invite.create" => author!(event_spec::InviteCreate),
+            "ak.invite.third_party" => author!(event_spec::InviteThirdParty),
+            "ak.invite.claim" => author!(event_spec::InviteClaim),
+            "ak.invite.accept" => author!(event_spec::InviteAccept),
+            "ak.invite.revoke" => author!(event_spec::InviteRevoke),
+            "ak.realm.join_rule" => author!(event_spec::RealmJoinRule),
+            "ak.realm.policy_bundle" => author!(event_spec::RealmPolicyBundle),
+            "ak.capability.grant" => author!(event_spec::CapabilityGrant),
+            "ak.capability.revoke" => author!(event_spec::CapabilityRevoke),
+            "ak.member.state" => author!(event_spec::MemberState),
+            _ => anyhow::bail!("business bridge does not recognize this SDK EventSpec"),
+        };
+        let signed = event.clone();
+        let item = self.submit_event(event).await?;
+        Ok(json!({"event":signed,"commit":item.commit(),"event_id":item.event_id()}))
+    }
+
+    /// Registered SDK reader over the original DPoP-bound Garth transport.
+    pub async fn third_party_invite_acceptance_attestation(
+        &self,
+        request: &arkret_models_collaboration::governance::third_party_invite::ThirdPartyInviteAcceptanceAttestationRequestBody,
+    ) -> Result<Value> {
+        let outcome = self
+            .runtime
+            .authority()
+            .transport()
+            .third_party_invite_acceptance_attestation(request)
+            .await?;
+        Ok(serde_json::to_value(outcome)?)
     }
 
     /// Found a normal plaintext collaboration Realm through Garth's durable queue.

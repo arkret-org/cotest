@@ -23,7 +23,7 @@ $root = Join-Path ([System.IO.Path]::GetTempPath()) ("cotest-binary-marker-" + [
 $null = New-Item -ItemType Directory -Path $root
 try {
     $file = Join-Path $root "fixture.bin"
-    $marker = "org.arkret.coland.conformance.realm_state_snapshot"
+    $marker = "org.arkret.coland.conformance.encode"
     $needle = [System.Text.Encoding]::ASCII.GetBytes($marker)
     Assert-True (-not (Test-BinaryContainsAsciiMarker -Path $file -Marker $marker)) "missing file must fail closed"
     [System.IO.File]::WriteAllBytes($file, [byte[]]@())
