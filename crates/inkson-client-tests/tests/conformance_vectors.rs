@@ -46,13 +46,44 @@ fn named_suite_audit_executes_registered_runners_and_exposes_every_gap() -> Resu
             .any(|entrypoint| entrypoint == "ak.suite.account.blocklist_projection.v1")
     );
     assert!(!report.decision_point_gaps.is_empty());
+    let federation = "ak.suite.federation.idempotency_after_key_revoke.v1";
+    assert!(
+        report
+            .executed_entrypoints
+            .iter()
+            .any(|id| id == federation)
+    );
+    assert!(!report.unwired_entrypoints.iter().any(|id| id == federation));
+    assert!(
+        report
+            .unproved_entrypoints
+            .iter()
+            .any(|id| id == federation)
+    );
+    assert!(
+        !report
+            .failed_executions
+            .iter()
+            .any(|(id, ..)| id == federation)
+    );
+    let missing_federation = report
+        .missing_production_cases
+        .iter()
+        .filter(|case| {
+            case.fixture_ref == "fixtures/federation-idempotency-key-revoke-fixture.json"
+        })
+        .map(|case| case.case_id.as_str())
+        .collect::<Vec<_>>();
+    assert_eq!(
+        missing_federation,
+        ["removed_origin_binding_denies_the_replay"]
+    );
     for required_gap in [
         "ak.suite.call.force_mute_v1_boundary.v1",
         "ak.suite.current.cas_failure_read_boundary.v1",
         "ak.suite.consent.cache_invalidation.v1",
         "ak.suite.direct_conversation.admission_producers.v1",
         "ak.suite.direct_conversation.signal_admission.v1",
-        "ak.suite.federation.idempotency_after_key_revoke.v1",
         "ak.suite.reaction.authority_order.v1",
         "ak.suite.invite.claim_security.v1",
         "ak.suite.peer.event_submit.semantic_union.v1",

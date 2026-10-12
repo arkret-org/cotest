@@ -1543,13 +1543,21 @@ pub async fn original_human_signer_fact(
         .producer_proof
         .as_ref()
         .context("original producer proof")?;
+    let recipient = client
+        .principal
+        .as_ref()
+        .context("historical fact reader requires its authenticated principal")?;
+    let recipient_account = AccountId::new(
+        recipient.core_id.clone(),
+        DidCoreId::new(client.service_id().to_owned())?,
+    );
     let request = SignerKeysQueryRequestBody {
         request_id: RequestId::new(format!(
             "ak:request:{}",
             crate::scenarios::mls_lifecycle_live::fresh_uuid_v7()
         ))?,
         realm_id: event.realm_id.clone(),
-        recipient_account_id: producer.account_id.clone(),
+        recipient_account_id: recipient_account,
         queries: vec![SignerKeyQuerySelector::HistoricalEvent {
             sender: HistoricalSignerKeyQuerySender::AccountDevice {
                 actor: event.actual_signer().clone(),

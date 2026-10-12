@@ -56,6 +56,8 @@ mod encoding;
 mod envelope;
 mod expected_state_digest;
 mod fanout_route_miss;
+mod federation_idempotency_production;
+pub use federation_idempotency_production::run_federation_idempotency_production_suite;
 mod file_transfer_stream_aead;
 mod final_conformance_closure;
 mod fixture_dsl;

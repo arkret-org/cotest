@@ -94,7 +94,7 @@ pub fn missing_sync_production_cases(
 /// total number of unwired suites happened to stay constant.
 // Content-key KATs run in arkret-mls; complete authorized-checkpoint
 // remains owned by 0805. Terminal live scenarios execute below.
-const KNOWN_UNWIRED_ENTRYPOINTS: [&str; 34] = [
+const KNOWN_UNWIRED_ENTRYPOINTS: [&str; 33] = [
     "ak.suite.agent.draft_pending_intent.v1",
     "ak.suite.agent.participation.v1",
     "ak.suite.applet.managed_actor_authority.v1",
@@ -114,7 +114,6 @@ const KNOWN_UNWIRED_ENTRYPOINTS: [&str; 34] = [
     "ak.suite.direct_conversation.signal_admission.v1",
     "ak.suite.encoding.content_bound_event_id.v1",
     "ak.suite.events.redaction.v1",
-    "ak.suite.federation.idempotency_after_key_revoke.v1",
     "ak.suite.identity.independent_admission.v1",
     "ak.suite.identity.pcr_genesis.v1",
     "ak.suite.invite.claim_security.v1",
@@ -152,12 +151,20 @@ enum Runner {
     EvidenceMapped(fn() -> Result<()>),
 }
 
-const RUNNERS: [(&str, Runner); 53] = [
+const RUNNERS: [(&str, Runner); 54] = [
     (
         super::TERMINAL_REPLICATION_AUTHORITY_ENTRYPOINT,
         Runner::ProductionCases {
             run: super::run_terminal_replication_authority_suite,
             reviewed_cases: &[&super::TERMINAL_CASES],
+            pointers: &["/cases"],
+        },
+    ),
+    (
+        super::federation_idempotency_production::ENTRYPOINT,
+        Runner::ProductionCases {
+            run: super::run_federation_idempotency_production_suite,
+            reviewed_cases: &[&super::federation_idempotency_production::REVIEWED_CASES],
             pointers: &["/cases"],
         },
     ),
