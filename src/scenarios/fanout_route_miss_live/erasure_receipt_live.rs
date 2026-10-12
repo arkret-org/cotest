@@ -24,7 +24,8 @@ fn sign(source: &ArkretServer, package: &mut ErasureReceiptPackage) -> Result<()
         arkret_wire::Hash::new(arkret_canonical::canonical_sha256(&package.retained_stub)?)?;
     package.receipt.proofs.clear();
     package.receipt.proofs.push(ErasureReceiptProof {
-        verification_method: DidUrl::new(format!("{}#notary-key", source.service_did()))?,
+        verification_method: DidUrl::new(format!("{}#notary-key", source.service_did()))
+            .map_err(anyhow::Error::msg)?,
         payload_digest: package.receipt.canonical_payload_digest()?,
         signature: arkret_signatures::jws::sign_jws_ed25519(
             &package.receipt.canonical_proof_input()?,
@@ -42,7 +43,10 @@ fn package(
     message: &Event,
     redaction: &Event,
 ) -> Result<ErasureReceiptPackage> {
-    let id = format!("ak:receipt:{}", uuid::Uuid::now_v7());
+    let id = format!(
+        "ak:receipt:{}",
+        arkret_identifiers::uuid_v7_at(chrono::Utc::now().timestamp_millis().try_into()?)
+    );
     let at = arkret_canonical::normalize_timestamp_canonical(chrono::Utc::now());
     let trigger = ErasureTrigger::Event {
         event_id: redaction.event_id.clone(),
@@ -206,7 +210,7 @@ pub async fn run(ban: bool) -> Result<()> {
             "/_arkret/peer/erasure-receipts",
             &body,
             fixture.group.server(1).service_id(),
-            &key,
+            Some(&key),
         )
         .await?;
     ensure!(
@@ -264,7 +268,7 @@ pub async fn run(ban: bool) -> Result<()> {
                 "/_arkret/peer/erasure-receipts",
                 &body,
                 fixture.group.server(1).service_id(),
-                &key,
+                Some(&key),
             )
             .await?;
         ensure!(
@@ -288,7 +292,7 @@ pub async fn run(ban: bool) -> Result<()> {
             "/_arkret/peer/erasure-receipts",
             &different,
             fixture.group.server(1).service_id(),
-            &key,
+            Some(&key),
         )
         .await?;
     ensure!(
@@ -310,7 +314,7 @@ pub async fn run(ban: bool) -> Result<()> {
             "/_arkret/peer/erasure-receipts",
             &invalid,
             fixture.group.server(1).service_id(),
-            "invalid-proof",
+            Some("invalid-proof"),
         )
         .await?;
     ensure!(
