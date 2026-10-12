@@ -179,13 +179,15 @@ async fn closure_checks(
         .restart_external_process()
         .await?;
     let installed = acceptance_rows(&receiver_url).await?;
+    let replay_request = terminal_restart_live::frozen_duplicate_request(
+        fixture.group.server(1),
+        fixture.group.server(0),
+        body,
+    )
+    .await?;
     for _ in 0..2 {
-        ensure!(matches!(
-            replicate(fixture.group.server(1), fixture.group.server(0), body)
-                .await?
-                .as_slice(),
-            [PeerCommittedReplicationOutcomeRecord::Duplicate {}]
-        ));
+        terminal_restart_live::replay_frozen_duplicate(fixture.group.server(1), &replay_request)
+            .await?;
         ensure!(
             acceptance_rows(&receiver_url).await? == installed,
             "exact replay after gap repair changed acceptance rows"
@@ -248,12 +250,11 @@ async fn closure_checks(
         );
         let late_message = replication_body(&fixture.alice, &after.0, &after.1).await?;
         let late_terminal = replication_body(&fixture.alice, &terminal, &terminal_commit).await?;
-        // The direct successor reaches the departed-host gate. The terminal
-        // has an unavailable predecessor and must fail continuity first.
-        for (late, expected) in [
-            (&late_message, "capability_denied"),
-            (&late_terminal, "dependency_missing"),
-        ] {
+        // Both positions exceed the verified membership interval. Current
+        // recipient authority is checked before continuity/cache access;
+        // a post-cut gap cannot restore or disclose replication eligibility.
+        for late in [&late_message, &late_terminal] {
+            let expected = "capability_denied";
             for _ in 0..2 {
                 let outcome =
                     replicate(fixture.group.server(1), fixture.group.server(0), late).await?;

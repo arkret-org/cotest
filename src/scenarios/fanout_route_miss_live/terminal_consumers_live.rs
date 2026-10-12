@@ -1,7 +1,8 @@
 //! Shared governing cut, terminal child writes and durable live navigation.
 
 use super::terminal_restart_live::{
-    ensure_ordinary_refusal_rows, qualified_ordinary_candidate, tombstone,
+    ensure_ordinary_refusal_rows, hold_outbox_progress, qualified_ordinary_candidate,
+    release_outbox_progress, tombstone,
 };
 use super::*;
 use crate::harness::CanonicalJsonBody;
@@ -32,6 +33,7 @@ pub async fn run() -> Result<()> {
         )?;
     // A controller and an already admitted ordinary remote writer reach the same v1
     // destructive-confirmation refusal, including a correctly signed ordinary vote.
+    let source_outbox = hold_outbox_progress(&source).await?;
     for (client, approved) in [
         (&fixture.alice, false),
         (&fixture.bob, false),
@@ -157,6 +159,7 @@ pub async fn run() -> Result<()> {
             ensure_ordinary_refusal_rows(&before, acceptance_rows(&source).await?, client)?;
         }
     }
+    release_outbox_progress(source_outbox).await?;
     let actor = ActorId::account(fixture.alice_account.clone());
     let mut spaces = Vec::new();
     for kind in ["board", "list"] {
@@ -211,6 +214,8 @@ pub async fn run() -> Result<()> {
     let canonical = acceptance_rows(&source).await?;
     let (_, terminal) = tombstone(&fixture).await?;
     super::frozen_authority_live::settled(&source, &terminal, "delivered").await?;
+    let source_outbox = hold_outbox_progress(&source).await?;
+    let receiver_outbox = hold_outbox_progress(&receiver).await?;
     for (client, rows) in [(&fixture.alice, &source), (&fixture.bob, &receiver)] {
         for suffix in ["spaces", "strands"] {
             let result: Value = client
@@ -248,6 +253,8 @@ pub async fn run() -> Result<()> {
         ensure!(problem.problem_type.ends_with("failed_precondition"));
         ensure_ordinary_refusal_rows(&before, acceptance_rows(rows).await?, client)?;
     }
+    release_outbox_progress(receiver_outbox).await?;
+    release_outbox_progress(source_outbox).await?;
     let after = acceptance_rows(&source).await?;
     for table in [
         "circle_current_results",
@@ -280,6 +287,7 @@ pub async fn run() -> Result<()> {
             json!({"target_ref":circle}),
         )
         .await?;
+    let source_outbox = hold_outbox_progress(&source).await?;
     let stable = acceptance_rows(&source).await?;
     let response = fixture
         .alice
@@ -307,6 +315,7 @@ pub async fn run() -> Result<()> {
     let problem: arkret_wire::Problem = response.json().await?;
     ensure!(problem.problem_type.ends_with("failed_precondition"));
     ensure_ordinary_refusal_rows(&stable, acceptance_rows(&source).await?, &fixture.alice)?;
+    release_outbox_progress(source_outbox).await?;
     println!(
         "[terminal-consumers] controller_destroy_denied=1 signed_peer_destroy_denied=2 ordinary_vote_not_destructive_carrier=1 actual_space_placement=1 effective_circle_closed=1 canonical_children_unchanged=1 cold_restart_navigation_closed=1 ordinary_self_peer_denied=2"
     );

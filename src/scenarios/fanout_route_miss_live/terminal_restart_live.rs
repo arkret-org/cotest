@@ -27,6 +27,78 @@ pub(super) async fn fanout(url: &str, commit: &RealmCommit) -> Result<Vec<Value>
     }).await?
 }
 
+pub(super) async fn frozen_duplicate_request(
+    receiver: &ArkretServer,
+    source: &ArkretServer,
+    body: &[u8],
+) -> Result<reqwest::Request> {
+    // Distinct signed transport from the automatic original delivery. Its
+    // first outcome must be Duplicate for this already installed replica;
+    // subsequent replays preserve this exact transcript and original outcome.
+    let request = receiver.signed_peer_post_request_with_idempotency_key(
+        source,
+        PEER_EVENTS,
+        body,
+        receiver.service_id(),
+        Some("terminal-installed-replica-exact-replay"),
+    )?;
+    let response = receiver
+        .http()
+        .execute(
+            request
+                .try_clone()
+                .context("clone installed replica request")?,
+        )
+        .await?;
+    ensure!(response.status() == StatusCode::OK);
+    let outcome: PeerAuthoritySubmitOutcome = response.json().await?;
+    ensure!(
+        matches!(&outcome, PeerAuthoritySubmitOutcome::CommittedReplication(value)
+            if matches!(value.replication_outcomes.as_slice(), [PeerCommittedReplicationOutcomeRecord::Duplicate {}])),
+        "distinct transport for installed replica did not yield Duplicate: {outcome:?}"
+    );
+    Ok(request)
+}
+
+pub(super) async fn replay_frozen_duplicate(
+    receiver: &ArkretServer,
+    request: &reqwest::Request,
+) -> Result<()> {
+    let response = receiver
+        .http()
+        .execute(
+            request
+                .try_clone()
+                .context("clone exact duplicate request")?,
+        )
+        .await?;
+    ensure!(response.status() == StatusCode::OK);
+    let outcome: PeerAuthoritySubmitOutcome = response.json().await?;
+    ensure!(
+        matches!(&outcome, PeerAuthoritySubmitOutcome::CommittedReplication(value)
+            if matches!(value.replication_outcomes.as_slice(), [PeerCommittedReplicationOutcomeRecord::Duplicate {}])),
+        "exact transport replay changed its original Duplicate outcome: {outcome:?}"
+    );
+    Ok(())
+}
+
+pub(super) async fn hold_outbox_progress(url: &str) -> Result<postgres::Client> {
+    let url = url.to_owned();
+    tokio::task::spawn_blocking(move || -> Result<_> {
+        let mut connection = postgres::Client::connect(&url, postgres::NoTls)?;
+        // Freeze worker DML without altering any intent or accepting row.
+        // The actual refused request must complete without outbox writes.
+        connection.batch_execute("BEGIN; LOCK TABLE federation_outbox IN SHARE MODE")?;
+        Ok(connection)
+    })
+    .await?
+}
+
+pub(super) async fn release_outbox_progress(connection: postgres::Client) -> Result<()> {
+    tokio::task::spawn_blocking(move || drop(connection)).await?;
+    Ok(())
+}
+
 async fn wait_delivered_intent(url: &str, commit: &RealmCommit) -> Result<()> {
     let deadline = Instant::now() + HELD_WINDOW;
     loop {
@@ -310,17 +382,14 @@ pub async fn pending_terminal_survives_restart(route_miss: bool) -> Result<()> {
     );
     ensure!(acceptance_rows(receiver_url).await? == installed);
     ensure!(acceptance_rows(source_url).await? == source_installed);
+    let replay_request = frozen_duplicate_request(
+        fixture.group.server(1),
+        fixture.group.server(0),
+        &exact_body,
+    )
+    .await?;
     for _ in 0..2 {
-        ensure!(matches!(
-            replicate(
-                fixture.group.server(1),
-                fixture.group.server(0),
-                &exact_body
-            )
-            .await?
-            .as_slice(),
-            [PeerCommittedReplicationOutcomeRecord::Duplicate {}]
-        ));
+        replay_frozen_duplicate(fixture.group.server(1), &replay_request).await?;
         ensure!(
             acceptance_rows(receiver_url).await? == installed,
             "terminal replay after restart has fresh acceptance effects"
@@ -436,17 +505,14 @@ pub async fn departure_survives_restart(ban: bool) -> Result<()> {
             }),
         "departure forged a Realm terminal projection"
     );
+    let replay_request = frozen_duplicate_request(
+        fixture.group.server(1),
+        fixture.group.server(0),
+        &removal_body,
+    )
+    .await?;
     for _ in 0..2 {
-        ensure!(matches!(
-            replicate(
-                fixture.group.server(1),
-                fixture.group.server(0),
-                &removal_body
-            )
-            .await?
-            .as_slice(),
-            [PeerCommittedReplicationOutcomeRecord::Duplicate {}]
-        ));
+        replay_frozen_duplicate(fixture.group.server(1), &replay_request).await?;
         ensure!(acceptance_rows(receiver_url).await? == departed);
     }
     let (terminal, terminal_commit) = tombstone(&fixture).await?;
