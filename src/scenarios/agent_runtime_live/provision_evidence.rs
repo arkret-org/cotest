@@ -1,0 +1,402 @@
+//! Production observations for the Agent PCR forward-declaration boundary.
+
+use arkret_models_collaboration::agent_operations::{
+    AgentList, AgentProvisionAwaitingControllerEvent, AgentProvisionComplete,
+};
+use arkret_wire::RealmCommit;
+use serde_json::Value;
+
+use super::*;
+use crate::conformance::{CaseExecutionResult, SuiteExecutionResult};
+use crate::scenarios::_helpers::acceptance_footprint::acceptance_rows_with_agent_stores;
+
+pub(crate) struct ProvisionEvidence {
+    database_url: String,
+    forward_assertions: usize,
+    negative_assertions: usize,
+    genesis_cut: Option<Value>,
+}
+
+impl ProvisionEvidence {
+    async fn snapshot(&self) -> Result<Value> {
+        acceptance_rows_with_agent_stores(&self.database_url, true).await
+    }
+
+    async fn public_document(server: &ArkretServer, did: &Did) -> Result<Value> {
+        let resolved: arkret_models_identity::identity::IdentityResolveOutcome =
+            serde_json::from_value(
+                expect_json(
+                    server
+                        .http()
+                        .post(server.url("/_arkret/root/identity/resolve"))
+                        .json(
+                            &arkret_models_identity::identity::IdentityResolveRequestBody {
+                                did: did.clone(),
+                                requested_evidence_kinds: Vec::new(),
+                            },
+                        ),
+                    StatusCode::OK,
+                )
+                .await?,
+            )?;
+        Ok(serde_json::to_value(resolved.did_document)?)
+    }
+
+    async fn invisible(&mut self, controller: &TestActorClient, agent: &DidCoreId) -> Result<()> {
+        let list: AgentList = serde_json::from_value(
+            expect_json(controller.get("/_arkret/self/agents"), StatusCode::OK).await?,
+        )?;
+        ensure!(
+            list.agents.iter().all(|entry| entry.agent_id != *agent),
+            "unfinished provision leaked into the Agent list"
+        );
+        let response = controller
+            .get(&format!("/_arkret/self/agents/{agent}"))
+            .send()
+            .await?;
+        ensure!(
+            response.status() == StatusCode::NOT_FOUND,
+            "unfinished provision leaked into the Agent resource"
+        );
+        self.forward_assertions += 2;
+        Ok(())
+    }
+
+    async fn state(&self, realm: &RealmId, agent: &DidCoreId) -> Result<Option<Value>> {
+        let url = self.database_url.clone();
+        let realm = realm.to_string();
+        let agent = agent.to_string();
+        tokio::task::spawn_blocking(move || -> Result<_> {
+            let mut db = postgres::Client::connect(&url, postgres::NoTls)?;
+            Ok(db.query_opt("SELECT value FROM agent_status_current_results WHERE realm_id=$1 AND agent_id=$2",
+                &[&realm, &agent])?.map(|row| row.get(0)))
+        }).await?
+    }
+
+    async fn genesis_cut(&self, realm: &RealmId) -> Result<Value> {
+        let url = self.database_url.clone();
+        let realm = realm.to_string();
+        tokio::task::spawn_blocking(move || -> Result<_> {
+            let mut db = postgres::Client::connect(&url, postgres::NoTls)?;
+            Ok(db.query_one("SELECT jsonb_build_object('status', (SELECT coalesce(jsonb_agg(to_jsonb(s) ORDER BY s.current_key),'[]'::jsonb) FROM agent_status_current_results s WHERE realm_id=$1), 'events', (SELECT coalesce(jsonb_agg(to_jsonb(e) ORDER BY e.id),'[]'::jsonb) FROM canonical_events e WHERE realm_id=$1), 'commits', (SELECT coalesce(jsonb_agg(to_jsonb(c) ORDER BY c.stream_position),'[]'::jsonb) FROM realm_commits c WHERE realm_id=$1))", &[&realm])?.get(0))
+        }).await?
+    }
+
+    pub(super) async fn prepared(
+        &mut self,
+        server: &ArkretServer,
+        controller: &TestActorClient,
+        prepared: &AgentProvisionAwaitingControllerEvent,
+        genesis: &Event,
+    ) -> Result<()> {
+        ensure!(
+            serde_json::to_value(prepared)?
+                .get("principal_control_realm_id")
+                .is_none(),
+            "prepare allocated a PCR before its content-bound genesis"
+        );
+        ensure!(
+            genesis.realm_id == RealmId::from_event_id(&genesis.event_id)
+                && genesis.semantic_refs.is_empty(),
+            "genesis is not independent and content-bound"
+        );
+        genesis.verify_event_id_matches_content_with_digest_suite(
+            arkret_canonical::DigestSuite::Sha256,
+        )?;
+        self.forward_assertions += 3;
+        let public = Self::public_document(server, &prepared.did).await?;
+        ensure!(
+            public
+                .get("service")
+                .and_then(Value::as_array)
+                .is_none_or(|services| services
+                    .iter()
+                    .all(|service| service["type"] != "ArkretPrincipalControlRealm")),
+            "accepted inception published a future Agent PCR service"
+        );
+        self.forward_assertions += 1;
+        self.invisible(controller, &prepared.agent_id).await?;
+
+        let before = self.snapshot().await?;
+        let problem = crate::harness::expect_api_error(
+            controller
+                .post("/_arkret/self/events")
+                .json(&arkret_wire::EventAdmissionSubmission::new(genesis.clone())),
+            StatusCode::CONFLICT,
+            "failed_precondition",
+        )
+        .await?;
+        let problem = serde_json::to_value(problem)?;
+        ensure!(
+            problem["reason_code"] == "agent_pcr_genesis_declaration_missing",
+            "undeclared Agent genesis hit the wrong rejection: {problem}"
+        );
+        ensure!(
+            self.snapshot().await? == before,
+            "undeclared Agent genesis wrote durable state"
+        );
+        ensure!(
+            self.state(&genesis.realm_id, &prepared.agent_id)
+                .await?
+                .is_none(),
+            "undeclared genesis materialized lifecycle state"
+        );
+        self.negative_assertions += 4;
+        Ok(())
+    }
+
+    pub(super) async fn declared(
+        &mut self,
+        server: &ArkretServer,
+        controller: &TestActorClient,
+        body: &AgentProvisionRequestBody,
+        outcome: &AgentProvisionOutcome,
+        genesis: &Event,
+        provision_event: &Event,
+    ) -> Result<()> {
+        let AgentProvisionOutcome::AwaitingPcrGenesis(waiting) = outcome else {
+            bail!("provision did not remain at the genesis boundary");
+        };
+        ensure!(
+            waiting.principal_control_realm_id == genesis.realm_id
+                && provision_event.payload["principal_control_realm_id"]
+                    == genesis.realm_id.as_str(),
+            "accepted provision does not declare the exact frozen genesis"
+        );
+        let wire = serde_json::to_value(outcome)?;
+        ensure!(
+            wire.get("pairing_request_id").is_none() && wire.get("pairing_code").is_none(),
+            "unfounded provision exposed runtime pairing material"
+        );
+        self.forward_assertions += 2;
+        self.invisible(controller, &waiting.agent_id).await?;
+        let public = Self::public_document(server, &waiting.did).await?;
+        ensure!(
+            public
+                .get("service")
+                .and_then(Value::as_array)
+                .is_none_or(|services| services
+                    .iter()
+                    .all(|service| service["type"] != "ArkretPrincipalControlRealm")),
+            "accepted provision published the Agent PCR service before genesis"
+        );
+        let url = self.database_url.clone();
+        let realm = genesis.realm_id.to_string();
+        let (agent_id, event_ref): (String, String) = tokio::task::spawn_blocking(move || -> Result<_> {
+            let mut db = postgres::Client::connect(&url, postgres::NoTls)?;
+            let row = db.query_one("SELECT d.value->>'agent_id',c.commit_json->>'event_ref' FROM agent_pcr_genesis_declaration_current_results d JOIN realm_commits c ON c.commit_id=d.current_commit_id WHERE d.principal_control_realm_id=$1", &[&realm])?;
+            Ok((row.get(0), row.get(1)))
+        }).await??;
+        ensure!(
+            agent_id == waiting.agent_id.as_str() && event_ref == provision_event.event_id.as_str(),
+            "genesis declaration does not belong to the accepted provision Event"
+        );
+        self.forward_assertions += 2;
+
+        // Reopen the original serialized intent before recovery. The retry
+        // cannot mint replacement Event ids, proofs or allocation bindings.
+        let frozen = arkret_canonical::canonical_json_bytes(body)?;
+        let journal = tempfile::NamedTempFile::new()?;
+        std::fs::write(journal.path(), &frozen)?;
+        journal.as_file().sync_all()?;
+        let recovered: AgentProvisionRequestBody =
+            serde_json::from_slice(&std::fs::read(journal.path())?)?;
+        ensure!(arkret_canonical::canonical_json_bytes(&recovered)? == frozen);
+        let before = self.snapshot().await?;
+        let replay = provision(controller, &recovered, StatusCode::OK).await?;
+        ensure!(
+            serde_json::to_value(replay)? == wire,
+            "provision replay changed its first outcome"
+        );
+        ensure!(
+            self.snapshot().await? == before,
+            "provision replay added durable accepting effects"
+        );
+        self.forward_assertions += 3;
+        Ok(())
+    }
+
+    pub(super) async fn founded(
+        &mut self,
+        server: &ArkretServer,
+        controller: &TestActorClient,
+        body: &AgentProvisionRequestBody,
+        outcome: &AgentProvisionOutcome,
+        genesis: &Event,
+        commit: &RealmCommit,
+    ) -> Result<()> {
+        let AgentProvisionOutcome::AwaitingDidBinding(waiting) = outcome else {
+            bail!("genesis did not stop before the continuous DID binding");
+        };
+        self.invisible(controller, &waiting.agent_id).await?;
+        let public = Self::public_document(server, &waiting.did).await?;
+        ensure!(
+            public
+                .get("service")
+                .and_then(Value::as_array)
+                .is_none_or(|services| services
+                    .iter()
+                    .all(|service| service["type"] != "ArkretPrincipalControlRealm")),
+            "genesis published the Agent PCR service before continuous DID entry 1"
+        );
+        self.forward_assertions += 1;
+        ensure!(
+            self.state(&genesis.realm_id, &waiting.agent_id).await? == Some(json!("active")),
+            "genesis did not establish the sole initial active current"
+        );
+        let submission = arkret_wire::EventAdmissionSubmission::new(genesis.clone());
+        let frozen = arkret_canonical::canonical_json_bytes(&submission)?;
+        let journal = tempfile::NamedTempFile::new()?;
+        std::fs::write(journal.path(), &frozen)?;
+        journal.as_file().sync_all()?;
+        let recovered: arkret_wire::EventAdmissionSubmission =
+            serde_json::from_slice(&std::fs::read(journal.path())?)?;
+        ensure!(arkret_canonical::canonical_json_bytes(&recovered)? == frozen);
+        let before = self.snapshot().await?;
+        let replay: AuthoritySubmitOutcome = serde_json::from_value(
+            expect_json(
+                controller.post("/_arkret/self/events").json(&recovered),
+                StatusCode::OK,
+            )
+            .await?,
+        )?;
+        ensure!(
+            matches!(replay, AuthoritySubmitOutcome::Accepted {
+            status: AuthorityCommitStatus::Duplicate, commit: ref original
+        } if original == commit),
+            "genesis replay lost the original accepted Commit"
+        );
+        ensure!(
+            self.snapshot().await? == before,
+            "genesis replay changed durable state"
+        );
+        let replay = provision(controller, body, StatusCode::OK).await?;
+        ensure!(
+            serde_json::to_value(replay)? == serde_json::to_value(outcome)?,
+            "provision recovery changed its awaiting-DID binding"
+        );
+        self.forward_assertions += 5;
+
+        let before_agent = self.state(&genesis.realm_id, &waiting.agent_id).await?;
+        let ordinary = crate::scenarios::human_device_producer_live::create_realm_with_join_rule(
+            controller,
+            "ordinary-create-does-not-activate-agent",
+            "closed",
+            &[],
+        )
+        .await?;
+        ensure!(self.state(&genesis.realm_id, &waiting.agent_id).await? == before_agent);
+        let url = self.database_url.clone();
+        let declarations: i64 = tokio::task::spawn_blocking(move || -> Result<_> {
+            let mut db = postgres::Client::connect(&url, postgres::NoTls)?;
+            Ok(db.query_one("SELECT count(*) FROM agent_pcr_genesis_declaration_current_results WHERE principal_control_realm_id=$1",
+                &[&ordinary])?.get(0))
+        }).await??;
+        ensure!(
+            declarations == 0,
+            "ordinary Realm create entered the Agent declaration index"
+        );
+        self.forward_assertions += 2;
+        self.genesis_cut = Some(self.genesis_cut(&genesis.realm_id).await?);
+        Ok(())
+    }
+
+    pub(super) async fn bound(
+        &mut self,
+        server: &ArkretServer,
+        controller: &TestActorClient,
+        outcome: &AgentProvisionComplete,
+    ) -> Result<()> {
+        ensure!(
+            self.state(&outcome.principal_control_realm_id, &outcome.agent_id)
+                .await?
+                == Some(json!("active")),
+            "accepted DID binding did not activate the Agent"
+        );
+        ensure!(
+            Some(
+                self.genesis_cut(&outcome.principal_control_realm_id)
+                    .await?
+            ) == self.genesis_cut,
+            "DID binding or provision completion rewrote the accepted genesis lifecycle cut"
+        );
+        self.forward_assertions += 1;
+        ensure!(!outcome.pairing_request_id.as_str().is_empty() && outcome.pairing_code.is_some());
+        let public = Self::public_document(server, &outcome.did).await?;
+        let services = public
+            .get("service")
+            .and_then(Value::as_array)
+            .context("bound Agent has no DID services")?;
+        ensure!(
+            services
+                .iter()
+                .filter(|service| service["type"] == "ArkretPrincipalControlRealm")
+                .count()
+                == 1,
+            "DID entry 1 does not expose exactly one accepted Agent PCR binding"
+        );
+        self.forward_assertions += 1;
+        let view: arkret_models_collaboration::agent_operations::AgentView =
+            serde_json::from_value(
+                expect_json(
+                    controller.get(&format!("/_arkret/self/agents/{}", outcome.agent_id)),
+                    StatusCode::OK,
+                )
+                .await?,
+            )?;
+        ensure!(
+            view.agent.agent_id == outcome.agent_id,
+            "complete Agent is not visible"
+        );
+        self.forward_assertions += 3;
+        Ok(())
+    }
+}
+
+pub async fn run_agent_genesis_production_cases() -> Result<SuiteExecutionResult> {
+    let name = "agent-genesis-named-production";
+    let database = database(name)?.context("Agent named production cases require PostgreSQL")?;
+    let coauth = MockCoauthIntrospectionServer::spawn_with_internal_secret(
+        HARNESS_INTERNAL_AUTHORITY_SECRET,
+    )
+    .await?;
+    let group = TestServerGroup::try_multi_external_with_node_envs(
+        name,
+        &[station_env(&database.connect_url, &coauth)],
+    )
+    .await?
+    .context("Agent named production cases require the current Coland binary")?;
+    let station = group.server(0);
+    let (controller, account) =
+        standard_client(station, &coauth, "genesis-controller", CONTROLLER_DEVICE).await?;
+    let mut evidence = ProvisionEvidence {
+        database_url: database.connect_url.clone(),
+        forward_assertions: 0,
+        negative_assertions: 0,
+        genesis_cut: None,
+    };
+    AgentRuntimeSession::establish_observed(
+        station,
+        &coauth,
+        &controller,
+        &account,
+        "genesis-agent",
+        &runtime_operations(),
+        Some(&mut evidence),
+    )
+    .await?;
+    Ok(SuiteExecutionResult {
+        entrypoint: "ak.suite.agent.vectors.v1",
+        fixture: "agent-vectors-fixture.json",
+        cases: vec![
+            CaseExecutionResult {
+                case_id: "agent_pcr_genesis_forward_declaration".into(),
+                assertions: evidence.forward_assertions,
+            },
+            CaseExecutionResult {
+                case_id: "agent_pcr_genesis_without_declaration_rejected".into(),
+                assertions: evidence.negative_assertions,
+            },
+        ],
+    })
+}

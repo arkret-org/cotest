@@ -11,6 +11,8 @@ mod agent_participation;
 #[cfg(test)]
 mod agent_runtime_scope;
 mod agent_vectors;
+mod agent_vectors_production;
+pub use agent_vectors_production::run_agent_vectors_production_suite;
 mod applet_install;
 mod managed_governance;
 pub mod shared_submission;

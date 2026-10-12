@@ -94,10 +94,9 @@ pub fn missing_sync_production_cases(
 /// total number of unwired suites happened to stay constant.
 // Content-key KATs run in arkret-mls; complete authorized-checkpoint and
 // terminal live scenarios remain owned by work tasks 0805 and 1939.
-const KNOWN_UNWIRED_ENTRYPOINTS: [&str; 36] = [
+const KNOWN_UNWIRED_ENTRYPOINTS: [&str; 35] = [
     "ak.suite.agent.draft_pending_intent.v1",
     "ak.suite.agent.participation.v1",
-    "ak.suite.agent.vectors.v1",
     "ak.suite.applet.managed_actor_authority.v1",
     "ak.suite.applet.revoke_saga.v1",
     "ak.suite.auth.session_proof.v1",
@@ -136,6 +135,12 @@ const KNOWN_UNWIRED_ENTRYPOINTS: [&str; 36] = [
 #[derive(Clone, Copy)]
 enum Runner {
     Cases(fn() -> Result<SuiteExecutionResult>),
+    // Each returned case has completed production-consumer review. A partial
+    // result credits only those cases and retains every absent obligation.
+    ProductionCases {
+        run: fn() -> Result<SuiteExecutionResult>,
+        reviewed_cases: &'static [&'static str],
+    },
     CasesAt {
         run: fn() -> Result<SuiteExecutionResult>,
         pointer: &'static str,
@@ -147,7 +152,17 @@ enum Runner {
     EvidenceMapped(fn() -> Result<()>),
 }
 
-const RUNNERS: [(&str, Runner); 51] = [
+const RUNNERS: [(&str, Runner); 52] = [
+    (
+        "ak.suite.agent.vectors.v1",
+        Runner::ProductionCases {
+            run: super::run_agent_vectors_production_suite,
+            reviewed_cases: &[
+                "agent_pcr_genesis_forward_declaration",
+                "agent_pcr_genesis_without_declaration_rejected",
+            ],
+        },
+    ),
     (
         super::MANAGED_GOVERNANCE_ENTRYPOINT,
         Runner::EvidenceMapped(super::run_managed_governance_suite),
@@ -545,12 +560,11 @@ pub fn inspect_named_suite_execution_with_clients(
             .iter()
             .map(|(name, run)| (*name, Runner::Cases(*run))),
     ) {
-        // Per-case results establish execution, not the semantic strength of
-        // its consumer. In particular, several Cases runners own modeled
-        // Station/ledger ports. Only explicitly supplied native client runners
-        // have completed production-consumer review here. Server/SDK runners
-        // remain diagnostic until their entire case obligations are reviewed.
-        let production_proved = client_runners.iter().any(|(name, _)| *name == entrypoint);
+        // Diagnostic model results are not production evidence. Reviewed root
+        // runners and native consumers credit only successfully executed cases;
+        // incomplete production suites remain unproved with their exact gaps.
+        let production_proved = client_runners.iter().any(|(name, _)| *name == entrypoint)
+            || matches!(runner, Runner::ProductionCases { .. });
         if !production_proved {
             unproved.push(entrypoint.to_owned());
         }
@@ -586,6 +600,23 @@ pub fn inspect_named_suite_execution_with_clients(
                         "{entrypoint}: runner fixture {} differs from canonical {file_name}",
                         result.fixture
                     );
+                    if matches!(runner, Runner::ProductionCases { .. }) {
+                        let missing = result.missing_against_cases(
+                            fixture
+                                .get("cases")
+                                .and_then(Value::as_array)
+                                .ok_or_else(|| anyhow!("{file_name} has no canonical cases"))?,
+                        )?;
+                        if !missing.is_empty() {
+                            unproved.push(entrypoint.to_owned());
+                            missing_production_cases.extend(missing.into_iter().map(|case_id| {
+                                CaseRef {
+                                    fixture_ref: format!("fixtures/{file_name}"),
+                                    case_id,
+                                }
+                            }));
+                        }
+                    }
                 }
                 Ok(result)
             });
@@ -616,6 +647,7 @@ pub fn inspect_named_suite_execution_with_clients(
     }
     executed.sort();
     unproved.sort();
+    unproved.dedup();
     let profiles: Value = serde_json::from_slice(&fs::read(
         spec_artifacts_root().join("profiles/conformance-profiles.json"),
     )?)?;
@@ -642,6 +674,31 @@ fn execute_runner(
     fixture: &Value,
 ) -> Result<Option<SuiteExecutionResult>> {
     match runner {
+        Runner::ProductionCases {
+            run,
+            reviewed_cases,
+        } => {
+            let result = run()?;
+            ensure!(
+                result.entrypoint == entrypoint,
+                "runner returned the wrong entrypoint"
+            );
+            ensure!(
+                result
+                    .cases
+                    .iter()
+                    .map(|case| case.case_id.as_str())
+                    .eq(reviewed_cases.iter().copied()),
+                "{entrypoint}: execution differs from the reviewed production case set"
+            );
+            result.missing_against_cases(
+                fixture
+                    .get("cases")
+                    .and_then(Value::as_array)
+                    .ok_or_else(|| anyhow!("{} has no canonical cases", result.fixture))?,
+            )?;
+            Ok(Some(result))
+        }
         Runner::Cases(run) => {
             let result = run()?;
             ensure!(
