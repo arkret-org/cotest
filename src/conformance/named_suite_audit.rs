@@ -139,7 +139,8 @@ enum Runner {
     // result credits only those cases and retains every absent obligation.
     ProductionCases {
         run: fn() -> Result<SuiteExecutionResult>,
-        reviewed_cases: &'static [&'static str],
+        reviewed_cases: &'static [&'static [&'static str]],
+        pointers: &'static [&'static str],
     },
     CasesAt {
         run: fn() -> Result<SuiteExecutionResult>,
@@ -158,9 +159,13 @@ const RUNNERS: [(&str, Runner); 52] = [
         Runner::ProductionCases {
             run: super::run_agent_vectors_production_suite,
             reviewed_cases: &[
-                "agent_pcr_genesis_forward_declaration",
-                "agent_pcr_genesis_without_declaration_rejected",
+                &super::agent_vectors_production::REVIEWED_SCHEMA_CASES,
+                &[
+                    "agent_pcr_genesis_forward_declaration",
+                    "agent_pcr_genesis_without_declaration_rejected",
+                ],
             ],
+            pointers: &["/schema_validation_cases", "/cases"],
         },
     ),
     (
@@ -600,13 +605,9 @@ pub fn inspect_named_suite_execution_with_clients(
                         "{entrypoint}: runner fixture {} differs from canonical {file_name}",
                         result.fixture
                     );
-                    if matches!(runner, Runner::ProductionCases { .. }) {
-                        let missing = result.missing_against_cases(
-                            fixture
-                                .get("cases")
-                                .and_then(Value::as_array)
-                                .ok_or_else(|| anyhow!("{file_name} has no canonical cases"))?,
-                        )?;
+                    if let Runner::ProductionCases { pointers, .. } = runner {
+                        let missing =
+                            result.missing_against_cases(&case_sections(fixture, pointers)?)?;
                         if !missing.is_empty() {
                             unproved.push(entrypoint.to_owned());
                             missing_production_cases.extend(missing.into_iter().map(|case_id| {
@@ -677,6 +678,7 @@ fn execute_runner(
         Runner::ProductionCases {
             run,
             reviewed_cases,
+            pointers,
         } => {
             let result = run()?;
             ensure!(
@@ -688,15 +690,12 @@ fn execute_runner(
                     .cases
                     .iter()
                     .map(|case| case.case_id.as_str())
-                    .eq(reviewed_cases.iter().copied()),
+                    .eq(reviewed_cases
+                        .iter()
+                        .flat_map(|section| section.iter().copied())),
                 "{entrypoint}: execution differs from the reviewed production case set"
             );
-            result.missing_against_cases(
-                fixture
-                    .get("cases")
-                    .and_then(Value::as_array)
-                    .ok_or_else(|| anyhow!("{} has no canonical cases", result.fixture))?,
-            )?;
+            result.missing_against_cases(&case_sections(fixture, pointers)?)?;
             Ok(Some(result))
         }
         Runner::Cases(run) => {
@@ -751,6 +750,24 @@ fn execute_runner(
             Ok(None)
         }
     }
+}
+
+fn case_sections(fixture: &Value, pointers: &[&str]) -> Result<Vec<Value>> {
+    ensure!(
+        !pointers.is_empty(),
+        "production runner has no declared case sections"
+    );
+    let mut cases = Vec::new();
+    for pointer in pointers {
+        cases.extend_from_slice(
+            fixture
+                .pointer(pointer)
+                .and_then(Value::as_array)
+                .filter(|cases| !cases.is_empty())
+                .ok_or_else(|| anyhow!("production fixture has no cases at {pointer}"))?,
+        );
+    }
+    Ok(cases)
 }
 
 #[cfg(test)]
