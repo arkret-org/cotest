@@ -93,8 +93,8 @@ pub fn missing_sync_production_cases(
 /// renaming a canonical named suite cannot remain invisible merely because the
 /// total number of unwired suites happened to stay constant.
 // Content-key KATs run in arkret-mls; complete authorized-checkpoint and
-// terminal live scenarios remain owned by work tasks 0805 and 1939.
-const KNOWN_UNWIRED_ENTRYPOINTS: [&str; 36] = [
+// terminal live scenarios execute through the production runner below.
+const KNOWN_UNWIRED_ENTRYPOINTS: [&str; 35] = [
     "ak.suite.agent.draft_pending_intent.v1",
     "ak.suite.agent.participation.v1",
     "ak.suite.agent.vectors.v1",
@@ -116,7 +116,6 @@ const KNOWN_UNWIRED_ENTRYPOINTS: [&str; 36] = [
     "ak.suite.encoding.content_bound_event_id.v1",
     "ak.suite.events.redaction.v1",
     "ak.suite.federation.idempotency_after_key_revoke.v1",
-    "ak.suite.federation.terminal_replication_authority.v1",
     "ak.suite.identity.independent_admission.v1",
     "ak.suite.identity.pcr_genesis.v1",
     "ak.suite.invite.claim_security.v1",
@@ -136,6 +135,8 @@ const KNOWN_UNWIRED_ENTRYPOINTS: [&str; 36] = [
 #[derive(Clone, Copy)]
 enum Runner {
     Cases(fn() -> Result<SuiteExecutionResult>),
+    /// Reviewed real Station consumers; missing live prerequisites are errors.
+    ProductionCases(fn() -> Result<SuiteExecutionResult>),
     CasesAt {
         run: fn() -> Result<SuiteExecutionResult>,
         pointer: &'static str,
@@ -147,7 +148,11 @@ enum Runner {
     EvidenceMapped(fn() -> Result<()>),
 }
 
-const RUNNERS: [(&str, Runner); 51] = [
+const RUNNERS: [(&str, Runner); 52] = [
+    (
+        super::TERMINAL_REPLICATION_AUTHORITY_ENTRYPOINT,
+        Runner::ProductionCases(super::run_terminal_replication_authority_suite),
+    ),
     (
         super::MANAGED_GOVERNANCE_ENTRYPOINT,
         Runner::EvidenceMapped(super::run_managed_governance_suite),
@@ -547,10 +552,11 @@ pub fn inspect_named_suite_execution_with_clients(
     ) {
         // Per-case results establish execution, not the semantic strength of
         // its consumer. In particular, several Cases runners own modeled
-        // Station/ledger ports. Only explicitly supplied native client runners
-        // have completed production-consumer review here. Server/SDK runners
-        // remain diagnostic until their entire case obligations are reviewed.
-        let production_proved = client_runners.iter().any(|(name, _)| *name == entrypoint);
+        // Station/ledger ports. Reviewed ProductionCases and explicitly supplied
+        // native client runners prove consumers. Other server/SDK runners remain
+        // diagnostic until their entire case obligations are reviewed.
+        let production_proved = matches!(runner, Runner::ProductionCases(_))
+            || client_runners.iter().any(|(name, _)| *name == entrypoint);
         if !production_proved {
             unproved.push(entrypoint.to_owned());
         }
@@ -642,7 +648,7 @@ fn execute_runner(
     fixture: &Value,
 ) -> Result<Option<SuiteExecutionResult>> {
     match runner {
-        Runner::Cases(run) => {
+        Runner::Cases(run) | Runner::ProductionCases(run) => {
             let result = run()?;
             ensure!(
                 result.entrypoint == entrypoint,

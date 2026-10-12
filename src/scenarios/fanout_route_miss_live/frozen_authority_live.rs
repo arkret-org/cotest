@@ -6,6 +6,7 @@ use super::terminal_restart_live::{
     ensure_same_intent, fanout, qualified_ordinary_candidate, sql, tombstone,
 };
 use super::*;
+use crate::harness::CanonicalJsonBody;
 use crate::scenarios::_helpers::acceptance_footprint::acceptance_rows;
 
 pub(super) async fn hold_schedule(url: &str, messages_only: bool) -> Result<()> {
@@ -487,8 +488,353 @@ pub async fn remaining_witness_and_rejoin() -> Result<()> {
         receiver_before == acceptance_rows(&receiver_url).await?,
         "new join revived old sender effects"
     );
+    let (terminal, terminal_commit) = tombstone(&fixture).await?;
+    let terminal_intent = settled(&source_url, &terminal_commit, "delivered").await?;
+    ensure!(
+        terminal_intent["realm_fanout"]["authority_witnesses"]
+            .as_array()
+            .context("remaining member terminal basis")?
+            .len()
+            == 1
+    );
+    ensure_same_commit(
+        &terminal_commit,
+        &wait_held(&carol, &terminal.event_id, HELD_WINDOW).await?,
+    )?;
+    wait_not_listed(&fixture.bob, &fixture.realm, HELD_WINDOW).await?;
     println!(
         "[frozen-authority] independent_accepted_actors=3 complete_frozen_witness_or=1 old_member_left=1 actual_signed_delivery=1 different_opening_member_preserved=1 later_member_own_leave_bound_result=1 all_original_witnesses_lost=1 actual_same_actor_rejoin=1 original_basis_unchanged=1 cancelled_authority_lost=1 http_attempts=0 receiver_acceptance_rows_unchanged=1"
+    );
+    Ok(())
+}
+
+/// Revoke complete-byte policy and Circle membership through signed Events.
+/// No SQL fixture may manufacture a revoked authority verdict.
+pub async fn scope_and_policy_withdrawal() -> Result<()> {
+    use arkret_models_collaboration::governance::plaintext_visibility::PlaintextVisibleServicesPayload;
+
+    use crate::scenarios::circle_poll_scope_live::{circle_create, circle_event, join_circle};
+    let Some(mut fixture) = current_origin_fixture("frozen-scope-policy-withdrawal").await? else {
+        return Ok(());
+    };
+    let source = fixture._governance_database.connect_url.clone();
+    let receiver = fixture._member_database.connect_url.clone();
+    let strand = fixture.alice.default_strand_id(&fixture.realm)?;
+    let (_, control) = alice_message(
+        &fixture.alice,
+        &fixture.alice_account,
+        &fixture.realm,
+        &strand,
+        "policy control full delivery",
+    )
+    .await?;
+    settled(&source, &control, "delivered").await?;
+    let rows = acceptance_rows(&source).await?;
+    let policy = rows["realm_bootstrap_current_results"]
+        .as_array()
+        .context("policy currents")?
+        .iter()
+        .find(|row| {
+            row["realm_id"] == fixture.realm
+                && row["result_family"] == "realm_plaintext_visible_services"
+        })
+        .context("accepted plaintext policy")?["value"]
+        .clone();
+    let original_policy: PlaintextVisibleServicesPayload = serde_json::from_value(policy)?;
+    hold_schedule(&source, true).await?;
+    let (_, pending_commit) = alice_message(
+        &fixture.alice,
+        &fixture.alice_account,
+        &fixture.realm,
+        &strand,
+        "policy withdrawn before dispatch",
+    )
+    .await?;
+    let pending = fanout(&source, &pending_commit).await?.remove(0);
+    frozen(&pending, 1)?;
+    let mut withdrawn = original_policy.clone();
+    withdrawn
+        .services
+        .retain(|service| service.service_id != *fixture.group.server(1).service_id());
+    let denied = fixture
+        .bob
+        .author_event(
+            &fixture.realm,
+            EventKind::RealmPlaintextVisibleServices.as_str(),
+            withdrawn.to_value()?,
+        )
+        .await?;
+    let before_denied = acceptance_rows(&source).await?;
+    let response = fixture
+        .bob
+        .post("/_arkret/self/events")
+        .canonical_json(&EventAdmissionSubmission::new(denied))?
+        .send()
+        .await?;
+    ensure!(response.status() == StatusCode::FORBIDDEN);
+    let problem: arkret_wire::Problem = response.json().await?;
+    ensure!(problem.problem_type.ends_with("capability_denied"));
+    super::terminal_restart_live::ensure_ordinary_refusal_rows(
+        &before_denied,
+        acceptance_rows(&source).await?,
+        &fixture.bob,
+    )?;
+    let event = fixture
+        .alice
+        .author_event(
+            &fixture.realm,
+            EventKind::RealmPlaintextVisibleServices.as_str(),
+            withdrawn.to_value()?,
+        )
+        .await?;
+    let cut =
+        submit_and_expect_commit(&fixture.alice, &fixture.alice_account, ALICE_DEVICE, &event)
+            .await?;
+    settled(&source, &cut, "delivered").await?;
+    fixture.group.server_mut(0).stop_external_process().await?;
+    release(&source, &pending).await?;
+    let pending = fanout(&source, &pending_commit).await?.remove(0);
+    let before = acceptance_rows(&source).await?;
+    let receiver_before = acceptance_rows(&receiver).await?;
+    fixture.group.server_mut(0).start_external_process().await?;
+    let cancelled = settled(&source, &pending_commit, "cancelled_authority_lost").await?;
+    cancellation_effect(
+        &before,
+        &acceptance_rows(&source).await?,
+        &pending,
+        &cancelled,
+    )?;
+    ensure!(receiver_before == acceptance_rows(&receiver).await?);
+    let policy_evidence = json!({"original_policy":original_policy,"withdrawn_policy":withdrawn,
+        "withdrawal_commit":cut,"pending_intent":pending,"cancelled_intent":cancelled,
+        "source_before":before,"source_after":acceptance_rows(&source).await?,"receiver_unchanged":receiver_before});
+    let event = fixture
+        .alice
+        .author_event(
+            &fixture.realm,
+            EventKind::RealmPlaintextVisibleServices.as_str(),
+            original_policy.to_value()?,
+        )
+        .await?;
+    let restored =
+        submit_and_expect_commit(&fixture.alice, &fixture.alice_account, ALICE_DEVICE, &event)
+            .await?;
+    settled(&source, &restored, "delivered").await?;
+    ensure!(fanout(&source, &pending_commit).await? == vec![cancelled]);
+    sql(&source, "DROP TRIGGER hold_frozen_schedule ON federation_outbox; DROP FUNCTION hold_frozen_schedule()").await?;
+    let (fresh, fresh_commit) = alice_message(
+        &fixture.alice,
+        &fixture.alice_account,
+        &fixture.realm,
+        &strand,
+        "fresh policy-authorized delivery",
+    )
+    .await?;
+    settled(&source, &fresh_commit, "delivered").await?;
+    ensure_same_commit(
+        &fresh_commit,
+        &wait_held(&fixture.bob, &fresh.event_id, HELD_WINDOW).await?,
+    )?;
+
+    let alice_actor = ActorId::account(fixture.alice_account.clone());
+    let bob_account = AccountId::new(
+        fixture
+            .bob
+            .principal
+            .as_ref()
+            .context("Bob principal")?
+            .core_id
+            .clone(),
+        fixture.group.server(1).service_id().clone(),
+    );
+    let bob_actor = ActorId::account(bob_account.clone());
+    let circle = circle_create(
+        &fixture.alice,
+        &fixture.realm,
+        &alice_actor,
+        "Frozen private scope",
+        "Frozen",
+    )
+    .await?;
+    join_circle(&fixture.alice, &fixture.realm, &circle, &alice_actor).await?;
+    let realm_id = RealmId::new(fixture.realm.clone())?;
+    let grant = arkret_models_collaboration::events_payloads::CapabilityGrantCreateBody {
+        schema: "ak.schema.capability.v1".into(),
+        realm_id: Some(realm_id.clone()),
+        issuer_id: alice_actor.clone(),
+        subject:
+            arkret_models_collaboration::governance::grant_constraint::CapabilitySubject::Actor(
+                bob_actor.clone(),
+            ),
+        actions: vec!["ak.circle.member.manage".into()],
+        resources: vec![arkret_wire::WireResourceSelector::circle(
+            realm_id.clone(),
+            circle.clone(),
+        )],
+        constraints: Vec::new(),
+        issuer_authority_refs: vec![arkret::IssuerAuthorityRef::RealmRoot {
+            realm_id: realm_id.clone(),
+            authority_event_ref: realm_id.event_id(),
+            authority_generation: 0,
+        }],
+        issued_at: chrono::Utc::now(),
+    };
+    let event = fixture
+        .alice
+        .author_event(
+            &fixture.realm,
+            EventKind::CapabilityGrant.as_str(),
+            serde_json::to_value(
+                arkret_models_collaboration::events_payloads::CapabilityGrantPayload { grant },
+            )?,
+        )
+        .await?;
+    let granted =
+        submit_and_expect_commit(&fixture.alice, &fixture.alice_account, ALICE_DEVICE, &event)
+            .await?;
+    settled(&source, &granted, "delivered").await?;
+    fixture.bob.remember_grant(
+        &fixture.realm,
+        arkret_wire::GrantId::from_event_id(&event.event_id).as_str(),
+        &["ak.circle.member.manage"],
+    );
+    let parent = fixture
+        .alice
+        .parent_membership_revision(&fixture.realm, &bob_actor)
+        .await?;
+    let join = circle_event(
+        &fixture.bob,
+        &fixture.realm,
+        &circle,
+        EventKind::CircleMemberState,
+        json!({"circle_id":circle,"member_id":bob_actor,"membership":"join",
+            "expected_membership":null,"parent_membership_revision":parent}),
+    )
+    .await?;
+    submit_and_expect_commit(&fixture.bob, &bob_account, BOB_DEVICE, &join).await?;
+    let strand_event = circle_event(&fixture.alice, &fixture.realm, &circle, EventKind::StrandCreate,
+        json!({"object":{"schema":"ak.schema.strand.v1","realm_id":fixture.realm,
+            "scope_circle_id":circle,"tracks":{"discussion":{"is_primary":true,"profile":"discussion"}},
+            "metadata":{"title":"Private frozen strand"},"state":"active","created_by":alice_actor}})).await?;
+    let strand_commit = submit_and_expect_commit(
+        &fixture.alice,
+        &fixture.alice_account,
+        ALICE_DEVICE,
+        &strand_event,
+    )
+    .await?;
+    settled(&source, &strand_commit, "delivered").await?;
+    let strand = arkret_wire::StrandId::from_event_id(&strand_event.event_id);
+    let event = circle_event(
+        &fixture.alice,
+        &fixture.realm,
+        &circle,
+        EventKind::MessageCreate,
+        message_create_text_payload(strand.as_str(), "private control complete bytes")?,
+    )
+    .await?;
+    let control =
+        submit_and_expect_commit(&fixture.alice, &fixture.alice_account, ALICE_DEVICE, &event)
+            .await?;
+    settled(&source, &control, "delivered").await?;
+    ensure_same_commit(
+        &control,
+        &wait_held(&fixture.bob, &event.event_id, HELD_WINDOW).await?,
+    )?;
+    hold_schedule(&source, true).await?;
+    let event = circle_event(
+        &fixture.alice,
+        &fixture.realm,
+        &circle,
+        EventKind::MessageCreate,
+        message_create_text_payload(strand.as_str(), "private scope withdrawn before dispatch")?,
+    )
+    .await?;
+    let withheld =
+        submit_and_expect_commit(&fixture.alice, &fixture.alice_account, ALICE_DEVICE, &event)
+            .await?;
+    let intent = fanout(&source, &withheld).await?.remove(0);
+    frozen(&intent, 1)?;
+    ensure!(
+        intent["realm_fanout"]["authority_witnesses"][0]["circle_membership_event_ref"].is_string()
+    );
+    let leave = circle_event(&fixture.bob, &fixture.realm, &circle, EventKind::CircleMemberState,
+        json!({"circle_id":circle,"member_id":bob_actor,"membership":"leave","expected_membership":"join"})).await?;
+    let left = submit_and_expect_commit(&fixture.bob, &bob_account, BOB_DEVICE, &leave).await?;
+    settled(&source, &left, "delivered").await?;
+    fixture.group.server_mut(0).stop_external_process().await?;
+    release(&source, &intent).await?;
+    let intent = fanout(&source, &withheld).await?.remove(0);
+    let before = acceptance_rows(&source).await?;
+    let receiver_before = acceptance_rows(&receiver).await?;
+    fixture.group.server_mut(0).start_external_process().await?;
+    let cancelled = settled(&source, &withheld, "cancelled_authority_lost").await?;
+    cancellation_effect(
+        &before,
+        &acceptance_rows(&source).await?,
+        &intent,
+        &cancelled,
+    )?;
+    ensure!(receiver_before == acceptance_rows(&receiver).await?);
+    ensure!(
+        receiver_before["member_state_current_results"]
+            .as_array()
+            .context("Realm membership")?
+            .iter()
+            .any(|row| row["realm_id"] == fixture.realm
+                && row["member_id"] == bob_actor.to_string()
+                && row["membership"] == "join")
+    );
+    let parent = fixture
+        .alice
+        .parent_membership_revision(&fixture.realm, &bob_actor)
+        .await?;
+    let rejoin = circle_event(
+        &fixture.bob,
+        &fixture.realm,
+        &circle,
+        EventKind::CircleMemberState,
+        json!({"circle_id":circle,"member_id":bob_actor,"membership":"join",
+            "expected_membership":"leave","parent_membership_revision":parent}),
+    )
+    .await?;
+    submit_and_expect_commit(&fixture.bob, &bob_account, BOB_DEVICE, &rejoin).await?;
+    fixture
+        .group
+        .server_mut(0)
+        .restart_external_process()
+        .await?;
+    ensure!(fanout(&source, &withheld).await? == vec![cancelled]);
+    sql(&source, "DROP TRIGGER hold_frozen_schedule ON federation_outbox; DROP FUNCTION hold_frozen_schedule()").await?;
+    let event = circle_event(
+        &fixture.alice,
+        &fixture.realm,
+        &circle,
+        EventKind::MessageCreate,
+        message_create_text_payload(strand.as_str(), "fresh explicit Circle regrant")?,
+    )
+    .await?;
+    let fresh =
+        submit_and_expect_commit(&fixture.alice, &fixture.alice_account, ALICE_DEVICE, &event)
+            .await?;
+    settled(&source, &fresh, "delivered").await?;
+    ensure_same_commit(
+        &fresh,
+        &wait_held(&fixture.bob, &event.event_id, HELD_WINDOW).await?,
+    )?;
+    let directory = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("artifacts/terminal-authority-closure");
+    std::fs::create_dir_all(&directory)?;
+    std::fs::write(
+        directory.join("scope-policy-withdrawal.json"),
+        serde_json::to_vec_pretty(
+            &json!({"policy":policy_evidence,"scope":{"withdrawal_commit":left,
+            "pending_intent":intent,"source_before":before,"receiver_unchanged":receiver_before,
+            "new_join":rejoin,"fresh_delivery":fresh}}),
+        )?,
+    )?;
+    println!(
+        "[frozen-authority] signed_policy_withdrawal=1 signed_scope_leave=1 cancelled_without_http=2 receiver_zero_effects=2 old_intent_not_revived=2 explicit_regrant_fresh_delivery=2"
     );
     Ok(())
 }

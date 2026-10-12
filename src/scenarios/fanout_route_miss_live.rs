@@ -44,6 +44,7 @@ const CAROL_DEVICE: &str = "ak:device:01904100-0000-7000-8000-000000002004";
 
 pub mod erasure_receipt_live;
 pub mod frozen_authority_live;
+pub mod terminal_consumers_live;
 pub mod terminal_gap_live;
 pub mod terminal_restart_live;
 

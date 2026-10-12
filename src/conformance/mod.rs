@@ -1,4 +1,9 @@
 mod account_data_cas_convergence;
+mod terminal_replication_authority;
+pub use terminal_replication_authority::{
+    TERMINAL_CASES, TERMINAL_REPLICATION_AUTHORITY_ENTRYPOINT,
+    run_terminal_replication_authority_case, run_terminal_replication_authority_suite,
+};
 mod account_status_issuer_ledger;
 mod actor_private_events_submit;
 mod aead_nonce_replay;
