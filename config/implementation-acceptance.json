@@ -137,10 +137,11 @@
     },
     {
       "task": "2026-09-08-1638-device-recovery-and-encrypted-edit.md",
-      "criteria_count": 4,
-      "criteria_sha256": "775723fc39c09e739474c3e74e40498930a1fb82f18507072f5cd87da040cb40",
+      "criteria_count": 5,
+      "criteria_sha256": "ad4f5b8322ebe8fa5c80a4f39af1d3f2f1fa24283349e85a66d78d2da57edef5",
       "spec_refs": [
-        "arkret-spec/spec/v1/zh/identity/security-transactions.md"
+        "arkret-spec/spec/v1/zh/identity/security-transactions.md",
+        "arkret-spec/spec/v1/zh/crypto-media/device-lifecycle.md"
       ],
       "source_refs": [
         "inkson/src/mls/account_recovery/recovery_transaction.rs"
@@ -167,7 +168,7 @@
       ],
       "engineering_checks": [],
       "remaining_scenarios": [
-        "登录callback／late401与durable隔离；四RecoveryMethod；恢复后真实编辑和第二设备；actor-private游标"
+        "DR-C2登录callback／late401与durable隔离；DR-C3四RecoveryMethod；DR-C4恢复后真实编辑和第二设备；DR-C5 actor-private游标；DR-C6实际发送调用方的DeviceMessage离线／重启／ACK完整组合，已有TTL／exact replay测试不代表整项完成"
       ]
     },
     {
@@ -196,7 +197,7 @@
     {
       "task": "2026-09-10-0540-client-current-result-durable-index.md",
       "criteria_count": 7,
-      "criteria_sha256": "beebef34c3e67690cf9a4040346e6017354459f5c643eaf6440d3363f3f9b652",
+      "criteria_sha256": "8c7bc4ffaac69ca7dbbb19d33de9a49b2ed1f80a3365c330b26e44c4d1aa2628",
       "spec_refs": [
         "arkret-spec/spec/v1/zh/sync/current-results.md"
       ],
@@ -219,7 +220,7 @@
       ],
       "engineering_checks": [],
       "remaining_scenarios": [
-        "授权搜索Event／covering Commit负例与语言切换；非current账号字段有界物理写；1／100／1000实机；flaky exact case受控复现"
+        "真实Circle／Sidecar非空依赖与tail、Account cursor不推进；1／100／1000实机与账号其它字段有界写入；identity/device_directory／chat flaky复现；获准搜索来源及privacy／crypto负例、原body／route／seal与完整语言切换，保留预期失败直到实际闭合"
       ]
     },
     {
@@ -404,7 +405,7 @@
     {
       "task": "2026-09-25-2135-account-detail-coverage-cursor-and-visibility.md",
       "criteria_count": 5,
-      "criteria_sha256": "5d4f8685d6d706ff184a279ea2e68099a0f3245e2adcba0dc8ada080a0c1a7e3",
+      "criteria_sha256": "6041ed10e281bd32883c5ba9d2fb8713ec62d8bd159f3c89f9e936d740c876e3",
       "spec_refs": [
         "arkret-spec/spec/v1/zh/sync/client-sync.md"
       ],
@@ -427,7 +428,7 @@
       ],
       "engineering_checks": [],
       "remaining_scenarios": [
-        "完整获准Circle／Sidecar ACL与撤权；wire字节预算／不可截断entry；每流head／generation分页失效；summary/detail/WS同producer"
+        "Realm／Circle／Sidecar ACL与撤权；全部获准stream耐久达到声明head才complete；每流head／generation分页失效；authority-signed slice或preview窗口；summary／detail／WS同producer及quiet long-poll"
       ]
     },
     {
@@ -456,7 +457,7 @@
     {
       "task": "2026-09-25-2141-consent-current-and-admission.md",
       "criteria_count": 2,
-      "criteria_sha256": "6baa7b17e09d6295e09bd9e5f25b902b94567d462f7d104cbeb8a962dad4c2dc",
+      "criteria_sha256": "f0cea38170a031034b550e7e7a266b476e1340664eda9726980ef179870aaffe",
       "spec_refs": [
         "arkret-spec/spec/v1/zh/identity/consent-model.md"
       ],
@@ -473,7 +474,7 @@
       ],
       "engineering_checks": [],
       "remaining_scenarios": [
-        "规范先消除Directory／PSI漂移；仍登记的invite／call／presence／MIMI跨层撤销竞争；any和cache revision不回退；重算canonical case"
+        "跨消费层与跨Station的在途竞争逐case验收；Directory／MIMI／push PSI／call／presence／private discovery逐层消费与缓存失效；正式consent.cache_invalidation逐case真实执行，本地invitation CAS不代替其它消费面"
       ]
     },
     {
@@ -503,35 +504,6 @@
       "engineering_checks": [],
       "remaining_scenarios": [
         "同cut heads和终止/rejoin；并发Genesis／Commit零部分写；第64/65 ref接受边界；17 reserved vector完整producer runner"
-      ]
-    },
-    {
-      "task": "2026-09-26-1939-realm-destroy-authority-cut.md",
-      "criteria_count": 3,
-      "criteria_sha256": "b58db39a36725d0b0e3c6afdbb5be7afea9a4231221a62441c3c1b70ceca571e",
-      "spec_refs": [
-        "arkret-spec/spec/v1/zh/governance/history-visibility.md"
-      ],
-      "source_refs": [
-        "coland/crates/storage-postgres/src/realm_lifecycle_current_results.rs"
-      ],
-      "tests": [
-        {
-          "path": "cotest/tests/terminal_gap_live.rs",
-          "symbol": "terminal_missing_predecessor_repairs_full_and_withheld_chain",
-          "kind": "live",
-          "covers": "terminal专属Full/Withheld补链"
-        },
-        {
-          "path": "cotest/tests/terminal_restart_live.rs",
-          "symbol": "pending_delivery_terminal_survives_actual_station_restart",
-          "kind": "live",
-          "covers": "真实Station重启原intent恢复"
-        }
-      ],
-      "engineering_checks": [],
-      "remaining_scenarios": [
-        "非HTTP writer／子导航／Circle有效lifecycle；更细scope/policy sender撤权；正式八case named接线与全接受footprint"
       ]
     },
     {
@@ -671,6 +643,23 @@
       ],
       "remaining_scenarios": [
         "CT-3 semantic_union／parent tenure锁／realm-links零写；桥进程kill/reopen accepted custody寻址；accepted-before-persist与issuer丢响应不同切点"
+      ]
+    },
+    {
+      "task": "2026-10-10-1842-github-ci-repair.md",
+      "criteria_count": 2,
+      "criteria_sha256": "66d3bbaae147d0f5a1c30c9e5bff96c50aa9d0fb731ece6059099d62a997b94a",
+      "spec_refs": [],
+      "source_refs": [
+        "cotest/scripts/run-native-rust-tests.py",
+        "cotest/.github/workflows/ci.yml"
+      ],
+      "tests": [],
+      "engineering_checks": [
+        "用户恢复后沿原CI批次核对新HEAD结果；完整native／browser继续原0900／1011，不由本清单启动"
+      ],
+      "remaining_scenarios": [
+        "最新完整browser112与普通native未重跑；新HEAD CI未查询，用户已取消后续检查，保持未完成且不启动"
       ]
     }
   ]
