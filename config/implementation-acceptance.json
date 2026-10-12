@@ -263,7 +263,7 @@
           "path": "cotest/tests/agent_vectors_production.rs",
           "symbol": "agent_genesis_cases_cross_real_http_admission_and_preserve_rejected_state",
           "kind": "live",
-          "covers": "当前18项/12项缺口显式拒绝complete"
+          "covers": "当前19项/11项缺口显式拒绝complete；真实pairing expiry/DID/proof/deactivated拒绝零写"
         },
         {
           "path": "cotest/tests/federation_current_origin_replay_live.rs",
@@ -384,6 +384,12 @@
           "symbol": "immutable_cursor_issuance_lookup_and_gc_costs_are_measured_on_real_postgres",
           "kind": "live",
           "covers": "同SUT单/八并发真实续页、签发行数/空间、PG查表/GC成本；原进度/期限/撤销身份保持"
+        },
+        {
+          "path": "cotest/tests/agent_pairing_expiry_live.rs",
+          "symbol": "canonical_pairing_failure_reasons_cross_the_real_gate_without_business_writes",
+          "kind": "live",
+          "covers": "规范短TTL真实续配/到期、controller proof及DID mismatch、真实deactivation；四登记reason和完整状态零副作用"
         }
       ],
       "engineering_checks": [],

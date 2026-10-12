@@ -18,9 +18,16 @@ pub fn run_agent_vectors_production_suite() -> Result<SuiteExecutionResult> {
                 .thread_stack_size(32 * 1024 * 1024)
                 .enable_all()
                 .build()?
-                .block_on(
-                    crate::scenarios::agent_runtime_live::run_agent_genesis_production_cases(),
-                )?;
+                .block_on(async {
+                    let mut execution =
+                        crate::scenarios::agent_runtime_live::run_agent_genesis_production_cases()
+                            .await?;
+                    let pairing =
+                        crate::scenarios::agent_runtime_live::run_agent_pairing_expiry_production()
+                            .await?;
+                    execution.cases.extend(pairing.cases);
+                    Ok::<SuiteExecutionResult, anyhow::Error>(execution)
+                })?;
             execution.cases.splice(0..0, schema_cases);
             Ok(execution)
         })?

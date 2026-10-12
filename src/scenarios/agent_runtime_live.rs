@@ -55,7 +55,9 @@ use crate::scenarios::_helpers::live_gate::skip_or_fail;
 use crate::scenarios::human_device_producer_live::{database, standard_client, station_env};
 use crate::scenarios::identity_test_support::HARNESS_INTERNAL_AUTHORITY_SECRET;
 
+mod pairing_expiry_evidence;
 mod provision_evidence;
+pub use pairing_expiry_evidence::run_agent_pairing_expiry_production;
 pub use provision_evidence::run_agent_genesis_production_cases;
 
 const GROUP: &str = "agent-runtime-session";
