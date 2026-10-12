@@ -55,8 +55,10 @@ use crate::scenarios::_helpers::live_gate::skip_or_fail;
 use crate::scenarios::human_device_producer_live::{database, standard_client, station_env};
 use crate::scenarios::identity_test_support::HARNESS_INTERNAL_AUTHORITY_SECRET;
 
+mod coauth_session_evidence;
 mod pairing_expiry_evidence;
 mod provision_evidence;
+pub use coauth_session_evidence::run_agent_session_grant_replay_production;
 pub use pairing_expiry_evidence::run_agent_pairing_expiry_production;
 pub use provision_evidence::run_agent_genesis_production_cases;
 
@@ -168,6 +170,15 @@ pub struct AgentRuntimeSession {
     pub key_authorization: EventId,
     /// The runtime's authenticated client.
     pub runtime: TestActorClient,
+    issuer_request: Option<arkret_models_collaboration::session_grants::AgentSessionGrantRequest>,
+}
+
+enum AgentSessionIssuer<'a> {
+    Fixture(&'a MockCoauthIntrospectionServer),
+    Coauth {
+        base: &'a str,
+        database_url: &'a str,
+    },
 }
 
 impl AgentRuntimeSession {
@@ -225,7 +236,7 @@ impl AgentRuntimeSession {
     ) -> Result<Self> {
         Self::establish_observed(
             server,
-            coauth,
+            AgentSessionIssuer::Fixture(coauth),
             controller,
             controller_account,
             label,
@@ -237,7 +248,7 @@ impl AgentRuntimeSession {
 
     async fn establish_observed(
         server: &ArkretServer,
-        coauth: &MockCoauthIntrospectionServer,
+        issuer: AgentSessionIssuer<'_>,
         controller: &TestActorClient,
         controller_account: &AccountId,
         label: &str,
@@ -602,10 +613,16 @@ impl AgentRuntimeSession {
             disclosure,
             authorize.clone(),
         )?;
+        let pair_url = match &issuer {
+            AgentSessionIssuer::Fixture(_) => server.url("/_arkret/gate/account/agent-key-pair"),
+            AgentSessionIssuer::Coauth { base, .. } => {
+                format!("{base}/_arkret/gate/account/agent-key-pair")
+            }
+        };
         let paired: AgentKeyPairOutcome = serde_json::from_value(
             expect_json(
                 controller
-                    .post("/_arkret/gate/account/agent-key-pair")
+                    .authorize(server.http().post(pair_url))
                     .header("idempotency-key", authorize.event_id.as_str())
                     .json(&pair_request.body),
                 StatusCode::OK,
@@ -645,17 +662,42 @@ impl AgentRuntimeSession {
         );
 
         // 10. The Account Authority binds the runtime's SessionGrant.
-        let grant = crate::scenarios::bridge_contracts::session_grant::mock_session_grant_jwt(
-            agent_id.as_str(),
-            verification_method.as_str(),
-            station.as_str(),
-        );
-        coauth.bind_agent_runtime_grant(
-            &grant,
-            &authorize.event_id,
-            &authorization,
-            &runtime_key.verifying_key(),
-        )?;
+        let (grant, issuer_request) = match issuer {
+            AgentSessionIssuer::Fixture(coauth) => {
+                let grant =
+                    crate::scenarios::bridge_contracts::session_grant::mock_session_grant_jwt(
+                        agent_id.as_str(),
+                        verification_method.as_str(),
+                        station.as_str(),
+                    );
+                coauth.bind_agent_runtime_grant(
+                    &grant,
+                    &authorize.event_id,
+                    &authorization,
+                    &runtime_key.verifying_key(),
+                )?;
+                (grant, None)
+            }
+            AgentSessionIssuer::Coauth { base, database_url } => {
+                coauth_session_evidence::wait_for_issuer_authorization(
+                    database_url,
+                    &authorize.event_id,
+                )
+                .await?;
+                let (grant, request) = coauth_session_evidence::issue_runtime_session(
+                    server,
+                    base,
+                    database_url,
+                    &agent_id,
+                    &authorize.event_id,
+                    &verification_method,
+                    &runtime_key,
+                    operations,
+                )
+                .await?;
+                (grant, Some(request))
+            }
+        };
         let runtime = server.client_with_agent_runtime_grant(
             agent_did.as_str(),
             RUNTIME_FRAGMENT,
@@ -672,6 +714,7 @@ impl AgentRuntimeSession {
             verification_method,
             key_authorization: authorize.event_id,
             runtime,
+            issuer_request,
         })
     }
 }

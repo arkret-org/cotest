@@ -390,6 +390,12 @@
           "symbol": "canonical_pairing_failure_reasons_cross_the_real_gate_without_business_writes",
           "kind": "live",
           "covers": "规范短TTL真实续配/到期、controller proof及DID mismatch、真实deactivation；四登记reason和完整状态零副作用"
+        },
+        {
+          "path": "cotest/tests/agent_coauth_session_live.rs",
+          "symbol": "agent_session_proofs_replay_and_lifecycle_use_real_coauth_and_station",
+          "kind": "live",
+          "covers": "真实Coauth注册/OIDC/founding/配对自动同步；签发精确重放、九类真实拒绝及完整grant ledger零变化"
         }
       ],
       "engineering_checks": [],

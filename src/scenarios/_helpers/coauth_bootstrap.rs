@@ -172,6 +172,22 @@ pub struct CoauthChaosConfig {
 }
 
 impl SpawnedCoauth {
+    /// Apply the actual Station endpoint and trust anchor before business use.
+    pub(crate) async fn bind_station(
+        &mut self,
+        station: &crate::harness::ArkretServer,
+        shared_secret: &str,
+        registration_bearer: &str,
+    ) -> Result<()> {
+        patch_station_config_file(
+            &mut self.config,
+            station.base_url().as_str(),
+            shared_secret,
+            registration_bearer,
+        )?;
+        self.station_ca_path = station.tls_ca_path().map(Path::to_path_buf);
+        self.restart_same_config().await
+    }
     /// Public REST base — what callers should use for `/_arkret/self/...`.
     pub fn base_url(&self) -> &str {
         &self.server.base_url
@@ -377,7 +393,21 @@ fn patch_station_config(
     internal_authority_shared_secret: &str,
     embedded_webvh_registration_bearer: &str,
 ) -> Result<()> {
-    let file = bundle.file.as_file_mut();
+    patch_station_config_file(
+        &mut bundle.file,
+        endpoint,
+        internal_authority_shared_secret,
+        embedded_webvh_registration_bearer,
+    )
+}
+
+fn patch_station_config_file(
+    config_file: &mut NamedTempFile,
+    endpoint: &str,
+    internal_authority_shared_secret: &str,
+    embedded_webvh_registration_bearer: &str,
+) -> Result<()> {
+    let file = config_file.as_file_mut();
     file.seek(SeekFrom::Start(0))?;
     let mut config: serde_yaml_ng::Value = serde_yaml_ng::from_reader(&mut *file)
         .context("decode generated coauth config for Station wiring")?;

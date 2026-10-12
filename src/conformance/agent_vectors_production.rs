@@ -26,6 +26,8 @@ pub fn run_agent_vectors_production_suite() -> Result<SuiteExecutionResult> {
                         crate::scenarios::agent_runtime_live::run_agent_pairing_expiry_production()
                             .await?;
                     execution.cases.extend(pairing.cases);
+                    let session = crate::scenarios::agent_runtime_live::run_agent_session_grant_replay_production().await?;
+                    execution.cases.extend(session.cases);
                     Ok::<SuiteExecutionResult, anyhow::Error>(execution)
                 })?;
             execution.cases.splice(0..0, schema_cases);

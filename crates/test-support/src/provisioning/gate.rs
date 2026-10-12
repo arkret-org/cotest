@@ -747,7 +747,7 @@ async fn verify_accepted_identity_material(
         let mut builder =
             arkret_http_client::Client::builder(url.clone()).http_client(http.clone());
         if let Some(host) = url.host_str() {
-            for namespace in ["local.host", "localhost"] {
+            for namespace in ["local.host", "localhost", "127.0.0.1"] {
                 if host == namespace || host.ends_with(&format!(".{namespace}")) {
                     builder = builder.loopback_service_discovery(
                         namespace,

@@ -1672,7 +1672,34 @@ impl ArkretServer {
         // The actor is the resolvable DID for the same reason: every other
         // constructor hands `TestActorClient` a `did:`, and the harness
         // projects to `ak:did_core:` where a business object needs it.
-        self.actor_client(&founded.did, &device_id, session, None)
+        let creation = founded
+            .accepted_request
+            .identity_creation
+            .as_ref()
+            .context("accepted canonical registration has no identity creation unit")?;
+        let founding_authorization = creation
+            .pcr_genesis_unit
+            .events
+            .get(1)
+            .context("accepted canonical registration has no founding Device authorization")?;
+        let root_material =
+            arkret::identity_root::derive_identity_recovery_key_material_from_bip39(
+                &founded.recovery_key,
+                "",
+                0,
+            )
+            .context("restore the actual registered principal custody")?;
+        let principal = ProvisionedTestPrincipal {
+            did: Did::new(founded.did.clone())?,
+            core_id: founded.account_id().principal_id.clone(),
+            device_id: arkret_wire::DeviceId::new(founded.device_id.clone())
+                .map_err(anyhow::Error::msg)?,
+            device_signing_key: ed25519_dalek::SigningKey::from_bytes(&event_seed),
+            root_key_seed: root_material.root_seed,
+            pcr_realm_id: creation.pcr_genesis_unit.create().realm_id.clone(),
+            founding_authorize_event_id: founding_authorization.event_id.clone(),
+        };
+        self.actor_client(&founded.did, &device_id, session, Some(principal))
     }
 
     /// Register account-first, then publish a primary localpart through the

@@ -551,7 +551,7 @@ pub async fn run_agent_genesis_production_cases() -> Result<SuiteExecutionResult
     };
     AgentRuntimeSession::establish_observed(
         station,
-        &coauth,
+        AgentSessionIssuer::Fixture(&coauth),
         &controller,
         &account,
         "genesis-agent",
