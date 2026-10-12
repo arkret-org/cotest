@@ -555,7 +555,7 @@ pub async fn run_agent_genesis_production_cases() -> Result<SuiteExecutionResult
         &controller,
         &account,
         "genesis-agent",
-        &runtime_operations(),
+        requested_scope(&runtime_operations())?,
         Some(&mut evidence),
     )
     .await?;

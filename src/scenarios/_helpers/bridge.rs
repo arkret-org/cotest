@@ -273,14 +273,38 @@ impl MockCoauthIntrospectionServer {
     ) -> Result<()> {
         use arkret_models_collaboration::events_payloads::agent::AgentKeyScopeResourceKind;
         anyhow::ensure!(
-            authorization.agent_key_scope.constraints.is_empty()
-                && authorization
-                    .agent_key_scope
-                    .resources
-                    .iter()
-                    .all(|resource| resource.kind == AgentKeyScopeResourceKind::Operation),
+            authorization
+                .agent_key_scope
+                .resources
+                .iter()
+                .all(|resource| resource.kind == AgentKeyScopeResourceKind::Operation),
             "fixture issuer cannot discard an unrepresented key constraint or content resource ceiling"
         );
+        let mut allowed_labels: Option<std::collections::BTreeSet<String>> = None;
+        for constraint in &authorization.agent_key_scope.constraints {
+            let supported: arkret_models_collaboration::governance::grant_constraint::GrantConstraint =
+                serde_json::from_value(json!({
+                    "constraint_kind": "scope_limitation",
+                    "effect": "allow",
+                    "allowed_data_labels": constraint.allowed_data_labels,
+                }))?;
+            anyhow::ensure!(
+                constraint == &supported && !constraint.allowed_data_labels.is_empty(),
+                "fixture issuer cannot discard an unrepresented key constraint"
+            );
+            let labels = constraint.allowed_data_labels.iter().cloned().collect();
+            allowed_labels = Some(match allowed_labels {
+                None => labels,
+                Some(current) => current.intersection(&labels).cloned().collect(),
+            });
+        }
+        anyhow::ensure!(
+            allowed_labels
+                .as_ref()
+                .is_none_or(|labels| !labels.is_empty()),
+            "fixture issuer cannot express an empty mandatory label intersection as unrestricted"
+        );
+        let allowed_labels: Vec<_> = allowed_labels.unwrap_or_default().into_iter().collect();
         let key = serde_json::to_value(&authorization.public_key)?;
         anyhow::ensure!(
             key["key"].as_str()
@@ -292,7 +316,7 @@ impl MockCoauthIntrospectionServer {
             "agent_key_authorization_ref": authorization_ref,
             "realm_ids": [], "strand_ids": [],
             "resources": {"realm_ids": [], "strand_ids": []},
-            "constraints": {"allowed_tracks": [], "allowed_data_labels": [], "allowed_endpoints": []},
+            "constraints": {"allowed_tracks": [], "allowed_data_labels": allowed_labels, "allowed_endpoints": []},
             "capability_grant_refs": [], "policy_refs": []
         }).as_object().unwrap().clone();
         self.record(

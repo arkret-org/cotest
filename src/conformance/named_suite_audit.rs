@@ -181,6 +181,7 @@ const RUNNERS: [(&str, Runner); 54] = [
                     "agent_pairing_expiry",
                     "agent_session_grant_replay",
                     "agent_repairing_supersede",
+                    "agent_requested_scope_privacy",
                     "agent_pcr_genesis_same_batch_rejected",
                 ],
             ],

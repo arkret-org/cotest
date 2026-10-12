@@ -30,6 +30,8 @@ pub fn run_agent_vectors_production_suite() -> Result<SuiteExecutionResult> {
                     execution.cases.extend(session.cases);
                     let repairing = crate::scenarios::agent_runtime_live::run_agent_repairing_production().await?;
                     execution.cases.extend(repairing.cases);
+                    let privacy = crate::scenarios::agent_runtime_live::run_agent_requested_scope_privacy_production().await?;
+                    execution.cases.extend(privacy.cases);
                     Ok::<SuiteExecutionResult, anyhow::Error>(execution)
                 })?;
             execution.cases.splice(0..0, schema_cases);

@@ -402,6 +402,12 @@
           "symbol": "exact_supersedes_and_replacement_handles_cross_real_station_admission",
           "kind": "live",
           "covers": "真实 Station/PG 重新配对八项合取；启动 AA 为显式 mock，独立于真实 Coauth 签发证明"
+        },
+        {
+          "path": "cotest/tests/agent_scope_privacy_live.rs",
+          "symbol": "private_scope_disclosure_and_public_history_cross_real_station",
+          "kind": "live",
+          "covers": "实际公开 WebVH history、SDK controller 披露验签/单次 intent 消费与全量拒绝零写；显式不保存披露 producer 的实际数据库无原始披露"
         }
       ],
       "engineering_checks": [],

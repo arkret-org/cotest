@@ -57,10 +57,12 @@ use crate::scenarios::identity_test_support::HARNESS_INTERNAL_AUTHORITY_SECRET;
 
 mod coauth_session_evidence;
 mod pairing_expiry_evidence;
+mod privacy_evidence;
 mod provision_evidence;
 mod repairing_evidence;
 pub use coauth_session_evidence::run_agent_session_grant_replay_production;
 pub use pairing_expiry_evidence::run_agent_pairing_expiry_production;
+pub use privacy_evidence::run_agent_requested_scope_privacy_production;
 pub use provision_evidence::run_agent_genesis_production_cases;
 pub use repairing_evidence::run_agent_repairing_production;
 
@@ -242,7 +244,7 @@ impl AgentRuntimeSession {
             controller,
             controller_account,
             label,
-            operations,
+            requested_scope(operations)?,
             None,
         )
         .await
@@ -254,9 +256,10 @@ impl AgentRuntimeSession {
         controller: &TestActorClient,
         controller_account: &AccountId,
         label: &str,
-        operations: &[&str],
+        scope: AgentKeyScope,
         mut evidence: Option<&mut provision_evidence::ProvisionEvidence>,
     ) -> Result<Self> {
+        let operations: Vec<&str> = scope.actions.iter().map(String::as_str).collect();
         let principal = controller
             .principal
             .as_ref()
@@ -305,7 +308,6 @@ impl AgentRuntimeSession {
         let agent_did = Did::new(inception.did.clone())?;
 
         // 2. Prepare pins the accepted inception.
-        let scope = requested_scope(operations)?;
         let operation_id = ProtocolOperationId::new(format!("ak:operation:{}", unique_uuid7()))
             .map_err(anyhow::Error::msg)?;
         let idempotency_key = IdempotencyKey::new(unique_uuid7()).map_err(anyhow::Error::msg)?;
@@ -694,7 +696,7 @@ impl AgentRuntimeSession {
                     &authorize.event_id,
                     &verification_method,
                     &runtime_key,
-                    operations,
+                    &operations,
                 )
                 .await?;
                 (grant, Some(request))

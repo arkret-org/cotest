@@ -216,7 +216,7 @@ pub async fn run_agent_session_grant_replay_production()
         &controller,
         &account,
         "real-coauth-agent",
-        &super::runtime_operations(),
+        super::requested_scope(&super::runtime_operations())?,
         None,
     )
     .await
