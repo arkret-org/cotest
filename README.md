@@ -1,5 +1,7 @@
 # cotest
 
+实现任务的验收范围与现有测试入口见 [implementation acceptance](docs/implementation-acceptance.md)。`python scripts/check_operation_test_coverage.py --check-acceptance` 显式核对协调仓剩项与测试符号；该静态检查不证明业务运行或完整 claim。
+
 > **Spec target**: the sibling [arkret-spec](../arkret-spec) checkout used by
 > the current run; cotest does not pin a stale README hash.
 

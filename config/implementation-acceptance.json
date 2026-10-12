@@ -1,0 +1,677 @@
+{
+  "format_version": 1,
+  "source_of_truth": false,
+  "complete_claim": false,
+  "tasks": [
+    {
+      "task": "2026-07-30-inkson-mls-governance-anchor-liveness.md",
+      "criteria_count": 3,
+      "criteria_sha256": "66a41b3009b28460548115c2fa0a7b3a34196443afe9bfde3d985a557f685db5",
+      "spec_refs": [
+        "arkret-spec/spec/v1/zh/crypto-media/encryption-and-audit.md"
+      ],
+      "source_refs": [
+        "inkson/src/mls/send_gate.rs"
+      ],
+      "tests": [
+        {
+          "path": "cotest/tests/cross_station_mls_genesis.rs",
+          "symbol": "cross_station_mls_genesis",
+          "kind": "live",
+          "covers": "跨站MLS Genesis基础；不能代替Agent creator恢复"
+        }
+      ],
+      "engineering_checks": [],
+      "remaining_scenarios": [
+        "Agent exact current pin／私态crash-reload；superseded与旧holder拒绝；各角色真实客户端原bytes重投"
+      ]
+    },
+    {
+      "task": "2026-09-06-0914-sdk-contract-generation-and-canonical-reuse.md",
+      "criteria_count": 6,
+      "criteria_sha256": "6618b9b66a261e44659c862727dfbb3b7b61a1896b15282e578af1bca47eba8e",
+      "spec_refs": [
+        "arkret-spec/spec/v1/zh/overview/protocol-layers.md"
+      ],
+      "source_refs": [
+        "arkret-rust-sdk/tools/schema_struct_gate.py"
+      ],
+      "tests": [
+        {
+          "path": "arkret-rust-sdk/crates/wire/tests/generated_registry_coverage.rs",
+          "symbol": "generated_closed_registry_types_reject_unregistered_values",
+          "kind": "contract",
+          "covers": "已有生成注册类型闭合验证，非完整DTO生成"
+        }
+      ],
+      "engineering_checks": [
+        "SDK schema/ownership/generated-contracts与逐字节KAT"
+      ],
+      "remaining_scenarios": [
+        "代表类型required／null／union生成前后接受集合与KAT等价；全consumer替换；exemption与常量真实差集"
+      ]
+    },
+    {
+      "task": "2026-09-06-0915-protocol-fixtures-mock-and-api-test-convergence.md",
+      "criteria_count": 7,
+      "criteria_sha256": "3c7d21beb3d61a92a5cb505076d3cfd421b95184abdfc54ec077f42566453e64",
+      "spec_refs": [
+        "arkret-spec/spec/v1/zh/identity/contact-and-direct-conversation.md"
+      ],
+      "source_refs": [
+        "inkson/tests/e2e/mock-operation-inventory.json"
+      ],
+      "tests": [
+        {
+          "path": "cotest/tests/spec_business_flows.rs",
+          "symbol": "spec_business_flows_cover_operation_registry_surfaces",
+          "kind": "engineering",
+          "covers": "业务surface静态索引，不证明live"
+        }
+      ],
+      "engineering_checks": [
+        "现有mock contract/API-only/operation inventory门禁"
+      ],
+      "remaining_scenarios": [
+        "双边Contact四分支receipt／round／current；实际证明族迁移；当前API-only pending逐case解锁"
+      ]
+    },
+    {
+      "task": "2026-09-06-0917-garth-runtime-and-host-ports.md",
+      "criteria_count": 9,
+      "criteria_sha256": "2ca93d2dc946ebb4ccb59516d84a9e3da4b03ebfd1426085432a985e6ef44725",
+      "spec_refs": [
+        "arkret-spec/spec/v1/zh/overview/protocol-layers.md"
+      ],
+      "source_refs": [
+        "garth/src/mls.rs"
+      ],
+      "tests": [],
+      "engineering_checks": [
+        "用户恢复后运行layering gate和native/wasm/Savfox caller等价"
+      ],
+      "remaining_scenarios": [
+        "真实MLS checkpoint port与durable取消；reducer／history／authoring实际caller；native／wasm／Savfox同输入等价"
+      ]
+    },
+    {
+      "task": "2026-09-06-0920-residual-capability-and-storage-ownership.md",
+      "criteria_count": 4,
+      "criteria_sha256": "886fcce5c28a03e4358e22a688d36bce2731b10767bfbf508e605dcf49458c6e",
+      "spec_refs": [
+        "arkret-spec/spec/v1/zh/authz/capabilities.md"
+      ],
+      "source_refs": [
+        "coauth/crates/storage-postgres/src/collaboration_capability.rs"
+      ],
+      "tests": [],
+      "engineering_checks": [
+        "全caller/SQL/动态引用纵向审计和现有semantic_residue门"
+      ],
+      "remaining_scenarios": [
+        "迁移accepted读面后纵向删除旧grants；实验功能逐caller裁决；删除链和动态引用检查"
+      ]
+    },
+    {
+      "task": "2026-09-06-1725-joint-e2e-inkson-decoupling-and-provisioning-convergence.md",
+      "criteria_count": 5,
+      "criteria_sha256": "a87767136a20748385987c4a151382630ea2f805814bfe62e7c62c1c762e6e2f",
+      "spec_refs": [
+        "arkret-spec/spec/v1/zh/models/sidecar.md"
+      ],
+      "source_refs": [
+        "inkson/src/views/chat/mod.rs"
+      ],
+      "tests": [
+        {
+          "path": "cotest/crates/inkson-client-tests/tests/client_sync_production_live.rs",
+          "symbol": "private_agent_sidecar_reply_recovers_in_the_original_account_attempt",
+          "kind": "live",
+          "covers": "一次native真实私密回复恢复，不证明三次WASM可见"
+        }
+      ],
+      "engineering_checks": [],
+      "remaining_scenarios": [
+        "真实WASM大历史输入／锚点／长任务；cursor重绘不重复验证；三次私密回复双用户零披露；远端PCR／mode／runtime恢复"
+      ]
+    },
+    {
+      "task": "2026-09-08-1638-device-recovery-and-encrypted-edit.md",
+      "criteria_count": 4,
+      "criteria_sha256": "775723fc39c09e739474c3e74e40498930a1fb82f18507072f5cd87da040cb40",
+      "spec_refs": [
+        "arkret-spec/spec/v1/zh/identity/security-transactions.md"
+      ],
+      "source_refs": [
+        "inkson/src/mls/account_recovery/recovery_transaction.rs"
+      ],
+      "tests": [
+        {
+          "path": "cotest/tests/recovery_transaction_faults.rs",
+          "symbol": "recovery_transaction_remote_side_effect_fault_matrix",
+          "kind": "contract",
+          "covers": "恢复副作用故障矩阵"
+        },
+        {
+          "path": "cotest/tests/to_device_offline_ordering.rs",
+          "symbol": "expired_device_message_replays_exactly_and_remains_until_ack",
+          "kind": "live",
+          "covers": "过期exact HTTP／跨HTTP key／ACK前后重放及两次实际重启"
+        },
+        {
+          "path": "cotest/tests/to_device_offline_ordering.rs",
+          "symbol": "invalid_device_message_expiry_rejects_the_whole_batch",
+          "kind": "live",
+          "covers": "新增过期与超过24h混合batch零入队"
+        }
+      ],
+      "engineering_checks": [],
+      "remaining_scenarios": [
+        "登录callback／late401与durable隔离；四RecoveryMethod；恢复后真实编辑和第二设备；actor-private游标"
+      ]
+    },
+    {
+      "task": "2026-09-08-2040-owned-agent-direct-conversation.md",
+      "criteria_count": 5,
+      "criteria_sha256": "435a75886b7a6155110c4aa935abff1009477b1ed95d621e5f090a8c25a29d7e",
+      "spec_refs": [
+        "arkret-spec/spec/v1/zh/identity/contact-and-direct-conversation.md"
+      ],
+      "source_refs": [
+        "inkson/src/app/direct_open.rs"
+      ],
+      "tests": [
+        {
+          "path": "cotest/tests/direct_conversation_admission.rs",
+          "symbol": "direct_conversation_admission_suite_is_audited_but_not_falsely_marked_live",
+          "kind": "contract",
+          "covers": "Direct准入诊断及拒绝假live声明"
+        }
+      ],
+      "engineering_checks": [],
+      "remaining_scenarios": [
+        "首次Agent claim／Welcome精确binding；accepted祖先不回退ratchet；四Event／四Commit和实时双向回复；旧queue残留清理"
+      ]
+    },
+    {
+      "task": "2026-09-10-0540-client-current-result-durable-index.md",
+      "criteria_count": 7,
+      "criteria_sha256": "beebef34c3e67690cf9a4040346e6017354459f5c643eaf6440d3363f3f9b652",
+      "spec_refs": [
+        "arkret-spec/spec/v1/zh/sync/current-results.md"
+      ],
+      "source_refs": [
+        "inkson/src/views/global_search.rs"
+      ],
+      "tests": [
+        {
+          "path": "inkson/tests/e2e/inkson.strands.search-locale.spec.ts",
+          "symbol": "global search results preserve local text and routes across language changes",
+          "kind": "product",
+          "covers": "真实搜索已具名预期失败；不能当通过"
+        },
+        {
+          "path": "cotest/tests/client_account_stream.rs",
+          "symbol": "client_account_stream_vector_runs_clean",
+          "kind": "contract",
+          "covers": "Account stream合同向量，非宿主容量"
+        }
+      ],
+      "engineering_checks": [],
+      "remaining_scenarios": [
+        "授权搜索Event／covering Commit负例与语言切换；非current账号字段有界物理写；1／100／1000实机；flaky exact case受控复现"
+      ]
+    },
+    {
+      "task": "2026-09-13-0847-applet-authoring-result-runtime-installation.md",
+      "criteria_count": 5,
+      "criteria_sha256": "b8fb26a4985b6119802eabdf782f83ad81015f192519ece691275b8b73781e22",
+      "spec_refs": [
+        "arkret-spec/spec/v1/zh/extensions/applet-integration.md"
+      ],
+      "source_refs": [
+        "coland/crates/http/src/routing/extensions/applet_bridge/delegated_device.rs"
+      ],
+      "tests": [
+        {
+          "path": "cotest/tests/conformance_vectors.rs",
+          "symbol": "actor_private_events_submit_named_suite_executes_every_variant",
+          "kind": "contract",
+          "covers": "私有管理来源载体，不证明Bot/Ghost业务审批"
+        }
+      ],
+      "engineering_checks": [],
+      "remaining_scenarios": [
+        "Service-only安装→独立Ghost／Bot创建；管理review与quota原子；21-operation Device业务门；跨scope撤权／rotation与内容真实解密回复"
+      ]
+    },
+    {
+      "task": "2026-09-18-2345c-security-evidence-suites-must-actually-run.md",
+      "criteria_count": 5,
+      "criteria_sha256": "d0f0f9aac0bfb9f94acc6da4ff91aecc5d8156d004c7645c4ce7e709924b33c6",
+      "spec_refs": [
+        "arkret-spec/spec/v1/zh/conformance/conformance-suite.md"
+      ],
+      "source_refs": [
+        "cotest/src/conformance/named_suite_audit.rs"
+      ],
+      "tests": [
+        {
+          "path": "cotest/tests/agent_vectors_production.rs",
+          "symbol": "agent_genesis_cases_cross_real_http_admission_and_preserve_rejected_state",
+          "kind": "live",
+          "covers": "当前18项/12项缺口显式拒绝complete"
+        },
+        {
+          "path": "cotest/tests/federation_current_origin_replay_live.rs",
+          "symbol": "held_commit_replay_requires_current_origin_after_peer_auth",
+          "kind": "live",
+          "covers": "当前origin的独立生产重放切片"
+        }
+      ],
+      "engineering_checks": [],
+      "remaining_scenarios": [
+        "逐case named生产消费／required-ref合取；五联邦case；启用Cursor撤销的HTTP／WS／多进程；成本；最终签名SDK/profile闭包"
+      ]
+    },
+    {
+      "task": "2026-09-19-0038b-sdk-test-material-and-precheck-suites.md",
+      "criteria_count": 4,
+      "criteria_sha256": "27191e83cbe5ebf909b1e82999209b201e31453f5cc9bb5e3bb6d4fec5d2583c",
+      "spec_refs": [
+        "arkret-spec/spec/v1/zh/conformance/conformance-profiles.md"
+      ],
+      "source_refs": [
+        "cotest/src/conformance/named_suite_audit.rs"
+      ],
+      "tests": [
+        {
+          "path": "cotest/tests/conformance_vectors.rs",
+          "symbol": "sdk_precheck_diagnostic_executes_cases_and_refuses_production_claim",
+          "kind": "contract",
+          "covers": "明确拒绝diagnostic冒充production claim"
+        },
+        {
+          "path": "cotest/tests/conformance_vectors.rs",
+          "symbol": "test_material_rejection_named_suite_executes_all_cases_and_exposes_service_gaps",
+          "kind": "contract",
+          "covers": "已知test material和服务缺口"
+        }
+      ],
+      "engineering_checks": [],
+      "remaining_scenarios": [
+        "closed Event／kind-selected payload进入真实reducer存储；三类标识真实拒绝后的cache／binding／challenge零残留；跨服务ledger"
+      ]
+    },
+    {
+      "task": "2026-09-19-0228-approval-layer-and-policy-projection-downstream.md",
+      "criteria_count": 5,
+      "criteria_sha256": "07cc1c28498cb163453224ce44b34df4b0569fca4d846017008cd6fd11560c15",
+      "spec_refs": [
+        "arkret-spec/spec/v1/zh/authz/constraint-schema.md"
+      ],
+      "source_refs": [
+        "coland/crates/storage-postgres/src/agent_confirmation_admission.rs"
+      ],
+      "tests": [
+        {
+          "path": "cotest/tests/approval_admission.rs",
+          "symbol": "historical_wip_approval_and_private_audit",
+          "kind": "live",
+          "covers": "历史WIP审批与私密审计切片"
+        }
+      ],
+      "engineering_checks": [],
+      "remaining_scenarios": [
+        "全部适用入口差集；两层阈值与Policy完整current；真实draft发布；accepted-at／nonce／审计原子；forward保票与replication去票两站"
+      ]
+    },
+    {
+      "task": "2026-09-25-2132-commit-stream-chain-and-planned-handoff.md",
+      "criteria_count": 5,
+      "criteria_sha256": "6151149fcfc8dcb7fd6563d77985d576bd75bf2dad471b0aefd58ad928e835ca",
+      "spec_refs": [
+        "arkret-spec/spec/v1/zh/sync/authority-commit-log.md"
+      ],
+      "source_refs": [
+        "coland/crates/storage-postgres/src/snapshot_disclosure_gate.rs"
+      ],
+      "tests": [
+        {
+          "path": "cotest/tests/snapshot_head_disclosure.rs",
+          "symbol": "exact_snapshot_by_ref_reads_through_garth_with_historical_station_key",
+          "kind": "live",
+          "covers": "历史Station key by-ref起点，非handoff后任期"
+        }
+      ],
+      "engineering_checks": [],
+      "remaining_scenarios": [
+        "正式双签handoff生产入口；generation>0完整current导入与head；全部stream断链／跨stream负例；旧任期exact snapshot"
+      ]
+    },
+    {
+      "task": "2026-09-25-2133-snapshot-and-scan-beyond-single-realm-stream.md",
+      "criteria_count": 3,
+      "criteria_sha256": "89e5fd4d8732c8578310a66943833d47d5945f7e256aee4eaa00bf2b38d1aa2e",
+      "spec_refs": [
+        "arkret-spec/spec/v1/zh/sync/client-sync.md"
+      ],
+      "source_refs": [
+        "coland/crates/storage-postgres/src/issued_realm_snapshots.rs"
+      ],
+      "tests": [
+        {
+          "path": "cotest/tests/sidecar_authority_live.rs",
+          "symbol": "pending_agent_sidecar_http_reads_disclose_handshakes_without_private_content",
+          "kind": "live",
+          "covers": "pending Agent仅握手披露"
+        },
+        {
+          "path": "cotest/tests/snapshot_head_disclosure.rs",
+          "symbol": "exact_snapshot_by_ref_reads_through_garth_with_historical_station_key",
+          "kind": "live",
+          "covers": "exact历史snapshot读取"
+        }
+      ],
+      "engineering_checks": [],
+      "remaining_scenarios": [
+        "合法旧row更新后的by-ref正负例；effective Agent consume后的内容；peer withheld/facts矩阵；超过64流／首屏外idle/busy产品运行"
+      ]
+    },
+    {
+      "task": "2026-09-25-2134-typed-current-cas-and-materialization.md",
+      "criteria_count": 5,
+      "criteria_sha256": "28ff23f74dcfabf70992032df1489282e583d67c9b0ca2288fcb5e5ab7eed251",
+      "spec_refs": [
+        "arkret-spec/spec/v1/zh/sync/current-results.md"
+      ],
+      "source_refs": [
+        "coland/crates/storage-postgres/src/read_capacity_tests.rs"
+      ],
+      "tests": [
+        {
+          "path": "coland/crates/storage-postgres/src/read_capacity_tests.rs",
+          "symbol": "typed_current_and_self_reads_stay_bounded_across_one_hundred_and_one_thousand_realms",
+          "kind": "live",
+          "covers": "SQL扫描容量，不证明wire分页或所有writer"
+        }
+      ],
+      "engineering_checks": [],
+      "remaining_scenarios": [
+        "registry→family／SQL／writer完整映射；Commit/source绑定零部分写；按family guard的并发CAS；同revision canonical相等；缺tail/授权分支"
+      ]
+    },
+    {
+      "task": "2026-09-25-2135-account-detail-coverage-cursor-and-visibility.md",
+      "criteria_count": 5,
+      "criteria_sha256": "5d4f8685d6d706ff184a279ea2e68099a0f3245e2adcba0dc8ada080a0c1a7e3",
+      "spec_refs": [
+        "arkret-spec/spec/v1/zh/sync/client-sync.md"
+      ],
+      "source_refs": [
+        "coland/crates/http/src/routing/events/sync/subscribe.rs"
+      ],
+      "tests": [
+        {
+          "path": "cotest/tests/account_subscribe_long_poll.rs",
+          "symbol": "account_subscribe_omits_quiet_realm_at_unchanged_cursor",
+          "kind": "live",
+          "covers": "quiet long-poll"
+        },
+        {
+          "path": "cotest/tests/snapshot_head_disclosure.rs",
+          "symbol": "limited_account_window_names_issued_basis_or_is_preview_only",
+          "kind": "live",
+          "covers": "window basis与preview分支"
+        }
+      ],
+      "engineering_checks": [],
+      "remaining_scenarios": [
+        "完整获准Circle／Sidecar ACL与撤权；wire字节预算／不可截断entry；每流head／generation分页失效；summary/detail/WS同producer"
+      ]
+    },
+    {
+      "task": "2026-09-25-2136-effect-ownership-closure-and-remaining-current-families.md",
+      "criteria_count": 4,
+      "criteria_sha256": "0d2e61aaea229c67d11ada5e29daf14d99acae1226f3704eff1dcb1bb9f0c152",
+      "spec_refs": [
+        "arkret-spec/spec/v1/zh/sync/current-results.md"
+      ],
+      "source_refs": [
+        "coland/crates/storage-postgres/src/authority_commit.rs"
+      ],
+      "tests": [
+        {
+          "path": "cotest/tests/strand_watch_live.rs",
+          "symbol": "real_watch_current_preserves_clear_revision_and_enforces_whole_value_cas",
+          "kind": "live",
+          "covers": "普通Realm self-watch whole-value CAS"
+        }
+      ],
+      "engineering_checks": [],
+      "remaining_scenarios": [
+        "每effect owner运行时正负例；Circle／others／audit watch；effective scope与Circle成员同cut；mute_override与SFU真实拒绝"
+      ]
+    },
+    {
+      "task": "2026-09-25-2141-consent-current-and-admission.md",
+      "criteria_count": 2,
+      "criteria_sha256": "6baa7b17e09d6295e09bd9e5f25b902b94567d462f7d104cbeb8a962dad4c2dc",
+      "spec_refs": [
+        "arkret-spec/spec/v1/zh/identity/consent-model.md"
+      ],
+      "source_refs": [
+        "coland/crates/storage-postgres/src/consent_current.rs"
+      ],
+      "tests": [
+        {
+          "path": "cotest/tests/consent_pairwise_isolation_live.rs",
+          "symbol": "retired_pairwise_profile_rejected_and_peer_identity_isolated",
+          "kind": "live",
+          "covers": "pairwise隔离及退役profile拒绝"
+        }
+      ],
+      "engineering_checks": [],
+      "remaining_scenarios": [
+        "规范先消除Directory／PSI漂移；仍登记的invite／call／presence／MIMI跨层撤销竞争；any和cache revision不回退；重算canonical case"
+      ]
+    },
+    {
+      "task": "2026-09-25-2144-sidecar-participant-authority-cut.md",
+      "criteria_count": 5,
+      "criteria_sha256": "a3aea64f1da394d19bf2e164cd3c46edea7b1989ff406f6f4a0d3bdd32990c31",
+      "spec_refs": [
+        "arkret-spec/spec/v1/zh/models/sidecar.md"
+      ],
+      "source_refs": [
+        "coland/crates/storage-postgres/tests/sidecar_authority_cut.rs"
+      ],
+      "tests": [
+        {
+          "path": "cotest/tests/sidecar_authority_live.rs",
+          "symbol": "sidecar_ensure_replay_and_private_native_disclosure_are_real",
+          "kind": "live",
+          "covers": "真实ensure／重放／私有scan"
+        },
+        {
+          "path": "coland/crates/storage-postgres/tests/sidecar_authority_cut.rs",
+          "symbol": "desired_agents_require_owned_active_key_and_exact_realm_membership",
+          "kind": "live",
+          "covers": "desired Agent真实accepted资格"
+        }
+      ],
+      "engineering_checks": [],
+      "remaining_scenarios": [
+        "同cut heads和终止/rejoin；并发Genesis／Commit零部分写；第64/65 ref接受边界；17 reserved vector完整producer runner"
+      ]
+    },
+    {
+      "task": "2026-09-26-1939-realm-destroy-authority-cut.md",
+      "criteria_count": 3,
+      "criteria_sha256": "b58db39a36725d0b0e3c6afdbb5be7afea9a4231221a62441c3c1b70ceca571e",
+      "spec_refs": [
+        "arkret-spec/spec/v1/zh/governance/history-visibility.md"
+      ],
+      "source_refs": [
+        "coland/crates/storage-postgres/src/realm_lifecycle_current_results.rs"
+      ],
+      "tests": [
+        {
+          "path": "cotest/tests/terminal_gap_live.rs",
+          "symbol": "terminal_missing_predecessor_repairs_full_and_withheld_chain",
+          "kind": "live",
+          "covers": "terminal专属Full/Withheld补链"
+        },
+        {
+          "path": "cotest/tests/terminal_restart_live.rs",
+          "symbol": "pending_delivery_terminal_survives_actual_station_restart",
+          "kind": "live",
+          "covers": "真实Station重启原intent恢复"
+        }
+      ],
+      "engineering_checks": [],
+      "remaining_scenarios": [
+        "非HTTP writer／子导航／Circle有效lifecycle；更细scope/policy sender撤权；正式八case named接线与全接受footprint"
+      ]
+    },
+    {
+      "task": "2026-09-30-0805-blob-upload-encryption-classification.md",
+      "criteria_count": 5,
+      "criteria_sha256": "31c3a0086f06cb73fe185ecc2f2a849def09b386f3aecf88de5b44f74dc526f7",
+      "spec_refs": [
+        "arkret-spec/spec/v1/zh/crypto-media/media-and-blob.md"
+      ],
+      "source_refs": [
+        "inkson/src/views/chat/composer/commands.rs"
+      ],
+      "tests": [
+        {
+          "path": "cotest/tests/conformance_vectors.rs",
+          "symbol": "blob_stream_aead_named_suite_executes_all_current_cases",
+          "kind": "contract",
+          "covers": "AEAD向量，非附件端到端"
+        },
+        {
+          "path": "cotest/tests/delivery_media.rs",
+          "symbol": "blob_storage_classification_survives_restart",
+          "kind": "live",
+          "covers": "服务端分类／restart及presign拒绝"
+        }
+      ],
+      "engineering_checks": [],
+      "remaining_scenarios": [
+        "BA-C1授权winning checkpoint；durable salt／descriptor／ciphertext；结构化ContentBlock发送；授权历史解密/渲染和有界流；真实两设备附件闭环"
+      ]
+    },
+    {
+      "task": "2026-10-03-1746-direct-conversation-topics-and-groups.md",
+      "criteria_count": 5,
+      "criteria_sha256": "d58379bcbbe8be1d584bd5b64ba63ba4496dedd8f6e4a1bd1b5276a6d3d62b0d",
+      "spec_refs": [
+        "arkret-spec/spec/v1/zh/identity/contact-and-direct-conversation.md"
+      ],
+      "source_refs": [
+        "inkson/src/views/chat/direct_structure.rs"
+      ],
+      "tests": [
+        {
+          "path": "cotest/tests/direct_conversation_founding_live.rs",
+          "symbol": "cross_station_two_authorized_devices_race_founding",
+          "kind": "live",
+          "covers": "两授权设备竞争founding，不证明Chat/Topic UI"
+        }
+      ],
+      "engineering_checks": [],
+      "remaining_scenarios": [
+        "延迟第二resolve时页面可见及session取消；真实IndexedDB取消clear；标题/watch／Topic排序restore/stale CAS；非participant/main负例；完整跨站加密产品"
+      ]
+    },
+    {
+      "task": "2026-10-11-0930-owned-agent-controller-management-enforcement.md",
+      "criteria_count": 6,
+      "criteria_sha256": "16fa2b7bfd58397852c28b43e36640fd36aae868e43923f164d31a025532cb5e",
+      "spec_refs": [
+        "arkret-spec/spec/v1/zh/authz/owned-agent-authority.md"
+      ],
+      "source_refs": [
+        "coland/crates/storage-postgres/src/agent_management_admission.rs"
+      ],
+      "tests": [
+        {
+          "path": "coland/crates/storage-postgres/tests/sidecar_authority_cut.rs",
+          "symbol": "ordinary_member_can_join_own_agent_without_permission_to_add_humans",
+          "kind": "live",
+          "covers": "成员添加自有Agent与Human权限区分"
+        }
+      ],
+      "engineering_checks": [],
+      "remaining_scenarios": [
+        "多scope配置／review真实消费；controller专用grant/revoke；读／Blob／future material／HTTP/WS最后门；跨站serve／deliver；管理员/成员真实UI"
+      ]
+    },
+    {
+      "task": "2026-10-11-0932-inkson-linux-security-dependency-remediation.md",
+      "criteria_count": 4,
+      "criteria_sha256": "cb3e917b6d26cdb6aa50e94b877da2d3384edf45fcffd455ae4278489c779c50",
+      "spec_refs": [],
+      "source_refs": [
+        "inkson/.github/workflows/packages.yml"
+      ],
+      "tests": [],
+      "engineering_checks": [
+        "严格cargo deny全目标desktop图与真实LinuxPackages构建/启动"
+      ],
+      "remaining_scenarios": [
+        "两条GLib入口可执行修复；严格全图审计；真实Linux打包启动；受影响Windows/macOS回归"
+      ]
+    },
+    {
+      "task": "2026-10-11-0933-third-party-invite-provider-lifecycle.md",
+      "criteria_count": 5,
+      "criteria_sha256": "88a9d1ae131bf7be63cfb927dbcf08b994d2689f1a859952d64834b7876cd546",
+      "spec_refs": [
+        "arkret-spec/spec/v1/zh/sync/third-party-invites.md"
+      ],
+      "source_refs": [
+        "coland/crates/storage-postgres/src/invite_current_results/claim_admission.rs"
+      ],
+      "tests": [
+        {
+          "path": "cotest/tests/spec_business_flows.rs",
+          "symbol": "third_party_invite_present_body_matches_canonical_schema",
+          "kind": "contract",
+          "covers": "present DTO closed及subject/token形状，非provider业务"
+        }
+      ],
+      "engineering_checks": [],
+      "remaining_scenarios": [
+        "正式IVS owner与四operation；双模式私密provision/activate/status/deliver/present；原proof一次绑定；响应丢失/重启/清理/URL拒绝；接Claim真实闭环"
+      ]
+    },
+    {
+      "task": "2026-10-11-0934-cotest-canonical-provisioning-and-client-journeys.md",
+      "criteria_count": 2,
+      "criteria_sha256": "77425857d718927ba303d6795235d7fd7c6ffe8b7c876e619a0f9ad46bbf4c8c",
+      "spec_refs": [
+        "arkret-spec/spec/v1/zh/identity/account-lifecycle.md"
+      ],
+      "source_refs": [
+        "cotest/crates/test-support/src/garth_client.rs"
+      ],
+      "tests": [
+        {
+          "path": "cotest/e2e/tests/harness/test-client-parity.spec.ts",
+          "symbol": "the selected client founds a principal and syncs its account",
+          "kind": "product",
+          "covers": "选定客户端正常供给／同步；实际Garth写入选择需runner"
+        }
+      ],
+      "engineering_checks": [
+        "现有check_package_graph与browserless lane资源门"
+      ],
+      "remaining_scenarios": [
+        "CT-3 semantic_union／parent tenure锁／realm-links零写；桥进程kill/reopen accepted custody寻址；accepted-before-persist与issuer丢响应不同切点"
+      ]
+    }
+  ]
+}

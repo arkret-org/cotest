@@ -543,6 +543,157 @@ fn queue_request(recipient: &str, device: &str, id: &str) -> Result<DeviceMessag
     )
 }
 
+/// device-lifecycle §7: expiry gates new enqueue, never exact replay or queue retention.
+pub async fn expired_device_message_replays_exactly_and_remains_until_ack() -> Result<()> {
+    let ephemeral = crate::scenarios::_helpers::coauth_bootstrap::spawn_ephemeral_postgres_for(
+        "COTEST_COLAND_DATABASE_URL",
+    )?
+    .ok_or_else(|| anyhow!("device-message expiry restart requires isolated PostgreSQL"))?;
+    let keystore_dir = tempfile::tempdir()?;
+    let keystore_path = keystore_dir
+        .path()
+        .join("coland.v1")
+        .to_string_lossy()
+        .into_owned();
+    let mut server =
+        crate::scenarios::identity_test_support::spawn_with_harness_account_authority_at(
+            "device-message-expiry-replay",
+            &ephemeral.connect_url,
+            &[
+                ("COLAND_KEYSTORE_BACKEND", "encrypted_file"),
+                ("COLAND_KEYSTORE_PATH", keystore_path.as_str()),
+                (
+                    "COLAND_KEYSTORE_MASTER_KEY",
+                    "UlJSUlJSUlJSUlJSUlJSUlJSUlJSUlJSUlJSUlJSUlI=",
+                ),
+            ],
+        )
+        .await?;
+    let did = actor_did_for_service_did(server.service_did(), "expiry-replay")?;
+    let device = "ak:device:01904100-0000-7000-8000-0000000000a1";
+    let owner = server.demo_client(&did, device).await?;
+    acknowledge_bootstrap_messages(&owner).await?;
+    let id = "ak:device_message:0196419b-0000-7000-8000-00000000e801";
+    let expiry = chrono::DateTime::from_timestamp_millis(
+        (chrono::Utc::now() + chrono::Duration::seconds(5)).timestamp_millis(),
+    )
+    .ok_or_else(|| anyhow!("expiry outside timestamp range"))?;
+    let body = device_message_send_request(
+        &did,
+        device,
+        id,
+        "ak.mls.application",
+        encrypted_envelope("ak.mls.application", "b3BhcXVl"),
+        expiry,
+    )?;
+    let sent = send_exact_message(&owner, &body, "expiry-original").await?;
+    let before = poll_to_device(&server, owner.expect_dev_bearer(), None).await?;
+    let envelopes = application_messages(&before)?;
+    assert_eq!(queue_ids(&before)?, vec![id]);
+    // Wait for real expiry; do not change the accepted envelope or the Station clock.
+    let wait = (expiry - chrono::Utc::now()).to_std().unwrap_or_default();
+    tokio::time::sleep(wait + std::time::Duration::from_millis(100)).await;
+    assert!(chrono::Utc::now() > expiry);
+    assert_eq!(
+        send_exact_message(&owner, &body, "expiry-original").await?,
+        sent
+    );
+    assert_eq!(
+        send_exact_message(&owner, &body, "expiry-new-http-key").await?,
+        sent
+    );
+    let retained = poll_to_device(&server, owner.expect_dev_bearer(), None).await?;
+    assert_eq!(application_messages(&retained)?, envelopes);
+    server.restart_external_process().await?;
+    assert_eq!(
+        send_exact_message(&owner, &body, "expiry-after-restart").await?,
+        sent
+    );
+    let restarted = poll_to_device(&server, owner.expect_dev_bearer(), None).await?;
+    assert_eq!(application_messages(&restarted)?, envelopes);
+    assert_eq!(ack_count(&owner, &delivery_token(&restarted)?).await?, 1);
+    server.restart_external_process().await?;
+    assert_eq!(
+        send_exact_message(&owner, &body, "expiry-after-ack").await?,
+        sent
+    );
+    assert!(
+        queue_ids(&poll_to_device(&server, owner.expect_dev_bearer(), None).await?)?.is_empty()
+    );
+    Ok(())
+}
+
+/// Both expired and over-limit targets reject a mixed batch without a partial enqueue.
+pub async fn invalid_device_message_expiry_rejects_the_whole_batch() -> Result<()> {
+    let server = spawn_with_harness_account_authority("device-message-expiry-batch", &[]).await?;
+    let did = actor_did_for_service_did(server.service_did(), "expiry-batch")?;
+    let first_device = "ak:device:01904100-0000-7000-8000-0000000000a1";
+    let second_device = "ak:device:01904100-0000-7000-8000-0000000000b1";
+    let first = server.demo_client(&did, first_device).await?;
+    let second = server.demo_client(&did, second_device).await?;
+    acknowledge_bootstrap_messages(&first).await?;
+    acknowledge_bootstrap_messages(&second).await?;
+    for (index, expiry) in [
+        chrono::Utc::now() - chrono::Duration::seconds(1),
+        chrono::Utc::now() + chrono::Duration::hours(25),
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        let mut body = queue_request(
+            &did,
+            first_device,
+            "ak:device_message:0196419b-0000-7000-8000-00000000e901",
+        )?;
+        let invalid = device_message_send_request(
+            &did,
+            second_device,
+            "ak:device_message:0196419b-0000-7000-8000-00000000e902",
+            "ak.mls.application",
+            encrypted_envelope("ak.mls.application", "b3BhcXVl"),
+            expiry,
+        )?;
+        body.messages
+            .values_mut()
+            .next()
+            .ok_or_else(|| anyhow!("missing valid target"))?
+            .extend(
+                invalid
+                    .messages
+                    .into_values()
+                    .next()
+                    .ok_or_else(|| anyhow!("missing invalid target"))?,
+            );
+        let denied = expect_json(
+            first
+                .post("/_arkret/self/device_messages")
+                .header("Idempotency-Key", format!("invalid-expiry-{index}"))
+                .json(&body),
+            StatusCode::BAD_REQUEST,
+        )
+        .await?;
+        assert_eq!(denied["type"], "https://arkret.org/problems/param_invalid");
+        for client in [&first, &second] {
+            assert!(
+                queue_ids(&poll_to_device(&server, client.expect_dev_bearer(), None).await?)?
+                    .is_empty()
+            );
+        }
+    }
+    // Reusing the valid target proves neither rejected batch consumed its logical ID.
+    let valid = queue_request(
+        &did,
+        first_device,
+        "ak:device_message:0196419b-0000-7000-8000-00000000e901",
+    )?;
+    send_exact_message(&first, &valid, "expiry-valid-after-rejection").await?;
+    assert_eq!(
+        queue_ids(&poll_to_device(&server, first.expect_dev_bearer(), None).await?)?,
+        vec!["ak:device_message:0196419b-0000-7000-8000-00000000e901"]
+    );
+    Ok(())
+}
+
 fn queue_expiry() -> Result<chrono::DateTime<chrono::Utc>> {
     chrono::DateTime::from_timestamp_millis(
         (chrono::Utc::now() + chrono::Duration::minutes(10)).timestamp_millis(),
