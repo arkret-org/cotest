@@ -847,10 +847,12 @@
         "raw_http_fixture"
       ],
       "declared_test_bypasses": [
+        "create_realm_passive_prompt_dismissal",
         "raw_http_fixture_or_oracle",
         "session_injection"
       ],
       "claims_excluded": [
+        "mls_backup_unlock_and_missing_recovery_prompt_behavior",
         "registration_login_authorization",
         "ui_driven_business_flow_for_raw_http_steps"
       ]
