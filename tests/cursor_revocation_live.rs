@@ -33,3 +33,16 @@ async fn cursor_revocation_is_visible_between_two_processes_sharing_one_durable_
     cotest::scenarios::cursor_revocation_live::shared_database_two_process_cursor_revocation_live()
         .await
 }
+
+#[tokio::test(flavor = "multi_thread")]
+#[serial]
+async fn concurrent_issuance_cannot_install_a_cut_after_its_input_was_revoked() -> Result<()> {
+    cotest::scenarios::cursor_revocation_live::issuance_racing_completed_revocation_live().await
+}
+
+#[tokio::test(flavor = "multi_thread")]
+#[serial]
+async fn completed_revocation_remains_visible_under_a_repeatable_read_database_default()
+-> Result<()> {
+    cotest::scenarios::cursor_revocation_live::issuance_racing_repeatable_read_default_live().await
+}

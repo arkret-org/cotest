@@ -249,7 +249,7 @@
     {
       "task": "2026-09-18-2345c-security-evidence-suites-must-actually-run.md",
       "criteria_count": 5,
-      "criteria_sha256": "d0f0f9aac0bfb9f94acc6da4ff91aecc5d8156d004c7645c4ce7e709924b33c6",
+      "criteria_sha256": "f5576aeb9b917bb50dc7600af8f9d1027269f1fbe66af28f04052c54bddd04b1",
       "spec_refs": [
         "arkret-spec/spec/v1/zh/conformance/conformance-suite.md"
       ],
@@ -348,11 +348,23 @@
           "symbol": "cursor_revocation_is_visible_between_two_processes_sharing_one_durable_issuer",
           "kind": "live",
           "covers": "两个OS进程共享耐久issuer/PG/加密keystore；跨进程组撤销及独立重启"
+        },
+        {
+          "path": "cotest/tests/cursor_revocation_live.rs",
+          "symbol": "concurrent_issuance_cannot_install_a_cut_after_its_input_was_revoked",
+          "kind": "live",
+          "covers": "真实PG INSERT阻塞与完成this_cursor撤销；正式cursor_revoked及handle/retention/业务/ACK原子回滚"
+        },
+        {
+          "path": "cotest/tests/cursor_revocation_live.rs",
+          "symbol": "completed_revocation_remains_visible_under_a_repeatable_read_database_default",
+          "kind": "live",
+          "covers": "独立数据库默认repeatable-read、新OS进程与完成撤销可见性；完整拒绝零推进"
         }
       ],
       "engineering_checks": [],
       "remaining_scenarios": [
-        "逐case named生产消费／required-ref合取；五联邦case；启用Cursor撤销的HTTP／WS／多进程；成本；最终签名SDK/profile闭包"
+        "逐case named生产消费/required-ref合取；原origin binding移除；旧页与mutable下载进度隔离、合法wire到期优先级；成本；最终签名SDK/profile闭包"
       ]
     },
     {

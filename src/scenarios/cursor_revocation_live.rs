@@ -543,3 +543,157 @@ pub async fn shared_database_two_process_cursor_revocation_live() -> Result<()> 
     );
     Ok(())
 }
+
+pub async fn issuance_racing_completed_revocation_live() -> Result<()> {
+    issuance_racing_revocation(false).await
+}
+
+pub async fn issuance_racing_repeatable_read_default_live() -> Result<()> {
+    issuance_racing_revocation(true).await
+}
+
+async fn issuance_racing_revocation(repeatable_read: bool) -> Result<()> {
+    use std::time::Duration;
+    let database = database("cursor-issuance-revoke-race")?.context("real PostgreSQL required")?;
+    let issuer = MockCoauthIntrospectionServer::spawn_with_internal_secret(
+        HARNESS_INTERNAL_AUTHORITY_SECRET,
+    )
+    .await?;
+    let mut group = TestServerGroup::try_multi_external_with_node_envs(
+        "cursor-issuance-revoke-race",
+        &[station_env(&database.connect_url, &issuer)],
+    )
+    .await?
+    .context("actual Coland process required")?;
+    let (client, _) = standard_client(
+        group.server(0),
+        &issuer,
+        "cursor-racing",
+        "ak:device:01904100-0000-7000-8000-000000004506",
+    )
+    .await?;
+    let original = cursor(&client).await?;
+    if repeatable_read {
+        let connect = database.connect_url.clone();
+        tokio::task::spawn_blocking(move || -> Result<()> {
+            let mut connection = postgres::Client::connect(&connect, postgres::NoTls)?;
+            let name: String = connection
+                .query_one("SELECT current_database()", &[])?
+                .get(0);
+            ensure!(
+                name.starts_with("cotest_")
+                    && name
+                        .bytes()
+                        .all(|byte| byte.is_ascii_alphanumeric() || byte == b'_'),
+                "owned test database identity required"
+            );
+            connection.batch_execute(&format!(
+                "ALTER DATABASE {name} SET default_transaction_isolation='repeatable read'"
+            ))?;
+            Ok(())
+        })
+        .await??;
+        group.server_mut(0).restart_external_process().await?;
+    }
+
+    let connect = database.connect_url.clone();
+    let (ready_tx, ready_rx) = tokio::sync::oneshot::channel();
+    let (entered_tx, entered_rx) = tokio::sync::oneshot::channel();
+    let (release_tx, release_rx) = std::sync::mpsc::channel();
+    let held = tokio::task::spawn_blocking(move || -> Result<()> {
+        let mut connection = postgres::Client::connect(&connect, postgres::NoTls)?;
+        connection.batch_execute("BEGIN; LOCK TABLE sync_cursor_handles IN SHARE MODE")?;
+        ready_tx
+            .send(())
+            .map_err(|_| anyhow::anyhow!("issuance observer was abandoned"))?;
+        let deadline = std::time::Instant::now() + Duration::from_secs(15);
+        loop {
+            connection.batch_execute("SELECT pg_stat_clear_snapshot()")?;
+            let waiting=connection.query_one("SELECT count(*)::bigint FROM pg_stat_activity WHERE datname=current_database() AND wait_event_type='Lock' AND query ILIKE '%INSERT INTO sync_cursor_handles%'",&[])?.get::<_,i64>(0);
+            if waiting > 0 {
+                break;
+            }
+            if std::time::Instant::now() >= deadline {
+                for row in connection.query("SELECT coalesce(wait_event_type,''),coalesce(wait_event,''),left(query,120) FROM pg_stat_activity WHERE datname=current_database() AND pid<>pg_backend_pid()",&[])? {
+                    eprintln!("issuance boundary diagnostic wait_type={} wait={} statement={}",row.get::<_,String>(0),row.get::<_,String>(1),row.get::<_,String>(2));
+                }
+                anyhow::bail!("actual continuation did not reach blocked handle issuance");
+            }
+            std::thread::sleep(Duration::from_millis(20));
+        }
+        entered_tx
+            .send(())
+            .map_err(|_| anyhow::anyhow!("issuance observer was abandoned"))?;
+        let _ = release_rx.recv();
+        Ok(())
+    });
+    ready_rx
+        .await
+        .context("owned handle-table lock must be established")?;
+    let reader = client.clone();
+    let after = original.clone();
+    let pending = tokio::spawn(async move {
+        reader
+            .sdk()
+            .account_subscribe_batch(&SyncRequestBody {
+                after: Some(after),
+                catchup: Some(true),
+                ..Default::default()
+            })
+            .await
+    });
+    if tokio::time::timeout(Duration::from_secs(20), entered_rx)
+        .await
+        .is_err()
+    {
+        pending.abort();
+        let _ = release_tx.send(());
+        let _ = held.await;
+        anyhow::bail!("actual continuation did not reach blocked handle issuance");
+    }
+    ensure!(
+        !pending.is_finished(),
+        "continuation completed before controlled issuance"
+    );
+    let after_revocation: Result<Value> = async {
+        client
+            .sdk()
+            .account_cursor_revoke(&AccountCursorRevokeRequestBody {
+                cursor: original.clone(),
+                reason_code: ReasonCode::from_wire("user_requested"),
+                revoke_scope: CursorRevokeScope::ThisCursor,
+            })
+            .await?;
+        footprint(&database.connect_url).await
+    }
+    .await;
+    let _ = release_tx.send(());
+    held.await??;
+    let after_revocation = after_revocation?;
+    let result = tokio::time::timeout(Duration::from_secs(40), pending)
+        .await
+        .context("interrupted continuation must finish within the normal idle window")??;
+    let error =
+        result.expect_err("continuation cannot consume an input after completed revocation");
+    ensure!(
+        error.error_code() == Some(ErrorCode::CursorRevoked),
+        "issuance race lost its canonical refusal: {error:?}"
+    );
+    let after = footprint(&database.connect_url).await?;
+    let changed = after_revocation["cursor_progress_and_ack"]
+        .as_object()
+        .context("cursor footprint")?
+        .iter()
+        .filter(|(table, rows)| after["cursor_progress_and_ack"].get(*table) != Some(*rows))
+        .map(|(table, _)| table.as_str())
+        .collect::<Vec<_>>();
+    ensure!(
+        after == after_revocation,
+        "refused issuance/revoke race advanced complete handle/business/ACK state: {changed:?}"
+    );
+    revoked(&client, &original, &database.connect_url).await?;
+    println!(
+        "[cursor-revocation] blocked_real_handle_insert=1 completed_this_cursor_revoke=1 refused_continuation=1 zero_post_revoke_handle_progress=1"
+    );
+    Ok(())
+}
