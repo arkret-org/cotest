@@ -818,17 +818,46 @@ test.describe("cross-server federation", () => {
     expect(original, "the member holds the exact original accepted Full").toBeTruthy();
     // This exercises the publication cache's server2 self GET and the helper's
     // explicit server1 governance peer scan authorized for server3.
-    const options = { origin: colandServiceId("server1"), destination: colandServiceId("server3"), server: "server3" as const, realmId };
-    const first = await rawPushFederationEvents(request, [{ event_id: sent.event_id }], options);
-    expect(first.status()).toBe(200);
-    const firstOutcome = await first.json();
-    expect(firstOutcome.branch).toBe("committed_replication");
-    expect(firstOutcome.replication_outcomes).toHaveLength(1);
-    expect(["stored", "duplicate"], JSON.stringify(firstOutcome.replication_outcomes))
-      .toContain(firstOutcome.replication_outcomes[0].status);
-    const replay = await rawPushFederationEvents(request, [{ event_id: sent.event_id }], options);
+    let exactReplay: (() => ReturnType<APIRequestContext["post"]>) | undefined;
+    let canonicalSubmissionBody: string | undefined;
+    const options = {
+      origin: colandServiceId("server1"), destination: colandServiceId("server3"),
+      server: "server3" as const, realmId,
+      captureExactReplay: (submit: () => ReturnType<APIRequestContext["post"]>, body: string) => {
+        if (canonicalSubmissionBody === undefined) canonicalSubmissionBody = body;
+        else expect(body, "dependency recovery preserves the complete canonical request identity")
+          .toBe(canonicalSubmissionBody);
+        exactReplay = submit;
+      },
+    };
+    // Acceptance at the publishing member does not imply that the third
+    // Station has installed the message's governing prefix. Retry only that
+    // dependency refusal, using the same immutable original within the test's
+    // existing total budget; each dependency recovery attempt is freshly signed.
+    const replicationDeadline = Date.now() + 45_000;
+    let acceptedOutcome: unknown;
+    for (;;) {
+      const first = await rawPushFederationEvents(request, [{ event_id: sent.event_id }], options);
+      expect(first.status()).toBe(200);
+      const firstOutcome = await first.json();
+      expect(firstOutcome.branch).toBe("committed_replication");
+      expect(firstOutcome.replication_outcomes).toHaveLength(1);
+      const outcome = firstOutcome.replication_outcomes[0];
+      if (["stored", "duplicate"].includes(outcome.status)) {
+        acceptedOutcome = firstOutcome;
+        break;
+      }
+      expect(outcome).toEqual({ status: "rejected", reason_code: "dependency_missing" });
+      expect(Date.now(), "the exact original must become stored or duplicate within the prefix budget")
+        .toBeLessThan(replicationDeadline);
+      await new Promise((resolve) => setTimeout(resolve, 1_000));
+    }
+    // An exact signed request replays its durable terminal result; the first
+    // stored outcome stays stored (federation §3.3, api-conventions §6.1/6.2).
+    expect(exactReplay, "the successful submission captures its exact signed request").toBeTruthy();
+    const replay = await exactReplay!();
     expect(replay.status()).toBe(200);
-    expect((await replay.json()).replication_outcomes).toEqual([{ status: "duplicate" }]);
+    expect(await replay.json()).toEqual(acceptedOutcome);
     const heldUrl = `${colandBaseUrl("server3")}/_arkret/self/committed-events/${sent.event_id}`;
     const held = await request.get(heldUrl, { headers: authHeaders(carolToken, "GET", heldUrl) });
     expect(held.status()).toBe(200);

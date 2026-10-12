@@ -256,9 +256,14 @@ impl Session {
             .context("decode durable accepted identity snapshot")
     }
 
-    async fn dispatch(&mut self, request: Request) -> Result<Value> {
+    // Separate operation state machines keep founding and restored-identity
+    // temporaries out of the same poll frame on default native thread stacks.
+    fn dispatch(
+        &mut self,
+        request: Request,
+    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<Value>> + '_>> {
         match request.op.as_str() {
-            "describe_station" => {
+            "describe_station" => Box::pin(async move {
                 let endpoints: DeploymentEndpoints =
                     serde_json::from_value::<EndpointsBody>(request.body)
                         .context("parse endpoints")?
@@ -268,8 +273,8 @@ impl Session {
                     "trust_domain": facts.trust_domain,
                     "service_id": facts.service_id,
                 }))
-            }
-            "provision_unbound_account" => {
+            }),
+            "provision_unbound_account" => Box::pin(async move {
                 #[derive(Deserialize)]
                 struct Body {
                     endpoints: EndpointsBody,
@@ -280,8 +285,8 @@ impl Session {
                 let account: UnboundAccount = body.account.into();
                 provision_unbound_account(&self.http, &endpoints, &account).await?;
                 Ok(json!({ "handle": account.handle, "email": account.email }))
-            }
-            "create_account_handoff" => {
+            }),
+            "create_account_handoff" => Box::pin(async move {
                 #[derive(Deserialize)]
                 struct Body {
                     coauth_base_url: String,
@@ -313,8 +318,8 @@ impl Session {
                 // them needs `found_principal`, which runs in this process.
                 self.handoffs.insert(handoff.request_id.clone(), handoff);
                 Ok(response)
-            }
-            "found_principal" => {
+            }),
+            "found_principal" => Box::pin(async move {
                 #[derive(Deserialize)]
                 struct Body {
                     handoff_id: String,
@@ -383,8 +388,8 @@ impl Session {
                     "binding_receipt": principal.outcome.binding_receipt,
                     "pcr_genesis_commits": principal.outcome.pcr_genesis_commits,
                 }))
-            }
-            "read_self_account_viewer" => {
+            }),
+            "read_self_account_viewer" => Box::pin(async move {
                 #[derive(Deserialize)]
                 struct Body {
                     handoff_id: String,
@@ -409,14 +414,14 @@ impl Session {
                 )
                 .await?;
                 Ok(json!({ "status": read.status, "body": read.body }))
-            }
+            }),
             // --- Garth as a client -------------------------------------------
             //
             // These drive `ArkretClient` itself, not the provisioning builders
             // above. That distinction is the whole point of a `GarthClient`
             // being selectable: a suite asking for Garth must get Garth's
             // runtime, not the harness reproducing what it would have done.
-            "garth_client_open" => {
+            "garth_client_open" => Box::pin(async move {
                 #[derive(Deserialize)]
                 struct Body {
                     handoff_id: String,
@@ -479,8 +484,8 @@ impl Session {
                 Ok(json!({ "store_root": store_root.to_string_lossy(),
                     "identity_snapshot_path":self.identity_path(&body.handoff_id).to_string_lossy(),
                     "identity_restored_from_disk":true }))
-            }
-            "garth_sync_account" => {
+            }),
+            "garth_sync_account" => Box::pin(async move {
                 #[derive(Deserialize)]
                 struct Body {
                     handoff_id: String,
@@ -501,8 +506,8 @@ impl Session {
                     "projected": outcome.projected,
                     "event_ids": outcome.event_ids,
                 }))
-            }
-            "garth_cursor_after_restart" => {
+            }),
+            "garth_cursor_after_restart" => Box::pin(async move {
                 #[derive(Deserialize)]
                 struct Body {
                     handoff_id: String,
@@ -520,14 +525,14 @@ impl Session {
                     .as_ref()
                     .context("durable accepted initial session grant unavailable")?;
                 let origin = identity.station_base;
-                Box::pin(self.dispatch(Request {
+                self.dispatch(Request {
                     id: request.id,
                     op: "garth_client_open".into(),
                     body: json!({
                         "handoff_id":body.handoff_id,"coland_base_url":origin,
                         "account_id":accepted_grant.account_id,"device_id":principal.device_id
                     }),
-                }))
+                })
                 .await?;
                 let client = self
                     .garth_clients
@@ -538,13 +543,13 @@ impl Session {
                 Ok(
                     json!({ "cursor":cursor,"rounds":sync.rounds,"projected":sync.projected,"stop_reason":sync.stop_reason,"identity_restored_from_disk":true }),
                 )
-            }
+            }),
             "garth_create_realm"
             | "garth_join_realm"
             | "garth_grant_messages"
             | "garth_send_message"
             | "garth_read_messages"
-            | "garth_retained_message" => {
+            | "garth_retained_message" => Box::pin(async move {
                 let handoff_id = request
                     .body
                     .get("handoff_id")
@@ -604,8 +609,11 @@ impl Session {
                     }
                     _ => unreachable!(),
                 }
+            }),
+            other => {
+                let operation = other.to_owned();
+                Box::pin(async move { bail!("unknown provisioning op {operation:?}") })
             }
-            other => bail!("unknown provisioning op {other:?}"),
         }
     }
 }

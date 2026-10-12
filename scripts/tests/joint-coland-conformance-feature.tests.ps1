@@ -17,8 +17,14 @@ Assert-True ($parseErrors.Count -eq 0) "joint runner must parse as PowerShell"
 
 $runner = $ast.Extent.Text
 Assert-True `
-    ($runner -match 'org\.arkret\.coland\.conformance\.realm_state_snapshot') `
+    ($runner -match 'org\.arkret\.coland\.conformance\.encode') `
     "runner must identify a feature-bearing Coland conformance harness binary"
+$conformanceHandlers = Get-Content -Raw -LiteralPath (
+    Join-Path $PSScriptRoot "..\..\..\coland\crates\http\src\routing\conformance\handlers.rs"
+)
+Assert-True `
+    ($conformanceHandlers -match 'operation_id = "org\.arkret\.coland\.conformance\.encode"') `
+    "the binary marker must name a surviving conformance endpoint"
 Assert-True `
     ($runner -match '-not \$freshness\.Fresh -or -not \$colandConformanceHarnessPresent') `
     "a source-fresh production Coland binary must not bypass the conformance-harness build"

@@ -318,6 +318,51 @@ function Write-ArtifactBuildStamp {
     return $stampPath
 }
 
+function Copy-RunScopedNativeArtifact {
+    param(
+        [Parameter(Mandatory = $true)][string]$ArtifactPath,
+        [Parameter(Mandatory = $true)][string]$DestinationRoot,
+        $RepositoryStates,
+        [switch]$CallerProvided
+    )
+
+    $source = Resolve-BuildInputPath -Path $ArtifactPath
+    if (-not $CallerProvided) {
+        if (-not $RepositoryStates) { throw 'Managed native artifacts require current build inputs' }
+        $verified = Test-ArtifactBuildStamp -ArtifactPath $source -RepositoryStates $RepositoryStates
+        if (-not $verified.Matches) { throw "Cannot freeze an unverified native artifact: $($verified.Detail)" }
+    }
+    $sourceHash = (Get-FileHash -LiteralPath $source -Algorithm SHA256).Hash.ToLowerInvariant()
+    $null = New-Item -ItemType Directory -Path $DestinationRoot -Force
+    $destination = Join-Path (Resolve-BuildInputPath -Path $DestinationRoot) (Split-Path -Leaf $source)
+    if (Test-Path -LiteralPath $destination) { throw "Run-scoped native artifact already exists: $destination" }
+    Copy-Item -LiteralPath $source -Destination $destination
+    $copiedHash = (Get-FileHash -LiteralPath $destination -Algorithm SHA256).Hash.ToLowerInvariant()
+    if ($copiedHash -cne $sourceHash -or
+        (Get-FileHash -LiteralPath $source -Algorithm SHA256).Hash.ToLowerInvariant() -cne $sourceHash) {
+        throw "Native artifact changed while freezing it: $source"
+    }
+    if (-not $CallerProvided) {
+        # Preserve the successful build's time and exact input identity; copying
+        # immutable bytes is not a new build and must not invent one.
+        $stamp = Get-Content -Raw -LiteralPath (Get-ArtifactBuildStampPath -ArtifactPath $source) | ConvertFrom-Json
+        $stamp.artifact = $destination
+        $stamp | Add-Member -NotePropertyName source_artifact -NotePropertyValue $source -Force
+        $stamp | ConvertTo-Json -Depth 5 |
+            Set-Content -LiteralPath (Get-ArtifactBuildStampPath -ArtifactPath $destination) -Encoding UTF8
+        $frozen = Test-ArtifactBuildStamp -ArtifactPath $destination -RepositoryStates $RepositoryStates
+        if (-not $frozen.Matches) { throw "Frozen native artifact does not match its build: $($frozen.Detail)" }
+    }
+    [pscustomobject]@{
+        source_artifact = $source
+        runtime_artifact = $destination
+        artifact_sha256 = $copiedHash
+        build_input_verified = -not [bool]$CallerProvided
+    } | ConvertTo-Json -Depth 3 |
+        Set-Content -LiteralPath "$destination.cotest-runtime-source.json" -Encoding UTF8
+    return $destination
+}
+
 function Test-ArtifactBuildStamp {
     param(
         [Parameter(Mandatory = $true)][string]$ArtifactPath,

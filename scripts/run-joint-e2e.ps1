@@ -710,7 +710,7 @@ function Get-JointSourceHeads {
 # `conformance-harness` feature. Source freshness alone cannot distinguish a
 # default production build from the feature-bearing joint-e2e SUT because both
 # write the same target/debug/coland executable.
-$colandConformanceHarnessMarker = "org.arkret.coland.conformance.realm_state_snapshot"
+$colandConformanceHarnessMarker = "org.arkret.coland.conformance.encode"
 
 function Resolve-PlaywrightCliInvocation {
     param([Parameter(Mandatory = $true)][string]$E2eRoot)
@@ -3905,6 +3905,28 @@ try {
         exit 0
     }
 
+    # Cargo's live provisioning tests can replace target/debug native bins.
+    # Freeze the selected bytes before mocks or long-lived callers inherit them.
+    $nativeRuntimeRoot = Join-Path $jointDir "tools"
+    $nativeBuildRoots = @($repoRoot, (Join-Path $workspaceRoot "arkret-rust-sdk"))
+    $callerProvidedWire = [bool]$env:COTEST_WIRE_BIN
+    $selectedWireBinary = if ($callerProvidedWire) { $env:COTEST_WIRE_BIN } else {
+        Join-Path $cotestTargetDirectory ("debug/" + (Get-NativeExecutableName -Name "cotest-wire"))
+    }
+    if (Test-Path -LiteralPath $selectedWireBinary -PathType Leaf) {
+        $wireBuildStates = if ($callerProvidedWire) { $null } else {
+            @(Get-ArtifactBuildRepositoryStates -ArtifactPath $selectedWireBinary -RepositoryRoots $nativeBuildRoots)
+        }
+        $env:COTEST_WIRE_BIN = Copy-RunScopedNativeArtifact -ArtifactPath $selectedWireBinary `
+            -DestinationRoot $nativeRuntimeRoot -RepositoryStates $wireBuildStates -CallerProvided:$callerProvidedWire
+    }
+    $runtimeProvisionBinary = Join-Path $cotestTargetDirectory ("debug/" + (Get-NativeExecutableName -Name "cotest-provision"))
+    if (Test-Path -LiteralPath $runtimeProvisionBinary -PathType Leaf) {
+        $provisionBuildStates = @(Get-ArtifactBuildRepositoryStates -ArtifactPath $runtimeProvisionBinary -RepositoryRoots $nativeBuildRoots)
+        $runtimeProvisionBinary = Copy-RunScopedNativeArtifact -ArtifactPath $runtimeProvisionBinary `
+            -DestinationRoot $nativeRuntimeRoot -RepositoryStates $provisionBuildStates
+    }
+
     # Serve an immutable, run-scoped copy of the verified Inkson bundle. A
     # separately running `dx serve` watches the same repository and can replace
     # target\dx\...\public in place with a dev build while a long joint-full run
@@ -4822,7 +4844,7 @@ try {
     # paying Cargo discovery and the build-directory lock. It is a long-lived
     # process — the TypeScript side spawns one per Playwright worker — which
     # makes `cargo run` per invocation worse here than it was for cotest-wire.
-    $provisionBinary = Join-Path $cotestTargetDirectory ("debug/" + (Get-NativeExecutableName -Name "cotest-provision"))
+    $provisionBinary = $runtimeProvisionBinary
     if (Test-Path -LiteralPath $provisionBinary) {
         $env:COTEST_PROVISION_BIN = $provisionBinary
     } else {

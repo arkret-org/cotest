@@ -143,7 +143,7 @@ async function buildEncryptedBoardAndCard(
   await page.getByTestId("new-column-input").fill(columnName);
   await page.getByTestId("add-column-button").click();
   const column = page.getByTestId("kanban-column").filter({ hasText: columnName }).first();
-  await expect(column).toBeVisible({ timeout: 45_000 });
+  await expect(column).toHaveAttribute("data-column-draft", "false", { timeout: 45_000 });
   await addCardThroughColumn(column, cardTitle);
   await expect(column.getByTestId("kanban-card").filter({ hasText: cardTitle })).toBeVisible({
     timeout: 45_000,
@@ -693,7 +693,7 @@ test.describe("kanban end-to-end", () => {
         await alicePage.page.getByTestId("add-column-button").click();
         await expect(
           alicePage.page.getByTestId("kanban-column").filter({ hasText: columnName }),
-        ).toBeVisible({ timeout: 30_000 });
+        ).toHaveAttribute("data-column-draft", "false", { timeout: 30_000 });
       }
 
       const firstColumn = alicePage.page.getByTestId("kanban-column").filter({ hasText: first });
@@ -764,7 +764,7 @@ test.describe("kanban end-to-end", () => {
         await alicePage.page.getByTestId("add-column-button").click();
         await expect(
           alicePage.page.getByTestId("kanban-column").filter({ hasText: columnName }),
-        ).toBeVisible({ timeout: 30_000 });
+        ).toHaveAttribute("data-column-draft", "false", { timeout: 30_000 });
       }
 
       const firstColumn = alicePage.page.getByTestId("kanban-column").filter({ hasText: first });

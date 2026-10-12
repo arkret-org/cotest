@@ -30,6 +30,22 @@ try {
     $matching = Test-ArtifactBuildStamp -ArtifactPath $artifact -RepositoryStates $states
     Assert-True $matching.Matches "the exact stamped commit set must be fresh"
 
+    $frozen = Copy-RunScopedNativeArtifact -ArtifactPath $artifact -RepositoryStates $states -DestinationRoot (Join-Path $testRoot 'runtime-tools')
+    $buildTime = (Get-Content -Raw -LiteralPath (Get-ArtifactBuildStampPath -ArtifactPath $artifact) | ConvertFrom-Json).built_at
+    $frozenStamp = Get-Content -Raw -LiteralPath (Get-ArtifactBuildStampPath -ArtifactPath $frozen) | ConvertFrom-Json
+    Assert-True ($frozenStamp.built_at -ceq $buildTime) 'freezing an artifact must preserve its actual build time'
+    Assert-True ($frozenStamp.source_artifact -ceq $artifact) 'frozen provenance must identify the original build output'
+    Set-Content -LiteralPath $artifact -Value 'cargo test replaced this binary' -Encoding UTF8
+    Assert-True (Test-ArtifactBuildStamp -ArtifactPath $frozen -RepositoryStates $states).Matches 'cargo test must not change the selected run-scoped tool bytes'
+    $unverifiedCopyRejected = $false
+    try { Copy-RunScopedNativeArtifact -ArtifactPath $artifact -RepositoryStates $states -DestinationRoot (Join-Path $testRoot 'stale-tools') | Out-Null }
+    catch { $unverifiedCopyRejected = $true }
+    Assert-True $unverifiedCopyRejected 'a replaced native binary must not be frozen under its old build stamp'
+    $callerTool = Copy-RunScopedNativeArtifact -ArtifactPath $artifact -CallerProvided -DestinationRoot (Join-Path $testRoot 'caller-tools')
+    $callerReceipt = Get-Content -Raw -LiteralPath "$callerTool.cotest-runtime-source.json" | ConvertFrom-Json
+    Assert-True (-not $callerReceipt.build_input_verified) 'caller-provided byte identity must not claim managed source verification'
+    Set-Content -LiteralPath $artifact -Value 'synthetic artifact' -Encoding UTF8
+
     $oldArtifactTime = [DateTime]::UtcNow.AddHours(-1)
     $recentInputTime = [DateTime]::UtcNow
     $cleanInputs = @(
@@ -292,7 +308,7 @@ dependencies = ["freshness_build", "freshness_dev", "freshness_optional", "fresh
 '@ -Encoding UTF8
     $graphRoots = @(Resolve-RepositoryBuildInputRoots -RepositoryRoots @($graphRoot))
     $expectedRoots = @($graphRoot, $pathRoot, $patchRoot, $devRoot, $buildRoot, $targetRoot) | ForEach-Object {
-        (Invoke-BuildInputGit -RepositoryRoot $_ -Arguments @('rev-parse', '--show-toplevel')).Trim()
+        Resolve-BuildInputPath -Path ((Invoke-BuildInputGit -RepositoryRoot $_ -Arguments @('rev-parse', '--show-toplevel')).Trim())
     }
     Assert-True ($graphRoots.Count -eq 6 -and @($expectedRoots | Where-Object { $graphRoots -cnotcontains $_ }).Count -eq 0) "real offline Cargo metadata must include optional local and patched dependency repositories"
     $productRoots = @(Resolve-RepositoryBuildInputRoots -RepositoryRoots @($graphRoot) -DependencyScope product -TargetName coauth)

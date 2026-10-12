@@ -711,9 +711,9 @@ test.describe("applet bridge", () => {
       // Alice's session cannot submit another Actor's PCR founding Event.
       // This producer refusal precedes managed-aggregate admission. The
       // authenticated Applet aggregate below remains the provisioning path.
-      // The producer preflight reports registered conflict before reducer/CAS admission.
-      expect(standaloneGenesis.status(), standaloneGenesisText).toBe(409);
-      expect(wireErrCode(JSON.parse(standaloneGenesisText))).toBe("conflict");
+      // The exact authenticated producer is a capability boundary, not a CAS conflict.
+      expect(standaloneGenesis.status(), standaloneGenesisText).toBe(403);
+      expect(wireErrCode(JSON.parse(standaloneGenesisText))).toBe("capability_denied");
       expect(JSON.parse(standaloneGenesisText).detail).toContain("exact authenticated actor");
       const provision = await request.post(`${registryBase}/external-event`, {
         headers: authHeaders(aliceToken, "POST", `${registryBase}/external-event`),
@@ -1203,14 +1203,14 @@ test.describe("applet bridge", () => {
     // The nested evidence is schema-bound through
     // `applet-install-authoring.schema.json#/$defs/registration_event` to
     // `applet-registration-epoch-evidence.schema.json`: a shape violation is
-    // `schema_violation` (422). A schema-valid carrier that disagrees with the
-    // resolved service DID state fails closed as the active `param_invalid`
-    // (400); `applet_registration_epoch_evidence_mismatch` is only a reserved
-    // registry code and is never emitted as the top-level `error.code`.
+    // `schema_violation` (422). The sealed registration epoch also binds the
+    // service DID, document digest and accepted signing keys. Changing those
+    // inputs without changing the signed package fails transcript validation
+    // before service DID resolution can decide a current-state mismatch.
     const expectNestedEvidenceRejected = async (
       label: string,
       evidence: Record<string, unknown>,
-      expected: { status: 400; code: "param_invalid" } | { status: 422; code: "schema_violation" },
+      expected: { status: 422; code: "schema_violation" },
     ) => {
       const candidate = await prepareAppletInstallAuthoringBasis(
         request,
@@ -1240,7 +1240,6 @@ test.describe("applet bridge", () => {
       expect(wireErrCode(deniedBody), label).toBe(expected.code);
     };
     const schemaViolation = { status: 422, code: "schema_violation" } as const;
-    const evidenceMismatch = { status: 400, code: "param_invalid" } as const;
 
     // `accepted_signing_keys` is `minItems: 1`.
     const emptyKeys = structuredClone(registrationEvidence);
@@ -1260,7 +1259,7 @@ test.describe("applet bridge", () => {
       schemaViolation,
     );
 
-    // A schema-valid did:webvh naming another service.
+    // A schema-valid did:webvh naming another service breaks the sealed epoch.
     const serviceDid = String(registrationEvidence.did);
     const swappedDid = serviceDid.replace(
       /^(did:webvh:[^:]+):.+$/,
@@ -1274,7 +1273,7 @@ test.describe("applet bridge", () => {
     await expectNestedEvidenceRejected(
       "swapped service DID",
       swappedService,
-      evidenceMismatch,
+      schemaViolation,
     );
 
     const rotatedSnapshot = structuredClone(registrationEvidence);
@@ -1290,7 +1289,7 @@ test.describe("applet bridge", () => {
     await expectNestedEvidenceRejected(
       "rotated DID snapshot under the sealed epoch",
       rotatedSnapshot,
-      evidenceMismatch,
+      schemaViolation,
     );
   });
 

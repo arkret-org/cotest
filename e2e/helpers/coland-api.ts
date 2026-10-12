@@ -2821,6 +2821,9 @@ type PeerPushOpts = {
   // itself stays cryptographically valid — only created/expires are stale.
   expireSignature?: boolean;
   relaySourceServiceId?: string;
+  // Capture the actual canonical bytes and transport signature for a terminal
+  // outcome replay, rather than signing a different request across a second.
+  captureExactReplay?: (submit: () => Promise<APIResponse>, canonicalBody: string) => void;
 };
 
 export async function rawPushFederationEvents(
@@ -2881,10 +2884,10 @@ async function rawPushCommittedReplication(
   if (opts.tamperSignature) {
     headers.signature = `sig1=:${Buffer.alloc(64).toString("base64")}:`;
   }
-  return await request.post(url, {
-    data: canonicalJson(body),
-    headers,
-  });
+  const canonicalBody = canonicalJson(body);
+  const submit = () => request.post(url, { data: canonicalBody, headers });
+  opts.captureExactReplay?.(submit, canonicalBody);
+  return await submit();
 }
 
 // `invite-delivery-request.schema.json` is a closed object, so the body is
