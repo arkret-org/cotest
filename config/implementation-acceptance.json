@@ -396,6 +396,12 @@
           "symbol": "agent_session_proofs_replay_and_lifecycle_use_real_coauth_and_station",
           "kind": "live",
           "covers": "真实Coauth注册/OIDC/founding/配对自动同步；签发精确重放、九类真实拒绝及完整grant ledger零变化"
+        },
+        {
+          "path": "cotest/tests/agent_repairing_live.rs",
+          "symbol": "exact_supersedes_and_replacement_handles_cross_real_station_admission",
+          "kind": "live",
+          "covers": "真实 Station/PG 重新配对八项合取；启动 AA 为显式 mock，独立于真实 Coauth 签发证明"
         }
       ],
       "engineering_checks": [],

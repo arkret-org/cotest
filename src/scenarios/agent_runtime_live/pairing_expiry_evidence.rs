@@ -13,6 +13,22 @@ async fn replacement(
     account: &AccountId,
     agent: &AgentRuntimeSession,
 ) -> Result<(AgentKeyPairRequestBody, chrono::DateTime<Utc>)> {
+    let material = replacement_material(station, controller, account, agent).await?;
+    Ok((material.body, material.bootstrap.pairing_expires_at))
+}
+
+pub(super) struct ReplacementMaterial {
+    pub(super) body: AgentKeyPairRequestBody,
+    pub(super) bootstrap: AgentPairingBootstrap,
+    pub(super) key: SigningKey,
+}
+
+pub(super) async fn replacement_material(
+    station: &ArkretServer,
+    controller: &TestActorClient,
+    account: &AccountId,
+    agent: &AgentRuntimeSession,
+) -> Result<ReplacementMaterial> {
     let renewed: AgentRenewPairingOutcome = serde_json::from_value(
         expect_json(
             controller
@@ -37,7 +53,9 @@ async fn replacement(
         .map_err(anyhow::Error::msg)?
         .verification_method
         .clone();
-    let key = SigningKey::from_bytes(&[0x62; 32]);
+    let mut seed = [0u8; 32];
+    getrandom::fill(&mut seed).map_err(|error| anyhow::anyhow!("runtime key entropy: {error}"))?;
+    let key = SigningKey::from_bytes(&seed);
     let builder = arkret_signatures::agent::RuntimeKeyRequestBuilder::new_with_verification_method(
         &key,
         bootstrap.clone(),
@@ -125,12 +143,13 @@ async fn replacement(
         &bootstrap.pairing_request_id,
         &authorization.agent_key_scope,
     )?;
-    Ok((
-        builder
+    Ok(ReplacementMaterial {
+        body: builder
             .build_key_pair_request(approval.approval_request_id, disclosure, event)?
             .body,
-        renewed.expires_at,
-    ))
+        bootstrap,
+        key,
+    })
 }
 
 async fn refusal(

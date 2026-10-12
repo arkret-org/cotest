@@ -180,6 +180,7 @@ const RUNNERS: [(&str, Runner); 54] = [
                     "two_provisions_declaring_one_realm_id_rejected",
                     "agent_pairing_expiry",
                     "agent_session_grant_replay",
+                    "agent_repairing_supersede",
                     "agent_pcr_genesis_same_batch_rejected",
                 ],
             ],

@@ -12,8 +12,19 @@ fn agent_genesis_cases_cross_real_http_admission_and_preserve_rejected_state() -
         .clone();
     cases.extend_from_slice(fixture["cases"].as_array().unwrap());
     let missing = execution.missing_against_cases(&cases)?;
-    assert_eq!(execution.cases.len(), 21);
-    assert_eq!(missing.len(), 9);
+    assert_eq!(execution.cases.len(), 22);
+    assert_eq!(missing.len(), 8);
+    assert!(
+        execution
+            .cases
+            .iter()
+            .any(|case| case.case_id == "agent_repairing_supersede" && case.assertions == 8)
+    );
+    assert!(
+        !missing
+            .iter()
+            .any(|case| case == "agent_repairing_supersede")
+    );
     assert!(
         execution
             .cases
