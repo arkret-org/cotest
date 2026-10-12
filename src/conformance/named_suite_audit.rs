@@ -163,6 +163,7 @@ const RUNNERS: [(&str, Runner); 52] = [
                 &[
                     "agent_pcr_genesis_forward_declaration",
                     "agent_pcr_genesis_without_declaration_rejected",
+                    "two_provisions_declaring_one_realm_id_rejected",
                 ],
             ],
             pointers: &["/schema_validation_cases", "/cases"],
