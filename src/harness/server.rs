@@ -1323,6 +1323,28 @@ impl ArkretServer {
         self.start_external_process().await
     }
 
+    /// Change the deployment mode of this owned process while retaining its
+    /// database, identity, keys and ports. Fixture bootstrap may precede the
+    /// switch; subsequent observations run against the requested real mode.
+    pub async fn restart_external_process_with_development_mode(
+        &mut self,
+        development: bool,
+    ) -> Result<()> {
+        self.stop_external_process().await?;
+        let config = self
+            .external_restart
+            .as_mut()
+            .context("mode switching requires the owned external-binary harness")?;
+        config
+            .extra_env
+            .retain(|(key, _)| key != "COLAND_DEVELOPMENT_MODE");
+        config.extra_env.push((
+            "COLAND_DEVELOPMENT_MODE".to_owned(),
+            development.to_string(),
+        ));
+        self.start_external_process().await
+    }
+
     /// Restart an owned Coland process with a new explicit service assertion
     /// seed while retaining its database, KeyStore, DID, endpoints, and peers.
     pub async fn restart_external_process_with_notary_signing_key(

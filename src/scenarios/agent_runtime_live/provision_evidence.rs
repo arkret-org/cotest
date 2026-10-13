@@ -21,6 +21,107 @@ pub(crate) struct ProvisionEvidence {
 }
 
 impl ProvisionEvidence {
+    pub(super) async fn reject_proof_substitutes(
+        &mut self,
+        server: &ArkretServer,
+        controller: &TestActorClient,
+        body: &AgentProvisionRequestBody,
+    ) -> Result<()> {
+        let AgentProvisionRequestBody::Commit(original) = body else {
+            bail!("proof boundary requires the frozen commit");
+        };
+        let mut unsigned = original.provision_event.event.clone();
+        unsigned.producer_proof = None;
+        let service_signed = sign(
+            arkret_wire::AuthoredEvent::from_verified_with_digest_suite(
+                unsigned,
+                arkret_canonical::DigestSuite::Sha256,
+            )?,
+            &DidUrl::new(format!("{}#federation-fanout-key", server.service_did()))
+                .map_err(anyhow::Error::msg)?,
+            server.federation_signing_key()?.to_bytes(),
+        )?;
+        let proof = service_signed
+            .producer_proof
+            .as_ref()
+            .context("service signature absent")?;
+        arkret_signatures::verify_ed25519_detached_jws_proof_with_digest_suite(
+            proof,
+            &arkret_signatures::EventProofBuilder::new().envelope_bytes(&service_signed)?,
+            &service_signed.actor_id,
+            &arkret_signatures::PublicKeyMaterial::Ed25519Raw {
+                bytes: server
+                    .federation_signing_key()?
+                    .verifying_key()
+                    .as_bytes()
+                    .to_vec(),
+            },
+            arkret_canonical::DigestSuite::Sha256,
+        )?;
+        let mut aliased = original.provision_event.event.clone();
+        let controller_method = aliased
+            .producer_proof
+            .as_ref()
+            .context("controller proof absent")?
+            .verification_method
+            .clone();
+        aliased.producer_proof = None;
+        let aliased = sign(
+            arkret_wire::AuthoredEvent::from_verified_with_digest_suite(
+                aliased,
+                arkret_canonical::DigestSuite::Sha256,
+            )?,
+            &controller_method,
+            server.federation_signing_key()?.to_bytes(),
+        )?;
+        for (label, event, expected) in [
+            ("real_service_method", service_signed, "signature_invalid"),
+            (
+                "service_key_under_controller_method",
+                aliased,
+                "signature_invalid",
+            ),
+            (
+                "dev_proof",
+                {
+                    let mut event = original.provision_event.event.clone();
+                    event
+                        .producer_proof
+                        .as_mut()
+                        .context("controller proof absent")?
+                        .kind = "dev-proof".to_owned();
+                    event
+                },
+                "schema_violation",
+            ),
+        ] {
+            let mut request = original.clone();
+            request.provision_event = arkret_wire::EventAdmissionSubmission::new(event);
+            let before = self.snapshot().await?;
+            let response = controller
+                .post("/_arkret/self/agents")
+                .canonical_json(&AgentProvisionRequestBody::Commit(request))?
+                .send()
+                .await?;
+            ensure!(
+                !response.status().is_success(),
+                "provision accepted {label}"
+            );
+            let problem: arkret_wire::Problem = response.json().await?;
+            ensure!(
+                problem.code() == expected,
+                "{label} reached the wrong refusal: {}: {}",
+                problem.code(),
+                problem.detail
+            );
+            ensure!(
+                self.snapshot().await? == before,
+                "refused provision proof substitute changed accepting state"
+            );
+            self.forward_assertions += 2;
+        }
+        Ok(())
+    }
     pub(super) async fn snapshot(&self) -> Result<Value> {
         acceptance_rows_with_agent_stores(&self.database_url, true).await
     }
@@ -556,6 +657,7 @@ impl ProvisionEvidence {
         server: &ArkretServer,
         controller: &TestActorClient,
         outcome: &AgentProvisionComplete,
+        body: &AgentProvisionRequestBody,
     ) -> Result<()> {
         ensure!(
             self.state(&outcome.principal_control_realm_id, &outcome.agent_id)
@@ -598,27 +700,132 @@ impl ProvisionEvidence {
             view.agent.agent_id == outcome.agent_id,
             "complete Agent is not visible"
         );
+        ensure!(view.agent.readiness.state == arkret_models_collaboration::agent_operations::AgentReadinessState::NotReady
+            && view.agent.readiness.blockers.contains(&arkret_models_collaboration::agent_operations::AgentReadinessBlocker::RuntimeKeyMissing)
+            && view.grants.is_empty(), "provision completion granted runtime readiness or Realm authority");
+        let realm = outcome.principal_control_realm_id.to_string();
+        let url = self.database_url.clone();
+        let counts: (i64, i64, i64) = tokio::task::spawn_blocking(move || -> Result<_> {
+            let mut db = postgres::Client::connect(&url, postgres::NoTls)?;
+            let row = db.query_one("SELECT (SELECT count(*) FROM actor_profile_current_results WHERE realm_id=$1), (SELECT count(*) FROM agent_key_current_results WHERE realm_id=$1), (SELECT count(*) FROM key_backup_active_series_current_results WHERE realm_id=$1)", &[&realm])?;
+            Ok((row.get(0),row.get(1),row.get(2)))
+        }).await??;
+        ensure!(
+            counts == (0, 0, 0),
+            "provision completion prewrote profile, runtime key or backup projection"
+        );
+        let AgentProvisionRequestBody::Commit(original) = body else {
+            bail!("completion requires original commit")
+        };
+        let scope_digest = arkret_signatures::agent::agent_requested_scope_digest(
+            &outcome.agent_id,
+            &controller
+                .principal
+                .as_ref()
+                .context("controller principal")?
+                .core_id,
+            &original.requested_scope,
+        )?;
+        let endpoint = services
+            .iter()
+            .find(|s| s["type"] == "ArkretPrincipalControlRealm")
+            .and_then(|s| s.get("serviceEndpoint"))
+            .and_then(Value::as_object)
+            .context("bound PCR service has no structured endpoint")?;
+        ensure!(
+            endpoint.len() == 4
+                && endpoint.get("realm_id") == Some(&json!(outcome.principal_control_realm_id))
+                && endpoint.get("requested_scope_digest") == Some(&json!(scope_digest))
+                && endpoint.get("controller_did")
+                    == Some(&json!(
+                        controller
+                            .principal
+                            .as_ref()
+                            .context("controller principal")?
+                            .core_id
+                    ))
+                && endpoint.get("authorization_ref")
+                    == Some(&json!(
+                        view.key_state
+                            .as_ref()
+                            .context("controller-private key state")?
+                            .controller_authorization_ref
+                    ))
+                && original.provision_event.event.payload["requested_scope_digest"]
+                    == json!(scope_digest),
+            "DID binding did not preserve the SDK commitment and closed tuple"
+        );
+        let before = self.snapshot().await?;
+        let replay = provision(controller, body, StatusCode::CREATED).await?;
+        ensure!(
+            serde_json::to_value(replay)?
+                == serde_json::to_value(AgentProvisionOutcome::Complete(outcome.clone()))?
+                && self.snapshot().await? == before,
+            "complete replay changed original outcome or accepted state"
+        );
+        self.forward_assertions += 4;
         self.forward_assertions += 3;
         Ok(())
     }
 }
 
 pub async fn run_agent_genesis_production_cases() -> Result<SuiteExecutionResult> {
-    let name = "agent-genesis-named-production";
+    run_agent_genesis_production_cases_for_mode(true).await
+}
+
+pub async fn run_agent_provision_authority_boundary() -> Result<()> {
+    for development in [true, false] {
+        let result = run_agent_genesis_production_cases_for_mode(development).await?;
+        println!("Agent provision development_mode={development}: {result:#?}");
+    }
+    Ok(())
+}
+
+async fn run_agent_genesis_production_cases_for_mode(
+    development: bool,
+) -> Result<SuiteExecutionResult> {
+    let name = if development {
+        "agent-genesis-development"
+    } else {
+        "agent-genesis-production"
+    };
     let database = database(name)?.context("Agent named production cases require PostgreSQL")?;
     let coauth = MockCoauthIntrospectionServer::spawn_with_internal_secret(
         HARNESS_INTERNAL_AUTHORITY_SECRET,
     )
     .await?;
-    let group = TestServerGroup::try_multi_external_with_node_envs(
-        name,
-        &[station_env(&database.connect_url, &coauth)],
+    let mut env = station_env(&database.connect_url, &coauth);
+    // The local issuer fixture is an explicitly allowed loopback participant;
+    // production mode still enforces the normal Event proof/admission path.
+    env.push((
+        "COLAND_EGRESS_ALLOW_PRIVATE_NETWORKS".to_owned(),
+        "true".to_owned(),
+    ));
+    env.push((
+        "COLAND_EGRESS_ALLOWED_HOSTS".to_owned(),
+        "127.0.0.1".to_owned(),
+    ));
+    env.push(("COLAND_DEVELOPMENT_MODE".to_owned(), "true".to_owned()));
+    let mut group = TestServerGroup::try_multi_external_with_node_envs(name, &[env])
+        .await?
+        .context("Agent named production cases require the current Coland binary")?;
+    let (controller, account) = standard_client(
+        group.server(0),
+        &coauth,
+        "genesis-controller",
+        CONTROLLER_DEVICE,
     )
-    .await?
-    .context("Agent named production cases require the current Coland binary")?;
+    .await?;
+    // The existing controller fixture obtains its founding session through a
+    // development seam. Switch the owned process before any Agent ceremony
+    // and keep that bootstrap explicitly outside the provision observations.
+    if !development {
+        group
+            .server_mut(0)
+            .restart_external_process_with_development_mode(false)
+            .await?;
+    }
     let station = group.server(0);
-    let (controller, account) =
-        standard_client(station, &coauth, "genesis-controller", CONTROLLER_DEVICE).await?;
     let mut evidence = ProvisionEvidence {
         database_url: database.connect_url.clone(),
         forward_assertions: 0,
