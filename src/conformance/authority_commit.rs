@@ -838,7 +838,13 @@ fn build_authority_fixture(declared: &[DeclaredStream]) -> Result<AuthorityFixtu
             realm_id: realm_id.clone(),
         },
         producer_actor()?,
-        json!({ "cotest_change": 1 }),
+        serde_json::to_value(
+            arkret_models_collaboration::events_payloads::RealmGovernanceStationChangePayload {
+                expected_governance_generation: 0,
+                expected_realm_stream_commit_id: genesis_commit.commit_id.clone(),
+                new_governance_station_id: service_id(NEW_AUTHORITY_DID)?,
+            },
+        )?,
         fixed_time(10),
     )?)?;
     let change_commit = RealmCommit {
@@ -849,7 +855,9 @@ fn build_authority_fixture(declared: &[DeclaredStream]) -> Result<AuthorityFixtu
         previous_commit_ref: Some(genesis_commit.commit_id.clone()),
         event_ref: change_event.event_id.clone(),
         governance_generation: 0,
-        authority_ref: RealmCommitAuthorityRef::GenesisOrChangeEvent(change_event.event_id.clone()),
+        authority_ref: RealmCommitAuthorityRef::GenesisOrChangeEvent(
+            genesis_event.event_id.clone(),
+        ),
         committed_at: fixed_time(11),
         producer_signer_fact_digest: None,
         signature: authority_signature(DetachedSignatureContext::RealmCommit, OLD_AUTHORITY_DID)?,

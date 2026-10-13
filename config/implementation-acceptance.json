@@ -27,31 +27,6 @@
       ]
     },
     {
-      "task": "2026-09-06-0914-sdk-contract-generation-and-canonical-reuse.md",
-      "criteria_count": 2,
-      "criteria_sha256": "03839f334a9b3e2643ebeb7dea44ea51ddc8238fdfab15ad318302a0a7a568fa",
-      "spec_refs": [
-        "arkret-spec/spec/v1/zh/overview/protocol-layers.md"
-      ],
-      "source_refs": [
-        "arkret-rust-sdk/tools/schema_struct_gate.py"
-      ],
-      "tests": [
-        {
-          "path": "arkret-rust-sdk/crates/wire/tests/generated_registry_coverage.rs",
-          "symbol": "generated_closed_registry_types_reject_unregistered_values",
-          "kind": "contract",
-          "covers": "已有生成注册类型闭合验证，非完整DTO生成"
-        }
-      ],
-      "engineering_checks": [
-        "SDK schema/ownership/generated-contracts与逐字节KAT"
-      ],
-      "remaining_scenarios": [
-        "代表类型required／null／union生成前后接受集合与KAT等价；全consumer替换；exemption与常量真实差集"
-      ]
-    },
-    {
       "task": "2026-09-06-0915-protocol-fixtures-mock-and-api-test-convergence.md",
       "criteria_count": 7,
       "criteria_sha256": "d199b9952188d276c1d8da1e6fe408e8f2be0b8d681768e6b82b09ea78abbce4",
@@ -477,29 +452,6 @@
       "engineering_checks": [],
       "remaining_scenarios": [
         "全部适用入口差集；两层阈值与Policy完整current；真实draft发布；accepted-at／nonce／审计原子；forward保票与replication去票两站"
-      ]
-    },
-    {
-      "task": "2026-09-25-2132-commit-stream-chain-and-planned-handoff.md",
-      "criteria_count": 5,
-      "criteria_sha256": "6151149fcfc8dcb7fd6563d77985d576bd75bf2dad471b0aefd58ad928e835ca",
-      "spec_refs": [
-        "arkret-spec/spec/v1/zh/sync/authority-commit-log.md"
-      ],
-      "source_refs": [
-        "coland/crates/storage-postgres/src/snapshot_disclosure_gate.rs"
-      ],
-      "tests": [
-        {
-          "path": "cotest/tests/snapshot_head_disclosure.rs",
-          "symbol": "exact_snapshot_by_ref_reads_through_garth_with_historical_station_key",
-          "kind": "live",
-          "covers": "历史Station key by-ref起点，非handoff后任期"
-        }
-      ],
-      "engineering_checks": [],
-      "remaining_scenarios": [
-        "正式双签handoff生产入口；generation>0完整current导入与head；全部stream断链／跨stream负例；旧任期exact snapshot"
       ]
     },
     {
