@@ -1664,6 +1664,7 @@ async function pairNativeManagedSavfoxAgent(
       });
       await expect(savfox.getByText(displayPairingCode(pairing.pairingCode), { exact: true }))
         .toBeVisible({ timeout: Math.max(1, Math.min(10_000, deadline - Date.now())) });
+      if (Date.now() >= deadline) break;
       await retry.click({ timeout: Math.max(1, Math.min(10_000, deadline - Date.now())) });
     }
   }
