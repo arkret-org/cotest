@@ -122,6 +122,9 @@ test("Agent creation continues through the four stages with an active recovery p
     expect(agentId).toMatch(/^ak:did_core:/);
     await expect(page.getByTestId("agent-admin-last-op"))
       .toContainText("Station-committed Agent PCR", { timeout: 60_000 });
+    const weakAgentKeys = await page.evaluate(() => Object.keys(localStorage)
+      .filter(key => key.startsWith("agent.did.keys.") || key.includes(".agent.did.keys.")).length);
+    expect(weakAgentKeys, "Agent DID binding keys must never enter the localStorage tier").toBe(0);
   } finally {
     await user.close();
   }
