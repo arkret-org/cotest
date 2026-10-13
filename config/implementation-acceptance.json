@@ -543,7 +543,7 @@
     {
       "task": "2026-08-31-0630-remote-signal-accepted-device-directory.md",
       "criteria_count": 6,
-      "criteria_sha256": "29791dad110f7d35b718f37510e3b26ba69a37cdc13b269677de1194dc9f0946",
+      "criteria_sha256": "7cf9a322fb8266691694129c692a5e8c298d9db9d7ad1156440c1d0421654623",
       "spec_refs": [
         "arkret-spec/spec/v1/zh/sync/signal.md",
         "arkret-spec/spec/v1/zh/discovery/profiles-presence.md"
@@ -554,14 +554,17 @@
         "garth/src/signal_message_stream.rs",
         "inkson/src/signal_receive_engine.rs",
         "inkson/src/state/current_index.rs",
-        "inkson/src/app/signal_products.rs"
+        "inkson/src/app/signal_products.rs",
+        "arkret-rust-sdk/crates/models-collaboration/src/signal_delivery.rs",
+        "arkret-rust-sdk/crates/policy/src/signal_authorization.rs",
+        "inkson/src/views/message_streams.rs"
       ],
       "tests": [
         {
           "path": "cotest/tests/signal_live.rs",
           "symbol": "accepted_signal_self_peer_recipient_and_read_only_denials",
           "kind": "live",
-          "covers": "既有真实 Signal rail 准入入口；不证明 Inkson MessageStream 展示前的两个 action 重验或全部 Typing profile"
+          "covers": "真实双Station TLS／PG／producer proof／MLS AEAD；缺send、缺create、双grant及撤销后共享产品gate的preview正反例；未证明Inkson浏览器或完整Agent冷路径"
         },
         {
           "path": "cotest/src/conformance/signal_recipient.rs",
@@ -574,11 +577,23 @@
           "symbol": "signal_recipient_profile_expiry_cannot_poison_high_water",
           "kind": "contract",
           "covers": "短于外层期限的 profile 已过期时不推进 high-water；不证明实际浏览器／Station消费"
+        },
+        {
+          "path": "cotest/src/conformance/signal_recipient.rs",
+          "symbol": "signal_recipient_consumes_formal_dual_action_fixture_without_body_on_refusal",
+          "kind": "contract",
+          "covers": "正式11 mutation matrix经真实producer proof／Garth材料绑定／SDK双action gate；受控decryptor不证明实际AEAD"
+        },
+        {
+          "path": "inkson/src/views/message_streams.rs",
+          "symbol": "mounted_hub_requires_both_live_actions_before_body_side_effects",
+          "kind": "product",
+          "covers": "mounted Dioxus MessageStreamHub正文前双action拒绝／允许与失效正文清除；native，不冒充浏览器"
         }
       ],
       "engineering_checks": [],
       "remaining_scenarios": [
-        "MessageStream exact verified basis 的正式双 action 消费及证据充分性复审；Typing policy可见性和撤权展示；最新真实浏览器／双Station ordinary／Agent与sender durable allocator组合验收"
+        "Typing完整capability／policy可见性、适用blocklist与撤权后旧指示仍有代码剩项；MessageStream正式双action消费已接通，剩真实浏览器／完整ordinary-Agent-Circle／Direct participant与sender durable allocator组合验收"
       ]
     }
   ]

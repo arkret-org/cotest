@@ -114,13 +114,21 @@ async fn scan(client: &TestActorClient, realm: &str) -> Result<Value> {
     )?)
 }
 
-async fn rejected(client: &TestActorClient, event: &Value, url: &str, realm: &str) -> Result<()> {
+async fn rejected(
+    client: &TestActorClient,
+    baseline: &arkret_wire::Event,
+    event: &Value,
+    url: &str,
+    realm: &str,
+) -> Result<()> {
     let before = acceptance_rows_with_agent_stores(url, true).await?;
     let visible = scan(client, realm).await?;
+    let body = arkret_test_kit::wire_negative_from_sdk(
+        &arkret_wire::EventAdmissionSubmission::new(baseline.clone()),
+        |body| body["event"] = event.clone(),
+    )?;
     expect_api_error(
-        client
-            .post("/_arkret/self/events")
-            .json(&json!({"event": event})),
+        client.post("/_arkret/self/events").json(&body),
         StatusCode::UNPROCESSABLE_ENTITY,
         "schema_violation",
     )
@@ -138,6 +146,7 @@ async fn rejected(client: &TestActorClient, event: &Value, url: &str, realm: &st
 
 pub async fn run_sdk_precheck_production() -> Result<SuiteExecutionResult> {
     let (fixture, canonical) = cotest_sdk_precheck_runner::load_fixture_and_base_event()?;
+    let canonical_baseline = arkret_event_draft::decode_event_for_submit(canonical.clone())?;
     let database = database("sdk-precheck-production")?.context("real PostgreSQL required")?;
     let issuer = MockCoauthIntrospectionServer::spawn_with_internal_secret(
         HARNESS_INTERNAL_AUTHORITY_SECRET,
@@ -213,14 +222,21 @@ pub async fn run_sdk_precheck_production() -> Result<SuiteExecutionResult> {
         );
         // The exact canonical bytes and a context-valid live counterpart cross
         // the same normal HTTP ingress. Neither result is credited statically.
-        rejected(&client, &raw, &database.connect_url, &realm).await?;
+        rejected(
+            &client,
+            &canonical_baseline,
+            &raw,
+            &database.connect_url,
+            &realm,
+        )
+        .await?;
         let mut live = cotest_sdk_precheck_runner::mutation_for(id, &live_base)?;
         if id == "a_payload_that_fails_its_payload_class_never_reaches_the_reducer" {
             let mut typed: arkret_wire::Event = serde_json::from_value(live)?;
             crate::harness::refresh_typed_event_proof(&mut typed)?;
             live = serde_json::to_value(typed)?;
         }
-        rejected(&client, &live, &database.connect_url, &realm).await?;
+        rejected(&client, &base, &live, &database.connect_url, &realm).await?;
         let mut assertions = 7
             + rejected_locally(&store, &path, &scope, &raw, &delta).await?
             + rejected_locally(&store, &path, &scope, &live, &delta).await?;
@@ -228,9 +244,9 @@ pub async fn run_sdk_precheck_production() -> Result<SuiteExecutionResult> {
             assertions += rejected_locally(&store, &path, &scope, &live, &delta).await?;
             let reopened = garth::FileStore::open(&path)?;
             assertions += rejected_locally(&reopened, &path, &scope, &live, &delta).await?;
-            rejected(&client, &live, &database.connect_url, &realm).await?;
+            rejected(&client, &base, &live, &database.connect_url, &realm).await?;
             group.server_mut(0).restart_external_process().await?;
-            rejected(&client, &live, &database.connect_url, &realm).await?;
+            rejected(&client, &base, &live, &database.connect_url, &realm).await?;
             ensure!(
                 scan(&client, &realm).await?["committed_events"]
                     .as_array()
