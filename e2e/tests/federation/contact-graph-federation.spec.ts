@@ -19,7 +19,7 @@
 // (`POST /_arkret/peer/invites`): the recipient PS verifies the grant against
 // its OWN consent cells. S4-fed exercises that real cross-PS path end to end.
 
-import { flatTopicChats } from "../../helpers/direct-structure";
+import { createDirectBoundaryCircleStrand, flatTopicChats } from "../../helpers/direct-structure";
 import type { Page } from "@playwright/test";
 import { expect, test } from "../../helpers/arkret-test";
 import {
@@ -41,6 +41,7 @@ import {
   ensureRegistered,
   issueUserSession,
   openDpopUserPage,
+  createDpopUserSession,
   openUserPage,
   uniqueUser,
 } from "../../helpers/users";
@@ -447,7 +448,24 @@ test.describe("contact graph federation (server1/server2)", () => {
       await expect(
         bobPage.page.getByTestId("chat-message").filter({ hasText: aliceMessage }),
       ).toBeVisible({ timeout: 90_000 });
-      await flatTopicChats(alicePage.page, bobPage.page, [aliceMessage, bobMessage]);
+      // Full structure coverage uses the real accepted participant sessions
+      // and independently accepted outside targets, not guessed identifiers.
+      const outsideRealm = await createRealmApi(request, aliceFlow.session.grantJwt, {
+        title: `Cross-PS Direct boundary ${stamp}`, mls_activated: false,
+      });
+      const outsideStrand = await resolveDefaultStrandId(request, aliceFlow.session.grantJwt, outsideRealm);
+      const control = alicePage.page;
+      const circleStrand = await createDirectBoundaryCircleStrand(control, request,
+        aliceFlow.session.grantJwt, outsideRealm, `Cross-PS boundary Circle ${stamp}`);
+      const third = await createDpopUserSession(request, `cgf-direct-outsider-${stamp}`, { server: "server1" });
+      expect(third, "negative author is a real registered principal and device").toBeDefined();
+      await control.goto(`/direct/${encodeURIComponent(realmId)}/${encodeURIComponent(strandId)}`, { waitUntil: "domcontentloaded" });
+      await flatTopicChats(alicePage.page, bobPage.page, [aliceMessage, bobMessage], [], {
+        request, token: aliceFlow.session.grantJwt,
+        peer: { token: bobFlow.session.grantJwt, server: "server2" },
+        boundaryTargets: { realmStrand: outsideStrand, circleStrand: circleStrand!,
+          thirdActor: accountActorId(third!.user.id, "server1"), thirdToken: third!.grantJwt },
+      });
     } finally {
       await Promise.allSettled([alicePage.close(), bobPage.close()]);
     }

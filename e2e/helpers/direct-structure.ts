@@ -9,6 +9,48 @@ import { colandBaseUrl, colandServiceId, colandServiceResolution, type ColandKey
 import { cotestWire } from "./coland-api/wire-client";
 import type { ActorId } from "./generated/spec-wire-objects";
 
+// Negative structure targets must exist outside Direct's protected Realm.
+// Circle creation does not create a Strand: author it with an explicit scope.
+export async function createDirectBoundaryCircleStrand(
+  page: Page, request: APIRequestContext, token: string, realmId: string, title: string,
+): Promise<string> {
+  await page.goto(`/realms/${encodeURIComponent(realmId)}/circles`, { waitUntil: "domcontentloaded" });
+  await page.getByTestId("circle-create-open").click();
+  await page.getByTestId("circle-create-title").fill(title);
+  await expect(page.getByTestId("circle-create-encrypted")).not.toBeChecked();
+  await page.getByTestId("circle-create-submit").click();
+  await expect(page).toHaveURL(/\/realms\/[^/]+\/circles\/[^/]+$/);
+  const circleId = decodeURIComponent(new URL(page.url()).pathname.split("/").at(-1)!);
+  expect(circleId).toMatch(/^ak:circle:/);
+
+  await page.goto(`/chat/${encodeURIComponent(realmId)}`, { waitUntil: "domcontentloaded" });
+  await page.getByTestId("open-channel-dialog").click();
+  await expect(page.getByTestId("channel-create-modal")).toBeVisible();
+  await page.getByTestId("new-channel-name").fill(`${title} Strand`);
+  const picker = page.getByTestId("new-channel-circle-scope");
+  await picker.locator('button[aria-haspopup="listbox"]').click();
+  await picker.locator(`[role="option"][data-value="${circleId}"]`).click();
+  await expect(picker.locator('button[aria-haspopup="listbox"]')).toContainText(title);
+  await page.getByTestId("create-channel-button").click();
+  const channel = page.getByTestId("channel-item").filter({ hasText: `${title} Strand` });
+  await expect(channel).toBeVisible({ timeout: 60_000 });
+
+  let strandId: string | undefined;
+  await expect.poll(async () => {
+    const history = await scanRealmStreamApi(request, token, realmId, {
+      streamRef: { kind: "circle", realm_id: realmId, circle_id: circleId }, limit: 1000,
+    });
+    expect(history.truncated).toBe(false);
+    const created = history.events.find(event => event.kind === "ak.strand.create");
+    if (!created) return undefined;
+    expect(created.scope_ref).toEqual({ kind: "circle", realm_id: realmId, circle_id: circleId });
+    if (typeof created.event_id !== "string") throw new Error("accepted Circle Strand has no Event id");
+    strandId = created.event_id.replace(/^ak:event:/, "ak:strand:");
+    return strandId;
+  }).toMatch(/^ak:strand:/);
+  return strandId!;
+}
+
 // Refusal diagnostics must not dump unexpected accepted Commit signatures.
 function structureOutcomeDiagnostic(outcome: Record<string, unknown>): string {
   const safe = Object.fromEntries(["status", "reason_code", "type", "code"].map(key => {
@@ -189,11 +231,12 @@ async function structureCut(proof: DirectStructureProof, realm: string,
       expect(source.truncated, "qualify all visible scope groups through their complete accepted prefix").toBe(false);
       expect(source.commits.at(-1)?.commit_id === scopeHeads[0].commit_id).toBe(true);
       let genesis = source.events.find((event: any) => event.event_id === row.value.genesis_event_ref);
-      if (!genesis && viewer) {
+      if (!genesis && proof.peer) {
         // The founder qualifies the public Genesis; this never widens the
         // peer's own readable prefix or its authenticated history floor.
-        const founderHistory = await scanRealmStreamApi(proof.request, proof.token, realm,
-          { limit: 1000, streamRef: scope });
+        const other = viewer ? undefined : proof.peer;
+        const founderHistory = await scanRealmStreamApi(proof.request, other?.token ?? proof.token, realm,
+          { limit: 1000, server: other?.server, streamRef: scope });
         expect(founderHistory.truncated).toBe(false);
         genesis = founderHistory.events.find((event: any) => event.event_id === row.value.genesis_event_ref);
       }

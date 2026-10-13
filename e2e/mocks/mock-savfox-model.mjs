@@ -81,6 +81,16 @@ const server = http.createServer((request, response) => {
         response: { id: responseId, status: "in_progress" },
       },
       {
+        type: "response.output_item.added",
+        output_index: 0,
+        item: {
+          type: "message",
+          role: "assistant",
+          id: `msg_joint_${suffix}`,
+          content: [],
+        },
+      },
+      {
         type: "response.output_text.delta",
         response_id: responseId,
         item_id: `msg_joint_${suffix}`,

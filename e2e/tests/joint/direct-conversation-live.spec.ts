@@ -9,7 +9,7 @@ import { approvePairingLinkOnAuthorizedDevice, createDpopUserSession, openUserPa
 import { serverLoginViaCoauth, submitCoauthPasswordCredentials } from "../../helpers/real-oidc-login";
 import { colandBaseUrl } from "../../helpers/env";
 
-import { directStructureLifecycleGate, flatTopicChats, rejectDirectStructureEvent } from "../../helpers/direct-structure";
+import { createDirectBoundaryCircleStrand, directStructureLifecycleGate, flatTopicChats, rejectDirectStructureEvent } from "../../helpers/direct-structure";
 
 function directConversationCase(mode: "normal" | "interrupted" | "offline" | "lost" | "logout" | "account" | "withdrawal" | "leave", remoteBob = false) {
 return async ({ jointUsers, request, browser }: { jointUsers: JointUsersFixture; request: APIRequestContext; browser: Browser }) => {
@@ -481,23 +481,8 @@ return async ({ jointUsers, request, browser }: { jointUsers: JointUsersFixture;
       });
       const outsideStrand = await resolveDefaultStrandId(request, aliceSession.grantJwt, outsideRealm);
       const control = paired.page.page;
-      await control.goto(`/realms/${encodeURIComponent(outsideRealm)}/circles`, { waitUntil: "domcontentloaded" });
-      await control.getByTestId("circle-create-open").click();
-      await control.getByTestId("circle-create-title").fill(`DM boundary Circle ${Date.now()}`);
-      await expect(control.getByTestId("circle-create-encrypted")).not.toBeChecked();
-      await control.getByTestId("circle-create-submit").click();
-      await expect(control).toHaveURL(/\/realms\/[^/]+\/circles\/[^/]+$/);
-      const outsideCircle = decodeURIComponent(new URL(control.url()).pathname.split("/").at(-1)!);
-      let circleStrand: string | undefined;
-      await expect.poll(async () => {
-        const history = await scanRealmStreamApi(request, aliceSession.grantJwt, outsideRealm, {
-          streamRef: { kind: "circle", realm_id: outsideRealm, circle_id: outsideCircle }, limit: 1000,
-        });
-        expect(history.truncated).toBe(false);
-        const created = history.events.find(event => event.kind === "ak.strand.create");
-        circleStrand = typeof created?.event_id === "string" ? created.event_id.replace("ak:event:", "ak:strand:") : undefined;
-        return circleStrand;
-      }).toBeTruthy();
+      const circleStrand = await createDirectBoundaryCircleStrand(control, request,
+        aliceSession.grantJwt, outsideRealm, `DM boundary Circle ${Date.now()}`);
       const third = await createDpopUserSession(request, "direct-outsider", {});
       expect(third, "negative author must be a real registered principal/device").toBeDefined();
       await control.goto(path, { waitUntil: "domcontentloaded" });
