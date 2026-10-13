@@ -357,6 +357,12 @@ pub async fn run_agent_requested_scope_privacy_production()
     )
     .await?;
 
+    // Refusal snapshots may exhaust the short live handle. Keep its original
+    // TTL and obtain a fresh ordinary pairing instance for the success branch.
+    let material =
+        pairing_expiry_evidence::replacement_material(station, &controller, &account, &agent)
+            .await?;
+    let body = &material.body;
     let paired: AgentKeyPairOutcome = serde_json::from_value(
         expect_json(
             controller
