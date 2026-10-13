@@ -33,7 +33,17 @@ export async function createDirectBoundaryCircleStrand(
   await expect(picker.locator('button[aria-haspopup="listbox"]')).toContainText(title);
   await page.getByTestId("create-channel-button").click();
   const channel = page.getByTestId("channel-item").filter({ hasText: `${title} Strand` });
-  await expect(channel).toBeVisible({ timeout: 60_000 });
+  // The joined Circle can appear in the picker before its signed current cut
+  // is installed. Only retry this known pre-authoring refusal; an unknown
+  // submission outcome must retain its original durable write identity.
+  await expect(async () => {
+    if (await channel.isVisible()) return;
+    const status = await page.getByTestId("chat-status").textContent();
+    if (status === "Strand create failed: MLS send gate is not ready: Circle send requires a verified Circle member current") {
+      await page.getByTestId("create-channel-button").click();
+    }
+    await expect(channel).toBeVisible({ timeout: 1_000 });
+  }).toPass({ timeout: 60_000, intervals: [1_000, 2_000, 5_000] });
 
   let strandId: string | undefined;
   await expect.poll(async () => {
