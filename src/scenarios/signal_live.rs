@@ -1085,15 +1085,38 @@ pub(crate) async fn exercise_two_station_signal(
     deny(bob, &revoked_signal, realm, &[x_url, y_url]).await?;
     deny_peer(&revoked_signal, y, x, &[x_url, y_url]).await?;
     exercise_circle(alice, bob, x, y, realm, &[x_url, y_url]).await?;
+    // Circle bootstrap can advance the replica's signed baseline beyond the
+    // original Realm cut. New producers select a currently held exact basis.
+    let fresh_head = super::websocket_live::realm_head(&alice.client, realm.as_str()).await?;
+    let fresh_tail = alice
+        .client
+        .sdk()
+        .scan_commit_stream_tail(
+            realm.clone(),
+            fresh_head.stream_ref.clone(),
+            fresh_head.stream_position.checked_sub(1),
+            1,
+        )
+        .await?;
+    let fresh_basis = fresh_tail
+        .committed_events
+        .last()
+        .context("fresh accepted Realm basis")?
+        .commit()
+        .clone();
+    ensure!(fresh_basis.commit_id == fresh_head.commit_id);
+    super::mls_lifecycle_live::accepted_full_view(&bob.client, &fresh_basis.event_ref).await?;
+    wait_for_replica_cut(y_url, &fresh_basis).await?;
+
     let fresh = envelope(
         bob,
         bob_group,
         realm,
         strand,
         state,
-        head,
+        &fresh_basis.commit_id,
         SignalClass::Session,
-        7,
+        15,
     )?;
     emission::exercise(
         alice,
@@ -1103,7 +1126,7 @@ pub(crate) async fn exercise_two_station_signal(
         realm,
         strand,
         state,
-        head,
+        &fresh_basis.commit_id,
         x,
         y,
         &[x_url, y_url],
