@@ -2408,13 +2408,33 @@ async function createSidecarSourceCard(
   await page.getByTestId("create-board-space-button").click();
   // The toolbar is visible while the Board is still a local pending create.
   // Wait for its accepted canonical route before composing a child List.
-  await expect(page).toHaveURL(
-    (url) =>
-      decodeURIComponent(url.pathname).startsWith(
-        `/kanban/${realmId}/board/ak:space:`,
-      ),
-    { timeout: 120_000 },
-  );
+  const acceptedBoardRoute = (url: URL) => decodeURIComponent(url.pathname)
+    .startsWith(`/kanban/${realmId}/board/ak:space:`);
+  const deadline = Date.now() + 120_000;
+  while (Date.now() < deadline) {
+    try {
+      await expect(page).toHaveURL(acceptedBoardRoute, {
+        timeout: Math.max(1, Math.min(2_000, deadline - Date.now())),
+      });
+      break;
+    } catch {
+      if (Date.now() >= deadline) break;
+      const picker = page.getByTestId("board-space-select-button");
+      if (!(await picker.isVisible())) continue;
+      if (await picker.getAttribute("aria-expanded") !== "true") {
+        await picker.click({ timeout: Math.max(1, Math.min(3_000, deadline - Date.now())) });
+      }
+      const retry = page.getByRole("option", { name: `${title} (create failed)`, exact: true });
+      if (await retry.count() !== 1 || !(await retry.isVisible()) || !(await retry.isEnabled())) continue;
+      // Drive the existing same-operation retry only for the observed local
+      // pre-authoring encryption transition, never an authority rejection.
+      const reason = await retry.getAttribute("title");
+      if (!reason?.includes("MLS state is not converged yet: encryption transition")) continue;
+      if (Date.now() >= deadline) break;
+      await retry.click({ timeout: Math.max(1, Math.min(3_000, deadline - Date.now())) });
+    }
+  }
+  await expect(page).toHaveURL(acceptedBoardRoute, { timeout: 1 });
   await page.getByTestId("new-column-input").fill("Work");
   await expect(page.getByTestId("new-column-input")).toHaveValue("Work");
   await page.getByTestId("add-column-button").click();
