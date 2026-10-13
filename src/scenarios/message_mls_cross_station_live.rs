@@ -19,8 +19,8 @@ use crate::scenarios::cross_station_mls_welcome::{
     claim_for, genesis_creator_leaf_authority, join_through_invite, publish_one, wait_for_welcome,
 };
 use crate::scenarios::human_device_producer_live::{
-    create_realm_with_join_rule, database, ensure_commit_signed_by, grant_message_create,
-    station_env, submit_and_expect_commit, wait_for_committed,
+    create_realm_with_join_rule, database, ensure_commit_signed_by, station_env,
+    submit_and_expect_commit, wait_for_committed,
 };
 use crate::scenarios::identity_test_support::HARNESS_INTERNAL_AUTHORITY_SECRET;
 use crate::scenarios::mls_lifecycle_live::{
@@ -298,7 +298,14 @@ pub(crate) async fn run_with_signal_boundary(
         'c',
     )
     .await?;
-    grant_message_create(&alice.client, x, &realm, &bob.account).await?;
+    let initial_message_grant = super::human_device_producer_live::grant_realm_actions(
+        &alice.client,
+        x,
+        &realm,
+        &bob.account,
+        &[arkret_wire::CapabilityActionId::MESSAGE_CREATE],
+    )
+    .await?;
     let bob_identity = publish_one(&bob).await?;
     let scope = ScopeRef::Realm {
         realm_id: realm_id.clone(),
@@ -468,6 +475,7 @@ pub(crate) async fn run_with_signal_boundary(
             &commit_event.event_id,
             &commit.commit_id,
             &before_bob_join.commit_id,
+            &initial_message_grant,
             x,
             y,
             &x_database.connect_url,

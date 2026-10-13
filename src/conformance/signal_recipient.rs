@@ -4,12 +4,13 @@
 //! this suite exercises proof, delivery authority, profile and sequence checks.
 //! MLS exporter encryption/decryption is covered by the MLS crate itself.
 
+use arkret_models_collaboration::SignalDeliveryAuthority;
 use arkret_models_collaboration::signal_plaintext::{
     PresencePlaintext, PresenceState, seal_signal_plaintext,
 };
 use arkret_wire::{
-    AccountId, ActorId, Base64UrlString, DidCoreId, DidUrl, EventId, SignalDeliveryAuthority,
-    SignalEnvelope, StationSigningKey,
+    AccountId, ActorId, Base64UrlString, DidCoreId, DidUrl, EventId, SignalEnvelope,
+    StationSigningKey,
 };
 use ed25519_dalek::SigningKey;
 use garth::signal::{SignalDecryptor, SignalReceiveOutcome, SignalReceiver};
@@ -51,6 +52,7 @@ fn delivery_authority(
     recipient: AccountId,
 ) -> SignalDeliveryAuthority {
     let authority = SignalDeliveryAuthority {
+        product_authority: None,
         recipient_account_id: recipient,
         key: StationSigningKey {
             actor: signal.sender_actor_id.clone(),
@@ -363,4 +365,187 @@ async fn signal_recipient_profile_expiry_cannot_poison_high_water() {
             .unwrap(),
         SignalReceiveOutcome::Accepted { .. }
     ));
+}
+
+#[tokio::test]
+async fn signal_recipient_consumes_formal_dual_action_fixture_without_body_on_refusal()
+-> anyhow::Result<()> {
+    use arkret_models_collaboration::SignalProductAuthority;
+    use arkret_models_collaboration::governance::grant_constraint::{
+        CapabilityGrant, GrantConstraint, GrantConstraintEffect, GrantConstraintKind,
+    };
+    use arkret_models_collaboration::signal_message_stream::{
+        MessageStreamFormat, MessageStreamFrame, MessageStreamKeyframe,
+    };
+    use arkret_wire::{
+        CapabilityActionId, CommitStreamHead, CommitStreamRef, GrantId, MessageId, MessageStreamId,
+        StrandId,
+    };
+    let fixture = super::load_fixture_value("signal-message-stream-fixture.json")?;
+    let matrix = fixture["cases"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|c| c["name"] == "recipient_dual_action_authority_matrix")
+        .unwrap();
+    let signal = envelope()?;
+    let strand: StrandId = "ak:strand:AZ6GqZWWvnQ2KFwbBD-MenomzWNz-31MUAuKzBXIP0zv".parse()?;
+    let original_event = crate::fixture_event_id("signal-product-grant");
+    let grant: CapabilityGrant = serde_json::from_value(serde_json::json!({
+        "id":GrantId::from_event_id(&original_event), "schema":"ak.schema.capability.v1", "realm_id":signal.realm_id,
+        "issuer_id":signal.sender_actor_id, "subject":signal.sender_actor_id,
+        "actions":[CapabilityActionId::MESSAGE_STREAM_SEND,CapabilityActionId::MESSAGE_CREATE],
+        "resources":[{"kind":"strand","realm_id":signal.realm_id,"strand_id":strand}],
+        "status":"active", "issued_at":"2026-07-01T00:00:00.000Z",
+        "issuer_authority_refs":[{"kind":"realm_root","realm_id":signal.realm_id,"authority_event_ref":crate::fixture_event_id("signal-product-root"),"authority_generation":0}],
+        "authority_root_refs":[{"kind":"realm_root","realm_id":signal.realm_id,"authority_event_ref":crate::fixture_event_id("signal-product-root"),"authority_generation":0}], "authority_depth":1
+    }))?;
+    let head = CommitStreamHead {
+        stream_ref: CommitStreamRef::Realm {
+            realm_id: signal.realm_id.clone(),
+        },
+        commit_id: signal.authority_commit_id.clone(),
+        stream_position: 1,
+    };
+    let material = SignalProductAuthority {
+        authority_commit_id: signal.authority_commit_id.clone(),
+        parent_realm_authority_commit_id: None,
+        current_realm_head: head.clone(),
+        current_scope_head: head,
+        sent_at: signal.sent_at,
+        grants: vec![grant.clone()],
+        current_grants: vec![grant],
+        owner_actions: vec![],
+        profile_actions: vec![],
+        agent: None,
+    };
+    for mutation in matrix["input"]["generator"]["mutations"]
+        .as_array()
+        .unwrap()
+    {
+        let mutation = mutation.as_str().unwrap();
+        let expected = matrix["expected"][mutation].as_str().unwrap();
+        let mut product = material.clone();
+        let mut target = strand.clone();
+        match mutation {
+            "none" => {}
+            "missing_send" => product.grants[0]
+                .actions
+                .retain(|a| a != CapabilityActionId::MESSAGE_STREAM_SEND),
+            "missing_create" => product.grants[0]
+                .actions
+                .retain(|a| a != CapabilityActionId::MESSAGE_CREATE),
+            "revoked_source" => product.current_grants.clear(),
+            "replacement_grant" => {
+                product.current_grants[0].id =
+                    GrantId::from_event_id(&crate::fixture_event_id("replacement-product-grant"))
+            }
+            "wrong_strand" => {
+                target = "ak:strand:Aa-h0nYxlvhQk1U9H0yQTY4hZEVTz0be75pj6U70n7qy".parse()?
+            }
+            "same_principal_other_station" => {
+                let mut account = signal.sender_actor_id.as_account_id().unwrap().clone();
+                account.station_id = "ak:did_core:web:station-b.example".parse()?;
+                product.grants[0].subject=arkret_models_collaboration::governance::grant_constraint::CapabilitySubject::Actor(ActorId::account(account));
+            }
+            "wrong_basis" => {
+                product.authority_commit_id = arkret_wire::RealmCommitId::from_digest([0x88; 32])
+            }
+            "explicit_null" => {
+                let mut value = serde_json::to_value(&product)?;
+                value["agent"] = serde_json::Value::Null;
+                assert!(serde_json::from_value::<SignalProductAuthority>(value).is_err());
+                continue;
+            }
+            "historical_unknown_deny" | "current_unknown_review" => {
+                let historical = mutation == "historical_unknown_deny";
+                let mut constraint = GrantConstraint::new(
+                    GrantConstraintKind::ScopeLimitation,
+                    if historical {
+                        GrantConstraintEffect::Deny
+                    } else {
+                        GrantConstraintEffect::RequireReview
+                    },
+                );
+                constraint.allowed_session_ids = vec!["unavailable-private-session".into()];
+                if historical {
+                    product.grants[0].constraints.push(constraint)
+                } else {
+                    product.current_grants[0].constraints.push(constraint)
+                }
+            }
+            _ => anyhow::bail!("unimplemented formal product mutation {mutation}"),
+        }
+        let frame = MessageStreamFrame::Keyframe(MessageStreamKeyframe::new(
+            1,
+            target,
+            MessageId::from_event_id(&crate::fixture_event_id("product-final-message")),
+            0,
+            MessageStreamId::new_v7_at(1_790_000_000_000),
+            0,
+            MessageStreamFormat::Plain,
+            "transient body",
+            false,
+        )?);
+        let decryptor = ProfileDecryptor {
+            bytes: arkret_canonical::canonical_json_bytes(&frame)?,
+        };
+        let mut authority = delivery_authority(
+            &signal,
+            ALICE_SEED,
+            crate::fixture_event_id("signal-alice-current-device-authorize"),
+            recipient_account(),
+        );
+        authority.product_authority = Some(Box::new(product));
+        let mut receiver = SignalReceiver::new();
+        let outcome = receiver
+            .receive(&signal, &authority, &decryptor, signal.sent_at)
+            .await;
+        if expected == "reject_before_high_water" {
+            assert!(outcome.is_err(), "{mutation}");
+            authority.product_authority = Some(Box::new(material.clone()));
+            assert!(matches!(
+                receiver
+                    .receive(&signal, &authority, &decryptor, signal.sent_at)
+                    .await?,
+                SignalReceiveOutcome::Accepted { .. }
+            ));
+            continue;
+        }
+        let SignalReceiveOutcome::Accepted {
+            domain,
+            plaintext,
+            product_authority: Some(material),
+            ..
+        } = outcome?
+        else {
+            anyhow::bail!("valid producer frame was not admitted for {mutation}");
+        };
+        let mut projection = garth::MessageStreamProjection::new();
+        let result = projection.apply_plaintext(
+            &domain,
+            &plaintext,
+            &|domain: &garth::SignalSequenceDomain, frame: &arkret_models_collaboration::signal_message_stream::MessageStreamFrame| {
+                arkret_policy::signal_authorization::message_stream_allowed(
+                    &material,
+                    &domain.sender_actor_id,
+                    &domain.scope_ref,
+                    frame.strand_id(),
+                    signal.sent_at,
+                )
+            },
+            signal.sent_at,
+        );
+        assert_eq!(
+            result.is_ok(),
+            expected == "show_preview",
+            "{mutation}: {result:?}"
+        );
+        assert_eq!(
+            projection.previews().count(),
+            usize::from(expected == "show_preview"),
+            "{mutation}"
+        );
+    }
+    Ok(())
 }

@@ -3,10 +3,11 @@
 use anyhow::{Context, Result, ensure};
 use arkret::ArkretMlsGroup;
 use arkret::mls::SignalSenderAuthority;
+use arkret_models_collaboration::SignalStreamFrame;
 use arkret_models_collaboration::signal_plaintext::TypingPlaintext;
 use arkret_wire::{
     EventId, RealmCommitId, RealmId, ScopeRef, SignalAeadBinding, SignalClass, SignalEnvelope,
-    SignalKeyRef, SignalProof, SignalStreamFrame,
+    SignalKeyRef, SignalProof,
 };
 use chrono::{Duration, Utc};
 
@@ -93,6 +94,25 @@ fn scoped_envelope(
     scope: ScopeRef,
     parent_cut: Option<&RealmCommitId>,
 ) -> Result<SignalEnvelope> {
+    scoped_envelope_with_payload(
+        sender, group, realm, strand, state, head, class, sequence, scope, parent_cut, None,
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+fn scoped_envelope_with_payload(
+    sender: &Member,
+    group: &mut ArkretMlsGroup,
+    realm: &RealmId,
+    strand: &str,
+    state: &EventId,
+    head: &RealmCommitId,
+    class: SignalClass,
+    sequence: u64,
+    scope: ScopeRef,
+    parent_cut: Option<&RealmCommitId>,
+    product_payload: Option<Vec<u8>>,
+) -> Result<SignalEnvelope> {
     let key_ref = SignalKeyRef {
         group_state_ref: state.to_string(),
     };
@@ -114,7 +134,9 @@ fn scoped_envelope(
         aead_profile: ACTIVE_SUITE,
         epoch: group.epoch(),
     };
-    let plaintext = if class == SignalClass::Moderation {
+    let plaintext = if let Some(payload) = product_payload {
+        payload
+    } else if class == SignalClass::Moderation {
         use arkret_models_collaboration::call_signal::*;
         CallSignalPlaintext::new(
             sequence,
@@ -528,6 +550,7 @@ async fn exercise_circle(
         SignalClass::Session,
         1,
         None,
+        None,
     )
     .await?;
     deliver(
@@ -544,6 +567,7 @@ async fn exercise_circle(
         SignalClass::Session,
         1,
         Some(x),
+        None,
     )
     .await?;
     for (index, url) in urls.iter().enumerate() {
@@ -590,6 +614,7 @@ async fn deliver(
     class: SignalClass,
     sequence: u64,
     websocket_server: Option<&crate::harness::ArkretServer>,
+    product_case: Option<(Vec<u8>, bool)>,
 ) -> Result<()> {
     let mut stream = if websocket_server.is_some() {
         None
@@ -623,7 +648,7 @@ async fn deliver(
         },
         Some(SignalStreamFrame::Heartbeat)
     ));
-    let signal = scoped_envelope(
+    let signal = scoped_envelope_with_payload(
         sender,
         sender_group,
         realm,
@@ -634,6 +659,7 @@ async fn deliver(
         sequence,
         scope,
         parent_cut,
+        product_case.as_ref().map(|(payload, _)| payload.clone()),
     )?;
     let outcome = sender
         .client
@@ -697,6 +723,51 @@ async fn deliver(
     )?;
     let payload = arkret_models_collaboration::signal_plaintext::open_signal_plaintext(&plaintext)?;
     ensure!(payload.signal_class() == class && payload.payload_sequence() == sequence);
+    if let Some((_, expected)) = product_case {
+        let arkret::SignalPlaintext::MessageStream(frame) = &payload else {
+            anyhow::bail!("MessageStream product profile was lost");
+        };
+        let material = received
+            .1
+            .product_authority
+            .as_deref()
+            .context("complete per-frame product material")?;
+        material.validate_for_envelope(&received.0)?;
+        let domain = garth::SignalSequenceDomain {
+            sender_actor_id: sender.actor.clone(),
+            endpoint: garth::SignalSequenceEndpoint::AccountDevice {
+                device_id: sender.device.clone(),
+            },
+            scope_ref: received.0.scope_ref.clone(),
+        };
+        let mut projection = garth::MessageStreamProjection::new();
+        let result = projection.apply(
+            &domain,
+            frame,
+            &|domain: &garth::SignalSequenceDomain, frame: &arkret_models_collaboration::signal_message_stream::MessageStreamFrame| {
+                arkret_policy::signal_authorization::message_stream_allowed(
+                    material,
+                    &domain.sender_actor_id,
+                    &domain.scope_ref,
+                    frame.strand_id(),
+                    Utc::now(),
+                )
+            },
+            Utc::now(),
+        );
+        ensure!(
+            result.is_ok() == expected,
+            "MessageStream dual-action product gate must match accepted original/current sources: {result:?}"
+        );
+        ensure!(
+            projection.previews().count() == usize::from(expected),
+            "denied product has no body side effect"
+        );
+        eprintln!(
+            "[signal-message-stream] actual_two_station=1 proof_mls_aead=1 original_and_current_material=1 dual_action_allowed={expected} preview_count={}",
+            projection.previews().count()
+        );
+    }
     if let Some(websocket) = &mut websocket {
         websocket.finish().await?;
     }
@@ -723,6 +794,7 @@ pub(crate) async fn exercise_two_station_signal(
     state: &EventId,
     head: &RealmCommitId,
     old_head: &RealmCommitId,
+    initial_message_grant: &arkret_wire::RealmCommit,
     x: &crate::harness::ArkretServer,
     y: &crate::harness::ArkretServer,
     x_url: &str,
@@ -756,6 +828,7 @@ pub(crate) async fn exercise_two_station_signal(
             SignalClass::Session,
             1,
             reverse.then_some(x),
+            None,
         )
         .await?;
     }
@@ -766,6 +839,155 @@ pub(crate) async fn exercise_two_station_signal(
             "Signal is transient and relays exactly once at each Station"
         );
     }
+    let product_frame = |sequence| -> Result<Vec<u8>> {
+        let frame = arkret::MessageStreamKeyframe::new(
+            sequence,
+            strand.parse()?,
+            arkret::MessageId::from_event_id(state),
+            0,
+            arkret::MessageStreamId::new_v7_at(Utc::now().timestamp_millis() as u64),
+            0,
+            arkret::MessageStreamFormat::Plain,
+            "authorized transient body",
+            false,
+        )?;
+        Ok(arkret_canonical::canonical_json_bytes(&frame)?)
+    };
+    deliver(
+        bob,
+        alice,
+        bob_group,
+        alice_group,
+        realm,
+        strand,
+        state,
+        head,
+        ScopeRef::Realm {
+            realm_id: realm.clone(),
+        },
+        None,
+        SignalClass::Session,
+        8,
+        None,
+        Some((product_frame(8)?, false)),
+    )
+    .await?;
+    let initial_revoke: arkret_wire::AuthoritySubmitOutcome = serde_json::from_value(
+        alice
+            .client
+            .revoke_realm_grant(
+                realm.as_str(),
+                arkret_wire::GrantId::from_event_id(&initial_message_grant.event_ref).as_str(),
+            )
+            .await?,
+    )?;
+    let arkret_wire::AuthoritySubmitOutcome::Accepted {
+        commit: initial_revoked,
+        ..
+    } = initial_revoke
+    else {
+        anyhow::bail!("initial MessageCreate grant revoke must be accepted");
+    };
+    super::mls_lifecycle_live::accepted_full_view(&bob.client, &initial_revoked.event_ref).await?;
+    wait_for_replica_cut(y_url, &initial_revoked).await?;
+    let send_grant = super::human_device_producer_live::grant_realm_actions(
+        &alice.client,
+        x,
+        realm.as_str(),
+        &bob.account,
+        &[arkret_wire::CapabilityActionId::MESSAGE_STREAM_SEND],
+    )
+    .await?;
+    super::mls_lifecycle_live::accepted_full_view(&bob.client, &send_grant.event_ref).await?;
+    wait_for_replica_cut(y_url, &send_grant).await?;
+    deliver(
+        bob,
+        alice,
+        bob_group,
+        alice_group,
+        realm,
+        strand,
+        state,
+        &send_grant.commit_id,
+        ScopeRef::Realm {
+            realm_id: realm.clone(),
+        },
+        None,
+        SignalClass::Session,
+        9,
+        None,
+        Some((product_frame(9)?, false)),
+    )
+    .await?;
+    let dual_grant = super::human_device_producer_live::grant_realm_actions(
+        &alice.client,
+        x,
+        realm.as_str(),
+        &bob.account,
+        &[
+            arkret_wire::CapabilityActionId::MESSAGE_STREAM_SEND,
+            arkret_wire::CapabilityActionId::MESSAGE_CREATE,
+        ],
+    )
+    .await?;
+    super::mls_lifecycle_live::accepted_full_view(&bob.client, &dual_grant.event_ref).await?;
+    wait_for_replica_cut(y_url, &dual_grant).await?;
+    deliver(
+        bob,
+        alice,
+        bob_group,
+        alice_group,
+        realm,
+        strand,
+        state,
+        &dual_grant.commit_id,
+        ScopeRef::Realm {
+            realm_id: realm.clone(),
+        },
+        None,
+        SignalClass::Session,
+        10,
+        Some(x),
+        Some((product_frame(10)?, true)),
+    )
+    .await?;
+    let revoke_product: arkret_wire::AuthoritySubmitOutcome = serde_json::from_value(
+        alice
+            .client
+            .revoke_realm_grant(
+                realm.as_str(),
+                arkret_wire::GrantId::from_event_id(&dual_grant.event_ref).as_str(),
+            )
+            .await?,
+    )?;
+    let arkret_wire::AuthoritySubmitOutcome::Accepted {
+        commit: product_revoked,
+        ..
+    } = revoke_product
+    else {
+        anyhow::bail!("MessageStream revoke must be accepted");
+    };
+    super::mls_lifecycle_live::accepted_full_view(&bob.client, &product_revoked.event_ref).await?;
+    wait_for_replica_cut(y_url, &product_revoked).await?;
+    deliver(
+        bob,
+        alice,
+        bob_group,
+        alice_group,
+        realm,
+        strand,
+        state,
+        &dual_grant.commit_id,
+        ScopeRef::Realm {
+            realm_id: realm.clone(),
+        },
+        None,
+        SignalClass::Session,
+        11,
+        None,
+        Some((product_frame(11)?, false)),
+    )
+    .await?;
     let old = envelope(
         bob,
         bob_group,
@@ -828,8 +1050,9 @@ pub(crate) async fn exercise_two_station_signal(
         },
         None,
         SignalClass::Moderation,
-        5,
+        14,
         Some(x),
+        None,
     )
     .await?;
     let revoke: arkret_wire::AuthoritySubmitOutcome = serde_json::from_value(

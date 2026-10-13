@@ -43,7 +43,7 @@ async fn current(url: &str, realm: &RealmId) -> Result<MlsGroupCurrent> {
 async fn receive(
     rail: &mut Rail,
     expected: &SignalEnvelope,
-) -> Result<arkret_wire::SignalDeliveryAuthority> {
+) -> Result<arkret_models_collaboration::SignalDeliveryAuthority> {
     tokio::time::timeout(Duration::from_secs(5), async {
         loop {
             match rail
