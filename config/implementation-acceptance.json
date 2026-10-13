@@ -54,7 +54,7 @@
     {
       "task": "2026-09-06-0915-protocol-fixtures-mock-and-api-test-convergence.md",
       "criteria_count": 7,
-      "criteria_sha256": "3c7d21beb3d61a92a5cb505076d3cfd421b95184abdfc54ec077f42566453e64",
+      "criteria_sha256": "d199b9952188d276c1d8da1e6fe408e8f2be0b8d681768e6b82b09ea78abbce4",
       "spec_refs": [
         "arkret-spec/spec/v1/zh/identity/contact-and-direct-conversation.md"
       ],
@@ -408,6 +408,12 @@
           "symbol": "private_scope_disclosure_and_public_history_cross_real_station",
           "kind": "live",
           "covers": "实际公开 WebVH history、SDK controller 披露验签/单次 intent 消费与全量拒绝零写；显式不保存披露 producer 的实际数据库无原始披露"
+        },
+        {
+          "path": "cotest/tests/agent_pcr_profile_live.rs",
+          "symbol": "controller_signed_agent_profile_uses_its_own_pcr",
+          "kind": "live",
+          "covers": "真实 Station/PG 独立 Agent PCR 八项合取；controller 原签 Profile 创建/更新、精确重试、资源/purpose/delegation 拒绝与完整业务状态零变化；显式 mock AA 启动"
         }
       ],
       "engineering_checks": [],
@@ -676,113 +682,29 @@
       ]
     },
     {
-      "task": "2026-10-03-1746-direct-conversation-topics-and-groups.md",
-      "criteria_count": 5,
-      "criteria_sha256": "d58379bcbbe8be1d584bd5b64ba63ba4496dedd8f6e4a1bd1b5276a6d3d62b0d",
-      "spec_refs": [
-        "arkret-spec/spec/v1/zh/identity/contact-and-direct-conversation.md"
-      ],
-      "source_refs": [
-        "inkson/src/views/chat/direct_structure.rs"
-      ],
-      "tests": [
-        {
-          "path": "cotest/tests/direct_conversation_founding_live.rs",
-          "symbol": "cross_station_two_authorized_devices_race_founding",
-          "kind": "live",
-          "covers": "两授权设备竞争founding，不证明Chat/Topic UI"
-        }
-      ],
-      "engineering_checks": [],
-      "remaining_scenarios": [
-        "延迟第二resolve时页面可见及session取消；真实IndexedDB取消clear；标题/watch／Topic排序restore/stale CAS；非participant/main负例；完整跨站加密产品"
-      ]
-    },
-    {
-      "task": "2026-10-11-0930-owned-agent-controller-management-enforcement.md",
+      "task": "2026-08-31-0630-remote-signal-accepted-device-directory.md",
       "criteria_count": 6,
-      "criteria_sha256": "16fa2b7bfd58397852c28b43e36640fd36aae868e43923f164d31a025532cb5e",
+      "criteria_sha256": "f683aca0399f3812de0d88c66d76b19dd050e33b8a30d2c6be1eeb8ff90e2c83",
       "spec_refs": [
-        "arkret-spec/spec/v1/zh/authz/owned-agent-authority.md"
+        "arkret-spec/spec/v1/zh/sync/signal.md",
+        "arkret-spec/spec/v1/zh/discovery/profiles-presence.md"
       ],
       "source_refs": [
-        "coland/crates/storage-postgres/src/agent_management_admission.rs"
+        "coland/crates/storage-postgres/src/signal_scope_authority.rs",
+        "garth/src/signal.rs",
+        "garth/src/signal_message_stream.rs"
       ],
       "tests": [
         {
-          "path": "coland/crates/storage-postgres/tests/sidecar_authority_cut.rs",
-          "symbol": "ordinary_member_can_join_own_agent_without_permission_to_add_humans",
+          "path": "cotest/tests/signal_live.rs",
+          "symbol": "accepted_signal_self_peer_recipient_and_read_only_denials",
           "kind": "live",
-          "covers": "成员添加自有Agent与Human权限区分"
+          "covers": "既有真实 Signal rail 准入入口；不证明 Inkson MessageStream 展示前的两个 action 重验或全部 Typing profile"
         }
       ],
       "engineering_checks": [],
       "remaining_scenarios": [
-        "多scope配置／review真实消费；controller专用grant/revoke；读／Blob／future material／HTTP/WS最后门；跨站serve／deliver；管理员/成员真实UI"
-      ]
-    },
-    {
-      "task": "2026-10-11-0932-inkson-linux-security-dependency-remediation.md",
-      "criteria_count": 4,
-      "criteria_sha256": "cb3e917b6d26cdb6aa50e94b877da2d3384edf45fcffd455ae4278489c779c50",
-      "spec_refs": [],
-      "source_refs": [
-        "inkson/.github/workflows/packages.yml"
-      ],
-      "tests": [],
-      "engineering_checks": [
-        "严格cargo deny全目标desktop图与真实LinuxPackages构建/启动"
-      ],
-      "remaining_scenarios": [
-        "两条GLib入口可执行修复；严格全图审计；真实Linux打包启动；受影响Windows/macOS回归"
-      ]
-    },
-    {
-      "task": "2026-10-11-0933-third-party-invite-provider-lifecycle.md",
-      "criteria_count": 5,
-      "criteria_sha256": "88a9d1ae131bf7be63cfb927dbcf08b994d2689f1a859952d64834b7876cd546",
-      "spec_refs": [
-        "arkret-spec/spec/v1/zh/sync/third-party-invites.md"
-      ],
-      "source_refs": [
-        "coland/crates/storage-postgres/src/invite_current_results/claim_admission.rs"
-      ],
-      "tests": [
-        {
-          "path": "cotest/tests/spec_business_flows.rs",
-          "symbol": "third_party_invite_present_body_matches_canonical_schema",
-          "kind": "contract",
-          "covers": "present DTO closed及subject/token形状，非provider业务"
-        }
-      ],
-      "engineering_checks": [],
-      "remaining_scenarios": [
-        "正式IVS owner与四operation；双模式私密provision/activate/status/deliver/present；原proof一次绑定；响应丢失/重启/清理/URL拒绝；接Claim真实闭环"
-      ]
-    },
-    {
-      "task": "2026-10-11-0934-cotest-canonical-provisioning-and-client-journeys.md",
-      "criteria_count": 2,
-      "criteria_sha256": "77425857d718927ba303d6795235d7fd7c6ffe8b7c876e619a0f9ad46bbf4c8c",
-      "spec_refs": [
-        "arkret-spec/spec/v1/zh/identity/account-lifecycle.md"
-      ],
-      "source_refs": [
-        "cotest/crates/test-support/src/garth_client.rs"
-      ],
-      "tests": [
-        {
-          "path": "cotest/e2e/tests/harness/test-client-parity.spec.ts",
-          "symbol": "the selected client founds a principal and syncs its account",
-          "kind": "product",
-          "covers": "选定客户端正常供给／同步；实际Garth写入选择需runner"
-        }
-      ],
-      "engineering_checks": [
-        "现有check_package_graph与browserless lane资源门"
-      ],
-      "remaining_scenarios": [
-        "CT-3 semantic_union／parent tenure锁／realm-links零写；桥进程kill/reopen accepted custody寻址；accepted-before-persist与issuer丢响应不同切点"
+        "原 owner 返回 active：保全已验证 authority basis，MessageStream 展示前双 action 重验；Typing blocklist/membership/track 完整门、完整双站 ordinary/Agent 与持久 high-water 冻结验收"
       ]
     }
   ]

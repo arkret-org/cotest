@@ -32,6 +32,8 @@ pub fn run_agent_vectors_production_suite() -> Result<SuiteExecutionResult> {
                     execution.cases.extend(repairing.cases);
                     let privacy = crate::scenarios::agent_runtime_live::run_agent_requested_scope_privacy_production().await?;
                     execution.cases.extend(privacy.cases);
+                    let pcr = crate::scenarios::agent_runtime_live::run_agent_pcr_profile_admission().await?;
+                    execution.cases.extend(pcr.cases);
                     Ok::<SuiteExecutionResult, anyhow::Error>(execution)
                 })?;
             execution.cases.splice(0..0, schema_cases);
