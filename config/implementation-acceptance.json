@@ -414,6 +414,12 @@
           "symbol": "controller_signed_agent_profile_uses_its_own_pcr",
           "kind": "live",
           "covers": "真实 Station/PG 独立 Agent PCR 八项合取；controller 原签 Profile 创建/更新、精确重试、资源/purpose/delegation 拒绝与完整业务状态零变化；显式 mock AA 启动"
+        },
+        {
+          "path": "cotest/tests/agent_runtime_binding_live.rs",
+          "symbol": "pending_runtime_binding_uses_actual_native_keys_and_station_admission",
+          "kind": "live",
+          "covers": "真实 Savfox 平台密钥与独立进程/channel 持久化、实际通知和控制者投影；SDK PoP、持久完整批准摘要、丢钥停机/续配、十三项合取与拒绝零写；显式 mock AA 启动"
         }
       ],
       "engineering_checks": [],

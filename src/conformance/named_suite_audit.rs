@@ -183,6 +183,7 @@ const RUNNERS: [(&str, Runner); 54] = [
                     "agent_repairing_supersede",
                     "agent_requested_scope_privacy",
                     "agent_pcr_separation",
+                    "agent_runtime_key_binding",
                     "agent_pcr_genesis_same_batch_rejected",
                 ],
             ],
