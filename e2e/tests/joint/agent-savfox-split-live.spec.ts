@@ -2224,7 +2224,24 @@ async function addAgentToRealm(
       `[data-testid="available-realm-agent-row"][data-agent-id="${agentId}"]`,
     );
     await expect(available).toBeVisible({ timeout: 120_000 });
+    const isTargetJoin = (event: SubmittedEvent) => {
+      const member = event.payload?.member_id as { kind?: string; account_id?: AccountId } | undefined;
+      return event.kind === "ak.member.state" && event.realm_id === realmId
+        && event.payload?.membership === "join" && member?.kind === "account"
+        && member.account_id?.principal_id === agentId;
+    };
+    const submittedJoin = page.waitForResponse(response => {
+      const outgoing = response.request();
+      return outgoing.method() === "POST" && new URL(response.url()).pathname === EVENTS_SUBMIT_PATH
+        && eventSubmissions(outgoing.postData()).some(isTargetJoin);
+    }, { timeout: 180_000 });
     await available.getByTestId("confirm-add-agent-to-realm").click();
+    const joinResponse = await submittedJoin;
+    const joinOutcome = await joinResponse.json() as Record<string, unknown>;
+    expect(joinResponse.ok(), `Agent join HTTP ${joinResponse.status()}: ${String(joinOutcome.detail ?? "missing Problem detail")}`)
+      .toBe(true);
+    const join = eventSubmissions(joinResponse.request().postData()).find(isTargetJoin)!;
+    assertAuthoritySubmitOutcome(joinOutcome, join, "normal controller-authored Agent first join");
     await expect(page.getByTestId("realm-members-status")).toContainText(
       "added agent",
       { timeout: 180_000 },
