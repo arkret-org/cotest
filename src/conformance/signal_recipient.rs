@@ -4,12 +4,13 @@
 //! this suite exercises proof, delivery authority, profile and sequence checks.
 //! MLS exporter encryption/decryption is covered by the MLS crate itself.
 
+use arkret_models_collaboration::SignalDeliveryAuthority;
 use arkret_models_collaboration::signal_plaintext::{
     PresencePlaintext, PresenceState, seal_signal_plaintext,
 };
 use arkret_wire::{
-    AccountId, ActorId, Base64UrlString, DidCoreId, DidUrl, EventId, SignalDeliveryAuthority,
-    SignalEnvelope, StationSigningKey,
+    AccountId, ActorId, Base64UrlString, DidCoreId, DidUrl, EventId, SignalEnvelope,
+    StationSigningKey,
 };
 use ed25519_dalek::SigningKey;
 use garth::signal::{SignalDecryptor, SignalReceiveOutcome, SignalReceiver};
@@ -61,6 +62,7 @@ fn delivery_authority(
             .unwrap(),
             authorization_ref: authorization,
         },
+        product_authority: None,
     };
     authority.validate_for_envelope(signal).unwrap();
     authority

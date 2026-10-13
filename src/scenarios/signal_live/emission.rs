@@ -4,7 +4,8 @@
 use std::path::Path;
 use std::time::Duration;
 
-use arkret_wire::{EventKind, SignalDeliveryAuthority};
+use arkret_models_collaboration::SignalDeliveryAuthority;
+use arkret_wire::EventKind;
 
 use super::*;
 use crate::harness::ArkretServer;

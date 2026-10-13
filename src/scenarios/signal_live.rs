@@ -3,10 +3,11 @@
 use anyhow::{Context, Result, ensure};
 use arkret::ArkretMlsGroup;
 use arkret::mls::SignalSenderAuthority;
+use arkret_models_collaboration::SignalStreamFrame;
 use arkret_models_collaboration::signal_plaintext::TypingPlaintext;
 use arkret_wire::{
     EventId, RealmCommitId, RealmId, ScopeRef, SignalAeadBinding, SignalClass, SignalEnvelope,
-    SignalKeyRef, SignalProof, SignalStreamFrame,
+    SignalKeyRef, SignalProof,
 };
 use chrono::{Duration, Utc};
 
