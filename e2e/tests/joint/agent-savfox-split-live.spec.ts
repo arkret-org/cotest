@@ -1711,11 +1711,26 @@ async function readNativeCommittedEvent(request: APIRequestContext, session: Dpo
 
 async function nativePublicMentionAndReply(page: Page, card: Locator, request: APIRequestContext,
   realm: JointRealmFixture, agentId: string, strand: string, prompt: string, expectedReplies: number) {
-  await card.getByTestId("card-detail-sidebar-tab-members").click();
-  const agentRow = card.locator(`[data-testid="card-detail-agent-row"][data-agent-id="${agentId}"]`);
-  await expect(agentRow).toBeVisible({ timeout: 120_000 });
-  await composeSourceAgentMention(card, agentRow, agentId, prompt);
   await card.getByTestId("card-detail-tab-discussion").click();
+  // Independent Humans use the public composer picker. Card Agent rows are
+  // supplied by the controller's private owned inventory, not this caller's.
+  const stationId = realm.aliceSession.accountId.station_id;
+  const composer = card.getByTestId("chat-input");
+  await composer.fill("@");
+  const candidate = card.locator(
+    `button[data-testid="mention-suggestion"][data-mention-principal-id="${agentId}"][data-mention-station-id="${stationId}"]`,
+  );
+  await expect(candidate).toBeVisible({ timeout: 120_000 });
+  await expect(candidate.getByTestId("mention-suggestion-agent-badge")).toBeVisible();
+  await candidate.click();
+  const chip = card.locator(
+    `[data-testid="mention-chip"][data-mention-principal-id="${agentId}"][data-mention-station-id="${stationId}"]`,
+  );
+  await expect(chip).toBeVisible({ timeout: 30_000 });
+  const mention = (await chip.locator("span").first().innerText()).trim();
+  expect(mention).toMatch(/^@/);
+  await expect(composer).toHaveValue(`${mention} `);
+  await composer.fill(`${mention} ${prompt}`);
   await expect(card.getByTestId("composer-send-scope")).toHaveAttribute("data-send-route", "Shared");
   const sourceResponse = page.waitForResponse(response => {
     const request = response.request();
