@@ -88,29 +88,6 @@
       ]
     },
     {
-      "task": "2026-09-06-1725-joint-e2e-inkson-decoupling-and-provisioning-convergence.md",
-      "criteria_count": 5,
-      "criteria_sha256": "a87767136a20748385987c4a151382630ea2f805814bfe62e7c62c1c762e6e2f",
-      "spec_refs": [
-        "arkret-spec/spec/v1/zh/models/sidecar.md"
-      ],
-      "source_refs": [
-        "inkson/src/views/chat/mod.rs"
-      ],
-      "tests": [
-        {
-          "path": "cotest/crates/inkson-client-tests/tests/client_sync_production_live.rs",
-          "symbol": "private_agent_sidecar_reply_recovers_in_the_original_account_attempt",
-          "kind": "live",
-          "covers": "一次native真实私密回复恢复，不证明三次WASM可见"
-        }
-      ],
-      "engineering_checks": [],
-      "remaining_scenarios": [
-        "真实WASM大历史输入／锚点／长任务；cursor重绘不重复验证；三次私密回复双用户零披露；远端PCR／mode／runtime恢复"
-      ]
-    },
-    {
       "task": "2026-09-10-0540-client-current-result-durable-index.md",
       "criteria_count": 7,
       "criteria_sha256": "beebef34c3e67690cf9a4040346e6017354459f5c643eaf6440d3363f3f9b652",
