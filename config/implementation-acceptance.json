@@ -633,7 +633,7 @@
     {
       "task": "2026-08-31-0630-remote-signal-accepted-device-directory.md",
       "criteria_count": 6,
-      "criteria_sha256": "f683aca0399f3812de0d88c66d76b19dd050e33b8a30d2c6be1eeb8ff90e2c83",
+      "criteria_sha256": "29791dad110f7d35b718f37510e3b26ba69a37cdc13b269677de1194dc9f0946",
       "spec_refs": [
         "arkret-spec/spec/v1/zh/sync/signal.md",
         "arkret-spec/spec/v1/zh/discovery/profiles-presence.md"
@@ -641,7 +641,10 @@
       "source_refs": [
         "coland/crates/storage-postgres/src/signal_scope_authority.rs",
         "garth/src/signal.rs",
-        "garth/src/signal_message_stream.rs"
+        "garth/src/signal_message_stream.rs",
+        "inkson/src/signal_receive_engine.rs",
+        "inkson/src/state/current_index.rs",
+        "inkson/src/app/signal_products.rs"
       ],
       "tests": [
         {
@@ -649,11 +652,23 @@
           "symbol": "accepted_signal_self_peer_recipient_and_read_only_denials",
           "kind": "live",
           "covers": "既有真实 Signal rail 准入入口；不证明 Inkson MessageStream 展示前的两个 action 重验或全部 Typing profile"
+        },
+        {
+          "path": "cotest/src/conformance/signal_recipient.rs",
+          "symbol": "signal_recipient_preserves_the_authenticated_circle_authority_basis",
+          "kind": "contract",
+          "covers": "实际 producer 签名认证后保留原 scope／父 Realm basis，篡改父 basis 拒绝；decryptor fixture，不证明实际 MLS AEAD或产品授权"
+        },
+        {
+          "path": "cotest/src/conformance/signal_recipient.rs",
+          "symbol": "signal_recipient_profile_expiry_cannot_poison_high_water",
+          "kind": "contract",
+          "covers": "短于外层期限的 profile 已过期时不推进 high-water；不证明实际浏览器／Station消费"
         }
       ],
       "engineering_checks": [],
       "remaining_scenarios": [
-        "原 owner 返回 active：保全已验证 authority basis，MessageStream 展示前双 action 重验；Typing blocklist/membership/track 完整门、完整双站 ordinary/Agent 与持久 high-water 冻结验收"
+        "MessageStream exact verified basis 的正式双 action 消费及证据充分性复审；Typing policy可见性和撤权展示；最新真实浏览器／双Station ordinary／Agent与sender durable allocator组合验收"
       ]
     }
   ]

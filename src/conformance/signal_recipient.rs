@@ -272,3 +272,95 @@ async fn signal_peer_uncertain_http_outcome_is_not_retried() {
         );
     }
 }
+
+#[tokio::test]
+async fn signal_recipient_preserves_the_authenticated_circle_authority_basis() {
+    let mut signal = envelope().unwrap();
+    signal.scope_ref = arkret_wire::ScopeRef::Circle {
+        realm_id: signal.realm_id.clone(),
+        circle_id: arkret_wire::CircleId::from_event_id(&crate::fixture_event_id("signal-circle")),
+    };
+    signal.parent_realm_authority_commit_id =
+        Some(arkret_wire::RealmCommitId::from_digest([0x43; 32]));
+    crate::harness::attach_signal_proof(&mut signal, &SigningKey::from_bytes(&ALICE_SEED));
+    let authority = delivery_authority(
+        &signal,
+        ALICE_SEED,
+        crate::fixture_event_id("signal-alice-current-device-authorize"),
+        recipient_account(),
+    );
+    let decryptor = ProfileDecryptor::presence(&signal, 1);
+    let mut receiver = SignalReceiver::new();
+    let mut tampered = signal.clone();
+    tampered.parent_realm_authority_commit_id =
+        Some(arkret_wire::RealmCommitId::from_digest([0x44; 32]));
+    assert!(
+        receiver
+            .receive(&tampered, &authority, &decryptor, signal.sent_at)
+            .await
+            .is_err()
+    );
+    let SignalReceiveOutcome::Accepted {
+        authority_commit_id,
+        parent_realm_authority_commit_id,
+        domain,
+        ..
+    } = receiver
+        .receive(&signal, &authority, &decryptor, signal.sent_at)
+        .await
+        .unwrap()
+    else {
+        panic!("authenticated Circle Signal was not accepted");
+    };
+    assert_eq!(authority_commit_id, signal.authority_commit_id);
+    assert_eq!(
+        parent_realm_authority_commit_id,
+        signal.parent_realm_authority_commit_id
+    );
+    assert_eq!(domain.scope_ref, signal.scope_ref);
+    assert_eq!(domain.sender_actor_id, signal.sender_actor_id);
+}
+
+#[tokio::test]
+async fn signal_recipient_profile_expiry_cannot_poison_high_water() {
+    let signal = envelope().unwrap();
+    let authority = delivery_authority(
+        &signal,
+        ALICE_SEED,
+        crate::fixture_event_id("signal-alice-current-device-authorize"),
+        recipient_account(),
+    );
+    let expired = ProfileDecryptor {
+        bytes: seal_signal_plaintext(
+            &PresencePlaintext::new(
+                1024,
+                signal.sender_actor_id.clone(),
+                PresenceState::Online,
+                1_000,
+            )
+            .unwrap(),
+        )
+        .unwrap(),
+    };
+    let now = signal.sent_at + chrono::Duration::seconds(2);
+    let mut receiver = SignalReceiver::new();
+    assert_eq!(
+        receiver
+            .receive(&signal, &authority, &expired, now)
+            .await
+            .unwrap(),
+        SignalReceiveOutcome::Expired
+    );
+    assert!(matches!(
+        receiver
+            .receive(
+                &signal,
+                &authority,
+                &ProfileDecryptor::presence(&signal, 7),
+                now
+            )
+            .await
+            .unwrap(),
+        SignalReceiveOutcome::Accepted { .. }
+    ));
+}
