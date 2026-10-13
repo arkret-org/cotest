@@ -443,12 +443,18 @@
     {
       "task": "2026-09-25-2141-consent-current-and-admission.md",
       "criteria_count": 2,
-      "criteria_sha256": "6baa7b17e09d6295e09bd9e5f25b902b94567d462f7d104cbeb8a962dad4c2dc",
+      "criteria_sha256": "8bfb8292d1dbdc5189f38ca0db494d5e5b9a808c431c36dadfc69f72a1c1edb6",
       "spec_refs": [
-        "arkret-spec/spec/v1/zh/identity/consent-model.md"
+        "arkret-spec/spec/v1/zh/identity/consent-model.md",
+        "arkret-spec/spec/v1/zh/extensions/mimi-interop.md",
+        "arkret-spec/spec/v1/zh/crypto-media/webrtc-signaling.md",
+        "arkret-spec/spec/v1/artifacts/fixtures/consent-cache-invalidation-fixture.json"
       ],
       "source_refs": [
-        "coland/crates/storage-postgres/src/consent_current.rs"
+        "coland/crates/storage-postgres/src/consent_current.rs",
+        "coland/crates/http/src/routing/interop/mimi/handlers.rs",
+        "inkson/src/signal_receive_engine.rs",
+        "cotest/src/conformance/named_suite_audit.rs"
       ],
       "tests": [
         {
@@ -456,11 +462,24 @@
           "symbol": "retired_pairwise_profile_rejected_and_peer_identity_isolated",
           "kind": "live",
           "covers": "pairwise隔离及退役profile拒绝"
+        },
+        {
+          "path": "coland/crates/http/src/routing/interop/mimi/handlers.rs",
+          "symbol": "consent_deny_and_revoke_use_exact_current_and_preserve_accepted_retry",
+          "kind": "contract",
+          "covers": "真实PG上的MIMI精确holder/peer/scope/revision、deny/revoke、exact replay与竞争拒绝零写入；不代表完整provider HTTP或named suite"
+        },
+        {
+          "path": "coland/crates/storage-postgres/tests/consent_current.rs",
+          "symbol": "consent_current_guards_invite_delivery_cas_and_rejects_a_pre_revoke_proof",
+          "kind": "contract",
+          "covers": "同PCR锁的invite delivery最终CAS与旧proof拒绝；不替代跨Station全部消费面"
         }
       ],
       "engineering_checks": [],
       "remaining_scenarios": [
-        "跨消费层与跨Station的在途竞争逐case验收；Directory／MIMI／push PSI／call／presence／private discovery逐层消费与缓存失效；正式consent.cache_invalidation逐case真实执行，本地invitation CAS不代替其它消费面"
+        "通话invite三层Consent正式证据边界与生产接线；presence/MIMI当前适用消费者；跨层/跨Station在途撤销、any独立性、完整peer和时间窗、current revision不回退",
+        "正式consent.cache_invalidation五case/五decision point真实生产executor实现、注册与最新冻结执行；Directory/PSI只执行退役不可调用/不可广告/零索引变化负例，不恢复正向路径"
       ]
     },
     {
