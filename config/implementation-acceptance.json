@@ -111,42 +111,6 @@
       ]
     },
     {
-      "task": "2026-09-08-1638-device-recovery-and-encrypted-edit.md",
-      "criteria_count": 4,
-      "criteria_sha256": "775723fc39c09e739474c3e74e40498930a1fb82f18507072f5cd87da040cb40",
-      "spec_refs": [
-        "arkret-spec/spec/v1/zh/identity/security-transactions.md",
-        "arkret-spec/spec/v1/zh/crypto-media/device-lifecycle.md"
-      ],
-      "source_refs": [
-        "inkson/src/mls/account_recovery/recovery_transaction.rs"
-      ],
-      "tests": [
-        {
-          "path": "cotest/tests/recovery_transaction_faults.rs",
-          "symbol": "recovery_transaction_remote_side_effect_fault_matrix",
-          "kind": "contract",
-          "covers": "恢复副作用故障矩阵"
-        },
-        {
-          "path": "cotest/tests/to_device_offline_ordering.rs",
-          "symbol": "expired_device_message_replays_exactly_and_remains_until_ack",
-          "kind": "live",
-          "covers": "过期exact HTTP／跨HTTP key／ACK前后重放及两次实际重启"
-        },
-        {
-          "path": "cotest/tests/to_device_offline_ordering.rs",
-          "symbol": "invalid_device_message_expiry_rejects_the_whole_batch",
-          "kind": "live",
-          "covers": "新增过期与超过24h混合batch零入队"
-        }
-      ],
-      "engineering_checks": [],
-      "remaining_scenarios": [
-        "DR-C2登录callback／late401与durable隔离；DR-C3四RecoveryMethod；DR-C4恢复后真实编辑和第二设备；DR-C5 actor-private游标；DR-C6实际发送调用方的DeviceMessage离线／重启／ACK完整组合，已有TTL／exact replay测试不代表整项完成"
-      ]
-    },
-    {
       "task": "2026-09-10-0540-client-current-result-durable-index.md",
       "criteria_count": 7,
       "criteria_sha256": "beebef34c3e67690cf9a4040346e6017354459f5c643eaf6440d3363f3f9b652",
