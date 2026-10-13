@@ -4,7 +4,7 @@ import { test, expect } from "../../helpers/joint-fixture";
 import type { Page, Locator, APIRequestContext } from "../../helpers/arkret-test";
 import { coauthBaseUrl, colandBaseUrl, mockEmailBaseUrl } from "../../helpers/env";
 import { grantInviteConsentArkret, deliverInviteWithConsentGrant } from "../../helpers/contact-api";
-import { buildCapabilityGrantEnvelope, canonicalJson, grantCapabilityEventApi, rawSubmitSignedEventApi, refreshEventEnvelopeProof, resolveDefaultStrandId, retypeEventDerivedId, signedEventEnvelope, wireErrCode } from "../../helpers/coland-api";
+import { assertAuthoritySubmitOutcome, buildCapabilityGrantEnvelope, canonicalJson, grantCapabilityEventApi, rawSubmitSignedEventApi, refreshEventEnvelopeProof, resolveDefaultStrandId, retypeEventDerivedId, signedEventEnvelope, wireErrCode } from "../../helpers/coland-api";
 import { addCircleMemberRaw, createCircleArkret } from "../../helpers/circle-api";
 import { decodeIngressEvents } from "../../helpers/event-ingress";
 import { openDpopUserPageFromSession, registeredSubjectIdentityControl, selfPathHeadersForDpopSession, type DpopUserSession, type JointUserPage } from "../../helpers/users";
@@ -148,6 +148,17 @@ test("ordinary member explicitly grants, withdraws cold and confirms a new owned
   await available.getByTestId("confirm-add-agent-to-realm").click();
   await expect(row).toBeVisible({ timeout: 180_000 });
   const panel = row.getByTestId("member-agent-authority");
+  await expect(panel).toBeVisible({ timeout: 180_000 });
+  // The roster row already existed before Add. Re-read the two accepted join
+  // generations through the normal control before asserting confirmation UI.
+  await expect(async () => {
+    const confirmButton = panel.getByTestId("owned-agent-confirm-authority");
+    if (!await confirmButton.isVisible()) {
+      const refresh = panel.getByRole("button", { name: "刷新当前权限与管理限制", exact: true });
+      if (await refresh.isEnabled()) await refresh.click();
+    }
+    await expect(confirmButton).toBeVisible({ timeout: 1_000 });
+  }).toPass({ timeout: 120_000, intervals: [1_000, 2_000, 5_000] });
   await expect(panel.getByTestId("owned-agent-confirm-authority")).toBeDisabled();
   await expect(panel.getByRole("checkbox", { name: "发送消息", exact: true })).not.toBeChecked();
   const agentAccount = { principal_id: agentId, station_id: jointRealm.bobSession.accountId.station_id };
@@ -597,11 +608,21 @@ test("normal controller requests join and public review, distinct administrator 
   const otherRealm = await jointRealm.alicePage.createRealm({ title: "Management review state isolation", joinRule: "invite" });
   const created = await secondAccepted;
   expect(created.status()).toBe(200);
-  const createdEvent = decodeIngressEvents(created.request().postData()).find(value => value.kind === "ak.realm.create")!;
+  const createdEvents = decodeIngressEvents(created.request().postData());
+  expect(createdEvents.map(event => event.kind)).toEqual(["ak.realm.create", "ak.member.state"]);
+  const createdEvent = createdEvents[0];
   const createdOutcome = await created.json();
   expect(createdEvent.realm_id).toBe(otherRealm);
+  expect(createdOutcome.unit_kind).toBe("ordinary_realm_bootstrap");
   expect(createdOutcome.status).toBe("committed");
-  expect(createdOutcome.commit?.event_ref).toBe(createdEvent.event_id);
+  expect(createdOutcome.commits).toHaveLength(createdEvents.length);
+  for (const [index, event] of createdEvents.entries()) {
+    const commit = createdOutcome.commits[index];
+    assertAuthoritySubmitOutcome({ status: createdOutcome.status, commit }, event,
+      `management isolation Realm bootstrap ${index}`);
+    expect(commit.stream_position).toBe(index);
+    expect(commit.previous_commit_ref ?? null).toBe(index ? createdOutcome.commits[index - 1].commit_id : null);
+  }
   expect(otherRealm).not.toBe(realm);
   const editor = await loadPolicyEditor(jointRealm.alicePage, realm);
   await editor.getByLabel("Default effect", { exact: true }).selectOption("allow");
