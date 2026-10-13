@@ -147,29 +147,6 @@
       ]
     },
     {
-      "task": "2026-09-08-2040-owned-agent-direct-conversation.md",
-      "criteria_count": 5,
-      "criteria_sha256": "435a75886b7a6155110c4aa935abff1009477b1ed95d621e5f090a8c25a29d7e",
-      "spec_refs": [
-        "arkret-spec/spec/v1/zh/identity/contact-and-direct-conversation.md"
-      ],
-      "source_refs": [
-        "inkson/src/app/direct_open.rs"
-      ],
-      "tests": [
-        {
-          "path": "cotest/tests/direct_conversation_admission.rs",
-          "symbol": "direct_conversation_admission_suite_is_audited_but_not_falsely_marked_live",
-          "kind": "contract",
-          "covers": "Direct准入诊断及拒绝假live声明"
-        }
-      ],
-      "engineering_checks": [],
-      "remaining_scenarios": [
-        "首次Agent claim／Welcome精确binding；accepted祖先不回退ratchet；四Event／四Commit和实时双向回复；旧queue残留清理"
-      ]
-    },
-    {
       "task": "2026-09-10-0540-client-current-result-durable-index.md",
       "criteria_count": 7,
       "criteria_sha256": "beebef34c3e67690cf9a4040346e6017354459f5c643eaf6440d3363f3f9b652",
