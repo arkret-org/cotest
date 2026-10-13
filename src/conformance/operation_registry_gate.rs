@@ -54,6 +54,7 @@ const OPENAPI_METHODS: &[(&str, &str)] = &[
 pub enum OperationRegistryGateStatus {
     Registered,
     ProductPrivate,
+    NegativeTest,
     Failed,
 }
 
@@ -169,6 +170,18 @@ struct SchemaIndexOperation {
 #[derive(Debug, Deserialize)]
 struct ProductPrivateRegistry {
     allowed: Vec<ProductPrivatePath>,
+    #[serde(default)]
+    negative_test_paths: Vec<NegativeTestPath>,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct NegativeTestPath {
+    source: String,
+    source_file: String,
+    method: String,
+    path: String,
+    reason: String,
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -183,6 +196,7 @@ struct ProductPrivatePath {
 #[derive(Clone, Debug, Default)]
 struct ProductPrivateIndex {
     entries: Vec<ProductPrivatePath>,
+    negative_tests: Vec<NegativeTestPath>,
 }
 
 #[derive(Clone, Debug)]
@@ -855,6 +869,7 @@ fn load_product_private_index(path: &Path) -> Result<ProductPrivateIndex> {
     })?;
     Ok(ProductPrivateIndex {
         entries: registry.allowed,
+        negative_tests: registry.negative_test_paths,
     })
 }
 
@@ -1020,6 +1035,40 @@ fn validate_product_private_index(index: &ProductPrivateIndex) -> Vec<String> {
             ));
         }
     }
+    let mut negative_seen = BTreeSet::new();
+    for entry in &index.negative_tests {
+        let test_file = ["src/scenarios/", "e2e/tests/", "tests/"]
+            .iter()
+            .any(|prefix| entry.source_file.starts_with(prefix));
+        if entry.source != "cotest"
+            || !test_file
+            || entry.source_file.contains(['*', '\\', ':'])
+            || entry
+                .source_file
+                .split('/')
+                .any(|part| matches!(part, "" | "." | ".."))
+            || !(entry.source_file.ends_with(".rs") || entry.source_file.ends_with(".spec.ts"))
+            || !HTTP_METHODS.contains(&entry.method.as_str())
+            || !entry.path.starts_with("/_arkret/")
+            || entry.path.contains('*')
+            || entry.reason.trim().is_empty()
+        {
+            failures.push(format!(
+                "invalid scoped negative-test path: {} {} in {}",
+                entry.method, entry.path, entry.source_file
+            ));
+        }
+        if !negative_seen.insert((
+            &entry.source_file,
+            &entry.method,
+            normalize_path_template(&entry.path),
+        )) {
+            failures.push(format!(
+                "duplicate negative-test path: {} {} in {}",
+                entry.method, entry.path, entry.source_file
+            ));
+        }
+    }
     failures
 }
 
@@ -1058,6 +1107,26 @@ fn classify_observed_operation(
             path: observed.path,
             evidence: observed.evidence,
             gate_status: OperationRegistryGateStatus::ProductPrivate,
+            operation_id: None,
+            reason: Some(entry.reason.clone()),
+        };
+    }
+
+    if let Some(entry) = product_private.negative_tests.iter().find(|entry| {
+        entry.source == observed.source
+            && observed.method.as_deref() == Some(entry.method.as_str())
+            && normalize_path_template(&entry.path) == normalize_path_template(&observed.path)
+            && observed
+                .evidence
+                .replace('\\', "/")
+                .starts_with(&format!("{}:", entry.source_file))
+    }) {
+        return OperationRegistryGateEntry {
+            source: observed.source,
+            method: observed.method,
+            path: observed.path,
+            evidence: observed.evidence,
+            gate_status: OperationRegistryGateStatus::NegativeTest,
             operation_id: None,
             reason: Some(entry.reason.clone()),
         };

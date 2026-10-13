@@ -1020,7 +1020,7 @@ impl World {
             }),
             "ak.capability.grant" => json!({
                 "grant": {
-                    "schema": "ak.schema.capability_grant.v1",
+                    "schema": "ak.schema.capability.v1",
                     "issuer_id": ActorId::account(self.account.clone()),
                     "subject": ActorId::account(AccountId::new(
                         DidCoreId::new("ak:did_core:webvh:z6mkcarol")?,
