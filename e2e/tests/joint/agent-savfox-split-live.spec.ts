@@ -1643,7 +1643,31 @@ async function pairNativeManagedSavfoxAgent(
   expect((await controller.getByTestId("agent-runtime-approval-code").innerText()).trim() === displayPairingCode(pairing.pairingCode)).toBe(true);
   await controller.getByTestId("agent-runtime-approval-approve").click();
   await expect(controller.getByTestId("agent-runtime-approval-modal")).toHaveCount(0, { timeout: 180_000 });
-  await expect(savfox.getByText("Agent paired and channel saved.", { exact: true })).toBeVisible({ timeout: 180_000 });
+  const saved = savfox.getByText("Agent paired and channel saved.", { exact: true });
+  const deadline = Date.now() + 180_000;
+  while (Date.now() < deadline) {
+    const completed = await saved.waitFor({
+      state: "visible", timeout: Math.max(1, Math.min(5_000, deadline - Date.now())),
+    }).then(() => true, (error: unknown) => {
+      if (error instanceof Error && error.name === "TimeoutError") return false;
+      throw error;
+    });
+    if (completed) break;
+    const retry = savfox.getByRole("button", { name: "Retry saving", exact: true });
+    if (await retry.isVisible() && await retry.isEnabled()) {
+      // The original approval can precede issuer reconciliation. Retry only
+      // the same retained UI candidate, without re-pairing or new authority.
+      await expect(savfox.getByPlaceholder(
+        "https://arkret.example.org/_arkret/open/agent-pairing/resolve#token=...", { exact: true },
+      )).toHaveValue(pairing.pairingLink, {
+        timeout: Math.max(1, Math.min(10_000, deadline - Date.now())),
+      });
+      await expect(savfox.getByText(displayPairingCode(pairing.pairingCode), { exact: true }))
+        .toBeVisible({ timeout: Math.max(1, Math.min(10_000, deadline - Date.now())) });
+      await retry.click({ timeout: Math.max(1, Math.min(10_000, deadline - Date.now())) });
+    }
+  }
+  await expect(saved).toBeVisible({ timeout: 1 });
   await saveSavfoxChannel(savfox);
   // Native owner mode intentionally stops this gateway's account listener.
   // No synthetic Listening assertion; only the real decrypted reply below is
