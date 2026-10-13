@@ -146,7 +146,9 @@
       "spec_refs": [
         "arkret-spec/spec/v1/zh/extensions/applet-integration.md",
         "arkret-spec/spec/v1/zh/authz/managed-governance.md",
-        "arkret-spec/spec/v1/artifacts/registry/applet-managed-authority-registry.json"
+        "arkret-spec/spec/v1/artifacts/registry/applet-managed-authority-registry.json",
+        "arkret-spec/spec/v1/zh/crypto-media/device-lifecycle.md",
+        "arkret-spec/spec/v1/artifacts/registry/contract-registry.json"
       ],
       "source_refs": [
         "coland/crates/http/src/routing/extensions/applet_bridge/delegated_device.rs",
@@ -169,11 +171,17 @@
           "symbol": "ghost_creation_quota_rolls_back_with_the_unit_and_counts_exact_retry_once",
           "kind": "live",
           "covers": "真实PG/HTTP fresh创建quota、后段故障回滚、跨HTTP key exact retry/变更body拒绝和额度耗尽；不证明管理审批、reuse quota或独立Device/runtime全通"
+        },
+        {
+          "path": "coland/crates/server/tests/applet_admission.rs",
+          "symbol": "ghost_mapping_quota_is_atomic_and_exact_retries_do_not_reconsume_creation",
+          "kind": "live",
+          "covers": "真实PG/HTTP reuse mapping rate quota、后段失败完整零写、原创建额度不重扣、跨HTTP key和preview变更后exact恢复、额度耗尽及伪造anchors拒绝；不证明管理review/首Device/runtime全通"
         }
       ],
       "engineering_checks": [],
       "remaining_scenarios": [
-        "Applet creation/join/publish管理review与quota完整分类；Service多parent/共享ancestor quota；无session首Device入站和21-operation业务门；独立多Bot/Ghost runtime、跨scope撤权/rotation与真实内容解密回复；未挂载author成员的不完整bundle声明修正"
+        "Applet creation/join/publish管理review与完整quota分类；Service多parent/共享ancestor quota；首Device合法generation初始化规范前置、无session入站和21-operation业务门；独立多Bot/Ghost runtime、跨scope撤权/rotation与真实内容解密回复；未挂载author成员的不完整bundle声明修正"
       ]
     },
     {
