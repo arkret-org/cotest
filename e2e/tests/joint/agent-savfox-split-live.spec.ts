@@ -8,6 +8,7 @@ import {
   type Locator,
   type Page,
   type Request,
+  type Response,
   type Route,
   type TestInfo,
 } from "../../helpers/arkret-test";
@@ -1491,6 +1492,22 @@ nativePublicReplyTest.describe("Native public fixed reply @native-public-reply",
         });
         const context = await browser.newContext();
         const savfox = await context.newPage();
+        const refusals: Array<Record<string, unknown>> = [];
+        const refusalReads: Promise<void>[] = [];
+        const observeRefusal = (response: Response) => {
+          const outgoing = response.request();
+          if (outgoing.method() !== "POST" || new URL(response.url()).pathname !== EVENTS_SUBMIT_PATH
+            || response.status() < 400 || refusalReads.length >= 32) return;
+          // Only standard Problem fields; never retain request bytes, headers,
+          // Welcome ciphertext or decrypted provider inputs.
+          const kinds = eventSubmissions(outgoing.postData()).map(event => event.kind);
+          refusalReads.push(response.json().then((problem: Record<string, unknown>) => {
+            refusals.push({ status: response.status(), kinds, type: problem.type,
+              detail: problem.detail, reason_code: problem.reason_code });
+          }).catch(() => { refusals.push({ status: response.status(), kinds, unreadable_problem: true }); }));
+        };
+        controller.on("response", observeRefusal);
+        caller.on("response", observeRefusal);
         try {
           await openSavfoxArkretChannel(savfox, base, token);
           const pairing = await provisionAgent(controller, `native-public-${Date.now().toString(36)}`);
@@ -1583,6 +1600,12 @@ nativePublicReplyTest.describe("Native public fixed reply @native-public-reply",
             new_source_provider_calls: 1, exact_old_signed_event_and_commit_preserved: true,
           }), contentType: "application/json" });
         } finally {
+          controller.off("response", observeRefusal);
+          caller.off("response", observeRefusal);
+          await Promise.allSettled(refusalReads);
+          if (refusals.length) await testInfo.attach("native-standard-admission-problems", {
+            body: JSON.stringify(refusals), contentType: "application/json",
+          });
           await context.close();
         }
       },
