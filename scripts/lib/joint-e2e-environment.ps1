@@ -4,6 +4,21 @@ $script:CotestHostsMarkerPrefix = "cotest-joint-e2e"
 $script:CotestCaddyMinimumVersion = [version]"2.8.0"
 $script:CotestCaddyMaximumVersionExclusive = [version]"3.0.0"
 
+function Get-CotestWindowsProcessPath {
+    param([string]$InheritedPath, [string]$MachinePath, [string]$UserPath)
+
+    $ordered = [System.Collections.Generic.List[string]]::new()
+    $seen = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
+    foreach ($source in @($InheritedPath, $MachinePath, $UserPath)) {
+        foreach ($entry in @($source -split ';')) {
+            if (-not $entry -or -not $entry.Trim()) { continue }
+            $entry = $entry.Trim()
+            if ($seen.Add($entry.TrimEnd('\'))) { $ordered.Add($entry) }
+        }
+    }
+    return $ordered -join ';'
+}
+
 function Get-CotestPlatformInfo {
     $os = if ($IsWindows) { "windows" } elseif ($IsMacOS) { "macos" } elseif ($IsLinux) { "linux" } else { "unknown" }
     $architecture = [System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture.ToString().ToLowerInvariant()

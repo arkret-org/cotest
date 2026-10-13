@@ -43,7 +43,3 @@ pub fn run_test_material_rejection_suite() -> Result<SuiteExecutionResult> {
     );
     Ok(coverage.execution)
 }
-
-pub(crate) fn run_test_material_rejection_suite_diagnostic() -> Result<SuiteExecutionResult> {
-    Ok(run_test_material_rejection_suite_with_coverage()?.execution)
-}

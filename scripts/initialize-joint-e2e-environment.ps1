@@ -60,25 +60,9 @@ function Update-CotestProcessPath {
     # plain overwrite silently discards a run-scoped PATH prefix, which makes a
     # tool that is installed-but-unregistered impossible to surface without
     # editing the machine or user environment.
-    $inherited = @(($env:PATH -split ";") | Where-Object { $_ -and $_.Trim() })
-    $persisted = @(
-        @(
-            [Environment]::GetEnvironmentVariable("Path", "Machine"),
-            [Environment]::GetEnvironmentVariable("Path", "User")
-        ) |
-            Where-Object { $_ } |
-            ForEach-Object { $_ -split ";" } |
-            Where-Object { $_ -and $_.Trim() }
-    )
-    $ordered = [System.Collections.Generic.List[string]]::new()
-    $seen = [System.Collections.Generic.HashSet[string]]::new(
-        [System.StringComparer]::OrdinalIgnoreCase
-    )
-    foreach ($entry in @($inherited + $persisted)) {
-        $trimmed = $entry.TrimEnd("\")
-        if ($seen.Add($trimmed)) { $ordered.Add($entry) | Out-Null }
-    }
-    $env:PATH = $ordered -join ";"
+    $env:PATH = Get-CotestWindowsProcessPath -InheritedPath $env:PATH `
+        -MachinePath ([Environment]::GetEnvironmentVariable("Path", "Machine")) `
+        -UserPath ([Environment]::GetEnvironmentVariable("Path", "User"))
 }
 
 # Git for Windows and the standard Win64 OpenSSL installer both keep the

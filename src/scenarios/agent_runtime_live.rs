@@ -62,6 +62,7 @@ mod pairing_expiry_evidence;
 mod pcr_evidence;
 mod privacy_evidence;
 mod provision_evidence;
+mod provision_start_evidence;
 mod repairing_evidence;
 pub use binding_evidence::run_agent_runtime_binding_admission;
 pub use coauth_session_evidence::run_agent_session_grant_replay_production;
@@ -70,6 +71,7 @@ pub use pairing_expiry_evidence::run_agent_pairing_expiry_production;
 pub use pcr_evidence::run_agent_pcr_profile_admission;
 pub use privacy_evidence::run_agent_requested_scope_privacy_production;
 pub use provision_evidence::run_agent_genesis_production_cases;
+pub use provision_start_evidence::run_agent_provision_prerequisites_boundary;
 pub use repairing_evidence::run_agent_repairing_production;
 
 const GROUP: &str = "agent-runtime-session";

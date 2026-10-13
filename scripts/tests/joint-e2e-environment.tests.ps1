@@ -5,6 +5,10 @@ Set-StrictMode -Version Latest
 function Assert-True([bool]$Condition, [string]$Message) { if (-not $Condition) { throw $Message } }
 function Assert-Equal($Expected, $Actual, [string]$Message) { if ($Expected -ne $Actual) { throw "$Message expected='$Expected' actual='$Actual'" } }
 
+$refreshed = Get-CotestWindowsProcessPath -InheritedPath 'D:\approved-node;C:\shared\;; ' -MachinePath 'C:\system;d:\APPROVED-NODE' -UserPath 'C:\shared;C:\user'
+Assert-Equal 'D:\approved-node;C:\shared\;C:\system;C:\user' $refreshed 'refresh must retain the approved caller runtime first, append installed tools and deduplicate Windows aliases'
+Assert-Equal 'C:\system' (Get-CotestWindowsProcessPath -InheritedPath '' -MachinePath 'C:\system' -UserPath '') 'empty inherited PATH must still expose installed tools'
+
 $original = "127.0.0.1 localhost`r`n10.0.0.8 user-owned.example`r`n"
 $marker = New-CotestHostsMarker -RunId "unit-1"
 $hosts = Get-CotestJointHostNames -ServerCount 3 -IncludeCoauth $true -IncludeUnregisteredProbe $true
@@ -94,6 +98,8 @@ Assert-True ($runnerScript -match 'initialize-joint-e2e-environment\.ps1') "the 
 Assert-True ($runnerScript -notmatch '\[switch\]\$SkipPreflight') "the test entry must not expose a bootstrap bypass"
 Assert-True ($runnerScript -match 'postgres:18\.6-alpine') "the runner must pin PostgreSQL 18.6 Alpine"
 Assert-True ($runnerScript -match 'GetEnvironmentVariable\("Path", "Machine"\)' -and $runnerScript -match 'GetEnvironmentVariable\("Path", "User"\)') "the entry must refresh PATH after child-process installation"
+Assert-True ($runnerScript -match 'Get-CotestWindowsProcessPath -InheritedPath \$env:PATH') 'the actual runner must retain its caller runtime during PATH refresh'
+Assert-True ($runnerScript -match 'playwright-runtime\.json') 'the actual executed Playwright runtime must be recorded independently of preflight'
 Assert-True ($runnerScript -match '\$allColandBaseUrls = @\(\$ColandBaseUrl, \$colandServer2BaseUrl\) \+ @\(\$additionalServers \| ForEach-Object \{ \$_.ColandBaseUrl \}\) \| Where-Object \{ \$_ \}' -and
     $runnerScript -match 'New-StationInternalChannelBindings\s+`\s*-StationBaseUrls \$allColandBaseUrls' -and
     $runnerScript -match '\$resolvedInksonUrls = @\(if ') "single-server Station and Inkson URL collections must remain arrays and feed indexed Station bindings under strict mode"

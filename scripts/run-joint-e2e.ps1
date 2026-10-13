@@ -3173,7 +3173,7 @@ if ($environmentExit -ne 0) {
 if ($IsWindows) {
     $machinePath = [Environment]::GetEnvironmentVariable("Path", "Machine")
     $userPath = [Environment]::GetEnvironmentVariable("Path", "User")
-    $env:PATH = @($machinePath, $userPath) | Where-Object { $_ } | Join-String -Separator ";"
+    $env:PATH = Get-CotestWindowsProcessPath -InheritedPath $env:PATH -MachinePath $machinePath -UserPath $userPath
 }
 
 if (-not $OutputRoot) {
@@ -5530,6 +5530,15 @@ try {
         }
         $playwrightCommand = $playwrightCli.FilePath
         $playwrightCommandArgs = @($playwrightCli.Arguments) + $playwrightArgs
+        $runtimeVersion = if ([IO.Path]::GetFileName($playwrightCommand) -match '^node(?:\.exe)?$') {
+            (& $playwrightCommand --version | Out-String).Trim()
+        } else { $null }
+        [ordered]@{
+            executable = $playwrightCommand
+            executable_sha256 = (Get-FileHash -LiteralPath $playwrightCommand -Algorithm SHA256).Hash.ToLowerInvariant()
+            node_version = $runtimeVersion
+            cli_entry = if ($playwrightCli.Arguments.Count -gt 0) { $playwrightCli.Arguments[0] } else { $null }
+        } | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $jointDir 'playwright-runtime.json') -Encoding UTF8
         Push-Location $e2eRoot
         $playwrightWriter = $null
         try {

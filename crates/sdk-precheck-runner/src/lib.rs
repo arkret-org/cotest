@@ -1,9 +1,9 @@
 //! Executable SDK Event precheck vectors.
 //!
-//! The fixture mutations are submitted to the SDK's production Draft 2020-12
-//! [`ProtocolSchemaRegistry`]. The Event schema itself owns the kind-selected
-//! payload dispatch; this runner deliberately does not call the payload catalog
-//! as a second acceptance gate.
+//! The diagnostic runner checks canonical mutations against both the complete
+//! typed SDK Event gate and the normative Draft 2020-12 schema oracle.
+//! Modeled effect counters are diagnostic evidence only; the root Cotest suite
+//! owns the real Station, PostgreSQL reducer and native client storage consumer.
 
 use std::path::PathBuf;
 
@@ -66,9 +66,8 @@ struct AdmissionObservation {
     issue: Option<SchemaValidationIssue>,
 }
 
-/// Thin consumer boundary that guarantees schema validation precedes every
-/// downstream effect. The validator is production SDK code; the counters are
-/// explicit Cotest ports which make forbidden consumption observable.
+/// Diagnostic schema consumer with explicitly modeled effect counters.
+/// These counters cannot establish production reducer or storage evidence.
 struct EventAdmissionConsumer {
     registry: ProtocolSchemaRegistry,
 }
@@ -190,7 +189,7 @@ fn load_artifact_json(relative: &str) -> Result<Value> {
     serde_json::from_str(&raw).with_context(|| format!("parse spec artifact {}", path.display()))
 }
 
-fn load_fixture_and_base_event() -> Result<(Value, Value)> {
+pub fn load_fixture_and_base_event() -> Result<(Value, Value)> {
     let fixture = load_artifact_json(&format!("fixtures/{FIXTURE}"))?;
     ensure!(
         fixture
@@ -239,7 +238,7 @@ fn event_object(event: &mut Value) -> Result<&mut Map<String, Value>> {
         .context("legal base Event must be an object")
 }
 
-fn mutation_for(case_id: &str, base_event: &Value) -> Result<Value> {
+pub fn mutation_for(case_id: &str, base_event: &Value) -> Result<Value> {
     let mut event = base_event.clone();
     let object = event_object(&mut event)?;
     match case_id {
@@ -361,6 +360,7 @@ pub fn run_sdk_precheck_suite_diagnostic() -> Result<SdkPrecheckExecution> {
     let consumer = EventAdmissionConsumer::from_spec_artifacts()?;
 
     let positive = consumer.submit(&base_event, AdmissionPath::Initial)?;
+    arkret_event_draft::decode_event_for_submit(base_event.clone())?;
     ensure!(
         positive.accepted,
         "legal base Event did not pass complete Event schema"
@@ -409,6 +409,10 @@ pub fn run_sdk_precheck_suite_diagnostic() -> Result<SdkPrecheckExecution> {
             "{case_id} reason drifted"
         );
         let event = mutation_for(case_id, &base_event)?;
+        ensure!(
+            arkret_event_draft::decode_event_for_submit(event.clone()).is_err(),
+            "production typed Event admission accepted {case_id}"
+        );
         let paths = paths_for(case_id);
         let mut first_issue = None;
         let mut combined_effects = EffectCounts::default();
@@ -506,7 +510,7 @@ mod tests {
     fn complete_event_precheck_executes_all_current_cases() -> Result<()> {
         let execution = run_sdk_precheck_suite_diagnostic()?;
         assert_eq!(execution.entrypoint, SDK_PRECHECK_ENTRYPOINT);
-        assert_eq!(execution.cases.len(), 10);
+        execution.assert_complete_against(&load_fixture_and_base_event()?.0)?;
         assert!(execution.positive_control_assertions > 0);
         assert!(execution.cases.iter().all(|case| case.assertions > 0));
         assert!(execution.cases.iter().all(|case| case.effects.is_zero()));

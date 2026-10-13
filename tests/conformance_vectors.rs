@@ -28,7 +28,7 @@ use cotest::conformance::{
     run_poll_reducer_fixture_suite, run_presence_signal_vector_suite,
     run_primary_handle_vector_suite, run_private_view_inbox_suite, run_producer_identity_suite,
     run_protocol_time_tolerance_suite, run_protocol_version_suite, run_push_rule_core_suite,
-    run_realm_join_candidate_suite, run_relation_structural_realm_suite, run_sdk_precheck_suite,
+    run_realm_join_candidate_suite, run_relation_structural_realm_suite,
     run_sdk_precheck_suite_diagnostic, run_sidecar_vector_suite, run_strand_watch_current_suite,
     run_string_profile_suite, run_test_material_rejection_suite_with_coverage,
 };
@@ -121,11 +121,15 @@ fn protocol_time_tolerance_named_suite_returns_one_result_per_case() -> Result<(
 }
 
 #[test]
-fn test_material_rejection_named_suite_executes_all_cases_and_exposes_service_gaps() -> Result<()> {
+fn test_material_rejection_named_suite_executes_sdk_coauth_and_coland_consumers() -> Result<()> {
     let coverage = run_test_material_rejection_suite_with_coverage()?;
-    assert_eq!(coverage.execution.cases.len(), 14);
-    assert_eq!(coverage.service_e2e_status, "partial");
-    assert_eq!(coverage.service_e2e_gaps.len(), 1);
+    coverage
+        .execution
+        .assert_complete_against(&cotest::conformance::load_fixture_value(
+            coverage.execution.fixture,
+        )?)?;
+    assert_eq!(coverage.service_e2e_status, "complete");
+    assert!(coverage.service_e2e_gaps.is_empty());
     Ok(())
 }
 
@@ -134,7 +138,7 @@ fn sdk_precheck_diagnostic_executes_cases_and_refuses_production_claim() -> Resu
     let execution = run_sdk_precheck_suite_diagnostic()?;
     execution
         .assert_complete_against(&cotest::conformance::load_fixture_value(execution.fixture)?)?;
-    assert!(run_sdk_precheck_suite().is_err());
+    assert!(cotest_sdk_precheck_runner::run_sdk_precheck_suite().is_err());
     Ok(())
 }
 

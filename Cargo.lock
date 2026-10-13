@@ -3006,6 +3006,7 @@ name = "cotest-sdk-precheck-runner"
 version = "0.3.0"
 dependencies = [
  "anyhow",
+ "arkret-event-draft",
  "arkret-schema",
  "arkret-schema-conformance",
  "arkret-wire",

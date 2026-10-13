@@ -111,42 +111,6 @@
       ]
     },
     {
-      "task": "2026-09-08-1638-device-recovery-and-encrypted-edit.md",
-      "criteria_count": 4,
-      "criteria_sha256": "775723fc39c09e739474c3e74e40498930a1fb82f18507072f5cd87da040cb40",
-      "spec_refs": [
-        "arkret-spec/spec/v1/zh/identity/security-transactions.md",
-        "arkret-spec/spec/v1/zh/crypto-media/device-lifecycle.md"
-      ],
-      "source_refs": [
-        "inkson/src/mls/account_recovery/recovery_transaction.rs"
-      ],
-      "tests": [
-        {
-          "path": "cotest/tests/recovery_transaction_faults.rs",
-          "symbol": "recovery_transaction_remote_side_effect_fault_matrix",
-          "kind": "contract",
-          "covers": "恢复副作用故障矩阵"
-        },
-        {
-          "path": "cotest/tests/to_device_offline_ordering.rs",
-          "symbol": "expired_device_message_replays_exactly_and_remains_until_ack",
-          "kind": "live",
-          "covers": "过期exact HTTP／跨HTTP key／ACK前后重放及两次实际重启"
-        },
-        {
-          "path": "cotest/tests/to_device_offline_ordering.rs",
-          "symbol": "invalid_device_message_expiry_rejects_the_whole_batch",
-          "kind": "live",
-          "covers": "新增过期与超过24h混合batch零入队"
-        }
-      ],
-      "engineering_checks": [],
-      "remaining_scenarios": [
-        "DR-C2登录callback／late401与durable隔离；DR-C3四RecoveryMethod；DR-C4恢复后真实编辑和第二设备；DR-C5 actor-private游标；DR-C6实际发送调用方的DeviceMessage离线／重启／ACK完整组合，已有TTL／exact replay测试不代表整项完成"
-      ]
-    },
-    {
       "task": "2026-09-10-0540-client-current-result-durable-index.md",
       "criteria_count": 7,
       "criteria_sha256": "beebef34c3e67690cf9a4040346e6017354459f5c643eaf6440d3363f3f9b652",
@@ -182,7 +146,9 @@
       "spec_refs": [
         "arkret-spec/spec/v1/zh/extensions/applet-integration.md",
         "arkret-spec/spec/v1/zh/authz/managed-governance.md",
-        "arkret-spec/spec/v1/artifacts/registry/applet-managed-authority-registry.json"
+        "arkret-spec/spec/v1/artifacts/registry/applet-managed-authority-registry.json",
+        "arkret-spec/spec/v1/zh/crypto-media/device-lifecycle.md",
+        "arkret-spec/spec/v1/artifacts/registry/contract-registry.json"
       ],
       "source_refs": [
         "coland/crates/http/src/routing/extensions/applet_bridge/delegated_device.rs",
@@ -205,11 +171,17 @@
           "symbol": "ghost_creation_quota_rolls_back_with_the_unit_and_counts_exact_retry_once",
           "kind": "live",
           "covers": "真实PG/HTTP fresh创建quota、后段故障回滚、跨HTTP key exact retry/变更body拒绝和额度耗尽；不证明管理审批、reuse quota或独立Device/runtime全通"
+        },
+        {
+          "path": "coland/crates/server/tests/applet_admission.rs",
+          "symbol": "ghost_mapping_quota_is_atomic_and_exact_retries_do_not_reconsume_creation",
+          "kind": "live",
+          "covers": "真实PG/HTTP reuse mapping rate quota、后段失败完整零写、原创建额度不重扣、跨HTTP key和preview变更后exact恢复、额度耗尽及伪造anchors拒绝；不证明管理review/首Device/runtime全通"
         }
       ],
       "engineering_checks": [],
       "remaining_scenarios": [
-        "Applet creation/join/publish管理review与quota完整分类；Service多parent/共享ancestor quota；无session首Device入站和21-operation业务门；独立多Bot/Ghost runtime、跨scope撤权/rotation与真实内容解密回复；未挂载author成员的不完整bundle声明修正"
+        "Applet creation/join/publish管理review与完整quota分类；Service多parent/共享ancestor quota；首Device合法generation初始化规范前置、无session入站和21-operation业务门；独立多Bot/Ghost runtime、跨scope撤权/rotation与真实内容解密回复；未挂载author成员的不完整bundle声明修正"
       ]
     },
     {
@@ -391,35 +363,6 @@
       "engineering_checks": [],
       "remaining_scenarios": [
         "逐case named生产消费/required-ref合取；原origin binding移除；最终签名SDK/profile闭包"
-      ]
-    },
-    {
-      "task": "2026-09-19-0038b-sdk-test-material-and-precheck-suites.md",
-      "criteria_count": 4,
-      "criteria_sha256": "27191e83cbe5ebf909b1e82999209b201e31453f5cc9bb5e3bb6d4fec5d2583c",
-      "spec_refs": [
-        "arkret-spec/spec/v1/zh/conformance/conformance-profiles.md"
-      ],
-      "source_refs": [
-        "cotest/src/conformance/named_suite_audit.rs"
-      ],
-      "tests": [
-        {
-          "path": "cotest/tests/conformance_vectors.rs",
-          "symbol": "sdk_precheck_diagnostic_executes_cases_and_refuses_production_claim",
-          "kind": "contract",
-          "covers": "明确拒绝diagnostic冒充production claim"
-        },
-        {
-          "path": "cotest/tests/conformance_vectors.rs",
-          "symbol": "test_material_rejection_named_suite_executes_all_cases_and_exposes_service_gaps",
-          "kind": "contract",
-          "covers": "已知test material和服务缺口"
-        }
-      ],
-      "engineering_checks": [],
-      "remaining_scenarios": [
-        "closed Event／kind-selected payload进入真实reducer存储；三类标识真实拒绝后的cache／binding／challenge零残留；跨服务ledger"
       ]
     },
     {
