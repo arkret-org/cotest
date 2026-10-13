@@ -294,6 +294,99 @@ fn current_workspace_operation_registry_gate_passes() -> Result<()> {
     Ok(())
 }
 
+#[test]
+fn negative_routes_are_scoped_to_one_test_file_method_and_path() -> Result<()> {
+    let temp = tempfile::tempdir()?;
+    let artifacts_root = temp.path().join("artifacts");
+    let classifications = temp.path().join("operation-product-private-paths.json");
+    let source_dir = temp.path().join("source");
+    write_minimal_artifacts(
+        &artifacts_root,
+        &[(
+            "ak.server.read.describe.v1",
+            "GET /_arkret/describe",
+            "typed_response",
+            None,
+            None,
+        )],
+        &[("GET", "/_arkret/describe", "ak.server.read.describe.v1")],
+    )?;
+    write_json(
+        &classifications,
+        &json!({
+            "allowed": [],
+            "negative_test_paths": [{
+                "source": "cotest", "source_file": "src/scenarios/retired.rs",
+                "method": "GET", "path": "/_arkret/self/retired",
+                "reason": "The exact test asserts that this retired route returns 404."
+            }]
+        }),
+    )?;
+    write_source(
+        &source_dir,
+        "src/scenarios/retired.rs",
+        r#"client.get_json("_arkret/self/retired")"#,
+    )?;
+    for (source, file, call, allowed) in [
+        (
+            "cotest",
+            "src/scenarios/retired.rs",
+            r#"client.get_json("_arkret/self/retired")"#,
+            true,
+        ),
+        (
+            "coland",
+            "src/scenarios/retired.rs",
+            r#"client.get_json("_arkret/self/retired")"#,
+            false,
+        ),
+        (
+            "cotest",
+            "src/scenarios/elsewhere.rs",
+            r#"client.get_json("_arkret/self/retired")"#,
+            false,
+        ),
+        (
+            "cotest",
+            "src/scenarios/retired.rs",
+            r#"client.post_json("_arkret/self/retired", &body)"#,
+            false,
+        ),
+        (
+            "cotest",
+            "src/scenarios/retired.rs",
+            r#"client.get_json("_arkret/self/other-retired")"#,
+            false,
+        ),
+    ] {
+        write_source(&source_dir, file, call)?;
+        let report = build_operation_registry_gate_report_from_paths(paths(
+            &artifacts_root,
+            &classifications,
+            source_root(source, &source_dir, file),
+        ))?;
+        assert_eq!(
+            validate_operation_registry_gate_report(&report).is_ok(),
+            allowed
+        );
+        if allowed {
+            assert!(
+                report
+                    .entries
+                    .iter()
+                    .any(|entry| entry.gate_status == OperationRegistryGateStatus::NegativeTest)
+            );
+            assert!(
+                report
+                    .entries
+                    .iter()
+                    .all(|entry| entry.operation_id.is_none())
+            );
+        }
+    }
+    Ok(())
+}
+
 fn paths(
     artifacts_root: &Path,
     product_private_path: &Path,

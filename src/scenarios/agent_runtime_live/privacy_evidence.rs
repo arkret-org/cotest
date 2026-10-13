@@ -196,7 +196,7 @@ pub async fn run_agent_requested_scope_privacy_production()
     scope.constraints = vec![serde_json::from_value(json!({
         "constraint_kind": "scope_limitation", "effect": "allow", "allowed_data_labels": [marker],
     }))?];
-    let agent = AgentRuntimeSession::establish_observed(
+    let mut agent = AgentRuntimeSession::establish_observed(
         station,
         AgentSessionIssuer::Fixture(&coauth),
         &controller,
@@ -436,10 +436,12 @@ pub async fn run_agent_requested_scope_privacy_production()
         "pairing",
     )
     .await?;
-    let mut renewed =
+    let mut renewed = {
+        agent.key_authorization = paired.authorize_event_ref.clone();
         pairing_expiry_evidence::replacement_material(station, &controller, &account, &agent)
             .await?
-            .body;
+            .body
+    };
     renewed.requested_scope_disclosure = old_disclosure;
     refused(
         &controller,

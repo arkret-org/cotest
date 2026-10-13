@@ -1,6 +1,6 @@
 {
   "schema": "cotest.operation-product-private-paths.v1",
-  "comment": "Explicit product-private classifications for discovered /_arkret/* paths that are not registered protocol operations. The operation registry gate fails any unregistered discovered path unless it is listed here with classification=product-private and a reason.",
+  "comment": "Explicit product-private classifications and exact Cotest negative route tests. Unregistered production paths still fail; negative tests require a reviewed reason, exact test source file, HTTP method and path, with no wildcard.",
   "allowed": [
     {
       "source": "coland",
@@ -183,6 +183,15 @@
       "path": "/_arkret/self/circles/({wildcard}",
       "classification": "product-private",
       "reason": "Malformed path template recovered from the mockArkretApi.ts regex /^\\/_arkret\\/self\\/circles\\/([^/]+)\\/(archive|restore|tombstone)$/ (the capture-group '(' leaks into the extracted template); the mock actually dispatches the registered circle archive/restore/tombstone operations."
+    }
+  ],
+  "negative_test_paths": [
+    {
+      "source": "cotest",
+      "source_file": "src/scenarios/realm_links_live.rs",
+      "method": "GET",
+      "path": "/_arkret/self/realms/{target}/effective-policy",
+      "reason": "The Realm link live scenario requires the retired effective-policy alias to return 404; this path is a negative test and must never be registered or mounted as a protocol operation."
     }
   ]
 }

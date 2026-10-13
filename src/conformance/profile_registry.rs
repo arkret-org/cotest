@@ -84,11 +84,7 @@ const NEW_VECTOR_PROFILES: &[&str] = &[
 /// for. Aggressive mode: the harness does not yet drive every required
 /// event_kind through a live server, so they default to `unsupported` per
 /// spec's `default_unsupported_behavior` — never silently skipped.
-const NEW_IMPLEMENTATION_PROFILES: &[&str] = &[
-    "ak.profile.e2ee_relaxed.v1",
-    "ak.profile.directory_service.v1",
-    "ak.profile.federation.high_assurance.v1",
-];
+const NEW_IMPLEMENTATION_PROFILES: &[&str] = &["ak.profile.directory_service.v1"];
 
 /// Wired cotest suites. Each entry is `(suite_id, fixture_file)`. The fixture
 /// existence under `tests/fixtures/` is used as the run-time check; the suite

@@ -125,7 +125,7 @@ async fn refused_supersedes(
     Ok(())
 }
 
-async fn lifecycle(
+pub(super) async fn lifecycle(
     controller: &TestActorClient,
     agent: &AgentRuntimeSession,
     action: &str,

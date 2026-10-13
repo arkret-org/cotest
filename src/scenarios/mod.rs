@@ -71,3 +71,8 @@ pub mod third_party_invite_claim_live;
 pub mod approval_admission_live;
 pub mod signal_live;
 pub mod websocket_live;
+
+pub mod peer_semantic_union_live;
+pub mod realm_links_live;
+pub mod realm_organization_account_live;
+pub mod realm_parent_membership_live;

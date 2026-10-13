@@ -55,13 +55,17 @@ use crate::scenarios::_helpers::live_gate::skip_or_fail;
 use crate::scenarios::human_device_producer_live::{database, standard_client, station_env};
 use crate::scenarios::identity_test_support::HARNESS_INTERNAL_AUTHORITY_SECRET;
 
+mod binding_evidence;
 mod coauth_session_evidence;
 mod pairing_expiry_evidence;
+mod pcr_evidence;
 mod privacy_evidence;
 mod provision_evidence;
 mod repairing_evidence;
+pub use binding_evidence::run_agent_runtime_binding_admission;
 pub use coauth_session_evidence::run_agent_session_grant_replay_production;
 pub use pairing_expiry_evidence::run_agent_pairing_expiry_production;
+pub use pcr_evidence::run_agent_pcr_profile_admission;
 pub use privacy_evidence::run_agent_requested_scope_privacy_production;
 pub use provision_evidence::run_agent_genesis_production_cases;
 pub use repairing_evidence::run_agent_repairing_production;

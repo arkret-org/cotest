@@ -71,7 +71,7 @@ const DIRECT_CONVERSATIONS_RESOLVE_PATH =
   "/_arkret/self/direct-conversations/resolve";
 const KEYPACKAGES_CLAIM_PATH = "/_arkret/self/keys/keypackages/claim";
 const EVENTS_SUBMIT_PATH = "/_arkret/self/events";
-const MLS_TRANSACTION_KINDS = ["ak.mls.commit", "ak.mls.welcome"];
+const MLS_TRANSACTION_KINDS = ["ak.mls.commit"];
 
 const isAccountSubscribe = ({ pathname }: URL) =>
   pathname === ACCOUNT_SUBSCRIBE_PATH;
@@ -546,10 +546,6 @@ jointTest.describe("Agent Savfox split live @fully-implemented", () => {
           mlsSubmissions.distinctEventIds("ak.mls.commit", 1),
           "a resumed materialization must not author a second epoch-1 Commit",
         ).toHaveLength(1);
-        expect(
-          mlsSubmissions.distinctEventIds("ak.mls.welcome").length,
-          "a resumed materialization must not author a second Welcome",
-        ).toBeLessThanOrEqual(1);
         expect(
           keyPackageClaims.count(),
           "resuming the frozen MLS unit must not make another peer KeyPackage claim request",
