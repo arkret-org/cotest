@@ -383,18 +383,43 @@ test("administrator Policy stale CAS and ordinary member edits refuse without ef
   const id = await editor.getByLabel("Exact Policy id", { exact: true }).inputValue();
   const sibling = await openDpopUserPageFromSession(browser, jointRealm.aliceSession, { prepareMlsDevice: false });
   expect(Boolean(sibling)).toBe(true);
+  let releaseStale!: () => void;
+  const staleHold = new Promise<void>(resolve => { releaseStale = resolve; });
+  let staleFrozen!: () => void;
+  const frozen = new Promise<void>(resolve => { staleFrozen = resolve; });
+  let originalStale: string | undefined;
+  const stalePattern = "**/_arkret/self/events";
+  await sibling!.page.page.route(stalePattern, async route => {
+    const events = decodeIngressEvents(route.request().postData());
+    const policy = events.find(event => event.kind === "ak.policy.set" && event.payload?.policy_id === id);
+    if (!policy) { await route.continue(); return; }
+    expect(policy.payload?.expected_revision).toBeNull();
+    const raw = route.request().postData()!;
+    if (originalStale === undefined) originalStale = raw;
+    expect(raw === originalStale, "the delayed candidate keeps every original signed request byte").toBe(true);
+    staleFrozen();
+    await staleHold;
+    await route.continue();
+  });
   try {
     const staleEditor = await loadPolicyEditor(sibling!.page, realm, id);
-    const first = await savePolicyEditor(user, editor, realm);
-    const accepted = await assertPolicyCurrent(request, jointRealm.aliceSession, realm, first);
     await staleEditor.getByTestId("agent-policy-rule").getByLabel("Effect", { exact: true }).selectOption("allow");
-    const before = await footprint(realm, jointRealm.aliceSession.accountId.station_id);
     const staleResponse = sibling!.page.page.waitForResponse(response =>
       response.request().method() === "POST" && new URL(response.url()).pathname === "/_arkret/self/events"
       && decodeIngressEvents(response.request().postData()).some(event => event.payload?.policy_id === id));
-    const [refusal] = await Promise.all([
+    const [refusal, { accepted, before }] = await Promise.all([
       staleResponse,
-      staleEditor.getByTestId("agent-policy-save").click(),
+      (async () => {
+        await staleEditor.getByTestId("agent-policy-save").click();
+        await frozen;
+        // Freeze through normal authoring while its null CAS basis is valid.
+        // The other page commits before this original request reaches the Station.
+        const first = await savePolicyEditor(user, editor, realm);
+        const accepted = await assertPolicyCurrent(request, jointRealm.aliceSession, realm, first);
+        const before = await footprint(realm, jointRealm.aliceSession.accountId.station_id);
+        releaseStale();
+        return { accepted, before };
+      })(),
     ]);
     const body = await refusal.json();
     expect(refusal.status(), "stale null revision must not overwrite the accepted Policy").toBe(409);
@@ -404,7 +429,11 @@ test("administrator Policy stale CAS and ordinary member edits refuse without ef
     expect(canonicalJson((await footprint(realm, jointRealm.aliceSession.accountId.station_id)).tables) === canonicalJson(before.tables)).toBe(true);
     const unchanged = await exactPolicy(request, jointRealm.aliceSession, realm, id);
     expect(canonicalJson(unchanged.entry) === canonicalJson(accepted.entry)).toBe(true);
-  } finally { await sibling!.page.close(); }
+  } finally {
+    releaseStale();
+    await sibling!.page.page.unroute(stalePattern);
+    await sibling!.page.close();
+  }
 
   const consent = await grantInviteConsentArkret(request, jointRealm.bobToken, jointRealm.bob, jointRealm.alice.id);
   const delivery = await deliverInviteWithConsentGrant(request, {
