@@ -70,7 +70,9 @@ pub use grant_ceiling_evidence::run_agent_provision_grant_ceiling_boundary;
 pub use pairing_expiry_evidence::run_agent_pairing_expiry_production;
 pub use pcr_evidence::run_agent_pcr_profile_admission;
 pub use privacy_evidence::run_agent_requested_scope_privacy_production;
-pub use provision_evidence::run_agent_genesis_production_cases;
+pub use provision_evidence::{
+    run_agent_genesis_production_cases, run_agent_provision_authority_boundary,
+};
 pub use provision_start_evidence::run_agent_provision_prerequisites_boundary;
 pub use repairing_evidence::run_agent_repairing_production;
 
@@ -436,6 +438,9 @@ impl AgentRuntimeSession {
         });
         if let Some(evidence) = evidence.as_deref_mut() {
             evidence
+                .reject_proof_substitutes(server, controller, &commit_body)
+                .await?;
+            evidence
                 .late_projection_fault(controller, &commit_body)
                 .await?;
         }
@@ -520,7 +525,9 @@ impl AgentRuntimeSession {
             bail!("the bound Agent completes provisioning: {complete:?}");
         };
         if let Some(evidence) = evidence.as_deref_mut() {
-            evidence.bound(server, controller, &complete).await?;
+            evidence
+                .bound(server, controller, &complete, &commit_body)
+                .await?;
         }
         let pairing_code = complete
             .pairing_code

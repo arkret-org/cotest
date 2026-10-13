@@ -9,7 +9,7 @@ import { approvePairingLinkOnAuthorizedDevice, createDpopUserSession, openUserPa
 import { serverLoginViaCoauth, submitCoauthPasswordCredentials } from "../../helpers/real-oidc-login";
 import { colandBaseUrl } from "../../helpers/env";
 
-import { directStructureLifecycleGate, flatTopicChats, rejectDirectStructureEvent } from "../../helpers/direct-structure";
+import { createDirectBoundaryCircleStrand, directStructureLifecycleGate, flatTopicChats, rejectDirectStructureEvent } from "../../helpers/direct-structure";
 
 function directConversationCase(mode: "normal" | "interrupted" | "offline" | "lost" | "logout" | "account" | "withdrawal" | "leave", remoteBob = false) {
 return async ({ jointUsers, request, browser }: { jointUsers: JointUsersFixture; request: APIRequestContext; browser: Browser }) => {
@@ -21,10 +21,16 @@ return async ({ jointUsers, request, browser }: { jointUsers: JointUsersFixture;
   const bob = bobPage.page;
   const interruptPreparation = mode === "interrupted" || mode === "offline";
   const holdSecondResolve = mode === "normal" || mode === "logout" || mode === "account";
+  const phase = (stage: string) => {
+    if (remoteBob) console.info("Cross-station Direct preparation", JSON.stringify({ stage, mode }));
+  };
+  const resolveObservations = new Map<Page, string>();
+  phase("recovery_start");
   await Promise.all([
-    alicePage.completeRecoveryKeySetupIfPrompted(30_000),
-    bobPage.completeRecoveryKeySetupIfPrompted(30_000),
+    alicePage.completeRecoveryKeySetupIfPrompted(30_000).then(() => phase("alice_recovery_finished")),
+    bobPage.completeRecoveryKeySetupIfPrompted(30_000).then(() => phase("bob_recovery_finished")),
   ]);
+  phase("contact_request_start");
   const remoteLocator = remoteBob && await resolvePrincipalLocator(request, bobSession.user.id, "server2", bobSession.grantJwt);
   const { outcome } = await requestContactArkret(request, aliceSession.grantJwt, bobSession.user.id, {
     requestedScopes: ["direct_message", "presence"],
@@ -39,6 +45,7 @@ return async ({ jointUsers, request, browser }: { jointUsers: JointUsersFixture;
     ...(remoteBob ? { server: "server2" as const, requesterServiceId: aliceSession.accountId.station_id } : {}),
   });
   expect(accepted.state).toBe("accepted");
+  phase("contact_accepted");
 
   // Claim blocking fixes the pre-join boundary at epoch 0; since_join forbids
   // delivering that epoch to the future peer. Consume blocking instead tests
@@ -63,7 +70,9 @@ return async ({ jointUsers, request, browser }: { jointUsers: JointUsersFixture;
       await route.abort("failed");
     });
   }
+  phase("participant_reload_start");
   await Promise.all([alice.reload(), bob.reload()]);
+  phase("participant_reload_finished");
   let founder: Page | undefined;
   let foundingAcceptedAt: number | undefined;
   let releaseResolve!: () => void;
@@ -133,16 +142,44 @@ return async ({ jointUsers, request, browser }: { jointUsers: JointUsersFixture;
         if (request.method() !== "POST" || new URL(request.url()).pathname !== "/_arkret/self/events") return;
         if (request.postDataJSON()?.unit_kind === "direct_conversation_founding") founder = page;
       });
-      page.on("response", response => {
+      page.on("response", async response => {
         if (response.request().method() !== "POST" || new URL(response.url()).pathname !== "/_arkret/self/events") return;
-        if (response.request().postDataJSON()?.unit_kind === "direct_conversation_founding" && response.ok()) {
+        if (response.request().postDataJSON()?.unit_kind !== "direct_conversation_founding") return;
+        const outcome = await response.json().catch(() => null);
+        const committed = response.ok() && outcome?.unit_kind === "direct_conversation_founding"
+          && outcome.status === "committed" && Array.isArray(outcome.commits) && outcome.commits.length === 4;
+        console.info("Direct founding submit observation", JSON.stringify({
+          side: page === alice ? "alice" : "bob", http_status: response.status(),
+          committed, commit_count: Array.isArray(outcome?.commits) ? outcome.commits.length : 0,
+        }));
+        if (!response.ok()) return;
+        if (committed) {
+          founder = page;
           foundingAcceptedAt ??= Date.now();
-          acceptFounding(response);
         }
+        acceptFounding(response);
       });
       await page.route(resolvePath, async route => {
         const handling = (async () => {
-          const heldResponse = mode === "account" && founder === page ? await route.fetch() : undefined;
+          // A submit request does not establish acceptance. A failed first
+          // attempt must retain the real resolver path needed for recovery.
+          const holdAcceptedResolve = founder === page && foundingAcceptedAt !== undefined;
+          const heldResponse = mode === "account" && holdAcceptedResolve ? await route.fetch() : undefined;
+          const observedResponse = remoteBob && !holdAcceptedResolve ? await route.fetch() : undefined;
+          if (observedResponse) {
+            const resolved = await observedResponse.json();
+            const state = ["creation_required", "creation_blocked", "awaiting_founder", "provisional", "found", "suspended", "temporarily_unavailable"].includes(resolved.state)
+              ? resolved.state : "unexpected_state";
+            const observation = JSON.stringify({ side: page === alice ? "alice" : "bob",
+              http_status: observedResponse.status(), state,
+              blockers: Array.isArray(resolved.blockers) ? resolved.blockers
+                .filter((value: unknown) => typeof value === "string" && /^[a-z_]{1,80}$/.test(value)) : [],
+              founding_input_present: resolved.next_founding_input !== undefined });
+            if (resolveObservations.get(page) !== observation) {
+              console.info("Cross-station Direct real resolver observation", observation);
+              resolveObservations.set(page, observation);
+            }
+          }
           if (heldResponse) {
             expect(heldResponse.ok(), "the old Account's actual resolver must answer before identity replacement").toBe(true);
             const resolved = await heldResponse.json();
@@ -152,9 +189,10 @@ return async ({ jointUsers, request, browser }: { jointUsers: JointUsersFixture;
             heldResolvedCoordinates = resolved.coordinates;
             oldResolutionReady();
           }
-          if (founder === page) await resolveDelay;
+          if (holdAcceptedResolve) await resolveDelay;
           try {
             if (heldResponse) await route.fulfill({ response: heldResponse });
+            else if (observedResponse) await route.fulfill({ response: observedResponse });
             else await route.continue();
           } catch (error) {
             if (mode !== "account") throw error;
@@ -176,8 +214,10 @@ return async ({ jointUsers, request, browser }: { jointUsers: JointUsersFixture;
   }
   try {
   for (const [page, peer] of [[alice, bobSession.user.id], [bob, aliceSession.user.id]] as const) {
+    phase(page === alice ? "alice_direct_open_start" : "bob_direct_open_start");
     await page.getByTestId("realm-sidebar-tab-direct").click();
     await page.locator(`[data-testid="direct-conversation-row"][data-peer=${JSON.stringify(canonicalJson(accountActorId(peer, peer === bobSession.user.id && remoteBob ? "server2" : "default")))}]`).click();
+    phase(page === alice ? "alice_direct_open_finished" : "bob_direct_open_finished");
   }
   if (mode === "lost") {
     await lostAcceptance;
@@ -186,6 +226,7 @@ return async ({ jointUsers, request, browser }: { jointUsers: JointUsersFixture;
   }
   if (holdSecondResolve) {
     const acceptedResponse = await foundingAccepted;
+    phase("founding_accepted");
     expect(acceptedResponse.ok(), await acceptedResponse.text()).toBeTruthy();
     const unit = ingressEvents(decodeEventIngressBody(acceptedResponse.request().postDataJSON()));
     const acceptedBody = await acceptedResponse.json() as { unit_kind: string; status: string; commits: Array<Record<string, unknown>> };
@@ -481,23 +522,8 @@ return async ({ jointUsers, request, browser }: { jointUsers: JointUsersFixture;
       });
       const outsideStrand = await resolveDefaultStrandId(request, aliceSession.grantJwt, outsideRealm);
       const control = paired.page.page;
-      await control.goto(`/realms/${encodeURIComponent(outsideRealm)}/circles`, { waitUntil: "domcontentloaded" });
-      await control.getByTestId("circle-create-open").click();
-      await control.getByTestId("circle-create-title").fill(`DM boundary Circle ${Date.now()}`);
-      await expect(control.getByTestId("circle-create-encrypted")).not.toBeChecked();
-      await control.getByTestId("circle-create-submit").click();
-      await expect(control).toHaveURL(/\/realms\/[^/]+\/circles\/[^/]+$/);
-      const outsideCircle = decodeURIComponent(new URL(control.url()).pathname.split("/").at(-1)!);
-      let circleStrand: string | undefined;
-      await expect.poll(async () => {
-        const history = await scanRealmStreamApi(request, aliceSession.grantJwt, outsideRealm, {
-          streamRef: { kind: "circle", realm_id: outsideRealm, circle_id: outsideCircle }, limit: 1000,
-        });
-        expect(history.truncated).toBe(false);
-        const created = history.events.find(event => event.kind === "ak.strand.create");
-        circleStrand = typeof created?.event_id === "string" ? created.event_id.replace("ak:event:", "ak:strand:") : undefined;
-        return circleStrand;
-      }).toBeTruthy();
+      const circleStrand = await createDirectBoundaryCircleStrand(control, request,
+        aliceSession.grantJwt, outsideRealm, `DM boundary Circle ${Date.now()}`);
       const third = await createDpopUserSession(request, "direct-outsider", {});
       expect(third, "negative author must be a real registered principal/device").toBeDefined();
       await control.goto(path, { waitUntil: "domcontentloaded" });

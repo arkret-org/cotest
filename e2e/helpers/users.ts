@@ -941,11 +941,16 @@ export class JointUserPage {
       await this.dismissCreateRealmBlockingPrompts(promptHandling);
       strand = this.page.getByTestId("realm-lifecycle-strand").last();
       titleInput = strand.getByTestId("realm-title-input");
+      const another = strand.getByTestId("new-realm-start-another");
+      if (await another.isVisible({ timeout: 1_000 }).catch(() => false)) {
+        await expect(another).toBeEnabled({ timeout: 30_000 });
+        await this.clickCreateRealmControl(another, promptHandling);
+      }
       if (await titleInput.isVisible({ timeout: 1_000 }).catch(() => false)) {
         break;
       }
       const basicsStep = strand
-        .getByRole("button", { name: /^Basics/ })
+        .getByRole("button", { name: /\bBasics\b/ })
         .first();
       if (await basicsStep.isVisible({ timeout: 2_000 }).catch(() => false)) {
         await basicsStep.click();
@@ -963,7 +968,7 @@ export class JointUserPage {
     // UI state without weakening the subsequent field assertions.
     if (!(await titleInput.isVisible({ timeout: 1_000 }).catch(() => false))) {
       const basicsStep = strand
-        .getByRole("button", { name: /^Basics/ })
+        .getByRole("button", { name: /\bBasics\b/ })
         .first();
       if (await basicsStep.isVisible({ timeout: 2_000 }).catch(() => false)) {
         await basicsStep.click();

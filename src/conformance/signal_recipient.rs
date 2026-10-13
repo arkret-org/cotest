@@ -63,6 +63,7 @@ fn delivery_authority(
             .unwrap(),
             authorization_ref: authorization,
         },
+        product_authority: None,
     };
     authority.validate_for_envelope(signal).unwrap();
     authority

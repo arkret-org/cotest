@@ -1,10 +1,11 @@
 // A normal member confirms a narrow owned source through Inkson, without an
-// admin granting capability-management actions or a runtime pairing prerequisite.
+// admin granting capability-management actions. Immutable private scope evidence
+// is required before authorization; pairing itself must not grant content rights.
 import { test, expect } from "../../helpers/joint-fixture";
 import type { Page, Locator, APIRequestContext } from "../../helpers/arkret-test";
 import { coauthBaseUrl, colandBaseUrl, mockEmailBaseUrl } from "../../helpers/env";
 import { grantInviteConsentArkret, deliverInviteWithConsentGrant } from "../../helpers/contact-api";
-import { buildCapabilityGrantEnvelope, canonicalJson, grantCapabilityEventApi, rawSubmitSignedEventApi, refreshEventEnvelopeProof, resolveDefaultStrandId, retypeEventDerivedId, signedEventEnvelope, wireErrCode } from "../../helpers/coland-api";
+import { assertAuthoritySubmitOutcome, buildCapabilityGrantEnvelope, canonicalJson, grantCapabilityEventApi, rawSubmitSignedEventApi, refreshEventEnvelopeProof, resolveDefaultStrandId, retypeEventDerivedId, signedEventEnvelope, wireErrCode } from "../../helpers/coland-api";
 import { addCircleMemberRaw, createCircleArkret } from "../../helpers/circle-api";
 import { decodeIngressEvents } from "../../helpers/event-ingress";
 import { openDpopUserPageFromSession, registeredSubjectIdentityControl, selfPathHeadersForDpopSession, type DpopUserSession, type JointUserPage } from "../../helpers/users";
@@ -79,7 +80,8 @@ async function members(page: Page, realm: string, agent: string): Promise<Locato
   return page.locator(`[data-testid="member-self-agent-row"][data-agent-id="${agent}"]`);
 }
 
-async function confirm(page: Page, panel: Locator, realm: string, account: unknown, agent: unknown, strand: string): Promise<string> {
+async function confirm(page: Page, panel: Locator, realm: string, account: unknown, agent: unknown, strand: string,
+  expectedRejection?: "agent_requested_scope_commitment_invalid"): Promise<string> {
   await panel.getByTestId("owned-agent-scope").selectOption(strand);
   await panel.getByRole("checkbox", { name: "发送消息", exact: true }).check();
   const published = page.waitForResponse(response => {
@@ -89,8 +91,16 @@ async function confirm(page: Page, panel: Locator, realm: string, account: unkno
   }, { timeout: 180_000 });
   await panel.getByTestId("owned-agent-confirm-authority").click();
   const response = await published;
-  expect(response.ok()).toBe(true);
   const event = decodeIngressEvents(response.request().postData()).find(event => event.kind === "ak.capability.grant")!;
+  if (expectedRejection) {
+    const body = await response.json();
+    expect(response.status()).toBe(409);
+    expect(wireErrCode(body)).toBe("failed_precondition");
+    expect(body.reason_code).toBe(expectedRejection);
+    expect(body.commit === undefined && body.commits === undefined).toBe(true);
+    return retypeEventDerivedId(event.event_id!, "grant");
+  }
+  expect(response.ok()).toBe(true);
   expect(event.actor_id).toEqual({ kind: "account", account_id: account });
   const grant = event.payload!.grant as Record<string, unknown>;
   expect(grant.subject).toEqual({ kind: "account", account_id: agent });
@@ -148,14 +158,33 @@ test("ordinary member explicitly grants, withdraws cold and confirms a new owned
   await available.getByTestId("confirm-add-agent-to-realm").click();
   await expect(row).toBeVisible({ timeout: 180_000 });
   const panel = row.getByTestId("member-agent-authority");
+  await expect(panel).toBeVisible({ timeout: 180_000 });
+  // The roster row already existed before Add. Re-read the two accepted join
+  // generations through the normal control before asserting confirmation UI.
+  await expect(async () => {
+    const confirmButton = panel.getByTestId("owned-agent-confirm-authority");
+    if (!await confirmButton.isVisible()) {
+      const refresh = panel.getByRole("button", { name: "刷新当前权限与管理限制", exact: true });
+      if (await refresh.isEnabled()) await refresh.click();
+    }
+    await expect(confirmButton).toBeVisible({ timeout: 1_000 });
+  }).toPass({ timeout: 120_000, intervals: [1_000, 2_000, 5_000] }).catch(async error => {
+    const status = await panel.getByTestId("owned-agent-authority-status").textContent().catch(() => null);
+    const safeStatus = status && !/Bearer|eyJ[A-Za-z0-9_-]{20}|recovery.key|private.key/i.test(status)
+      ? status.slice(0, 1_000) : "status unavailable";
+    await test.info().attach("owned-agent-authority-join-status", {
+      body: Buffer.from(JSON.stringify({ status: safeStatus })), contentType: "application/json",
+    });
+    throw error;
+  });
   await expect(panel.getByTestId("owned-agent-confirm-authority")).toBeDisabled();
   await expect(panel.getByRole("checkbox", { name: "发送消息", exact: true })).not.toBeChecked();
   const agentAccount = { principal_id: agentId, station_id: jointRealm.bobSession.accountId.station_id };
-  const first = await confirm(bob, panel, realm, jointRealm.bobSession.accountId, agentAccount, strand);
-  await expect(panel.locator(`[data-grant-id="${first}"]`)).toContainText("当前权限/管理预检允许（运行时仍需验收）", { timeout: 120_000 });
-  // Preflight is separately labelled. Only a real paired Agent's signed
-  // accepted Message and exact read-back prove the business action below.
-  await expect(panel.locator(`[data-grant-id="${first}"]`)).not.toContainText(/未确认|基础权限|不可达/, { timeout: 120_000 });
+  const beforeUnqualified = await footprint(realm, jointRealm.bobSession.accountId.station_id);
+  const unqualified = await confirm(bob, panel, realm, jointRealm.bobSession.accountId, agentAccount, strand,
+    "agent_requested_scope_commitment_invalid");
+  expect((await footprint(realm, jointRealm.bobSession.accountId.station_id)).tables).toEqual(beforeUnqualified.tables);
+  await expect(panel.locator(`[data-grant-id="${unqualified}"]`)).toHaveCount(0);
   await row.getByTestId("member-agent-interaction-mode").getByRole("button", { name: /^(公开|Public)$/ }).click();
   const reply = row.getByTestId("member-agent-reply-toggle");
   if (await reply.getAttribute("aria-checked") !== "true") await reply.click();
@@ -171,6 +200,15 @@ test("ordinary member explicitly grants, withdraws cold and confirms a new owned
       agentId, realmId: realm, strandId: strand,
     });
     expect(runtime.authorizationEventId).toMatch(/^ak:event:/);
+    // Current pairing custody proves the private immutable ceiling, but is
+    // neither a content grant nor the ordinary member's explicit confirmation.
+    await rejectedWithoutEffects(bridge, runtime.runtimeId, realm, strand, session.accountId.station_id);
+    const qualifiedPanel = (await members(bob, realm, agentId)).getByTestId("member-agent-authority");
+    const first = await confirm(bob, qualifiedPanel, realm, session.accountId, agentAccount, strand);
+    await expect(qualifiedPanel.locator(`[data-grant-id="${first}"]`)).toContainText("当前权限/管理预检允许（运行时仍需验收）", { timeout: 120_000 });
+    // Preflight is separately labelled. Only the real Agent-signed accepted
+    // Message and exact read-back below prove business effectiveness.
+    await expect(qualifiedPanel.locator(`[data-grant-id="${first}"]`)).not.toContainText(/未确认|基础权限|不可达/, { timeout: 120_000 });
     const authored = await bridge.prepareAgentMessage({ runtimeId: runtime.runtimeId, realmId: realm, strandId: strand,
       text: "real Agent signs and commits using the explicitly confirmed narrow owned source" });
     const accepted = await bridge.submitAgentMessage(runtime.runtimeId, authored);
@@ -345,17 +383,44 @@ test("administrator Policy stale CAS and ordinary member edits refuse without ef
   const id = await editor.getByLabel("Exact Policy id", { exact: true }).inputValue();
   const sibling = await openDpopUserPageFromSession(browser, jointRealm.aliceSession, { prepareMlsDevice: false });
   expect(Boolean(sibling)).toBe(true);
+  let releaseStale!: () => void;
+  const staleHold = new Promise<void>(resolve => { releaseStale = resolve; });
+  let staleFrozen!: () => void;
+  const frozen = new Promise<void>(resolve => { staleFrozen = resolve; });
+  let originalStale: string | undefined;
+  const stalePattern = "**/_arkret/self/events";
+  await sibling!.page.page.route(stalePattern, async route => {
+    const events = decodeIngressEvents(route.request().postData());
+    const policy = events.find(event => event.kind === "ak.policy.set" && event.payload?.policy_id === id);
+    if (!policy) { await route.continue(); return; }
+    expect(policy.payload?.expected_revision).toBeNull();
+    const raw = route.request().postData()!;
+    if (originalStale === undefined) originalStale = raw;
+    expect(raw === originalStale, "the delayed candidate keeps every original signed request byte").toBe(true);
+    staleFrozen();
+    await staleHold;
+    await route.continue();
+  });
   try {
     const staleEditor = await loadPolicyEditor(sibling!.page, realm, id);
-    const first = await savePolicyEditor(user, editor, realm);
-    const accepted = await assertPolicyCurrent(request, jointRealm.aliceSession, realm, first);
     await staleEditor.getByTestId("agent-policy-rule").getByLabel("Effect", { exact: true }).selectOption("allow");
     const staleResponse = sibling!.page.page.waitForResponse(response =>
       response.request().method() === "POST" && new URL(response.url()).pathname === "/_arkret/self/events"
       && decodeIngressEvents(response.request().postData()).some(event => event.payload?.policy_id === id));
-    const before = await footprint(realm, jointRealm.aliceSession.accountId.station_id);
-    await staleEditor.getByTestId("agent-policy-save").click();
-    const refusal = await staleResponse;
+    const [refusal, { accepted, before }] = await Promise.all([
+      staleResponse,
+      (async () => {
+        await staleEditor.getByTestId("agent-policy-save").click();
+        await frozen;
+        // Freeze through normal authoring while its null CAS basis is valid.
+        // The other page commits before this original request reaches the Station.
+        const first = await savePolicyEditor(user, editor, realm);
+        const accepted = await assertPolicyCurrent(request, jointRealm.aliceSession, realm, first);
+        const before = await footprint(realm, jointRealm.aliceSession.accountId.station_id);
+        releaseStale();
+        return { accepted, before };
+      })(),
+    ]);
     const body = await refusal.json();
     expect(refusal.status(), "stale null revision must not overwrite the accepted Policy").toBe(409);
     expect(wireErrCode(body) ?? body.reason_code).toBe("failed_precondition");
@@ -364,7 +429,11 @@ test("administrator Policy stale CAS and ordinary member edits refuse without ef
     expect(canonicalJson((await footprint(realm, jointRealm.aliceSession.accountId.station_id)).tables) === canonicalJson(before.tables)).toBe(true);
     const unchanged = await exactPolicy(request, jointRealm.aliceSession, realm, id);
     expect(canonicalJson(unchanged.entry) === canonicalJson(accepted.entry)).toBe(true);
-  } finally { await sibling!.page.close(); }
+  } finally {
+    releaseStale();
+    await sibling!.page.page.unroute(stalePattern);
+    await sibling!.page.close();
+  }
 
   const consent = await grantInviteConsentArkret(request, jointRealm.bobToken, jointRealm.bob, jointRealm.alice.id);
   const delivery = await deliverInviteWithConsentGrant(request, {
@@ -597,11 +666,30 @@ test("normal controller requests join and public review, distinct administrator 
   const otherRealm = await jointRealm.alicePage.createRealm({ title: "Management review state isolation", joinRule: "invite" });
   const created = await secondAccepted;
   expect(created.status()).toBe(200);
-  const createdEvent = decodeIngressEvents(created.request().postData()).find(value => value.kind === "ak.realm.create")!;
+  const createdEvents = decodeIngressEvents(created.request().postData());
+  const contract = JSON.parse(await readFile(fileURLToPath(new URL(
+    "../../../../arkret-spec/spec/v1/artifacts/registry/contract-registry.json", import.meta.url,
+  )), "utf8"));
+  // This normal wizard declares plaintext visibility and requests no alias.
+  // Derive the one registered order instead of keeping a second slot list.
+  const slots = contract.realm_bootstrap_registry.ordinary_collaboration.ordered_slots as
+    Array<{ event_kind: string; presence: string }>;
+  expect(createdEvents.map(event => event.kind)).toEqual(slots
+    .filter(slot => slot.presence !== "optional").map(slot => slot.event_kind));
+  const createdEvent = createdEvents[0];
   const createdOutcome = await created.json();
-  expect(createdEvent.realm_id).toBe(otherRealm);
+  expect(createdEvent.scope_ref).toEqual({ kind: "realm_genesis" });
+  expect(retypeEventDerivedId(createdEvent.event_id!, "realm")).toBe(otherRealm);
+  expect(createdOutcome.unit_kind).toBe("ordinary_realm_bootstrap");
   expect(createdOutcome.status).toBe("committed");
-  expect(createdOutcome.commit?.event_ref).toBe(createdEvent.event_id);
+  expect(createdOutcome.commits).toHaveLength(createdEvents.length);
+  for (const [index, event] of createdEvents.entries()) {
+    const commit = createdOutcome.commits[index];
+    assertAuthoritySubmitOutcome({ status: createdOutcome.status, commit }, event,
+      `management isolation Realm bootstrap ${index}`);
+    expect(commit.stream_position).toBe(index);
+    expect(commit.previous_commit_ref ?? null).toBe(index ? createdOutcome.commits[index - 1].commit_id : null);
+  }
   expect(otherRealm).not.toBe(realm);
   const editor = await loadPolicyEditor(jointRealm.alicePage, realm);
   await editor.getByLabel("Default effect", { exact: true }).selectOption("allow");

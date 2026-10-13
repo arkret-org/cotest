@@ -393,7 +393,7 @@ impl AgentRuntimeHandle {
                     .any(|x| x == ServiceOperationId::SELF_EVENTS_COMMAND_SUBMIT_V1)
                 && scopes
                     .iter()
-                    .any(|x| x == ServiceOperationId::SELF_COMMITTED_EVENT_RESOURCE_GET_V1),
+                    .any(|x| x == ServiceOperationId::SELF_COMMITTED_EVENT_READ_SCAN_V1),
             "accepted provision did not select the tested runtime operations"
         );
         ensure!(

@@ -436,7 +436,11 @@ impl LiveSignalReader {
                     WebSocketServerFrame::Data {
                         payload: WebSocketDataPayload::Signal(frame),
                         ..
-                    } if matches!(*frame, arkret::SignalStreamFrame::Signal { .. }) => {
+                    } if matches!(
+                        *frame,
+                        arkret_models_collaboration::SignalStreamFrame::Signal { .. }
+                    ) =>
+                    {
                         bail!("unexpected Signal while settling the durable Events rail")
                     }
                     WebSocketServerFrame::ChannelError { error, .. } => {
@@ -451,7 +455,9 @@ impl LiveSignalReader {
         .context("exact accepted transition on the shared Events rail")?
     }
 
-    pub(crate) async fn next_frame(&mut self) -> Result<Option<arkret::SignalStreamFrame>> {
+    pub(crate) async fn next_frame(
+        &mut self,
+    ) -> Result<Option<arkret_models_collaboration::SignalStreamFrame>> {
         loop {
             match next(&mut self.0).await? {
                 WebSocketServerFrame::Data {
@@ -463,7 +469,9 @@ impl LiveSignalReader {
                     payload: WebSocketChannelControlPayload::Heartbeat(_),
                     ..
                 } if channel_id == "signal-1" => {
-                    return Ok(Some(arkret::SignalStreamFrame::Heartbeat));
+                    return Ok(Some(
+                        arkret_models_collaboration::SignalStreamFrame::Heartbeat,
+                    ));
                 }
                 WebSocketServerFrame::ChannelControl {
                     channel_id,

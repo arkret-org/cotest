@@ -552,7 +552,7 @@ struct OpenSignalsInput {
     group_state_ref: EventId,
     authority_commit_id: arkret_wire::RealmCommitId,
     parent_realm_authority_commit_id: Option<arkret_wire::RealmCommitId>,
-    frames: Vec<arkret::SignalStreamFrame>,
+    frames: Vec<arkret_models_collaboration::SignalStreamFrame>,
 }
 
 /// Open the captured rail with the recipient's independent group and authority.
@@ -564,7 +564,7 @@ pub fn mls_open_signals(input: Value) -> Result<Value> {
     let mut payloads = Vec::new();
     for frame in input.frames {
         frame.validate()?;
-        let arkret::SignalStreamFrame::Signal {
+        let arkret_models_collaboration::SignalStreamFrame::Signal {
             envelope,
             delivery_authority,
         } = frame

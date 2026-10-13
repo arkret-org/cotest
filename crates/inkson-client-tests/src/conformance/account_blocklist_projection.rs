@@ -2493,7 +2493,7 @@ async fn next_admitted_signal(
                 .await?
                 .context("live Signal rail ended")?
             {
-                arkret::SignalStreamFrame::Signal {
+                arkret_models_collaboration::SignalStreamFrame::Signal {
                     envelope,
                     delivery_authority,
                 } => {
@@ -2506,7 +2506,7 @@ async fn next_admitted_signal(
                         )
                         .await?);
                 }
-                arkret::SignalStreamFrame::Heartbeat => {}
+                arkret_models_collaboration::SignalStreamFrame::Heartbeat => {}
                 terminal => bail!("Signal rail terminated before actual delivery: {terminal:?}"),
             }
         }
