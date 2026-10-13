@@ -883,6 +883,8 @@ function Invoke-JointE2ePreflight {
         [ValidateSet("process", "docker")][string]$ColandRuntime = "process",
         [string]$ColandImage,
         [bool]$WillStartDockerColand = $false,
+        [bool]$StartNativeArkretPublicReply = $false,
+        [string]$NativeSavfoxBinary,
         [string]$InksonBaseUrl,
         [string]$InksonCommand,
         # False for a browserless lane. Without it the "neither URL nor command"
@@ -998,9 +1000,24 @@ function Invoke-JointE2ePreflight {
                 } else {
                     Add-PreflightResult $results "coland conformance-harness feature" "fail" "cached binary lacks the conformance-harness marker; rerun without -SkipBuild"
                 }
+                if ($StartNativeArkretPublicReply) {
+                    if (Test-BinaryContainsAsciiMarker -Path $colandBinary -Marker "COLAND_ARKRET_RUNTIME_HOME") {
+                        Add-PreflightResult $results "coland native Main owner" "pass" $colandBinary
+                    } else {
+                        Add-PreflightResult $results "coland native Main owner" "fail" "binary lacks the native Main owner startup; select its implemented source and rebuild"
+                    }
+                }
             } catch {
                 Add-PreflightResult $results "coland binary" "fail" $_.Exception.Message
             }
+        }
+    }
+
+    if ($StartNativeArkretPublicReply) {
+        if ($NativeSavfoxBinary -and (Test-BinaryContainsAsciiMarker -Path $NativeSavfoxBinary -Marker "SAVFOX_ARKRET_NATIVE_OWNER_HOME")) {
+            Add-PreflightResult $results "savfox native owner handoff" "pass" $NativeSavfoxBinary
+        } else {
+            Add-PreflightResult $results "savfox native owner handoff" "fail" "binary lacks the native owner handoff; select its implemented source and rebuild"
         }
     }
 
@@ -3949,6 +3966,9 @@ try {
     ConvertTo-Json -InputObject @($preparationTimings.ToArray()) -Depth 4 |
         Set-Content -Path (Join-Path $jointDir "preparation-timings.json") -Encoding UTF8
 
+    $nativePublicSavfoxBinary = if ($StartNativeArkretPublicReply) {
+        Join-Path (Get-CargoTargetDirectory -RepositoryRoot $SavfoxRoot) ("debug/" + (Get-NativeExecutableName -Name "savfox"))
+    } else { $null }
     Invoke-JointE2ePreflight `
         -RepoRoot $repoRoot `
         -WorkspaceRoot $workspaceRoot `
@@ -3969,6 +3989,8 @@ try {
         -ColandRuntime $ColandRuntime `
         -ColandImage $ColandImage `
         -WillStartDockerColand $willStartDockerColand `
+        -StartNativeArkretPublicReply ([bool]$StartNativeArkretPublicReply) `
+        -NativeSavfoxBinary $nativePublicSavfoxBinary `
         -InksonBaseUrl $InksonBaseUrl `
         -InksonCommand $InksonCommand `
         -RequiresInkson $requiresInkson `
