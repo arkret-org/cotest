@@ -158,7 +158,15 @@ test("ordinary member explicitly grants, withdraws cold and confirms a new owned
       if (await refresh.isEnabled()) await refresh.click();
     }
     await expect(confirmButton).toBeVisible({ timeout: 1_000 });
-  }).toPass({ timeout: 120_000, intervals: [1_000, 2_000, 5_000] });
+  }).toPass({ timeout: 120_000, intervals: [1_000, 2_000, 5_000] }).catch(async error => {
+    const status = await panel.getByTestId("owned-agent-authority-status").textContent().catch(() => null);
+    const safeStatus = status && !/Bearer|eyJ[A-Za-z0-9_-]{20}|recovery.key|private.key/i.test(status)
+      ? status.slice(0, 1_000) : "status unavailable";
+    await test.info().attach("owned-agent-authority-join-status", {
+      body: Buffer.from(JSON.stringify({ status: safeStatus })), contentType: "application/json",
+    });
+    throw error;
+  });
   await expect(panel.getByTestId("owned-agent-confirm-authority")).toBeDisabled();
   await expect(panel.getByRole("checkbox", { name: "发送消息", exact: true })).not.toBeChecked();
   const agentAccount = { principal_id: agentId, station_id: jointRealm.bobSession.accountId.station_id };
@@ -609,7 +617,15 @@ test("normal controller requests join and public review, distinct administrator 
   const created = await secondAccepted;
   expect(created.status()).toBe(200);
   const createdEvents = decodeIngressEvents(created.request().postData());
-  expect(createdEvents.map(event => event.kind)).toEqual(["ak.realm.create", "ak.member.state"]);
+  const contract = JSON.parse(await readFile(fileURLToPath(new URL(
+    "../../../../arkret-spec/spec/v1/artifacts/registry/contract-registry.json", import.meta.url,
+  )), "utf8"));
+  // This normal wizard declares plaintext visibility and requests no alias.
+  // Derive the one registered order instead of keeping a second slot list.
+  const slots = contract.realm_bootstrap_registry.ordinary_collaboration.ordered_slots as
+    Array<{ event_kind: string; presence: string }>;
+  expect(createdEvents.map(event => event.kind)).toEqual(slots
+    .filter(slot => slot.presence !== "optional").map(slot => slot.event_kind));
   const createdEvent = createdEvents[0];
   const createdOutcome = await created.json();
   expect(createdEvent.realm_id).toBe(otherRealm);

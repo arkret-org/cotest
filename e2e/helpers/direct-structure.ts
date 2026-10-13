@@ -5,7 +5,7 @@ import { decodeEventIngressBody, ingressEvents, type IngressEvent } from "./even
 import { readFile, writeFile, rename, rm } from "node:fs/promises";
 import { randomBytes, randomUUID } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
-import { colandBaseUrl, colandServiceId, colandServiceResolution, type ColandKey } from "./env";
+import { colandBaseUrl, colandServiceDid, colandServiceId, colandServiceResolution, configuredServerKeys, type ColandKey } from "./env";
 import { cotestWire } from "./coland-api/wire-client";
 import type { ActorId } from "./generated/spec-wire-objects";
 
@@ -200,15 +200,22 @@ async function structureCut(proof: DirectStructureProof, realm: string,
     const response = await proof.request.get(url, { headers: authHeaders(viewer?.token ?? proof.token, "GET", url) });
     expect(response.status(), "complete signed structure-boundary snapshot").toBe(200);
     const snapshot = await response.json();
+    // Replicas retain the governing Station's original Snapshot signature.
+    // Its method is only a routing hint; the SDK below must still qualify the
+    // complete nonce-bound authority chain and method-native key history.
+    const signerDid = snapshot.signature?.verification_method?.split("#")[0];
+    const candidates = configuredServerKeys().filter(key => colandServiceDid(key) === signerDid);
+    expect(candidates.length, "Snapshot signer has one configured authority candidate").toBe(1);
+    const candidate = candidates[0]!;
     const authorityRequest = { realm_id: realm, nonce: randomBytes(32).toString("base64url") };
-    const authority = await proof.request.post(`${colandBaseUrl()}/_arkret/open/realm-authority/bundle`, {
+    const authority = await proof.request.post(`${colandBaseUrl(candidate)}/_arkret/open/realm-authority/bundle`, {
       headers: { "content-type": "application/json" }, data: canonicalJson(authorityRequest) });
-    expect(authority.status()).toBe(200);
-    const resolution = await proof.request.get(colandServiceResolution().resolution_url);
-    expect(resolution.status()).toBe(200);
+    expect(authority.status(), "candidate must supply the actual nonce-bound authority bundle").toBe(200);
+    const resolution = await proof.request.get(colandServiceResolution(candidate).resolution_url);
+    expect(resolution.status(), "candidate's method-native service history is available").toBe(200);
     expect(cotestWire<{ verified: boolean }>("verify-realm-state-snapshot", {
       snapshot, expected_snapshot_id: snapshot.snapshot_id, authority_request: authorityRequest,
-      authority_bundle: await authority.json(), trusted_service_id: colandServiceId(),
+      authority_bundle: await authority.json(), trusted_service_id: colandServiceId(candidate),
       service_resolution: await resolution.json(),
     }).verified, "SDK must verify the whole current snapshot and native authority history").toBe(true);
     const stream = { kind: "realm", realm_id: realm };
@@ -272,16 +279,30 @@ async function assertStructureBoundary(proof: DirectStructureProof, realm: strin
     const successor = await scanRealmStreamApi(proof.request, viewers[index]?.token ?? proof.token, realm,
       { limit: 1000, server: viewers[index]?.server, afterPosition: before[index].position });
     expect(successor.truncated).toBe(false);
-    expect(successor.events.some((row: any) => row.event_id === event.event_id)).toBe(true);
-    expect(successor.events.every((row: any) => ["ak.space.create", "ak.space.update", "ak.space.archive",
+    expect(successor.commits.length).toBe(successor.events.length);
+    const end = successor.commits.findIndex(commit => commit.commit_id === after.head
+      && commit.stream_position === after.position);
+    expect(end, "accepted tail reaches the exact after-Snapshot head").toBeGreaterThanOrEqual(0);
+    const interval = successor.events.slice(0, end + 1);
+    for (const [offset, commit] of successor.commits.slice(0, end + 1).entries()) {
+      expect(commit.stream_position, "structure interval is a complete continuous accepted tail")
+        .toBe(before[index].position + offset + 1);
+      expect(commit.event_ref, "each interval Commit binds its actual Event").toBe(interval[offset].event_id);
+    }
+    expect(interval.some((row: any) => row.event_id === event.event_id)).toBe(true);
+    // Ordinary encrypted messages and their receiving-service franking
+    // proofs can finish asynchronously without changing any custody row.
+    // Never include writes beyond the exact signed after-cut in this interval.
+    const unexpectedKinds = [...new Set(interval.filter((row: any) => !["ak.space.create", "ak.space.update", "ak.space.archive",
       "ak.space.restore", "ak.space.tombstone", "ak.strand.create", "ak.strand.update", "ak.strand.archive",
-      "ak.strand.restore", "ak.strand.watch.set"].includes(row.kind)),
-      "structure interval cannot conceal a member/history/MLS/Realm transition").toBe(true);
+      "ak.strand.restore", "ak.strand.watch.set", "ak.message.create", "ak.moderation.franking_proof"].includes(row.kind))
+      .map(row => row.kind))];
+    expect(unexpectedKinds, "structure interval cannot conceal a member/history/MLS/Realm transition").toEqual([]);
     await test.info().attach(`structure-custody-boundary-${index}-${event.event_id}`, {
       body: JSON.stringify({ realm_id: realm, viewer_station: viewers[index]?.server ?? "default",
         protected_rows: after.rows.length, groups: after.groups, history_floor_unchanged: true,
         member_and_mls_rows_exact: true, before_head: before[index].head, after_head: after.head,
-        actual_structure_event: event.event_id, accepted_successors: successor.events.length }), contentType: "application/json" });
+        actual_structure_event: event.event_id, accepted_successors: interval.length }), contentType: "application/json" });
   }
 }
 
@@ -674,10 +695,33 @@ export async function rejectDirectStructureEvent(proof: DirectStructureProof, te
   }
   expect(body.commit === undefined, "refused write must omit Commit").toBe(true);
   expect(body.commits === undefined, "refused write must omit Commits").toBe(true);
-  expect(await readCommitStreamHeadApi(proof.request, proof.token, realm)).toEqual(beforeHead);
-  expect(await snapshot()).toEqual(before);
+  const afterHead = await readCommitStreamHeadApi(proof.request, proof.token, realm);
+  expect(afterHead, "refusal observer retains its actual accepted head").toBeDefined();
+  expect(afterHead!.stream_ref).toEqual(beforeHead!.stream_ref);
+  const unchangedRows = (entries: Array<Record<string, any>>) => entries
+    .filter(row => row.selector.kind !== "moderation_franking_proof")
+    .sort((a, b) => canonicalJson(a.selector).localeCompare(canonicalJson(b.selector)));
+  expect(unchangedRows(await snapshot())).toEqual(unchangedRows(before));
   const after = await scanRealmStreamApi(proof.request, proof.token, realm, { afterPosition: beforeHead!.stream_position });
-  expect(after).toMatchObject({ truncated: false, events: [], commits: [] });
+  expect(after.truncated).toBe(false);
+  expect(after.commits.length).toBe(after.events.length);
+  expect(after.events.some(row => row.event_id === event.event_id), "refused Event never enters the accepted stream").toBe(false);
+  expect(after.commits.some(commit => commit.event_ref === event.event_id), "refused Event has no accepting Commit").toBe(false);
+  if (afterHead!.commit_id === beforeHead!.commit_id) {
+    expect(afterHead).toEqual(beforeHead);
+  } else {
+    const end = after.commits.findIndex(commit => commit.commit_id === afterHead!.commit_id
+      && commit.stream_position === afterHead!.stream_position);
+    expect(end, "refusal observation reaches its exact after-head").toBeGreaterThanOrEqual(0);
+    for (const [offset, commit] of after.commits.slice(0, end + 1).entries()) {
+      expect(commit.stream_position).toBe(beforeHead!.stream_position + offset + 1);
+      expect(commit.event_ref).toBe(after.events[offset].event_id);
+      // A delayed receiving-service receipt is independent of this refused
+      // write. It must not conceal any business or governance Event.
+      expect(after.events[offset].kind, "only concurrent franking receipts may advance the refusal observation")
+        .toBe("ak.moderation.franking_proof");
+    }
+  }
   await test.info().attach(`direct-negative-${name}`, {
     body: Buffer.from(JSON.stringify({ event_id: event.event_id, expected_reason: reason ?? "failed_precondition",
       stream_head: beforeHead, current_unchanged: true, subsequent_events: 0, subsequent_commits: 0 })),
