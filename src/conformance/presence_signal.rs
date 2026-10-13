@@ -59,6 +59,8 @@ fn accepted_presence(
     )?)?;
     let realm_id = RealmId::new("ak:realm:AYcmQBZ6x7FCwln_vbdWIyV2tJ4pOJ4rmbd6v_0Y7N9_")?;
     Ok(SignalReceiveOutcome::Accepted {
+        signer_verification_method: arkret_wire::DidUrl::new("did:web:alice.example#device-1")
+            .unwrap(),
         product_authority: None,
         authority_commit_id: arkret_wire::RealmCommitId::from_digest([41; 32]),
         parent_realm_authority_commit_id: None,

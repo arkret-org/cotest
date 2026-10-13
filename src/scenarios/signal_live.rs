@@ -10,6 +10,7 @@ use arkret_wire::{
     SignalKeyRef, SignalProof,
 };
 use chrono::{Duration, Utc};
+use serde_json::json;
 
 use crate::scenarios::mls_lifecycle_live::{ACTIVE_SUITE, Member};
 
@@ -724,9 +725,6 @@ async fn deliver(
     let payload = arkret_models_collaboration::signal_plaintext::open_signal_plaintext(&plaintext)?;
     ensure!(payload.signal_class() == class && payload.payload_sequence() == sequence);
     if let Some((_, expected)) = product_case {
-        let arkret::SignalPlaintext::MessageStream(frame) = &payload else {
-            anyhow::bail!("MessageStream product profile was lost");
-        };
         let material = received
             .1
             .product_authority
@@ -740,8 +738,27 @@ async fn deliver(
             },
             scope_ref: received.0.scope_ref.clone(),
         };
-        let mut projection = garth::MessageStreamProjection::new();
-        let result = projection.apply(
+        match &payload {
+            arkret::SignalPlaintext::Typing(typing) => {
+                let allowed = arkret_policy::signal_authorization::typing_allowed(
+                    material,
+                    &domain.sender_actor_id,
+                    &domain.scope_ref,
+                    &typing.strand_id,
+                    Utc::now(),
+                );
+                ensure!(
+                    allowed == expected,
+                    "Typing original/current product gate differs"
+                );
+                eprintln!(
+                    "[signal-typing] actual_two_station=1 proof_mls_aead=1 original_and_current_material=1 broadcast_allowed={allowed} indicator_count={}",
+                    usize::from(allowed)
+                );
+            }
+            arkret::SignalPlaintext::MessageStream(frame) => {
+                let mut projection = garth::MessageStreamProjection::new();
+                let result = projection.apply(
             &domain,
             frame,
             &|domain: &garth::SignalSequenceDomain, frame: &arkret_models_collaboration::signal_message_stream::MessageStreamFrame| {
@@ -755,18 +772,21 @@ async fn deliver(
             },
             Utc::now(),
         );
-        ensure!(
-            result.is_ok() == expected,
-            "MessageStream dual-action product gate must match accepted original/current sources: {result:?}"
-        );
-        ensure!(
-            projection.previews().count() == usize::from(expected),
-            "denied product has no body side effect"
-        );
-        eprintln!(
-            "[signal-message-stream] actual_two_station=1 proof_mls_aead=1 original_and_current_material=1 dual_action_allowed={expected} preview_count={}",
-            projection.previews().count()
-        );
+                ensure!(
+                    result.is_ok() == expected,
+                    "MessageStream dual-action product gate must match accepted original/current sources: {result:?}"
+                );
+                ensure!(
+                    projection.previews().count() == usize::from(expected),
+                    "denied product has no body side effect"
+                );
+                eprintln!(
+                    "[signal-message-stream] actual_two_station=1 proof_mls_aead=1 original_and_current_material=1 dual_action_allowed={expected} preview_count={}",
+                    projection.previews().count()
+                );
+            }
+            _ => anyhow::bail!("unexpected Signal product profile"),
+        }
     }
     if let Some(websocket) = &mut websocket {
         websocket.finish().await?;
@@ -988,6 +1008,191 @@ pub(crate) async fn exercise_two_station_signal(
         Some((product_frame(11)?, false)),
     )
     .await?;
+    let typing_frame = |sequence| -> Result<Vec<u8>> {
+        Ok(arkret_canonical::canonical_json_bytes(&json!({
+            "kind":"ak.typing", "payload_sequence":sequence, "strand_id":strand, "typing":true
+        }))?)
+    };
+    deliver(
+        bob,
+        alice,
+        bob_group,
+        alice_group,
+        realm,
+        strand,
+        state,
+        &product_revoked.commit_id,
+        ScopeRef::Realm {
+            realm_id: realm.clone(),
+        },
+        None,
+        SignalClass::Session,
+        12,
+        None,
+        Some((typing_frame(12)?, false)),
+    )
+    .await?;
+    let typing_grant = super::human_device_producer_live::grant_realm_actions(
+        &alice.client,
+        x,
+        realm.as_str(),
+        &bob.account,
+        &[arkret_wire::CapabilityActionId::TYPING_BROADCAST],
+    )
+    .await?;
+    super::mls_lifecycle_live::accepted_full_view(&bob.client, &typing_grant.event_ref).await?;
+    wait_for_replica_cut(y_url, &typing_grant).await?;
+    deliver(
+        bob,
+        alice,
+        bob_group,
+        alice_group,
+        realm,
+        strand,
+        state,
+        &typing_grant.commit_id,
+        ScopeRef::Realm {
+            realm_id: realm.clone(),
+        },
+        None,
+        SignalClass::Session,
+        13,
+        Some(x),
+        Some((typing_frame(13)?, true)),
+    )
+    .await?;
+    let policy_id = arkret_wire::PolicyId::new_v7_at(Utc::now().timestamp_millis() as u64);
+    let mut policy: arkret_models_collaboration::governance::operation_wire::Policy =
+        serde_json::from_value(json!({
+            "id":policy_id, "schema":"ak.schema.policy.v1", "realm_id":realm,
+            "policy_kind":"access", "rules":[{"rule_id":"typing","kind":"action","effect":"deny","actions":[arkret_wire::CapabilityActionId::TYPING_BROADCAST]}],
+            "default_effect":"allow", "created_by":alice.actor,
+            "created_at":arkret_canonical::format_timestamp_canonical(Utc::now())
+        }))?;
+    policy.validate()?;
+    let set_policy = |policy: &arkret_models_collaboration::governance::operation_wire::Policy| -> Result<
+        arkret_models_collaboration::governance::operation_wire::PolicySetStatePayload,
+    > {
+        Ok(serde_json::from_value(
+            json!({"policy_id":policy_id,"value":policy}),
+        )?)
+    };
+    let outcome: arkret_wire::AuthoritySubmitOutcome = serde_json::from_value(
+        alice
+            .client
+            .submit_event(
+                realm.as_str(),
+                arkret_wire::EventKind::PolicySet.as_str(),
+                serde_json::to_value(set_policy(&policy)?)?,
+            )
+            .await?,
+    )?;
+    let arkret_wire::AuthoritySubmitOutcome::Accepted {
+        commit: policy_denied,
+        ..
+    } = outcome
+    else {
+        anyhow::bail!("Typing Policy deny must be accepted");
+    };
+    super::mls_lifecycle_live::accepted_full_view(&bob.client, &policy_denied.event_ref).await?;
+    wait_for_replica_cut(y_url, &policy_denied).await?;
+    // The original cut had the grant and no deny; the current Policy must win.
+    deliver(
+        bob,
+        alice,
+        bob_group,
+        alice_group,
+        realm,
+        strand,
+        state,
+        &typing_grant.commit_id,
+        ScopeRef::Realm {
+            realm_id: realm.clone(),
+        },
+        None,
+        SignalClass::Session,
+        14,
+        None,
+        Some((typing_frame(14)?, false)),
+    )
+    .await?;
+    policy.rules[0].effect = arkret_wire::PolicyEffect::Allow;
+    let outcome: arkret_wire::AuthoritySubmitOutcome = serde_json::from_value(
+        alice
+            .client
+            .submit_event(
+                realm.as_str(),
+                arkret_wire::EventKind::PolicySet.as_str(),
+                serde_json::to_value(set_policy(&policy)?)?,
+            )
+            .await?,
+    )?;
+    let arkret_wire::AuthoritySubmitOutcome::Accepted {
+        commit: policy_allowed,
+        ..
+    } = outcome
+    else {
+        anyhow::bail!("Typing Policy allow must be accepted");
+    };
+    super::mls_lifecycle_live::accepted_full_view(&bob.client, &policy_allowed.event_ref).await?;
+    wait_for_replica_cut(y_url, &policy_allowed).await?;
+    deliver(
+        bob,
+        alice,
+        bob_group,
+        alice_group,
+        realm,
+        strand,
+        state,
+        &policy_allowed.commit_id,
+        ScopeRef::Realm {
+            realm_id: realm.clone(),
+        },
+        None,
+        SignalClass::Session,
+        15,
+        Some(x),
+        Some((typing_frame(15)?, true)),
+    )
+    .await?;
+    let typing_revoke: arkret_wire::AuthoritySubmitOutcome = serde_json::from_value(
+        alice
+            .client
+            .revoke_realm_grant(
+                realm.as_str(),
+                arkret_wire::GrantId::from_event_id(&typing_grant.event_ref).as_str(),
+            )
+            .await?,
+    )?;
+    let arkret_wire::AuthoritySubmitOutcome::Accepted {
+        commit: typing_revoked,
+        ..
+    } = typing_revoke
+    else {
+        anyhow::bail!("Typing revoke must be accepted");
+    };
+    super::mls_lifecycle_live::accepted_full_view(&bob.client, &typing_revoked.event_ref).await?;
+    wait_for_replica_cut(y_url, &typing_revoked).await?;
+    // Keep the original grant-bearing basis; current revocation must win.
+    deliver(
+        bob,
+        alice,
+        bob_group,
+        alice_group,
+        realm,
+        strand,
+        state,
+        &policy_allowed.commit_id,
+        ScopeRef::Realm {
+            realm_id: realm.clone(),
+        },
+        None,
+        SignalClass::Session,
+        16,
+        None,
+        Some((typing_frame(16)?, false)),
+    )
+    .await?;
     let old = envelope(
         bob,
         bob_group,
@@ -1050,7 +1255,7 @@ pub(crate) async fn exercise_two_station_signal(
         },
         None,
         SignalClass::Moderation,
-        14,
+        17,
         Some(x),
         None,
     )
@@ -1116,7 +1321,7 @@ pub(crate) async fn exercise_two_station_signal(
         state,
         &fresh_basis.commit_id,
         SignalClass::Session,
-        15,
+        18,
     )?;
     emission::exercise(
         alice,
