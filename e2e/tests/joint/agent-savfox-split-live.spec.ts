@@ -42,6 +42,7 @@ import {
   grantCapabilityEventApi,
   wireErrCode,
 } from "../../helpers/coland-api";
+import { readScopeMlsGroupCurrentApi } from "../../helpers/coland-api/mls";
 import {
   serverLoginViaCoauth,
   submitCoauthPasswordCredentials,
@@ -1542,6 +1543,14 @@ nativePublicReplyTest.describe("Native public fixed reply @native-public-reply",
           const modeCurrent = await current.json();
           expect(modeCurrent.entry.value.interaction_mode).toBe("public");
           expect(modeCurrent.entry.revision.commit_id).toBe((modeOutcome.commit as Record<string, unknown>).commit_id);
+          // Joining is a membership acceptance, not completion of its MLS Add.
+          // Read a complete real authority cut after all intended joins, then
+          // wait for the actual group to cover that cut before authoring Card
+          // metadata. No fixture ciphertext or assumed epoch stands in for it.
+          await expect.poll(async () => {
+            const group = await readScopeMlsGroupCurrentApi(request, jointUsers.aliceToken, realm);
+            return !!group && group.covered_key_access_revision === group.current_key_access_revision;
+          }, { timeout: 120_000 }).toBe(true);
           const card = await createSidecarSourceCard(controller, realm, `Native public source ${Date.now()}`);
           await card.getByTestId("card-detail-tab-discussion").click();
           const cardAddress = new URL(controller.url());
