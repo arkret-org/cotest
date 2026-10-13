@@ -498,35 +498,6 @@
       ]
     },
     {
-      "task": "2026-09-25-2135-account-detail-coverage-cursor-and-visibility.md",
-      "criteria_count": 5,
-      "criteria_sha256": "5d4f8685d6d706ff184a279ea2e68099a0f3245e2adcba0dc8ada080a0c1a7e3",
-      "spec_refs": [
-        "arkret-spec/spec/v1/zh/sync/client-sync.md"
-      ],
-      "source_refs": [
-        "coland/crates/http/src/routing/events/sync/subscribe.rs"
-      ],
-      "tests": [
-        {
-          "path": "cotest/tests/account_subscribe_long_poll.rs",
-          "symbol": "account_subscribe_omits_quiet_realm_at_unchanged_cursor",
-          "kind": "live",
-          "covers": "quiet long-poll"
-        },
-        {
-          "path": "cotest/tests/snapshot_head_disclosure.rs",
-          "symbol": "limited_account_window_names_issued_basis_or_is_preview_only",
-          "kind": "live",
-          "covers": "window basis与preview分支"
-        }
-      ],
-      "engineering_checks": [],
-      "remaining_scenarios": [
-        "Realm／Circle／Sidecar ACL与撤权；全部获准stream耐久达到声明head才complete；每流head／generation分页失效；authority-signed slice或preview窗口；summary／detail／WS同producer及quiet long-poll"
-      ]
-    },
-    {
       "task": "2026-09-25-2136-effect-ownership-closure-and-remaining-current-families.md",
       "criteria_count": 4,
       "criteria_sha256": "0d2e61aaea229c67d11ada5e29daf14d99acae1226f3704eff1dcb1bb9f0c152",
