@@ -394,35 +394,6 @@
       ]
     },
     {
-      "task": "2026-09-19-0038b-sdk-test-material-and-precheck-suites.md",
-      "criteria_count": 4,
-      "criteria_sha256": "27191e83cbe5ebf909b1e82999209b201e31453f5cc9bb5e3bb6d4fec5d2583c",
-      "spec_refs": [
-        "arkret-spec/spec/v1/zh/conformance/conformance-profiles.md"
-      ],
-      "source_refs": [
-        "cotest/src/conformance/named_suite_audit.rs"
-      ],
-      "tests": [
-        {
-          "path": "cotest/tests/conformance_vectors.rs",
-          "symbol": "sdk_precheck_diagnostic_executes_cases_and_refuses_production_claim",
-          "kind": "contract",
-          "covers": "明确拒绝diagnostic冒充production claim"
-        },
-        {
-          "path": "cotest/tests/conformance_vectors.rs",
-          "symbol": "test_material_rejection_named_suite_executes_all_cases_and_exposes_service_gaps",
-          "kind": "contract",
-          "covers": "已知test material和服务缺口"
-        }
-      ],
-      "engineering_checks": [],
-      "remaining_scenarios": [
-        "closed Event／kind-selected payload进入真实reducer存储；三类标识真实拒绝后的cache／binding／challenge零残留；跨服务ledger"
-      ]
-    },
-    {
       "task": "2026-09-19-0228-approval-layer-and-policy-projection-downstream.md",
       "criteria_count": 5,
       "criteria_sha256": "07cc1c28498cb163453224ce44b34df4b0569fca4d846017008cd6fd11560c15",

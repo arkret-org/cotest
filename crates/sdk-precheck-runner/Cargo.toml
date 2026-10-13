@@ -7,6 +7,7 @@ publish = false
 
 [dependencies]
 anyhow = { workspace = true }
+arkret-event-draft = { workspace = true }
 arkret-schema = { workspace = true }
 arkret-schema-conformance = { workspace = true }
 arkret-wire = { workspace = true }

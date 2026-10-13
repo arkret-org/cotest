@@ -1,9 +1,9 @@
 //! Executable public-test-material rejection vectors.
 //!
 //! The runner uses production SDK matchers and Coauth's production binding
-//! constructor. It also records the remaining cross-service gaps explicitly;
-//! case execution here must not be mistaken for a live WebSocket or Coland
-//! trust-admission test.
+//! constructor. The formal dispatcher additionally executes Coauth HTTP/PG
+//! transactions and Coland trust, durable ledger, binding and route consumers.
+//! The isolated SDK-only runner continues to report its service evidence gap.
 
 use std::path::PathBuf;
 
@@ -24,7 +24,7 @@ pub const TEST_MATERIAL_REJECTION_ENTRYPOINT: &str = "ak.suite.identity.test_mat
 const FIXTURE: &str = "test-material-rejection-fixture.json";
 const ARTIFACT_FIXTURES_DIR: &str = "fixtures";
 
-const EXECUTED_CASES: &[&str] = &[
+pub const EXECUTED_CASES: &[&str] = &[
     "a_published_fixture_key_is_refused_although_its_signature_verifies",
     "the_same_key_under_a_different_kid_and_did_is_refused",
     "the_same_key_re_encoded_is_refused",
@@ -939,7 +939,7 @@ pub fn run_test_material_rejection_suite_with_pg_coverage() -> Result<TestMateri
         std::env::var("DATABASE_URL").is_ok_and(|url| !url.trim().is_empty()),
         "DATABASE_URL must name a migrated scratch database for Coauth route evidence"
     );
-    let coverage = run_test_material_rejection_suite_with_coverage()?;
+    let mut coverage = run_test_material_rejection_suite_with_coverage()?;
     let manifest = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../coauth/Cargo.toml");
     for name in [
         "reserved_did_and_key_id_roll_back_real_admin_binding_transaction",
@@ -981,7 +981,60 @@ pub fn run_test_material_rejection_suite_with_pg_coverage() -> Result<TestMateri
                 && stdout.contains("1 passed; 0 failed; 0 ignored;"),
             "Coauth PG route {test} did not execute exactly one passing test: {stdout}"
         );
+        println!("production trust evidence: coauth-backend::{test} passed");
     }
+    let coland_manifest =
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../coland/Cargo.toml");
+    for (package, test) in [
+        (
+            "coland-http",
+            "state::authority_forward::recovery_tests::test_material_evidence_tests::reserved_material_and_identifiers_leave_no_pg_cache_binding_or_auth_state",
+        ),
+        (
+            "coland-http",
+            "state::did_resolver_chain::tests::formal_test_material_never_enters_the_resolution_snapshot",
+        ),
+        (
+            "coland-http",
+            "state::did_resolver_chain::tests::each_reserved_identifier_rule_blocks_snapshot_admission_independently",
+        ),
+        (
+            "coland-http",
+            "jws_verify::did_binding_tests::valid_signature_from_published_material_is_denied_without_a_binding",
+        ),
+        (
+            "coland-services",
+            "service_route::tests::reserved_trust_domain_is_rejected_before_durable_or_runtime_route_cache_write",
+        ),
+    ] {
+        let output = std::process::Command::new("cargo")
+            .args(["test", "--locked", "--manifest-path"])
+            .arg(&coland_manifest)
+            .args(["-p", package, "--lib", test, "--", "--exact", "--nocapture"])
+            .env_remove("CARGO_MAKEFLAGS")
+            .env_remove("MAKEFLAGS")
+            .env_remove("MFLAGS")
+            .output()
+            .context("execute Coland production trust evidence")?;
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        ensure!(
+            output.status.success(),
+            "Coland {test} failed:\n{stdout}\n{stderr}"
+        );
+        ensure!(
+            !stdout.contains("SKIP(") && !stderr.contains("SKIP("),
+            "Coland {test} skipped"
+        );
+        ensure!(
+            stdout.contains(&format!("test {test} ... ok"))
+                && stdout.contains("1 passed; 0 failed; 0 ignored;"),
+            "Coland {test} did not execute exactly one passing test: {stdout}"
+        );
+        println!("production trust evidence: {package}::{test} passed");
+    }
+    coverage.service_e2e_status = "complete";
+    coverage.service_e2e_gaps.clear();
     Ok(coverage)
 }
 
@@ -1000,9 +1053,11 @@ mod tests {
     use super::*;
 
     #[test]
-    fn executes_all_fourteen_cases_through_sdk_and_coauth_seams() -> Result<()> {
+    fn executes_current_cases_through_sdk_and_coauth_seams() -> Result<()> {
         let coverage = run_test_material_rejection_suite_with_coverage()?;
-        assert_eq!(coverage.execution.cases.len(), 14);
+        coverage
+            .execution
+            .assert_complete_against(&load_fixture_value(FIXTURE)?)?;
         assert!(
             coverage
                 .execution

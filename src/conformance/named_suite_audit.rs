@@ -12,7 +12,7 @@ use anyhow::{Result, anyhow, ensure};
 use cotest_suite_evidence::{CaseRef, DecisionPointGap, audit_decision_points};
 use serde_json::Value;
 
-use super::test_material_rejection::run_test_material_rejection_suite_diagnostic;
+use super::test_material_rejection::run_test_material_rejection_suite;
 use super::{
     ACCOUNT_DATA_CAS_CONVERGENCE_ENTRYPOINT, ACTOR_PRIVATE_EVENTS_SUBMIT_ENTRYPOINT,
     AEAD_NONCE_REPLAY_ENTRYPOINT, AGENT_MLS_KEYPACKAGE_AUTHORIZATION_ENTRYPOINT,
@@ -47,7 +47,7 @@ use super::{
     run_mls_governance_binding_suite, run_object_identity_collision_suite,
     run_private_view_inbox_suite, run_producer_identity_suite, run_protocol_time_tolerance_suite,
     run_protocol_version_suite, run_push_rule_core_suite, run_realm_join_candidate_suite,
-    run_relation_structural_realm_suite, run_sdk_precheck_suite_diagnostic,
+    run_relation_structural_realm_suite, run_sdk_precheck_suite,
     run_security_transaction_resilience_joint_gate, run_session_grant_issuer_ledger_suite,
     run_signal_sequence_high_water_suite, run_strand_watch_current_suite, run_string_profile_suite,
     run_view_write_contract_suite, run_websocket_binding_suite, spec_artifacts_root,
@@ -393,7 +393,11 @@ const RUNNERS: [(&str, Runner); 54] = [
     ),
     (
         SDK_PRECHECK_ENTRYPOINT,
-        Runner::Cases(run_sdk_precheck_suite_diagnostic),
+        Runner::ProductionCases {
+            run: run_sdk_precheck_suite,
+            reviewed_cases: &[super::sdk_precheck::REVIEWED_CASES],
+            pointers: &["/cases"],
+        },
     ),
     (
         STRAND_WATCH_CURRENT_ENTRYPOINT,
@@ -408,7 +412,11 @@ const RUNNERS: [(&str, Runner); 54] = [
     ),
     (
         TEST_MATERIAL_REJECTION_ENTRYPOINT,
-        Runner::Cases(run_test_material_rejection_suite_diagnostic),
+        Runner::ProductionCases {
+            run: run_test_material_rejection_suite,
+            reviewed_cases: &[cotest_test_material_runner::EXECUTED_CASES],
+            pointers: &["/cases"],
+        },
     ),
     (
         VIEW_WRITE_CONTRACT_ENTRYPOINT,

@@ -37,24 +37,39 @@ fn core_named_suite_audit_keeps_client_runners_explicitly_deferred() -> Result<(
         );
     }
     assert!(report.assert_complete().is_err());
-    assert!(
-        report
-            .unproved_entrypoints
-            .iter()
-            .any(|id| id == "ak.suite.sdk.precheck.v1")
-    );
-    assert!(
-        report
-            .unproved_entrypoints
-            .iter()
-            .any(|id| id == "ak.suite.identity.test_material_rejection.v1")
-    );
-    assert!(
-        report
-            .decision_point_gaps
-            .iter()
-            .any(|gap| gap.decision_point == "AK-SDK-001/no_effect_reaches_the_reducer")
-    );
+    for entrypoint in [
+        "ak.suite.sdk.precheck.v1",
+        "ak.suite.identity.test_material_rejection.v1",
+    ] {
+        assert!(
+            !report
+                .unproved_entrypoints
+                .iter()
+                .any(|id| id == entrypoint)
+        );
+        assert!(
+            report
+                .executed_entrypoints
+                .iter()
+                .any(|id| id == entrypoint)
+                || report
+                    .failed_executions
+                    .iter()
+                    .any(|(id, ..)| id == entrypoint)
+        );
+    }
+    if report
+        .executed_entrypoints
+        .iter()
+        .any(|id| id == "ak.suite.sdk.precheck.v1")
+    {
+        assert!(
+            !report
+                .decision_point_gaps
+                .iter()
+                .any(|gap| gap.decision_point == "AK-SDK-001/no_effect_reaches_the_reducer")
+        );
+    }
     assert_eq!(
         report.deferred_client_entrypoints,
         [
