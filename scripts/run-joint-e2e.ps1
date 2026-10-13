@@ -5485,6 +5485,12 @@ try {
         if (-not ($effectiveGrep -and $effectiveGrep.Contains("@platform-live"))) {
             $grepInvertPatterns.Add("@platform-live")
         }
+        # Native Public owns a separate one-Station process/restart lane.
+        # Broad joint runs cannot satisfy that topology. Explicit selection
+        # retains the lane's fail-closed runner preconditions.
+        if (-not $StartNativeArkretPublicReply -and -not ($effectiveGrep -and $effectiveGrep.Contains("@native-public-reply"))) {
+            $grepInvertPatterns.Add("@native-public-reply")
+        }
         # The three-server P0 describe block deliberately fails closed when its
         # topology is absent. Broad one/two-server runs must not select it in the
         # first place; an explicit grep remains an opt-in fail-closed probe.

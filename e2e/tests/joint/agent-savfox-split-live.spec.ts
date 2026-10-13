@@ -1454,10 +1454,10 @@ jointTest("fresh Agent pairing gates the first send until binding and answers on
 
 // This is a separately selected native Public lane. The original two Agent
 // tests and normal12/management6/refusal50 selections retain their exact titles.
-jointTest.describe("Native public fixed reply @native-public-reply", () => {
-  jointTest.use({ trace: "off", screenshot: "off", video: "off" });
+const nativePublicReplyTest = jointTest.extend({ trace: "off", screenshot: "off", video: "off" });
+nativePublicReplyTest.describe("Native public fixed reply @native-public-reply", () => {
   for (const restart of [false, true]) {
-    jointTest(
+    nativePublicReplyTest(
       restart
         ? "retains the accepted third-party public reply across the whole Main process restart and handles a new source once"
         : "explicitly configures the first public native reply and answers an independent Human's encrypted shared Strand mention once",
@@ -1469,7 +1469,7 @@ jointTest.describe("Native public fixed reply @native-public-reply", () => {
         if (required && (!base || !token || !receipts || !process.env.COTEST_TOPOLOGY_PATH)) {
           throw new Error("Native Public lane requires the runner-owned gateway, provider receipts and Station process control");
         }
-        jointTest.skip(!required, "PRECONDITION_NATIVE_PUBLIC_REPLY: select the original runner with -StartNativeArkretPublicReply");
+        nativePublicReplyTest.skip(!required, "PRECONDITION_NATIVE_PUBLIC_REPLY: select the original runner with -StartNativeArkretPublicReply");
         if (!base || !token || !receipts) throw new Error("Native Public runner inputs missing");
         const realm = await jointUsers.alicePage.createRealm({
           title: `Native public ${restart ? "restart" : "first"} ${Date.now()}`,
