@@ -27,31 +27,6 @@
       ]
     },
     {
-      "task": "2026-09-06-0914-sdk-contract-generation-and-canonical-reuse.md",
-      "criteria_count": 2,
-      "criteria_sha256": "03839f334a9b3e2643ebeb7dea44ea51ddc8238fdfab15ad318302a0a7a568fa",
-      "spec_refs": [
-        "arkret-spec/spec/v1/zh/overview/protocol-layers.md"
-      ],
-      "source_refs": [
-        "arkret-rust-sdk/tools/schema_struct_gate.py"
-      ],
-      "tests": [
-        {
-          "path": "arkret-rust-sdk/crates/wire/tests/generated_registry_coverage.rs",
-          "symbol": "generated_closed_registry_types_reject_unregistered_values",
-          "kind": "contract",
-          "covers": "已有生成注册类型闭合验证，非完整DTO生成"
-        }
-      ],
-      "engineering_checks": [
-        "SDK schema/ownership/generated-contracts与逐字节KAT"
-      ],
-      "remaining_scenarios": [
-        "代表类型required／null／union生成前后接受集合与KAT等价；全consumer替换；exemption与常量真实差集"
-      ]
-    },
-    {
       "task": "2026-09-06-0915-protocol-fixtures-mock-and-api-test-convergence.md",
       "criteria_count": 7,
       "criteria_sha256": "d199b9952188d276c1d8da1e6fe408e8f2be0b8d681768e6b82b09ea78abbce4",
@@ -172,29 +147,6 @@
       ]
     },
     {
-      "task": "2026-09-08-2040-owned-agent-direct-conversation.md",
-      "criteria_count": 5,
-      "criteria_sha256": "435a75886b7a6155110c4aa935abff1009477b1ed95d621e5f090a8c25a29d7e",
-      "spec_refs": [
-        "arkret-spec/spec/v1/zh/identity/contact-and-direct-conversation.md"
-      ],
-      "source_refs": [
-        "inkson/src/app/direct_open.rs"
-      ],
-      "tests": [
-        {
-          "path": "cotest/tests/direct_conversation_admission.rs",
-          "symbol": "direct_conversation_admission_suite_is_audited_but_not_falsely_marked_live",
-          "kind": "contract",
-          "covers": "Direct准入诊断及拒绝假live声明"
-        }
-      ],
-      "engineering_checks": [],
-      "remaining_scenarios": [
-        "首次Agent claim／Welcome精确binding；accepted祖先不回退ratchet；四Event／四Commit和实时双向回复；旧queue残留清理"
-      ]
-    },
-    {
       "task": "2026-09-10-0540-client-current-result-durable-index.md",
       "criteria_count": 7,
       "criteria_sha256": "beebef34c3e67690cf9a4040346e6017354459f5c643eaf6440d3363f3f9b652",
@@ -228,10 +180,18 @@
       "criteria_count": 5,
       "criteria_sha256": "b8fb26a4985b6119802eabdf782f83ad81015f192519ece691275b8b73781e22",
       "spec_refs": [
-        "arkret-spec/spec/v1/zh/extensions/applet-integration.md"
+        "arkret-spec/spec/v1/zh/extensions/applet-integration.md",
+        "arkret-spec/spec/v1/zh/authz/managed-governance.md",
+        "arkret-spec/spec/v1/artifacts/registry/applet-managed-authority-registry.json"
       ],
       "source_refs": [
-        "coland/crates/http/src/routing/extensions/applet_bridge/delegated_device.rs"
+        "coland/crates/http/src/routing/extensions/applet_bridge/delegated_device.rs",
+        "coland/crates/storage-postgres/src/applet_admission.rs",
+        "coland/crates/http/src/routing/extensions/applet_bridge/endpoints.rs",
+        "coland/crates/http/src/routing/management_review.rs",
+        "coland/crates/storage-postgres/src/policy_current_results.rs",
+        "coland/crates/http/src/routing/authority_commit.rs",
+        "coland/crates/http/src/state/authority_self_event_unit.rs"
       ],
       "tests": [
         {
@@ -239,11 +199,17 @@
           "symbol": "actor_private_events_submit_named_suite_executes_every_variant",
           "kind": "contract",
           "covers": "私有管理来源载体，不证明Bot/Ghost业务审批"
+        },
+        {
+          "path": "coland/crates/server/tests/applet_admission.rs",
+          "symbol": "ghost_creation_quota_rolls_back_with_the_unit_and_counts_exact_retry_once",
+          "kind": "live",
+          "covers": "真实PG/HTTP fresh创建quota、后段故障回滚、跨HTTP key exact retry/变更body拒绝和额度耗尽；不证明管理审批、reuse quota或独立Device/runtime全通"
         }
       ],
       "engineering_checks": [],
       "remaining_scenarios": [
-        "Service-only安装→独立Ghost／Bot创建；管理review与quota原子；21-operation Device业务门；跨scope撤权／rotation与内容真实解密回复"
+        "Applet creation/join/publish管理review与quota完整分类；Service多parent/共享ancestor quota；无session首Device入站和21-operation业务门；独立多Bot/Ghost runtime、跨scope撤权/rotation与真实内容解密回复；未挂载author成员的不完整bundle声明修正"
       ]
     },
     {
@@ -480,29 +446,6 @@
       ]
     },
     {
-      "task": "2026-09-25-2132-commit-stream-chain-and-planned-handoff.md",
-      "criteria_count": 5,
-      "criteria_sha256": "6151149fcfc8dcb7fd6563d77985d576bd75bf2dad471b0aefd58ad928e835ca",
-      "spec_refs": [
-        "arkret-spec/spec/v1/zh/sync/authority-commit-log.md"
-      ],
-      "source_refs": [
-        "coland/crates/storage-postgres/src/snapshot_disclosure_gate.rs"
-      ],
-      "tests": [
-        {
-          "path": "cotest/tests/snapshot_head_disclosure.rs",
-          "symbol": "exact_snapshot_by_ref_reads_through_garth_with_historical_station_key",
-          "kind": "live",
-          "covers": "历史Station key by-ref起点，非handoff后任期"
-        }
-      ],
-      "engineering_checks": [],
-      "remaining_scenarios": [
-        "正式双签handoff生产入口；generation>0完整current导入与head；全部stream断链／跨stream负例；旧任期exact snapshot"
-      ]
-    },
-    {
       "task": "2026-09-25-2133-snapshot-and-scan-beyond-single-realm-stream.md",
       "criteria_count": 3,
       "criteria_sha256": "89e5fd4d8732c8578310a66943833d47d5945f7e256aee4eaa00bf2b38d1aa2e",
@@ -552,35 +495,6 @@
       "engineering_checks": [],
       "remaining_scenarios": [
         "registry→family／SQL／writer完整映射；Commit/source绑定零部分写；按family guard的并发CAS；同revision canonical相等；缺tail/授权分支"
-      ]
-    },
-    {
-      "task": "2026-09-25-2135-account-detail-coverage-cursor-and-visibility.md",
-      "criteria_count": 5,
-      "criteria_sha256": "5d4f8685d6d706ff184a279ea2e68099a0f3245e2adcba0dc8ada080a0c1a7e3",
-      "spec_refs": [
-        "arkret-spec/spec/v1/zh/sync/client-sync.md"
-      ],
-      "source_refs": [
-        "coland/crates/http/src/routing/events/sync/subscribe.rs"
-      ],
-      "tests": [
-        {
-          "path": "cotest/tests/account_subscribe_long_poll.rs",
-          "symbol": "account_subscribe_omits_quiet_realm_at_unchanged_cursor",
-          "kind": "live",
-          "covers": "quiet long-poll"
-        },
-        {
-          "path": "cotest/tests/snapshot_head_disclosure.rs",
-          "symbol": "limited_account_window_names_issued_basis_or_is_preview_only",
-          "kind": "live",
-          "covers": "window basis与preview分支"
-        }
-      ],
-      "engineering_checks": [],
-      "remaining_scenarios": [
-        "Realm／Circle／Sidecar ACL与撤权；全部获准stream耐久达到声明head才complete；每流head／generation分页失效；authority-signed slice或preview窗口；summary／detail／WS同producer及quiet long-poll"
       ]
     },
     {
@@ -690,7 +604,7 @@
     {
       "task": "2026-08-31-0630-remote-signal-accepted-device-directory.md",
       "criteria_count": 6,
-      "criteria_sha256": "f683aca0399f3812de0d88c66d76b19dd050e33b8a30d2c6be1eeb8ff90e2c83",
+      "criteria_sha256": "29791dad110f7d35b718f37510e3b26ba69a37cdc13b269677de1194dc9f0946",
       "spec_refs": [
         "arkret-spec/spec/v1/zh/sync/signal.md",
         "arkret-spec/spec/v1/zh/discovery/profiles-presence.md"
@@ -698,7 +612,10 @@
       "source_refs": [
         "coland/crates/storage-postgres/src/signal_scope_authority.rs",
         "garth/src/signal.rs",
-        "garth/src/signal_message_stream.rs"
+        "garth/src/signal_message_stream.rs",
+        "inkson/src/signal_receive_engine.rs",
+        "inkson/src/state/current_index.rs",
+        "inkson/src/app/signal_products.rs"
       ],
       "tests": [
         {
@@ -706,11 +623,23 @@
           "symbol": "accepted_signal_self_peer_recipient_and_read_only_denials",
           "kind": "live",
           "covers": "既有真实 Signal rail 准入入口；不证明 Inkson MessageStream 展示前的两个 action 重验或全部 Typing profile"
+        },
+        {
+          "path": "cotest/src/conformance/signal_recipient.rs",
+          "symbol": "signal_recipient_preserves_the_authenticated_circle_authority_basis",
+          "kind": "contract",
+          "covers": "实际 producer 签名认证后保留原 scope／父 Realm basis，篡改父 basis 拒绝；decryptor fixture，不证明实际 MLS AEAD或产品授权"
+        },
+        {
+          "path": "cotest/src/conformance/signal_recipient.rs",
+          "symbol": "signal_recipient_profile_expiry_cannot_poison_high_water",
+          "kind": "contract",
+          "covers": "短于外层期限的 profile 已过期时不推进 high-water；不证明实际浏览器／Station消费"
         }
       ],
       "engineering_checks": [],
       "remaining_scenarios": [
-        "原 owner 返回 active：保全已验证 authority basis，MessageStream 展示前双 action 重验；Typing blocklist/membership/track 完整门、完整双站 ordinary/Agent 与持久 high-water 冻结验收"
+        "MessageStream exact verified basis 的正式双 action 消费及证据充分性复审；Typing policy可见性和撤权展示；最新真实浏览器／双Station ordinary／Agent与sender durable allocator组合验收"
       ]
     }
   ]

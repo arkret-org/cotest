@@ -57,6 +57,7 @@ use crate::scenarios::identity_test_support::HARNESS_INTERNAL_AUTHORITY_SECRET;
 
 mod binding_evidence;
 mod coauth_session_evidence;
+mod grant_ceiling_evidence;
 mod pairing_expiry_evidence;
 mod pcr_evidence;
 mod privacy_evidence;
@@ -64,6 +65,7 @@ mod provision_evidence;
 mod repairing_evidence;
 pub use binding_evidence::run_agent_runtime_binding_admission;
 pub use coauth_session_evidence::run_agent_session_grant_replay_production;
+pub use grant_ceiling_evidence::run_agent_provision_grant_ceiling_boundary;
 pub use pairing_expiry_evidence::run_agent_pairing_expiry_production;
 pub use pcr_evidence::run_agent_pcr_profile_admission;
 pub use privacy_evidence::run_agent_requested_scope_privacy_production;
@@ -181,6 +183,20 @@ pub struct AgentRuntimeSession {
     issuer_request: Option<arkret_models_collaboration::session_grants::AgentSessionGrantRequest>,
 }
 
+/// A real provision, PCR genesis and controller-approved runtime key. No
+/// SessionGrant has been issued; controller-only checks consume this phase.
+struct AgentPairedPrincipal {
+    controller_account: AccountId,
+    agent_did: Did,
+    agent_account: AccountId,
+    agent_pcr: RealmId,
+    delegation: DidUrl,
+    runtime_key: SigningKey,
+    verification_method: DidUrl,
+    key_authorization: EventId,
+    authorization: AgentKeyAuthorizePayload,
+}
+
 enum AgentSessionIssuer<'a> {
     Fixture(&'a MockCoauthIntrospectionServer),
     Coauth {
@@ -254,16 +270,15 @@ impl AgentRuntimeSession {
         .await
     }
 
-    async fn establish_observed(
+    async fn establish_paired_observed(
         server: &ArkretServer,
-        issuer: AgentSessionIssuer<'_>,
+        issuer: &AgentSessionIssuer<'_>,
         controller: &TestActorClient,
         controller_account: &AccountId,
         label: &str,
         scope: AgentKeyScope,
         mut evidence: Option<&mut provision_evidence::ProvisionEvidence>,
-    ) -> Result<Self> {
-        let operations: Vec<&str> = scope.actions.iter().map(String::as_str).collect();
+    ) -> Result<AgentPairedPrincipal> {
         let principal = controller
             .principal
             .as_ref()
@@ -621,7 +636,7 @@ impl AgentRuntimeSession {
             disclosure,
             authorize.clone(),
         )?;
-        let pair_url = match &issuer {
+        let pair_url = match issuer {
             AgentSessionIssuer::Fixture(_) => server.url("/_arkret/gate/account/agent-key-pair"),
             AgentSessionIssuer::Coauth { base, .. } => {
                 format!("{base}/_arkret/gate/account/agent-key-pair")
@@ -669,6 +684,56 @@ impl AgentRuntimeSession {
             "the controller must resolve the exact committed Agent authorization"
         );
 
+        Ok(AgentPairedPrincipal {
+            controller_account: controller_account.clone(),
+            agent_did,
+            agent_account,
+            agent_pcr,
+            delegation,
+            runtime_key,
+            verification_method,
+            key_authorization: authorize.event_id,
+            authorization,
+        })
+    }
+
+    async fn establish_observed(
+        server: &ArkretServer,
+        issuer: AgentSessionIssuer<'_>,
+        controller: &TestActorClient,
+        controller_account: &AccountId,
+        label: &str,
+        scope: AgentKeyScope,
+        evidence: Option<&mut provision_evidence::ProvisionEvidence>,
+    ) -> Result<Self> {
+        let AgentPairedPrincipal {
+            controller_account,
+            agent_did,
+            agent_account,
+            agent_pcr,
+            delegation,
+            runtime_key,
+            verification_method,
+            key_authorization,
+            authorization,
+        } = Box::pin(Self::establish_paired_observed(
+            server,
+            &issuer,
+            controller,
+            controller_account,
+            label,
+            scope,
+            evidence,
+        ))
+        .await?;
+        let station = server.service_id().clone();
+        let agent_id = agent_account.principal_id.clone();
+        let operations: Vec<&str> = authorization
+            .agent_key_scope
+            .actions
+            .iter()
+            .map(String::as_str)
+            .collect();
         // 10. The Account Authority binds the runtime's SessionGrant.
         let (grant, issuer_request) = match issuer {
             AgentSessionIssuer::Fixture(coauth) => {
@@ -680,7 +745,7 @@ impl AgentRuntimeSession {
                     );
                 coauth.bind_agent_runtime_grant(
                     &grant,
-                    &authorize.event_id,
+                    &key_authorization,
                     &authorization,
                     &runtime_key.verifying_key(),
                 )?;
@@ -689,7 +754,7 @@ impl AgentRuntimeSession {
             AgentSessionIssuer::Coauth { base, database_url } => {
                 coauth_session_evidence::wait_for_issuer_authorization(
                     database_url,
-                    &authorize.event_id,
+                    &key_authorization,
                 )
                 .await?;
                 let (grant, request) = coauth_session_evidence::issue_runtime_session(
@@ -697,7 +762,7 @@ impl AgentRuntimeSession {
                     base,
                     database_url,
                     &agent_id,
-                    &authorize.event_id,
+                    &key_authorization,
                     &verification_method,
                     &runtime_key,
                     &operations,
@@ -713,14 +778,14 @@ impl AgentRuntimeSession {
             runtime_key.clone(),
         )?;
         Ok(Self {
-            controller_account: controller_account.clone(),
+            controller_account,
             agent_did,
             agent_account,
             agent_pcr,
             delegation,
             runtime_key,
             verification_method,
-            key_authorization: authorize.event_id,
+            key_authorization,
             runtime,
             issuer_request,
         })
