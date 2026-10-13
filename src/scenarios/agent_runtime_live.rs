@@ -333,6 +333,10 @@ impl AgentRuntimeSession {
             .map_err(anyhow::Error::msg)?;
         let idempotency_key = IdempotencyKey::new(unique_uuid7()).map_err(anyhow::Error::msg)?;
         let slug = label.to_owned();
+        let prepare_before = match evidence.as_deref() {
+            Some(evidence) => Some(evidence.snapshot().await?),
+            None => None,
+        };
         let prepared = provision(
             controller,
             &AgentProvisionRequestBody::Prepare(AgentProvisionPrepareRequestBody {
@@ -348,6 +352,9 @@ impl AgentRuntimeSession {
             StatusCode::OK,
         )
         .await?;
+        if let (Some(evidence), Some(before)) = (evidence.as_deref_mut(), prepare_before) {
+            evidence.prepare_zero_writes(before).await?;
+        }
         let AgentProvisionOutcome::AwaitingControllerEvent(prepared) = prepared else {
             bail!("prepare must await the controller-authored provision");
         };
@@ -427,6 +434,11 @@ impl AgentRuntimeSession {
             provision_event: arkret_wire::EventAdmissionSubmission::new(provision_event.clone()),
             pairing_ttl_ms: None,
         });
+        if let Some(evidence) = evidence.as_deref_mut() {
+            evidence
+                .late_projection_fault(controller, &commit_body)
+                .await?;
+        }
         let awaiting = provision(controller, &commit_body, StatusCode::OK).await?;
         ensure!(
             matches!(awaiting, AgentProvisionOutcome::AwaitingPcrGenesis(_)),

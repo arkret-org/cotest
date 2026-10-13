@@ -21,8 +21,57 @@ pub(crate) struct ProvisionEvidence {
 }
 
 impl ProvisionEvidence {
-    async fn snapshot(&self) -> Result<Value> {
+    pub(super) async fn snapshot(&self) -> Result<Value> {
         acceptance_rows_with_agent_stores(&self.database_url, true).await
+    }
+
+    pub(super) async fn prepare_zero_writes(&mut self, before: Value) -> Result<()> {
+        ensure!(
+            self.snapshot().await? == before,
+            "prepare wrote accepted facts, Agent projections or grant state"
+        );
+        self.forward_assertions += 1;
+        Ok(())
+    }
+
+    async fn execute_owned_sql(&self, sql: &'static str) -> Result<()> {
+        let url = self.database_url.clone();
+        tokio::task::spawn_blocking(move || -> Result<()> {
+            postgres::Client::connect(&url, postgres::NoTls)?.batch_execute(sql)?;
+            Ok(())
+        })
+        .await?
+    }
+
+    pub(super) async fn late_projection_fault(
+        &mut self,
+        controller: &TestActorClient,
+        body: &AgentProvisionRequestBody,
+    ) -> Result<()> {
+        let bytes = arkret_canonical::canonical_json_bytes(body)?;
+        let before = self.snapshot().await?;
+        self.execute_owned_sql("CREATE FUNCTION agent_provision_projection_fault() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'owned Agent provision final projection fault'; END $$; CREATE TRIGGER agent_provision_projection_fault BEFORE INSERT OR UPDATE ON agent_pcr_genesis_declaration_current_results FOR EACH ROW EXECUTE FUNCTION agent_provision_projection_fault()").await?;
+        let failed = controller
+            .post("/_arkret/self/agents")
+            .header(reqwest::header::CONTENT_TYPE, "application/json")
+            .body(bytes)
+            .send()
+            .await;
+        // Remove the owned fault even when transport fails; the next call uses
+        // the same frozen SDK request and must reach the original transaction.
+        self.execute_owned_sql("DROP TRIGGER agent_provision_projection_fault ON agent_pcr_genesis_declaration_current_results; DROP FUNCTION agent_provision_projection_fault()").await?;
+        let failed = failed?;
+        ensure!(
+            failed.status() == StatusCode::INTERNAL_SERVER_ERROR,
+            "final provision projection fault did not reach the writer: {}",
+            failed.status()
+        );
+        ensure!(
+            self.snapshot().await? == before,
+            "final provision projection fault changed accepted/Agent state"
+        );
+        self.forward_assertions += 2;
+        Ok(())
     }
 
     async fn public_document(server: &ArkretServer, did: &Did) -> Result<Value> {
@@ -199,6 +248,35 @@ impl ProvisionEvidence {
         let AgentProvisionRequestBody::Commit(original) = body else {
             bail!("accepted declaration must retain its exact provision commit request");
         };
+        let mut changed = original.clone();
+        // Retain the known Event identity and alter its proof bytes. Replays
+        // must conflict rather than treating a different envelope as a retry.
+        let proof = changed
+            .provision_event
+            .event
+            .producer_proof
+            .as_mut()
+            .context("controller provision has no producer proof")?;
+        let mut signature = proof.jws.as_bytes().to_vec();
+        let last = signature
+            .last_mut()
+            .context("controller proof has no signature bytes")?;
+        *last = if *last == b'A' { b'B' } else { b'A' };
+        proof.jws = String::from_utf8(signature)?;
+        let before = self.snapshot().await?;
+        crate::harness::expect_api_error(
+            controller
+                .post("/_arkret/self/agents")
+                .json(&AgentProvisionRequestBody::Commit(changed)),
+            StatusCode::CONFLICT,
+            "conflict",
+        )
+        .await?;
+        ensure!(
+            self.snapshot().await? == before,
+            "same provision Event identity with different bytes changed accepted state"
+        );
+        self.forward_assertions += 2;
         self.reject_second_pcr_claim(server, controller, original, provision_event)
             .await?;
 
