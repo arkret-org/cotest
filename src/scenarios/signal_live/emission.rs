@@ -176,18 +176,30 @@ fn verify_plaintext(
 ) -> Result<()> {
     authority.validate_for_envelope(signal)?;
     ensure!(authority.recipient_account_id == receiver.account);
-    ensure!(
-        authority.key.actor == sender.actor
-            && authority.key.authorization_ref == sender.authorize_event_id
-    );
-    let bytes = arkret_canonical::base64url_decode(authority.key.public_key_b64u.as_str())?;
+    verify_candidate_plaintext(sender, group, signal, &authority.key, state, head, sequence)
+}
+
+// Local producer-proof/MLS preflight cannot reuse another frame's per-envelope
+// product decision. It checks immutable key bytes and the exact MLS transition.
+fn verify_candidate_plaintext(
+    sender: &Member,
+    group: &ArkretMlsGroup,
+    signal: &SignalEnvelope,
+    key: &arkret_wire::StationSigningKey,
+    state: &EventId,
+    head: &RealmCommitId,
+    sequence: u64,
+) -> Result<()> {
+    key.validate()?;
+    ensure!(key.actor == sender.actor && key.authorization_ref == sender.authorize_event_id);
+    let bytes = arkret_canonical::base64url_decode(key.public_key_b64u.as_str())?;
     ensure!(bytes == sender.key.verifying_key().to_bytes());
     let public = arkret_signatures::PublicKeyMaterial::Ed25519Raw { bytes };
     let plaintext = group.open_signal_envelope(
         signal,
         SignalSenderAuthority::AccountDevice {
             public_key: &public,
-            device_authorize_event_id: &authority.key.authorization_ref,
+            device_authorize_event_id: &key.authorization_ref,
         },
         state.as_str(),
         head,
@@ -345,8 +357,8 @@ pub(super) async fn exercise(
         22,
     )?;
     // Prove both negative candidates are real, decryptable MLS plaintexts.
-    verify_plaintext(alice, bob, bob_group, &queued, &authority, state, head, 21)?;
-    verify_plaintext(alice, bob, bob_group, &delayed, &authority, state, head, 22)?;
+    verify_candidate_plaintext(alice, bob_group, &queued, &authority.key, state, head, 21)?;
+    verify_candidate_plaintext(alice, bob_group, &delayed, &authority.key, state, head, 22)?;
     ensure!(queued.envelope_digest()? != delayed.envelope_digest()?);
     let probe = arm(pause_file, &queued, &[&bob.account])?.remove(0);
     let observed_path = probe.as_path();

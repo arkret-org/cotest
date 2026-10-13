@@ -158,7 +158,11 @@ fn fixture_and_closed_message_create_identity_contract_are_present() {
     ))
     .unwrap();
     assert_eq!(fixture["profile"], "ak.profile.signal_message_stream.v1");
-    assert_eq!(fixture["cases"].as_array().unwrap().len(), 5);
+    assert_eq!(fixture["cases"].as_array().unwrap().len(), 6);
+    assert!(fixture["cases"].as_array().unwrap().iter().any(|case| {
+        case["name"] == "recipient_dual_action_authority_matrix"
+            && case["vector_id"] == "ak.vector.signal.message_stream.v1"
+    }));
 
     let illegal = json!({
         "strand_id": strand().as_str(),

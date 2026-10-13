@@ -88,29 +88,6 @@
       ]
     },
     {
-      "task": "2026-09-06-1725-joint-e2e-inkson-decoupling-and-provisioning-convergence.md",
-      "criteria_count": 5,
-      "criteria_sha256": "a87767136a20748385987c4a151382630ea2f805814bfe62e7c62c1c762e6e2f",
-      "spec_refs": [
-        "arkret-spec/spec/v1/zh/models/sidecar.md"
-      ],
-      "source_refs": [
-        "inkson/src/views/chat/mod.rs"
-      ],
-      "tests": [
-        {
-          "path": "cotest/crates/inkson-client-tests/tests/client_sync_production_live.rs",
-          "symbol": "private_agent_sidecar_reply_recovers_in_the_original_account_attempt",
-          "kind": "live",
-          "covers": "一次native真实私密回复恢复，不证明三次WASM可见"
-        }
-      ],
-      "engineering_checks": [],
-      "remaining_scenarios": [
-        "真实WASM大历史输入／锚点／长任务；cursor重绘不重复验证；三次私密回复双用户零披露；远端PCR／mode／runtime恢复"
-      ]
-    },
-    {
       "task": "2026-09-10-0540-client-current-result-durable-index.md",
       "criteria_count": 7,
       "criteria_sha256": "beebef34c3e67690cf9a4040346e6017354459f5c643eaf6440d3363f3f9b652",
@@ -466,12 +443,18 @@
     {
       "task": "2026-09-25-2141-consent-current-and-admission.md",
       "criteria_count": 2,
-      "criteria_sha256": "6baa7b17e09d6295e09bd9e5f25b902b94567d462f7d104cbeb8a962dad4c2dc",
+      "criteria_sha256": "8bfb8292d1dbdc5189f38ca0db494d5e5b9a808c431c36dadfc69f72a1c1edb6",
       "spec_refs": [
-        "arkret-spec/spec/v1/zh/identity/consent-model.md"
+        "arkret-spec/spec/v1/zh/identity/consent-model.md",
+        "arkret-spec/spec/v1/zh/extensions/mimi-interop.md",
+        "arkret-spec/spec/v1/zh/crypto-media/webrtc-signaling.md",
+        "arkret-spec/spec/v1/artifacts/fixtures/consent-cache-invalidation-fixture.json"
       ],
       "source_refs": [
-        "coland/crates/storage-postgres/src/consent_current.rs"
+        "coland/crates/storage-postgres/src/consent_current.rs",
+        "coland/crates/http/src/routing/interop/mimi/handlers.rs",
+        "inkson/src/signal_receive_engine.rs",
+        "cotest/src/conformance/named_suite_audit.rs"
       ],
       "tests": [
         {
@@ -479,11 +462,24 @@
           "symbol": "retired_pairwise_profile_rejected_and_peer_identity_isolated",
           "kind": "live",
           "covers": "pairwise隔离及退役profile拒绝"
+        },
+        {
+          "path": "coland/crates/http/src/routing/interop/mimi/handlers.rs",
+          "symbol": "consent_deny_and_revoke_use_exact_current_and_preserve_accepted_retry",
+          "kind": "contract",
+          "covers": "真实PG上的MIMI精确holder/peer/scope/revision、deny/revoke、exact replay与竞争拒绝零写入；不代表完整provider HTTP或named suite"
+        },
+        {
+          "path": "coland/crates/storage-postgres/tests/consent_current.rs",
+          "symbol": "consent_current_guards_invite_delivery_cas_and_rejects_a_pre_revoke_proof",
+          "kind": "contract",
+          "covers": "同PCR锁的invite delivery最终CAS与旧proof拒绝；不替代跨Station全部消费面"
         }
       ],
       "engineering_checks": [],
       "remaining_scenarios": [
-        "跨消费层与跨Station的在途竞争逐case验收；Directory／MIMI／push PSI／call／presence／private discovery逐层消费与缓存失效；正式consent.cache_invalidation逐case真实执行，本地invitation CAS不代替其它消费面"
+        "通话invite三层Consent正式证据边界与生产接线；presence/MIMI当前适用消费者；跨层/跨Station在途撤销、any独立性、完整peer和时间窗、current revision不回退",
+        "正式consent.cache_invalidation五case/五decision point真实生产executor实现、注册与最新冻结执行；Directory/PSI只执行退役不可调用/不可广告/零索引变化负例，不恢复正向路径"
       ]
     },
     {
@@ -547,7 +543,7 @@
     {
       "task": "2026-08-31-0630-remote-signal-accepted-device-directory.md",
       "criteria_count": 6,
-      "criteria_sha256": "29791dad110f7d35b718f37510e3b26ba69a37cdc13b269677de1194dc9f0946",
+      "criteria_sha256": "7cf9a322fb8266691694129c692a5e8c298d9db9d7ad1156440c1d0421654623",
       "spec_refs": [
         "arkret-spec/spec/v1/zh/sync/signal.md",
         "arkret-spec/spec/v1/zh/discovery/profiles-presence.md"
@@ -558,14 +554,17 @@
         "garth/src/signal_message_stream.rs",
         "inkson/src/signal_receive_engine.rs",
         "inkson/src/state/current_index.rs",
-        "inkson/src/app/signal_products.rs"
+        "inkson/src/app/signal_products.rs",
+        "arkret-rust-sdk/crates/models-collaboration/src/signal_delivery.rs",
+        "arkret-rust-sdk/crates/policy/src/signal_authorization.rs",
+        "inkson/src/views/message_streams.rs"
       ],
       "tests": [
         {
           "path": "cotest/tests/signal_live.rs",
           "symbol": "accepted_signal_self_peer_recipient_and_read_only_denials",
           "kind": "live",
-          "covers": "既有真实 Signal rail 准入入口；不证明 Inkson MessageStream 展示前的两个 action 重验或全部 Typing profile"
+          "covers": "真实双Station TLS／PG／producer proof／MLS AEAD；缺send、缺create、双grant及撤销后共享产品gate的preview正反例；未证明Inkson浏览器或完整Agent冷路径"
         },
         {
           "path": "cotest/src/conformance/signal_recipient.rs",
@@ -578,11 +577,23 @@
           "symbol": "signal_recipient_profile_expiry_cannot_poison_high_water",
           "kind": "contract",
           "covers": "短于外层期限的 profile 已过期时不推进 high-water；不证明实际浏览器／Station消费"
+        },
+        {
+          "path": "cotest/src/conformance/signal_recipient.rs",
+          "symbol": "signal_recipient_consumes_formal_dual_action_fixture_without_body_on_refusal",
+          "kind": "contract",
+          "covers": "正式11 mutation matrix经真实producer proof／Garth材料绑定／SDK双action gate；受控decryptor不证明实际AEAD"
+        },
+        {
+          "path": "inkson/src/views/message_streams.rs",
+          "symbol": "mounted_hub_requires_both_live_actions_before_body_side_effects",
+          "kind": "product",
+          "covers": "mounted Dioxus MessageStreamHub正文前双action拒绝／允许与失效正文清除；native，不冒充浏览器"
         }
       ],
       "engineering_checks": [],
       "remaining_scenarios": [
-        "MessageStream exact verified basis 的正式双 action 消费及证据充分性复审；Typing policy可见性和撤权展示；最新真实浏览器／双Station ordinary／Agent与sender durable allocator组合验收"
+        "Typing完整capability／policy可见性、适用blocklist与撤权后旧指示仍有代码剩项；MessageStream正式双action消费已接通，剩真实浏览器／完整ordinary-Agent-Circle／Direct participant与sender durable allocator组合验收"
       ]
     }
   ]
