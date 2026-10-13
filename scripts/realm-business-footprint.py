@@ -14,6 +14,42 @@ import shutil
 import stat
 import subprocess
 import sys
+from urllib.parse import parse_qsl, unquote, urlsplit
+
+
+class PostgresSamplingFailure(RuntimeError):
+    def __init__(self, sqlstate):
+        self.sqlstate = sqlstate
+        super().__init__("readonly PostgreSQL sampling failed")
+
+
+def connection_environment(connection):
+    address = urlsplit(connection)
+    if (address.scheme not in ("postgres", "postgresql") or not address.hostname
+            or not address.username or not address.path.startswith("/") or len(address.path) < 2):
+        raise ValueError("invalid runner PostgreSQL connection")
+    env = dict(os.environ)
+    for key in ("PGSERVICE", "PGSERVICEFILE", "PGHOSTADDR", "PGPASSWORD"):
+        env.pop(key, None)
+    # PGDATABASE is a database name, not a URI expansion point. Keep every
+    # connection field in the child environment so no secret appears in argv.
+    env["PGHOST"] = address.hostname
+    env["PGPORT"] = str(address.port or 5432)
+    env["PGUSER"] = unquote(address.username)
+    env["PGDATABASE"] = unquote(address.path[1:])
+    if address.password is not None:
+        env["PGPASSWORD"] = unquote(address.password)
+    options = {"sslmode": "PGSSLMODE", "sslcert": "PGSSLCERT", "sslkey": "PGSSLKEY",
+               "sslrootcert": "PGSSLROOTCERT", "connect_timeout": "PGCONNECT_TIMEOUT",
+               "application_name": "PGAPPNAME", "options": "PGOPTIONS",
+               "target_session_attrs": "PGTARGETSESSIONATTRS"}
+    seen = set()
+    for name, value in parse_qsl(address.query, keep_blank_values=True, strict_parsing=True):
+        if name not in options or name in seen:
+            raise ValueError("unsupported or duplicate PostgreSQL connection option")
+        seen.add(name)
+        env[options[name]] = value
+    return env
 
 
 def private_path(path, directory=False):
@@ -49,13 +85,17 @@ def connection_for(server):
     return connection
 
 
-def sql_for(realm, candidate):
+def sql_for(realm, candidate, stream_after=None, stream_end=None):
     # Identifiers come from metadata, with PostgreSQL format(%I) quoting them.
     # Realm/Event locators are validated before interpolation into SQL literals.
     if not re.fullmatch(r"ak:realm:[A-Za-z0-9_-]+", realm):
         raise ValueError("invalid Realm locator")
     if candidate and not re.fullmatch(r"ak:event:[A-Za-z0-9_-]+", candidate):
         raise ValueError("invalid candidate Event locator")
+    if (stream_after is None) != (stream_end is None):
+        raise ValueError("both exact stream bounds are required")
+    if stream_after is not None and not (0 <= stream_after <= stream_end <= 9007199254740991):
+        raise ValueError("invalid exact stream bounds")
     sql = f"""
 BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY;
 SET LOCAL statement_timeout = '15s';
@@ -93,14 +133,33 @@ JOIN public.federation_outbox f ON f.id=x.outbox_id WHERE e.realm_id='{realm}') 
 'federation_outbox',(SELECT count(*) FROM public.federation_outbox WHERE strpos(payload_json,'{candidate}')>0)
 ))::text;
 """
+    if stream_after is not None:
+        # Withheld is a legal reader outcome. This private test oracle exports
+        # only the already disclosed full Commit and its accepted kind/ID,
+        # never the hidden Event payload, ciphertext or producer proof.
+        sql += f"""SELECT json_build_object('stream_successors',COALESCE(jsonb_agg(
+jsonb_build_object('commit',c.commit_json,'event_id',e.envelope->>'event_id','event_kind',e.kind)
+ORDER BY c.stream_position),'[]'::jsonb))::text
+FROM public.realm_commits c JOIN public.canonical_events e ON e.pk=c.event_pk
+WHERE c.realm_id='{realm}' AND c.stream_ref=jsonb_build_object('kind','realm','realm_id','{realm}')
+AND c.stream_position>{stream_after} AND c.stream_position<={stream_end}
+AND e.state='committed' AND e.kind=e.envelope->>'kind'
+AND c.commit_json->>'event_ref'=e.envelope->>'event_id';
+"""
     return sql + "COMMIT;\n"
 
 
 def summarize(output):
     tables = {}
     candidate = None
+    successors = None
     for line in output.splitlines():
         row = json.loads(line)
+        if "stream_successors" in row:
+            if successors is not None or not isinstance(row["stream_successors"], list):
+                raise ValueError("invalid accepted stream metadata cut")
+            successors = row["stream_successors"]
+            continue
         if "candidate_absence" in row:
             if candidate is not None:
                 raise ValueError("duplicate candidate cut")
@@ -123,6 +182,8 @@ def summarize(output):
               "excluded_independent_bookkeeping": ["worker leases and attempts", "relay TTL collection", "notification read receipts"]}
     if candidate is not None:
         result["candidate_absence"] = candidate
+    if successors is not None:
+        result["stream_successors"] = successors
     return result
 
 
@@ -131,20 +192,21 @@ def main():
     parser.add_argument("--server", required=True)
     parser.add_argument("--realm", required=True)
     parser.add_argument("--candidate-event")
+    parser.add_argument("--stream-after-position", type=int)
+    parser.add_argument("--stream-end-position", type=int)
     args = parser.parse_args()
-    sql = sql_for(args.realm, args.candidate_event)
+    sql = sql_for(args.realm, args.candidate_event, args.stream_after_position, args.stream_end_position)
     connection = connection_for(args.server)
     executable = shutil.which("psql")
     if not executable:
         raise ValueError("psql is required for real readonly sampling")
-    env = dict(os.environ)
-    # libpq accepts a URI in PGDATABASE. The secret never appears in argv.
-    env["PGDATABASE"] = connection
+    env = connection_environment(connection)
     process = subprocess.run([executable, "--no-psqlrc", "--no-password", "--quiet", "--tuples-only", "--no-align",
-                              "--set=ON_ERROR_STOP=1"], input=sql, text=True, env=env,
+                              "--set=ON_ERROR_STOP=1", "--set=VERBOSITY=sqlstate"], input=sql, text=True, env=env,
                              capture_output=True, timeout=40, check=False)
     if process.returncode != 0:
-        raise RuntimeError("readonly PostgreSQL sampling failed")
+        code = re.search(r"(?:ERROR|FATAL):\s*([0-9A-Z]{5})\b", process.stderr)
+        raise PostgresSamplingFailure(code.group(1) if code else "unavailable")
     result = summarize(process.stdout)
     if args.candidate_event and "candidate_absence" not in result:
         raise ValueError("candidate absence cut is missing")
@@ -156,5 +218,7 @@ if __name__ == "__main__":
         main()
     except Exception as error:
         # psql errors/rows/DSNs are private even on test failure.
-        print("readonly business sampling failed (" + type(error).__name__ + ")", file=sys.stderr)
+        diagnostic = ("PostgresSamplingFailure SQLSTATE=" + error.sqlstate
+                      if isinstance(error, PostgresSamplingFailure) else type(error).__name__)
+        print("readonly business sampling failed (" + diagnostic + ")", file=sys.stderr)
         sys.exit(1)

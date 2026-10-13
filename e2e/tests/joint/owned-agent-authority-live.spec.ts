@@ -1,5 +1,6 @@
 // A normal member confirms a narrow owned source through Inkson, without an
-// admin granting capability-management actions or a runtime pairing prerequisite.
+// admin granting capability-management actions. Immutable private scope evidence
+// is required before authorization; pairing itself must not grant content rights.
 import { test, expect } from "../../helpers/joint-fixture";
 import type { Page, Locator, APIRequestContext } from "../../helpers/arkret-test";
 import { coauthBaseUrl, colandBaseUrl, mockEmailBaseUrl } from "../../helpers/env";
@@ -79,7 +80,8 @@ async function members(page: Page, realm: string, agent: string): Promise<Locato
   return page.locator(`[data-testid="member-self-agent-row"][data-agent-id="${agent}"]`);
 }
 
-async function confirm(page: Page, panel: Locator, realm: string, account: unknown, agent: unknown, strand: string): Promise<string> {
+async function confirm(page: Page, panel: Locator, realm: string, account: unknown, agent: unknown, strand: string,
+  expectedRejection?: "agent_requested_scope_commitment_invalid"): Promise<string> {
   await panel.getByTestId("owned-agent-scope").selectOption(strand);
   await panel.getByRole("checkbox", { name: "发送消息", exact: true }).check();
   const published = page.waitForResponse(response => {
@@ -89,8 +91,16 @@ async function confirm(page: Page, panel: Locator, realm: string, account: unkno
   }, { timeout: 180_000 });
   await panel.getByTestId("owned-agent-confirm-authority").click();
   const response = await published;
-  expect(response.ok()).toBe(true);
   const event = decodeIngressEvents(response.request().postData()).find(event => event.kind === "ak.capability.grant")!;
+  if (expectedRejection) {
+    const body = await response.json();
+    expect(response.status()).toBe(409);
+    expect(wireErrCode(body)).toBe("failed_precondition");
+    expect(body.reason_code).toBe(expectedRejection);
+    expect(body.commit === undefined && body.commits === undefined).toBe(true);
+    return retypeEventDerivedId(event.event_id!, "grant");
+  }
+  expect(response.ok()).toBe(true);
   expect(event.actor_id).toEqual({ kind: "account", account_id: account });
   const grant = event.payload!.grant as Record<string, unknown>;
   expect(grant.subject).toEqual({ kind: "account", account_id: agent });
@@ -170,11 +180,11 @@ test("ordinary member explicitly grants, withdraws cold and confirms a new owned
   await expect(panel.getByTestId("owned-agent-confirm-authority")).toBeDisabled();
   await expect(panel.getByRole("checkbox", { name: "发送消息", exact: true })).not.toBeChecked();
   const agentAccount = { principal_id: agentId, station_id: jointRealm.bobSession.accountId.station_id };
-  const first = await confirm(bob, panel, realm, jointRealm.bobSession.accountId, agentAccount, strand);
-  await expect(panel.locator(`[data-grant-id="${first}"]`)).toContainText("当前权限/管理预检允许（运行时仍需验收）", { timeout: 120_000 });
-  // Preflight is separately labelled. Only a real paired Agent's signed
-  // accepted Message and exact read-back prove the business action below.
-  await expect(panel.locator(`[data-grant-id="${first}"]`)).not.toContainText(/未确认|基础权限|不可达/, { timeout: 120_000 });
+  const beforeUnqualified = await footprint(realm, jointRealm.bobSession.accountId.station_id);
+  const unqualified = await confirm(bob, panel, realm, jointRealm.bobSession.accountId, agentAccount, strand,
+    "agent_requested_scope_commitment_invalid");
+  expect((await footprint(realm, jointRealm.bobSession.accountId.station_id)).tables).toEqual(beforeUnqualified.tables);
+  await expect(panel.locator(`[data-grant-id="${unqualified}"]`)).toHaveCount(0);
   await row.getByTestId("member-agent-interaction-mode").getByRole("button", { name: /^(公开|Public)$/ }).click();
   const reply = row.getByTestId("member-agent-reply-toggle");
   if (await reply.getAttribute("aria-checked") !== "true") await reply.click();
@@ -190,6 +200,15 @@ test("ordinary member explicitly grants, withdraws cold and confirms a new owned
       agentId, realmId: realm, strandId: strand,
     });
     expect(runtime.authorizationEventId).toMatch(/^ak:event:/);
+    // Current pairing custody proves the private immutable ceiling, but is
+    // neither a content grant nor the ordinary member's explicit confirmation.
+    await rejectedWithoutEffects(bridge, runtime.runtimeId, realm, strand, session.accountId.station_id);
+    const qualifiedPanel = (await members(bob, realm, agentId)).getByTestId("member-agent-authority");
+    const first = await confirm(bob, qualifiedPanel, realm, session.accountId, agentAccount, strand);
+    await expect(qualifiedPanel.locator(`[data-grant-id="${first}"]`)).toContainText("当前权限/管理预检允许（运行时仍需验收）", { timeout: 120_000 });
+    // Preflight is separately labelled. Only the real Agent-signed accepted
+    // Message and exact read-back below prove business effectiveness.
+    await expect(qualifiedPanel.locator(`[data-grant-id="${first}"]`)).not.toContainText(/未确认|基础权限|不可达/, { timeout: 120_000 });
     const authored = await bridge.prepareAgentMessage({ runtimeId: runtime.runtimeId, realmId: realm, strandId: strand,
       text: "real Agent signs and commits using the explicitly confirmed narrow owned source" });
     const accepted = await bridge.submitAgentMessage(runtime.runtimeId, authored);
@@ -369,12 +388,14 @@ test("administrator Policy stale CAS and ordinary member edits refuse without ef
     const first = await savePolicyEditor(user, editor, realm);
     const accepted = await assertPolicyCurrent(request, jointRealm.aliceSession, realm, first);
     await staleEditor.getByTestId("agent-policy-rule").getByLabel("Effect", { exact: true }).selectOption("allow");
+    const before = await footprint(realm, jointRealm.aliceSession.accountId.station_id);
     const staleResponse = sibling!.page.page.waitForResponse(response =>
       response.request().method() === "POST" && new URL(response.url()).pathname === "/_arkret/self/events"
       && decodeIngressEvents(response.request().postData()).some(event => event.payload?.policy_id === id));
-    const before = await footprint(realm, jointRealm.aliceSession.accountId.station_id);
-    await staleEditor.getByTestId("agent-policy-save").click();
-    const refusal = await staleResponse;
+    const [refusal] = await Promise.all([
+      staleResponse,
+      staleEditor.getByTestId("agent-policy-save").click(),
+    ]);
     const body = await refusal.json();
     expect(refusal.status(), "stale null revision must not overwrite the accepted Policy").toBe(409);
     expect(wireErrCode(body) ?? body.reason_code).toBe("failed_precondition");
@@ -628,7 +649,8 @@ test("normal controller requests join and public review, distinct administrator 
     .filter(slot => slot.presence !== "optional").map(slot => slot.event_kind));
   const createdEvent = createdEvents[0];
   const createdOutcome = await created.json();
-  expect(createdEvent.realm_id).toBe(otherRealm);
+  expect(createdEvent.scope_ref).toEqual({ kind: "realm_genesis" });
+  expect(retypeEventDerivedId(createdEvent.event_id!, "realm")).toBe(otherRealm);
   expect(createdOutcome.unit_kind).toBe("ordinary_realm_bootstrap");
   expect(createdOutcome.status).toBe("committed");
   expect(createdOutcome.commits).toHaveLength(createdEvents.length);

@@ -5,6 +5,9 @@ import { decodeEventIngressBody, ingressEvents, type IngressEvent } from "./even
 import { readFile, writeFile, rename, rm } from "node:fs/promises";
 import { randomBytes, randomUUID } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
+import { fileURLToPath } from "node:url";
 import { colandBaseUrl, colandServiceDid, colandServiceId, colandServiceResolution, configuredServerKeys, type ColandKey } from "./env";
 import { cotestWire } from "./coland-api/wire-client";
 import type { ActorId } from "./generated/spec-wire-objects";
@@ -705,26 +708,55 @@ export async function rejectDirectStructureEvent(proof: DirectStructureProof, te
   const after = await scanRealmStreamApi(proof.request, proof.token, realm, { afterPosition: beforeHead!.stream_position });
   expect(after.truncated).toBe(false);
   expect(after.commits.length).toBe(after.events.length);
-  expect(after.events.some(row => row.event_id === event.event_id), "refused Event never enters the accepted stream").toBe(false);
+  expect(after.events.some(row => row?.event_id === event.event_id), "refused Event never enters the accepted stream").toBe(false);
   expect(after.commits.some(commit => commit.event_ref === event.event_id), "refused Event has no accepting Commit").toBe(false);
+  let independentFrankingSuccessors = 0;
   if (afterHead!.commit_id === beforeHead!.commit_id) {
     expect(afterHead).toEqual(beforeHead);
   } else {
     const end = after.commits.findIndex(commit => commit.commit_id === afterHead!.commit_id
       && commit.stream_position === afterHead!.stream_position);
     expect(end, "refusal observation reaches its exact after-head").toBeGreaterThanOrEqual(0);
+    independentFrankingSuccessors = end + 1;
+    // A private receiving proof can legally be Withheld, and a departed peer
+    // cannot supply a new member read. The runner-owned readonly test oracle
+    // checks accepted kind/ID plus the same full Commit, without exposing the
+    // hidden payload or treating omission as a protocol proof.
+    let stored: Array<{ commit: Record<string, unknown>; event_id: string; event_kind: string }> = [];
+    if (after.events.slice(0, end + 1).some(row => row === undefined)) {
+      const topology = JSON.parse(await readFile(process.env.COTEST_TOPOLOGY_PATH!, "utf8"));
+      const servers = topology.servers.filter((server: { coland: { service_id: string } }) =>
+        server.coland.service_id === colandServiceId());
+      expect(servers).toHaveLength(1);
+      const script = fileURLToPath(new URL("../../scripts/realm-business-footprint.py", import.meta.url));
+      const { stdout } = await promisify(execFile)("python3", [script, "--server", servers[0].name,
+        "--realm", realm, "--stream-after-position", String(beforeHead!.stream_position),
+        "--stream-end-position", String(afterHead!.stream_position)], { timeout: 45_000, maxBuffer: 1_048_576 });
+      stored = JSON.parse(stdout).stream_successors;
+      expect(Array.isArray(stored)).toBe(true);
+      expect(stored).toHaveLength(end + 1);
+    }
     for (const [offset, commit] of after.commits.slice(0, end + 1).entries()) {
       expect(commit.stream_position).toBe(beforeHead!.stream_position + offset + 1);
-      expect(commit.event_ref).toBe(after.events[offset].event_id);
+      let original = after.events[offset];
+      if (original === undefined) {
+        expect(stored[offset].commit, "the stored original has the same entire accepting Commit").toEqual(commit);
+        expect(stored[offset].event_id).toBe(commit.event_ref);
+        expect(stored[offset].event_kind).toBe("ak.moderation.franking_proof");
+        continue;
+      }
+      expect(original, "a private omission cannot prove a successor's Event kind").toBeDefined();
+      expect(commit.event_ref).toBe(original.event_id);
       // A delayed receiving-service receipt is independent of this refused
       // write. It must not conceal any business or governance Event.
-      expect(after.events[offset].kind, "only concurrent franking receipts may advance the refusal observation")
+      expect(original.kind, "only concurrent franking receipts may advance the refusal observation")
         .toBe("ak.moderation.franking_proof");
     }
   }
   await test.info().attach(`direct-negative-${name}`, {
     body: Buffer.from(JSON.stringify({ event_id: event.event_id, expected_reason: reason ?? "failed_precondition",
-      stream_head: beforeHead, current_unchanged: true, subsequent_events: 0, subsequent_commits: 0 })),
+      stream_head: beforeHead, current_unchanged: true, refused_events: 0, accepting_commits: 0,
+      independent_franking_successors: independentFrankingSuccessors })),
     contentType: "application/json",
   });
 }
@@ -766,10 +798,12 @@ async function ownWatchTransitions(page: Page, otherPages: Page[], strandId: str
   const writes: Array<{ event_id: string | undefined; level: string | null; expected_value: unknown }> = [];
   for (const level of ["all", "muted", "mentions_only", "participating", "default", "all"]) {
     await page.getByTestId("watch-level-toggle").click();
+    const option = page.getByTestId("watch-level-menu").locator(`[data-watch-level="${level}"]`);
+    await expect(option, "the actual self current must enable this choice before observing its write").toBeEnabled({ timeout: 30_000 });
     const accepted = page.waitForResponse(response => response.request().method() === "POST"
       && new URL(response.url()).pathname === "/_arkret/self/events"
       && ingressEvents(decodeEventIngressBody(response.request().postDataJSON())).some(event => event.kind === "ak.strand.watch.set"));
-    await page.getByTestId("watch-level-menu").locator(`[data-watch-level="${level}"]`).click();
+    await option.click();
     const response = await accepted;
     expect(response.ok(), await response.text()).toBe(true);
     const event = ingressEvents(decodeEventIngressBody(response.request().postDataJSON())).find(event => event.kind === "ak.strand.watch.set")!;
