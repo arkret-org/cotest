@@ -4,43 +4,6 @@
   "complete_claim": false,
   "tasks": [
     {
-      "task": "2026-09-06-0915-protocol-fixtures-mock-and-api-test-convergence.md",
-      "criteria_count": 7,
-      "criteria_sha256": "d199b9952188d276c1d8da1e6fe408e8f2be0b8d681768e6b82b09ea78abbce4",
-      "spec_refs": [
-        "arkret-spec/spec/v1/zh/identity/contact-and-direct-conversation.md",
-        "arkret-spec/spec/v1/zh/discovery/read-receipts.md",
-        "arkret-spec/spec/v1/zh/governance/history-visibility.md"
-      ],
-      "source_refs": [
-        "arkret-rust-sdk/crates/test-kit/src/contact.rs",
-        "arkret-rust-sdk/crates/test-kit/src/service_identity.rs",
-        "cotest/api-only-migration.json",
-        "cotest/scripts/run-api-only-native-migrations.py",
-        "coland/crates/storage-postgres/src/read_cursors.rs"
-      ],
-      "tests": [
-        {
-          "path": "cotest/tests/private_read_marker_api.rs",
-          "symbol": "canonical_private_read_marker_api_migration",
-          "kind": "live",
-          "covers": "Actual accepted sibling and bidirectional actor-private marker convergence; latest execution pending."
-        },
-        {
-          "path": "cotest/tests/api_mls_migrations.rs",
-          "symbol": "discussion_upgrade_api_migration",
-          "kind": "live",
-          "covers": "Actual Circle scope, MLS, private relation and signed negative writes; no UI claim."
-        }
-      ],
-      "engineering_checks": [
-        "Native migration manifest and mandatory 13-case runner; schema/signature contract; collection floor and release joint-skip refusal"
-      ],
-      "remaining_scenarios": [
-        "Latest canonical/isolated 13-case run, rebuilt wire plus request-dependent UI, unfiltered joint/release and final source pin."
-      ]
-    },
-    {
       "task": "2026-09-06-0917-garth-runtime-and-host-ports.md",
       "criteria_count": 9,
       "criteria_sha256": "2ca93d2dc946ebb4ccb59516d84a9e3da4b03ebfd1426085432a985e6ef44725",
