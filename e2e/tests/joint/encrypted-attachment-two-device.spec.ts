@@ -301,6 +301,28 @@ test("encrypted attachment two-device upload/send/history/render and exact resta
     expect(firstPageUrl).toMatch(/^blob:/);
     const textReader = bob.page.getByTestId("verified-long-text");
     const firstReaderId = await textReader.getAttribute("data-reader-id");
+    const firstBinding = await textReader.evaluate((element: HTMLElement) => ({
+      row: element.closest("[data-message-id]")?.getAttribute("data-message-id"),
+      renderer: element.closest("[data-attachment-renderer-id]")?.getAttribute("data-attachment-renderer-id"),
+      source: element.closest("[data-attachment-source]")?.getAttribute("data-attachment-source"),
+      feed: element.closest('[id^="chat-feed-"]')?.id,
+    }));
+    await textReader.evaluate((element: HTMLElement) => {
+      const feed = element.closest('[id^="chat-feed-"]')!;
+      const changes: unknown[] = [];
+      const ids = (node: Node) => node instanceof Element ? [node, ...Array.from(node.querySelectorAll('[data-message-id],[data-reader-id],[data-attachment-renderer-id]'))]
+        .filter(e => e.hasAttribute("data-message-id") || e.hasAttribute("data-reader-id") || e.hasAttribute("data-attachment-renderer-id"))
+        .map(e => ({row: e.getAttribute("data-message-id"), reader: e.getAttribute("data-reader-id"), renderer: e.getAttribute("data-attachment-renderer-id")})) : [];
+      const observer = new MutationObserver(entries => {
+        for (const entry of entries) {
+          const removed = Array.from(entry.removedNodes).flatMap(ids);
+          const added = Array.from(entry.addedNodes).flatMap(ids);
+          if ((removed.length || added.length) && changes.length < 200) changes.push({time: performance.now(), removed, added});
+        }
+      });
+      observer.observe(feed, {childList: true, subtree: true});
+      (window as any).__attachmentReaderTrace = {changes, observer};
+    });
     const textViewport = bob.page.getByTestId("verified-long-text-viewport");
     const firstPageHeight = await textViewport.evaluate((element: HTMLElement) => element.getBoundingClientRect().height);
     expect(firstPageHeight).toBeGreaterThan(0);
@@ -319,17 +341,23 @@ test("encrypted attachment two-device upload/send/history/render and exact resta
       fullText = await textLink.evaluate(async (link: HTMLAnchorElement) => await (await fetch(link.href)).text());
     } catch (error) {
       await testInfo.attach("long-text-reader-boundary.json", {contentType: "application/json", body: JSON.stringify({
-        firstPageUrl, firstReaderId, firstPageHeight,
+        firstPageUrl, firstReaderId, firstPageHeight, firstBinding,
         current: await textReader.evaluate((element: HTMLElement) => ({
           reader: element.dataset.readerId, page: element.dataset.pageIndex,
           url: element.querySelector("a")?.getAttribute("href"),
           row: element.closest("[data-message-id]")?.getAttribute("data-message-id"),
+          renderer: element.closest("[data-attachment-renderer-id]")?.getAttribute("data-attachment-renderer-id"),
+          source: element.closest("[data-attachment-source]")?.getAttribute("data-attachment-source"),
+          revision: element.closest("[data-attachment-load-revision]")?.getAttribute("data-attachment-load-revision"),
           rectangle: element.getBoundingClientRect().toJSON(),
           lastDisabled: (element.querySelector('[data-testid="verified-long-text-last"]') as HTMLButtonElement)?.disabled,
           feed: element.closest('[id^="chat-feed-"]')?.scrollTop,
         })).catch(() => null),
+        changes: await bob.page.evaluate(() => (window as any).__attachmentReaderTrace?.changes),
       })});
       throw error;
+    } finally {
+      await bob.page.evaluate(() => { (window as any).__attachmentReaderTrace?.observer.disconnect(); delete (window as any).__attachmentReaderTrace; });
     }
     expect(fullText).toBe(longBody);
     const preparedBlobs = (await holderAttachments(alice.page)).filter(o => o.scope.realm_id === realm && o.uploaded);
