@@ -422,10 +422,21 @@
       "criteria_count": 5,
       "criteria_sha256": "b8ef3470fe8d0c482e78245b806e0b16c5e77efef2bf50c1bdb147b68c624e0f",
       "spec_refs": [
-        "arkret-spec/spec/v1/zh/sync/current-results.md"
+        "arkret-spec/spec/v1/zh/sync/current-results.md",
+        "arkret-spec/spec/v1/zh/models/strand-and-message.md",
+        "arkret-spec/spec/v1/zh/models/circle.md",
+        "arkret-spec/spec/v1/zh/sync/service-http-binding.md"
       ],
       "source_refs": [
-        "coland/crates/storage-postgres/src/authority_commit.rs"
+        "coland/crates/storage-postgres/src/authority_commit.rs",
+        "coland/crates/storage-postgres/src/strand_watch_current_results.rs",
+        "coland/crates/storage-postgres/src/self_current_reads.rs",
+        "coland/crates/storage-postgres/src/account_content_delivery.rs",
+        "coland/crates/storage-postgres/src/circle_current_results.rs",
+        "coland/crates/http/src/routing/self_current_reads.rs",
+        "coland/crates/http/src/routing/interop/webrtc.rs",
+        "arkret-rust-sdk/crates/http-client/src/endpoints/peer.rs",
+        "arkret-rust-sdk/crates/models-collaboration/src/strand_watch_operations.rs"
       ],
       "tests": [
         {
@@ -433,11 +444,64 @@
           "symbol": "real_watch_current_preserves_clear_revision_and_enforces_whole_value_cas",
           "kind": "live",
           "covers": "普通Realm self-watch whole-value CAS"
+        },
+        {
+          "path": "coland/crates/storage-postgres/tests/strand_watch_admission.rs",
+          "symbol": "circle_watch_uses_its_exact_namespace_and_loses_disclosure_on_circle_leave",
+          "kind": "contract",
+          "covers": "真实PG Circle scope／整值CAS／清空revision／Snapshot及成员撤回；不是双站实测"
+        },
+        {
+          "path": "coland/crates/storage-postgres/tests/strand_watch_admission.rs",
+          "symbol": "original_author_does_not_replace_the_full_watcher_selector_when_current_is_lost",
+          "kind": "contract",
+          "covers": "PG故障夹具：按payload watcher找缺Commit的历史并拒绝；不是合法.others正例"
+        },
+        {
+          "path": "coland/crates/storage-postgres/tests/strand_watch_admission.rs",
+          "symbol": "remote_watch_delivery_uses_the_verified_peer_cut_without_local_reducer_material",
+          "kind": "contract",
+          "covers": "真实PG最终交付guard；已验证peer witness在存储port注入，核本地session／Device／完整Account／generation；不计S2S正例"
+        },
+        {
+          "path": "coland/crates/storage-postgres/tests/strand_watch_admission.rs",
+          "symbol": "a_missing_original_in_the_effective_namespace_never_proves_never_written",
+          "kind": "contract",
+          "covers": "PG故障：有效stream原件缺项失败关闭"
+        },
+        {
+          "path": "coland/crates/storage-postgres/tests/strand_watch_admission.rs",
+          "symbol": "circle_self_knock_and_cancel_have_durable_current_without_join_access",
+          "kind": "contract",
+          "covers": "真实PG self knock／cancel durable current、错误CAS零写及knock不授joined内容权"
+        },
+        {
+          "path": "coland/crates/storage-postgres/tests/planned_authority_handoff.rs",
+          "symbol": "handoff_freezes_writes_preserves_current_and_reads_old_snapshots",
+          "kind": "contract",
+          "covers": "同PG生产UOW signed handoff导入null Watch与肯定never-written，旧Snapshot保留；不计独立双站交接"
+        },
+        {
+          "path": "coland/crates/http/src/routing/router_build.rs",
+          "symbol": "peer_watch_current_is_advertised_and_reaches_the_signature_gate",
+          "kind": "contract",
+          "covers": "真实HTTP router的未签名peer请求拒绝及独立bundle广告；不计认证peer正例"
+        },
+        {
+          "path": "arkret-rust-sdk/crates/models-collaboration/tests/strand_watch_current_schema_conformance.rs",
+          "symbol": "peer_watch_answer_binds_the_nonce_verified_generation_and_rejects_sidecar_heads",
+          "kind": "contract",
+          "covers": "共享outcome的两presence分支／generation／完整Station selector／Sidecar拒绝；仅SDK合同"
         }
       ],
       "engineering_checks": [],
       "remaining_scenarios": [
-        "每effect owner运行时正负例；Circle／others／audit watch；effective scope与Circle成员同cut；mute_override与SFU真实拒绝"
+        "每个ownership分支的生产运行时正例与未登记kind／缺handler／错owner／shared-private混用／事务中途失败零效果矩阵；静态manifest不替代",
+        "Watch .others同批审计、audit-read载体与Agent provenance可见性：用户指定先失败关闭，规范缺口1013；裁决后由2136继续生产实现",
+        "0162真实独立双站：nonce-bound governor／S2S认证、Circle与完整Account隔离、CAS竞争、非零任期完整导入、撤回／Device replacement／handoff迟到与冷恢复；存储witness注入和同PG交接不计实测",
+        "Strand effective scope／Circle member同cut完整生产矩阵、长历史完整namespace证明成本；索引probe不替代端到端测量",
+        "0132所有mute_override与moderator媒体控制零写拒绝的真实token issuer／SFU具名执行器及完整回归；本轮issuer Rust单测不升级SFU",
+        "同最新来源完整full／Native2最终验收返0900，当前complete_claim保持false"
       ]
     },
     {
