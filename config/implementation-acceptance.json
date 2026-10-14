@@ -47,24 +47,6 @@
       ]
     },
     {
-      "task": "2026-09-06-0920-residual-capability-and-storage-ownership.md",
-      "criteria_count": 4,
-      "criteria_sha256": "886fcce5c28a03e4358e22a688d36bce2731b10767bfbf508e605dcf49458c6e",
-      "spec_refs": [
-        "arkret-spec/spec/v1/zh/authz/capabilities.md"
-      ],
-      "source_refs": [
-        "coauth/crates/storage-postgres/src/collaboration_capability.rs"
-      ],
-      "tests": [],
-      "engineering_checks": [
-        "全caller/SQL/动态引用纵向审计和现有semantic_residue门"
-      ],
-      "remaining_scenarios": [
-        "迁移accepted读面后纵向删除旧grants；实验功能逐caller裁决；删除链和动态引用检查"
-      ]
-    },
-    {
       "task": "2026-09-10-0540-client-current-result-durable-index.md",
       "criteria_count": 7,
       "criteria_sha256": "beebef34c3e67690cf9a4040346e6017354459f5c643eaf6440d3363f3f9b652",
