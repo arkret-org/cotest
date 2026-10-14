@@ -16,6 +16,20 @@ use crate::scenarios::_helpers::external_binary::{SpawnedExternalProcess, worksp
 
 pub async fn run_agent_session_grant_replay_production()
 -> Result<crate::conformance::SuiteExecutionResult> {
+    run_agent_issuer_boundary(false).await
+}
+
+pub async fn run_agent_longevity_session_boundary() -> Result<()> {
+    run_agent_issuer_boundary(true).await?;
+    println!(
+        "[agent-longevity-session] real_issuer_conjunction=1 canonical_case_completion_claim=0"
+    );
+    Ok(())
+}
+
+async fn run_agent_issuer_boundary(
+    longevity: bool,
+) -> Result<crate::conformance::SuiteExecutionResult> {
     let mut port = reserve_port()?;
     let email_base = format!("http://127.0.0.1:{}", port.port());
     port.release();
@@ -207,7 +221,7 @@ pub async fn run_agent_session_grant_replay_production()
     );
     let account =
         arkret_wire::AccountId::new(principal.core_id.clone(), station.service_id().clone());
-    let agent = super::AgentRuntimeSession::establish_observed(
+    let mut agent = super::AgentRuntimeSession::establish_observed(
         &station,
         super::AgentSessionIssuer::Coauth {
             base: coauth.base_url(),
@@ -231,6 +245,15 @@ pub async fn run_agent_session_grant_replay_production()
         "real Agent session was refused: {}",
         response.status()
     );
+    if longevity {
+        super::longevity_evidence::renew_with_real_issuer(
+            &station,
+            &coauth,
+            &controller,
+            &mut agent,
+        )
+        .await?;
+    }
     lifecycle_refusals(&station, &coauth, &controller, &agent).await?;
     let issue_url = format!("{}/_arkret/gate/account/session-grants", coauth.base_url());
     let header = arkret_signatures::dpop::build_dpop_proof(
@@ -678,7 +701,7 @@ async fn lifecycle_refusals(
     Ok(())
 }
 
-async fn wait_runtime_rejected(
+pub(super) async fn wait_runtime_rejected(
     runtime: &crate::harness::TestActorClient,
     label: &str,
     start: std::time::Instant,
@@ -711,7 +734,7 @@ fn random_session_challenge() -> Result<String> {
     Ok(base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(bytes))
 }
 
-fn fresh_session_request(
+pub(super) fn fresh_session_request(
     original: &arkret_models_collaboration::session_grants::AgentSessionGrantRequest,
     url: &str,
     key: &ed25519_dalek::SigningKey,
@@ -828,7 +851,7 @@ pub(super) async fn set_accountability_for_agent(
 }
 
 #[allow(clippy::too_many_arguments)]
-async fn expect_issue_refusal(
+pub(super) async fn expect_issue_refusal(
     station: &crate::harness::ArkretServer,
     database_url: &str,
     url: &str,

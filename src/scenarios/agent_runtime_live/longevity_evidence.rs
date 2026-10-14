@@ -76,6 +76,197 @@ async fn refuse_without_effects(
     Ok(())
 }
 
+pub(super) async fn renew_with_real_issuer(
+    station: &ArkretServer,
+    coauth: &crate::scenarios::_helpers::coauth_bootstrap::SpawnedCoauth,
+    controller: &TestActorClient,
+    agent: &mut AgentRuntimeSession,
+) -> Result<()> {
+    let original = controller
+        .sdk()
+        .committed_event_get(&agent.key_authorization)
+        .await?;
+    let mut payload = AgentKeyAuthorizePayload::try_from(
+        original.reducer_input().context("accepted original key")?,
+    )?;
+    ensure!(payload.expires_at.is_none());
+    let started = Instant::now();
+    tokio::time::sleep(Duration::from_secs(65)).await;
+    ensure!(started.elapsed() >= Duration::from_secs(65));
+    let (grant, request) = coauth_session_evidence::issue_runtime_session(
+        station,
+        coauth.base_url(),
+        &coauth.pg.connect_url,
+        &agent.agent_account.principal_id,
+        &agent.key_authorization,
+        &agent.verification_method,
+        &agent.runtime_key,
+        &runtime_operations(),
+    )
+    .await
+    .context("real issuance after 65 seconds of unrevoked authorization")?;
+    let runtime = station.client_with_agent_runtime_grant(
+        agent.agent_did.as_str(),
+        "long-lived-agent",
+        grant,
+        agent.runtime_key.clone(),
+    )?;
+    ensure!(
+        runtime
+            .get("/_arkret/self/device_messages")
+            .send()
+            .await?
+            .status()
+            .is_success()
+    );
+    agent.runtime = runtime;
+    agent.issuer_request = Some(request);
+    payload.supersedes = vec![AgentKeySupersession {
+        key_id: payload.key_id.clone(),
+        authorized_event_ref: agent.key_authorization.clone(),
+    }];
+    payload.issued_at = arkret_canonical::normalize_timestamp_canonical(Utc::now());
+    let event = renewal(controller, agent, &payload)?;
+    let replacement_started = Instant::now();
+    let outcome: AuthoritySubmitOutcome = serde_json::from_value(
+        expect_json(
+            controller
+                .post("/_arkret/self/events")
+                .header("Content-Type", "application/json")
+                .body(arkret_canonical::canonical_json_bytes(
+                    &arkret_wire::EventAdmissionSubmission::new(event.clone()),
+                )?),
+            StatusCode::OK,
+        )
+        .await?,
+    )?;
+    let AuthoritySubmitOutcome::Accepted {
+        status: AuthorityCommitStatus::Committed,
+        commit,
+    } = outcome
+    else {
+        bail!("real issuer same-key renewal failed: {outcome:?}");
+    };
+    commit.validate_content_address()?;
+    crate::scenarios::human_device_producer_live::ensure_commit_signed_by(&commit, station)?;
+    ensure!(commit.event_ref == event.event_id);
+    let current = controller
+        .sdk()
+        .agent_get(agent.agent_account.principal_id.as_str())
+        .await?
+        .key_state
+        .context("current replacement key source")?;
+    current.validate_signer_evidence_delivery()?;
+    ensure!(
+        current
+            .current_key_authorization
+            .as_ref()
+            .and_then(|source| source.reducer_input())
+            .is_some_and(|source| source.event_id == event.event_id)
+    );
+    let mut missing = current.clone();
+    missing.current_key_authorization = None;
+    ensure!(missing.validate_signer_evidence_delivery().is_err());
+    let mut replayed = current.clone();
+    let root = &mut replayed
+        .current_signer_evidence
+        .as_mut()
+        .context("replacement compact signer root")?
+        .authenticated_signer_evidence;
+    root.authority_commit_id = original.commit().commit_id.clone();
+    let reference = root.signer_evidence_ref()?;
+    replayed
+        .current_signer_evidence
+        .as_mut()
+        .context("mutated compact signer root")?
+        .signer_resolution_evidence_ref = reference.clone();
+    replayed.signer_resolution_evidence_ref = Some(reference);
+    ensure!(replayed.validate_signer_evidence_delivery().is_err());
+    let mut wrong_subject = current.clone();
+    let root = &mut wrong_subject
+        .current_signer_evidence
+        .as_mut()
+        .context("subject-bound compact signer root")?
+        .authenticated_signer_evidence;
+    root.subject_id = agent.controller_account.principal_id.clone();
+    let reference = root.signer_evidence_ref()?;
+    wrong_subject
+        .current_signer_evidence
+        .as_mut()
+        .context("mutated subject root")?
+        .signer_resolution_evidence_ref = reference.clone();
+    wrong_subject.signer_resolution_evidence_ref = Some(reference);
+    ensure!(wrong_subject.validate_signer_evidence_delivery().is_err());
+    let mut unsigned = current.clone();
+    if let Some(source) = unsigned.current_key_authorization.as_mut() {
+        let arkret_wire::CommittedEventView::Full(source) = source.as_mut() else {
+            bail!("accepted key source is withheld");
+        };
+        source.event.producer_proof = None;
+    }
+    ensure!(unsigned.validate_signer_evidence_delivery().is_err());
+    coauth_session_evidence::wait_runtime_rejected(
+        &agent.runtime,
+        "superseded real issuer credential",
+        replacement_started,
+    )
+    .await?;
+    let issue_url = format!("{}/_arkret/gate/account/session-grants", coauth.base_url());
+    let stale = coauth_session_evidence::fresh_session_request(
+        agent
+            .issuer_request
+            .as_ref()
+            .context("original actual issuer intent")?,
+        &issue_url,
+        &agent.runtime_key,
+    )?;
+    coauth_session_evidence::expect_issue_refusal(
+        station,
+        &coauth.pg.connect_url,
+        &issue_url,
+        &stale,
+        &agent.runtime_key,
+        None,
+        arkret_wire::ErrorCode::SIGNATURE_INVALID,
+        Some(arkret_wire::ReasonCode::PROOF_INVALID),
+    )
+    .await?;
+    let (grant, request) = coauth_session_evidence::issue_runtime_session(
+        station,
+        coauth.base_url(),
+        &coauth.pg.connect_url,
+        &agent.agent_account.principal_id,
+        &event.event_id,
+        &agent.verification_method,
+        &agent.runtime_key,
+        &runtime_operations(),
+    )
+    .await
+    .context("real issuer session for accepted same-key replacement")?;
+    agent.runtime = station.client_with_agent_runtime_grant(
+        agent.agent_did.as_str(),
+        "same-key-long-lived-agent",
+        grant,
+        agent.runtime_key.clone(),
+    )?;
+    agent.key_authorization = event.event_id;
+    agent.issuer_request = Some(request);
+    ensure!(
+        agent
+            .runtime
+            .get("/_arkret/self/device_messages")
+            .send()
+            .await?
+            .status()
+            .is_success()
+    );
+    println!(
+        "[agent-longevity-session] actual_wall_clock_delay_seconds={} nonexpiring_original_issuance_and_consumer=1 accepted_same_key_renewal=1 exact_current_source_binding=1 missing_source_and_self_consistent_old_root_refused=1 old_credential_superseded_within_60s=1 stale_issuer_intent_zero_ledger_refused=1 actual_replacement_issuer_and_consumer=1 canonical_case_completion_claim=0",
+        started.elapsed().as_secs_f64()
+    );
+    Ok(())
+}
+
 pub async fn run_agent_same_key_renewal_boundary() -> Result<()> {
     let name = "agent-same-key-renewal";
     let Some(database) = database(name)? else {

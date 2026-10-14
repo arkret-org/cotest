@@ -73,7 +73,9 @@ mod provision_start_evidence;
 mod repairing_evidence;
 mod terminal_evidence;
 pub use binding_evidence::run_agent_runtime_binding_admission;
-pub use coauth_session_evidence::run_agent_session_grant_replay_production;
+pub use coauth_session_evidence::{
+    run_agent_longevity_session_boundary, run_agent_session_grant_replay_production,
+};
 pub use grant_ceiling_evidence::run_agent_provision_grant_ceiling_boundary;
 pub use lifecycle_conjunction::run_agent_controller_lifecycle_production;
 pub use lifecycle_evidence::run_agent_controller_lifecycle_boundary;
