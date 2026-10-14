@@ -26,11 +26,11 @@ async function presignProblemDiagnostic(response: import("@playwright/test").API
   }
 }
 
-test("Chat file drop keeps plaintext usable and refuses raw file upload into an encrypted scope", async ({ browser, request }, testInfo) => {
+test("Chat file drop freezes structured plaintext and encrypted attachments", async ({ browser, request }, testInfo) => {
   test.setTimeout(300_000);
   const flow = await openDpopUserPage(browser, request, `blob-drop-${Date.now()}`);
   if (!flow) throw new Error("Blob file-drop acceptance requires real Coauth DPoP login");
-  const evidence: Array<{ realm_id: string; blob_ref: string; encryption: null; size_bytes: number }> = [];
+  const evidence: Array<{ realm_id: string; blob_ref: string; encryption: null | {scheme: string}; size_bytes: number }> = [];
   try {
     for (const encrypted of [false, true]) {
       const realmId = await flow.page.createRealm({
@@ -48,35 +48,35 @@ test("Chat file drop keeps plaintext usable and refuses raw file upload into an 
       page.on("request", observe);
       try {
         const body = `private attachment ${Date.now()}`;
-        const uploaded = encrypted ? undefined : page.waitForResponse(response =>
+        await expect(page.getByTestId("send-chat-button")).toBeEnabled({timeout: 120_000});
+        const uploaded = page.waitForResponse(response =>
           new URL(response.url()).pathname === "/_arkret/self/blob/upload" && response.request().method() === "POST");
         await page.getByTestId("compose-drop-zone").evaluate((zone, body) => {
           const transfer = new DataTransfer();
           transfer.items.add(new File([body], "private-note.txt", { type: "text/plain" }));
           zone.dispatchEvent(new DragEvent("drop", { bubbles: true, cancelable: true, dataTransfer: transfer }));
         }, body);
-        if (encrypted) {
-          await expect(page.getByTestId("compose-upload-progress")).toContainText(/unavailable for this encrypted conversation/);
-          expect(uploadRequests).toHaveLength(0);
-          await expect(page.getByTestId("chat-input")).toHaveValue("");
-        } else {
-          const response = await uploaded!;
-          expect(response.status()).toBe(200);
-          const outcome = await response.json();
-          const bytes = Buffer.from(body, "utf8");
-          const expectedRef = `ak:blob:sha256:${createHash("sha256").update(bytes).digest("hex")}`;
-          expect(outcome.blob_ref).toBe(expectedRef);
-          await expect(page.getByTestId("compose-upload-progress")).toContainText("1 attachment(s) uploaded");
-          expect(uploadRequests).toHaveLength(1);
-          await expect(page.getByTestId("chat-input")).toHaveValue(new RegExp(`\\[Attachment: ${expectedRef}`));
-          const base = colandBaseUrl();
-          const downloadUrl = `${base}/_arkret/self/blob/get?blob_ref=${encodeURIComponent(expectedRef)}`;
-          const download = await request.get(downloadUrl, {
-            headers: selfPathHeadersForDpopSession(flow.session, "GET", downloadUrl),
-          });
-          expect(download.status()).toBe(200);
-          expect(download.headers()["content-type"]?.split(";", 1)[0].trim()).toBe("text/plain");
-          expect(await download.body()).toEqual(bytes);
+        const response = await uploaded;
+        expect(response.status()).toBe(200);
+        const outcome = await response.json();
+        const bytes = Buffer.from(body, "utf8");
+        const expectedRef = outcome.blob_ref as string;
+        await expect(page.getByTestId("compose-upload-progress")).toContainText("1 attachment(s) ready");
+        await expect(page.getByTestId("compose-attachment")).toHaveCount(1);
+        expect(uploadRequests).toHaveLength(1);
+        await expect(page.getByTestId("chat-input")).toHaveValue("");
+        const base = colandBaseUrl();
+        const downloadUrl = `${base}/_arkret/self/blob/get?blob_ref=${encodeURIComponent(expectedRef)}`;
+        const download = await request.get(downloadUrl, {
+          headers: selfPathHeadersForDpopSession(flow.session, "GET", downloadUrl),
+        });
+        expect(download.status()).toBe(200);
+        const stored = await download.body();
+        expect(expectedRef).toBe(`ak:blob:sha256:${createHash("sha256").update(stored).digest("hex")}`);
+        expect(download.headers()["content-type"]?.split(";", 1)[0].trim()).toBe(encrypted ? "application/octet-stream" : "text/plain");
+        expect(stored.equals(bytes)).toBe(!encrypted);
+        expect(stored.length).toBe(bytes.length + (encrypted ? 16 : 0));
+        if (!encrypted) {
           // This Realm has not opted into direct download; plaintext also
           // requires policy authorization before a bearer URL can be issued.
           const presignUrl = `${base}/_arkret/self/blob/presign`;
@@ -88,8 +88,8 @@ test("Chat file drop keeps plaintext usable and refuses raw file upload into an 
           const problem = await presigned.json();
           expect(problem.type).toBe("https://arkret.org/problems/not_found");
           expect(problem.status).toBe(presigned.status());
-          evidence.push({ realm_id: realmId, blob_ref: expectedRef, encryption: null, size_bytes: bytes.length });
         }
+        evidence.push({ realm_id: realmId, blob_ref: expectedRef, encryption: encrypted ? {scheme: "ak.blob.stream_aead.v1"} : null, size_bytes: stored.length });
       } finally { page.off("request", observe); }
     }
     await testInfo.attach("blob-file-drop-classification-refs.json", {

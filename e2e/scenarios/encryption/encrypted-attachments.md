@@ -1,111 +1,35 @@
-# E2EE 加密附件
+# E2EE 加密附件（0805）
 
-## 目标
+## 正式合同
 
-在 `encryption_profile=mls_rfc9420` 的 Realm 中,alice 给消息附图;bob(成员)能下载并解密看到明文;mallory(非成员)拿不到 ciphertext(opaque 403/404);blob 存储服务**只见 ciphertext**,不知道 plaintext filename / content / size 准确值。
+真相源为 `crypto-media/media-and-blob.md` §§2–3.3、§5、`models/content-types.md` 的 E2EE long-text，以及 `blob.schema.json`。上传 classification 为 closed `{scheme}`；transport MIME 为 `application/octet-stream`，服务端保存密文尺寸。明文 filename/MIME/尺寸、salt、nonce prefix 和完整 SDK descriptor 留在私有 ContentBlock。
 
-不验证:MLS 群组生命周期本身(encryption/mls-group 前置)、密钥备份(encryption/key-backup)、calls 中的媒体(calls/webrtc)。
+每个新 object 在派生前耐久冻结独立 32-byte salt、authoring scope、immutable Genesis 和 exact winning checkpoint。内容密钥使用正式 MLS exporter Context，不使用当前 epoch fallback 或任意缓存 secret。`group_state_ref` 接受 EventId 或该 accepted Genesis/winning Commit Event 的 SHA-256 内容摘要等价引用；原始引用继续参与 AAD。拥有 ref、salt 或密文不授予历史读取权。
 
-## Spec 锚点
+生产支持 `ak.blob.stream_aead.v1` + `mls_exporter_aead_xchacha20poly1305_stream`。whole-file/AES 继续失败关闭。每段 tag 与整个所选 Blob digest 全部通过后，才创建可用预览或下载结果。
 
-- `crypto-media/media-and-blob.md` §3 — 加密附件 metadata(`encryption.algorithm = "MLS"`、`group_state_ref`、`ciphertext_digest`)
-- `crypto-media/media-and-blob.md` §5 — 认证下载、authz、cache 规则
-- `crypto-media/media-and-blob.md` §5.1 — Content-Type / Content-Disposition 不能泄漏 plaintext
-- `crypto-media/media-and-blob.md` §5.2-§5.3 — Caching + thumbnail
-- `crypto-media/media-and-blob.md` §6 — Asset Privacy Policy(`download_mode=provider_proxy` 默认)
-- `crypto-media/encryption-and-audit.md` §2.3.1 — `key_ref` for MLS profile
+## 运行拓扑与执行入口
 
-## 拓扑
+一台 runner-owned TLS Coland、独立 PostgreSQL/对象目录、一台真实 Coauth；发送者和接收者使用独立浏览器 context/Device。第三位 since-join 成员用于历史拒绝与真实 Add epoch 前进。
 
-- 1 × coland(含 Blob Service)+ 1 × coauth
+主用例：`tests/joint/encrypted-attachment-two-device.spec.ts`。补充服务分类、tus/restart 与 plaintext 回归：`tests/joint/blob-storage-classification.spec.ts`。唯一实现 owner 为 `arkret-work/tasks/impl-done/2026-09-30-0805-blob-upload-encryption-classification.md`（完成后归档路径以工作索引为准）。
 
-## Actors
+通过 `scripts/run-joint-e2e.ps1 -StartCoauth` 运行，保留源码/lock/features 与 SUT build identity，不使用 HTTP 诊断环境替代 TLS 验收。
 
-| 名字 | 角色 |
-|---|---|
-| alice | Realm owner,上传附件 |
-| bob | 成员,下载 + 解密 |
-| mallory | 非成员,验证 ACL |
+## 非空业务断言
 
-## Pre-conditions
+1. UI 实际 File drop，经 SDK KDF/AEAD、canonical multipart 和结构化私有 Message，由另一设备解密并显示实际 PNG pixels/bytes。
+2. 服务接受上传后丢失响应，发送端刷新恢复：salt、descriptor、nonce prefix、密文字节和 BlobRef 精确重用。
+3. 草稿改走再改回取消旧 continuation；未完成附件不能发送，显式重试沿用原对象。
+4. 同样输入的另一新 object 使用 fresh salt/key 和不同密文；跨多段大文件下载的 SHA-256 等于真实输入。
+5. 超 inline 上限的加密 long-text 经 mandatory stream descriptor 发送；UTF-8 分页首尾和完整下载等于源正文。
+6. 真正新增成员推进 epoch 后，旧授权成员刷新仍能读旧附件；since-join 成员按原 Message ID 读取返回404且没有历史预览。
+7. 离开目标后原预览Blob URL不可用；密文 HTTP 响应被篡改后不产生原附件的可用 URL/preview；ciphertext presign 被拒绝。
+8. 通过 runner 的真实 Station 只读数据库 lease 检查 `blobs`：只有 closed classification、octet-stream、密文尺寸；filename 为 null，无完整私有 descriptor。
 
-- encryption/mls-group 已实现到能创建 E2EE Realm 且 alice/bob 都是成员
-- alice、bob、mallory 都注册
-- Blob Service endpoint 在 coland 同进程或独立
+## 证据边界
 
-## Steps
+SDK 向量、native storage/codec 单测、TypeScript 检查分别证明各自边界，不能代替上述实际生产成功链。浏览器附件输入使用 File/Blob slice；Dioxus 的 `byte_stream()` 在当前版本整读 File，因此不用于浏览器生产路径。原生使用文件分段读取和受保护按需 KV。接收端先验证完整承诺，再输出 browser Blob URL 或原生可撤销临时文件能力。
 
-### Phase A — alice 上传 + 发送加密附件
-
-1. alice 在 E2EE Realm `R_e2ee` 中准备发消息,附图 `cat.png`(plaintext)
-2. inkson 客户端:
-   - 生成本地 AEAD key + nonce
-   - 用 XChaCha20-Poly1305 加密 `cat.png` → ciphertext
-   - 计算 `ciphertext_digest = sha256(ciphertext)`
-3. `POST /_arkret/self/blob/upload` 上传:
-   - body: ciphertext bytes
-   - meta: `{ realm_id, media_type: "application/octet-stream", encryption: { algorithm: "MLS", group_state_ref: { epoch, key_ref } }, ciphertext_digest }`
-   - **关键 invariant**:不带明文文件名、不带 plaintext media type
-4. coland Blob Service 返回 `blob_ref: sha256:...`
-5. alice 客户端组消息 `ak.message.create`:
-   - `encrypted_payload`(明文 = "look at this", `attachments: [{ blob_ref, encryption, ciphertext_digest }]`)
-   - 用 MLS 当前 epoch key 加密整个 payload
-6. 提交事件 → coland 接受,Sync 路由
-
-### Phase B — bob 下载 + 解密
-
-7. bob inkson 拉 sync → 解 message → 拿到 plaintext `attachments` 数组
-8. bob 客户端 `GET /_arkret/self/blob/get?blob_ref=<sha>` with `Authorization: Bearer <bob_token>`
-9. coland Blob Service 校验:
-   - bob 是 `R_e2ee` 的当前成员
-   - 当前 confirmed Seal 中的 membership 与 MLS sequenced state 授权 bob 读取该 epoch 的密文
-10. 返回 ciphertext bytes + `Content-Type: application/octet-stream` + `Cache-Control: private, no-store`(spec §5.1)
-11. bob 客户端用 plaintext attachments 里携带的 key_ref → 派生解密 key → 解 ciphertext → 拿到原始 `cat.png`
-12. inkson 渲染图片(lock icon + "Encrypted attachment, X KB")
-13. 断言:bob timeline 上消息含 image preview
-
-### Phase C — Ciphertext digest 校验
-
-14. 测试 harness 强制让 bob 客户端拿到一个**篡改过 1 byte 的 ciphertext**(通过 `route.fulfill` 替换响应)
-15. bob 客户端计算 sha256,与 `ciphertext_digest` 不匹配
-16. 断言:客户端**丢弃** 这份 bytes,不解密,timeline 显示"Failed integrity check"或等价错误标记(spec §5)
-
-### Phase D — Non-member access denied
-
-17. mallory(非 `R_e2ee` 成员)拿到 `blob_ref`(假设外漏)
-18. mallory `GET /_arkret/self/blob/get?blob_ref=<sha>` with `mallory_token`
-19. coland 应拒绝;返回**不可区分** 的 opaque 403(同样的错误码 + body 对"不存在"和"无权限"都返回)
-20. 断言:status 403/404;response 不暴露 realm_id / blob 是否存在
-
-### Phase E — Storage 服务只见 ciphertext
-
-21. 测试 harness 通过 service log 抓 Blob Service 写盘记录(假设 service log 暴露 metadata)
-22. 断言:写盘 metadata 含 `blob_ref`、`size`(ciphertext size,不是 plaintext)、`media_type = "application/octet-stream"`
-23. 断言:写盘 metadata **不含** plaintext filename、不含 `image/png` 或类似 plaintext media type
-
-## Observable assertions(合并)
-
-- Phase A 步骤 4-5:blob_ref 生成、消息携带 encrypted attachment metadata
-- Phase B 步骤 13:bob 看到 image
-- Phase B 步骤 10:Content-Type 是 octet-stream,不泄漏
-- Phase C 步骤 16:digest 失败客户端拒绝
-- Phase D 步骤 19-20:non-member 拿到 opaque 错误
-- Phase E 步骤 22-23:Blob Service 只见 ciphertext
-
-## Edge cases / sub-tests
-
-- **E12.1 message redact 后 attachment 仍可访问?**:alice redact 消息,但 `blob_ref` 在 storage 仍存在 → blob GC policy 决定何时清理。spec 暗示 redact 不立刻删 blob(`media-and-blob.md` §3),但 `ak.blob.gc` event 触发后清理
-- **E12.2 thumbnail derivation**:E2EE 模式下,服务端**不能**生成 thumbnail(因为没明文)→ client-side 生成 + 重新加密上传(§5.3)
-- **E12.3 download_mode=provider_proxy**:大文件经过 Sync proxy 中转(防止 client 跨域)→ proxy 只见 ciphertext,不解密(spec §6)
-- **E12.5 大文件 + chunked upload**:>10MB 文件分块上传,每块独立 encrypted + digested
-
-## Implementation notes
-
-- **2026-05-25 P2-044 local close**:coland `POST /_arkret/self/blob/upload` 对 encrypted attachment 强制 `media_type=application/octet-stream`,丢弃明文 filename,校验 `ciphertext_digest` 与 ciphertext bytes 匹配,成员可直接下载 ciphertext,非成员拿到 opaque `not_found`,E2EE blob presign fail-closed。
-- **2026-05-25 P2-044 local close**:inkson 新增客户端 XChaCha20-Poly1305 MLS attachment helper,thumbnail 作为独立 ciphertext asset 加密并携带独立 digest/nonce;`ArkretApi::upload_encrypted_mls_attachment_asset` 发送 ciphertext-only headers。
-- **Moderation franking 边界**:`ak.moderation.franking_proof` 与普通举报不触发 Audit Applet release 的验证归入 `encryption/audited-e2ee`；本场景不复制该流程。
-- **仍待 UI polish**:E2EE attachment lock icon、"Decrypting..." 进度、integrity check 失败的错误 UI 可作为后续用户体验强化,不再阻塞 P2-044 protocol/privacy closure。
-
-## 总耗时预估
-
-约 60-90s(含 KDF 不计入,XChaCha20 很快;主要时间在 MLS sync 和 image preview load)。
+运行状态、失败、自然退出和最终 pins 写入 0805 的本批报告；历史 P2-044 的测试及旧 helper 名称不作为现实现交付证据。
+2026-10-14 最新冻结实际通过：真实provisioning 7/7，业务3项＋build-ID 4/4，自然exit0，0失败/跳过，secret scan通过。源码/lock/features/产物身份与原失败记录见 `arkret-work/reports/2026-10-14-0805-attachment-production-closeout.md`；三scope本地授权cut前提测试不冒充独立部署验收，whole-file/AES未启用。
