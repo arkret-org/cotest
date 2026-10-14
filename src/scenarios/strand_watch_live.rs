@@ -1,6 +1,6 @@
 //! Real authority-cut watch CAS and exact private current reads.
 
-use anyhow::{Context as _, Result, ensure};
+use anyhow::{Context as _, Result, bail, ensure};
 use arkret_models_collaboration::events_payloads::strand::{
     StrandWatchExpectedValue, StrandWatchLevel, StrandWatchSetPayload,
 };
@@ -22,6 +22,11 @@ use crate::scenarios::human_device_producer_live::{
     membership_payload, standard_client, station_env, submit_and_expect_commit,
 };
 use crate::scenarios::identity_test_support::HARNESS_INTERNAL_AUTHORITY_SECRET;
+
+mod approval_matrix;
+mod circle_matrix;
+mod handoff_matrix;
+mod mute_matrix;
 
 const GROUP: &str = "strand-watch-current-live";
 const ALICE_DEVICE: &str = "ak:device:01904100-0000-7000-8000-000000002361";
@@ -567,23 +572,138 @@ pub async fn run_strand_watch_current_live() -> Result<()> {
         "not_found",
     )
     .await?;
+    use crate::harness::CanonicalJsonBody;
+    let race = [StrandWatchLevel::All, StrandWatchLevel::Participating];
+    let mut candidates = Vec::new();
+    for level in race {
+        candidates.push(
+            event(
+                &alice,
+                &realm,
+                &StrandWatchSetPayload::set(
+                    request.strand_id.clone(),
+                    request.watcher_actor_id.clone(),
+                    level,
+                    None,
+                )
+                .with_expected_value(StrandWatchCurrentValue::Cleared(())),
+            )
+            .await?,
+        );
+    }
+    let first = alice.post("/_arkret/self/events").canonical_json(
+        &arkret_wire::EventAdmissionSubmission::new(candidates[0].clone()),
+    )?;
+    let second = alice.post("/_arkret/self/events").canonical_json(
+        &arkret_wire::EventAdmissionSubmission::new(candidates[1].clone()),
+    )?;
+    let (first, second) = tokio::join!(first.send(), second.send());
+    let replies = [first?, second?];
+    let mut winner = None;
+    let mut loser = None;
+    for (index, reply) in replies.into_iter().enumerate() {
+        match reply.status() {
+            StatusCode::OK => {
+                let outcome: AuthoritySubmitOutcome = reply.json().await?;
+                let AuthoritySubmitOutcome::Accepted { commit, .. } = outcome else {
+                    bail!("CAS race was not committed");
+                };
+                ensure!(
+                    winner.replace((index, commit)).is_none(),
+                    "both competing CAS writes won"
+                );
+            }
+            StatusCode::CONFLICT => {
+                let problem: serde_json::Value = reply.json().await?;
+                ensure!(
+                    problem["type"] == "https://arkret.org/problems/failed_precondition",
+                    "unexpected CAS race conflict: {problem}"
+                );
+                loser = Some(index);
+            }
+            StatusCode::SERVICE_UNAVAILABLE => {
+                let problem: serde_json::Value = reply.json().await?;
+                ensure!(
+                    problem["type"] == "https://arkret.org/problems/temporarily_unavailable",
+                    "unexpected CAS race availability refusal: {problem}"
+                );
+                // Ordering is assigned by the Station. A candidate made on
+                // an older head stays unknown until its exact retry rechecks CAS.
+                let retry = alice
+                    .post("/_arkret/self/events")
+                    .canonical_json(&arkret_wire::EventAdmissionSubmission::new(
+                        candidates[index].clone(),
+                    ))?
+                    .send()
+                    .await?;
+                ensure!(
+                    retry.status() == StatusCode::CONFLICT,
+                    "exact CAS loser retry was not rejected"
+                );
+                let problem: serde_json::Value = retry.json().await?;
+                ensure!(
+                    problem["type"] == "https://arkret.org/problems/failed_precondition",
+                    "exact CAS loser retry did not re-evaluate the current value: {problem}"
+                );
+                loser = Some(index);
+            }
+            status => bail!(
+                "unexpected CAS race response: {status} {}",
+                reply.text().await?
+            ),
+        }
+    }
+    let (index, commit) = winner.context("CAS race has no winner")?;
+    let loser = loser.context("CAS race has no loser")?;
+    ensure!(
+        commit.stream_position == final_commit.stream_position + 1,
+        "competing loser occupied a Commit position"
+    );
+    current(
+        read(&alice, &request).await?,
+        &commit,
+        StrandWatchCurrentValue::Set(StrandWatchExpectedValue {
+            level: race[index],
+            level_public: None,
+        }),
+    )?;
+    expect_api_error(
+        alice.get(&format!(
+            "/_arkret/self/committed-events/{}",
+            candidates[loser].event_id
+        )),
+        StatusCode::NOT_FOUND,
+        "not_found",
+    )
+    .await?;
+    println!(
+        "[watch-cas-race] actual_concurrent_requests=2 single_commit=1 losing_original_absent=1"
+    );
     Ok(())
 }
 
 /// Registered first admission through authenticated HTTP, with real device proofs.
 pub async fn run_registered_watch_audit_live() -> Result<()> {
-    run_registered_watch_audit(false, false).await
+    run_registered_watch_audit(false, false, false).await
 }
 
 pub async fn run_registered_watch_audit_peer_live() -> Result<()> {
-    run_registered_watch_audit(true, false).await
+    run_registered_watch_audit(true, false, false).await
 }
 
 pub async fn run_registered_watch_audit_scan_recovery_live() -> Result<()> {
-    run_registered_watch_audit(true, true).await
+    run_registered_watch_audit(true, true, false).await
 }
 
-async fn run_registered_watch_audit(cross_station: bool, faults: bool) -> Result<()> {
+pub async fn run_registered_watch_handoff_live() -> Result<()> {
+    run_registered_watch_audit(true, false, true).await
+}
+
+async fn run_registered_watch_audit(
+    cross_station: bool,
+    faults: bool,
+    handoff: bool,
+) -> Result<()> {
     use arkret_models_collaboration::authority_commit::{
         AuditPairedEventUnitKind, AuditPairedEventUnitSubmission, SelfAuthoritySubmitOutcome,
         SelfAuthoritySubmitRequest,
@@ -592,7 +712,9 @@ async fn run_registered_watch_audit(cross_station: bool, faults: bool) -> Result
         WatchAuditReadOutcome, WatchAuditReadRequest,
     };
     use arkret_wire::{EventAdmissionSubmission, SemanticRef};
-    let scenario = if faults {
+    let scenario = if handoff {
+        "registered-watch-handoff-live"
+    } else if faults {
         "registered-watch-audit-scan-recovery-live"
     } else if cross_station {
         "registered-watch-audit-peer-live"
@@ -610,6 +732,7 @@ async fn run_registered_watch_audit(cross_station: bool, faults: bool) -> Result
     if cross_station && peer_db.is_none() {
         return skip_or_fail(scenario, "second PostgreSQL unavailable");
     }
+    let new_db = if handoff { database(scenario)? } else { None };
     let coauth = MockCoauthIntrospectionServer::spawn_with_internal_secret(
         HARNESS_INTERNAL_AUTHORITY_SECRET,
     )
@@ -622,6 +745,9 @@ async fn run_registered_watch_audit(cross_station: bool, faults: bool) -> Result
         );
         environments.push(station_env(&peer_db.connect_url, &coauth));
     }
+    if let Some(new_db) = &new_db {
+        environments.push(station_env(&new_db.connect_url, &coauth));
+    }
     let Some(mut group) =
         TestServerGroup::try_multi_external_with_node_envs(scenario, &environments).await?
     else {
@@ -632,13 +758,14 @@ async fn run_registered_watch_audit(cross_station: bool, faults: bool) -> Result
     } else {
         None
     };
-    let relay_governor = if faults {
+    let relay_governor = if cross_station {
         Some(group.server_mut(1).install_scan_gap_relay().await?)
     } else {
         None
     };
     let station = group.server(0);
     let governor = group.server(usize::from(cross_station));
+    let governor_id = governor.service_id().clone();
     let (alice, alice_account) =
         standard_client(station, &coauth, "audit-watch-alice", ALICE_DEVICE).await?;
     let (bob, bob_account) =
@@ -657,7 +784,9 @@ async fn run_registered_watch_audit(cross_station: bool, faults: bool) -> Result
         None
     };
     let controller = owner.as_ref().map_or(&alice, |owner| &owner.0);
-    let services = if cross_station {
+    let services = if handoff {
+        vec![station, governor, group.server(2)]
+    } else if cross_station {
         vec![station, governor]
     } else {
         vec![station]
@@ -676,6 +805,7 @@ async fn run_registered_watch_audit(cross_station: bool, faults: bool) -> Result
     } else {
         vec![(&bob, &bob_account, BOB_DEVICE)]
     };
+    let mut joining_revisions = Vec::new();
     for (index, (joining, joining_account, joining_device)) in joining.into_iter().enumerate() {
         if cross_station {
             crate::scenarios::human_device_producer_live::prepare_join(
@@ -695,7 +825,15 @@ async fn run_registered_watch_audit(cross_station: bool, faults: bool) -> Result
                 )?,
             )
             .await?;
-        submit_and_expect_commit(joining, joining_account, joining_device, &joined).await?;
+        let committed =
+            submit_and_expect_commit(joining, joining_account, joining_device, &joined).await?;
+        joining_revisions.push((
+            joining_account.clone(),
+            arkret_wire::CurrentRevision {
+                commit_id: committed.commit_id,
+                stream_position: committed.stream_position,
+            },
+        ));
     }
     grant_realm_actions(
         controller,
@@ -911,6 +1049,23 @@ async fn run_registered_watch_audit(cross_station: bool, faults: bool) -> Result
         strand_id: strand.clone(),
         watcher_actor_id: watcher.clone(),
     };
+    if cross_station {
+        let foreign_account = StrandWatchCurrentRequestBody {
+            watcher_actor_id: ActorId::account(arkret_wire::AccountId::new(
+                bob_account.principal_id.clone(),
+                governor_id.clone(),
+            )),
+            ..own.clone()
+        };
+        expect_api_error(
+            bob.post("/_arkret/self/strands/watch/current")
+                .json(&foreign_account),
+            StatusCode::NOT_FOUND,
+            "not_found",
+        )
+        .await?;
+        println!("[watch-account-isolation] same_principal_other_live_station_refused=1");
+    }
     current(
         read(&bob, &own).await?,
         &accepted.commits[0],
@@ -949,5 +1104,94 @@ async fn run_registered_watch_audit(cross_station: bool, faults: bool) -> Result
         matches!(cleared.current,StrandWatchCurrentOutcome::Current { result, .. } if result.value==StrandWatchCurrentValue::Cleared(())),
         "audit erased written null into absence"
     );
+    if cross_station && !faults {
+        approval_matrix::run(
+            &alice,
+            &alice_account,
+            &bob,
+            &bob_account,
+            controller,
+            group.server(1),
+            &peer_db
+                .as_ref()
+                .context("approval governor DB")?
+                .connect_url,
+            &realm,
+            &strand,
+        )
+        .await?;
+        circle_matrix::run(
+            &alice,
+            &alice_account,
+            &bob,
+            &bob_account,
+            controller,
+            group.server(1),
+            &realm,
+            &joining_revisions,
+        )
+        .await?;
+    }
+    if cross_station && !faults && !handoff {
+        use crate::harness::CanonicalJsonBody;
+        let control = relay_governor.as_ref().context("governor relay")?.control();
+        control.hold_next_watch_reply();
+        let pending_client = bob.clone();
+        let pending_request = own.clone();
+        let pending = tokio::spawn(async move {
+            Ok::<_, anyhow::Error>(
+                pending_client
+                    .post("/_arkret/self/strands/watch/current")
+                    .canonical_json(&pending_request)?
+                    .send()
+                    .await?,
+            )
+        });
+        control.wait_for_held_watch_reply().await?;
+        let leave = bob
+            .author_event(
+                &realm,
+                EventKind::MemberState.as_str(),
+                membership_payload(
+                    &realm,
+                    bob_account.clone(),
+                    MembershipPayloadState::Leave,
+                    "withdraw before delivery",
+                )?,
+            )
+            .await?;
+        submit_and_expect_commit(&bob, &bob_account, &bob.device_id, &leave).await?;
+        control.release_watch_reply();
+        let response = pending.await??;
+        let status = response.status();
+        let body = response.text().await?;
+        ensure!(
+            status.is_client_error() && !body.contains("watcher_actor_id"),
+            "late withdrawn Watch result leaked: {status} {body}"
+        );
+        println!(
+            "[watch-late-reply] native_governor_result_held=1 real_leave_accepted=1 local_final_delivery_refused=1"
+        );
+    }
+    if handoff {
+        handoff_matrix::run(
+            &mut group,
+            &relay_governor.as_ref().context("governor relay")?.control(),
+            &peer_db.as_ref().context("outgoing DB")?.connect_url,
+            &new_db.as_ref().context("incoming DB")?.connect_url,
+            controller,
+            &alice,
+            &bob,
+            &realm,
+            &strand,
+            &unit,
+            &accepted,
+            &cleared_request,
+        )
+        .await?;
+    }
+    if !cross_station {
+        mute_matrix::run(&alice, &alice_account, &realm, &db.connect_url).await?;
+    }
     Ok(())
 }

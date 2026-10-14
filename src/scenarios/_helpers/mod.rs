@@ -5,6 +5,7 @@
 
 pub(crate) mod acceptance_footprint;
 pub mod bridge;
+pub mod canonical_api;
 pub mod coauth_bootstrap;
 pub mod did_host;
 pub mod external_binary;

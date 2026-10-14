@@ -10,7 +10,13 @@ extended it — the authority-commit protocol deleted.
 
 ## Strand
 
-1. Register Alice and issue a dev session.
+2026-10-14：API-only 验收已迁至 `src/scenarios/realm_genesis_commit_stream.rs` 和
+`tests/realm_genesis_commit_stream.rs`。自带真实 Station／PG 的具名用例验证创建、精确重放及后继写入；
+`canonical_realm_genesis_api_migration` 通过 joint runner 在真实 Coauth／Coland 组合上运行。
+`api-only-migration.json.native_live_migrations` 保留 operation→Rust test 映射，joint／release-gate
+的无筛选运行强制执行，零 case、ignore 或失败都不能替代通过。日志写入运行目录的 `native-api-migrations/`。
+
+1. Found Alice through the canonical bootstrap and obtain the exact DPoP-bound Standard SessionGrant.
 2. Create a Realm through one `ordinary_realm_bootstrap` self-submit unit with
    a UUIDv7 idempotency key. Its ordered slots are create, profile, policy
    bundle, join rule, history access, discovery, conditional plaintext-visible

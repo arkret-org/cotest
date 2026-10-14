@@ -115,6 +115,9 @@ test.describe("harness mocks selftest @fully-implemented", () => {
     await request.post(`${baseUrl}/mock/email/verification/send`, {
       data: { to, token: goodToken, ttl_seconds: 600 },
     });
+    const inbox = await request.get(`${baseUrl}/mock/email/verification/inbox?to=${encodeURIComponent(to)}`);
+    expect(inbox.status()).toBe(200);
+    expect((await inbox.json()).messages.some((message: { token?: string }) => message.token === goodToken)).toBe(true);
     const claim = await request.post(`${baseUrl}/mock/email/verification/claim`, {
       data: { token: goodToken, did: "did:web:alice.selftest" },
     });
@@ -127,6 +130,10 @@ test.describe("harness mocks selftest @fully-implemented", () => {
     const tokens = inspect.tokens as Array<{ token: string; consumed: boolean }>;
     const goodEntry = tokens.find((t) => t.token === goodToken);
     expect(goodEntry?.consumed).toBe(true);
+    const replay = await request.post(`${baseUrl}/mock/email/verification/claim`, {
+      data: { token: goodToken, did: "did:web:alice.selftest" },
+    });
+    expect(replay.status()).toBe(409);
   });
 
   test("mock-witness: chain validation, monotonicity, stale rejection", async ({ request }) => {

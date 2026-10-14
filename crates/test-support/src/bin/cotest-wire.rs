@@ -24,7 +24,6 @@ fn main() -> Result<()> {
         "verify-realm-state-snapshot" => wire::verify_realm_state_snapshot(input)?,
         "mimi-consent-proof" => wire::mimi_consent_proof(input)?,
         "mimi-request-consent-proof" => wire::mimi_request_consent_proof(input)?,
-        "invite-subject-proof" => wire::invite_subject_proof(input)?,
         "key-backup-auth-signature" => wire::key_backup_auth_signature(input)?,
         "mls-keypackage-upload-entry" => wire::mls_keypackage_upload_entry(input)?,
         "mls-keypackages" => mls_wire::mls_keypackages(input)?,

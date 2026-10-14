@@ -141,21 +141,29 @@ foreach ($project in $browserProjects) {
 # unsupported file-transfer UI removal. Its fixture records the still-open
 # file-transfer owner; this selection is not a full protocol coverage claim.
 $uiSmokeBaseline = Get-Content -LiteralPath (Join-Path $PSScriptRoot "fixtures/ui-smoke-selection.json") -Raw | ConvertFrom-Json
+$apiMigrations = Get-Content -LiteralPath (Join-Path $repoRoot "api-only-migration.json") -Raw | ConvertFrom-Json
+$nativeMigrations = @($apiMigrations.native_live_migrations)
+foreach ($source in $uiSmokeBaseline.required_native_migrations) {
+    Assert-True (@($nativeMigrations | Where-Object source -eq $source).Count -eq 1) "UI smoke lost the native executor for $source"
+}
 $floors = @(
     @{ project = "chrome"; grep = $null; tests = 279; files = 67; label = "joint-full default lane" },
     @{ project = "chromium"; grep = $null; tests = 279; files = 67; label = "chromium lane" },
-    @{ project = "chrome"; grep = "@fully-implemented"; tests = $uiSmokeBaseline.minimum_tests; files = $uiSmokeBaseline.required_files.Count; label = "supported UI smoke gate" },
+    @{ project = "chrome"; grep = "@fully-implemented"; tests = $uiSmokeBaseline.minimum_tests; files = ($uiSmokeBaseline.required_files.Count + $uiSmokeBaseline.required_native_migrations.Count); label = "supported UI smoke gate" },
     @{ project = "joint-inkson"; grep = $null; tests = 38; files = 17; label = "joint-inkson identity lane" },
     @{ project = "joint-api"; grep = $null; tests = 71; files = 16; label = "joint-api browserless lane" }
 )
 
 foreach ($floor in $floors) {
     $listing = Invoke-PlaywrightList -Project $floor.project -Grep $floor.grep
-    Assert-True ($listing.tests -ge $floor.tests) (
+    $retained = @($nativeMigrations | Where-Object { $floor.project -in $_.legacy_projects -and (-not $floor.grep -or $_.legacy_fully_implemented) })
+    $retainedCases = ($retained | Measure-Object -Property legacy_case_count -Sum).Sum
+    if ($null -eq $retainedCases) { $retainedCases = 0 }
+    Assert-True (($listing.tests + $retainedCases) -ge $floor.tests) (
         "$($floor.label) shrank: project '$($floor.project)'" +
         $(if ($floor.grep) { " --grep $($floor.grep)" } else { "" }) +
         " collects $($listing.tests) tests, floor is $($floor.tests).")
-    Assert-True ($listing.files -ge $floor.files) (
+    Assert-True (($listing.files + $retained.Count) -ge $floor.files) (
         "$($floor.label) shrank: project '$($floor.project)'" +
         $(if ($floor.grep) { " --grep $($floor.grep)" } else { "" }) +
         " collects $($listing.files) files, floor is $($floor.files).")
@@ -168,6 +176,7 @@ foreach ($floor in $floors) {
     }
     Write-Host ("  {0,-22} {1,-18} {2,3} tests / {3,2} files (floor {4}/{5})" -f
         $floor.project, ($floor.grep ?? "-"), $listing.tests, $listing.files, $floor.tests, $floor.files)
+    Write-Host "    retained native source selection: $retainedCases historical cases / $($retained.Count) files; execution is checked by the mandatory joint native gate"
 }
 
 Write-Host "browserless-lane-resources.tests.ps1: PASS"

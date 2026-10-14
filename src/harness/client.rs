@@ -665,11 +665,12 @@ impl TestActorClient {
         let typed_outcome: arkret_models_collaboration::authority_commit::SelfAuthoritySubmitOutcome =
             serde_json::from_value(event_response.clone())
                 .context("Realm bootstrap response is not the closed SDK outcome")?;
-        typed_outcome.validate_for_request(&arkret_models_collaboration::authority_commit::SelfAuthoritySubmitRequest::OrdinaryRealmBootstrap(request))?;
+        typed_outcome.validate_for_request(&arkret_models_collaboration::authority_commit::SelfAuthoritySubmitRequest::OrdinaryRealmBootstrap(request.clone()))?;
         let realm_id = arkret_identifiers::RealmId::new(realm_id.clone())?;
         Ok(json!({
             "realm_id": realm_id,
             "event_response": event_response,
+            "submission": request,
         }))
     }
 

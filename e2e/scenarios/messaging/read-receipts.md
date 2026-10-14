@@ -1,5 +1,18 @@
 # Read receipts + 隐私开关
 
+2026-10-15：原 API-only Playwright 文件已迁为 Rust，旧步骤仅保留产品目标与历史来源，**不证明真实 UI 通过**。
+
+当前具名执行入口：
+
+- `tests/api_mls_migrations.rs::read_receipt_signals_api_migration`（isolated_station）。
+- `tests/private_read_marker_api.rs::canonical_private_read_marker_api_migration`（canonical）。
+
+operation→Rust test 与原选择数量见 `api-only-migration.json.native_live_migrations`。无筛选 joint 强制执行全部 primary／supporting 用例；release-gate 通过其 joint 阶段执行，跳过联合阶段不能发布为 release 通过。缺少环境、零测试、ignore 与失败均不能代替通过。日志位于本轮 `native-api-migrations/`，映射本身不是运行证据。
+
+旧文件的 receiver policy 是测试本地函数；现由明确的协议 KAT 承接，真实加密 relay／accepted policy 由原生场景验证。实际 Inkson private visibility／debounce 产品消费仍须独立验证，不能以这些 API 断言关闭。
+
+## 历史场景与独立产品目标
+
 本次policy准入切片必须在原owner签发后，回读真实signed Snapshot的唯一 `realm_read_receipt_policy` row：source stream、covering revision/value与accepted Commit逐一匹配，再由cotest-wire复用SDK/Garth验证authority nonce、Station history与Snapshot签名。已接受策略才供接收端解密fixture使用。API测试与session injection分类保留，不用测试本地policy缓存冒充持久current，也不把服务改为识别Signal密文中的receipt类型。其余UI目标仍是产品待验收边界。
 
 ## 目标

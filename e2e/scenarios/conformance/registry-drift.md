@@ -2,6 +2,11 @@
 
 ## 目标
 
+2026-10-14 已迁至 `src/scenarios/registry_drift.rs`、`tests/registry_drift.rs` 与共享 Rust
+`conformance/forbidden_wire.rs`。真实 Station／PG 已执行 catalog、七个实际 surface、禁用字段扫描，
+以及保持正确 EventId／设备签名的禁用 kind 零写入探针；canonical 部署验收由
+`api-only-migration.json.native_live_migrations` 的强制 joint gate 执行，不再保留 API-only TS。
+
 以 arkret-spec 当前 candidate v1 的 canonical 工件为唯一真源，检查 coland 实际暴露的 `/_arkret/describe`、事件写入和读取 surface 是否发生漂移。当前 v1 尚未发布，规范明确不维护历史 migration 清单或兼容登记表；Cotest 不得依赖已删除的 `artifacts/migration/*.json`。
 
 本 scenario 验证：
@@ -58,7 +63,7 @@
 ## 边界规则
 
 - 所有 id 比较都区分大小写，不做 lowercase normalization。
-- describe 没有 operation 声明字段时，Phase E 必须显式 skip，不得静默 pass。
+- describe 没有当前规范要求的 operation bundles 时必须失败，不以 skip 代替验收。
 - profile deep-walk 只收集 profile-bearing 路径，避免把其它 `id` 字段误当 profile。
 - 工件在 spec 模块加载时一次性读取；缺失当前 canonical 工件应立即使测试收集失败。
 

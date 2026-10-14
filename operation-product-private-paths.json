@@ -123,13 +123,6 @@
     },
     {
       "source": "cotest",
-      "method": "GET",
-      "path": "/_arkret/self/notifications",
-      "classification": "product-private",
-      "reason": "registry-drift.spec.ts scans this as a may-4xx surface; coland does not route /_arkret/self/notifications and the registry defines no notifications operation, so it is a tolerated probe rather than a protocol operation."
-    },
-    {
-      "source": "cotest",
       "method": "POST",
       "path": "/_arkret/describe",
       "classification": "product-private",

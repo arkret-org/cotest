@@ -1,6 +1,245 @@
 {
   "schema": "arkret.api-only-rust-migration.v1",
-  "expected_candidate_count": 30,
+  "expected_candidate_count": 41,
+  "native_live_migrations": [
+    {
+      "source": "cotest/e2e/tests/conformance/registry-drift.spec.ts",
+      "target": "registry_drift",
+      "symbol": "canonical_registry_drift_api_migration",
+      "legacy_case_count": 5,
+      "legacy_projects": [
+        "chrome",
+        "chromium",
+        "joint-api"
+      ],
+      "legacy_fully_implemented": true,
+      "operation_ids": [
+        "ak.server.read.describe.v1",
+        "ak.self.events.command.submit.v1",
+        "ak.self.committed_event.read.scan.v1"
+      ]
+    },
+    {
+      "source": "cotest/e2e/tests/identity/oidc-login-chain.spec.ts",
+      "target": "oidc_login_chain",
+      "symbol": "canonical_oidc_login_chain_api_migration",
+      "legacy_case_count": 3,
+      "legacy_projects": [
+        "chrome",
+        "chromium",
+        "joint-api"
+      ],
+      "legacy_fully_implemented": false,
+      "operation_ids": [
+        "ak.server.read.describe.v1",
+        "ak.root.identity.recovery_policy.resource.get.v1"
+      ]
+    },
+    {
+      "source": "cotest/e2e/tests/events/realm-genesis-commit-stream.spec.ts",
+      "target": "realm_genesis_commit_stream",
+      "symbol": "canonical_realm_genesis_api_migration",
+      "legacy_case_count": 3,
+      "legacy_projects": [
+        "chrome",
+        "chromium",
+        "joint-api",
+        "joint-inkson"
+      ],
+      "legacy_fully_implemented": true,
+      "operation_ids": [
+        "ak.self.events.command.submit.v1",
+        "ak.self.committed_event.read.scan.v1"
+      ]
+    },
+    {
+      "source": "cotest/e2e/tests/sync/account-stream-device-message.spec.ts",
+      "target": "account_stream_api",
+      "symbol": "canonical_account_stream_api_migration",
+      "environment": "canonical",
+      "legacy_case_count": 9,
+      "legacy_projects": [
+        "chrome",
+        "chromium",
+        "joint-api"
+      ],
+      "legacy_fully_implemented": false,
+      "operation_ids": [
+        "ak.self.account.stream.subscribe.v1",
+        "ak.self.events.command.submit.v1",
+        "ak.self.committed_event.read.scan.v1"
+      ]
+    },
+    {
+      "source": "cotest/e2e/tests/sync/transport-negotiation.spec.ts",
+      "target": "transport_negotiation_api",
+      "symbol": "transport_negotiation_api_migration",
+      "environment": "isolated_station",
+      "legacy_case_count": 3,
+      "legacy_projects": [
+        "chrome",
+        "chromium",
+        "joint-api"
+      ],
+      "legacy_fully_implemented": false,
+      "operation_ids": [
+        "ak.server.read.describe.v1",
+        "ak.peer.events.command.submit.v1"
+      ]
+    },
+    {
+      "source": "cotest/e2e/tests/encryption/audited-e2ee.spec.ts",
+      "target": "api_mls_migrations",
+      "symbol": "audited_e2ee_api_migration",
+      "environment": "isolated_station",
+      "legacy_case_count": 1,
+      "legacy_projects": [
+        "chrome",
+        "chromium",
+        "joint-api"
+      ],
+      "legacy_fully_implemented": false,
+      "operation_ids": [
+        "ak.self.events.command.submit.v1",
+        "ak.self.committed_event.read.scan.v1",
+        "ak.self.moderation.command.report.v1"
+      ]
+    },
+    {
+      "source": "cotest/e2e/tests/invites/invite-addressing.spec.ts",
+      "target": "invite_addressing_api",
+      "symbol": "invite_addressing_api_migration",
+      "environment": "isolated_station",
+      "legacy_case_count": 6,
+      "legacy_projects": [
+        "chrome",
+        "chromium",
+        "joint-api"
+      ],
+      "legacy_fully_implemented": false,
+      "operation_ids": [
+        "ak.peer.invites.command.submit.v1",
+        "ak.self.invites.command.dispatch.v1",
+        "ak.open.invite_locator.read.resolve.v1",
+        "ak.self.invite_locator.command.issue.v1",
+        "ak.self.invite_locator.command.rotate.v1",
+        "ak.self.invite_locator.command.revoke.v1"
+      ]
+    },
+    {
+      "source": "cotest/e2e/tests/invites/third-party.spec.ts",
+      "target": "third_party_invite_api",
+      "symbol": "third_party_invite_api_migration",
+      "environment": "isolated_station",
+      "legacy_case_count": 6,
+      "legacy_projects": [
+        "chrome",
+        "chromium",
+        "joint-api"
+      ],
+      "legacy_fully_implemented": false,
+      "operation_ids": [
+        "ak.self.events.command.submit.v1",
+        "ak.self.committed_event.read.scan.v1"
+      ]
+    },
+    {
+      "source": "cotest/e2e/tests/messaging/discussion-upgrade.spec.ts",
+      "target": "api_mls_migrations",
+      "symbol": "discussion_upgrade_api_migration",
+      "environment": "isolated_station",
+      "legacy_case_count": 9,
+      "legacy_projects": [
+        "chrome",
+        "chromium",
+        "joint-api"
+      ],
+      "legacy_fully_implemented": false,
+      "operation_ids": [
+        "ak.self.events.command.submit.v1",
+        "ak.self.committed_event.read.scan.v1",
+        "ak.self.signal.command.send.v1",
+        "ak.self.signal.stream.subscribe.v1",
+        "ak.self.circle.command.create.v1",
+        "ak.self.circle.member.command.add.v1"
+      ]
+    },
+    {
+      "source": "cotest/e2e/tests/messaging/read-receipts.spec.ts",
+      "target": "api_mls_migrations",
+      "symbol": "read_receipt_signals_api_migration",
+      "environment": "isolated_station",
+      "legacy_case_count": 13,
+      "legacy_projects": [
+        "chrome",
+        "chromium",
+        "joint-api"
+      ],
+      "legacy_fully_implemented": false,
+      "operation_ids": [
+        "ak.self.signal.command.send.v1",
+        "ak.self.signal.stream.subscribe.v1",
+        "ak.self.events.command.submit.v1",
+        "ak.self.committed_event.read.scan.v1",
+        "ak.open.realm_authority.read.bundle.v1",
+        "ak.open.service.read.resolution.v1",
+        "ak.self.realm_state_snapshot.read.manifest_head.v1"
+      ],
+      "supporting_tests": [
+        {
+          "target": "private_read_marker_api",
+          "symbol": "canonical_private_read_marker_api_migration",
+          "operation_ids": [
+            "ak.self.read_cursor.command.advance.v1",
+            "ak.self.read_cursor.read.list.v1",
+            "ak.self.account.stream.subscribe.v1"
+          ],
+          "environment": "canonical"
+        }
+      ]
+    },
+    {
+      "source": "cotest/e2e/tests/models/private-read-marker.spec.ts",
+      "target": "private_read_marker_api",
+      "symbol": "canonical_private_read_marker_api_migration",
+      "environment": "canonical",
+      "legacy_case_count": 6,
+      "legacy_projects": [
+        "chrome",
+        "chromium",
+        "joint-api"
+      ],
+      "legacy_fully_implemented": false,
+      "operation_ids": [
+        "ak.self.read_cursor.command.advance.v1",
+        "ak.self.read_cursor.read.list.v1",
+        "ak.self.account.stream.subscribe.v1"
+      ],
+      "supporting_tests": [
+        {
+          "target": "api_mls_migrations",
+          "symbol": "private_marker_encrypted_notification_api_migration",
+          "operation_ids": [
+            "ak.self.events.command.submit.v1",
+            "ak.self.committed_event.read.scan.v1",
+            "ak.self.account.stream.subscribe.v1"
+          ],
+          "environment": "isolated_station"
+        },
+        {
+          "target": "api_mls_migrations",
+          "symbol": "private_marker_circle_scope_api_migration",
+          "operation_ids": [
+            "ak.self.read_cursor.command.advance.v1",
+            "ak.self.read_cursor.read.list.v1",
+            "ak.self.events.command.submit.v1",
+            "ak.self.committed_event.read.scan.v1"
+          ],
+          "environment": "isolated_station"
+        }
+      ]
+    }
+  ],
   "specialized_api_lanes": [
     "cotest/e2e/tests/extensions/platform-live.spec.ts",
     "cotest/e2e/tests/harness/mocks-selftest.spec.ts",
@@ -10,234 +249,472 @@
   ],
   "candidates": [
     {
+      "source": "cotest/e2e/tests/conformance/registry-drift.spec.ts",
+      "disposition": "migrated",
+      "coverage_status": "live_native",
+      "replacements": [
+        {
+          "file": "cotest/src/scenarios/registry_drift.rs",
+          "symbol": "registry_drift_with_client"
+        },
+        {
+          "file": "cotest/tests/registry_drift.rs",
+          "symbol": "canonical_registry_drift_api_migration"
+        },
+        {
+          "file": "cotest/src/conformance/forbidden_wire.rs",
+          "symbol": "ForbiddenWireScanner"
+        }
+      ]
+    },
+    {
+      "source": "cotest/e2e/tests/identity/oidc-login-chain.spec.ts",
+      "disposition": "migrated",
+      "coverage_status": "live_native",
+      "replacements": [
+        {
+          "file": "cotest/src/scenarios/oidc_login_chain.rs",
+          "symbol": "canonical_oidc_login_chain_api_migration"
+        },
+        {
+          "file": "cotest/tests/oidc_login_chain.rs",
+          "symbol": "canonical_oidc_login_chain_api_migration"
+        }
+      ]
+    },
+    {
+      "source": "cotest/e2e/tests/events/realm-genesis-commit-stream.spec.ts",
+      "disposition": "migrated",
+      "coverage_status": "live_native",
+      "replacements": [
+        {
+          "file": "cotest/src/scenarios/realm_genesis_commit_stream.rs",
+          "symbol": "realm_genesis_with_client"
+        },
+        {
+          "file": "cotest/tests/realm_genesis_commit_stream.rs",
+          "symbol": "canonical_realm_genesis_api_migration"
+        }
+      ]
+    },
+    {
       "source": "cotest/e2e/tests/authz/capability-chain.spec.ts",
       "disposition": "duplicate_removed",
       "replacements": [
-        { "file": "cotest/src/scenarios/authz_policy_presence.rs", "symbol": "authz_grant_lifecycle_and_audit_work" },
-        { "file": "cotest/src/conformance/capability.rs", "symbol": "run_capability_facet_fixture_suite" },
-        { "file": "cotest/src/conformance/capability.rs", "symbol": "run_capability_boundary_fixture_suite" },
-        { "file": "coland/crates/services/src/authorization.rs", "symbol": "a_covering_grant_is_named_by_the_verdict" },
-        { "file": "coland/crates/services/src/authorization.rs", "symbol": "nothing_authorizes_an_actor_without_root_or_grant" }
+        {
+          "file": "cotest/src/scenarios/authz_policy_presence.rs",
+          "symbol": "authz_grant_lifecycle_and_audit_work"
+        },
+        {
+          "file": "cotest/src/conformance/capability.rs",
+          "symbol": "run_capability_facet_fixture_suite"
+        },
+        {
+          "file": "cotest/src/conformance/capability.rs",
+          "symbol": "run_capability_boundary_fixture_suite"
+        },
+        {
+          "file": "coland/crates/services/src/authorization.rs",
+          "symbol": "a_covering_grant_is_named_by_the_verdict"
+        },
+        {
+          "file": "coland/crates/services/src/authorization.rs",
+          "symbol": "nothing_authorizes_an_actor_without_root_or_grant"
+        }
       ]
     },
     {
       "source": "cotest/e2e/tests/calls/webrtc-call-sequence.spec.ts",
       "disposition": "duplicate_removed",
       "replacements": [
-        { "file": "cotest/src/conformance/call_signal.rs", "symbol": "run_call_signal_vector_suite" },
-        { "file": "cotest/src/conformance/call_state_core_executable.rs", "symbol": "run_call_state_core_suite" }
+        {
+          "file": "cotest/src/conformance/call_signal.rs",
+          "symbol": "run_call_signal_vector_suite"
+        },
+        {
+          "file": "cotest/src/conformance/call_state_core_executable.rs",
+          "symbol": "run_call_state_core_suite"
+        }
       ]
     },
     {
       "source": "cotest/e2e/tests/calls/webrtc-media-token.spec.ts",
       "disposition": "duplicate_removed",
       "replacements": [
-        { "file": "cotest/src/conformance/media_binding.rs", "symbol": "run_media_binding_vector_suite" },
-        { "file": "cotest/src/conformance/call_state_core_executable.rs", "symbol": "run_call_state_core_suite" }
+        {
+          "file": "cotest/src/conformance/media_binding.rs",
+          "symbol": "run_media_binding_vector_suite"
+        },
+        {
+          "file": "cotest/src/conformance/call_state_core_executable.rs",
+          "symbol": "run_call_state_core_suite"
+        }
       ]
     },
     {
       "source": "cotest/e2e/tests/calls/webrtc-moderation.spec.ts",
       "disposition": "duplicate_removed",
       "replacements": [
-        { "file": "cotest/src/conformance/call_state_media_lifecycle.rs", "symbol": "run_moderator_kick_ban_vector" },
-        { "file": "cotest/src/conformance/media_binding.rs", "symbol": "run_participant_id_unrecognised_vector" }
+        {
+          "file": "cotest/src/conformance/call_state_media_lifecycle.rs",
+          "symbol": "run_moderator_kick_ban_vector"
+        },
+        {
+          "file": "cotest/src/conformance/media_binding.rs",
+          "symbol": "run_participant_id_unrecognised_vector"
+        }
       ]
     },
     {
       "source": "cotest/e2e/tests/calls/webrtc-renegotiate.spec.ts",
       "disposition": "duplicate_removed",
       "replacements": [
-        { "file": "cotest/src/scenarios/schema_policy_realtime/webrtc.rs", "symbol": "webrtc_session_signal_strand_and_guards_work" },
-        { "file": "cotest/src/conformance/call_signal.rs", "symbol": "run_seq_monotonic_vector" }
+        {
+          "file": "cotest/src/scenarios/schema_policy_realtime/webrtc.rs",
+          "symbol": "webrtc_session_signal_strand_and_guards_work"
+        },
+        {
+          "file": "cotest/src/conformance/call_signal.rs",
+          "symbol": "run_seq_monotonic_vector"
+        }
       ]
     },
     {
       "source": "cotest/e2e/tests/calls/webrtc-seq-monotonic.spec.ts",
       "disposition": "duplicate_removed",
       "replacements": [
-        { "file": "cotest/src/conformance/call_signal.rs", "symbol": "run_seq_monotonic_vector" }
+        {
+          "file": "cotest/src/conformance/call_signal.rs",
+          "symbol": "run_seq_monotonic_vector"
+        }
       ]
     },
     {
       "source": "cotest/e2e/tests/calls/webrtc-signals.spec.ts",
       "disposition": "duplicate_removed",
       "replacements": [
-        { "file": "cotest/src/conformance/call_signal.rs", "symbol": "run_signal_kind_enum_vector" },
-        { "file": "cotest/src/conformance/call_signal.rs", "symbol": "run_proof_detached_jws_vector" }
+        {
+          "file": "cotest/src/conformance/call_signal.rs",
+          "symbol": "run_signal_kind_enum_vector"
+        },
+        {
+          "file": "cotest/src/conformance/call_signal.rs",
+          "symbol": "run_proof_detached_jws_vector"
+        }
       ]
     },
     {
       "source": "cotest/e2e/tests/calls/webrtc.spec.ts",
       "disposition": "duplicate_removed",
       "replacements": [
-        { "file": "cotest/src/scenarios/schema_policy_realtime/webrtc.rs", "symbol": "webrtc_session_signal_strand_and_guards_work" },
-        { "file": "cotest/src/scenarios/authz_policy_presence.rs", "symbol": "push_and_ice_contracts_work" }
+        {
+          "file": "cotest/src/scenarios/schema_policy_realtime/webrtc.rs",
+          "symbol": "webrtc_session_signal_strand_and_guards_work"
+        },
+        {
+          "file": "cotest/src/scenarios/authz_policy_presence.rs",
+          "symbol": "push_and_ice_contracts_work"
+        }
       ]
     },
     {
       "source": "cotest/e2e/tests/conformance/canonical-cross-lang.spec.ts",
       "disposition": "duplicate_removed",
       "replacements": [
-        { "file": "cotest/src/conformance/canonical_cross_lang.rs", "symbol": "run_canonical_cross_lang_suite" }
+        {
+          "file": "cotest/src/conformance/canonical_cross_lang.rs",
+          "symbol": "run_canonical_cross_lang_suite"
+        }
       ]
     },
     {
       "source": "cotest/e2e/tests/conformance/encoding-vectors.spec.ts",
       "disposition": "duplicate_removed",
       "replacements": [
-        { "file": "cotest/src/conformance/encoding.rs", "symbol": "run_encoding_fixture_suite" },
-        { "file": "cotest/src/conformance/redaction.rs", "symbol": "run_redaction_fixture_suite" }
+        {
+          "file": "cotest/src/conformance/encoding.rs",
+          "symbol": "run_encoding_fixture_suite"
+        },
+        {
+          "file": "cotest/src/conformance/redaction.rs",
+          "symbol": "run_redaction_fixture_suite"
+        }
       ]
     },
     {
       "source": "cotest/e2e/tests/conformance/profile-gates.spec.ts",
       "disposition": "duplicate_removed",
       "replacements": [
-        { "file": "cotest/src/conformance/profile_matrix.rs", "symbol": "run_profile_requirement_gate_suite" },
-        { "file": "cotest/src/scenarios/profile_claim_gate.rs", "symbol": "live_describe_profile_claim_gate_from_env" }
+        {
+          "file": "cotest/src/conformance/profile_matrix.rs",
+          "symbol": "run_profile_requirement_gate_suite"
+        },
+        {
+          "file": "cotest/src/scenarios/profile_claim_gate.rs",
+          "symbol": "live_describe_profile_claim_gate_from_env"
+        }
       ]
     },
     {
       "source": "cotest/e2e/tests/encryption/encrypted-attachments.spec.ts",
       "disposition": "duplicate_removed",
       "replacements": [
-        { "file": "cotest/src/scenarios/delivery_media.rs", "symbol": "blob_integrity_head_range_and_missing_edges_work" },
-        { "file": "cotest/src/conformance/file_transfer_stream_aead.rs", "symbol": "run_file_transfer_stream_aead_fixture_suite" }
+        {
+          "file": "cotest/src/scenarios/delivery_media.rs",
+          "symbol": "blob_integrity_head_range_and_missing_edges_work"
+        },
+        {
+          "file": "cotest/src/conformance/file_transfer_stream_aead.rs",
+          "symbol": "run_file_transfer_stream_aead_fixture_suite"
+        }
       ]
     },
     {
       "source": "cotest/e2e/tests/encryption/mls-group.spec.ts",
       "disposition": "duplicate_removed",
       "replacements": [
-        { "file": "cotest/src/conformance/authority_commit.rs", "symbol": "run_authority_commit_suite" },
-        { "file": "cotest/src/conformance/final_conformance_closure.rs", "symbol": "run_mls_proposal_producer_binding_vector" },
-        { "file": "cotest/src/conformance/final_conformance_closure.rs", "symbol": "run_mls_key_access_revision_vector" },
-        { "file": "cotest/src/conformance/visibility_policy.rs", "symbol": "run_visibility_policy_fixture_suite" }
+        {
+          "file": "cotest/src/conformance/authority_commit.rs",
+          "symbol": "run_authority_commit_suite"
+        },
+        {
+          "file": "cotest/src/conformance/final_conformance_closure.rs",
+          "symbol": "run_mls_proposal_producer_binding_vector"
+        },
+        {
+          "file": "cotest/src/conformance/final_conformance_closure.rs",
+          "symbol": "run_mls_key_access_revision_vector"
+        },
+        {
+          "file": "cotest/src/conformance/visibility_policy.rs",
+          "symbol": "run_visibility_policy_fixture_suite"
+        }
       ]
     },
     {
       "source": "cotest/e2e/tests/extensions/mimi-federation.spec.ts",
       "disposition": "duplicate_removed",
       "replacements": [
-        { "file": "cotest/src/conformance/wire/mimi.rs", "symbol": "run_mimi_components_fixture_suite" },
-        { "file": "cotest/tests/mimi_directory_authority_closure.rs", "symbol": "mimi_report_requires_closed_exact_actor_authority" },
-        { "file": "cotest/src/conformance/wire/interop.rs", "symbol": "run_interop_downgrade_fixture_suite" }
+        {
+          "file": "cotest/src/conformance/wire/mimi.rs",
+          "symbol": "run_mimi_components_fixture_suite"
+        },
+        {
+          "file": "cotest/tests/mimi_directory_authority_closure.rs",
+          "symbol": "mimi_report_requires_closed_exact_actor_authority"
+        },
+        {
+          "file": "cotest/src/conformance/wire/interop.rs",
+          "symbol": "run_interop_downgrade_fixture_suite"
+        }
       ]
     },
     {
       "source": "cotest/e2e/tests/federation/security-hardening.spec.ts",
       "disposition": "duplicate_removed",
       "replacements": [
-        { "file": "cotest/src/conformance/security_negative.rs", "symbol": "run_security_negative_profile_suite" },
-        { "file": "arkret-rust-sdk/crates/signatures/src/http_signature.rs", "symbol": "scenario_signer_owns_headers_and_rejects_body_tampering" },
-        { "file": "arkret-rust-sdk/crates/signatures/src/http_signature.rs", "symbol": "signature_policy_enforces_digest_components_and_time_window" },
-        { "file": "coland/crates/http/src/routing/federation/federation_tests.rs", "symbol": "verify_actor_headers_reject_destination_mismatch" },
-        { "file": "coland/crates/http/src/routing/federation/federation_tests.rs", "symbol": "signature_input_rejects_mismatched_federation_key" }
+        {
+          "file": "cotest/src/conformance/security_negative.rs",
+          "symbol": "run_security_negative_profile_suite"
+        },
+        {
+          "file": "arkret-rust-sdk/crates/signatures/src/http_signature.rs",
+          "symbol": "scenario_signer_owns_headers_and_rejects_body_tampering"
+        },
+        {
+          "file": "arkret-rust-sdk/crates/signatures/src/http_signature.rs",
+          "symbol": "signature_policy_enforces_digest_components_and_time_window"
+        },
+        {
+          "file": "coland/crates/http/src/routing/federation/federation_tests.rs",
+          "symbol": "verify_actor_headers_reject_destination_mismatch"
+        },
+        {
+          "file": "coland/crates/http/src/routing/federation/federation_tests.rs",
+          "symbol": "signature_input_rejects_mismatched_federation_key"
+        }
       ]
     },
     {
       "source": "cotest/e2e/tests/governance/gdpr-audit-retention.spec.ts",
       "disposition": "duplicate_removed",
       "replacements": [
-        { "file": "cotest/src/conformance/redaction.rs", "symbol": "run_redaction_fixture_suite" },
-        { "file": "cotest/src/conformance/account_status_issuer_ledger.rs", "symbol": "run_account_status_issuer_ledger_vector" }
+        {
+          "file": "cotest/src/conformance/redaction.rs",
+          "symbol": "run_redaction_fixture_suite"
+        },
+        {
+          "file": "cotest/src/conformance/account_status_issuer_ledger.rs",
+          "symbol": "run_account_status_issuer_ledger_vector"
+        }
       ]
     },
     {
       "source": "cotest/e2e/tests/governance/organization-bootstrap.spec.ts",
       "disposition": "duplicate_removed",
       "replacements": [
-        { "file": "cotest/tests/realm_organization_statement_positive.rs", "symbol": "organization_signed_statement_verifies_through_coland_shape" },
-        { "file": "cotest/src/conformance/coauth_lifecycle.rs", "symbol": "run_coauth_account_lifecycle_fixture_suite" }
+        {
+          "file": "cotest/tests/realm_organization_statement_positive.rs",
+          "symbol": "organization_signed_statement_verifies_through_coland_shape"
+        },
+        {
+          "file": "cotest/src/conformance/coauth_lifecycle.rs",
+          "symbol": "run_coauth_account_lifecycle_fixture_suite"
+        }
       ]
     },
     {
       "source": "cotest/e2e/tests/governance/organization-policy.spec.ts",
       "disposition": "duplicate_removed",
       "replacements": [
-        { "file": "cotest/tests/realm_organization_statement_negative.rs", "symbol": "realm_organization_statement_negative_vectors_match_spec_codes" },
-        { "file": "cotest/src/scenarios/high_assurance_realm_policy.rs", "symbol": "run_high_assurance_rejects_open_federation" }
+        {
+          "file": "cotest/tests/realm_organization_statement_negative.rs",
+          "symbol": "realm_organization_statement_negative_vectors_match_spec_codes"
+        },
+        {
+          "file": "cotest/src/scenarios/high_assurance_realm_policy.rs",
+          "symbol": "run_high_assurance_rejects_open_federation"
+        }
       ]
     },
     {
       "source": "cotest/e2e/tests/harness/event-actor.spec.ts",
       "disposition": "duplicate_removed",
       "replacements": [
-        { "file": "cotest/tests/pcr_event_derived_boundaries.rs", "symbol": "event_actor_requires_complete_core_account_identity" },
-        { "file": "cotest/tests/canonical_hash_convergence.rs", "symbol": "canonical_hash" }
+        {
+          "file": "cotest/tests/pcr_event_derived_boundaries.rs",
+          "symbol": "event_actor_requires_complete_core_account_identity"
+        },
+        {
+          "file": "cotest/tests/canonical_hash_convergence.rs",
+          "symbol": "canonical_hash"
+        }
       ]
     },
     {
       "source": "cotest/e2e/tests/identity/account-device-auth.spec.ts",
       "disposition": "duplicate_removed",
       "replacements": [
-        { "file": "cotest/src/scenarios/api_contracts_auth.rs", "symbol": "account_auth_and_session_edges_are_enforced" },
-        { "file": "cotest/src/conformance/auth_session_proof.rs", "symbol": "run_session_bare_bearer_rejected_protected_vector" }
+        {
+          "file": "cotest/src/scenarios/api_contracts_auth.rs",
+          "symbol": "account_auth_and_session_edges_are_enforced"
+        },
+        {
+          "file": "cotest/src/conformance/auth_session_proof.rs",
+          "symbol": "run_session_bare_bearer_rejected_protected_vector"
+        }
       ]
     },
     {
       "source": "cotest/e2e/tests/identity/account-handoff.spec.ts",
       "disposition": "duplicate_removed",
       "replacements": [
-        { "file": "cotest/src/conformance/coauth_lifecycle.rs", "symbol": "run_coauth_account_lifecycle_fixture_suite" },
-        { "file": "cotest/src/conformance/recovery_completion_grant.rs", "symbol": "run_recovery_completion_grant_suite" }
+        {
+          "file": "cotest/src/conformance/coauth_lifecycle.rs",
+          "symbol": "run_coauth_account_lifecycle_fixture_suite"
+        },
+        {
+          "file": "cotest/src/conformance/recovery_completion_grant.rs",
+          "symbol": "run_recovery_completion_grant_suite"
+        }
       ]
     },
     {
       "source": "cotest/e2e/tests/identity/account-states.spec.ts",
       "disposition": "duplicate_removed",
       "replacements": [
-        { "file": "cotest/src/conformance/account_status_issuer_ledger.rs", "symbol": "run_account_status_issuer_ledger_vector" },
-        { "file": "cotest/src/conformance/coauth_lifecycle.rs", "symbol": "run_coauth_account_lifecycle_fixture_suite" }
+        {
+          "file": "cotest/src/conformance/account_status_issuer_ledger.rs",
+          "symbol": "run_account_status_issuer_ledger_vector"
+        },
+        {
+          "file": "cotest/src/conformance/coauth_lifecycle.rs",
+          "symbol": "run_coauth_account_lifecycle_fixture_suite"
+        }
       ]
     },
     {
       "source": "cotest/e2e/tests/identity/circle-member.spec.ts",
       "disposition": "duplicate_removed",
       "replacements": [
-        { "file": "cotest/src/scenarios/circle/member_strict_subset.rs", "symbol": "member_strict_subset_run" },
-        { "file": "cotest/src/scenarios/circle/member_transition_rules.rs", "symbol": "member_transition_rules_run" }
+        {
+          "file": "cotest/src/scenarios/circle/member_strict_subset.rs",
+          "symbol": "member_strict_subset_run"
+        },
+        {
+          "file": "cotest/src/scenarios/circle/member_transition_rules.rs",
+          "symbol": "member_transition_rules_run"
+        }
       ]
     },
     {
       "source": "cotest/e2e/tests/identity/contact-graph.spec.ts",
       "disposition": "duplicate_removed",
       "replacements": [
-        { "file": "cotest/src/scenarios/identity_directory/contacts.rs", "symbol": "contacts_invites_listing_export_and_audit_work" },
-        { "file": "cotest/src/conformance/direct_conversation_flow.rs", "symbol": "run_direct_conversation_flow_suite" },
-        { "file": "cotest/src/scenarios/invite_service_fanout_live.rs", "symbol": "invite_service_fanout_live_run" }
+        {
+          "file": "cotest/src/scenarios/identity_directory/contacts.rs",
+          "symbol": "contacts_invites_listing_export_and_audit_work"
+        },
+        {
+          "file": "cotest/src/conformance/direct_conversation_flow.rs",
+          "symbol": "run_direct_conversation_flow_suite"
+        },
+        {
+          "file": "cotest/src/scenarios/invite_service_fanout_live.rs",
+          "symbol": "invite_service_fanout_live_run"
+        }
       ]
     },
     {
       "source": "cotest/e2e/tests/identity/direct-conversation-founding.spec.ts",
       "disposition": "duplicate_removed",
       "replacements": [
-        { "file": "cotest/src/conformance/direct_conversation_flow.rs", "symbol": "run_direct_conversation_flow_suite" }
+        {
+          "file": "cotest/src/conformance/direct_conversation_flow.rs",
+          "symbol": "run_direct_conversation_flow_suite"
+        }
       ]
     },
     {
       "source": "cotest/e2e/tests/identity/session-grant-dpop.spec.ts",
       "disposition": "duplicate_removed",
       "replacements": [
-        { "file": "cotest/src/conformance/auth_session_proof.rs", "symbol": "run_auth_session_proof_fixture_suite" },
-        { "file": "cotest/src/scenarios/bridge_contracts/session_grant.rs", "symbol": "session_grant_presentation_uses_configured_coauth_introspection" }
+        {
+          "file": "cotest/src/conformance/auth_session_proof.rs",
+          "symbol": "run_auth_session_proof_fixture_suite"
+        },
+        {
+          "file": "cotest/src/scenarios/bridge_contracts/session_grant.rs",
+          "symbol": "session_grant_presentation_uses_configured_coauth_introspection"
+        }
       ]
     },
     {
       "source": "cotest/e2e/tests/joint/did-boundary-call-counts.spec.ts",
       "disposition": "duplicate_removed",
       "replacements": [
-        { "file": "cotest/src/scenarios/did_boundary_call_counts.rs", "symbol": "two_ordinary_events_under_one_key_epoch_run" },
-        { "file": "cotest/src/scenarios/did_boundary_call_counts.rs", "symbol": "repeated_requests_under_one_binding_run" }
+        {
+          "file": "cotest/src/scenarios/did_boundary_call_counts.rs",
+          "symbol": "two_ordinary_events_under_one_key_epoch_run"
+        },
+        {
+          "file": "cotest/src/scenarios/did_boundary_call_counts.rs",
+          "symbol": "repeated_requests_under_one_binding_run"
+        }
       ]
     },
     {
       "source": "cotest/e2e/tests/joint/service-resolution-bootstrap.spec.ts",
       "disposition": "duplicate_removed",
       "replacements": [
-        { "file": "cotest/src/conformance/service_did_routes.rs", "symbol": "run_service_did_routes_suite" },
-        { "file": "cotest/src/scenarios/bridge_contracts/discovery.rs", "symbol": "principal_bridge_contracts_are_discoverable" }
+        {
+          "file": "cotest/src/conformance/service_did_routes.rs",
+          "symbol": "run_service_did_routes_suite"
+        },
+        {
+          "file": "cotest/src/scenarios/bridge_contracts/discovery.rs",
+          "symbol": "principal_bridge_contracts_are_discoverable"
+        }
       ]
     },
     {
@@ -246,8 +723,14 @@
       "coverage_status": "partial",
       "remaining_gap": "The named Coland tests cover in-memory gate evaluation only. They do not close the current-v1 parent_membership production contract: active join_gate_from and same-current-Station authority-tenure checks, canonical durable locks, cross-Station/handoff fail-closed, and zero Event/RealmCommit/member_state writes still require a Cotest production runner.",
       "replacements": [
-        { "file": "coland/crates/server/tests/realm_join_policy.rs", "symbol": "parent_membership_gate_never_uses_projection_cache_as_authority" },
-        { "file": "coland/crates/server/tests/realm_join_policy.rs", "symbol": "cooldown_gate_denies_independently_of_any_combinator" }
+        {
+          "file": "coland/crates/server/tests/realm_join_policy.rs",
+          "symbol": "parent_membership_gate_never_uses_projection_cache_as_authority"
+        },
+        {
+          "file": "coland/crates/server/tests/realm_join_policy.rs",
+          "symbol": "cooldown_gate_denies_independently_of_any_combinator"
+        }
       ]
     },
     {
@@ -256,23 +739,118 @@
       "coverage_status": "static_clean_break_only",
       "remaining_gap": "The retired positive inheritance flow was deleted. Static artifact checks prove that policy, capability and notification propagation have no current-v1 wire carrier; a production Coland durable migration/zero-write runner remains open and is documented in e2e/scenarios/models/realm-links.md.",
       "replacements": [
-        { "file": "cotest/tests/realm_link_clean_break.rs", "symbol": "rejects_automatic_realm_inheritance_without_current_v1_carrier" },
-        { "file": "cotest/tests/realm_link_clean_break.rs", "symbol": "parent_membership_contract_is_co_governed_and_caller_proof_free" }
+        {
+          "file": "cotest/tests/realm_link_clean_break.rs",
+          "symbol": "rejects_automatic_realm_inheritance_without_current_v1_carrier"
+        },
+        {
+          "file": "cotest/tests/realm_link_clean_break.rs",
+          "symbol": "parent_membership_contract_is_co_governed_and_caller_proof_free"
+        }
+      ]
+    },
+    {
+      "source": "cotest/e2e/tests/sync/account-stream-device-message.spec.ts",
+      "disposition": "migrated",
+      "coverage_status": "live_native",
+      "replacements": [
+        {
+          "file": "cotest/tests/account_stream_api.rs",
+          "symbol": "canonical_account_stream_api_migration"
+        }
+      ]
+    },
+    {
+      "source": "cotest/e2e/tests/sync/transport-negotiation.spec.ts",
+      "disposition": "migrated",
+      "coverage_status": "live_native",
+      "replacements": [
+        {
+          "file": "cotest/tests/transport_negotiation_api.rs",
+          "symbol": "transport_negotiation_api_migration"
+        }
+      ]
+    },
+    {
+      "source": "cotest/e2e/tests/encryption/audited-e2ee.spec.ts",
+      "disposition": "migrated",
+      "coverage_status": "live_native",
+      "replacements": [
+        {
+          "file": "cotest/tests/api_mls_migrations.rs",
+          "symbol": "audited_e2ee_api_migration"
+        }
+      ]
+    },
+    {
+      "source": "cotest/e2e/tests/invites/invite-addressing.spec.ts",
+      "disposition": "migrated",
+      "coverage_status": "live_native",
+      "replacements": [
+        {
+          "file": "cotest/tests/invite_addressing_api.rs",
+          "symbol": "invite_addressing_api_migration"
+        }
+      ]
+    },
+    {
+      "source": "cotest/e2e/tests/invites/third-party.spec.ts",
+      "disposition": "migrated",
+      "coverage_status": "live_native",
+      "replacements": [
+        {
+          "file": "cotest/tests/third_party_invite_api.rs",
+          "symbol": "third_party_invite_api_migration"
+        }
+      ],
+      "retained_specialized_coverage": "mock-email inbox, atomic consumption and retry refusal remain in e2e/tests/harness/mocks-selftest.spec.ts; no protocol service claim is inferred from the mock."
+    },
+    {
+      "source": "cotest/e2e/tests/messaging/discussion-upgrade.spec.ts",
+      "disposition": "migrated",
+      "coverage_status": "live_native",
+      "replacements": [
+        {
+          "file": "cotest/tests/api_mls_migrations.rs",
+          "symbol": "discussion_upgrade_api_migration"
+        }
+      ]
+    },
+    {
+      "source": "cotest/e2e/tests/messaging/read-receipts.spec.ts",
+      "disposition": "migrated",
+      "coverage_status": "live_native",
+      "replacements": [
+        {
+          "file": "cotest/tests/api_mls_migrations.rs",
+          "symbol": "read_receipt_signals_api_migration"
+        },
+        {
+          "file": "cotest/tests/private_read_marker_api.rs",
+          "symbol": "canonical_private_read_marker_api_migration"
+        }
+      ],
+      "consumer_boundary": "Native relay, typed accepted policy and protocol receiver KAT replace the old local TS policy function. Actual Inkson receiver display and debounce remain product obligations; these API tests never exercised that UI."
+    },
+    {
+      "source": "cotest/e2e/tests/models/private-read-marker.spec.ts",
+      "disposition": "migrated",
+      "coverage_status": "live_native",
+      "replacements": [
+        {
+          "file": "cotest/tests/private_read_marker_api.rs",
+          "symbol": "canonical_private_read_marker_api_migration"
+        },
+        {
+          "file": "cotest/tests/api_mls_migrations.rs",
+          "symbol": "private_marker_encrypted_notification_api_migration"
+        },
+        {
+          "file": "cotest/tests/api_mls_migrations.rs",
+          "symbol": "private_marker_circle_scope_api_migration"
+        }
       ]
     }
   ],
-  "pending_migration_note": "API-only Playwright specs not migrated yet. The gate treats this as a CLOSED set: each source must still exist and must still be API-only, and any API-only spec in neither this list nor specialized_api_lanes fails the gate, so new browserless Playwright coverage cannot be added. Tracked by arkret-work/tasks/impl-active/2026-09-05-1311-cotest-services-live-lane-and-joint-runner-dead-switch-cleanup.md.",
-  "pending_migration": [
-    { "source": "cotest/e2e/tests/identity/oidc-login-chain.spec.ts", "needs": "Rust joint bootstrap must set coland's COLAND_OAUTH_CLIENT_ID, establish the Coauth browser session, and complete the proof-bound OIDC/passkey exchange before the describe client_id and DPoP self-path contracts can be asserted from Rust." },
-    { "source": "cotest/e2e/tests/sync/account-stream-device-message.spec.ts", "needs": "Needs an SDK account-stream subscribe client; the spec drives the long-poll surface directly." },
-    { "source": "cotest/e2e/tests/events/realm-genesis-commit-stream.spec.ts", "needs": "Needs the canonical founding-unit builder and the governance-Station submit path exposed to Rust scenarios so genesis commits are not hand-rolled." },
-    { "source": "cotest/e2e/tests/sync/transport-negotiation.spec.ts", "needs": "Needs transport negotiation in the Rust harness; the spec also captures screenshots, so its evidence must move to a Rust transcript artifact." },
-    { "source": "cotest/e2e/tests/encryption/audited-e2ee.spec.ts", "needs": "Needs SDK client coverage for the audited-E2EE read path." },
-    { "source": "cotest/e2e/tests/invites/invite-addressing.spec.ts", "needs": "Needs contact-api and authenticated invite notification through SDK DTOs." },
-    { "source": "cotest/e2e/tests/conformance/registry-drift.spec.ts", "needs": "Overlaps the Rust drift validator; fold the remaining assertions into that suite rather than porting the spec." },
-    { "source": "cotest/e2e/tests/invites/third-party.spec.ts", "needs": "Needs third-party invite, encoding and webvh helpers as SDK clients." },
-    { "source": "cotest/e2e/tests/messaging/discussion-upgrade.spec.ts", "needs": "Largest remaining port: messaging fixtures, circle-api and webrtc helpers all need SDK equivalents." },
-    { "source": "cotest/e2e/tests/messaging/read-receipts.spec.ts", "needs": "Needs the accepted-device sibling pairing ceremony (stage, finalize, pair_device, issue_session_grant) and the encrypted receipt Signal helpers exposed to Rust scenarios." },
-    { "source": "cotest/e2e/tests/models/private-read-marker.spec.ts", "needs": "Needs the accepted-device sibling pairing ceremony (stage, finalize, pair_device, issue_session_grant) and an SDK account-stream to-device client exposed to Rust scenarios." }
-  ]
+  "native_execution_note": "Every primary and supporting test is mandatory; only the primary carries historical collection credits. canonical uses real Coauth provisioning and accepted sibling pairing; isolated_station uses real native Stations, isolated PostgreSQL and an explicitly declared test issuer. No missing binary, DB or environment is accepted as success. A mapping is an executor obligation, not evidence that its latest run passed."
 }

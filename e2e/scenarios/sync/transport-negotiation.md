@@ -1,5 +1,15 @@
 # Transport binding negotiation (HTTP / WebSocket fallback)
 
+2026-10-15：原 API-only Playwright 文件已迁为 Rust，旧步骤仅保留产品目标与历史来源，**不证明真实 UI 通过**。
+
+当前具名执行入口：
+
+- `tests/transport_negotiation_api.rs::transport_negotiation_api_migration`（isolated_station）。
+
+operation→Rust test 与原选择数量见 `api-only-migration.json.native_live_migrations`。无筛选 joint 强制执行全部 primary／supporting 用例；release-gate 通过其 joint 阶段执行，跳过联合阶段不能发布为 release 通过。缺少环境、零测试、ignore 与失败均不能代替通过。日志位于本轮 `native-api-migrations/`，映射本身不是运行证据。
+
+## 历史场景与独立产品目标
+
 ## 目标
 
 验证两个 coland 实例(coland_a 和 coland_b)能完成「HTTP signed baseline → 协商升级到 WebSocket → 任一 transport 断连后回退到 HTTP」的完整 transport negotiation 链路;过程中 RFC 9421 HTTP Message Signature、origin/destination service DID、nonce、key rotation 等约束在所有 transport 上一致执行,binding fallback chain 在故障时收敛到 HTTP/JSON baseline。

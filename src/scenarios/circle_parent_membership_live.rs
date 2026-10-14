@@ -369,6 +369,23 @@ pub async fn grant_circle_actions(
     circle: &CircleId,
     subject: &Member,
 ) -> Result<()> {
+    grant_circle_actions_with(
+        controller,
+        realm,
+        circle,
+        subject,
+        &["ak.circle.member.add", "ak.mls.genesis"],
+    )
+    .await
+}
+
+pub(crate) async fn grant_circle_actions_with(
+    controller: &Member,
+    realm: &str,
+    circle: &CircleId,
+    subject: &Member,
+    actions: &[&str],
+) -> Result<()> {
     use arkret_models_collaboration::events_payloads::{
         CapabilityGrantCreateBody, CapabilityGrantPayload,
     };
@@ -379,10 +396,7 @@ pub async fn grant_circle_actions(
         realm_id: Some(realm_id.clone()),
         issuer_id: controller.actor.clone(),
         subject: CapabilitySubject::Actor(subject.actor.clone()),
-        actions: vec![
-            "ak.circle.member.add".to_owned(),
-            "ak.mls.genesis".to_owned(),
-        ],
+        actions: actions.iter().map(|action| (*action).to_owned()).collect(),
         resources: vec![serde_json::from_value(
             json!({"kind":"circle","realm_id":realm_id,"circle_id":circle}),
         )?],

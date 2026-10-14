@@ -55,6 +55,8 @@ use crate::scenarios::_helpers::live_gate::skip_or_fail;
 use crate::scenarios::human_device_producer_live::{database, standard_client, station_env};
 use crate::scenarios::identity_test_support::HARNESS_INTERNAL_AUTHORITY_SECRET;
 
+mod watch_evidence;
+pub use watch_evidence::run_registered_agent_watch_live;
 mod binding_evidence;
 mod coauth_session_evidence;
 mod direct_evidence;
@@ -2933,11 +2935,25 @@ pub async fn run_agent_actor_private_events_live() -> Result<()> {
         accepted.status(),
         accepted.text().await.unwrap_or_default()
     );
+    let accepted_outcome: serde_json::Value = accepted.json().await?;
     let replay = submit_actor_private(&agent.runtime, &request).await?;
     ensure!(
         replay.status() == StatusCode::OK,
         "an exact retry of the Agent's request is not its first outcome"
     );
+    ensure!(
+        replay.json::<serde_json::Value>().await? == accepted_outcome,
+        "actor-private exact replay changed the original outcome"
+    );
+    let private_url = database.connect_url.clone();
+    let private_event_id = request.event_id.to_string();
+    tokio::task::spawn_blocking(move || -> Result<()> {
+        let mut connection = postgres::Client::connect(&private_url, postgres::NoTls)?;
+        let row = connection.query_one("SELECT EXISTS(SELECT 1 FROM actor_private_events WHERE event_id=$1), EXISTS(SELECT 1 FROM canonical_events WHERE envelope->>'event_id'=$1), EXISTS(SELECT 1 FROM realm_commits WHERE commit_json->>'event_ref'=$1)", &[&private_event_id])?;
+        ensure!(row.get::<_,bool>(0) && !row.get::<_,bool>(1) && !row.get::<_,bool>(2),
+            "accepted private owner crossed into the shared Event/Commit plane");
+        Ok(())
+    }).await??;
 
     // The controller rejects it from its own device.
     let request_id = request.payload["request_id"].clone();
@@ -3007,6 +3023,12 @@ pub async fn run_agent_actor_private_events_live() -> Result<()> {
     );
 
     // A recipient digest that is not the device's current HPKE key.
+    let before_refusal =
+        crate::scenarios::_helpers::acceptance_footprint::acceptance_rows_with_agent_stores(
+            &database.connect_url,
+            true,
+        )
+        .await?;
     expect_code(
         submit_actor_private(
             &agent.runtime,
@@ -3017,6 +3039,15 @@ pub async fn run_agent_actor_private_events_live() -> Result<()> {
         "param_invalid",
     )
     .await?;
+    ensure!(
+        crate::scenarios::_helpers::acceptance_footprint::acceptance_rows_with_agent_stores(
+            &database.connect_url,
+            true
+        )
+        .await?
+            == before_refusal,
+        "invalid private HPKE recipient left accepting effects"
+    );
 
     // A request whose expiry has already passed.
     let expired = actor_private_event(
@@ -3042,5 +3073,17 @@ pub async fn run_agent_actor_private_events_live() -> Result<()> {
         "failed_precondition",
     )
     .await?;
+    ensure!(
+        crate::scenarios::_helpers::acceptance_footprint::acceptance_rows_with_agent_stores(
+            &database.connect_url,
+            true
+        )
+        .await?
+            == before_refusal,
+        "expired private request left accepting effects"
+    );
+    println!(
+        "[effect-private-owner] real_agent_session=1 accepted_private_original=1 exact_replay=1 shared_event_and_commit_absent=1 invalid_and_expired_zero_effects=1"
+    );
     Ok(())
 }

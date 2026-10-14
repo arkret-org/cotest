@@ -153,7 +153,7 @@ pub trait MlsGenesisObserver {
 }
 
 pub async fn run_with_genesis_observer(observer: &dyn MlsGenesisObserver) -> Result<()> {
-    run_lifecycle(None, false, Some(observer)).await
+    run_lifecycle(None, false, Some(observer), None).await
 }
 
 pub async fn run_same_station_mls_keypackage_lifecycle_live() -> Result<()> {
@@ -164,16 +164,21 @@ pub async fn run_with_blocklist_observer(
     observer: Option<&dyn MlsClientObserver>,
     observe_receipt: bool,
 ) -> Result<()> {
-    run_lifecycle(observer, observe_receipt, None).await
+    run_lifecycle(observer, observe_receipt, None, None).await
+}
+
+pub async fn run_with_api_migration(case: super::api_mls_migrations::MlsApiCase) -> Result<()> {
+    run_lifecycle(None, false, None, Some(case)).await
 }
 
 async fn run_lifecycle(
     observer: Option<&dyn MlsClientObserver>,
     observe_receipt: bool,
     genesis_observer: Option<&dyn MlsGenesisObserver>,
+    api_case: Option<super::api_mls_migrations::MlsApiCase>,
 ) -> Result<()> {
     let Some(database) = database(GROUP)? else {
-        if observer.is_some() || genesis_observer.is_some() {
+        if observer.is_some() || genesis_observer.is_some() || api_case.is_some() {
             bail!("live MLS evidence requires an isolated PostgreSQL database");
         }
         return Ok(());
@@ -188,7 +193,7 @@ async fn run_lifecycle(
     )
     .await?
     else {
-        if observer.is_some() || genesis_observer.is_some() {
+        if observer.is_some() || genesis_observer.is_some() || api_case.is_some() {
             bail!("live MLS evidence requires a prebuilt real Coland binary");
         }
         return skip_or_fail(GROUP, "prebuilt Coland unavailable");
@@ -751,6 +756,22 @@ async fn run_lifecycle(
         arkret::MessageCrypto::decrypt(&mut bob_group, &sealed)? == b"after Add",
         "Bob could not decrypt Alice's message at the accepted epoch"
     );
+
+    if let Some(case) = api_case {
+        Box::pin(super::api_mls_migrations::exercise(
+            case,
+            &alice,
+            &bob,
+            station,
+            &coauth,
+            &realm_id,
+            &strand_id,
+            &commit_event.event_id,
+            &mut alice_group,
+            &mut bob_group,
+        ))
+        .await?;
+    }
 
     if let Some(observer) = observer {
         observer

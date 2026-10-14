@@ -1,5 +1,15 @@
 # Account stream 与 durable 重连
 
+2026-10-15：原 API-only Playwright 文件已迁为 Rust，旧步骤仅保留产品目标与历史来源，**不证明真实 UI 通过**。
+
+当前具名执行入口：
+
+- `tests/account_stream_api.rs::canonical_account_stream_api_migration`（canonical）。
+
+operation→Rust test 与原选择数量见 `api-only-migration.json.native_live_migrations`。无筛选 joint 强制执行全部 primary／supporting 用例；release-gate 通过其 joint 阶段执行，跳过联合阶段不能发布为 release 通过。缺少环境、零测试、ignore 与失败均不能代替通过。日志位于本轮 `native-api-migrations/`，映射本身不是运行证据。
+
+## 历史场景与独立产品目标
+
 规范：`sync/client-sync.md` §§2–3、§11–12；`conformance/encoding.md` §8.3.1；`sync/service-http-binding.md` 的 `ak.self.account.stream.subscribe.v1`。
 
 来源和其余设备消息设计见 [Complement 补测复核](../../../docs/complement-coverage-review.md)。该文件名保留既有 lane 身份；当前十条测试入口验证 account stream，不能据此宣称跨站队列或浏览器持久化已覆盖。设备消息 ACK 另在 Rust `tests/to_device_offline_ordering.rs` 新增五条合同测试，不计入这十条 joint-api 用例。

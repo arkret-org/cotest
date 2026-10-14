@@ -1765,7 +1765,7 @@ impl ArkretServer {
             .bearer_auth(EMBEDDED_WEBVH_REGISTRATION_BEARER))
     }
 
-    fn actor_client(
+    pub(crate) fn actor_client(
         &self,
         actor: &str,
         device_id: &str,

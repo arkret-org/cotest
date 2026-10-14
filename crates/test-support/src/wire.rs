@@ -1642,7 +1642,7 @@ pub fn event_proof(input: Value, digest_mode: EventDigestMode) -> Result<Value> 
         Hash::new(event_digest(&input.event, digest_mode)?).context("parse event digest")?;
     let signing_key = match input.signing_seed_b64url.as_deref() {
         Some(seed) => signing_key_from_seed(seed).context("parse event signing seed")?,
-        None => development_event_signing_key(&input.verification_method),
+        None => arkret_test_kit::development_signing_key(&input.verification_method),
     };
 
     let mut proof = ProducerEventProof {
@@ -1733,7 +1733,7 @@ pub fn mimi_consent_proof(input: Value) -> Result<Value> {
         .context("encode MIMI consent proof binding")?;
     let signing_key = match input.signing_seed_b64url.as_deref() {
         Some(seed) => signing_key_from_seed(seed).context("parse MIMI consent signing seed")?,
-        None => development_event_signing_key(&input.verification_method),
+        None => arkret_test_kit::development_signing_key(&input.verification_method),
     };
     let jws = arkret_signatures::proof::sign_ed25519_detached_jws(&signing_key, &binding)
         .map_err(|error| anyhow::anyhow!("sign MIMI consent proof: {error}"))?;
@@ -1787,7 +1787,7 @@ pub fn mimi_request_consent_proof(input: Value) -> Result<Value> {
         Some(seed) => {
             signing_key_from_seed(seed).context("parse MIMI request-consent signing seed")?
         }
-        None => development_event_signing_key(&input.verification_method),
+        None => arkret_test_kit::development_signing_key(&input.verification_method),
     };
     let jws = arkret_signatures::proof::sign_ed25519_detached_jws(&signing_key, &binding)
         .map_err(|error| anyhow::anyhow!("sign MIMI request-consent proof: {error}"))?;
@@ -1849,10 +1849,6 @@ fn event_digest(event: &Value, _mode: EventDigestMode) -> Result<String> {
         .digest_payload()
         .context("build SDK Event digest payload")?;
     canonical::canonical_sha256(&payload).context("hash event digest payload")
-}
-
-fn development_event_signing_key(verification_method: &str) -> SigningKey {
-    arkret_test_kit::keys::development_signing_key(verification_method)
 }
 
 #[cfg(test)]
@@ -2104,11 +2100,11 @@ mod tests {
         let method = "did:webvh:z6mkfixture:alice.example#device";
 
         assert_eq!(
-            development_event_signing_key(method).verifying_key(),
+            arkret_test_kit::development_signing_key(method).verifying_key(),
             arkret_test_kit::keys::development_verifying_key(method)
         );
         assert_ne!(
-            development_event_signing_key(method).verifying_key(),
+            arkret_test_kit::development_signing_key(method).verifying_key(),
             arkret_test_kit::keys::development_verifying_key(
                 "did:webvh:z6mkfixture:alice.example#other-device"
             )

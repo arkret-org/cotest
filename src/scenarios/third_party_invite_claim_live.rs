@@ -24,6 +24,192 @@ use crate::scenarios::identity_test_support::{
 };
 
 const GROUP: &str = "third-party-invite-claim";
+
+fn migrated_claim(
+    template: &InviteClaimPayload,
+    invite_digest: &str,
+    nonce: &str,
+    verifier: &SigningKey,
+    root_method: arkret_wire::DidUrl,
+    root_seed: &[u8; 32],
+) -> Result<InviteClaimPayload> {
+    let mut payload = template.clone();
+    payload.claim_nonce = nonce.to_owned();
+    payload.binding_proof.claim_nonce = nonce.to_owned();
+    payload.binding_proof.signature = URL_SAFE_NO_PAD.encode(
+        verifier
+            .sign(&invite_binding_proof_transcript_bytes(
+                &payload.binding_proof,
+                payload.invite_id.as_str(),
+                payload.token_commitment.as_str(),
+                invite_digest,
+            )?)
+            .to_bytes(),
+    );
+    let subject = InviteSubjectProofBody::from_wire_parts(
+        payload.subject_account_id.clone(),
+        payload.invite_id.as_str(),
+        payload.binding_proof.realm_id.as_str(),
+        payload.token_commitment.as_str(),
+        nonce,
+        payload.binding_proof.verification_id.as_str(),
+        payload.binding_proof.canonical_digest()?.as_str(),
+    )?;
+    payload.subject_proof = InviteSubjectProof::new(
+        root_method,
+        subject.transcript_digest()?,
+        URL_SAFE_NO_PAD.encode(
+            SigningKey::from_bytes(root_seed)
+                .sign(&subject.canonical_bytes()?)
+                .to_bytes(),
+        ),
+    );
+    Ok(payload)
+}
+
+#[allow(clippy::too_many_arguments)]
+async fn migrated_preclaim_negatives(
+    alice: &TestActorClient,
+    bob: &TestActorClient,
+    governance: &crate::harness::ArkretServer,
+    subject_station: &crate::harness::ArkretServer,
+    issuer: &MockCoauthIntrospectionServer,
+    template: &InviteClaimPayload,
+    material: &Value,
+    verifier: &SigningKey,
+    database_url: &str,
+) -> Result<()> {
+    let realm = template.binding_proof.realm_id.as_str();
+    let (root_method, root_seed) = test_principal_root_signing_authority(&bob.actor)?;
+    let mut private_material = material.clone();
+    private_material["token_commitment"] = json!(format!("sha256:{}", "b".repeat(64)));
+    let expires = arkret_canonical::format_timestamp_canonical(
+        chrono::Utc::now() + chrono::Duration::seconds(5),
+    );
+    let create = alice
+        .author_event(
+            realm,
+            EventKind::InviteThirdParty.as_str(),
+            json!({"third_party_invite":private_material,"expires_at":expires}),
+        )
+        .await?;
+    submit_and_expect_commit(
+        alice,
+        create
+            .actor_id
+            .as_account_id()
+            .context("invite creator Account")?,
+        &alice.device_id,
+        &create,
+    )
+    .await?;
+    let expired_id = InviteId::from_event_id(&create.event_id);
+    prepare_join(
+        bob,
+        realm,
+        governance,
+        &arkret_identifiers::new_prefixed_uuid7("ak:request:"),
+        RealmJoinIntent::InviteAccept {
+            invite_id: expired_id.clone(),
+        },
+    )
+    .await?;
+    let mut expired = template.clone();
+    expired.invite_id = expired_id.clone();
+    expired.token_commitment = arkret_wire::Hash::new(format!("sha256:{}", "b".repeat(64)))?;
+    expired.binding_proof.expires_at = expires.clone();
+    let expired_digest = arkret_canonical::canonical_sha256(
+        &json!({"invite_id":expired_id,"realm_id":realm,"expires_at":expires,"third_party_invite":private_material}),
+    )?;
+    expired = migrated_claim(
+        &expired,
+        &expired_digest,
+        "expired-invite-claim",
+        verifier,
+        root_method,
+        &root_seed,
+    )?;
+    tokio::time::sleep(std::time::Duration::from_secs(6)).await;
+    let before = observation(database_url, realm).await?;
+    let event = bob
+        .author_event(
+            realm,
+            EventKind::InviteClaim.as_str(),
+            serde_json::to_value(expired)?,
+        )
+        .await?;
+    let (status, expired_problem) = submit_raw(bob, &event).await?;
+    ensure!(
+        status == reqwest::StatusCode::NOT_FOUND
+            && expired_problem["type"] == "https://arkret.org/problems/not_found",
+        "expired invite claim disclosed an unrelated refusal"
+    );
+    ensure!(
+        observation(database_url, realm).await? == before,
+        "expired claim changed durable Events, Commits or lifecycle rows"
+    );
+    let (mallory, mallory_account) = standard_client(
+        subject_station,
+        issuer,
+        "migration-wrong-claim-subject",
+        &arkret_identifiers::new_prefixed_uuid7("ak:device:"),
+    )
+    .await?;
+    prepare_join(
+        &mallory,
+        realm,
+        governance,
+        &arkret_identifiers::new_prefixed_uuid7("ak:request:"),
+        RealmJoinIntent::InviteAccept {
+            invite_id: template.invite_id.clone(),
+        },
+    )
+    .await?;
+    let (method, seed) = test_principal_root_signing_authority(&mallory.actor)?;
+    let mut mismatch = template.clone();
+    mismatch.subject_account_id = mallory_account;
+    let digest = arkret_canonical::canonical_sha256(
+        &json!({"invite_id":template.invite_id,"realm_id":realm,"expires_at":template.binding_proof.expires_at,"third_party_invite":material}),
+    )?;
+    mismatch = migrated_claim(
+        &mismatch,
+        &digest,
+        "different-binding-subject",
+        verifier,
+        method,
+        &seed,
+    )?;
+    let event = mallory
+        .author_event(
+            realm,
+            EventKind::InviteClaim.as_str(),
+            serde_json::to_value(mismatch)?,
+        )
+        .await?;
+    let (status, mismatch_problem) = submit_raw(&mallory, &event).await?;
+    ensure!(
+        status == reqwest::StatusCode::UNPROCESSABLE_ENTITY
+            && mismatch_problem["type"] == "https://arkret.org/problems/schema_violation",
+        "inconsistent binding and claimant did not fail the closed payload contract: {status} {mismatch_problem}"
+    );
+    let public = serde_json::to_string(&mismatch_problem)?;
+    for secret in [
+        bob.actor.as_str(),
+        mallory.actor.as_str(),
+        template.token_commitment.as_str(),
+    ] {
+        ensure!(
+            !public.contains(secret),
+            "malformed claim disclosed a private subject or commitment"
+        );
+    }
+    ensure!(
+        observation(database_url, realm).await? == before,
+        "wrong binding subject changed durable state"
+    );
+    Ok(())
+}
+
 async fn submit_raw(
     client: &TestActorClient,
     event: &arkret_wire::Event,
@@ -102,10 +288,28 @@ async fn restore_origin_source(url: &str, root: (String, String, String)) -> Res
 }
 
 pub async fn third_party_invite_claim_run() -> Result<()> {
+    run(false).await
+}
+
+pub async fn third_party_invite_api_migration() -> Result<()> {
+    super::third_party_invite_create_live::third_party_invite_create_requires_current_allowlist()
+        .await?;
+    run(true).await
+}
+
+async fn run(api_migration: bool) -> Result<()> {
     let Some(governance_db) = database(GROUP)? else {
+        ensure!(
+            !api_migration,
+            "3PID API migration requires an isolated governance PostgreSQL database"
+        );
         return Ok(());
     };
     let Some(subject_db) = database(GROUP)? else {
+        ensure!(
+            !api_migration,
+            "3PID API migration requires an isolated subject PostgreSQL database"
+        );
         return Ok(());
     };
     ensure!(
@@ -125,6 +329,10 @@ pub async fn third_party_invite_claim_run() -> Result<()> {
     )
     .await?
     else {
+        ensure!(
+            !api_migration,
+            "3PID API migration requires the prebuilt real Station"
+        );
         return skip_or_fail(GROUP, "prebuilt Coland unavailable");
     };
     let (alice, _) = standard_client(
@@ -228,6 +436,33 @@ pub async fn third_party_invite_claim_run() -> Result<()> {
         subject_proof: subject,
         extensions: Default::default(),
     };
+    if api_migration {
+        migrated_preclaim_negatives(
+            &alice,
+            &bob,
+            group.server(0),
+            group.server(1),
+            &coauth,
+            &payload,
+            &material,
+            &verifier,
+            &governance_db.connect_url,
+        )
+        .await?;
+        let wire = serde_json::to_string(&create)?;
+        for private in [
+            "@example.com",
+            "token_salt\"",
+            "delivery_target",
+            "pepper",
+            "ephemeral_private_key",
+        ] {
+            ensure!(
+                !wire.contains(private),
+                "durable 3PID Event disclosed private verifier material"
+            );
+        }
+    }
     let before = observation(&governance_db.connect_url, realm).await?;
     let mut rejection_shape = None;
     for case in ["binding_signature", "subject_signature", "pcr_device"] {
@@ -359,7 +594,7 @@ pub async fn third_party_invite_claim_run() -> Result<()> {
         .author_event(
             realm,
             EventKind::InviteClaim.as_str(),
-            serde_json::to_value(payload)?,
+            serde_json::to_value(&payload)?,
         )
         .await?;
     let before_replica = replica_observation(&subject_db.connect_url, realm).await?;
@@ -374,6 +609,34 @@ pub async fn third_party_invite_claim_run() -> Result<()> {
     }
     let claim_commit = claim_result?;
     let claimed = observation(&governance_db.connect_url, realm).await?;
+    if api_migration {
+        let late = migrated_claim(
+            &payload,
+            &invite_digest,
+            "different-second-claim",
+            &verifier,
+            arkret_wire::DidUrl::new(rotation.current_root_verification_method.clone())
+                .map_err(anyhow::Error::msg)?,
+            &next_root_seed,
+        )?;
+        let event = bob
+            .author_event(
+                realm,
+                EventKind::InviteClaim.as_str(),
+                serde_json::to_value(late)?,
+            )
+            .await?;
+        let (status, body) = submit_raw(&bob, &event).await?;
+        ensure!(
+            status == reqwest::StatusCode::NOT_FOUND
+                && body["type"] == "https://arkret.org/problems/not_found",
+            "different second claim disclosed a non-uniform refusal"
+        );
+        ensure!(
+            observation(&governance_db.connect_url, realm).await? == claimed,
+            "different second claim changed durable lifecycle state"
+        );
+    }
     ensure!(
         claimed.2 == before.2 + 1 && claimed.3 == before.3,
         "claim must establish the exact proposal without joining its subject"

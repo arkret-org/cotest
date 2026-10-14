@@ -1,5 +1,17 @@
 # 第三方邀请：allowlist、单次提交与 claim
 
+2026-10-15：原 API-only Playwright 文件已迁为 Rust，旧步骤仅保留产品目标与历史来源，**不证明真实 UI 通过**。
+
+当前具名执行入口：
+
+- `tests/third_party_invite_api.rs::third_party_invite_api_migration`（isolated_station）。
+
+operation→Rust test 与原选择数量见 `api-only-migration.json.native_live_migrations`。无筛选 joint 强制执行全部 primary／supporting 用例；release-gate 通过其 joint 阶段执行，跳过联合阶段不能发布为 release 通过。缺少环境、零测试、ignore 与失败均不能代替通过。日志位于本轮 `native-api-migrations/`，映射本身不是运行证据。
+
+mock-email 的 inbox、单次消费与重复 claim 拒绝保留在 `harness/mocks-selftest.spec.ts`；mock 通过不计作协议服务通过。
+
+## 历史场景与独立产品目标
+
 ## 执行范围
 
 `tests/invites/third-party.spec.ts` 包含六条服务契约或 mock 测试。它们通过 API

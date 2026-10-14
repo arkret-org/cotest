@@ -89,7 +89,7 @@ pub async fn install_bindings(group: &mut ArkretMlsGroup, members: &[&Member]) -
     clippy::too_many_arguments,
     reason = "Cross-station fixture binds sender, recipient and signed routing context"
 )]
-async fn submit_and_open(
+pub(crate) async fn submit_and_open(
     sender: &Member,
     receiver: &Member,
     sender_group: &mut ArkretMlsGroup,
@@ -100,11 +100,36 @@ async fn submit_and_open(
     body: &str,
 ) -> Result<arkret_wire::RealmCommit> {
     let content = arkret::ContentBlock::text(body);
+    submit_and_open_content(
+        sender,
+        receiver,
+        sender_group,
+        receiver_group,
+        realm,
+        strand,
+        state_ref,
+        content,
+        ScopeRef::Realm {
+            realm_id: realm.clone(),
+        },
+    )
+    .await
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(crate) async fn submit_and_open_content(
+    sender: &Member,
+    receiver: &Member,
+    sender_group: &mut ArkretMlsGroup,
+    receiver_group: &mut ArkretMlsGroup,
+    realm: &RealmId,
+    strand: &str,
+    state_ref: &EventId,
+    content: arkret::ContentBlock,
+    scope: ScopeRef,
+) -> Result<arkret_wire::RealmCommit> {
     let plaintext = arkret_canonical::canonical_json_bytes(&content)?;
     let before = sender_group.export_state_record()?.serialized_state;
-    let scope = ScopeRef::Realm {
-        realm_id: realm.clone(),
-    };
     let header = arkret::EventContentPreEncryptionHeader::reconstruct(
         "1.0",
         "application/vnd.arkret.message+json",
@@ -126,7 +151,7 @@ async fn submit_and_open(
     let payload: MessageCreatePayload = serde_json::from_value(serde_json::json!({
         "strand_id": strand, "track_name": "discussion", "encrypted_content": sealed.payload.to_envelope()?,
     }))?;
-    let event = sender
+    let mut event = sender
         .client
         .author_event(
             realm.as_str(),
@@ -134,6 +159,8 @@ async fn submit_and_open(
             canonical(serde_json::to_value(payload)?)?,
         )
         .await?;
+    event.scope_ref = scope.clone();
+    crate::harness::refresh_typed_event_proof_with_signing_seed(&mut event, sender.key.to_bytes())?;
     let frozen =
         garth::FrozenMessageSubmission::from_signed_request(garth::MessageSubmitRequestBody {
             submission: arkret_wire::EventAdmissionSubmission::new(event.clone()),
