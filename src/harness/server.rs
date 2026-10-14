@@ -981,6 +981,13 @@ impl ArkretServer {
         &self.service_id
     }
 
+    /// The managed database behind this native SUT, for acceptance footprints.
+    pub fn owned_database_url(&self) -> Option<&str> {
+        self._database
+            .as_ref()
+            .map(|database| database.connect_url.as_str())
+    }
+
     pub fn service_did(&self) -> &Did {
         &self.service_did
     }

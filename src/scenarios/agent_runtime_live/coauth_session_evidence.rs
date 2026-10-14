@@ -27,9 +27,15 @@ pub async fn run_agent_longevity_session_boundary() -> Result<()> {
     Ok(())
 }
 
-async fn run_agent_issuer_boundary(
-    longevity: bool,
-) -> Result<crate::conformance::SuiteExecutionResult> {
+pub(super) struct ActualAgentDeployment {
+    pub station: ArkretServer,
+    pub coauth: crate::scenarios::_helpers::coauth_bootstrap::SpawnedCoauth,
+    pub controller: crate::harness::TestActorClient,
+    pub account: arkret_wire::AccountId,
+    _email: SpawnedExternalProcess,
+}
+
+pub(super) async fn actual_agent_deployment(label: &str) -> Result<ActualAgentDeployment> {
     let mut port = reserve_port()?;
     let email_base = format!("http://127.0.0.1:{}", port.port());
     port.release();
@@ -101,7 +107,7 @@ async fn run_agent_issuer_boundary(
         coauth.base_url()
     );
     let station = ArkretServer::spawn_with_env(
-        "agent-real-coauth",
+        label,
         &[
             ("COLAND_SEED_DEMO_DATA", "0"),
             ("COLAND_TRUST_DOMAIN", JOINT_TRUST_DOMAIN),
@@ -221,6 +227,24 @@ async fn run_agent_issuer_boundary(
     );
     let account =
         arkret_wire::AccountId::new(principal.core_id.clone(), station.service_id().clone());
+    Ok(ActualAgentDeployment {
+        station,
+        coauth,
+        controller,
+        account,
+        _email,
+    })
+}
+
+async fn run_agent_issuer_boundary(
+    longevity: bool,
+) -> Result<crate::conformance::SuiteExecutionResult> {
+    use base64::Engine as _;
+    let deployment = actual_agent_deployment("agent-real-coauth").await?;
+    let station = &deployment.station;
+    let coauth = &deployment.coauth;
+    let controller = &deployment.controller;
+    let account = &deployment.account;
     let mut agent = super::AgentRuntimeSession::establish_observed(
         &station,
         super::AgentSessionIssuer::Coauth {
@@ -333,9 +357,41 @@ pub(super) async fn issue_runtime_session(
     String,
     arkret_models_collaboration::session_grants::AgentSessionGrantRequest,
 )> {
+    issue_runtime_session_with_scope(
+        station,
+        base,
+        database_url,
+        agent,
+        authorization,
+        method,
+        key,
+        operations,
+        arkret_models_collaboration::session_grants::SessionGrantAgentScopeRequest {
+            realm_ids: Vec::new(),
+            strand_ids: Vec::new(),
+            track_names: Vec::new(),
+        },
+    )
+    .await
+}
+
+pub(super) async fn issue_runtime_session_with_scope(
+    station: &crate::harness::ArkretServer,
+    base: &str,
+    database_url: &str,
+    agent: &arkret_wire::DidCoreId,
+    authorization: &arkret_wire::EventId,
+    method: &arkret_wire::DidUrl,
+    key: &ed25519_dalek::SigningKey,
+    operations: &[&str],
+    scope_request: arkret_models_collaboration::session_grants::SessionGrantAgentScopeRequest,
+) -> Result<(
+    String,
+    arkret_models_collaboration::session_grants::AgentSessionGrantRequest,
+)> {
     use arkret_models_collaboration::session_grants::{
-        SessionGrantAgentScopeRequest, SessionGrantDpopBindingProof, SessionGrantOutcome,
-        SessionGrantRequestBody, UnsignedAgentSessionGrantProof, UnsignedAgentSessionGrantRequest,
+        SessionGrantDpopBindingProof, SessionGrantOutcome, SessionGrantRequestBody,
+        UnsignedAgentSessionGrantProof, UnsignedAgentSessionGrantRequest,
     };
     use arkret_signatures::dpop::{DpopProofRequest, build_dpop_proof};
     use base64::Engine as _;
@@ -350,11 +406,7 @@ pub(super) async fn issue_runtime_session(
             .map(|operation| (*operation).to_owned())
             .collect(),
         authorization.clone(),
-        SessionGrantAgentScopeRequest {
-            realm_ids: Vec::new(),
-            strand_ids: Vec::new(),
-            track_names: Vec::new(),
-        },
+        scope_request,
         None,
         SessionGrantDpopBindingProof {
             proof_jwt: binding.proof_jwt,
@@ -493,7 +545,7 @@ pub(super) async fn issue_runtime_session(
     Ok((outcome.session_grant, original))
 }
 
-async fn grant_ledger(database_url: &str) -> Result<serde_json::Value> {
+pub(super) async fn grant_ledger(database_url: &str) -> Result<serde_json::Value> {
     let url = database_url.to_owned();
     tokio::task::spawn_blocking(move || -> Result<_> {
         let mut db = postgres::Client::connect(&url, postgres::NoTls)?;
