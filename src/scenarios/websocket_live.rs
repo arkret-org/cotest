@@ -45,6 +45,14 @@ pub fn socket_url(server: &ArkretServer) -> Result<String> {
     Ok(url.to_string())
 }
 
+struct HandshakeTask<T>(tokio::task::JoinHandle<T>);
+
+impl<T> Drop for HandshakeTask<T> {
+    fn drop(&mut self) {
+        self.0.abort();
+    }
+}
+
 pub async fn connect(
     server: &ArkretServer,
     origin: Option<&str>,
@@ -68,13 +76,18 @@ pub async fn connect(
     request
         .headers_mut()
         .insert("Sec-WebSocket-Protocol", protocol.parse()?);
-    let (socket, response) = tokio_tungstenite::connect_async_tls_with_config(
-        request,
-        None,
-        true,
-        Some(Connector::Rustls(Arc::new(tls))),
-    )
-    .await?;
+    // Keep the owned TLS handshake outside the large scenario poll stack.
+    // Dropping the caller still cancels the handshake instead of detaching it.
+    let mut handshake = HandshakeTask(tokio::spawn(async move {
+        tokio_tungstenite::connect_async_tls_with_config(
+            request,
+            None,
+            true,
+            Some(Connector::Rustls(Arc::new(tls))),
+        )
+        .await
+    }));
+    let (socket, response) = (&mut handshake.0).await??;
     ensure!(
         response.status() == 101
             && response

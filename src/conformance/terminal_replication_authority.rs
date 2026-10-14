@@ -10,11 +10,19 @@ pub const TERMINAL_REPLICATION_AUTHORITY_ENTRYPOINT: &str =
     "ak.suite.federation.terminal_replication_authority.v1";
 const FIXTURE: &str = "terminal-replication-authority-fixture.json";
 
-// Construct each large native journey outside the aggregate poll frame.
-// This preserves the default Windows test/worker stack without a stack override.
+// Construct and poll each owned journey in its own default-stack task.
+// Immediate awaiting keeps its real database leases and materials alive while
+// avoiding the cumulative stack of nested aggregate and journey poll frames.
 #[inline(never)]
-fn heap_live<F: std::future::Future>(make: impl FnOnce() -> F) -> std::pin::Pin<Box<F>> {
-    Box::pin(make())
+fn heap_live<T, F>(
+    make: impl FnOnce() -> F + Send + 'static,
+) -> impl std::future::Future<Output = Result<T>>
+where
+    T: Send + 'static,
+    F: std::future::Future<Output = Result<T>> + Send + 'static,
+{
+    let task = tokio::spawn(async move { Box::pin(make()).await });
+    async move { task.await.map_err(anyhow::Error::from)? }
 }
 pub const TERMINAL_CASES: [&str; 8] = [
     "joined_holder_terminal",
@@ -124,7 +132,7 @@ pub fn run_terminal_replication_authority_suite() -> Result<SuiteExecutionResult
     let cases = runtime.block_on(async {
         let mut results = Vec::new();
         for name in TERMINAL_CASES {
-            results.push(heap_live(|| run_terminal_replication_authority_case(name)).await?);
+            results.push(heap_live(move || run_terminal_replication_authority_case(name)).await?);
         }
         Ok::<_, anyhow::Error>(results)
     })?;

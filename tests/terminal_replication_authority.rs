@@ -1,5 +1,13 @@
 use anyhow::Result;
 
+#[tokio::test(flavor = "multi_thread")]
+#[ignore = "requires real TLS Stations and PostgreSQL"]
+async fn last_member_terminal_journey_on_default_stack() -> Result<()> {
+    cotest::conformance::run_terminal_replication_authority_case("last_member_leave_then_terminal")
+        .await?;
+    Ok(())
+}
+
 #[test]
 fn canonical_terminal_suite_executes_all_eight_production_cases() -> Result<()> {
     let execution = cotest::conformance::run_terminal_replication_authority_suite()?;

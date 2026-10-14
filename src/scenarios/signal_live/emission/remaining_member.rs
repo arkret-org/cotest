@@ -143,7 +143,11 @@ fn exact_device_query_effects(
     for row in &added {
         let evidence: arkret_models_identity::AccountDeviceSignerEvidence =
             serde_json::from_value(row["evidence_json"].clone())?;
-        evidence.validate_binding(&sender.account, &sender.device)?;
+        arkret_identity::account_device_signer_evidence::verify_historical_account_device_signer_evidence(
+            &evidence,
+            &sender.account,
+            &sender.device,
+        )?;
         ensure!(serde_json::to_value(evidence.signer_evidence_ref()?)? == row["evidence_ref"]);
         ensure!(
             evidence
@@ -566,10 +570,20 @@ pub(crate) async fn exercise(
         32,
     )?;
     bob_rail.quiet().await?;
+    // The remote recipient's final sender check performs a second registered
+    // keys/query at the origin. Verify every retained immutable evidence root
+    // cryptographically; all other accepting tables must still be identical.
+    let origin_after = acceptance_rows(urls[0]).await?;
+    let total_query_evidence_added =
+        exact_device_query_effects(&before_query[0], &origin_after, alice)?;
+    ensure!(total_query_evidence_added >= query_evidence_added);
+    let frame_gate_query_evidence_added = total_query_evidence_added - query_evidence_added;
     for (index, url) in urls.iter().enumerate() {
         let after = counts(url, realm).await?;
         ensure!(after[0..2] == settled[index][0..2] && after[2] == settled[index][2] + 1);
-        unchanged_footprint(url, &snapshots[index], boundary, "fresh", index).await?;
+        if index != 0 {
+            unchanged_footprint(url, &snapshots[index], boundary, "fresh", index).await?;
+        }
     }
     for rail in [&mut bob_rail, &mut carol_rail] {
         if let Rail::WebSocket(rail) = rail {
@@ -577,7 +591,7 @@ pub(crate) async fn exercise(
         }
     }
     eprintln!(
-        "[signal-remaining-member] boundary={boundary:?} independent_accepted_actors=3 control_epoch=3 control_decrypted=2 same_queued_digest=1 old_epoch_final_gate_denied_before_ttl=2 accepted_remove_epoch=4 remaining_mls_leaves=2 fresh_peer_relay_carol_decrypted=1 bob_no_data_frames=1 frame_gate_acceptance_rows_unchanged=2 current_device_query_evidence_added={query_evidence_added} http_and_websocket=1"
+        "[signal-remaining-member] boundary={boundary:?} independent_accepted_actors=3 control_epoch=3 control_decrypted=2 same_queued_digest=1 old_epoch_final_gate_denied_before_ttl=2 accepted_remove_epoch=4 remaining_mls_leaves=2 fresh_peer_relay_carol_decrypted=1 bob_no_data_frames=1 canonical_acceptance_rows_unchanged=2 sender_query_evidence_added={query_evidence_added} frame_gate_query_evidence_added={frame_gate_query_evidence_added} complete_immutable_evidence_verified=1 http_and_websocket=1"
     );
     Ok(())
 }
