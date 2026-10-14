@@ -99,6 +99,14 @@ async fn refusal<T: serde::Serialize>(
     Ok(())
 }
 
+async fn relay_positions(database_url: &str) -> Result<serde_json::Value> {
+    let url = database_url.to_owned();
+    tokio::task::spawn_blocking(move || -> Result<_> {
+        let mut database = postgres::Client::connect(&url, postgres::NoTls)?;
+        Ok(database.query_one("SELECT coalesce(jsonb_agg(to_jsonb(r) ORDER BY r.realm_id), '[]'::jsonb) FROM signal_relay_position r", &[])?.get(0))
+    }).await?
+}
+
 pub(super) async fn exercise(mut material: Materials<'_>) -> Result<()> {
     material
         .agent
@@ -255,8 +263,9 @@ pub(super) async fn exercise(mut material: Materials<'_>) -> Result<()> {
         "r":pending.bootstrap.pairing_request_id,"c":pending.bootstrap.pairing_code,
     }))?);
     ensure!(pending.bootstrap.pairing_expires_at > Utc::now() + chrono::Duration::seconds(90));
+    let terminal_started = Instant::now();
     repairing_evidence::lifecycle(material.controller, material.agent, "deactivate").await?;
-    let deadline = Instant::now() + Duration::from_secs(60);
+    let deadline = terminal_started + Duration::from_secs(60);
     loop {
         let result = runtime.get("/_arkret/self/device_messages").send().await?;
         if matches!(
@@ -269,6 +278,11 @@ pub(super) async fn exercise(mut material: Materials<'_>) -> Result<()> {
         tokio::time::sleep(Duration::from_millis(100)).await;
     }
     let before = acceptance_rows_with_agent_stores(material.database_url, true).await?;
+    let relay_before = relay_positions(material.database_url).await?;
+    ensure!(
+        Utc::now() < presence.expires_at && Utc::now() < direct_presence.expires_at,
+        "terminal Signal controls expired before the authorization gate was exercised"
+    );
     refusal(&runtime, "/_arkret/self/signal", &presence).await?;
     refusal(&runtime, "/_arkret/self/signal", &direct_presence).await?;
     let response = material
@@ -381,6 +395,14 @@ pub(super) async fn exercise(mut material: Materials<'_>) -> Result<()> {
     ensure!(
         acceptance_rows_with_agent_stores(material.database_url, true).await? == before,
         "terminal endpoint refusals changed full accepted state"
+    );
+    ensure!(
+        relay_positions(material.database_url).await? == relay_before,
+        "terminal Signal advanced its accepting relay position"
+    );
+    ensure!(
+        Instant::now() <= deadline,
+        "terminal endpoint matrix exceeded sixty seconds from transition submission"
     );
     println!(
         "[agent-terminal] active_signer_control=1 active_upload_control=1 actual_controller_claim_control=1 durable_runtime_identity=1 live_pairing_handle_control=1 terminal_open_handle_before_ttl=1 terminal_renew=1 terminal_pending_pair=1 terminal_session=1 terminal_upload=1 terminal_consume=1 terminal_new_granted_event=1 terminal_signer_unavailable=1 terminal_controller_claim=1 full_footprint_unchanged=1 canonical_case_completion_claim=0"

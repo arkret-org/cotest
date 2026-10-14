@@ -186,6 +186,7 @@ const RUNNERS: [(&str, Runner); 54] = [
                     "agent_requested_scope_privacy",
                     "agent_pcr_separation",
                     "agent_runtime_key_binding",
+                    "agent_controller_lifecycle",
                 ],
             ],
             pointers: &["/schema_validation_cases", "/cases"],
@@ -833,12 +834,19 @@ mod tests {
             &["/schema_validation_cases", "/cases"],
         )?)?;
         ensure!(
-            execution.cases.len() == 26 && missing.len() == 4,
+            execution.cases.len() == 27 && missing.len() == 3,
             "reviewed Agent result did not retain its exact partial coverage"
         );
         ensure!(
             !missing.iter().any(|name| name == "agent_provision"),
             "registered executor did not consume full Agent provision"
+        );
+        ensure!(
+            execution
+                .cases
+                .iter()
+                .any(|case| case.case_id == "agent_controller_lifecycle" && case.assertions == 8),
+            "registered executor did not consume the live lifecycle conjunction"
         );
         println!("[named-agent] {execution:#?}\nmissing={missing:?}");
         Ok(())

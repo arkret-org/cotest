@@ -234,6 +234,7 @@ async fn refused(
 }
 
 pub async fn run_agent_controller_lifecycle_boundary() -> Result<()> {
+    registry_bindings()?;
     let name = "agent-controller-lifecycle-production";
     let database = database(name)?.context("real PostgreSQL required")?;
     let coauth = MockCoauthIntrospectionServer::spawn_with_internal_secret(
@@ -338,6 +339,7 @@ pub async fn run_agent_controller_lifecycle_boundary() -> Result<()> {
     let problem: arkret_wire::Problem = response.json().await?;
     ensure!(problem.code() == arkret_wire::ErrorCode::SCHEMA_VIOLATION);
     ensure!(acceptance_rows_with_agent_stores(&database.connect_url, true).await? == before);
+    let terminal_started = Instant::now();
     let deactivate_request = accepted(
         station,
         &controller,
@@ -404,7 +406,7 @@ pub async fn run_agent_controller_lifecycle_boundary() -> Result<()> {
         arkret_wire::ReasonCode::AGENT_DEACTIVATED,
     )
     .await?;
-    let deadline = Instant::now() + Duration::from_secs(60);
+    let deadline = terminal_started + Duration::from_secs(60);
     loop {
         let response = agent
             .runtime
@@ -416,6 +418,10 @@ pub async fn run_agent_controller_lifecycle_boundary() -> Result<()> {
             StatusCode::UNAUTHORIZED | StatusCode::FORBIDDEN
         ) {
             let _: arkret_wire::Problem = response.json().await?;
+            ensure!(
+                Instant::now() <= deadline,
+                "terminal rejection exceeded sixty seconds from transition submission"
+            );
             break;
         }
         ensure!(
@@ -427,5 +433,49 @@ pub async fn run_agent_controller_lifecycle_boundary() -> Result<()> {
     println!(
         "[agent-lifecycle] controller_transitions_verified=1 terminal_existing_session_refused_within_60s=1 canonical_case_completion_claim=0"
     );
+    Ok(())
+}
+
+fn registry_bindings() -> Result<()> {
+    let root = crate::scenarios::_helpers::external_binary::workspace_root()
+        .context("binding source workspace")?;
+    let registry: serde_json::Value = serde_json::from_slice(&std::fs::read(
+        root.join("arkret-spec/spec/v1/artifacts/registry/contract-registry.json"),
+    )?)?;
+    let operations = registry
+        .pointer("/operation_registry/operations")
+        .and_then(serde_json::Value::as_array)
+        .context("normative operation registry")?;
+    for token in [
+        ServiceOperationId::SELF_AGENT_COMMAND_PAUSE_V1,
+        ServiceOperationId::SELF_AGENT_COMMAND_RESUME_V1,
+        ServiceOperationId::SELF_AGENT_COMMAND_DEACTIVATE_V1,
+        ServiceOperationId::SELF_AGENT_COMMAND_RENEW_PAIRING_V1,
+        ServiceOperationId::SELF_AGENT_READ_LIST_V1,
+        ServiceOperationId::SELF_AGENT_RESOURCE_GET_V1,
+        ServiceOperationId::SELF_AGENT_SIDECAR_COMMAND_ENSURE_V1,
+    ] {
+        let descriptor = ServiceOperationId::from_wire(token)
+            .context("registered SDK operation")?
+            .descriptor();
+        let matches = operations
+            .iter()
+            .filter(|operation| operation["operation_id"].as_str() == Some(token))
+            .collect::<Vec<_>>();
+        let [operation] = matches.as_slice() else {
+            bail!("lifecycle operation is not uniquely registered: {token}");
+        };
+        ensure!(
+            operation["http"].as_str()
+                == Some(format!("{} {}", descriptor.http_method, descriptor.http_path).as_str()),
+            "lifecycle HTTP binding differs from normative registry: {token}"
+        );
+        ensure!(
+            operation["request_schema_ref"].as_str() == descriptor.request_schema_ref
+                && operation["response_schema_ref"].as_str() == descriptor.response_schema_ref,
+            "lifecycle DTO binding differs from normative registry: {token}"
+        );
+    }
+    println!("[agent-lifecycle] normative_registry_exact_operation_http_dto_bindings=7");
     Ok(())
 }

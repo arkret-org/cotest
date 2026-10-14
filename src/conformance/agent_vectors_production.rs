@@ -38,6 +38,8 @@ pub fn run_agent_vectors_production_suite() -> Result<SuiteExecutionResult> {
                     execution.cases.extend(pcr.cases);
                     let binding = crate::scenarios::agent_runtime_live::run_agent_runtime_binding_admission().await?;
                     execution.cases.extend(binding.cases);
+                    let lifecycle = crate::scenarios::agent_runtime_live::run_agent_controller_lifecycle_production().await?;
+                    execution.cases.extend(lifecycle.cases);
                     Ok::<SuiteExecutionResult, anyhow::Error>(execution)
                 })?;
             execution.cases.splice(0..0, schema_cases);

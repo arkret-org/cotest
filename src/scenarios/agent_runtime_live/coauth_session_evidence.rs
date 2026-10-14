@@ -516,6 +516,7 @@ async fn lifecycle_refusals(
         &method,
         principal.device_signing_key.to_bytes(),
     )?;
+    let pause_started = std::time::Instant::now();
     expect_json(
         controller
             .post(&format!(
@@ -541,6 +542,12 @@ async fn lifecycle_refusals(
     )
     .await
     .context("paused Agent fresh issuance")?;
+    wait_runtime_rejected(
+        &agent.runtime,
+        "paused actual issuer credential",
+        pause_started,
+    )
+    .await?;
     let resumed = super::sign(
         arkret_event_draft::build_agent_resume_intent(
             ActorId::account(agent.agent_account.clone()),
@@ -567,6 +574,32 @@ async fn lifecycle_refusals(
         reqwest::StatusCode::OK,
     )
     .await?;
+    let (resumed_grant, _) = issue_runtime_session(
+        station,
+        coauth.base_url(),
+        &coauth.pg.connect_url,
+        &agent.agent_account.principal_id,
+        &agent.key_authorization,
+        &agent.verification_method,
+        &agent.runtime_key,
+        &super::runtime_operations(),
+    )
+    .await
+    .context("resumed Agent actual fresh issuer credential")?;
+    let resumed_runtime = station.client_with_agent_runtime_grant(
+        agent.agent_did.as_str(),
+        "actual-resumed-lifecycle",
+        resumed_grant,
+        agent.runtime_key.clone(),
+    )?;
+    ensure!(
+        resumed_runtime
+            .get("/_arkret/self/device_messages")
+            .send()
+            .await?
+            .status()
+            .is_success()
+    );
     set_accountability(
         controller,
         agent,
@@ -607,6 +640,7 @@ async fn lifecycle_refusals(
         &method,
         principal.device_signing_key.to_bytes(),
     )?;
+    let deactivate_started = std::time::Instant::now();
     expect_json(
         controller
             .post(&format!(
@@ -632,7 +666,41 @@ async fn lifecycle_refusals(
     )
     .await
     .context("deactivated Agent fresh issuance")?;
+    wait_runtime_rejected(
+        &resumed_runtime,
+        "deactivated actual resumed issuer credential",
+        deactivate_started,
+    )
+    .await?;
+    println!(
+        "[agent-lifecycle-issuer] actual_paused_fresh_issue_refused=1 actual_issued_session_refused_within_60s=1 actual_resume_fresh_grant_consumer=1 actual_terminal_fresh_issue_refused=1 actual_resumed_grant_terminal_refused_within_60s=1"
+    );
     Ok(())
+}
+
+async fn wait_runtime_rejected(
+    runtime: &crate::harness::TestActorClient,
+    label: &str,
+    start: std::time::Instant,
+) -> Result<()> {
+    loop {
+        let response = runtime.get("/_arkret/self/device_messages").send().await?;
+        if matches!(
+            response.status(),
+            reqwest::StatusCode::UNAUTHORIZED | reqwest::StatusCode::FORBIDDEN
+        ) {
+            ensure!(
+                start.elapsed() <= Duration::from_secs(60),
+                "{label} exceeded the independent freshness window"
+            );
+            return Ok(());
+        }
+        ensure!(
+            response.status().is_success() && start.elapsed() < Duration::from_secs(60),
+            "{label} did not fail closed"
+        );
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    }
 }
 
 fn random_session_challenge() -> Result<String> {
