@@ -549,7 +549,7 @@
     {
       "task": "2026-09-30-0805-blob-upload-encryption-classification.md",
       "criteria_count": 5,
-      "criteria_sha256": "b3c465a2babf16398f451ea7b3f83afee139e5a9b5923741e1818ba4e47cf889",
+      "criteria_sha256": "54d3159125850d4976085fcefe384e4feaa44ffe9ee5b9fd86e45289812bcda9",
       "spec_refs": [
         "arkret-spec/spec/v1/zh/crypto-media/media-and-blob.md"
       ],
