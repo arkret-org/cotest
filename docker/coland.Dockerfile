@@ -1,6 +1,6 @@
 FROM rust:bookworm AS build
 
-WORKDIR /workspace
+WORKDIR /workspace/arkret-org
 RUN apt-get update && apt-get install -y --no-install-recommends jq \
     && rm -rf /var/lib/apt/lists/*
 ENV RUSTFLAGS="-C link-arg=-lssl -C link-arg=-lcrypto"
@@ -13,11 +13,13 @@ COPY floria ./floria
 COPY coauth ./coauth
 COPY cotest ./cotest
 COPY coland ./coland
+COPY bridges ./bridges
+COPY --from=savfox . /workspace/savfox-ai/savfox
 
-WORKDIR /workspace/coland
+WORKDIR /workspace/arkret-org/coland
 RUN --mount=type=cache,target=/usr/local/cargo/registry \
     --mount=type=cache,target=/usr/local/cargo/git \
-    --mount=type=cache,target=/workspace/coland/target \
+    --mount=type=cache,target=/workspace/arkret-org/coland/target \
     cargo build --release --locked --features conformance-harness \
     && target_dir="$(cargo metadata --locked --format-version 1 --no-deps | jq -er .target_directory)" \
     && cp "$target_dir/release/coland" /tmp/coland
