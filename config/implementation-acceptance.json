@@ -504,6 +504,24 @@
           "symbol": "changed_complete_pair_cannot_reuse_its_business_event_fence",
           "kind": "contract",
           "covers": "PG完整unit换bytes复用business ID为duplicate_conflict"
+        },
+        {
+          "path": "cotest/tests/strand_watch_live.rs",
+          "symbol": "real_registered_watch_scan_boundary_and_lost_ack_survive_cold_restart",
+          "kind": "live",
+          "covers": "两独立Station阻断整组outbox、配对scan页边界、丢ACK及双站重启原结果"
+        },
+        {
+          "path": "coland/crates/storage-postgres/tests/registered_service_pair.rs",
+          "symbol": "registered_service_pair_has_real_peer_producer_facts",
+          "kind": "contract",
+          "covers": "真实签名peer/self Service原签单元、独立fact与错误exact Service ref零提交"
+        },
+        {
+          "path": "coland/crates/storage-postgres/tests/registered_watch_audit.rs",
+          "symbol": "independent_handoff_preserves_unit_fences_and_frozen_reads_and_rejects_incomplete_import",
+          "kind": "contract",
+          "covers": "独立PG私密导入、激活完整性、原pair/frozen read与旧generation拒绝"
         }
       ],
       "engineering_checks": [],
