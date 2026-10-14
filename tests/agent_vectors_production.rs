@@ -12,8 +12,17 @@ fn agent_genesis_cases_cross_real_http_admission_and_preserve_rejected_state() -
         .clone();
     cases.extend_from_slice(fixture["cases"].as_array().unwrap());
     let missing = execution.missing_against_cases(&cases)?;
-    assert_eq!(execution.cases.len(), 27);
-    assert_eq!(missing.len(), 3);
+    assert_eq!(execution.cases.len(), 28);
+    assert_eq!(
+        missing,
+        ["agent_act_on_behalf", "agent_human_approval_required"]
+    );
+    assert!(
+        execution
+            .cases
+            .iter()
+            .any(|case| case.case_id == "agent_longevity_no_expiry" && case.assertions == 8)
+    );
     assert!(
         execution
             .cases

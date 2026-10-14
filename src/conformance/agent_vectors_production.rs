@@ -40,6 +40,8 @@ pub fn run_agent_vectors_production_suite() -> Result<SuiteExecutionResult> {
                     execution.cases.extend(binding.cases);
                     let lifecycle = crate::scenarios::agent_runtime_live::run_agent_controller_lifecycle_production().await?;
                     execution.cases.extend(lifecycle.cases);
+                    let longevity = crate::scenarios::agent_runtime_live::run_agent_longevity_production().await?;
+                    execution.cases.extend(longevity.cases);
                     Ok::<SuiteExecutionResult, anyhow::Error>(execution)
                 })?;
             execution.cases.splice(0..0, schema_cases);

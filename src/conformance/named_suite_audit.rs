@@ -187,6 +187,7 @@ const RUNNERS: [(&str, Runner); 54] = [
                     "agent_pcr_separation",
                     "agent_runtime_key_binding",
                     "agent_controller_lifecycle",
+                    "agent_longevity_no_expiry",
                 ],
             ],
             pointers: &["/schema_validation_cases", "/cases"],
@@ -834,7 +835,8 @@ mod tests {
             &["/schema_validation_cases", "/cases"],
         )?)?;
         ensure!(
-            execution.cases.len() == 27 && missing.len() == 3,
+            execution.cases.len() == 28
+                && missing == ["agent_act_on_behalf", "agent_human_approval_required"],
             "reviewed Agent result did not retain its exact partial coverage"
         );
         ensure!(
