@@ -150,8 +150,15 @@ pub(super) async fn exercise(mut material: Materials<'_>) -> Result<()> {
     ));
     let direct =
         direct_evidence::found(material.controller, material.agent, material.station).await?;
+    let mut joined_direct =
+        Box::pin(direct_mls_evidence::join(&material, &runtime, direct)).await?;
+    let direct_presence = Box::pin(presence_evidence::positive_direct(
+        &material,
+        &runtime,
+        &mut joined_direct,
+    ))
+    .await?;
     let presence = presence_evidence::unmapped_ordinary(&mut material, &runtime).await?;
-    ensure!(!direct.realm_id.as_str().is_empty());
     let first = material.group.identity().key_package_record()?;
     let second = material.group.identity().key_package_record()?;
     let private = tempfile::NamedTempFile::new()?;
@@ -263,6 +270,7 @@ pub(super) async fn exercise(mut material: Materials<'_>) -> Result<()> {
     }
     let before = acceptance_rows_with_agent_stores(material.database_url, true).await?;
     refusal(&runtime, "/_arkret/self/signal", &presence).await?;
+    refusal(&runtime, "/_arkret/self/signal", &direct_presence).await?;
     let response = material
         .station
         .http()

@@ -58,6 +58,7 @@ use crate::scenarios::identity_test_support::HARNESS_INTERNAL_AUTHORITY_SECRET;
 mod binding_evidence;
 mod coauth_session_evidence;
 mod direct_evidence;
+mod direct_mls_evidence;
 mod grant_ceiling_evidence;
 mod lifecycle_evidence;
 mod pairing_expiry_evidence;
