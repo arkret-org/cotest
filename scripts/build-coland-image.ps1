@@ -19,6 +19,7 @@ if (-not $WorkspaceRoot) {
 if (-not $DockerfilePath) {
     $DockerfilePath = Join-Path $repoRoot "docker\coland.Dockerfile"
 }
+$savfoxRoot = Join-Path $WorkspaceRoot "../savfox-ai/savfox"
 
 $requiredPaths = @(
     (Join-Path $WorkspaceRoot "coland"),
@@ -30,7 +31,8 @@ $requiredPaths = @(
     (Join-Path $WorkspaceRoot "floria"),
     (Join-Path $WorkspaceRoot "coauth"),
     (Join-Path $WorkspaceRoot "cotest"),
-    $DockerfilePath
+    $DockerfilePath,
+    $savfoxRoot
 )
 
 foreach ($path in $requiredPaths) {
@@ -39,7 +41,9 @@ foreach ($path in $requiredPaths) {
     }
 }
 
-$buildArgs = @("build", "--file", $DockerfilePath, "--tag", $ImageTag)
+$savfoxRoot = (Resolve-Path -LiteralPath $savfoxRoot).Path
+$buildArgs = @("build", "--file", $DockerfilePath, "--tag", $ImageTag,
+    "--build-context", "savfox=$savfoxRoot")
 foreach ($cache in $CacheFrom) {
     if ($cache) {
         $buildArgs += @("--cache-from", $cache)

@@ -828,17 +828,21 @@ function Invoke-ColandImageBuild {
     $buildRepoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
     $buildWorkspaceRoot = (Resolve-Path (Join-Path $buildRepoRoot "..")).Path
     $buildDockerfilePath = Join-Path $buildRepoRoot "docker\coland.Dockerfile"
+    $savfoxRoot = Join-Path $buildWorkspaceRoot "../savfox-ai/savfox"
     foreach ($path in @(
             (Join-Path $buildWorkspaceRoot "coland"),
             (Join-Path $buildWorkspaceRoot "arkret-rust-sdk"),
-            $buildDockerfilePath
+            $buildDockerfilePath,
+            $savfoxRoot
         )) {
         if (-not (Test-Path $path)) {
             throw "Required path not found: $path"
         }
     }
 
-    $buildArgs = @("build", "--file", $buildDockerfilePath, "--tag", $ImageTag)
+    $savfoxRoot = (Resolve-Path -LiteralPath $savfoxRoot).Path
+    $buildArgs = @("build", "--file", $buildDockerfilePath, "--tag", $ImageTag,
+        "--build-context", "savfox=$savfoxRoot")
     foreach ($cache in $CacheFrom) {
         if ($cache) {
             $buildArgs += @("--cache-from", $cache)
