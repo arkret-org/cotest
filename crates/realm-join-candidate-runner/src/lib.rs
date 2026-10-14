@@ -613,6 +613,12 @@ fn event(kind: EventKind, seconds: i64) -> Result<Event> {
 }
 
 fn seal_commit(mut commit: RealmCommit, did: &str, key: &SigningKey) -> Result<RealmCommit> {
+    commit.commit_id = RealmCommitId::from_digest(arkret_canonical::sha256_bytes(
+        canonical::canonical_json_bytes(&canonical::unsigned_value(
+            &commit,
+            &["commit_id", "signature"],
+        )?)?,
+    ));
     let unsigned = canonical::unsigned_value(&commit, &["signature"])?;
     commit.signature = sign_detached_object(
         &unsigned,
@@ -628,7 +634,7 @@ fn seal_commit(mut commit: RealmCommit, did: &str, key: &SigningKey) -> Result<R
 fn commit(
     seed: u8,
     stream_position: u64,
-    previous: Option<u8>,
+    previous: Option<RealmCommitId>,
     event_ref: &EventId,
     generation: u64,
     authority_ref: RealmCommitAuthorityRef,
@@ -641,7 +647,7 @@ fn commit(
             realm_id: realm_id(),
             stream_ref: realm_stream(),
             stream_position,
-            previous_commit_ref: previous.map(|byte| RealmCommitId::from_digest([byte; 32])),
+            previous_commit_ref: previous,
             event_ref: event_ref.clone(),
             governance_generation: generation,
             authority_ref,
@@ -740,11 +746,20 @@ fn signed_chain() -> Result<SignedChain> {
         STATION_A,
         &key_a,
     )?;
-    let change_event = event(EventKind::MessageCreate, 1)?;
+    let mut change_event = event(EventKind::RealmGovernanceStationChange, 1)?;
+    let change_payload =
+        arkret_models_collaboration::events_payloads::RealmGovernanceStationChangePayload {
+            expected_governance_generation: 0,
+            expected_realm_stream_commit_id: genesis_commit.commit_id.clone(),
+            new_governance_station_id: core_id(STATION_B)?,
+        };
+    change_event.payload = serde_json::from_value(serde_json::to_value(change_payload)?)?;
+    change_event
+        .refresh_content_bound_identity_with_digest_suite(arkret_canonical::DigestSuite::Sha256)?;
     let change_commit = commit(
         0x02,
         1,
-        Some(0x01),
+        Some(genesis_commit.commit_id.clone()),
         &change_event.event_id,
         0,
         RealmCommitAuthorityRef::GenesisOrChangeEvent(genesis_event.event_id.clone()),
