@@ -22,3 +22,8 @@
 **/node_modules
 **/artifacts/runs
 **/artifacts/latest
+cotest/artifacts
+cotest/test-results
+cotest/playwright-report
+**/.codex*
+**/.playwright-mcp
