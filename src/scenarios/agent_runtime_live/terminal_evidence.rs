@@ -99,7 +99,7 @@ async fn refusal<T: serde::Serialize>(
     Ok(())
 }
 
-pub(super) async fn exercise(material: Materials<'_>) -> Result<()> {
+pub(super) async fn exercise(mut material: Materials<'_>) -> Result<()> {
     material
         .agent
         .transition(
@@ -148,6 +148,10 @@ pub(super) async fn exercise(material: Materials<'_>) -> Result<()> {
         keys.results.as_slice(),
         [arkret::SignerKeyQueryOutcome::CurrentResolved { .. }]
     ));
+    let direct =
+        direct_evidence::found(material.controller, material.agent, material.station).await?;
+    let presence = presence_evidence::unmapped_ordinary(&mut material, &runtime).await?;
+    ensure!(!direct.realm_id.as_str().is_empty());
     let first = material.group.identity().key_package_record()?;
     let second = material.group.identity().key_package_record()?;
     let private = tempfile::NamedTempFile::new()?;
@@ -258,6 +262,7 @@ pub(super) async fn exercise(material: Materials<'_>) -> Result<()> {
         tokio::time::sleep(Duration::from_millis(100)).await;
     }
     let before = acceptance_rows_with_agent_stores(material.database_url, true).await?;
+    refusal(&runtime, "/_arkret/self/signal", &presence).await?;
     let response = material
         .station
         .http()

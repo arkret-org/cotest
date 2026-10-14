@@ -57,10 +57,12 @@ use crate::scenarios::identity_test_support::HARNESS_INTERNAL_AUTHORITY_SECRET;
 
 mod binding_evidence;
 mod coauth_session_evidence;
+mod direct_evidence;
 mod grant_ceiling_evidence;
 mod lifecycle_evidence;
 mod pairing_expiry_evidence;
 mod pcr_evidence;
+mod presence_evidence;
 mod privacy_evidence;
 mod provision_conjunction;
 mod provision_evidence;
@@ -1419,6 +1421,13 @@ async fn run_agent_keypackage_journey(terminal: bool) -> Result<()> {
         "ak.event.read",
         "ak.message.create",
     ];
+    let mut operations = operations.to_vec();
+    if terminal {
+        operations.extend([
+            ServiceOperationId::SELF_SIGNAL_COMMAND_SEND_V1,
+            "ak.presence.broadcast",
+        ]);
+    }
     let completed_operations =
         arkret_schema::agent_runtime_scope::complete_agent_runtime_scope(operations)?;
     let operations = completed_operations
