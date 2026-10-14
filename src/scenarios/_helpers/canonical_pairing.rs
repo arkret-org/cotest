@@ -33,10 +33,7 @@ fn handoff_client(
         .http_client(fixture.http.clone())
         .auth(Auth::Dpop(DpopAuth::with_dpop_token(
             handoff.account_handoff_grant.clone(),
-            move |mut request| {
-                // Account-handoff proofs bind the HTTP request; ath belongs to the
-                // later Standard credential, not this handoff token.
-                request.access_token = None;
+            move |request| {
                 garth::session::dpop::build_http_dpop_proof(request, &key)
                     .map_err(|error| arkret_http_client::Error::Protocol(error.to_string()))
             },
