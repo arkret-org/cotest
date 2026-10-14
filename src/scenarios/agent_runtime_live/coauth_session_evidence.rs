@@ -775,6 +775,16 @@ pub(super) async fn set_accountability_for_agent(
     controller_account: &arkret_wire::AccountId,
     status: arkret_models_collaboration::governance::accountability::AccountabilityGrantStatus,
 ) -> Result<()> {
+    set_accountability_with_source(controller, agent_id, controller_account, status).await?;
+    Ok(())
+}
+
+pub(super) async fn set_accountability_with_source(
+    controller: &crate::harness::TestActorClient,
+    agent_id: &arkret_wire::DidCoreId,
+    controller_account: &arkret_wire::AccountId,
+    status: arkret_models_collaboration::governance::accountability::AccountabilityGrantStatus,
+) -> Result<arkret_wire::CommittedEventView> {
     use arkret_models_collaboration::governance::accountability::{
         AccountabilityGrantPayload, AccountabilityScope, AccountabilityScopeKind,
     };
@@ -834,7 +844,7 @@ pub(super) async fn set_accountability_for_agent(
                 .post("/_arkret/self/events")
                 .header("Content-Type", "application/json")
                 .body(arkret_canonical::canonical_json_bytes(
-                    &arkret_wire::EventAdmissionSubmission::new(event),
+                    &arkret_wire::EventAdmissionSubmission::new(event.clone()),
                 )?),
             reqwest::StatusCode::OK,
         )
@@ -847,7 +857,13 @@ pub(super) async fn set_accountability_for_agent(
         ),
         "controller accountability Event was refused"
     );
-    Ok(())
+    let source = controller
+        .sdk()
+        .committed_event_get(&event.event_id)
+        .await?;
+    ensure!(source.reducer_input() == Some(&event));
+    source.commit().validate_content_address()?;
+    Ok(source)
 }
 
 #[allow(clippy::too_many_arguments)]

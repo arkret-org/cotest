@@ -62,6 +62,7 @@ mod direct_mls_evidence;
 mod grant_ceiling_evidence;
 mod lifecycle_conjunction;
 mod lifecycle_evidence;
+mod longevity_conjunction;
 mod longevity_evidence;
 mod pairing_expiry_evidence;
 mod pcr_evidence;
@@ -79,6 +80,7 @@ pub use coauth_session_evidence::{
 pub use grant_ceiling_evidence::run_agent_provision_grant_ceiling_boundary;
 pub use lifecycle_conjunction::run_agent_controller_lifecycle_production;
 pub use lifecycle_evidence::run_agent_controller_lifecycle_boundary;
+pub use longevity_conjunction::run_agent_longevity_production;
 pub use longevity_evidence::run_agent_same_key_renewal_boundary;
 pub use pairing_expiry_evidence::run_agent_pairing_expiry_production;
 pub use pcr_evidence::run_agent_pcr_profile_admission;

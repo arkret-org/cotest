@@ -457,8 +457,176 @@ pub async fn run_agent_same_key_renewal_boundary() -> Result<()> {
             && state.active_authorizations[0].authorized_event_ref == winner.event_id
             && state.active_authorizations[0].expires_at.is_none()
     );
+    use arkret_models_collaboration::governance::accountability::{
+        AccountabilityGrantPayload, AccountabilityGrantStatus,
+    };
+    let accountability = coauth_session_evidence::set_accountability_with_source(
+        &controller,
+        &agent.agent_account.principal_id,
+        &agent.controller_account,
+        AccountabilityGrantStatus::Active,
+    )
+    .await?;
+    let grant: AccountabilityGrantPayload = serde_json::from_value(serde_json::to_value(
+        &accountability
+            .reducer_input()
+            .context("accepted accountability source")?
+            .payload,
+    )?)?;
+    ensure!(
+        grant.expires_at.is_none()
+            && grant.subject_id == agent.agent_account.principal_id
+            && grant.issuer_id == agent.controller_account.principal_id
+    );
+    let profile = arkret_models_collaboration::events_payloads::ActorProfileCreatePayload {
+        object: arkret_models_identity::actor_profile::ActorProfileDefinition {
+            principal_id: agent.agent_account.principal_id.clone(),
+            actor_kind: arkret_wire::ActorKind::Agent,
+            display_name: "Nonexpiring accountability Agent".to_owned(),
+            handle: None,
+            agent_slug: None,
+            avatar_blob_ref: None,
+            accountable_principal_ids: vec![agent.controller_account.principal_id.clone()],
+            profile_fields: std::collections::BTreeMap::new(),
+        },
+    };
+    let author_profile = || -> Result<Event> {
+        let principal = controller
+            .principal
+            .as_ref()
+            .context("controller profile signer")?;
+        let intent =
+            arkret_event_draft::TypedEventDraft::<arkret_wire::event_spec::ProfileCreate>::new(
+                ScopeRef::Realm {
+                    realm_id: agent.agent_pcr.clone(),
+                },
+                ActorId::account(agent.agent_account.clone()),
+                profile.clone(),
+            )?
+            .with_executed_by(ActorId::account(agent.controller_account.clone()))
+            .with_authorization_ref(
+                arkret_wire::AuthorizationRef::new(agent.delegation.as_str())
+                    .map_err(anyhow::Error::msg)?,
+            )
+            .into_intent(Utc::now())?;
+        sign(
+            intent.author_with_digest_suite(arkret_canonical::DigestSuite::Sha256)?,
+            &DidUrl::new(format!("{}#{}", principal.did, principal.device_id))
+                .map_err(anyhow::Error::msg)?,
+            principal.device_signing_key.to_bytes(),
+        )
+    };
+    let profile_event = author_profile()?;
+    let accepted: AuthoritySubmitOutcome = serde_json::from_value(
+        expect_json(
+            controller
+                .post("/_arkret/self/events")
+                .header("Content-Type", "application/json")
+                .body(arkret_canonical::canonical_json_bytes(
+                    &arkret_wire::EventAdmissionSubmission::new(profile_event.clone()),
+                )?),
+            StatusCode::OK,
+        )
+        .await?,
+    )?;
+    ensure!(matches!(
+        accepted,
+        AuthoritySubmitOutcome::Accepted {
+            status: AuthorityCommitStatus::Committed,
+            ..
+        }
+    ));
+    let source = controller
+        .sdk()
+        .committed_event_get(&profile_event.event_id)
+        .await?;
+    ensure!(source.reducer_input() == Some(&profile_event));
+    source.commit().validate_content_address()?;
+    crate::scenarios::human_device_producer_live::ensure_commit_signed_by(
+        source.commit(),
+        station,
+    )?;
+    coauth_session_evidence::set_accountability_with_source(
+        &controller,
+        &agent.agent_account.principal_id,
+        &agent.controller_account,
+        AccountabilityGrantStatus::Revoked,
+    )
+    .await?;
+    refuse_without_effects(&controller, author_profile()?, &database.connect_url).await?;
+    coauth_session_evidence::set_accountability_with_source(
+        &controller,
+        &agent.agent_account.principal_id,
+        &agent.controller_account,
+        AccountabilityGrantStatus::Active,
+    )
+    .await?;
+    let principal = controller
+        .principal
+        .as_ref()
+        .context("key revoke controller")?;
+    let revoke = sign(
+        arkret_event_draft::build_agent_key_revoke_intent(
+            &arkret_models_collaboration::events_payloads::agent::AgentKeyRevokePayload {
+                agent_id: agent.agent_account.principal_id.clone(),
+                key_id: payload.key_id.clone(),
+                revoked_by: agent.controller_account.principal_id.clone(),
+                revoked_at: arkret_canonical::normalize_timestamp_canonical(Utc::now()),
+                reason: None,
+            },
+            ScopeRef::Realm {
+                realm_id: agent.agent_pcr.clone(),
+            },
+            ActorId::account(agent.agent_account.clone()),
+            ActorId::account(agent.controller_account.clone()),
+            agent.delegation.clone(),
+            Utc::now(),
+        )?
+        .author_with_digest_suite(arkret_canonical::DigestSuite::Sha256)?,
+        &DidUrl::new(format!("{}#{}", principal.did, principal.device_id))
+            .map_err(anyhow::Error::msg)?,
+        principal.device_signing_key.to_bytes(),
+    )?;
+    let revoke_started = Instant::now();
+    let result: AuthoritySubmitOutcome = serde_json::from_value(
+        expect_json(
+            controller
+                .post("/_arkret/self/events")
+                .header("Content-Type", "application/json")
+                .body(arkret_canonical::canonical_json_bytes(
+                    &arkret_wire::EventAdmissionSubmission::new(revoke),
+                )?),
+            StatusCode::OK,
+        )
+        .await?,
+    )?;
+    ensure!(matches!(
+        result,
+        AuthoritySubmitOutcome::Accepted {
+            status: AuthorityCommitStatus::Committed,
+            ..
+        }
+    ));
+    let state = controller
+        .sdk()
+        .agent_get(agent.agent_account.principal_id.as_str())
+        .await?
+        .key_state
+        .context("revoked current key view")?;
+    ensure!(state.active_authorizations.is_empty() && state.current_key_authorization.is_none());
+    state.validate_signer_evidence_delivery()?;
+    ensure!(revoke_started.elapsed() <= Duration::from_secs(60));
+    let mut resurrect = payload.clone();
+    resurrect.issued_at = arkret_canonical::normalize_timestamp_canonical(Utc::now());
+    resurrect.supersedes.clear();
+    refuse_without_effects(
+        &controller,
+        renewal(&controller, &agent, &resurrect)?,
+        &database.connect_url,
+    )
+    .await?;
     println!(
-        "[agent-longevity] real_nonexpiring_authorization=1 original_exact_active_dot=1 same_key_material_preserved=1 same_key_controller_event_without_pairing=1 exactly_one_event_commit=1 observed_dot_replaced=1 stale_same_basis_refused=1 empty_basis_unpaired_key_enlarged_scope_refused=1 current_runtime_binding_and_signer_evidence_advanced=1 no_permission_heads_or_earliest_expiry_merge=1 full_refusal_footprint_unchanged=1 canonical_case_completion_claim=0"
+        "[agent-longevity] real_nonexpiring_authorization=1 original_exact_active_dot=1 same_key_material_preserved=1 same_key_controller_event_without_pairing=1 exactly_one_event_commit=1 observed_dot_replaced=1 stale_same_basis_refused=1 empty_basis_unpaired_key_enlarged_scope_refused=1 current_runtime_binding_and_signer_evidence_advanced=1 no_permission_heads_or_earliest_expiry_merge=1 full_refusal_footprint_unchanged=1 accepted_indefinite_accountability=1 actual_profile_accountable_principals_verified=1 revoked_accountability_profile_zero_effect_refused=1 revoked_nonexpiring_key_current_source_within_60s=1 revoked_key_not_resurrected=1 canonical_case_completion_claim=0"
     );
     Ok(())
 }
