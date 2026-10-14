@@ -572,14 +572,18 @@ pub async fn run_strand_watch_current_live() -> Result<()> {
 
 /// Registered first admission through authenticated HTTP, with real device proofs.
 pub async fn run_registered_watch_audit_live() -> Result<()> {
-    run_registered_watch_audit(false).await
+    run_registered_watch_audit(false, false).await
 }
 
 pub async fn run_registered_watch_audit_peer_live() -> Result<()> {
-    run_registered_watch_audit(true).await
+    run_registered_watch_audit(true, false).await
 }
 
-async fn run_registered_watch_audit(cross_station: bool) -> Result<()> {
+pub async fn run_registered_watch_audit_scan_recovery_live() -> Result<()> {
+    run_registered_watch_audit(true, true).await
+}
+
+async fn run_registered_watch_audit(cross_station: bool, faults: bool) -> Result<()> {
     use arkret_models_collaboration::authority_commit::{
         AuditPairedEventUnitKind, AuditPairedEventUnitSubmission, SelfAuthoritySubmitOutcome,
         SelfAuthoritySubmitRequest,
@@ -588,7 +592,9 @@ async fn run_registered_watch_audit(cross_station: bool) -> Result<()> {
         WatchAuditReadOutcome, WatchAuditReadRequest,
     };
     use arkret_wire::{EventAdmissionSubmission, SemanticRef};
-    let scenario = if cross_station {
+    let scenario = if faults {
+        "registered-watch-audit-scan-recovery-live"
+    } else if cross_station {
         "registered-watch-audit-peer-live"
     } else {
         "registered-watch-audit-live"
@@ -616,10 +622,20 @@ async fn run_registered_watch_audit(cross_station: bool) -> Result<()> {
         );
         environments.push(station_env(&peer_db.connect_url, &coauth));
     }
-    let Some(group) =
+    let Some(mut group) =
         TestServerGroup::try_multi_external_with_node_envs(scenario, &environments).await?
     else {
         return skip_or_fail(scenario, "prebuilt Coland unavailable");
+    };
+    let relay_origin = if faults {
+        Some(group.server_mut(0).install_scan_gap_relay().await?)
+    } else {
+        None
+    };
+    let relay_governor = if faults {
+        Some(group.server_mut(1).install_scan_gap_relay().await?)
+    } else {
+        None
     };
     let station = group.server(0);
     let governor = group.server(usize::from(cross_station));
@@ -758,6 +774,42 @@ async fn run_registered_watch_audit(cross_station: bool) -> Result<()> {
     };
     unit.validate().map_err(anyhow::Error::msg)?;
     let body = SelfAuthoritySubmitRequest::AuditPairedEvent(unit.clone());
+    if faults {
+        relay_origin
+            .as_ref()
+            .unwrap()
+            .control()
+            .block_audit_replication();
+        relay_governor
+            .as_ref()
+            .unwrap()
+            .control()
+            .split_audit_scan_and_drop_ack();
+        // The governor accepts the unit, then its response is lost. A cold
+        // origin must keep the original request, recover the original outcome
+        // and fill both Full rows without an outbox delivery.
+        let lost = alice
+            .post("/_arkret/self/events")
+            .header("content-type", "application/json")
+            .body(arkret_canonical::canonical_json_bytes(&body)?)
+            .send()
+            .await?;
+        ensure!(
+            !lost.status().is_success(),
+            "injected lost ACK did not fail transport"
+        );
+        ensure!(
+            relay_governor
+                .as_ref()
+                .unwrap()
+                .control()
+                .audit_fault_counts()
+                .2
+                == 1,
+            "governor did not accept before injected ACK loss"
+        );
+        group.server_mut(0).restart_external_process().await?;
+    }
     let accepted: SelfAuthoritySubmitOutcome = serde_json::from_value(
         expect_json(
             alice.post("/_arkret/self/events").json(&body),
@@ -793,6 +845,39 @@ async fn run_registered_watch_audit(cross_station: bool) -> Result<()> {
                 std::thread::sleep(std::time::Duration::from_millis(100));
             }
         }).await??;
+    }
+    if faults {
+        let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(20);
+        while relay_origin
+            .as_ref()
+            .unwrap()
+            .control()
+            .audit_fault_counts()
+            .0
+            == 0
+            && tokio::time::Instant::now() < deadline
+        {
+            tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+        }
+        let origin = relay_origin
+            .as_ref()
+            .unwrap()
+            .control()
+            .audit_fault_counts();
+        let governor = relay_governor.as_ref().unwrap().control();
+        ensure!(origin.0 > 0, "whole pair outbox was not blocked");
+        ensure!(
+            governor.audit_fault_counts().1 > 0
+                && governor
+                    .scan_requests()
+                    .iter()
+                    .any(|request| request.limit == 2),
+            "pair was not recovered across the real peer scan page boundary"
+        );
+        // Reopen both processes before exact replay; SQL remains the only
+        // durable source of the pair acceptance and origin acknowledgement.
+        group.server_mut(0).restart_external_process().await?;
+        group.server_mut(1).restart_external_process().await?;
     }
     let replay: SelfAuthoritySubmitOutcome = serde_json::from_value(
         expect_json(

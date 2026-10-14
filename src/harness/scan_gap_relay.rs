@@ -18,9 +18,32 @@ struct GapState {
     observations: Vec<StreamScanOutcome>,
     scan_requests: Vec<StreamScanRequest>,
     event_submissions: Vec<arkret_wire::EventId>,
+    block_audit_replication: bool,
+    blocked_audit_replications: usize,
+    split_audit_scan: bool,
+    split_audit_pages: usize,
+    drop_audit_ack: bool,
+    dropped_audit_acks: usize,
 }
 
 impl ScanGapControl {
+    pub fn block_audit_replication(&self) {
+        self.0.lock().unwrap().block_audit_replication = true;
+    }
+    pub fn split_audit_scan_and_drop_ack(&self) {
+        let mut state = self.0.lock().unwrap();
+        state.split_audit_scan = true;
+        state.drop_audit_ack = true;
+    }
+    pub fn audit_fault_counts(&self) -> (usize, usize, usize) {
+        let state = self.0.lock().unwrap();
+        (
+            state.blocked_audit_replications,
+            state.split_audit_pages,
+            state.dropped_audit_acks,
+        )
+    }
+
     pub fn omit_position_one(&self, stream: CommitStreamRef) {
         self.omit_position(stream, 1);
     }
@@ -92,6 +115,29 @@ impl Relay {
             .as_str();
         let target = self.upstream.join(path)?;
         let body = req.payload().await?.to_vec();
+        use arkret_models_collaboration::authority_commit::{
+            PeerAuthoritySubmitRequest, PeerRegisteredAtomicUnit,
+        };
+        let peer_unit = (req.uri().path() == "/_arkret/peer/events")
+            .then(|| serde_json::from_slice::<PeerAuthoritySubmitRequest>(&body).ok())
+            .flatten();
+        if matches!(&peer_unit, Some(PeerAuthoritySubmitRequest::RegisteredAtomicUnit(value)) if matches!(&value.unit, PeerRegisteredAtomicUnit::AuditPairedEvent(_)))
+        {
+            let blocked = {
+                let mut state = self.control.0.lock().unwrap();
+                if state.block_audit_replication {
+                    state.blocked_audit_replications += 1;
+                    true
+                } else {
+                    false
+                }
+            };
+            if blocked {
+                res.status_code(StatusCode::SERVICE_UNAVAILABLE);
+                res.render("injected whole audit delivery outage");
+                return Ok(());
+            }
+        }
         if req.uri().path() == "/_arkret/self/events"
             && req.method() == salvo::http::Method::POST
             && let Ok(
@@ -140,6 +186,49 @@ impl Relay {
         headers.remove("transfer-encoding");
         headers.remove("connection");
         let mut bytes = response.bytes().await?.to_vec();
+        if res.status_code == Some(StatusCode::OK)
+            && matches!(
+                &peer_unit,
+                Some(PeerAuthoritySubmitRequest::AuthorityForwardAtomic(_))
+            )
+        {
+            let drop_ack = {
+                let mut state = self.control.0.lock().unwrap();
+                if state.drop_audit_ack {
+                    state.drop_audit_ack = false;
+                    state.dropped_audit_acks += 1;
+                    true
+                } else {
+                    false
+                }
+            };
+            if drop_ack {
+                res.status_code(StatusCode::SERVICE_UNAVAILABLE);
+                headers.remove("content-type");
+                bytes = b"injected lost accepted audit acknowledgement".to_vec();
+            }
+        }
+        if req.uri().path() == "/_arkret/peer/streams/scan"
+            && res.status_code == Some(StatusCode::OK)
+        {
+            let request: StreamScanRequest = serde_json::from_slice(&body)?;
+            let mut state = self.control.0.lock().unwrap();
+            state.scan_requests.push(request.clone());
+            if state.split_audit_scan && request.limit > 2 {
+                let mut page: arkret_models_collaboration::authority_commit::PeerStreamScanOutcome =
+                    serde_json::from_slice(&bytes)?;
+                page.validate_for_request(&request)?;
+                if let Some(index) = page.committed_events.iter().position(|item| matches!(item,
+                    arkret_wire::CommittedEventView::Full(full) if full.event.kind != arkret_wire::EventKind::AuditAccessed
+                    && arkret_models_collaboration::authority_commit::is_audit_paired_event_slot(&full.event).unwrap_or(false)))
+                    && index + 1 < page.committed_events.len() {
+                    page.committed_events.truncate(index + 1); page.truncated = true;
+                    page.producer_signer_facts.retain(|fact| page.committed_events.iter().any(|item| item.commit().commit_id == fact.target.commit_id));
+                    page.validate_for_request(&request)?;
+                    state.split_audit_pages += 1; bytes = serde_json::to_vec(&page)?;
+                }
+            }
+        }
         if req.uri().path() == "/_arkret/self/streams/scan"
             && res.status_code == Some(StatusCode::OK)
         {
