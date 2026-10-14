@@ -4,29 +4,6 @@
   "complete_claim": false,
   "tasks": [
     {
-      "task": "2026-07-30-inkson-mls-governance-anchor-liveness.md",
-      "criteria_count": 3,
-      "criteria_sha256": "66a41b3009b28460548115c2fa0a7b3a34196443afe9bfde3d985a557f685db5",
-      "spec_refs": [
-        "arkret-spec/spec/v1/zh/crypto-media/encryption-and-audit.md"
-      ],
-      "source_refs": [
-        "inkson/src/mls/send_gate.rs"
-      ],
-      "tests": [
-        {
-          "path": "cotest/tests/cross_station_mls_genesis.rs",
-          "symbol": "cross_station_mls_genesis",
-          "kind": "live",
-          "covers": "跨站MLS Genesis基础；不能代替Agent creator恢复"
-        }
-      ],
-      "engineering_checks": [],
-      "remaining_scenarios": [
-        "Agent exact current pin／私态crash-reload；superseded与旧holder拒绝；各角色真实客户端原bytes重投"
-      ]
-    },
-    {
       "task": "2026-09-06-0915-protocol-fixtures-mock-and-api-test-convergence.md",
       "criteria_count": 7,
       "criteria_sha256": "d199b9952188d276c1d8da1e6fe408e8f2be0b8d681768e6b82b09ea78abbce4",
