@@ -61,6 +61,7 @@ mod grant_ceiling_evidence;
 mod pairing_expiry_evidence;
 mod pcr_evidence;
 mod privacy_evidence;
+mod provision_conjunction;
 mod provision_evidence;
 mod provision_start_evidence;
 mod repairing_evidence;
@@ -70,6 +71,7 @@ pub use grant_ceiling_evidence::run_agent_provision_grant_ceiling_boundary;
 pub use pairing_expiry_evidence::run_agent_pairing_expiry_production;
 pub use pcr_evidence::run_agent_pcr_profile_admission;
 pub use privacy_evidence::run_agent_requested_scope_privacy_production;
+pub use provision_conjunction::run_agent_provision_production;
 pub use provision_evidence::{
     run_agent_genesis_production_cases, run_agent_provision_authority_boundary,
     run_agent_provision_key_scope_boundary,
@@ -336,6 +338,23 @@ impl AgentRuntimeSession {
             .map_err(anyhow::Error::msg)?;
         let idempotency_key = IdempotencyKey::new(unique_uuid7()).map_err(anyhow::Error::msg)?;
         let slug = label.to_owned();
+        if let Some(evidence) = evidence.as_deref_mut() {
+            evidence
+                .reject_wrong_station(
+                    controller,
+                    &AgentProvisionPrepareRequestBody {
+                        phase: AgentProvisionPreparePhase::Prepare,
+                        operation_id: operation_id.clone(),
+                        idempotency_key: idempotency_key.clone(),
+                        did: agent_did.clone(),
+                        slug: slug.clone(),
+                        requested_scope: scope.clone(),
+                        pairing_ttl_ms: None,
+                        controller_station_id: controller_account.principal_id.clone(),
+                    },
+                )
+                .await?;
+        }
         let prepare_before = match evidence.as_deref() {
             Some(evidence) => Some(evidence.snapshot().await?),
             None => None,
@@ -363,7 +382,9 @@ impl AgentRuntimeSession {
         };
         ensure!(
             prepared.initial_resolution.did == agent_did
-                && prepared.initial_resolution.version_id == inception.version_id,
+                && prepared.initial_resolution.version_id == inception.version_id
+                && prepared.initial_resolution.method_history_head
+                    == arkret_canonical::canonical_sha256(&inception.log_entry)?.as_str(),
             "prepare did not pin the submitted inception"
         );
         let agent_id = prepared.agent_id.clone();
