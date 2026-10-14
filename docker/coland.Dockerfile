@@ -13,6 +13,7 @@ COPY floria ./floria
 COPY coauth ./coauth
 COPY cotest ./cotest
 COPY coland ./coland
+COPY bridges ./bridges
 COPY --from=savfox . /workspace/savfox-ai/savfox
 
 WORKDIR /workspace/arkret-org/coland

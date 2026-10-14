@@ -23,6 +23,7 @@ $savfoxRoot = Join-Path $WorkspaceRoot "../savfox-ai/savfox"
 
 $requiredPaths = @(
     (Join-Path $WorkspaceRoot "coland"),
+    (Join-Path $WorkspaceRoot "bridges"),
     (Join-Path $WorkspaceRoot "arkret-rust-sdk"),
     (Join-Path $WorkspaceRoot "arkret-spec"),
     (Join-Path $WorkspaceRoot "garth"),

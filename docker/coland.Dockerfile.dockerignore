@@ -17,6 +17,8 @@
 !cotest/**
 !coland/
 !coland/**
+!bridges/
+!bridges/**
 **/.git
 **/target
 **/target-*
