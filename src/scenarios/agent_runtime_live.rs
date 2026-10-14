@@ -104,6 +104,7 @@ fn requested_scope(operations: &[&str]) -> Result<AgentKeyScope> {
         "actions": operations,
         "resources": operations
             .iter()
+            .filter(|operation| ServiceOperationId::from_wire(operation).is_some())
             .map(|operation| json!({"kind": "operation", "operation": operation}))
             .collect::<Vec<_>>()
     }))?)
@@ -1402,6 +1403,7 @@ pub async fn run_agent_keypackage_upload_live() -> Result<()> {
         ServiceOperationId::SELF_KEYS_KEYPACKAGES_COMMAND_CONSUME_V1,
         ServiceOperationId::SELF_DEVICE_MESSAGES_READ_LIST_V1,
         ServiceOperationId::SELF_DEVICE_MESSAGES_COMMAND_ACK_V1,
+        "ak.event.read",
         "ak.message.create",
     ];
     let completed_operations =
