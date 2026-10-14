@@ -5,8 +5,8 @@
   "tasks": [
     {
       "task": "2026-09-06-0915-protocol-fixtures-mock-and-api-test-convergence.md",
-      "criteria_count": 3,
-      "criteria_sha256": "2bc489578dd6b970101776d648edaf4641d8ab201d28857d264bc773497e0b3e",
+      "criteria_count": 7,
+      "criteria_sha256": "d199b9952188d276c1d8da1e6fe408e8f2be0b8d681768e6b82b09ea78abbce4",
       "spec_refs": [
         "arkret-spec/spec/v1/zh/identity/contact-and-direct-conversation.md",
         "arkret-spec/spec/v1/zh/discovery/read-receipts.md",
