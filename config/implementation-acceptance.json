@@ -302,29 +302,6 @@
       ]
     },
     {
-      "task": "2026-09-19-0228-approval-layer-and-policy-projection-downstream.md",
-      "criteria_count": 5,
-      "criteria_sha256": "07cc1c28498cb163453224ce44b34df4b0569fca4d846017008cd6fd11560c15",
-      "spec_refs": [
-        "arkret-spec/spec/v1/zh/authz/constraint-schema.md"
-      ],
-      "source_refs": [
-        "coland/crates/storage-postgres/src/agent_confirmation_admission.rs"
-      ],
-      "tests": [
-        {
-          "path": "cotest/tests/approval_admission.rs",
-          "symbol": "historical_wip_approval_and_private_audit",
-          "kind": "live",
-          "covers": "历史WIP审批与私密审计切片"
-        }
-      ],
-      "engineering_checks": [],
-      "remaining_scenarios": [
-        "全部适用入口差集；两层阈值与Policy完整current；真实draft发布；accepted-at／nonce／审计原子；forward保票与replication去票两站"
-      ]
-    },
-    {
       "task": "2026-09-25-2133-snapshot-and-scan-beyond-single-realm-stream.md",
       "criteria_count": 3,
       "criteria_sha256": "89e5fd4d8732c8578310a66943833d47d5945f7e256aee4eaa00bf2b38d1aa2e",
