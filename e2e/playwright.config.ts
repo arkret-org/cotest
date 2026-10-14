@@ -125,7 +125,6 @@ export default defineConfig({
       testMatch: [
         "joint/*.spec.ts",
         "encryption/key-backup.spec.ts",
-        "events/realm-genesis-commit-stream.spec.ts",
         "identity/device-key-lifecycle.spec.ts",
         "identity/multi-device.spec.ts",
         "identity/onboarding.spec.ts",

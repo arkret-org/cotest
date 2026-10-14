@@ -6,9 +6,7 @@
   "required_files": [
     "../setup/inkson-build-id.setup.ts",
     "conformance/realm-state-snapshot-query-scalability.spec.ts",
-    "conformance/registry-drift.spec.ts",
     "encryption/key-backup.spec.ts",
-    "events/realm-genesis-commit-stream.spec.ts",
     "harness/garth-client.spec.ts",
     "harness/mocks-selftest.spec.ts",
     "harness/provisioning-bridge.spec.ts",
@@ -33,7 +31,8 @@
     "spaces/realm-profile.spec.ts",
     "sync/service-surface-contract.spec.ts"
   ],
-  "scope": "Currently supported UI smoke suite; principal-private file-transfer UI remains uncovered.",
+  "required_native_migrations": ["cotest/e2e/tests/conformance/registry-drift.spec.ts", "cotest/e2e/tests/events/realm-genesis-commit-stream.spec.ts"],
+  "scope": "Supported UI smoke plus explicitly mapped native API migrations. Collection credits preserve the old selection floor and never claim that native tests actually ran.",
   "file_transfer_owner": "arkret-work/tasks/impl-done/2026-09-30-0805-blob-upload-encryption-classification.md",
   "retirements": {
     "47264e61": "batch-realm-bootstrap replaced by realm-genesis-commit-stream",

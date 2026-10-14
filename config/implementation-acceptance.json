@@ -5,27 +5,39 @@
   "tasks": [
     {
       "task": "2026-09-06-0915-protocol-fixtures-mock-and-api-test-convergence.md",
-      "criteria_count": 7,
-      "criteria_sha256": "d199b9952188d276c1d8da1e6fe408e8f2be0b8d681768e6b82b09ea78abbce4",
+      "criteria_count": 3,
+      "criteria_sha256": "2bc489578dd6b970101776d648edaf4641d8ab201d28857d264bc773497e0b3e",
       "spec_refs": [
-        "arkret-spec/spec/v1/zh/identity/contact-and-direct-conversation.md"
+        "arkret-spec/spec/v1/zh/identity/contact-and-direct-conversation.md",
+        "arkret-spec/spec/v1/zh/discovery/read-receipts.md",
+        "arkret-spec/spec/v1/zh/governance/history-visibility.md"
       ],
       "source_refs": [
-        "inkson/tests/e2e/mock-operation-inventory.json"
+        "arkret-rust-sdk/crates/test-kit/src/contact.rs",
+        "arkret-rust-sdk/crates/test-kit/src/service_identity.rs",
+        "cotest/api-only-migration.json",
+        "cotest/scripts/run-api-only-native-migrations.py",
+        "coland/crates/storage-postgres/src/read_cursors.rs"
       ],
       "tests": [
         {
-          "path": "cotest/tests/spec_business_flows.rs",
-          "symbol": "spec_business_flows_cover_operation_registry_surfaces",
-          "kind": "engineering",
-          "covers": "业务surface静态索引，不证明live"
+          "path": "cotest/tests/private_read_marker_api.rs",
+          "symbol": "canonical_private_read_marker_api_migration",
+          "kind": "live",
+          "covers": "Actual accepted sibling and bidirectional actor-private marker convergence; latest execution pending."
+        },
+        {
+          "path": "cotest/tests/api_mls_migrations.rs",
+          "symbol": "discussion_upgrade_api_migration",
+          "kind": "live",
+          "covers": "Actual Circle scope, MLS, private relation and signed negative writes; no UI claim."
         }
       ],
       "engineering_checks": [
-        "现有mock contract/API-only/operation inventory门禁"
+        "Native migration manifest and mandatory 13-case runner; schema/signature contract; collection floor and release joint-skip refusal"
       ],
       "remaining_scenarios": [
-        "双边Contact四分支receipt／round／current；实际证明族迁移；当前API-only pending逐case解锁"
+        "Latest canonical/isolated 13-case run, rebuilt wire plus request-dependent UI, unfiltered joint/release and final source pin."
       ]
     },
     {

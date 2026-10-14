@@ -20,6 +20,8 @@ class ApiOnlyMigrationTests(unittest.TestCase):
     def setUp(self) -> None:
         self.temp = tempfile.TemporaryDirectory()
         self.root = Path(self.temp.name)
+        self.write("arkret-spec/spec/v1/artifacts/registry/operation-registry.json",
+                   json.dumps({"operations": [{"operation_id": "ak.self.events.command.submit.v1"}]}))
         self.write(
             "cotest/src/replacement.rs",
             "#[test]\nfn retained_rust_oracle() {}\n",
@@ -64,6 +66,36 @@ class ApiOnlyMigrationTests(unittest.TestCase):
 
     def test_accepts_closed_migration_and_uses_workspace_manifest(self) -> None:
         migration.validate_repository(self.root)
+
+    def test_live_migration_cannot_drop_its_joint_executor(self) -> None:
+        self.manifest["candidates"][0]["coverage_status"] = "live_native"
+        self.write("cotest/api-only-migration.json", json.dumps(self.manifest))
+        self.assertTrue(any("no mandatory joint executor" in error for error in migration.validation_errors(self.root)))
+
+    def test_native_migration_requires_an_exact_rust_test_and_operation_mapping(self) -> None:
+        source = self.manifest["candidates"][0]["source"]
+        self.manifest["candidates"][0]["coverage_status"] = "live_native"
+        entry = {"source": source, "target": "native_live", "symbol": "canonical_live", "operation_ids": ["ak.self.events.command.submit.v1"],
+                 "legacy_case_count": 1, "legacy_projects": ["joint-api"], "legacy_fully_implemented": False}
+        self.manifest["native_live_migrations"] = [entry]
+        self.write("cotest/tests/native_live.rs", "#[tokio::test]\n#[ignore]\nasync fn canonical_live() {}\n")
+        self.write("cotest/api-only-migration.json", json.dumps(self.manifest))
+        migration.validate_repository(self.root)
+        entry["symbol"] = "missing_live"
+        self.write("cotest/api-only-migration.json", json.dumps(self.manifest))
+        self.assertTrue(any("native live migration test is missing" in error for error in migration.validation_errors(self.root)))
+
+    def test_supporting_live_tests_and_operations_must_exist(self) -> None:
+        self.manifest["native_live_migrations"] = [{
+            "source": self.manifest["candidates"][0]["source"], "target": "native_live", "symbol": "canonical_live",
+            "operation_ids": ["ak.self.events.command.submit.v1"], "legacy_case_count": 1,
+            "legacy_projects": ["joint-api"], "legacy_fully_implemented": False,
+            "supporting_tests": [{"target": "native_live", "symbol": "isolated_live",
+                                  "operation_ids": ["ak.unregistered.v1"], "environment": "isolated_station"}],
+        }]
+        self.write("cotest/tests/native_live.rs", "async fn canonical_live() {}\nasync fn isolated_live() {}\n")
+        self.write("cotest/api-only-migration.json", json.dumps(self.manifest))
+        self.assertTrue(any("no registered operation evidence" in error for error in migration.validation_errors(self.root)))
 
     def test_rejects_reintroduced_api_only_playwright_spec(self) -> None:
         self.write(

@@ -101,7 +101,7 @@ fn scoped_envelope(
 }
 
 #[allow(clippy::too_many_arguments)]
-fn scoped_envelope_with_payload(
+pub(crate) fn scoped_envelope_with_payload(
     sender: &Member,
     group: &mut ArkretMlsGroup,
     realm: &RealmId,
@@ -319,7 +319,7 @@ async fn wait_for_replica_cut(url: &str, commit: &arkret_wire::RealmCommit) -> R
     }
 }
 
-async fn scoped_event(
+pub(crate) async fn scoped_event(
     member: &Member,
     scope: &ScopeRef,
     kind: arkret_wire::EventKind,
@@ -334,7 +334,7 @@ async fn scoped_event(
     Ok(event)
 }
 
-async fn circle_membership(
+pub(crate) async fn circle_membership(
     member: &Member,
     authority_reader: &crate::harness::TestActorClient,
     scope: &ScopeRef,
@@ -373,27 +373,22 @@ async fn circle_membership(
     .await
 }
 
-async fn exercise_circle(
+pub(crate) struct CircleDiscussionBasis {
+    pub scope: ScopeRef,
+    pub circle: arkret_wire::CircleId,
+    pub strand_id: arkret_wire::StrandId,
+}
+
+pub(crate) async fn circle_discussion_basis(
     alice: &Member,
     bob: &Member,
-    x: &crate::harness::ArkretServer,
-    y: &crate::harness::ArkretServer,
     realm: &RealmId,
-    urls: &[&str],
-) -> Result<()> {
-    use arkret::{MlsCommitPayload, MlsGovernanceBindingPayload};
-    use arkret_models_collaboration::authority_commit::SelfAuthoritySubmitRequest;
-    use arkret_wire::{AuthoritySubmitOutcome, EventKind, MlsCommitSubmission};
+) -> Result<CircleDiscussionBasis> {
+    use arkret_wire::EventKind;
 
-    use super::cross_station_mls_welcome::{
-        claim_for, genesis_creator_leaf_authority, publish_one, wait_for_welcome,
-    };
     use super::human_device_producer_live::submit_and_expect_commit;
-    use super::message_mls_cross_station_live::install_bindings;
-    use super::mls_lifecycle_live::{
-        accepted_full_view, canonical, claimed_keypackage_record, fresh_uuid_v7, post_json,
-        signed_welcome, upload_public_blob,
-    };
+    let unique = arkret_identifiers::new_prefixed_uuid7("ak:request:");
+    let short_name = format!("Signal {}", &unique[unique.len() - 8..]);
     let mut create = alice
         .client
         .author_event(
@@ -401,7 +396,7 @@ async fn exercise_circle(
             EventKind::CircleCreate.as_str(),
             serde_json::json!({"object":{
         "schema":"ak.schema.circle.v1","realm_id":realm,"title":"Signal Circle",
-        "display":{"short_name":"Signal Circle","color_token":"blue","symbol":{"glyph":"lock"}},
+        "display":{"short_name":short_name,"color_token":"blue","symbol":{"glyph":"lock"}},
         "directory_visibility":"members","join_rule":"public","history_access":"since_join",
         "state":"active","created_by":alice.actor}}),
         )
@@ -428,7 +423,7 @@ async fn exercise_circle(
         .await?;
     circle_membership(alice, &alice.client, &scope, true).await?;
     let bob_join = circle_membership(bob, &alice.client, &scope, true).await?;
-    accepted_full_view(&bob.client, &bob_join.event_ref).await?;
+    super::mls_lifecycle_live::accepted_full_view(&bob.client, &bob_join.event_ref).await?;
     let mut strand = scoped_event(alice, &scope, EventKind::StrandCreate, serde_json::json!({"object":{
         "schema":"ak.schema.strand.v1","realm_id":realm,"scope_circle_id":circle,"tracks":{"discussion":{"is_primary":true,"profile":"discussion"}},
         "metadata":{"title":"Circle Signal target"},"state":"active","created_by":alice.actor,
@@ -445,6 +440,47 @@ async fn exercise_circle(
     )
     .await?;
     let strand_id = arkret_wire::StrandId::from_event_id(&strand.event_id);
+    Ok(CircleDiscussionBasis {
+        scope,
+        circle,
+        strand_id,
+    })
+}
+
+pub(crate) struct CircleMlsFixture {
+    pub basis: CircleDiscussionBasis,
+    pub source_group: ArkretMlsGroup,
+    pub holder_group: ArkretMlsGroup,
+    pub state_ref: EventId,
+    pub head: arkret_wire::RealmCommit,
+    pub parent_head: arkret_wire::CommitStreamHead,
+}
+
+pub(crate) async fn circle_mls_fixture(
+    alice: &Member,
+    bob: &Member,
+    x: &crate::harness::ArkretServer,
+    y: &crate::harness::ArkretServer,
+    realm: &RealmId,
+) -> Result<CircleMlsFixture> {
+    use arkret::{MlsCommitPayload, MlsGovernanceBindingPayload};
+    use arkret_models_collaboration::authority_commit::SelfAuthoritySubmitRequest;
+    use arkret_wire::{AuthoritySubmitOutcome, EventKind, MlsCommitSubmission};
+
+    use super::cross_station_mls_welcome::{
+        claim_for, genesis_creator_leaf_authority, publish_one, wait_for_welcome,
+    };
+    use super::human_device_producer_live::submit_and_expect_commit;
+    use super::message_mls_cross_station_live::install_bindings;
+    use super::mls_lifecycle_live::{
+        accepted_full_view, canonical, claimed_keypackage_record, fresh_uuid_v7, post_json,
+        signed_welcome, upload_public_blob,
+    };
+    let CircleDiscussionBasis {
+        scope,
+        circle,
+        strand_id,
+    } = circle_discussion_basis(alice, bob, realm).await?;
     let bob_identity = publish_one(bob).await?;
     let (claim, ..) = claim_for(
         alice,
@@ -530,12 +566,59 @@ async fn exercise_circle(
     wait_for_welcome(bob, &welcome).await?;
     let remote = accepted_full_view(&bob.client, &commit_event.event_id).await?;
     ensure!(remote == accepted);
-    wait_for_replica_cut(urls[1], &commit).await?;
     let mut bob_group =
         ArkretMlsGroup::join_from_verified_welcome_delivery(bob_identity, &welcome, &remote)?;
     install_bindings(&mut alice_group, &[alice, bob]).await?;
     install_bindings(&mut bob_group, &[alice, bob]).await?;
+    let (queued, ack_token) = super::mls_lifecycle_live::recipient_welcomes(&bob.client).await?;
+    ensure!(
+        queued.contains(&welcome),
+        "Circle recipient queue omitted the exact installed Welcome"
+    );
+    let _: serde_json::Value = bob
+        .client
+        .sdk()
+        .post(
+            "/_arkret/self/device_messages/ack",
+            &arkret_models_collaboration::device_messages::DeviceMessagesAckRequestBody {
+                ack_token,
+            },
+        )
+        .await?;
     let parent = super::websocket_live::realm_head(&alice.client, realm.as_str()).await?;
+    Ok(CircleMlsFixture {
+        basis: CircleDiscussionBasis {
+            scope,
+            circle,
+            strand_id,
+        },
+        source_group: alice_group,
+        holder_group: bob_group,
+        state_ref: commit_event.event_id,
+        head: commit,
+        parent_head: parent,
+    })
+}
+
+async fn exercise_circle(
+    alice: &Member,
+    bob: &Member,
+    x: &crate::harness::ArkretServer,
+    y: &crate::harness::ArkretServer,
+    realm: &RealmId,
+    urls: &[&str],
+) -> Result<()> {
+    let CircleMlsFixture {
+        basis: CircleDiscussionBasis {
+            scope, strand_id, ..
+        },
+        source_group: mut alice_group,
+        holder_group: mut bob_group,
+        state_ref,
+        head: commit,
+        parent_head: parent,
+    } = circle_mls_fixture(alice, bob, x, y, realm).await?;
+    wait_for_replica_cut(urls[1], &commit).await?;
     let before = [counts(urls[0], realm).await?, counts(urls[1], realm).await?];
     deliver(
         alice,
@@ -544,7 +627,7 @@ async fn exercise_circle(
         &bob_group,
         realm,
         strand_id.as_str(),
-        &commit_event.event_id,
+        &state_ref,
         &commit.commit_id,
         scope.clone(),
         Some(&parent.commit_id),
@@ -561,7 +644,7 @@ async fn exercise_circle(
         &alice_group,
         realm,
         strand_id.as_str(),
-        &commit_event.event_id,
+        &state_ref,
         &commit.commit_id,
         scope.clone(),
         Some(&parent.commit_id),
@@ -585,7 +668,7 @@ async fn exercise_circle(
         &mut bob_group,
         realm,
         strand_id.as_str(),
-        &commit_event.event_id,
+        &state_ref,
         &commit.commit_id,
         SignalClass::Session,
         2,

@@ -12,7 +12,6 @@ type CotestWireCommand =
   | "historical-human-signer-fact"
   | "verify-realm-state-snapshot"
   | "validate-applet-authority-material"
-  | "invite-subject-proof"
   | "key-backup-auth-signature"
   | "mimi-consent-proof"
   | "mimi-request-consent-proof"
@@ -111,36 +110,6 @@ export function sdkEventDerivedIds(event: Record<string, unknown>): {
     "event-derived-id",
     event,
   );
-}
-
-export function sdkInviteSubjectProof(args: {
-  subjectAccountId: { principal_id: string; station_id: string };
-  inviteId: string;
-  realmId: string;
-  tokenCommitment: string;
-  claimNonce: string;
-  verificationId: string;
-  bindingProof: Record<string, unknown>;
-  verificationMethod: string;
-  subjectDid: string;
-  rootPublicKeyMultibase: string;
-  recoveryKey: string;
-  negativeDeviceSigningSeedB64url?: string;
-}): Record<string, unknown> {
-  return cotestWire<Record<string, unknown>>("invite-subject-proof", {
-    subject_account_id: args.subjectAccountId,
-    invite_id: args.inviteId,
-    realm_id: args.realmId,
-    token_commitment: args.tokenCommitment,
-    claim_nonce: args.claimNonce,
-    verification_id: args.verificationId,
-    binding_proof: args.bindingProof,
-    verification_method: args.verificationMethod,
-    subject_did: args.subjectDid,
-    root_public_key_multibase: args.rootPublicKeyMultibase,
-    negative_device_signing_seed_b64url: args.negativeDeviceSigningSeedB64url,
-    recovery_key: args.recoveryKey,
-  });
 }
 
 /// The device signature `auth_data.signature` of a key-backup envelope

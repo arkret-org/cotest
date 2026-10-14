@@ -1,5 +1,15 @@
 # Discussion scope 升级为独立 Strand + Circle
 
+2026-10-15：原 API-only Playwright 文件已迁为 Rust，旧步骤仅保留产品目标与历史来源，**不证明真实 UI 通过**。
+
+当前具名执行入口：
+
+- `tests/api_mls_migrations.rs::discussion_upgrade_api_migration`（isolated_station）。
+
+operation→Rust test 与原选择数量见 `api-only-migration.json.native_live_migrations`。无筛选 joint 强制执行全部 primary／supporting 用例；release-gate 通过其 joint 阶段执行，跳过联合阶段不能发布为 release 通过。缺少环境、零测试、ignore 与失败均不能代替通过。日志位于本轮 `native-api-migrations/`，映射本身不是运行证据。
+
+## 历史场景与独立产品目标
+
 ## 目标
 
 一个 Strand 的 discussion track 内消息增长后，alice 把后续私密讨论迁移到一条新的 discussion Strand，并把新 Strand 绑定到 Realm 内的窄 Circle。原 Strand 的 synthesis / discussion 保留在原 effective scope；新讨论 Strand 通过 `confidential_discussion_of` Relation 指回原 Strand。协议层不使用 `discussion_space_ref`，也不把 Space 当成成员、访问策略或 E2EE 边界。

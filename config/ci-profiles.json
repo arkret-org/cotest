@@ -226,6 +226,16 @@
           "target": "durable_effect_live_spotcheck",
           "filter": "declared_durable_effects_match_live_producers",
           "package": "cotest"
+        },
+        {
+          "target": "realm_genesis_commit_stream",
+          "filter": "realm_genesis_commit_stream_preserves_founding_replay_and_continuation",
+          "package": "cotest"
+        },
+        {
+          "target": "registry_drift",
+          "filter": "registry_drift_runs_against_station",
+          "package": "cotest"
         }
       ],
       "excluded_quarantine_labels": [],

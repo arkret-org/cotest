@@ -80,7 +80,7 @@ export function apiOnlyTestMatch(e2eRoot: string): string[] {
 
   const sources = [
     ...specializedSources(manifest.specialized_api_lanes),
-    ...pendingSources(manifest.pending_migration),
+    ...pendingSources(manifest.pending_migration ?? []),
   ];
 
   const seen = new Set<string>();

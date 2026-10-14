@@ -1509,10 +1509,10 @@ function New-ReleaseGate {
     $jointSmokeStatus = if ($JointSmokeGate) { $JointSmokeGate.status } else { "skipped" }
     $checks.Add((New-ReleaseGateCheck `
                 -Id "joint_smoke" `
-                -Description "Live coland + inkson + coauth browser smoke completes before release." `
+                -Description "Live coland + inkson + coauth browser smoke and every migrated native API case complete before release." `
                 -Tests $Tests `
                 -RequiredTests @() `
-                -AdditionalGatePassed ($jointSmokeStatus -eq "passed" -or $jointSmokeStatus -eq "skipped") `
+                -AdditionalGatePassed ($jointSmokeStatus -eq "passed" -or ($Profile -ne "release-gate" -and $jointSmokeStatus -eq "skipped")) `
                 -AdditionalGateReason "joint_smoke_failed"))
 
     $failedChecks = @($checks | Where-Object { $_.status -ne "passed" })

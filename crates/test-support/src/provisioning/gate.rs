@@ -296,6 +296,48 @@ pub async fn create_account_handoff(
     authorization: &OidcAuthorization,
     device_key: FoundingDeviceKey,
 ) -> Result<AccountHandoff> {
+    let handoff =
+        exchange_account_handoff(http, coauth_base, audience_id, authorization, device_key).await?;
+    let binding: arkret_models_identity::account::AccountHandoffBinding =
+        serde_json::from_value(handoff.binding.clone())?;
+    ensure!(
+        matches!(
+            binding,
+            arkret_models_identity::account::AccountHandoffBinding::IdentityCreationActive { .. }
+        ),
+        "a fresh account must receive an active identity-creation lease"
+    );
+    Ok(handoff)
+}
+
+/// Exchange an already-bound account without weakening the fresh-account gate.
+pub async fn create_returning_account_handoff(
+    http: &reqwest::Client,
+    coauth_base: &str,
+    audience_id: &str,
+    authorization: &OidcAuthorization,
+    device_key: FoundingDeviceKey,
+    expected_principal: &arkret_identifiers::DidCoreId,
+    expected_did: &arkret_identifiers::Did,
+) -> Result<AccountHandoff> {
+    let handoff =
+        exchange_account_handoff(http, coauth_base, audience_id, authorization, device_key).await?;
+    let binding: arkret_models_identity::account::AccountHandoffBinding =
+        serde_json::from_value(handoff.binding.clone())?;
+    ensure!(
+        matches!(binding, arkret_models_identity::account::AccountHandoffBinding::Bound { principal_id, did } if &principal_id == expected_principal && &did == expected_did),
+        "returning handoff is not bound to the accepted principal"
+    );
+    Ok(handoff)
+}
+
+async fn exchange_account_handoff(
+    http: &reqwest::Client,
+    coauth_base: &str,
+    audience_id: &str,
+    authorization: &OidcAuthorization,
+    device_key: FoundingDeviceKey,
+) -> Result<AccountHandoff> {
     let request_id = arkret_identifiers::new_prefixed_uuid7("ak:request:");
     let body = crate::wire::account_handoff_request(json!({
         "request_id": request_id,
@@ -343,10 +385,6 @@ pub async fn create_account_handoff(
         .get("binding")
         .cloned()
         .context("account handoff outcome carried no binding")?;
-    let state = binding.get("state").and_then(Value::as_str);
-    if state != Some("identity_creation_active") {
-        bail!("a fresh account must receive an active identity-creation lease, got {state:?}");
-    }
 
     Ok(AccountHandoff {
         request_id,

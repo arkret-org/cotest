@@ -116,7 +116,7 @@ param(
     # (coland config `oidc_client_id`). MUST match a client registered at coauth; the joint
     # coauth config (coauth/config.dev.yaml) seeds the "Inkson Dev" client under this ULID.
     # Without it coland advertises no client_id and the browser OIDC bridge gets
-    # `could not find client` from coauth's /authorize. See cotest oidc-login-chain.spec.ts.
+    # `could not find client` from coauth's /authorize. See oidc_login_chain.rs.
     [string]$CoauthOAuthClientId = "01GFWR28C4KNE04WG3HKXB7C9R",
     [int]$StartupTimeoutSeconds = 900,
     [switch]$SkipBuild,
@@ -3710,7 +3710,9 @@ try {
 
     $preparationTasks = New-Object System.Collections.Generic.List[object]
     $preparationTimings = New-Object System.Collections.Generic.List[object]
-    if (-not $SkipBuild -and $willStartDefaultColand -and $ColandRuntime -eq "process" -and -not $ColandBin -and -not $env:COLAND_BIN) {
+    $runNativeApiMigrations = $RunProfile -in @("joint-smoke", "joint-full", "joint-api") -and -not $Grep
+    $needsNativeColandBinary = ($willStartDefaultColand -and $ColandRuntime -eq "process") -or $runNativeApiMigrations
+    if (-not $SkipBuild -and $needsNativeColandBinary -and -not $ColandBin -and -not $env:COLAND_BIN) {
         $defaultColandBinary = Join-Path $colandTargetDirectory ("debug/" + (Get-NativeExecutableName -Name "coland"))
         $freshness = Get-ArtifactFreshness `
             -ArtifactPath $defaultColandBinary `
@@ -5228,7 +5230,7 @@ try {
         $env:COTEST_COAUTH_SERVICE_ID = $CoauthServiceId
         # The OAuth client_id coland is configured to advertise (see
         # COLAND_OAUTH_CLIENT_ID in the generated coland config). Surfaced to e2e so
-        # oidc-login-chain.spec.ts can assert /_arkret/describe advertises it.
+        # oidc_login_chain.rs can assert /_arkret/describe advertises it.
         $env:COTEST_OIDC_CLIENT_ID = $CoauthOAuthClientId
         # The notary signing seed this run configured coland with. A Rust
         # scenario attaching to this deployment cannot derive the notary
@@ -5448,6 +5450,20 @@ try {
             if ($garthClientExit -ne 0) {
                 throw "Garth client check failed (exit=$garthClientExit); see $garthClientLog"
             }
+        }
+    }
+
+    if ($runNativeApiMigrations) {
+        Write-Host "=== Migrated native API coverage (canonical deployment and isolated Stations) ==="
+        $env:COLAND_BIN = Resolve-ColandBinary -ExplicitPath $ColandBin -WorkspaceRoot $workspaceRoot
+        if ($ColandDatabaseUrl) { $env:COTEST_COLAND_DATABASE_URL = $ColandDatabaseUrl }
+        $apiMigrationCommand = "python {0} --output-dir {1}" -f `
+            (Quote-PsLiteral (Join-Path $repoRoot "scripts/run-api-only-native-migrations.py")), `
+            (Quote-PsLiteral (Join-Path $jointDir "native-api-migrations"))
+        $apiMigrationService = Start-ManagedCommand -Name "prepare-native-api-migrations" `
+            -Command $apiMigrationCommand -WorkingDirectory $repoRoot -LogDirectory $serviceLogDir
+        foreach ($path in @($apiMigrationService.Stdout, $apiMigrationService.Stderr)) {
+            if (Test-Path -LiteralPath $path) { Get-Content -LiteralPath $path | ForEach-Object { Write-Host $_ } }
         }
     }
 

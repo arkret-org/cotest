@@ -188,6 +188,66 @@ def validation_errors(
         if not BROWSER_SIGNAL.search(text) and relative not in classified:
             errors.append(f"API-only Playwright spec is not classified: {relative}")
 
+    native = manifest.get("native_live_migrations", [])
+    if not isinstance(native, list):
+        return errors + ["native_live_migrations must be an array"]
+    native_sources: set[str] = set()
+    registry_path = workspace_root / "arkret-spec/spec/v1/artifacts/registry/operation-registry.json"
+    registry = json.loads(registry_path.read_text(encoding="utf-8")) if native and registry_path.is_file() else {}
+    registered_operations = {row["operation_id"] for row in registry.get("operations", [])}
+    if native and not registered_operations:
+        errors.append("native migrations require the canonical operation registry")
+
+    def validate_native_test(test: dict, source: str) -> None:
+        target, symbol = test.get("target"), test.get("symbol")
+        if not isinstance(target, str) or not isinstance(symbol, str) or not re.fullmatch(r"[a-z0-9_]+", target) or not re.fullmatch(r"[a-z0-9_]+", symbol):
+            errors.append(f"invalid native live migration Cargo selector: {source}")
+            return
+        path = workspace_root / "cotest/tests" / f"{target}.rs"
+        text = path.read_text(encoding="utf-8") if path.is_file() else ""
+        if not re.search(r"\basync\s+fn\s+" + re.escape(symbol) + r"\s*\(", text):
+            errors.append(f"native live migration test is missing: {target}::{symbol}")
+        if test.get("environment", "canonical") not in {"canonical", "isolated_station"}:
+            errors.append(f"native migration has an invalid environment: {source}")
+        operations = test.get("operation_ids")
+        if not isinstance(operations, list) or not operations or not all(isinstance(value, str) and value in registered_operations for value in operations):
+            errors.append(f"native live migration has no registered operation evidence: {source}")
+
+    for entry in native:
+        required = {"source", "target", "symbol", "operation_ids", "legacy_case_count", "legacy_projects", "legacy_fully_implemented"}
+        if not isinstance(entry, dict) or not required <= set(entry) or set(entry) - required - {"environment", "supporting_tests"}:
+            errors.append("native live migration has unknown or missing fields")
+            continue
+        source, target, symbol = (entry[key] for key in ("source", "target", "symbol"))
+        if not all(isinstance(value, str) for value in (source, target, symbol)):
+            errors.append("native live migration selectors must be strings")
+            continue
+        if source not in seen_sources or source in native_sources:
+            errors.append(f"native live migration has no unique migrated source: {source}")
+        native_sources.add(source)
+        validate_native_test(entry, source)
+        supporting = entry.get("supporting_tests", [])
+        if not isinstance(supporting, list):
+            errors.append(f"native migration supporting_tests must be an array: {source}")
+        else:
+            for test in supporting:
+                if not isinstance(test, dict) or set(test) - {"target", "symbol", "operation_ids", "environment"} or not {"target", "symbol", "operation_ids"} <= set(test):
+                    errors.append(f"native migration has invalid supporting test: {source}")
+                else:
+                    validate_native_test(test, source)
+        if type(entry["legacy_case_count"]) is not int or entry["legacy_case_count"] < 1:
+            errors.append(f"native migration has no retained historical case count: {source}")
+        projects = entry["legacy_projects"]
+        if not isinstance(projects, list) or not projects or not all(
+            isinstance(project, str) and project in {"chrome", "chromium", "joint-api", "joint-inkson"} for project in projects
+        ) or len(set(projects)) != len(projects):
+            errors.append(f"native migration has invalid prior Playwright selection: {source}")
+        if type(entry["legacy_fully_implemented"]) is not bool:
+            errors.append(f"native migration has no prior smoke selector: {source}")
+    for candidate in candidates:
+        if isinstance(candidate, dict) and candidate.get("coverage_status") == "live_native" and candidate.get("source") not in native_sources:
+            errors.append(f"migrated live coverage has no mandatory joint executor: {candidate.get('source')}")
+
     return errors
 
 

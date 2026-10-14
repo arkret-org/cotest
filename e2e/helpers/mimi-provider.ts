@@ -15,7 +15,7 @@ import { createHash, sign } from "node:crypto";
 import type { APIRequestContext, APIResponse } from "@playwright/test";
 import { operationSelector } from "./arkret-test";
 import { canonicalJson, projectDidToCoreId } from "./coland-api";
-import { generateDidKeyIdentity, type DidKeyIdentity } from "./third-party-invite";
+import { generateDidKeyIdentity, type DidKeyIdentity } from "./did-key-identity";
 
 export type MimiProvider = {
   identity: DidKeyIdentity;

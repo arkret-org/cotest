@@ -183,6 +183,7 @@ zeroize = "1.9.0"
 test-with-containers = ["dep:testcontainers"]
 
 [dependencies]
+regex = "1.13"
 cotest-suite-evidence = { path = "crates/suite-evidence" }
 cotest-managed-governance-runner = { workspace = true }
 # The light build edge. See the workspace comment above for why the arrow

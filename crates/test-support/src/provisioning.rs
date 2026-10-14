@@ -31,8 +31,9 @@ pub use coauth_account::{MockEmailInbox, UnboundAccount};
 pub use gate::{
     AccountHandoff, FoundPrincipalRequest, FoundedPrincipal, FoundingDeviceKey, OidcAuthorization,
     PreparedPrincipalRegistration, SessionGrantRead, authorize_with_current_account,
-    create_account_handoff, found_principal, prepare_principal_registration,
-    read_self_account_viewer, submit_prepared_principal_registration,
+    create_account_handoff, create_returning_account_handoff, found_principal,
+    prepare_principal_registration, read_self_account_viewer,
+    submit_prepared_principal_registration,
 };
 use serde_json::Value;
 

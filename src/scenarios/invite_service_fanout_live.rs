@@ -145,7 +145,7 @@ async fn prepare_invite_with_evidence(
     let realm_id = inviter.create_realm(label).await?;
     let payload = invite_create_payload(
         &holder.actor,
-        inviter.service_id(),
+        holder.service_id(),
         arkret_canonical::canonical_sha256(&evidence)?,
         Utc::now() + ChronoDuration::days(7),
     )?;
