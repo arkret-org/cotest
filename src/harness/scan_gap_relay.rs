@@ -24,9 +24,30 @@ struct GapState {
     split_audit_pages: usize,
     drop_audit_ack: bool,
     dropped_audit_acks: usize,
+    hold_watch_reply: bool,
+    watch_reply_started: Arc<tokio::sync::Notify>,
+    watch_reply_release: Arc<tokio::sync::Notify>,
 }
 
 impl ScanGapControl {
+    pub fn hold_next_watch_reply(&self) {
+        let mut state = self.0.lock().unwrap();
+        state.hold_watch_reply = true;
+        state.watch_reply_started = Arc::new(tokio::sync::Notify::new());
+        state.watch_reply_release = Arc::new(tokio::sync::Notify::new());
+    }
+
+    pub async fn wait_for_held_watch_reply(&self) -> Result<()> {
+        let started = self.0.lock().unwrap().watch_reply_started.clone();
+        tokio::time::timeout(std::time::Duration::from_secs(30), started.notified())
+            .await
+            .context("native governor did not produce a held Watch reply")?;
+        Ok(())
+    }
+
+    pub fn release_watch_reply(&self) {
+        self.0.lock().unwrap().watch_reply_release.notify_one();
+    }
     pub fn block_audit_replication(&self) {
         self.0.lock().unwrap().block_audit_replication = true;
     }
@@ -114,7 +135,8 @@ impl Relay {
             .context("relay request path")?
             .as_str();
         let target = self.upstream.join(path)?;
-        let body = req.payload().await?.to_vec();
+        // Match the production ingress budget for complete handoff material.
+        let body = req.payload_with_max_size(16 * 1024 * 1024).await?.to_vec();
         use arkret_models_collaboration::authority_commit::{
             PeerAuthoritySubmitRequest, PeerRegisteredAtomicUnit,
         };
@@ -186,6 +208,23 @@ impl Relay {
         headers.remove("transfer-encoding");
         headers.remove("connection");
         let mut bytes = response.bytes().await?.to_vec();
+        if req.uri().path() == "/_arkret/peer/strands/watch/current"
+            && res.status_code == Some(StatusCode::OK)
+        {
+            let gate = {
+                let mut state = self.control.0.lock().unwrap();
+                if state.hold_watch_reply {
+                    state.hold_watch_reply = false;
+                    state.watch_reply_started.notify_one();
+                    Some(state.watch_reply_release.clone())
+                } else {
+                    None
+                }
+            };
+            if let Some(gate) = gate {
+                gate.notified().await;
+            }
+        }
         if res.status_code == Some(StatusCode::OK)
             && matches!(
                 &peer_unit,

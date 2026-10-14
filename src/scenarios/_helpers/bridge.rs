@@ -277,7 +277,21 @@ impl MockCoauthIntrospectionServer {
                 .agent_key_scope
                 .resources
                 .iter()
-                .all(|resource| resource.kind == AgentKeyScopeResourceKind::Operation),
+                .all(
+                    |resource| resource.kind == AgentKeyScopeResourceKind::Operation
+                        || (resource.kind == AgentKeyScopeResourceKind::Strand
+                            && resource.realm_id.is_some()
+                            && resource.resource_ref.is_some()
+                            && resource.schema_ref.is_none()
+                            && resource.operation.is_none()
+                            && resource.service_id.is_none())
+                        || (resource.kind == AgentKeyScopeResourceKind::Realm
+                            && resource.realm_id.is_some()
+                            && resource.resource_ref.is_none()
+                            && resource.schema_ref.is_none()
+                            && resource.operation.is_none()
+                            && resource.service_id.is_none())
+                ),
             "fixture issuer cannot discard an unrepresented key constraint or content resource ceiling"
         );
         let mut allowed_labels: Option<std::collections::BTreeSet<String>> = None;
@@ -311,11 +325,26 @@ impl MockCoauthIntrospectionServer {
                 == Some(arkret_canonical::base64url_encode(runtime_key.as_bytes()).as_str()),
             "issuer runtime holder differs from the accepted authorization key"
         );
+        let realm_ids: std::collections::BTreeSet<_> = authorization
+            .agent_key_scope
+            .resources
+            .iter()
+            .filter(|resource| resource.kind == AgentKeyScopeResourceKind::Realm)
+            .filter_map(|resource| resource.realm_id.as_ref())
+            .collect();
+        let strand_ids: std::collections::BTreeSet<_> = authorization
+            .agent_key_scope
+            .resources
+            .iter()
+            .filter(|resource| resource.kind == AgentKeyScopeResourceKind::Strand)
+            .filter_map(|resource| resource.resource_ref.as_ref())
+            .map(ToString::to_string)
+            .collect();
         let scope_details = json!({
             "controller_principal_id": authorization.accountable_principal_id,
             "agent_key_authorization_ref": authorization_ref,
-            "realm_ids": [], "strand_ids": [],
-            "resources": {"realm_ids": [], "strand_ids": []},
+            "realm_ids": realm_ids, "strand_ids": strand_ids,
+            "resources": {"realm_ids": realm_ids, "strand_ids": strand_ids},
             "constraints": {"allowed_tracks": [], "allowed_data_labels": allowed_labels, "allowed_endpoints": []},
             "capability_grant_refs": [], "policy_refs": []
         }).as_object().unwrap().clone();

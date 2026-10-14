@@ -200,6 +200,14 @@ pub async fn run_same_station_human_control_event_live() -> Result<()> {
 
 /// The Account lives on Station A and the Realm is governed by Station B.
 pub async fn run_cross_station_authority_forward_live() -> Result<()> {
+    run_cross_station_authority_forward_with_watch(false).await
+}
+
+pub async fn run_watch_device_replacement_live() -> Result<()> {
+    run_cross_station_authority_forward_with_watch(true).await
+}
+
+async fn run_cross_station_authority_forward_with_watch(watch: bool) -> Result<()> {
     let Some(account_database) = database(FORWARD_GROUP)? else {
         return Ok(());
     };
@@ -214,7 +222,7 @@ pub async fn run_cross_station_authority_forward_live() -> Result<()> {
         HARNESS_INTERNAL_AUTHORITY_SECRET,
     )
     .await?;
-    let Some(group) = TestServerGroup::try_multi_external_with_node_envs(
+    let Some(mut group) = TestServerGroup::try_multi_external_with_node_envs(
         FORWARD_GROUP,
         &[
             station_env(&account_database.connect_url, &coauth),
@@ -225,12 +233,18 @@ pub async fn run_cross_station_authority_forward_live() -> Result<()> {
     else {
         return skip_or_fail(FORWARD_GROUP, "prebuilt Coland unavailable");
     };
+    let relay = if watch {
+        Some(group.server_mut(1).install_scan_gap_relay().await?)
+    } else {
+        None
+    };
     let account_station = group.server(0);
     let governance_station = group.server(1);
 
     // Alice on A: founding device A plus accepted devices B and C.
     let RotationFixture {
         client_a,
+        client_b,
         client_c,
         events_a,
         principal,
@@ -347,6 +361,122 @@ pub async fn run_cross_station_authority_forward_live() -> Result<()> {
     );
     ensure_never_committed(&bob, &ciphertext.event_id, Duration::from_secs(2)).await?;
 
+    if watch {
+        use crate::harness::CanonicalJsonBody;
+        let client_c = account_station
+            .bind_native_host_session(client_c.clone(), &coauth)
+            .await?;
+        let client_b = account_station
+            .bind_native_host_session(client_b.clone(), &coauth)
+            .await?;
+        use arkret_models_collaboration::events_payloads::strand::{
+            StrandWatchLevel, StrandWatchSetPayload,
+        };
+        use arkret_models_collaboration::strand_watch_operations::{
+            StrandWatchCurrentOutcome, StrandWatchCurrentRequestBody,
+        };
+        grant_realm_actions(
+            &bob,
+            governance_station,
+            &realm_id,
+            &alice_account,
+            &["ak.strand.watch.set"],
+        )
+        .await?;
+        let payload = StrandWatchSetPayload::set(
+            strand_id.parse()?,
+            ActorId::account(alice_account.clone()),
+            StrandWatchLevel::All,
+            None,
+        );
+        let watched = events_a
+            .author_event(
+                &realm_id,
+                EventKind::StrandWatchSet.as_str(),
+                serde_json::to_value(payload)?,
+            )
+            .await?;
+        submit_and_expect_commit(&events_a, &alice_account, DEVICE_A, &watched).await?;
+        let request = StrandWatchCurrentRequestBody {
+            realm_id: realm_id.parse()?,
+            strand_id: strand_id.parse()?,
+            watcher_actor_id: ActorId::account(alice_account.clone()),
+        };
+        let control = relay.as_ref().context("Watch reply relay")?.control();
+        control.hold_next_watch_reply();
+        let pending_client = client_c.clone();
+        let pending_request = request.clone();
+        let mut pending = tokio::spawn(async move {
+            Ok::<_, anyhow::Error>(
+                pending_client
+                    .post("/_arkret/self/strands/watch/current")
+                    .canonical_json(&pending_request)?
+                    .send()
+                    .await?,
+            )
+        });
+        tokio::select! {
+            held=control.wait_for_held_watch_reply()=>held?,
+            early=&mut pending=>{
+                let response=early??;let status=response.status();let body=response.text().await?;
+                bail!("Device Watch request ended before the relay held it: {status} {body}");
+            }
+        }
+        let (rotation, _) = signer.rotation(
+            "fa01",
+            DEVICE_C,
+            seed_a,
+            seed_a,
+            &old,
+            &selected.active_series.authority_commit_id,
+        )?;
+        let transaction = create(&client_a, &rotation).await?;
+        wait_for_accepted_revoke(&client_a, &transaction).await?;
+        control.release_watch_reply();
+        let response = pending.await??;
+        let status = response.status();
+        let body = response.text().await?;
+        ensure!(
+            !status.is_success() && !body.contains("watcher_actor_id"),
+            "revoked Device received the late current: {status} {body}"
+        );
+        let replacement: StrandWatchCurrentOutcome = serde_json::from_value(
+            expect_json(
+                client_b
+                    .post("/_arkret/self/strands/watch/current")
+                    .canonical_json(&request)?,
+                StatusCode::OK,
+            )
+            .await?,
+        )?;
+        ensure!(
+            matches!(replacement, StrandWatchCurrentOutcome::Current { .. }),
+            "replacement device lost the Account Watch"
+        );
+        let mut cleared = client_b
+            .author_event(
+                &realm_id,
+                EventKind::StrandWatchSet.as_str(),
+                serde_json::to_value(StrandWatchSetPayload::clear(request.strand_id,request.watcher_actor_id)
+                    .with_expected_value(arkret_models_collaboration::strand_watch_operations::StrandWatchCurrentValue::Set(
+                        arkret_models_collaboration::events_payloads::strand::StrandWatchExpectedValue {level:StrandWatchLevel::All,level_public:None})))?,
+            )
+            .await?;
+        crate::harness::refresh_typed_event_proof_with_signing_seed(
+            &mut cleared,
+            client_b
+                .principal
+                .as_ref()
+                .context("accepted replacement device")?
+                .device_signing_key
+                .to_bytes(),
+        )?;
+        submit_and_expect_commit(&client_b, &alice_account, &client_b.device_id, &cleared).await?;
+        println!(
+            "[watch-device-replacement] independent_native_stations=1 real_security_rotation_revoke=1 old_device_late_result_refused=1 accepted_replacement_device_reads_and_clears_same_account=1"
+        );
+    }
+
     // 6. Control Event by device A: Alice leaves the B-governed Realm.
     let leave = events_a
         .author_event(
@@ -367,17 +497,19 @@ pub async fn run_cross_station_authority_forward_live() -> Result<()> {
         &leave_commit,
         &wait_for_committed(&bob, &leave.event_id).await?,
     )?;
-    // 7. A revokes device C through the live SecurityRotation path.
-    let (rotation, _) = signer.rotation(
-        "fa01",
-        DEVICE_C,
-        seed_a,
-        seed_a,
-        &old,
-        &selected.active_series.authority_commit_id,
-    )?;
-    let created = create(&client_a, &rotation).await?;
-    wait_for_accepted_revoke(&client_a, &created).await?;
+    if !watch {
+        // 7. A revokes device C through the live SecurityRotation path.
+        let (rotation, _) = signer.rotation(
+            "fa01",
+            DEVICE_C,
+            seed_a,
+            seed_a,
+            &old,
+            &selected.active_series.authority_commit_id,
+        )?;
+        let created = create(&client_a, &rotation).await?;
+        wait_for_accepted_revoke(&client_a, &created).await?;
+    }
     ensure!(
         refused(&client_c).await?,
         "the revoked device C still authenticates at its account Station"
