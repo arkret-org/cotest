@@ -97,6 +97,35 @@ try {
     $changed = Get-RepositoryBuildInputState -RepositoryRoot $repo -BinaryPath $artifact
     Assert-True ($added.SourceSha256 -ne $changed.SourceSha256) 'editing untracked source at unchanged mtime must invalidate content identity'
 
+    if ($IsWindows -and [System.IO.Path]::GetPathRoot($testRoot) -ne [System.IO.Path]::GetPathRoot($PSScriptRoot)) {
+        $otherVolumeRoot = Join-Path ([System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../../../.tmp'))) "0805-cross-volume-$([guid]::NewGuid().ToString('N'))"
+        $null = New-Item -ItemType Directory -Path $otherVolumeRoot
+        try {
+            $externalBinary = Join-Path $otherVolumeRoot 'service.exe'
+            Set-Content -LiteralPath $externalBinary -Value 'synthetic external-volume artifact'
+            $externalState = Get-RepositoryBuildInputState -RepositoryRoot $repo -BinaryPath $externalBinary -ArtifactRoot $otherVolumeRoot
+            Assert-True ($externalState.SourceSha256 -eq $changed.SourceSha256) 'an external-volume artifact must preserve every source byte and never become an absolute Git exclusion'
+            Assert-True ($externalState.BuildInputCount -eq $changed.BuildInputCount) 'an external-volume bundle root must not exclude repository inputs'
+            $outsideRejected = $false
+            try { Get-ArtifactContentIdentity -ArtifactPath $externalBinary -ArtifactRoot $testRoot | Out-Null }
+            catch { $outsideRejected = $true }
+            Assert-True $outsideRejected 'a cross-volume artifact cannot be claimed inside another bundle root'
+            $savedCargoHome = $env:CARGO_HOME
+            try {
+                $env:CARGO_HOME = $otherVolumeRoot
+                Set-Content -LiteralPath (Join-Path $otherVolumeRoot 'config.toml') -Value '[build]'
+                $configuredState = Get-RepositoryBuildInputState -RepositoryRoot $repo -BinaryPath $externalBinary
+                Assert-True ($configuredState.SourceSha256 -ne $externalState.SourceSha256) 'external-volume Cargo configuration must be bound as source input'
+                Assert-True (@($configuredState.BuildInputFiles | Where-Object { $_.path -eq ('cargo_configuration:' + (Join-Path $otherVolumeRoot 'config.toml')) }).Count -eq 1) 'the exact external Cargo configuration must occur once'
+            } finally { $env:CARGO_HOME = $savedCargoHome }
+        } finally {
+            $resolvedOtherVolumeRoot = (Resolve-Path -LiteralPath $otherVolumeRoot).Path
+            $expectedOtherVolumeParent = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../../../.tmp'))
+            if ((Split-Path -Parent $resolvedOtherVolumeRoot) -ne $expectedOtherVolumeParent -or -not (Split-Path -Leaf $resolvedOtherVolumeRoot).StartsWith('0805-cross-volume-')) { throw 'Unexpected cross-volume fixture cleanup target' }
+            Remove-Item -LiteralPath $resolvedOtherVolumeRoot -Recurse -Force
+        }
+    }
+
     # A normal cargo test can replace the conformance binary at the same HEAD.
     # Preserve mtime too: only the artifact bytes prove this is a different build.
     $originalMtime = (Get-Item -LiteralPath $artifact).LastWriteTimeUtc

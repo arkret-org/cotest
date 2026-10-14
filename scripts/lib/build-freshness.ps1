@@ -165,7 +165,7 @@ function Get-RepositoryBuildInputState {
     $pathspecs = @('.')
     foreach ($output in $excluded) {
         $relative = [System.IO.Path]::GetRelativePath($root, $output).Replace([System.IO.Path]::DirectorySeparatorChar, [char]'/')
-        if ($relative -ne '..' -and -not $relative.StartsWith('../')) { $pathspecs += ":(literal,exclude)$relative" }
+        if (-not [System.IO.Path]::IsPathRooted($relative) -and $relative -ne '..' -and -not $relative.StartsWith('../')) { $pathspecs += ":(literal,exclude)$relative" }
     }
     $status = Invoke-BuildInputGit -RepositoryRoot $root -Arguments (@('status', '--porcelain=v1', '--untracked-files=all', '-z', '--') + $pathspecs)
     $changes = Invoke-BuildInputGit -RepositoryRoot $root -Arguments (@('diff', '--raw', 'HEAD', '-z', '--') + $pathspecs)
@@ -177,7 +177,7 @@ function Get-RepositoryBuildInputState {
         if ($fullPath -eq $binary -or $fullPath -eq (Get-ArtifactBuildStampPath -ArtifactPath $binary)) { continue }
         if ($ArtifactRoot) {
             $artifactRelative = [System.IO.Path]::GetRelativePath([System.IO.Path]::GetFullPath($ArtifactRoot), $fullPath)
-            if ($artifactRelative -ne '..' -and -not $artifactRelative.StartsWith('..' + [System.IO.Path]::DirectorySeparatorChar)) { continue }
+            if (-not [System.IO.Path]::IsPathRooted($artifactRelative) -and $artifactRelative -ne '..' -and -not $artifactRelative.StartsWith('..' + [System.IO.Path]::DirectorySeparatorChar)) { continue }
         }
         $records.Add((Get-BuildInputFileRecord -Root $root -RelativePath $path))
         if (Test-Path -LiteralPath (Join-Path $root $path) -PathType Leaf) {
@@ -199,7 +199,7 @@ function Get-RepositoryBuildInputState {
     foreach ($name in @('config', 'config.toml')) { $null = $configurationPaths.Add((Join-Path $cargoHome $name)) }
     foreach ($configuration in $configurationPaths) {
         $relative = [System.IO.Path]::GetRelativePath($root, $configuration)
-        if ($relative -ne '..' -and -not $relative.StartsWith('..' + [System.IO.Path]::DirectorySeparatorChar)) { continue }
+        if (-not [System.IO.Path]::IsPathRooted($relative) -and $relative -ne '..' -and -not $relative.StartsWith('..' + [System.IO.Path]::DirectorySeparatorChar)) { continue }
         if (Test-Path -LiteralPath $configuration -PathType Leaf) {
             $record = Get-BuildInputFileRecord -Root (Split-Path -Parent $configuration) -RelativePath (Split-Path -Leaf $configuration)
             $record.path = 'cargo_configuration:' + [System.IO.Path]::GetFullPath($configuration)
@@ -299,11 +299,11 @@ function Get-ArtifactContentIdentity {
         foreach ($required in $RequiredArtifactPaths) {
             $requiredPath = [System.IO.Path]::GetFullPath((Join-Path $root $required))
             $relative = [System.IO.Path]::GetRelativePath($root, $requiredPath)
-            if ($relative -eq '..' -or $relative.StartsWith('..' + [System.IO.Path]::DirectorySeparatorChar) -or
+            if ([System.IO.Path]::IsPathRooted($relative) -or $relative -eq '..' -or $relative.StartsWith('..' + [System.IO.Path]::DirectorySeparatorChar) -or
                 -not (Test-Path -LiteralPath $requiredPath -PathType Leaf)) { throw "Required served bundle member is missing or outside the root: $required" }
         }
         $relativeArtifact = [System.IO.Path]::GetRelativePath($root, $path)
-        if ($relativeArtifact -eq '..' -or $relativeArtifact.StartsWith('..' + [System.IO.Path]::DirectorySeparatorChar)) { throw 'Artifact is outside its bundle root' }
+        if ([System.IO.Path]::IsPathRooted($relativeArtifact) -or $relativeArtifact -eq '..' -or $relativeArtifact.StartsWith('..' + [System.IO.Path]::DirectorySeparatorChar)) { throw 'Artifact is outside its bundle root' }
         $paths = [System.Collections.Generic.SortedSet[string]]::new([System.StringComparer]::Ordinal)
         foreach ($directory in (Get-ChildItem -LiteralPath $root -Directory -Recurse -Force)) {
             if (($directory.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0) { throw "Served bundle contains an unsupported directory link: $($directory.FullName)" }
