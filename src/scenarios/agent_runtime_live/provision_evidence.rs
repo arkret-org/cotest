@@ -23,6 +23,27 @@ pub(crate) struct ProvisionEvidence {
 }
 
 impl ProvisionEvidence {
+    pub(super) async fn reject_wrong_station(
+        &mut self,
+        controller: &TestActorClient,
+        request: &AgentProvisionPrepareRequestBody,
+    ) -> Result<()> {
+        let before = self.snapshot().await?;
+        crate::harness::expect_api_error(
+            controller
+                .post("/_arkret/self/agents")
+                .canonical_json(&AgentProvisionRequestBody::Prepare(request.clone()))?,
+            StatusCode::CONFLICT,
+            "failed_precondition",
+        )
+        .await?;
+        ensure!(
+            self.snapshot().await? == before,
+            "foreign controller Station prepare wrote accepting state"
+        );
+        self.forward_assertions += 2;
+        Ok(())
+    }
     pub(super) fn key_scope(&self, ceiling: &AgentKeyScope) -> AgentKeyScope {
         let mut scope = ceiling.clone();
         if self.scope_matrix {
@@ -486,6 +507,30 @@ impl ProvisionEvidence {
         let AgentProvisionRequestBody::Commit(original) = body else {
             bail!("accepted declaration must retain its exact provision commit request");
         };
+        ensure!(
+            original.provision_event.approval_signatures.is_none()
+                && original.provision_event.event.producer_proof.is_some()
+                && !original.provision_event.event.payload.contains_key("proof")
+                && !original
+                    .provision_event
+                    .event
+                    .payload
+                    .contains_key("proofs"),
+            "provision is not one SDK Event with only its producer signature"
+        );
+        let controller_realm = original.provision_event.event.realm_id.to_string();
+        let agent = original.agent_id.to_string();
+        let event_id = original.provision_event.event.event_id.to_string();
+        let url = self.database_url.clone();
+        let projections: bool = tokio::task::spawn_blocking(move || -> Result<_> {
+            let mut db = postgres::Client::connect(&url,postgres::NoTls)?;
+            Ok(db.query_one("SELECT EXISTS(SELECT 1 FROM agent_provisioning_current_results p JOIN identity_accountability_current_results a ON a.realm_id=p.realm_id AND a.subject_id=p.agent_id AND a.current_commit_id=p.current_commit_id JOIN agent_selector_claim_current_results s ON s.realm_id=p.realm_id AND s.current_commit_id=p.current_commit_id JOIN agent_pcr_genesis_declaration_current_results d ON d.realm_id=p.realm_id AND d.current_commit_id=p.current_commit_id JOIN realm_commits c ON c.commit_id=p.current_commit_id WHERE p.realm_id=$1 AND p.agent_id=$2 AND c.commit_json->>'event_ref'=$3)",&[&controller_realm,&agent,&event_id])?.get(0))
+        }).await??;
+        ensure!(
+            projections,
+            "four provision projections do not share the original accepted Event and Commit"
+        );
+        self.forward_assertions += 2;
         let mut changed = original.clone();
         // Retain the known Event identity and alter its proof bytes. Replays
         // must conflict rather than treating a different envelope as a retry.
@@ -900,6 +945,25 @@ impl ProvisionEvidence {
                 && self.snapshot().await? == before,
             "complete replay changed original outcome or accepted state"
         );
+        let mut changed_scope = original.clone();
+        changed_scope
+            .requested_scope
+            .actions
+            .push("ak.event.read".to_owned());
+        let before = self.snapshot().await?;
+        crate::harness::expect_api_error(
+            controller
+                .post("/_arkret/self/agents")
+                .canonical_json(&AgentProvisionRequestBody::Commit(changed_scope))?,
+            StatusCode::CONFLICT,
+            "failed_precondition",
+        )
+        .await?;
+        ensure!(
+            self.snapshot().await? == before,
+            "changed private scope reused an existing provision allocation"
+        );
+        self.forward_assertions += 2;
         self.forward_assertions += 4;
         self.forward_assertions += 3;
         Ok(())

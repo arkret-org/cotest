@@ -320,7 +320,7 @@ pub async fn run_agent_requested_scope_privacy_production()
         .requested_scope_disclosure
         .requested_scope
         .actions
-        .remove(0);
+        .push("ak.event.read".to_owned());
     sign_disclosure(&controller, &mut mismatch.requested_scope_disclosure)?;
     refused(
         &controller,

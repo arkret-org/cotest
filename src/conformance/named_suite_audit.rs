@@ -175,16 +175,17 @@ const RUNNERS: [(&str, Runner); 54] = [
             reviewed_cases: &[
                 &super::agent_vectors_production::REVIEWED_SCHEMA_CASES,
                 &[
+                    "agent_provision",
                     "agent_pcr_genesis_forward_declaration",
                     "agent_pcr_genesis_without_declaration_rejected",
                     "two_provisions_declaring_one_realm_id_rejected",
+                    "agent_pcr_genesis_same_batch_rejected",
                     "agent_pairing_expiry",
                     "agent_session_grant_replay",
                     "agent_repairing_supersede",
                     "agent_requested_scope_privacy",
                     "agent_pcr_separation",
                     "agent_runtime_key_binding",
-                    "agent_pcr_genesis_same_batch_rejected",
                 ],
             ],
             pointers: &["/schema_validation_cases", "/cases"],
@@ -805,6 +806,34 @@ mod tests {
     use serde_json::json;
 
     use super::*;
+
+    #[test]
+    #[ignore = "requires current Station, Coauth, browser bundle and native Savfox worker"]
+    fn reviewed_agent_production_cases_cross_the_registered_executor() -> Result<()> {
+        let entrypoint = "ak.suite.agent.vectors.v1";
+        let runner = RUNNERS
+            .iter()
+            .find(|(name, _)| *name == entrypoint)
+            .map(|(_, runner)| *runner)
+            .ok_or_else(|| anyhow!("Agent production runner is not registered"))?;
+        let fixture = super::super::load_fixture_value("agent-vectors-fixture.json")?;
+        let execution = execute_runner(entrypoint, runner, &fixture)?
+            .ok_or_else(|| anyhow!("Agent runner omitted production results"))?;
+        let missing = execution.missing_against_cases(&case_sections(
+            &fixture,
+            &["/schema_validation_cases", "/cases"],
+        )?)?;
+        ensure!(
+            execution.cases.len() == 26 && missing.len() == 4,
+            "reviewed Agent result did not retain its exact partial coverage"
+        );
+        ensure!(
+            !missing.iter().any(|name| name == "agent_provision"),
+            "registered executor did not consume full Agent provision"
+        );
+        println!("[named-agent] {execution:#?}\nmissing={missing:?}");
+        Ok(())
+    }
 
     #[test]
     fn sync_partial_production_results_keep_every_other_case_open() -> Result<()> {

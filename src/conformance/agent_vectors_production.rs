@@ -20,8 +20,10 @@ pub fn run_agent_vectors_production_suite() -> Result<SuiteExecutionResult> {
                 .build()?
                 .block_on(async {
                     let mut execution =
-                        crate::scenarios::agent_runtime_live::run_agent_genesis_production_cases()
+                        crate::scenarios::agent_runtime_live::run_agent_provision_production()
                             .await?;
+                    let genesis = crate::scenarios::agent_runtime_live::run_agent_genesis_production_cases().await?;
+                    execution.cases.extend(genesis.cases);
                     let pairing =
                         crate::scenarios::agent_runtime_live::run_agent_pairing_expiry_production()
                             .await?;

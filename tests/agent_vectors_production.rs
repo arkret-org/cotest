@@ -12,8 +12,15 @@ fn agent_genesis_cases_cross_real_http_admission_and_preserve_rejected_state() -
         .clone();
     cases.extend_from_slice(fixture["cases"].as_array().unwrap());
     let missing = execution.missing_against_cases(&cases)?;
-    assert_eq!(execution.cases.len(), 25);
-    assert_eq!(missing.len(), 5);
+    assert_eq!(execution.cases.len(), 26);
+    assert_eq!(missing.len(), 4);
+    assert!(
+        execution
+            .cases
+            .iter()
+            .any(|case| case.case_id == "agent_provision" && case.assertions == 20)
+    );
+    assert!(!missing.iter().any(|case| case == "agent_provision"));
     assert!(
         execution
             .cases
