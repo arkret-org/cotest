@@ -599,35 +599,6 @@
         "多scope配置／review真实消费；controller专用grant/revoke；读／Blob／future material／HTTP/WS最后门；跨站serve／deliver；管理员/成员真实UI",
         "AG-M7正式会话内容来源／fresh issue／refresh及当前ceiling生产验收；0163规范已闭合，工程仍归原0930"
       ]
-    },
-    {
-      "task": "2026-09-30-0805-blob-upload-encryption-classification.md",
-      "criteria_count": 5,
-      "criteria_sha256": "54d3159125850d4976085fcefe384e4feaa44ffe9ee5b9fd86e45289812bcda9",
-      "spec_refs": [
-        "arkret-spec/spec/v1/zh/crypto-media/media-and-blob.md"
-      ],
-      "source_refs": [
-        "inkson/src/views/chat/composer/commands.rs"
-      ],
-      "tests": [
-        {
-          "path": "cotest/tests/conformance_vectors.rs",
-          "symbol": "blob_stream_aead_named_suite_executes_all_current_cases",
-          "kind": "contract",
-          "covers": "AEAD向量，非附件端到端"
-        },
-        {
-          "path": "cotest/tests/delivery_media.rs",
-          "symbol": "blob_storage_classification_survives_restart",
-          "kind": "live",
-          "covers": "服务端分类／restart及presign拒绝"
-        }
-      ],
-      "engineering_checks": [],
-      "remaining_scenarios": [
-        "BA-C1授权winning checkpoint；durable salt／descriptor／ciphertext；结构化ContentBlock发送；授权历史解密/渲染和有界流；真实两设备附件闭环"
-      ]
     }
   ]
 }
