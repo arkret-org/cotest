@@ -52,7 +52,6 @@ fn delivery_authority(
     recipient: AccountId,
 ) -> SignalDeliveryAuthority {
     let authority = SignalDeliveryAuthority {
-        product_authority: None,
         recipient_account_id: recipient,
         key: StationSigningKey {
             actor: signal.sender_actor_id.clone(),
@@ -416,6 +415,8 @@ async fn signal_recipient_consumes_formal_dual_action_fixture_without_body_on_re
         sent_at: signal.sent_at,
         grants: vec![grant.clone()],
         current_grants: vec![grant],
+        historical_product_policies: vec![],
+        current_product_policies: vec![],
         owner_actions: vec![],
         profile_actions: vec![],
         agent: None,

@@ -72,6 +72,7 @@ pub use pcr_evidence::run_agent_pcr_profile_admission;
 pub use privacy_evidence::run_agent_requested_scope_privacy_production;
 pub use provision_evidence::{
     run_agent_genesis_production_cases, run_agent_provision_authority_boundary,
+    run_agent_provision_key_scope_boundary,
 };
 pub use provision_start_evidence::run_agent_provision_prerequisites_boundary;
 pub use repairing_evidence::run_agent_repairing_production;
@@ -614,7 +615,10 @@ impl AgentRuntimeSession {
             verification_method: verification_method.clone(),
             public_key: approval_request.body.public_key.clone(),
             accountable_principal_id: controller_account.principal_id.clone(),
-            agent_key_scope: scope.clone(),
+            agent_key_scope: evidence
+                .as_deref()
+                .map(|evidence| evidence.key_scope(&scope))
+                .unwrap_or_else(|| scope.clone()),
             audience: vec![station.to_string()],
             issued_at: arkret::canonical::normalize_timestamp_canonical(Utc::now()),
             expires_at: None,
@@ -657,6 +661,17 @@ impl AgentRuntimeSession {
             disclosure,
             authorize.clone(),
         )?;
+        if let Some(evidence) = evidence.as_deref_mut() {
+            evidence
+                .reject_key_scope_expansion(
+                    controller,
+                    &pair_request.body,
+                    &authorization,
+                    &device_method,
+                    device_seed,
+                )
+                .await?;
+        }
         let pair_url = match issuer {
             AgentSessionIssuer::Fixture(_) => server.url("/_arkret/gate/account/agent-key-pair"),
             AgentSessionIssuer::Coauth { base, .. } => {
@@ -704,6 +719,16 @@ impl AgentRuntimeSession {
                 && committed.reducer_input() == Some(&authorize),
             "the controller must resolve the exact committed Agent authorization"
         );
+        if let Some(evidence) = evidence.as_deref_mut() {
+            evidence.accepted_key_scope(
+                &AgentKeyAuthorizePayload::try_from(
+                    committed
+                        .reducer_input()
+                        .context("accepted key authorization missing")?,
+                )?,
+                &scope,
+            )?;
+        }
 
         Ok(AgentPairedPrincipal {
             controller_account: controller_account.clone(),

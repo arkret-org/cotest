@@ -419,8 +419,8 @@
     },
     {
       "task": "2026-09-25-2136-effect-ownership-closure-and-remaining-current-families.md",
-      "criteria_count": 4,
-      "criteria_sha256": "0d2e61aaea229c67d11ada5e29daf14d99acae1226f3704eff1dcb1bb9f0c152",
+      "criteria_count": 5,
+      "criteria_sha256": "b8ef3470fe8d0c482e78245b806e0b16c5e77efef2bf50c1bdb147b68c624e0f",
       "spec_refs": [
         "arkret-spec/spec/v1/zh/sync/current-results.md"
       ],
@@ -443,7 +443,7 @@
     {
       "task": "2026-09-25-2141-consent-current-and-admission.md",
       "criteria_count": 2,
-      "criteria_sha256": "8bfb8292d1dbdc5189f38ca0db494d5e5b9a808c431c36dadfc69f72a1c1edb6",
+      "criteria_sha256": "7ba083aad5c548d1cdae815cddb8f3b6410819b2a4da88122e41308d297c43f1",
       "spec_refs": [
         "arkret-spec/spec/v1/zh/identity/consent-model.md",
         "arkret-spec/spec/v1/zh/extensions/mimi-interop.md",
@@ -514,7 +514,7 @@
     {
       "task": "2026-09-30-0805-blob-upload-encryption-classification.md",
       "criteria_count": 5,
-      "criteria_sha256": "31c3a0086f06cb73fe185ecc2f2a849def09b386f3aecf88de5b44f74dc526f7",
+      "criteria_sha256": "b3c465a2babf16398f451ea7b3f83afee139e5a9b5923741e1818ba4e47cf889",
       "spec_refs": [
         "arkret-spec/spec/v1/zh/crypto-media/media-and-blob.md"
       ],
@@ -541,59 +541,27 @@
       ]
     },
     {
-      "task": "2026-08-31-0630-remote-signal-accepted-device-directory.md",
-      "criteria_count": 6,
-      "criteria_sha256": "7cf9a322fb8266691694129c692a5e8c298d9db9d7ad1156440c1d0421654623",
+      "task": "2026-10-11-0930-owned-agent-controller-management-enforcement.md",
+      "criteria_count": 7,
+      "criteria_sha256": "33b8d24e713c9efac1d889ef8378b9f330559f0a1f264cdf2edb9a64b78bfac2",
       "spec_refs": [
-        "arkret-spec/spec/v1/zh/sync/signal.md",
-        "arkret-spec/spec/v1/zh/discovery/profiles-presence.md"
+        "arkret-spec/spec/v1/zh/authz/owned-agent-authority.md"
       ],
       "source_refs": [
-        "coland/crates/storage-postgres/src/signal_scope_authority.rs",
-        "garth/src/signal.rs",
-        "garth/src/signal_message_stream.rs",
-        "inkson/src/signal_receive_engine.rs",
-        "inkson/src/state/current_index.rs",
-        "inkson/src/app/signal_products.rs",
-        "arkret-rust-sdk/crates/models-collaboration/src/signal_delivery.rs",
-        "arkret-rust-sdk/crates/policy/src/signal_authorization.rs",
-        "inkson/src/views/message_streams.rs"
+        "coland/crates/storage-postgres/src/agent_management_admission.rs"
       ],
       "tests": [
         {
-          "path": "cotest/tests/signal_live.rs",
-          "symbol": "accepted_signal_self_peer_recipient_and_read_only_denials",
+          "path": "coland/crates/storage-postgres/tests/sidecar_authority_cut.rs",
+          "symbol": "ordinary_member_can_join_own_agent_without_permission_to_add_humans",
           "kind": "live",
-          "covers": "真实双Station TLS／PG／producer proof／MLS AEAD；缺send、缺create、双grant及撤销后共享产品gate的preview正反例；未证明Inkson浏览器或完整Agent冷路径"
-        },
-        {
-          "path": "cotest/src/conformance/signal_recipient.rs",
-          "symbol": "signal_recipient_preserves_the_authenticated_circle_authority_basis",
-          "kind": "contract",
-          "covers": "实际 producer 签名认证后保留原 scope／父 Realm basis，篡改父 basis 拒绝；decryptor fixture，不证明实际 MLS AEAD或产品授权"
-        },
-        {
-          "path": "cotest/src/conformance/signal_recipient.rs",
-          "symbol": "signal_recipient_profile_expiry_cannot_poison_high_water",
-          "kind": "contract",
-          "covers": "短于外层期限的 profile 已过期时不推进 high-water；不证明实际浏览器／Station消费"
-        },
-        {
-          "path": "cotest/src/conformance/signal_recipient.rs",
-          "symbol": "signal_recipient_consumes_formal_dual_action_fixture_without_body_on_refusal",
-          "kind": "contract",
-          "covers": "正式11 mutation matrix经真实producer proof／Garth材料绑定／SDK双action gate；受控decryptor不证明实际AEAD"
-        },
-        {
-          "path": "inkson/src/views/message_streams.rs",
-          "symbol": "mounted_hub_requires_both_live_actions_before_body_side_effects",
-          "kind": "product",
-          "covers": "mounted Dioxus MessageStreamHub正文前双action拒绝／允许与失效正文清除；native，不冒充浏览器"
+          "covers": "成员添加自有Agent与Human权限区分"
         }
       ],
       "engineering_checks": [],
       "remaining_scenarios": [
-        "Typing完整capability／policy可见性、适用blocklist与撤权后旧指示仍有代码剩项；MessageStream正式双action消费已接通，剩真实浏览器／完整ordinary-Agent-Circle／Direct participant与sender durable allocator组合验收"
+        "多scope配置／review真实消费；controller专用grant/revoke；读／Blob／future material／HTTP/WS最后门；跨站serve／deliver；管理员/成员真实UI",
+        "AG-M7正式会话内容来源／fresh issue／refresh及当前ceiling生产验收；0163规范已闭合，工程仍归原0930"
       ]
     }
   ]

@@ -137,6 +137,71 @@ pub async fn run_agent_provision_grant_ceiling_boundary() -> Result<()> {
             &arkret_wire::EventAdmissionSubmission::new(event.clone()),
         )?;
         if accepted {
+            let method = event
+                .producer_proof
+                .as_ref()
+                .context("grant controller proof absent")?
+                .verification_method
+                .clone();
+            for label in [
+                "service_method",
+                "service_key_under_controller_method",
+                "dev_proof",
+            ] {
+                let mut substituted = event.clone();
+                if label == "dev_proof" {
+                    substituted
+                        .producer_proof
+                        .as_mut()
+                        .context("grant proof absent")?
+                        .kind = "dev-proof".to_owned();
+                } else {
+                    substituted.producer_proof = None;
+                    let signing_method = if label == "service_method" {
+                        DidUrl::new(format!("{}#federation-fanout-key", station.service_did()))
+                            .map_err(anyhow::Error::msg)?
+                    } else {
+                        method.clone()
+                    };
+                    substituted = sign(
+                        arkret_wire::AuthoredEvent::from_verified_with_digest_suite(
+                            substituted,
+                            arkret_canonical::DigestSuite::Sha256,
+                        )?,
+                        &signing_method,
+                        station.federation_signing_key()?.to_bytes(),
+                    )?;
+                }
+                let before = acceptance_rows_with_agent_stores(&database.connect_url, true).await?;
+                let response = controller
+                    .post("/_arkret/self/events")
+                    .header(reqwest::header::CONTENT_TYPE, "application/json")
+                    .body(arkret_canonical::canonical_json_bytes(
+                        &arkret_wire::EventAdmissionSubmission::new(substituted),
+                    )?)
+                    .send()
+                    .await?;
+                let status = response.status();
+                let problem: arkret_wire::Problem = response.json().await?;
+                let expected = if label == "dev_proof" {
+                    "schema_violation"
+                } else {
+                    "signature_invalid"
+                };
+                ensure!(
+                    status.is_client_error() && problem.code() == expected,
+                    "ordinary grant {label} reached wrong refusal: {}: {}",
+                    problem.code(),
+                    problem.detail
+                );
+                ensure!(
+                    acceptance_rows_with_agent_stores(&database.connect_url, true).await? == before,
+                    "ordinary grant proof substitute changed full accepted/Agent state"
+                );
+                println!(
+                    "[agent-provision-grant] rejected={label} code={expected} full_footprint_unchanged=1"
+                );
+            }
             execute_owned_sql(&database.connect_url,
                 "CREATE FUNCTION agent_grant_projection_fault() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'owned Agent grant projection fault'; END $$; CREATE TRIGGER agent_grant_projection_fault BEFORE INSERT OR UPDATE ON capability_grant_current_results FOR EACH ROW EXECUTE FUNCTION agent_grant_projection_fault()").await?;
             let before_fault =
@@ -209,6 +274,57 @@ pub async fn run_agent_provision_grant_ceiling_boundary() -> Result<()> {
             ensure!(
                 acceptance_rows_with_agent_stores(&database.connect_url, true).await? == after,
                 "exact grant replay wrote new state"
+            );
+            // Revoke through the real controller PCR writer. A fresh Event
+            // probes the current gate; the already accepted exact replay must
+            // retain its historical outcome independently of this new cut.
+            coauth_session_evidence::set_accountability_for_agent(
+                &controller, &agent.agent_account.principal_id, &account,
+                arkret_models_collaboration::governance::accountability::AccountabilityGrantStatus::Revoked,
+            ).await?;
+            let fresh = controller
+                .author_event(
+                    grant_realm.as_str(),
+                    "ak.capability.grant",
+                    serde_json::to_value(&event.payload)?,
+                )
+                .await?;
+            ensure!(
+                fresh.event_id != event.event_id,
+                "missing accountability probe reused an accepted Event"
+            );
+            let fresh_bytes = arkret_canonical::canonical_json_bytes(
+                &arkret_wire::EventAdmissionSubmission::new(fresh.clone()),
+            )?;
+            let before = acceptance_rows_with_agent_stores(&database.connect_url, true).await?;
+            let problem = crate::harness::expect_api_error(
+                controller
+                    .post("/_arkret/self/events")
+                    .header(reqwest::header::CONTENT_TYPE, "application/json")
+                    .body(fresh_bytes),
+                StatusCode::CONFLICT,
+                "failed_precondition",
+            )
+            .await?;
+            ensure!(
+                problem
+                    .extensions
+                    .get("reason_code")
+                    .and_then(serde_json::Value::as_str)
+                    == Some(arkret_wire::ReasonCode::ACCOUNTABILITY_GRANT_MISSING),
+                "revoked accountability did not reach its formal grant gate: {}",
+                problem.code()
+            );
+            ensure!(
+                acceptance_rows_with_agent_stores(&database.connect_url, true).await? == before,
+                "fresh grant without accountability changed accepted/Agent state"
+            );
+            coauth_session_evidence::set_accountability_for_agent(
+                &controller, &agent.agent_account.principal_id, &account,
+                arkret_models_collaboration::governance::accountability::AccountabilityGrantStatus::Active,
+            ).await?;
+            println!(
+                "[agent-provision-grant] fresh_grant_after_actual_accountability_revoke=accountability_grant_missing full_footprint_unchanged=1"
             );
         } else {
             ensure!(

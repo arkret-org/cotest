@@ -669,6 +669,21 @@ async fn set_accountability(
     agent: &super::AgentRuntimeSession,
     status: arkret_models_collaboration::governance::accountability::AccountabilityGrantStatus,
 ) -> Result<()> {
+    set_accountability_for_agent(
+        controller,
+        &agent.agent_account.principal_id,
+        &agent.controller_account,
+        status,
+    )
+    .await
+}
+
+pub(super) async fn set_accountability_for_agent(
+    controller: &crate::harness::TestActorClient,
+    agent_id: &arkret_wire::DidCoreId,
+    controller_account: &arkret_wire::AccountId,
+    status: arkret_models_collaboration::governance::accountability::AccountabilityGrantStatus,
+) -> Result<()> {
     use arkret_models_collaboration::governance::accountability::{
         AccountabilityGrantPayload, AccountabilityScope, AccountabilityScopeKind,
     };
@@ -682,7 +697,7 @@ async fn set_accountability(
     let created_at = arkret_canonical::normalize_timestamp_canonical(chrono::Utc::now());
     let mut grant = AccountabilityGrantPayload::new(
         principal.core_id.clone(),
-        agent.agent_account.principal_id.clone(),
+        agent_id.clone(),
         AccountabilityScope::Single(AccountabilityScopeKind::AgentOperator),
         created_at - chrono::Duration::seconds(1),
         None,
@@ -714,7 +729,7 @@ async fn set_accountability(
             arkret_wire::ScopeRef::Realm {
                 realm_id: principal.pcr_realm_id.clone(),
             },
-            arkret_wire::ActorId::account(agent.controller_account.clone()),
+            arkret_wire::ActorId::account(controller_account.clone()),
             created_at,
             None,
         )?
