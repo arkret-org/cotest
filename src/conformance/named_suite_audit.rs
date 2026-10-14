@@ -402,7 +402,15 @@ const RUNNERS: [(&str, Runner); 54] = [
     ),
     (
         STRAND_WATCH_CURRENT_ENTRYPOINT,
-        Runner::Cases(run_strand_watch_current_suite),
+        Runner::CasesAcross {
+            run: run_strand_watch_current_suite,
+            pointers: &[
+                "/cases",
+                "/schema_validation_cases",
+                "/cross_station_cases",
+                "/submit_cas_cases",
+            ],
+        },
     ),
     (
         STRING_PROFILE_ENTRYPOINT,
@@ -803,6 +811,7 @@ fn case_sections(fixture: &Value, pointers: &[&str]) -> Result<Vec<Value>> {
 
 #[cfg(test)]
 mod tests {
+    use anyhow::Context;
     use serde_json::json;
 
     use super::*;
@@ -873,6 +882,20 @@ mod tests {
     }
 
     fn passing_evidence_runner() -> Result<()> {
+        Ok(())
+    }
+
+    #[test]
+    fn strand_watch_registered_executor_consumes_every_canonical_section() -> Result<()> {
+        let fixture = super::super::load_fixture_value("strand-watch-current-read-fixture.json")?;
+        let runner = RUNNERS
+            .iter()
+            .find(|(entrypoint, _)| *entrypoint == STRAND_WATCH_CURRENT_ENTRYPOINT)
+            .context("Strand Watch has no registered executor")?;
+        let execution = execute_runner(STRAND_WATCH_CURRENT_ENTRYPOINT, runner.1, &fixture)?
+            .context("Strand Watch returned no per-case results")?;
+        ensure!(execution.cases.len() == 58);
+        println!("[named-watch] {execution:#?}");
         Ok(())
     }
 

@@ -33,6 +33,12 @@ struct FixtureRoot {
     covers_vectors: Vec<String>,
     cases: Vec<Value>,
     minimum_independent_runners: usize,
+    cross_station_operation_id: String,
+    evidence_boundary: String,
+    schema_validation_cases: Vec<Value>,
+    cross_station_cases: Vec<Value>,
+    submit_cas_cases: Vec<Value>,
+    cross_station_basis: Value,
 }
 
 #[derive(Debug, Deserialize)]
@@ -436,6 +442,49 @@ pub fn run_strand_watch_current_suite() -> Result<StrandWatchCurrentExecution> {
         stale_authoring_blocks += stale;
     }
     ensure!(cases.len() == 7, "expected all seven watch-current cases");
+    ensure!(fixture.cross_station_operation_id == "ak.peer.strand.watch.read.current.v1");
+    ensure!(!fixture.evidence_boundary.is_empty() && fixture.cross_station_basis.is_object());
+    let output = std::process::Command::new(
+        std::env::var_os("COTEST_PYTHON_BIN").unwrap_or_else(|| "python".into()),
+    )
+    .args(["-X", "utf8"])
+    .arg(std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("scripts/run-peer-watch-vectors.py"))
+    .arg(spec_artifacts_root())
+    .output()
+    .context("execute canonical peer Watch schema and abstract evaluator")?;
+    ensure!(
+        output.status.success(),
+        "canonical peer Watch evaluator failed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let evaluated: Value = serde_json::from_slice(&output.stdout)?;
+    ensure!(
+        evaluated["evidence_kind"] == "schema_and_abstract_vectors"
+            && evaluated["production_e2e_claim"] == false
+            && evaluated["independent_runner_claim"] == false
+    );
+    let actual = evaluated["cases"]
+        .as_array()
+        .context("canonical evaluator returned no cases")?;
+    let declared: Vec<_> = fixture
+        .schema_validation_cases
+        .iter()
+        .chain(&fixture.cross_station_cases)
+        .chain(&fixture.submit_cas_cases)
+        .map(case_name)
+        .collect::<Result<_>>()?;
+    ensure!(actual.len() == declared.len());
+    for (row, name) in actual.iter().zip(declared) {
+        ensure!(row["case_id"] == name && row["assertions"] == 1);
+        cases.push(CaseExecutionResult {
+            case_id: name.into(),
+            assertions: 1,
+        });
+    }
+    println!(
+        "[strand-watch] cases={} schema_and_abstract_only=1 production_e2e_claim=0",
+        cases.len()
+    );
     Ok(StrandWatchCurrentExecution {
         entrypoint: STRAND_WATCH_CURRENT_ENTRYPOINT,
         fixture: FIXTURE,
@@ -454,7 +503,7 @@ mod tests {
     fn executes_every_station_and_client_case() {
         let execution = run_strand_watch_current_suite().unwrap();
         assert_eq!(execution.entrypoint, STRAND_WATCH_CURRENT_ENTRYPOINT);
-        assert_eq!(execution.cases.len(), 7);
+        assert_eq!(execution.cases.len(), 58);
         assert_eq!(execution.typed_outcomes, 3);
         assert_eq!(execution.non_enumerating_rejections, 4);
         assert_eq!(execution.stale_authoring_blocks, 2);

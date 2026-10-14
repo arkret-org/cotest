@@ -254,7 +254,7 @@ fn strand_watch_current_named_suite_executes_all_current_cases() -> Result<()> {
         execution.entrypoint,
         "ak.suite.state.strand_watch_current_read.v1"
     );
-    assert_eq!(execution.cases.len(), 7);
+    assert_eq!(execution.cases.len(), 58);
     assert!(execution.cases.iter().all(|case| case.assertions > 0));
     Ok(())
 }
