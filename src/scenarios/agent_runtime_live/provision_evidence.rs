@@ -18,9 +18,146 @@ pub(crate) struct ProvisionEvidence {
     collision_assertions: usize,
     batch_assertions: usize,
     genesis_cut: Option<Value>,
+    scope_matrix: bool,
+    scope_assertions: usize,
 }
 
 impl ProvisionEvidence {
+    pub(super) fn key_scope(&self, ceiling: &AgentKeyScope) -> AgentKeyScope {
+        let mut scope = ceiling.clone();
+        if self.scope_matrix {
+            scope.actions.retain(|action| {
+                action != ServiceOperationId::SELF_DEVICE_MESSAGES_COMMAND_SEND_V1
+            });
+            scope.resources.retain(|resource| {
+                resource.operation.as_deref()
+                    != Some(ServiceOperationId::SELF_DEVICE_MESSAGES_COMMAND_SEND_V1)
+            });
+        }
+        scope
+    }
+
+    pub(super) async fn reject_key_scope_expansion(
+        &mut self,
+        controller: &TestActorClient,
+        request: &arkret_models_collaboration::agent_scope::AgentKeyPairRequestBody,
+        authorization: &AgentKeyAuthorizePayload,
+        method: &DidUrl,
+        seed: [u8; 32],
+    ) -> Result<()> {
+        if !self.scope_matrix {
+            return Ok(());
+        }
+        for label in [
+            "wider_action",
+            "outside_content_resource",
+            "omitted_mandatory_constraint",
+        ] {
+            let mut payload = authorization.clone();
+            match label {
+                "wider_action" => payload.agent_key_scope.actions.push("ak.event.read".to_owned()),
+                "outside_content_resource" => payload.agent_key_scope.resources.push(serde_json::from_value(json!({
+                    "kind":"realm", "realm_id":RealmId::from_event_id(&EventId::from_digest(arkret_canonical::DigestSuite::Sha256,[12;32]))
+                }))?),
+                _ => payload.agent_key_scope.constraints.clear(),
+            }
+            let original = &request.authorize_event.event;
+            let event = sign(
+                arkret_event_draft::build_agent_key_authorize_intent(
+                    &payload,
+                    original.scope_ref.clone(),
+                    original.actor_id.clone(),
+                    original
+                        .executed_by
+                        .clone()
+                        .context("controller execution missing")?,
+                    DidUrl::new(
+                        original
+                            .authorization_ref
+                            .as_ref()
+                            .context("controller delegation missing")?
+                            .as_str(),
+                    )
+                    .map_err(anyhow::Error::msg)?,
+                    Utc::now(),
+                )?
+                .author_with_digest_suite(arkret_canonical::DigestSuite::Sha256)?,
+                method,
+                seed,
+            )?;
+            let mut rejected = request.clone();
+            rejected.authorize_event = arkret_wire::EventAdmissionSubmission::new(event);
+            if label == "wider_action" {
+                let before = self.snapshot().await?;
+                let response = controller
+                    .post("/_arkret/self/events")
+                    .canonical_json(&rejected.authorize_event)?
+                    .send()
+                    .await?;
+                let status = response.status();
+                let problem: arkret_wire::Problem = response.json().await?;
+                ensure!(
+                    status.is_client_error() && problem.error_code().is_some(),
+                    "direct key authorize bypassed its public admission gate: {}: {}",
+                    problem.code(),
+                    problem.detail
+                );
+                ensure!(
+                    self.snapshot().await? == before,
+                    "direct key authorization changed accepting or Agent state"
+                );
+                println!(
+                    "[agent-provision-scope] direct_key_authorize_rejected={} full_footprint_unchanged=1",
+                    problem.code()
+                );
+                self.scope_assertions += 1;
+            }
+            let before = self.snapshot().await?;
+            let problem = crate::harness::expect_api_error(
+                controller
+                    .post("/_arkret/gate/account/agent-key-pair")
+                    .header(
+                        "idempotency-key",
+                        rejected.authorize_event.event.event_id.as_str(),
+                    )
+                    .canonical_json(&rejected)?,
+                StatusCode::BAD_REQUEST,
+                "param_invalid",
+            )
+            .await?;
+            ensure!(
+                problem
+                    .detail
+                    .contains("within the provisioned requested_scope"),
+                "{label} did not reach the provision ceiling: {}",
+                problem.detail
+            );
+            ensure!(
+                self.snapshot().await? == before,
+                "{label} changed accepting or Agent state"
+            );
+            self.scope_assertions += 2;
+        }
+        Ok(())
+    }
+
+    pub(super) fn accepted_key_scope(
+        &mut self,
+        payload: &AgentKeyAuthorizePayload,
+        ceiling: &AgentKeyScope,
+    ) -> Result<()> {
+        if self.scope_matrix {
+            ensure!(
+                payload.agent_key_scope == self.key_scope(ceiling)
+                    && payload.agent_key_scope.actions.len() < ceiling.actions.len()
+                    && payload.agent_key_scope.resources.len() < ceiling.resources.len()
+                    && payload.agent_key_scope.constraints == ceiling.constraints,
+                "accepted runtime key did not preserve its narrower immutable scope"
+            );
+            self.scope_assertions += 1;
+        }
+        Ok(())
+    }
     pub(super) async fn reject_proof_substitutes(
         &mut self,
         server: &ArkretServer,
@@ -784,6 +921,20 @@ pub async fn run_agent_provision_authority_boundary() -> Result<()> {
 async fn run_agent_genesis_production_cases_for_mode(
     development: bool,
 ) -> Result<SuiteExecutionResult> {
+    run_agent_provision_cases(development, false).await
+}
+
+pub async fn run_agent_provision_key_scope_boundary() -> Result<()> {
+    for development in [true, false] {
+        run_agent_provision_cases(development, true).await?;
+    }
+    Ok(())
+}
+
+async fn run_agent_provision_cases(
+    development: bool,
+    scope_matrix: bool,
+) -> Result<SuiteExecutionResult> {
     let name = if development {
         "agent-genesis-development"
     } else {
@@ -833,17 +984,39 @@ async fn run_agent_genesis_production_cases_for_mode(
         collision_assertions: 0,
         batch_assertions: 0,
         genesis_cut: None,
+        scope_matrix,
+        scope_assertions: 0,
     };
-    AgentRuntimeSession::establish_observed(
+    let mut scope = requested_scope(&runtime_operations())?;
+    if scope_matrix {
+        scope.resources.push(serde_json::from_value(json!({"kind":"realm", "realm_id":RealmId::from_event_id(&EventId::from_digest(arkret_canonical::DigestSuite::Sha256,[11;32]))}))?);
+        let mut required = arkret_models_collaboration::governance::grant_constraint::GrantConstraint::new(
+            arkret_models_collaboration::governance::grant_constraint::GrantConstraintKind::ClaimBased,
+            arkret_models_collaboration::governance::grant_constraint::GrantConstraintEffect::Allow,
+        );
+        required.constraint_subkind = Some(arkret_models_collaboration::governance::grant_constraint::GrantConstraintSubkind::Approval);
+        required.controller_approval_required = Some(true);
+        scope.constraints.push(required);
+    }
+    AgentRuntimeSession::establish_paired_observed(
         station,
-        AgentSessionIssuer::Fixture(&coauth),
+        &AgentSessionIssuer::Fixture(&coauth),
         &controller,
         &account,
         "genesis-agent",
-        requested_scope(&runtime_operations())?,
+        scope,
         Some(&mut evidence),
     )
     .await?;
+    if scope_matrix {
+        ensure!(
+            evidence.scope_assertions == 8,
+            "key scope matrix was not fully observed"
+        );
+        println!(
+            "[agent-provision-scope] development_mode={development} observations=8 narrower_key_accepted=1 wider_action_rejected=1 outside_content_resource_rejected=1 mandatory_constraint_preserved=1 direct_submit_rejected=1 complete_footprints_unchanged=1"
+        );
+    }
     Ok(SuiteExecutionResult {
         entrypoint: "ak.suite.agent.vectors.v1",
         fixture: "agent-vectors-fixture.json",
