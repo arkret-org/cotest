@@ -483,35 +483,6 @@
       ]
     },
     {
-      "task": "2026-09-25-2144-sidecar-participant-authority-cut.md",
-      "criteria_count": 5,
-      "criteria_sha256": "a3aea64f1da394d19bf2e164cd3c46edea7b1989ff406f6f4a0d3bdd32990c31",
-      "spec_refs": [
-        "arkret-spec/spec/v1/zh/models/sidecar.md"
-      ],
-      "source_refs": [
-        "coland/crates/storage-postgres/tests/sidecar_authority_cut.rs"
-      ],
-      "tests": [
-        {
-          "path": "cotest/tests/sidecar_authority_live.rs",
-          "symbol": "sidecar_ensure_replay_and_private_native_disclosure_are_real",
-          "kind": "live",
-          "covers": "真实ensure／重放／私有scan"
-        },
-        {
-          "path": "coland/crates/storage-postgres/tests/sidecar_authority_cut.rs",
-          "symbol": "desired_agents_require_owned_active_key_and_exact_realm_membership",
-          "kind": "live",
-          "covers": "desired Agent真实accepted资格"
-        }
-      ],
-      "engineering_checks": [],
-      "remaining_scenarios": [
-        "同cut heads和终止/rejoin；并发Genesis／Commit零部分写；第64/65 ref接受边界；17 reserved vector完整producer runner"
-      ]
-    },
-    {
       "task": "2026-09-30-0805-blob-upload-encryption-classification.md",
       "criteria_count": 5,
       "criteria_sha256": "b3c465a2babf16398f451ea7b3f83afee139e5a9b5923741e1818ba4e47cf889",
