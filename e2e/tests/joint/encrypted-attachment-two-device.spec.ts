@@ -296,10 +296,41 @@ test("encrypted attachment two-device upload/send/history/render and exact resta
     await expect(alice.page.getByTestId("send-chat-button")).toBeEnabled({timeout: 120_000});
     await alice.page.getByTestId("send-chat-button").click();
     await expect(bob.page.getByTestId("verified-long-text-page")).toContainText(`${marker} long text`, {timeout: 120_000});
-    await bob.page.getByTestId("verified-long-text-last").click();
-    await expect(bob.page.getByTestId("verified-long-text-page")).toContainText("long-text-final-验收");
     const textLink = bob.page.getByRole("link", {name: "Download full text", exact: true});
-    const fullText = await textLink.evaluate(async (link: HTMLAnchorElement) => await (await fetch(link.href)).text());
+    const firstPageUrl = await textLink.getAttribute("href");
+    expect(firstPageUrl).toMatch(/^blob:/);
+    const textReader = bob.page.getByTestId("verified-long-text");
+    const firstReaderId = await textReader.getAttribute("data-reader-id");
+    const textViewport = bob.page.getByTestId("verified-long-text-viewport");
+    const firstPageHeight = await textViewport.evaluate((element: HTMLElement) => element.getBoundingClientRect().height);
+    expect(firstPageHeight).toBeGreaterThan(0);
+    expect(firstPageHeight).toBeLessThanOrEqual(384);
+    let fullText: string;
+    try {
+      await bob.page.getByTestId("verified-long-text-last").click();
+      await expect(bob.page.getByTestId("verified-long-text-page")).toContainText("long-text-final-验收");
+      // Let ResizeObserver/virtual-window feedback settle; paging must keep the
+      // same mounted verified artifact, rather than recreating a revoked URL.
+      await bob.page.evaluate(() => new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
+      await expect(bob.page.getByTestId("verified-long-text-page")).toContainText("long-text-final-验收");
+      await expect(textReader).toHaveAttribute("data-reader-id", firstReaderId!);
+      await expect(textLink).toHaveAttribute("href", firstPageUrl!);
+      expect(await textViewport.evaluate((element: HTMLElement) => element.getBoundingClientRect().height)).toBe(firstPageHeight);
+      fullText = await textLink.evaluate(async (link: HTMLAnchorElement) => await (await fetch(link.href)).text());
+    } catch (error) {
+      await testInfo.attach("long-text-reader-boundary.json", {contentType: "application/json", body: JSON.stringify({
+        firstPageUrl, firstReaderId, firstPageHeight,
+        current: await textReader.evaluate((element: HTMLElement) => ({
+          reader: element.dataset.readerId, page: element.dataset.pageIndex,
+          url: element.querySelector("a")?.getAttribute("href"),
+          row: element.closest("[data-message-id]")?.getAttribute("data-message-id"),
+          rectangle: element.getBoundingClientRect().toJSON(),
+          lastDisabled: (element.querySelector('[data-testid="verified-long-text-last"]') as HTMLButtonElement)?.disabled,
+          feed: element.closest('[id^="chat-feed-"]')?.scrollTop,
+        })).catch(() => null),
+      })});
+      throw error;
+    }
     expect(fullText).toBe(longBody);
     const preparedBlobs = (await holderAttachments(alice.page)).filter(o => o.scope.realm_id === realm && o.uploaded);
     const storedBlobs = await inspectStoredBlobs(preparedBlobs.map(o => o.blobRef));
@@ -386,6 +417,7 @@ test("encrypted attachment two-device upload/send/history/render and exact resta
       assertions: {exact_restart_object: true, private_structured_send: true, receiver_bytes_and_pixels: true, receiver_restart: true,
         target_draft_aba_cancel_and_exact_recovery: true, fresh_object_salt_and_ciphertext: true,
         bounded_browser_source_reads: sourceReads, large_segmented_file_sha256: sha(large), long_text_full_sha256: sha(Buffer.from(fullText)),
+        long_text_paging_keeps_artifact_url: true, long_text_viewport_height: firstPageHeight,
         historical_epoch_advanced_from: oldEpoch, since_join_historical_source_not_found: true, since_join_no_historical_preview: true,
         preview_url_revoked_on_target_navigation: true,
         ciphertext_presign_refused: true, tamper_no_preview: tampered}}), contentType: "application/json"});
