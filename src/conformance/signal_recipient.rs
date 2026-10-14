@@ -52,7 +52,6 @@ fn delivery_authority(
     recipient: AccountId,
 ) -> SignalDeliveryAuthority {
     let authority = SignalDeliveryAuthority {
-        product_authority: None,
         recipient_account_id: recipient,
         key: StationSigningKey {
             actor: signal.sender_actor_id.clone(),
