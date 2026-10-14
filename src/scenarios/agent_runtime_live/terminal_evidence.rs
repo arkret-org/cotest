@@ -232,6 +232,18 @@ pub(super) async fn exercise(material: Materials<'_>) -> Result<()> {
     )?;
     durable.as_file().sync_all()?;
     let terminal_claim = claim_request(&material, &second.keypackage_ref)?;
+    let pending = pairing_expiry_evidence::replacement_material_with_ttl(
+        material.station,
+        material.controller,
+        &material.agent.controller_account,
+        material.agent,
+        120000,
+    )
+    .await?;
+    let token = URL_SAFE_NO_PAD.encode(serde_json::to_vec(&json!({
+        "r":pending.bootstrap.pairing_request_id,"c":pending.bootstrap.pairing_code,
+    }))?);
+    ensure!(pending.bootstrap.pairing_expires_at > Utc::now() + chrono::Duration::seconds(90));
     repairing_evidence::lifecycle(material.controller, material.agent, "deactivate").await?;
     let deadline = Instant::now() + Duration::from_secs(60);
     loop {
@@ -246,6 +258,66 @@ pub(super) async fn exercise(material: Materials<'_>) -> Result<()> {
         tokio::time::sleep(Duration::from_millis(100)).await;
     }
     let before = acceptance_rows_with_agent_stores(material.database_url, true).await?;
+    let response = material
+        .station
+        .http()
+        .post(material.station.url("/_arkret/open/agent-pairing/resolve"))
+        .header("Content-Type", "application/json")
+        .body(arkret_canonical::canonical_json_bytes(
+            &arkret_models_collaboration::agent_operations::AgentPairingResolveRequestBody {
+                pairing_token: token,
+            },
+        )?)
+        .send()
+        .await?;
+    ensure!(
+        response.status() == StatusCode::NOT_FOUND
+            && Utc::now() < pending.bootstrap.pairing_expires_at,
+        "terminal open handle remained resolvable or the test waited for TTL expiry"
+    );
+    let response = material
+        .controller
+        .post(&format!(
+            "/_arkret/self/agents/{}/renew-pairing",
+            material.agent.agent_account.principal_id
+        ))
+        .header("Content-Type", "application/json")
+        .body(arkret_canonical::canonical_json_bytes(
+            &arkret_models_collaboration::agent_operations::AgentRenewPairingRequestBody {
+                pairing_ttl_ms: Some(120000),
+            },
+        )?)
+        .send()
+        .await?;
+    ensure!(response.status().is_client_error());
+    let problem: arkret_wire::Problem = response.json().await?;
+    ensure!(
+        problem
+            .extensions
+            .get("reason_code")
+            .and_then(serde_json::Value::as_str)
+            == Some(arkret_wire::ReasonCode::AGENT_DEACTIVATED)
+    );
+    let response = material
+        .controller
+        .post("/_arkret/gate/account/agent-key-pair")
+        .header(
+            "Idempotency-Key",
+            pending.body.authorize_event.event.event_id.as_str(),
+        )
+        .header("Content-Type", "application/json")
+        .body(arkret_canonical::canonical_json_bytes(&pending.body)?)
+        .send()
+        .await?;
+    ensure!(response.status().is_client_error());
+    let problem: arkret_wire::Problem = response.json().await?;
+    ensure!(
+        problem
+            .extensions
+            .get("reason_code")
+            .and_then(serde_json::Value::as_str)
+            == Some(arkret_wire::ReasonCode::AGENT_DEACTIVATED)
+    );
     refusal(&runtime, "/_arkret/self/keys/keypackages/upload", &upload).await?;
     refusal(
         &runtime,
@@ -298,7 +370,7 @@ pub(super) async fn exercise(material: Materials<'_>) -> Result<()> {
         "terminal endpoint refusals changed full accepted state"
     );
     println!(
-        "[agent-terminal] active_signer_control=1 active_upload_control=1 actual_controller_claim_control=1 durable_runtime_identity=1 terminal_session=1 terminal_upload=1 terminal_consume=1 terminal_new_granted_event=1 terminal_signer_unavailable=1 terminal_controller_claim=1 full_footprint_unchanged=1 canonical_case_completion_claim=0"
+        "[agent-terminal] active_signer_control=1 active_upload_control=1 actual_controller_claim_control=1 durable_runtime_identity=1 live_pairing_handle_control=1 terminal_open_handle_before_ttl=1 terminal_renew=1 terminal_pending_pair=1 terminal_session=1 terminal_upload=1 terminal_consume=1 terminal_new_granted_event=1 terminal_signer_unavailable=1 terminal_controller_claim=1 full_footprint_unchanged=1 canonical_case_completion_claim=0"
     );
     Ok(())
 }

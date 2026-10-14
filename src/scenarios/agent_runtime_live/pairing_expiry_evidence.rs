@@ -29,6 +29,16 @@ pub(super) async fn replacement_material(
     account: &AccountId,
     agent: &AgentRuntimeSession,
 ) -> Result<ReplacementMaterial> {
+    replacement_material_with_ttl(station, controller, account, agent, 8000).await
+}
+
+pub(super) async fn replacement_material_with_ttl(
+    station: &ArkretServer,
+    controller: &TestActorClient,
+    account: &AccountId,
+    agent: &AgentRuntimeSession,
+    pairing_ttl_ms: u64,
+) -> Result<ReplacementMaterial> {
     let renewed: AgentRenewPairingOutcome = serde_json::from_value(
         expect_json(
             controller
@@ -37,7 +47,7 @@ pub(super) async fn replacement_material(
                     agent.agent_account.principal_id
                 ))
                 .json(&AgentRenewPairingRequestBody {
-                    pairing_ttl_ms: Some(8000),
+                    pairing_ttl_ms: Some(pairing_ttl_ms),
                 }),
             StatusCode::OK,
         )
