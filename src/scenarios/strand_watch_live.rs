@@ -569,3 +569,300 @@ pub async fn run_strand_watch_current_live() -> Result<()> {
     .await?;
     Ok(())
 }
+
+/// Registered first admission through authenticated HTTP, with real device proofs.
+pub async fn run_registered_watch_audit_live() -> Result<()> {
+    run_registered_watch_audit(false).await
+}
+
+pub async fn run_registered_watch_audit_peer_live() -> Result<()> {
+    run_registered_watch_audit(true).await
+}
+
+async fn run_registered_watch_audit(cross_station: bool) -> Result<()> {
+    use arkret_models_collaboration::authority_commit::{
+        AuditPairedEventUnitKind, AuditPairedEventUnitSubmission, SelfAuthoritySubmitOutcome,
+        SelfAuthoritySubmitRequest,
+    };
+    use arkret_models_collaboration::strand_watch_operations::{
+        WatchAuditReadOutcome, WatchAuditReadRequest,
+    };
+    use arkret_wire::{EventAdmissionSubmission, SemanticRef};
+    let scenario = if cross_station {
+        "registered-watch-audit-peer-live"
+    } else {
+        "registered-watch-audit-live"
+    };
+    let Some(db) = database(scenario)? else {
+        return Ok(());
+    };
+    let peer_db = if cross_station {
+        database(scenario)?
+    } else {
+        None
+    };
+    if cross_station && peer_db.is_none() {
+        return skip_or_fail(scenario, "second PostgreSQL unavailable");
+    }
+    let coauth = MockCoauthIntrospectionServer::spawn_with_internal_secret(
+        HARNESS_INTERNAL_AUTHORITY_SECRET,
+    )
+    .await?;
+    let mut environments = vec![station_env(&db.connect_url, &coauth)];
+    if let Some(peer_db) = &peer_db {
+        ensure!(
+            db.connect_url != peer_db.connect_url,
+            "stations share their database"
+        );
+        environments.push(station_env(&peer_db.connect_url, &coauth));
+    }
+    let Some(group) =
+        TestServerGroup::try_multi_external_with_node_envs(scenario, &environments).await?
+    else {
+        return skip_or_fail(scenario, "prebuilt Coland unavailable");
+    };
+    let station = group.server(0);
+    let governor = group.server(usize::from(cross_station));
+    let (alice, alice_account) =
+        standard_client(station, &coauth, "audit-watch-alice", ALICE_DEVICE).await?;
+    let (bob, bob_account) =
+        standard_client(station, &coauth, "audit-watch-bob", BOB_DEVICE).await?;
+    let owner = if cross_station {
+        Some(
+            standard_client(
+                governor,
+                &coauth,
+                "audit-watch-governor",
+                "ak:device:01904100-0000-7000-8000-000000002363",
+            )
+            .await?,
+        )
+    } else {
+        None
+    };
+    let controller = owner.as_ref().map_or(&alice, |owner| &owner.0);
+    let services = if cross_station {
+        vec![station, governor]
+    } else {
+        vec![station]
+    };
+    let realm =
+        create_realm_with_join_rule(controller, "Registered watch audit", "public", &services)
+            .await?;
+    let strand = StrandId::new(controller.default_strand_id(&realm)?)?;
+    let watcher = ActorId::account(bob_account.clone());
+    let writer = ActorId::account(alice_account.clone());
+    let joining = if cross_station {
+        vec![
+            (&alice, &alice_account, ALICE_DEVICE),
+            (&bob, &bob_account, BOB_DEVICE),
+        ]
+    } else {
+        vec![(&bob, &bob_account, BOB_DEVICE)]
+    };
+    for (index, (joining, joining_account, joining_device)) in joining.into_iter().enumerate() {
+        if cross_station {
+            crate::scenarios::human_device_producer_live::prepare_join(
+                joining,&realm,governor,&format!("ak:request:019b0000-0000-7000-8000-{:012}",2368+index),
+                arkret_models_collaboration::governance::realm_join_intake::RealmJoinIntent::MemberJoin,
+            ).await?;
+        }
+        let joined = joining
+            .author_event(
+                &realm,
+                EventKind::MemberState.as_str(),
+                membership_payload(
+                    &realm,
+                    joining_account.clone(),
+                    MembershipPayloadState::Join,
+                    "audited watch member",
+                )?,
+            )
+            .await?;
+        submit_and_expect_commit(joining, joining_account, joining_device, &joined).await?;
+    }
+    grant_realm_actions(
+        controller,
+        governor,
+        &realm,
+        &alice_account,
+        &[
+            "ak.strand.watch.set.others",
+            "ak.audit.accessed",
+            "ak.realm.notification.audit",
+        ],
+    )
+    .await?;
+    grant_realm_actions(
+        controller,
+        governor,
+        &realm,
+        &bob_account,
+        &["ak.strand.watch.set"],
+    )
+    .await?;
+    let make_read = |audit| WatchAuditReadRequest {
+        audit_submission: EventAdmissionSubmission::new(audit),
+    };
+    let audit = alice.author_event(&realm,EventKind::AuditAccessed.as_str(),serde_json::json!({
+        "access_kind":"watch_audit_read","writer_actor_id":writer,"target_actor_id":watcher,
+        "target_ref":strand,"purpose":"authorized frozen observation","accessed_at":arkret_canonical::format_timestamp_canonical(chrono::Utc::now())
+    })).await?;
+    let request = make_read(audit.clone());
+    let original: WatchAuditReadOutcome = serde_json::from_value(
+        expect_json(
+            alice
+                .post("/_arkret/self/strands/watch/audit-read")
+                .json(&request),
+            StatusCode::OK,
+        )
+        .await?,
+    )?;
+    original
+        .validate_for_request(&request, 0)
+        .map_err(anyhow::Error::msg)?;
+    ensure!(
+        matches!(
+            original.current,
+            StrandWatchCurrentOutcome::NeverWritten { .. }
+        ),
+        "audit read did not freeze absence"
+    );
+    expect_api_error(
+        bob.post("/_arkret/self/strands/watch/audit-read")
+            .json(&request),
+        StatusCode::NOT_FOUND,
+        "not_found",
+    )
+    .await?;
+
+    let payload =
+        StrandWatchSetPayload::set(strand.clone(), watcher.clone(), StrandWatchLevel::All, None);
+    let business = event(&alice, &realm, &payload).await?;
+    let mut paired_audit=alice.author_event(&realm,EventKind::AuditAccessed.as_str(),serde_json::json!({
+        "access_kind":"watch_set_others","writer_actor_id":writer,"target_actor_id":watcher,
+        "target_ref":strand,"paired_event_id":business.event_id,"purpose":"authorized other watcher write",
+        "accessed_at":arkret_canonical::format_timestamp_canonical(chrono::Utc::now())
+    })).await?;
+    paired_audit.semantic_refs.push(SemanticRef::new(
+        business.event_id.to_string(),
+        "audit_pair",
+    ));
+    crate::harness::refresh_typed_event_proof(&mut paired_audit)?;
+    let unit = AuditPairedEventUnitSubmission {
+        unit_kind: AuditPairedEventUnitKind::AuditPairedEvent,
+        events: [
+            EventAdmissionSubmission::new(business.clone()),
+            EventAdmissionSubmission::new(paired_audit.clone()),
+        ],
+    };
+    unit.validate().map_err(anyhow::Error::msg)?;
+    let body = SelfAuthoritySubmitRequest::AuditPairedEvent(unit.clone());
+    let accepted: SelfAuthoritySubmitOutcome = serde_json::from_value(
+        expect_json(
+            alice.post("/_arkret/self/events").json(&body),
+            StatusCode::OK,
+        )
+        .await?,
+    )?;
+    let SelfAuthoritySubmitOutcome::AuditPairedEvent(accepted) = accepted else {
+        anyhow::bail!("paired HTTP outcome expected")
+    };
+    accepted
+        .validate_for_request(&unit)
+        .map_err(anyhow::Error::msg)?;
+    if cross_station {
+        let database_url = db.connect_url.clone();
+        let expected = accepted.commits.clone();
+        tokio::task::spawn_blocking(move || -> Result<()> {
+            let mut connection = postgres::Client::connect(&database_url, postgres::NoTls)?;
+            let deadline = std::time::Instant::now() + std::time::Duration::from_secs(20);
+            loop {
+                if let Some(row) = connection.query_opt(
+                    "SELECT canonical_submission FROM registered_audit_replica_units WHERE business_event_id=$1 AND audit_event_id=$2",
+                    &[&expected[0].event_ref.as_str(), &expected[1].event_ref.as_str()],
+                )? {
+                    let bytes: Vec<u8> = row.get(0);
+                    let source: arkret_models_collaboration::authority_commit::AuditPairedEventFederationSubmission = serde_json::from_slice(&bytes)?;
+                    source.validate().map_err(anyhow::Error::msg)?;
+                    ensure!(source.committed_events[0].source_commit == expected[0] && source.committed_events[1].source_commit == expected[1],
+                        "atomic replica changed the original source Commits");
+                    return Ok(());
+                }
+                ensure!(std::time::Instant::now() < deadline, "paired source replication never retained its complete atomic fence");
+                std::thread::sleep(std::time::Duration::from_millis(100));
+            }
+        }).await??;
+    }
+    let replay: SelfAuthoritySubmitOutcome = serde_json::from_value(
+        expect_json(
+            alice.post("/_arkret/self/events").json(&body),
+            StatusCode::OK,
+        )
+        .await?,
+    )?;
+    let SelfAuthoritySubmitOutcome::AuditPairedEvent(replay) = replay else {
+        anyhow::bail!("paired HTTP replay expected")
+    };
+    ensure!(
+        replay.commits == accepted.commits,
+        "paired replay changed original Commits"
+    );
+    let frozen: WatchAuditReadOutcome = serde_json::from_value(
+        expect_json(
+            alice
+                .post("/_arkret/self/strands/watch/audit-read")
+                .json(&request),
+            StatusCode::OK,
+        )
+        .await?,
+    )?;
+    ensure!(
+        frozen == original,
+        "exact audit retry exposed a later Watch value"
+    );
+    let own = StrandWatchCurrentRequestBody {
+        realm_id: realm.parse()?,
+        strand_id: strand.clone(),
+        watcher_actor_id: watcher.clone(),
+    };
+    current(
+        read(&bob, &own).await?,
+        &accepted.commits[0],
+        StrandWatchCurrentValue::Set(StrandWatchExpectedValue {
+            level: StrandWatchLevel::All,
+            level_public: None,
+        }),
+    )?;
+    let clear = event(
+        &bob,
+        &realm,
+        &StrandWatchSetPayload::clear(strand.clone(), watcher.clone()).with_expected_value(
+            StrandWatchCurrentValue::Set(StrandWatchExpectedValue {
+                level: StrandWatchLevel::All,
+                level_public: None,
+            }),
+        ),
+    )
+    .await?;
+    submit_and_expect_commit(&bob, &bob_account, BOB_DEVICE, &clear).await?;
+    let audit=alice.author_event(&realm,EventKind::AuditAccessed.as_str(),serde_json::json!({
+        "access_kind":"watch_audit_read","writer_actor_id":writer,"target_actor_id":watcher,
+        "target_ref":strand,"purpose":"authorized cleared observation","accessed_at":arkret_canonical::format_timestamp_canonical(chrono::Utc::now())
+    })).await?;
+    let cleared_request = make_read(audit);
+    let cleared: WatchAuditReadOutcome = serde_json::from_value(
+        expect_json(
+            alice
+                .post("/_arkret/self/strands/watch/audit-read")
+                .json(&cleared_request),
+            StatusCode::OK,
+        )
+        .await?,
+    )?;
+    ensure!(
+        matches!(cleared.current,StrandWatchCurrentOutcome::Current { result, .. } if result.value==StrandWatchCurrentValue::Cleared(())),
+        "audit erased written null into absence"
+    );
+    Ok(())
+}

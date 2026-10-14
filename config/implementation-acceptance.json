@@ -402,7 +402,9 @@
         "arkret-spec/spec/v1/zh/sync/current-results.md",
         "arkret-spec/spec/v1/zh/models/strand-and-message.md",
         "arkret-spec/spec/v1/zh/models/circle.md",
-        "arkret-spec/spec/v1/zh/sync/service-http-binding.md"
+        "arkret-spec/spec/v1/zh/sync/service-http-binding.md",
+        "arkret-spec/spec/v1/zh/sync/authority-commit-log.md",
+        "arkret-spec/spec/v1/artifacts/schemas/watch-audit-operations.schema.json"
       ],
       "source_refs": [
         "coland/crates/storage-postgres/src/authority_commit.rs",
@@ -413,7 +415,10 @@
         "coland/crates/http/src/routing/self_current_reads.rs",
         "coland/crates/http/src/routing/interop/webrtc.rs",
         "arkret-rust-sdk/crates/http-client/src/endpoints/peer.rs",
-        "arkret-rust-sdk/crates/models-collaboration/src/strand_watch_operations.rs"
+        "arkret-rust-sdk/crates/models-collaboration/src/strand_watch_operations.rs",
+        "coland/crates/http/src/state/authority_audit_unit.rs",
+        "coland/crates/storage-postgres/src/registered_audit.rs",
+        "arkret-rust-sdk/crates/models-collaboration/src/authority_commit/audit_atomic.rs"
       ],
       "tests": [
         {
@@ -469,12 +474,60 @@
           "symbol": "peer_watch_answer_binds_the_nonce_verified_generation_and_rejects_sidecar_heads",
           "kind": "contract",
           "covers": "共享outcome的两presence分支／generation／完整Station selector／Sidecar拒绝；仅SDK合同"
+        },
+        {
+          "path": "cotest/tests/strand_watch_live.rs",
+          "symbol": "real_registered_watch_pair_and_audited_read_preserve_durable_fences",
+          "kind": "live",
+          "covers": "真实单Station HTTP／Device签名：配对提交与精确重放，audit冻结never_written与written-null"
+        },
+        {
+          "path": "cotest/tests/strand_watch_live.rs",
+          "symbol": "real_two_stations_forward_registered_watch_pair_and_audited_read",
+          "kind": "live",
+          "covers": "两个独立Station／独立PG：nonce governor、fresh双slot Device证明、配对首次转发与audit-read；不计Circle／Agent／独立handoff完整矩阵"
+        },
+        {
+          "path": "coland/crates/storage-postgres/tests/registered_watch_audit.rs",
+          "symbol": "audit_pair_commits_once_and_exact_replay_preserves_both_source_commits",
+          "kind": "contract",
+          "covers": "PG配对原子提交与耐久exact fence"
+        },
+        {
+          "path": "coland/crates/storage-postgres/tests/registered_watch_audit.rs",
+          "symbol": "failed_second_slot_rolls_back_business_projection_and_stream_position",
+          "kind": "contract",
+          "covers": "PG第二slot失败整组回滚，原stream位置可再提交"
+        },
+        {
+          "path": "coland/crates/storage-postgres/tests/registered_watch_audit.rs",
+          "symbol": "paired_watch_cas_conflict_and_standalone_audit_leave_no_effects",
+          "kind": "contract",
+          "covers": "PG整值CAS与standalone审计入口零写拒绝"
+        },
+        {
+          "path": "coland/crates/storage-postgres/tests/registered_watch_audit.rs",
+          "symbol": "audit_read_freezes_never_written_and_replay_does_not_read_later_watch",
+          "kind": "contract",
+          "covers": "PGaudit冻结原never_written，后续Watch不替换原观察"
+        },
+        {
+          "path": "coland/crates/storage-postgres/tests/registered_watch_audit.rs",
+          "symbol": "audit_read_freezes_written_current_and_revoked_permission_hides_replay",
+          "kind": "contract",
+          "covers": "PG正式CapabilityRevoke撤权后not_found，重放零新增效果"
+        },
+        {
+          "path": "coland/crates/storage-postgres/tests/registered_watch_audit.rs",
+          "symbol": "changed_complete_pair_cannot_reuse_its_business_event_fence",
+          "kind": "contract",
+          "covers": "PG完整unit换bytes复用business ID为duplicate_conflict"
         }
       ],
       "engineering_checks": [],
       "remaining_scenarios": [
         "每个ownership分支的生产运行时正例与未登记kind／缺handler／错owner／shared-private混用／事务中途失败零效果矩阵；静态manifest不替代",
-        "Watch .others同批审计、audit-read载体与Agent provenance可见性：用户指定先失败关闭，规范缺口1013；裁决后由2136继续生产实现",
+        "0166已闭合并接通SDK／Coland配对与冻结读取；Device单站及双站基础闭环具名通过。审批／Agent／Service producer、非成员Circle auditor与成员管理、完整原子scan补链／私密fence移交／冷恢复仍需生产矩阵及可达性闭合，不升级整项完成",
         "0162真实独立双站：nonce-bound governor／S2S认证、Circle与完整Account隔离、CAS竞争、非零任期完整导入、撤回／Device replacement／handoff迟到与冷恢复；存储witness注入和同PG交接不计实测",
         "Strand effective scope／Circle member同cut完整生产矩阵、长历史完整namespace证明成本；索引probe不替代端到端测量",
         "0132所有mute_override与moderator媒体控制零写拒绝的真实token issuer／SFU具名执行器及完整回归；本轮issuer Rust单测不升级SFU",
