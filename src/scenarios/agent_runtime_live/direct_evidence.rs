@@ -10,13 +10,21 @@ use arkret_models_collaboration::direct_conversation::{
 };
 use arkret_models_collaboration::objects::direct_conversation::*;
 
+pub(super) struct Founded {
+    pub coordinates:
+        arkret_models_collaboration::direct_conversation::DirectConversationCoordinates,
+    pub plan: DirectConversationFoundingPlan,
+    pub authorization_basis: DirectConversationAuthorizationBasis,
+    pub create_ref: EventId,
+}
+
 use super::*;
 
 pub(super) async fn found(
     controller: &TestActorClient,
     agent: &AgentRuntimeSession,
     station: &ArkretServer,
-) -> Result<arkret_models_collaboration::direct_conversation::DirectConversationCoordinates> {
+) -> Result<Founded> {
     let request = DirectConversationResolveRequestBody {
         peer: arkret_models_collaboration::contact_operations::ContactPeer::Agent {
             actor_id: ActorId::account(agent.agent_account.clone()),
@@ -214,5 +222,10 @@ pub(super) async fn found(
     println!(
         "[agent-offline] actual_client_no_verified_presence=1 receiver_aggregate_offline=1 real_agent_active_ready_paired=1 accepted_direct_still_resolves=1 server_unknown_as_offline_claim=0"
     );
-    Ok(coordinates)
+    Ok(Founded {
+        coordinates,
+        plan,
+        authorization_basis,
+        create_ref: unit.events[0].event.event_id.clone(),
+    })
 }
