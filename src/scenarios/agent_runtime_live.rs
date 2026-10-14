@@ -66,6 +66,7 @@ mod provision_conjunction;
 mod provision_evidence;
 mod provision_start_evidence;
 mod repairing_evidence;
+mod terminal_evidence;
 pub use binding_evidence::run_agent_runtime_binding_admission;
 pub use coauth_session_evidence::run_agent_session_grant_replay_production;
 pub use grant_ceiling_evidence::run_agent_provision_grant_ceiling_boundary;
@@ -1372,7 +1373,19 @@ fn persist_and_reopen_agent_consume(
 
 /// An Agent publishes and durably joins using its authorized runtime key.
 pub async fn run_agent_keypackage_upload_live() -> Result<()> {
-    let group_name = "agent-keypackage-upload";
+    run_agent_keypackage_journey(false).await
+}
+
+pub async fn run_agent_keypackage_terminal_live() -> Result<()> {
+    run_agent_keypackage_journey(true).await
+}
+
+async fn run_agent_keypackage_journey(terminal: bool) -> Result<()> {
+    let group_name = if terminal {
+        "agent-terminal-keypackage"
+    } else {
+        "agent-keypackage-upload"
+    };
     let Some(database) = database(group_name)? else {
         return Ok(());
     };
@@ -2651,6 +2664,26 @@ pub async fn run_agent_keypackage_upload_live() -> Result<()> {
             "accepted Agent reply has no durable franking carrier"
         );
         tokio::time::sleep(Duration::from_millis(100)).await;
+    }
+    if terminal {
+        tokio::spawn(async move {
+            let station = group.server(0);
+            terminal_evidence::exercise(terminal_evidence::Materials {
+                station,
+                controller: &controller,
+                agent: &agent,
+                issuer: &coauth,
+                database_url: &database.connect_url,
+                realm: &joined_realm,
+                strand: &strand_id,
+                group: &mut agent_group,
+                claim: &controller_claim,
+                consume: &consume,
+                state_ref: &commit_event.event_id,
+            })
+            .await
+        })
+        .await??;
     }
     Ok(())
 }
