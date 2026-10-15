@@ -1980,7 +1980,7 @@ pub(crate) async fn observe_dm_retained_receipt(
     let garth::signal::SignalReceiveOutcome::Accepted { plaintext, .. } = received else {
         bail!("DM receipt failed sender MLS admission: {received:?}");
     };
-    let arkret::SignalPlaintext::ReadReceipt(read) = plaintext else {
+    let arkret::SignalPlaintext::ReadReceipt(read) = *plaintext else {
         bail!("non receipt Signal reached DM receipt subscriber");
     };
     ensure!(
@@ -2419,7 +2419,7 @@ async fn native_endpoint(
         .committed_event_get(accepted_group)
         .await?;
     ensure!(accepted.commit().event_ref == *accepted_group);
-    let mut checkpoint = inkson::mls::persistence::encrypt_state(
+    let mut checkpoint = garth::mls::checkpoint::encrypt_state(
         realm.as_str(),
         record.group_id.as_str(),
         record.epoch,
@@ -2877,7 +2877,7 @@ pub(crate) async fn observe_ordinary_call_invite(
                 else {
                     bail!("automatic receipt was not admitted by the real sender: {received:?}");
                 };
-                let arkret::SignalPlaintext::ReadReceipt(read) = plaintext else {
+                let arkret::SignalPlaintext::ReadReceipt(read) = *plaintext else {
                     bail!("another Signal profile reached the automatic receipt subscriber");
                 };
                 ensure!(
@@ -2954,7 +2954,7 @@ pub(crate) async fn observe_ordinary_call_invite(
             domain.sender_actor_id == sender.actor && domain.scope_ref == scope,
             "actual Call sender or scope changed"
         );
-        let arkret::SignalPlaintext::CallSignal(call) = plaintext else {
+        let arkret::SignalPlaintext::CallSignal(call) = plaintext.as_ref() else {
             bail!("another sealed profile reached the Call consumer");
         };
         ensure!(

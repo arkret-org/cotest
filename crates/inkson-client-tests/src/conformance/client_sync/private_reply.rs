@@ -340,7 +340,7 @@ impl SidecarSyncObserver for PrivateReplyProbe {
             record.epoch == 1,
             "runtime join did not preserve the actual accepted Add epoch"
         );
-        let mut checkpoint = inkson::mls::persistence::encrypt_state(
+        let mut checkpoint = garth::mls::checkpoint::encrypt_state(
             realm.as_str(),
             &record.group_id,
             record.epoch,

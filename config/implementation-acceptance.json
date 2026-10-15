@@ -4,50 +4,58 @@
   "complete_claim": false,
   "tasks": [
     {
-      "task": "2026-09-06-0917-garth-runtime-and-host-ports.md",
-      "criteria_count": 9,
-      "criteria_sha256": "2ca93d2dc946ebb4ccb59516d84a9e3da4b03ebfd1426085432a985e6ef44725",
-      "spec_refs": [
-        "arkret-spec/spec/v1/zh/overview/protocol-layers.md"
-      ],
-      "source_refs": [
-        "garth/src/mls.rs"
-      ],
-      "tests": [],
-      "engineering_checks": [
-        "用户恢复后运行layering gate和native/wasm/Savfox caller等价"
-      ],
-      "remaining_scenarios": [
-        "真实MLS checkpoint port与durable取消；reducer／history／authoring实际caller；native／wasm／Savfox同输入等价"
-      ]
-    },
-    {
       "task": "2026-09-10-0540-client-current-result-durable-index.md",
-      "criteria_count": 7,
-      "criteria_sha256": "beebef34c3e67690cf9a4040346e6017354459f5c643eaf6440d3363f3f9b652",
+      "criteria_count": 6,
+      "criteria_sha256": "ddabfddeb39cea74df4e8e1040b8b219a1cd2f45e9c1246df9aedf2ecbb3bd0f",
       "spec_refs": [
         "arkret-spec/spec/v1/zh/sync/current-results.md"
       ],
       "source_refs": [
-        "inkson/src/views/global_search.rs"
+        "inkson/src/state/current_index/search.rs",
+        "inkson/src/views/global_search.rs",
+        "inkson/src/realm_events_engine/own_live.rs"
       ],
       "tests": [
         {
           "path": "inkson/tests/e2e/inkson.strands.search-locale.spec.ts",
           "symbol": "global search results preserve local text and routes across language changes",
           "kind": "product",
-          "covers": "真实搜索已具名预期失败；不能当通过"
+          "covers": "正式签名消息搜索body／route／Event／Commit及En→Zh→En、零远程search／Event／join写入；本批浏览器实际执行状态见0540报告"
         },
         {
           "path": "cotest/tests/client_account_stream.rs",
           "symbol": "client_account_stream_vector_runs_clean",
           "kind": "contract",
           "covers": "Account stream合同向量，非宿主容量"
+        },
+        {
+          "path": "inkson/src/state/current_index/search.rs",
+          "symbol": "search_current_index_requires_publication_and_survives_reopen",
+          "kind": "product",
+          "covers": "native encrypted index: abandoned generation invisible, committed original byte-exact, cold reopen and wrong-Station rejection; not a complete native session query"
+        },
+        {
+          "path": "inkson/src/state/current_index/search.rs",
+          "symbol": "search_current_index_revocation_floor_and_withheld_suppress_originals",
+          "kind": "product",
+          "covers": "native complete-cut membership leave, history floor, withheld, wrong scope and missing Strand fail closed"
+        },
+        {
+          "path": "inkson/src/state/current_index/search.rs",
+          "symbol": "search_current_index_uses_latest_committed_revision_and_redaction",
+          "kind": "product",
+          "covers": "native latest accepted revision and redaction; tampered latest must not fall back to an old body"
+        },
+        {
+          "path": "inkson/src/state/projection_read_tests.rs",
+          "symbol": "search_privacy_and_session_reads_do_not_copy_unrelated_history",
+          "kind": "engineering",
+          "covers": "privacy/session narrow reads make zero full-account copies with 10000 unrelated audit rows"
         }
       ],
       "engineering_checks": [],
       "remaining_scenarios": [
-        "真实Circle／Sidecar非空依赖与tail、Account cursor不推进；1／100／1000实机与账号其它字段有界写入；identity/device_directory／chat flaky复现；获准搜索来源及privacy／crypto负例、原body／route／seal与完整语言切换，保留预期失败直到实际闭合"
+        "真实Circle／Sidecar非空依赖与tail、Account cursor不推进；1／100／1000真实Station首屏与非current账号共同事务／有界物理写；完整retention／expiry／privacy／crypto及native会话／Device replacement／异步矩阵。浏览器原body／route／Event／Commit、En→Zh→En及零远程写入2／2实际通过，不重复列待办。"
       ]
     },
     {
@@ -274,58 +282,6 @@
       "engineering_checks": [],
       "remaining_scenarios": [
         "逐case named生产消费/required-ref合取；原origin binding移除；最终签名SDK/profile闭包"
-      ]
-    },
-    {
-      "task": "2026-09-25-2133-snapshot-and-scan-beyond-single-realm-stream.md",
-      "criteria_count": 3,
-      "criteria_sha256": "89e5fd4d8732c8578310a66943833d47d5945f7e256aee4eaa00bf2b38d1aa2e",
-      "spec_refs": [
-        "arkret-spec/spec/v1/zh/sync/client-sync.md"
-      ],
-      "source_refs": [
-        "coland/crates/storage-postgres/src/issued_realm_snapshots.rs"
-      ],
-      "tests": [
-        {
-          "path": "cotest/tests/sidecar_authority_live.rs",
-          "symbol": "pending_agent_sidecar_http_reads_disclose_handshakes_without_private_content",
-          "kind": "live",
-          "covers": "pending Agent仅握手披露"
-        },
-        {
-          "path": "cotest/tests/snapshot_head_disclosure.rs",
-          "symbol": "exact_snapshot_by_ref_reads_through_garth_with_historical_station_key",
-          "kind": "live",
-          "covers": "exact历史snapshot读取"
-        }
-      ],
-      "engineering_checks": [],
-      "remaining_scenarios": [
-        "合法旧row更新后的by-ref正负例；effective Agent consume后的内容；peer withheld/facts矩阵；超过64流／首屏外idle/busy产品运行"
-      ]
-    },
-    {
-      "task": "2026-09-25-2134-typed-current-cas-and-materialization.md",
-      "criteria_count": 5,
-      "criteria_sha256": "28ff23f74dcfabf70992032df1489282e583d67c9b0ca2288fcb5e5ab7eed251",
-      "spec_refs": [
-        "arkret-spec/spec/v1/zh/sync/current-results.md"
-      ],
-      "source_refs": [
-        "coland/crates/storage-postgres/src/read_capacity_tests.rs"
-      ],
-      "tests": [
-        {
-          "path": "coland/crates/storage-postgres/src/read_capacity_tests.rs",
-          "symbol": "typed_current_and_self_reads_stay_bounded_across_one_hundred_and_one_thousand_realms",
-          "kind": "live",
-          "covers": "SQL扫描容量，不证明wire分页或所有writer"
-        }
-      ],
-      "engineering_checks": [],
-      "remaining_scenarios": [
-        "registry→family／SQL／writer完整映射；Commit/source绑定零部分写；按family guard的并发CAS；同revision canonical相等；缺tail/授权分支"
       ]
     },
     {
