@@ -7,6 +7,24 @@ use super::SuiteExecutionResult;
 mod schema;
 pub(super) use schema::REVIEWED_SCHEMA_CASES;
 
+pub(super) const REVIEWED_PRODUCTION_CASES: [&str; 15] = [
+    "agent_provision",
+    "agent_pcr_genesis_forward_declaration",
+    "agent_pcr_genesis_without_declaration_rejected",
+    "two_provisions_declaring_one_realm_id_rejected",
+    "agent_pcr_genesis_same_batch_rejected",
+    "agent_pairing_expiry",
+    "agent_session_grant_replay",
+    "agent_repairing_supersede",
+    "agent_requested_scope_privacy",
+    "agent_pcr_separation",
+    "agent_runtime_key_binding",
+    "agent_controller_lifecycle",
+    "agent_longevity_no_expiry",
+    "agent_act_on_behalf",
+    "agent_human_approval_required",
+];
+
 pub fn run_agent_vectors_production_suite() -> Result<SuiteExecutionResult> {
     std::thread::Builder::new()
         .name("agent-vectors-production".into())

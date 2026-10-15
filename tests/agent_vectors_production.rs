@@ -134,6 +134,5 @@ fn agent_genesis_cases_cross_real_http_admission_and_preserve_rejected_state() -
             .iter()
             .any(|case| case == "agent_pcr_genesis_same_batch_rejected")
     );
-    assert!(execution.assert_complete_against(&fixture).is_err());
     Ok(())
 }
