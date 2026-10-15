@@ -984,9 +984,52 @@ async fn product_attempt_after_current(
             return Ok(0);
         }
         Ok(result) => result?,
-        Err(_) => return Ok(0),
+        Err(_) => {
+            eprintln!("[2141-product] received=false dedicated={dedicated}");
+            return Ok(0);
+        }
     };
-    inkson::conformance::observe_native_call_projection(native, received).await
+    if let garth::signal::SignalReceiveOutcome::Accepted {
+        call_invitation,
+        plaintext,
+        effective_expires_at,
+        ..
+    } = &received
+    {
+        let call_matches = matches!(plaintext.as_ref(), arkret::SignalPlaintext::CallSignal(call)
+            if call.call_id == request.invitation.call_id);
+        let product_live = call_invitation
+            .as_ref()
+            .is_some_and(|view| view.outcome.expires_at > Utc::now());
+        let current = inkson::conformance::retained_realm_current(
+            &native.state_store(),
+            &member.account,
+            &context.realm,
+        )
+        .await?;
+        let rows: Vec<arkret_wire::TypedCurrentRow> =
+            serde_json::from_value(current["entries"].clone())?;
+        let installed = rows.iter().any(|row| matches!(row,
+            arkret_wire::TypedCurrentRow::Value {selector: arkret_wire::CurrentSelector::CallState {call_id}, ..}
+                if call_id == &request.invitation.call_id));
+        eprintln!(
+            "[2141-product] received=true dedicated={dedicated} exact_call={call_matches} product={} product_live={product_live} signal_live={} call_current_installed={installed}",
+            call_invitation.is_some(),
+            effective_expires_at > &Utc::now()
+        );
+    }
+    let projected = inkson::conformance::observe_native_call_projection(native, received).await?;
+    if dedicated && projected == 0 {
+        let read = inkson::conformance::read_native_call_consent(native, &request.invitation).await;
+        let read_ok = read.is_ok();
+        let permitted =
+            read.and_then(|value| value.permits(None, &[], Utc::now()).map_err(Into::into));
+        eprintln!(
+            "[2141-product] projected=0 fresh_current_read={read_ok} fresh_current_allowed={}",
+            permitted.is_ok_and(|value| value)
+        );
+    }
+    Ok(projected)
 }
 
 // Poll the actual media fixture as its own task, after the parent driver
