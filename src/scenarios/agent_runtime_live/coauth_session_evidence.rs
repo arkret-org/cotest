@@ -980,7 +980,7 @@ pub(super) async fn expect_issue_refusal(
     reason: Option<&str>,
 ) -> Result<()> {
     use arkret_signatures::dpop::{DpopProofRequest, build_dpop_proof};
-    let before = grant_ledger(database_url).await?;
+    let before = issuer_state(database_url).await?;
     let fresh = build_dpop_proof(&DpopProofRequest::new("POST", url), key)?;
     let response = station
         .http()
@@ -1012,11 +1012,11 @@ pub(super) async fn expect_issue_refusal(
         );
     }
     ensure!(
-        grant_ledger(database_url).await? == before,
-        "refused Agent request changed the issuer grant ledger"
+        issuer_state(database_url).await? == before,
+        "refused Agent request changed issuer session, grant, operation or proof state"
     );
     println!(
-        "[agent-session] refused_code={} reason={reason:?} status={} full_grant_ledger_unchanged=1",
+        "[agent-session] refused_code={} reason={reason:?} status={} full_issuer_state_unchanged=1",
         problem.code(),
         problem.status
     );
