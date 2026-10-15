@@ -261,7 +261,7 @@
         },
         {
           "path": "cotest/tests/federation_idempotency_production.rs",
-          "symbol": "canonical_federation_cases_use_real_ingress_and_keep_the_missing_binding_explicit",
+          "symbol": "canonical_federation_cases_use_real_ingress_and_current_origin_binding",
           "kind": "live",
           "covers": "正式生产子集4/5；binding移除仍缺，complete显式拒绝"
         },
