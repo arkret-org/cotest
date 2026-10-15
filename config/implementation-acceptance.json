@@ -277,35 +277,6 @@
       ]
     },
     {
-      "task": "2026-09-25-2133-snapshot-and-scan-beyond-single-realm-stream.md",
-      "criteria_count": 3,
-      "criteria_sha256": "89e5fd4d8732c8578310a66943833d47d5945f7e256aee4eaa00bf2b38d1aa2e",
-      "spec_refs": [
-        "arkret-spec/spec/v1/zh/sync/client-sync.md"
-      ],
-      "source_refs": [
-        "coland/crates/storage-postgres/src/issued_realm_snapshots.rs"
-      ],
-      "tests": [
-        {
-          "path": "cotest/tests/sidecar_authority_live.rs",
-          "symbol": "pending_agent_sidecar_http_reads_disclose_handshakes_without_private_content",
-          "kind": "live",
-          "covers": "pending Agent仅握手披露"
-        },
-        {
-          "path": "cotest/tests/snapshot_head_disclosure.rs",
-          "symbol": "exact_snapshot_by_ref_reads_through_garth_with_historical_station_key",
-          "kind": "live",
-          "covers": "exact历史snapshot读取"
-        }
-      ],
-      "engineering_checks": [],
-      "remaining_scenarios": [
-        "合法旧row更新后的by-ref正负例；effective Agent consume后的内容；peer withheld/facts矩阵；超过64流／首屏外idle/busy产品运行"
-      ]
-    },
-    {
       "task": "2026-09-25-2141-consent-current-and-admission.md",
       "criteria_count": 2,
       "criteria_sha256": "7ba083aad5c548d1cdae815cddb8f3b6410819b2a4da88122e41308d297c43f1",
