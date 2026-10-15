@@ -6,9 +6,11 @@
     {
       "task": "2026-09-10-0540-client-current-result-durable-index.md",
       "criteria_count": 4,
-      "criteria_sha256": "70eba4f8e857d1dd5e80039f68267435098004dc8255c0c48557ef4dfaebae86",
+      "criteria_sha256": "0bef9a212e75e59a7ba90ec396249e4cd04bd926763a2438a3cae260759fe5c6",
       "spec_refs": [
-        "arkret-spec/spec/v1/zh/sync/current-results.md"
+        "arkret-spec/spec/v1/zh/sync/current-results.md",
+        "arkret-spec/spec/v1/zh/sync/privacy-preserving-search.md",
+        "arkret-spec/spec/v1/zh/crypto-media/device-lifecycle.md"
       ],
       "source_refs": [
         "inkson/src/state/current_index/search.rs",
@@ -61,6 +63,42 @@
           "symbol": "sidecar_checkpoint_cases_use_the_actual_account_driver",
           "kind": "live",
           "covers": "真实Station Circle／Sidecar非空依赖与tail、exact GET withheld／503拒绝时root／cursor／current不变，实际SQLite事务失败／旧cut恢复、新进程读回与23个canonical Sync case；不证明真实容量或完整native/browser搜索会话矩阵"
+        },
+        {
+          "path": "inkson/src/views/global_search/session_tests.rs",
+          "symbol": "native_search_visible_results_expire_at_each_holder_deadline",
+          "kind": "product",
+          "covers": "Formal native search hook and encrypted committed index: exact original Event/Commit/body, independent session/projection/authorization half-open expiry, visible rows removed without store/query changes"
+        },
+        {
+          "path": "inkson/src/views/global_search/session_tests.rs",
+          "symbol": "native_search_renewed_holder_cancels_old_expiry_and_rechecks_new_expiry",
+          "kind": "product",
+          "covers": "Formal search holder renewal cancels old timer and removes results at the replacement expiry"
+        },
+        {
+          "path": "inkson/src/views/global_search/session_tests.rs",
+          "symbol": "native_search_holder_replacement_revocation_and_late_request_fail_closed",
+          "kind": "product",
+          "covers": "Formal native asynchronous query versus account/Device/grant/revocation/session epoch replacement; pending completion cannot restore plaintext"
+        },
+        {
+          "path": "inkson/tests/e2e/inkson.search-session-expiry.spec.ts",
+          "symbol": "visible committed search plaintext disappears without another query",
+          "kind": "product",
+          "covers": "Browser product search from signed API fixtures: independent session/projection/authorization expiry removes committed plaintext and expired retry stays empty, zero remote search/Event/join writes; not live Coauth or full same-source holder matrix"
+        },
+        {
+          "path": "inkson/src/views/global_search/session_tests.rs",
+          "symbol": "native_search_new_query_becomes_readable_after_not_before_without_store_change",
+          "kind": "product",
+          "covers": "Formal native query starts before not_before, later accepts the same persisted evidence and arms expiry; the displayed result disappears again when that authorization window ends"
+        },
+        {
+          "path": "inkson/tests/e2e/inkson.search-session-expiry.spec.ts",
+          "symbol": "new query accepts effective holder evidence without remounting the panel",
+          "kind": "product",
+          "covers": "Browser positive/negative same-panel holder-time transition: no result before device evidence is effective, then exact body/Event/Commit on a new authorized query; zero remote search/Event/join writes"
         }
       ],
       "engineering_checks": [],
