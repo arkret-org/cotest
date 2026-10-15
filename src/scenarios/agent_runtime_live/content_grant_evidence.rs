@@ -12,18 +12,18 @@ pub const REVIEWED_GRANT_CONTENT_CASES: [&str; 6] = [
     "source_stale_or_unknown",
 ];
 
-struct GrantFixture {
-    deployment: coauth_session_evidence::ActualAgentDeployment,
-    agent: AgentRuntimeSession,
-    realm: RealmId,
-    a: arkret_wire::StrandId,
-    b: arkret_wire::StrandId,
-    operations: Vec<String>,
-    message: Event,
+pub(super) struct GrantFixture {
+    pub(super) deployment: coauth_session_evidence::ActualAgentDeployment,
+    pub(super) agent: AgentRuntimeSession,
+    pub(super) realm: RealmId,
+    pub(super) a: arkret_wire::StrandId,
+    pub(super) b: arkret_wire::StrandId,
+    pub(super) operations: Vec<String>,
+    pub(super) message: Event,
 }
 
 impl GrantFixture {
-    async fn establish() -> Result<Self> {
+    pub(super) async fn establish() -> Result<Self> {
         let deployment =
             coauth_session_evidence::actual_agent_deployment("agent-content-grants").await?;
         let station = &deployment.station;
@@ -154,7 +154,7 @@ impl GrantFixture {
         })
     }
 
-    fn selectors(
+    pub(super) fn selectors(
         &self,
     ) -> arkret_models_collaboration::session_grants::SessionGrantAgentScopeRequest {
         arkret_models_collaboration::session_grants::SessionGrantAgentScopeRequest {
@@ -164,7 +164,7 @@ impl GrantFixture {
         }
     }
 
-    async fn issue(
+    pub(super) async fn issue(
         &self,
     ) -> Result<(
         TestActorClient,
@@ -175,6 +175,17 @@ impl GrantFixture {
             .iter()
             .map(String::as_str)
             .collect::<Vec<_>>();
+        self.issue_for(&operations, self.selectors()).await
+    }
+
+    pub(super) async fn issue_for(
+        &self,
+        operations: &[&str],
+        selectors: arkret_models_collaboration::session_grants::SessionGrantAgentScopeRequest,
+    ) -> Result<(
+        TestActorClient,
+        arkret_models_identity::SignedSessionGrantClaims,
+    )> {
         let (credential, _) = coauth_session_evidence::issue_runtime_session_with_scope(
             &self.deployment.station,
             self.deployment.coauth.base_url(),
@@ -183,8 +194,8 @@ impl GrantFixture {
             &self.agent.key_authorization,
             &self.agent.verification_method,
             &self.agent.runtime_key,
-            &operations,
-            self.selectors(),
+            operations,
+            selectors,
         )
         .await?;
         let claims = super::content_session_evidence::observed_issued_claims(&credential)?;
@@ -197,7 +208,7 @@ impl GrantFixture {
         Ok((client, claims))
     }
 
-    async fn read_exact(&self, client: &TestActorClient) -> Result<()> {
+    pub(super) async fn read_exact(&self, client: &TestActorClient) -> Result<()> {
         let response = expect_json(
             client.get(&format!(
                 "/_arkret/self/committed-events/{}",
@@ -213,12 +224,22 @@ impl GrantFixture {
         Ok(())
     }
 
-    async fn grant(
+    pub(super) async fn grant(
         &self,
         strand: &arkret_wire::StrandId,
         actions: &[&str],
     ) -> Result<arkret_wire::GrantId> {
-        let body = arkret_models_collaboration::events_payloads::CapabilityGrantCreateBody {
+        self.grant_with_constraints(strand, actions, Vec::new())
+            .await
+    }
+
+    pub(super) async fn grant_with_constraints(
+        &self,
+        strand: &arkret_wire::StrandId,
+        actions: &[&str],
+        extra: Vec<arkret_models_collaboration::governance::grant_constraint::GrantConstraint>,
+    ) -> Result<arkret_wire::GrantId> {
+        let mut body = arkret_models_collaboration::events_payloads::CapabilityGrantCreateBody {
             schema: SchemaId::CAPABILITY_V1.to_owned(),
             realm_id: Some(self.realm.clone()),
             issuer_id: ActorId::account(self.deployment.account.clone()),
@@ -242,6 +263,7 @@ impl GrantFixture {
             }],
             issued_at: Utc::now(),
         };
+        body.constraints.extend(extra);
         let controller = &self.deployment.controller;
         let event = controller
             .author_event(
@@ -269,7 +291,56 @@ impl GrantFixture {
         Ok(arkret_wire::GrantId::from_event_id(&event.event_id))
     }
 
-    async fn revoke(&self, grant: &arkret_wire::GrantId) -> Result<()> {
+    pub(super) async fn commit_message(
+        &self,
+        runtime: &TestActorClient,
+        strand: &arkret_wire::StrandId,
+        grant: &arkret_wire::GrantId,
+        text: &str,
+    ) -> Result<Event> {
+        let message =
+            arkret_event_draft::TypedEventDraft::<arkret_wire::event_spec::MessageCreate>::new(
+                ScopeRef::Realm {
+                    realm_id: self.realm.clone(),
+                },
+                ActorId::account(self.agent.agent_account.clone()),
+                arkret_models_collaboration::events_payloads::MessageCreatePayload::with_content(
+                    strand.clone(),
+                    "discussion",
+                    arkret_models_collaboration::events_payloads::ContentBlock::text(text),
+                ),
+            )?
+            .with_semantic_ref(arkret_wire::SemanticRef::new(
+                grant.to_string(),
+                arkret_wire::SEMANTIC_REF_ROLE_AUTHORIZED_BY,
+            ))
+            .author_with_digest_suite(Utc::now(), arkret_canonical::DigestSuite::Sha256)?;
+        let message = sign(
+            message,
+            &self.agent.verification_method,
+            self.agent.runtime_key.to_bytes(),
+        )?;
+        let id = committed(
+            expect_json(
+                runtime
+                    .post("/_arkret/self/events")
+                    .canonical_json(&arkret_wire::EventAdmissionSubmission::new(message.clone()))?,
+                StatusCode::OK,
+            )
+            .await?,
+        )?;
+        ensure!(id == message.event_id);
+        let stored = self
+            .deployment
+            .controller
+            .sdk()
+            .committed_event_get(&id)
+            .await?;
+        ensure!(stored.reducer_input() == Some(&message));
+        Ok(message)
+    }
+
+    pub(super) async fn revoke(&self, grant: &arkret_wire::GrantId) -> Result<()> {
         let id = committed(
             self.deployment
                 .controller
@@ -415,47 +486,14 @@ pub async fn run_agent_content_grant_production() -> Result<crate::conformance::
             .iter()
             .any(|value| value.as_str() == Some(write_a.as_str()))
     );
-    let message =
-        arkret_event_draft::TypedEventDraft::<arkret_wire::event_spec::MessageCreate>::new(
-            ScopeRef::Realm {
-                realm_id: scene.realm.clone(),
-            },
-            ActorId::account(scene.agent.agent_account.clone()),
-            arkret_models_collaboration::events_payloads::MessageCreatePayload::with_content(
-                scene.a.clone(),
-                "discussion",
-                arkret_models_collaboration::events_payloads::ContentBlock::text(
-                    "Exact literal grant on resource A",
-                ),
-            ),
-        )?
-        .with_semantic_ref(arkret_wire::SemanticRef::new(
-            write_a.to_string(),
-            arkret_wire::SEMANTIC_REF_ROLE_AUTHORIZED_BY,
-        ))
-        .author_with_digest_suite(Utc::now(), arkret_canonical::DigestSuite::Sha256)?;
-    let message = sign(
-        message,
-        &scene.agent.verification_method,
-        scene.agent.runtime_key.to_bytes(),
-    )?;
-    let id = committed(
-        expect_json(
-            runtime
-                .post("/_arkret/self/events")
-                .canonical_json(&arkret_wire::EventAdmissionSubmission::new(message.clone()))?,
-            StatusCode::OK,
+    scene
+        .commit_message(
+            &runtime,
+            &scene.a,
+            &write_a,
+            "Exact literal grant on resource A",
         )
-        .await?,
-    )?;
-    ensure!(id == message.event_id);
-    let stored = scene
-        .deployment
-        .controller
-        .sdk()
-        .committed_event_get(&id)
         .await?;
-    ensure!(stored.reducer_input() == Some(&message));
     scene.revoke(&write_a).await?;
     let (_, claims) = scene.issue().await?;
     read_without_write(&claims)?;

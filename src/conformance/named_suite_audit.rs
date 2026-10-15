@@ -859,6 +859,7 @@ mod tests {
         for reviewed in [
             &crate::scenarios::agent_runtime_live::REVIEWED_CONTENT_CASES[..],
             &crate::scenarios::agent_runtime_live::REVIEWED_GRANT_CONTENT_CASES[..],
+            &crate::scenarios::agent_runtime_live::REVIEWED_POLICY_CONTENT_CASES[..],
         ] {
             let canonical = cases
                 .iter()
@@ -871,7 +872,7 @@ mod tests {
             );
         }
         println!(
-            "[named-agent-order] reviewed18_and6_match_canonical=1 removed=0 runtime_credit=0"
+            "[named-agent-order] reviewed_nested_groups_match_canonical=1 removed=0 runtime_credit=0"
         );
         Ok(())
     }

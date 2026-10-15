@@ -62,6 +62,7 @@ mod act_on_behalf_evidence;
 mod binding_evidence;
 mod coauth_session_evidence;
 mod content_grant_evidence;
+mod content_policy_evidence;
 mod content_session_evidence;
 mod direct_evidence;
 mod direct_mls_evidence;
@@ -88,6 +89,9 @@ pub use coauth_session_evidence::{
 };
 pub use content_grant_evidence::{
     REVIEWED_GRANT_CONTENT_CASES, run_agent_content_grant_production,
+};
+pub use content_policy_evidence::{
+    REVIEWED_POLICY_CONTENT_CASES, run_agent_content_policy_production,
 };
 pub use content_session_evidence::{
     REVIEWED_CONTENT_CASES, run_agent_session_content_production,

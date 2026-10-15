@@ -199,6 +199,7 @@ pub async fn run_agent_human_approval_production()
         .to_owned();
     let value: serde_json::Value = response.json().await?;
     let problem: arkret_wire::Problem = serde_json::from_value(value.clone())?;
+    coauth_session_evidence::validate_issue_problem(&problem)?;
     ensure!(
         media.starts_with("application/problem+json")
             && problem.code() == arkret_wire::ErrorCode::CLAIM_REQUIRED
@@ -223,6 +224,7 @@ pub async fn run_agent_human_approval_production()
         .await?;
     ensure!(refused.status().is_client_error());
     let refused: arkret_wire::Problem = refused.json().await?;
+    coauth_session_evidence::validate_issue_problem(&refused)?;
     ensure!(
         refused.code() != arkret_wire::ErrorCode::CLAIM_REQUIRED,
         "correlation handle was interpreted as approval authority"

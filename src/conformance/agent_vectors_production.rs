@@ -30,6 +30,7 @@ pub(super) const REVIEWED_CASE_GROUPS: &[&[&str]] = &[
     &REVIEWED_PRODUCTION_CASES,
     &crate::scenarios::agent_runtime_live::REVIEWED_CONTENT_CASES,
     &crate::scenarios::agent_runtime_live::REVIEWED_GRANT_CONTENT_CASES,
+    &crate::scenarios::agent_runtime_live::REVIEWED_POLICY_CONTENT_CASES,
 ];
 
 pub fn reviewed_agent_production_case_ids() -> Vec<&'static str> {
@@ -82,6 +83,8 @@ pub fn run_agent_vectors_production_suite() -> Result<SuiteExecutionResult> {
                     execution.cases.extend(content.cases);
                     let grants = crate::scenarios::agent_runtime_live::run_agent_content_grant_production().await?;
                     execution.cases.extend(grants.cases);
+                    let policies = crate::scenarios::agent_runtime_live::run_agent_content_policy_production().await?;
+                    execution.cases.extend(policies.cases);
                     Ok::<SuiteExecutionResult, anyhow::Error>(execution)
                 })?;
             execution.cases.splice(0..0, schema_cases);

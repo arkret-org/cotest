@@ -968,6 +968,79 @@ pub(super) async fn set_accountability_with_source(
     Ok(source)
 }
 
+/// Validate an actual issue reply against its canonical operation binding.
+/// This is evidence metadata validation, never an authorization evaluator.
+pub(super) fn validate_issue_problem(problem: &arkret_wire::Problem) -> Result<()> {
+    static MAPPING: std::sync::OnceLock<serde_json::Value> = std::sync::OnceLock::new();
+    if MAPPING.get().is_none() {
+        let path = crate::conformance::spec_artifacts_root()
+            .join("registry/operations-error-mapping.json");
+        let value = serde_json::from_slice(&std::fs::read(path)?)?;
+        let _ = MAPPING.set(value);
+    }
+    let mapping = MAPPING.get().context("canonical operation error mapping")?;
+    let universal_rule = mapping["rules"]["universal_codes"]
+        .as_str()
+        .context("canonical universal error rule")?;
+    let listed = universal_rule
+        .strip_prefix("Every protected operation MAY additionally return any of: ")
+        .and_then(|rule| rule.split_once(". These ").map(|(codes, _)| codes))
+        .context("review changed universal error rule format")?;
+    let universal = listed.split(", ").collect::<Vec<_>>();
+    ensure!(
+        !universal.is_empty()
+            && universal
+                .iter()
+                .all(|code| arkret_wire::ErrorCode::is_registered(code)),
+        "universal error rule must name registered codes"
+    );
+    let operation = arkret_wire::ServiceOperationId::from_wire(
+        "ak.gate.account.command.issue_session_grant.v1",
+    )
+    .context("canonical issue operation")?;
+    let specific = operation.operation_specific_errors();
+    let code = arkret_wire::ErrorCode::from_wire(problem.code())
+        .context("registered actual error code")?;
+    let reason = problem
+        .extensions
+        .get("reason_code")
+        .map(|value| value.as_str().context("reason_code must be a string"))
+        .transpose()?;
+    if let Some(reason) = reason {
+        ensure!(
+            arkret_wire::ReasonCode::is_registered(reason),
+            "actual reason_code is unregistered"
+        );
+        if reason == arkret_wire::ReasonCode::HUMAN_APPROVAL_REQUIRED {
+            ensure!(
+                problem.agent_human_approval_details()?.is_some(),
+                "human approval reason requires its exact SDK error parent and closed extensions"
+            );
+        }
+    } else {
+        ensure!(
+            problem.status
+                == code.http_status_in(arkret_wire::ErrorStatusContext::SessionIssuanceOrRefresh),
+            "actual reason-free status differs from the registered session error"
+        );
+    }
+    ensure!(
+        serde_json::to_value(problem)?["type"] == code.type_uri(),
+        "actual error type URI differs from registry"
+    );
+    ensure!(
+        universal.contains(&code.as_str())
+            || specific.iter().any(|entry| match entry {
+                arkret_wire::OperationSpecificError::Code(allowed) => *allowed == code,
+                arkret_wire::OperationSpecificError::Reason(allowed) =>
+                    reason == Some(allowed.as_str()),
+            }),
+        "actual issue reply is outside its operation error binding: {}",
+        code.as_str()
+    );
+    Ok(())
+}
+
 #[allow(clippy::too_many_arguments)]
 pub(super) async fn expect_issue_refusal(
     station: &crate::harness::ArkretServer,
@@ -993,6 +1066,7 @@ pub(super) async fn expect_issue_refusal(
     let status = response.status();
     ensure!(!status.is_success(), "negative Agent issuance was accepted");
     let problem: arkret_wire::Problem = response.json().await?;
+    validate_issue_problem(&problem)?;
     ensure!(
         problem.status == status.as_u16(),
         "Problem status differs from its HTTP status"
@@ -1021,4 +1095,63 @@ pub(super) async fn expect_issue_refusal(
         problem.status
     );
     Ok(())
+}
+
+#[cfg(test)]
+mod operation_error_tests {
+    use super::*;
+
+    fn problem(code: arkret_wire::ErrorCode, reason: Option<&str>) -> Result<arkret_wire::Problem> {
+        let mut value = serde_json::json!({"type":code.type_uri(),"title":code.title(),
+            "status":code.http_status_in(arkret_wire::ErrorStatusContext::SessionIssuanceOrRefresh),
+            "detail":"Operation error binding metadata fixture"});
+        if let Some(reason) = reason {
+            value["reason_code"] = serde_json::json!(reason);
+            if reason == "human_approval_required" {
+                value["approval_request_id"] =
+                    serde_json::json!("opaque_metadata_contract_request");
+            }
+        }
+        Ok(serde_json::from_value(value)?)
+    }
+
+    #[test]
+    fn issue_error_binding_rejects_endpoint_errors_and_wrong_status() -> Result<()> {
+        use arkret_wire::ErrorCode;
+        validate_issue_problem(&problem(ErrorCode::CapabilityDenied, None)?)?;
+        validate_issue_problem(&problem(ErrorCode::ServiceUnavailable, None)?)?;
+        validate_issue_problem(&problem(
+            ErrorCode::ClaimRequired,
+            Some("human_approval_required"),
+        )?)?;
+        ensure!(validate_issue_problem(&problem(ErrorCode::PolicyUnavailable, None)?).is_err());
+        ensure!(validate_issue_problem(&problem(ErrorCode::PolicyViolation, None)?).is_err());
+        ensure!(
+            validate_issue_problem(&problem(
+                ErrorCode::PolicyViolation,
+                Some("human_approval_required")
+            )?)
+            .is_err()
+        );
+        let mut wrong = problem(ErrorCode::CapabilityDenied, None)?;
+        wrong.status = 503;
+        ensure!(validate_issue_problem(&wrong).is_err());
+        Ok(())
+    }
+
+    #[test]
+    fn actual_session_policy_renderer_uses_registered_operation_errors() -> Result<()> {
+        use coauth_backend::handlers::account::agents::AgentAuthRejection;
+        for rejection in [
+            AgentAuthRejection::PolicyViolation,
+            AgentAuthRejection::PolicyUnavailable,
+        ] {
+            let code = arkret_wire::ErrorCode::from_wire(rejection.code())
+                .context("registered renderer code")?;
+            let mut reply = problem(code, rejection.reason_code())?;
+            reply.status = rejection.http_status().as_u16();
+            validate_issue_problem(&reply)?;
+        }
+        Ok(())
+    }
 }
