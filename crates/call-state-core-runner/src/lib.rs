@@ -288,6 +288,20 @@ fn token_request() -> CallMediaTokenExchangeRequestBody {
         )),
         DeviceId::new("ak:device:01904100-0000-7000-8000-000000000005").unwrap(),
         "fra-1",
+        arkret_models_collaboration::call_invitation::CallJoinContext::Voluntary(
+            arkret_models_collaboration::call_invitation::CallVoluntaryJoinRequestBody {
+                kind:
+                    arkret_models_collaboration::call_invitation::CallVoluntaryJoinKind::Voluntary,
+                created_at: chrono::Utc::now(),
+                expires_at: chrono::Utc::now() + chrono::Duration::seconds(30),
+                nonce: "AAAAAAAAAAAAAAAAAAAAAA".into(),
+                proof: arkret_models_collaboration::call_invitation::CallInvitationProof {
+                    verification_method: arkret_wire::DidUrl::new("did:web:fixture.example#device")
+                        .unwrap(),
+                    jws: "fixture-signature-not-consumed-by-this-gate".into(),
+                },
+            },
+        ),
     )
 }
 
@@ -296,7 +310,33 @@ fn token_outcome(
     key: &SigningKey,
     expires_at: DateTime<Utc>,
 ) -> Result<CallMediaTokenExchangeOutcome> {
+    let roster_identity = arkret_models_collaboration::call_invitation::CallMediaRosterIdentity {
+        actor_id: arkret_wire::DidCoreId::new(
+            "ak:did_core:key:z6MkpTHR8VNsBxYAAWHut2Geadd9jSwuBV8xRoAnwWsdvktH",
+        )
+        .unwrap(),
+        device_id: arkret_wire::DeviceId::new("ak:device:01904100-0000-7000-8000-000000000009")
+            .unwrap(),
+    };
+    let unsigned_binding = CallMediaParticipantBinding {
+        subject_binding_digest: arkret_wire::Hash::new(format!("sha256:{}", "0".repeat(64)))
+            .unwrap(),
+        expires_at,
+        issuer_kid: arkret_wire::DidUrl::new(ISSUER_KID).unwrap(),
+        sig: String::new(),
+    };
+    let subject_binding =
+        arkret_models_collaboration::call_invitation::CallMediaSubjectBinding::unsigned_for_token(
+            request,
+            roster_identity.clone(),
+            "ak:rtc_participant:0198c2f4-0000-7000-8000-000000000000".into(),
+            &unsigned_binding,
+            arkret_canonical::base64url_encode([42u8; 32]),
+        )
+        .unwrap();
     let mut outcome = CallMediaTokenExchangeOutcome {
+        roster_identity,
+        subject_binding,
         realm_id: request.realm_id.clone(),
         call_id: request.call_id.clone(),
         actor_id: request.actor_id.clone(),
@@ -307,12 +347,20 @@ fn token_outcome(
         backend_token: MediaBackendToken::Opaque("opaque-token".to_owned()),
         participant_id: "ak:rtc_participant:0198c2f4-0000-7000-8000-000000000000".to_owned(),
         participant_binding: CallMediaParticipantBinding {
+            subject_binding_digest: arkret_wire::Hash::new(format!("sha256:{}", "0".repeat(64)))
+                .unwrap(),
             sig: String::new(),
             issuer_kid: arkret::DidUrl::new(ISSUER_KID).map_err(anyhow::Error::msg)?,
             expires_at,
         },
         expires_at,
     };
+    outcome.subject_binding.sig = arkret_canonical::base64url_encode(
+        key.sign(&outcome.subject_binding.signing_bytes().unwrap())
+            .to_bytes(),
+    );
+    outcome.participant_binding.subject_binding_digest =
+        outcome.subject_binding.signed_digest().unwrap();
     let input =
         participant_binding_signing_input(&ParticipantBindingContext::from_outcome(&outcome))?;
     outcome.participant_binding.sig = base64url_encode(key.sign(&input).to_bytes());

@@ -62,6 +62,7 @@ fn accepted_presence(
         signer_verification_method: arkret_wire::DidUrl::new("did:web:alice.example#device-1")
             .unwrap(),
         product_authority: None,
+        call_invitation: None,
         authority_commit_id: arkret_wire::RealmCommitId::from_digest([41; 32]),
         parent_realm_authority_commit_id: None,
         domain: Box::new(SignalSequenceDomain {

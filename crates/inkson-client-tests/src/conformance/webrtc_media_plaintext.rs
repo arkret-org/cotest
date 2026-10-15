@@ -133,7 +133,11 @@ pub fn run_webrtc_media_plaintext_suite() -> Result<SuiteExecutionResult> {
     let authorized = media_join_request(true, true, true)?;
     let permit = authorize_media_join(&authorized).map_err(|error| anyhow!(error.as_wire()))?;
     let key = permit
-        .publish_frame_key(&exporter, PARTICIPANT_ID)
+        .publish_frame_key(
+            &exporter,
+            PARTICIPANT_ID,
+            &"ak:device:01904100-0000-7000-8000-000000000009".parse()?,
+        )
         .map_err(|error| anyhow!(error.as_wire()))?;
     ensure!(
         key.len() == 32,
@@ -209,6 +213,17 @@ fn media_join_request(
         )])
     });
     Ok(MediaJoinRequest {
+        join_context: arkret::CallJoinContext::Voluntary(arkret::CallVoluntaryJoinRequestBody {
+            kind: arkret::CallVoluntaryJoinKind::Voluntary,
+            created_at: chrono::Utc::now(),
+            expires_at: chrono::Utc::now() + chrono::Duration::seconds(30),
+            nonce: "AAAAAAAAAAAAAAAAAAAAAA".into(),
+            proof: arkret::CallInvitationProof {
+                verification_method: arkret_wire::DidUrl::new("did:web:fixture.example#device")
+                    .unwrap(),
+                jws: "fixture-signature-not-consumed-by-this-gate".into(),
+            },
+        }),
         realm_id: "ak:realm:AVxu7KCm9qmiOqakDKBXUia9rbZ3NBurP875XbqG1rbs".to_owned(),
         call_id: "ak:call:AYf05kF8z4cSo8r6qmqXgu4KPuv2YtKBlsE00FOmblaz".to_owned(),
         actor_id: "ak:did_core:web:alice.example".to_owned(),

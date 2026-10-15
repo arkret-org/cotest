@@ -13,6 +13,8 @@ pub struct ScanGapControl(Arc<Mutex<GapState>>);
 
 #[derive(Default)]
 struct GapState {
+    unavailable_paths: std::collections::BTreeSet<String>,
+    unavailable_requests: std::collections::BTreeMap<String, usize>,
     stream: Option<CommitStreamRef>,
     position: u64,
     observations: Vec<StreamScanOutcome>,
@@ -65,6 +67,24 @@ impl ScanGapControl {
         )
     }
 
+    pub fn set_path_unavailable(&self, path: &str, unavailable: bool) {
+        let mut state = self.0.lock().unwrap();
+        if unavailable {
+            state.unavailable_paths.insert(path.to_owned());
+        } else {
+            state.unavailable_paths.remove(path);
+        }
+    }
+
+    pub fn unavailable_request_count(&self, path: &str) -> usize {
+        self.0
+            .lock()
+            .unwrap()
+            .unavailable_requests
+            .get(path)
+            .copied()
+            .unwrap_or(0)
+    }
     pub fn omit_position_one(&self, stream: CommitStreamRef) {
         self.omit_position(stream, 1);
     }
@@ -129,6 +149,24 @@ struct Relay {
 
 impl Relay {
     async fn forward(&self, req: &mut Request, res: &mut Response) -> Result<()> {
+        let unavailable = {
+            let mut state = self.control.0.lock().unwrap();
+            let path = req.uri().path();
+            if state.unavailable_paths.contains(path) {
+                *state
+                    .unavailable_requests
+                    .entry(path.to_owned())
+                    .or_default() += 1;
+                true
+            } else {
+                false
+            }
+        };
+        if unavailable {
+            res.status_code(salvo::http::StatusCode::SERVICE_UNAVAILABLE);
+            res.render(Text::Plain("fixture upstream unavailable"));
+            return Ok(());
+        }
         let path = req
             .uri()
             .path_and_query()
@@ -207,6 +245,11 @@ impl Relay {
         headers.remove("content-length");
         headers.remove("transfer-encoding");
         headers.remove("connection");
+        if req.uri().path() == "/_arkret/self/signal/subscribe" {
+            *res.headers_mut() = headers;
+            res.stream(response.bytes_stream());
+            return Ok(());
+        }
         let mut bytes = response.bytes().await?.to_vec();
         if req.uri().path() == "/_arkret/peer/strands/watch/current"
             && res.status_code == Some(StatusCode::OK)

@@ -25,6 +25,26 @@ async fn signed_post(
     provider: &str,
     body: &Value,
 ) -> Result<(StatusCode, Value)> {
+    let (_, seed) = test_service_signing_key(&format!("{GROUP}-0"));
+    signed_provider_post(
+        server,
+        path,
+        room,
+        provider,
+        body,
+        &ed25519_dalek::SigningKey::from_bytes(&seed),
+    )
+    .await
+}
+
+pub(crate) async fn signed_provider_post(
+    server: &ArkretServer,
+    path: &str,
+    room: &str,
+    provider: &str,
+    body: &Value,
+    key: &ed25519_dalek::SigningKey,
+) -> Result<(StatusCode, Value)> {
     use arkret_signatures::http_signature::{
         Component, ContentDigest, ContentDigestAlgorithm, SignedRequestParts, canonical_message,
         format_signature_input_component_list, parse_signature_input, sign_message,
@@ -39,7 +59,7 @@ async fn signed_post(
     let digest = ContentDigest::compute(&body, ContentDigestAlgorithm::Sha256).wire_value;
     let operation = arkret_wire::ServiceOperationId::from_http_request("POST", path)
         .context("MIMI operation")?;
-    let headers = vec![
+    let mut headers = vec![
         ("arkret-operation".into(), operation.as_str().to_owned()),
         ("content-type".into(), "application/json".into()),
         ("content-digest".into(), digest.clone()),
@@ -49,9 +69,8 @@ async fn signed_post(
             "destination-service-id".into(),
             server.service_id().to_string(),
         ),
-        ("mimi-room-uri".into(), room.to_owned()),
     ];
-    let covered = vec![
+    let mut covered = vec![
         Component::Method,
         Component::TargetUri,
         Component::Authority,
@@ -60,8 +79,11 @@ async fn signed_post(
         Component::Header("provider-id".into()),
         Component::Header("source-service-id".into()),
         Component::Header("destination-service-id".into()),
-        Component::Header("mimi-room-uri".into()),
     ];
+    if !room.is_empty() {
+        headers.push(("mimi-room-uri".into(), room.to_owned()));
+        covered.push(Component::Header("mimi-room-uri".into()));
+    }
     let now = chrono::Utc::now().timestamp();
     let keyid = format!("{}#notary-key", server.service_did());
     let input = format!(
@@ -81,8 +103,7 @@ async fn signed_post(
         },
         &parsed,
     )?;
-    let (_, seed) = test_service_signing_key(&format!("{GROUP}-0"));
-    let signature = sign_message(&transcript, &ed25519_dalek::SigningKey::from_bytes(&seed));
+    let signature = sign_message(&transcript, key);
     let mut request = server.http().post(target).body(body);
     for (name, value) in headers {
         // The operation-selecting client already installs the signed selector.
@@ -773,4 +794,148 @@ async fn migration_matrix(
             .unwrap_or(usize::MAX)
     });
     Ok(results)
+}
+
+/// A registered authenticated facade cannot derive identity from Consent.
+pub async fn verify_consent_identifier_exclusions(
+    member: &Member,
+    peer: &arkret_wire::ActorId,
+    server: &ArkretServer,
+) -> Result<()> {
+    use arkret_models_collaboration::consent_operations::{
+        ConsentGrantRequestBody, ConsentRevokeRequestBody, ConsentView,
+    };
+    use arkret_models_collaboration::events_payloads::consent::{ConsentGrantPayload, ConsentPeer};
+    use arkret_models_collaboration::mimi_operations::{
+        MimiIdentifierQueryOutcome, MimiIdentifierQueryRequestBody,
+    };
+    use arkret_models_collaboration::objects::mimi::{MimiIdentifier, MimiIdentifierKind};
+    let pcr = &member
+        .client
+        .principal
+        .as_ref()
+        .context("actual holder PCR")?
+        .pcr_realm_id;
+    let event = member
+        .client
+        .author_event(
+            pcr.as_str(),
+            EventKind::ConsentGrant.as_str(),
+            serde_json::to_value(ConsentGrantPayload {
+                consent_id: arkret_wire::ConsentId::new(format!(
+                    "ak:consent:{}",
+                    crate::scenarios::mls_lifecycle_live::fresh_uuid_v7()
+                ))?,
+                peer: ConsentPeer::Actor {
+                    actor_id: peer.clone(),
+                },
+                consent_scope: arkret_wire::ConsentScope::Any,
+                not_before: None,
+                expires_at: None,
+                constraints: None,
+                evidence_ref: None,
+                reason: None,
+            })?,
+        )
+        .await?;
+    let grant: ConsentView = serde_json::from_value(
+        expect_json(
+            member
+                .client
+                .post("/_arkret/self/consent/results/grant")
+                .json(&ConsentGrantRequestBody {
+                    grant_event: arkret_wire::EventAdmissionSubmission::new(event),
+                }),
+            StatusCode::OK,
+        )
+        .await?,
+    )?;
+    let directory: Value = server
+        .http()
+        .get(server.url("/_arkret/open/mimi/provider-directory"))
+        .send()
+        .await?
+        .error_for_status()?
+        .json()
+        .await?;
+    let provider = directory
+        .pointer("/mimi/provider_id")
+        .and_then(Value::as_str)
+        .context("actual MIMI provider")?;
+    for revoked in [false, true] {
+        if revoked {
+            let event = member
+                .client
+                .author_event(
+                    pcr.as_str(),
+                    EventKind::ConsentRevoke.as_str(),
+                    serde_json::to_value(
+                        arkret_models_collaboration::governance_payloads::ConsentRevokePayload {
+                            consent_id: grant.consent_id.clone(),
+                            expected_revision: grant.revision.clone(),
+                            revoked_at: None,
+                            reason: None,
+                        },
+                    )?,
+                )
+                .await?;
+            expect_json(
+                member
+                    .client
+                    .post("/_arkret/self/consent/results/revoke")
+                    .json(&ConsentRevokeRequestBody {
+                        revoke_event: arkret_wire::EventAdmissionSubmission::new(event),
+                    }),
+                StatusCode::OK,
+            )
+            .await?;
+        }
+        let request = MimiIdentifierQueryRequestBody {
+            identifiers: ["opaque", "did", "phone", "email"]
+                .into_iter()
+                .enumerate()
+                .map(|(index, kind)| {
+                    Ok(MimiIdentifier {
+                        kind: serde_json::from_value::<MimiIdentifierKind>(json!(kind))?,
+                        identifier_commitment: arkret_wire::Hash::new(format!(
+                            "sha256:{}",
+                            format!("{:02x}", index + 1).repeat(32)
+                        ))?,
+                    })
+                })
+                .collect::<Result<Vec<_>>>()?,
+            requester_id: None,
+            privacy_profile: None,
+            proofs: vec![],
+        };
+        let (status, value) = signed_provider_post(
+            server,
+            "/_arkret/open/mimi/identifiers/query",
+            "",
+            provider,
+            &serde_json::to_value(&request)?,
+            &server.federation_signing_key()?,
+        )
+        .await?;
+        ensure!(
+            status == StatusCode::OK,
+            "actual authenticated MIMI identifiers query: {status} {value}"
+        );
+        let response: MimiIdentifierQueryOutcome = serde_json::from_value(value)?;
+        ensure!(response.matches.len() == request.identifiers.len() && !response.has_more);
+        for (requested, matched) in request.identifiers.iter().zip(&response.matches) {
+            ensure!(
+                requested.identifier_commitment == matched.identifier_commitment
+                    && !matched.matched
+                    && matched.mimi_uri.is_none()
+                    && matched.subject_id.is_none(),
+                "MIMI exposed a private match or handoff"
+            );
+        }
+    }
+    crate::scenarios::directory_service::verify_consent_discovery_exclusions().await?;
+    eprintln!(
+        "[consent-exclusion] active_revoked_facade_queries=2 commitments=8 matched=0 identity_handoff=0"
+    );
+    Ok(())
 }

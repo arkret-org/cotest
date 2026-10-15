@@ -491,6 +491,7 @@ fn is_secret_field(name: &str) -> bool {
             | "secret"
             | "secret_b64u"
             | "session_credential"
+            | "subject_binding"
             | "credential"
             | "push_key"
             | "invite_token"
@@ -575,6 +576,23 @@ mod tests {
         assert_eq!(sanitized["ice"]["credential"], "[redacted]");
         assert_eq!(sanitized["ice"]["username"], "public-routing-user");
         assert_eq!(sanitized["recovery_key"], "[redacted]");
+    }
+
+    #[test]
+    fn transcript_sanitizer_removes_the_entire_private_call_mapping() {
+        let sanitized = sanitize_json_value(json!({"join_context": {
+            "kind": "refresh", "subject_binding": {
+                "subject_actor_id": "private-account", "subject_device_id": "real-device",
+                "roster_identity": {"actor_id": "alias", "device_id": "device-alias"}
+            }, "participant_id": "public-participant"
+        }}));
+        assert_eq!(sanitized["join_context"]["subject_binding"], "[redacted]");
+        assert_eq!(
+            sanitized["join_context"]["participant_id"],
+            "public-participant"
+        );
+        assert!(!sanitized.to_string().contains("private-account"));
+        assert!(!sanitized.to_string().contains("device-alias"));
     }
 
     #[test]

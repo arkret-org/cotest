@@ -167,6 +167,7 @@ pub(super) async fn run(
         arkret_signatures::detached_object::sign_detached_object(value, context, method, at, key)
     };
     let mut handoff = RealmAuthorityHandoff {
+        pcr_private_state_digest: None,
         handoff_id: RealmAuthorityHandoffId::from_digest(arkret_canonical::sha256_bytes(
             change.event_id.as_str().as_bytes(),
         )),
@@ -224,6 +225,7 @@ pub(super) async fn run(
         &new_key,
     )?;
     let activation = AuthorityHandoffRequest {
+        pcr_private_state: None,
         handoff,
         final_stream_heads: heads,
         snapshot,

@@ -376,9 +376,72 @@ pub fn cursor(frame: &WebSocketServerFrame, id: &str) -> Option<String> {
 }
 
 /// Consume a real Signal while the two durable rails share the same socket.
-pub(crate) struct LiveSignalReader(Socket);
+pub struct LiveSignalReader(Socket);
 
 impl LiveSignalReader {
+    pub async fn expect_capability_denied_channel(&mut self) -> Result<()> {
+        let mut denied = false;
+        tokio::time::timeout(WAIT, async {
+            loop {
+                match next(&mut self.0).await? {
+                    WebSocketServerFrame::ChannelError {
+                        channel_id, error, ..
+                    } if channel_id == "signal-1" => {
+                        ensure!(
+                            !denied && error.code == arkret_wire::ErrorCode::CapabilityDenied,
+                            "actual Signal refusal used another transport error"
+                        );
+                        denied = true;
+                    }
+                    WebSocketServerFrame::Closed { channel_id, reason }
+                        if channel_id == "signal-1" =>
+                    {
+                        ensure!(
+                            denied && reason == WebSocketClosedReason::Unauthorized,
+                            "Signal channel closed without the actual authorization refusal"
+                        );
+                        return Ok::<(), anyhow::Error>(());
+                    }
+                    WebSocketServerFrame::ChannelControl {
+                        channel_id,
+                        payload: WebSocketChannelControlPayload::Heartbeat(_),
+                        ..
+                    } if channel_id == "signal-1" => {}
+                    other => {
+                        bail!("revoked Signal channel released an unexpected frame: {other:?}")
+                    }
+                }
+            }
+        })
+        .await??;
+        Ok(())
+    }
+
+    pub async fn connect_signal(server: &ArkretServer, client: &TestActorClient) -> Result<Self> {
+        let (mut socket, _) = authenticated(server, client).await?;
+        open(
+            &mut socket,
+            "signal-1",
+            WebSocketOpenParameters::Signal(Default::default()),
+            WebSocketOperationId::SignalStreamSubscribe,
+        )
+        .await?;
+        let mut reader = Self(socket);
+        tokio::time::timeout(WAIT, async {
+            match reader
+                .next_frame()
+                .await?
+                .context("actual Signal channel remains open")?
+            {
+                arkret_models_collaboration::SignalStreamFrame::Heartbeat => {
+                    Ok::<(), anyhow::Error>(())
+                }
+                other => bail!("Signal channel was not ready before publication: {other:?}"),
+            }
+        })
+        .await??;
+        Ok(reader)
+    }
     pub(crate) async fn connect(
         server: &ArkretServer,
         client: &TestActorClient,
@@ -468,7 +531,7 @@ impl LiveSignalReader {
         .context("exact accepted transition on the shared Events rail")?
     }
 
-    pub(crate) async fn next_frame(
+    pub async fn next_frame(
         &mut self,
     ) -> Result<Option<arkret_models_collaboration::SignalStreamFrame>> {
         loop {

@@ -367,7 +367,7 @@
       "engineering_checks": [],
       "remaining_scenarios": [
         "通话invite三层Consent正式证据边界与生产接线；presence/MIMI当前适用消费者；跨层/跨Station在途撤销、any独立性、完整peer和时间窗、current revision不回退",
-        "正式consent.cache_invalidation五case/五decision point真实生产executor实现、注册与最新冻结执行；Directory/PSI只执行退役不可调用/不可广告/零索引变化负例，不恢复正向路径"
+        "正式consent.cache_invalidation 14 case/14 decision point真实生产executor实现、注册与最新冻结执行；Directory/PSI只执行退役不可调用/不可广告/零索引变化负例，不恢复正向路径"
       ]
     },
     {

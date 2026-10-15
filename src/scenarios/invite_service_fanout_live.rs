@@ -48,6 +48,11 @@ use crate::harness::{
 };
 use crate::scenarios::identity_test_support::actor_did_for_service_did;
 
+mod consent_delivery_race;
+mod consent_invite_matrix;
+pub(crate) use consent_delivery_race::verify_consent_delivery_race;
+pub use consent_invite_matrix::run_current_invite_matrix;
+
 fn account_data_update_matches(envelope: &DeviceMessageEnvelope, row: &AccountDataRow) -> bool {
     envelope.kind.as_str() == "ak.account_data.update"
         && envelope.content.get("operation").and_then(Value::as_str) == Some("put")
@@ -335,6 +340,14 @@ async fn grant_invite_consent(
     holder: &TestActorClient,
     peer: &TestActorClient,
 ) -> Result<(ConsentView, arkret_wire::Event)> {
+    grant_invite_consent_scope(holder, peer, ConsentScope::Invite).await
+}
+
+async fn grant_invite_consent_scope(
+    holder: &TestActorClient,
+    peer: &TestActorClient,
+    scope: ConsentScope,
+) -> Result<(ConsentView, arkret_wire::Event)> {
     let principal = holder
         .principal
         .as_ref()
@@ -353,7 +366,7 @@ async fn grant_invite_consent(
                 DidCoreId::new(peer.service_id())?,
             )),
         },
-        consent_scope: ConsentScope::Invite,
+        consent_scope: scope,
         not_before: None,
         expires_at: Some(Utc::now() + ChronoDuration::days(1)),
         constraints: None,
