@@ -184,7 +184,7 @@
           "path": "bridges/crates/runtime/src/managed_actor_authoring.rs",
           "symbol": "shared_http_author_uses_durable_custody_across_restart_and_refuses_wrong_kek",
           "kind": "live",
-          "covers": "Shared canonical HTTP Bot/Ghost author, real random encrypted key custody, exact authoring and frozen preparation across durable reopen, wrong KEK refusal without replacing old ciphertext; not Device/MLS runtime acceptance"
+          "covers": "Canonical Bot/Ghost HTTP author and native DID document/JSONL publication with real random encrypted custody, verified native proof, exact replay/public resources across durable reopen, wrong origin/KEK and unknown refusal; not full Device/MLS runtime or live Savfox host acceptance"
         }
       ],
       "engineering_checks": [],
