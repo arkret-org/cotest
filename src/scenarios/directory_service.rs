@@ -235,3 +235,85 @@ fn assert_array_exact(value: &JsonValue, key: &str, expected: &[&str]) {
         "{key} must be exact"
     );
 }
+
+/// Real current-v1 Directory exclusion evidence on a dedicated initialized PG.
+/// Unknown paths are negative probes, never registered operation substitutes.
+pub(crate) async fn verify_consent_discovery_exclusions() -> Result<()> {
+    use crate::scenarios::_helpers::external_binary::try_spawn_with_extra_env;
+    let db =
+        crate::scenarios::human_device_producer_live::database("consent-directory-exclusions")?
+            .context("Consent exclusion evidence requires PostgreSQL")?;
+    let directory = try_spawn_with_extra_env(&FLAGON_SPEC, &[("DATABASE_URL", &db.connect_url)])
+        .await?
+        .context("Consent exclusion evidence requires prebuilt Flagon")?;
+    let http = Client::builder()
+        .timeout(std::time::Duration::from_secs(10))
+        .build()?;
+    let describe = get_json_with_operation(
+        &http,
+        format!("{}/_arkret/find/directory/describe", directory.base_url),
+        ServiceOperationId::FIND_DIRECTORY_READ_DESCRIBE_V1,
+    )
+    .await?;
+    assert_array_exact(&describe, "resource_kinds", &["realm"]);
+    let openapi = get_json(
+        &http,
+        format!("{}/.well-known/arkret/openapi.json", directory.base_url),
+    )
+    .await?;
+    let mut advertised = openapi["paths"]
+        .as_object()
+        .context("actual Directory OpenAPI paths")?
+        .keys()
+        .filter(|path| path.starts_with("/_arkret/find/directory/"))
+        .cloned()
+        .collect::<Vec<_>>();
+    advertised.sort();
+    anyhow::ensure!(
+        advertised
+            == [
+                "/_arkret/find/directory/describe",
+                "/_arkret/find/directory/resolve-realm",
+                "/_arkret/find/directory/search-realms"
+            ],
+        "actual Directory advertised another current-v1 operation"
+    );
+    let before = directory_index_digest(&db.connect_url).await?;
+    for path in [
+        "/_arkret/find/directory/search-users",
+        "/_arkret/find/directory/announce",
+        "/_arkret/find/directory/withdraw",
+        "/_arkret/find/directory/psi/rotate",
+        "/_arkret/find/directory/private-contacts",
+    ] {
+        let response = http
+            .post(format!("{}{path}", directory.base_url))
+            .header("content-type", "application/json")
+            .body("{}")
+            .send()
+            .await?;
+        anyhow::ensure!(
+            matches!(response.status().as_u16(), 404 | 405 | 410),
+            "excluded discovery probe did not return an explicit unavailable route: {path}: {}",
+            response.status()
+        );
+    }
+    anyhow::ensure!(
+        before == directory_index_digest(&db.connect_url).await?,
+        "excluded discovery or PSI attempt changed the actual public index"
+    );
+    eprintln!(
+        "[consent-exclusion] actual_directory_operations=3 excluded_calls=5 index_changed=0 psi_rotation=0"
+    );
+    Ok(())
+}
+
+async fn directory_index_digest(url: &str) -> Result<Vec<u8>> {
+    use sha2::{Digest, Sha256};
+    let url = url.to_owned();
+    tokio::task::spawn_blocking(move || -> Result<_> {
+        let mut db = postgres::Client::connect(&url, postgres::NoTls)?;
+        let value: JsonValue = db.query_one("SELECT coalesce(jsonb_agg(to_jsonb(e) ORDER BY realm_id),'[]'::jsonb) FROM directory_public_realm_entries e", &[])?.get(0);
+        Ok(Sha256::digest(arkret_canonical::canonical_json_bytes(&value)?).to_vec())
+    }).await?
+}

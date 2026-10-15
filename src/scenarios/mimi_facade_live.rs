@@ -809,3 +809,139 @@ async fn migration_matrix(
     });
     Ok(results)
 }
+
+/// A registered authenticated facade cannot derive identity from Consent.
+pub async fn verify_consent_identifier_exclusions(
+    member: &Member,
+    peer: &arkret_wire::ActorId,
+    server: &ArkretServer,
+) -> Result<()> {
+    use arkret_models_collaboration::consent_operations::{
+        ConsentGrantRequestBody, ConsentRevokeRequestBody, ConsentView,
+    };
+    use arkret_models_collaboration::events_payloads::consent::{ConsentGrantPayload, ConsentPeer};
+    use arkret_models_collaboration::mimi_operations::{
+        MimiIdentifierQueryOutcome, MimiIdentifierQueryRequestBody,
+    };
+    use arkret_models_collaboration::objects::mimi::{MimiIdentifier, MimiIdentifierKind};
+    let pcr = &member
+        .client
+        .principal
+        .as_ref()
+        .context("actual holder PCR")?
+        .pcr_realm_id;
+    let event = member
+        .client
+        .author_event(
+            pcr.as_str(),
+            EventKind::ConsentGrant.as_str(),
+            serde_json::to_value(ConsentGrantPayload {
+                consent_id: arkret_wire::ConsentId::new(format!(
+                    "ak:consent:{}",
+                    crate::scenarios::mls_lifecycle_live::fresh_uuid_v7()
+                ))?,
+                peer: ConsentPeer::Actor {
+                    actor_id: peer.clone(),
+                },
+                consent_scope: arkret_wire::ConsentScope::Any,
+                not_before: None,
+                expires_at: None,
+                constraints: None,
+                evidence_ref: None,
+                reason: None,
+            })?,
+        )
+        .await?;
+    let grant: ConsentView = serde_json::from_value(
+        expect_json(
+            member
+                .client
+                .post("/_arkret/self/consent/results/grant")
+                .json(&ConsentGrantRequestBody {
+                    grant_event: arkret_wire::EventAdmissionSubmission::new(event),
+                }),
+            StatusCode::OK,
+        )
+        .await?,
+    )?;
+    let directory: Value = server
+        .http()
+        .get(server.url("/_arkret/open/mimi/provider-directory"))
+        .send()
+        .await?
+        .error_for_status()?
+        .json()
+        .await?;
+    let provider = directory
+        .pointer("/mimi/provider_id")
+        .and_then(Value::as_str)
+        .context("actual MIMI provider")?;
+    for revoked in [false, true] {
+        if revoked {
+            let event = member
+                .client
+                .author_event(
+                    pcr.as_str(),
+                    EventKind::ConsentRevoke.as_str(),
+                    serde_json::to_value(
+                        arkret_models_collaboration::governance_payloads::ConsentRevokePayload {
+                            consent_id: grant.consent_id.clone(),
+                            expected_revision: grant.revision.clone(),
+                            revoked_at: None,
+                            reason: None,
+                        },
+                    )?,
+                )
+                .await?;
+            expect_json(
+                member
+                    .client
+                    .post("/_arkret/self/consent/results/revoke")
+                    .json(&ConsentRevokeRequestBody {
+                        revoke_event: arkret_wire::EventAdmissionSubmission::new(event),
+                    }),
+                StatusCode::OK,
+            )
+            .await?;
+        }
+        let request = MimiIdentifierQueryRequestBody {
+            identifiers: ["opaque", "did", "phone", "email"]
+                .into_iter()
+                .enumerate()
+                .map(|(index, kind)| {
+                    Ok(MimiIdentifier {
+                        kind: serde_json::from_value::<MimiIdentifierKind>(json!(kind))?,
+                        identifier_commitment: arkret_wire::Hash::new(format!(
+                            "sha256:{}",
+                            format!("{:02x}", index + 1).repeat(32)
+                        ))?,
+                    })
+                })
+                .collect::<Result<Vec<_>>>()?,
+            requester_id: None,
+            privacy_profile: None,
+            proofs: vec![],
+        };
+        let (status, value) = signed_identifier_query(server, provider, &request).await?;
+        ensure!(
+            status == StatusCode::OK,
+            "actual authenticated MIMI identifiers query: {status} {value}"
+        );
+        let response: MimiIdentifierQueryOutcome = serde_json::from_value(value)?;
+        ensure!(response.matches.len() == request.identifiers.len() && !response.has_more);
+        for (requested, matched) in request.identifiers.iter().zip(&response.matches) {
+            ensure!(
+                requested.identifier_commitment == matched.identifier_commitment
+                    && !matched.matched
+                    && matched.mimi_uri.is_none()
+                    && matched.subject_id.is_none(),
+                "MIMI exposed a private match or handoff"
+            );
+        }
+    }
+    crate::scenarios::directory_service::verify_consent_discovery_exclusions().await?;
+    eprintln!(
+        "[consent-exclusion] active_revoked_facade_queries=2 commitments=8 matched=0 identity_handoff=0"
+    );
+    Ok(())
+}

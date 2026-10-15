@@ -48,6 +48,11 @@ use crate::harness::{
 };
 use crate::scenarios::identity_test_support::actor_did_for_service_did;
 
+mod consent_delivery_race;
+mod consent_invite_matrix;
+pub(crate) use consent_delivery_race::verify_consent_delivery_race;
+pub use consent_invite_matrix::run_current_invite_matrix;
+
 fn account_data_update_matches(envelope: &DeviceMessageEnvelope, row: &AccountDataRow) -> bool {
     envelope.kind.as_str() == "ak.account_data.update"
         && envelope.content.get("operation").and_then(Value::as_str) == Some("put")

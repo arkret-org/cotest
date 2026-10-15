@@ -379,6 +379,32 @@ pub fn cursor(frame: &WebSocketServerFrame, id: &str) -> Option<String> {
 pub struct LiveSignalReader(Socket);
 
 impl LiveSignalReader {
+    pub async fn connect_signal(server: &ArkretServer, client: &TestActorClient) -> Result<Self> {
+        let (mut socket, _) = authenticated(server, client).await?;
+        open(
+            &mut socket,
+            "signal-1",
+            WebSocketOpenParameters::Signal(Default::default()),
+            WebSocketOperationId::SignalStreamSubscribe,
+        )
+        .await?;
+        let mut reader = Self(socket);
+        tokio::time::timeout(WAIT, async {
+            match reader
+                .next_frame()
+                .await?
+                .context("actual Signal channel remains open")?
+            {
+                arkret_models_collaboration::SignalStreamFrame::Heartbeat => {
+                    Ok::<(), anyhow::Error>(())
+                }
+                other => bail!("Signal channel was not ready before publication: {other:?}"),
+            }
+        })
+        .await??;
+        Ok(reader)
+    }
+
     pub async fn connect(
         server: &ArkretServer,
         client: &TestActorClient,

@@ -6,6 +6,7 @@ pub mod conformance {
     pub mod account_blocklist_projection;
     pub mod client_sync;
     pub mod consent_cache;
+    pub mod consent_call_admission;
     pub mod webrtc_media_plaintext;
     pub use account_blocklist_projection::*;
     pub use webrtc_media_plaintext::*;

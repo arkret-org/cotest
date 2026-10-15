@@ -2374,6 +2374,27 @@ pub(crate) async fn native_signal_endpoint(
     group: &arkret::ArkretMlsGroup,
     path: &std::path::Path,
 ) -> Result<inkson::sync_engine::NativeAccountHost> {
+    native_endpoint(member, realm, accepted_group, group, path, true).await
+}
+
+pub(super) async fn native_call_endpoint(
+    member: &crate::scenarios::mls_lifecycle_live::Member,
+    realm: &arkret_wire::RealmId,
+    accepted_group: &arkret_wire::EventId,
+    group: &arkret::ArkretMlsGroup,
+    path: &std::path::Path,
+) -> Result<inkson::sync_engine::NativeAccountHost> {
+    native_endpoint(member, realm, accepted_group, group, path, false).await
+}
+
+async fn native_endpoint(
+    member: &crate::scenarios::mls_lifecycle_live::Member,
+    realm: &arkret_wire::RealmId,
+    accepted_group: &arkret_wire::EventId,
+    group: &arkret::ArkretMlsGroup,
+    path: &std::path::Path,
+    audit_retained_history: bool,
+) -> Result<inkson::sync_engine::NativeAccountHost> {
     use base64::Engine as _;
     let secret = base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(SECRET);
     inkson::mls::runtime::store_account_mls_secret(
@@ -2381,14 +2402,16 @@ pub(crate) async fn native_signal_endpoint(
         &member.account,
         &secret,
     )?;
-    let host = inkson::sync_engine::NativeAccountHost::new_for_realm(
+    let open_host = inkson::sync_engine::NativeAccountHost::new_for_realm(
         member.client.sdk(),
         member.account.clone(),
         member.device.clone(),
         inkson::LocalStateStore::with_path(path),
         realm.clone(),
-    )
-    .await?;
+    );
+    let host = Box::pin(open_host)
+        .await
+        .context("Open native Account host at the actual Station")?;
     let record = group.export_state_record()?;
     let accepted = member
         .client
@@ -2411,10 +2434,26 @@ pub(crate) async fn native_signal_endpoint(
     host.state_store_handle()
         .write(|store| store.save_mls_checkpoint_for_scope(&scope, checkpoint))
         .map_err(anyhow::Error::msg)?;
-    host.catch_up_selected_realm_until_complete(realm)
-        .await
-        .context("Native selected Realm catch-up after accepted MLS checkpoint")?;
-    ingest_retained_realm(&member.client, &host, realm).await?;
+    let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(60);
+    loop {
+        match Box::pin(host.catch_up_selected_realm_until_complete(realm)).await {
+            Ok(()) => break,
+            Err(garth::Error::Api { status: 503, error })
+                if !audit_retained_history
+                    && error.error_code()
+                        == Some(arkret_wire::ErrorCode::RealmStateSnapshotUnavailable)
+                    && tokio::time::Instant::now() < deadline =>
+            {
+                tokio::time::sleep(std::time::Duration::from_millis(250)).await;
+            }
+            Err(error) => return Err(error.into()),
+        }
+    }
+    if audit_retained_history {
+        Box::pin(ingest_retained_realm(&member.client, &host, realm))
+            .await
+            .context("Independently verify retained Realm history for the native fixture")?;
+    }
     let installed_ref = host
         .state_store()
         .mls_group_state_ref_for_scope(&scope, record.group_id.as_str(), record.epoch)
@@ -2596,7 +2635,7 @@ pub(crate) async fn observe_ordinary_call_invite(
         &actions,
     )
     .await?;
-    let (call_id, call_commit) = if observe_receipt {
+    let (call_id, _call_commit) = if observe_receipt {
         (None, None)
     } else {
         let payload = CallCreatePayload {
@@ -2627,6 +2666,48 @@ pub(crate) async fn observe_ordinary_call_invite(
             Some(commit),
         )
     };
+    if !observe_receipt {
+        let principal = holder
+            .client
+            .principal
+            .as_ref()
+            .context("actual holder PCR")?;
+        let payload = arkret_models_collaboration::events_payloads::ConsentGrantPayload {
+            consent_id: arkret_wire::ConsentId::new(format!(
+                "ak:consent:{}",
+                cotest::scenarios::mls_lifecycle_live::fresh_uuid_v7()
+            ))?,
+            peer: arkret_models_collaboration::events_payloads::consent::ConsentPeer::Actor {
+                actor_id: sender.actor.clone(),
+            },
+            consent_scope: arkret_wire::ConsentScope::VoiceCall,
+            not_before: None,
+            expires_at: None,
+            constraints: None,
+            evidence_ref: None,
+            reason: None,
+        };
+        let event = holder
+            .client
+            .author_event(
+                principal.pcr_realm_id.as_str(),
+                arkret_wire::EventKind::ConsentGrant.as_str(),
+                serde_json::to_value(payload)?,
+            )
+            .await?;
+        expect_json(
+            holder
+                .client
+                .post("/_arkret/self/consent/results/grant")
+                .json(
+                    &arkret_models_collaboration::consent_operations::ConsentGrantRequestBody {
+                        grant_event: arkret_wire::EventAdmissionSubmission::new(event),
+                    },
+                ),
+            StatusCode::OK,
+        )
+        .await?;
+    }
     block_direct_peer(holder, sender).await?;
     let receipt_message = if observe_receipt {
         let strand = sender.client.default_strand_id(realm.as_str())?;
@@ -2853,13 +2934,13 @@ pub(crate) async fn observe_ordinary_call_invite(
             None,
         )
         .context("sender Native key material after accepted MLS checkpoint")?;
-        let (outcome, transport) = sender_host
-            .send_scope_signal_with_transport_observation(scope.clone(), &material, &payload)
+        let outcome = sender_host
+            .send_call_invitation(holder.account.clone(), scope.clone(), &material, &payload)
             .await
-            .context("CallInvite send after holder blocklist projection")?;
+            .context("Call invitation send after holder blocklist projection")?;
         ensure!(
-            outcome.accepted && outcome.realm_id == *realm,
-            "real CallInvite was not accepted: {outcome:?}"
+            outcome.status == arkret::CallInvitationSendStatus::Deferred,
+            "requester outcome disclosed private admission"
         );
         let received =
             next_admitted_signal(&mut stream, &holder_host, holder, &mut receiver).await?;
@@ -2891,98 +2972,12 @@ pub(crate) async fn observe_ordinary_call_invite(
                 &sender.actor,
             )
         );
-        observed.push((outcome, transport));
+        observed.push(outcome);
     }
     ensure!(
-        observed[0].0.accepted == observed[1].0.accepted
-            && observed[0].0.realm_id == observed[1].0.realm_id
-            && observed[0].0.dispatched_recipient_count == observed[1].0.dispatched_recipient_count
-            && observed[0].1.status == 200
-            && observed[0].1.status == observed[1].1.status
-            && observed[0].1.http_version == observed[1].1.http_version
-            && observed[0].1.content_type == observed[1].1.content_type
-            && json_shape(&serde_json::to_value(&observed[0].0)?)
-                == json_shape(&serde_json::to_value(&observed[1].0)?),
-        "private block leaked through typed public response eligibility"
+        observed.len() == 2 && observed[0] == observed[1],
+        "private blocklist changed the opaque call invitation response"
     );
-    eprintln!(
-        "blocklist CallInvite paired Signal HTTP transport: scope={}, sender={}, protocol={}, status={}, content_type={}, blocked_start_to_full_response_ns={}, unblocked_start_to_full_response_ns={}, public_response_shape={}, accepted={}, recipient_count={:?}; durations are regression observations without a pass threshold",
-        realm,
-        sender.actor,
-        observed[0].1.http_version,
-        observed[0].1.status,
-        observed[0].1.content_type,
-        observed[0].1.start_to_full_response.as_nanos(),
-        observed[1].1.start_to_full_response.as_nanos(),
-        json_shape(&serde_json::to_value(&observed[0].0)?),
-        observed[0].0.accepted,
-        observed[0].0.dispatched_recipient_count,
-    );
-    // A held historical joined cut cannot authorize a sender that has left
-    // before the next source ingress. Bind the fresh encrypted attempt to the
-    // actual earlier CallCreate Commit and keep the verified Native cut held.
-    // The server must re-observe current membership despite that valid old basis.
-    let leave=holder.client.author_event(
-        realm.as_str(),arkret_wire::EventKind::MemberState.as_str(),
-        crate::scenarios::human_device_producer_live::membership_payload(
-            realm.as_str(),holder.account.clone(),
-            arkret_models_collaboration::governance::membership_invite::MembershipPayloadState::Leave,
-            "Signal current membership refusal",
-        )?,
-    ).await?;
-    submit_and_expect_commit(
-        &holder.client,
-        &holder.account,
-        holder.device.as_str(),
-        &leave,
-    )
-    .await?;
-    let call_id = call_id.context("held-cut fixture lacks accepted CallCreate")?;
-    let commit = call_commit.context("held-cut fixture lacks accepted CallCreate Commit")?;
-    let material =
-        inkson::signal::key_material_for_scope(&holder_host.state_store(), realm.as_str(), None)?;
-    let payload = inkson::signal::SignalPayload::CallSignal {
-        call_id,
-        seq: 3,
-        signal: arkret::CallSignalData::Invite(arkret::CallInviteSignalData {
-            lifetime_ms: 30_000,
-            offer: arkret::SessionDescription {
-                sdp_type: arkret::SessionDescriptionType::Offer,
-                sdp: "v=0".to_owned(),
-            },
-            media: arkret::CallMediaSelection {
-                audio: true,
-                video: false,
-                screen: None,
-            },
-        }),
-    };
-    let _signer = ActiveEndpointSigner::install(holder)?;
-    let header = inkson::signal::SignalHeader::new(
-        scope,
-        holder.actor.clone(),
-        holder.device.clone(),
-        commit.commit_id.clone(),
-        None,
-        payload.signal_class(),
-        chrono::Utc::now(),
-    );
-    let denied = inkson::event_submit::EventSubmitter::new(holder.client.sdk())
-        .send_signal(
-            &holder.account,
-            header,
-            &material,
-            &payload,
-            &holder_host.state_store_handle(),
-        )
-        .await
-        .unwrap_err();
-    ensure!(
-        denied.to_string().contains("signal_class_denied"),
-        "held joined cut was not refused by the registered current membership gate: {denied:#}"
-    );
-    eprintln!(
-        "blocklist actual accepted ordinary CallCreate + sealed CallInvite: real producer/MLS/sequence receiver, private product 0->1, unchanged public response shape; Contact and first-DM production observations run in their separately named live case"
-    );
+
     Ok(())
 }

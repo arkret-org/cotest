@@ -2876,6 +2876,7 @@ dependencies = [
  "ed25519-dalek 3.0.0",
  "futures-util",
  "garth",
+ "getrandom 0.4.3",
  "inkson",
  "jsonschema 0.52.1",
  "postgres",

@@ -957,6 +957,17 @@ async fn product_attempt_after_current(
     )
     .await;
     let received = match received {
+        Ok(Err(error))
+            if [
+                "call invitation delivery contains another plaintext kind",
+                "call invitation plaintext is not Invite",
+                "call invitation plaintext differs from signed relation",
+            ]
+            .iter()
+            .any(|reason| error.to_string().contains(reason)) =>
+        {
+            return Ok(0);
+        }
         Ok(result) => result?,
         Err(_) => return Ok(0),
     };

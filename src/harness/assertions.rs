@@ -599,6 +599,23 @@ mod tests {
     }
 
     #[test]
+    fn transcript_sanitizer_removes_the_entire_private_call_mapping() {
+        let sanitized = sanitize_json_value(json!({"join_context": {
+            "kind": "refresh", "subject_binding": {
+                "subject_actor_id": "private-account", "subject_device_id": "real-device",
+                "roster_identity": {"actor_id": "alias", "device_id": "device-alias"}
+            }, "participant_id": "public-participant"
+        }}));
+        assert_eq!(sanitized["join_context"]["subject_binding"], "[redacted]");
+        assert_eq!(
+            sanitized["join_context"]["participant_id"],
+            "public-participant"
+        );
+        assert!(!sanitized.to_string().contains("private-account"));
+        assert!(!sanitized.to_string().contains("device-alias"));
+    }
+
+    #[test]
     fn transcript_sanitizer_redacts_query_credentials() {
         let url = "https://example.test/blob?blob_ref=ak%3Ablob%3Asha256%3Aabc&access_token=live-session-grant&purpose=message.attachment"
             .parse()

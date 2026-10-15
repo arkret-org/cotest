@@ -143,6 +143,22 @@ pub trait MlsClientObserver {
         holder_group: &arkret::ArkretMlsGroup,
         observe_receipt: bool,
     ) -> Result<()>;
+
+    async fn after_station_restart(&self, _holder: &Member) -> Result<()> {
+        Ok(())
+    }
+
+    fn media_token_ttl_seconds(&self) -> Option<u64> {
+        None
+    }
+
+    fn verify_invite_delivery_race(&self) -> bool {
+        false
+    }
+
+    fn verify_service_signer_rotation(&self) -> bool {
+        false
+    }
 }
 
 #[async_trait::async_trait(?Send)]
@@ -187,11 +203,21 @@ async fn run_lifecycle(
         HARNESS_INTERNAL_AUTHORITY_SECRET,
     )
     .await?;
-    let Some(mut group) = TestServerGroup::try_multi_external_with_node_envs(
-        GROUP,
-        &[station_env(&database.connect_url, &coauth)],
-    )
-    .await?
+    let mut environment = station_env(&database.connect_url, &coauth);
+    if let Some(ttl) = observer.and_then(|observer| observer.media_token_ttl_seconds()) {
+        environment.push(("COLAND_MEDIA_TOKEN_TTL_SECONDS".into(), ttl.to_string()));
+    }
+    let invite_probe = observer
+        .is_some_and(|observer| observer.verify_invite_delivery_race())
+        .then(|| std::env::temp_dir().join(format!("cotest-invite-{}.pause", fresh_uuid_v7())));
+    if let Some(path) = &invite_probe {
+        environment.push((
+            "COLAND_CONFORMANCE_INVITE_DELIVERY_PAUSE_FILE".into(),
+            path.to_string_lossy().into_owned(),
+        ));
+    }
+    let Some(mut group) =
+        TestServerGroup::try_multi_external_with_node_envs(GROUP, &[environment]).await?
     else {
         if observer.is_some() || genesis_observer.is_some() || api_case.is_some() {
             bail!("live MLS evidence requires a prebuilt real Coland binary");
@@ -773,6 +799,23 @@ async fn run_lifecycle(
         .await?;
     }
 
+    if observer
+        .and_then(|observer| observer.media_token_ttl_seconds())
+        .is_some()
+    {
+        crate::scenarios::mimi_facade_live::verify_consent_identifier_exclusions(
+            &bob,
+            &alice.actor,
+            station,
+        )
+        .await?;
+    }
+    if let Some(path) = &invite_probe {
+        crate::scenarios::invite_service_fanout_live::verify_consent_delivery_race(
+            &alice, &bob, &realm_id, path,
+        )
+        .await?;
+    }
     if let Some(observer) = observer {
         observer
             .observe_ordinary_call_invite(
@@ -791,6 +834,18 @@ async fn run_lifecycle(
     // Restart: the claim ledger replays byte-identically and the ACKed
     // Welcome is gone.
     group.server_mut(0).restart_external_process().await?;
+    if let Some(observer) = observer {
+        observer.after_station_restart(&bob).await?;
+        if observer.verify_service_signer_rotation() {
+            let (seed, _) =
+                crate::harness::test_service_signing_key("consent-accepted-roster-rotation");
+            group
+                .server_mut(0)
+                .restart_external_process_with_notary_signing_key(&seed)
+                .await?;
+            observer.after_station_restart(&bob).await?;
+        }
+    }
     if let Some(probe) = genesis_observer {
         probe.after_restart(&alice).await?;
     }

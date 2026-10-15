@@ -28,9 +28,54 @@ use crate::scenarios::mls_lifecycle_live::{
     post_json, signed_welcome, upload_public_blob,
 };
 
+mod call_holders;
+
 const GROUP: &str = "message-mls-cross-station";
 const ALICE_DEVICE: &str = "ak:device:01904100-0000-7000-8000-000000002801";
 const BOB_DEVICE: &str = "ak:device:01904100-0000-7000-8000-000000002802";
+
+/// This shared fixture also runs inside existing Send production journeys.
+/// Native UI observation must finish on its own executor before returning.
+#[async_trait::async_trait]
+pub trait CrossStationCallObserver: Send + Sync {
+    fn configure_emission_probe(&self, path: &std::path::Path) -> Result<()>;
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "Observation binds the complete accepted MLS fixture"
+    )]
+    async fn observe_ordinary_call_invite(
+        &self,
+        sender: &Member,
+        holder: &Member,
+        station: &crate::harness::ArkretServer,
+        holder_station: &crate::harness::ArkretServer,
+        realm: &RealmId,
+        accepted_group: &EventId,
+        sender_group: &mut ArkretMlsGroup,
+        holder_group: &ArkretMlsGroup,
+        other_holder: &Member,
+        other_group: &ArkretMlsGroup,
+        observe_receipt: bool,
+    ) -> Result<()>;
+    async fn after_station_restart(&self, holder: &Member) -> Result<()>;
+    async fn observe_material_recovery(
+        &self,
+        sender: &Member,
+        holder: &Member,
+        realm: &RealmId,
+        accepted_group: &EventId,
+        sender_group: &ArkretMlsGroup,
+        holder_group: &ArkretMlsGroup,
+        control: crate::harness::ScanGapControl,
+    ) -> Result<()>;
+    fn media_token_ttl_seconds(&self) -> Option<u64> {
+        None
+    }
+
+    fn verify_service_signer_rotation(&self) -> bool {
+        false
+    }
+}
 
 /// Bind every actual occupied leaf to the accepted founding device facts,
 /// not the isolated cryptography test helper's synthetic authorization ID.
@@ -265,10 +310,35 @@ pub(crate) async fn run_with_signal_boundary(
     include_signal: bool,
     boundary: super::signal_live::emission::Boundary,
 ) -> Result<()> {
+    run_at_two_stations(include_signal, boundary, None).await
+}
+
+pub async fn run_with_call_observer(observer: &dyn CrossStationCallObserver) -> Result<()> {
+    run_at_two_stations(
+        false,
+        super::signal_live::emission::Boundary::Leave,
+        Some(observer),
+    )
+    .await
+}
+
+async fn run_at_two_stations(
+    include_signal: bool,
+    boundary: super::signal_live::emission::Boundary,
+    observer: Option<&dyn CrossStationCallObserver>,
+) -> Result<()> {
     let Some(x_database) = database(GROUP)? else {
+        ensure!(
+            observer.is_none(),
+            "cross-Station Call evidence requires PostgreSQL"
+        );
         return Ok(());
     };
     let Some(y_database) = database(GROUP)? else {
+        ensure!(
+            observer.is_none(),
+            "cross-Station Call evidence requires the second PostgreSQL database"
+        );
         return Ok(());
     };
     ensure!(x_database.connect_url != y_database.connect_url);
@@ -279,18 +349,34 @@ pub(crate) async fn run_with_signal_boundary(
     let emission_probe = tempfile::tempdir()?;
     let pause_file = emission_probe.path().join("signal-emission.pause");
     let mut recipient_env = station_env(&y_database.connect_url, &coauth);
-    if include_signal {
+    if let Some(ttl) = observer.and_then(|observer| observer.media_token_ttl_seconds()) {
+        recipient_env.push(("COLAND_MEDIA_TOKEN_TTL_SECONDS".into(), ttl.to_string()));
+    }
+    if include_signal || observer.is_some() {
+        if observer.is_some() {
+            recipient_env.push((
+                "COLAND_CONFORMANCE_MEDIA_TOKEN_RELEASE_PAUSE_FILE".into(),
+                pause_file
+                    .with_file_name("media-token-release.pause")
+                    .to_string_lossy()
+                    .into_owned(),
+            ));
+        }
         recipient_env.push((
             "COLAND_CONFORMANCE_SIGNAL_EMISSION_PAUSE_FILE".to_owned(),
             pause_file.to_string_lossy().into_owned(),
         ));
     }
-    let Some(group) = TestServerGroup::try_multi_external_with_node_envs(
+    let Some(mut group) = TestServerGroup::try_multi_external_with_node_envs(
         GROUP,
         &[station_env(&x_database.connect_url, &coauth), recipient_env],
     )
     .await?
     else {
+        ensure!(
+            observer.is_none(),
+            "cross-Station Call evidence requires a prebuilt Coland"
+        );
         return skip_or_fail(GROUP, "prebuilt Coland unavailable");
     };
     let x = group.server(0);
@@ -333,6 +419,11 @@ pub(crate) async fn run_with_signal_boundary(
         &[arkret_wire::CapabilityActionId::MESSAGE_CREATE],
     )
     .await?;
+    let other = if observer.is_some() {
+        Some(call_holders::provision_other(&alice, x, y, &coauth, &realm_id).await?)
+    } else {
+        None
+    };
     let bob_identity = publish_one(&bob).await?;
     let scope = ScopeRef::Realm {
         realm_id: realm_id.clone(),
@@ -467,6 +558,65 @@ pub(crate) async fn run_with_signal_boundary(
     )?;
     install_bindings(&mut alice_group, &[&alice, &bob]).await?;
     install_bindings(&mut bob_group, &[&alice, &bob]).await?;
+    if let Some(observer) = observer {
+        let other = other
+            .as_ref()
+            .context("Call fixture's actual second holder")?;
+        let (other_group, call_group_event) = call_holders::add_other(
+            &alice,
+            &bob,
+            other,
+            x,
+            y,
+            &realm_id,
+            &x_database.connect_url,
+            &mut alice_group,
+            &mut bob_group,
+        )
+        .await?;
+        observer.configure_emission_probe(&pause_file)?;
+        observer
+            .observe_ordinary_call_invite(
+                &alice,
+                &bob,
+                x,
+                y,
+                &realm_id,
+                &call_group_event,
+                &mut alice_group,
+                &bob_group,
+                other,
+                &other_group,
+                false,
+            )
+            .await?;
+        let material_relay = group.server_mut(1).install_scan_gap_relay().await?;
+        observer
+            .observe_material_recovery(
+                &alice,
+                &bob,
+                &realm_id,
+                &call_group_event,
+                &alice_group,
+                &bob_group,
+                material_relay.control(),
+            )
+            .await?;
+        group.server_mut(0).restart_external_process().await?;
+        group.server_mut(1).restart_external_process().await?;
+        observer.after_station_restart(&bob).await?;
+        if observer.verify_service_signer_rotation() {
+            let (seed, _) =
+                crate::harness::test_service_signing_key("consent-cross-station-roster-rotation");
+            group
+                .server_mut(1)
+                .restart_external_process_with_notary_signing_key(&seed)
+                .await?;
+            group.server_mut(0).restart_external_process().await?;
+            observer.after_station_restart(&bob).await?;
+        }
+        return Ok(());
+    }
     if include_signal {
         if matches!(
             boundary,
