@@ -158,8 +158,14 @@ pub(super) async fn exercise(mut material: Materials<'_>) -> Result<()> {
     ));
     let direct =
         direct_evidence::found(material.controller, material.agent, material.station).await?;
-    let mut joined_direct =
-        Box::pin(direct_mls_evidence::join(&material, &runtime, direct)).await?;
+    let mut joined_direct = Box::pin(direct_mls_evidence::join(
+        material.station,
+        material.controller,
+        material.agent,
+        &runtime,
+        direct,
+    ))
+    .await?;
     let direct_presence = Box::pin(presence_evidence::positive_direct(
         &material,
         &runtime,

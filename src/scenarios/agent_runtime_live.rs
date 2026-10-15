@@ -61,6 +61,7 @@ mod act_on_behalf_conjunction;
 mod act_on_behalf_evidence;
 mod binding_evidence;
 mod coauth_session_evidence;
+mod content_direct_evidence;
 mod content_grant_evidence;
 mod content_policy_evidence;
 mod content_session_evidence;
@@ -86,6 +87,9 @@ pub use act_on_behalf_evidence::run_agent_act_on_behalf_boundary;
 pub use binding_evidence::run_agent_runtime_binding_admission;
 pub use coauth_session_evidence::{
     run_agent_longevity_session_boundary, run_agent_session_grant_replay_production,
+};
+pub use content_direct_evidence::{
+    REVIEWED_DIRECT_CONTENT_CASES, run_agent_content_direct_production,
 };
 pub use content_grant_evidence::{
     REVIEWED_GRANT_CONTENT_CASES, run_agent_content_grant_production,
@@ -353,7 +357,7 @@ impl AgentRuntimeSession {
         let device_seed = principal.device_signing_key.to_bytes();
 
         // The controller's recovery policy is a provisioning prerequisite.
-        publish_recovery_policy(
+        ensure_controller_recovery_policy(
             controller,
             controller_account,
             principal,
@@ -916,8 +920,8 @@ impl AgentRuntimeSession {
     }
 }
 
-/// Publish a one-device recovery policy for the controller.
-async fn publish_recovery_policy(
+/// Reuse the accepted controller prerequisite, or publish it once.
+async fn ensure_controller_recovery_policy(
     controller: &TestActorClient,
     controller_account: &AccountId,
     principal: &crate::harness::ProvisionedTestPrincipal,
@@ -926,6 +930,38 @@ async fn publish_recovery_policy(
 ) -> Result<()> {
     use ed25519_dalek::Signer as _;
 
+    let current: arkret_models_crypto::RecoveryPolicyActiveOutcome = serde_json::from_value(
+        expect_json(
+            controller.get("/_arkret/root/identity/recovery-policy"),
+            StatusCode::OK,
+        )
+        .await?,
+    )?;
+    current.validate_shape()?;
+    ensure!(
+        current.account_id.as_ref() == Some(controller_account),
+        "recovery policy reader returned another Account"
+    );
+    if let Some(summary) = current.active_policy {
+        let policy = summary
+            .policy
+            .as_ref()
+            .context("accepted controller policy original")?;
+        policy.validate_shape()?;
+        ensure!(
+            &summary.account_id == controller_account
+                && &summary.trust_domain == trust_domain
+                && policy.account_id == summary.account_id
+                && policy.version == summary.version
+                && policy.trust_domain == summary.trust_domain
+                && &policy.auth_data.verification_method == device_method
+                && policy.expires_at.is_none_or(|at| at > Utc::now())
+                && serde_json::to_value(&policy.methods)? == json!([{"kind":"did_root"}]),
+            "accepted recovery policy differs from this controller fixture prerequisite"
+        );
+        println!("[agent-recovery] accepted_policy_reused=1 new_publication=0");
+        return Ok(());
+    }
     let policy_id = format!("ak:policy:{}", unique_uuid7());
     let mut policy: arkret_models_crypto::RecoveryPolicy = serde_json::from_value(json!({
         "schema": "ak.schema.recovery_policy.v1",

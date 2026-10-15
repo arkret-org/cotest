@@ -860,6 +860,7 @@ mod tests {
             &crate::scenarios::agent_runtime_live::REVIEWED_CONTENT_CASES[..],
             &crate::scenarios::agent_runtime_live::REVIEWED_GRANT_CONTENT_CASES[..],
             &crate::scenarios::agent_runtime_live::REVIEWED_POLICY_CONTENT_CASES[..],
+            &crate::scenarios::agent_runtime_live::REVIEWED_DIRECT_CONTENT_CASES[..],
         ] {
             let canonical = cases
                 .iter()
