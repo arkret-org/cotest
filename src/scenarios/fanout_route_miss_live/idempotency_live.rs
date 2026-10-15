@@ -3,6 +3,13 @@
 use super::*;
 
 async fn manual_current_origin_fixture(name: &str) -> Result<CurrentOriginFixture> {
+    manual_current_origin_fixture_with_successor(name, None).await
+}
+
+pub(super) async fn manual_current_origin_fixture_with_successor(
+    name: &str,
+    successor: Option<&EphemeralPg>,
+) -> Result<CurrentOriginFixture> {
     let governance_database = database(name)?.context("federation replay requires PostgreSQL")?;
     let member_database = database(name)?.context("federation replay requires PostgreSQL")?;
     ensure!(governance_database.connect_url != member_database.connect_url);
@@ -16,24 +23,35 @@ async fn manual_current_origin_fixture(name: &str) -> Result<CurrentOriginFixtur
             *value = "0".to_owned();
         }
     }
-    let group = TestServerGroup::try_multi_external_with_node_envs(
-        name,
-        &[
-            source_env,
-            station_env(&member_database.connect_url, &coauth),
-        ],
-    )
-    .await?
-    .context("two actual Coland processes required")?;
+    let mut environments = vec![
+        source_env,
+        station_env(&member_database.connect_url, &coauth),
+    ];
+    if let Some(successor) = successor {
+        let mut environment = station_env(&successor.connect_url, &coauth);
+        for (key, value) in &mut environment {
+            if key == "COLAND_FEDERATION_OUTBOUND" {
+                *value = "0".to_owned();
+            }
+        }
+        environments.push(environment);
+    }
+    let group = TestServerGroup::try_multi_external_with_node_envs(name, &environments)
+        .await?
+        .context("independent actual Coland processes required")?;
     let (alice, alice_account) =
         standard_client(group.server(0), &coauth, "replay-alice", ALICE_DEVICE).await?;
     let (bob, bob_account) =
         standard_client(group.server(1), &coauth, "replay-bob", BOB_DEVICE).await?;
+    let mut plaintext_services = vec![group.server(0), group.server(1)];
+    if successor.is_some() {
+        plaintext_services.push(group.server(2));
+    }
     let realm = create_realm_with_join_rule(
         &alice,
         "Federation first stored replay",
         "public",
-        &[group.server(0), group.server(1)],
+        &plaintext_services,
     )
     .await?;
     prepare_join(
@@ -181,7 +199,7 @@ async fn first_stored_outcome_replay(with_header: bool) -> Result<()> {
     Ok(())
 }
 
-async fn snapshot(fixture: &CurrentOriginFixture) -> Result<Value> {
+pub(super) async fn snapshot(fixture: &CurrentOriginFixture) -> Result<Value> {
     crate::scenarios::_helpers::acceptance_footprint::acceptance_rows_with_agent_stores(
         &fixture._member_database.connect_url,
         true,
@@ -436,7 +454,7 @@ pub async fn run_federation_receipt_rollback_live() -> Result<()> {
     Ok(())
 }
 
-async fn first_stored_request(
+pub(super) async fn first_stored_request(
     fixture: &CurrentOriginFixture,
     key: &str,
 ) -> Result<(reqwest::Request, Event, RealmCommit)> {

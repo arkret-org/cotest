@@ -42,3 +42,10 @@ async fn concurrent_identical_requests_share_one_durable_first_stored_receipt() 
 async fn failed_receipt_insert_rolls_back_the_entire_accepted_replica() -> Result<()> {
     cotest::scenarios::fanout_route_miss_live::idempotency_live::run_federation_receipt_rollback_live().await
 }
+
+#[tokio::test(flavor = "multi_thread")]
+#[serial]
+async fn removed_origin_binding_refuses_exact_replay_under_the_unchanged_active_key() -> Result<()>
+{
+    cotest::scenarios::fanout_route_miss_live::origin_binding_live::run_removed_origin_binding_replay_live().await
+}
