@@ -5,31 +5,57 @@
   "tasks": [
     {
       "task": "2026-09-10-0540-client-current-result-durable-index.md",
-      "criteria_count": 7,
-      "criteria_sha256": "beebef34c3e67690cf9a4040346e6017354459f5c643eaf6440d3363f3f9b652",
+      "criteria_count": 6,
+      "criteria_sha256": "c1431e9e4446f591ea138ac5fa8288c3b89ebdc5e2cff0b6e723928fa77b5f89",
       "spec_refs": [
         "arkret-spec/spec/v1/zh/sync/current-results.md"
       ],
       "source_refs": [
-        "inkson/src/views/global_search.rs"
+        "inkson/src/state/current_index/search.rs",
+        "inkson/src/views/global_search.rs",
+        "inkson/src/realm_events_engine/own_live.rs"
       ],
       "tests": [
         {
           "path": "inkson/tests/e2e/inkson.strands.search-locale.spec.ts",
           "symbol": "global search results preserve local text and routes across language changes",
           "kind": "product",
-          "covers": "真实搜索已具名预期失败；不能当通过"
+          "covers": "正式签名消息搜索body／route／Event／Commit及En→Zh→En、零远程search／Event／join写入；本批浏览器实际执行状态见0540报告"
         },
         {
           "path": "cotest/tests/client_account_stream.rs",
           "symbol": "client_account_stream_vector_runs_clean",
           "kind": "contract",
           "covers": "Account stream合同向量，非宿主容量"
+        },
+        {
+          "path": "inkson/src/state/current_index/search.rs",
+          "symbol": "search_current_index_requires_publication_and_survives_reopen",
+          "kind": "product",
+          "covers": "native encrypted index: abandoned generation invisible, committed original byte-exact, cold reopen and wrong-Station rejection; not a complete native session query"
+        },
+        {
+          "path": "inkson/src/state/current_index/search.rs",
+          "symbol": "search_current_index_revocation_floor_and_withheld_suppress_originals",
+          "kind": "product",
+          "covers": "native complete-cut membership leave, history floor, withheld, wrong scope and missing Strand fail closed"
+        },
+        {
+          "path": "inkson/src/state/current_index/search.rs",
+          "symbol": "search_current_index_uses_latest_committed_revision_and_redaction",
+          "kind": "product",
+          "covers": "native latest accepted revision and redaction; tampered latest must not fall back to an old body"
+        },
+        {
+          "path": "inkson/src/state/projection_read_tests.rs",
+          "symbol": "search_privacy_and_session_reads_do_not_copy_unrelated_history",
+          "kind": "engineering",
+          "covers": "privacy/session narrow reads make zero full-account copies with 10000 unrelated audit rows"
         }
       ],
       "engineering_checks": [],
       "remaining_scenarios": [
-        "真实Circle／Sidecar非空依赖与tail、Account cursor不推进；1／100／1000实机与账号其它字段有界写入；identity/device_directory／chat flaky复现；获准搜索来源及privacy／crypto负例、原body／route／seal与完整语言切换，保留预期失败直到实际闭合"
+        "真实Circle／Sidecar非空依赖与tail、Account cursor不推进；1／100／1000真实Station首屏与非current账号共同事务／有界物理写；完整retention／expiry／privacy／crypto及native会话／Device replacement／异步矩阵。浏览器原body／route／Event／Commit、En→Zh→En及零远程写入2／2实际通过，不重复列待办。"
       ]
     },
     {
