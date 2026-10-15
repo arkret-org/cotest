@@ -723,11 +723,22 @@ fn run_call_cases<'a>(
                 invitation: delivery.invitation.clone(),
                 envelope: delivery.request.envelope.clone(),
             });
-            sender
-                .client
-                .sdk()
-                .signal_send(&delivery.request.envelope)
+            let mut ordinary_payload = payload.clone();
+            let inkson::signal::SignalPayload::CallSignal { seq, .. } = &mut ordinary_payload
+            else {
+                anyhow::bail!("ordinary control requires the actual Invite payload");
+            };
+            *seq += 1000;
+            let ordinary_envelope = sender_host
+                .prepare_signal_envelope(
+                    ScopeRef::Realm {
+                        realm_id: realm.clone(),
+                    },
+                    &material,
+                    &ordinary_payload,
+                )
                 .await?;
+            sender.client.sdk().signal_send(&ordinary_envelope).await?;
             let ordinary = next_admitted_signal(
                 &mut stream,
                 &holder_host,
