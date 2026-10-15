@@ -8,6 +8,20 @@ async fn refuse_event(
     event: Event,
     label: &str,
 ) -> Result<()> {
+    if label == "kind_outside_controller_delegation" {
+        let catalogue =
+            crate::conformance::load_artifact_json("registry/event-kind-registry.json")?;
+        let entry = catalogue["event_kinds"]
+            .as_array()
+            .context("registered Event kinds")?
+            .iter()
+            .find(|row| row["event_kind"] == event.kind.as_str())
+            .context("unsupported delegated kind is registered")?;
+        ensure!(
+            entry["admission"] == "self_authored_proof" && event.executed_by.is_some(),
+            "the refusal must exercise delegation on a self-authored Event kind"
+        );
+    }
     let before =
         crate::scenarios::_helpers::acceptance_footprint::acceptance_rows_with_agent_stores(
             database, true,
@@ -41,8 +55,8 @@ async fn refuse_event(
             "{label} missed the delegation binding: {problem:?}"
         ),
         "kind_outside_controller_delegation" => ensure!(
-            problem.detail.contains("without delegated execution"),
-            "unsupported controller purpose reached another gate: {problem:?}"
+            problem.code() == arkret_wire::ErrorCode::CAPABILITY_DENIED,
+            "self-authored Event kind accepted an unsupported controller purpose: {problem:?}"
         ),
         _ => {}
     }
