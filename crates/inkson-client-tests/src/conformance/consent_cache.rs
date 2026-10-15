@@ -2114,24 +2114,26 @@ async fn opaque_response(context: &mut ConsentCallContext, sequence: &mut u64) -
     };
     let revoked = context.holder.account.clone();
     let never = context.denied_holder.account.clone();
-    let revoked = prepare_invitation(context, &call, &revoked, media.clone(), *sequence).await?;
-    *sequence += 1;
-    let never = prepare_invitation(context, &call, &never, media.clone(), *sequence).await?;
-    *sequence += 1;
     let absent = arkret_wire::AccountId::new(
         "ak:did_core:web:absent.consent.example".parse()?,
         context.holder.account.station_id.clone(),
     );
-    let absent = prepare_invitation(context, &call, &absent, media, *sequence).await?;
-    *sequence += 1;
-    send(context, &revoked).await?;
-    send(context, &never).await?;
-    send(context, &absent).await?;
+    for holder in [&revoked, &never, &absent] {
+        let request = prepare_invitation(context, &call, holder, media.clone(), *sequence).await?;
+        *sequence += 1;
+        send(context, &request).await?;
+    }
     let mut samples = [Vec::new(), Vec::new()];
     for sample in 0..24 {
         for index in [sample % 2, 1 - sample % 2] {
+            // Each timing sample is a fresh encrypted submission, outside the
+            // measured HTTP interval and within its original signed window.
+            let holder = if index == 0 { &revoked } else { &never };
+            let request =
+                prepare_invitation(context, &call, holder, media.clone(), *sequence).await?;
+            *sequence += 1;
             let start = std::time::Instant::now();
-            send(context, if index == 0 { &revoked } else { &never }).await?;
+            send(context, &request).await?;
             samples[index].push(start.elapsed().as_secs_f64());
         }
     }
