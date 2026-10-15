@@ -6,9 +6,12 @@
     {
       "task": "2026-09-10-0540-client-current-result-durable-index.md",
       "criteria_count": 4,
-      "criteria_sha256": "70eba4f8e857d1dd5e80039f68267435098004dc8255c0c48557ef4dfaebae86",
+      "criteria_sha256": "1e90584024ad7f8c36c02829ac0e3fbccb7e14916564fc6b53f05ac20d6b66dd",
       "spec_refs": [
-        "arkret-spec/spec/v1/zh/sync/current-results.md"
+        "arkret-spec/spec/v1/zh/sync/current-results.md",
+        "arkret-spec/spec/v1/zh/sync/privacy-preserving-search.md",
+        "arkret-spec/spec/v1/zh/crypto-media/device-lifecycle.md",
+        "arkret-spec/spec/v1/zh/models/circle.md"
       ],
       "source_refs": [
         "inkson/src/state/current_index/search.rs",
@@ -61,11 +64,59 @@
           "symbol": "sidecar_checkpoint_cases_use_the_actual_account_driver",
           "kind": "live",
           "covers": "真实Station Circle／Sidecar非空依赖与tail、exact GET withheld／503拒绝时root／cursor／current不变，实际SQLite事务失败／旧cut恢复、新进程读回与23个canonical Sync case；不证明真实容量或完整native/browser搜索会话矩阵"
+        },
+        {
+          "path": "inkson/src/views/global_search/session_tests.rs",
+          "symbol": "native_search_visible_results_expire_at_each_holder_deadline",
+          "kind": "product",
+          "covers": "Formal native search hook and encrypted committed index: exact original Event/Commit/body, independent session/projection/authorization half-open expiry, visible rows removed without store/query changes"
+        },
+        {
+          "path": "inkson/src/views/global_search/session_tests.rs",
+          "symbol": "native_search_renewed_holder_cancels_old_expiry_and_rechecks_new_expiry",
+          "kind": "product",
+          "covers": "Formal search holder renewal cancels old timer and removes results at the replacement expiry"
+        },
+        {
+          "path": "inkson/src/views/global_search/session_tests.rs",
+          "symbol": "native_search_holder_replacement_revocation_and_late_request_fail_closed",
+          "kind": "product",
+          "covers": "Formal native asynchronous query versus account/Device/grant/revocation/session epoch replacement; pending completion cannot restore plaintext"
+        },
+        {
+          "path": "inkson/tests/e2e/inkson.search-session-expiry.spec.ts",
+          "symbol": "visible committed search plaintext disappears without another query",
+          "kind": "product",
+          "covers": "Browser product search from signed API fixtures: independent session/projection/authorization expiry removes committed plaintext and expired retry stays empty, zero remote search/Event/join writes; not live Coauth or full same-source holder matrix"
+        },
+        {
+          "path": "inkson/src/views/global_search/session_tests.rs",
+          "symbol": "native_search_new_query_becomes_readable_after_not_before_without_store_change",
+          "kind": "product",
+          "covers": "Formal native query starts before not_before, later accepts the same persisted evidence and arms expiry; the displayed result disappears again when that authorization window ends"
+        },
+        {
+          "path": "inkson/tests/e2e/inkson.search-session-expiry.spec.ts",
+          "symbol": "new query accepts effective holder evidence without remounting the panel",
+          "kind": "product",
+          "covers": "Browser positive/negative same-panel holder-time transition: no result before device evidence is effective, then exact body/Event/Commit on a new authorized query; zero remote search/Event/join writes"
+        },
+        {
+          "path": "inkson/src/state/current_index/search.rs",
+          "symbol": "search_circle_current_scope_survives_archive_but_not_terminal_or_missing_evidence",
+          "kind": "product",
+          "covers": "native encrypted SQLite: shared signed originals/cuts; active and archived exact original remains readable, tombstone/missing/wrong Circle id/Realm/schema/source suppress cached originals live and after reopen; bounded production candidate filter, not full UI or live Station admission"
+        },
+        {
+          "path": "inkson/tests/wasm_current_index.rs",
+          "symbol": "search_circle_current_scope_survives_archive_but_not_terminal_or_missing_evidence",
+          "kind": "product",
+          "covers": "browser IndexedDB: shared signed originals/cuts; active and archived exact original remains readable, tombstone/missing/wrong Circle id/Realm/schema/source suppress cached originals live and after reopen; bounded production candidate filter, not full UI or live Station admission"
         }
       ],
       "engineering_checks": [],
       "remaining_scenarios": [
-        "1／100／1000 Realm真实Station与实机首屏、UI长任务；同来源native／browser当前授权负例、有效retention／expiry／privacy／crypto搜索生命周期与完整holder／Device replacement／异步会话矩阵。账号有界物理项、共同事务／恢复／GC及真实Circle／Sidecar非空依赖均已闭合，不重复列待办。"
+        "1／100／1000 Realm真实Station与实机首屏、UI长任务；正式入口同来源native／browser当前授权负例、有效retention／expiry／privacy／crypto搜索生命周期与完整holder／Device replacement／异步会话矩阵。账号有界物理项、共同事务／恢复／GC、真实Circle／Sidecar非空依赖及Circle对象当前证据门均已闭合，不重复列待办；索引后端矩阵不替代完整UI。"
       ]
     },
     {
@@ -86,7 +137,12 @@
         "coland/crates/http/src/routing/management_review.rs",
         "coland/crates/storage-postgres/src/policy_current_results.rs",
         "coland/crates/http/src/routing/authority_commit.rs",
-        "coland/crates/http/src/state/authority_self_event_unit.rs"
+        "coland/crates/http/src/state/authority_self_event_unit.rs",
+        "coland/crates/storage-postgres/src/applet_current_results.rs",
+        "coland/crates/storage-postgres/src/pcr_device_current_results.rs",
+        "coland/crates/storage-postgres/src/pcr_device_status_reader.rs",
+        "coland/crates/storage-postgres/src/pcr_device_revocation_proposals.rs",
+        "coland/crates/http/src/routing/identity/device_generation/confirmed.rs"
       ],
       "tests": [
         {
@@ -106,11 +162,17 @@
           "symbol": "ghost_mapping_quota_is_atomic_and_exact_retries_do_not_reconsume_creation",
           "kind": "live",
           "covers": "真实PG/HTTP reuse mapping rate quota、后段失败完整零写、原创建额度不重扣、跨HTTP key和preview变更后exact恢复、额度耗尽及伪造anchors拒绝；不证明管理review/首Device/runtime全通"
+        },
+        {
+          "path": "coland/crates/server/tests/applet_admission.rs",
+          "symbol": "managed_pcr_genesis_initializes_generation_without_a_device_and_rejects_corrupt_current",
+          "kind": "live",
+          "covers": "Atomic managed PCR generation initialization, device-free Bot/Ghost history reconstruction from retained originals, rollback, exact retries, corrupted current refusal and missing-root refusal; does not prove first Device admission or full runtime support"
         }
       ],
       "engineering_checks": [],
       "remaining_scenarios": [
-        "Applet creation/join/publish管理review与完整quota分类；Service多parent/共享ancestor quota；首Device合法generation初始化规范前置、无session入站和21-operation业务门；独立多Bot/Ghost runtime、跨scope撤权/rotation与真实内容解密回复；未挂载author成员的不完整bundle声明修正"
+        "Applet creation/join/publish management review and full quota classification; Service multi-parent/shared-ancestor quota; Principal-signed successor Device authorization, sessionless ingress and all 21 operation consumers; independent Bot/Ghost Device/MLS runtime, scoped revocation/rotation and real decryption/replies; complete bundle service surface and support claims"
       ]
     },
     {
