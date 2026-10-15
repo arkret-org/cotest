@@ -33,6 +33,7 @@ pub async fn run_agent_act_on_behalf_boundary() -> Result<()> {
     let mut operations = runtime_operations().to_vec();
     operations.push(ServiceOperationId::SELF_EVENTS_COMMAND_SUBMIT_V1);
     operations.push("ak.message.create");
+    operations.push("ak.reaction.add");
     let completed_operations =
         arkret_schema::agent_runtime_scope::complete_agent_runtime_scope(operations)?;
     let operations = completed_operations
@@ -90,6 +91,7 @@ pub async fn run_agent_act_on_behalf_boundary() -> Result<()> {
         },
         selection: arkret::ParticipationBits {
             act_on_behalf: true,
+            reaction_add: true,
             ..arkret::ParticipationBits::NONE
         },
         expected_version: 0,
@@ -119,7 +121,10 @@ pub async fn run_agent_act_on_behalf_boundary() -> Result<()> {
             realm.clone(),
             strand.clone(),
         )],
-        constraints: Vec::new(),
+        constraints: vec![serde_json::from_value(json!({
+            "constraint_kind":"scope_limitation", "effect":"allow",
+            "allowed_strand_ids":[strand], "allowed_tracks":["discussion"]
+        }))?],
         issuer_authority_refs: vec![arkret::IssuerAuthorityRef::RealmRoot {
             realm_id: realm.clone(),
             authority_event_ref: realm.event_id(),
@@ -133,7 +138,7 @@ pub async fn run_agent_act_on_behalf_boundary() -> Result<()> {
             "ak.capability.grant",
             serde_json::to_value(
                 arkret_models_collaboration::events_payloads::CapabilityGrantPayload {
-                    grant: body,
+                    grant: body.clone(),
                 },
             )?,
         )
@@ -155,6 +160,27 @@ pub async fn run_agent_act_on_behalf_boundary() -> Result<()> {
             ..
         }
     ));
+    let mut reaction_body = body;
+    reaction_body.actions = vec!["ak.reaction.add".to_owned()];
+    let reaction_grant = controller
+        .author_event(
+            realm.as_str(),
+            "ak.capability.grant",
+            serde_json::to_value(
+                arkret_models_collaboration::events_payloads::CapabilityGrantPayload {
+                    grant: reaction_body,
+                },
+            )?,
+        )
+        .await?;
+    let wrong_action_grant = arkret_wire::GrantId::from_event_id(&reaction_grant.event_id);
+    expect_json(
+        controller
+            .post("/_arkret/self/events")
+            .canonical_json(&arkret_wire::EventAdmissionSubmission::new(reaction_grant))?,
+        StatusCode::OK,
+    )
+    .await?;
     let (credential, issued_request) = coauth_session_evidence::issue_runtime_session_with_scope(
         station,
         deployment.coauth.base_url(),
@@ -452,6 +478,137 @@ pub async fn run_agent_act_on_behalf_boundary() -> Result<()> {
         "exact publication retry changed the covering Commit"
     );
     ensure!(published_rows == acceptance_rows_with_agent_stores(&database, true).await?);
+    // Each denied publication has its own accepted exact confirmation, so a
+    // missing fresh approval cannot conceal the independently tested gate.
+    let no_reference = attributed_message(
+        &realm,
+        &strand,
+        &deployment.account,
+        &agent,
+        None,
+        "Missing selected authorization",
+    )?;
+    confirm_target(
+        &deployment,
+        &runtime,
+        &agent,
+        &realm,
+        &strand,
+        &no_reference,
+    )
+    .await?;
+    refuse_target(
+        &runtime,
+        &database,
+        &no_reference,
+        &[
+            arkret_wire::ErrorCode::SCHEMA_VIOLATION,
+            arkret_wire::ErrorCode::CAPABILITY_DENIED,
+        ],
+    )
+    .await?;
+    let wrong_scope = attributed_message(
+        &realm,
+        &strand,
+        &deployment.account,
+        &agent,
+        Some(&wrong_action_grant),
+        "Wrong selected grant action",
+    )?;
+    confirm_target(&deployment, &runtime, &agent, &realm, &strand, &wrong_scope).await?;
+    refuse_target(
+        &runtime,
+        &database,
+        &wrong_scope,
+        &[arkret_wire::ErrorCode::CAPABILITY_DENIED],
+    )
+    .await?;
+    let participation_target = attributed_message(
+        &realm,
+        &strand,
+        &deployment.account,
+        &agent,
+        Some(&grant_id),
+        "Closed private participation",
+    )?;
+    confirm_target(
+        &deployment,
+        &runtime,
+        &agent,
+        &realm,
+        &strand,
+        &participation_target,
+    )
+    .await?;
+    let closed = arkret::ParticipationReplaceRequestBody {
+        target_scope: selection.target_scope.clone(),
+        selection: arkret::ParticipationBits {
+            act_on_behalf: false,
+            ..selection.selection
+        },
+        expected_version: 1,
+    };
+    let changed = controller
+        .sdk()
+        .agent_participation_replace(agent.agent_account.principal_id.as_str(), &closed)
+        .await?;
+    ensure!(
+        changed
+            .agent_participation_entries
+            .iter()
+            .any(|entry| entry.scope == closed.target_scope
+                && entry.version == 2
+                && !entry.selection.act_on_behalf)
+    );
+    let refused = refuse_target(
+        &runtime,
+        &database,
+        &participation_target,
+        &[arkret_wire::ErrorCode::FAILED_PRECONDITION],
+    )
+    .await?;
+    ensure!(
+        refused.detail.contains("agent_act_on_behalf_not_permitted"),
+        "another gate concealed private participation: {refused:?}"
+    );
+    let restored = arkret::ParticipationReplaceRequestBody {
+        expected_version: 2,
+        ..selection.clone()
+    };
+    controller
+        .sdk()
+        .agent_participation_replace(agent.agent_account.principal_id.as_str(), &restored)
+        .await?;
+    let before_sidecar = acceptance_rows_with_agent_stores(&database, true).await?;
+    let illegal_sidecar = arkret_models_collaboration::sidecar_operations::SidecarEnsureRequestBody::Prepare(
+        arkret_models_collaboration::sidecar_operations::SidecarEnsurePrepareRequestBody {
+            phase: arkret_models_collaboration::sidecar_operations::SidecarEnsurePreparePhase::Prepare,
+            operation_id: ProtocolOperationId::new(format!("ak:operation:{}", unique_uuid7())).map_err(anyhow::Error::msg)?,
+            idempotency_key: IdempotencyKey::new(unique_uuid7()).map_err(anyhow::Error::msg)?,
+            source_realm_id: realm.clone(),
+            controller_account_id: agent.agent_account.clone(),
+            context_ref: arkret_models_collaboration::sidecar_operations::SidecarContextRef::Strand { strand_id: strand.clone() },
+        });
+    let path = arkret_wire::ServiceOperationId::SelfAgentSidecarCommandEnsureV1
+        .descriptor()
+        .http_path;
+    let refused = controller
+        .post(path)
+        .canonical_json(&illegal_sidecar)?
+        .send()
+        .await?;
+    let status = refused.status();
+    let problem: arkret_wire::Problem = refused.json().await?;
+    ensure!(
+        status == StatusCode::FORBIDDEN
+            && problem.code() == arkret_wire::ErrorCode::CAPABILITY_DENIED
+            && serde_json::to_value(&problem)?["reason_code"] == "sidecar_create_denied",
+        "foreign-controller Sidecar creation returned {status} {problem:?}"
+    );
+    ensure!(before_sidecar == acceptance_rows_with_agent_stores(&database, true).await?);
+    controller
+        .revoke_realm_grant(realm.as_str(), wrong_action_grant.as_str())
+        .await?;
     controller
         .revoke_realm_grant(realm.as_str(), grant_id.as_str())
         .await?;
@@ -507,9 +664,139 @@ pub async fn run_agent_act_on_behalf_boundary() -> Result<()> {
     );
     ensure!(revoked == acceptance_rows_with_agent_stores(&database, true).await?);
     println!(
-        "[agent-act-on-behalf] real_narrow_content_issuer=1 actual_private_selection=1 unselected_attribution_requires_fresh_approval=1 missing_confirmation_zero_effect_refused=1 actual_controller_confirmation_publication=1 exact_confirmation_retry_original_commit_zero_effect=1 confirmation_nonce_rebinding_zero_effect_refused=1 unknown_confirmation_request_zero_effect_refused=1 exact_publication_retry_original_commit_zero_effect=1 accepted_recovery_wrong_producer_zero_effect_refused=1 authenticated_actual_producer_mismatch_zero_effect_refused=1 revoked_content_source_fresh_issue_zero_effect_refused=1 completed_issue_replay_after_revoke_original=1 canonical_case_completion_claim=0"
+        "[agent-act-on-behalf] real_narrow_content_issuer=1 actual_private_selection=1 unselected_attribution_requires_fresh_approval=1 missing_confirmation_zero_effect_refused=1 actual_controller_confirmation_publication=1 exact_confirmation_retry_original_commit_zero_effect=1 confirmation_nonce_rebinding_zero_effect_refused=1 unknown_confirmation_request_zero_effect_refused=1 exact_publication_retry_original_commit_zero_effect=1 accepted_recovery_wrong_producer_zero_effect_refused=1 authenticated_actual_producer_mismatch_zero_effect_refused=1 revoked_content_source_fresh_issue_zero_effect_refused=1 completed_issue_replay_after_revoke_original=1 missing_authorization_ref_zero_effect_refused=1 selected_wrong_action_grant_zero_effect_refused=1 participation_closed_with_fresh_confirmation_zero_effect_refused=1 foreign_controller_sidecar_create_denied_zero_effect=1 canonical_case_completion_claim=0"
     );
     Ok(())
+}
+
+fn attributed_message(
+    realm: &RealmId,
+    strand: &arkret_wire::StrandId,
+    owner: &AccountId,
+    agent: &AgentPairedPrincipal,
+    grant: Option<&arkret_wire::GrantId>,
+    text: &str,
+) -> Result<Event> {
+    let payload: arkret_models_collaboration::events_payloads::message::MessageCreatePayload =
+        serde_json::from_value(json!({
+            "strand_id":strand,"track_name":"discussion","content":{"kind":"ak.content.text","body":text}
+        }))?;
+    let mut draft =
+        arkret_event_draft::TypedEventDraft::<arkret_wire::event_spec::MessageCreate>::new(
+            ScopeRef::Realm {
+                realm_id: realm.clone(),
+            },
+            ActorId::account(owner.clone()),
+            payload,
+        )?
+        .with_executed_by(ActorId::account(agent.agent_account.clone()));
+    if let Some(grant) = grant {
+        draft = draft.with_authorization_ref(
+            arkret_wire::AuthorizationRef::new(grant.as_str()).map_err(anyhow::Error::msg)?,
+        );
+    }
+    sign(
+        draft.author_with_digest_suite(Utc::now(), arkret_canonical::DigestSuite::Sha256)?,
+        &agent.verification_method,
+        agent.runtime_key.to_bytes(),
+    )
+}
+
+async fn confirm_target(
+    deployment: &coauth_session_evidence::ActualAgentDeployment,
+    runtime: &TestActorClient,
+    agent: &AgentPairedPrincipal,
+    realm: &RealmId,
+    strand: &arkret_wire::StrandId,
+    target: &Event,
+) -> Result<()> {
+    let at = arkret_canonical::normalize_timestamp_canonical(Utc::now());
+    let request: arkret_models_collaboration::events_payloads::agent::AgentActionRequestPayload =
+        serde_json::from_value(json!({
+            "request_id":unique_uuid7(),"agent_id":agent.agent_account.principal_id,
+            "controller_account_id":deployment.account,"proposed_action":"ak.message.create",
+            "target":{"kind":"strand","realm_id":realm,"object_ref":strand},
+            "request_canonical_digest":arkret_canonical::canonical_sha256(target)?,
+            "expires_at":arkret_canonical::format_timestamp_canonical(at+chrono::Duration::minutes(5)),
+            "created_at":arkret_canonical::format_timestamp_canonical(at),
+        }))?;
+    let original = request.clone();
+    let private = sign(
+        arkret_event_draft::TypedEventDraft::<arkret_wire::event_spec::AgentActionRequest>::new(
+            ScopeRef::Realm {
+                realm_id: agent.agent_pcr.clone(),
+            },
+            ActorId::account(agent.agent_account.clone()),
+            request,
+        )?
+        .author_with_digest_suite(at, arkret_canonical::DigestSuite::Sha256)?,
+        &agent.verification_method,
+        agent.runtime_key.to_bytes(),
+    )?;
+    let accepted = submit_actor_private(runtime, &private).await?;
+    ensure!(
+        accepted.status().is_success(),
+        "exact private negative-case request failed: {} {}",
+        accepted.status(),
+        accepted.text().await?
+    );
+    let mut nonce = [0u8; 32];
+    getrandom::fill(&mut nonce)
+        .map_err(|error| anyhow::anyhow!("confirmation nonce generation failed: {error}"))?;
+    let approval = arkret_models_collaboration::events_payloads::agent::AgentActionApprovePayload {
+        approval_id: unique_uuid7(),
+        request_id: Some(original.request_id),
+        draft_id: None,
+        agent_id: agent.agent_account.principal_id.clone(),
+        proposed_action: original.proposed_action,
+        target: original.target,
+        approved_event_id: target.event_id.clone(),
+        draft_content_digest: None,
+        approval_nonce: URL_SAFE_NO_PAD.encode(nonce),
+        expires_at: at + chrono::Duration::minutes(2),
+    };
+    let event = deployment
+        .controller
+        .author_event(
+            realm.as_str(),
+            "ak.agent.action_approve",
+            serde_json::to_value(approval)?,
+        )
+        .await?;
+    expect_json(
+        deployment
+            .controller
+            .post("/_arkret/self/events")
+            .canonical_json(&arkret_wire::EventAdmissionSubmission::new(event))?,
+        StatusCode::OK,
+    )
+    .await?;
+    Ok(())
+}
+
+async fn refuse_target(
+    runtime: &TestActorClient,
+    database: &str,
+    event: &Event,
+    expected: &[&str],
+) -> Result<arkret_wire::Problem> {
+    let before = acceptance_rows_with_agent_stores(database, true).await?;
+    let response = runtime
+        .post("/_arkret/self/events")
+        .canonical_json(&arkret_wire::EventAdmissionSubmission::new(event.clone()))?
+        .send()
+        .await?;
+    let status = response.status();
+    let problem: arkret_wire::Problem = response.json().await?;
+    ensure!(
+        !status.is_success() && expected.contains(&problem.code()),
+        "wrong publication refusal: {status} {problem:?}"
+    );
+    ensure!(
+        before == acceptance_rows_with_agent_stores(database, true).await?,
+        "denied publication changed business state"
+    );
+    Ok(problem)
 }
 
 fn observed_issued_claims(

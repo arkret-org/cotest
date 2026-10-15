@@ -57,6 +57,7 @@ use crate::scenarios::identity_test_support::HARNESS_INTERNAL_AUTHORITY_SECRET;
 
 mod watch_evidence;
 pub use watch_evidence::run_registered_agent_watch_live;
+mod act_on_behalf_conjunction;
 mod act_on_behalf_evidence;
 mod binding_evidence;
 mod coauth_session_evidence;
@@ -76,6 +77,7 @@ mod provision_evidence;
 mod provision_start_evidence;
 mod repairing_evidence;
 mod terminal_evidence;
+pub use act_on_behalf_conjunction::run_agent_act_on_behalf_production;
 pub use act_on_behalf_evidence::{
     run_agent_act_on_behalf_boundary, run_agent_session_content_read_boundary,
 };

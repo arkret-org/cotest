@@ -835,8 +835,7 @@ mod tests {
             &["/schema_validation_cases", "/cases"],
         )?)?;
         ensure!(
-            execution.cases.len() == 28
-                && missing == ["agent_act_on_behalf", "agent_human_approval_required"],
+            execution.cases.len() == 29 && missing == ["agent_human_approval_required"],
             "reviewed Agent result did not retain its exact partial coverage"
         );
         ensure!(
