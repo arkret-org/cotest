@@ -20,6 +20,7 @@ fn authored(
     kind: &str,
     scope: ScopeRef,
     payload: serde_json::Value,
+    created_at: chrono::DateTime<Utc>,
     bootstrap: Option<&EventId>,
 ) -> Result<Event> {
     let principal = controller
@@ -39,7 +40,7 @@ fn authored(
         account.principal_id.clone(),
         account.station_id.clone(),
         payload,
-        arkret_canonical::normalize_timestamp_canonical(Utc::now()),
+        created_at,
     )?;
     if let Some(reference) = bootstrap {
         event.authorization_ref = Some(
@@ -137,6 +138,7 @@ pub(super) async fn join(
     let (info, tree) = controller.public_group_state_bytes()?;
     let info_ref = blob(material.controller, &info).await?;
     let tree_ref = blob(material.controller, &tree).await?;
+    let created_at = arkret_canonical::normalize_timestamp_canonical(Utc::now());
     let genesis = authored(
         material.controller,
         &material.agent.controller_account,
@@ -146,8 +148,9 @@ pub(super) async fn join(
             "cipher_suite": crate::scenarios::mls_lifecycle_live::ACTIVE_SUITE,
             "group_info_ref": info_ref, "ratchet_tree_ref": tree_ref,
             "creator_leaf_authority": creator_authority, "governance_binding": genesis_binding,
-            "created_at": arkret_canonical::format_timestamp_canonical(Utc::now()),
+            "created_at": arkret_canonical::format_timestamp_canonical(created_at),
         }),
+        created_at,
         None,
     )?;
     submit(material.controller, &genesis).await?;
@@ -232,6 +235,7 @@ pub(super) async fn join(
             &add.commit,
             binding,
         )?)?,
+        Utc::now(),
         Some(&founded.create_ref),
     )?;
     let mut welcome = arkret_wire::MlsWelcomeDelivery {
@@ -448,6 +452,7 @@ pub(super) async fn join(
         "ak.direct_conversation.bound",
         scope.clone(),
         serde_json::to_value(&payload)?,
+        Utc::now(),
         Some(&founded.create_ref),
     )?;
     submit(material.controller, &controller_bound).await?;
