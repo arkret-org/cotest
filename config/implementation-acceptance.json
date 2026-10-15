@@ -124,7 +124,12 @@
         "coland/crates/http/src/routing/management_review.rs",
         "coland/crates/storage-postgres/src/policy_current_results.rs",
         "coland/crates/http/src/routing/authority_commit.rs",
-        "coland/crates/http/src/state/authority_self_event_unit.rs"
+        "coland/crates/http/src/state/authority_self_event_unit.rs",
+        "coland/crates/storage-postgres/src/applet_current_results.rs",
+        "coland/crates/storage-postgres/src/pcr_device_current_results.rs",
+        "coland/crates/storage-postgres/src/pcr_device_status_reader.rs",
+        "coland/crates/storage-postgres/src/pcr_device_revocation_proposals.rs",
+        "coland/crates/http/src/routing/identity/device_generation/confirmed.rs"
       ],
       "tests": [
         {
@@ -144,11 +149,17 @@
           "symbol": "ghost_mapping_quota_is_atomic_and_exact_retries_do_not_reconsume_creation",
           "kind": "live",
           "covers": "真实PG/HTTP reuse mapping rate quota、后段失败完整零写、原创建额度不重扣、跨HTTP key和preview变更后exact恢复、额度耗尽及伪造anchors拒绝；不证明管理review/首Device/runtime全通"
+        },
+        {
+          "path": "coland/crates/server/tests/applet_admission.rs",
+          "symbol": "managed_pcr_genesis_initializes_generation_without_a_device_and_rejects_corrupt_current",
+          "kind": "live",
+          "covers": "Atomic managed PCR generation initialization, device-free Bot/Ghost history reconstruction from retained originals, rollback, exact retries, corrupted current refusal and missing-root refusal; does not prove first Device admission or full runtime support"
         }
       ],
       "engineering_checks": [],
       "remaining_scenarios": [
-        "Applet creation/join/publish管理review与完整quota分类；Service多parent/共享ancestor quota；首Device合法generation初始化规范前置、无session入站和21-operation业务门；独立多Bot/Ghost runtime、跨scope撤权/rotation与真实内容解密回复；未挂载author成员的不完整bundle声明修正"
+        "Applet creation/join/publish management review and full quota classification; Service multi-parent/shared-ancestor quota; Principal-signed successor Device authorization, sessionless ingress and all 21 operation consumers; independent Bot/Ghost Device/MLS runtime, scoped revocation/rotation and real decryption/replies; complete bundle service surface and support claims"
       ]
     },
     {
