@@ -6,11 +6,12 @@
     {
       "task": "2026-09-10-0540-client-current-result-durable-index.md",
       "criteria_count": 4,
-      "criteria_sha256": "0bef9a212e75e59a7ba90ec396249e4cd04bd926763a2438a3cae260759fe5c6",
+      "criteria_sha256": "1e90584024ad7f8c36c02829ac0e3fbccb7e14916564fc6b53f05ac20d6b66dd",
       "spec_refs": [
         "arkret-spec/spec/v1/zh/sync/current-results.md",
         "arkret-spec/spec/v1/zh/sync/privacy-preserving-search.md",
-        "arkret-spec/spec/v1/zh/crypto-media/device-lifecycle.md"
+        "arkret-spec/spec/v1/zh/crypto-media/device-lifecycle.md",
+        "arkret-spec/spec/v1/zh/models/circle.md"
       ],
       "source_refs": [
         "inkson/src/state/current_index/search.rs",
@@ -99,11 +100,23 @@
           "symbol": "new query accepts effective holder evidence without remounting the panel",
           "kind": "product",
           "covers": "Browser positive/negative same-panel holder-time transition: no result before device evidence is effective, then exact body/Event/Commit on a new authorized query; zero remote search/Event/join writes"
+        },
+        {
+          "path": "inkson/src/state/current_index/search.rs",
+          "symbol": "search_circle_current_scope_survives_archive_but_not_terminal_or_missing_evidence",
+          "kind": "product",
+          "covers": "native encrypted SQLite: shared signed originals/cuts; active and archived exact original remains readable, tombstone/missing/wrong Circle id/Realm/schema/source suppress cached originals live and after reopen; bounded production candidate filter, not full UI or live Station admission"
+        },
+        {
+          "path": "inkson/tests/wasm_current_index.rs",
+          "symbol": "search_circle_current_scope_survives_archive_but_not_terminal_or_missing_evidence",
+          "kind": "product",
+          "covers": "browser IndexedDB: shared signed originals/cuts; active and archived exact original remains readable, tombstone/missing/wrong Circle id/Realm/schema/source suppress cached originals live and after reopen; bounded production candidate filter, not full UI or live Station admission"
         }
       ],
       "engineering_checks": [],
       "remaining_scenarios": [
-        "1／100／1000 Realm真实Station与实机首屏、UI长任务；同来源native／browser当前授权负例、有效retention／expiry／privacy／crypto搜索生命周期与完整holder／Device replacement／异步会话矩阵。账号有界物理项、共同事务／恢复／GC及真实Circle／Sidecar非空依赖均已闭合，不重复列待办。"
+        "1／100／1000 Realm真实Station与实机首屏、UI长任务；正式入口同来源native／browser当前授权负例、有效retention／expiry／privacy／crypto搜索生命周期与完整holder／Device replacement／异步会话矩阵。账号有界物理项、共同事务／恢复／GC、真实Circle／Sidecar非空依赖及Circle对象当前证据门均已闭合，不重复列待办；索引后端矩阵不替代完整UI。"
       ]
     },
     {
