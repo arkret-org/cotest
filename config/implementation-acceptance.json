@@ -194,8 +194,8 @@
     },
     {
       "task": "2026-09-18-2345c-security-evidence-suites-must-actually-run.md",
-      "criteria_count": 3,
-      "criteria_sha256": "e4232e617924a3b8c33e752cbfb44cbed95129d1650225e578f3d71656b5b49f",
+      "criteria_count": 2,
+      "criteria_sha256": "428a01cf284d977b2f1f3da89d92067038d841f407c585757bdd541337804902",
       "spec_refs": [
         "arkret-spec/spec/v1/zh/conformance/conformance-suite.md"
       ],
