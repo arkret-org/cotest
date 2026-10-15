@@ -2032,8 +2032,8 @@ async fn authority_change(
         )
         .await?;
         let previous = old.value()?.governance_generation;
-        cotest::harness::heap_future(|| {
-            cotest::scenarios::consent_pcr_handoff::handoff(context, from, to)
+        let recovery = cotest::harness::heap_future(|| {
+            cotest::scenarios::consent_pcr_handoff::activate_handoff(context, from, to)
         })
         .await
         .context("authority-change native PCR handoff")?;
@@ -2075,6 +2075,10 @@ async fn authority_change(
             inkson::conformance::observe_native_call_projection(native, received).await? == 0,
             "previous-authority product rang after authority switch"
         );
+        cotest::harness::heap_future(|| {
+            cotest::scenarios::consent_pcr_handoff::recover_handoff(context, recovery)
+        })
+        .await?;
         // The original ciphertext was already decrypted before handoff. Recovery
         // must author a fresh Signal rather than bypass the MLS replay guard.
         let retry = prepare_invitation(

@@ -12,7 +12,23 @@ use coland_storage_postgres::{Db, PgAuthorityCommitStore, PoolTuning};
 
 use super::consent_call_context::ConsentCallContext;
 
+pub struct HandoffRecovery {
+    before: serde_json::Value,
+    from: usize,
+    to: usize,
+    generation: u64,
+}
+
 pub async fn handoff(context: &mut ConsentCallContext, from: usize, to: usize) -> Result<()> {
+    let recovery = crate::harness::heap_future(|| activate_handoff(context, from, to)).await?;
+    recover_handoff(context, recovery).await
+}
+
+pub async fn activate_handoff(
+    context: &mut ConsentCallContext,
+    from: usize,
+    to: usize,
+) -> Result<HandoffRecovery> {
     ensure!(from != to, "PCR handoff requires independent Stations");
     let holder = &context.holder;
     let realm = holder
@@ -253,6 +269,24 @@ pub async fn handoff(context: &mut ConsentCallContext, from: usize, to: usize) -
         authority.generation == generation + 1 && authority.service_id == *new.service_id(),
         "incoming authority did not advance exactly once"
     );
+    Ok(HandoffRecovery {
+        before,
+        from,
+        to,
+        generation,
+    })
+}
+
+pub async fn recover_handoff(
+    context: &mut ConsentCallContext,
+    recovery: HandoffRecovery,
+) -> Result<()> {
+    let HandoffRecovery {
+        before,
+        from,
+        to,
+        generation,
+    } = recovery;
     for index in [from, to] {
         context
             .stations
