@@ -1074,6 +1074,7 @@ fn run_call_cases<'a>(
                 .await
                 .context("Consent revoke must not end an accepted established leg")?;
             refreshes.push((refresh, response.participant_binding.expires_at));
+            cotest::harness::heap_future(|| async {
             for (offset, window) in ["future", "expired", "unknown_constraint"]
                 .into_iter()
                 .enumerate()
@@ -1200,6 +1201,8 @@ fn run_call_cases<'a>(
             eprintln!(
                 "[consent-call] video={video} ineligible_windows=3 independent_grant_revokes=2 all_revoked_denied=1"
             );
+            Ok::<(), anyhow::Error>(())
+            }).await?;
             let now = chrono::Utc::now();
             let mut intent_nonce = [0u8; 32];
             getrandom::fill(&mut intent_nonce)?;
