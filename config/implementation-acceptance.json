@@ -146,7 +146,8 @@
         "coland/crates/storage-postgres/src/pcr_applet_device.rs",
         "arkret-rust-sdk/crates/signatures/src/webvh/inception.rs",
         "arkret-rust-sdk/crates/http-client/src/http_did_resolver.rs",
-        "bridges/crates/messaging/src/managed_actor_authoring.rs"
+        "bridges/crates/runtime/src/managed_actor_authoring.rs",
+        "bridges/crates/runtime/src/managed_actor_store.rs"
       ],
       "tests": [
         {
@@ -178,6 +179,12 @@
           "symbol": "managed_devices_require_independent_principal_and_possession_on_service_ingress",
           "kind": "live",
           "covers": "Real sessionless Service HTTP ingress for Principal-signed Bot/Ghost successor Device authorization; separate key roles and possession, exact accepted retries/replacement, expiry, missing generation, rollback, stale CAS and managed-device upward pairing refusal. Does not prove scoped 21-operation or MLS runtime support."
+        },
+        {
+          "path": "bridges/crates/runtime/src/managed_actor_authoring.rs",
+          "symbol": "shared_http_author_uses_durable_custody_across_restart_and_refuses_wrong_kek",
+          "kind": "live",
+          "covers": "Shared canonical HTTP Bot/Ghost author, real random encrypted key custody, exact authoring and frozen preparation across durable reopen, wrong KEK refusal without replacing old ciphertext; not Device/MLS runtime acceptance"
         }
       ],
       "engineering_checks": [],
