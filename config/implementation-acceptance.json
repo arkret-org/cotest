@@ -5,8 +5,8 @@
   "tasks": [
     {
       "task": "2026-09-10-0540-client-current-result-durable-index.md",
-      "criteria_count": 6,
-      "criteria_sha256": "ddabfddeb39cea74df4e8e1040b8b219a1cd2f45e9c1246df9aedf2ecbb3bd0f",
+      "criteria_count": 5,
+      "criteria_sha256": "c4870ae99067e5509b8b9478ff046a0dfac2716f72776292edbb6e8444d440f2",
       "spec_refs": [
         "arkret-spec/spec/v1/zh/sync/current-results.md"
       ],
@@ -20,7 +20,7 @@
           "path": "inkson/tests/e2e/inkson.strands.search-locale.spec.ts",
           "symbol": "global search results preserve local text and routes across language changes",
           "kind": "product",
-          "covers": "正式签名消息搜索body／route／Event／Commit及En→Zh→En、零远程search／Event／join写入；本批浏览器实际执行状态见0540报告"
+          "covers": "正式签名消息搜索body／route／exact Event／Commit、En→Zh→En及页面重载恢复，零远程search／Event／join写入；实际执行状态见0540报告"
         },
         {
           "path": "cotest/tests/client_account_stream.rs",
