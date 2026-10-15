@@ -6,14 +6,16 @@
     {
       "task": "2026-09-10-0540-client-current-result-durable-index.md",
       "criteria_count": 4,
-      "criteria_sha256": "1e90584024ad7f8c36c02829ac0e3fbccb7e14916564fc6b53f05ac20d6b66dd",
+      "criteria_sha256": "7cc735e7b6740a24dc3e58feb347eea5974b51daf745707d41797d644c59e06e",
       "spec_refs": [
         "arkret-spec/spec/v1/zh/sync/current-results.md",
         "arkret-spec/spec/v1/zh/sync/privacy-preserving-search.md",
         "arkret-spec/spec/v1/zh/crypto-media/device-lifecycle.md",
         "arkret-spec/spec/v1/zh/models/circle.md",
         "arkret-spec/spec/v1/zh/models/strand-and-message.md",
-        "arkret-spec/spec/v1/zh/models/event-and-patch.md"
+        "arkret-spec/spec/v1/zh/models/event-and-patch.md",
+        "arkret-spec/spec/v1/artifacts/registry/current-result-registry.json",
+        "arkret-spec/spec/v1/artifacts/schemas/typed-current-result.schema.json"
       ],
       "source_refs": [
         "inkson/src/state/current_index/search.rs",
@@ -151,11 +153,47 @@
           "symbol": "search_current_message_redaction_rejects_bad_evidence_without_publication",
           "kind": "product",
           "covers": "Real browser IndexedDB: same empty/wrong-subject/wrong-stream cuts fail without replacing the old authorized result"
+        },
+        {
+          "path": "inkson/src/state/current_index/search.rs",
+          "symbol": "search_revision_current_advance_waits_for_exact_original_across_restart",
+          "kind": "product",
+          "covers": "Encrypted SQLite: published create, abandoned current stage, current-only revision advance suppresses stale body, old-original replay, cold reopen, exact signed revision backfill and recovered current body"
+        },
+        {
+          "path": "inkson/src/state/current_index/search.rs",
+          "symbol": "search_revision_current_requires_exact_carrier_evidence",
+          "kind": "product",
+          "covers": "Encrypted SQLite: same signed create/revise fixtures with missing current, wrong stream/Commit/position/payload/Message selector and older current; invalid installation or bounded read releases no body"
+        },
+        {
+          "path": "inkson/tests/wasm_current_index.rs",
+          "symbol": "search_revision_current_advance_waits_for_exact_original_across_restart",
+          "kind": "product",
+          "covers": "Real browser IndexedDB: same signed current-first fixture, no old-body fallback after replay/restart, exact original backfill restores current body and survives cold reopen; production index filter, not full UI"
+        },
+        {
+          "path": "inkson/tests/wasm_current_index.rs",
+          "symbol": "search_revision_current_requires_exact_carrier_evidence",
+          "kind": "product",
+          "covers": "Real browser IndexedDB: same create/revise carrier evidence matrix as SQLite; rejected installation or current-cut mismatch never releases plaintext"
+        },
+        {
+          "path": "inkson/src/views/global_search/session_tests.rs",
+          "symbol": "native_search_current_revision_hides_stale_body_and_recovers_exact_original",
+          "kind": "product",
+          "covers": "Formal native use_local_search hook: visible create disappears after current-only revision, retry stays empty, verified original arrival restores replacement body with exact source Event and covering Commit"
+        },
+        {
+          "path": "inkson/src/bin/inkson-wire/realm_fixture.rs",
+          "symbol": "message_fixture_delivers_exact_current_revision_carrier",
+          "kind": "product",
+          "covers": "Existing browser wire fixture generator delivers the signed Message create carrier as message_revision current with exact source stream, Commit/position and payload; fixture validation, not live admission"
         }
       ],
       "engineering_checks": [],
       "remaining_scenarios": [
-        "真实1／100／1000 Realm容量与实机首屏／长任务；完整正式搜索入口授权负例；有效retention／expiry、最新revision／history／crypto／私密Sidecar及Event字段级redaction完整展示矩阵；完整holder／Device replacement／异步会话矩阵。Message当前撤回的终态候选安装、已完成时间边界与Circle对象门不重复列待实现；索引后端回归不代替完整UI／真实Station验收。"
+        "真实1／100／1000 Realm容量与实机首屏／长任务；完整正式搜索入口授权负例；有效retention／expiry、history／crypto／私密Sidecar、Event字段级redaction与修订链完整浏览器展示；完整holder／Device replacement／异步会话矩阵。Message当前撤回终态、最新revision同cut签名carrier绑定与补齐恢复、已完成时间边界及Circle对象门不重复列待实现；索引后端回归不代替完整UI／真实Station验收。"
       ]
     },
     {
