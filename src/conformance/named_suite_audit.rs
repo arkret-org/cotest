@@ -851,6 +851,32 @@ mod tests {
     use super::*;
 
     #[test]
+    fn named_agent_reviewed_nested_groups_match_canonical_producer_order() -> Result<()> {
+        let fixture = super::super::load_fixture_value("agent-vectors-fixture.json")?;
+        let cases = fixture["session_content_authority_contract"]["cases"]
+            .as_array()
+            .context("canonical nested Agent cases")?;
+        for reviewed in [
+            &crate::scenarios::agent_runtime_live::REVIEWED_CONTENT_CASES[..],
+            &crate::scenarios::agent_runtime_live::REVIEWED_GRANT_CONTENT_CASES[..],
+        ] {
+            let canonical = cases
+                .iter()
+                .filter_map(|case| case["name"].as_str())
+                .filter(|name| reviewed.contains(name))
+                .collect::<Vec<_>>();
+            ensure!(
+                canonical == reviewed,
+                "registered Agent IDs must retain the exact canonical producer order"
+            );
+        }
+        println!(
+            "[named-agent-order] reviewed18_and6_match_canonical=1 removed=0 runtime_credit=0"
+        );
+        Ok(())
+    }
+
+    #[test]
     fn named_preflight_inventory_rejects_unacknowledged_additions_and_removals() -> Result<()> {
         let (_, fixtures) = load_named_fixture_inventory()?;
         let registered = RUNNERS

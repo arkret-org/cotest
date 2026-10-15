@@ -66,23 +66,23 @@ pub async fn run_agent_session_content_read_boundary() -> Result<()> {
 
 pub const REVIEWED_CONTENT_CASES: [&str; 18] = [
     "membership_read_without_literal_grant",
-    "no_policy_with_complete_current_evidence",
     "membership_does_not_grant_write",
+    "provision_only_is_not_authority",
     "fresh_issue_after_service_session",
     "refresh_preserves_existing_ceiling",
     "refresh_rejects_scope_expansion",
     "refresh_rejects_scope_request_field",
     "refresh_current_authority_lost",
-    "ordinary_controller_read_revoked",
-    "session_service_only_cannot_read",
-    "issuer_proof_invalid",
-    "conflicting_issue_replay",
     "exact_issue_replay_unchanged",
     "terminal_issue_replay",
-    "provision_only_is_not_authority",
+    "conflicting_issue_replay",
+    "no_policy_with_complete_current_evidence",
     "request_omits_content",
     "content_selector_missing",
     "runtime_mandatory_floor_missing",
+    "issuer_proof_invalid",
+    "ordinary_controller_read_revoked",
+    "session_service_only_cannot_read",
 ];
 
 pub async fn run_agent_session_content_production()

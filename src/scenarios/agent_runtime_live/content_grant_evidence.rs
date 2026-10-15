@@ -5,10 +5,10 @@ use crate::harness::CanonicalJsonBody;
 
 pub const REVIEWED_GRANT_CONTENT_CASES: [&str; 6] = [
     "literal_write_grant",
-    "one_complete_path_among_alternatives",
     "action_resource_cannot_be_spliced",
-    "revoked_literal_read_does_not_erase_membership",
+    "one_complete_path_among_alternatives",
     "revoked_grant_path_cannot_restore",
+    "revoked_literal_read_does_not_erase_membership",
     "source_stale_or_unknown",
 ];
 
