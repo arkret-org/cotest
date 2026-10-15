@@ -4,24 +4,6 @@
   "complete_claim": false,
   "tasks": [
     {
-      "task": "2026-09-06-0917-garth-runtime-and-host-ports.md",
-      "criteria_count": 9,
-      "criteria_sha256": "2ca93d2dc946ebb4ccb59516d84a9e3da4b03ebfd1426085432a985e6ef44725",
-      "spec_refs": [
-        "arkret-spec/spec/v1/zh/overview/protocol-layers.md"
-      ],
-      "source_refs": [
-        "garth/src/mls.rs"
-      ],
-      "tests": [],
-      "engineering_checks": [
-        "用户恢复后运行layering gate和native/wasm/Savfox caller等价"
-      ],
-      "remaining_scenarios": [
-        "真实MLS checkpoint port与durable取消；reducer／history／authoring实际caller；native／wasm／Savfox同输入等价"
-      ]
-    },
-    {
       "task": "2026-09-10-0540-client-current-result-durable-index.md",
       "criteria_count": 7,
       "criteria_sha256": "beebef34c3e67690cf9a4040346e6017354459f5c643eaf6440d3363f3f9b652",

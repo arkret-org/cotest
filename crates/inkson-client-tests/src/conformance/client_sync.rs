@@ -861,7 +861,7 @@ impl Probe {
         let record = creator_group.export_state_record()?;
         let bytes = serde_json::to_vec(&record)?;
         let secret = "cursor-recovery-fixture-checkpoint-secret";
-        let mut checkpoint = inkson::mls::persistence::encrypt_state(
+        let mut checkpoint = garth::mls::checkpoint::encrypt_state(
             genesis.scope_ref.realm_id().as_str(),
             &record.group_id,
             record.epoch,
@@ -985,7 +985,7 @@ impl Probe {
                 .context("recovery deleted MLS private state")?;
             ensure!(
                 retained == checkpoint
-                    && inkson::mls::persistence::decrypt_envelope(&retained, secret)? == bytes,
+                    && garth::mls::checkpoint::decrypt_envelope(&retained, secret)? == bytes,
                 "recovery modified the actual encrypted creator checkpoint"
             );
             let after = state(&host)?;

@@ -73,7 +73,7 @@ fn accepted_presence(
             },
             scope_ref: ScopeRef::Realm { realm_id },
         }),
-        plaintext,
+        plaintext: Box::new(plaintext),
         effective_expires_at: sent_at + Duration::seconds(30),
     })
 }
@@ -85,9 +85,9 @@ pub fn run_state_closed_set_vector() -> Result<()> {
         ensure!(matches!(
             &outcome,
             SignalReceiveOutcome::Accepted {
-                plaintext: SignalPlaintext::Presence(_),
+                plaintext,
                 ..
-            }
+            } if matches!(plaintext.as_ref(), SignalPlaintext::Presence(_))
         ));
         ensure!(PresenceProjection::new().apply_verified(&outcome, sent_at())?);
     }
