@@ -633,7 +633,7 @@ pub async fn run_presence_and_media_cuts_live() -> Result<()> {
         ("COLAND_LIVEKIT_API_KEY".into(), SFU_API_KEY.into()),
         ("COLAND_LIVEKIT_API_SECRET".into(), SFU_API_SECRET.into()),
     ];
-    let mut context =
+    let context =
         cotest::harness::heap_future(|| ConsentCallContext::create("consent-media-current", &env))
             .await?;
     install_media(
@@ -666,9 +666,9 @@ pub async fn run_presence_and_media_cuts_live() -> Result<()> {
     })
     .await?;
     cotest::harness::heap_future(|| presence_current(&context, &native, &directory)).await?;
-    let mut sequence = 1;
-    cotest::harness::heap_future(|| sfu_media(&mut context, &native, &other, &mut sequence))
-        .await?;
+    let sequence = 1;
+    let (mut context, native, _other, mut sequence) =
+        media_phase(context, native, other, sequence).await?;
     let fresh = reopen_native(&context, &native).await?;
     cotest::harness::heap_future(|| authority_change(&mut context, &fresh, &mut sequence)).await?;
     Ok(())
@@ -897,10 +897,8 @@ async fn run_three_cuts_evidence() -> Result<Vec<super::CaseExecutionResult>> {
     completed_case(&mut evidence, 8, 4)?;
     cotest::harness::heap_future(|| presence_current(&context, &native, &directory)).await?;
     completed_case(&mut evidence, 2, 9)?;
-    cotest::harness::heap_future(|| {
-        sfu_media(&mut context, &native, &denied_native, &mut sequence)
-    })
-    .await?;
+    let (mut context, native, _denied_native, mut sequence) =
+        media_phase(context, native, denied_native, sequence).await?;
     completed_case(&mut evidence, 5, 6)?;
     completed_case(&mut evidence, 10, 8)?;
     completed_case(&mut evidence, 12, 21)?;
@@ -972,6 +970,30 @@ async fn product_attempt_after_current(
         Err(_) => return Ok(0),
     };
     inkson::conformance::observe_native_call_projection(native, received).await
+}
+
+// Poll the actual media fixture as its own task, after the parent driver
+// returns Pending. The services, native hosts and MLS material remain owned
+// across the join; nested large debug poll frames do not share one stack.
+fn media_phase(
+    mut context: ConsentCallContext,
+    native: inkson::sync_engine::NativeAccountHost,
+    other: inkson::sync_engine::NativeAccountHost,
+    mut sequence: u64,
+) -> impl std::future::Future<
+    Output = Result<(
+        ConsentCallContext,
+        inkson::sync_engine::NativeAccountHost,
+        inkson::sync_engine::NativeAccountHost,
+        u64,
+    )>,
+> {
+    let task = tokio::task::spawn_local(cotest::harness::heap_future(move || async move {
+        cotest::harness::heap_future(|| sfu_media(&mut context, &native, &other, &mut sequence))
+            .await?;
+        Ok((context, native, other, sequence))
+    }));
+    async move { task.await.context("actual media fixture task failed")? }
 }
 
 async fn sfu_media(
