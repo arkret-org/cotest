@@ -175,7 +175,11 @@ const RUNNERS: [(&str, Runner); 54] = [
                 &super::agent_vectors_production::REVIEWED_SCHEMA_CASES,
                 &super::agent_vectors_production::REVIEWED_PRODUCTION_CASES,
             ],
-            pointers: &["/schema_validation_cases", "/cases"],
+            pointers: &[
+                "/schema_validation_cases",
+                "/cases",
+                "/session_content_authority_contract/cases",
+            ],
         },
     ),
     (
@@ -806,7 +810,7 @@ mod tests {
 
     #[test]
     #[ignore = "requires current Station, Coauth, browser bundle and native Savfox worker"]
-    fn reviewed_agent_production_cases_cross_the_registered_executor() -> Result<()> {
+    fn reviewed_agent_primary_sections_cross_the_registered_executor() -> Result<()> {
         let entrypoint = "ak.suite.agent.vectors.v1";
         let runner = RUNNERS
             .iter()
@@ -836,6 +840,56 @@ mod tests {
             "registered executor did not consume the live lifecycle conjunction"
         );
         println!("[named-agent] {execution:#?}\nmissing={missing:?}");
+        Ok(())
+    }
+
+    #[test]
+    fn agent_nested_content_contract_cannot_disappear_behind_primary_coverage() -> Result<()> {
+        let entrypoint = "ak.suite.agent.vectors.v1";
+        let pointers = RUNNERS
+            .iter()
+            .find_map(|(name, runner)| match runner {
+                Runner::ProductionCases { pointers, .. } if *name == entrypoint => Some(*pointers),
+                _ => None,
+            })
+            .context("registered Agent production sections")?;
+        let fixture = super::super::load_fixture_value("agent-vectors-fixture.json")?;
+        let primary = case_sections(&fixture, &["/schema_validation_cases", "/cases"])?;
+        // These placeholders test accounting only and earn no runtime evidence.
+        let partial = SuiteExecutionResult {
+            entrypoint,
+            fixture: "agent-vectors-fixture.json",
+            cases: primary
+                .iter()
+                .map(|case| {
+                    Ok(super::super::CaseExecutionResult {
+                        case_id: case["name"].as_str().context("primary name")?.into(),
+                        assertions: 1,
+                    })
+                })
+                .collect::<Result<_>>()?,
+        };
+        let declared = case_sections(&fixture, pointers)?;
+        let missing = partial.missing_against_cases(&declared)?;
+        let required = fixture["session_content_authority_contract"]["required_case_names"]
+            .as_array()
+            .context("required nested Agent cases")?
+            .iter()
+            .map(|value| {
+                value
+                    .as_str()
+                    .context("nested case name")
+                    .map(str::to_owned)
+            })
+            .collect::<Result<BTreeSet<_>>>()?;
+        ensure!(partial.cases.len() == 30 && declared.len() == 96);
+        ensure!(
+            missing.len() == 66 && missing.iter().cloned().collect::<BTreeSet<_>>() == required
+        );
+        ensure!(partial.assert_complete_against_cases(&declared).is_err());
+        println!(
+            "[named-agent-inventory] primary_placeholders=30 nested_required_missing=66 total_required=96 runtime_evidence_credit=0"
+        );
         Ok(())
     }
 
