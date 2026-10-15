@@ -6,12 +6,14 @@
     {
       "task": "2026-09-10-0540-client-current-result-durable-index.md",
       "criteria_count": 4,
-      "criteria_sha256": "1e90584024ad7f8c36c02829ac0e3fbccb7e14916564fc6b53f05ac20d6b66dd",
+      "criteria_sha256": "085394c97f7721efebbb14480beb78d0a2c999ea08a539d623ab3ffef1a34963",
       "spec_refs": [
         "arkret-spec/spec/v1/zh/sync/current-results.md",
         "arkret-spec/spec/v1/zh/sync/privacy-preserving-search.md",
         "arkret-spec/spec/v1/zh/crypto-media/device-lifecycle.md",
-        "arkret-spec/spec/v1/zh/models/circle.md"
+        "arkret-spec/spec/v1/zh/models/circle.md",
+        "arkret-spec/spec/v1/zh/models/strand-and-message.md",
+        "arkret-spec/spec/v1/zh/models/event-and-patch.md"
       ],
       "source_refs": [
         "inkson/src/state/current_index/search.rs",
@@ -20,7 +22,8 @@
         "coland/crates/storage-postgres/src/issued_realm_snapshots.rs",
         "garth/src/history_recovery.rs",
         "garth/src/own_station_results.rs",
-        "inkson/src/sync_engine.rs"
+        "inkson/src/sync_engine.rs",
+        "inkson/src/state/current_index.rs"
       ],
       "tests": [
         {
@@ -112,11 +115,47 @@
           "symbol": "search_circle_current_scope_survives_archive_but_not_terminal_or_missing_evidence",
           "kind": "product",
           "covers": "browser IndexedDB: shared signed originals/cuts; active and archived exact original remains readable, tombstone/missing/wrong Circle id/Realm/schema/source suppress cached originals live and after reopen; bounded production candidate filter, not full UI or live Station admission"
+        },
+        {
+          "path": "inkson/src/state/current_index/search.rs",
+          "symbol": "search_current_message_redaction_is_terminal_without_history_and_scrubs_candidates",
+          "kind": "product",
+          "covers": "Encrypted SQLite: current-only Message redaction, redaction before original, latest revision, unrelated target isolation, abandoned stage, late replay, disclosure changes and cold reopen; latest candidate contains no retained original; fixture input after verification, not live Station admission"
+        },
+        {
+          "path": "inkson/src/state/current_index/search.rs",
+          "symbol": "search_current_message_redaction_rejects_bad_evidence_without_publication",
+          "kind": "product",
+          "covers": "Encrypted SQLite: empty assertions, wrong subject and wrong stream reject installation with old generation and previously authorized result unchanged"
+        },
+        {
+          "path": "inkson/src/state/current_index/search.rs",
+          "symbol": "search_current_redaction_masks_unfolded_legacy_candidates",
+          "kind": "product",
+          "covers": "Current-cut read gate hides an original cached by the previous installer even without a physical candidate rewrite"
+        },
+        {
+          "path": "inkson/src/views/global_search/session_tests.rs",
+          "symbol": "native_search_current_only_redaction_removes_visible_body_and_retry_stays_empty",
+          "kind": "product",
+          "covers": "Formal native use_local_search hook: exact original initially visible, committed current-only redaction removes result and explicit retry remains empty without an error"
+        },
+        {
+          "path": "inkson/tests/wasm_current_index.rs",
+          "symbol": "search_current_message_redaction_is_terminal_without_history_and_scrubs_candidates",
+          "kind": "product",
+          "covers": "Real browser IndexedDB: same signed current-only, before-original, revised and unrelated-target fixtures, late replay, latest candidate scrub, disclosure change and cold reopen; bounded production filter, not full browser UI"
+        },
+        {
+          "path": "inkson/tests/wasm_current_index.rs",
+          "symbol": "search_current_message_redaction_rejects_bad_evidence_without_publication",
+          "kind": "product",
+          "covers": "Real browser IndexedDB: same empty/wrong-subject/wrong-stream cuts fail without replacing the old authorized result"
         }
       ],
       "engineering_checks": [],
       "remaining_scenarios": [
-        "1／100／1000 Realm真实Station与实机首屏、UI长任务；正式入口同来源native／browser当前授权负例、有效retention／expiry／privacy／crypto搜索生命周期与完整holder／Device replacement／异步会话矩阵。账号有界物理项、共同事务／恢复／GC、真实Circle／Sidecar非空依赖及Circle对象当前证据门均已闭合，不重复列待办；索引后端矩阵不替代完整UI。"
+        "真实1／100／1000 Realm容量与实机首屏／长任务；完整正式搜索入口授权负例；有效retention／expiry、最新revision／history／crypto／私密Sidecar及Event字段级redaction完整展示矩阵；完整holder／Device replacement／异步会话矩阵。Message当前撤回的终态候选安装、已完成时间边界与Circle对象门不重复列待实现；索引后端回归不代替完整UI／真实Station验收。"
       ]
     },
     {
