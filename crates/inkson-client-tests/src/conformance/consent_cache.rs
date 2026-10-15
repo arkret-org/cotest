@@ -938,98 +938,103 @@ async fn product_attempt(
     product_attempt_after_current(context, member, native, request, dedicated).await
 }
 
-async fn product_attempt_after_current(
-    context: &ConsentCallContext,
-    member: &Member,
-    native: &inkson::sync_engine::NativeAccountHost,
-    request: &CallInvitationSendRequestBody,
+#[inline(never)]
+fn product_attempt_after_current<'a>(
+    context: &'a ConsentCallContext,
+    member: &'a Member,
+    native: &'a inkson::sync_engine::NativeAccountHost,
+    request: &'a CallInvitationSendRequestBody,
     dedicated: bool,
-) -> Result<usize> {
-    let mut stream = ready_stream(member).await?;
-    if dedicated {
-        send(context, request).await?;
-    } else {
-        let accepted = context
-            .caller
-            .client
-            .sdk()
-            .signal_send(&request.envelope)
-            .await?;
-        ensure!(
-            accepted.accepted,
-            "ordinary encrypted rail refused the legal source"
-        );
-    }
-    let mut receiver = garth::signal::SignalReceiver::new();
-    let received = tokio::time::timeout(
-        std::time::Duration::from_secs(3),
-        super::account_blocklist_projection::next_admitted_signal(
-            &mut stream,
-            native,
-            member,
-            &mut receiver,
-        ),
-    )
-    .await;
-    let received = match received {
-        Ok(Err(error))
-            if [
-                "call invitation delivery contains another plaintext kind",
-                "call invitation plaintext is not Invite",
-                "call invitation plaintext differs from signed relation",
-            ]
-            .iter()
-            .any(|reason| error.to_string().contains(reason)) =>
-        {
-            return Ok(0);
+) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<usize>> + 'a>> {
+    cotest::harness::heap_future(move || async move {
+        let mut stream = ready_stream(member).await?;
+        if dedicated {
+            send(context, request).await?;
+        } else {
+            let accepted = context
+                .caller
+                .client
+                .sdk()
+                .signal_send(&request.envelope)
+                .await?;
+            ensure!(
+                accepted.accepted,
+                "ordinary encrypted rail refused the legal source"
+            );
         }
-        Ok(result) => result?,
-        Err(_) => {
-            eprintln!("[2141-product] received=false dedicated={dedicated}");
-            return Ok(0);
-        }
-    };
-    if let garth::signal::SignalReceiveOutcome::Accepted {
-        call_invitation,
-        plaintext,
-        effective_expires_at,
-        ..
-    } = &received
-    {
-        let call_matches = matches!(plaintext.as_ref(), arkret::SignalPlaintext::CallSignal(call)
-            if call.call_id == request.invitation.call_id);
-        let product_live = call_invitation
-            .as_ref()
-            .is_some_and(|view| view.outcome.expires_at > Utc::now());
-        let current = inkson::conformance::retained_realm_current(
-            &native.state_store(),
-            &member.account,
-            &context.realm,
+        let mut receiver = garth::signal::SignalReceiver::new();
+        let received = tokio::time::timeout(
+            std::time::Duration::from_secs(3),
+            super::account_blocklist_projection::next_admitted_signal(
+                &mut stream,
+                native,
+                member,
+                &mut receiver,
+            ),
         )
-        .await?;
-        let rows: Vec<arkret_wire::TypedCurrentRow> =
-            serde_json::from_value(current["entries"].clone())?;
-        let installed = rows.iter().any(|row| matches!(row,
+        .await;
+        let received = match received {
+            Ok(Err(error))
+                if [
+                    "call invitation delivery contains another plaintext kind",
+                    "call invitation plaintext is not Invite",
+                    "call invitation plaintext differs from signed relation",
+                ]
+                .iter()
+                .any(|reason| error.to_string().contains(reason)) =>
+            {
+                return Ok(0);
+            }
+            Ok(result) => result?,
+            Err(_) => {
+                eprintln!("[2141-product] received=false dedicated={dedicated}");
+                return Ok(0);
+            }
+        };
+        if let garth::signal::SignalReceiveOutcome::Accepted {
+            call_invitation,
+            plaintext,
+            effective_expires_at,
+            ..
+        } = &received
+        {
+            let call_matches = matches!(plaintext.as_ref(), arkret::SignalPlaintext::CallSignal(call)
+            if call.call_id == request.invitation.call_id);
+            let product_live = call_invitation
+                .as_ref()
+                .is_some_and(|view| view.outcome.expires_at > Utc::now());
+            let current = inkson::conformance::retained_realm_current(
+                &native.state_store(),
+                &member.account,
+                &context.realm,
+            )
+            .await?;
+            let rows: Vec<arkret_wire::TypedCurrentRow> =
+                serde_json::from_value(current["entries"].clone())?;
+            let installed = rows.iter().any(|row| matches!(row,
             arkret_wire::TypedCurrentRow::Value {selector: arkret_wire::CurrentSelector::CallState {call_id}, ..}
                 if call_id == &request.invitation.call_id));
-        eprintln!(
-            "[2141-product] received=true dedicated={dedicated} exact_call={call_matches} product={} product_live={product_live} signal_live={} call_current_installed={installed}",
-            call_invitation.is_some(),
-            effective_expires_at > &Utc::now()
-        );
-    }
-    let projected = inkson::conformance::observe_native_call_projection(native, received).await?;
-    if dedicated && projected == 0 {
-        let read = inkson::conformance::read_native_call_consent(native, &request.invitation).await;
-        let read_ok = read.is_ok();
-        let permitted =
-            read.and_then(|value| value.permits(None, &[], Utc::now()).map_err(Into::into));
-        eprintln!(
-            "[2141-product] projected=0 fresh_current_read={read_ok} fresh_current_allowed={}",
-            permitted.is_ok_and(|value| value)
-        );
-    }
-    Ok(projected)
+            eprintln!(
+                "[2141-product] received=true dedicated={dedicated} exact_call={call_matches} product={} product_live={product_live} signal_live={} call_current_installed={installed}",
+                call_invitation.is_some(),
+                effective_expires_at > &Utc::now()
+            );
+        }
+        let projected =
+            inkson::conformance::observe_native_call_projection(native, received).await?;
+        if dedicated && projected == 0 {
+            let read =
+                inkson::conformance::read_native_call_consent(native, &request.invitation).await;
+            let read_ok = read.is_ok();
+            let permitted =
+                read.and_then(|value| value.permits(None, &[], Utc::now()).map_err(Into::into));
+            eprintln!(
+                "[2141-product] projected=0 fresh_current_read={read_ok} fresh_current_allowed={}",
+                permitted.is_ok_and(|value| value)
+            );
+        }
+        Ok(projected)
+    })
 }
 
 // Poll the actual media fixture as its own task, after the parent driver
