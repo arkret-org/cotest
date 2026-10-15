@@ -23,6 +23,17 @@ async fn named_consent_cache_all_fourteen_cases() {
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 #[serial_test::serial]
+async fn actual_pcr_authority_live_verdicts() {
+    tokio::task::LocalSet::new()
+        .run_until(cotest::harness::heap_future(
+            cotest_inkson_client_tests::conformance::consent_cache::run_authority_change_live,
+        ))
+        .await
+        .unwrap();
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[serial_test::serial]
 async fn actual_presence_and_media_current_cuts() {
     tokio::task::LocalSet::new().run_until(cotest::harness::heap_future(
         cotest_inkson_client_tests::conformance::consent_cache::run_presence_and_media_cuts_live,

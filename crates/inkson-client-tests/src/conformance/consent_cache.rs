@@ -674,10 +674,9 @@ pub async fn run_presence_and_media_cuts_live() -> Result<()> {
     .await?;
     cotest::harness::heap_future(|| presence_current(&context, &native, &directory)).await?;
     let sequence = 1;
-    let (mut context, native, _other, mut sequence) =
-        media_phase(context, native, other, sequence).await?;
-    let fresh = reopen_native(&context, &native).await?;
-    cotest::harness::heap_future(|| authority_change(&mut context, &fresh, &mut sequence)).await?;
+    let (context, native, other, _sequence) = media_phase(context, native, other, sequence).await?;
+    drop((context, native, other));
+    cotest::harness::heap_future(run_authority_change_live).await?;
     Ok(())
 }
 
@@ -914,13 +913,13 @@ async fn run_three_cuts_evidence() -> Result<Vec<super::CaseExecutionResult>> {
     completed_case(&mut evidence, 8, 4)?;
     cotest::harness::heap_future(|| presence_current(&context, &native, &directory)).await?;
     completed_case(&mut evidence, 2, 9)?;
-    let (mut context, native, _denied_native, mut sequence) =
+    let (context, native, denied_native, _sequence) =
         media_phase(context, native, denied_native, sequence).await?;
     completed_case(&mut evidence, 5, 6)?;
     completed_case(&mut evidence, 10, 8)?;
     completed_case(&mut evidence, 12, 21)?;
-    let fresh = reopen_native(&context, &native).await?;
-    cotest::harness::heap_future(|| authority_change(&mut context, &fresh, &mut sequence)).await?;
+    drop((context, native, denied_native));
+    cotest::harness::heap_future(run_authority_change_live).await?;
     completed_case(&mut evidence, 13, 5)?;
     Ok(evidence)
 }
@@ -2007,6 +2006,38 @@ async fn reopen_native(
     .await?)
 }
 
+/// Keep the original thirty-second verdict live across the actual authority cut.
+pub async fn run_authority_change_live() -> Result<()> {
+    let mut context = cotest::harness::heap_future(|| async {
+        ConsentCallContext::create("consent-authority-live", &[])
+            .await
+            .map(Box::new)
+    })
+    .await?;
+    install_media(
+        &context,
+        "arkret_native",
+        "https://media.consent.invalid/connect",
+    )
+    .await?;
+    let directory = tempfile::tempdir()?;
+    let native = cotest::harness::heap_future(|| async {
+        super::account_blocklist_projection::native_signal_endpoint(
+            &context.holder,
+            &context.realm,
+            &context.accepted_group,
+            &context.holder_group,
+            &directory.path().join("holder.json"),
+        )
+        .await
+        .map(Box::new)
+    })
+    .await?;
+    let fresh = reopen_native(&context, &native).await?;
+    let mut sequence = 1;
+    cotest::harness::heap_future(|| authority_change(&mut context, &fresh, &mut sequence)).await
+}
+
 async fn authority_change(
     context: &mut ConsentCallContext,
     native: &inkson::sync_engine::NativeAccountHost,
@@ -2025,6 +2056,7 @@ async fn authority_change(
         let (request, received) = actual_product(context, native, sequence)
             .await
             .context("authority-change original actual product")?;
+        let started = std::time::Instant::now();
         let old = inkson::conformance::read_native_consent_current(
             native,
             context.caller.actor.clone(),
@@ -2056,6 +2088,11 @@ async fn authority_change(
                 .await
                 .is_err(),
             "older authority read crossed the known tenure high water"
+        );
+        eprintln!(
+            "[2141-authority] from_generation={previous} activation_and_current_ms={} original_invitation_remaining_ms={}",
+            started.elapsed().as_millis(),
+            (request.invitation.expires_at - Utc::now()).num_milliseconds()
         );
         ensure!(
             request.invitation.expires_at > Utc::now(),
