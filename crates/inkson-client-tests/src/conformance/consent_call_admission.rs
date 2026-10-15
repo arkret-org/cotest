@@ -442,25 +442,50 @@ async fn exercise_token_invitation_mismatches(
             &mut context.invitation,
             &sender.key,
         )?;
+        let broken_envelope_relation = matches!(
+            mutation,
+            "inviter_station" | "scope" | "signer" | "ciphertext"
+        );
+        let invalid_parameter = broken_envelope_relation || mutation == "subject_device";
         let problem = cotest::harness::expect_json(
             holder.client.post("/_arkret/self/rtc/token").json(&request),
-            if mutation == "subject_device" {
+            if invalid_parameter {
                 reqwest::StatusCode::BAD_REQUEST
             } else {
-                reqwest::StatusCode::FORBIDDEN
+                reqwest::StatusCode::CONFLICT
             },
         )
         .await
-        .with_context(|| format!("actual Invitation token accepted changed {mutation}"))?;
+        .with_context(|| {
+            format!(
+                "actual Invitation token did not reject changed {mutation} at its contract boundary"
+            )
+        })?;
         ensure!(
             problem["type"]
-                == if mutation == "subject_device" {
+                == if invalid_parameter {
                     "https://arkret.org/problems/param_invalid"
                 } else {
-                    "https://arkret.org/problems/capability_denied"
+                    "https://arkret.org/problems/failed_precondition"
                 },
             "changed {mutation} hit another boundary"
         );
+        if !invalid_parameter {
+            ensure!(
+                problem["detail"].as_str().is_some_and(
+                    |s| s.contains("invitation is not this exact first-contact request")
+                ),
+                "changed {mutation} did not fail the first-contact binding"
+            );
+        }
+        if broken_envelope_relation {
+            ensure!(
+                problem["detail"].as_str().is_some_and(
+                    |s| s.contains("call invitation does not bind its exact producer envelope")
+                ),
+                "changed {mutation} did not fail the exact encrypted relation"
+            );
+        }
     }
     eprintln!("[consent-call] actual_token_relation_mismatches=8 token_releases=0");
     Ok(())
@@ -476,6 +501,26 @@ async fn token_status(
         status,
     )
     .await?;
+    Ok(())
+}
+
+async fn token_precondition(
+    member: &Member,
+    request: &arkret_models_collaboration::objects::media::CallMediaTokenExchangeRequestBody,
+    detail: &str,
+) -> Result<()> {
+    let problem = cotest::harness::expect_json(
+        member.client.post("/_arkret/self/rtc/token").json(request),
+        reqwest::StatusCode::CONFLICT,
+    )
+    .await?;
+    ensure!(
+        problem["type"] == "https://arkret.org/problems/failed_precondition"
+            && problem["detail"]
+                .as_str()
+                .is_some_and(|s| s.contains(detail)),
+        "token rejected outside its exact current/receipt precondition: {problem}"
+    );
     Ok(())
 }
 
@@ -811,9 +856,13 @@ fn run_call_cases<'a>(
                 kind: CallRefreshJoinKind::Refresh,
                 participant_id: response.participant_id.clone(),
             });
-            token_status(holder, &refresh, reqwest::StatusCode::FORBIDDEN)
-                .await
-                .context("unestablished refresh must not bypass first-contact admission")?;
+            token_precondition(
+                holder,
+                &refresh,
+                "refresh has no active accepted participant",
+            )
+            .await
+            .context("unestablished refresh must not bypass first-contact admission")?;
             media_verification::verify_actual_outcome(holder, &request, &response).await?;
             ensure!(
                 response.roster_identity.actor_id != *holder.actor.signing_principal_id()
@@ -863,27 +912,37 @@ fn run_call_cases<'a>(
                     .as_mut()
                     .context("explicit accepted media")?
                     .screen = Some(true);
-                token_status(holder, &expanded, reqwest::StatusCode::FORBIDDEN)
-                    .await
-                    .context(
-                        "unaccepted screen media cannot expand first join or established refresh",
-                    )?;
+                let detail = match &expanded.join_context {
+                    CallMediaJoinContext::Invitation(_) => {
+                        "invitation is not this exact first-contact request"
+                    }
+                    _ => "refresh receipt is not the exact authenticated leg",
+                };
+                token_precondition(holder, &expanded, detail).await?;
             }
 
             let mut wrong_subject = refresh.clone();
             if let CallMediaJoinContext::Refresh(context) = &mut wrong_subject.join_context {
                 context.subject_binding.subject_device_id = sender.device.clone();
             }
-            token_status(holder, &wrong_subject, reqwest::StatusCode::FORBIDDEN)
-                .await
-                .context("private receipt cannot cross authenticated devices")?;
+            token_precondition(
+                holder,
+                &wrong_subject,
+                "refresh receipt is not the exact authenticated leg",
+            )
+            .await
+            .context("private receipt cannot cross authenticated devices")?;
             let mut wrong_alias = refresh.clone();
             if let CallMediaJoinContext::Refresh(context) = &mut wrong_alias.join_context {
                 context.subject_binding.roster_identity.device_id = sender.device.clone();
             }
-            token_status(holder, &wrong_alias, reqwest::StatusCode::FORBIDDEN)
-                .await
-                .context("private receipt cannot substitute its durable alias")?;
+            token_precondition(
+                holder,
+                &wrong_alias,
+                "refresh has no active accepted participant",
+            )
+            .await
+            .context("private receipt cannot substitute its durable alias")?;
             for mutation in ["station", "digest", "signature", "media", "focus", "call"] {
                 let mut invalid = refresh.clone();
                 let CallMediaJoinContext::Refresh(context) = &mut invalid.join_context else {
@@ -910,7 +969,12 @@ fn run_call_cases<'a>(
                     }
                     _ => unreachable!(),
                 }
-                token_status(holder, &invalid, reqwest::StatusCode::FORBIDDEN)
+                let detail = if matches!(mutation, "digest" | "signature") {
+                    "refresh differs from accepted alias, binding or media"
+                } else {
+                    "refresh receipt is not the exact authenticated leg"
+                };
+                token_precondition(holder, &invalid, detail)
                     .await
                     .with_context(|| format!("private receipt accepted a changed {mutation}"))?;
             }
@@ -921,9 +985,13 @@ fn run_call_cases<'a>(
                     .as_mut()
                     .context("explicit media")?
                     .video = Some(true);
-                token_status(holder, &expanded, reqwest::StatusCode::FORBIDDEN)
-                    .await
-                    .context("voice invitation must not authorize video expansion")?;
+                token_precondition(
+                    holder,
+                    &expanded,
+                    "invitation is not this exact first-contact request",
+                )
+                .await
+                .context("voice invitation must not authorize video expansion")?;
             }
             let older =
                 inkson::conformance::read_native_call_consent(&holder_host, &delivery.invitation)
@@ -1578,7 +1646,12 @@ async fn exercise_independent_holder(
     let mut token = granted_request.clone();
     token.actor_id = denied.actor.clone();
     token.device_id = denied.device.clone();
-    token_status(denied, &token, reqwest::StatusCode::FORBIDDEN).await?;
+    token_precondition(
+        denied,
+        &token,
+        "invitation is not this exact first-contact request",
+    )
+    .await?;
     let request = producer
         .prepare_call_invitation(
             denied.account.clone(),
@@ -1613,7 +1686,45 @@ async fn exercise_independent_holder(
                 .context("denied holder rail remains open")?
             {
                 arkret_models_collaboration::SignalStreamFrame::Heartbeat => {}
-                frame => anyhow::bail!("denied holder received a product frame: {frame:?}"),
+                arkret_models_collaboration::SignalStreamFrame::Signal {
+                    envelope,
+                    delivery_authority,
+                } => {
+                    ensure!(
+                        delivery_authority.call_invitation.is_none(),
+                        "denied holder received call product material"
+                    );
+                    let decryptor = inkson::signal_receive_engine::MlsSignalDecryptor::new(
+                        consumer.state_store_handle(),
+                        denied.account.clone(),
+                        denied.device.clone(),
+                    );
+                    let received = garth::signal::SignalReceiver::new()
+                        .receive(
+                            &envelope,
+                            &delivery_authority,
+                            &decryptor,
+                            chrono::Utc::now(),
+                        )
+                        .await?;
+                    ensure!(
+                        matches!(
+                            &received,
+                            garth::signal::SignalReceiveOutcome::Accepted {
+                                call_invitation: None,
+                                ..
+                            }
+                        ),
+                        "ordinary control did not reach actual decryption"
+                    );
+                    ensure!(
+                        inkson::conformance::observe_native_call_projection(consumer, received)
+                            .await?
+                            == 0,
+                        "ordinary encrypted control rang for the unconsenting holder"
+                    );
+                }
+                _ => anyhow::bail!("denied holder rail terminated during product observation"),
             }
         }
         #[allow(unreachable_code)]
@@ -1632,8 +1743,22 @@ async fn exercise_independent_holder(
     token_status(denied, &token, reqwest::StatusCode::FORBIDDEN).await?;
     // Force an actual generic encrypted delivery to exercise this holder's
     // decryptor and native product, without manufacturing delivery material.
-    sender.client.sdk().signal_send(&request.envelope).await?;
-    let (envelope, authority) = next_exact_frame(&mut rail, &request.envelope).await?;
+    let mut ordinary_payload = payload.clone();
+    let inkson::signal::SignalPayload::CallSignal { seq, .. } = &mut ordinary_payload else {
+        unreachable!()
+    };
+    *seq += 2000;
+    let ordinary = producer
+        .prepare_signal_envelope(
+            ScopeRef::Realm {
+                realm_id: realm.clone(),
+            },
+            material,
+            &ordinary_payload,
+        )
+        .await?;
+    sender.client.sdk().signal_send(&ordinary).await?;
+    let (envelope, authority) = next_exact_frame(&mut rail, &ordinary).await?;
     ensure!(
         authority.call_invitation.is_none(),
         "ordinary rail inherited another holder's product admission"
@@ -1748,9 +1873,13 @@ async fn exercise_complete_roster_leave_and_rejoin(
         &leave,
     )
     .await?;
-    token_status(member, refresh, reqwest::StatusCode::FORBIDDEN)
-        .await
-        .context("accepted leave must remove refresh permission")?;
+    token_precondition(
+        member,
+        refresh,
+        "refresh has no active accepted participant",
+    )
+    .await
+    .context("accepted leave must remove refresh permission")?;
     let rejoin = member
         .client
         .author_event(realm.as_str(), EventKind::CallState.as_str(), payload)

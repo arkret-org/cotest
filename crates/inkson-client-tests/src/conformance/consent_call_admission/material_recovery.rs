@@ -111,12 +111,21 @@ pub(super) async fn run(
         "unavailable route did not withhold its frame: {quiet:?}"
     );
     control.set_path_unavailable(peer, false);
-    let retry = sender.client.sdk().call_invitation_send(&request).await?;
+    // Invitation send is retry-unsafe/drop_unconfirmed. Recovery is a new
+    // signed relation and ciphertext, never a replay of unconfirmed material.
+    let inkson::signal::SignalPayload::CallSignal { seq, .. } = &mut payload else {
+        unreachable!()
+    };
+    *seq = 302;
+    let recovered = producer
+        .prepare_call_invitation(holder.account.clone(), scope.clone(), &material, &payload)
+        .await?;
+    let retry = sender.client.sdk().call_invitation_send(&recovered).await?;
     ensure!(
         serde_json::to_value(&retry)? == serde_json::to_value(&opaque)?,
         "route recovery disclosed delivery state"
     );
-    let (envelope, authority) = next_exact_frame(&mut rail, &request.envelope).await?;
+    let (envelope, authority) = next_exact_frame(&mut rail, &recovered.envelope).await?;
     let decryptor = inkson::signal_receive_engine::MlsSignalDecryptor::new(
         consumer.state_store_handle(),
         holder.account.clone(),
@@ -140,7 +149,7 @@ pub(super) async fn run(
     let inkson::signal::SignalPayload::CallSignal { seq, .. } = &mut payload else {
         unreachable!()
     };
-    *seq = 302;
+    *seq = 303;
     let fresh = producer
         .prepare_call_invitation(holder.account.clone(), scope, &material, &payload)
         .await?;
