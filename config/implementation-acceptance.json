@@ -147,7 +147,10 @@
         "arkret-rust-sdk/crates/signatures/src/webvh/inception.rs",
         "arkret-rust-sdk/crates/http-client/src/http_did_resolver.rs",
         "bridges/crates/runtime/src/managed_actor_authoring.rs",
-        "bridges/crates/runtime/src/managed_actor_store.rs"
+        "bridges/crates/runtime/src/managed_actor_store.rs",
+        "arkret-rust-sdk/crates/models-collaboration/src/events_payloads/device_identity.rs",
+        "arkret-rust-sdk/crates/wire/src/generated/applet_managed_device_rules.rs",
+        "cotest/src/conformance/applet_device_scopes.rs"
       ],
       "tests": [
         {
@@ -185,11 +188,17 @@
           "symbol": "shared_http_author_uses_durable_custody_across_restart_and_refuses_wrong_kek",
           "kind": "live",
           "covers": "Canonical Bot/Ghost HTTP author and native DID document/JSONL publication with real random encrypted custody, verified native proof, exact replay/public resources across durable reopen, wrong origin/KEK and unknown refusal; not full Device/MLS runtime or live Savfox host acceptance"
+        },
+        {
+          "path": "cotest/tests/conformance_fixtures.rs",
+          "symbol": "applet_device_scopes_consume_every_registered_pair_case",
+          "kind": "contract",
+          "covers": "All formal managed Device pair cases through the production SDK matcher; canonical order, registered actions and exact scope equality. Does not prove live 21-operation authentication or scoped delivery."
         }
       ],
       "engineering_checks": [],
       "remaining_scenarios": [
-        "Applet creation/join/publish management review and full quota classification; Service multi-parent/shared-ancestor quota; formal Device scope matching and all 21 operation consumers; independent Bot/Ghost Device/MLS runtime, scoped revocation/rotation and real decryption/replies; complete bundle service surface and support claims"
+        "Applet creation/join/publish management review and full quota classification; Service multi-parent/shared-ancestor quota; all 21 Device operation production consumers; independent Bot/Ghost Device/MLS runtime, scoped revocation/rotation and real decryption/replies; complete bundle service surface and support claims"
       ]
     },
     {

@@ -150,7 +150,11 @@ enum Runner {
     EvidenceMapped(fn() -> Result<()>),
 }
 
-const RUNNERS: [(&str, Runner); 54] = [
+const RUNNERS: [(&str, Runner); 55] = [
+    (
+        super::APPLET_DEVICE_SCOPES_ENTRYPOINT,
+        Runner::Cases(super::run_applet_device_scopes_suite),
+    ),
     (
         super::TERMINAL_REPLICATION_AUTHORITY_ENTRYPOINT,
         Runner::ProductionCases {

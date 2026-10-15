@@ -601,3 +601,9 @@ conformance_test!(
     "protocol_gap_closure_fixture",
     cotest::conformance::run_protocol_gap_closure_fixture_suite,
 );
+
+#[test]
+fn applet_device_scopes_consume_every_registered_pair_case() -> Result<()> {
+    let _guard = enter_scenario("applet_device_scopes");
+    cotest::conformance::run_applet_device_scopes_suite().map(|_| ())
+}

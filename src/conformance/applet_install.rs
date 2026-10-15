@@ -527,7 +527,10 @@ fn build_delegated_device_payload(
     });
     let scopes = match mutation {
         DelegatedDeviceMutation::UnscopedDelegation => None,
-        _ => Some(vec![non_empty("ak.applet.managed_actor.delegated_device")?]),
+        _ => Some(serde_json::from_value(json!([{
+            "effective_scope":{"kind":"realm","realm_id":"ak:realm:AUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFB"},
+            "actions":["ak.event.read"]
+        }]))?),
     };
     let expires_at = match mutation {
         DelegatedDeviceMutation::UnboundedLifetime => Some(None),
