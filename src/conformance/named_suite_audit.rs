@@ -94,7 +94,7 @@ pub fn missing_sync_production_cases(
 /// total number of unwired suites happened to stay constant.
 // Content-key KATs run in arkret-mls; complete authorized-checkpoint
 // remains owned by 0805. Terminal live scenarios execute below.
-const KNOWN_UNWIRED_ENTRYPOINTS: [&str; 32] = [
+const KNOWN_UNWIRED_ENTRYPOINTS: [&str; 33] = [
     "ak.suite.agent.draft_pending_intent.v1",
     "ak.suite.agent.participation.v1",
     "ak.suite.applet.managed_actor_authority.v1",
@@ -126,6 +126,7 @@ const KNOWN_UNWIRED_ENTRYPOINTS: [&str; 32] = [
     "ak.suite.scope.circle.v1",
     "ak.suite.sdk.event_type_axes.v1",
     "ak.suite.signer_key.historical_commit_coordinate.v1",
+    "ak.suite.state.registered_atomic_units_and_watch_audit.v1",
     "ak.suite.visibility.policy.v1",
 ];
 
@@ -150,10 +151,34 @@ enum Runner {
     EvidenceMapped(fn() -> Result<()>),
 }
 
+// These cases exercise the production SDK decoder and exact pair matcher.
+// They do not prove managed Device HTTP/PG operation admission.
+const REVIEWED_APPLET_DEVICE_SCOPE_CASES: [&str; 15] = [
+    "a_read",
+    "b_write",
+    "no_cross_pair",
+    "all_actions_required",
+    "realm_does_not_include_circle",
+    "empty",
+    "ordinary_strings",
+    "duplicate_scope",
+    "unsorted_scopes",
+    "unknown_action",
+    "wildcard_action",
+    "empty_actions",
+    "duplicate_actions",
+    "unsorted_actions",
+    "sidecar",
+];
+
 const RUNNERS: [(&str, Runner); 55] = [
     (
         super::APPLET_DEVICE_SCOPES_ENTRYPOINT,
-        Runner::Cases(super::run_applet_device_scopes_suite),
+        Runner::ProductionCases {
+            run: super::run_applet_device_scopes_suite,
+            reviewed_cases: &[&REVIEWED_APPLET_DEVICE_SCOPE_CASES],
+            pointers: &["/cases"],
+        },
     ),
     (
         super::TERMINAL_REPLICATION_AUTHORITY_ENTRYPOINT,
@@ -489,32 +514,16 @@ pub fn run_named_suite_audit_with_clients(
     Ok(report)
 }
 
-/// Diagnostic execution retains gaps; unlike the claim gate, its success is
-/// not a conformance claim. Consumers must report every gap in the result.
-pub fn inspect_named_suite_execution_with_clients(
-    client_runners: &[ClientNamedSuiteRunner],
-) -> Result<NamedSuiteAuditReport> {
-    const CLIENT_ENTRYPOINTS: [&str; 4] = [
-        "ak.suite.account.blocklist_projection.v1",
-        "ak.suite.webrtc.media_plaintext_downgrade.v1",
-        "ak.suite.consent.cache_invalidation.v1",
-        SYNC_CLIENT_ENTRYPOINT,
-    ];
-    let declared_clients = client_runners
-        .iter()
-        .map(|(name, _)| *name)
-        .collect::<BTreeSet<_>>();
-    ensure!(
-        client_runners.is_empty()
-            || ((2..=CLIENT_ENTRYPOINTS.len()).contains(&client_runners.len())
-                && declared_clients.len() == client_runners.len()
-                && declared_clients.contains(CLIENT_ENTRYPOINTS[0])
-                && declared_clients.contains(CLIENT_ENTRYPOINTS[1])
-                && declared_clients
-                    .iter()
-                    .all(|name| CLIENT_ENTRYPOINTS.contains(name))),
-        "audit requires the exact client runners, with optional Sync and Consent production evidence"
-    );
+const CLIENT_ENTRYPOINTS: [&str; 4] = [
+    "ak.suite.account.blocklist_projection.v1",
+    "ak.suite.webrtc.media_plaintext_downgrade.v1",
+    "ak.suite.consent.cache_invalidation.v1",
+    SYNC_CLIENT_ENTRYPOINT,
+];
+
+type NamedFixtureInventory = BTreeMap<String, Vec<(String, Value)>>;
+
+fn load_named_fixture_inventory() -> Result<(BTreeMap<String, Value>, NamedFixtureInventory)> {
     let fixture_dir = spec_artifacts_root().join("fixtures");
     let mut all_fixtures = BTreeMap::new();
     let mut fixtures: BTreeMap<String, Vec<(String, Value)>> = BTreeMap::new();
@@ -560,15 +569,13 @@ pub fn inspect_named_suite_execution_with_clients(
             );
         }
     }
-    let registered = RUNNERS
-        .iter()
-        .map(|(entrypoint, _)| *entrypoint)
-        .chain(client_runners.iter().map(|(name, _)| *name))
-        .collect::<BTreeSet<_>>();
-    ensure!(
-        registered.len() == RUNNERS.len() + client_runners.len(),
-        "explicit named-suite registry contains a duplicate"
-    );
+    Ok((all_fixtures, fixtures))
+}
+
+fn assert_named_gap_inventory(
+    fixtures: &NamedFixtureInventory,
+    registered: &BTreeSet<&str>,
+) -> Result<Vec<String>> {
     // Validate the closed inventory before executing any case. A failing
     // earlier runner must not hide drift in newly declared semantic suites.
     let unwired: Vec<_> = fixtures
@@ -587,6 +594,40 @@ pub fn inspect_named_suite_execution_with_clients(
         unwired == expected_unwired,
         "named-suite gap ledger drifted: expected {expected_unwired:?}, got {unwired:?}"
     );
+    Ok(unwired)
+}
+
+/// Diagnostic execution retains gaps; unlike the claim gate, its success is
+/// not a conformance claim. Consumers must report every gap in the result.
+pub fn inspect_named_suite_execution_with_clients(
+    client_runners: &[ClientNamedSuiteRunner],
+) -> Result<NamedSuiteAuditReport> {
+    let declared_clients = client_runners
+        .iter()
+        .map(|(name, _)| *name)
+        .collect::<BTreeSet<_>>();
+    ensure!(
+        client_runners.is_empty()
+            || ((2..=CLIENT_ENTRYPOINTS.len()).contains(&client_runners.len())
+                && declared_clients.len() == client_runners.len()
+                && declared_clients.contains(CLIENT_ENTRYPOINTS[0])
+                && declared_clients.contains(CLIENT_ENTRYPOINTS[1])
+                && declared_clients
+                    .iter()
+                    .all(|name| CLIENT_ENTRYPOINTS.contains(name))),
+        "audit requires the exact client runners, with optional Sync and Consent production evidence"
+    );
+    let (all_fixtures, fixtures) = load_named_fixture_inventory()?;
+    let registered = RUNNERS
+        .iter()
+        .map(|(entrypoint, _)| *entrypoint)
+        .chain(client_runners.iter().map(|(name, _)| *name))
+        .collect::<BTreeSet<_>>();
+    ensure!(
+        registered.len() == RUNNERS.len() + client_runners.len(),
+        "explicit named-suite registry contains a duplicate"
+    );
+    let unwired = assert_named_gap_inventory(&fixtures, &registered)?;
     let mut executed = Vec::new();
     let mut executed_cases = BTreeSet::new();
     let mut unproved = Vec::new();
@@ -808,6 +849,47 @@ mod tests {
     use serde_json::json;
 
     use super::*;
+
+    #[test]
+    fn named_preflight_inventory_rejects_unacknowledged_additions_and_removals() -> Result<()> {
+        let (_, fixtures) = load_named_fixture_inventory()?;
+        let registered = RUNNERS
+            .iter()
+            .map(|(name, _)| *name)
+            .chain(CLIENT_ENTRYPOINTS)
+            .collect::<BTreeSet<_>>();
+        ensure!(registered.len() == RUNNERS.len() + CLIENT_ENTRYPOINTS.len());
+        let unwired = assert_named_gap_inventory(&fixtures, &registered)?;
+        ensure!(unwired.len() == 33);
+        let mut added = fixtures.clone();
+        added.insert("unregistered_test_entrypoint".to_owned(), Vec::new());
+        ensure!(assert_named_gap_inventory(&added, &registered).is_err());
+        let mut removed = fixtures;
+        ensure!(removed.remove(KNOWN_UNWIRED_ENTRYPOINTS[0]).is_some());
+        ensure!(assert_named_gap_inventory(&removed, &registered).is_err());
+        println!(
+            "[named-preflight] acknowledged_unwired=33 added_rejected=1 removed_rejected=1 runtime_credit=0"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn named_preflight_sdk_device_pairs_cross_registered_production_matcher() -> Result<()> {
+        let entrypoint = super::super::APPLET_DEVICE_SCOPES_ENTRYPOINT;
+        let runner = RUNNERS
+            .iter()
+            .find(|(name, _)| *name == entrypoint)
+            .map(|(_, runner)| *runner)
+            .context("registered SDK Device pair runner")?;
+        ensure!(matches!(runner, Runner::ProductionCases { .. }));
+        let fixture = super::super::load_fixture_value("applet-device-scope-fixture.json")?;
+        let result = execute_runner(entrypoint, runner, &fixture)?
+            .context("registered SDK matcher omitted evidence")?;
+        result.assert_complete_against(&fixture)?;
+        ensure!(result.cases.len() == REVIEWED_APPLET_DEVICE_SCOPE_CASES.len());
+        println!("[named-sdk-device-pairs] {result:#?}");
+        Ok(())
+    }
 
     #[test]
     #[ignore = "requires current Station, Coauth, browser bundle and native Savfox worker"]
