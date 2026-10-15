@@ -133,7 +133,11 @@ pub fn run_webrtc_media_plaintext_suite() -> Result<SuiteExecutionResult> {
     let authorized = media_join_request(true, true, true)?;
     let permit = authorize_media_join(&authorized).map_err(|error| anyhow!(error.as_wire()))?;
     let key = permit
-        .publish_frame_key(&exporter, PARTICIPANT_ID)
+        .publish_frame_key(
+            &exporter,
+            PARTICIPANT_ID,
+            &arkret_wire::DeviceId::new("ak:device:01904100-0000-7000-8000-000000000047")?,
+        )
         .map_err(|error| anyhow!(error.as_wire()))?;
     ensure!(
         key.len() == 32,
@@ -209,6 +213,25 @@ fn media_join_request(
         )])
     });
     Ok(MediaJoinRequest {
+        account_id: arkret_wire::AccountId::new(
+            arkret_wire::DidCoreId::new("ak:did_core:web:alice.example").unwrap(),
+            arkret_wire::DidCoreId::new("ak:did_core:web:station.example").unwrap(),
+        ),
+        join_context: arkret_models_collaboration::call_invitation::CallMediaJoinContext::Voluntary(
+            arkret_models_collaboration::call_invitation::CallVoluntaryJoinContext {
+                kind:
+                    arkret_models_collaboration::call_invitation::CallVoluntaryJoinKind::Voluntary,
+                created_at: arkret_canonical::normalize_timestamp_canonical(chrono::Utc::now()),
+                expires_at: arkret_canonical::normalize_timestamp_canonical(
+                    chrono::Utc::now() + chrono::Duration::seconds(30),
+                ),
+                nonce: arkret_canonical::base64url_encode([71u8; 32]),
+                proof: arkret_models_collaboration::call_invitation::CallVoluntaryJoinProof {
+                    verification_method: "did:web:alice.example#device".to_owned(),
+                    jws: "unused_by_plaintext_policy_gate".to_owned(),
+                },
+            },
+        ),
         realm_id: "ak:realm:AVxu7KCm9qmiOqakDKBXUia9rbZ3NBurP875XbqG1rbs".to_owned(),
         call_id: "ak:call:AYf05kF8z4cSo8r6qmqXgu4KPuv2YtKBlsE00FOmblaz".to_owned(),
         actor_id: "ak:did_core:web:alice.example".to_owned(),
@@ -217,7 +240,7 @@ fn media_join_request(
         epoch_id: 7,
         desired_media: DesiredMedia::audio_video(),
         media_service_ids: vec!["ak:did_core:web:media.example".to_owned()],
-        verified_media_routes: Vec::new(),
+        verified_media_bindings: Vec::new(),
         governance_evidence: Some(MediaGovernanceEvidence {
             governance_binding,
             media_service_payload: serde_json::json!({

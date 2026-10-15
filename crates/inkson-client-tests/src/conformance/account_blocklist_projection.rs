@@ -2367,7 +2367,7 @@ fn verify_security_evidence_mapping(fixture: &Value) -> Result<()> {
 
 // An actual endpoint's live provider is transferred through the production
 // encrypted restart checkpoint, never replaced by a fabricated MLS model.
-async fn native_signal_endpoint(
+pub(crate) async fn native_signal_endpoint(
     member: &crate::scenarios::mls_lifecycle_live::Member,
     realm: &arkret_wire::RealmId,
     accepted_group: &arkret_wire::EventId,
@@ -2445,12 +2445,12 @@ async fn catch_up_blocklist_revision(
     )
 }
 
-struct ActiveEndpointSigner {
+pub(crate) struct ActiveEndpointSigner {
     previous: Option<std::sync::Arc<inkson::event_signer::InksonEventSigner>>,
     mode: inkson::operation::ProofMode,
 }
 impl ActiveEndpointSigner {
-    fn install(member: &crate::scenarios::mls_lifecycle_live::Member) -> Result<Self> {
+    pub(crate) fn install(member: &crate::scenarios::mls_lifecycle_live::Member) -> Result<Self> {
         let principal = member
             .client
             .principal
@@ -2475,7 +2475,7 @@ impl Drop for ActiveEndpointSigner {
     }
 }
 
-async fn next_admitted_signal(
+pub(crate) async fn next_admitted_signal(
     stream: &mut arkret_http_client::SignalSubscribeFrameStream,
     host: &inkson::sync_engine::NativeAccountHost,
     member: &crate::scenarios::mls_lifecycle_live::Member,

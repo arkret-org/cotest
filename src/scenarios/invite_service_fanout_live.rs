@@ -136,7 +136,7 @@ pub(crate) async fn prepare_explicit_invite(
     .await
 }
 
-async fn prepare_invite_with_evidence(
+pub(crate) async fn prepare_invite_with_evidence(
     inviter: &TestActorClient,
     holder: &TestActorClient,
     label: &str,
@@ -153,12 +153,9 @@ async fn prepare_invite_with_evidence(
         .submit_event(&realm_id, "ak.invite.create", payload)
         .await?;
     let event_id = crate::harness::submitted_event_id(&accepted)?;
-    let service_id = DidCoreId::new(inviter.service_id().to_owned())?;
-    let service_resolution = ServiceResolutionCarrier::ResolutionUrl {
-        resolution_url: format!(
-            "https://cotest.invalid{}",
-            arkret_models_identity::canonical_service_resolution_path(&service_id)
-        ),
+    let service_id = DidCoreId::new(holder.service_id().to_owned())?;
+    let service_resolution = ServiceResolutionCarrier::Inline {
+        inline: holder.sdk().open_service_resolution(&service_id).await?,
     };
     let request = SelfInviteDispatchRequestBody {
         schema: arkret_wire::SchemaId::INVITE_DELIVERY_REQUEST_V1.to_owned(),
@@ -331,9 +328,17 @@ async fn assert_service_account_data_fanout(
     Ok(())
 }
 
-async fn grant_invite_consent(
+pub(crate) async fn grant_invite_consent(
     holder: &TestActorClient,
     peer: &TestActorClient,
+) -> Result<(ConsentView, arkret_wire::Event)> {
+    grant_scoped_consent(holder, peer, ConsentScope::Invite).await
+}
+
+async fn grant_scoped_consent(
+    holder: &TestActorClient,
+    peer: &TestActorClient,
+    scope: ConsentScope,
 ) -> Result<(ConsentView, arkret_wire::Event)> {
     let principal = holder
         .principal
@@ -353,7 +358,7 @@ async fn grant_invite_consent(
                 DidCoreId::new(peer.service_id())?,
             )),
         },
-        consent_scope: ConsentScope::Invite,
+        consent_scope: scope,
         not_before: None,
         expires_at: Some(Utc::now() + ChronoDuration::days(1)),
         constraints: None,
@@ -819,6 +824,13 @@ pub async fn consent_current_and_invite_gate_live_run() -> Result<()> {
         stale["type"] == "https://arkret.org/problems/cas_conflict",
         "stale Consent did not keep its registered CAS error"
     );
+    let preflight_before_revoke = prepare_invite_with_evidence(
+        &inviter,
+        &holder,
+        "Consent prepared before revoke",
+        evidence.clone(),
+    )
+    .await?;
     let revoked = revoke_invite_consent(&holder, granted.clone()).await?;
     ensure!(
         revoked.state == arkret_models_collaboration::consent_operations::ConsentState::Revoked,
@@ -844,9 +856,7 @@ pub async fn consent_current_and_invite_gate_live_run() -> Result<()> {
         current.consents == vec![revoked],
         "old grant replay reactivated current Consent"
     );
-    let prepared =
-        prepare_invite_with_evidence(&inviter, &holder, "Consent revoked invite", evidence).await?;
-    let dropped = dispatch_explicit_invite(&inviter, prepared).await?;
+    let dropped = dispatch_explicit_invite(&inviter, preflight_before_revoke).await?;
     ensure!(
         dropped.outcome["status"] == "deferred"
             && dropped.outcome.get("disclosed_outcome").is_none(),
@@ -856,6 +866,142 @@ pub async fn consent_current_and_invite_gate_live_run() -> Result<()> {
     ensure!(
         unchanged.revision == notified.revision && unchanged.content == notified.content,
         "revoked Consent changed holder invite delivery"
+    );
+    generic_consent_opaque_timings(
+        server,
+        &inviter,
+        &holder,
+        IntroductionEvidence::ConsentGrant {
+            consent_grant_ref: grant_event.event_id.clone(),
+            consent_id: Some(granted.consent_id.to_string()),
+        },
+    )
+    .await?;
+    let (any, any_event) = grant_scoped_consent(&holder, &inviter, ConsentScope::Any).await?;
+    let evidence = IntroductionEvidence::ConsentGrant {
+        consent_grant_ref: any_event.event_id.clone(),
+        consent_id: Some(any.consent_id.to_string()),
+    };
+    let prepared = prepare_invite_with_evidence(
+        &inviter,
+        &holder,
+        "any scope actual invite",
+        evidence.clone(),
+    )
+    .await?;
+    dispatch_explicit_invite(&inviter, prepared).await?;
+    let active = account_data_row(&holder, AccountDataKey::ACCOUNT_INVITE_DELIVERY).await?;
+    ensure!(
+        active.revision > unchanged.revision,
+        "any scope did not authorize actual invite delivery"
+    );
+    let stale =
+        prepare_invite_with_evidence(&inviter, &holder, "any scope pre-revoke", evidence).await?;
+    let (independent, independent_event) = grant_invite_consent(&holder, &inviter).await?;
+    revoke_invite_consent(&holder, any).await?;
+    dispatch_explicit_invite(&inviter, stale).await?;
+    let after = account_data_row(&holder, AccountDataKey::ACCOUNT_INVITE_DELIVERY).await?;
+    ensure!(
+        after.revision == active.revision && after.content == active.content,
+        "revoked any invitation reused its earlier decision"
+    );
+    let prepared = prepare_invite_with_evidence(
+        &inviter,
+        &holder,
+        "independent concrete invite",
+        IntroductionEvidence::ConsentGrant {
+            consent_grant_ref: independent_event.event_id,
+            consent_id: Some(independent.consent_id.to_string()),
+        },
+    )
+    .await?;
+    dispatch_explicit_invite(&inviter, prepared).await?;
+    let retained: ConsentList = serde_json::from_value(
+        expect_json(holder.get("/_arkret/self/consent/results"), StatusCode::OK).await?,
+    )?;
+    ensure!(
+        retained
+            .consents
+            .iter()
+            .find(|v| v.consent_id == independent.consent_id)
+            == Some(&independent),
+        "any revoke changed independent Invite grant"
+    );
+    ensure!(
+        account_data_row(&holder, AccountDataKey::ACCOUNT_INVITE_DELIVERY)
+            .await?
+            .revision
+            > active.revision,
+        "independent concrete Invite grant did not remain eligible"
+    );
+    println!(
+        "[2141-live] actual_invite_final_cas_revoke=1 any_derived_invite_denied=1 independent_concrete_invite_current_unchanged=1 opaque_deferred=1"
+    );
+    Ok(())
+}
+
+async fn generic_consent_opaque_timings(
+    server: &crate::harness::ArkretServer,
+    revoked: &TestActorClient,
+    holder: &TestActorClient,
+    evidence: IntroductionEvidence,
+) -> Result<()> {
+    let never = server
+        .standard_client(
+            &actor_did_for_service_did(server.service_did(), "consent-never-matching")?,
+            "ak:device:01904100-0000-7000-8000-0000000000e3",
+        )
+        .await?;
+    let mut requests = [
+        prepare_invite_with_evidence(
+            revoked,
+            holder,
+            "opaque revoked actual Invite",
+            evidence.clone(),
+        )
+        .await?
+        .request,
+        prepare_invite_with_evidence(
+            &never,
+            holder,
+            "opaque never-matching actual Invite",
+            evidence,
+        )
+        .await?
+        .request,
+    ];
+    let before = account_data_row(holder, AccountDataKey::ACCOUNT_INVITE_DELIVERY).await?;
+    let mut samples = [Vec::new(), Vec::new()];
+    for sample in 0..26 {
+        for class in [sample % 2, 1 - sample % 2] {
+            requests[class].idempotency_key = format!("consent-opaque-{class}-{sample}");
+            let started = Instant::now();
+            let client = if class == 0 { revoked } else { &never };
+            let response:arkret_models_collaboration::governance::invite_addressing::InviteDeliveryOutcome=serde_json::from_value(expect_json(client.post("/_arkret/self/invites/dispatch").json(&requests[class]),StatusCode::OK).await?)?;
+            let elapsed = started.elapsed().as_secs_f64();
+            ensure!(response.status==arkret_models_collaboration::governance::invite_addressing::InviteDeliveryOutcomeStatus::Deferred && response.disclosed_outcome.is_none() && response.retry_after_ms.is_none(),"generic Invite disclosed Consent history");
+            if sample >= 2 {
+                samples[class].push(elapsed);
+            }
+        }
+    }
+    let mut distance = 0f64;
+    for value in samples.iter().flatten() {
+        let left = samples[0].iter().filter(|x| *x <= value).count() as f64 / 24.0;
+        let right = samples[1].iter().filter(|x| *x <= value).count() as f64 / 24.0;
+        distance = distance.max((left - right).abs());
+    }
+    ensure!(
+        distance <= 1.63f64 * (2.0f64 / 24.0f64).sqrt(),
+        "generic Invite Consent-history timing separated: KS={distance}"
+    );
+    let after = account_data_row(holder, AccountDataKey::ACCOUNT_INVITE_DELIVERY).await?;
+    ensure!(
+        before.revision == after.revision && before.content == after.content,
+        "opaque denied samples changed Invite delivery"
+    );
+    println!(
+        "[2141-live] actual_generic_invite_revoked_never_opaque=1 timing_samples_per_class=24 alpha=0.01 zero_delivery_writes=1"
     );
     Ok(())
 }

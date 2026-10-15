@@ -482,6 +482,7 @@ fn is_secret_field(name: &str) -> bool {
     matches!(
         normalized.as_str(),
         "authorization"
+            | "dpop"
             | "cookie"
             | "set-cookie"
             | "access_token"
@@ -490,6 +491,10 @@ fn is_secret_field(name: &str) -> bool {
             | "password"
             | "secret"
             | "secret_b64u"
+            | "subject_binding"
+            | "pcr_private_state"
+            | "key_bytes"
+            | "backend_token"
             | "session_credential"
             | "credential"
             | "push_key"
@@ -555,26 +560,42 @@ mod tests {
     #[test]
     fn transcript_sanitizer_redacts_credential_material() {
         for field in [
+            "DPoP",
             "credential",
             "secret_b64u",
             "private_key",
             "recovery_key",
             "root_seed",
             "hkdf_prk",
+            "subject_binding",
+            "pcr_private_state",
+            "key_bytes",
+            "backend_token",
         ] {
             assert!(is_secret_field(field), "{field} must be treated as secret");
         }
 
         let sanitized = sanitize_json_value(json!({
+            "headers": {"DPoP":"single-use-proof"},
             "ice": {
                 "credential": "turn-password",
                 "username": "public-routing-user"
             },
-            "recovery_key": "word list"
+            "recovery_key": "word list",
+            "subject_binding":{"subject_actor_id":"private account","roster_identity":"anonymous alias"},
+            "backend_token":"opaque bearer",
+            "participant_binding":{"subject_binding_digest":"public commitment"}
         }));
         assert_eq!(sanitized["ice"]["credential"], "[redacted]");
+        assert_eq!(sanitized["headers"]["DPoP"], "[redacted]");
         assert_eq!(sanitized["ice"]["username"], "public-routing-user");
         assert_eq!(sanitized["recovery_key"], "[redacted]");
+        assert_eq!(sanitized["subject_binding"], "[redacted]");
+        assert_eq!(sanitized["backend_token"], "[redacted]");
+        assert_eq!(
+            sanitized["participant_binding"]["subject_binding_digest"],
+            "public commitment"
+        );
     }
 
     #[test]

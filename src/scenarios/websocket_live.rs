@@ -376,10 +376,10 @@ pub fn cursor(frame: &WebSocketServerFrame, id: &str) -> Option<String> {
 }
 
 /// Consume a real Signal while the two durable rails share the same socket.
-pub(crate) struct LiveSignalReader(Socket);
+pub struct LiveSignalReader(Socket);
 
 impl LiveSignalReader {
-    pub(crate) async fn connect(
+    pub async fn connect(
         server: &ArkretServer,
         client: &TestActorClient,
         realm: &str,
@@ -468,7 +468,7 @@ impl LiveSignalReader {
         .context("exact accepted transition on the shared Events rail")?
     }
 
-    pub(crate) async fn next_frame(
+    pub async fn next_frame(
         &mut self,
     ) -> Result<Option<arkret_models_collaboration::SignalStreamFrame>> {
         loop {

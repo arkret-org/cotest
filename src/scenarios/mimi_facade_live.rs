@@ -5,9 +5,7 @@ use reqwest::StatusCode;
 use serde_json::{Value, json};
 
 use crate::conformance::CaseExecutionResult;
-use crate::harness::{
-    ArkretServer, CanonicalJsonBody as _, TestServerGroup, expect_json, test_service_signing_key,
-};
+use crate::harness::{ArkretServer, CanonicalJsonBody as _, TestServerGroup, expect_json};
 use crate::scenarios::_helpers::bridge::MockCoauthIntrospectionServer;
 use crate::scenarios::_helpers::live_gate::skip_or_fail;
 use crate::scenarios::human_device_producer_live::{
@@ -18,10 +16,44 @@ use crate::scenarios::mls_lifecycle_live::Member;
 const GROUP: &str = "mimi-facade-live";
 const DEVICE: &str = "ak:device:01904100-0000-7000-8000-000000002881";
 
-async fn signed_post(
+pub async fn signed_post(
     server: &ArkretServer,
     path: &str,
     room: &str,
+    provider: &str,
+    body: &Value,
+) -> Result<(StatusCode, Value)> {
+    signed_post_inner(server, path, Some(room), provider, body).await
+}
+
+pub async fn signed_consent_command(
+    server: &ArkretServer,
+    path: &str,
+    provider: &str,
+    body: &Value,
+) -> Result<(StatusCode, Value)> {
+    signed_post_inner(server, path, None, provider, body).await
+}
+
+pub async fn signed_identifier_query(
+    server: &ArkretServer,
+    provider: &str,
+    body: &arkret_models_collaboration::mimi_operations::MimiIdentifierQueryRequestBody,
+) -> Result<(StatusCode, Value)> {
+    signed_post_inner(
+        server,
+        "/_arkret/open/mimi/identifiers/query",
+        None,
+        provider,
+        &serde_json::to_value(body)?,
+    )
+    .await
+}
+
+async fn signed_post_inner(
+    server: &ArkretServer,
+    path: &str,
+    room: Option<&str>,
     provider: &str,
     body: &Value,
 ) -> Result<(StatusCode, Value)> {
@@ -39,7 +71,7 @@ async fn signed_post(
     let digest = ContentDigest::compute(&body, ContentDigestAlgorithm::Sha256).wire_value;
     let operation = arkret_wire::ServiceOperationId::from_http_request("POST", path)
         .context("MIMI operation")?;
-    let headers = vec![
+    let mut headers = vec![
         ("arkret-operation".into(), operation.as_str().to_owned()),
         ("content-type".into(), "application/json".into()),
         ("content-digest".into(), digest.clone()),
@@ -49,9 +81,11 @@ async fn signed_post(
             "destination-service-id".into(),
             server.service_id().to_string(),
         ),
-        ("mimi-room-uri".into(), room.to_owned()),
     ];
-    let covered = vec![
+    if let Some(room) = room {
+        headers.push(("mimi-room-uri".into(), room.to_owned()));
+    }
+    let mut covered = vec![
         Component::Method,
         Component::TargetUri,
         Component::Authority,
@@ -60,8 +94,10 @@ async fn signed_post(
         Component::Header("provider-id".into()),
         Component::Header("source-service-id".into()),
         Component::Header("destination-service-id".into()),
-        Component::Header("mimi-room-uri".into()),
     ];
+    if room.is_some() {
+        covered.push(Component::Header("mimi-room-uri".into()));
+    }
     let now = chrono::Utc::now().timestamp();
     let keyid = format!("{}#notary-key", server.service_did());
     let input = format!(
@@ -81,8 +117,7 @@ async fn signed_post(
         },
         &parsed,
     )?;
-    let (_, seed) = test_service_signing_key(&format!("{GROUP}-0"));
-    let signature = sign_message(&transcript, &ed25519_dalek::SigningKey::from_bytes(&seed));
+    let signature = sign_message(&transcript, &server.federation_signing_key()?);
     let mut request = server.http().post(target).body(body);
     for (name, value) in headers {
         // The operation-selecting client already installs the signed selector.

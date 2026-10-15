@@ -288,6 +288,19 @@ fn token_request() -> CallMediaTokenExchangeRequestBody {
         )),
         DeviceId::new("ak:device:01904100-0000-7000-8000-000000000005").unwrap(),
         "fra-1",
+        arkret_models_collaboration::call_invitation::CallMediaJoinContext::Voluntary(
+            arkret_models_collaboration::call_invitation::CallVoluntaryJoinContext {
+                kind:
+                    arkret_models_collaboration::call_invitation::CallVoluntaryJoinKind::Voluntary,
+                created_at: fixture_now(),
+                expires_at: fixture_now() + Duration::seconds(60),
+                nonce: base64url_encode([18u8; 32]),
+                proof: arkret_models_collaboration::call_invitation::CallVoluntaryJoinProof {
+                    verification_method: "did:web:alice.example#device".to_owned(),
+                    jws: "unused-issuer-verification-fixture".to_owned(),
+                },
+            },
+        ),
     )
 }
 
@@ -296,6 +309,29 @@ fn token_outcome(
     key: &SigningKey,
     expires_at: DateTime<Utc>,
 ) -> Result<CallMediaTokenExchangeOutcome> {
+    let roster_identity: arkret_models_collaboration::call_invitation::CallMediaRosterIdentity =
+        serde_json::from_value(json!({
+            "actor_id":format!("ak:did_core:key:{}",arkret_canonical::ed25519_pubkey_to_did_key_multibase(&SigningKey::from_bytes(&[47;32]).verifying_key().to_bytes())),
+            "device_id":"ak:device:01904100-0000-7000-8000-000000000047"
+        }))?;
+    let subject_binding = arkret_models_collaboration::call_invitation::CallMediaSubjectBinding {
+        realm_id: request.realm_id.clone(),
+        call_id: request.call_id.clone(),
+        subject_actor_id: request.actor_id.clone(),
+        subject_device_id: request.device_id.clone(),
+        roster_identity: roster_identity.clone(),
+        focus_id: request.focus_id.clone(),
+        participant_id: "ak:rtc_participant:0198c2f4-0000-7000-8000-000000000000".to_owned(),
+        media: arkret_models_collaboration::call_invitation::CallInvitationMedia {
+            audio: true,
+            video: true,
+            screen: false,
+        },
+        expires_at,
+        nonce: base64url_encode([48u8; 32]),
+        issuer_kid: DidUrl::new(ISSUER_KID).map_err(anyhow::Error::msg)?,
+        sig: String::new(),
+    };
     let mut outcome = CallMediaTokenExchangeOutcome {
         realm_id: request.realm_id.clone(),
         call_id: request.call_id.clone(),
@@ -308,11 +344,22 @@ fn token_outcome(
         participant_id: "ak:rtc_participant:0198c2f4-0000-7000-8000-000000000000".to_owned(),
         participant_binding: CallMediaParticipantBinding {
             sig: String::new(),
+            subject_binding_digest: String::new(),
             issuer_kid: arkret::DidUrl::new(ISSUER_KID).map_err(anyhow::Error::msg)?,
             expires_at,
         },
         expires_at,
+        roster_identity,
+        subject_binding,
     };
+    outcome.subject_binding.sig = base64url_encode(
+        key.sign(&outcome.subject_binding.signature_input()?)
+            .to_bytes(),
+    );
+    outcome.participant_binding.subject_binding_digest =
+        arkret_models_collaboration::call_invitation::canonical_request_digest(
+            &outcome.subject_binding,
+        )?;
     let input =
         participant_binding_signing_input(&ParticipantBindingContext::from_outcome(&outcome))?;
     outcome.participant_binding.sig = base64url_encode(key.sign(&input).to_bytes());

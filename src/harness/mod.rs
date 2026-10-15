@@ -375,3 +375,14 @@ pub fn realm_create_payload_for_station(
         plaintext_visible_services,
     })
 }
+
+/// Construct child futures outside an aggregate poll frame without changing
+/// the executor, cancellation, thread stack or ownership of live fixtures.
+#[inline(never)]
+pub fn heap_future<F, Fut>(make: F) -> std::pin::Pin<Box<Fut>>
+where
+    F: FnOnce() -> Fut,
+    Fut: std::future::Future,
+{
+    Box::pin(make())
+}

@@ -94,7 +94,7 @@ pub fn missing_sync_production_cases(
 /// total number of unwired suites happened to stay constant.
 // Content-key KATs run in arkret-mls; complete authorized-checkpoint
 // remains owned by 0805. Terminal live scenarios execute below.
-const KNOWN_UNWIRED_ENTRYPOINTS: [&str; 33] = [
+const KNOWN_UNWIRED_ENTRYPOINTS: [&str; 32] = [
     "ak.suite.agent.draft_pending_intent.v1",
     "ak.suite.agent.participation.v1",
     "ak.suite.applet.managed_actor_authority.v1",
@@ -106,7 +106,6 @@ const KNOWN_UNWIRED_ENTRYPOINTS: [&str; 33] = [
     "ak.suite.call.force_mute_v1_boundary.v1",
     "ak.suite.circle.parent_membership.v1",
     "ak.suite.conformance.final_closure.v1",
-    "ak.suite.consent.cache_invalidation.v1",
     "ak.suite.contact.bilateral_continuity_checkpoint.v1",
     "ak.suite.current.cas_failure_read_boundary.v1",
     "ak.suite.direct_conversation.admission_producers.v1",
@@ -504,9 +503,10 @@ pub fn run_named_suite_audit_with_clients(
 pub fn inspect_named_suite_execution_with_clients(
     client_runners: &[ClientNamedSuiteRunner],
 ) -> Result<NamedSuiteAuditReport> {
-    const CLIENT_ENTRYPOINTS: [&str; 3] = [
+    const CLIENT_ENTRYPOINTS: [&str; 4] = [
         "ak.suite.account.blocklist_projection.v1",
         "ak.suite.webrtc.media_plaintext_downgrade.v1",
+        "ak.suite.consent.cache_invalidation.v1",
         SYNC_CLIENT_ENTRYPOINT,
     ];
     let declared_clients = client_runners
@@ -515,14 +515,14 @@ pub fn inspect_named_suite_execution_with_clients(
         .collect::<BTreeSet<_>>();
     ensure!(
         client_runners.is_empty()
-            || ((client_runners.len() == 2 || client_runners.len() == 3)
+            || ((2..=CLIENT_ENTRYPOINTS.len()).contains(&client_runners.len())
                 && declared_clients.len() == client_runners.len()
                 && declared_clients.contains(CLIENT_ENTRYPOINTS[0])
                 && declared_clients.contains(CLIENT_ENTRYPOINTS[1])
                 && declared_clients
                     .iter()
                     .all(|name| CLIENT_ENTRYPOINTS.contains(name))),
-        "audit requires the exact client runners, with optional Sync production evidence"
+        "audit requires the exact client runners, with optional Sync and Consent production evidence"
     );
     let fixture_dir = spec_artifacts_root().join("fixtures");
     let mut all_fixtures = BTreeMap::new();

@@ -5,6 +5,7 @@ use cotest::conformance::{
 };
 
 use super::client_sync::run_sync_client_production_suite;
+use super::consent_cache::{CONSENT_CACHE_ENTRYPOINT, run_consent_cache_suite};
 use super::{
     ACCOUNT_BLOCKLIST_PROJECTION_ENTRYPOINT, WEBRTC_MEDIA_PLAINTEXT_ENTRYPOINT,
     run_account_blocklist_projection_suite, run_webrtc_media_plaintext_suite,
@@ -13,6 +14,7 @@ use super::{
 pub fn run_named_suite_audit() -> Result<NamedSuiteAuditReport> {
     run_named_suite_audit_with_clients(&[
         (SYNC_CLIENT_ENTRYPOINT, run_sync_client_production_suite),
+        (CONSENT_CACHE_ENTRYPOINT, run_consent_cache_suite),
         (
             ACCOUNT_BLOCKLIST_PROJECTION_ENTRYPOINT,
             run_account_blocklist_projection_suite,
@@ -28,6 +30,7 @@ pub fn run_named_suite_audit() -> Result<NamedSuiteAuditReport> {
 pub fn inspect_named_suite_execution() -> Result<NamedSuiteAuditReport> {
     inspect_named_suite_execution_with_clients(&[
         (SYNC_CLIENT_ENTRYPOINT, run_sync_client_production_suite),
+        (CONSENT_CACHE_ENTRYPOINT, run_consent_cache_suite),
         (
             ACCOUNT_BLOCKLIST_PROJECTION_ENTRYPOINT,
             run_account_blocklist_projection_suite,

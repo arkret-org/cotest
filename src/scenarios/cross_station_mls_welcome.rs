@@ -188,7 +188,7 @@ async fn wait_for_joined_row(member: &Member, realm: &str) -> Result<()> {
 
 /// Publish one fresh KeyPackage of `member` on its own Station and return
 /// the identity that holds its private state.
-pub(crate) async fn publish_one(member: &Member) -> Result<arkret::ArkretMlsIdentity> {
+pub async fn publish_one(member: &Member) -> Result<arkret::ArkretMlsIdentity> {
     let identity = member.mls_identity()?;
     let record = identity.key_package_record()?;
     let upload = identity.signed_key_packages_upload_request(&[record], member.method.as_str())?;
@@ -214,7 +214,7 @@ pub(crate) async fn publish_one(member: &Member) -> Result<arkret::ArkretMlsIden
 /// available on the requester's Station: a claim relayed to another Station
 /// answers `failed_precondition` until the relay has stored the outcome, and
 /// a claim the destination cannot serve yet is retried under a new id.
-pub(crate) async fn claim_for(
+pub async fn claim_for(
     requester: &Member,
     source: &ArkretServer,
     destination: &ArkretServer,
@@ -272,7 +272,7 @@ pub(crate) async fn claim_for(
 }
 
 /// The Welcomes in `member`'s recipient queue once `expected` arrived.
-pub(crate) async fn wait_for_welcome(
+pub async fn wait_for_welcome(
     member: &Member,
     expected: &MlsWelcomeDelivery,
 ) -> Result<(Vec<MlsWelcomeDelivery>, String)> {

@@ -2308,6 +2308,7 @@ dependencies = [
  "arkret-models-integration",
  "arkret-policy",
  "arkret-schema",
+ "arkret-signatures",
  "arkret-state",
  "arkret-wire",
  "async-trait",
@@ -2348,13 +2349,16 @@ dependencies = [
  "async-trait",
  "base64 0.23.1",
  "chrono",
+ "coland-domain",
  "coland-storage",
  "deadpool",
  "diesel",
  "diesel-async",
  "diesel_migrations",
  "ed25519-dalek 3.0.0",
+ "hmac 0.13.0",
  "parking_lot",
+ "rand 0.10.2",
  "serde",
  "serde_json",
  "sha2 0.11.0",
@@ -2377,11 +2381,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cfc320937d09e6de266b31b9afb480f197d7a861be86be7cb2ea7e5d1bfffc5e"
 dependencies = [
  "bytes",
- "futures-core",
  "memchr",
- "pin-project-lite",
- "tokio",
- "tokio-util",
 ]
 
 [[package]]
@@ -4764,7 +4764,6 @@ dependencies = [
  "subtle",
  "thiserror 2.0.20",
  "tokio",
- "tokio-postgres",
  "tokio-postgres-rustls",
  "tracing",
  "tracing-opentelemetry",
@@ -9382,18 +9381,11 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2acbc41a996f7652b2ddd9dfd98cc4ff602cfd742ae35382f07f608405ab50ed"
 dependencies = [
  "arcstr",
- "async-lock",
- "bytes",
- "cfg-if",
  "combine",
- "futures-util",
  "itoa",
  "percent-encoding",
- "pin-project-lite",
  "ryu",
  "socket2",
- "tokio",
- "tokio-util",
  "url",
  "xxhash-rust",
 ]

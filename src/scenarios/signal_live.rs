@@ -101,7 +101,7 @@ fn scoped_envelope(
 }
 
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn scoped_envelope_with_payload(
+pub fn scoped_envelope_with_payload(
     sender: &Member,
     group: &mut ArkretMlsGroup,
     realm: &RealmId,
