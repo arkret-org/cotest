@@ -647,8 +647,8 @@ fn call_state_media_lifecycle_vector_suite_runs_clean() {
 fn agent_vector_suite_runs_clean() {
     run_agent_vector_suite().expect("agent vectors must pass");
     // VECT-AG-1..5 plus longevity, controller lifecycle, act-on-behalf,
-    // session-grant replay, and human-approval-required coverage.
-    assert_eq!(ALL_AGENT_VECTOR_IDS.len(), 10);
+    // session-grant replay, human approval, and content-authority coverage.
+    assert_eq!(ALL_AGENT_VECTOR_IDS.len(), 11);
 }
 
 // ─── Sidecar pre-activation checks (all 17 rows reserved) ─────────────────

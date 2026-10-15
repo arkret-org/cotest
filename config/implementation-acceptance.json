@@ -325,30 +325,6 @@
         "通话invite三层Consent正式证据边界与生产接线；presence/MIMI当前适用消费者；跨层/跨Station在途撤销、any独立性、完整peer和时间窗、current revision不回退",
         "正式consent.cache_invalidation 14 case/14 decision point真实生产executor实现、注册与最新冻结执行；Directory/PSI只执行退役不可调用/不可广告/零索引变化负例，不恢复正向路径"
       ]
-    },
-    {
-      "task": "2026-10-11-0930-owned-agent-controller-management-enforcement.md",
-      "criteria_count": 7,
-      "criteria_sha256": "33b8d24e713c9efac1d889ef8378b9f330559f0a1f264cdf2edb9a64b78bfac2",
-      "spec_refs": [
-        "arkret-spec/spec/v1/zh/authz/owned-agent-authority.md"
-      ],
-      "source_refs": [
-        "coland/crates/storage-postgres/src/agent_management_admission.rs"
-      ],
-      "tests": [
-        {
-          "path": "coland/crates/storage-postgres/tests/sidecar_authority_cut.rs",
-          "symbol": "ordinary_member_can_join_own_agent_without_permission_to_add_humans",
-          "kind": "live",
-          "covers": "成员添加自有Agent与Human权限区分"
-        }
-      ],
-      "engineering_checks": [],
-      "remaining_scenarios": [
-        "多scope配置／review真实消费；controller专用grant/revoke；读／Blob／future material／HTTP/WS最后门；跨站serve／deliver；管理员/成员真实UI",
-        "AG-M7正式会话内容来源／fresh issue／refresh及当前ceiling生产验收；0163规范已闭合，工程仍归原0930"
-      ]
     }
   ]
 }

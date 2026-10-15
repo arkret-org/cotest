@@ -161,8 +161,11 @@ pub(super) async fn actual_agent_deployment(label: &str) -> Result<ActualAgentDe
         .redirect(reqwest::redirect::Policy::none())
         .timeout(Duration::from_secs(45));
     if let Some(ca) = station.tls_ca_path() {
-        builder =
-            builder.add_root_certificate(reqwest::Certificate::from_pem(&std::fs::read(ca)?)?);
+        // Match the harness's explicit run PKI without platform-verifier
+        // signature differences; hostname and chain verification stay enabled.
+        builder = builder
+            .tls_backend_rustls()
+            .tls_certs_only(reqwest::Certificate::from_pem_bundle(&std::fs::read(ca)?)?);
     }
     let http = builder.build()?;
     let deadline = std::time::Instant::now() + Duration::from_secs(60);

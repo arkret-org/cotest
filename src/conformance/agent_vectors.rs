@@ -1,6 +1,6 @@
 //! Agent surface conformance vectors.
 //!
-//! 10 vectors:
+//! 11 vectors:
 //!   - `ak.vector.agent.provision.v1`
 //!   - `ak.vector.agent.pairing_expiry.v1`
 //!   - `ak.vector.agent.runtime_key_binding.v1`
@@ -11,6 +11,7 @@
 //!   - `ak.vector.agent.act_on_behalf.v1`
 //!   - `ak.vector.agent.session_grant.replay.v1`
 //!   - `ak.vector.agent_auth.human_approval_required.v1`
+//!   - `ak.vector.agent.session_content_authority.v1`
 //!
 //! These are SDK-pure wire-shape pins. Live reducer paths (sequenced-state
 //! reject, deactivate-terminal, session-grant agent-branch acceptance
@@ -41,6 +42,9 @@ pub const VECTOR_ID_AGENT_SESSION_GRANT_REPLAY: &str = "ak.vector.agent.session_
 pub const VECTOR_ID_AGENT_HUMAN_APPROVAL_REQUIRED: &str =
     "ak.vector.agent_auth.human_approval_required.v1";
 
+pub const VECTOR_ID_AGENT_SESSION_CONTENT_AUTHORITY: &str =
+    "ak.vector.agent.session_content_authority.v1";
+
 pub const ALL_AGENT_VECTOR_IDS: &[&str] = &[
     VECTOR_ID_AGENT_PROVISION,
     VECTOR_ID_AGENT_PAIRING_EXPIRY,
@@ -52,6 +56,7 @@ pub const ALL_AGENT_VECTOR_IDS: &[&str] = &[
     VECTOR_ID_AGENT_ACT_ON_BEHALF,
     VECTOR_ID_AGENT_SESSION_GRANT_REPLAY,
     VECTOR_ID_AGENT_HUMAN_APPROVAL_REQUIRED,
+    VECTOR_ID_AGENT_SESSION_CONTENT_AUTHORITY,
 ];
 
 const AGENT_VECTORS_FIXTURE_FILE: &str = "agent-vectors-fixture.json";
@@ -74,6 +79,12 @@ fn validate_agent_vectors_fixture_metadata() -> Result<()> {
             .any(|entry| entry.as_str() == Some(*vector_id))
         {
             bail!("agent vectors fixture missing covers_vectors entry {vector_id}");
+        }
+        if *vector_id == VECTOR_ID_AGENT_SESSION_CONTENT_AUTHORITY {
+            if fixture["session_content_authority_contract"]["vector_id"] != *vector_id {
+                bail!("agent session content authority contract is absent");
+            }
+            continue;
         }
         if !cases.iter().any(|case| {
             case.get("vector_id").and_then(Value::as_str) == Some(*vector_id)
@@ -1551,12 +1562,176 @@ pub fn run_agent_human_approval_required_vector() -> Result<()> {
     Ok(())
 }
 
-/// Suite entry point — runs all 10 agent vectors.
+/// Reference predicates from the normative vector, not production evidence.
+/// Source verification and physical delivery are exercised by the live suites.
+fn session_content_decision(case: &Value, read_actions: &[Value]) -> &'static str {
+    let yes = |key: &str| case[key] == true;
+    let all = |keys: &[&str]| keys.iter().all(|key| yes(key));
+    let phase = case["phase"].as_str().unwrap_or("");
+    if ![
+        "issue",
+        "refresh",
+        "bootstrap",
+        "payload",
+        "future_material",
+    ]
+    .contains(&phase)
+        || !all(&["proof_valid", "holder_current", "same_account_scope"])
+    {
+        return "deny";
+    }
+    if ["issue", "refresh"].contains(&phase) && case["replay_state"] != "none" {
+        return if case["replay_state"] == "active_exact" {
+            "reuse_original"
+        } else {
+            "deny"
+        };
+    }
+    if !all(&[
+        "provision_allows",
+        "key_allows",
+        "request_allows",
+        "runtime_floor_complete",
+    ]) || (phase != "issue" && !yes("session_allows"))
+        || (phase == "refresh"
+            && (!yes("refresh_ceiling_unchanged") || case["scope_request_field_present"] != false))
+    {
+        return "deny";
+    }
+    if case["action"] == "service_operation" {
+        return if ["issue", "refresh"].contains(&phase) {
+            "allow"
+        } else {
+            "deny"
+        };
+    }
+    if !all(&[
+        "content_selector_present",
+        "source_current",
+        "source_supply_verified",
+        "management_allows",
+        "flat_encoding_safe",
+    ]) || case["global_deny"] != false
+        || !["absent_proven", "allow"].contains(&case["policy_state"].as_str().unwrap_or(""))
+        || (case["resource_profile"] != "direct" && !yes("controller_allows"))
+    {
+        return "deny";
+    }
+    let read = read_actions.contains(&case["action"]);
+    let path = case["paths"].as_array().is_some_and(|paths| {
+        paths.iter().any(|path| {
+            path["complete"] == true
+                && path["active"] == true
+                && path["actions"]
+                    .as_array()
+                    .is_some_and(|values| values.contains(&case["action"]))
+                && path["resources"]
+                    .as_array()
+                    .is_some_and(|values| values.contains(&case["resource"]))
+                && match case["resource_profile"].as_str() {
+                    Some("direct") => path["kind"] == "direct_participant",
+                    Some("sidecar") => {
+                        yes("desired")
+                            && if read {
+                                path["kind"] == "sidecar_read"
+                            } else {
+                                path["kind"] == "capability_grant"
+                            }
+                    }
+                    Some("realm" | "circle") => {
+                        path["kind"] == "capability_grant"
+                            || (read && path["kind"] == "membership_read")
+                    }
+                    _ => false,
+                }
+        })
+    });
+    if !path
+        || (case["resource_profile"] == "sidecar" && !yes("exact_endpoint"))
+        || (["bootstrap", "future_material"].contains(&phase)
+            && (case["resource_profile"] != "sidecar"
+                || !yes("accepted_lineage")
+                || case["action"] != "ak.event.read"))
+        || (!["issue", "refresh"].contains(&phase)
+            && !all(&[
+                "history_visible",
+                "participation_allows",
+                "conditions_allow",
+                "quota_available",
+                "approval_allows",
+            ]))
+        || (phase == "payload"
+            && (!yes("mls_ready") || (case["resource_profile"] == "sidecar" && !yes("effective"))))
+    {
+        "deny"
+    } else {
+        "allow"
+    }
+}
+
+/// Consume every formal content-authority case, preserving exact case names.
+pub fn run_agent_session_content_authority_vector() -> Result<usize> {
+    let fixture = super::load_fixture_value(AGENT_VECTORS_FIXTURE_FILE)?;
+    let contract = &fixture["session_content_authority_contract"];
+    let registry = super::load_artifact_json("registry/owned-agent-authority-registry.json")?;
+    let registry = &registry["session_content_authority_contract"];
+    if contract["vector_id"] != VECTOR_ID_AGENT_SESSION_CONTENT_AUTHORITY
+        || registry["vector_id"] != VECTOR_ID_AGENT_SESSION_CONTENT_AUTHORITY
+        || contract["registry_ref"]
+            != "registry/owned-agent-authority-registry.json#/session_content_authority_contract"
+    {
+        bail!("session content authority registry/fixture binding changed");
+    }
+    let read_actions = registry["read_actions"]
+        .as_array()
+        .ok_or_else(|| anyhow!("read actions absent"))?;
+    let defaults = contract["defaults"]
+        .as_object()
+        .ok_or_else(|| anyhow!("content defaults absent"))?;
+    let cases = contract["cases"]
+        .as_array()
+        .ok_or_else(|| anyhow!("content cases absent"))?;
+    let required = contract["required_case_names"]
+        .as_array()
+        .ok_or_else(|| anyhow!("required content cases absent"))?;
+    let mut seen = BTreeSet::new();
+    for case in cases {
+        let name = case["name"]
+            .as_str()
+            .ok_or_else(|| anyhow!("content case has no name"))?;
+        if !seen.insert(name) {
+            bail!("duplicate content case {name}");
+        }
+        let mut input = defaults.clone();
+        input.extend(
+            case["input"]
+                .as_object()
+                .ok_or_else(|| anyhow!("{name} input absent"))?
+                .clone(),
+        );
+        if case["expected"] != session_content_decision(&Value::Object(input), read_actions) {
+            bail!("session content authority case {name} disagrees with the reference evaluator");
+        }
+    }
+    let expected = required
+        .iter()
+        .map(|name| {
+            name.as_str()
+                .ok_or_else(|| anyhow!("required case name is not a string"))
+        })
+        .collect::<Result<BTreeSet<_>>>()?;
+    if seen.is_empty() || seen != expected || expected.len() != required.len() {
+        bail!("session content authority case coverage is incomplete or duplicated");
+    }
+    Ok(seen.len())
+}
+
+/// Suite entry point — runs all 11 agent vectors.
 pub fn run_agent_vector_suite() -> Result<()> {
     validate_agent_vectors_fixture_metadata()?;
-    if ALL_AGENT_VECTOR_IDS.len() != 10 {
+    if ALL_AGENT_VECTOR_IDS.len() != 11 {
         bail!(
-            "expected 10 agent vector ids, got {}",
+            "expected 11 agent vector ids, got {}",
             ALL_AGENT_VECTOR_IDS.len()
         );
     }
@@ -1570,6 +1745,8 @@ pub fn run_agent_vector_suite() -> Result<()> {
     run_agent_act_on_behalf_vector().context("agent act-on-behalf vector")?;
     run_agent_session_grant_replay_vector().context("agent session grant replay vector")?;
     run_agent_human_approval_required_vector().context("agent human approval vector")?;
+    run_agent_session_content_authority_vector()
+        .context("agent session content authority vector")?;
     Ok(())
 }
 
@@ -1580,6 +1757,11 @@ mod tests {
     #[test]
     fn all_agent_vectors_run_clean() {
         run_agent_vector_suite().unwrap();
+    }
+
+    #[test]
+    fn session_content_authority_vector_runs_all_formal_cases() {
+        assert!(run_agent_session_content_authority_vector().unwrap() > 0);
     }
 
     #[test]
