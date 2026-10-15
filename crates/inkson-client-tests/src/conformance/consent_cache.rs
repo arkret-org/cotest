@@ -963,8 +963,9 @@ fn product_attempt_after_current<'a>(
             );
         }
         let mut receiver = garth::signal::SignalReceiver::new();
+        let started = std::time::Instant::now();
         let received = tokio::time::timeout(
-            std::time::Duration::from_secs(3),
+            std::time::Duration::from_secs(30),
             super::account_blocklist_projection::next_admitted_signal(
                 &mut stream,
                 native,
@@ -987,7 +988,10 @@ fn product_attempt_after_current<'a>(
             }
             Ok(result) => result?,
             Err(_) => {
-                eprintln!("[2141-product] received=false dedicated={dedicated}");
+                eprintln!(
+                    "[2141-product] received=false dedicated={dedicated} elapsed_ms={}",
+                    started.elapsed().as_millis()
+                );
                 return Ok(0);
             }
         };
@@ -1015,9 +1019,10 @@ fn product_attempt_after_current<'a>(
             arkret_wire::TypedCurrentRow::Value {selector: arkret_wire::CurrentSelector::CallState {call_id}, ..}
                 if call_id == &request.invitation.call_id));
             eprintln!(
-                "[2141-product] received=true dedicated={dedicated} exact_call={call_matches} product={} product_live={product_live} signal_live={} call_current_installed={installed}",
+                "[2141-product] received=true dedicated={dedicated} exact_call={call_matches} product={} product_live={product_live} signal_live={} call_current_installed={installed} elapsed_ms={}",
                 call_invitation.is_some(),
-                effective_expires_at > &Utc::now()
+                effective_expires_at > &Utc::now(),
+                started.elapsed().as_millis()
             );
         }
         let projected =
