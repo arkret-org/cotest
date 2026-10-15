@@ -1248,7 +1248,6 @@ pub fn run_agent_session_grant_replay_vector() -> Result<()> {
 
 const HUMAN_APPROVAL_RUNNER: &str =
     "cotest::conformance::agent_vectors::run_agent_human_approval_required_vector";
-const ACCEPTED_APPROVAL_EVENT_REF: &str = "ak:event:AR4I3pqI_AE1Vxb4LEKq2azQxWXhHobgzwnTJmhVKJT-";
 
 fn validate_human_approval_details_schema(details: &Value) -> Result<()> {
     let document = super::load_artifact_json("schemas/agent-operations.schema.json")?;
@@ -1390,66 +1389,8 @@ pub fn validate_agent_human_approval_http_response(status: u16, body: &Value) ->
     Ok(typed.approval_request_id().to_owned())
 }
 
-#[derive(Debug)]
-struct MiniHumanApprovalGate {
-    approval_request_id: String,
-    accepted_evidence_ref: Option<&'static str>,
-    evidence_fresh: bool,
-    evidence_consumed: bool,
-}
-
-impl MiniHumanApprovalGate {
-    fn new(approval_request_id: String) -> Self {
-        Self {
-            approval_request_id,
-            accepted_evidence_ref: None,
-            evidence_fresh: false,
-            evidence_consumed: false,
-        }
-    }
-
-    fn approval_required_response(&self) -> Result<Value> {
-        let details = AgentHumanApprovalProblem::new(self.approval_request_id.clone())?;
-        Ok(serde_json::to_value(
-            Problem::claim_required_human_approval("controller approval required", details)
-                .with_instance("cotest-human-approval"),
-        )?)
-    }
-
-    fn approve_out_of_band(&mut self, evidence_ref: &'static str) {
-        self.accepted_evidence_ref = Some(evidence_ref);
-        self.evidence_fresh = true;
-    }
-
-    fn retry(
-        &mut self,
-        agent_key_proof_valid: bool,
-        scope_within_ceiling: bool,
-        evidence_ref: Option<&str>,
-    ) -> std::result::Result<(), &'static str> {
-        if !agent_key_proof_valid {
-            return Err(arkret_wire::ReasonCode::PROOF_INVALID);
-        }
-        if !scope_within_ceiling {
-            return Err("agent_scope_exceeds_ceiling");
-        }
-        let Some(evidence_ref) = evidence_ref else {
-            return Err("accepted_approval_evidence_missing");
-        };
-        if self.accepted_evidence_ref != Some(evidence_ref) {
-            return Err("accepted_approval_evidence_mismatch");
-        }
-        if !self.evidence_fresh {
-            return Err("accepted_approval_evidence_stale");
-        }
-        if self.evidence_consumed {
-            return Err(arkret_wire::ReasonCode::APPROVAL_ALREADY_CONSUMED);
-        }
-        self.evidence_consumed = true;
-        Ok(())
-    }
-}
-
+/// Schema-only fixture checks. Real approval and issuer behavior are reported
+/// exclusively by agent_runtime_live::run_agent_human_approval_production.
 pub fn run_agent_human_approval_required_vector() -> Result<()> {
     let fixture = super::load_fixture_value(AGENT_VECTORS_FIXTURE_FILE)?;
     let case = fixture
@@ -1473,19 +1414,30 @@ pub fn run_agent_human_approval_required_vector() -> Result<()> {
         &[
             "operation_id",
             "proof_kind",
-            "requested_scope_requires_controller_approval",
-            "risk_tier",
+            "requested_content_action",
+            "authority_state",
+            "retry_evidence_member",
+            "retry_evidence_event_kind",
         ],
         "human-approval request",
     )?;
     if request.get("operation_id").and_then(Value::as_str)
         != Some(arkret_wire::ServiceOperationId::GATE_ACCOUNT_COMMAND_ISSUE_SESSION_GRANT_V1)
         || request.get("proof_kind").and_then(Value::as_str) != Some("agent_key_proof")
-        || request.get("risk_tier").and_then(Value::as_str) != Some("high")
         || request
-            .get("requested_scope_requires_controller_approval")
-            .and_then(Value::as_bool)
-            != Some(true)
+            .get("requested_content_action")
+            .and_then(Value::as_str)
+            != Some("ak.message.create")
+        || request.get("authority_state").and_then(Value::as_str)
+            != Some(
+                "only_missing_explicit_owned_agent_grant_with_all_other_current_gates_satisfied",
+            )
+        || request.get("retry_evidence_member").and_then(Value::as_str)
+            != Some("approval_evidence_refs")
+        || request
+            .get("retry_evidence_event_kind")
+            .and_then(Value::as_str)
+            != Some("ak.capability.grant")
     {
         bail!("human-approval fixture request semantics drifted");
     }
@@ -1499,8 +1451,13 @@ pub fn run_agent_human_approval_required_vector() -> Result<()> {
         .and_then(Value::as_str)
         .ok_or_else(|| anyhow!("human-approval fixture approval_request_id missing"))?
         .to_owned();
-    let mut gate = MiniHumanApprovalGate::new(approval_request_id.clone());
-    let response = gate.approval_required_response()?;
+    let response = serde_json::to_value(
+        Problem::claim_required_human_approval(
+            "controller approval required",
+            AgentHumanApprovalProblem::new(approval_request_id.clone())?,
+        )
+        .with_instance("cotest-human-approval"),
+    )?;
     if validate_agent_human_approval_http_response(403, &response)? != approval_request_id {
         bail!("human-approval response changed the opaque correlation handle");
     }
@@ -1516,28 +1473,6 @@ pub fn run_agent_human_approval_required_vector() -> Result<()> {
         {
             bail!("human-approval fixture missing forbidden challenge {required}");
         }
-    }
-
-    if gate.retry(true, true, None) != Err("accepted_approval_evidence_missing") {
-        bail!("session grant was available before out-of-band approval");
-    }
-    gate.approve_out_of_band(ACCEPTED_APPROVAL_EVENT_REF);
-    if gate.retry(false, true, Some(ACCEPTED_APPROVAL_EVENT_REF))
-        != Err(arkret_wire::ReasonCode::PROOF_INVALID)
-    {
-        bail!("approved retry skipped agent key proof revalidation");
-    }
-    if gate.retry(true, false, Some(ACCEPTED_APPROVAL_EVENT_REF))
-        != Err("agent_scope_exceeds_ceiling")
-    {
-        bail!("approved retry skipped scope ceiling revalidation");
-    }
-    gate.retry(true, true, Some(ACCEPTED_APPROVAL_EVENT_REF))
-        .map_err(|reason| anyhow!("accepted approval evidence was rejected: {reason}"))?;
-    if gate.retry(true, true, Some(ACCEPTED_APPROVAL_EVENT_REF))
-        != Err(arkret_wire::ReasonCode::APPROVAL_ALREADY_CONSUMED)
-    {
-        bail!("accepted approval evidence was not single-use");
     }
 
     let mut flat = response.clone();

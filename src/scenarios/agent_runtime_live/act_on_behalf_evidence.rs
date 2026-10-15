@@ -143,7 +143,8 @@ pub async fn run_agent_act_on_behalf_boundary() -> Result<()> {
             )?,
         )
         .await?;
-    let grant_id = arkret_wire::GrantId::from_event_id(&grant.event_id);
+    let grant_ref = grant.event_id.clone();
+    let grant_id = arkret_wire::GrantId::from_event_id(&grant_ref);
     let outcome: AuthoritySubmitOutcome = serde_json::from_value(
         expect_json(
             controller
@@ -617,12 +618,14 @@ pub async fn run_agent_act_on_behalf_boundary() -> Result<()> {
         "{}/_arkret/gate/account/session-grants",
         deployment.coauth.base_url()
     );
+    let mut revoked_intent = issued_request.clone();
+    revoked_intent.approval_evidence_refs = Some(vec![grant_ref]);
     coauth_session_evidence::expect_issue_refusal(
         station,
         &deployment.coauth.pg.connect_url,
         &issue_url,
         &coauth_session_evidence::fresh_session_request(
-            &issued_request,
+            &revoked_intent,
             &issue_url,
             &agent.runtime_key,
         )?,

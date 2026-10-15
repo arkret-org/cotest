@@ -64,6 +64,7 @@ mod coauth_session_evidence;
 mod direct_evidence;
 mod direct_mls_evidence;
 mod grant_ceiling_evidence;
+mod human_approval_evidence;
 mod lifecycle_conjunction;
 mod lifecycle_evidence;
 mod longevity_conjunction;
@@ -86,6 +87,7 @@ pub use coauth_session_evidence::{
     run_agent_longevity_session_boundary, run_agent_session_grant_replay_production,
 };
 pub use grant_ceiling_evidence::run_agent_provision_grant_ceiling_boundary;
+pub use human_approval_evidence::run_agent_human_approval_production;
 pub use lifecycle_conjunction::run_agent_controller_lifecycle_production;
 pub use lifecycle_evidence::run_agent_controller_lifecycle_boundary;
 pub use longevity_conjunction::run_agent_longevity_production;
