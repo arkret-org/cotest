@@ -633,9 +633,12 @@ pub async fn run_presence_and_media_cuts_live() -> Result<()> {
         ("COLAND_LIVEKIT_API_KEY".into(), SFU_API_KEY.into()),
         ("COLAND_LIVEKIT_API_SECRET".into(), SFU_API_SECRET.into()),
     ];
-    let context =
-        cotest::harness::heap_future(|| ConsentCallContext::create("consent-media-current", &env))
-            .await?;
+    let context = cotest::harness::heap_future(|| async {
+        ConsentCallContext::create("consent-media-current", &env)
+            .await
+            .map(Box::new)
+    })
+    .await?;
     install_media(
         &context,
         "arkret_native",
@@ -645,7 +648,7 @@ pub async fn run_presence_and_media_cuts_live() -> Result<()> {
     let directory = tempfile::tempdir()?;
     let holder_path = directory.path().join("holder.json");
     let other_path = directory.path().join("other.json");
-    let native = cotest::harness::heap_future(|| {
+    let native = cotest::harness::heap_future(|| async {
         super::account_blocklist_projection::native_signal_endpoint(
             &context.holder,
             &context.realm,
@@ -653,9 +656,11 @@ pub async fn run_presence_and_media_cuts_live() -> Result<()> {
             &context.holder_group,
             &holder_path,
         )
+        .await
+        .map(Box::new)
     })
     .await?;
-    let other = cotest::harness::heap_future(|| {
+    let other = cotest::harness::heap_future(|| async {
         super::account_blocklist_projection::native_signal_endpoint(
             &context.denied_holder,
             &context.realm,
@@ -663,6 +668,8 @@ pub async fn run_presence_and_media_cuts_live() -> Result<()> {
             &context.denied_group,
             &other_path,
         )
+        .await
+        .map(Box::new)
     })
     .await?;
     cotest::harness::heap_future(|| presence_current(&context, &native, &directory)).await?;
@@ -687,8 +694,10 @@ async fn run_three_cuts_evidence() -> Result<Vec<super::CaseExecutionResult>> {
             pause_file.to_string_lossy().into_owned(),
         ),
     ];
-    let mut context = cotest::harness::heap_future(|| {
+    let mut context = cotest::harness::heap_future(|| async {
         ConsentCallContext::create("consent-three-cuts", &holder_env)
+            .await
+            .map(Box::new)
     })
     .await?;
     eprintln!("[2141-live] actual accepted membership and MLS source ready");
@@ -711,13 +720,17 @@ async fn run_three_cuts_evidence() -> Result<Vec<super::CaseExecutionResult>> {
     )
     .await?;
     let directory = tempfile::tempdir()?;
-    let native = super::account_blocklist_projection::native_signal_endpoint(
-        &context.holder,
-        &context.realm,
-        &context.accepted_group,
-        &context.holder_group,
-        &directory.path().join("holder.json"),
-    )
+    let native = cotest::harness::heap_future(|| async {
+        super::account_blocklist_projection::native_signal_endpoint(
+            &context.holder,
+            &context.realm,
+            &context.accepted_group,
+            &context.holder_group,
+            &directory.path().join("holder.json"),
+        )
+        .await
+        .map(Box::new)
+    })
     .await?;
     eprintln!("[2141-live] actual Native current baseline ready");
     let holder = context.holder.account.clone();
@@ -884,13 +897,17 @@ async fn run_three_cuts_evidence() -> Result<Vec<super::CaseExecutionResult>> {
     completed_case(&mut evidence, 7, 13)?;
     independent_windows(&mut context, &native, &mut sequence).await?;
     completed_case(&mut evidence, 9, 6)?;
-    let denied_native = super::account_blocklist_projection::native_signal_endpoint(
-        &context.denied_holder,
-        &context.realm,
-        &context.accepted_group,
-        &context.denied_group,
-        &directory.path().join("denied-holder.json"),
-    )
+    let denied_native = cotest::harness::heap_future(|| async {
+        super::account_blocklist_projection::native_signal_endpoint(
+            &context.denied_holder,
+            &context.realm,
+            &context.accepted_group,
+            &context.denied_group,
+            &directory.path().join("denied-holder.json"),
+        )
+        .await
+        .map(Box::new)
+    })
     .await?;
     independent_holders(&mut context, &native, &denied_native, &mut sequence).await?;
     completed_case(&mut evidence, 6, 1)?;
@@ -976,15 +993,15 @@ async fn product_attempt_after_current(
 // returns Pending. The services, native hosts and MLS material remain owned
 // across the join; nested large debug poll frames do not share one stack.
 fn media_phase(
-    mut context: ConsentCallContext,
-    native: inkson::sync_engine::NativeAccountHost,
-    other: inkson::sync_engine::NativeAccountHost,
+    mut context: Box<ConsentCallContext>,
+    native: Box<inkson::sync_engine::NativeAccountHost>,
+    other: Box<inkson::sync_engine::NativeAccountHost>,
     mut sequence: u64,
 ) -> impl std::future::Future<
     Output = Result<(
-        ConsentCallContext,
-        inkson::sync_engine::NativeAccountHost,
-        inkson::sync_engine::NativeAccountHost,
+        Box<ConsentCallContext>,
+        Box<inkson::sync_engine::NativeAccountHost>,
+        Box<inkson::sync_engine::NativeAccountHost>,
         u64,
     )>,
 > {
