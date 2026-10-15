@@ -206,6 +206,9 @@ async fn run_with_options(
             Op::SELF_REALM_STATE_SNAPSHOT_READ_MANIFEST_HEAD_V1,
             Op::SELF_REALM_STATE_SNAPSHOT_READ_BY_REF_V1,
             Op::SELF_MLS_READ_GROUP_STATE_MATERIAL_V1,
+            "ak.event.read",
+            "ak.object.read",
+            "ak.strand.read",
         ];
         if sync_observer.is_some_and(|probe| probe.requires_private_agent_reply()) {
             requested.extend([
@@ -225,14 +228,21 @@ async fn run_with_options(
         let operations =
             arkret_schema::agent_runtime_scope::complete_agent_runtime_scope(requested)?;
         let operations = operations.iter().map(String::as_str).collect::<Vec<_>>();
+        let scope = serde_json::from_value(serde_json::json!({
+            "actions":operations,
+            "resources":operations.iter().filter(|action| Op::from_wire(action).is_some())
+                .map(|action| serde_json::json!({"kind":"operation","operation":action}))
+                .chain(std::iter::once(serde_json::json!({"kind":"realm","realm_id":realm})))
+                .collect::<Vec<_>>()
+        }))?;
         let mut agent =
-            crate::scenarios::agent_runtime_live::AgentRuntimeSession::establish_with_operations(
+            crate::scenarios::agent_runtime_live::AgentRuntimeSession::establish_with_scope(
                 station,
                 &coauth,
                 &controller.client,
                 &controller.account,
                 "sidecar-pending-reader",
-                &operations,
+                scope,
             )
             .await?;
         if sync_observer.is_some_and(|probe| probe.requires_private_agent_reply()) {

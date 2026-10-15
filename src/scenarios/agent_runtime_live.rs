@@ -288,13 +288,34 @@ impl AgentRuntimeSession {
         label: &str,
         operations: &[&str],
     ) -> Result<Self> {
+        Self::establish_with_scope(
+            server,
+            coauth,
+            controller,
+            controller_account,
+            label,
+            requested_scope(operations)?,
+        )
+        .await
+    }
+
+    /// Preserve an explicit signed content ceiling in the fixture issuer record.
+    /// Actual membership, disclosure and private scope gates remain server-owned.
+    pub async fn establish_with_scope(
+        server: &ArkretServer,
+        coauth: &MockCoauthIntrospectionServer,
+        controller: &TestActorClient,
+        controller_account: &AccountId,
+        label: &str,
+        scope: AgentKeyScope,
+    ) -> Result<Self> {
         Self::establish_observed(
             server,
             AgentSessionIssuer::Fixture(coauth),
             controller,
             controller_account,
             label,
-            requested_scope(operations)?,
+            scope,
             None,
         )
         .await

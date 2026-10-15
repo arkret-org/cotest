@@ -14,6 +14,7 @@ use serde_json::Value;
 
 mod private_reply;
 mod recovery;
+mod window_dependencies;
 
 const CASES: [&str; 3] = [
     "sidecar_history_current_projection_same_cut_before_checkpoint",
@@ -243,6 +244,7 @@ struct StreamGapRail {
     ack_before: String,
     requests: Mutex<Vec<SyncRequestBody>>,
     retry_before: Mutex<Option<Value>>,
+    retry_dependencies: Mutex<Vec<arkret_wire::CommittedEventRef>>,
 }
 
 impl AccountSubscribeTransport for StreamGapRail {
@@ -347,6 +349,18 @@ impl AccountSubscribeTransport for StreamGapRail {
             fault.clear();
         }
         let mut batch = self.http.account_subscribe_batch(request).await?;
+        if visit == 2 {
+            *self.retry_dependencies.lock().unwrap() = batch
+                .frames
+                .iter()
+                .flat_map(|frame| &frame.realms)
+                .flat_map(|realms| realms.entries.values())
+                .flat_map(|entry| entry.streams.iter().flatten())
+                .filter(|window| window.stream_ref == self.affected_stream)
+                .filter_map(|window| window.window_start_basis.as_ref())
+                .flat_map(|basis| basis.accepted_dependency_refs.iter().flatten().cloned())
+                .collect();
+        }
         if visit == 1 {
             let healthy = batch
                 .frames
@@ -857,7 +871,8 @@ impl Probe {
             inkson::LocalStateStore::with_path(path.clone()),
             genesis.scope_ref.realm_id().clone(),
         )
-        .await?;
+        .await
+        .context("open reconnect host")?;
         let record = creator_group.export_state_record()?;
         let bytes = serde_json::to_vec(&record)?;
         let secret = "cursor-recovery-fixture-checkpoint-secret";
@@ -968,7 +983,9 @@ impl Probe {
                 requests: Default::default(),
                 refusals: Default::default(),
             };
-            host.catch_up_with_conformance_transport(&rail).await?;
+            host.catch_up_with_conformance_transport(&rail)
+                .await
+                .with_context(|| format!("{name}: reconnect Account driver"))?;
             ensure!(
                 rail.requests.lock().unwrap().len() == if refusal.is_some() { 2 } else { 1 }
                     && rail.refusals.lock().unwrap().as_slice()
@@ -1027,7 +1044,8 @@ impl Probe {
                 let (snapshot, history) = inkson::conformance::retained_sidecar_cut(
                     &host.state_store(),
                     &genesis.scope_ref,
-                )?;
+                )
+                .with_context(|| format!("{name}: retained reconnect cut"))?;
                 let cursor = host
                     .state_store()
                     .sync_cursor()
@@ -1073,7 +1091,8 @@ impl Probe {
             database_url,
             ACK_CASES[1],
         )
-        .await?;
+        .await
+        .context("reconnect expired-token durable ACK")?;
         let request = cotest::harness::device_message_send_request(
             controller
                 .client
@@ -1225,6 +1244,21 @@ impl SidecarSyncObserver for Probe {
             .clone()
             .context("missing baseline state")?;
         let old_cursor = host.state_store().sync_cursor().context("old cursor")?;
+        let dependency_reads = self
+            .scan_relay
+            .borrow()
+            .as_ref()
+            .context("dependency read relay")?
+            .control();
+        Box::pin(
+            window_dependencies::assert_dependency_reads_keep_checkpoint(
+                &host,
+                controller.client.sdk(),
+                &arkret_wire::CommitStreamRef::from_scope(&genesis.scope_ref, None)?,
+                dependency_reads,
+            ),
+        )
+        .await?;
         let missing = ObservedRail {
             http: controller.client.sdk(),
             missing: Some(genesis.event_id.clone()),
@@ -1265,6 +1299,10 @@ impl SidecarSyncObserver for Probe {
             "the verified Account did not reach its real transaction boundary: {failed:?}"
         );
         let observed = rail.observed.lock().unwrap();
+        window_dependencies::assert_issued_dependencies(
+            &observed,
+            &arkret_wire::CommitStreamRef::from_scope(&genesis.scope_ref, None)?,
+        )?;
         ensure!(
             observed.len() == 1
                 && observed[0]
@@ -1367,9 +1405,11 @@ impl SidecarSyncObserver for Probe {
             creator_group,
             database_url,
         )
-        .await?;
+        .await
+        .context("reconnect production checkpoints")?;
         self.baseline_ordering(controller, other_recipient, database_url)
-            .await?;
+            .await
+            .context("baseline production ordering")?;
         Ok(())
     }
 }
@@ -2094,6 +2134,7 @@ impl Probe {
             ack_before,
             requests: Default::default(),
             retry_before: Default::default(),
+            retry_dependencies: Default::default(),
         };
         host.catch_up_with_conformance_transport(&rail).await?;
         ensure!(
@@ -2110,10 +2151,12 @@ impl Probe {
         );
         if private_scope.is_some() {
             let scans = fault.scan_requests();
-            ensure!(
-                scans.iter().all(|scan| scan.stream_ref == stream),
-                "Circle recovery rescanned an unrelated stream: {scans:?}"
-            );
+            let dependencies = rail.retry_dependencies.lock().unwrap().clone();
+            window_dependencies::assert_only_tail_and_dependency_scans(
+                &scans,
+                &stream,
+                &dependencies,
+            )?;
             let retry_before = rail
                 .retry_before
                 .lock()
@@ -2148,7 +2191,7 @@ impl Probe {
                 "sync.client_account_stream.circle_recovery_scans",
                 &serde_json::json!({"case_id":case_id,"affected_stream":stream}),
                 &serde_json::json!({"recovered_streams":[stream.clone()]}),
-                &serde_json::json!({"retry_scan_requests":scans,"installed_recovered_streams":[stream.clone()],"complete_suite_claim":false}),
+                &serde_json::json!({"retry_scan_requests":scans,"accepted_dependency_refs":dependencies,"installed_recovered_streams":[stream.clone()],"complete_suite_claim":false}),
             );
         }
         let recovered_state = state(&host)?;
@@ -2339,6 +2382,21 @@ impl Probe {
                 && commit.previous_commit_ref.as_ref() == Some(&first.commit_id),
             "accepted Circle successor borrowed a sibling stream predecessor or position"
         );
+        let dependency_reads = self
+            .scan_relay
+            .borrow()
+            .as_ref()
+            .context("dependency read relay")?
+            .control();
+        Box::pin(
+            window_dependencies::assert_dependency_reads_keep_checkpoint(
+                &host,
+                controller.client.sdk(),
+                &stream,
+                dependency_reads,
+            ),
+        )
+        .await?;
         let rail = ObservedRail {
             http: controller.client.sdk(),
             missing: None,
@@ -2346,6 +2404,7 @@ impl Probe {
         };
         host.catch_up_with_conformance_transport(&rail).await?;
         let batches = rail.observed.lock().unwrap().clone();
+        window_dependencies::assert_issued_dependencies(&batches, &stream)?;
         ensure!(
             batches
                 .iter()
@@ -2552,6 +2611,7 @@ impl Probe {
             ack_before,
             requests: Default::default(),
             retry_before: Default::default(),
+            retry_dependencies: Default::default(),
         };
         // Alter only the untrusted window's declared end. Original signed
         // Events, Commits, Snapshot and PostgreSQL rows remain unchanged.

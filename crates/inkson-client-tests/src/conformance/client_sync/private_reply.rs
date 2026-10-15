@@ -40,6 +40,7 @@ struct HealingRail {
     business_before: String,
     requests: Mutex<Vec<SyncRequestBody>>,
     initial_scans: Mutex<Vec<arkret_wire::StreamScanRequest>>,
+    dependencies: Mutex<Vec<Vec<arkret_wire::CommittedEventRef>>>,
 }
 
 const BUSINESS: &str = "SELECT jsonb_build_object(\
@@ -210,11 +211,22 @@ impl AccountSubscribeTransport for HealingRail {
             Ok(())
         })();
         held.map_err(|error| garth::Error::Protocol(format!("private retry boundary: {error:#}")))?;
-        Ok(self
-            .http
-            .account_subscribe_batch(request)
-            .await
-            .map(AccountSubscribeSnapshotResult::Batch)?)
+        let batch = self.http.account_subscribe_batch(request).await?;
+        let stream = arkret_wire::CommitStreamRef::from_scope(&self.scope, None)
+            .map_err(|error| garth::Error::Protocol(error.to_string()))?;
+        self.dependencies.lock().unwrap().push(
+            batch
+                .frames
+                .iter()
+                .flat_map(|frame| &frame.realms)
+                .flat_map(|realms| realms.entries.values())
+                .flat_map(|entry| entry.streams.iter().flatten())
+                .filter(|window| window.stream_ref == stream)
+                .filter_map(|window| window.window_start_basis.as_ref())
+                .flat_map(|basis| basis.accepted_dependency_refs.iter().flatten().cloned())
+                .collect(),
+        );
+        Ok(AccountSubscribeSnapshotResult::Batch(batch))
     }
 }
 
@@ -602,6 +614,7 @@ impl SidecarSyncObserver for PrivateReplyProbe {
             business_before: business_evidence(database_url)?,
             requests: Default::default(),
             initial_scans: Default::default(),
+            dependencies: Default::default(),
         };
         host.catch_up_with_conformance_transport(&rail).await?;
         ensure!(
@@ -616,15 +629,33 @@ impl SidecarSyncObserver for PrivateReplyProbe {
         let recovery_scans = scans
             .strip_prefix(initial_scans.as_slice())
             .context("automatic retry changed its original scan observations")?;
+        let dependencies = rail.dependencies.lock().unwrap().clone();
         ensure!(
-            !recovery_scans.is_empty()
-                && recovery_scans
-                    .iter()
-                    .all(|scan| scan.stream_ref == reply_accepted.commit.stream_ref),
-            "automatic private retry rescanned an unrelated stream: {recovery_scans:?}"
+            dependencies.len() == 2,
+            "missing original and retry dependency observations"
         );
-        for scan in initial_scans
+        window_dependencies::assert_only_tail_and_dependency_scans(
+            recovery_scans,
+            &reply_accepted.commit.stream_ref,
+            &dependencies[1],
+        )?;
+        ensure!(
+            dependencies[0].iter().all(|reference| initial_scans
+                .iter()
+                .any(|scan| window_dependencies::is_exact_dependency_scan(scan, reference))),
+            "initial private attempt skipped an issued dependency original"
+        );
+        let initial_progress_scans = initial_scans
             .iter()
+            .filter(|scan| {
+                !dependencies[0]
+                    .iter()
+                    .any(|reference| window_dependencies::is_exact_dependency_scan(scan, reference))
+            })
+            .collect::<Vec<_>>();
+        for scan in initial_progress_scans
+            .iter()
+            .copied()
             .filter(|scan| scan.stream_ref != reply_accepted.commit.stream_ref)
         {
             let head = before["verified_commit_stream_cursors"]
@@ -641,7 +672,7 @@ impl SidecarSyncObserver for PrivateReplyProbe {
                                 .as_u64()
                                 .context("original position")?
                         ))
-                    && initial_scans
+                    && initial_progress_scans
                         .iter()
                         .filter(|other| other.stream_ref == scan.stream_ref)
                         .count()

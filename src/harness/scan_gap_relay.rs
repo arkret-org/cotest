@@ -13,6 +13,8 @@ pub struct ScanGapControl(Arc<Mutex<GapState>>);
 
 #[derive(Default)]
 struct GapState {
+    withheld_event_gets: std::collections::BTreeSet<arkret_wire::EventId>,
+    withheld_event_get_counts: std::collections::BTreeMap<arkret_wire::EventId, usize>,
     unavailable_paths: std::collections::BTreeSet<String>,
     unavailable_requests: std::collections::BTreeMap<String, usize>,
     stream: Option<CommitStreamRef>,
@@ -32,6 +34,25 @@ struct GapState {
 }
 
 impl ScanGapControl {
+    pub fn set_event_get_withheld(&self, event: &arkret_wire::EventId, withheld: bool) {
+        let mut state = self.0.lock().unwrap();
+        if withheld {
+            state.withheld_event_gets.insert(event.clone());
+        } else {
+            state.withheld_event_gets.remove(event);
+        }
+    }
+
+    pub fn withheld_event_get_count(&self, event: &arkret_wire::EventId) -> usize {
+        self.0
+            .lock()
+            .unwrap()
+            .withheld_event_get_counts
+            .get(event)
+            .copied()
+            .unwrap_or(0)
+    }
+
     pub fn hold_next_watch_reply(&self) {
         let mut state = self.0.lock().unwrap();
         state.hold_watch_reply = true;
@@ -251,6 +272,28 @@ impl Relay {
             return Ok(());
         }
         let mut bytes = response.bytes().await?.to_vec();
+        if req.method() == salvo::http::Method::GET
+            && req
+                .uri()
+                .path()
+                .starts_with("/_arkret/self/committed-events/")
+            && res.status_code == Some(StatusCode::OK)
+            && let Ok(original) = serde_json::from_slice::<arkret_wire::CommittedEventView>(&bytes)
+        {
+            let mut state = self.control.0.lock().unwrap();
+            let event = original.commit().event_ref.clone();
+            if state.withheld_event_gets.contains(&event) {
+                *state.withheld_event_get_counts.entry(event).or_default() += 1;
+                bytes = serde_json::to_vec(&arkret_wire::CommittedEventView::Withheld(
+                    arkret_wire::CommittedEventWithheldView {
+                        commit: original.commit().clone(),
+                        event_disclosure: arkret_wire::EventDisclosure {
+                            status: arkret_wire::EventDisclosureStatus::Withheld,
+                        },
+                    },
+                ))?;
+            }
+        }
         if req.uri().path() == "/_arkret/peer/strands/watch/current"
             && res.status_code == Some(StatusCode::OK)
         {

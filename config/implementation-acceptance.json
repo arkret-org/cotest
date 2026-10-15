@@ -5,15 +5,19 @@
   "tasks": [
     {
       "task": "2026-09-10-0540-client-current-result-durable-index.md",
-      "criteria_count": 5,
-      "criteria_sha256": "c4870ae99067e5509b8b9478ff046a0dfac2716f72776292edbb6e8444d440f2",
+      "criteria_count": 4,
+      "criteria_sha256": "70eba4f8e857d1dd5e80039f68267435098004dc8255c0c48557ef4dfaebae86",
       "spec_refs": [
         "arkret-spec/spec/v1/zh/sync/current-results.md"
       ],
       "source_refs": [
         "inkson/src/state/current_index/search.rs",
         "inkson/src/views/global_search.rs",
-        "inkson/src/realm_events_engine/own_live.rs"
+        "inkson/src/realm_events_engine/own_live.rs",
+        "coland/crates/storage-postgres/src/issued_realm_snapshots.rs",
+        "garth/src/history_recovery.rs",
+        "garth/src/own_station_results.rs",
+        "inkson/src/sync_engine.rs"
       ],
       "tests": [
         {
@@ -51,11 +55,17 @@
           "symbol": "search_privacy_and_session_reads_do_not_copy_unrelated_history",
           "kind": "engineering",
           "covers": "privacy/session narrow reads make zero full-account copies with 10000 unrelated audit rows"
+        },
+        {
+          "path": "cotest/crates/inkson-client-tests/tests/client_sync_production_live.rs",
+          "symbol": "sidecar_checkpoint_cases_use_the_actual_account_driver",
+          "kind": "live",
+          "covers": "真实Station Circle／Sidecar非空依赖与tail、exact GET withheld／503拒绝时root／cursor／current不变，实际SQLite事务失败／旧cut恢复、新进程读回与23个canonical Sync case；不证明真实容量或完整native/browser搜索会话矩阵"
         }
       ],
       "engineering_checks": [],
       "remaining_scenarios": [
-        "真实Circle／Sidecar非空依赖与tail、Account cursor不推进；1／100／1000真实Station首屏与非current账号共同事务／有界物理写；完整retention／expiry／privacy／crypto及native会话／Device replacement／异步矩阵。浏览器原body／route／Event／Commit、En→Zh→En及零远程写入2／2实际通过，不重复列待办。"
+        "1／100／1000 Realm真实Station与实机首屏、UI长任务；同来源native／browser当前授权负例、有效retention／expiry／privacy／crypto搜索生命周期与完整holder／Device replacement／异步会话矩阵。账号有界物理项、共同事务／恢复／GC及真实Circle／Sidecar非空依赖均已闭合，不重复列待办。"
       ]
     },
     {
