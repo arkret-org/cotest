@@ -306,29 +306,6 @@
       ]
     },
     {
-      "task": "2026-09-25-2134-typed-current-cas-and-materialization.md",
-      "criteria_count": 5,
-      "criteria_sha256": "28ff23f74dcfabf70992032df1489282e583d67c9b0ca2288fcb5e5ab7eed251",
-      "spec_refs": [
-        "arkret-spec/spec/v1/zh/sync/current-results.md"
-      ],
-      "source_refs": [
-        "coland/crates/storage-postgres/src/read_capacity_tests.rs"
-      ],
-      "tests": [
-        {
-          "path": "coland/crates/storage-postgres/src/read_capacity_tests.rs",
-          "symbol": "typed_current_and_self_reads_stay_bounded_across_one_hundred_and_one_thousand_realms",
-          "kind": "live",
-          "covers": "SQL扫描容量，不证明wire分页或所有writer"
-        }
-      ],
-      "engineering_checks": [],
-      "remaining_scenarios": [
-        "registry→family／SQL／writer完整映射；Commit/source绑定零部分写；按family guard的并发CAS；同revision canonical相等；缺tail/授权分支"
-      ]
-    },
-    {
       "task": "2026-09-25-2141-consent-current-and-admission.md",
       "criteria_count": 2,
       "criteria_sha256": "7ba083aad5c548d1cdae815cddb8f3b6410819b2a4da88122e41308d297c43f1",
