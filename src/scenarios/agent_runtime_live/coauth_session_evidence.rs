@@ -378,22 +378,19 @@ pub(super) async fn issue_runtime_session(
     .await
 }
 
-pub(super) async fn issue_runtime_session_with_scope(
+#[allow(clippy::too_many_arguments)]
+pub(super) fn build_runtime_session_request(
     station: &crate::harness::ArkretServer,
     base: &str,
-    database_url: &str,
     agent: &arkret_wire::DidCoreId,
     authorization: &arkret_wire::EventId,
     method: &arkret_wire::DidUrl,
     key: &ed25519_dalek::SigningKey,
     operations: &[&str],
     scope_request: arkret_models_collaboration::session_grants::SessionGrantAgentScopeRequest,
-) -> Result<(
-    String,
-    arkret_models_collaboration::session_grants::AgentSessionGrantRequest,
-)> {
+) -> Result<arkret_models_collaboration::session_grants::AgentSessionGrantRequest> {
     use arkret_models_collaboration::session_grants::{
-        SessionGrantDpopBindingProof, SessionGrantOutcome, SessionGrantRequestBody,
+        SessionGrantDpopBindingProof, SessionGrantRequestBody,
         UnsignedAgentSessionGrantProof, UnsignedAgentSessionGrantRequest,
     };
     use arkret_signatures::dpop::{DpopProofRequest, build_dpop_proof};
@@ -431,6 +428,43 @@ pub(super) async fn issue_runtime_session_with_scope(
     body.proof.signature = base64::engine::general_purpose::URL_SAFE_NO_PAD
         .encode(key.sign(&body.proof.canonical_signing_bytes()?).to_bytes());
     request.validate()?;
+    let SessionGrantRequestBody::Agent(body) = request else {
+        unreachable!()
+    };
+    Ok(body)
+}
+
+pub(super) async fn issue_runtime_session_with_scope(
+    station: &crate::harness::ArkretServer,
+    base: &str,
+    database_url: &str,
+    agent: &arkret_wire::DidCoreId,
+    authorization: &arkret_wire::EventId,
+    method: &arkret_wire::DidUrl,
+    key: &ed25519_dalek::SigningKey,
+    operations: &[&str],
+    scope_request: arkret_models_collaboration::session_grants::SessionGrantAgentScopeRequest,
+) -> Result<(
+    String,
+    arkret_models_collaboration::session_grants::AgentSessionGrantRequest,
+)> {
+    use arkret_models_collaboration::session_grants::{
+        SessionGrantOutcome, SessionGrantRequestBody,
+    };
+    use arkret_signatures::dpop::{DpopProofRequest, build_dpop_proof};
+    use base64::Engine as _;
+    use ed25519_dalek::Signer as _;
+    let url = format!("{base}/_arkret/gate/account/session-grants");
+    let request = SessionGrantRequestBody::Agent(build_runtime_session_request(
+        station,
+        base,
+        agent,
+        authorization,
+        method,
+        key,
+        operations,
+        scope_request,
+    )?);
     let bytes = arkret_canonical::canonical_json_bytes(&request)?;
     let http_proof = build_dpop_proof(&DpopProofRequest::new("POST", &url), key)?;
     let response = station

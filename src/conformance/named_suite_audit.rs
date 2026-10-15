@@ -835,8 +835,8 @@ mod tests {
             &["/schema_validation_cases", "/cases"],
         )?)?;
         ensure!(
-            execution.cases.len() == 29 && missing == ["agent_human_approval_required"],
-            "reviewed Agent result did not retain its exact partial coverage"
+            execution.cases.len() == 30 && missing.is_empty(),
+            "reviewed Agent result did not complete its exact canonical coverage"
         );
         ensure!(
             !missing.iter().any(|name| name == "agent_provision"),

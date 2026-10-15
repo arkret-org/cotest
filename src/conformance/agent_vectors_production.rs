@@ -44,6 +44,8 @@ pub fn run_agent_vectors_production_suite() -> Result<SuiteExecutionResult> {
                     execution.cases.extend(longevity.cases);
                     let attribution = crate::scenarios::agent_runtime_live::run_agent_act_on_behalf_production().await?;
                     execution.cases.extend(attribution.cases);
+                    let approval = crate::scenarios::agent_runtime_live::run_agent_human_approval_production().await?;
+                    execution.cases.extend(approval.cases);
                     Ok::<SuiteExecutionResult, anyhow::Error>(execution)
                 })?;
             execution.cases.splice(0..0, schema_cases);
