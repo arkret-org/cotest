@@ -730,8 +730,7 @@ impl Probe {
             Ok(())
         })?;
         // Reopen the exact active shard before the destructive service call.
-        let path = host.state_store().conformance_account_state_path();
-        let disk: Value = serde_json::from_slice(&std::fs::read(&path)?)?;
+        let disk = serde_json::to_value(host.state_store().conformance_committed_account_state()?)?;
         let journal = disk["to_device_inbox"]
             .as_array()
             .context("durable recipient journal")?;
@@ -783,7 +782,8 @@ impl Probe {
             "service did not consume the issued ACK token"
         );
         ensure!(
-            serde_json::from_slice::<Value>(&std::fs::read(path)?)? == disk,
+            serde_json::to_value(host.state_store().conformance_committed_account_state()?)?
+                == disk,
             "remote ACK deleted the durable local recipient original"
         );
         self.results.borrow_mut().push(super::CaseExecutionResult {
@@ -1249,44 +1249,45 @@ impl SidecarSyncObserver for Probe {
             assertions: 4,
         });
 
-        let account_path = host.state_store().conformance_account_state_path();
-        let bytes = std::fs::read(&account_path)?;
-        let backup = account_path.with_extension("backup");
-        std::fs::rename(&account_path, &backup)?;
-        std::fs::create_dir(&account_path)?;
+        let committed_before =
+            serde_json::to_value(host.state_store().conformance_committed_account_state()?)?;
+        let token_before = host.state_store().conformance_account_checkpoint_token()?;
+        host.state_store().conformance_fail_account_commit(true)?;
         let rail = ObservedRail {
             http: controller.client.sdk(),
             missing: None,
             observed: Default::default(),
         };
         let failed = host.catch_up_with_conformance_transport(&rail).await;
-        let staged = std::fs::read(account_path.with_extension("json.tmp"));
-        std::fs::remove_dir(&account_path)?;
-        std::fs::rename(&backup, &account_path)?;
+        host.state_store().conformance_fail_account_commit(false)?;
         ensure!(
-            failed.is_err(),
-            "a real persistence failure crossed the Account driver"
+            matches!(&failed,Err(garth::Error::Protocol(message)) if message.contains("injected client account commit failure")),
+            "the verified Account did not reach its real transaction boundary: {failed:?}"
         );
-        let staged: Value = serde_json::from_slice(
-            &staged.context("the failed write never staged an account shard")?,
-        )?;
+        let observed = rail.observed.lock().unwrap();
         ensure!(
-            staged["verified_sidecar_history"]
-                .as_object()
-                .is_some_and(|streams| streams
-                    .values()
-                    .filter_map(Value::as_array)
-                    .flatten()
-                    .any(|row| row["event"]["event_id"] == genesis.event_id.as_str())),
-            "persistence negative never staged the verified new private history"
+            observed.len() == 1
+                && observed[0]
+                    .frames
+                    .iter()
+                    .flat_map(|frame| frame.realms.iter())
+                    .flat_map(|realms| realms.entries.values())
+                    .flat_map(|entry| entry.committed_events.iter().flatten())
+                    .any(|row| row
+                        .reducer_input()
+                        .is_some_and(|event| event.event_id == genesis.event_id)),
+            "persistence negative never delivered its authentic new private history"
+        );
+        drop(observed);
+        ensure!(
+            host.state_store().conformance_account_checkpoint_token()? == token_before
+                && serde_json::to_value(host.state_store().conformance_committed_account_state()?)?
+                    == committed_before,
+            "failed transaction changed the committed account record set or cursor"
         );
         ensure!(
-            rail.observed.lock().unwrap().len() == 1,
-            "persistence case did not deliver the authentic incremental"
-        );
-        ensure!(
-            state(&host)? == before && std::fs::read(&account_path)? == bytes,
-            "persistence failure partially installed history, current, generation or checkpoint"
+            state(&host)? == before,
+            "failed transaction installed an in-memory history, current or checkpoint"
         );
         self.results.borrow_mut().push(super::CaseExecutionResult {
             case_id: CASES[2].into(),
@@ -1691,23 +1692,15 @@ impl Probe {
             .state_store()
             .sync_cursor()
             .context("ordering prior cursor")?;
-        let account_path = host.state_store().conformance_account_state_path();
-        let account_bytes = std::fs::read(&account_path)?;
-        let index_path = path.with_extension("current.sqlite");
+        let account_token = host.state_store().conformance_account_checkpoint_token()?;
+        let committed_account =
+            serde_json::to_value(host.state_store().conformance_committed_account_state()?)?;
+        let index_path = host.state_store().conformance_account_database_path();
         ensure!(
             index_path.is_file(),
-            "ordering has no actual native current index"
+            "ordering has no actual native account/current database"
         );
         let database = rusqlite::Connection::open(&index_path)?;
-        let rows = |connection: &rusqlite::Connection| -> Result<Vec<(String, String)>> {
-            let mut query =
-                connection.prepare("SELECT key,value FROM current_entries ORDER BY key")?;
-            let rows = query
-                .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))?
-                .collect::<std::result::Result<Vec<_>, _>>()?;
-            Ok(rows)
-        };
-        let encrypted_before = rows(&database)?;
         let circle = cotest::scenarios::circle_poll_scope_live::circle_create(
             &controller.client,
             realm.as_str(),
@@ -1752,9 +1745,9 @@ impl Probe {
             "ordering setup lacks its exact accepted predecessor"
         );
 
-        // Only the current backend refuses writes. The Account checkpoint
-        // remains writable, so checkpoint-first regressions remain observable.
-        database.execute_batch("CREATE TRIGGER cotest_projection_write_barrier BEFORE INSERT ON current_entries BEGIN SELECT RAISE(ABORT,'cotest projection write barrier'); END;")?;
+        // Fail at a typed current row after account records have entered the
+        // same transaction. A checkpoint-first split cannot survive this cut.
+        database.execute_batch("CREATE TRIGGER cotest_projection_write_barrier BEFORE INSERT ON current_entries WHEN NEW.key LIKE 'inkson.current.v1/%/row/%' BEGIN SELECT RAISE(ABORT,'cotest projection write barrier'); END;")?;
         let rail = ObservedRail {
             http: controller.client.sdk(),
             missing: None,
@@ -1767,8 +1760,9 @@ impl Probe {
             "ordering did not fail at the actual current storage barrier: {failed:?}"
         );
         ensure!(
-            std::fs::read(&account_path)? == account_bytes
-                && rows(&database)? == encrypted_before
+            host.state_store().conformance_account_checkpoint_token()? == account_token
+                && serde_json::to_value(host.state_store().conformance_committed_account_state()?)?
+                    == committed_account
                 && state(&host)? == before
                 && host.state_store().sync_cursor().as_deref() == Some(old_cursor.as_str()),
             "current failure allowed a premature durable checkpoint or projection"
