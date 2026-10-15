@@ -3,7 +3,7 @@
 use super::*;
 use crate::harness::CanonicalJsonBody;
 
-fn observed_issued_claims(
+pub(super) fn observed_issued_claims(
     credential: &str,
 ) -> Result<arkret_models_identity::SignedSessionGrantClaims> {
     // This is a test observation; the real Station independently verifies

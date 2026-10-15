@@ -25,6 +25,20 @@ pub(super) const REVIEWED_PRODUCTION_CASES: [&str; 15] = [
     "agent_human_approval_required",
 ];
 
+pub(super) const REVIEWED_CASE_GROUPS: &[&[&str]] = &[
+    &REVIEWED_SCHEMA_CASES,
+    &REVIEWED_PRODUCTION_CASES,
+    &crate::scenarios::agent_runtime_live::REVIEWED_CONTENT_CASES,
+    &crate::scenarios::agent_runtime_live::REVIEWED_GRANT_CONTENT_CASES,
+];
+
+pub fn reviewed_agent_production_case_ids() -> Vec<&'static str> {
+    REVIEWED_CASE_GROUPS
+        .iter()
+        .flat_map(|cases| cases.iter().copied())
+        .collect()
+}
+
 pub fn run_agent_vectors_production_suite() -> Result<SuiteExecutionResult> {
     std::thread::Builder::new()
         .name("agent-vectors-production".into())
@@ -66,6 +80,8 @@ pub fn run_agent_vectors_production_suite() -> Result<SuiteExecutionResult> {
                     execution.cases.extend(approval.cases);
                     let content = crate::scenarios::agent_runtime_live::run_agent_session_content_production().await?;
                     execution.cases.extend(content.cases);
+                    let grants = crate::scenarios::agent_runtime_live::run_agent_content_grant_production().await?;
+                    execution.cases.extend(grants.cases);
                     Ok::<SuiteExecutionResult, anyhow::Error>(execution)
                 })?;
             execution.cases.splice(0..0, schema_cases);

@@ -175,11 +175,7 @@ const RUNNERS: [(&str, Runner); 55] = [
         "ak.suite.agent.vectors.v1",
         Runner::ProductionCases {
             run: super::run_agent_vectors_production_suite,
-            reviewed_cases: &[
-                &super::agent_vectors_production::REVIEWED_SCHEMA_CASES,
-                &super::agent_vectors_production::REVIEWED_PRODUCTION_CASES,
-                &crate::scenarios::agent_runtime_live::REVIEWED_CONTENT_CASES,
-            ],
+            reviewed_cases: super::agent_vectors_production::REVIEWED_CASE_GROUPS,
             pointers: &[
                 "/schema_validation_cases",
                 "/cases",

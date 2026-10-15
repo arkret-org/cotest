@@ -579,14 +579,14 @@ impl TestActorClient {
         }))
     }
 
-    pub async fn create_default_strand(&self, realm_id: &str) -> Result<String> {
+    pub async fn create_strand(&self, realm_id: &str, title: &str) -> Result<String> {
         let realm_id = arkret_identifiers::RealmId::new(realm_id.to_owned())?;
         let actor_did = arkret_identifiers::Did::new(self.actor.clone())?;
         let actor_id = ActorId::account(AccountId::new(
             arkret_identifiers::project_did_to_core_id(&actor_did)?,
             DidCoreId::new(self.service_id.clone())?,
         ));
-        let mut strand = Strand::new_create(realm_id.clone(), "Discussion", actor_id);
+        let mut strand = Strand::new_create(realm_id.clone(), title, actor_id);
         // The create payload cannot carry the reducer-derived stage axis.
         strand.stage = None;
         strand.tracks.clear();
@@ -622,6 +622,14 @@ impl TestActorClient {
         .await?;
         let strand_event_id = super::submitted_event_id(&created)?;
         let strand_id = arkret_identifiers::StrandId::from_event_id(&strand_event_id);
+        Ok(strand_id.to_string())
+    }
+
+    pub async fn create_default_strand(&self, realm_id: &str) -> Result<String> {
+        let realm_id = arkret_identifiers::RealmId::new(realm_id.to_owned())?;
+        let strand_id = arkret_identifiers::StrandId::new(
+            self.create_strand(realm_id.as_str(), "Discussion").await?,
+        )?;
         self.submit_event(
             realm_id.as_str(),
             arkret_wire::event_kind_str::REALM_SET_DEFAULT_STRAND,

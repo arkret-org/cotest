@@ -17,7 +17,9 @@ mod agent_participation;
 mod agent_runtime_scope;
 mod agent_vectors;
 mod agent_vectors_production;
-pub use agent_vectors_production::run_agent_vectors_production_suite;
+pub use agent_vectors_production::{
+    reviewed_agent_production_case_ids, run_agent_vectors_production_suite,
+};
 mod applet_device_scopes;
 mod applet_install;
 pub use applet_device_scopes::{APPLET_DEVICE_SCOPES_ENTRYPOINT, run_applet_device_scopes_suite};
