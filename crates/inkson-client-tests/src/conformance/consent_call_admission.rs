@@ -1074,9 +1074,12 @@ fn run_call_cases<'a>(
                 .await
                 .context("Consent revoke must not end an accepted established leg")?;
             refreshes.push((refresh, response.participant_binding.expires_at));
-            for window in ["future", "expired", "unknown_constraint"] {
+            for (offset, window) in ["future", "expired", "unknown_constraint"]
+                .into_iter()
+                .enumerate()
+            {
                 let now = chrono::Utc::now();
-                let payload = ConsentGrantPayload {
+                let consent_payload = ConsentGrantPayload {
                     consent_id: ConsentId::new(format!("ak:consent:{}", fresh_uuid_v7()))?,
                     peer:
                         arkret_models_collaboration::events_payloads::consent::ConsentPeer::Actor {
@@ -1095,18 +1098,27 @@ fn run_call_cases<'a>(
                     evidence_ref: None,
                     reason: None,
                 };
-                grant_payload(holder, payload).await?;
-                token_status(holder, &request, reqwest::StatusCode::FORBIDDEN)
+                grant_payload(holder, consent_payload).await?;
+                let (fresh_invitation, ineligible) = fresh_call_signal(
+                    (sender_host, sender),
+                    holder_host,
+                    holder,
+                    realm,
+                    &material,
+                    &payload,
+                    10 + offset as u64,
+                )
+                .await?;
+                let mut ineligible_request = request.clone();
+                ineligible_request.join_context = invitation_context(&fresh_invitation);
+                token_status(holder, &ineligible_request, reqwest::StatusCode::FORBIDDEN)
                     .await
                     .with_context(|| {
                         format!("{window} Consent authorized the actual invitation token cut")
                     })?;
                 ensure!(
-                    inkson::conformance::observe_native_call_projection(
-                        &holder_host,
-                        received.clone()
-                    )
-                    .await?
+                    inkson::conformance::observe_native_call_projection(&holder_host, ineligible)
+                        .await?
                         == 0,
                     "ineligible Consent authorized ringing"
                 );
@@ -1119,30 +1131,68 @@ fn run_call_cases<'a>(
             let any = grant(holder, &sender.actor, ConsentScope::Any).await?;
             let concrete = grant(holder, &sender.actor, concrete_scope).await?;
             revoke(holder, &any).await?;
-            token_status(holder, &request, reqwest::StatusCode::OK)
+            let (fresh_invitation, concrete_signal) = fresh_call_signal(
+                (sender_host, sender),
+                holder_host,
+                holder,
+                realm,
+                &material,
+                &payload,
+                13,
+            )
+            .await?;
+            let mut concrete_request = request.clone();
+            concrete_request.join_context = invitation_context(&fresh_invitation);
+            token_status(holder, &concrete_request, reqwest::StatusCode::OK)
                 .await
                 .context("any revoke erased independent concrete Consent")?;
             ensure!(
-                inkson::conformance::observe_native_call_projection(&holder_host, received.clone())
+                inkson::conformance::observe_native_call_projection(&holder_host, concrete_signal)
                     .await?
                     == 1,
                 "any revoke erased independent concrete ringing admission"
             );
             let remaining_any = grant(holder, &sender.actor, ConsentScope::Any).await?;
             revoke(holder, &concrete).await?;
-            token_status(holder, &request, reqwest::StatusCode::OK)
+            let (fresh_invitation, any_signal) = fresh_call_signal(
+                (sender_host, sender),
+                holder_host,
+                holder,
+                realm,
+                &material,
+                &payload,
+                14,
+            )
+            .await?;
+            let mut any_request = request.clone();
+            any_request.join_context = invitation_context(&fresh_invitation);
+            token_status(holder, &any_request, reqwest::StatusCode::OK)
                 .await
                 .context("concrete revoke erased independent any Consent")?;
             ensure!(
-                inkson::conformance::observe_native_call_projection(&holder_host, received.clone())
-                    .await?
+                inkson::conformance::observe_native_call_projection(
+                    &holder_host,
+                    any_signal.clone()
+                )
+                .await?
                     == 1,
                 "concrete revoke erased independent any ringing admission"
             );
             revoke(holder, &remaining_any).await?;
-            token_status(holder, &request, reqwest::StatusCode::FORBIDDEN).await?;
+            token_status(holder, &any_request, reqwest::StatusCode::FORBIDDEN).await?;
+            let garth::signal::SignalReceiveOutcome::Accepted {
+                call_invitation: Some(product),
+                ..
+            } = &any_signal
+            else {
+                anyhow::bail!("fresh independent any control omitted its product verdict");
+            };
             ensure!(
-                inkson::conformance::observe_native_call_projection(&holder_host, received.clone())
+                product.outcome.expires_at > chrono::Utc::now(),
+                "revocation control crossed its original product window"
+            );
+            ensure!(
+                inkson::conformance::observe_native_call_projection(&holder_host, any_signal)
                     .await?
                     == 0,
                 "revoked any remained eligible through an older product outcome"
@@ -1231,6 +1281,60 @@ fn run_call_cases<'a>(
             );
         }
         Ok(refreshes)
+    })
+}
+
+async fn fresh_call_signal(
+    producer: (&inkson::sync_engine::NativeAccountHost, &Member),
+    consumer: &inkson::sync_engine::NativeAccountHost,
+    holder: &Member,
+    realm: &arkret_wire::RealmId,
+    material: &inkson::signal::SignalKeyMaterial,
+    original: &inkson::signal::SignalPayload,
+    sequence: u64,
+) -> Result<(
+    CallInvitationSendRequestBody,
+    garth::signal::SignalReceiveOutcome,
+)> {
+    let mut payload = original.clone();
+    let inkson::signal::SignalPayload::CallSignal { seq, .. } = &mut payload else {
+        anyhow::bail!("fresh control requires the original Invite payload");
+    };
+    *seq = sequence;
+    let mut rail = ready_signal_rail(holder).await?;
+    let request = producer
+        .0
+        .prepare_call_invitation(
+            holder.account.clone(),
+            ScopeRef::Realm {
+                realm_id: realm.clone(),
+            },
+            material,
+            &payload,
+        )
+        .await?;
+    let sent = producer
+        .1
+        .client
+        .sdk()
+        .call_invitation_send(&request)
+        .await?;
+    ensure!(sent.status == CallInvitationSendStatus::Deferred);
+    let received = next_admitted_signal(
+        &mut rail,
+        consumer,
+        holder,
+        &mut garth::signal::SignalReceiver::new(),
+    )
+    .await?;
+    Ok((request, received))
+}
+
+fn invitation_context(request: &CallInvitationSendRequestBody) -> CallMediaJoinContext {
+    CallMediaJoinContext::Invitation(CallInvitationJoinContext {
+        kind: CallInvitationJoinKind::Invitation,
+        invitation: request.invitation.clone(),
+        envelope: request.envelope.clone(),
     })
 }
 
