@@ -2,22 +2,10 @@
 
 use arkret_models_collaboration::session_grants::{AgentSessionGrantRequest, SessionGrantOutcome};
 
+use super::coauth_session_evidence::issuer_state;
 use super::*;
 use crate::harness::CanonicalJsonBody;
 use crate::scenarios::_helpers::acceptance_footprint::acceptance_rows_with_agent_stores;
-
-async fn issuer_state(url: &str) -> Result<serde_json::Value> {
-    let url = url.to_owned();
-    tokio::task::spawn_blocking(move || -> Result<_> {
-        let mut db = postgres::Client::connect(&url, postgres::NoTls)?;
-        let mut state = serde_json::Map::new();
-        for table in ["oauth_sessions", "oauth_session_grants", "oauth_session_grant_operations", "agent_session_proof_replay"] {
-            let query = format!("SELECT coalesce(jsonb_agg(v ORDER BY v::text),'[]'::jsonb) FROM (SELECT to_jsonb(r) v FROM {table} r) rows");
-            state.insert(table.to_owned(), db.query_one(&query, &[])?.get(0));
-        }
-        Ok(serde_json::Value::Object(state))
-    }).await?
-}
 
 async fn send(
     station: &ArkretServer,

@@ -11,8 +11,19 @@ fn agent_genesis_cases_cross_real_http_admission_and_preserve_rejected_state() -
         .unwrap()
         .clone();
     cases.extend_from_slice(fixture["cases"].as_array().unwrap());
+    cases.extend(
+        fixture["session_content_authority_contract"]["cases"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|case| {
+                cotest::scenarios::agent_runtime_live::REVIEWED_CONTENT_CASES
+                    .contains(&case["name"].as_str().unwrap())
+            })
+            .cloned(),
+    );
     let missing = execution.missing_against_cases(&cases)?;
-    assert_eq!(execution.cases.len(), 30);
+    assert_eq!(execution.cases.len(), 40);
     assert!(missing.is_empty());
     assert!(
         execution

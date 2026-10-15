@@ -174,6 +174,7 @@ const RUNNERS: [(&str, Runner); 54] = [
             reviewed_cases: &[
                 &super::agent_vectors_production::REVIEWED_SCHEMA_CASES,
                 &super::agent_vectors_production::REVIEWED_PRODUCTION_CASES,
+                &crate::scenarios::agent_runtime_live::REVIEWED_CONTENT_CASES,
             ],
             pointers: &[
                 "/schema_validation_cases",
@@ -818,8 +819,14 @@ mod tests {
             .map(|(_, runner)| *runner)
             .ok_or_else(|| anyhow!("Agent production runner is not registered"))?;
         let fixture = super::super::load_fixture_value("agent-vectors-fixture.json")?;
-        let execution = execute_runner(entrypoint, runner, &fixture)?
+        let mut execution = execute_runner(entrypoint, runner, &fixture)?
             .ok_or_else(|| anyhow!("Agent runner omitted production results"))?;
+        let primary = case_sections(&fixture, &["/schema_validation_cases", "/cases"])?;
+        execution.cases.retain(|case| {
+            primary
+                .iter()
+                .any(|declared| declared["name"] == case.case_id)
+        });
         let missing = execution.missing_against_cases(&case_sections(
             &fixture,
             &["/schema_validation_cases", "/cases"],

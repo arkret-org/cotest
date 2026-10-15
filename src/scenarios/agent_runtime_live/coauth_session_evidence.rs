@@ -390,8 +390,8 @@ pub(super) fn build_runtime_session_request(
     scope_request: arkret_models_collaboration::session_grants::SessionGrantAgentScopeRequest,
 ) -> Result<arkret_models_collaboration::session_grants::AgentSessionGrantRequest> {
     use arkret_models_collaboration::session_grants::{
-        SessionGrantDpopBindingProof, SessionGrantRequestBody,
-        UnsignedAgentSessionGrantProof, UnsignedAgentSessionGrantRequest,
+        SessionGrantDpopBindingProof, SessionGrantRequestBody, UnsignedAgentSessionGrantProof,
+        UnsignedAgentSessionGrantRequest,
     };
     use arkret_signatures::dpop::{DpopProofRequest, build_dpop_proof};
     use base64::Engine as _;
@@ -580,6 +580,19 @@ pub(super) async fn issue_runtime_session_with_scope(
         .with_context(|| format!("real Agent {negative} rejection"))?;
     }
     Ok((outcome.session_grant, original))
+}
+
+pub(super) async fn issuer_state(url: &str) -> Result<serde_json::Value> {
+    let url = url.to_owned();
+    tokio::task::spawn_blocking(move || -> Result<_> {
+        let mut db = postgres::Client::connect(&url, postgres::NoTls)?;
+        let mut state = serde_json::Map::new();
+        for table in ["oauth_sessions", "oauth_session_grants", "oauth_session_grant_operations", "agent_session_proof_replay"] {
+            let query = format!("SELECT coalesce(jsonb_agg(v ORDER BY v::text),'[]'::jsonb) FROM (SELECT to_jsonb(r) v FROM {table} r) rows");
+            state.insert(table.to_owned(), db.query_one(&query, &[])?.get(0));
+        }
+        Ok(serde_json::Value::Object(state))
+    }).await?
 }
 
 pub(super) async fn grant_ledger(database_url: &str) -> Result<serde_json::Value> {
