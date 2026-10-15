@@ -6,7 +6,7 @@
     {
       "task": "2026-09-10-0540-client-current-result-durable-index.md",
       "criteria_count": 4,
-      "criteria_sha256": "085394c97f7721efebbb14480beb78d0a2c999ea08a539d623ab3ffef1a34963",
+      "criteria_sha256": "1e90584024ad7f8c36c02829ac0e3fbccb7e14916564fc6b53f05ac20d6b66dd",
       "spec_refs": [
         "arkret-spec/spec/v1/zh/sync/current-results.md",
         "arkret-spec/spec/v1/zh/sync/privacy-preserving-search.md",
