@@ -142,7 +142,12 @@
         "coland/crates/storage-postgres/src/pcr_device_current_results.rs",
         "coland/crates/storage-postgres/src/pcr_device_status_reader.rs",
         "coland/crates/storage-postgres/src/pcr_device_revocation_proposals.rs",
-        "coland/crates/http/src/routing/identity/device_generation/confirmed.rs"
+        "coland/crates/http/src/routing/identity/device_generation/confirmed.rs",
+        "coland/crates/storage-postgres/src/pcr_applet_device.rs",
+        "arkret-rust-sdk/crates/signatures/src/webvh/inception.rs",
+        "arkret-rust-sdk/crates/http-client/src/http_did_resolver.rs",
+        "bridges/crates/runtime/src/managed_actor_authoring.rs",
+        "bridges/crates/runtime/src/managed_actor_store.rs"
       ],
       "tests": [
         {
@@ -168,17 +173,29 @@
           "symbol": "managed_pcr_genesis_initializes_generation_without_a_device_and_rejects_corrupt_current",
           "kind": "live",
           "covers": "Atomic managed PCR generation initialization, device-free Bot/Ghost history reconstruction from retained originals, rollback, exact retries, corrupted current refusal and missing-root refusal; does not prove first Device admission or full runtime support"
+        },
+        {
+          "path": "coland/crates/server/tests/applet_admission.rs",
+          "symbol": "managed_devices_require_independent_principal_and_possession_on_service_ingress",
+          "kind": "live",
+          "covers": "Real sessionless Service HTTP ingress for Principal-signed Bot/Ghost successor Device authorization; separate key roles and possession, exact accepted retries/replacement, expiry, missing generation, rollback, stale CAS and managed-device upward pairing refusal. Does not prove scoped 21-operation or MLS runtime support."
+        },
+        {
+          "path": "bridges/crates/runtime/src/managed_actor_authoring.rs",
+          "symbol": "shared_http_author_uses_durable_custody_across_restart_and_refuses_wrong_kek",
+          "kind": "live",
+          "covers": "Canonical Bot/Ghost HTTP author and native DID document/JSONL publication with real random encrypted custody, verified native proof, exact replay/public resources across durable reopen, wrong origin/KEK and unknown refusal; not full Device/MLS runtime or live Savfox host acceptance"
         }
       ],
       "engineering_checks": [],
       "remaining_scenarios": [
-        "Applet creation/join/publish management review and full quota classification; Service multi-parent/shared-ancestor quota; Principal-signed successor Device authorization, sessionless ingress and all 21 operation consumers; independent Bot/Ghost Device/MLS runtime, scoped revocation/rotation and real decryption/replies; complete bundle service surface and support claims"
+        "Applet creation/join/publish management review and full quota classification; Service multi-parent/shared-ancestor quota; formal Device scope matching and all 21 operation consumers; independent Bot/Ghost Device/MLS runtime, scoped revocation/rotation and real decryption/replies; complete bundle service surface and support claims"
       ]
     },
     {
       "task": "2026-09-18-2345c-security-evidence-suites-must-actually-run.md",
-      "criteria_count": 3,
-      "criteria_sha256": "e4232e617924a3b8c33e752cbfb44cbed95129d1650225e578f3d71656b5b49f",
+      "criteria_count": 2,
+      "criteria_sha256": "428a01cf284d977b2f1f3da89d92067038d841f407c585757bdd541337804902",
       "spec_refs": [
         "arkret-spec/spec/v1/zh/conformance/conformance-suite.md"
       ],
@@ -244,7 +261,7 @@
         },
         {
           "path": "cotest/tests/federation_idempotency_production.rs",
-          "symbol": "canonical_federation_cases_use_real_ingress_and_keep_the_missing_binding_explicit",
+          "symbol": "canonical_federation_cases_use_real_ingress_and_current_origin_binding",
           "kind": "live",
           "covers": "正式生产子集4/5；binding移除仍缺，complete显式拒绝"
         },
