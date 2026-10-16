@@ -865,6 +865,7 @@ mod tests {
             &crate::scenarios::agent_runtime_live::REVIEWED_SIDECAR_CONTENT_CASES[..],
             &crate::scenarios::agent_runtime_live::REVIEWED_CEILING_CONTENT_CASES[..],
             &crate::scenarios::agent_runtime_live::REVIEWED_APPROVAL_CONTENT_CASES[..],
+            &crate::scenarios::agent_runtime_live::REVIEWED_MLS_CONTENT_CASES[..],
         ] {
             let canonical = cases
                 .iter()

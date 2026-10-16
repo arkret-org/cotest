@@ -27,8 +27,20 @@ pub(super) struct GrantFixture {
 
 impl GrantFixture {
     pub(super) async fn establish() -> Result<Self> {
-        let deployment =
-            coauth_session_evidence::actual_agent_deployment("agent-content-grants").await?;
+        Self::establish_scoped(false).await
+    }
+
+    pub(super) async fn establish_with_mls() -> Result<Self> {
+        Self::establish_scoped(true).await
+    }
+
+    async fn establish_scoped(mls: bool) -> Result<Self> {
+        let deployment = coauth_session_evidence::actual_agent_deployment(if mls {
+            "agent-content-mls"
+        } else {
+            "agent-content-grants"
+        })
+        .await?;
         let station = &deployment.station;
         let controller = &deployment.controller;
         let created = controller
@@ -66,13 +78,33 @@ impl GrantFixture {
             "ak.event.read",
             "ak.message.create",
         ]);
+        if mls {
+            draft.extend([
+                ServiceOperationId::SELF_KEYS_KEYPACKAGES_UPLOAD_CREATE_V1,
+                ServiceOperationId::SELF_KEYS_KEYPACKAGES_COMMAND_CLAIM_V1,
+                ServiceOperationId::SELF_KEYS_KEYPACKAGES_READ_CLAIM_V1,
+                ServiceOperationId::SELF_KEYS_KEYPACKAGES_COMMAND_CONSUME_V1,
+                ServiceOperationId::SELF_DEVICE_MESSAGES_READ_LIST_V1,
+                ServiceOperationId::SELF_DEVICE_MESSAGES_COMMAND_ACK_V1,
+                ServiceOperationId::SELF_REALM_READ_STREAMS_V1,
+                ServiceOperationId::SELF_REALM_STATE_SNAPSHOT_READ_MANIFEST_HEAD_V1,
+                ServiceOperationId::SELF_MLS_READ_ROSTER_AUTHORITY_V1,
+                ServiceOperationId::SELF_MLS_READ_GROUP_STATE_MATERIAL_V1,
+            ]);
+        }
         let operations = arkret_schema::agent_runtime_scope::complete_agent_runtime_scope(draft)?;
         let actions = operations.iter().map(String::as_str).collect::<Vec<_>>();
         let mut scope = requested_scope(&actions)?;
-        for strand in [&a, &b] {
+        if mls {
             scope.resources.push(serde_json::from_value(
-                json!({"kind":"strand","realm_id":realm,"resource_ref":strand}),
+                json!({"kind":"realm","realm_id":realm}),
             )?);
+        } else {
+            for strand in [&a, &b] {
+                scope.resources.push(serde_json::from_value(
+                    json!({"kind":"strand","realm_id":realm,"resource_ref":strand}),
+                )?);
+            }
         }
         let agent = AgentRuntimeSession::establish_observed(
             station,

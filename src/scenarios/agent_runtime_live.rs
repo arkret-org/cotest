@@ -66,6 +66,7 @@ mod content_direct_evidence;
 mod content_grant_evidence;
 mod content_history_evidence;
 mod content_limit_evidence;
+mod content_mls_evidence;
 mod content_policy_evidence;
 mod content_session_evidence;
 mod content_sidecar_evidence;
@@ -106,6 +107,7 @@ pub use content_grant_evidence::{
 pub use content_history_evidence::{
     REVIEWED_HISTORY_CONTENT_CASES, run_agent_content_history_production,
 };
+pub use content_mls_evidence::{REVIEWED_MLS_CONTENT_CASES, run_agent_content_mls_production};
 pub use content_policy_evidence::{
     REVIEWED_POLICY_CONTENT_CASES, run_agent_content_policy_production,
 };

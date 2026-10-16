@@ -1,4 +1,4 @@
-//! A real runtime leaf admitted into the controller's native Sidecar.
+//! A real runtime leaf admitted into an accepted Realm or native Sidecar group.
 
 use anyhow::{Context, Result, ensure};
 use arkret_wire::ScopeRef;
@@ -51,8 +51,10 @@ pub(crate) async fn join_agent_with_observer(
 ) -> Result<(arkret_wire::CommittedEventFullView, arkret::ArkretMlsGroup)> {
     let scope = &genesis.scope_ref;
     let realm = scope.realm_id();
-    let ScopeRef::Sidecar { sidecar_id, .. } = scope else {
-        anyhow::bail!("native Sidecar required")
+    let sidecar_id = match scope {
+        ScopeRef::Sidecar { sidecar_id, .. } => Some(sidecar_id),
+        ScopeRef::Realm { .. } => None,
+        _ => anyhow::bail!("Realm or native Sidecar required"),
     };
     let identity = arkret::ArkretMlsIdentity::new_agent(
         arkret_wire::ActorId::account(agent.agent_account.clone()),
@@ -139,21 +141,31 @@ pub(crate) async fn join_agent_with_observer(
             (scope_ref == scope).then(|| serde_json::from_value(value.clone()))
         })
         .context("Sidecar MLS current unavailable")??;
-    let view = controller
-        .client
-        .sdk()
-        .agent_sidecar_get(sidecar_id)
-        .await?;
-    let binding = arkret::MlsGovernanceBindingPayload::sidecar(
-        realm.clone(),
-        sidecar_id.clone(),
-        Some(genesis.event_id.clone()),
-        0,
-        1,
-        base.current_key_access_revision,
-        view.mls_context.participant_authority_digest,
-        view.mls_context.authority_stream_head,
-    )?;
+    let binding = if let Some(sidecar_id) = sidecar_id {
+        let view = controller
+            .client
+            .sdk()
+            .agent_sidecar_get(sidecar_id)
+            .await?;
+        arkret::MlsGovernanceBindingPayload::sidecar(
+            realm.clone(),
+            sidecar_id.clone(),
+            Some(genesis.event_id.clone()),
+            0,
+            1,
+            base.current_key_access_revision,
+            view.mls_context.participant_authority_digest,
+            view.mls_context.authority_stream_head,
+        )?
+    } else {
+        arkret::MlsGovernanceBindingPayload::new(
+            scope.clone(),
+            Some(genesis.event_id.clone()),
+            0,
+            1,
+            base.current_key_access_revision,
+        )?
+    };
     let add = group.add_member_with_governance_binding(
         &arkret::mls_key_package_record_from_claim(selected)?,
         &binding,
@@ -355,14 +367,16 @@ pub(crate) async fn join_agent_with_observer(
             .await?;
     }
     agent.runtime.sdk().keypackages_consume(&consume).await?;
-    ensure!(
-        controller
-            .client
-            .sdk()
-            .agent_sidecar_get(sidecar_id)
-            .await?
-            .effective_agent_ids
-            == vec![agent.agent_account.principal_id.clone()]
-    );
+    if let Some(sidecar_id) = sidecar_id {
+        ensure!(
+            controller
+                .client
+                .sdk()
+                .agent_sidecar_get(sidecar_id)
+                .await?
+                .effective_agent_ids
+                == vec![agent.agent_account.principal_id.clone()]
+        );
+    }
     Ok((accepted, agent_group))
 }

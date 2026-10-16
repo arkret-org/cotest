@@ -460,7 +460,7 @@ async fn advance_epoch_material(
     Ok(accepted)
 }
 
-async fn controller_message(
+pub(super) async fn controller_message(
     controller: &Member,
     group: &mut arkret::ArkretMlsGroup,
     state: &arkret_wire::CommittedEventFullView,
@@ -560,7 +560,7 @@ fn agent_message(
     ))
 }
 
-fn open_message(group: &mut arkret::ArkretMlsGroup, event: &Event) -> Result<Vec<u8>> {
+pub(super) fn open_message(group: &mut arkret::ArkretMlsGroup, event: &Event) -> Result<Vec<u8>> {
     let envelope: arkret::EncryptedEnvelope =
         serde_json::from_value(event.payload["encrypted_content"].clone())?;
     let domain = arkret::mls_basic_credential_identity(event.actual_signer())?;
