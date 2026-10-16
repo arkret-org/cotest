@@ -15,7 +15,9 @@
         "arkret-spec/spec/v1/zh/models/strand-and-message.md",
         "arkret-spec/spec/v1/zh/models/event-and-patch.md",
         "arkret-spec/spec/v1/artifacts/registry/current-result-registry.json",
-        "arkret-spec/spec/v1/artifacts/schemas/typed-current-result.schema.json"
+        "arkret-spec/spec/v1/artifacts/schemas/typed-current-result.schema.json",
+        "arkret-spec/spec/v1/zh/discovery/client-preferences.md",
+        "arkret-spec/spec/v1/zh/governance/content-moderation.md"
       ],
       "source_refs": [
         "inkson/src/state/current_index/search.rs",
@@ -25,7 +27,8 @@
         "garth/src/history_recovery.rs",
         "garth/src/own_station_results.rs",
         "inkson/src/sync_engine.rs",
-        "inkson/src/state/current_index.rs"
+        "inkson/src/state/current_index.rs",
+        "inkson/src/account_data/blocklist.rs"
       ],
       "tests": [
         {
@@ -189,11 +192,35 @@
           "symbol": "message_fixture_delivers_exact_current_revision_carrier",
           "kind": "product",
           "covers": "Existing browser wire fixture generator delivers the signed Message create carrier as message_revision current with exact source stream, Commit/position and payload; fixture validation, not live admission"
+        },
+        {
+          "path": "inkson/src/views/global_search/session_tests.rs",
+          "symbol": "native_search_local_block_withdraws_visible_body_and_unblock_restores_retained_original",
+          "kind": "product",
+          "covers": "Formal native search hook: local pending messages block changes neither accepted blocklist revision nor current generation, withdraws visible body; retry/cold encrypted account reload stay empty; unblock automatically restores exact retained Event/Commit/body"
+        },
+        {
+          "path": "inkson/src/views/global_search/session_tests.rs",
+          "symbol": "native_search_blocklist_uses_exact_actor_mode_surface_and_expiry",
+          "kind": "product",
+          "covers": "Formal native search hook: block/hide suppress, mute remains searchable, another surface/expired rule/same principal at another Station remain visible; shared existing typed blocklist evaluator"
+        },
+        {
+          "path": "inkson/src/views/global_search/session_tests.rs",
+          "symbol": "native_search_pending_request_cannot_republish_a_newly_blocked_sender",
+          "kind": "product",
+          "covers": "Formal native callback starts a request before local block is applied; rendering/effects and late query completion cannot republish the sender body"
+        },
+        {
+          "path": "inkson/tests/e2e/inkson.search-blocklist.spec.ts",
+          "symbol": "global search applies personal message blocks and restores retained history after unblock",
+          "kind": "product",
+          "covers": "Real Chromium product UI: ordinary verified Realm history, Settings message-only Actor block, search hides body, reload remains filtered, Settings unblock restores same signed Event/Commit/body; mocked Station fixtures, not live Coauth/Station or other blocklist targets"
         }
       ],
       "engineering_checks": [],
       "remaining_scenarios": [
-        "真实1／100／1000 Realm容量与实机首屏／长任务；完整正式搜索入口授权负例；有效retention／expiry、history／crypto／私密Sidecar、Event字段级redaction与修订链完整浏览器展示；完整holder／Device replacement／异步会话矩阵。Message当前撤回终态、最新revision同cut签名carrier绑定与补齐恢复、已完成时间边界及Circle对象门不重复列待实现；索引后端回归不代替完整UI／真实Station验收。"
+        "真实1／100／1000 Realm容量与实机首屏／长任务；完整正式搜索当前授权与holder／Device／session同源矩阵；有效retention／expiry、history／crypto／私密Sidecar、Event字段级redaction及完整修订链展示。精确Actor个人messages block／hide过滤与解除恢复、Message当前撤回终态、最新revision同cut绑定恢复、时间边界及Circle对象门不重复列待实现；其它blocklist targets／完整真实服务入口不以本批夹具计完成。"
       ]
     },
     {
