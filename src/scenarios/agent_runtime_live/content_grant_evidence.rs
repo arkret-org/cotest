@@ -16,6 +16,7 @@ pub(super) struct GrantFixture {
     pub(super) deployment: coauth_session_evidence::ActualAgentDeployment,
     pub(super) agent: AgentRuntimeSession,
     pub(super) realm: RealmId,
+    pub(super) generation: EventId,
     pub(super) a: arkret_wire::StrandId,
     pub(super) b: arkret_wire::StrandId,
     pub(super) operations: Vec<String>,
@@ -91,7 +92,7 @@ impl GrantFixture {
         );
         join.agent_controller_binding = Some(AgentControllerMembershipBinding {
             controller_account_id: deployment.account.clone(),
-            controller_membership_generation_ref: generation,
+            controller_membership_generation_ref: generation.clone(),
             controller_terminal_event_ref: None,
         });
         committed(
@@ -147,6 +148,7 @@ impl GrantFixture {
             deployment,
             agent,
             realm,
+            generation,
             a,
             b,
             operations,

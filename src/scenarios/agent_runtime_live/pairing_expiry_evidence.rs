@@ -39,6 +39,17 @@ pub(super) async fn replacement_material_with_ttl(
     agent: &AgentRuntimeSession,
     pairing_ttl_ms: u64,
 ) -> Result<ReplacementMaterial> {
+    replacement_material_with_scope(station, controller, account, agent, pairing_ttl_ms, None).await
+}
+
+pub(super) async fn replacement_material_with_scope(
+    station: &ArkretServer,
+    controller: &TestActorClient,
+    account: &AccountId,
+    agent: &AgentRuntimeSession,
+    pairing_ttl_ms: u64,
+    scope: Option<AgentKeyScope>,
+) -> Result<ReplacementMaterial> {
     let renewed: AgentRenewPairingOutcome = serde_json::from_value(
         expect_json(
             controller
@@ -96,6 +107,9 @@ pub(super) async fn replacement_material_with_ttl(
         .reducer_input()
         .context("accepted original key authorization")?;
     let mut authorization: AgentKeyAuthorizePayload = AgentKeyAuthorizePayload::try_from(original)?;
+    if let Some(scope) = scope {
+        authorization.agent_key_scope = scope;
+    }
     authorization.supersedes = vec![
         arkret_models_collaboration::events_payloads::agent::AgentKeySupersession {
             key_id: authorization.key_id.clone(),
@@ -145,13 +159,28 @@ pub(super) async fn replacement_material_with_ttl(
         &controller_method,
         principal.device_signing_key.to_bytes(),
     )?;
+    let view: arkret_models_collaboration::agent_operations::AgentView = serde_json::from_value(
+        expect_json(
+            controller.get(&format!(
+                "/_arkret/self/agents/{}",
+                agent.agent_account.principal_id
+            )),
+            StatusCode::OK,
+        )
+        .await?,
+    )?;
+    let provision_scope = &view
+        .key_state
+        .as_ref()
+        .context("immutable provision scope")?
+        .requested_scope;
     let disclosure = requested_scope_disclosure(
         account,
         (controller_method, principal.device_signing_key.to_bytes()),
         &agent.agent_account.principal_id,
         station.service_id(),
         &bootstrap.pairing_request_id,
-        &authorization.agent_key_scope,
+        provision_scope,
     )?;
     Ok(ReplacementMaterial {
         body: builder

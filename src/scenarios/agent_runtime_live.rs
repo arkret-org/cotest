@@ -61,6 +61,7 @@ mod act_on_behalf_conjunction;
 mod act_on_behalf_evidence;
 mod binding_evidence;
 mod coauth_session_evidence;
+mod content_ceiling_evidence;
 mod content_direct_evidence;
 mod content_grant_evidence;
 mod content_history_evidence;
@@ -89,6 +90,9 @@ pub use act_on_behalf_evidence::run_agent_act_on_behalf_boundary;
 pub use binding_evidence::run_agent_runtime_binding_admission;
 pub use coauth_session_evidence::{
     run_agent_longevity_session_boundary, run_agent_session_grant_replay_production,
+};
+pub use content_ceiling_evidence::{
+    REVIEWED_CEILING_CONTENT_CASES, run_agent_content_ceiling_production,
 };
 pub use content_direct_evidence::{
     REVIEWED_DIRECT_CONTENT_CASES, run_agent_content_direct_production,

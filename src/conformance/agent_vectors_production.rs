@@ -34,6 +34,7 @@ pub(super) const REVIEWED_CASE_GROUPS: &[&[&str]] = &[
     &crate::scenarios::agent_runtime_live::REVIEWED_DIRECT_CONTENT_CASES,
     &crate::scenarios::agent_runtime_live::REVIEWED_HISTORY_CONTENT_CASES,
     &crate::scenarios::agent_runtime_live::REVIEWED_SIDECAR_CONTENT_CASES,
+    &crate::scenarios::agent_runtime_live::REVIEWED_CEILING_CONTENT_CASES,
 ];
 
 pub fn reviewed_agent_production_case_ids() -> Vec<&'static str> {
@@ -94,6 +95,8 @@ pub fn run_agent_vectors_production_suite() -> Result<SuiteExecutionResult> {
                     execution.cases.extend(history.cases);
                     let sidecar = crate::scenarios::agent_runtime_live::run_agent_content_sidecar_production().await?;
                     execution.cases.extend(sidecar.cases);
+                    let ceilings = crate::scenarios::agent_runtime_live::run_agent_content_ceiling_production().await?;
+                    execution.cases.extend(ceilings.cases);
                     Ok::<SuiteExecutionResult, anyhow::Error>(execution)
                 })?;
             execution.cases.splice(0..0, schema_cases);
