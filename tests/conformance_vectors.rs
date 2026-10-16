@@ -130,6 +130,19 @@ fn test_material_rejection_named_suite_executes_sdk_coauth_and_coland_consumers(
         )?)?;
     assert_eq!(coverage.service_e2e_status, "complete");
     assert!(coverage.service_e2e_gaps.is_empty());
+    println!(
+        "[test-material-results] {}",
+        serde_json::json!({
+            "entrypoint": coverage.execution.entrypoint,
+            "fixture": coverage.execution.fixture,
+            "cases": coverage.execution.cases.iter().map(|case| serde_json::json!({
+                "case_id": case.case_id,
+                "assertions": case.assertions,
+            })).collect::<Vec<_>>(),
+            "service_e2e_status": coverage.service_e2e_status,
+            "service_e2e_gaps": coverage.service_e2e_gaps,
+        })
+    );
     Ok(())
 }
 
