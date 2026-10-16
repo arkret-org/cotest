@@ -17,7 +17,9 @@
         "arkret-spec/spec/v1/artifacts/registry/current-result-registry.json",
         "arkret-spec/spec/v1/artifacts/schemas/typed-current-result.schema.json",
         "arkret-spec/spec/v1/zh/discovery/client-preferences.md",
-        "arkret-spec/spec/v1/zh/governance/content-moderation.md"
+        "arkret-spec/spec/v1/zh/governance/content-moderation.md",
+        "arkret-spec/spec/v1/zh/sync/service-http-binding.md",
+        "arkret-spec/spec/v1/zh/governance/history-visibility.md"
       ],
       "source_refs": [
         "inkson/src/state/current_index/search.rs",
@@ -216,17 +218,35 @@
           "symbol": "global search applies personal message blocks and restores retained history after unblock",
           "kind": "product",
           "covers": "Real Chromium product UI: ordinary verified Realm history, Settings message-only Actor block, search hides body, reload remains filtered, Settings unblock restores same signed Event/Commit/body; mocked Station fixtures, not live Coauth/Station or other blocklist targets"
+        },
+        {
+          "path": "inkson/src/state/current_index/search.rs",
+          "symbol": "search_disclosure_backfill_recovers_exact_original_without_reopening_other_gates",
+          "kind": "product",
+          "covers": "Encrypted SQLite bounded production search: same signed disclosure cases as IndexedDB, create/withheld-first/revised-create/revision, exact Event backfill, current-only and unrelated originals remain hidden, both mixed-disclosure orders fail closed, repeated Full, re-withholding, tightened history floor and terminal Message redaction; every step checked after cold reopen"
+        },
+        {
+          "path": "inkson/tests/wasm_current_index.rs",
+          "symbol": "search_disclosure_backfill_recovers_exact_original_without_reopening_other_gates",
+          "kind": "product",
+          "covers": "Real browser IndexedDB bounded production search: identical signed inputs and all observations as SQLite, each committed step and cold reopen; fixture host at verified-input boundary, not full browser UI or live Station admission"
+        },
+        {
+          "path": "inkson/src/views/global_search/session_tests.rs",
+          "symbol": "native_search_disclosure_withdraws_and_recovers_only_after_durable_full_publication",
+          "kind": "product",
+          "covers": "Formal native use_local_search hook: visible original disappears on withheld, abandoned Full cannot republish, encrypted account cold recovery and committed Full restore exact Event/Commit/body, later withheld removes it again"
         }
       ],
       "engineering_checks": [],
       "remaining_scenarios": [
-        "真实1／100／1000 Realm容量与实机首屏／长任务；完整正式搜索当前授权与holder／Device／session同源矩阵；有效retention／expiry、history／crypto／私密Sidecar、Event字段级redaction及完整修订链展示。精确Actor个人messages block／hide过滤与解除恢复、Message当前撤回终态、最新revision同cut绑定恢复、时间边界及Circle对象门不重复列待实现；其它blocklist targets／完整真实服务入口不以本批夹具计完成。"
+        "真实1／100／1000 Realm容量与实机首屏／长任务；完整正式搜索当前授权与holder／Device／session同源矩阵；有效retention／expiry、history／crypto／私密Sidecar、Event字段级redaction及完整修订链展示。精确Actor个人messages block／hide过滤与解除恢复、Message当前撤回终态、最新revision同cut绑定恢复、时间边界及Circle对象门不重复列待实现；其它blocklist targets／完整真实服务入口不以本批夹具计完成。 本批精确Event的withheld→合法Full恢复与再次撤下已闭合；不重复列为待实现，完整retention策略／真实Station披露生命周期仍开放。"
       ]
     },
     {
       "task": "2026-09-13-0847-applet-authoring-result-runtime-installation.md",
       "criteria_count": 5,
-      "criteria_sha256": "b8fb26a4985b6119802eabdf782f83ad81015f192519ece691275b8b73781e22",
+      "criteria_sha256": "6ea81f947d1e38411390ea031116deb2a12c9d815842a1954bc54a462fac8633",
       "spec_refs": [
         "arkret-spec/spec/v1/zh/extensions/applet-integration.md",
         "arkret-spec/spec/v1/zh/authz/managed-governance.md",
