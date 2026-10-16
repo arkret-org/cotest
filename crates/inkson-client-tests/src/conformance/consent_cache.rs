@@ -762,10 +762,20 @@ async fn run_three_cuts_evidence() -> Result<Vec<super::CaseExecutionResult>> {
     else {
         anyhow::bail!("actual subscriber lacked holder product material");
     };
-    ensure!(
-        inkson::conformance::observe_native_call_projection(&native, received).await? == 1,
-        "actual Native product cut did not release the lawful Invite"
-    );
+    let admitted = format!("{received:?}");
+    let rings = inkson::conformance::observe_native_call_projection(&native, received).await?;
+    if rings != 1 {
+        return Err(cotest::harness::heap_future(|| {
+            call_projection_failure(
+                &context,
+                &native,
+                &request,
+                admitted,
+                "actual Native product cut did not release the lawful Invite".to_owned(),
+            )
+        })
+        .await);
+    }
     let token = invited_token(
         &context,
         &request,
@@ -1855,6 +1865,27 @@ async fn wait_emission(path: &std::path::Path, extension: &str) -> Result<serde_
         tokio::time::sleep(std::time::Duration::from_millis(20)).await;
     }
 }
+async fn call_projection_failure(
+    context: &ConsentCallContext,
+    native: &inkson::sync_engine::NativeAccountHost,
+    request: &CallInvitationSendRequestBody,
+    admitted: String,
+    phase: String,
+) -> anyhow::Error {
+    let current = inkson::conformance::retained_realm_current(
+        &native.state_store(),
+        &context.holder.account,
+        &context.realm,
+    )
+    .await;
+    let fresh_consent = inkson::conformance::read_native_call_consent(native, &request.invitation)
+        .await
+        .and_then(|read| read.permits(None, &[], Utc::now()).map_err(Into::into));
+    anyhow::anyhow!(
+        "{phase}: admitted={admitted}, current={current:?}, fresh_consent={fresh_consent:?}"
+    )
+}
+
 async fn queued_revoke(
     context: &mut ConsentCallContext,
     native: &inkson::sync_engine::NativeAccountHost,
@@ -1934,11 +1965,21 @@ async fn queued_revoke(
             );
             if allowed {
                 let received = stream.admit(native, &context.holder).await?;
-                ensure!(
-                    inkson::conformance::observe_native_call_projection(native, received).await?
-                        == 1,
-                    "paused positive control did not ring"
-                );
+                let admitted = format!("{received:?}");
+                let rings =
+                    inkson::conformance::observe_native_call_projection(native, received).await?;
+                if rings != 1 {
+                    return Err(cotest::harness::heap_future(|| {
+                        call_projection_failure(
+                            context,
+                            native,
+                            &request,
+                            admitted,
+                            format!("paused positive control did not ring: websocket={websocket}"),
+                        )
+                    })
+                    .await);
+                }
             } else {
                 let received = stream.admit(native, &context.holder).await?;
                 ensure!(
