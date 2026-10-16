@@ -62,6 +62,7 @@ mod act_on_behalf_evidence;
 mod binding_evidence;
 mod coauth_session_evidence;
 mod content_ceiling_evidence;
+mod content_cross_authority_evidence;
 mod content_direct_evidence;
 mod content_grant_evidence;
 mod content_history_evidence;
@@ -97,6 +98,9 @@ pub use coauth_session_evidence::{
 };
 pub use content_ceiling_evidence::{
     REVIEWED_CEILING_CONTENT_CASES, run_agent_content_ceiling_production,
+};
+pub use content_cross_authority_evidence::{
+    REVIEWED_CROSS_AUTHORITY_CONTENT_CASES, run_agent_content_cross_authority_production,
 };
 pub use content_direct_evidence::{
     REVIEWED_DIRECT_CONTENT_CASES, run_agent_content_direct_production,

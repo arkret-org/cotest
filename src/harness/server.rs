@@ -1330,6 +1330,21 @@ impl ArkretServer {
         self.start_external_process().await
     }
 
+    /// Change only normal deployment peer discovery, retaining custody and data.
+    pub async fn restart_with_federation_peers(&mut self, endpoints: &[String]) -> Result<()> {
+        let config = self
+            .external_restart
+            .as_mut()
+            .context("owned external Station")?;
+        config
+            .extra_env
+            .retain(|(key, _)| key != "COLAND_FEDERATION_PEERS");
+        config
+            .extra_env
+            .push(("COLAND_FEDERATION_PEERS".to_owned(), endpoints.join(",")));
+        self.restart_external_process().await
+    }
+
     /// Change the deployment mode of this owned process while retaining its
     /// database, identity, keys and ports. Fixture bootstrap may precede the
     /// switch; subsequent observations run against the requested real mode.
@@ -2076,6 +2091,16 @@ impl TestServerGroup {
 
     pub fn server_mut(&mut self, index: usize) -> &mut ArkretServer {
         &mut self.servers[index]
+    }
+
+    pub fn server_pair_mut(
+        &mut self,
+        first: usize,
+        second: usize,
+    ) -> (&mut ArkretServer, &mut ArkretServer) {
+        assert!(first < second);
+        let (before, after) = self.servers.split_at_mut(second);
+        (&mut before[first], &mut after[0])
     }
 
     pub fn len(&self) -> usize {

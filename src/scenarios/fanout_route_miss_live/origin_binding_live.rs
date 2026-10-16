@@ -119,12 +119,28 @@ async fn activate_successor(
     fixture: &mut CurrentOriginFixture,
     new_url: &str,
 ) -> Result<(Event, RealmCommit)> {
-    let old_url = fixture._governance_database.connect_url.as_str();
-    let group = &mut fixture.group;
-    let old = group.server(0);
-    let new = group.server(2);
-    let owner = &fixture.alice;
-    let realm = fixture.realm.as_str();
+    let (old, new) = fixture.group.server_pair_mut(0, 2);
+    activate_realm_successor(
+        old,
+        new,
+        &fixture.alice,
+        &fixture.alice_account,
+        &fixture.realm,
+        &fixture._governance_database.connect_url,
+        new_url,
+    )
+    .await
+}
+
+pub(crate) async fn activate_realm_successor(
+    old: &ArkretServer,
+    new: &mut ArkretServer,
+    owner: &TestActorClient,
+    owner_account: &AccountId,
+    realm: &str,
+    old_url: &str,
+    new_url: &str,
+) -> Result<(Event, RealmCommit)> {
     let typed_realm: RealmId = realm.parse()?;
     let mut nonce_bytes = [0u8; 32];
     getrandom::fill(&mut nonce_bytes).map_err(anyhow::Error::msg)?;
@@ -139,8 +155,7 @@ async fn activate_successor(
         .await?
         .realm_stream_head;
     let change = owner.author_event(realm, EventKind::RealmGovernanceStationChange.as_str(), json!({"expected_governance_generation":0,"expected_realm_stream_commit_id":head.commit_id,"new_governance_station_id":new.service_id()})).await?;
-    let changed =
-        submit_and_expect_commit(owner, &fixture.alice_account, ALICE_DEVICE, &change).await?;
+    let changed = submit_and_expect_commit(owner, owner_account, &owner.device_id, &change).await?;
     let db = Db::connect(Some(old_url), PoolTuning::default()).await?;
     let store = PgAuthorityCommitStore {
         pool: db.pool.context("outgoing pool")?,
@@ -271,11 +286,9 @@ async fn activate_successor(
     drop(originals);
     // Preserve the incoming deployment identity while importing all private
     // Realm ledgers, rather than using the public member snapshot as an import.
-    group.server_mut(2).stop_external_process().await?;
+    new.stop_external_process().await?;
     import_private_database(old_url, new_url).await?;
-    group.server_mut(2).start_external_process().await?;
-    let old = group.server(0);
-    let new = group.server(2);
+    new.start_external_process().await?;
     let (status, body) = new
         .signed_peer_post(
             old,
