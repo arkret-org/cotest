@@ -14,6 +14,9 @@ use arkret_identifiers::{
     CircleId, DidCoreId, EventId, KeypackageClaimId, MlsWelcomeDeliveryId, RealmAuthorityHandoffId,
     RealmCommitId, RealmId, RealmSnapshotId, SidecarId,
 };
+use arkret_models_collaboration::events_payloads::{
+    RealmCreatePayload, RealmGenesis, RealmPurpose,
+};
 use arkret_models_collaboration::governance::circle::{
     CircleScopeError, validate_mls_activation_is_irreversible, validate_scope_mls_activation,
 };
@@ -987,11 +990,23 @@ fn build_authority_fixture(declared: &[DeclaredStream]) -> Result<AuthorityFixtu
 }
 
 fn genesis_create_event() -> Result<Event> {
+    let genesis = RealmGenesis::new(
+        RealmPurpose::Collaboration,
+        arkret_wire::GenesisSalt::generate()?,
+        arkret_wire::TrustDomainId::new("ak:trust_domain:example.net")?,
+        arkret_wire::SecurityClass::Standard,
+        service_id(OLD_AUTHORITY_DID)?,
+        arkret_wire::JoinRule::Invite,
+        HistoryAccess::SinceJoin,
+        arkret_wire::Discoverability::InviteOnly,
+        None,
+        None,
+    )?;
     Ok(arkret_wire::test_support::raw_event_for_actor_at(
         EventKind::RealmCreate.as_str(),
         ScopeRef::RealmGenesis,
         producer_actor()?,
-        json!({ "cotest_genesis": 1 }),
+        RealmCreatePayload::new(genesis).to_value()?,
         fixed_time(0),
     )?)
 }
