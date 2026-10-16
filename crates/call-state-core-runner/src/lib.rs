@@ -17,6 +17,9 @@ use arkret_canonical::DigestSuite;
 use arkret_canonical::base64url::base64url_encode;
 use arkret_event_draft::ProjectedEventOperation;
 use arkret_identifiers::{CallId, DeviceId, Did, DidCoreId, OperationId, RealmId};
+use arkret_models_collaboration::events_payloads::call::{
+    CallCaptureFailureReasonCode, CallLifecycleState, CallStateTransition,
+};
 use arkret_models_collaboration::objects::media::{
     CallMediaParticipantBinding, CallMediaTokenExchangeOutcome, CallMediaTokenExchangeRequestBody,
     MediaBackendKind, MediaBackendToken,
@@ -222,10 +225,23 @@ fn transition_operation(from: &str, to: &str, sequence: u64) -> ProjectedEventOp
         EventKind::CallState,
         json!({
             "call_id": CALL,
-            "state_transition": {"from": from, "to": to}
+            "state_transition": transition_payload(from, to)
         }),
         sequence,
     )
+}
+
+fn transition_payload(from: &str, to: &str) -> CallStateTransition {
+    let from = serde_json::from_value(json!(from)).expect("registered fixture lifecycle state");
+    let to = serde_json::from_value(json!(to)).expect("registered fixture lifecycle state");
+    CallStateTransition {
+        from,
+        to,
+        failure_reason_code: (to == CallLifecycleState::Failed).then(|| {
+            CallCaptureFailureReasonCode::new(arkret_wire::ReasonCode::MEDIA_NEGOTIATION_TIMEOUT)
+                .expect("registered fixture failure reason")
+        }),
+    }
 }
 
 fn committed_transition(from: &str, to: &str) -> CommittedEventFullView {
@@ -239,7 +255,7 @@ fn committed_transition(from: &str, to: &str) -> CommittedEventFullView {
         DidCoreId::new("ak:did_core:web:station.example").unwrap(),
         json!({
             "call_id": CALL,
-            "state_transition": {"from": from, "to": to}
+            "state_transition": transition_payload(from, to)
         }),
         Utc.timestamp_opt(1_800_000_000, 0).unwrap(),
     )
@@ -544,10 +560,7 @@ fn axis_case() -> Result<(usize, usize)> {
     let mut state = ProjectionState::new();
     set_head(&mut state, CALL, "scheduled");
     let participant = json!({
-        "actor_id": ActorId::account(AccountId::new(
-            DidCoreId::new("ak:did_core:web:bob.example").unwrap(),
-            DidCoreId::new("ak:did_core:web:bob.example").unwrap(),
-        )),
+        "actor_id": "ak:did_core:key:z6MkpTHR8VNsBxYAAWHut2Geadd9jSwuBV8xRoAnwWsdvktH",
         "device_id": "ak:device:01904100-0000-7000-8000-d00000000001"
     });
     let combined = operation(
@@ -661,16 +674,17 @@ pub fn run_call_state_core_suite() -> Result<CallStateCoreExecution> {
         ensure!(case.vector_id == *vector_id);
         ensure!(!case.runner.trim().is_empty());
         ensure!(!case.assertions.is_empty());
-        let (committed_effects, rejected_zero_effects) = match case.name.as_str() {
-            "participant_binding_invalid" => participant_case()?,
-            "initial_state_accepts_allowed" => initial_case()?,
-            "transition_matrix" => transition_matrix_case()?,
-            "terminal_absorbing" => terminal_case()?,
-            "replay_same_state_noop" => replay_case()?,
-            "ordered_competing_transitions" => competing_case()?,
-            "axis_result_split" => axis_case()?,
+        let (committed_effects, rejected_zero_effects) = (match case.name.as_str() {
+            "participant_binding_invalid" => participant_case(),
+            "initial_state_accepts_allowed" => initial_case(),
+            "transition_matrix" => transition_matrix_case(),
+            "terminal_absorbing" => terminal_case(),
+            "replay_same_state_noop" => replay_case(),
+            "ordered_competing_transitions" => competing_case(),
+            "axis_result_split" => axis_case(),
             other => anyhow::bail!("unmapped call-state case {other}"),
-        };
+        })
+        .with_context(|| format!("call-state core case {}", case.name))?;
         cases.push(CaseExecutionResult {
             case_id: case.name.clone(),
             assertions: case.assertions.len(),
@@ -701,6 +715,21 @@ mod tests {
         assert_eq!(execution.committed_effects, 24);
         assert_eq!(execution.rejected_zero_effects, 46);
         assert!(execution.cases.iter().all(|case| case.assertions > 0));
+        println!(
+            "[call-state-core-results] {}",
+            json!({
+                "entrypoint": execution.entrypoint,
+                "fixture": execution.fixture,
+                "cases": execution.cases.iter().map(|case| json!({
+                    "case_id": case.case_id,
+                    "assertions": case.assertions,
+                    "committed_effects": case.committed_effects,
+                    "rejected_zero_effects": case.rejected_zero_effects,
+                })).collect::<Vec<_>>(),
+                "committed_effects": execution.committed_effects,
+                "rejected_zero_effects": execution.rejected_zero_effects,
+            })
+        );
     }
 
     #[test]
