@@ -7,13 +7,14 @@ use crate::harness::CanonicalJsonBody;
 use crate::scenarios::mls_lifecycle_live::{ACTIVE_SUITE, Member, upload_public_blob};
 use crate::scenarios::sidecar_authority_live::private_reply::{self, JoinObserver};
 
-pub const REVIEWED_SIDECAR_CONTENT_CASES: [&str; 10] = [
+pub const REVIEWED_SIDECAR_CONTENT_CASES: [&str; 11] = [
     "sidecar_read_without_literal_grant",
     "sidecar_read_does_not_grant_write",
     "issue_pending_mls_is_only_ceiling",
     "bootstrap_desired_not_yet_effective",
     "desired_cannot_read_payload",
     "effective_sidecar_payload",
+    "queued_welcome_after_desired_revoke",
     "sidecar_explicit_write_grant",
     "sidecar_write_grant_without_effective",
     "sidecar_write_grant_after_desired_loss",
@@ -383,6 +384,11 @@ pub async fn run_agent_content_sidecar_production()
         (
             "sidecar_material_not_a_write_grant_operation",
             json!({"resource_profile":"sidecar","action":"ak.message.create","paths":[{"kind":"capability_grant","actions":["ak.message.create"],"resources":["A"],"complete":true,"active":true}],"phase":"bootstrap"}),
+            "deny",
+        ),
+        (
+            "queued_welcome_after_desired_revoke",
+            json!({"phase":"bootstrap","desired":false,"paths":path,"resource_profile":"sidecar"}),
             "deny",
         ),
     ] {
@@ -757,6 +763,14 @@ pub async fn run_agent_content_sidecar_production()
             == Some(&reply)
     );
     ensure!(open_message(&mut group, &reply)? == reply_plaintext);
+    let (queued_before_loss, _) =
+        crate::scenarios::mls_lifecycle_live::recipient_welcomes(&fresh_read).await?;
+    ensure!(
+        queued_before_loss.len() == 1
+            && queued_before_loss[0].commit_event_ref == state.event.event_id
+            && queued_before_loss[0].effective_scope == state.event.scope_ref,
+        "the accepted Welcome must still be queued without ACK after consume"
+    );
     let set = arkret_models_collaboration::agent_interaction::AgentInteractionSetPayload {
         agent_account_id: agent.agent_account.clone(),
         controller_account_id: deployment.account.clone(),
@@ -848,6 +862,15 @@ pub async fn run_agent_content_sidecar_production()
     )
     .await?;
     ensure!(client.sdk().committed_event_get(&grant_event).await? == original_grant);
+    crate::harness::expect_api_error(
+        fresh_read.get("/_arkret/self/device_messages"),
+        StatusCode::FORBIDDEN,
+        arkret_wire::ErrorCode::CAPABILITY_DENIED,
+    )
+    .await?;
+    println!(
+        "[agent-sidecar-revoked-welcome] actual_unacked_welcome_present_after_consume=1 exact_scope_and_add=1 accepted_membership_loss=1 old_read_ceiling_retained=1 queued_welcome_new_delivery_denied=1 no_retroactive_knowledge_claim=1"
+    );
     println!(
         "[agent-sidecar-write] accepted_original_grant=1 fresh_real_coauth_write_ceiling=1 explicit_agent_message_committed=1 controller_decrypted=1 accepted_private_to_public=1 mode_preserves_roster=1 accepted_agent_leave=1 desired_and_effective_lost=1 old_write_credential_refused=1 required_rotation_checkpoint_denied=1 rejected_event_not_stored=1 grant_original_retained=1"
     );
