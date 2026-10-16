@@ -9,10 +9,11 @@ use super::content_grant_evidence::GrantFixture;
 use super::*;
 use crate::harness::expect_api_error;
 
-pub const REVIEWED_POLICY_CONTENT_CASES: [&str; 4] = [
+pub const REVIEWED_POLICY_CONTENT_CASES: [&str; 5] = [
     "explicit_policy_allow",
     "policy_deny",
     "unsafe_flat_cross_product",
+    "management_read_denied",
     "global_deny_overrides_complete_allow",
 ];
 
@@ -133,6 +134,11 @@ pub async fn run_agent_content_policy_production()
         ),
         ("policy_deny", json!({"policy_state":"deny"}), "deny"),
         (
+            "management_read_denied",
+            json!({"management_allows":false}),
+            "deny",
+        ),
+        (
             "unsafe_flat_cross_product",
             json!({"flat_encoding_safe":false}),
             "deny",
@@ -185,6 +191,9 @@ pub async fn run_agent_content_policy_production()
     )
     .await?;
     read_denied(&scene, &runtime).await?;
+    println!(
+        "[agent-management-read] accepted_exact_agent_read_deny=1 existing_read_credential_denied=1 complete_membership_retained=1 controller_original_retained=1"
+    );
     deny.rules[0].effect = arkret_wire::PolicyEffect::Allow;
     publish_policy(&scene, &deny, Some(revision)).await?;
     let (runtime, _) = scene.issue_for(&read_operations, scene.selectors()).await?;

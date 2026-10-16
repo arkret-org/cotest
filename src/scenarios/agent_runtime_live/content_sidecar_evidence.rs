@@ -7,7 +7,7 @@ use crate::harness::CanonicalJsonBody;
 use crate::scenarios::mls_lifecycle_live::{ACTIVE_SUITE, Member, upload_public_blob};
 use crate::scenarios::sidecar_authority_live::private_reply::{self, JoinObserver};
 
-pub const REVIEWED_SIDECAR_CONTENT_CASES: [&str; 11] = [
+pub const REVIEWED_SIDECAR_CONTENT_CASES: [&str; 13] = [
     "sidecar_read_without_literal_grant",
     "sidecar_read_does_not_grant_write",
     "issue_pending_mls_is_only_ceiling",
@@ -15,11 +15,174 @@ pub const REVIEWED_SIDECAR_CONTENT_CASES: [&str; 11] = [
     "desired_cannot_read_payload",
     "effective_sidecar_payload",
     "queued_welcome_after_desired_revoke",
+    "future_epoch_material_after_desired_revoke",
+    "valid_future_epoch_material",
     "sidecar_explicit_write_grant",
     "sidecar_write_grant_without_effective",
     "sidecar_write_grant_after_desired_loss",
     "sidecar_material_not_a_write_grant_operation",
 ];
+
+async fn advance_epoch_material(
+    controller: &Member,
+    agent: &AgentRuntimeSession,
+    read: &TestActorClient,
+    group: &mut arkret::ArkretMlsGroup,
+    agent_group: &mut arkret::ArkretMlsGroup,
+    scope: &ScopeRef,
+) -> Result<arkret_wire::CommittedEventFullView> {
+    let ScopeRef::Sidecar {
+        realm_id,
+        sidecar_id,
+    } = scope
+    else {
+        bail!("native Sidecar scope required")
+    };
+    let snapshot = controller
+        .client
+        .sdk()
+        .realm_state_snapshot_head(realm_id)
+        .await?;
+    let base: arkret_wire::MlsGroupCurrent = snapshot
+        .current_state_entries
+        .iter()
+        .find_map(|row| {
+            let arkret_wire::TypedCurrentRow::Value {
+                selector: arkret_wire::CurrentSelector::MlsGroup { scope_ref },
+                value,
+                ..
+            } = row
+            else {
+                return None;
+            };
+            (scope_ref == scope).then(|| serde_json::from_value(value.clone()))
+        })
+        .context("current Sidecar epoch")??;
+    ensure!(base.epoch == 1 && group.epoch() == 1 && agent_group.epoch() == 1);
+    let view = controller
+        .client
+        .sdk()
+        .agent_sidecar_get(sidecar_id)
+        .await?;
+    ensure!(
+        view.desired_agent_ids == vec![agent.agent_account.principal_id.clone()]
+            && view.effective_agent_ids == vec![agent.agent_account.principal_id.clone()]
+    );
+    let binding = arkret::MlsGovernanceBindingPayload::sidecar(
+        realm_id.clone(),
+        sidecar_id.clone(),
+        Some(base.current_mls_commit_event_ref.clone()),
+        base.epoch,
+        base.epoch + 1,
+        base.current_key_access_revision,
+        view.mls_context.participant_authority_digest,
+        view.mls_context.authority_stream_head,
+    )?;
+    let update = group.self_update_commit_with_governance_binding(&binding)?;
+    let payload = arkret::MlsCommitPayload::new(
+        base.current_mls_commit_event_ref.clone(),
+        base.current_key_access_revision,
+        &update,
+        binding,
+    )?;
+    let mut event = controller
+        .client
+        .author_event(
+            realm_id.as_str(),
+            "ak.mls.commit",
+            serde_json::to_value(payload)?,
+        )
+        .await?;
+    event.scope_ref = scope.clone();
+    crate::harness::refresh_typed_event_proof_with_signing_seed(
+        &mut event,
+        controller.key.to_bytes(),
+    )?;
+    let journal = tempfile::tempdir()?;
+    let path = journal.path().join("pending-controller.json");
+    let mut file = std::fs::File::create(&path)?;
+    use std::io::Write as _;
+    file.write_all(&serde_json::to_vec(&group.export_state_record()?)?)?;
+    file.sync_all()?;
+    let pending: arkret::MlsGroupStateRecord = serde_json::from_slice(&std::fs::read(&path)?)?;
+    *group = arkret::ArkretMlsGroup::restore_from_state_record(&pending)?;
+    let submission =
+        arkret_models_collaboration::authority_commit::SelfAuthoritySubmitRequest::MlsCommit(
+            arkret_wire::MlsCommitSubmission {
+                commit_event: event.clone(),
+                welcomes: vec![],
+                idempotency_key: arkret_wire::UuidV7::new(
+                    crate::scenarios::mls_lifecycle_live::fresh_uuid_v7().parse()?,
+                )?,
+            },
+        );
+    let (status, result) =
+        crate::scenarios::mls_lifecycle_live::post_json(&controller.client, &submission).await?;
+    ensure!(
+        status == StatusCode::OK,
+        "Sidecar real future Update refused: {status} {result}"
+    );
+    let accepted = crate::scenarios::mls_lifecycle_live::accepted_full_view(
+        &controller.client,
+        &event.event_id,
+    )
+    .await?;
+    ensure!(group.install_accepted_commit(&accepted, &base)? == 2);
+    let received = read.sdk().committed_event_get(&event.event_id).await?;
+    let arkret_wire::CommittedEventView::Full(received) = received else {
+        bail!("current effective Agent did not receive actual future epoch material")
+    };
+    ensure!(received == accepted && agent_group.install_accepted_commit(&received, &base)? == 2);
+    for (http, participant, actor) in [
+        (
+            controller.client.sdk(),
+            &mut *group,
+            controller.actor.clone(),
+        ),
+        (
+            read.sdk(),
+            &mut *agent_group,
+            ActorId::account(agent.agent_account.clone()),
+        ),
+    ] {
+        let request = arkret::MlsMemberRosterAuthorityReadRequestBody {
+            realm_id: realm_id.clone(),
+            effective_scope: scope.clone(),
+            mls_group_id: scope.canonical_mls_group_id()?,
+            target_commit_event_ref: event.event_id.clone(),
+            target_epoch: 2,
+            caller_actor_id: actor,
+            cursor: None,
+        };
+        let page = http.self_mls_roster_authority(&request).await?;
+        ensure!(page.roster.records.len() == 2 && page.roster.next_cursor.is_none());
+        let peer = arkret::verify_mls_member_roster_authority_pages(
+            std::slice::from_ref(&page),
+            &request,
+        )?;
+        let material = http
+            .self_mls_group_state_material(&arkret::mls_roster_genesis_material_request(
+                &peer,
+                &page.roster.manifest,
+            ))
+            .await?;
+        arkret::install_verified_mls_self_roster_bindings(
+            participant,
+            &[page],
+            &request,
+            &material,
+        )
+        .map_err(anyhow::Error::msg)?;
+    }
+    let path = journal.path().join("updated-agent.json");
+    let mut file = std::fs::File::create(&path)?;
+    file.write_all(&serde_json::to_vec(&agent_group.export_state_record()?)?)?;
+    file.sync_all()?;
+    let state: arkret::MlsGroupStateRecord = serde_json::from_slice(&std::fs::read(&path)?)?;
+    *agent_group = arkret::ArkretMlsGroup::restore_from_state_record(&state)?;
+    ensure!(agent_group.epoch() == 2);
+    Ok(accepted)
+}
 
 async fn controller_message(
     controller: &Member,
@@ -34,7 +197,7 @@ async fn controller_message(
         arkret::EncryptedPayloadScheme::MlsRfc9420,
         scope.clone(),
         arkret_wire::EventKind::MessageCreate.as_str(),
-        1,
+        group.epoch(),
         state.event.event_id.clone(),
         group.local_content_sender_domain()?,
         arkret::EventContentRoutingContext::None,
@@ -390,6 +553,16 @@ pub async fn run_agent_content_sidecar_production()
             "queued_welcome_after_desired_revoke",
             json!({"phase":"bootstrap","desired":false,"paths":path,"resource_profile":"sidecar"}),
             "deny",
+        ),
+        (
+            "future_epoch_material_after_desired_revoke",
+            json!({"phase":"future_material","desired":false,"paths":path,"resource_profile":"sidecar"}),
+            "deny",
+        ),
+        (
+            "valid_future_epoch_material",
+            json!({"phase":"future_material","paths":path,"resource_profile":"sidecar"}),
+            "allow",
         ),
     ] {
         let rows = contract["cases"]
@@ -763,6 +936,26 @@ pub async fn run_agent_content_sidecar_production()
             == Some(&reply)
     );
     ensure!(open_message(&mut group, &reply)? == reply_plaintext);
+    let future_state = advance_epoch_material(
+        &controller,
+        &agent,
+        &fresh_read,
+        &mut group,
+        &mut agent_group,
+        &state.event.scope_ref,
+    )
+    .await?;
+    let (future_message, future_plaintext) =
+        controller_message(&controller, &mut group, &future_state, &strand).await?;
+    ensure!(
+        fresh_read
+            .sdk()
+            .committed_event_get(&future_message.event_id)
+            .await?
+            .reducer_input()
+            == Some(&future_message)
+    );
+    ensure!(open_message(&mut agent_group, &future_message)? == future_plaintext);
     let (queued_before_loss, _) =
         crate::scenarios::mls_lifecycle_live::recipient_welcomes(&fresh_read).await?;
     ensure!(
@@ -817,7 +1010,7 @@ pub async fn run_agent_content_sidecar_production()
     .await?;
     let revoked = client.sdk().agent_sidecar_get(&sidecar).await?;
     ensure!(revoked.desired_agent_ids.is_empty() && revoked.effective_agent_ids.is_empty());
-    let (denied, _) = agent_message(&agent, &mut agent_group, &state, &strand, &grant)?;
+    let (denied, _) = agent_message(&agent, &mut agent_group, &future_state, &strand, &grant)?;
     let submit = ServiceOperationId::from_wire(ServiceOperationId::SELF_EVENTS_COMMAND_SUBMIT_V1)
         .context("registered self events operation")?;
     ensure!(
@@ -868,6 +1061,26 @@ pub async fn run_agent_content_sidecar_production()
         arkret_wire::ErrorCode::CAPABILITY_DENIED,
     )
     .await?;
+    crate::harness::expect_api_error(
+        fresh_read.get(&format!(
+            "/_arkret/self/committed-events/{}",
+            future_state.event.event_id
+        )),
+        StatusCode::NOT_FOUND,
+        arkret_wire::ErrorCode::NOT_FOUND,
+    )
+    .await?;
+    ensure!(
+        client
+            .sdk()
+            .committed_event_get(&future_state.event.event_id)
+            .await?
+            .reducer_input()
+            == Some(&future_state.event)
+    );
+    println!(
+        "[agent-sidecar-future] actual_governed_update_epoch_two=1 accepted_lineage_read=1 current_effective_endpoint=1 update_installed_and_durable=1 new_epoch_message_decrypted=1 accepted_desired_loss=1 old_read_ceiling_retained=1 update_material_new_delivery_denied=1 controller_original_retained=1 prior_knowledge_not_retracted=1"
+    );
     println!(
         "[agent-sidecar-revoked-welcome] actual_unacked_welcome_present_after_consume=1 exact_scope_and_add=1 accepted_membership_loss=1 old_read_ceiling_retained=1 queued_welcome_new_delivery_denied=1 no_retroactive_knowledge_claim=1"
     );

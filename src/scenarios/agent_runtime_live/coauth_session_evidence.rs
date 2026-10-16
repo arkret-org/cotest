@@ -230,6 +230,7 @@ pub(super) async fn actual_agent_deployment(label: &str) -> Result<ActualAgentDe
     );
     let account =
         arkret_wire::AccountId::new(principal.core_id.clone(), station.service_id().clone());
+    wait_for_onboarding_activity(&coauth.pg.connect_url).await?;
     Ok(ActualAgentDeployment {
         station,
         coauth,
@@ -319,6 +320,41 @@ async fn run_agent_issuer_boundary(
             assertions: 4,
         }],
     })
+}
+
+async fn wait_for_onboarding_activity(database_url: &str) -> Result<()> {
+    let deadline = std::time::Instant::now() + Duration::from_secs(90);
+    loop {
+        let url = database_url.to_owned();
+        let (sessions, durable): (i64, i64) = tokio::task::spawn_blocking(move || -> Result<_> {
+            let mut db = postgres::Client::connect(&url, postgres::NoTls)?;
+            let row = db.query_one(
+                "SELECT count(*), count(*) FILTER (WHERE s.last_active_at >= h.issued_at) \
+                 FROM oauth_sessions s JOIN LATERAL \
+                 (SELECT max(issued_at) AS issued_at FROM account_handoff_grants \
+                  WHERE local_account_id=s.user_id) h ON h.issued_at IS NOT NULL \
+                 WHERE s.finished_at IS NULL",
+                &[],
+            )?;
+            Ok((row.get(0), row.get(1)))
+        })
+        .await??;
+        ensure!(
+            sessions == 1,
+            "normal controller onboarding must have one bound OAuth session"
+        );
+        if durable == sessions {
+            println!(
+                "[agent-issuer-baseline] prior_handoff_activity_durably_flushed=1 complete_session_fields_retained=1 no_database_mutation=1"
+            );
+            return Ok(());
+        }
+        ensure!(
+            std::time::Instant::now() < deadline,
+            "normal handoff activity did not reach the production minute flush"
+        );
+        tokio::time::sleep(Duration::from_millis(200)).await;
+    }
 }
 
 pub(super) async fn wait_for_issuer_authorization(
@@ -1085,10 +1121,30 @@ pub(super) async fn expect_issue_refusal(
             "Agent issue omitted its formal reason {reason}: {problem:?}"
         );
     }
-    ensure!(
-        issuer_state(database_url).await? == before,
-        "refused Agent request changed issuer session, grant, operation or proof state"
-    );
+    let after = issuer_state(database_url).await?;
+    if after != before {
+        let changed_tables = before
+            .as_object()
+            .context("issuer state object")?
+            .keys()
+            .filter(|table| before[*table] != after[*table])
+            .cloned()
+            .collect::<Vec<_>>();
+        if let Some(directory) = std::env::var_os("COTEST_SERVICE_LOG_DIR") {
+            let directory = std::path::PathBuf::from(directory);
+            std::fs::create_dir_all(&directory)?;
+            let path = directory.join(format!("issuer-noop-{}.json", super::unique_uuid7()));
+            let mut file = std::fs::File::create(path)?;
+            use std::io::Write as _;
+            file.write_all(&serde_json::to_vec(
+                &json!({"before":before,"after":after}),
+            )?)?;
+            file.sync_all()?;
+        }
+        anyhow::bail!(
+            "refused Agent request changed issuer session, grant, operation or proof state; tables={changed_tables:?}; private diagnostic retained"
+        );
+    }
     println!(
         "[agent-session] refused_code={} reason={reason:?} status={} full_issuer_state_unchanged=1",
         problem.code(),
