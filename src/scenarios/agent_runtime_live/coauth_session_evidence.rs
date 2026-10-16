@@ -32,6 +32,7 @@ pub(super) struct ActualAgentDeployment {
     pub coauth: crate::scenarios::_helpers::coauth_bootstrap::SpawnedCoauth,
     pub controller: crate::harness::TestActorClient,
     pub account: arkret_wire::AccountId,
+    pub(super) endpoints: DeploymentEndpoints,
     _email: SpawnedExternalProcess,
 }
 
@@ -236,8 +237,77 @@ pub(super) async fn actual_agent_deployment(label: &str) -> Result<ActualAgentDe
         coauth,
         controller,
         account,
+        endpoints,
         _email,
     })
+}
+
+pub(super) async fn additional_controller(
+    deployment: &ActualAgentDeployment,
+    handle: &str,
+    device_id: &str,
+) -> Result<crate::harness::TestActorClient> {
+    let mut builder = reqwest::Client::builder()
+        .cookie_store(true)
+        .redirect(reqwest::redirect::Policy::none())
+        .timeout(Duration::from_secs(45));
+    if let Some(ca) = deployment.station.tls_ca_path() {
+        builder = builder
+            .tls_backend_rustls()
+            .tls_certs_only(reqwest::Certificate::from_pem_bundle(&std::fs::read(ca)?)?);
+    }
+    let http = builder.build()?;
+    let controller = deployment
+        .station
+        .canonical_client(CanonicalClientRequest {
+            http: &http,
+            endpoints: &deployment.endpoints,
+            oidc_client_id: "01GFWR28C4KNE04WG3HKXB7C9R",
+            handle,
+            password: "1amTester!",
+            device_id,
+            display_name: "Second actual Sidecar controller",
+        })
+        .await?;
+    let principal = controller
+        .principal
+        .as_ref()
+        .context("normal second controller custody")?;
+    ensure!(principal.core_id != deployment.account.principal_id);
+    let deadline = std::time::Instant::now() + Duration::from_secs(90);
+    loop {
+        let url = deployment.coauth.pg.connect_url.clone();
+        let id = principal.core_id.to_string();
+        let (sessions, durable): (i64, i64) = tokio::task::spawn_blocking(move || -> Result<_> {
+            let mut db = postgres::Client::connect(&url, postgres::NoTls)?;
+            let row = db.query_one(
+                "SELECT count(*), count(*) FILTER (WHERE s.last_active_at>=h.issued_at) \
+                FROM oauth_sessions s JOIN principal_did_owners p ON p.user_id=s.user_id \
+                JOIN LATERAL (SELECT max(issued_at) AS issued_at FROM account_handoff_grants \
+                    WHERE local_account_id=s.user_id) h ON h.issued_at IS NOT NULL \
+                WHERE p.principal_id=$1 AND s.finished_at IS NULL",
+                &[&id],
+            )?;
+            Ok((row.get(0), row.get(1)))
+        })
+        .await??;
+        ensure!(
+            sessions == 1,
+            "normal second controller must have one exact bound OAuth session"
+        );
+        if durable == sessions {
+            break;
+        }
+        ensure!(
+            std::time::Instant::now() < deadline,
+            "second controller activity not durably flushed"
+        );
+        tokio::time::sleep(Duration::from_millis(200)).await;
+    }
+    println!(
+        "[agent-second-controller] normal_onboarding=1 distinct_principal=1 exact_prior_activity_flushed=1"
+    );
+    Ok(controller)
 }
 
 async fn run_agent_issuer_boundary(

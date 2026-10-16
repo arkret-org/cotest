@@ -7,7 +7,7 @@ use crate::harness::CanonicalJsonBody;
 use crate::scenarios::mls_lifecycle_live::{ACTIVE_SUITE, Member, upload_public_blob};
 use crate::scenarios::sidecar_authority_live::private_reply::{self, JoinObserver};
 
-pub const REVIEWED_SIDECAR_CONTENT_CASES: [&str; 15] = [
+pub const REVIEWED_SIDECAR_CONTENT_CASES: [&str; 17] = [
     "sidecar_read_without_literal_grant",
     "sidecar_read_does_not_grant_write",
     "issue_pending_mls_is_only_ceiling",
@@ -16,14 +16,288 @@ pub const REVIEWED_SIDECAR_CONTENT_CASES: [&str; 15] = [
     "bootstrap_missing_add_welcome_claim_lineage",
     "desired_cannot_read_payload",
     "effective_sidecar_payload",
+    "wrong_sidecar_binding",
     "queued_welcome_after_desired_revoke",
     "future_epoch_material_after_desired_revoke",
     "valid_future_epoch_material",
+    "realm_grant_cannot_replace_sidecar_authority",
     "sidecar_explicit_write_grant",
     "sidecar_write_grant_without_effective",
     "sidecar_write_grant_after_desired_loss",
     "sidecar_material_not_a_write_grant_operation",
 ];
+
+async fn other_controller_content(
+    deployment: &coauth_session_evidence::ActualAgentDeployment,
+    agent: &AgentRuntimeSession,
+    read: &TestActorClient,
+    realm: &RealmId,
+    strand: &arkret_wire::StrandId,
+    own_message: &Event,
+) -> Result<()> {
+    let client = coauth_session_evidence::additional_controller(
+        deployment,
+        "bob",
+        "ak:device:01904100-0000-7000-8000-000000002302",
+    )
+    .await?;
+    let principal = client
+        .principal
+        .as_ref()
+        .context("actual second controller")?;
+    let account = AccountId::new(
+        principal.core_id.clone(),
+        deployment.station.service_id().clone(),
+    );
+    let join = MembershipPayload::join(
+        realm.clone(),
+        ActorId::account(account.clone()),
+        "Independent Sidecar controller",
+    );
+    let joined: AuthoritySubmitOutcome = serde_json::from_value(
+        client
+            .submit_event(realm.as_str(), "ak.member.state", join.to_value()?)
+            .await?,
+    )?;
+    ensure!(matches!(
+        joined,
+        AuthoritySubmitOutcome::Accepted {
+            status: AuthorityCommitStatus::Committed,
+            ..
+        }
+    ));
+    deployment
+        .controller
+        .grant_realm_actions_to(
+            realm.as_str(),
+            &client.actor,
+            &["ak.event.read", "ak.message.create"],
+        )
+        .await?;
+    let controller = Member {
+        client: client.clone(),
+        account: account.clone(),
+        actor: ActorId::account(account.clone()),
+        device: principal.device_id.clone(),
+        method: DidUrl::new(format!("{}#{}", principal.did, principal.device_id))
+            .map_err(anyhow::Error::msg)?,
+        key: principal.device_signing_key.clone(),
+        authorize_event_id: principal.founding_authorize_event_id.clone(),
+    };
+    let operation = ProtocolOperationId::new(format!("ak:operation:{}", unique_uuid7()))
+        .map_err(anyhow::Error::msg)?;
+    let prepare = SidecarEnsureRequestBody::Prepare(SidecarEnsurePrepareRequestBody {
+        phase: SidecarEnsurePreparePhase::Prepare,
+        operation_id: operation.clone(),
+        idempotency_key: IdempotencyKey::new(format!("other-prepare-{}", unique_uuid7()))
+            .map_err(anyhow::Error::msg)?,
+        source_realm_id: realm.clone(),
+        controller_account_id: account.clone(),
+        context_ref: SidecarContextRef::Strand {
+            strand_id: strand.clone(),
+        },
+    });
+    let SidecarEnsureOutcome::PreparedNew(prepared) =
+        client.sdk().agent_sidecar_ensure(&prepare).await?
+    else {
+        bail!("new independent Sidecar required")
+    };
+    let create = client.sign_prepared_contact_event(
+        &prepared.create_event_draft,
+        arkret_wire::EventKind::SidecarCreate.as_str(),
+    )?;
+    let attach = client.sign_prepared_contact_event(
+        &prepared.context_attach_event_draft,
+        arkret_wire::EventKind::SidecarContextAttach.as_str(),
+    )?;
+    let request = SidecarEnsureRequestBody::Commit(SidecarEnsureCommitRequestBody {
+        phase: SidecarEnsureCommitPhase::Commit,
+        operation_id: operation,
+        idempotency_key: IdempotencyKey::new(format!("other-commit-{}", unique_uuid7()))
+            .map_err(anyhow::Error::msg)?,
+        reservation_handle: prepared.reservation_handle,
+        create_event: create,
+        context_attach_event: attach,
+    });
+    let SidecarEnsureOutcome::Accepted(accepted) =
+        client.sdk().agent_sidecar_ensure(&request).await?
+    else {
+        bail!("independent Sidecar acceptance required")
+    };
+    let sidecar = accepted.sidecar_id;
+    let view = client.sdk().agent_sidecar_get(&sidecar).await?;
+    ensure!(
+        view.sidecar.controller_account_id == account
+            && view.sidecar.realm_id == *realm
+            && view.desired_agent_ids.is_empty()
+    );
+    let scope = ScopeRef::Sidecar {
+        realm_id: realm.clone(),
+        sidecar_id: sidecar.clone(),
+    };
+    ensure!(scope != own_message.scope_ref);
+    let binding = arkret::MlsGovernanceBindingPayload::sidecar(
+        realm.clone(),
+        sidecar,
+        None,
+        0,
+        0,
+        0,
+        view.mls_context.participant_authority_digest,
+        view.mls_context.authority_stream_head,
+    )?;
+    let mut group = controller
+        .mls_identity()?
+        .create_group_with_governance_binding(&scope, &binding)?;
+    let leaf = crate::scenarios::cross_station_mls_welcome::genesis_creator_leaf_authority(
+        &mut group,
+        &controller,
+    )?;
+    let (info, tree) = group.public_group_state_bytes()?;
+    let info = upload_public_blob(&client, realm, &info).await?;
+    let tree = upload_public_blob(&client, realm, &tree).await?;
+    let mut genesis = client
+        .author_event(
+            realm.as_str(),
+            "ak.mls.genesis",
+            json!({
+        "cipher_suite":ACTIVE_SUITE,"group_info_ref":info,"ratchet_tree_ref":tree,
+        "governance_binding":binding,"creator_leaf_authority":leaf,
+        "created_at":arkret_canonical::format_timestamp_canonical(Utc::now())}),
+        )
+        .await?;
+    genesis.scope_ref = scope;
+    crate::harness::refresh_typed_event_proof_with_signing_seed(
+        &mut genesis,
+        controller.key.to_bytes(),
+    )?;
+    crate::scenarios::human_device_producer_live::submit_and_expect_commit(
+        &client,
+        &account,
+        client.device_id.as_str(),
+        &genesis,
+    )
+    .await?;
+    let state =
+        crate::scenarios::mls_lifecycle_live::accepted_full_view(&client, &genesis.event_id)
+            .await?;
+    let request = arkret::MlsMemberRosterAuthorityReadRequestBody {
+        realm_id: realm.clone(),
+        effective_scope: genesis.scope_ref.clone(),
+        mls_group_id: genesis.scope_ref.canonical_mls_group_id()?,
+        target_commit_event_ref: genesis.event_id.clone(),
+        target_epoch: 0,
+        caller_actor_id: controller.actor.clone(),
+        cursor: None,
+    };
+    let page = client.sdk().self_mls_roster_authority(&request).await?;
+    ensure!(page.roster.records.len() == 1 && page.roster.next_cursor.is_none());
+    let peer =
+        arkret::verify_mls_member_roster_authority_pages(std::slice::from_ref(&page), &request)?;
+    let material = client
+        .sdk()
+        .self_mls_group_state_material(&arkret::mls_roster_genesis_material_request(
+            &peer,
+            &page.roster.manifest,
+        ))
+        .await?;
+    arkret::install_verified_mls_self_roster_bindings(&mut group, &[page], &request, &material)
+        .map_err(anyhow::Error::msg)?;
+    let (target, _) = controller_message(&controller, &mut group, &state, strand).await?;
+    let (grant, _) = deployment
+        .controller
+        .grant_realm_actions_to(realm.as_str(), agent.agent_did.as_str(), &["ak.event.read"])
+        .await?;
+    let grant = arkret_wire::GrantId::new(grant)?;
+    let original = deployment
+        .controller
+        .sdk()
+        .committed_event_get(&EventId::from_token_bytes(grant.token_bytes())?)
+        .await?;
+    let payload: arkret_models_collaboration::events_payloads::CapabilityGrantPayload =
+        serde_json::from_value(serde_json::to_value(
+            &original
+                .reducer_input()
+                .context("parent literal read grant")?
+                .payload,
+        )?)?;
+    ensure!(payload.grant.actions == vec!["ak.event.read"]);
+    ensure!(matches!(payload.grant.subject,
+        arkret_models_collaboration::governance::grant_constraint::CapabilitySubject::Actor(ref actor)
+        if actor==&ActorId::account(agent.agent_account.clone())));
+    ensure!(
+        read.sdk()
+            .committed_event_get(&own_message.event_id)
+            .await?
+            .reducer_input()
+            == Some(own_message)
+    );
+    crate::harness::expect_api_error(
+        read.get(&format!(
+            "/_arkret/self/committed-events/{}",
+            target.event_id
+        )),
+        StatusCode::NOT_FOUND,
+        arkret_wire::ErrorCode::NOT_FOUND,
+    )
+    .await?;
+    ensure!(
+        client
+            .sdk()
+            .committed_event_get(&target.event_id)
+            .await?
+            .reducer_input()
+            == Some(&target)
+    );
+    let leave = MembershipPayload::transition(
+        arkret_models_collaboration::governance::membership_invite::MembershipPayloadState::Leave,
+        controller.actor.clone(),
+        "Recheck ordinary controller qualification after departure",
+    );
+    let left: AuthoritySubmitOutcome = serde_json::from_value(
+        client
+            .submit_event(realm.as_str(), "ak.member.state", leave.to_value()?)
+            .await?,
+    )?;
+    ensure!(matches!(
+        left,
+        AuthoritySubmitOutcome::Accepted {
+            status: AuthorityCommitStatus::Committed,
+            ..
+        }
+    ));
+    let denied = SidecarEnsureRequestBody::Prepare(SidecarEnsurePrepareRequestBody {
+        phase: SidecarEnsurePreparePhase::Prepare,
+        operation_id: ProtocolOperationId::new(format!("ak:operation:{}", unique_uuid7()))
+            .map_err(anyhow::Error::msg)?,
+        idempotency_key: IdempotencyKey::new(format!("departed-prepare-{}", unique_uuid7()))
+            .map_err(anyhow::Error::msg)?,
+        source_realm_id: realm.clone(),
+        controller_account_id: account,
+        context_ref: SidecarContextRef::Strand {
+            strand_id: strand.clone(),
+        },
+    });
+    crate::harness::expect_api_error(
+        client
+            .post("/_arkret/self/agent-sidecars:ensure")
+            .canonical_json(&denied)?,
+        StatusCode::FORBIDDEN,
+        arkret_wire::ErrorCode::CAPABILITY_DENIED,
+    )
+    .await?;
+    ensure!(
+        read.sdk()
+            .committed_event_get(&own_message.event_id)
+            .await?
+            .reducer_input()
+            == Some(own_message)
+    );
+    println!(
+        "[agent-other-sidecar] actual_second_controller_onboarded=1 accepted_same_realm_join=1 independent_sidecar_genesis=1 actual_other_private_message=1 parent_literal_read_grant_retained=1 own_sidecar_payload_full=1 other_sidecar_payload_not_delivered=1 actual_owner_original_full=1 departed_controller_fresh_ensure_denied=1 other_owner_departure_preserves_own_read=1"
+    );
+    Ok(())
+}
 
 async fn advance_epoch_material(
     controller: &Member,
@@ -726,6 +1000,16 @@ pub async fn run_agent_content_sidecar_production()
             json!({"phase":"future_material","paths":path,"resource_profile":"sidecar"}),
             "allow",
         ),
+        (
+            "wrong_sidecar_binding",
+            json!({"phase":"payload","same_account_scope":false,"paths":path,"resource_profile":"sidecar"}),
+            "deny",
+        ),
+        (
+            "realm_grant_cannot_replace_sidecar_authority",
+            json!({"resource_profile":"sidecar","paths":[{"kind":"capability_grant","actions":["ak.event.read"],"resources":["A"],"complete":true,"active":true}]}),
+            "deny",
+        ),
     ] {
         let rows = contract["cases"]
             .as_array()
@@ -1118,6 +1402,15 @@ pub async fn run_agent_content_sidecar_production()
             == Some(&future_message)
     );
     ensure!(open_message(&mut agent_group, &future_message)? == future_plaintext);
+    other_controller_content(
+        &deployment,
+        &agent,
+        &fresh_read,
+        &realm,
+        &strand,
+        &future_message,
+    )
+    .await?;
     let (queued_before_loss, _) =
         crate::scenarios::mls_lifecycle_live::recipient_welcomes(&fresh_read).await?;
     ensure!(
