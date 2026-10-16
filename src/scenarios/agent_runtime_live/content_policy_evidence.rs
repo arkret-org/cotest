@@ -9,7 +9,8 @@ use super::content_grant_evidence::GrantFixture;
 use super::*;
 use crate::harness::{CanonicalJsonBody, expect_api_error};
 
-pub const REVIEWED_POLICY_CONTENT_CASES: [&str; 6] = [
+pub const REVIEWED_POLICY_CONTENT_CASES: [&str; 7] = [
+    "policy_unknown_is_not_absent",
     "explicit_policy_allow",
     "policy_deny",
     "unsafe_flat_cross_product",
@@ -17,6 +18,96 @@ pub const REVIEWED_POLICY_CONTENT_CASES: [&str; 6] = [
     "global_deny_overrides_complete_allow",
     "participation_current_denied",
 ];
+
+async fn unavailable_policy_source(
+    scene: &GrantFixture,
+    operations: &[&str],
+    runtime: &TestActorClient,
+) -> Result<()> {
+    use crate::scenarios::_helpers::acceptance_footprint::acceptance_rows_with_agent_stores;
+    let database = scene
+        .deployment
+        .station
+        .owned_database_url()
+        .context("owned Station database")?
+        .to_owned();
+    let before = acceptance_rows_with_agent_stores(&database, true).await?;
+    let lock_database = database.clone();
+    let (ready_tx, ready_rx) = tokio::sync::oneshot::channel();
+    let (release_tx, release_rx) = std::sync::mpsc::channel();
+    let blocker = tokio::task::spawn_blocking(move || -> Result<()> {
+        let mut connection = postgres::Client::connect(&lock_database, postgres::NoTls)?;
+        let backend: i32 = connection.query_one("SELECT pg_backend_pid()", &[])?.get(0);
+        let mut transaction = connection.transaction()?;
+        transaction.batch_execute("SET LOCAL lock_timeout='5s'; LOCK TABLE policy_current_results IN ACCESS EXCLUSIVE MODE")?;
+        let _ = ready_tx.send(backend);
+        let _ = release_rx.recv_timeout(Duration::from_secs(30));
+        transaction.rollback()?;
+        Ok(())
+    });
+    let blocker_pid = ready_rx
+        .await
+        .context("Policy source lock was not established")?;
+    let observe_database = database.clone();
+    let observed = tokio::task::spawn_blocking(move || -> Result<()> {
+        let mut connection = postgres::Client::connect(&observe_database, postgres::NoTls)?;
+        let deadline = std::time::Instant::now() + Duration::from_secs(8);
+        loop {
+            let waiting: bool = connection.query_one(
+                "SELECT EXISTS(SELECT 1 FROM pg_locks l WHERE NOT l.granted AND l.relation='policy_current_results'::regclass AND $1=ANY(pg_blocking_pids(l.pid)))",
+                &[&blocker_pid],
+            )?.get(0);
+            if waiting {
+                return Ok(());
+            }
+            if std::time::Instant::now() >= deadline {
+                let diagnostic: serde_json::Value = connection.query_one(
+                    "SELECT COALESCE(jsonb_agg(jsonb_build_object('pid',l.pid,'mode',l.mode,'granted',l.granted,'relation',COALESCE(c.relname,''),'blockers',pg_blocking_pids(l.pid),'query',a.query)),'[]'::jsonb) FROM pg_locks l LEFT JOIN pg_class c ON c.oid=l.relation LEFT JOIN pg_stat_activity a ON a.pid=l.pid WHERE l.database=(SELECT oid FROM pg_database WHERE datname=current_database())",
+                    &[],
+                )?.get(0);
+                if let Some(directory) = std::env::var_os("COTEST_SERVICE_LOG_DIR") {
+                    std::fs::write(
+                        std::path::PathBuf::from(directory)
+                            .join("policy-lock-private-diagnostic.json"),
+                        serde_json::to_vec_pretty(&diagnostic)?,
+                    )?;
+                }
+                bail!("real issuer did not attempt the unavailable current Policy read");
+            }
+            std::thread::sleep(Duration::from_millis(25));
+        }
+    });
+    let refusal = refused_issue(
+        scene,
+        operations,
+        scene.selectors(),
+        arkret_wire::ErrorCode::SERVICE_UNAVAILABLE,
+    );
+    let (refused, observed) = tokio::join!(refusal, observed);
+    let _ = release_tx.send(());
+    let released = blocker.await.context("Policy blocker task")?;
+    refused?;
+    observed.context("Policy read observation task")??;
+    released?;
+    ensure!(
+        acceptance_rows_with_agent_stores(&database, true).await? == before,
+        "unavailable Policy issue altered accepted/current/Agent/delivery state"
+    );
+    scene.read_exact(runtime).await?;
+    let (restored, claims) = scene.issue_for(operations, scene.selectors()).await?;
+    ensure!(
+        claims
+            .scope_details
+            .as_ref()
+            .context("restored absence proof")?["policy_refs"]
+            == json!([])
+    );
+    scene.read_exact(&restored).await?;
+    println!(
+        "[agent-policy-unknown] real_current_policy_read_observed_waiting=1 only_policy_table_temporarily_locked=1 no_business_data_mutated=1 actual_issue_503_service_unavailable=1 complete_issuer_noop=1 complete_station_business_noop=1 original_read_retained_after_release=1 fresh_issue_with_complete_absence_restored=1"
+    );
+    Ok(())
+}
 
 async fn current_reply_selection(
     scene: &GrantFixture,
@@ -250,6 +341,11 @@ pub async fn run_agent_content_policy_production()
         .context("canonical Policy cases")?;
     for (name, input, expected) in [
         (
+            "policy_unknown_is_not_absent",
+            json!({"policy_state":"unknown"}),
+            "deny",
+        ),
+        (
             "explicit_policy_allow",
             json!({"policy_state":"allow"}),
             "allow",
@@ -293,8 +389,16 @@ pub async fn run_agent_content_policy_production()
         .map(String::as_str)
         .filter(|action| *action != "ak.message.create")
         .collect::<Vec<_>>();
-    let (runtime, _) = scene.issue_for(&read_operations, scene.selectors()).await?;
+    let (runtime, initial_claims) = scene.issue_for(&read_operations, scene.selectors()).await?;
+    ensure!(
+        initial_claims
+            .scope_details
+            .as_ref()
+            .context("complete initial Policy absence")?["policy_refs"]
+            == json!([])
+    );
     scene.read_exact(&runtime).await?;
+    unavailable_policy_source(&scene, &read_operations, &runtime).await?;
     let allow = read_policy(&scene, arkret_wire::PolicyEffect::Allow)?;
     publish_policy(&scene, &allow, None).await?;
     let (runtime, claims) = scene.issue_for(&read_operations, scene.selectors()).await?;
