@@ -7,15 +7,137 @@ use arkret_wire::EventKind;
 
 use super::content_grant_evidence::GrantFixture;
 use super::*;
-use crate::harness::expect_api_error;
+use crate::harness::{CanonicalJsonBody, expect_api_error};
 
-pub const REVIEWED_POLICY_CONTENT_CASES: [&str; 5] = [
+pub const REVIEWED_POLICY_CONTENT_CASES: [&str; 6] = [
     "explicit_policy_allow",
     "policy_deny",
     "unsafe_flat_cross_product",
     "management_read_denied",
     "global_deny_overrides_complete_allow",
+    "participation_current_denied",
 ];
+
+async fn current_reply_selection(
+    scene: &GrantFixture,
+    runtime: &TestActorClient,
+    read: &TestActorClient,
+    grant: &arkret_wire::GrantId,
+) -> Result<()> {
+    use crate::scenarios::_helpers::acceptance_footprint::acceptance_rows_with_agent_stores;
+    let controller = &scene.deployment.controller;
+    let selection = arkret::ParticipationReplaceRequestBody {
+        target_scope: arkret::ParticipationScope::Realm {
+            realm_id: scene.realm.clone(),
+        },
+        selection: arkret::ParticipationBits::NONE,
+        expected_version: 1,
+    };
+    let changed = controller
+        .sdk()
+        .agent_participation_replace(scene.agent.agent_account.principal_id.as_str(), &selection)
+        .await?;
+    ensure!(changed.agent_participation_entries.len() == 1);
+    let entry = &changed.agent_participation_entries[0];
+    ensure!(
+        entry.scope == selection.target_scope
+            && entry.version == 2
+            && entry.selection == arkret::ParticipationBits::NONE
+    );
+    let message =
+        arkret_event_draft::TypedEventDraft::<arkret_wire::event_spec::MessageCreate>::new(
+            ScopeRef::Realm {
+                realm_id: scene.realm.clone(),
+            },
+            ActorId::account(scene.agent.agent_account.clone()),
+            arkret_models_collaboration::events_payloads::MessageCreatePayload::with_content(
+                scene.b.clone(),
+                "discussion",
+                arkret_models_collaboration::events_payloads::ContentBlock::text(
+                    "Current reply selection must be checked",
+                ),
+            ),
+        )?
+        .with_semantic_ref(arkret_wire::SemanticRef::new(
+            grant.to_string(),
+            arkret_wire::SEMANTIC_REF_ROLE_AUTHORIZED_BY,
+        ))
+        .author_with_digest_suite(Utc::now(), arkret_canonical::DigestSuite::Sha256)?;
+    let message = sign(
+        message,
+        &scene.agent.verification_method,
+        scene.agent.runtime_key.to_bytes(),
+    )?;
+    let submission = arkret_wire::EventAdmissionSubmission::new(message.clone());
+    let url = scene
+        .deployment
+        .station
+        .owned_database_url()
+        .context("owned Station database")?;
+    let before = acceptance_rows_with_agent_stores(url, true).await?;
+    let problem = expect_api_error(
+        runtime
+            .post("/_arkret/self/events")
+            .canonical_json(&submission)?,
+        StatusCode::CONFLICT,
+        arkret_wire::ErrorCode::FAILED_PRECONDITION,
+    )
+    .await?;
+    ensure!(
+        problem.detail.contains("agent_reply_not_permitted"),
+        "reply denial did not reach current selection gate"
+    );
+    ensure!(
+        acceptance_rows_with_agent_stores(url, true).await? == before,
+        "denied reply altered accepted/current/Agent/delivery business state"
+    );
+    scene.read_exact(read).await?;
+    let restored = controller
+        .sdk()
+        .agent_participation_replace(
+            scene.agent.agent_account.principal_id.as_str(),
+            &arkret::ParticipationReplaceRequestBody {
+                target_scope: selection.target_scope,
+                selection: arkret::ParticipationBits {
+                    reply_message: true,
+                    ..arkret::ParticipationBits::NONE
+                },
+                expected_version: 2,
+            },
+        )
+        .await?;
+    ensure!(
+        restored.agent_participation_entries.len() == 1
+            && restored.agent_participation_entries[0].version == 3
+            && restored.agent_participation_entries[0]
+                .selection
+                .reply_message
+    );
+    let accepted: AuthoritySubmitOutcome = serde_json::from_value(
+        expect_json(
+            runtime
+                .post("/_arkret/self/events")
+                .canonical_json(&submission)?,
+            StatusCode::OK,
+        )
+        .await?,
+    )?;
+    ensure!(matches!(accepted, AuthoritySubmitOutcome::Accepted {
+        status: AuthorityCommitStatus::Committed, commit,
+    } if commit.event_ref == message.event_id));
+    ensure!(
+        controller
+            .sdk()
+            .committed_event_get(&message.event_id)
+            .await?
+            .reducer_input()
+            == Some(&message)
+    );
+    println!(
+        "[agent-current-participation] original_write_credential_and_grant_retained=1 normal_reply_selection_removed=1 actual_current_selection_refusal=1 complete_business_noop=1 normal_selection_restored=1 exact_same_signed_message_committed=1 independent_read_retained=1"
+    );
+    Ok(())
+}
 
 async fn publish_policy(
     scene: &GrantFixture,
@@ -148,6 +270,12 @@ pub async fn run_agent_content_policy_production()
             json!({"global_deny":true}),
             "deny",
         ),
+        (
+            "participation_current_denied",
+            json!({"phase":"payload","action":"ak.message.create","participation_allows":false,
+                "paths":[{"kind":"capability_grant","actions":["ak.message.create"],"resources":["A"],"complete":true,"active":true}]}),
+            "deny",
+        ),
     ] {
         let rows = declared
             .iter()
@@ -264,6 +392,7 @@ pub async fn run_agent_content_policy_production()
     println!(
         "[agent-policy-content] accepted_allow=1 accepted_current_deny=1 original_credential_rechecked=1 exact_cas_restore=1 global_deny_beats_membership=1 controller_still_reads=1 safe_A_read_and_B_write=1 mixed_resources_refused=1"
     );
+    current_reply_selection(&scene, &on_b, &on_a, &write_b).await?;
     Ok(crate::conformance::SuiteExecutionResult {
         entrypoint: "ak.suite.agent.vectors.v1",
         fixture: "agent-vectors-fixture.json",
