@@ -3,15 +3,19 @@
 use arkret_models_collaboration::sidecar_operations::*;
 
 use super::*;
+use crate::harness::CanonicalJsonBody;
 use crate::scenarios::mls_lifecycle_live::{ACTIVE_SUITE, Member, upload_public_blob};
 use crate::scenarios::sidecar_authority_live::private_reply::{self, JoinObserver};
 
-pub const REVIEWED_SIDECAR_CONTENT_CASES: [&str; 5] = [
+pub const REVIEWED_SIDECAR_CONTENT_CASES: [&str; 8] = [
     "sidecar_read_without_literal_grant",
     "sidecar_read_does_not_grant_write",
+    "issue_pending_mls_is_only_ceiling",
     "bootstrap_desired_not_yet_effective",
     "desired_cannot_read_payload",
     "effective_sidecar_payload",
+    "sidecar_explicit_write_grant",
+    "sidecar_write_grant_after_desired_loss",
 ];
 
 async fn controller_message(
@@ -72,6 +76,62 @@ async fn controller_message(
             == Some(&event)
     );
     Ok((event, plaintext))
+}
+
+fn agent_message(
+    agent: &AgentRuntimeSession,
+    group: &mut arkret::ArkretMlsGroup,
+    state: &arkret_wire::CommittedEventFullView,
+    strand: &arkret_wire::StrandId,
+    grant: &arkret_wire::GrantId,
+) -> Result<(Event, Vec<u8>)> {
+    let scope = state.event.scope_ref.clone();
+    let header = arkret::EventContentPreEncryptionHeader::reconstruct(
+        "1.0",
+        "application/vnd.arkret.message+json",
+        arkret::EncryptedPayloadScheme::MlsRfc9420,
+        scope.clone(),
+        "ak.message.create",
+        group.epoch(),
+        state.event.event_id.clone(),
+        group.local_content_sender_domain()?,
+        arkret::EventContentRoutingContext::None,
+    )?;
+    let plaintext = arkret_canonical::canonical_json_bytes(&arkret::ContentBlock::text(
+        "Explicitly granted actual Sidecar reply",
+    ))?;
+    let encrypted = arkret::MessageCrypto::encrypt(group, unique_uuid7(), header, &plaintext)?;
+    let authored = arkret_event_draft::TypedEventDraft::<arkret_wire::event_spec::MessageCreate>::new(
+        scope, ActorId::account(agent.agent_account.clone()),
+        arkret_models_collaboration::events_payloads::MessageCreatePayload::with_encrypted_content(
+            strand.clone(), "discussion", arkret_models_crypto::MlsEncryptedPayload::new(encrypted.payload.to_envelope()?)?,
+        ),
+    )?.with_semantic_ref(arkret_wire::SemanticRef::new(grant.to_string(), arkret_wire::SEMANTIC_REF_ROLE_AUTHORIZED_BY))
+        .author_with_digest_suite(Utc::now(), arkret_canonical::DigestSuite::Sha256)?;
+    Ok((
+        sign(
+            authored,
+            &agent.verification_method,
+            agent.runtime_key.to_bytes(),
+        )?,
+        plaintext,
+    ))
+}
+
+fn open_message(group: &mut arkret::ArkretMlsGroup, event: &Event) -> Result<Vec<u8>> {
+    let envelope: arkret::EncryptedEnvelope =
+        serde_json::from_value(event.payload["encrypted_content"].clone())?;
+    let domain = arkret::mls_basic_credential_identity(event.actual_signer())?;
+    let header = envelope.reconstruct_pre_encryption_header(
+        arkret::EncryptedPayloadScheme::MlsRfc9420,
+        event.scope_ref.clone(),
+        event.kind.as_str(),
+        std::str::from_utf8(&domain)?,
+        None,
+    )?;
+    let payload =
+        arkret::mls::encrypted_envelope_to_payload_with_verified_header(&envelope, header)?;
+    Ok(group.decrypt_payload(&payload)?)
 }
 
 struct PendingPayload<'a> {
@@ -152,6 +212,21 @@ pub async fn run_agent_content_sidecar_production()
             "effective_sidecar_payload",
             json!({"phase":"payload","paths":path,"resource_profile":"sidecar"}),
             "allow",
+        ),
+        (
+            "issue_pending_mls_is_only_ceiling",
+            json!({"mls_ready":false,"effective":false,"paths":path,"resource_profile":"sidecar"}),
+            "allow",
+        ),
+        (
+            "sidecar_explicit_write_grant",
+            json!({"resource_profile":"sidecar","action":"ak.message.create","paths":[{"kind":"capability_grant","actions":["ak.message.create"],"resources":["A"],"complete":true,"active":true}],"phase":"payload"}),
+            "allow",
+        ),
+        (
+            "sidecar_write_grant_after_desired_loss",
+            json!({"resource_profile":"sidecar","action":"ak.message.create","paths":[{"kind":"capability_grant","actions":["ak.message.create"],"resources":["A"],"complete":true,"active":true}],"phase":"payload","desired":false}),
+            "deny",
         ),
     ] {
         let rows = contract["cases"]
@@ -461,6 +536,160 @@ pub async fn run_agent_content_sidecar_production()
     ensure!(agent_group.decrypt_payload(&payload)? == plaintext);
     println!(
         "[agent-sidecar-content] actual_coauth=1 no_literal_read_or_write_grant=1 issued_before_mls_ready=1 accepted_add_welcome_claim=1 durable_before_consume=1 pending_payload_refused=1 effective_payload_full_and_decrypted=1 mixed_request_read_only_ceiling=1"
+    );
+    let (grant, _) = client
+        .grant_realm_actions_to(
+            realm.as_str(),
+            agent.agent_did.as_str(),
+            &["ak.message.create"],
+        )
+        .await?;
+    let grant = arkret_wire::GrantId::new(grant)?;
+    let grant_event = EventId::from_token_bytes(grant.token_bytes())?;
+    let original_grant = client.sdk().committed_event_get(&grant_event).await?;
+    let grant_payload: arkret_models_collaboration::events_payloads::CapabilityGrantPayload =
+        serde_json::from_value(serde_json::to_value(
+            &original_grant
+                .reducer_input()
+                .context("accepted Sidecar write grant")?
+                .payload,
+        )?)?;
+    ensure!(matches!(grant_payload.grant.subject,
+        arkret_models_collaboration::governance::grant_constraint::CapabilitySubject::Actor(ref actor)
+        if actor == &ActorId::account(agent.agent_account.clone())));
+    let (write, write_claims) =
+        content_direct_evidence::issue(&deployment, &agent, &actions, &realm).await?;
+    ensure!(
+        write_claims
+            .scopes
+            .iter()
+            .any(|action| action == "ak.message.create")
+    );
+    ensure!(
+        write_claims
+            .scope_details
+            .as_ref()
+            .context("explicit write ceiling")?["capability_grant_refs"]
+            == json!([grant])
+    );
+    let (reply, reply_plaintext) =
+        agent_message(&agent, &mut agent_group, &state, &strand, &grant)?;
+    let outcome: AuthoritySubmitOutcome = serde_json::from_value(
+        expect_json(
+            write
+                .post("/_arkret/self/events")
+                .canonical_json(&arkret_wire::EventAdmissionSubmission::new(reply.clone()))?,
+            StatusCode::OK,
+        )
+        .await?,
+    )?;
+    ensure!(
+        matches!(&outcome, AuthoritySubmitOutcome::Accepted {status:AuthorityCommitStatus::Committed,commit}
+        if commit.event_ref == reply.event_id && commit.stream_ref == state.commit.stream_ref),
+        "Sidecar granted write did not commit: {outcome:?}"
+    );
+    ensure!(
+        client
+            .sdk()
+            .committed_event_get(&reply.event_id)
+            .await?
+            .reducer_input()
+            == Some(&reply)
+    );
+    ensure!(open_message(&mut group, &reply)? == reply_plaintext);
+    let set = arkret_models_collaboration::agent_interaction::AgentInteractionSetPayload {
+        agent_account_id: agent.agent_account.clone(),
+        controller_account_id: deployment.account.clone(),
+        interaction_mode:
+            arkret_models_collaboration::agent_interaction::AgentInteractionMode::Public,
+        expected_revision: None,
+    };
+    let change = client
+        .author_event(
+            realm.as_str(),
+            "ak.agent.interaction.set",
+            serde_json::to_value(set)?,
+        )
+        .await?;
+    crate::scenarios::human_device_producer_live::submit_and_expect_commit(
+        client,
+        &deployment.account,
+        &client.device_id,
+        &change,
+    )
+    .await?;
+    let retained = client.sdk().agent_sidecar_get(&sidecar).await?;
+    ensure!(
+        retained.desired_agent_ids == vec![agent.agent_account.principal_id.clone()]
+            && retained.effective_agent_ids == vec![agent.agent_account.principal_id.clone()],
+        "mode changed Sidecar roster: desired={:?} effective={:?}",
+        retained.desired_agent_ids,
+        retained.effective_agent_ids
+    );
+    let leave = MembershipPayload::transition(
+        arkret_models_collaboration::governance::membership_invite::MembershipPayloadState::Leave,
+        ActorId::account(agent.agent_account.clone()),
+        "Revoke exact Sidecar membership source",
+    );
+    let leave = client
+        .author_event(realm.as_str(), "ak.member.state", leave.to_value()?)
+        .await?;
+    crate::scenarios::human_device_producer_live::submit_and_expect_commit(
+        client,
+        &deployment.account,
+        &client.device_id,
+        &leave,
+    )
+    .await?;
+    let revoked = client.sdk().agent_sidecar_get(&sidecar).await?;
+    ensure!(revoked.desired_agent_ids.is_empty() && revoked.effective_agent_ids.is_empty());
+    let (denied, _) = agent_message(&agent, &mut agent_group, &state, &strand, &grant)?;
+    let submit = ServiceOperationId::from_wire(ServiceOperationId::SELF_EVENTS_COMMAND_SUBMIT_V1)
+        .context("registered self events operation")?;
+    ensure!(
+        submit
+            .operation_specific_errors()
+            .iter()
+            .any(|entry| matches!(
+                entry,
+                arkret_wire::OperationSpecificError::Code(
+                    arkret_wire::ErrorCode::FailedPrecondition
+                )
+            ))
+    );
+    ensure!(arkret_wire::ErrorCode::FailedPrecondition.http_status() == 409);
+    ensure!(
+        arkret_wire::ReasonCode::from_wire(arkret_wire::ReasonCode::EPOCH_UPDATE_REQUIRED)
+            .descriptor()
+            .is_some()
+    );
+    let rejected = crate::harness::expect_api_error(
+        write
+            .post("/_arkret/self/events")
+            .canonical_json(&arkret_wire::EventAdmissionSubmission::new(denied.clone()))?,
+        StatusCode::CONFLICT,
+        arkret_wire::ErrorCode::FAILED_PRECONDITION,
+    )
+    .await?;
+    ensure!(
+        rejected
+            .extensions
+            .get("reason_code")
+            .and_then(serde_json::Value::as_str)
+            == Some(arkret_wire::ReasonCode::EPOCH_UPDATE_REQUIRED)
+    );
+    crate::harness::expect_api_error(
+        client.get(&format!(
+            "/_arkret/self/committed-events/{}",
+            denied.event_id
+        )),
+        StatusCode::NOT_FOUND,
+        arkret_wire::ErrorCode::NOT_FOUND,
+    )
+    .await?;
+    ensure!(client.sdk().committed_event_get(&grant_event).await? == original_grant);
+    println!(
+        "[agent-sidecar-write] accepted_original_grant=1 fresh_real_coauth_write_ceiling=1 explicit_agent_message_committed=1 controller_decrypted=1 accepted_private_to_public=1 mode_preserves_roster=1 accepted_agent_leave=1 desired_and_effective_lost=1 old_write_credential_refused=1 required_rotation_checkpoint_denied=1 rejected_event_not_stored=1 grant_original_retained=1"
     );
     Ok(crate::conformance::SuiteExecutionResult {
         entrypoint: "ak.suite.agent.vectors.v1",
