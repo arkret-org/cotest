@@ -1658,8 +1658,8 @@ pub async fn original_human_signer_fact(
     client: &TestActorClient,
     event: &Event,
     commit: &RealmCommit,
-) -> Result<arkret_models_collaboration::authority_commit::HumanHistoricalSignerFact> {
-    use arkret_models_collaboration::authority_commit::HumanHistoricalSignerFact;
+) -> Result<arkret_models_collaboration::authority_commit::AccountDeviceHistoricalSignerFact> {
+    use arkret_models_collaboration::authority_commit::AccountDeviceHistoricalSignerFact;
     use arkret_models_identity::{
         HistoricalSignerKeyQuerySender, SignerKeyQueryOutcome, SignerKeyQuerySelector,
         SignerKeysQueryRequestBody,
@@ -1720,7 +1720,7 @@ pub async fn original_human_signer_fact(
         selector == &request.queries[0],
         "historical selector changed"
     );
-    let fact = HumanHistoricalSignerFact {
+    let fact = AccountDeviceHistoricalSignerFact {
         event_id: event.event_id.clone(),
         actor: event.actual_signer().clone(),
         device_id: producer.device_id,

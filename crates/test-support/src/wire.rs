@@ -109,7 +109,7 @@ pub fn historical_human_signer_query(input: Value) -> Result<Value> {
 /// Reconstruct only the original immutable fact and independently check its
 /// exact Commit binding and producer signature. Never use current admission.
 pub fn historical_human_signer_fact(input: Value) -> Result<Value> {
-    use arkret_models_collaboration::authority_commit::HumanHistoricalSignerFact;
+    use arkret_models_collaboration::authority_commit::AccountDeviceHistoricalSignerFact;
     use arkret_models_identity::SignerKeyQueryOutcome;
     let input: HistoricalHumanFactInput = serde_json::from_value(input)?;
     let selector = historical_human_selector(&input.event, &input.commit)?;
@@ -130,7 +130,7 @@ pub fn historical_human_signer_fact(input: Value) -> Result<Value> {
         .event
         .human_device_producer()?
         .context("Human producer absent")?;
-    let fact = HumanHistoricalSignerFact {
+    let fact = AccountDeviceHistoricalSignerFact {
         event_id: input.event.event_id.clone(),
         actor: input.event.actual_signer().clone(),
         device_id: producer.device_id,
@@ -152,7 +152,7 @@ pub fn historical_human_signer_fact(input: Value) -> Result<Value> {
         },
         suite,
     )?;
-    arkret_identity::account_device_signer_evidence::verify_historical_human_event_signature(
+    arkret_identity::account_device_signer_evidence::verify_historical_account_device_event_signature(
         &input.event,
         &fact,
         suite,
