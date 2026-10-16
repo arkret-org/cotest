@@ -7,11 +7,13 @@ use crate::harness::CanonicalJsonBody;
 use crate::scenarios::mls_lifecycle_live::{ACTIVE_SUITE, Member, upload_public_blob};
 use crate::scenarios::sidecar_authority_live::private_reply::{self, JoinObserver};
 
-pub const REVIEWED_SIDECAR_CONTENT_CASES: [&str; 13] = [
+pub const REVIEWED_SIDECAR_CONTENT_CASES: [&str; 15] = [
     "sidecar_read_without_literal_grant",
     "sidecar_read_does_not_grant_write",
     "issue_pending_mls_is_only_ceiling",
     "bootstrap_desired_not_yet_effective",
+    "bootstrap_wrong_endpoint",
+    "bootstrap_missing_add_welcome_claim_lineage",
     "desired_cannot_read_payload",
     "effective_sidecar_payload",
     "queued_welcome_after_desired_revoke",
@@ -310,6 +312,156 @@ struct PendingPayload<'a> {
 
 #[async_trait::async_trait(?Send)]
 impl JoinObserver for PendingPayload<'_> {
+    async fn before_submission(
+        &self,
+        controller: &Member,
+        agent: &AgentRuntimeSession,
+        submission: &arkret_models_collaboration::authority_commit::SelfAuthoritySubmitRequest,
+        claim_request: &arkret_models_crypto::KeyPackagesClaimRequestBody,
+    ) -> Result<()> {
+        use arkret_models_collaboration::authority_commit::SelfAuthoritySubmitRequest;
+
+        use crate::scenarios::_helpers::acceptance_footprint::acceptance_rows_with_agent_stores;
+        let SelfAuthoritySubmitRequest::MlsCommit(original) = submission else {
+            bail!("actual Add/Welcome submission required")
+        };
+        ensure!(original.welcomes.len() == 1);
+        for kind in ["wrong_endpoint", "missing_add_lineage"] {
+            let mut invalid = original.clone();
+            invalid.idempotency_key = arkret_wire::UuidV7::new(
+                crate::scenarios::mls_lifecycle_live::fresh_uuid_v7().parse()?,
+            )?;
+            let welcome = &mut invalid.welcomes[0];
+            if kind == "wrong_endpoint" {
+                welcome.recipient_endpoint =
+                    arkret_wire::MlsWelcomeRecipientEndpoint::AgentRuntime {
+                        verification_method: DidUrl::new(format!(
+                            "{}#not-the-current-endpoint",
+                            agent.agent_did
+                        ))
+                        .map_err(anyhow::Error::msg)?,
+                    };
+            } else {
+                let identity = arkret::ArkretMlsIdentity::new_agent(
+                    ActorId::account(agent.agent_account.clone()),
+                    agent.verification_method.clone(),
+                    agent.key_authorization.clone(),
+                    ArkretMlsSigner::from_ed25519_signing_key(agent.runtime_key.clone()),
+                )?;
+                let package = identity.key_package_record()?;
+                let upload = identity.signed_key_packages_upload_request(
+                    std::slice::from_ref(&package),
+                    agent.verification_method.as_str(),
+                )?;
+                ensure!(
+                    agent
+                        .runtime
+                        .sdk()
+                        .keypackages_upload(&upload)
+                        .await?
+                        .accepted
+                        == 1
+                );
+                let mut candidate = serde_json::to_value(claim_request)?;
+                let mut entropy = [0u8; 16];
+                getrandom::fill(&mut entropy)
+                    .map_err(|error| anyhow::anyhow!("claim entropy: {error}"))?;
+                candidate["claim_request_id"] = json!(URL_SAFE_NO_PAD.encode(entropy));
+                candidate["target_keypackage_ref"] = json!(package.keypackage_ref);
+                let mut claim: arkret_models_crypto::KeyPackagesClaimRequestBody =
+                    serde_json::from_value(candidate)?;
+                let bytes = arkret_models_crypto::keypackage_claim_authorization_signing_bytes(
+                    &claim.unsigned_request(),
+                    &claim.service_binding,
+                    &claim.requester_authorization,
+                )?;
+                let arkret_models_crypto::PeerKeyPackageRequesterAuthorization::Device {
+                    signature,
+                    ..
+                } = &mut claim.requester_authorization
+                else {
+                    bail!("normal controller device claim required")
+                };
+                signature.sig = arkret_wire::Base64UrlString::new(
+                    URL_SAFE_NO_PAD.encode(controller.key.sign(&bytes).to_bytes()),
+                )
+                .map_err(anyhow::Error::msg)?;
+                let claimed = controller.client.sdk().keypackages_claim(&claim).await?;
+                ensure!(
+                    claimed.claims.len() == 1
+                        && claimed.claims[0].keypackage_ref == package.keypackage_ref.as_str()
+                );
+                let second: arkret_wire::KeypackageClaimId =
+                    serde_json::from_value(json!(claimed.claims[0].claim_id))?;
+                ensure!(
+                    second != welcome.keypackage_claim_ref,
+                    "second claim must differ from actual Add"
+                );
+                welcome.keypackage_claim_ref = second;
+            }
+            let mut unsigned = serde_json::to_value(&*welcome)?;
+            unsigned
+                .as_object_mut()
+                .context("Welcome object")?
+                .remove("producer_proof");
+            welcome.producer_proof = arkret_signatures::detached_object::sign_detached_object(
+                &unsigned,
+                arkret_wire::DetachedSignatureContext::MlsWelcomeDelivery,
+                controller.method.clone(),
+                Utc::now(),
+                &controller.key,
+            )?;
+            let before = acceptance_rows_with_agent_stores(
+                self.deployment
+                    .station
+                    .owned_database_url()
+                    .context("owned Station database")?,
+                true,
+            )
+            .await?;
+            let (status, code) = (
+                StatusCode::CONFLICT,
+                arkret_wire::ErrorCode::FAILED_PRECONDITION,
+            );
+            let problem = crate::harness::expect_api_error(
+                controller
+                    .client
+                    .post("/_arkret/self/events")
+                    .canonical_json(&SelfAuthoritySubmitRequest::MlsCommit(invalid))?,
+                status,
+                code,
+            )
+            .await?;
+            if kind == "wrong_endpoint" {
+                ensure!(
+                    problem
+                        .detail
+                        .contains("Welcome recipient's endpoint package"),
+                    "wrong endpoint did not reach the actual claim binding gate"
+                );
+            }
+            ensure!(
+                acceptance_rows_with_agent_stores(
+                    self.deployment
+                        .station
+                        .owned_database_url()
+                        .context("owned Station database")?,
+                    true
+                )
+                .await?
+                    == before,
+                "{kind} altered accepted, current, Agent or delivery business state"
+            );
+            let (queued, _) =
+                crate::scenarios::mls_lifecycle_live::recipient_welcomes(self.read).await?;
+            ensure!(queued.is_empty(), "rejected {kind} supplied a Welcome");
+            println!(
+                "[agent-sidecar-lineage] rejected={kind} real_controller_signature=1 real_add_and_claim=1 full_business_footprint_unchanged=1 no_welcome_delivered=1"
+            );
+        }
+        Ok(())
+    }
+
     async fn before_consume(
         &self,
         controller: &Member,
@@ -513,6 +665,16 @@ pub async fn run_agent_content_sidecar_production()
             "bootstrap_desired_not_yet_effective",
             json!({"phase":"bootstrap","effective":false,"mls_ready":false,"paths":path,"resource_profile":"sidecar"}),
             "allow",
+        ),
+        (
+            "bootstrap_wrong_endpoint",
+            json!({"phase":"bootstrap","effective":false,"exact_endpoint":false,"paths":path,"resource_profile":"sidecar"}),
+            "deny",
+        ),
+        (
+            "bootstrap_missing_add_welcome_claim_lineage",
+            json!({"phase":"bootstrap","accepted_lineage":false,"paths":path,"resource_profile":"sidecar"}),
+            "deny",
         ),
         (
             "desired_cannot_read_payload",

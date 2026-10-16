@@ -12,6 +12,16 @@ use crate::scenarios::mls_lifecycle_live::{accepted_full_view, post_json, recipi
 
 #[async_trait::async_trait(?Send)]
 pub(crate) trait JoinObserver {
+    async fn before_submission(
+        &self,
+        _controller: &Member,
+        _agent: &AgentRuntimeSession,
+        _submission: &arkret_models_collaboration::authority_commit::SelfAuthoritySubmitRequest,
+        _claim_request: &arkret_models_crypto::KeyPackagesClaimRequestBody,
+    ) -> Result<()> {
+        Ok(())
+    }
+
     async fn before_consume(
         &self,
         controller: &Member,
@@ -203,6 +213,11 @@ pub(crate) async fn join_agent_with_observer(
                 )?,
             },
         );
+    if let Some(observer) = observer {
+        observer
+            .before_submission(controller, agent, &submission, &claim)
+            .await?;
+    }
     let (status, result) = post_json(&controller.client, &submission).await?;
     ensure!(
         status == reqwest::StatusCode::OK,
