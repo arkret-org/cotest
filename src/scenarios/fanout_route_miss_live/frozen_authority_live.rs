@@ -666,7 +666,7 @@ pub async fn scope_and_policy_withdrawal() -> Result<()> {
             arkret_models_collaboration::governance::grant_constraint::CapabilitySubject::Actor(
                 bob_actor.clone(),
             ),
-        actions: vec!["ak.circle.member.manage".into()],
+        actions: vec!["ak.circle.member.add".into()],
         resources: vec![arkret_wire::WireResourceSelector::circle(
             realm_id.clone(),
             circle.clone(),
@@ -696,7 +696,7 @@ pub async fn scope_and_policy_withdrawal() -> Result<()> {
     fixture.bob.remember_grant(
         &fixture.realm,
         arkret_wire::GrantId::from_event_id(&event.event_id).as_str(),
-        &["ak.circle.member.manage"],
+        &["ak.circle.member.add"],
     );
     let parent = fixture
         .alice

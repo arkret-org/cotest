@@ -15,6 +15,52 @@ fn webrtc_media_plaintext_named_suite_returns_one_result_per_case() -> Result<()
 fn named_suite_audit_executes_registered_runners_and_exposes_every_gap() -> Result<()> {
     let report = inspect_named_suite_execution()?;
     println!("{report:#?}");
+    let production_results = report.production_executions.iter().map(|suite| {
+        serde_json::json!({
+            "entrypoint": suite.entrypoint,
+            "fixture": suite.fixture,
+            "cases": suite.cases.iter().map(|case| serde_json::json!({"case_id":case.case_id,"assertions":case.assertions})).collect::<Vec<_>>()
+        })
+    }).collect::<Vec<_>>();
+    println!(
+        "[named-suite-production-results] {}",
+        serde_json::to_string(&production_results)?
+    );
+    let safe_report = serde_json::json!({
+        "fixture_count":report.fixture_count,
+        "executed_entrypoints":report.executed_entrypoints,
+        "unwired_entrypoints":report.unwired_entrypoints,
+        "deferred_client_entrypoints":report.deferred_client_entrypoints,
+        "unproved_entrypoints":report.unproved_entrypoints,
+        "failed_entrypoints":report.failed_executions.iter().map(|(id,_,_)|id).collect::<Vec<_>>(),
+        "decision_point_gaps":report.decision_point_gaps.iter().map(|gap|serde_json::json!({"decision_point":gap.decision_point,"missing_cases":gap.missing_cases.iter().map(|case|serde_json::json!({"fixture_ref":case.fixture_ref,"case_id":case.case_id})).collect::<Vec<_>>()})).collect::<Vec<_>>(),
+        "missing_production_cases":report.missing_production_cases.iter().map(|case|serde_json::json!({"fixture_ref":case.fixture_ref,"case_id":case.case_id})).collect::<Vec<_>>(),
+        "production_executions":production_results,
+        "complete_suite_claim":report.assert_complete().is_ok()
+    });
+    println!(
+        "[named-suite-audit-safe-json] {}",
+        serde_json::to_string(&safe_report)?
+    );
+
+    for (entrypoint, count) in [
+        ("ak.suite.agent.vectors.v1", 96),
+        (cotest::conformance::SYNC_CLIENT_ENTRYPOINT, 23),
+    ] {
+        let execution = report
+            .production_executions
+            .iter()
+            .filter(|suite| suite.entrypoint == entrypoint)
+            .collect::<Vec<_>>();
+        assert_eq!(
+            execution.len(),
+            1,
+            "exactly one production result required for {entrypoint}"
+        );
+        assert_eq!(execution[0].cases.len(), count);
+        assert!(execution[0].cases.iter().all(|case| case.assertions > 0));
+    }
+
     assert!(
         report.failed_executions.is_empty(),
         "registered runner failed: {:?}",
@@ -50,6 +96,14 @@ fn named_suite_audit_executes_registered_runners_and_exposes_every_gap() -> Resu
             .iter()
             .any(|entrypoint| entrypoint == "ak.suite.account.blocklist_projection.v1")
     );
+    for client in [
+        "ak.suite.consent.cache_invalidation.v1",
+        "ak.suite.account.blocklist_projection.v1",
+    ] {
+        assert!(report.executed_entrypoints.iter().any(|id| id == client));
+        assert!(!report.unwired_entrypoints.iter().any(|id| id == client));
+        assert!(!report.failed_executions.iter().any(|(id, ..)| id == client));
+    }
     assert!(!report.decision_point_gaps.is_empty());
     let federation = "ak.suite.federation.idempotency_after_key_revoke.v1";
     assert!(
@@ -60,7 +114,7 @@ fn named_suite_audit_executes_registered_runners_and_exposes_every_gap() -> Resu
     );
     assert!(!report.unwired_entrypoints.iter().any(|id| id == federation));
     assert!(
-        report
+        !report
             .unproved_entrypoints
             .iter()
             .any(|id| id == federation)
@@ -79,14 +133,10 @@ fn named_suite_audit_executes_registered_runners_and_exposes_every_gap() -> Resu
         })
         .map(|case| case.case_id.as_str())
         .collect::<Vec<_>>();
-    assert_eq!(
-        missing_federation,
-        ["removed_origin_binding_denies_the_replay"]
-    );
+    assert!(missing_federation.is_empty());
     for required_gap in [
         "ak.suite.call.force_mute_v1_boundary.v1",
         "ak.suite.current.cas_failure_read_boundary.v1",
-        "ak.suite.consent.cache_invalidation.v1",
         "ak.suite.direct_conversation.admission_producers.v1",
         "ak.suite.direct_conversation.signal_admission.v1",
         "ak.suite.reaction.authority_order.v1",

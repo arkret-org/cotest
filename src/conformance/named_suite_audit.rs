@@ -454,6 +454,7 @@ const RUNNERS: [(&str, Runner); 55] = [
 pub struct NamedSuiteAuditReport {
     pub fixture_count: usize,
     pub executed_entrypoints: Vec<String>,
+    pub production_executions: Vec<SuiteExecutionResult>,
     pub unwired_entrypoints: Vec<String>,
     pub deferred_client_entrypoints: Vec<String>,
     pub unproved_entrypoints: Vec<String>,
@@ -630,6 +631,7 @@ pub fn inspect_named_suite_execution_with_clients(
     let unwired = assert_named_gap_inventory(&fixtures, &registered)?;
     let mut executed = Vec::new();
     let mut executed_cases = BTreeSet::new();
+    let mut production_executions = Vec::new();
     let mut unproved = Vec::new();
     let mut failed_executions = Vec::new();
     let mut missing_production_cases = Vec::new();
@@ -709,6 +711,7 @@ pub fn inspect_named_suite_execution_with_clients(
             if let Some(result) = result
                 && production_proved
             {
+                production_executions.push(result.clone());
                 executed_cases.extend(result.cases.into_iter().map(|case| CaseRef {
                     fixture_ref: format!("fixtures/{file_name}"),
                     case_id: case.case_id,
@@ -729,6 +732,7 @@ pub fn inspect_named_suite_execution_with_clients(
     Ok(NamedSuiteAuditReport {
         fixture_count: fixtures.values().map(Vec::len).sum(),
         executed_entrypoints: executed,
+        production_executions,
         unproved_entrypoints: unproved,
         failed_executions,
         decision_point_gaps,
