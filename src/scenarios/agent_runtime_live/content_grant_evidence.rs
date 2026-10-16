@@ -3,13 +3,15 @@
 use super::*;
 use crate::harness::CanonicalJsonBody;
 
-pub const REVIEWED_GRANT_CONTENT_CASES: [&str; 6] = [
+pub const REVIEWED_GRANT_CONTENT_CASES: [&str; 8] = [
     "literal_write_grant",
     "action_resource_cannot_be_spliced",
     "one_complete_path_among_alternatives",
     "revoked_grant_path_cannot_restore",
     "revoked_literal_read_does_not_erase_membership",
     "source_stale_or_unknown",
+    "condition_not_satisfied",
+    "quota_exhausted",
 ];
 
 pub(super) struct GrantFixture {
@@ -293,9 +295,8 @@ impl GrantFixture {
         Ok(arkret_wire::GrantId::from_event_id(&event.event_id))
     }
 
-    pub(super) async fn commit_message(
+    pub(super) fn message(
         &self,
-        runtime: &TestActorClient,
         strand: &arkret_wire::StrandId,
         grant: &arkret_wire::GrantId,
         text: &str,
@@ -317,11 +318,21 @@ impl GrantFixture {
                 arkret_wire::SEMANTIC_REF_ROLE_AUTHORIZED_BY,
             ))
             .author_with_digest_suite(Utc::now(), arkret_canonical::DigestSuite::Sha256)?;
-        let message = sign(
+        sign(
             message,
             &self.agent.verification_method,
             self.agent.runtime_key.to_bytes(),
-        )?;
+        )
+    }
+
+    pub(super) async fn commit_message(
+        &self,
+        runtime: &TestActorClient,
+        strand: &arkret_wire::StrandId,
+        grant: &arkret_wire::GrantId,
+        text: &str,
+    ) -> Result<Event> {
+        let message = self.message(strand, grant, text)?;
         let id = committed(
             expect_json(
                 runtime
@@ -430,6 +441,16 @@ pub async fn run_agent_content_grant_production() -> Result<crate::conformance::
             json!({"paths":[{"kind":"capability_grant","actions":["ak.event.read"],"resources":["A"],"complete":true,"active":false}]}),
         ),
         ("source_stale_or_unknown", json!({"source_current":false})),
+        (
+            "condition_not_satisfied",
+            json!({"phase":"payload","action":"ak.message.create","conditions_allow":false,
+                "paths":[{"kind":"capability_grant","actions":["ak.message.create"],"resources":["A"],"complete":true,"active":true}]}),
+        ),
+        (
+            "quota_exhausted",
+            json!({"phase":"payload","action":"ak.message.create","quota_available":false,
+                "paths":[{"kind":"capability_grant","actions":["ak.message.create"],"resources":["A"],"complete":true,"active":true}]}),
+        ),
     ] {
         let rows = declared
             .iter()
@@ -444,6 +465,8 @@ pub async fn run_agent_content_grant_production() -> Result<crate::conformance::
             "action_resource_cannot_be_spliced"
                 | "revoked_grant_path_cannot_restore"
                 | "source_stale_or_unknown"
+                | "condition_not_satisfied"
+                | "quota_exhausted"
         ) {
             "deny"
         } else {
@@ -455,6 +478,7 @@ pub async fn run_agent_content_grant_production() -> Result<crate::conformance::
         );
     }
     let scene = GrantFixture::establish().await?;
+    super::content_limit_evidence::run_payload_limits(&scene).await?;
     let _b = scene
         .grant(&scene.b, &["ak.event.read", "ak.message.create"])
         .await?;

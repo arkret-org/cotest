@@ -65,6 +65,7 @@ mod content_ceiling_evidence;
 mod content_direct_evidence;
 mod content_grant_evidence;
 mod content_history_evidence;
+mod content_limit_evidence;
 mod content_policy_evidence;
 mod content_session_evidence;
 mod content_sidecar_evidence;
