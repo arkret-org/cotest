@@ -10,11 +10,32 @@ use super::*;
 use crate::scenarios::agent_runtime_live::AgentRuntimeSession;
 use crate::scenarios::mls_lifecycle_live::{accepted_full_view, post_json, recipient_welcomes};
 
-pub(super) async fn join_agent(
+#[async_trait::async_trait(?Send)]
+pub(crate) trait JoinObserver {
+    async fn before_consume(
+        &self,
+        controller: &Member,
+        agent: &AgentRuntimeSession,
+        controller_group: &mut arkret::ArkretMlsGroup,
+        accepted: &arkret_wire::CommittedEventFullView,
+    ) -> Result<()>;
+}
+
+pub(crate) async fn join_agent(
     controller: &Member,
     agent: &AgentRuntimeSession,
     group: &mut arkret::ArkretMlsGroup,
     genesis: &arkret_wire::Event,
+) -> Result<(arkret_wire::CommittedEventFullView, arkret::ArkretMlsGroup)> {
+    join_agent_with_observer(controller, agent, group, genesis, None).await
+}
+
+pub(crate) async fn join_agent_with_observer(
+    controller: &Member,
+    agent: &AgentRuntimeSession,
+    group: &mut arkret::ArkretMlsGroup,
+    genesis: &arkret_wire::Event,
+    observer: Option<&dyn JoinObserver>,
 ) -> Result<(arkret_wire::CommittedEventFullView, arkret::ArkretMlsGroup)> {
     let scope = &genesis.scope_ref;
     let realm = scope.realm_id();
@@ -135,7 +156,10 @@ pub(super) async fn join_agent(
         )
         .await?;
     event.scope_ref = scope.clone();
-    crate::harness::refresh_typed_event_proof(&mut event)?;
+    crate::harness::refresh_typed_event_proof_with_signing_seed(
+        &mut event,
+        controller.key.to_bytes(),
+    )?;
     let mut welcome = arkret_wire::MlsWelcomeDelivery {
         welcome_id: arkret_wire::MlsWelcomeDeliveryId::new_v7_at(
             chrono::Utc::now().timestamp_millis() as u64,
@@ -301,6 +325,11 @@ pub(super) async fn join_agent(
         arkret_wire::KeypackageClaimId::new(selected.claim_id.clone())?,
         receipt,
     )?;
+    if let Some(observer) = observer {
+        observer
+            .before_consume(controller, agent, group, &accepted)
+            .await?;
+    }
     agent.runtime.sdk().keypackages_consume(&consume).await?;
     ensure!(
         controller

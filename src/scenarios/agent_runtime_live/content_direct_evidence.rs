@@ -21,7 +21,7 @@ fn selectors(realm: &RealmId) -> SessionGrantAgentScopeRequest {
     }
 }
 
-async fn issue(
+pub(super) async fn issue(
     deployment: &coauth_session_evidence::ActualAgentDeployment,
     agent: &AgentRuntimeSession,
     operations: &[&str],
@@ -52,7 +52,7 @@ async fn issue(
     Ok((runtime, claims))
 }
 
-async fn refuse(
+pub(super) async fn refuse(
     deployment: &coauth_session_evidence::ActualAgentDeployment,
     agent: &AgentRuntimeSession,
     operations: &[&str],

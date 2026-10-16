@@ -66,6 +66,7 @@ mod content_grant_evidence;
 mod content_history_evidence;
 mod content_policy_evidence;
 mod content_session_evidence;
+mod content_sidecar_evidence;
 mod direct_evidence;
 mod direct_mls_evidence;
 mod grant_ceiling_evidence;
@@ -104,6 +105,9 @@ pub use content_policy_evidence::{
 pub use content_session_evidence::{
     REVIEWED_CONTENT_CASES, run_agent_session_content_production,
     run_agent_session_content_read_boundary,
+};
+pub use content_sidecar_evidence::{
+    REVIEWED_SIDECAR_CONTENT_CASES, run_agent_content_sidecar_production,
 };
 pub use grant_ceiling_evidence::run_agent_provision_grant_ceiling_boundary;
 pub use human_approval_evidence::run_agent_human_approval_production;

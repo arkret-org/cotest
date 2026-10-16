@@ -22,7 +22,7 @@ use crate::scenarios::mls_lifecycle_live::{ACTIVE_SUITE, Member, canonical, uplo
 
 const GROUP: &str = "sidecar-authority-live";
 
-mod private_reply;
+pub(crate) mod private_reply;
 
 pub async fn run() -> Result<()> {
     run_with_genesis_observer(None).await
