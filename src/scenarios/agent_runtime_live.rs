@@ -64,6 +64,7 @@ mod coauth_session_evidence;
 mod content_ceiling_evidence;
 mod content_cross_authority_evidence;
 mod content_direct_evidence;
+mod content_direct_interval_evidence;
 mod content_grant_evidence;
 mod content_history_evidence;
 mod content_limit_evidence;
@@ -104,6 +105,9 @@ pub use content_cross_authority_evidence::{
 };
 pub use content_direct_evidence::{
     REVIEWED_DIRECT_CONTENT_CASES, run_agent_content_direct_production,
+};
+pub use content_direct_interval_evidence::{
+    REVIEWED_DIRECT_INTERVAL_CONTENT_CASES, run_agent_content_direct_interval_production,
 };
 pub use content_grant_evidence::{
     REVIEWED_GRANT_CONTENT_CASES, run_agent_content_grant_production,

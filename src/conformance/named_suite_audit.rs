@@ -866,6 +866,7 @@ mod tests {
             &crate::scenarios::agent_runtime_live::REVIEWED_CEILING_CONTENT_CASES[..],
             &crate::scenarios::agent_runtime_live::REVIEWED_APPROVAL_CONTENT_CASES[..],
             &crate::scenarios::agent_runtime_live::REVIEWED_MLS_CONTENT_CASES[..],
+            &crate::scenarios::agent_runtime_live::REVIEWED_DIRECT_INTERVAL_CONTENT_CASES[..],
             &crate::scenarios::agent_runtime_live::REVIEWED_CROSS_AUTHORITY_CONTENT_CASES[..],
         ] {
             let canonical = cases

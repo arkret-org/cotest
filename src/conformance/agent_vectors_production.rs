@@ -37,6 +37,7 @@ pub(super) const REVIEWED_CASE_GROUPS: &[&[&str]] = &[
     &crate::scenarios::agent_runtime_live::REVIEWED_CEILING_CONTENT_CASES,
     &crate::scenarios::agent_runtime_live::REVIEWED_APPROVAL_CONTENT_CASES,
     &crate::scenarios::agent_runtime_live::REVIEWED_MLS_CONTENT_CASES,
+    &crate::scenarios::agent_runtime_live::REVIEWED_DIRECT_INTERVAL_CONTENT_CASES,
     &crate::scenarios::agent_runtime_live::REVIEWED_CROSS_AUTHORITY_CONTENT_CASES,
 ];
 
@@ -100,6 +101,8 @@ pub fn run_agent_vectors_production_suite() -> Result<SuiteExecutionResult> {
                     execution.cases.extend(sidecar.cases);
                     let mls = crate::scenarios::agent_runtime_live::run_agent_content_mls_production().await?;
                     execution.cases.extend(mls.cases);
+                    let interval = crate::scenarios::agent_runtime_live::run_agent_content_direct_interval_production().await?;
+                    execution.cases.extend(interval.cases);
                     let cross = crate::scenarios::agent_runtime_live::run_agent_content_cross_authority_production().await?;
                     execution.cases.extend(cross.cases);
                     let ceilings = crate::scenarios::agent_runtime_live::run_agent_content_ceiling_production().await?;

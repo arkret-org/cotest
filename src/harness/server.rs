@@ -1345,6 +1345,21 @@ impl ArkretServer {
         self.restart_external_process().await
     }
 
+    /// Enable normal durable federation delivery to these discovery peers.
+    pub async fn restart_with_federation_mesh(&mut self, endpoints: &[String]) -> Result<()> {
+        let config = self
+            .external_restart
+            .as_mut()
+            .context("owned external Station")?;
+        config
+            .extra_env
+            .retain(|(key, _)| key != "COLAND_FEDERATION_OUTBOUND");
+        config
+            .extra_env
+            .push(("COLAND_FEDERATION_OUTBOUND".to_owned(), "1".to_owned()));
+        self.restart_with_federation_peers(endpoints).await
+    }
+
     /// Change the deployment mode of this owned process while retaining its
     /// database, identity, keys and ports. Fixture bootstrap may precede the
     /// switch; subsequent observations run against the requested real mode.
