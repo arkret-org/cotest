@@ -48,6 +48,18 @@ fn blocklist_full_suite_runs_all_production_case_executors() -> Result<()> {
     let result = cotest_inkson_client_tests::conformance::run_account_blocklist_projection_suite()?;
     assert_eq!(result.cases.len(), 8);
     assert!(result.cases.iter().all(|case| case.assertions > 0));
+    println!(
+        "[blocklist-results] {}",
+        serde_json::json!({
+            "entrypoint": result.entrypoint,
+            "fixture": result.fixture,
+            "assertion_counts_source": "fixture declarations checked by the production executor",
+            "cases": result.cases.iter().map(|case| serde_json::json!({
+                "case_id": case.case_id,
+                "assertions": case.assertions,
+            })).collect::<Vec<_>>(),
+        })
+    );
     Ok(())
 }
 

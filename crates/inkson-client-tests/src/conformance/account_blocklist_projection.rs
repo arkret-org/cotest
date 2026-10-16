@@ -62,23 +62,28 @@ async fn run_account_blocklist_projection_suite_live() -> Result<super::SuiteExe
         base.cases.len() == 5,
         "blocklist base did not execute five cases"
     );
+    eprintln!("[blocklist-live] base_cas_target_freshness_and_shared_history_complete=1");
 
     assert_case(&cases[4], "accept", None)?;
     run_account_blocklist_case4_receipt_leg()
         .await
         .context("blocklist full suite encrypted Message and receipt")?;
+    eprintln!("[blocklist-live] encrypted_message_and_receipt_complete=1");
     run_account_blocklist_case4_federated_boundary_slice()
         .await
         .context("blocklist full suite federation boundary")?;
+    eprintln!("[blocklist-live] federation_boundary_complete=1");
 
     assert_case(&cases[5], "accept", None)?;
     run_account_blocklist_case5_dm_leg()
         .await
         .context("blocklist full suite retained DM and Contact terminal")?;
+    eprintln!("[blocklist-live] retained_dm_and_contact_terminal_complete=1");
 
     let case6 = run_account_blocklist_case6_production()
         .await
         .context("blocklist full suite holder-side request filtering")?;
+    eprintln!("[blocklist-live] holder_request_filtering_complete=1");
     let mut executed = base
         .cases
         .into_iter()
@@ -413,8 +418,13 @@ pub async fn run_account_blocklist_production_cases() -> Result<super::SuiteExec
     );
 
     let _session = native_account_session(&holder).await?;
+    eprintln!("[blocklist-live] private_account_catchup_start=1");
     private_account_catchup(&holder, &owner).await?;
+    eprintln!(
+        "[blocklist-live] private_account_catchup_complete=1 retained_shared_history_start=1"
+    );
     retained_shared_history(&server, &holder, &owner).await?;
+    eprintln!("[blocklist-live] retained_shared_history_complete=1");
 
     Ok(super::SuiteExecutionResult {
         entrypoint: ACCOUNT_BLOCKLIST_PROJECTION_ENTRYPOINT,
