@@ -8,6 +8,12 @@ pub const REVIEWED_CROSS_AUTHORITY_CONTENT_CASES: [&str; 1] =
 pub async fn run_agent_content_cross_authority_production()
 -> Result<crate::conformance::SuiteExecutionResult> {
     let fixture = crate::conformance::load_fixture_value("agent-vectors-fixture.json")?;
+    ensure!(
+        arkret_canonical::sha256_hex(arkret_canonical::canonical_json_bytes(
+            &fixture["session_content_authority_contract"]["defaults"]
+        )?) == "49fad7028393f37d28ca1a4ee06c376d6b16be0a16e4bfa35b77826a53130665",
+        "review changed content-authority defaults"
+    );
     let rows = fixture["session_content_authority_contract"]["cases"]
         .as_array()
         .context("canonical content cases")?;

@@ -17,7 +17,17 @@ fn agent_genesis_cases_cross_real_http_admission_and_preserve_rejected_state() -
             .unwrap(),
     );
     let reviewed = cotest::conformance::reviewed_agent_production_case_ids();
-    cases.retain(|case| reviewed.contains(&case["name"].as_str().unwrap()));
+    assert_eq!(
+        cases.len(),
+        96,
+        "review the complete canonical Agent inventory"
+    );
+    assert_eq!(reviewed.len(), cases.len());
+    assert!(
+        cases
+            .iter()
+            .all(|case| reviewed.contains(&case["name"].as_str().unwrap()))
+    );
     let missing = execution.missing_against_cases(&cases)?;
     assert_eq!(execution.cases.len(), cases.len());
     assert!(missing.is_empty());

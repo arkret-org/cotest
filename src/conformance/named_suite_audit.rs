@@ -758,17 +758,11 @@ fn execute_runner(
                 result.entrypoint == entrypoint,
                 "runner returned the wrong entrypoint"
             );
-            ensure!(
-                result
-                    .cases
-                    .iter()
-                    .map(|case| case.case_id.as_str())
-                    .eq(reviewed_cases
-                        .iter()
-                        .flat_map(|section| section.iter().copied())),
-                "{entrypoint}: execution differs from the reviewed production case set"
-            );
-            result.missing_against_cases(&case_sections(fixture, pointers)?)?;
+            validate_reviewed_production_cases(
+                &result,
+                reviewed_cases,
+                &case_sections(fixture, pointers)?,
+            )?;
             Ok(Some(result))
         }
         Runner::Cases(run) => {
@@ -825,6 +819,38 @@ fn execute_runner(
     }
 }
 
+fn validate_reviewed_production_cases(
+    result: &SuiteExecutionResult,
+    reviewed_cases: &[&[&str]],
+    declared_cases: &[Value],
+) -> Result<()> {
+    let reviewed = reviewed_cases
+        .iter()
+        .flat_map(|section| section.iter().copied())
+        .collect::<BTreeSet<_>>();
+    ensure!(
+        reviewed.len()
+            == reviewed_cases
+                .iter()
+                .map(|section| section.len())
+                .sum::<usize>(),
+        "{}: reviewed production case IDs contain duplicates",
+        result.entrypoint
+    );
+    let actual = result
+        .cases
+        .iter()
+        .map(|case| case.case_id.as_str())
+        .collect::<BTreeSet<_>>();
+    ensure!(
+        result.cases.len() == reviewed.len() && actual == reviewed,
+        "{}: execution differs from the reviewed production case set",
+        result.entrypoint
+    );
+    result.missing_against_cases(declared_cases)?;
+    Ok(())
+}
+
 fn case_sections(fixture: &Value, pointers: &[&str]) -> Result<Vec<Value>> {
     ensure!(
         !pointers.is_empty(),
@@ -849,6 +875,44 @@ mod tests {
     use serde_json::json;
 
     use super::*;
+
+    #[test]
+    fn reviewed_case_bijection_preserves_producer_order_and_rejects_invalid_evidence() {
+        let declared = vec![json!({"name":"first"}), json!({"name":"second"})];
+        let reviewed: &[&[&str]] = &[&["first", "second"]];
+        let execution = SuiteExecutionResult {
+            entrypoint: "test",
+            fixture: "test.json",
+            cases: vec![
+                super::super::CaseExecutionResult {
+                    case_id: "second".into(),
+                    assertions: 1,
+                },
+                super::super::CaseExecutionResult {
+                    case_id: "first".into(),
+                    assertions: 2,
+                },
+            ],
+        };
+        assert!(validate_reviewed_production_cases(&execution, reviewed, &declared).is_ok());
+        assert_eq!(execution.cases[0].case_id, "second");
+        let mut invalid = execution.clone();
+        invalid.cases.pop();
+        assert!(validate_reviewed_production_cases(&invalid, reviewed, &declared).is_err());
+        invalid = execution.clone();
+        invalid.cases[0].case_id = "first".into();
+        assert!(validate_reviewed_production_cases(&invalid, reviewed, &declared).is_err());
+        invalid = execution.clone();
+        invalid.cases[0].case_id = "unknown".into();
+        assert!(validate_reviewed_production_cases(&invalid, reviewed, &declared).is_err());
+        invalid = execution.clone();
+        invalid.cases[0].assertions = 0;
+        assert!(validate_reviewed_production_cases(&invalid, reviewed, &declared).is_err());
+        assert!(
+            validate_reviewed_production_cases(&execution, &[&["first", "first"]], &declared)
+                .is_err()
+        );
+    }
 
     #[test]
     fn named_agent_reviewed_nested_groups_match_canonical_producer_order() -> Result<()> {
@@ -928,7 +992,7 @@ mod tests {
 
     #[test]
     #[ignore = "requires current Station, Coauth, browser bundle and native Savfox worker"]
-    fn reviewed_agent_primary_sections_cross_the_registered_executor() -> Result<()> {
+    fn reviewed_agent_cases_cross_the_registered_executor() -> Result<()> {
         let entrypoint = "ak.suite.agent.vectors.v1";
         let runner = RUNNERS
             .iter()
@@ -936,20 +1000,18 @@ mod tests {
             .map(|(_, runner)| *runner)
             .ok_or_else(|| anyhow!("Agent production runner is not registered"))?;
         let fixture = super::super::load_fixture_value("agent-vectors-fixture.json")?;
-        let mut execution = execute_runner(entrypoint, runner, &fixture)?
+        let execution = execute_runner(entrypoint, runner, &fixture)?
             .ok_or_else(|| anyhow!("Agent runner omitted production results"))?;
-        let primary = case_sections(&fixture, &["/schema_validation_cases", "/cases"])?;
-        execution.cases.retain(|case| {
-            primary
-                .iter()
-                .any(|declared| declared["name"] == case.case_id)
-        });
         let missing = execution.missing_against_cases(&case_sections(
             &fixture,
-            &["/schema_validation_cases", "/cases"],
+            &[
+                "/schema_validation_cases",
+                "/cases",
+                "/session_content_authority_contract/cases",
+            ],
         )?)?;
         ensure!(
-            execution.cases.len() == 30 && missing.is_empty(),
+            execution.cases.len() == 96 && missing.is_empty(),
             "reviewed Agent result did not complete its exact canonical coverage"
         );
         ensure!(
