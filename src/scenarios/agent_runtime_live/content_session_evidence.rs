@@ -64,10 +64,12 @@ pub async fn run_agent_session_content_read_boundary() -> Result<()> {
     run_agent_session_content_production().await.map(|_| ())
 }
 
-pub const REVIEWED_CONTENT_CASES: [&str; 18] = [
+pub const REVIEWED_CONTENT_CASES: [&str; 20] = [
     "membership_read_without_literal_grant",
     "membership_does_not_grant_write",
     "provision_only_is_not_authority",
+    "participation_only_is_not_authority",
+    "accountability_only_is_not_authority",
     "fresh_issue_after_service_session",
     "refresh_preserves_existing_ceiling",
     "refresh_rejects_scope_expansion",
@@ -105,6 +107,16 @@ pub async fn run_agent_session_content_production()
         );
     }
     for (name, input, expected) in [
+        (
+            "participation_only_is_not_authority",
+            json!({"paths":[{"kind":"participation","actions":["ak.event.read"],"resources":["A"],"complete":true,"active":true}]}),
+            "deny",
+        ),
+        (
+            "accountability_only_is_not_authority",
+            json!({"paths":[{"kind":"accountability","actions":["ak.event.read"],"resources":["A"],"complete":true,"active":true}]}),
+            "deny",
+        ),
         ("membership_read_without_literal_grant", json!({}), "allow"),
         (
             "no_policy_with_complete_current_evidence",
@@ -260,6 +272,24 @@ pub async fn run_agent_session_content_production()
             strand_ids: vec![strand.clone()],
             track_names: Vec::new(),
         };
+    let accountability_source = coauth_session_evidence::set_accountability_with_source(
+        controller,
+        &agent.agent_account.principal_id,
+        &deployment.account,
+        arkret_models_collaboration::governance::accountability::AccountabilityGrantStatus::Active,
+    )
+    .await?;
+    let accountability: arkret_models_collaboration::governance::accountability::AccountabilityGrantPayload =
+        serde_json::from_value(serde_json::to_value(
+            &accountability_source.reducer_input().context("accepted accountability original")?.payload
+        )?)?;
+    ensure!(accountability.accountability_scope.canonical_set()?
+        == vec![arkret_models_collaboration::governance::accountability::AccountabilityScopeKind::AgentOperator]);
+    ensure!(accountability.issuer_id == deployment.account.principal_id
+        && accountability.subject_id == agent.agent_account.principal_id
+        && accountability.grant_status == arkret_models_collaboration::governance::accountability::AccountabilityGrantStatus::Active
+        && accountability.not_before <= Utc::now()
+        && accountability.expires_at.is_none_or(|expiry|expiry>Utc::now()));
     let prejoin = coauth_session_evidence::build_runtime_session_request(
         station,
         deployment.coauth.base_url(),
@@ -281,6 +311,61 @@ pub async fn run_agent_session_content_production()
         None,
     )
     .await?;
+    let selection = arkret::ParticipationReplaceRequestBody {
+        target_scope: arkret::ParticipationScope::Realm {
+            realm_id: realm.clone(),
+        },
+        selection: arkret::ParticipationBits {
+            reply_message: true,
+            ..arkret::ParticipationBits::NONE
+        },
+        expected_version: 0,
+    };
+    let selected = controller
+        .sdk()
+        .agent_participation_replace(agent.agent_account.principal_id.as_str(), &selection)
+        .await?;
+    ensure!(selected.agent_participation_entries.len() == 1);
+    let entry = &selected.agent_participation_entries[0];
+    ensure!(
+        entry.scope == selection.target_scope
+            && entry.selection.reply_message
+            && entry.version == 1
+    );
+    let with_selection = coauth_session_evidence::build_runtime_session_request(
+        station,
+        deployment.coauth.base_url(),
+        &agent.agent_account.principal_id,
+        &agent.key_authorization,
+        &agent.verification_method,
+        &agent.runtime_key,
+        &actions,
+        content_scope(),
+    )?;
+    coauth_session_evidence::expect_issue_refusal(
+        station,
+        &deployment.coauth.pg.connect_url,
+        &issue_url,
+        &with_selection,
+        &agent.runtime_key,
+        None,
+        arkret_wire::ErrorCode::CAPABILITY_DENIED,
+        None,
+    )
+    .await?;
+    let retained = controller
+        .sdk()
+        .agent_participation_get(agent.agent_account.principal_id.as_str())
+        .await?;
+    ensure!(serde_json::to_value(&retained)? == serde_json::to_value(&selected)?);
+    expect_json(
+        agent.runtime.get("/_arkret/self/device_messages"),
+        StatusCode::OK,
+    )
+    .await?;
+    println!(
+        "[agent-non-authority] accepted_active_accountability_current=1 actual_service_holder_valid=1 no_realm_join_or_content_source=1 fresh_content_issue_denied=1 normal_reply_selection_saved=1 selection_current_retained=1 selection_does_not_create_read_authority=1 full_issuer_state_unchanged=1"
+    );
     let mut joined = MembershipPayload::join(
         realm.clone(),
         ActorId::account(agent.agent_account.clone()),
