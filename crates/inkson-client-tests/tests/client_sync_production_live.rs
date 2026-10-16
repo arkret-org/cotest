@@ -8,6 +8,7 @@ fn sidecar_checkpoint_cases_use_the_actual_account_driver() -> Result<()> {
     );
     let execution =
         cotest_inkson_client_tests::conformance::client_sync::run_sync_client_production_suite()?;
+    println!("[sync-production-cases] {execution:#?}");
     assert_eq!(
         execution.cases.len(),
         cotest_inkson_client_tests::conformance::client_sync::PRODUCTION_CASE_COUNT
