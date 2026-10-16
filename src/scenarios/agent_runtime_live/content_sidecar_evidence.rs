@@ -7,7 +7,7 @@ use crate::harness::CanonicalJsonBody;
 use crate::scenarios::mls_lifecycle_live::{ACTIVE_SUITE, Member, upload_public_blob};
 use crate::scenarios::sidecar_authority_live::private_reply::{self, JoinObserver};
 
-pub const REVIEWED_SIDECAR_CONTENT_CASES: [&str; 8] = [
+pub const REVIEWED_SIDECAR_CONTENT_CASES: [&str; 10] = [
     "sidecar_read_without_literal_grant",
     "sidecar_read_does_not_grant_write",
     "issue_pending_mls_is_only_ceiling",
@@ -15,7 +15,9 @@ pub const REVIEWED_SIDECAR_CONTENT_CASES: [&str; 8] = [
     "desired_cannot_read_payload",
     "effective_sidecar_payload",
     "sidecar_explicit_write_grant",
+    "sidecar_write_grant_without_effective",
     "sidecar_write_grant_after_desired_loss",
+    "sidecar_material_not_a_write_grant_operation",
 ];
 
 async fn controller_message(
@@ -137,6 +139,9 @@ fn open_message(group: &mut arkret::ArkretMlsGroup, event: &Event) -> Result<Vec
 struct PendingPayload<'a> {
     read: &'a TestActorClient,
     strand: &'a arkret_wire::StrandId,
+    deployment: &'a coauth_session_evidence::ActualAgentDeployment,
+    actions: &'a [&'a str],
+    genesis: &'a Event,
 }
 
 #[async_trait::async_trait(?Send)]
@@ -146,7 +151,9 @@ impl JoinObserver for PendingPayload<'_> {
         controller: &Member,
         agent: &AgentRuntimeSession,
         group: &mut arkret::ArkretMlsGroup,
+        agent_group: &mut arkret::ArkretMlsGroup,
         accepted: &arkret_wire::CommittedEventFullView,
+        durable_state_path: &std::path::Path,
     ) -> Result<()> {
         let ScopeRef::Sidecar { sidecar_id, .. } = &accepted.event.scope_ref else {
             bail!("Sidecar required")
@@ -172,6 +179,146 @@ impl JoinObserver for PendingPayload<'_> {
         .await?;
         println!(
             "[agent-sidecar-pending] actual_accepted_add=1 actual_delivered_welcome=1 durable_local_state=1 consume_not_yet_sent=1 desired_not_effective=1 payload_refused=1"
+        );
+        let (grant, _) = controller
+            .client
+            .grant_realm_actions_to(
+                accepted.event.realm_id.as_str(),
+                agent.agent_did.as_str(),
+                &["ak.message.create"],
+            )
+            .await?;
+        let grant = arkret_wire::GrantId::new(grant)?;
+        let write_only = self
+            .actions
+            .iter()
+            .copied()
+            .filter(|action| *action != "ak.event.read")
+            .collect::<Vec<_>>();
+        let (write, claims) = content_direct_evidence::issue(
+            self.deployment,
+            agent,
+            &write_only,
+            &accepted.event.realm_id,
+        )
+        .await?;
+        ensure!(
+            claims
+                .scopes
+                .iter()
+                .any(|action| action == "ak.message.create")
+                && !claims.scopes.iter().any(|action| action == "ak.event.read")
+        );
+        ensure!(
+            claims
+                .scope_details
+                .as_ref()
+                .context("pending explicit write ceiling")?["capability_grant_refs"]
+                == json!([grant])
+        );
+        let material = arkret_models_collaboration::mls_group_state_material::MlsMemberGroupStateMaterialReadRequestBody {
+            realm_id:accepted.event.realm_id.clone(), effective_scope:accepted.event.scope_ref.clone(),
+            mls_group_id:accepted.event.scope_ref.canonical_mls_group_id()?, epoch:Default::default(),
+            group_state_event_id:self.genesis.event_id.clone(), caller_actor_id:ActorId::account(agent.agent_account.clone()),
+            target_commit_event_ref:self.genesis.event_id.clone(),target_epoch:0,
+            group_info_ref:arkret_wire::BlobRef::new(self.genesis.payload["group_info_ref"].as_str().context("accepted Genesis info")?)?,
+            ratchet_tree_ref:arkret_wire::BlobRef::new(self.genesis.payload["ratchet_tree_ref"].as_str().context("accepted Genesis tree")?)?,max_response_bytes:None,
+        };
+        self.read
+            .sdk()
+            .self_mls_group_state_material(&material)
+            .await?
+            .validate_for_request(&material.as_peer_request())?;
+        let (available, _) = crate::scenarios::mls_lifecycle_live::recipient_welcomes(self.read)
+            .await
+            .context("read-only actual Welcome control")?;
+        ensure!(
+            available.len() == 1
+                && available[0].effective_scope == accepted.event.scope_ref
+                && available[0].commit_event_ref == accepted.event.event_id
+        );
+        crate::harness::expect_api_error(
+            write.get("/_arkret/self/device_messages"),
+            StatusCode::FORBIDDEN,
+            arkret_wire::ErrorCode::CAPABILITY_DENIED,
+        )
+        .await?;
+        let (retained, _) = crate::scenarios::mls_lifecycle_live::recipient_welcomes(self.read)
+            .await
+            .context("read-only actual Welcome control")?;
+        ensure!(
+            retained == available,
+            "denied Welcome read acknowledged or removed the queued original"
+        );
+        let (write_with_read, combined) = content_direct_evidence::issue(
+            self.deployment,
+            agent,
+            self.actions,
+            &accepted.event.realm_id,
+        )
+        .await?;
+        ensure!(
+            combined
+                .scopes
+                .iter()
+                .any(|action| action == "ak.event.read")
+                && combined
+                    .scopes
+                    .iter()
+                    .any(|action| action == "ak.message.create")
+        );
+        ensure!(
+            combined
+                .scope_details
+                .as_ref()
+                .context("pending full content ceiling")?["capability_grant_refs"]
+                == json!([grant])
+        );
+        let (pending_write, _) = agent_message(agent, agent_group, accepted, self.strand, &grant)?;
+        {
+            use std::io::Write;
+            let mut file = std::fs::File::create(durable_state_path)?;
+            file.write_all(&serde_json::to_vec(&agent_group.export_state_record()?)?)?;
+            file.sync_all()?;
+        }
+        let durable: arkret::MlsGroupStateRecord =
+            serde_json::from_slice(&std::fs::read(durable_state_path)?)?;
+        *agent_group = arkret::ArkretMlsGroup::restore_from_state_record(&durable)?;
+        ensure!(arkret_wire::ErrorCode::Conflict.http_status() == 409);
+        crate::harness::expect_api_error(
+            write_with_read
+                .post("/_arkret/self/events")
+                .canonical_json(&arkret_wire::EventAdmissionSubmission::new(
+                    pending_write.clone(),
+                ))?,
+            StatusCode::CONFLICT,
+            arkret_wire::ErrorCode::CONFLICT,
+        )
+        .await?;
+        crate::harness::expect_api_error(
+            controller.client.get(&format!(
+                "/_arkret/self/committed-events/{}",
+                pending_write.event_id
+            )),
+            StatusCode::NOT_FOUND,
+            arkret_wire::ErrorCode::NOT_FOUND,
+        )
+        .await?;
+        controller
+            .client
+            .revoke_realm_grant(accepted.event.realm_id.as_str(), grant.as_str())
+            .await?;
+        let still_pending = controller
+            .client
+            .sdk()
+            .agent_sidecar_get(sidecar_id)
+            .await?;
+        ensure!(
+            still_pending.desired_agent_ids == vec![agent.agent_account.principal_id.clone()]
+                && still_pending.effective_agent_ids.is_empty()
+        );
+        println!(
+            "[agent-sidecar-pending-grant] actual_write_only_ceiling=1 same_queued_welcome_read_positive=1 write_does_not_read_welcome=1 queued_original_retained=1 read_and_write_ceiling_for_payload=1 valid_agent_ciphertext_durable_before_attempt=1 effective_missing_write_refused=1 effective_conflict_409=1 no_committed_original=1 temporary_grant_revoked=1 roster_not_changed_by_grant=1"
         );
         Ok(())
     }
@@ -226,6 +373,16 @@ pub async fn run_agent_content_sidecar_production()
         (
             "sidecar_write_grant_after_desired_loss",
             json!({"resource_profile":"sidecar","action":"ak.message.create","paths":[{"kind":"capability_grant","actions":["ak.message.create"],"resources":["A"],"complete":true,"active":true}],"phase":"payload","desired":false}),
+            "deny",
+        ),
+        (
+            "sidecar_write_grant_without_effective",
+            json!({"resource_profile":"sidecar","action":"ak.message.create","paths":[{"kind":"capability_grant","actions":["ak.message.create"],"resources":["A"],"complete":true,"active":true}],"phase":"payload","effective":false}),
+            "deny",
+        ),
+        (
+            "sidecar_material_not_a_write_grant_operation",
+            json!({"resource_profile":"sidecar","action":"ak.message.create","paths":[{"kind":"capability_grant","actions":["ak.message.create"],"resources":["A"],"complete":true,"active":true}],"phase":"bootstrap"}),
             "deny",
         ),
     ] {
@@ -476,6 +633,9 @@ pub async fn run_agent_content_sidecar_production()
     let observer = PendingPayload {
         read: &read,
         strand: &strand,
+        deployment: &deployment,
+        actions: &actions,
+        genesis: &genesis,
     };
     let (state, mut agent_group) = Box::pin(private_reply::join_agent_with_observer(
         &controller,

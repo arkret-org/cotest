@@ -17,7 +17,9 @@ pub(crate) trait JoinObserver {
         controller: &Member,
         agent: &AgentRuntimeSession,
         controller_group: &mut arkret::ArkretMlsGroup,
+        agent_group: &mut arkret::ArkretMlsGroup,
         accepted: &arkret_wire::CommittedEventFullView,
+        durable_state_path: &std::path::Path,
     ) -> Result<()>;
 }
 
@@ -327,7 +329,14 @@ pub(crate) async fn join_agent_with_observer(
     )?;
     if let Some(observer) = observer {
         observer
-            .before_consume(controller, agent, group, &accepted)
+            .before_consume(
+                controller,
+                agent,
+                group,
+                &mut agent_group,
+                &accepted,
+                &journal_path,
+            )
             .await?;
     }
     agent.runtime.sdk().keypackages_consume(&consume).await?;
