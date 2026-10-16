@@ -85,7 +85,9 @@ mod provision_evidence;
 mod provision_start_evidence;
 mod repairing_evidence;
 mod terminal_evidence;
-pub use act_on_behalf_conjunction::run_agent_act_on_behalf_production;
+pub use act_on_behalf_conjunction::{
+    REVIEWED_APPROVAL_CONTENT_CASES, run_agent_act_on_behalf_production,
+};
 pub use act_on_behalf_evidence::run_agent_act_on_behalf_boundary;
 pub use binding_evidence::run_agent_runtime_binding_admission;
 pub use coauth_session_evidence::{

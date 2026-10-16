@@ -35,6 +35,7 @@ pub(super) const REVIEWED_CASE_GROUPS: &[&[&str]] = &[
     &crate::scenarios::agent_runtime_live::REVIEWED_HISTORY_CONTENT_CASES,
     &crate::scenarios::agent_runtime_live::REVIEWED_SIDECAR_CONTENT_CASES,
     &crate::scenarios::agent_runtime_live::REVIEWED_CEILING_CONTENT_CASES,
+    &crate::scenarios::agent_runtime_live::REVIEWED_APPROVAL_CONTENT_CASES,
 ];
 
 pub fn reviewed_agent_production_case_ids() -> Vec<&'static str> {

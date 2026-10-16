@@ -2,6 +2,8 @@
 
 use super::*;
 
+pub const REVIEWED_APPROVAL_CONTENT_CASES: [&str; 1] = ["approval_missing"];
+
 pub async fn run_agent_act_on_behalf_production() -> Result<crate::conformance::SuiteExecutionResult>
 {
     let fixture = crate::conformance::load_fixture_value("agent-vectors-fixture.json")?;
@@ -31,6 +33,22 @@ pub async fn run_agent_act_on_behalf_production() -> Result<crate::conformance::
         actual == expected,
         "review the changed attribution obligations"
     );
+    let content = fixture["session_content_authority_contract"]["cases"]
+        .as_array()
+        .context("canonical content approval cases")?;
+    let approval = content
+        .iter()
+        .filter(|row| row["name"] == "approval_missing")
+        .collect::<Vec<_>>();
+    ensure!(
+        approval.len() == 1
+            && approval[0]["expected"] == "deny"
+            && approval[0]["input"]
+                == json!({"phase":"payload","action":"ak.message.create",
+            "approval_allows":false,"paths":[{"kind":"capability_grant","actions":["ak.message.create"],
+            "resources":["A"],"complete":true,"active":true}]}),
+        "review changed exact action approval gate"
+    );
     run_agent_act_on_behalf_boundary().await?;
     println!(
         "[agent-act-conjunction] real_issuer_and_actual_producer=1 confirmation_single_use_and_exact_retry=1 nonce_rebinding_zero_effect=1 authorization_participation_scope_and_fresh_approval_independently_refused=1 sidecar_create_denied=1 canonical_case_completion_claim=1 observations=4"
@@ -38,9 +56,15 @@ pub async fn run_agent_act_on_behalf_production() -> Result<crate::conformance::
     Ok(crate::conformance::SuiteExecutionResult {
         entrypoint: "ak.suite.agent.vectors.v1",
         fixture: "agent-vectors-fixture.json",
-        cases: vec![crate::conformance::CaseExecutionResult {
-            case_id: "agent_act_on_behalf".to_owned(),
-            assertions: 4,
-        }],
+        cases: vec![
+            crate::conformance::CaseExecutionResult {
+                case_id: "agent_act_on_behalf".to_owned(),
+                assertions: 4,
+            },
+            crate::conformance::CaseExecutionResult {
+                case_id: "approval_missing".to_owned(),
+                assertions: 1,
+            },
+        ],
     })
 }

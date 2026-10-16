@@ -302,6 +302,7 @@ pub async fn run_agent_act_on_behalf_boundary() -> Result<()> {
     let refused: arkret_wire::Problem = response.json().await?;
     ensure!(
         status == StatusCode::FORBIDDEN
+            && refused.code() == arkret_wire::ErrorCode::CLAIM_REQUIRED
             && serde_json::to_value(&refused)?["reason_code"] == "approval_required",
         "selected attributed publication without confirmation: {status} {refused:?}"
     );
@@ -440,6 +441,14 @@ pub async fn run_agent_act_on_behalf_boundary() -> Result<()> {
         anyhow::bail!("fresh approved publication did not commit: {published:?}");
     };
     ensure!(original_commit.event_ref == target.event_id);
+    ensure!(
+        controller
+            .sdk()
+            .committed_event_get(&target.event_id)
+            .await?
+            .reducer_input()
+            == Some(&target)
+    );
     let published_rows = acceptance_rows_with_agent_stores(&database, true).await?;
     let wrong_holder = controller
         .post("/_arkret/self/events")
@@ -668,6 +677,9 @@ pub async fn run_agent_act_on_behalf_boundary() -> Result<()> {
     ensure!(revoked == acceptance_rows_with_agent_stores(&database, true).await?);
     println!(
         "[agent-act-on-behalf] real_narrow_content_issuer=1 actual_private_selection=1 unselected_attribution_requires_fresh_approval=1 missing_confirmation_zero_effect_refused=1 actual_controller_confirmation_publication=1 exact_confirmation_retry_original_commit_zero_effect=1 confirmation_nonce_rebinding_zero_effect_refused=1 unknown_confirmation_request_zero_effect_refused=1 exact_publication_retry_original_commit_zero_effect=1 accepted_recovery_wrong_producer_zero_effect_refused=1 authenticated_actual_producer_mismatch_zero_effect_refused=1 revoked_content_source_fresh_issue_zero_effect_refused=1 completed_issue_replay_after_revoke_original=1 missing_authorization_ref_zero_effect_refused=1 selected_wrong_action_grant_zero_effect_refused=1 participation_closed_with_fresh_confirmation_zero_effect_refused=1 foreign_controller_sidecar_create_denied_zero_effect=1 canonical_case_completion_claim=0"
+    );
+    println!(
+        "[agent-payload-approval] actual_valid_write_scope=1 selection_retained=1 private_request_accepted=1 exact_approval_missing=1 actual_403_claim_required=1 complete_business_noop=1 accepted_controller_confirmation=1 exact_original_publication_committed_and_read=1"
     );
     Ok(())
 }
