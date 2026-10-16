@@ -23,10 +23,14 @@
 //! server-side (R3.1 work — see scenarios under `tests/`).
 
 use anyhow::{Result, anyhow, bail};
+use arkret::{ParticipantBindingContext, participant_binding_signing_input};
+use arkret_models_collaboration::call_invitation::{
+    CallMediaSubjectBinding, canonical_request_digest,
+};
 use arkret_models_collaboration::events_payloads::call::ParticipantBinding;
 use arkret_models_collaboration::objects::media::MEDIA_ICE_CONFIG_SIGNING_LABEL;
 use arkret_wire::{ExporterLabelId, MEDIA_TOKEN_TTL_MAX_SECS, ProfileId};
-use ed25519_dalek::{Signer, SigningKey, Verifier, VerifyingKey};
+use ed25519_dalek::{Signer, SigningKey, Verifier};
 use hkdf::Hkdf;
 use serde_json::{Value, json};
 use sha2::Sha256;
@@ -306,13 +310,10 @@ pub fn run_participant_binding_required_vector() -> Result<()> {
             "arkret_wire::ReasonCode::PARTICIPANT_BINDING_INVALID spelling drifted: participant_binding_invalid"
         );
     }
-    let compact = serde_json::json!({
-        "expires_at": "2026-06-15T00:05:00.000Z",
-        "issuer_kid": "did:web:media.example#media",
-        "sig": "AA"
-    });
+    let (_, binding) = participant_binding_test_material()?;
+    let compact = serde_json::to_value(binding)?;
     serde_json::from_value::<ParticipantBinding>(compact.clone())?;
-    for field in ["expires_at", "issuer_kid", "sig"] {
+    for field in ["expires_at", "issuer_kid", "subject_binding_digest", "sig"] {
         let mut missing = compact.clone();
         missing.as_object_mut().unwrap().remove(field);
         if serde_json::from_value::<ParticipantBinding>(missing).is_ok() {
@@ -341,161 +342,136 @@ pub fn run_participant_binding_required_vector() -> Result<()> {
     run_participant_binding_ed25519_vector()
 }
 
-/// Canonical participant_binding signing_input
-/// (media-service-binding.md §3 / §3.1, byte-locked):
-///
-/// ```text
-/// signing_input = "ak.media.participant_binding.v1" || 0x00 ||
-///   canonical_json({ actor_id, call_id, device_id, expires_at,
-///                    focus_id, participant_id, realm_id })
-/// ```
-///
-/// The label is the literal `scheme` value; the JCS object covers EXACTLY the
-/// 7 authoritative fields (the `scheme` / `issuer_kid` / `issued_at` metadata
-/// MUST NOT enter the input). Returns the bytes a verifier signs/checks.
-fn participant_binding_signing_input(
-    actor_id: &str,
-    call_id: &str,
-    device_id: &str,
-    expires_at: &str,
-    focus_id: &str,
-    participant_id: &str,
-    realm_id: &str,
-) -> Result<Vec<u8>> {
-    let seven_tuple = json!({
-        "actor_id": actor_id,
-        "call_id": call_id,
-        "device_id": device_id,
-        "expires_at": expires_at,
-        "focus_id": focus_id,
-        "participant_id": participant_id,
-        "realm_id": realm_id,
-    });
-    let jcs = arkret_canonical::canonical_json_bytes(&seven_tuple)
-        .map_err(|err| anyhow!("participant_binding JCS encoding failed: {err}"))?;
-    let mut input = Vec::with_capacity(ParticipantBinding::SCHEMA.len() + 1 + jcs.len());
-    input.extend_from_slice(ParticipantBinding::SCHEMA.as_bytes());
-    input.push(0x00);
-    input.extend_from_slice(&jcs);
-    Ok(input)
+/// Fixed synthetic receipt material for a cryptographic KAT, not live issuance.
+fn participant_binding_test_material() -> Result<(CallMediaSubjectBinding, ParticipantBinding)> {
+    let issuer = SigningKey::from_bytes(&[11; 32]);
+    let mut receipt: CallMediaSubjectBinding = serde_json::from_value(json!({
+        "realm_id": "ak:realm:AZAySZA7XRDeJ9cO4MqaDWrJD-rqPk6Cudk7CCzsDQz1",
+        "call_id": "ak:call:AYf05kF8z4cSo8r6qmqXgu4KPuv2YtKBlsE00FOmblaz",
+        "subject_actor_id": {
+            "kind": "account",
+            "account_id": {
+                "principal_id": "ak:did_core:web:alice.example.com",
+                "station_id": "ak:did_core:web:station.example.com"
+            }
+        },
+        "subject_device_id": "ak:device:01964137-0000-7000-8000-000000000001",
+        "roster_identity": {
+            "actor_id": "ak:did_core:key:z6MkpTHR8VNsBxYAAWHut2Geadd9jSwuBV8xRoAnwWsdvktH",
+            "device_id": "ak:device:01964137-0000-7000-8000-000000000000"
+        },
+        "focus_id": "fra-1",
+        "participant_id": "ak:rtc_participant:0198c2f4-0000-7000-8000-000000000000",
+        "media": {"audio": true, "video": true, "screen": false},
+        "expires_at": "2026-05-27T12:34:56.000Z",
+        "nonce": arkret_canonical::base64url_encode([48; 32]),
+        "issuer_kid": "did:web:media.example#media",
+        "sig": ""
+    }))?;
+    receipt.sig =
+        arkret_canonical::base64url_encode(issuer.sign(&receipt.signature_input()?).to_bytes());
+    let digest = canonical_request_digest(&receipt)?;
+    let context = participant_test_context(&receipt, &digest);
+    let binding = ParticipantBinding {
+        expires_at: receipt.expires_at,
+        issuer_kid: receipt.issuer_kid.clone(),
+        subject_binding_digest: digest.clone(),
+        sig: arkret_canonical::base64url_encode(
+            issuer
+                .sign(&participant_binding_signing_input(&context)?)
+                .to_bytes(),
+        ),
+    };
+    Ok((receipt, binding))
 }
 
-/// VECT-MB-5b — REAL Ed25519 golden vector for `participant_binding.sig`.
-///
-/// Fixed issuer seed + fixed 7-tuple ⇒ a deterministic golden signature. The
-/// vector proves:
-///   1. a correctly signed binding verifies (the issuer key signs the §3 signing_input, not the raw
-///      object);
-///   2. tampering with ANY one authoritative field breaks verification (the signature actually
-///      covers the field, it is not merely compared);
-///   3. the domain label is load-bearing — verifying the same `sig` under the ICE-config label
-///      (`ak.media.ice_config.v1`) MUST fail (cross-purpose signature confusion is rejected).
-fn run_participant_binding_ed25519_vector() -> Result<()> {
-    // Fixed golden inputs.
-    const ISSUER_SEED: [u8; 32] = [
-        0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff,
-        0x00, 0x10, 0x20, 0x30, 0x40, 0x50, 0x60, 0x70, 0x80, 0x90, 0xa0, 0xb0, 0xc0, 0xd0, 0xe0,
-        0xf0, 0x01,
-    ];
-    let actor_id = "ak:did_core:web:alice.example.com";
-    let call_id = "ak:call:AYf05kF8z4cSo8r6qmqXgu4KPuv2YtKBlsE00FOmblaz";
-    let device_id = "ak:device:01964137-0000-7000-8000-000000000000";
-    let expires_at = "2026-05-27T12:34:56.000Z";
-    let focus_id = "fra-1";
-    let participant_id = "ak:rtc_participant:0198c2f4-0000-7000-8000-000000000000";
-    let realm_id = "ak:realm:AZAySZA7XRDeJ9cO4MqaDWrJD-rqPk6Cudk7CCzsDQz1";
-
-    let signing_input = participant_binding_signing_input(
-        actor_id,
-        call_id,
-        device_id,
-        expires_at,
-        focus_id,
-        participant_id,
-        realm_id,
-    )?;
-
-    let issuer = SigningKey::from_bytes(&ISSUER_SEED);
-    let verifying: VerifyingKey = issuer.verifying_key();
-    let sig = issuer.sign(&signing_input);
-
-    // Golden signature pin: the deterministic ed25519 signature over the fixed
-    // input MUST reproduce this byte string. A drift in canonical JSON, the
-    // label, the 0x00 separator, or the field set changes these bytes.
-    const EXPECTED_SIG_HEX: &str = "f9dbc8ec2bce61aa2de541038afd266d3c35c35d6528b9100f3877aa02a4100152dbeefb2e5ab35d3090b7987a0bde6a18192da6771e4c2899ae648c7f8f0807";
-    let actual_sig_hex = hex_lower(&sig.to_bytes());
-    if actual_sig_hex != EXPECTED_SIG_HEX {
-        bail!(
-            "participant_binding golden signature drifted:\n  expected {EXPECTED_SIG_HEX}\n  actual   {actual_sig_hex}\n(signing_input / label / JCS changed)"
-        );
+fn participant_test_context<'a>(
+    receipt: &'a CallMediaSubjectBinding,
+    digest: &'a str,
+) -> ParticipantBindingContext<'a> {
+    ParticipantBindingContext {
+        actor_id: &receipt.roster_identity.actor_id,
+        call_id: &receipt.call_id,
+        device_id: &receipt.roster_identity.device_id,
+        expires_at: receipt.expires_at,
+        focus_id: &receipt.focus_id,
+        participant_id: &receipt.participant_id,
+        realm_id: &receipt.realm_id,
+        media: receipt.media.clone(),
+        issuer_kid: receipt.issuer_kid.as_str(),
+        subject_binding_digest: digest,
     }
+}
 
-    // 1. The honest signature verifies.
-    verifying
-        .verify(&signing_input, &sig)
-        .map_err(|err| anyhow!("honest participant_binding sig must verify: {err}"))?;
-
-    // 2. Tampering each authoritative field breaks verification.
-    let tampers: [(&str, &str); 7] = [
-        (actor_id, "ak:did_core:web:eve.example.com"),
+/// Lock all ten signed fields to an independently calculated Ed25519 KAT.
+fn run_participant_binding_ed25519_vector() -> Result<()> {
+    let (receipt, binding) = participant_binding_test_material()?;
+    let context = participant_test_context(&receipt, &binding.subject_binding_digest);
+    let input = participant_binding_signing_input(&context)?;
+    let issuer = SigningKey::from_bytes(&[11; 32]);
+    let verifying = issuer.verifying_key();
+    let sig = issuer.sign(&input);
+    // Calculated independently with Python cryptography Ed25519 and ASCII JCS.
+    const EXPECTED_SIG_HEX: &str = "bcde34696fd95673431c39783ccccc0d3c6513e2430dec89abb5829b6f63e9ca4cb70bb96d0c711eda6d9125d1ce8b18970bd268e9afdec895ee398111145c05";
+    if hex_lower(&sig.to_bytes()) != EXPECTED_SIG_HEX {
+        bail!("participant binding ten-field signature differs from the independent KAT");
+    }
+    verifying.verify(&input, &sig)?;
+    let fields = serde_json::to_value(&context)?;
+    if fields.as_object().map(|object| object.len()) != Some(10) {
+        bail!("participant binding must sign exactly ten fields");
+    }
+    let tampers = [
+        ("actor_id", json!("ak:did_core:key:tampered")),
         (
-            call_id,
-            "ak:call:AXeSRv0BBNTmteRf54F8yu5ahdBtw9_GfJ47WLgnrkD5",
+            "call_id",
+            json!("ak:call:AXeSRv0BBNTmteRf54F8yu5ahdBtw9_GfJ47WLgnrkD5"),
         ),
-        (device_id, "ak:device:01964137-0000-7000-8000-00000000dead"),
-        (expires_at, "2099-01-01T00:00:00.000Z"),
-        (focus_id, "fra-2"),
         (
-            participant_id,
-            "ak:rtc_participant:0198c2f4-0000-7000-8000-0000000000ff",
+            "device_id",
+            json!("ak:device:01964137-0000-7000-8000-00000000dead"),
+        ),
+        ("expires_at", json!("2099-01-01T00:00:00.000Z")),
+        ("focus_id", json!("fra-2")),
+        ("participant_id", json!("different-participant")),
+        (
+            "realm_id",
+            json!("ak:realm:AeqRpQIZxaoTV-G0Cl9jzAJ6wSak3GJUvizlNJRsvSFY"),
         ),
         (
-            realm_id,
-            "ak:realm:AeqRpQIZxaoTV-G0Cl9jzAJ6wSak3GJUvizlNJRsvSFY",
+            "media",
+            json!({"audio": true, "video": true, "screen": true}),
+        ),
+        ("issuer_kid", json!("did:web:rogue.example#media")),
+        (
+            "subject_binding_digest",
+            json!(format!("sha256:{}", "00".repeat(32))),
         ),
     ];
-    for (idx, (_orig, replacement)) in tampers.iter().enumerate() {
-        let tampered = participant_binding_signing_input(
-            if idx == 0 { replacement } else { actor_id },
-            if idx == 1 { replacement } else { call_id },
-            if idx == 2 { replacement } else { device_id },
-            if idx == 3 { replacement } else { expires_at },
-            if idx == 4 { replacement } else { focus_id },
-            if idx == 5 {
-                replacement
-            } else {
-                participant_id
-            },
-            if idx == 6 { replacement } else { realm_id },
-        )?;
-        if verifying.verify(&tampered, &sig).is_ok() {
-            bail!(
-                "tampered participant_binding field #{idx} verified against the original sig — \
-                 the signature does not actually cover that field (participant_binding_invalid)"
-            );
+    for (field, replacement) in tampers {
+        let mut tampered = fields.clone();
+        tampered[field] = replacement;
+        let mut bytes = b"ak.media.participant_binding.v1\0".to_vec();
+        bytes.extend_from_slice(&arkret_canonical::canonical_json_bytes(&tampered)?);
+        if verifying.verify(&bytes, &sig).is_ok() {
+            bail!("tampered participant binding field {field} verified");
         }
     }
-
-    // 3. Domain-label separation: the same sig under the ICE-config label MUST NOT verify
-    //    (cross-purpose confusion is rejected).
-    let mut cross_input = Vec::new();
-    cross_input.extend_from_slice(MEDIA_ICE_CONFIG_SIGNING_LABEL.as_bytes());
-    cross_input.push(0x00);
-    cross_input.extend_from_slice(
-        &arkret_canonical::canonical_json_bytes(&json!({
-            "actor_id": actor_id, "call_id": call_id, "device_id": device_id,
-            "expires_at": expires_at, "focus_id": focus_id,
-            "participant_id": participant_id, "realm_id": realm_id,
-        }))
-        .map_err(|err| anyhow!("cross-label JCS failed: {err}"))?,
-    );
-    if verifying.verify(&cross_input, &sig).is_ok() {
-        bail!(
-            "participant_binding sig verified under the ICE-config domain label — \
-             domain separation is broken"
-        );
+    let mut retired = fields.clone();
+    for field in ["media", "issuer_kid", "subject_binding_digest"] {
+        retired.as_object_mut().unwrap().remove(field);
     }
-
+    let mut old_input = b"ak.media.participant_binding.v1\0".to_vec();
+    old_input.extend_from_slice(&arkret_canonical::canonical_json_bytes(&retired)?);
+    if verifying.verify(&old_input, &sig).is_ok() {
+        bail!("retired seven-field binding verified");
+    }
+    let mut cross_input = MEDIA_ICE_CONFIG_SIGNING_LABEL.as_bytes().to_vec();
+    cross_input.push(0);
+    cross_input.extend_from_slice(&arkret_canonical::canonical_json_bytes(&fields)?);
+    if verifying.verify(&cross_input, &sig).is_ok() {
+        bail!("participant binding verified under the ICE-config domain label");
+    }
     Ok(())
 }
 

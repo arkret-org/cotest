@@ -546,6 +546,17 @@ fn media_binding_vector_suite_runs_clean() -> Result<()> {
     assert_eq!(execution.cases.len(), 10);
     assert!(execution.cases.iter().all(|case| case.assertions > 0));
     assert_eq!(ALL_MEDIA_BINDING_VECTOR_IDS.len(), 10);
+    println!(
+        "[media-binding-results] {}",
+        serde_json::json!({
+            "entrypoint": execution.entrypoint,
+            "fixture": execution.fixture,
+            "cases": execution.cases.iter().map(|case| serde_json::json!({
+                "case_id": case.case_id,
+                "assertions": case.assertions,
+            })).collect::<Vec<_>>(),
+        })
+    );
     Ok(())
 }
 
