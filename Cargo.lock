@@ -245,6 +245,7 @@ dependencies = [
  "arkret-push-policy",
  "arkret-retry",
  "arkret-schema",
+ "arkret-server",
  "arkret-signatures",
  "arkret-state",
  "arkret-wire",
