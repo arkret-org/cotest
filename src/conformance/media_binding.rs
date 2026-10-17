@@ -24,9 +24,6 @@
 
 use anyhow::{Result, anyhow, bail};
 use arkret::{ParticipantBindingContext, participant_binding_signing_input};
-use arkret_models_collaboration::call_invitation::{
-    CallMediaSubjectBinding, canonical_request_digest,
-};
 use arkret_models_collaboration::events_payloads::call::ParticipantBinding;
 use arkret_models_collaboration::objects::media::MEDIA_ICE_CONFIG_SIGNING_LABEL;
 use arkret_wire::{ExporterLabelId, MEDIA_TOKEN_TTL_MAX_SECS, ProfileId};
@@ -310,10 +307,10 @@ pub fn run_participant_binding_required_vector() -> Result<()> {
             "arkret_wire::ReasonCode::PARTICIPANT_BINDING_INVALID spelling drifted: participant_binding_invalid"
         );
     }
-    let (_, binding) = participant_binding_test_material()?;
+    let binding = participant_binding_test_material()?.participant_binding;
     let compact = serde_json::to_value(binding)?;
     serde_json::from_value::<ParticipantBinding>(compact.clone())?;
-    for field in ["expires_at", "issuer_kid", "subject_binding_digest", "sig"] {
+    for field in ["expires_at", "issuer_kid", "sig"] {
         let mut missing = compact.clone();
         missing.as_object_mut().unwrap().remove(field);
         if serde_json::from_value::<ParticipantBinding>(missing).is_ok() {
@@ -321,6 +318,7 @@ pub fn run_participant_binding_required_vector() -> Result<()> {
         }
     }
     for field in [
+        "subject_binding_digest",
         "scheme",
         "issued_at",
         "realm_id",
@@ -342,87 +340,58 @@ pub fn run_participant_binding_required_vector() -> Result<()> {
     run_participant_binding_ed25519_vector()
 }
 
-/// Fixed synthetic receipt material for a cryptographic KAT, not live issuance.
-fn participant_binding_test_material() -> Result<(CallMediaSubjectBinding, ParticipantBinding)> {
+/// Synthetic complete-identity token material for a cryptographic KAT.
+fn participant_binding_test_material()
+-> Result<arkret_models_collaboration::objects::media::CallMediaTokenExchangeOutcome> {
     let issuer = SigningKey::from_bytes(&[11; 32]);
-    let mut receipt: CallMediaSubjectBinding = serde_json::from_value(json!({
-        "realm_id": "ak:realm:AZAySZA7XRDeJ9cO4MqaDWrJD-rqPk6Cudk7CCzsDQz1",
-        "call_id": "ak:call:AYf05kF8z4cSo8r6qmqXgu4KPuv2YtKBlsE00FOmblaz",
-        "subject_actor_id": {
-            "kind": "account",
-            "account_id": {
-                "principal_id": "ak:did_core:web:alice.example.com",
-                "station_id": "ak:did_core:web:station.example.com"
-            }
-        },
-        "subject_device_id": "ak:device:01964137-0000-7000-8000-000000000001",
-        "roster_identity": {
-            "actor_id": "ak:did_core:key:z6MkpTHR8VNsBxYAAWHut2Geadd9jSwuBV8xRoAnwWsdvktH",
-            "device_id": "ak:device:01964137-0000-7000-8000-000000000000"
-        },
-        "focus_id": "fra-1",
-        "participant_id": "ak:rtc_participant:0198c2f4-0000-7000-8000-000000000000",
-        "media": {"audio": true, "video": true, "screen": false},
-        "expires_at": "2026-05-27T12:34:56.000Z",
-        "nonce": arkret_canonical::base64url_encode([48; 32]),
-        "issuer_kid": "did:web:media.example#media",
-        "sig": ""
-    }))?;
-    receipt.sig =
-        arkret_canonical::base64url_encode(issuer.sign(&receipt.signature_input()?).to_bytes());
-    let digest = canonical_request_digest(&receipt)?;
-    let context = participant_test_context(&receipt, &digest);
-    let binding = ParticipantBinding {
-        expires_at: receipt.expires_at,
-        issuer_kid: receipt.issuer_kid.clone(),
-        subject_binding_digest: digest.clone(),
-        sig: arkret_canonical::base64url_encode(
-            issuer
-                .sign(&participant_binding_signing_input(&context)?)
-                .to_bytes(),
-        ),
-    };
-    Ok((receipt, binding))
+    let mut outcome: arkret_models_collaboration::objects::media::CallMediaTokenExchangeOutcome =
+        serde_json::from_value(json!({
+            "realm_id": "ak:realm:AZAySZA7XRDeJ9cO4MqaDWrJD-rqPk6Cudk7CCzsDQz1",
+            "call_id": "ak:call:AYf05kF8z4cSo8r6qmqXgu4KPuv2YtKBlsE00FOmblaz",
+            "actor_id": {"kind":"account", "account_id": {
+                "principal_id":"ak:did_core:web:alice.example.com",
+                "station_id":"ak:did_core:web:station.example.com"
+            }},
+            "device_id": "ak:device:01964137-0000-7000-8000-000000000001",
+            "focus_id": "fra-1",
+            "participant_id": "ak:rtc_participant:0198c2f4-0000-7000-8000-000000000000",
+            "media": {"audio":true,"video":true,"screen":false},
+            "expires_at": "2026-05-27T12:34:56.000Z",
+            "participant_binding": {"expires_at":"2026-05-27T12:34:56.000Z", "issuer_kid":"did:web:media.example#media", "sig":"unsigned"},
+            "backend_kind":"livekit", "connect_url":"wss://media.example", "backend_token":"synthetic"
+        }))?;
+    let context = ParticipantBindingContext::from_outcome(&outcome);
+    outcome.participant_binding.sig = arkret_canonical::base64url_encode(
+        issuer
+            .sign(&participant_binding_signing_input(&context)?)
+            .to_bytes(),
+    );
+    Ok(outcome)
 }
 
-fn participant_test_context<'a>(
-    receipt: &'a CallMediaSubjectBinding,
-    digest: &'a str,
-) -> ParticipantBindingContext<'a> {
-    ParticipantBindingContext {
-        actor_id: &receipt.roster_identity.actor_id,
-        call_id: &receipt.call_id,
-        device_id: &receipt.roster_identity.device_id,
-        expires_at: receipt.expires_at,
-        focus_id: &receipt.focus_id,
-        participant_id: &receipt.participant_id,
-        realm_id: &receipt.realm_id,
-        media: receipt.media.clone(),
-        issuer_kid: receipt.issuer_kid.as_str(),
-        subject_binding_digest: digest,
-    }
-}
-
-/// Lock all ten signed fields to an independently calculated Ed25519 KAT.
+/// Lock all nine signed fields to an independently calculated Ed25519 KAT.
 fn run_participant_binding_ed25519_vector() -> Result<()> {
-    let (receipt, binding) = participant_binding_test_material()?;
-    let context = participant_test_context(&receipt, &binding.subject_binding_digest);
+    let outcome = participant_binding_test_material()?;
+    let context = ParticipantBindingContext::from_outcome(&outcome);
     let input = participant_binding_signing_input(&context)?;
     let issuer = SigningKey::from_bytes(&[11; 32]);
     let verifying = issuer.verifying_key();
     let sig = issuer.sign(&input);
     // Calculated independently with Python cryptography Ed25519 and ASCII JCS.
-    const EXPECTED_SIG_HEX: &str = "bcde34696fd95673431c39783ccccc0d3c6513e2430dec89abb5829b6f63e9ca4cb70bb96d0c711eda6d9125d1ce8b18970bd268e9afdec895ee398111145c05";
+    const EXPECTED_SIG_HEX: &str = "33a0669cb2f7b55eaeed1aa295bbd8d40d7baa65887af510b882605f69d06d1fac62db85dd107aeb0cb0f9da299d7517f92066e12fceef1c2416fa9ffe1b2905";
     if hex_lower(&sig.to_bytes()) != EXPECTED_SIG_HEX {
-        bail!("participant binding ten-field signature differs from the independent KAT");
+        bail!("participant binding nine-field signature differs from the independent KAT");
     }
     verifying.verify(&input, &sig)?;
     let fields = serde_json::to_value(&context)?;
-    if fields.as_object().map(|object| object.len()) != Some(10) {
-        bail!("participant binding must sign exactly ten fields");
+    if fields.as_object().map(|object| object.len()) != Some(9) {
+        bail!("participant binding must sign exactly nine fields");
     }
     let tampers = [
-        ("actor_id", json!("ak:did_core:key:tampered")),
+        (
+            "actor_id",
+            json!({"kind":"account","account_id":{"principal_id":"ak:did_core:web:alice.example.com","station_id":"ak:did_core:web:other.example.com"}}),
+        ),
         (
             "call_id",
             json!("ak:call:AXeSRv0BBNTmteRf54F8yu5ahdBtw9_GfJ47WLgnrkD5"),
@@ -443,10 +412,6 @@ fn run_participant_binding_ed25519_vector() -> Result<()> {
             json!({"audio": true, "video": true, "screen": true}),
         ),
         ("issuer_kid", json!("did:web:rogue.example#media")),
-        (
-            "subject_binding_digest",
-            json!(format!("sha256:{}", "00".repeat(32))),
-        ),
     ];
     for (field, replacement) in tampers {
         let mut tampered = fields.clone();
@@ -458,7 +423,7 @@ fn run_participant_binding_ed25519_vector() -> Result<()> {
         }
     }
     let mut retired = fields.clone();
-    for field in ["media", "issuer_kid", "subject_binding_digest"] {
+    for field in ["media", "issuer_kid"] {
         retired.as_object_mut().unwrap().remove(field);
     }
     let mut old_input = b"ak.media.participant_binding.v1\0".to_vec();

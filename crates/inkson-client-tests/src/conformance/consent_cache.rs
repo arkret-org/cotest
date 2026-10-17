@@ -395,15 +395,6 @@ async fn verify_token(
         Utc::now(),
     )?;
     ensure!(outcome.actor_id == request.actor_id && outcome.device_id == request.device_id);
-    ensure!(
-        outcome.roster_identity.actor_id
-            != request
-                .actor_id
-                .as_account_id()
-                .context("media subject Account")?
-                .principal_id
-            && outcome.roster_identity.device_id != request.device_id
-    );
     Ok(())
 }
 
@@ -505,8 +496,8 @@ async fn private_release_state(context: &ConsentCallContext) -> Result<Vec<Strin
     let url = context.databases[1].connect_url.clone();
     tokio::task::spawn_blocking(move || -> Result<_> {
         let mut db = postgres::Client::connect(&url, postgres::NoTls)?;
-        // Compare privately in memory; never log subject mappings or receipts.
-        ["call_media_subject_identities", "call_voluntary_join_nonces"].into_iter()
+        // Compare nonce state privately in memory without logging nonce material.
+        ["call_voluntary_join_nonces"].into_iter()
             .map(|table| Ok(db.query_one(&format!(
                 "SELECT COALESCE(jsonb_agg(to_jsonb(t) ORDER BY to_jsonb(t)::text),'[]'::jsonb)::text FROM {table} t"
             ), &[])?.get::<_,String>(0))).collect()
@@ -548,9 +539,9 @@ async fn accept_roster(
 ) -> Result<Event> {
     let event=holder.client.author_event(context.realm.as_str(),EventKind::CallState.as_str(),serde_json::json!({
         "call_id":outcome.call_id,"roster_delta":{"op":"join","participant":{
-            "actor_id":outcome.roster_identity.actor_id,"device_id":outcome.roster_identity.device_id,
+            "actor_id":outcome.actor_id,"device_id":outcome.device_id,
             "joined_at":arkret_canonical::format_timestamp_canonical(chrono::DateTime::<Utc>::from_timestamp(Utc::now().timestamp().div_euclid(300)*300,0).unwrap()),
-            "media":outcome.subject_binding.media,"focus_id":outcome.focus_id,
+            "media":outcome.media,"focus_id":outcome.focus_id,
             "participant_id":outcome.participant_id,"participant_binding":outcome.participant_binding
         }}
     })).await?;
@@ -589,7 +580,6 @@ fn refresh(
     request.join_context = CallMediaJoinContext::Refresh(CallRefreshJoinContext {
         kind: CallRefreshJoinKind::Refresh,
         participant_id: outcome.participant_id.clone(),
-        subject_binding: outcome.subject_binding.clone(),
     });
     request
 }
@@ -794,12 +784,13 @@ async fn run_three_cuts_evidence() -> Result<Vec<super::CaseExecutionResult>> {
     let roster = accept_roster(&context, &context.holder, &outcome).await?;
     ensure!(
         serde_json::to_value(&roster.payload)?.pointer("/roster_delta/participant/actor_id")
-            == Some(&serde_json::json!(outcome.roster_identity.actor_id))
+            == Some(&serde_json::json!(outcome.actor_id))
     );
     let refreshed = exchange(&context.holder, &refresh(&token, &outcome)).await?;
     verify_token(&context, &refresh(&token, &outcome), &refreshed).await?;
     ensure!(
-        refreshed.roster_identity == outcome.roster_identity
+        refreshed.actor_id == outcome.actor_id
+            && refreshed.device_id == outcome.device_id
             && refreshed.participant_id == outcome.participant_id
     );
     let old_read = inkson::conformance::read_native_consent_current(
@@ -887,7 +878,7 @@ async fn run_three_cuts_evidence() -> Result<Vec<super::CaseExecutionResult>> {
                 .revision
     );
     cotest::harness::heap_future(|| {
-        private_refresh_matrix(&mut context, &token, &outcome, &refreshed)
+        direct_actor_refresh_matrix(&mut context, &token, &outcome, &refreshed)
     })
     .await?;
     ensure!(
@@ -1176,9 +1167,9 @@ async fn sfu_media(
         .await?;
         let event=member.client.author_event(context.realm.as_str(),EventKind::CallState.as_str(),serde_json::json!({
             "call_id":request.call_id,"roster_delta":{"op":"join","participant":{
-                "actor_id":session.roster_identity.actor_id,"device_id":session.roster_identity.device_id,
+                "actor_id":session.actor_id,"device_id":session.device_id,
                 "focus_id":session.focus_id,"participant_id":session.participant_id,
-                "participant_binding":session.participant_binding,"media":session.subject_binding.media
+                "participant_binding":session.participant_binding,"media":{"audio":session.desired_media.audio,"video":session.desired_media.video,"screen":session.desired_media.screen}
             }}
         })).await?;
         cotest::scenarios::human_device_producer_live::submit_and_expect_commit(
@@ -1188,47 +1179,17 @@ async fn sfu_media(
             &event,
         )
         .await?;
-        inkson::media::rtc::persist_accepted_media_receipt(&session).await?;
-        let restored = inkson::media::rtc::restore_refresh_context(
-            &member.account,
-            &member.device,
-            &context.realm,
-            &request.call_id,
-            &session.participant_binding.subject_binding_digest,
-        )?
-        .context("cold private receipt restore")?;
         let mut cold_refresh = request.clone();
-        cold_refresh.join_context = restored;
+        cold_refresh.join_context = CallMediaJoinContext::Refresh(CallRefreshJoinContext {
+            kind: CallRefreshJoinKind::Refresh,
+            participant_id: session.participant_id.clone(),
+        });
         verify_token(
             context,
             &cold_refresh,
             &exchange(member, &cold_refresh).await?,
         )
         .await?;
-        let mut other = member.account.clone();
-        other.station_id = context.stations.server(2).service_id().clone();
-        ensure!(
-            inkson::media::rtc::restore_refresh_context(
-                &other,
-                &member.device,
-                &context.realm,
-                &request.call_id,
-                &session.participant_binding.subject_binding_digest
-            )?
-            .is_none(),
-            "another full Account restored the private receipt"
-        );
-        ensure!(
-            inkson::media::rtc::restore_refresh_context(
-                &member.account,
-                &member.device,
-                &context.realm,
-                &request.call_id,
-                "sha256:unaccepted"
-            )?
-            .is_none(),
-            "another public commitment restored the private receipt"
-        );
         // A new host instance restores the durable current index and private MLS checkpoint.
         let mut store = host.state_store();
         let reopened = store.conformance_reopen();
@@ -1328,7 +1289,7 @@ async fn sfu_media(
     checked?;
     ensure!(status.success(), "actual SFU probe failed");
     eprintln!(
-        "[2141-live] actual_native_rtc_joins=2 cold_current_without_raw_history=2 durable_private_receipt_restore=2 mls_sender_frame_keys=2 actual_http_tokens=2 anonymous_sfu_publishers=2 actual_audio_video_frames=1 established_media_survived_revoke=1 loopback_sfu_transport=1"
+        "[2141-live] actual_native_rtc_joins=2 cold_current_without_raw_history=2 full_actor_current_restore=2 mls_sender_frame_keys=2 actual_http_tokens=2 random_sfu_participant_ids=2 actual_audio_video_frames=1 established_media_survived_revoke=1 loopback_sfu_transport=1"
     );
     Ok(())
 }
@@ -2237,75 +2198,46 @@ async fn opaque_response(context: &mut ConsentCallContext, sequence: &mut u64) -
     Ok(())
 }
 
-async fn private_refresh_matrix(
+async fn direct_actor_refresh_matrix(
     context: &mut ConsentCallContext,
     token: &CallMediaTokenExchangeRequestBody,
     accepted: &CallMediaTokenExchangeOutcome,
-    unaccepted: &CallMediaTokenExchangeOutcome,
+    issued_refresh: &CallMediaTokenExchangeOutcome,
 ) -> Result<()> {
-    use ed25519_dalek::Signer as _;
-    reject_token(context, &context.holder, &refresh(token, unaccepted)).await?;
-    let signer = context.stations.server(1).federation_signing_key()?;
-    for mutation in 0..8 {
+    ensure!(
+        issued_refresh.actor_id == accepted.actor_id
+            && issued_refresh.device_id == accepted.device_id
+            && issued_refresh.participant_id == accepted.participant_id,
+        "renewal must retain the accepted full subject and participant leg"
+    );
+    let renewal = refresh(token, issued_refresh);
+    verify_token(
+        context,
+        &renewal,
+        &exchange(&context.holder, &renewal).await?,
+    )
+    .await?;
+    for mutation in 0..5 {
         let mut request = refresh(token, accepted);
-        let CallMediaJoinContext::Refresh(join) = &mut request.join_context else {
-            unreachable!()
-        };
         match mutation {
-            0 => join.subject_binding.subject_actor_id = context.denied_holder.actor.clone(),
-            1 => join.subject_binding.subject_device_id = context.denied_holder.device.clone(),
+            0 => request.actor_id = context.denied_holder.actor.clone(),
+            1 => request.device_id = context.denied_holder.device.clone(),
             2 => {
-                join.subject_binding.roster_identity.actor_id =
-                    context.caller.account.principal_id.clone()
+                let mut account = context.holder.account.clone();
+                account.station_id = context.stations.server(0).service_id().clone();
+                request.actor_id = arkret_wire::ActorId::account(account);
             }
-            3 => join.subject_binding.roster_identity.device_id = context.holder.device.clone(),
+            3 => request.focus_id = "wrong-focus".into(),
             4 => {
-                join.subject_binding.expires_at = arkret_canonical::normalize_timestamp_canonical(
-                    Utc::now() - Duration::seconds(1),
-                )
+                if let CallMediaJoinContext::Refresh(join) = &mut request.join_context {
+                    join.participant_id =
+                        "ak:rtc_participant:01964137-0000-7000-8000-00000000dead".into();
+                }
             }
-            5 => join.subject_binding.media.video = !join.subject_binding.media.video,
-            6 => join.subject_binding.nonce = arkret_canonical::base64url_encode([0xb5; 32]),
-            7 => join.subject_binding.participant_id.push('x'),
             _ => unreachable!(),
         }
-        join.subject_binding.sig = arkret_canonical::base64url_encode(
-            signer
-                .sign(&join.subject_binding.signature_input()?)
-                .to_bytes(),
-        );
         reject_token(context, &context.holder, &request).await?;
     }
-    let mut bad_signature = refresh(token, accepted);
-    let CallMediaJoinContext::Refresh(join) = &mut bad_signature.join_context else {
-        unreachable!()
-    };
-    join.subject_binding.sig = arkret_canonical::base64url_encode([0x44; 64]);
-    reject_token(context, &context.holder, &bad_signature).await?;
-    let mut other_station = refresh(token, accepted);
-    let CallMediaJoinContext::Refresh(join) = &mut other_station.join_context else {
-        unreachable!()
-    };
-    join.subject_binding.issuer_kid = arkret_wire::DidUrl::new(format!(
-        "{}#notary-key",
-        context.stations.server(0).service_did()
-    ))
-    .map_err(anyhow::Error::msg)?;
-    join.subject_binding.sig = arkret_canonical::base64url_encode(
-        context
-            .stations
-            .server(0)
-            .federation_signing_key()?
-            .sign(&join.subject_binding.signature_input()?)
-            .to_bytes(),
-    );
-    reject_token(context, &context.holder, &other_station).await?;
-    reject_token(context, &context.denied_holder, &refresh(token, accepted)).await?;
-    context
-        .stations
-        .server_mut(1)
-        .restart_external_process()
-        .await?;
     let request = refresh(token, accepted);
     verify_token(
         context,
@@ -2322,10 +2254,15 @@ async fn private_refresh_matrix(
     let rotated = exchange(&context.holder, &request).await?;
     verify_token(context, &request, &rotated).await?;
     ensure!(
-        rotated.subject_binding.sig != accepted.subject_binding.sig,
-        "rotation did not produce a fresh private receipt"
+        rotated.participant_binding.sig != accepted.participant_binding.sig,
+        "rotation did not produce a fresh participant binding"
     );
-    reject_token(context, &context.holder, &refresh(token, unaccepted)).await?;
+    verify_token(
+        context,
+        &renewal,
+        &exchange(&context.holder, &renewal).await?,
+    )
+    .await?;
     accept_roster(context, &context.holder, &rotated).await?;
     let current = refresh(token, &rotated);
     verify_token(
@@ -2334,9 +2271,14 @@ async fn private_refresh_matrix(
         &exchange(&context.holder, &current).await?,
     )
     .await?;
-    reject_token(context, &context.holder, &request).await?;
+    verify_token(
+        context,
+        &request,
+        &exchange(&context.holder, &request).await?,
+    )
+    .await?;
     println!(
-        "[2141-live] receipt_signed_mismatch_denials=8 bad_signature_denied=1 wrong_station_denied=1 wrong_subject_denied=1 valid_unaccepted_denied=1 durable_restart_refresh=1 historical_issuer_rotation_refresh=1 superseded_public_commitment_denied=1"
+        "[2141-live] exact_subject_device_station_focus_participant_denials=5 stable_accepted_leg_renewal=1 durable_restart_refresh=1 historical_issuer_rotation_refresh=1 renewed_binding_retains_leg=1"
     );
     Ok(())
 }

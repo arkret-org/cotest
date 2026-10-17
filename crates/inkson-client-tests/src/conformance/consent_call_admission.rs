@@ -129,21 +129,22 @@ impl CallAdmissionObserver {
                 "original accepted binding must actually be expired"
             );
             let original = match &request.join_context {
-                CallMediaJoinContext::Refresh(context) => &context.subject_binding,
-                _ => anyhow::bail!("recovery did not retain the actual accepted private receipt"),
+                CallMediaJoinContext::Refresh(context) => &context.participant_id,
+                _ => anyhow::bail!("recovery did not resolve the accepted participant"),
             };
             let response: arkret_models_collaboration::objects::media::CallMediaTokenExchangeOutcome = serde_json::from_value(
                 cotest::harness::expect_json(holder.client.post("/_arkret/self/rtc/token").json(&request), reqwest::StatusCode::OK).await?
             )?;
             media_verification::verify_actual_outcome(holder, &request, &response).await?;
             ensure!(
-                response.roster_identity == original.roster_identity
-                    && response.participant_id == original.participant_id,
-                "restart changed the private alias or accepted media leg"
+                response.actor_id == request.actor_id
+                    && response.device_id == request.device_id
+                    && &response.participant_id == original,
+                "restart changed the exact subject or accepted media leg"
             );
         }
         eprintln!(
-            "[consent-call] phase=post_restart_refresh accepted_legs=2 stable_aliases=2 rotated={after_rotation} original_bindings_expired=2"
+            "[consent-call] phase=post_restart_refresh accepted_legs=2 stable_subjects=2 rotated={after_rotation} original_bindings_expired=2"
         );
         Ok(())
     }
@@ -519,7 +520,7 @@ async fn token_precondition(
             && problem["detail"]
                 .as_str()
                 .is_some_and(|s| s.contains(detail)),
-        "token rejected outside its exact current/receipt precondition: {problem}"
+        "token rejected outside its exact current participant precondition: {problem}"
     );
     Ok(())
 }
@@ -852,22 +853,20 @@ fn run_call_cases<'a>(
             exercise_token_invitation_mismatches(sender, holder, &request).await?;
             let mut refresh = request.clone();
             refresh.join_context = CallMediaJoinContext::Refresh(CallRefreshJoinContext {
-                subject_binding: response.subject_binding.clone(),
                 kind: CallRefreshJoinKind::Refresh,
                 participant_id: response.participant_id.clone(),
             });
             token_precondition(
                 holder,
                 &refresh,
-                "refresh has no active accepted participant",
+                "refresh has no active accepted participant for this exact actor/device",
             )
             .await
             .context("unestablished refresh must not bypass first-contact admission")?;
             media_verification::verify_actual_outcome(holder, &request, &response).await?;
             ensure!(
-                response.roster_identity.actor_id != *holder.actor.signing_principal_id()
-                    && response.roster_identity.device_id != holder.device,
-                "durable roster coordinates disclosed the authenticated subject"
+                response.actor_id == holder.actor && response.device_id == holder.device,
+                "durable roster coordinates differ from the authenticated full subject"
             );
             let established = holder.client.author_event(
             realm.as_str(), EventKind::CallState.as_str(),
@@ -881,7 +880,7 @@ fn run_call_cases<'a>(
                 recording_transition: None, transcript_transition: None,
                 roster_delta: Some(arkret_models_collaboration::events_payloads::call::CallRosterDelta::Join {
                     participant: arkret_models_collaboration::events_payloads::call::CallParticipant {
-                        actor_id: response.roster_identity.actor_id.clone(), device_id: response.roster_identity.device_id.to_string(),
+                        actor_id: response.actor_id.clone(), device_id: response.device_id.to_string(),
                         joined_at: None, foci_preferred: None,
                         participant_id: Some(response.participant_id.clone()),
                         participant_binding: Some(serde_json::from_value(
@@ -916,67 +915,33 @@ fn run_call_cases<'a>(
                     CallMediaJoinContext::Invitation(_) => {
                         "invitation is not this exact first-contact request"
                     }
-                    _ => "refresh receipt is not the exact authenticated leg",
+                    _ => "refresh exceeds the accepted signed media range",
                 };
                 token_precondition(holder, &expanded, detail).await?;
             }
 
-            let mut wrong_subject = refresh.clone();
-            if let CallMediaJoinContext::Refresh(context) = &mut wrong_subject.join_context {
-                context.subject_binding.subject_device_id = sender.device.clone();
-            }
-            token_precondition(
-                holder,
-                &wrong_subject,
-                "refresh receipt is not the exact authenticated leg",
-            )
-            .await
-            .context("private receipt cannot cross authenticated devices")?;
-            let mut wrong_alias = refresh.clone();
-            if let CallMediaJoinContext::Refresh(context) = &mut wrong_alias.join_context {
-                context.subject_binding.roster_identity.device_id = sender.device.clone();
-            }
-            token_precondition(
-                holder,
-                &wrong_alias,
-                "refresh has no active accepted participant",
-            )
-            .await
-            .context("private receipt cannot substitute its durable alias")?;
-            for mutation in ["station", "digest", "signature", "media", "focus", "call"] {
+            for mutation in ["participant", "focus", "call"] {
                 let mut invalid = refresh.clone();
-                let CallMediaJoinContext::Refresh(context) = &mut invalid.join_context else {
-                    unreachable!()
-                };
                 match mutation {
-                    "station" => {
-                        let mut account = holder.account.clone();
-                        account.station_id = "ak:did_core:web:other-station.example".parse()?;
-                        context.subject_binding.subject_actor_id = ActorId::account(account);
+                    "participant" => {
+                        if let CallMediaJoinContext::Refresh(context) = &mut invalid.join_context {
+                            context.participant_id =
+                                "ak:rtc_participant:01964137-0000-7000-8000-00000000dead".into();
+                        }
                     }
-                    "digest" => {
-                        context.subject_binding.nonce =
-                            arkret_canonical::base64url_encode([0u8; 32])
-                    }
-                    "signature" => {
-                        context.subject_binding.sig = arkret_canonical::base64url_encode([0u8; 64])
-                    }
-                    "media" => context.subject_binding.media.audio = false,
-                    "focus" => context.subject_binding.focus_id = "another-focus".into(),
+                    "focus" => invalid.focus_id = "another-focus".into(),
                     "call" => {
-                        context.subject_binding.call_id =
+                        invalid.call_id =
                             "ak:call:ARzVic5s2NUShp82C8GPo-shbkm7isUWyvILLThc3aNL".parse()?
                     }
                     _ => unreachable!(),
                 }
-                let detail = if matches!(mutation, "digest" | "signature") {
-                    "refresh differs from accepted alias, binding or media"
+                let expected = if mutation == "call" {
+                    reqwest::StatusCode::FORBIDDEN
                 } else {
-                    "refresh receipt is not the exact authenticated leg"
+                    reqwest::StatusCode::CONFLICT
                 };
-                token_precondition(holder, &invalid, detail)
-                    .await
-                    .with_context(|| format!("private receipt accepted a changed {mutation}"))?;
+                token_status(holder, &invalid, expected).await?;
             }
             if !video {
                 let mut expanded = request.clone();
@@ -1280,7 +1245,7 @@ fn run_call_cases<'a>(
                 .await?;
             }
             eprintln!(
-                "[consent-call] video={video} product=1 ringing=1 token=1 revoked_ring=0 revoked_token=0 unestablished_refresh=0 established_refresh=1 anonymous_roster=1 revoked_refresh=1 voluntary=1"
+                "[consent-call] video={video} product=1 ringing=1 token=1 revoked_ring=0 revoked_token=0 unestablished_refresh=0 established_refresh=1 full_actor_roster=1 revoked_refresh=1 voluntary=1"
             );
         }
         Ok(refreshes)
@@ -1916,7 +1881,7 @@ async fn read_complete_roster(
                 if current.assertions.len() == count {
                     ensure!(
                         current.effective_participants()?.len() == 1,
-                        "complete roster lost the active anonymous leg"
+                        "complete roster lost the active full-actor leg"
                     );
                     return Ok(revision.clone());
                 }
@@ -1956,7 +1921,7 @@ async fn exercise_complete_roster_leave_and_rejoin(
     )
     .await?;
     let revision = read_complete_roster(member, realm, call, 2).await?;
-    let CallMediaJoinContext::Refresh(context) = &refresh.join_context else {
+    let CallMediaJoinContext::Refresh(_) = &refresh.join_context else {
         anyhow::bail!("refresh context missing")
     };
     let leave = member
@@ -1966,8 +1931,8 @@ async fn exercise_complete_roster_leave_and_rejoin(
             EventKind::CallState.as_str(),
             serde_json::json!({
                 "call_id":call,"roster_delta":{"op":"leave",
-                    "actor_id":context.subject_binding.roster_identity.actor_id,
-                    "device_id":context.subject_binding.roster_identity.device_id,
+                    "actor_id":member.actor,
+                    "device_id":member.device,
                     "expected_revision":revision
                 }
             }),
@@ -1983,7 +1948,7 @@ async fn exercise_complete_roster_leave_and_rejoin(
     token_precondition(
         member,
         refresh,
-        "refresh has no active accepted participant",
+        "refresh has no active accepted participant for this exact actor/device",
     )
     .await
     .context("accepted leave must remove refresh permission")?;

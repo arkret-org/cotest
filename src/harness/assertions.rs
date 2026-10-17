@@ -491,7 +491,6 @@ fn is_secret_field(name: &str) -> bool {
             | "password"
             | "secret"
             | "secret_b64u"
-            | "subject_binding"
             | "pcr_private_state"
             | "key_bytes"
             | "backend_token"
@@ -567,7 +566,6 @@ mod tests {
             "recovery_key",
             "root_seed",
             "hkdf_prk",
-            "subject_binding",
             "pcr_private_state",
             "key_bytes",
             "backend_token",
@@ -582,37 +580,28 @@ mod tests {
                 "username": "public-routing-user"
             },
             "recovery_key": "word list",
-            "subject_binding":{"subject_actor_id":"private account","roster_identity":"anonymous alias"},
             "backend_token":"opaque bearer",
-            "participant_binding":{"subject_binding_digest":"public commitment"}
+            "participant_binding":{"sig":"public signature"}
         }));
         assert_eq!(sanitized["ice"]["credential"], "[redacted]");
         assert_eq!(sanitized["headers"]["DPoP"], "[redacted]");
         assert_eq!(sanitized["ice"]["username"], "public-routing-user");
         assert_eq!(sanitized["recovery_key"], "[redacted]");
-        assert_eq!(sanitized["subject_binding"], "[redacted]");
         assert_eq!(sanitized["backend_token"], "[redacted]");
-        assert_eq!(
-            sanitized["participant_binding"]["subject_binding_digest"],
-            "public commitment"
-        );
+        assert_eq!(sanitized["participant_binding"]["sig"], "[redacted]");
     }
 
     #[test]
-    fn transcript_sanitizer_removes_the_entire_private_call_mapping() {
-        let sanitized = sanitize_json_value(json!({"join_context": {
-            "kind": "refresh", "subject_binding": {
-                "subject_actor_id": "private-account", "subject_device_id": "real-device",
-                "roster_identity": {"actor_id": "alias", "device_id": "device-alias"}
-            }, "participant_id": "public-participant"
-        }}));
-        assert_eq!(sanitized["join_context"]["subject_binding"], "[redacted]");
-        assert_eq!(
-            sanitized["join_context"]["participant_id"],
-            "public-participant"
-        );
-        assert!(!sanitized.to_string().contains("private-account"));
-        assert!(!sanitized.to_string().contains("device-alias"));
+    fn transcript_sanitizer_preserves_full_actor_and_redacts_backend_bearer() {
+        let actor = json!({"kind":"account","account_id":{
+            "principal_id":"ak:did_core:web:alice.example",
+            "station_id":"ak:did_core:web:station.example"
+        }});
+        let sanitized = sanitize_json_value(json!({
+            "actor_id":actor,"backend_token":"secret-bearer"
+        }));
+        assert_eq!(sanitized["actor_id"], actor);
+        assert_eq!(sanitized["backend_token"], "[redacted]");
     }
 
     #[test]

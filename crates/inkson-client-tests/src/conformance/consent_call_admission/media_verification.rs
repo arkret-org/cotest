@@ -67,18 +67,6 @@ async fn verify_inner(
         &anchors,
         chrono::Utc::now(),
     )?;
-    let mut private = outcome.clone();
-    private.subject_binding.sig = arkret_canonical::base64url_encode([0u8; 64]);
-    ensure!(
-        arkret_signatures::media::verify_call_media_token_outcome(
-            request,
-            &private,
-            &anchors,
-            chrono::Utc::now()
-        )
-        .is_err(),
-        "SDK accepted changed private subject signature"
-    );
     let mut public = outcome.clone();
     public.participant_binding.sig = arkret_canonical::base64url_encode([0u8; 64]);
     ensure!(
@@ -89,7 +77,7 @@ async fn verify_inner(
             chrono::Utc::now()
         )
         .is_err(),
-        "SDK accepted changed public anonymous binding signature"
+        "SDK accepted changed complete participant binding signature"
     );
     let backend = serde_json::to_value(&outcome.backend_token)?;
     fn contains(value: &serde_json::Value, wanted: &str) -> bool {
