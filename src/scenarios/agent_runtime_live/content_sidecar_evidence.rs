@@ -97,8 +97,10 @@ async fn other_controller_content(
             strand_id: strand.clone(),
         },
     });
-    let SidecarEnsureOutcome::PreparedNew(prepared) =
-        client.sdk().agent_sidecar_ensure(&prepare).await?
+    let SidecarEnsureOutcome::PreparedNew(prepared) = client
+        .sdk()
+        .agent_sidecar_ensure(&client.verify_publication(prepare)?)
+        .await?
     else {
         bail!("new independent Sidecar required")
     };
@@ -119,8 +121,10 @@ async fn other_controller_content(
         create_event: create,
         context_attach_event: attach,
     });
-    let SidecarEnsureOutcome::Accepted(accepted) =
-        client.sdk().agent_sidecar_ensure(&request).await?
+    let SidecarEnsureOutcome::Accepted(accepted) = client
+        .sdk()
+        .agent_sidecar_ensure(&client.verify_publication(request.clone())?)
+        .await?
     else {
         bail!("independent Sidecar acceptance required")
     };
@@ -1157,8 +1161,10 @@ pub async fn run_agent_content_sidecar_production()
             strand_id: strand.clone(),
         },
     });
-    let SidecarEnsureOutcome::PreparedNew(prepared) =
-        client.sdk().agent_sidecar_ensure(&prepare).await?
+    let SidecarEnsureOutcome::PreparedNew(prepared) = client
+        .sdk()
+        .agent_sidecar_ensure(&client.verify_publication(prepare)?)
+        .await?
     else {
         bail!("Sidecar new preparation required")
     };
@@ -1179,8 +1185,10 @@ pub async fn run_agent_content_sidecar_production()
         create_event: create.clone(),
         context_attach_event: attach,
     });
-    let SidecarEnsureOutcome::Accepted(accepted) =
-        client.sdk().agent_sidecar_ensure(&request).await?
+    let SidecarEnsureOutcome::Accepted(accepted) = client
+        .sdk()
+        .agent_sidecar_ensure(&client.verify_publication(request.clone())?)
+        .await?
     else {
         bail!("Sidecar acceptance required")
     };

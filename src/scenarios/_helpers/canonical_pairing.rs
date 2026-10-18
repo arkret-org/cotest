@@ -156,7 +156,9 @@ pub async fn pair(fixture: &CanonicalApiFixture) -> Result<TestActorClient> {
         .http_client(fixture.http.clone())
         .auth(session_auth(fixture.client.session())?)
         .build()?;
-    let paired = gate.account_device_pair(&approval).await?;
+    let paired = gate
+        .account_device_pair(&fixture.client.verify_publication(approval.clone())?)
+        .await?;
     ensure!(
         paired.device_id == device_id && paired.authorized_event_ref.event_id == event_id,
         "pair outcome changed the candidate authorization"

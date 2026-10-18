@@ -1,6 +1,11 @@
 use anyhow::Result;
 
 #[tokio::test]
+async fn security_rotation_refuses_ineligible_approval_sidecars_before_writes() -> Result<()> {
+    cotest::scenarios::security_rotation_live::security_rotation_refuses_ineligible_approval_sidecars_before_writes().await
+}
+
+#[tokio::test]
 async fn key_backup_replace_with_authorized_device_works() -> Result<()> {
     cotest::scenarios::protocol_payloads::key_backup_replace_with_authorized_device_works().await
 }

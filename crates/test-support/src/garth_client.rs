@@ -253,7 +253,26 @@ impl GarthClientHandle {
         self.outbound.enqueue(submission).await?;
         match self
             .outbound
-            .submit_next(self.runtime.authority(), &Default::default())
+            .submit_next(
+                self.runtime.authority(),
+                &Default::default(),
+                |request| async move {
+                    let context = arkret_identity::ProducerVerificationContext {
+                        actor: self.actor_id.clone(),
+                        verification_method: arkret_wire::DidUrl::new(
+                            arkret_signatures::EventSigner::verification_method(&self.signer)
+                                .to_owned(),
+                        )
+                        .map_err(str::to_owned)?,
+                        public_key: arkret_signatures::PublicKeyMaterial::Ed25519Raw {
+                            bytes: self.signer.verifying_key().as_bytes().to_vec(),
+                        },
+                        digest_suite: arkret_canonical::DigestSuite::Sha256,
+                    };
+                    arkret_identity::VerifiedSubmission::verify(request, |_| Ok(context.clone()))
+                        .map_err(|error| error.to_string())
+                },
+            )
             .await?
         {
             OutboundEngineOutcome::Committed { item, .. } if item.event_id() == &expected => {

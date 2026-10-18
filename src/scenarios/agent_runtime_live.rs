@@ -1694,19 +1694,40 @@ async fn run_agent_keypackage_journey(terminal: bool) -> Result<()> {
         URL_SAFE_NO_PAD.encode(agent.runtime_key.sign(&signing_input).to_bytes()),
     )
     .map_err(anyhow::Error::msg)?;
-    let rejected = agent
-        .runtime
-        .post("/_arkret/self/keys/keypackages/claim")
-        .header("content-type", "application/json")
-        .body(arkret_canonical::canonical_json_bytes(&claim)?)
-        .send()
-        .await?;
-    let rejected_status = rejected.status();
-    let rejected_body = rejected.text().await?;
+    let before_unjoined_claim =
+        super::mls_lifecycle_live::upload_durable_cut(&database.connect_url).await?;
+    let (rejected_status, rejected_bytes) =
+        super::mls_lifecycle_live::post_claim(&agent.runtime, &claim).await?;
+    let rejected_body = String::from_utf8(rejected_bytes)?;
+    let problem: arkret_wire::Problem = serde_json::from_str(&rejected_body)?;
+    let code = arkret_wire::ErrorCode::ClaimFailed;
+    // Device lifecycle section 9.1 collapses policy and visibility failures;
+    // exposing a membership-specific 403 would violate that outward contract.
     ensure!(
-        rejected_status == StatusCode::FORBIDDEN,
-        "Agent claimed into an unjoined Realm: {rejected_status} {rejected_body}",
+        rejected_status.as_u16() == code.http_status()
+            && problem.status == code.http_status()
+            && problem.problem_type == code.type_uri()
+            && problem.title == code.title()
+            && problem.detail == "KeyPackage claim failed"
+            && problem.extensions.is_empty(),
+        "unjoined-Realm claim returned a noncanonical refusal: {rejected_status} {rejected_body}",
     );
+    let after_unjoined_claim =
+        super::mls_lifecycle_live::upload_durable_cut(&database.connect_url).await?;
+    // The opaque failure ledger may be written; no package or delivery may
+    // advance as though the denied claim had succeeded.
+    for table in [
+        "mls_key_packages",
+        "keypackage_claim_welcome_bindings",
+        "mls_welcome_deliveries",
+        "device_messages",
+        "device_message_ack_tokens",
+    ] {
+        ensure!(
+            before_unjoined_claim[table] == after_unjoined_claim[table],
+            "denied unjoined-Realm claim changed {table}",
+        );
+    }
 
     // A controller already joined to an ordinary Realm can author the
     // Agent's explicit membership Event with the exact controller generation.
@@ -1855,15 +1876,9 @@ async fn run_agent_keypackage_journey(terminal: bool) -> Result<()> {
         URL_SAFE_NO_PAD.encode(agent.runtime_key.sign(&signing_input).to_bytes()),
     )
     .map_err(anyhow::Error::msg)?;
-    let claimed = agent
-        .runtime
-        .post("/_arkret/self/keys/keypackages/claim")
-        .header("content-type", "application/json")
-        .body(arkret_canonical::canonical_json_bytes(&claim)?)
-        .send()
-        .await?;
-    let claim_status = claimed.status();
-    let claim_body = claimed.text().await?;
+    let (claim_status, claim_bytes) =
+        super::mls_lifecycle_live::post_claim(&agent.runtime, &claim).await?;
+    let claim_body = String::from_utf8(claim_bytes)?;
     ensure!(
         claim_status == StatusCode::OK,
         "joined Agent self-claim was refused: {claim_status} {claim_body}"
@@ -1935,12 +1950,18 @@ async fn run_agent_keypackage_journey(terminal: bool) -> Result<()> {
         let before = super::mls_lifecycle_live::upload_durable_cut(&database.connect_url).await?;
         let mut invalid = serde_json::to_value(&controller_claim)?;
         invalid[field] = value;
-        let (status, refused) = super::mls_lifecycle_live::post_bytes_at(
-            &controller,
-            "/_arkret/self/keys/keypackages/claim",
-            &invalid,
-        )
-        .await?;
+        let response = controller
+            .post("/_arkret/self/keys/keypackages/claim")
+            .header(
+                "idempotency-key",
+                controller_claim.claim_request_id.as_str(),
+            )
+            .header(reqwest::header::CONTENT_TYPE, "application/json")
+            .body(arkret_canonical::canonical_json_bytes(&invalid)?)
+            .send()
+            .await?;
+        let status = response.status();
+        let refused = response.bytes().await?;
         ensure!(
             status == StatusCode::UNPROCESSABLE_ENTITY
                 && super::mls_lifecycle_live::problem_type(&refused)? == "schema_violation",

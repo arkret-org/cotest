@@ -343,6 +343,27 @@ async fn run_agent_issuer_boundary(
         "real Agent session was refused: {}",
         response.status()
     );
+    for partial_signature in [false, true] {
+        let mut request = station
+            .http()
+            .get(station.url(&format!(
+                "/_arkret/self/agents/{}",
+                agent.agent_account.principal_id
+            )))
+            .header("Source-Service-ID", station.service_id().as_str())
+            .header("Destination-Service-ID", station.service_id().as_str())
+            .header("Source-Trust-Domain", JOINT_TRUST_DOMAIN)
+            .header("Destination-Trust-Domain", JOINT_TRUST_DOMAIN);
+        if partial_signature {
+            request = request.header("Signature-Input", "sig1=()");
+        }
+        let response = request.send().await?;
+        ensure!(
+            response.status() == reqwest::StatusCode::UNAUTHORIZED,
+            "unexpected unsigned or partial service projection refusal: {}",
+            response.status()
+        );
+    }
     if longevity {
         super::longevity_evidence::renew_with_real_issuer(
             &station,

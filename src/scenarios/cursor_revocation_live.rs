@@ -379,9 +379,11 @@ pub async fn queued_websocket_cursor_revocation_live() -> Result<()> {
             .sdk()
             .account_data_replace(
                 key,
-                &arkret_models_identity::account::AccountDataReplaceRequestBody {
-                    set_event: arkret_wire::EventAdmissionSubmission::new(set),
-                },
+                &client.verify_publication(
+                    arkret_models_identity::account::AccountDataReplaceRequestBody {
+                        set_event: arkret_wire::EventAdmissionSubmission::new(set),
+                    },
+                )?,
             )
             .await?;
         ensure!(row.revision == 1);

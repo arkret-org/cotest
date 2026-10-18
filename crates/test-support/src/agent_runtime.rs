@@ -17,8 +17,7 @@ use arkret_wire::{
 };
 use ed25519_dalek::{Signer as _, SigningKey};
 use garth::{
-    ArkretClient, FileStore, OutboundEngine, OutboundEngineOutcome, QueuedSubmission,
-    SessionEngine, SystemClock,
+    ArkretClient, FileStore, OutboundEngine, OutboundEngineOutcome, SessionEngine, SystemClock,
 };
 use serde_json::{Value, json};
 
@@ -175,14 +174,11 @@ impl AgentRuntimeHandle {
         ensure!(expires > chrono::Utc::now(), "original pairing has expired");
         let open = sdk(http.clone(), station_base, None)?;
         let bootstrap: AgentPairingBootstrap = open
-            .post(
-                "/_arkret/open/agent-pairing/resolve",
-                &AgentPairingResolveRequestBody {
-                    pairing_token: arkret_canonical::base64url_encode(serde_json::to_vec(
-                        &json!({"r":request_id,"c":code}),
-                    )?),
-                },
-            )
+            .resolve_agent_pairing(&AgentPairingResolveRequestBody {
+                pairing_token: arkret_canonical::base64url_encode(serde_json::to_vec(
+                    &json!({"r":request_id,"c":code}),
+                )?),
+            })
             .await?;
         let identity = bootstrap
             .validated_runtime_identity()
@@ -205,10 +201,7 @@ impl AgentRuntimeHandle {
             );
         let approval_request = candidate.build_approval_request()?;
         let approval: AgentRuntimeApprovalOutcome = open
-            .post(
-                "/_arkret/open/agent-pairing/runtime-key-requests",
-                &approval_request.body,
-            )
+            .request_agent_runtime_approval(&approval_request.body)
             .await?;
         let runtime_digest = agent_runtime_key_binding_digest(
             &agent_id,
@@ -283,7 +276,17 @@ impl AgentRuntimeHandle {
             )?,
             authorize.into_event(),
         )?;
-        let paired = controller.agent_key_pair(&pair.body).await?;
+        let producer = arkret_identity::ProducerVerificationContext {
+            actor: ActorId::account(controller_account.clone()),
+            verification_method: controller_device_method.clone(),
+            public_key: arkret_signatures::PublicKeyMaterial::Ed25519Raw {
+                bytes: controller_device_key.verifying_key().to_bytes().to_vec(),
+            },
+            digest_suite: arkret_canonical::DigestSuite::Sha256,
+        };
+        let submission =
+            arkret_identity::VerifiedSubmission::verify(pair.body, |_| Ok(producer.clone()))?;
+        let paired = controller.agent_key_pair(&submission).await?;
         ensure!(
             paired.authorize_event_ref == authorization,
             "pair outcome names another authorization"
@@ -291,14 +294,11 @@ impl AgentRuntimeHandle {
         let deadline = std::time::Instant::now() + Duration::from_secs(30);
         let signer_commit = loop {
             let status: AgentRuntimeApprovalStatusOutcome = open
-                .post(
-                    "/_arkret/open/agent-pairing/runtime-key-requests/status",
-                    &AgentRuntimeApprovalStatusRequestBody {
-                        pairing_request_id: request_id.clone(),
-                        pairing_code: NonEmptyString::new(code).map_err(anyhow::Error::msg)?,
-                        agent_id: agent_id.clone(),
-                    },
-                )
+                .agent_runtime_approval_status(&AgentRuntimeApprovalStatusRequestBody {
+                    pairing_request_id: request_id.clone(),
+                    pairing_code: NonEmptyString::new(code).map_err(anyhow::Error::msg)?,
+                    agent_id: agent_id.clone(),
+                })
                 .await?;
             status.validate_signer_evidence_delivery()?;
             if status.authorized_event_ref.as_ref() == Some(&authorization) {
@@ -542,7 +542,26 @@ impl AgentRuntimeHandle {
         );
         match self
             .outbound
-            .submit_next(self.runtime.authority(), &Default::default())
+            .submit_next(
+                self.runtime.authority(),
+                &Default::default(),
+                |request| async move {
+                    let context = arkret_identity::ProducerVerificationContext {
+                        actor: ActorId::account(self.account.clone()),
+                        verification_method: DidUrl::new(
+                            arkret_signatures::EventSigner::verification_method(&self.signer)
+                                .to_owned(),
+                        )
+                        .map_err(str::to_owned)?,
+                        public_key: arkret_signatures::PublicKeyMaterial::Ed25519Raw {
+                            bytes: self.signer.verifying_key().as_bytes().to_vec(),
+                        },
+                        digest_suite: arkret_canonical::DigestSuite::Sha256,
+                    };
+                    arkret_identity::VerifiedSubmission::verify(request, |_| Ok(context.clone()))
+                        .map_err(|error| error.to_string())
+                },
+            )
             .await?
         {
             OutboundEngineOutcome::Committed { item, .. } if item.event_id() == &expected => {

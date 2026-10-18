@@ -80,6 +80,7 @@ async fn private_sidecar(
             strand_id: client.default_strand_id(realm.as_str())?.parse()?,
         },
     });
+    let request = client.verify_publication(request)?;
     let SidecarEnsureOutcome::PreparedNew(prepared) =
         client.sdk().agent_sidecar_ensure(&request).await?
     else {
@@ -100,6 +101,7 @@ async fn private_sidecar(
             EventKind::SidecarContextAttach.as_str(),
         )?,
     });
+    let request = client.verify_publication(request)?;
     let SidecarEnsureOutcome::Accepted(accepted) =
         client.sdk().agent_sidecar_ensure(&request).await?
     else {

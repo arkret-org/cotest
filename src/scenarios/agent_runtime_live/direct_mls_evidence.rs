@@ -207,6 +207,7 @@ pub(super) async fn join(
         expect_json(
             controller_client
                 .post("/_arkret/self/keys/keypackages/claim")
+                .header("idempotency-key", request.claim_request_id.as_str())
                 .header("Content-Type", "application/json")
                 .body(arkret_canonical::canonical_json_bytes(&request)?),
             StatusCode::OK,

@@ -261,7 +261,7 @@ async fn signal_peer_uncertain_http_outcome_is_not_retried() {
         .build()
         .unwrap();
         let result: arkret_http_client::Result<arkret_wire::SignalRelayOutcome> =
-            client.post("/_arkret/peer/signal", &request).await;
+            client.relay_signals(&request).await;
         assert!(result.is_err());
         finished.send(()).unwrap();
         let requests = server.await.unwrap();

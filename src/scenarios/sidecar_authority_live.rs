@@ -319,7 +319,7 @@ async fn run_with_options(
     let prepared = controller
         .client
         .sdk()
-        .agent_sidecar_ensure(&prepare)
+        .agent_sidecar_ensure(&controller.client.verify_publication(prepare)?)
         .await?;
     let SidecarEnsureOutcome::PreparedNew(prepared) = prepared else {
         bail!("fresh Sidecar did not prepare a new atomic unit");
@@ -344,7 +344,7 @@ async fn run_with_options(
     let accepted = controller
         .client
         .sdk()
-        .agent_sidecar_ensure(&request)
+        .agent_sidecar_ensure(&controller.client.verify_publication(request.clone())?)
         .await?;
     let SidecarEnsureOutcome::Accepted(accepted) = accepted else {
         bail!("signed Sidecar unit was not accepted");
@@ -378,7 +378,7 @@ async fn run_with_options(
     let replay = controller
         .client
         .sdk()
-        .agent_sidecar_ensure(&request)
+        .agent_sidecar_ensure(&controller.client.verify_publication(request.clone())?)
         .await?;
     ensure!(
         replay.sidecar_id() == Some(&accepted.sidecar_id),

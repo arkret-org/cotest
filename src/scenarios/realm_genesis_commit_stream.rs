@@ -140,7 +140,8 @@ pub async fn realm_genesis_with_client(client: &TestActorClient) -> Result<()> {
     let retry = client
         .sdk()
         .submit_to_realm_authority(
-            &SelfAuthoritySubmitRequest::OrdinaryRealmBootstrap(request),
+            &client
+                .verify_publication(SelfAuthoritySubmitRequest::OrdinaryRealmBootstrap(request))?,
             &Default::default(),
         )
         .await?;

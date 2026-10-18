@@ -84,6 +84,8 @@ mod mls_creator_bootstrap_recovery;
 mod mls_cross_station_welcome_replication;
 mod mls_governance_binding;
 mod named_suite_audit;
+mod sdk_event_type_axes;
+pub use sdk_event_type_axes::{SDK_EVENT_TYPE_AXES_ENTRYPOINT, run_sdk_event_type_axes_suite};
 mod non_governance_receiver;
 mod object_addressing_vectors;
 mod object_identity_collision;

@@ -97,6 +97,23 @@ fn sign_contact(draft: &arkret::PreparedEventDraft, agent: &AgentRuntimeSession)
     Ok(event.into_event())
 }
 
+fn verify_contact(
+    request: ContactAcceptRequestBody,
+    agent: &AgentRuntimeSession,
+) -> Result<arkret::VerifiedSubmission<ContactAcceptRequestBody>> {
+    let producer = arkret::ProducerVerificationContext {
+        actor: ActorId::account(agent.agent_account.clone()),
+        verification_method: agent.verification_method.clone(),
+        public_key: arkret_signatures::PublicKeyMaterial::Ed25519Raw {
+            bytes: agent.runtime_key.verifying_key().to_bytes().to_vec(),
+        },
+        digest_suite: arkret_canonical::DigestSuite::Sha256,
+    };
+    Ok(arkret::VerifiedSubmission::verify(request, |_| {
+        Ok(producer.clone())
+    })?)
+}
+
 async fn accept(
     runtime: &TestActorClient,
     agent: &AgentRuntimeSession,
@@ -108,8 +125,8 @@ async fn accept(
         .map_err(anyhow::Error::msg)?;
     let prepared = runtime
         .sdk()
-        .contacts_respond(&ContactAcceptRequestBody::Prepare(
-            ContactAcceptPrepareRequestBody {
+        .contacts_respond(&verify_contact(
+            ContactAcceptRequestBody::Prepare(ContactAcceptPrepareRequestBody {
                 phase: ContactPreparePhase::Prepare,
                 operation_id: operation_id.clone(),
                 idempotency_key: idempotency_key.clone(),
@@ -117,8 +134,9 @@ async fn accept(
                 request_event_ref: row.request_event_ref.context("normal incoming request")?,
                 action: ContactAcceptAction::Accept,
                 granted_to_peer_scopes: vec![ContactScope::DirectMessage],
-            },
-        ))
+            }),
+            agent,
+        )?)
         .await?;
     let ContactOperationOutcome::Prepared {
         outcome:
@@ -135,15 +153,16 @@ async fn accept(
     ensure!(actual == operation_id);
     let outcome = runtime
         .sdk()
-        .contacts_respond(&ContactAcceptRequestBody::Commit(
-            ContactCommitRequestBody {
+        .contacts_respond(&verify_contact(
+            ContactAcceptRequestBody::Commit(ContactCommitRequestBody {
                 phase: ContactCommitPhase::Commit,
                 operation_id,
                 idempotency_key,
                 reservation_handle,
                 signed_event: sign_contact(&event_draft, agent)?,
-            },
-        ))
+            }),
+            agent,
+        )?)
         .await?;
     ensure!(
         matches!(

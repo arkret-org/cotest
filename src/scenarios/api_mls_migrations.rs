@@ -138,7 +138,12 @@ async fn audited_report(ctx: &mut MlsApiContext<'_>) -> Result<()> {
         scope.clone(),
     )
     .await?;
-    let report = ctx.holder.client.sdk().moderation_report(&request).await?;
+    let report = ctx
+        .holder
+        .client
+        .sdk()
+        .moderation_report(&ctx.holder.client.verify_publication(request)?)
+        .await?;
     let report = serde_json::to_value(report)?;
     ensure!(
         report["status"] == "submitted" && report.get("routed_to").is_none(),

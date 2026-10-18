@@ -85,6 +85,31 @@ impl TestActorClient {
         self.sdk.clone()
     }
 
+    pub fn verify_publication<T: arkret::PublicationRequest>(
+        &self,
+        request: T,
+    ) -> Result<arkret::VerifiedSubmission<T>> {
+        let (seed, verification_method) =
+            event_signing_identity_for_device(&self.actor, &self.device_id);
+        let producer = arkret::ProducerVerificationContext {
+            actor: ActorId::account(AccountId::new(
+                project_did_to_core_id(&Did::new(self.actor.clone())?)?,
+                DidCoreId::new(self.service_id.clone())?,
+            )),
+            verification_method,
+            public_key: arkret_signatures::PublicKeyMaterial::Ed25519Raw {
+                bytes: ed25519_dalek::SigningKey::from_bytes(&seed)
+                    .verifying_key()
+                    .to_bytes()
+                    .to_vec(),
+            },
+            digest_suite: arkret_canonical::DigestSuite::Sha256,
+        };
+        Ok(arkret::VerifiedSubmission::verify(request, |_| {
+            Ok(producer.clone())
+        })?)
+    }
+
     pub fn contact_request_prepare(&self, target: &str) -> Result<ContactOperationRequestBody> {
         self.contact_request_prepare_with_peer(
             ContactPeer::Human {
@@ -144,8 +169,14 @@ impl TestActorClient {
             }
             ContactOperationRequestBody::Commit(_) => unreachable!("prepare constructor"),
         };
-        let prepared = self.sdk.contacts_request(&request).await?;
-        let prepared_replay = self.sdk.contacts_request(&request).await?;
+        let prepared = self
+            .sdk
+            .contacts_request(&self.verify_publication(request.clone())?)
+            .await?;
+        let prepared_replay = self
+            .sdk
+            .contacts_request(&self.verify_publication(request.clone())?)
+            .await?;
         if serde_json::to_value(&prepared)? != serde_json::to_value(prepared_replay)? {
             return Err(anyhow!(
                 "Contact request prepare replay changed its outcome"
@@ -186,8 +217,14 @@ impl TestActorClient {
                 arkret_wire::event_kind_str::CONTACT_REQUESTED,
             )?,
         });
-        let accepted = self.sdk.contacts_request(&commit).await?;
-        let accepted_replay = self.sdk.contacts_request(&commit).await?;
+        let accepted = self
+            .sdk
+            .contacts_request(&self.verify_publication(commit.clone())?)
+            .await?;
+        let accepted_replay = self
+            .sdk
+            .contacts_request(&self.verify_publication(commit.clone())?)
+            .await?;
         if serde_json::to_value(&accepted)? != serde_json::to_value(accepted_replay)? {
             return Err(anyhow!("Contact request commit replay changed its outcome"));
         }
@@ -241,7 +278,10 @@ impl TestActorClient {
             action: ContactAcceptAction::Accept,
             granted_to_peer_scopes: vec![ContactScope::DirectMessage],
         });
-        let prepared = self.sdk.contacts_respond(&request).await?;
+        let prepared = self
+            .sdk
+            .contacts_respond(&self.verify_publication(request.clone())?)
+            .await?;
         let (prepared_operation_id, reservation_handle, event_draft) = match prepared {
             ContactOperationOutcome::Prepared {
                 outcome:
@@ -277,7 +317,11 @@ impl TestActorClient {
                 arkret_wire::event_kind_str::CONTACT_ACCEPTED,
             )?,
         });
-        match self.sdk.contacts_respond(&commit).await? {
+        match self
+            .sdk
+            .contacts_respond(&self.verify_publication(commit.clone())?)
+            .await?
+        {
             ContactOperationOutcome::Accepted {
                 outcome: ContactAcceptedOutcome::Response { .. },
             } => Ok(()),

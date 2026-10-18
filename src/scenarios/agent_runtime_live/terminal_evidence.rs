@@ -216,6 +216,7 @@ pub(super) async fn exercise(mut material: Materials<'_>) -> Result<()> {
             material
                 .controller
                 .post("/_arkret/self/keys/keypackages/claim")
+                .header("idempotency-key", control_claim.claim_request_id.as_str())
                 .header("Content-Type", "application/json")
                 .body(arkret_canonical::canonical_json_bytes(&control_claim)?),
             StatusCode::OK,
@@ -375,29 +376,23 @@ pub(super) async fn exercise(mut material: Materials<'_>) -> Result<()> {
     let response = material
         .controller
         .post("/_arkret/self/keys/keypackages/claim")
+        .header("idempotency-key", terminal_claim.claim_request_id.as_str())
         .header("Content-Type", "application/json")
         .body(arkret_canonical::canonical_json_bytes(&terminal_claim)?)
         .send()
         .await?;
-    if response.status() == StatusCode::OK {
-        let result: arkret_models_crypto::KeyPackagesClaimOutcome = response.json().await?;
-        ensure!(
-            result.claims.is_empty(),
-            "terminal Agent still supplied its available KeyPackage"
-        );
-    } else {
-        ensure!(
-            response.status() == StatusCode::BAD_REQUEST,
-            "terminal claim did not use the opaque claim_failed status: {}",
-            response.status()
-        );
-        let problem: arkret_wire::Problem = response.json().await?;
-        ensure!(
-            problem.code() == arkret_wire::ErrorCode::CLAIM_FAILED
-                && !problem.extensions.contains_key("reason_code"),
-            "terminal claim disclosed its private target failure: {problem:?}"
-        );
-    }
+    ensure!(
+        response.status().as_u16() == arkret_wire::ErrorCode::ClaimFailed.http_status(),
+        "terminal claim did not use the opaque claim_failed status: {}",
+        response.status()
+    );
+    let problem: arkret_wire::Problem = response.json().await?;
+    ensure!(
+        problem.code() == arkret_wire::ErrorCode::CLAIM_FAILED
+            && problem.status == arkret_wire::ErrorCode::ClaimFailed.http_status()
+            && problem.extensions.is_empty(),
+        "terminal claim disclosed its private target failure: {problem:?}"
+    );
     ensure!(
         acceptance_rows_with_agent_stores(material.database_url, true).await? == before,
         "terminal endpoint refusals changed full accepted state"

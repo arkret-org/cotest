@@ -366,16 +366,32 @@ pub(crate) async fn join_agent_with_observer(
             )
             .await?;
     }
-    agent.runtime.sdk().keypackages_consume(&consume).await?;
+    let signed_digest = arkret_models_crypto::keypackages_consume_request_digest(&consume)?;
+    let unsigned = arkret_models_crypto::KeyPackagesConsumeUnsignedRequest {
+        claim_id: consume.claim_id.clone(),
+        recipient_durable_receipt: consume.recipient_durable_receipt.clone(),
+    };
+    ensure!(signed_digest != arkret_canonical::canonical_sha256(&unsigned)?);
+    let consumed = agent.runtime.sdk().keypackages_consume(&consume).await?;
+    ensure!(
+        consumed.consume_receipt.request_digest.as_str() == signed_digest,
+        "Sidecar consume receipt did not bind the complete signed command"
+    );
+    let replay = agent.runtime.sdk().keypackages_consume(&consume).await?;
+    ensure!(
+        arkret_canonical::canonical_json_bytes(&replay)?
+            == arkret_canonical::canonical_json_bytes(&consumed)?,
+        "Sidecar consume replay replaced its original receipt"
+    );
     if let Some(sidecar_id) = sidecar_id {
+        let view = controller
+            .client
+            .sdk()
+            .agent_sidecar_get(sidecar_id)
+            .await?;
         ensure!(
-            controller
-                .client
-                .sdk()
-                .agent_sidecar_get(sidecar_id)
-                .await?
-                .effective_agent_ids
-                == vec![agent.agent_account.principal_id.clone()]
+            view.effective_agent_ids == vec![agent.agent_account.principal_id.clone()],
+            "Sidecar did not activate after full-command consume and exact replay: {view:?}"
         );
         let http = agent.runtime.sdk();
         let snapshot = http.realm_state_snapshot_head(realm).await?;

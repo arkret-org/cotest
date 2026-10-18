@@ -38,12 +38,9 @@ pub(crate) async fn advance(
     })).await?;
     let outcome: ReadMarkerOutcome = client
         .sdk()
-        .post(
-            "/_arkret/self/read-cursors",
-            &ReadCursorAdvanceRequestBody {
-                advance_event: EventAdmissionSubmission::new(event.clone()),
-            },
-        )
+        .advance_read_cursor(&client.verify_publication(ReadCursorAdvanceRequestBody {
+            advance_event: EventAdmissionSubmission::new(event.clone()),
+        })?)
         .await?;
     ensure!(
         outcome.realm_id == *realm

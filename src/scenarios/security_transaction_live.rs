@@ -2,9 +2,9 @@ use anyhow::Result;
 use arkret_models_crypto::{
     BackupKind, BackupObjectRef, BackupRotationBinding, BackupRotationKind, BackupRotationPlan,
     KeyBackup, KeyBackupAead, KeyBackupAeadName, KeyBackupAuthData, KeyBackupDomainSeparation,
-    KeyBackupEncryption, KeyBackupRecipientMethod, KeyBackupSignatureAlgorithm,
-    PreparedEventBatchRequest, PreparedEventUnit, SecretStorageContentIndex, SecretStorageItemKind,
-    SecurityRotationTransactionCreateRequest, SecurityTransactionCreateRequest,
+    KeyBackupEncryption, KeyBackupRecipientMethod, KeyBackupSignatureAlgorithm, PreparedEventUnit,
+    SecretStorageContentIndex, SecretStorageItemKind, SecurityRotationTransactionCreateRequest,
+    SecurityTransactionCreateRequest,
 };
 use arkret_wire::{
     AccountId, ActorId, BackupId, BackupSeriesId, Base64UrlString, DeviceId, Did, DidCoreId,
@@ -268,8 +268,11 @@ fn rotation_plan(
 fn event_unit(event: Event) -> Result<PreparedEventUnit> {
     Ok(PreparedEventUnit::new(
         arkret_canonical::DigestSuite::Sha256,
-        PreparedEventBatchRequest {
-            events: vec![event],
+        arkret_wire::EventsSubmitBatchRequestBody {
+            events: (vec![event])
+                .into_iter()
+                .map(arkret_wire::EventAdmissionSubmission::new)
+                .collect(),
         },
     )?)
 }

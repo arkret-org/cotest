@@ -575,11 +575,10 @@ pub(crate) async fn circle_mls_fixture(
         queued.contains(&welcome),
         "Circle recipient queue omitted the exact installed Welcome"
     );
-    let _: serde_json::Value = bob
+    let _ = bob
         .client
         .sdk()
-        .post(
-            "/_arkret/self/device_messages/ack",
+        .ack_device_messages(
             &arkret_models_collaboration::device_messages::DeviceMessagesAckRequestBody {
                 ack_token,
             },

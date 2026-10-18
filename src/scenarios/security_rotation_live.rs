@@ -24,11 +24,11 @@ use arkret_models_crypto::{
     BackupRotationKind, BackupRotationPlan, ClientStepAttestation, ClientStepAttestationArtifact,
     ClientStepAttestationAuthData, KeyBackup, KeyBackupAead, KeyBackupAeadName, KeyBackupAuthData,
     KeyBackupDomainSeparation, KeyBackupEncryption, KeyBackupRecipientMethod,
-    KeyBackupSignatureAlgorithm, KeysBackupsList, PreparedEventBatchRequest, PreparedEventUnit,
-    SecretStorageContentIndex, SecretStorageItemKind, SecurityRotationLocalCommit,
-    SecurityRotationRevokeCommandDecision, SecurityRotationTransactionCreateRequest,
-    SecurityTransaction, SecurityTransactionContinueRequest, SecurityTransactionCreateRequest,
-    SecurityTransactionStep, SecurityTransactionTerminalOutcome,
+    KeyBackupSignatureAlgorithm, KeysBackupsList, PreparedEventUnit, SecretStorageContentIndex,
+    SecretStorageItemKind, SecurityRotationLocalCommit, SecurityRotationRevokeCommandDecision,
+    SecurityRotationTransactionCreateRequest, SecurityTransaction,
+    SecurityTransactionContinueRequest, SecurityTransactionCreateRequest, SecurityTransactionStep,
+    SecurityTransactionTerminalOutcome,
 };
 use arkret_wire::{
     AccountId, ActorId, AuthorityCommitStatus, AuthoritySubmitOutcome, BackupId, BackupSeriesId,
@@ -409,8 +409,11 @@ impl RotationAuthor {
         let unit = |event: Event| {
             PreparedEventUnit::new(
                 arkret_canonical::DigestSuite::Sha256,
-                PreparedEventBatchRequest {
-                    events: vec![event],
+                arkret_wire::EventsSubmitBatchRequestBody {
+                    events: (vec![event])
+                        .into_iter()
+                        .map(arkret_wire::EventAdmissionSubmission::new)
+                        .collect(),
                 },
             )
         };
@@ -818,14 +821,10 @@ pub async fn security_rotation_runs_worker_steps_to_local_commit() -> Result<()>
         .post("/_arkret/self/events")
         .header(reqwest::header::CONTENT_TYPE, "application/json")
         .body(arkret_canonical::canonical_json_bytes(
-            &crate::publication::initial_submission(
-                bad_rotation.prepared_plan.backup_rotations[0]
-                    .active_series_unit
-                    .request
-                    .events[0]
-                    .clone(),
-                "",
-            )?,
+            &bad_rotation.prepared_plan.backup_rotations[0]
+                .active_series_unit
+                .request
+                .events[0],
         )?)
         .send()
         .await?;
@@ -1579,6 +1578,131 @@ fn canonical_post(
         .post(path)
         .header(reqwest::header::CONTENT_TYPE, "application/json")
         .body(arkret_canonical::canonical_json_bytes(body)?))
+}
+
+/// Exercise the production SDK gate and HTTP ingress over real durable rotation units.
+/// The Account Authority introspection is a fixture; Station admission and PostgreSQL are real.
+pub async fn security_rotation_refuses_ineligible_approval_sidecars_before_writes() -> Result<()> {
+    let fixture = live_rotation("rotation-ineligible-approval", &[]).await?;
+    let (request, _) = fixture.signer.rotation(
+        "a105",
+        DEVICE_B,
+        fixture.seed_a,
+        fixture.seed_a,
+        &fixture.old,
+        &fixture.commit.commit_id,
+    )?;
+    let producer = arkret::ProducerVerificationContext {
+        actor: ActorId::account(fixture.signer.account.clone()),
+        verification_method: fixture.signer.method.clone(),
+        public_key: arkret_signatures::PublicKeyMaterial::Ed25519Raw {
+            bytes: SigningKey::from_bytes(&fixture.seed_a)
+                .verifying_key()
+                .to_bytes()
+                .to_vec(),
+        },
+        digest_suite: arkret_canonical::DigestSuite::Sha256,
+    };
+    let verified = arkret::VerifiedSubmission::verify(request.clone(), |_| Ok(producer.clone()))?;
+    ensure!(
+        verified.wire() == &request,
+        "SDK changed the original deferred request"
+    );
+    for active_series in [false, true] {
+        let mut with_evidence = request.clone();
+        let SecurityTransactionCreateRequest::SecurityRotation(rotation) = &mut with_evidence
+        else {
+            unreachable!()
+        };
+        let unit = if active_series {
+            &mut rotation.prepared_plan.backup_rotations[0].active_series_unit
+        } else {
+            &mut rotation.prepared_plan.revoke_unit
+        };
+        let event = &unit.request.events[0].event;
+        let approver = arkret::signatures::Ed25519DetachedJwsSigner::from_seed(
+            fixture.seed_a,
+            fixture.signer.method.as_str(),
+        );
+        let mut approval = arkret::ApprovalSignature {
+            input: arkret::ApprovalSignatureInput {
+                approval_context: arkret::ApprovalContext::RealmGovernance {},
+                approval_target: arkret::ApprovalTarget::Event {
+                    event_id: event.event_id.clone(),
+                },
+                request_canonical_digest: Hash::new(arkret_canonical::canonical_sha256(event)?)?,
+                operation: "ak.self.events.command.submit.v1".to_owned(),
+                action: arkret::CapabilityActionId::MessageCreate,
+                realm_id: event.realm_id.clone(),
+                initiating_actor_id: event.actor_id.clone(),
+                approver_did: arkret_wire::Did::new(fixture.signer.actor.clone())?,
+                approved_at: arkret_canonical::normalize_timestamp_canonical(Utc::now()),
+                nonce: format!("ineligible-native-approval-{active_series}-f371fe654ea14285"),
+            },
+            proof: arkret::ApprovalSignatureProof {
+                kind: arkret::ApprovalSignatureProofKind::DetachedJws,
+                verification_method: fixture.signer.method.clone(),
+                jws: String::new(),
+            },
+        };
+        approval.proof.jws = approver.sign_detached_jws(
+            &arkret::signatures::approval_signature::approval_signature_signing_bytes(&approval)?,
+        );
+        arkret::signatures::approval_signature::verify_event_approval_signature(
+            &approval,
+            event,
+            "ak.self.events.command.submit.v1",
+            arkret::CapabilityActionId::MessageCreate,
+            approval.input.approved_at,
+            &producer.public_key,
+        )?;
+        unit.request.events[0].approval_signatures = Some(vec![approval]);
+        *unit =
+            PreparedEventUnit::new(arkret_canonical::DigestSuite::Sha256, unit.request.clone())?;
+        ensure!(
+            arkret::VerifiedSubmission::verify(with_evidence.clone(), |_| Ok(producer.clone()))
+                .is_err(),
+            "SDK accepted approval evidence in an ineligible native unit"
+        );
+        let response = canonical_post(
+            &fixture.client_a,
+            "/_arkret/self/security-transactions",
+            &with_evidence,
+        )?
+        .send()
+        .await?;
+        let status = response.status();
+        let body: serde_json::Value = response.json().await?;
+        ensure!(
+            status.is_client_error(),
+            "ineligible sidecar reached native execution: {status} {body}"
+        );
+        let database_url = fixture.database.connect_url.clone();
+        tokio::task::spawn_blocking(move || -> Result<()> {
+            let mut database = postgres::Client::connect(&database_url, postgres::NoTls)?;
+            let count: i64 = database
+                .query_one("SELECT count(*) FROM security_transactions", &[])?
+                .get(0);
+            ensure!(
+                count == 0,
+                "ineligible approval wrote a durable transaction"
+            );
+            Ok(())
+        })
+        .await??;
+        ensure!(listing(&fixture.client_a).await?.active_series == fixture.selected.active_series);
+        ensure!(listing(&fixture.client_b).await?.active_series == fixture.selected.active_series);
+    }
+    let accepted = fixture
+        .client_a
+        .sdk()
+        .create_security_transaction(&verified)
+        .await?;
+    ensure!(
+        !accepted.accepted_steps.is_empty(),
+        "valid verified producer did not execute a worker step"
+    );
+    Ok(())
 }
 
 pub(crate) async fn create(
