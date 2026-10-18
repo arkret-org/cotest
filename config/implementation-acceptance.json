@@ -246,7 +246,7 @@
     {
       "task": "2026-09-13-0847-applet-authoring-result-runtime-installation.md",
       "criteria_count": 5,
-      "criteria_sha256": "6ea81f947d1e38411390ea031116deb2a12c9d815842a1954bc54a462fac8633",
+      "criteria_sha256": "6bb2ddaece90b79ab6b341ad5038f8a20d0f1c42f18badeb6401c0542060a2ed",
       "spec_refs": [
         "arkret-spec/spec/v1/zh/extensions/applet-integration.md",
         "arkret-spec/spec/v1/zh/authz/managed-governance.md",

@@ -429,6 +429,19 @@ export async function structureWrite(page: Page, action: string, kind: string, t
       if (boundaryProof && boundaryBefore) await assertStructureBoundary(boundaryProof, boundaryRealm, boundaryBefore, event);
       return event;
     }
+    const diagnostic = {
+      action,
+      expected_kind: kind,
+      matching_responses_remaining: responses.length,
+      signed_event_observed: frozen !== undefined,
+      panel_visible: await panel.isVisible().catch(() => false),
+      status: await panel.getByTestId("direct-structure-status").textContent().catch(() => null),
+      save_enabled: await panel.getByRole("button", { name: "Save", exact: true }).isEnabled().catch(() => false),
+    };
+    await test.info().attach("direct-structure-write-timeout", {
+      body: JSON.stringify(diagnostic), contentType: "application/json",
+    });
+    console.warn("Direct structure timeout diagnostic", JSON.stringify(diagnostic));
     throw new Error("structure write did not commit within the original 90 second budget");
   } finally {
     page.off("response", capture);
@@ -1217,12 +1230,16 @@ async function runFlatTopicChats(alice: Page, bob: Page, mainMessages: string[],
     "direct_conversation_participant_authority_denied", { token: boundary.thirdToken, actor: boundary.thirdActor });
   const privateCurrent = new URL(`${colandBaseUrl()}/_arkret/self/realm-state-snapshot/head`);
   privateCurrent.searchParams.set("realm_id", realmId);
+  const visible = await proof!.request.get(privateCurrent.toString(), {
+    headers: authHeaders(proof!.token, "GET", privateCurrent.toString()),
+  });
+  expect(visible.status(), "the same snapshot route must be available to its participant").toBe(200);
   const hidden = await proof!.request.get(privateCurrent.toString(), {
     headers: authHeaders(boundary.thirdToken, "GET", privateCurrent.toString()),
   });
-  expect(hidden.status(), await hidden.text()).toBe(403);
+  expect(hidden.status(), await hidden.text()).toBe(404);
   const hiddenBody = await hidden.json();
-  expect(wireErrCode(hiddenBody)).toBe("capability_denied");
+  expect(wireErrCode(hiddenBody)).toBe("not_found");
   for (const secret of [chatId, topicId, chatName, topicName]) expect(JSON.stringify(hiddenBody)).not.toContain(secret);
   for (const [name, target] of [["cross-realm", boundary.realmStrand], ["cross-circle", boundary.circleStrand]]) {
     await rejectSigned(`${name}-chat-write`, classified, "ak.strand.archive", { target_ref: target }, "direct_conversation_participant_authority_denied");

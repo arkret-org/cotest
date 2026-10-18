@@ -21,6 +21,96 @@ use garth::{
 };
 use serde_json::{Value, json};
 
+/// Diagnostics expose only fixed stage labels and registered HTTP codes.
+pub fn runtime_pair_error_summary(error: &anyhow::Error) -> String {
+    fn boundary(problem: &arkret_wire::Problem) -> &'static str {
+        if problem.detail.starts_with("invalid initial holder proof:") {
+            "initial_holder_dpop"
+        } else if problem
+            .detail
+            .starts_with("invalid grant-binding DPoP proof:")
+        {
+            "http_holder_dpop"
+        } else if problem.detail == "initial and current holder keys differ" {
+            "holder_key_binding"
+        } else if problem.detail == "signature_invalid" {
+            "issuer_agent_proof"
+        } else {
+            "registered_issuer_refusal"
+        }
+    }
+    const SAFE: &[&str] = &[
+        "pairing/read-agent-current",
+        "pairing/resolve",
+        "pairing/request-key",
+        "pairing/accept-key",
+        "pairing/observe-key",
+        "pairing/signer-evidence",
+        "pairing/read-accepted-key",
+        "pairing/describe",
+        "pairing/issue-session",
+        "pairing/observe-session",
+        "accepted Agent key state unavailable",
+        "accepted pairing handle missing",
+        "accepted pairing code missing",
+        "accepted pairing expiry missing",
+        "original pairing has expired",
+        "controller Device signer belongs to another principal",
+        "accepted Agent controller binding changed",
+        "pairing bootstrap changed the original accepted binding",
+        "pairing request kind invalid",
+        "original pairing handle missing",
+        "pair outcome names another authorization",
+        "activated Agent signer differs from the original frozen key",
+        "activated key omitted authenticated signer evidence",
+        "accepted runtime key activation did not complete",
+        "PCR authorization read-back changed Event",
+        "Station did not declare its Account Authority",
+        "configured Coauth differs from declared Account Authority",
+        "accepted provision did not select the tested runtime operations",
+        "accepted runtime scope is incomplete",
+        "issued session changed the runtime holder or requested scope",
+        "initial pairing session unexpectedly contains content authority",
+    ];
+    let stage = error
+        .chain()
+        .find_map(|cause| {
+            let text = cause.to_string();
+            SAFE.iter().copied().find(|label| *label == text)
+        })
+        .unwrap_or("unclassified pairing boundary");
+    let api =
+        error.chain().find_map(
+            |cause| match cause.downcast_ref::<arkret_http_client::Error>() {
+                Some(arkret_http_client::Error::Api { status, error }) => Some((
+                    *status,
+                    error
+                        .error_code()
+                        .map(|code| code.as_str())
+                        .unwrap_or("unregistered"),
+                    boundary(error),
+                )),
+                _ => match cause.downcast_ref::<garth::Error>() {
+                    Some(garth::Error::Api { status, error }) => Some((
+                        *status,
+                        error
+                            .error_code()
+                            .map(|code| code.as_str())
+                            .unwrap_or("unregistered"),
+                        boundary(error),
+                    )),
+                    _ => None,
+                },
+            },
+        );
+    match api {
+        Some((status, code, boundary)) => format!(
+            "accepted controller Agent pairing/session failed: {stage}; status={status}; code={code}; boundary={boundary}"
+        ),
+        None => format!("accepted controller Agent pairing/session failed: {stage}"),
+    }
+}
+
 pub struct AgentRuntimeHandle {
     runtime: ArkretClient<SdkClient, FileStore>,
     outbound: OutboundEngine<FileStore, SystemClock>,
@@ -28,6 +118,13 @@ pub struct AgentRuntimeHandle {
     account: AccountId,
     controller: SdkClient,
     pub authorization: EventId,
+    issuer: SessionEngine<SdkClient>,
+    session_request: UnsignedAgentSessionGrantRequest,
+    holder: Arc<SigningKey>,
+    runtime_key: SigningKey,
+    http: reqwest::Client,
+    station_base: String,
+    grant_url: String,
 }
 
 fn random_key() -> Result<SigningKey> {
@@ -37,8 +134,24 @@ fn random_key() -> Result<SigningKey> {
 }
 
 fn sdk(http: reqwest::Client, base: &str, auth: Option<Auth>) -> Result<SdkClient> {
+    sdk_with_retry(
+        http,
+        base,
+        auth,
+        arkret_http_client::RetryConfig::disabled(),
+    )
+}
+
+fn sdk_with_retry(
+    http: reqwest::Client,
+    base: &str,
+    auth: Option<Auth>,
+    retry: arkret_http_client::RetryConfig,
+) -> Result<SdkClient> {
     let endpoint = url::Url::parse(base)?;
-    let mut builder = SdkClient::builder(endpoint.clone()).http_client(http);
+    let mut builder = SdkClient::builder(endpoint.clone())
+        .http_client(http)
+        .retry(retry);
     if let Some(auth) = auth {
         builder = builder.auth(auth);
     }
@@ -139,7 +252,6 @@ impl AgentRuntimeHandle {
         controller_device_method: &DidUrl,
         controller_device_key: &SigningKey,
         agent_id: DidCoreId,
-        realm: RealmId,
         strand: StrandId,
         store_root: &Path,
     ) -> Result<Self> {
@@ -152,7 +264,7 @@ impl AgentRuntimeHandle {
         let view = controller
             .agent_get(agent_id.as_str())
             .await
-            .map_err(|_| anyhow::anyhow!("Agent controller current read failed"))?;
+            .context("pairing/read-agent-current")?;
         let state = view
             .key_state
             .context("accepted Agent key state unavailable")?;
@@ -173,13 +285,29 @@ impl AgentRuntimeHandle {
             .context("accepted pairing expiry missing")?;
         ensure!(expires > chrono::Utc::now(), "original pairing has expired");
         let open = sdk(http.clone(), station_base, None)?;
+        let describe = open.describe().await.context("pairing/describe")?;
+        let authority = describe
+            .auth_metadata
+            .account_authority
+            .as_ref()
+            .context("Station did not declare its Account Authority")?;
+        ensure!(
+            url::Url::parse(authority.origin.as_str())?.origin()
+                == url::Url::parse(coauth_base)?.origin(),
+            "configured Coauth differs from declared Account Authority"
+        );
+        // Pairing custody must be retained by the declared Account Authority
+        // that will issue the session, as in the normal product pairing flow.
+        let controller_authority =
+            controller.with_base_url(url::Url::parse(authority.origin.as_str())?)?;
         let bootstrap: AgentPairingBootstrap = open
             .resolve_agent_pairing(&AgentPairingResolveRequestBody {
                 pairing_token: arkret_canonical::base64url_encode(serde_json::to_vec(
                     &json!({"r":request_id,"c":code}),
                 )?),
             })
-            .await?;
+            .await
+            .context("pairing/resolve")?;
         let identity = bootstrap
             .validated_runtime_identity()
             .map_err(anyhow::Error::msg)?
@@ -202,7 +330,8 @@ impl AgentRuntimeHandle {
         let approval_request = candidate.build_approval_request()?;
         let approval: AgentRuntimeApprovalOutcome = open
             .request_agent_runtime_approval(&approval_request.body)
-            .await?;
+            .await
+            .context("pairing/request-key")?;
         let runtime_digest = agent_runtime_key_binding_digest(
             &agent_id,
             request_id,
@@ -286,7 +415,10 @@ impl AgentRuntimeHandle {
         };
         let submission =
             arkret_identity::VerifiedSubmission::verify(pair.body, |_| Ok(producer.clone()))?;
-        let paired = controller.agent_key_pair(&submission).await?;
+        let paired = controller_authority
+            .agent_key_pair(&submission)
+            .await
+            .context("pairing/accept-key")?;
         ensure!(
             paired.authorize_event_ref == authorization,
             "pair outcome names another authorization"
@@ -299,8 +431,11 @@ impl AgentRuntimeHandle {
                     pairing_code: NonEmptyString::new(code).map_err(anyhow::Error::msg)?,
                     agent_id: agent_id.clone(),
                 })
-                .await?;
-            status.validate_signer_evidence_delivery()?;
+                .await
+                .context("pairing/observe-key")?;
+            status
+                .validate_signer_evidence_delivery()
+                .context("pairing/signer-evidence")?;
             if status.authorized_event_ref.as_ref() == Some(&authorization) {
                 let evidence = &status
                     .current_signer_evidence
@@ -338,23 +473,15 @@ impl AgentRuntimeHandle {
             );
             tokio::time::sleep(Duration::from_millis(250)).await;
         };
-        let committed = controller.committed_event_get(&authorization).await?;
+        let committed = controller
+            .committed_event_get(&authorization)
+            .await
+            .context("pairing/read-accepted-key")?;
         ensure!(
             committed.commit().event_ref == authorization
                 && committed.commit().commit_id == signer_commit
                 && committed.reducer_input() == Some(&original_authorization),
             "PCR authorization read-back changed Event"
-        );
-        let describe = open.describe().await?;
-        let authority = describe
-            .auth_metadata
-            .account_authority
-            .as_ref()
-            .context("Station did not declare its Account Authority")?;
-        ensure!(
-            url::Url::parse(authority.origin.as_str())?.origin()
-                == url::Url::parse(coauth_base)?.origin(),
-            "configured Coauth differs from declared Account Authority"
         );
         let holder = random_key()?;
         ensure!(
@@ -368,7 +495,7 @@ impl AgentRuntimeHandle {
             &arkret_http_client::DpopProofRequest::new("POST", grant_url.as_str()),
             &holder,
         )?;
-        let kickoff = sdk(
+        let kickoff = sdk_with_retry(
             http.clone(),
             coauth_base,
             Some(Auth::Dpop(DpopAuth::proof_only({
@@ -381,6 +508,7 @@ impl AgentRuntimeHandle {
                     })
                 }
             }))),
+            arkret_http_client::RetryConfig::standard(5),
         )?;
         // The immutable provision selection controls mandatory runtime floors.
         // A lower layer cannot suppress selected capabilities. Retain its exact
@@ -411,9 +539,9 @@ impl AgentRuntimeHandle {
             scopes.clone(),
             authorization.clone(),
             SessionGrantAgentScopeRequest {
-                realm_ids: vec![realm],
-                strand_ids: vec![strand],
-                track_names: vec![NonEmptyString::new("discussion").map_err(anyhow::Error::msg)?],
+                realm_ids: vec![],
+                strand_ids: vec![],
+                track_names: vec![],
             },
             None,
             SessionGrantDpopBindingProof {
@@ -444,13 +572,27 @@ impl AgentRuntimeHandle {
         ))
         .map_err(anyhow::Error::msg)?;
         let session = SessionEngine::new(kickoff);
+        // Initial pairing requests no content resources. A later explicit
+        // confirmation uses a fresh challenge and signed issue intent.
+        let mut session_request = request.clone();
+        // One exact Strand is the complete content resource. Its accepted
+        // current determines the governing Realm; a second Realm selector
+        // would request an unrepresentable resource union in the flat carrier.
+        session_request.agent_scope_request = SessionGrantAgentScopeRequest {
+            realm_ids: vec![],
+            strand_ids: vec![strand],
+            track_names: vec![NonEmptyString::new("discussion").map_err(anyhow::Error::msg)?],
+        };
         session
             .login_request(request.attach_signature(signature)?, SystemClock)
-            .await?;
+            .await
+            .context("pairing/issue-session")?;
         let grant = session
             .current_state()
             .context("real Coauth did not issue Agent SessionGrant")?;
-        let observation = grant.agent_participation_observation(chrono::Utc::now())?;
+        let observation = grant
+            .agent_participation_observation(chrono::Utc::now())
+            .context("pairing/observe-session")?;
         ensure!(
             grant.account_id == account
                 && grant.device_id.is_none()
@@ -458,24 +600,42 @@ impl AgentRuntimeHandle {
                 && grant.dpop_jkt.as_deref() == Some(binding.jkt.as_str())
                 && observation.agent_key_authorization_ref == authorization
                 && observation.verification_method == identity.verification_method
-                && scopes
-                    .iter()
-                    .all(|scope| grant.granted_scope.contains(scope))
                 && grant
                     .granted_scope
                     .iter()
-                    .all(|scope| scopes.contains(scope)),
+                    .all(|scope| scopes.contains(scope))
+                && arkret_schema::agent_runtime_scope::assess_agent_runtime_scopes(
+                    &state.requested_scope.actions,
+                    &state.requested_scope.actions,
+                    &grant.granted_scope,
+                )?
+                .is_none(),
             "issued session changed the runtime holder or requested scope"
         );
+        ensure!(
+            grant.granted_scope.iter().all(|token| {
+                ServiceOperationId::from_wire(token).is_some()
+                    || arkret_schema::capability_action(token)
+                        .is_some_and(|descriptor| descriptor.category == "service")
+            }),
+            "initial pairing session unexpectedly contains content authority"
+        );
         let transport = sdk(
-            http,
+            http.clone(),
             station_base,
             Some(Auth::Dpop(DpopAuth::with_dpop_token(
                 grant.grant_jwt.clone(),
-                move |request| {
-                    garth::session::dpop::build_http_dpop_proof(request, &holder).map_err(|_| {
-                        arkret_http_client::Error::Protocol("Agent HTTP DPoP signing failed".into())
-                    })
+                {
+                    let holder = holder.clone();
+                    move |request| {
+                        garth::session::dpop::build_http_dpop_proof(request, &holder).map_err(
+                            |_| {
+                                arkret_http_client::Error::Protocol(
+                                    "Agent HTTP DPoP signing failed".into(),
+                                )
+                            },
+                        )
+                    }
                 },
             ))),
         )?;
@@ -490,13 +650,91 @@ impl AgentRuntimeHandle {
             runtime: ArkretClient::new(transport, store.clone()),
             outbound: OutboundEngine::new(store, SystemClock),
             signer: Ed25519DetachedJwsSigner::new(
-                runtime_key,
+                runtime_key.clone(),
                 identity.verification_method.as_str(),
             ),
             account,
             controller: controller.clone(),
             authorization,
+            issuer: session,
+            session_request,
+            holder,
+            runtime_key,
+            http,
+            station_base: station_base.to_owned(),
+            grant_url: grant_url.to_string(),
         })
+    }
+
+    /// A new signed issue intent follows explicit content authorization; refresh
+    /// never expands the predecessor service session's immutable ceiling.
+    pub async fn issue_current_content_session(&mut self) -> Result<()> {
+        let old = self
+            .issuer
+            .current_state()
+            .context("runtime session missing")?;
+        let mut request = self.session_request.clone();
+        let now = arkret_canonical::normalize_timestamp_canonical(chrono::Utc::now());
+        request.proof.challenge = arkret_canonical::base64url_encode(random_key()?.to_bytes());
+        request.proof.issued_at = now;
+        request.proof.expires_at = now + chrono::Duration::minutes(5);
+        let binding = arkret::dpop::build_dpop_proof(
+            &arkret_http_client::DpopProofRequest::new("POST", &self.grant_url),
+            &self.holder,
+        )?;
+        request.dpop_binding_proof = SessionGrantDpopBindingProof {
+            proof_jwt: binding.header_value,
+        };
+        let transcript = AgentSessionGrantProof {
+            proof_kind: AgentSessionGrantProofKind::AgentKeyProof,
+            challenge: request.proof.challenge.clone(),
+            request_canonical_digest: request.canonical_request_digest()?,
+            audience_id: request.proof.audience_id.clone(),
+            issued_at: request.proof.issued_at,
+            expires_at: request.proof.expires_at,
+            verification_method: request.proof.verification_method.clone(),
+            signature: String::new(),
+        };
+        let signature = NonEmptyString::new(arkret_canonical::base64url_encode(
+            self.runtime_key
+                .sign(&transcript.canonical_signing_bytes()?)
+                .to_bytes(),
+        ))
+        .map_err(anyhow::Error::msg)?;
+        self.issuer
+            .login_request(request.attach_signature(signature)?, SystemClock)
+            .await?;
+        let grant = self
+            .issuer
+            .current_state()
+            .context("content session missing")?;
+        ensure!(
+            grant.grant_id != old.grant_id
+                && grant
+                    .granted_scope
+                    .iter()
+                    .any(|scope| scope == "ak.message.create")
+                && grant
+                    .granted_scope
+                    .iter()
+                    .all(|scope| self.session_request.requested_scope.contains(scope)),
+            "fresh content issue must remain within the accepted request and provide its write action"
+        );
+        let holder = self.holder.clone();
+        let transport = sdk(
+            self.http.clone(),
+            &self.station_base,
+            Some(Auth::Dpop(DpopAuth::with_dpop_token(
+                grant.grant_jwt.clone(),
+                move |request| {
+                    garth::session::dpop::build_http_dpop_proof(request, &holder).map_err(|_| {
+                        arkret_http_client::Error::Protocol("Agent HTTP DPoP signing failed".into())
+                    })
+                },
+            ))),
+        )?;
+        self.runtime = ArkretClient::new(transport, self.runtime.store().clone());
+        Ok(())
     }
 
     /// Queue and submit an original Agent-signed SDK Message, then compare the

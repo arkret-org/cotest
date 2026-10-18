@@ -151,16 +151,21 @@ export class ProvisioningBridge {
     controllerHolderSeed: string;
     controllerEventSeed: string;
     controllerVerificationMethod: string;
-    agentId: string; realmId: string; strandId: string;
+    agentId: string; strandId: string;
   }): Promise<{ runtimeId: string; authorizationEventId: string }> {
     const result = await this.#call("agent_runtime_pair", {
       station_base_url: args.endpoints.colandBaseUrl, coauth_base_url: args.endpoints.coauthBaseUrl,
       controller_account_id: args.controllerAccountId, controller_grant: args.controllerGrant,
       controller_holder_seed: args.controllerHolderSeed, controller_event_seed: args.controllerEventSeed,
       controller_verification_method: args.controllerVerificationMethod,
-      agent_id: args.agentId, realm_id: args.realmId, strand_id: args.strandId,
+      agent_id: args.agentId, strand_id: args.strandId,
     });
     return { runtimeId: String(result.runtime_id), authorizationEventId: String(result.authorization_event_id) };
+  }
+
+  async issueAgentContentSession(runtimeId: string): Promise<void> {
+    const result = await this.#call("agent_runtime_issue_current_session", { runtime_id: runtimeId });
+    if (result.issued !== true) throw new Error("Agent fresh content session was not issued");
   }
 
   /** Freeze original Agent-signed bytes in Garth before a readonly effect cut. */

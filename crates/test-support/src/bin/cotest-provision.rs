@@ -318,7 +318,6 @@ impl Session {
             controller_event_seed: String,
             controller_verification_method: arkret_wire::DidUrl,
             agent_id: arkret_wire::DidCoreId,
-            realm_id: arkret_wire::RealmId,
             strand_id: arkret_wire::StrandId,
         }
         fn key(seed: &str) -> Result<ed25519_dalek::SigningKey> {
@@ -350,7 +349,6 @@ impl Session {
             &body.controller_verification_method,
             &key(&body.controller_event_seed)?,
             body.agent_id,
-            body.realm_id,
             body.strand_id,
             &store,
         )
@@ -369,9 +367,31 @@ impl Session {
     ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<Value>> + '_>> {
         match request.op.as_str() {
             "agent_runtime_pair" => Box::pin(async move {
-                self.open_agent_runtime(request.body).await.map_err(|_| {
-                    anyhow::anyhow!("accepted controller Agent pairing/session failed")
-                })
+                self.open_agent_runtime(request.body)
+                    .await
+                    .map_err(|error| {
+                        anyhow::anyhow!(
+                            cotest_test_support::agent_runtime::runtime_pair_error_summary(&error)
+                        )
+                    })
+            }),
+            "agent_runtime_issue_current_session" => Box::pin(async move {
+                #[derive(Deserialize)]
+                #[serde(deny_unknown_fields)]
+                struct Body {
+                    runtime_id: String,
+                }
+                let result = async {
+                    let body: Body = serde_json::from_value(request.body)?;
+                    self.agent_runtimes
+                        .get_mut(&body.runtime_id)
+                        .context("runtime unavailable")?
+                        .issue_current_content_session()
+                        .await?;
+                    Ok::<_, anyhow::Error>(json!({"issued": true}))
+                }
+                .await;
+                result.map_err(|_| anyhow::anyhow!("Agent fresh content session issuance failed"))
             }),
             "agent_runtime_prepare_message" => Box::pin(async move {
                 #[derive(Deserialize)]

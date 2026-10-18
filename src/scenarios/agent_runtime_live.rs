@@ -88,6 +88,7 @@ mod provision_conjunction;
 mod provision_evidence;
 mod provision_start_evidence;
 mod repairing_evidence;
+mod session_content_direct_evidence;
 mod terminal_evidence;
 pub use act_on_behalf_conjunction::{
     REVIEWED_APPROVAL_CONTENT_CASES, run_agent_act_on_behalf_production,
@@ -142,6 +143,7 @@ pub use provision_evidence::{
 };
 pub use provision_start_evidence::run_agent_provision_prerequisites_boundary;
 pub use repairing_evidence::run_agent_repairing_production;
+pub use session_content_direct_evidence::run_agent_direct_content_session_boundary;
 
 const GROUP: &str = "agent-runtime-session";
 const CONTROLLER_LABEL: &str = "agent-controller";
@@ -1651,9 +1653,15 @@ async fn run_agent_keypackage_journey(terminal: bool) -> Result<()> {
     }
     .canonical_mls_group_id()?;
     let signed_at = arkret_canonical::normalize_timestamp_canonical(Utc::now());
-    let claim_id = arkret_canonical::sha256_bytes(unique_uuid7().as_bytes());
+    let fresh_claim_id = || -> Result<arkret_wire::Base64UrlString> {
+        let mut entropy = [0_u8; 16];
+        getrandom::fill(&mut entropy)
+            .map_err(|error| anyhow::anyhow!("Agent claim entropy: {error}"))?;
+        arkret_wire::Base64UrlString::new(URL_SAFE_NO_PAD.encode(entropy))
+            .map_err(anyhow::Error::msg)
+    };
     let mut claim: KeyPackagesClaimRequestBody = serde_json::from_value(json!({
-        "claim_request_id": URL_SAFE_NO_PAD.encode(&claim_id[..16]),
+        "claim_request_id": fresh_claim_id()?,
         "target_agent_id": agent.agent_account.principal_id,
         "target_agent_verification_method": agent.verification_method,
         "target_agent_key_authorize_event_id": agent.key_authorization,
@@ -1853,10 +1861,7 @@ async fn run_agent_keypackage_journey(terminal: bool) -> Result<()> {
         } if commit.event_ref == join_event.event_id),
         "controller's Agent join was not committed"
     );
-    claim.claim_request_id = arkret_wire::Base64UrlString::new(
-        URL_SAFE_NO_PAD.encode(&arkret_canonical::sha256_bytes(unique_uuid7().as_bytes())[..16]),
-    )
-    .map_err(anyhow::Error::msg)?;
+    claim.claim_request_id = fresh_claim_id()?;
     claim.intended_realm_id = joined_realm.clone();
     claim.mls_group_id = ScopeRef::Realm {
         realm_id: joined_realm.clone(),
@@ -1897,10 +1902,7 @@ async fn run_agent_keypackage_journey(terminal: bool) -> Result<()> {
     ))
     .map_err(anyhow::Error::msg)?;
     let mut controller_claim = claim.clone();
-    controller_claim.claim_request_id = arkret_wire::Base64UrlString::new(
-        URL_SAFE_NO_PAD.encode(&arkret_canonical::sha256_bytes(unique_uuid7().as_bytes())[..16]),
-    )
-    .map_err(anyhow::Error::msg)?;
+    controller_claim.claim_request_id = fresh_claim_id()?;
     controller_claim.target_keypackage_ref = Some(serde_json::from_value(json!(
         add_keypackage.keypackage_ref
     ))?);

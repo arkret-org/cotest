@@ -15,7 +15,7 @@ pub(super) fn observed_issued_claims(
     Ok(serde_json::from_slice(&URL_SAFE_NO_PAD.decode(payload)?)?)
 }
 
-fn content_refresh_request(
+pub(super) fn content_refresh_request(
     station: &crate::harness::ArkretServer,
     agent: &AgentRuntimeSession,
     credential: &str,
@@ -740,6 +740,10 @@ pub async fn run_agent_session_content_production()
     );
     ensure!(
         ledger == coauth_session_evidence::issuer_state(&deployment.coauth.pg.connect_url).await?
+    );
+    ensure!(
+        Utc::now() < fresh.expires_at && Utc::now() < next.expires_at,
+        "current withdrawal must refuse before either content credential naturally expires"
     );
     println!(
         "[agent-content-session] real_issuer=1 service_only_predecessor=1 membership_read_without_literal_grant=1 fresh_issue_independent_chain=1 no_read_to_write=1 actual_station_read=1 unchanged_refresh_ceiling=1 current_withdrawal_blocks_read_issue_refresh=1"

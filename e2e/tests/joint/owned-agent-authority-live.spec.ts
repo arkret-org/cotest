@@ -2,7 +2,7 @@
 // admin granting capability-management actions. Immutable private scope evidence
 // is required before authorization; pairing itself must not grant content rights.
 import { test, expect } from "../../helpers/joint-fixture";
-import type { Page, Locator, APIRequestContext } from "../../helpers/arkret-test";
+import type { Page, Locator, APIRequestContext, Request, Route } from "../../helpers/arkret-test";
 import { coauthBaseUrl, colandBaseUrl, mockEmailBaseUrl } from "../../helpers/env";
 import { grantInviteConsentArkret, deliverInviteWithConsentGrant } from "../../helpers/contact-api";
 import { assertAuthoritySubmitOutcome, buildCapabilityGrantEnvelope, canonicalJson, grantCapabilityEventApi, rawSubmitSignedEventApi, refreshEventEnvelopeProof, resolveDefaultStrandId, retypeEventDerivedId, signedEventEnvelope, wireErrCode } from "../../helpers/coland-api";
@@ -197,7 +197,7 @@ test("ordinary member explicitly grants, withdraws cold and confirms a new owned
       controllerAccountId: session.accountId, controllerGrant: session.grantJwt,
       controllerHolderSeed: session.dpopSeedB64url, controllerEventSeed: session.eventSigningSeedB64url,
       controllerVerificationMethod: `${session.user.did}#${session.user.deviceId}`,
-      agentId, realmId: realm, strandId: strand,
+      agentId, strandId: strand,
     });
     expect(runtime.authorizationEventId).toMatch(/^ak:event:/);
     // Current pairing custody proves the private immutable ceiling, but is
@@ -209,6 +209,7 @@ test("ordinary member explicitly grants, withdraws cold and confirms a new owned
     // Preflight is separately labelled. Only the real Agent-signed accepted
     // Message and exact read-back below prove business effectiveness.
     await expect(qualifiedPanel.locator(`[data-grant-id="${first}"]`)).not.toContainText(/未确认|基础权限|不可达/, { timeout: 120_000 });
+    await bridge.issueAgentContentSession(runtime.runtimeId);
     const authored = await bridge.prepareAgentMessage({ runtimeId: runtime.runtimeId, realmId: realm, strandId: strand,
       text: "real Agent signs and commits using the explicitly confirmed narrow owned source" });
     const accepted = await bridge.submitAgentMessage(runtime.runtimeId, authored);
@@ -230,6 +231,7 @@ test("ordinary member explicitly grants, withdraws cold and confirms a new owned
     expect(second).not.toBe(first);
     await expect(currentPanel.locator(`[data-grant-id="${first}"]`)).toContainText("Revoked");
     await expect(currentPanel.locator(`[data-grant-id="${second}"]`)).toContainText("Active");
+    await bridge.issueAgentContentSession(runtime.runtimeId);
     const renewed = await bridge.prepareAgentMessage({ runtimeId: runtime.runtimeId, realmId: realm, strandId: strand,
       text: "new explicit owned confirmation authorizes a new Agent message" });
     expect((await bridge.submitAgentMessage(runtime.runtimeId, renewed)).accepted).toBe(true);
@@ -241,8 +243,52 @@ test("ordinary member explicitly grants, withdraws cold and confirms a new owned
     await members(bob, realm, agentId);
     const departed = bob.getByTestId("owned-agent-withdrawal-ledger").locator(`[data-grant-id="${second}"]`);
     await expect(departed).toContainText("Active", { timeout: 120_000 });
-    await departed.getByTestId("owned-agent-withdraw-retained").click();
-    await expect(departed).toContainText("Revoked", { timeout: 180_000 });
+    const withdrawalPath = "**/_arkret/self/events";
+    let originalWithdrawal: string | undefined;
+    let forwardedWithdrawals = 0;
+    const loseWithdrawalResponse = async (route: Route) => {
+      const events = decodeIngressEvents(route.request().postData());
+      const event = events.find(value => value.kind === "ak.capability.revoke" && value.realm_id === realm);
+      if (!event) { await route.continue(); return; }
+      const body = canonicalJson(route.request().postDataJSON());
+      if (originalWithdrawal !== undefined) {
+        expect(body === originalWithdrawal, "withdrawal retries retain the complete signed original").toBe(true);
+        await route.abort("failed");
+        return;
+      }
+      originalWithdrawal = body;
+      // Commit once at the actual Station, then lose every browser response.
+      // Only an independent original-issuer exact current may confirm revoke.
+      const actual = await route.fetch({ timeout: 180_000, maxRedirects: 0, maxRetries: 0 });
+      if (actual.status() !== 200) {
+        const problem = await actual.json().catch(() => null) as Record<string, unknown> | null;
+        const safe: Record<string, string | number> = { status: actual.status() };
+        for (const key of ["code", "type", "title", "detail", "message"]) {
+          const value = problem?.[key];
+          if (typeof value === "string") {
+            safe[key] = value
+              .replace(/(?:Bearer|DPoP)\s+\S+|eyJ[A-Za-z0-9_.-]{20,}/g, "[redacted-credential]")
+              .slice(0, 512);
+          }
+        }
+        await test.info().attach("departed-controller-withdrawal-refusal", {
+          body: Buffer.from(JSON.stringify(safe)), contentType: "application/json",
+        });
+      }
+      expect(actual.status()).toBe(200);
+      assertAuthoritySubmitOutcome(await actual.json(), event, "departed controller withdrawal");
+      forwardedWithdrawals += 1;
+      await route.abort("failed");
+    };
+    await bob.route(withdrawalPath, loseWithdrawalResponse);
+    try {
+      await departed.getByTestId("owned-agent-withdraw-retained").click();
+      await expect(departed).toContainText("Revoked", { timeout: 180_000 });
+      await expect(departed.getByTestId("owned-agent-withdraw-retained")).toHaveCount(0);
+      expect(forwardedWithdrawals).toBe(1);
+    } finally {
+      await bob.unroute(withdrawalPath, loseWithdrawalResponse);
+    }
     await rejectedWithoutEffects(bridge, runtime.runtimeId, realm, strand, session.accountId.station_id);
   } finally {
     await bridge.dispose();
@@ -533,6 +579,21 @@ test("normal administrator default denial admits an exact controller exception a
   await chooseManagementOperations(child.getByTestId("agent-policy-rule"), ["authorize"]);
   await child.getByTestId("agent-policy-rule").getByLabel("Effect", { exact: true }).selectOption("allow");
   await assertPolicyCurrent(request, jointRealm.aliceSession, realm, await savePolicyEditor(user, child, realm));
+  // Grant admission consumes the accepted immutable provision/key custody.
+  // Establish it before testing the parent authorize policy, then keep the
+  // runtime offline so no Agent action can manufacture this admin authority.
+  const custody = ProvisioningBridge.start();
+  try {
+    const session = jointRealm.aliceSession;
+    await custody.pairAgentRuntime({
+      endpoints: { colandBaseUrl: colandBaseUrl(), coauthBaseUrl: coauthBaseUrl()! },
+      controllerAccountId: session.accountId, controllerGrant: session.grantJwt,
+      controllerHolderSeed: session.dpopSeedB64url, controllerEventSeed: session.eventSigningSeedB64url,
+      controllerVerificationMethod: `${session.user.did}#${session.user.deviceId}`,
+      agentId: agent,
+      strandId: await resolveDefaultStrandId(request, jointRealm.aliceToken, realm),
+    });
+  } finally { await custody.dispose(); }
   const built = buildCapabilityGrantEnvelope({ ownerId: jointRealm.alice.id, realmId: realm, subjectId: agent,
     subjectStationId: jointRealm.aliceSession.accountId.station_id, actions: ["ak.message.create"] });
   (built.envelope.payload as any).grant.resources = [{ kind: "circle", realm_id: realm, circle_id: circle.circle_id }];
@@ -561,10 +622,56 @@ async function reviewPanel(user: JointUserPage, realm: string) {
   return panel;
 }
 
-function reviewResponse(page: Page, operation: "requests" | "status" | "decisions") {
-  return page.waitForResponse(response => response.request().method() === "POST"
-    && new URL(response.url()).pathname === `/_arkret/self/management-reviews/${operation}`,
-  { timeout: 180_000 });
+type ReviewObservation = {
+  status: () => number;
+  request: () => Request;
+  json: () => Promise<Record<string, any>>;
+};
+
+async function reviewResponse(page: Page, operation: "requests" | "status" | "decisions",
+  click: () => Promise<void>, requestId?: string): Promise<ReviewObservation> {
+  const pattern = `**/_arkret/self/management-reviews/${operation}`;
+  let settle!: (value: ReviewObservation) => void;
+  let fail!: (error: unknown) => void;
+  const observed = new Promise<ReviewObservation>((resolve, reject) => { settle = resolve; fail = reject; });
+  void observed.catch(() => {});
+  const timeout = setTimeout(() => fail(new Error("original management response timeout")), 180_000);
+  const handler = async (route: Route) => {
+    const original = route.request();
+    if (original.method() !== "POST"
+      || (requestId !== undefined && original.postDataJSON()?.request_id !== requestId)) {
+      await route.fallback();
+      return;
+    }
+    try {
+      // Forward exactly once to the real Station and deliver its unchanged
+      // bytes/status/headers to the browser. No synthesized review outcome.
+      const actual = await route.fetch({ timeout: 180_000, maxRedirects: 0, maxRetries: 0 });
+      const body = await actual.body();
+      const status = actual.status();
+      const origin = original.headers()["origin"];
+      if (origin) expect(actual.headers()["access-control-allow-origin"] === origin,
+        "the real Station supplies the browser's original CORS authority").toBe(true);
+      await route.fulfill({ response: actual });
+      settle({ status: () => status, request: () => original,
+        json: async () => JSON.parse(body.toString("utf8")) });
+    } catch (error) {
+      await route.abort("failed").catch(() => {});
+      fail(error);
+    }
+  };
+  let installed = false;
+  try {
+    await page.route(pattern, handler);
+    installed = true;
+    await click();
+    const captured = await observed;
+    expect(captured.status(), "original management response status").toBe(200);
+    return captured;
+  } finally {
+    clearTimeout(timeout);
+    if (installed) await page.unroute(pattern, handler);
+  }
 }
 
 async function confirmReview(panel: Locator) {
@@ -588,7 +695,7 @@ async function loseAcceptedReviewResponse(page: Page, operation: "requests" | "d
       }
       // The actual governing Station accepts first. Only the response to the
       // browser is lost; the test never synthesizes an approval or outcome.
-      const accepted = await route.fetch({ timeout: 180_000, maxRedirects: 0 });
+      const accepted = await route.fetch({ timeout: 180_000, maxRedirects: 0, maxRetries: 0 });
       expect(accepted.status()).toBe(200);
       const value = { body: route.request().postDataJSON(), outcome: await accepted.json() };
       retained = value;
@@ -623,6 +730,10 @@ async function switchReviewRealmAndReload(user: JointUserPage, originalRealm: st
     // router, so a cold reload cannot hide a missing Realm component key.
     await user.gotoAppPanel(`/realms/${encodeURIComponent(realm)}/settings/access`, "realm-admin-panel");
     await expect.poll(() => new URL(page.url()).pathname).toBe(`/realms/${encodeURIComponent(realm)}/settings/access`);
+    await expect.poll(async () => {
+      const href = await page.getByTestId("realm-admin-nav-item-access").getAttribute("href");
+      return href !== null && decodeURIComponent(new URL(href, page.url()).pathname.split("/")[2] ?? "") === realm;
+    }, { message: "rendered Realm navigation matches the requested Realm" }).toBe(true);
     const panel = page.getByTestId("management-review-panel");
     await expect(panel).toBeVisible({ timeout: 120_000 });
     await expect(panel.getByTestId("management-review-frozen-candidate")).toHaveCount(0);
@@ -636,13 +747,12 @@ async function switchReviewRealmAndReload(user: JointUserPage, originalRealm: st
   }
   const panel = page.getByTestId("management-review-panel");
   await panel.getByTestId("management-review-request-json").fill(share);
-  const response = reviewResponse(page, "status");
-  await panel.getByTestId("management-review-load").click();
-  const loaded = await response;
+  const request = JSON.parse(share);
+  const loaded = await reviewResponse(page, "status",
+    () => panel.getByTestId("management-review-load").click(), request.request_id);
   expect(loaded.status()).toBe(200);
   const outcome = await loaded.json();
   expect(outcome.status).toBe(expectedStatus);
-  const request = JSON.parse(share);
   expect(outcome.request_id).toBe(request.request_id);
   await expect(panel.getByTestId("management-review-frozen-candidate"))
     .toContainText(request.target.event.event_id);
@@ -721,9 +831,8 @@ test("normal controller requests join and public review, distinct administrator 
       await expect(controller.getByTestId("management-review-status")).toContainText("操作被拒绝或当前证据不可用");
       await expect(controller.getByTestId("management-review-request")).toHaveText("重试原审批请求（保留原候选）");
     }
-    const requested = reviewResponse(jointRealm.bobPage.page, "requests");
-    await controller.getByTestId("management-review-request").click();
-    const response = await requested;
+    const response = await reviewResponse(jointRealm.bobPage.page, "requests",
+      () => controller.getByTestId("management-review-request").click());
     expect(response.status()).toBe(200);
     const candidate = response.request().postDataJSON() as Record<string, any>;
     if (lostRequest) expect(canonicalJson(candidate) === canonicalJson(lostRequest), "request response loss retries its exact retained signed request").toBe(true);
@@ -732,9 +841,9 @@ test("normal controller requests join and public review, distinct administrator 
     let decidingPage = jointRealm.bobPage.page;
     if (terminal === "reject") {
       await administrator.getByTestId("management-review-request-json").fill(await sharedReview(controller, candidate));
-      const loaded = reviewResponse(jointRealm.alicePage.page, "status");
-      await administrator.getByTestId("management-review-load").click();
-      expect((await (await loaded).json()).status).toBe("pending");
+      const loaded = await reviewResponse(jointRealm.alicePage.page, "status",
+        () => administrator.getByTestId("management-review-load").click(), candidate.request_id);
+      expect((await loaded.json()).status).toBe("pending");
       decidingPanel = administrator;
       decidingPage = jointRealm.alicePage.page;
     }
@@ -747,9 +856,8 @@ test("normal controller requests join and public review, distinct administrator 
       await expect(decidingPanel.getByTestId("management-review-retry-decision")).toBeVisible();
       await switchReviewRealmAndReload(jointRealm.alicePage, realm, otherRealm, share, "rejected");
     } else {
-      const decision = reviewResponse(decidingPage, "decisions");
-      await decidingPanel.getByTestId("management-review-cancel").click();
-      const refused = await decision;
+      const refused = await reviewResponse(decidingPage, "decisions",
+        () => decidingPanel.getByTestId("management-review-cancel").click(), candidate.request_id);
       expect(refused.status()).toBe(200);
       expect((await refused.json()).status).toBe("cancelled");
     }
@@ -761,9 +869,8 @@ test("normal controller requests join and public review, distinct administrator 
   for (const operation of ["join", "publish"] as const) {
     await controller.getByLabel("原管理意图", { exact: true }).selectOption(operation);
     const before = await footprint(realm, station);
-    const pendingResponse = reviewResponse(jointRealm.bobPage.page, "requests");
-    await controller.getByTestId("management-review-request").click();
-    const response = await pendingResponse;
+    const response = await reviewResponse(jointRealm.bobPage.page, "requests",
+      () => controller.getByTestId("management-review-request").click());
     expect(response.status()).toBe(200);
     const candidate = response.request().postDataJSON() as Record<string, any>;
     const pending = await response.json();
@@ -774,7 +881,7 @@ test("normal controller requests join and public review, distinct administrator 
     expect(event.kind).toBe(operation === "join" ? "ak.member.state" : "ak.agent.interaction.set");
     expect(canonicalJson(event.actor_id) === canonicalJson({ kind: "account", account_id: jointRealm.bobSession.accountId })).toBe(true);
     expect(event.executed_by === undefined).toBe(true);
-    expect(pending.target_digest).toBe(createHash("sha256").update(canonicalJson(event)).digest("hex"));
+    expect(pending.target_digest).toBe(`sha256:${createHash("sha256").update(canonicalJson(event)).digest("hex")}`);
     const inactive = await footprint(realm, station, event.event_id);
     expect(canonicalJson(inactive.tables) === canonicalJson(before.tables)).toBe(true);
     expect(Object.values(inactive.candidate_absence!)).toEqual([0, 0, 0, 0, 0, 0]);
@@ -782,9 +889,9 @@ test("normal controller requests join and public review, distinct administrator 
     await expect(controller.getByTestId("management-review-approve")).toHaveCount(0);
     const share = await sharedReview(controller, candidate);
     await administrator.getByTestId("management-review-request-json").fill(share);
-    const statusResponse = reviewResponse(jointRealm.alicePage.page, "status");
-    await administrator.getByTestId("management-review-load").click();
-    expect((await (await statusResponse).json()).target_digest).toBe(pending.target_digest);
+    const statusResponse = await reviewResponse(jointRealm.alicePage.page, "status",
+      () => administrator.getByTestId("management-review-load").click(), candidate.request_id);
+    expect((await statusResponse.json()).target_digest).toBe(pending.target_digest);
     await expect(administrator.getByTestId("management-review-frozen-candidate")).toContainText(event.event_id);
     await confirmReview(administrator);
     // This accepted principal's Recovery Key is typed into the normal password
@@ -808,16 +915,15 @@ test("normal controller requests join and public review, distinct administrator 
       await expect(administrator.getByTestId("management-review-status")).toContainText("操作被拒绝或当前证据不可用");
       await expect(administrator.getByTestId("management-review-approve")).toHaveCount(0);
       await confirmReview(administrator);
-      const reconciled = reviewResponse(jointRealm.alicePage.page, "status");
-      await administrator.getByTestId("management-review-retry-decision").click();
-      approved = await (await reconciled).json();
+      const reconciled = await reviewResponse(jointRealm.alicePage.page, "status",
+        () => administrator.getByTestId("management-review-retry-decision").click(), candidate.request_id);
+      approved = await reconciled.json();
       expect(canonicalJson(approved.approval_signatures) === canonicalJson(lost.body.approval_signatures),
         "accepted response loss observes the exact original signature and timestamp").toBe(true);
       await expect(administrator.getByTestId("management-review-retry-decision")).toHaveCount(0);
     } else {
-      const decisionResponse = reviewResponse(jointRealm.alicePage.page, "decisions");
-      await administrator.getByTestId("management-review-approve").click();
-      const decision = await decisionResponse;
+      const decision = await reviewResponse(jointRealm.alicePage.page, "decisions",
+        () => administrator.getByTestId("management-review-approve").click(), candidate.request_id);
       expect(decision.status()).toBe(200);
       approved = await decision.json();
     }
@@ -833,9 +939,9 @@ test("normal controller requests join and public review, distinct administrator 
     await expect(administrator.getByTestId("management-review-recovery-key")).toHaveCount(0);
     const stillInactive = await footprint(realm, station, event.event_id);
     expect(canonicalJson(stillInactive) === canonicalJson(inactive)).toBe(true);
-    const refresh = reviewResponse(jointRealm.bobPage.page, "status");
-    await controller.getByTestId("management-review-refresh").click();
-    expect((await (await refresh).json()).status).toBe("approved");
+    const refresh = await reviewResponse(jointRealm.bobPage.page, "status",
+      () => controller.getByTestId("management-review-refresh").click(), candidate.request_id);
+    expect((await refresh.json()).status).toBe("approved");
     await expect(controller.getByTestId("management-review-submit")).toBeVisible();
     await confirmReview(controller);
     const submittedResponse = jointRealm.bobPage.page.waitForResponse(response =>

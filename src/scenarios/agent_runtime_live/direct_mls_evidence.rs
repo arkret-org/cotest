@@ -98,6 +98,47 @@ async fn blob(controller: &TestActorClient, bytes: &[u8]) -> Result<arkret_wire:
     )?)
 }
 
+async fn capture_claim_diagnostics(
+    station: &ArkretServer,
+    request: &KeyPackagesClaimRequestBody,
+) -> Result<()> {
+    let url = station
+        .owned_database_url()
+        .context("owned Direct claim database")?
+        .to_owned();
+    let state = tokio::task::spawn_blocking(move || -> Result<serde_json::Value> {
+        let mut connection = postgres::Client::connect(&url, postgres::NoTls)?;
+        let mut transaction = connection
+            .build_transaction()
+            .isolation_level(postgres::IsolationLevel::RepeatableRead)
+            .start()?;
+        transaction.batch_execute("SET TRANSACTION READ ONLY")?;
+        let state = transaction.query_one(
+            "SELECT jsonb_build_object(\
+                'packages',(SELECT COALESCE(jsonb_agg(to_jsonb(k)),'[]'::jsonb) FROM mls_key_packages k),\
+                'claims',(SELECT COALESCE(jsonb_agg(to_jsonb(c)),'[]'::jsonb) FROM peer_keypackage_claims c),\
+                'agent_status',(SELECT COALESCE(jsonb_agg(to_jsonb(s)),'[]'::jsonb) FROM agent_status_current_results s),\
+                'agent_keys',(SELECT COALESCE(jsonb_agg(to_jsonb(k)),'[]'::jsonb) FROM agent_key_current_results k),\
+                'accounts',(SELECT COALESCE(jsonb_agg(jsonb_build_object('pk',a.pk,'principal_id',a.principal_id,'station_id',a.station_id)),'[]'::jsonb) FROM accounts a))",
+            &[],
+        )?.get(0);
+        transaction.rollback()?;
+        Ok(state)
+    })
+    .await??;
+    let directory = std::env::var_os("COTEST_SERVICE_LOG_DIR")
+        .or_else(|| std::env::var_os("COTEST_ARTIFACT_DIR"))
+        .context("owned Direct claim diagnostic directory")?;
+    std::fs::write(
+        std::path::PathBuf::from(directory).join(format!(
+            "direct-claim-private-diagnostic-{}.json",
+            request.claim_request_id
+        )),
+        serde_json::to_vec_pretty(&json!({"request":request,"state":state}))?,
+    )?;
+    Ok(())
+}
+
 pub(super) async fn join(
     station: &ArkretServer,
     controller_client: &TestActorClient,
@@ -172,9 +213,18 @@ pub(super) async fn join(
         std::slice::from_ref(&package),
         agent_session.verification_method.as_str(),
     )?;
-    runtime.sdk().keypackages_upload(&upload).await?;
+    let uploaded = runtime.sdk().keypackages_upload(&upload).await?;
+    ensure!(
+        uploaded.accepted == 1
+            && uploaded.rejections.is_empty()
+            && uploaded.key_package_refs == [package.keypackage_ref.to_string()],
+        "Direct Agent KeyPackage publication was not accepted exactly: {uploaded:?}"
+    );
+    let mut claim_entropy = [0_u8; 16];
+    getrandom::fill(&mut claim_entropy)
+        .map_err(|error| anyhow::anyhow!("Direct claim entropy: {error}"))?;
     let mut request: KeyPackagesClaimRequestBody = serde_json::from_value(json!({
-        "claim_request_id":URL_SAFE_NO_PAD.encode(&arkret_canonical::sha256_bytes(unique_uuid7().as_bytes())[..16]),
+        "claim_request_id":URL_SAFE_NO_PAD.encode(claim_entropy),
         "target_agent_id":agent_session.agent_account.principal_id,
         "target_agent_verification_method":agent_session.verification_method,
         "target_agent_key_authorize_event_id":agent_session.key_authorization,
@@ -203,17 +253,24 @@ pub(super) async fn join(
         URL_SAFE_NO_PAD.encode(principal.device_signing_key.sign(&signed).to_bytes()),
     )
     .map_err(anyhow::Error::msg)?;
-    let claims: arkret_models_crypto::KeyPackagesClaimOutcome = serde_json::from_value(
-        expect_json(
-            controller_client
-                .post("/_arkret/self/keys/keypackages/claim")
-                .header("idempotency-key", request.claim_request_id.as_str())
-                .header("Content-Type", "application/json")
-                .body(arkret_canonical::canonical_json_bytes(&request)?),
-            StatusCode::OK,
-        )
-        .await?,
-    )?;
+    let claim_result = expect_json(
+        controller_client
+            .post("/_arkret/self/keys/keypackages/claim")
+            .header("idempotency-key", request.claim_request_id.as_str())
+            .header("Content-Type", "application/json")
+            .body(arkret_canonical::canonical_json_bytes(&request)?),
+        StatusCode::OK,
+    )
+    .await;
+    if claim_result.is_err() {
+        let captured = capture_claim_diagnostics(station, &request).await;
+        eprintln!(
+            "[agent-direct-claim-diagnostic] read_only_snapshot_saved={} raw_local_only=1",
+            captured.is_ok()
+        );
+    }
+    let claims: arkret_models_crypto::KeyPackagesClaimOutcome =
+        serde_json::from_value(claim_result?)?;
     let [claim] = claims.claims.as_slice() else {
         bail!("Direct claim did not select one Agent package");
     };

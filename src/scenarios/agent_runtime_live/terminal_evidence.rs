@@ -22,10 +22,12 @@ fn claim_request(
     target: &arkret_wire::Hash,
 ) -> Result<KeyPackagesClaimRequestBody> {
     let mut request = material.claim.clone();
-    request.claim_request_id = arkret_wire::Base64UrlString::new(
-        URL_SAFE_NO_PAD.encode(&arkret_canonical::sha256_bytes(unique_uuid7().as_bytes())[..16]),
-    )
-    .map_err(anyhow::Error::msg)?;
+    let mut claim_entropy = [0_u8; 16];
+    getrandom::fill(&mut claim_entropy)
+        .map_err(|error| anyhow::anyhow!("terminal claim entropy: {error}"))?;
+    request.claim_request_id =
+        arkret_wire::Base64UrlString::new(URL_SAFE_NO_PAD.encode(claim_entropy))
+            .map_err(anyhow::Error::msg)?;
     request.target_keypackage_ref = Some(serde_json::from_value(serde_json::to_value(target)?)?);
     let arkret_models_crypto::PeerKeyPackageRequesterAuthorization::Device { signed_at, .. } =
         &mut request.requester_authorization
@@ -33,6 +35,7 @@ fn claim_request(
         bail!("terminal claim requires the actual controller device");
     };
     *signed_at = arkret_canonical::normalize_timestamp_canonical(Utc::now());
+    request.expires_at = *signed_at + chrono::Duration::minutes(4);
     let bytes = arkret_models_crypto::keypackage_claim_authorization_signing_bytes(
         &request.unsigned_request(),
         &request.service_binding,
@@ -378,6 +381,7 @@ pub(super) async fn exercise(mut material: Materials<'_>) -> Result<()> {
         .post("/_arkret/self/keys/keypackages/claim")
         .header("idempotency-key", terminal_claim.claim_request_id.as_str())
         .header("Content-Type", "application/json")
+        .header("Idempotency-Key", terminal_claim.claim_request_id.as_str())
         .body(arkret_canonical::canonical_json_bytes(&terminal_claim)?)
         .send()
         .await?;

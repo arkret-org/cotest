@@ -14,3 +14,8 @@ async fn membership_content_session_uses_fresh_issue_and_current_refresh() -> an
     );
     Ok(())
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn direct_participant_content_session_is_fresh_bounded_and_current() -> anyhow::Result<()> {
+    cotest::scenarios::agent_runtime_live::run_agent_direct_content_session_boundary().await
+}
