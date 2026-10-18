@@ -1190,6 +1190,7 @@ fn event_forward_body(
         event_submission: EventAdmissionSubmission::new(event.clone()),
         mls_genesis_material: material,
         producer_device_evidence: None,
+        producer_managed_provenance: None,
         producer_agent_evidence: None,
     })?)
 }
@@ -1807,6 +1808,7 @@ fn human_without_evidence(world: &World) -> Result<Value> {
         event_submission: EventAdmissionSubmission::new(event),
         mls_genesis_material: None,
         producer_device_evidence: None,
+        producer_managed_provenance: None,
         producer_agent_evidence: None,
     })?;
     ensure!(body.get(EVIDENCE_MEMBER).is_none());
