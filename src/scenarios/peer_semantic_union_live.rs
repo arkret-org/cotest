@@ -34,7 +34,7 @@ pub(crate) async fn submit_and_expect_commit(
     event: &Event,
 ) -> Result<RealmCommit> {
     let producer = event
-        .human_device_producer()?
+        .account_device_producer()?
         .context("accepted Account device producer required")?;
     ensure!(
         &producer.account_id == account && producer.device_id.as_str() == device,

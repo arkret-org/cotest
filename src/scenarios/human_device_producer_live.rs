@@ -759,7 +759,7 @@ pub fn membership_payload(
 
 fn ensure_human_producer(event: &Event, account: &AccountId, device: &str) -> Result<()> {
     let producer = event
-        .human_device_producer()?
+        .account_device_producer()?
         .context("the harness Event is not signed by a human Account device")?;
     ensure!(
         &producer.account_id == account && producer.device_id.as_str() == device,
@@ -1669,7 +1669,7 @@ pub async fn original_human_signer_fact(
         "new ordinary Human acceptance must bind its original signer fact"
     );
     let producer = event
-        .human_device_producer()?
+        .account_device_producer()?
         .context("original Human producer")?;
     let proof = event
         .producer_proof

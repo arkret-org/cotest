@@ -32,16 +32,18 @@ use arkret_identity::{
     verify_realm_authority_bundle,
 };
 use arkret_models_collaboration::authority_commit::PeerAuthoritySubmitRequest;
+use arkret_models_collaboration::events_payloads::{
+    RealmCreatePayload, RealmGenesis, RealmGovernanceStationChangePayload, RealmPurpose,
+};
 use arkret_signatures::PublicKeyMaterial;
 use arkret_signatures::detached_object::sign_detached_object;
 use arkret_wire::{
-    AccountId, ActorId, Base64UrlString, CommitStreamHead, CommitStreamRef,
+    AccountDeviceProducer, AccountId, ActorId, Base64UrlString, CommitStreamHead, CommitStreamRef,
     DetachedObjectSignature, DetachedSignatureAlgorithm, DetachedSignatureContext, DeviceId, Did,
     DidCoreId, DidKey, DidUrl, ErrorCode, Event, EventAdmissionSubmission, EventId, EventKind,
-    Hash, HumanDeviceProducer, RealmAuthorityBundle, RealmAuthorityCurrentAssertion,
-    RealmAuthorityHandoff, RealmAuthorityHandoffId, RealmAuthorityTransition, RealmCommit,
-    RealmCommitAuthorityRef, RealmCommitId, RealmId, RealmSnapshotId, ScopeRef,
-    project_did_to_core_id,
+    Hash, RealmAuthorityBundle, RealmAuthorityCurrentAssertion, RealmAuthorityHandoff,
+    RealmAuthorityHandoffId, RealmAuthorityTransition, RealmCommit, RealmCommitAuthorityRef,
+    RealmCommitId, RealmId, RealmSnapshotId, ScopeRef, project_did_to_core_id,
 };
 use chrono::{DateTime, Duration, Utc};
 use ed25519_dalek::SigningKey;
@@ -217,7 +219,7 @@ fn commit_rejection(error: RealmAuthorityChainError) -> anyhow::Error {
 
 /// One device the receiver's own PCR accepted, for an Account it hosts.
 struct LocalDevice {
-    producer: HumanDeviceProducer,
+    producer: AccountDeviceProducer,
     signing_key_did: DidKey,
 }
 
@@ -357,24 +359,37 @@ struct World {
 impl World {
     fn new() -> Result<Self> {
         let start = DateTime::parse_from_rfc3339(CHAIN_START)?.to_utc();
-        let realm_id =
-            RealmId::from_event_id(&EventId::from_digest(DigestSuite::Sha256, [0x71; 32]));
         let key_a = SigningKey::from_bytes(&STATION_A_SEED);
         let key_b = SigningKey::from_bytes(&STATION_B_SEED);
+        let founder = ActorId::service(core_id(STATION_A)?);
+        let genesis = RealmGenesis::new(
+            RealmPurpose::Collaboration,
+            arkret_wire::GenesisSalt::new(arkret_canonical::base64url_encode([0x71; 32]))?,
+            arkret_wire::TrustDomainId::new("ak:trust_domain:example.net")?,
+            arkret_wire::SecurityClass::Standard,
+            core_id(STATION_A)?,
+            arkret_wire::JoinRule::Invite,
+            arkret_wire::HistoryAccess::SinceJoin,
+            arkret_wire::Discoverability::InviteOnly,
+            None,
+            None,
+        )?;
+        let genesis_event = sign(
+            arkret_wire::test_support::raw_event_for_actor_at(
+                EventKind::RealmCreate.as_str(),
+                ScopeRef::RealmGenesis,
+                founder.clone(),
+                RealmCreatePayload::new(genesis).to_value()?,
+                start,
+            )?,
+            &format!("{STATION_A}#realm-authority"),
+            STATION_A_SEED,
+            start,
+        )?;
+        let realm_id = RealmId::from_event_id(&genesis_event.event_id);
         let stream = CommitStreamRef::Realm {
             realm_id: realm_id.clone(),
         };
-
-        let founder = ActorId::service(core_id(STATION_A)?);
-        let genesis_event = arkret_wire::test_support::raw_event_for_actor_at(
-            EventKind::RealmCreate.as_str(),
-            ScopeRef::Realm {
-                realm_id: realm_id.clone(),
-            },
-            founder.clone(),
-            json!({}),
-            start,
-        )?;
         let genesis_commit = seal_commit(
             RealmCommit {
                 commit_id: RealmCommitId::from_digest([0x01; 32]),
@@ -394,13 +409,22 @@ impl World {
             STATION_A,
             &key_a,
         )?;
-        let change_event = arkret_wire::test_support::raw_event_for_actor_at(
-            EventKind::MessageCreate.as_str(),
-            ScopeRef::Realm {
-                realm_id: realm_id.clone(),
-            },
-            founder,
-            json!({}),
+        let change_event = sign(
+            arkret_wire::test_support::raw_event_for_actor_at(
+                EventKind::RealmGovernanceStationChange.as_str(),
+                ScopeRef::Realm {
+                    realm_id: realm_id.clone(),
+                },
+                founder,
+                serde_json::to_value(RealmGovernanceStationChangePayload {
+                    expected_governance_generation: genesis_commit.governance_generation,
+                    expected_realm_stream_commit_id: genesis_commit.commit_id.clone(),
+                    new_governance_station_id: core_id(STATION_B)?,
+                })?,
+                start + Duration::seconds(1),
+            )?,
+            &format!("{STATION_A}#realm-authority"),
+            STATION_A_SEED,
             start + Duration::seconds(1),
         )?;
         let change_commit = seal_commit(
@@ -530,7 +554,7 @@ impl World {
             authority,
             governance_keys,
             local_pcr: vec![LocalDevice {
-                producer: HumanDeviceProducer {
+                producer: AccountDeviceProducer {
                     account_id: self.local_account.clone(),
                     device_id: DeviceId::new(LOCAL_DEVICE)?,
                 },
@@ -857,6 +881,12 @@ fn placeholder_signature(context: DetachedSignatureContext) -> Result<DetachedOb
 /// Seal a Commit the way the verifier reconstructs it: the unsigned
 /// projection is the object without its `signature` member.
 fn seal_commit(mut commit: RealmCommit, station: &str, key: &SigningKey) -> Result<RealmCommit> {
+    commit.commit_id = RealmCommitId::from_digest(arkret_canonical::sha256_bytes(
+        &arkret_canonical::canonical_json_bytes(&unsigned_value(
+            &commit,
+            &["commit_id", "signature"],
+        )?)?,
+    ));
     commit.signature = sign_detached_object(
         &unsigned_value(&commit, &["signature"])?,
         DetachedSignatureContext::RealmCommit,
@@ -864,6 +894,7 @@ fn seal_commit(mut commit: RealmCommit, station: &str, key: &SigningKey) -> Resu
         commit.committed_at,
         key,
     )?;
+    commit.validate_content_address()?;
     Ok(commit)
 }
 

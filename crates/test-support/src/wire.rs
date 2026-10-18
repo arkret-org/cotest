@@ -128,7 +128,7 @@ pub fn historical_human_signer_fact(input: Value) -> Result<Value> {
     };
     let producer = input
         .event
-        .human_device_producer()?
+        .account_device_producer()?
         .context("Human producer absent")?;
     let fact = AccountDeviceHistoricalSignerFact {
         event_id: input.event.event_id.clone(),

@@ -1,17 +1,17 @@
 //! `ak.vector.federation.authority_forward_producer_device_evidence.v1` — the
-//! single human-device producer rule and the `authority_forward`
+//! shared Account Device producer rule and the `authority_forward`
 //! `producer_device_evidence` carrier (`device-lifecycle.md` §8.2.2).
 //!
-//! Every Event signed by a human Account device resolves its actual signer the
+//! These variants use Human Account Devices and resolve their actual signer the
 //! same way, whatever its kind. The same Station reads its own PCR device
 //! authorization and generation at the acceptance cut and carries no evidence;
 //! a governance Station admitting a forwarded Event accepts only the fresh
 //! `producer_device_evidence` the account Station signed for that attempt.
 //!
-//! The protocol decisions are the SDK's: `Event::human_device_producer`, the
+//! The protocol decisions are the SDK's: `Event::account_device_producer`, the
 //! validating `PeerAuthorityForward*Request` constructors, the untagged
 //! `PeerAuthoritySubmitRequest` wire parser and
-//! `arkret_identity::verify_forwarded_human_producer`. This module adds an
+//! `arkret_identity::verify_forwarded_account_device_producer`. This module adds an
 //! independent model of the two Stations around them — the account Station's
 //! live gate, fresh signing and persist-before-send ledger, and the governance
 //! Station's duplicate check, zero-write rejection and acceptance transaction —
@@ -24,7 +24,7 @@ use std::fmt;
 
 use anyhow::{Context as _, Result, anyhow, bail, ensure};
 use arkret_canonical::DigestSuite;
-use arkret_identity::account_device_signer_evidence::verify_forwarded_human_producer;
+use arkret_identity::account_device_signer_evidence::verify_forwarded_account_device_producer;
 use arkret_identity::build_authenticated_webvh_service_resolution;
 use arkret_models_collaboration::authority_commit::{
     AuthorityForwardBranch, PeerAuthorityForwardEventRequest, PeerAuthorityForwardMlsRequest,
@@ -32,8 +32,8 @@ use arkret_models_collaboration::authority_commit::{
 };
 use arkret_models_collaboration::governance::membership_invite::MembershipPayload;
 use arkret_models_crypto::{
-    DeviceAuthorizationWindow, DeviceStatus, ForwardDeviceProjectionAttestationCore,
-    HumanEventAuthorization,
+    AccountDeviceEventAuthorization, DeviceAuthorizationWindow, DeviceStatus,
+    ForwardDeviceProjectionAttestationCore,
 };
 use arkret_models_identity::service_identity::{CanonicalServiceUrl, ServiceRegistrationKey};
 use arkret_models_identity::{AuthenticatedServiceResolution, ForwardAccountDeviceSignerEvidence};
@@ -45,9 +45,10 @@ use arkret_signatures::{
     Ed25519DetachedJwsSigner, EventProofBuilder, PublicKeyMaterial, SignEventOptions, sign_event,
 };
 use arkret_wire::{
-    AccountId, ActorId, AuthoredEvent, DeviceId, DeviceRevocationAdmissionDecision, Did, DidCoreId,
-    DidKey, DidUrl, ErrorCode, Event, EventAdmissionSubmission, EventId, EventKind, Hash,
-    HumanDeviceProducer, MlsCommitSubmission, NonEmptyString, RealmId, ScopeRef, ServiceKind,
+    AccountDeviceProducer, AccountId, ActorId, AuthoredEvent, DeviceId,
+    DeviceRevocationAdmissionDecision, Did, DidCoreId, DidKey, DidUrl, ErrorCode, Event,
+    EventAdmissionSubmission, EventId, EventKind, Hash, MlsCommitSubmission, NonEmptyString,
+    RealmId, ScopeRef, ServiceKind,
 };
 use chrono::{DateTime, Duration, Utc};
 use ed25519_dalek::{Signer as _, SigningKey};
@@ -231,7 +232,8 @@ fn assert_evidence_member_is_the_signer_evidence_root() -> Result<()> {
         !required_somewhere(request),
         "the schema must not decide presence; the Event does"
     );
-    let mut forward_branches = 0;
+    let mut device_forward_branches = 0;
+    let mut atomic_forward_branches = 0;
     for branch in request["oneOf"]
         .as_array()
         .context("peer_submit_request is no longer a oneOf of branches")?
@@ -246,11 +248,30 @@ fn assert_evidence_member_is_the_signer_evidence_root() -> Result<()> {
             });
         ensure!(!required_somewhere(branch));
         if branch.pointer("/properties/branch/const") == Some(&json!("authority_forward")) {
-            ensure!(
-                !forbids_evidence,
-                "an authority_forward branch forbids producer_device_evidence"
-            );
-            forward_branches += 1;
+            let required = branch["required"]
+                .as_array()
+                .context("authority_forward branch has no required members")?;
+            if required.iter().any(|name| name == "atomic_submission") {
+                ensure!(
+                    forbids_evidence
+                        && required
+                            .iter()
+                            .any(|name| name == "atomic_producer_evidence"),
+                    "atomic forward must use its own producer evidence and forbid Device evidence"
+                );
+                atomic_forward_branches += 1;
+            } else {
+                ensure!(
+                    required
+                        .iter()
+                        .filter(|name| { *name == "event_submission" || *name == "mls_submission" })
+                        .count()
+                        == 1
+                        && !forbids_evidence,
+                    "Event or MLS forward must allow producer_device_evidence"
+                );
+                device_forward_branches += 1;
+            }
         } else {
             ensure!(
                 forbids_evidence,
@@ -260,8 +281,8 @@ fn assert_evidence_member_is_the_signer_evidence_root() -> Result<()> {
         }
     }
     ensure!(
-        forward_branches == 2,
-        "authority_forward no longer has exactly the Event and MLS branches"
+        device_forward_branches == 2 && atomic_forward_branches == 1,
+        "authority_forward must have two Device evidence branches and one separate atomic branch"
     );
     Ok(())
 }
@@ -448,7 +469,7 @@ impl LiveDeviceState {
 /// read its own gate is `temporarily_unavailable` (decision 0107 section 4).
 fn device_gate(
     record: Option<&DeviceRecord>,
-    producer: &HumanDeviceProducer,
+    producer: &AccountDeviceProducer,
     instants: &[DateTime<Utc>],
 ) -> std::result::Result<(), ErrorCode> {
     let decision = match record.filter(|record| record.is(producer)) {
@@ -485,7 +506,7 @@ impl DeviceRecord {
         at >= self.window.not_before && self.window.expires_at.is_none_or(|end| at < end)
     }
 
-    fn is(&self, producer: &HumanDeviceProducer) -> bool {
+    fn is(&self, producer: &AccountDeviceProducer) -> bool {
         self.account_id == producer.account_id && self.device_id == producer.device_id
     }
 }
@@ -537,7 +558,7 @@ impl<'a> AccountStation<'a> {
         attempt_at: DateTime<Utc>,
         body: &Value,
     ) -> Result<Option<ForwardAccountDeviceSignerEvidence>> {
-        let producer = event.human_device_producer().map_err(|error| {
+        let producer = event.account_device_producer().map_err(|error| {
             rejected(
                 RejectedBy::AccountStation,
                 error.error_code().unwrap_or(ErrorCode::SchemaViolation),
@@ -696,7 +717,7 @@ impl GovernanceStation {
         submission.validate()?;
         let event = &submission.event;
         let producer = event
-            .human_device_producer()?
+            .account_device_producer()?
             .context("the same-Station model admits human-device producers only")?;
         ensure!(
             producer.account_id.station_id == self.station_id,
@@ -754,7 +775,7 @@ impl GovernanceStation {
             evidence.context("the governance model admits human-device producers only")?;
         let body_digest =
             arkret_models_collaboration::authority_commit::authority_forward_body_digest(body)?;
-        match verify_forwarded_human_producer(
+        match verify_forwarded_account_device_producer(
             evidence,
             event,
             source,
@@ -764,7 +785,7 @@ impl GovernanceStation {
             now,
         ) {
             Ok(producer) => ensure!(
-                producer == event.human_device_producer()?.context("human producer")?,
+                producer == event.account_device_producer()?.context("human producer")?,
                 "verified producer differs from the Event's actual signer"
             ),
             Err(error) => {
@@ -1097,8 +1118,8 @@ impl World {
         )
     }
 
-    fn expected_producer(&self) -> Result<HumanDeviceProducer> {
-        Ok(HumanDeviceProducer {
+    fn expected_producer(&self) -> Result<AccountDeviceProducer> {
+        Ok(AccountDeviceProducer {
             account_id: self.account.clone(),
             device_id: DeviceId::new(DEVICE)?,
         })
@@ -1115,7 +1136,7 @@ impl World {
         ] {
             ensure!(
                 self.human_event(kind, created_at)?
-                    .human_device_producer()?
+                    .account_device_producer()?
                     == Some(self.expected_producer()?),
                 "{kind} resolved its human-device producer differently"
             );
@@ -1126,12 +1147,12 @@ impl World {
         delegated.executed_by = Some(delegated.actor_id.clone());
         delegated.actor_id = ActorId::service(self.station_a.service_id.clone());
         ensure!(
-            delegated.human_device_producer()? == Some(self.expected_producer()?),
+            delegated.account_device_producer()? == Some(self.expected_producer()?),
             "an Account executor did not make the Event a human-device producer"
         );
         ensure!(
-            self.agent_event()?.human_device_producer()?.is_none()
-                && self.service_event()?.human_device_producer()?.is_none(),
+            self.agent_event()?.account_device_producer()?.is_none()
+                && self.service_event()?.account_device_producer()?.is_none(),
             "an Agent or Service signer resolved as a human device"
         );
         Ok(())
@@ -1182,7 +1203,7 @@ fn original_authorization(
     event: &Event,
     destination: &DidCoreId,
     body: &Value,
-) -> Result<HumanEventAuthorization> {
+) -> Result<AccountDeviceEventAuthorization> {
     let original = &device.original;
     ensure!(original.event.event_id == device.authorize_event_id);
     ensure!(original.event.actual_signer() == &ActorId::account(device.account_id.clone()));
@@ -1190,7 +1211,7 @@ fn original_authorization(
         original.commit.stream_ref
             != arkret_wire::CommitStreamRef::from_scope(&event.scope_ref, None)?
     );
-    Ok(HumanEventAuthorization {
+    Ok(AccountDeviceEventAuthorization {
         event_id: event.event_id.clone(),
         verification_method: event
             .producer_proof
@@ -1293,7 +1314,7 @@ fn same_station_accepted(world: &World, variant: &Value) -> Result<Value> {
     ensure!(variant["carries_producer_device_evidence"] == false);
     let kind = event_kind(variant, EventKind::MemberState.as_str());
     let event = world.human_event(&kind, world.setup.event_created_at)?;
-    ensure!(event.human_device_producer()? == Some(world.expected_producer()?));
+    ensure!(event.account_device_producer()? == Some(world.expected_producer()?));
     let submission = EventAdmissionSubmission::new(event);
     ensure!(
         serde_json::to_value(&submission)?
@@ -1607,7 +1628,7 @@ fn substituted_event(world: &World, fragment: &str, seed: [u8; 32]) -> Result<Va
         seed,
         world.setup.event_created_at,
     )?;
-    ensure!(substituted.human_device_producer()?.is_some());
+    ensure!(substituted.account_device_producer()?.is_some());
     body["event_submission"] = serde_json::to_value(EventAdmissionSubmission::new(substituted))?;
     judge(world, &body, &world.station_a.service_id, world.setup.now)
 }
@@ -1727,7 +1748,7 @@ fn history_lacks_method(world: &World) -> Result<Value> {
 
 /// A non-human producer's Event forwarded with a human device's evidence.
 fn non_human_carries_evidence(world: &World, event: Event) -> Result<Value> {
-    ensure!(event.human_device_producer()?.is_none());
+    ensure!(event.account_device_producer()?.is_none());
     // A Service has no Human evidence. An Agent additionally requires its
     // independent Agent carrier, so absence is not a valid Agent forward.
     let without_human = PeerAuthorityForwardEventRequest::new(
@@ -1922,7 +1943,7 @@ impl ForwardingWorld {
             .as_ref()
             .ok_or(ErrorCode::SchemaViolation)?;
         let body = serde_json::to_value(request).map_err(|_| ErrorCode::SchemaViolation)?;
-        let producer = verify_forwarded_human_producer(
+        let producer = verify_forwarded_account_device_producer(
             evidence,
             event,
             &self.0.station_a.service_id,
@@ -1933,7 +1954,7 @@ impl ForwardingWorld {
             self.0.setup.now,
         )
         .map_err(|error| error.error_code().unwrap_or(ErrorCode::SignatureInvalid))?;
-        match event.human_device_producer() {
+        match event.account_device_producer() {
             Ok(Some(signer)) if signer == producer => Ok(()),
             _ => Err(ErrorCode::SignatureInvalid),
         }
