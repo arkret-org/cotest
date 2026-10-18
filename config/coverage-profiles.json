@@ -157,11 +157,14 @@
     "required_targets": [
       "account_blocklist_production_live",
       "calendar_rsvp_convergence",
+      "client_sync_production_live",
       "conformance_vectors",
       "invite_frozen_prestate_live",
       "kanban_identity_boundary",
+      "multistream_discovery_live",
       "productivity_contracts",
       "snapshot_head_disclosure",
+      "snapshot_busy_cut_live",
       "websocket_live"
     ],
     "combined_named_suite_runner_count": 54,

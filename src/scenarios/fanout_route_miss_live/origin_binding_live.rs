@@ -14,6 +14,8 @@ use super::idempotency_live::{
 };
 use super::*;
 
+pub mod snapshot_matrix;
+
 pub async fn run_removed_origin_binding_replay_live() -> Result<()> {
     let successor = database("federation-origin-successor")?
         .context("origin handoff requires actual PostgreSQL")?;

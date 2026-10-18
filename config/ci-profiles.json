@@ -449,6 +449,21 @@
         },
         {
           "package": "cotest-inkson-client-tests",
+          "target": "snapshot_head_disclosure",
+          "filter": "unrelated_scope_revocation_rejects_the_whole_native_account_frame"
+        },
+        {
+          "package": "cotest-inkson-client-tests",
+          "target": "multistream_discovery_live",
+          "filter": "actual_inkson_discovers_beyond_sixty_four_streams_while_idle_busy_and_after_new_scope"
+        },
+        {
+          "package": "cotest-inkson-client-tests",
+          "target": "client_sync_production_live",
+          "filter": "private_agent_sidecar_reply_recovers_in_the_original_account_attempt"
+        },
+        {
+          "package": "cotest-inkson-client-tests",
           "target": "websocket_live",
           "filter": "actual_inkson_http_and_websocket_idle_tail_and_reload"
         },
@@ -456,6 +471,11 @@
           "package": "cotest-inkson-client-tests",
           "target": "websocket_live",
           "filter": "actual_websocket_lifetime_drains_and_closes_with_registered_code"
+        },
+        {
+          "package": "cotest-inkson-client-tests",
+          "target": "snapshot_busy_cut_live",
+          "filter": "actual_member_snapshot_and_native_follower_progress_during_busy_writes"
         }
       ],
       "excluded_quarantine_labels": [],

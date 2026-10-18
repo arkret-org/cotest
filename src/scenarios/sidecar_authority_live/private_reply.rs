@@ -377,6 +377,67 @@ pub(crate) async fn join_agent_with_observer(
                 .effective_agent_ids
                 == vec![agent.agent_account.principal_id.clone()]
         );
+        let http = agent.runtime.sdk();
+        let snapshot = http.realm_state_snapshot_head(realm).await?;
+        let stream = arkret_wire::CommitStreamRef::from_scope(scope, Some(realm.clone()))?;
+        ensure!(
+            snapshot
+                .current_state_entries
+                .iter()
+                .any(|row| matches!(row,
+            arkret_wire::TypedCurrentRow::Value {
+                selector: arkret_wire::CurrentSelector::SidecarContext { .. }, source_stream_ref, ..
+            } if source_stream_ref == &stream)),
+            "consumed Agent cannot read its private current"
+        );
+        let original = http
+            .realm_state_snapshot_by_ref(realm, &snapshot.snapshot_id)
+            .await?;
+        ensure!(
+            arkret_canonical::canonical_json_bytes(&original)?
+                == arkret_canonical::canonical_json_bytes(&snapshot)?,
+            "effective Agent by-ref rewrote the original"
+        );
+        let mut forward = Vec::new();
+        for direction in [
+            arkret_wire::StreamScanDirection::After(None),
+            arkret_wire::StreamScanDirection::Before(None),
+        ] {
+            let request = arkret_wire::StreamScanRequest {
+                realm_id: realm.clone(),
+                stream_ref: stream.clone(),
+                direction,
+                limit: 100,
+            };
+            let page = http.scan_commit_stream(&request).await?;
+            page.validate_for_request(&request)?;
+            ensure!(
+                !page.truncated
+                    && page.committed_events.iter().any(|row| row
+                        .reducer_input()
+                        .is_some_and(|event| event.event_id == accepted.event.event_id)),
+                "effective Agent scan lacks its real consumed transition"
+            );
+            let ids = page
+                .committed_events
+                .iter()
+                .map(|row| row.commit().commit_id.clone())
+                .collect::<Vec<_>>();
+            if matches!(
+                request.direction,
+                arkret_wire::StreamScanDirection::After(_)
+            ) {
+                forward = ids;
+            } else {
+                ensure!(
+                    ids == forward.iter().rev().cloned().collect::<Vec<_>>(),
+                    "effective Agent forward/backward scans disagree"
+                );
+            }
+        }
+        eprintln!(
+            "[2133-effective-agent] actual_openmls_welcome=1 durable_restore=1 signed_consume=1 private_current=1 exact_by_ref=1 bidirectional_scan=1"
+        );
     }
     Ok((accepted, agent_group))
 }

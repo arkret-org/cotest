@@ -568,6 +568,63 @@ impl ArkretServer {
         .await
     }
 
+    /// Reauthenticate a long-running fixture with a distinct mock-ledger grant.
+    /// This preserves actor bookkeeping and the accepted Device; it is not
+    /// evidence of a production Account Authority refresh transaction.
+    pub async fn reissue_mock_native_host_session(
+        &self,
+        client: &TestActorClient,
+        issuer: &MockCoauthIntrospectionServer,
+    ) -> Result<TestActorClient> {
+        anyhow::ensure!(
+            client.service_id == self.service_id.as_str(),
+            "mock session reissue belongs to another Station"
+        );
+        let principal = client
+            .principal
+            .as_ref()
+            .context("mock session reissue requires an accepted Device")?;
+        let crate::harness::ClientSession::Canonical { grant, .. } = &client.session else {
+            anyhow::bail!("mock session reissue requires a canonical predecessor");
+        };
+        let predecessor = issuer.own_station_session_state(grant, &self.service_id)?;
+        let (unsigned, _) = grant
+            .rsplit_once('.')
+            .context("mock grant has no JWT signature")?;
+        let mut signature = [0u8; 64];
+        getrandom::fill(&mut signature).map_err(anyhow::Error::msg)?;
+        let grant = format!(
+            "{unsigned}.{}",
+            arkret_canonical::base64url_encode(signature)
+        );
+        anyhow::ensure!(
+            grant != client.session.credential(),
+            "mock reissue reused a credential"
+        );
+        issuer.bind_founding_device_grant(
+            &grant,
+            principal.core_id.as_str(),
+            principal.device_id.as_str(),
+            principal.founding_authorize_event_id.as_str(),
+            &principal.device_signing_key.verifying_key(),
+        )?;
+        anyhow::ensure!(
+            issuer.own_station_session_state(client.session.credential(), &self.service_id)?
+                == predecessor,
+            "mock reissue changed the predecessor grant or its expiry"
+        );
+        let fresh = self
+            .bind_native_host_session(
+                self.client_with_founding_device_grant(principal, grant)?,
+                issuer,
+            )
+            .await?;
+        let mut retained = client.clone();
+        retained.session = fresh.session;
+        retained.sdk = fresh.sdk;
+        Ok(retained)
+    }
+
     /// [`Self::demo_client`] presenting its founding device's Standard grant.
     pub async fn standard_client(&self, actor: &str, device_id: &str) -> Result<TestActorClient> {
         let client = self.demo_client(actor, device_id).await?;

@@ -15,6 +15,8 @@ use crate::scenarios::human_device_producer_live::{database, standard_client};
 use crate::scenarios::identity_test_support::HARNESS_INTERNAL_AUTHORITY_SECRET;
 use crate::scenarios::security_rotation_live::rotation_station_env;
 
+pub mod multistream;
+
 fn value_cell<T: Clone + 'static>(value: T) -> inkson::realm_events_engine::ValueCell<T> {
     let value = std::rc::Rc::new(std::cell::RefCell::new(value));
     let read = value.clone();

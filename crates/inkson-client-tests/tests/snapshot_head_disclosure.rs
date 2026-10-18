@@ -3,6 +3,12 @@ use serial_test::serial;
 
 #[tokio::test]
 #[serial]
+async fn unrelated_scope_revocation_rejects_the_whole_native_account_frame() -> Result<()> {
+    cotest_inkson_client_tests::scenarios::protocol_payloads::snapshot_revocation::unrelated_scope_revocation_rejects_the_whole_native_account_frame().await
+}
+
+#[tokio::test]
+#[serial]
 async fn preview_account_window_backfills_without_failing_its_sibling_realm() -> Result<()> {
     cotest_inkson_client_tests::scenarios::protocol_payloads::preview_account_window_backfills_without_failing_its_sibling_realm()
         .await
