@@ -94,7 +94,7 @@ pub fn missing_sync_production_cases(
 /// total number of unwired suites happened to stay constant.
 // Content-key KATs run in arkret-mls; complete authorized-checkpoint
 // remains owned by 0805. Terminal live scenarios execute below.
-const KNOWN_UNWIRED_ENTRYPOINTS: [&str; 32] = [
+const KNOWN_UNWIRED_ENTRYPOINTS: [&str; 33] = [
     "ak.suite.agent.draft_pending_intent.v1",
     "ak.suite.agent.participation.v1",
     "ak.suite.applet.managed_actor_authority.v1",
@@ -113,6 +113,7 @@ const KNOWN_UNWIRED_ENTRYPOINTS: [&str; 32] = [
     "ak.suite.direct_conversation.signal_admission.v1",
     "ak.suite.encoding.content_bound_event_id.v1",
     "ak.suite.events.redaction.v1",
+    "ak.suite.federation.managed_forward_provenance.v1",
     "ak.suite.identity.independent_admission.v1",
     "ak.suite.identity.pcr_genesis.v1",
     "ak.suite.invite.claim_security.v1",

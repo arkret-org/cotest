@@ -569,6 +569,7 @@ pub(crate) async fn rotation_fixture(
             &ProvisionedTestPrincipal {
                 device_id: DeviceId::new(device.to_owned())?,
                 device_signing_key: key,
+                device_hpke_private_key: None,
                 founding_authorize_event_id: authorize,
                 ..principal.clone()
             },

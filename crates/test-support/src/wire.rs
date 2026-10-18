@@ -703,6 +703,23 @@ fn non_empty(value: impl Into<String>) -> Result<NonEmptyString> {
     NonEmptyString::new(value.into()).map_err(anyhow::Error::msg)
 }
 
+pub(crate) fn device_hpke_multibase(public_key: &[u8]) -> Result<NonEmptyString> {
+    ensure!(
+        public_key.len() == 32,
+        "Device HPKE public key must be 32-byte X25519"
+    );
+    let mut multicodec = vec![0xec, 0x01];
+    multicodec.extend_from_slice(public_key);
+    non_empty(canonical::encode_multibase_base58btc(multicodec))
+}
+
+fn fresh_device_event_key() -> Result<SigningKey> {
+    let mut seed = [0_u8; 32];
+    getrandom::fill(&mut seed)
+        .map_err(|error| anyhow::anyhow!("Device Event key CSPRNG unavailable: {error}"))?;
+    Ok(SigningKey::from_bytes(&seed))
+}
+
 pub fn principal_registration_fixture(input: Value) -> Result<Value> {
     let input: PrincipalRegistrationFixtureInput =
         serde_json::from_value(input).context("parse principal-registration fixture input")?;
@@ -784,6 +801,8 @@ pub fn principal_registration_fixture(input: Value) -> Result<Value> {
     let lease: arkret::IdentityCreationLease =
         serde_json::from_value(input.identity_creation_lease)
             .context("parse identity-creation lease")?;
+    let device_hpke = arkret::crypto::hpke::generate_x25519_keypair()
+        .context("generate client-owned founding Device HPKE custody")?;
     let (creation_events, device_signing_seed) = build_pcr_genesis_unit(
         &principal,
         initial_session.audience_id.clone(),
@@ -795,7 +814,7 @@ pub fn principal_registration_fixture(input: Value) -> Result<Value> {
         &draft.root_verification_method,
         &key_material.root_seed,
         &input.device_id,
-        input.handoff_request_id.as_bytes(),
+        device_hpke_multibase(device_hpke.public_key())?,
         created_at,
     )
     .context("build PCR genesis unit")?;
@@ -833,6 +852,7 @@ pub fn principal_registration_fixture(input: Value) -> Result<Value> {
         "pcr_genesis_unit": creation_events,
         "initial_session": initial_session,
         "device_signing_seed_b64url": device_signing_seed,
+        "device_hpke_private_key_b64url": canonical::base64url_encode(device_hpke.private_key()),
         "genesis_created_at": arkret_canonical::format_timestamp_canonical(created_at),
         "genesis_salt": genesis_salt,
         "binding_receipt": null,
@@ -866,25 +886,17 @@ fn build_pcr_genesis_unit(
     root_verification_method: &str,
     root_seed: &[u8; 32],
     device_id: &str,
-    device_seed_basis: &[u8],
+    hpke_key: NonEmptyString,
     created_at: chrono::DateTime<Utc>,
 ) -> Result<(arkret_wire::PcrGenesisUnit, String)> {
     let principal_id = project_did_to_core_id(principal)?;
     let principal_device_id = DeviceId::new(device_id.to_owned()).context("parse device id")?;
-    let device_seed: [u8; 32] = Sha256::digest(
-        [
-            b"cotest-pcr-genesis-device-v1".as_slice(),
-            device_seed_basis,
-        ]
-        .concat(),
-    )
-    .into();
-    let device_key = SigningKey::from_bytes(&device_seed);
+    let device_key = fresh_device_event_key()?;
+    let device_seed = device_key.to_bytes();
     let device_public_key_bytes = device_key.verifying_key().to_bytes();
     let device_multibase =
         arkret_canonical::ed25519_pubkey_to_did_key_multibase(&device_public_key_bytes);
     let device_public_key = non_empty(format!("did:key:{device_multibase}"))?;
-    let hpke_key = non_empty("z6LSCotestPcrGenesisHpkeKey")?;
     let algorithms = vec![non_empty("ak.hpke_x25519_aead_chacha20poly1305.v1")?];
     let mut authorize_payload =
         arkret_models_collaboration::events_payloads::DeviceAuthorizePayload {
@@ -1314,10 +1326,6 @@ pub fn device_pairing_target_proof(input: Value) -> Result<Value> {
         hpke_public_key.len() == 32,
         "candidate HPKE public key must be a 32-byte X25519 key"
     );
-    // Multicodec x25519-pub (0xec 0x01), base58btc multibase: the same encoding
-    // the founding device descriptor and Inkson's pairing path publish.
-    let mut hpke_multicodec = vec![0xec, 0x01];
-    hpke_multicodec.extend_from_slice(&hpke_public_key);
     let unsigned = UnsignedDevicePairingTargetProof::new(
         input.account_id.clone(),
         device_id,
@@ -1326,7 +1334,7 @@ pub fn device_pairing_target_proof(input: Value) -> Result<Value> {
             canonical::ed25519_pubkey_to_did_key_multibase(&public_key)
         ))
         .map_err(anyhow::Error::msg)?,
-        non_empty(canonical::encode_multibase_base58btc(hpke_multicodec))?,
+        device_hpke_multibase(&hpke_public_key)?,
         vec![non_empty(
             arkret_wire::HPKE_SUITE_X25519_CHACHA20POLY1305_V1,
         )?],
@@ -1854,6 +1862,19 @@ fn event_digest(event: &Value, _mode: EventDigestMode) -> Result<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn founding_device_event_and_hpke_custody_are_fresh_independent_keys() {
+        let first = fresh_device_event_key().unwrap();
+        let second = fresh_device_event_key().unwrap();
+        let hpke = arkret::crypto::hpke::generate_x25519_keypair().unwrap();
+        assert_ne!(first.verifying_key(), second.verifying_key());
+        assert_ne!(first.as_bytes().as_slice(), hpke.private_key());
+        assert_eq!(
+            arkret::crypto::hpke::x25519_public_key(hpke.private_key()).unwrap(),
+            *hpke.public_key()
+        );
+    }
 
     #[test]
     fn invite_subject_oracle_signs_native_control_and_rejects_device_or_mismatched_custody() {

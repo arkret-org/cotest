@@ -371,6 +371,7 @@ pub async fn bootstrap_registered_actor(
             let token = dev_login(server, actor, &device_id).await?;
             return Ok((
                 ProvisionedTestPrincipal {
+                    device_hpke_private_key: None,
                     device_id: DeviceId::new(device_id.clone())?,
                     device_signing_key: additional_key,
                     founding_authorize_event_id: authorize_event_id,
@@ -412,6 +413,7 @@ pub async fn bootstrap_registered_actor(
         let token = dev_login(server, actor, &device_id).await?;
         return Ok((
             ProvisionedTestPrincipal {
+                device_hpke_private_key: None,
                 device_id: DeviceId::new(device_id)?,
                 device_signing_key: device_key,
                 founding_authorize_event_id: authorize_event_id,
@@ -432,6 +434,7 @@ pub async fn bootstrap_registered_actor(
     );
     let did = Did::new(actor.to_owned())?;
     let principal = ProvisionedTestPrincipal {
+        device_hpke_private_key: None,
         core_id: project_did_to_core_id(&did)?,
         did,
         device_id: DeviceId::new(device_id)?,

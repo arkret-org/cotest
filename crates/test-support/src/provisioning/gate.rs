@@ -483,6 +483,8 @@ impl FoundedPrincipal {
             self.event_signing_seed_b64url()
                 .context("stored Event key absent")?,
         )?;
+        self.device_hpke_private_key()
+            .context("restore accepted founding Device HPKE custody")?;
         let multikey = arkret_canonical::ed25519_pubkey_to_did_key_multibase(
             &event_key.signing_key().verifying_key().to_bytes(),
         );
@@ -540,6 +542,40 @@ impl FoundedPrincipal {
             .get("device_signing_seed_b64url")
             .and_then(Value::as_str)
     }
+
+    /// Restore only client-held HPKE custody bound to the accepted Device key.
+    /// This private material is never included in the provisioning bridge DTO.
+    pub fn device_hpke_private_key(&self) -> Result<Vec<u8>> {
+        let registration = self
+            .accepted_request
+            .identity_creation
+            .as_ref()
+            .context("stored registration request absent")?;
+        let device: arkret_models_collaboration::events_payloads::DeviceAuthorizePayload =
+            serde_json::from_value(serde_json::to_value(
+                &registration.pcr_genesis_unit.events[1].payload,
+            )?)?;
+        restore_device_hpke_custody(&self.checkpoint, &device.hpke_key)
+    }
+}
+
+fn restore_device_hpke_custody(
+    checkpoint: &Value,
+    accepted_hpke_key: &arkret_wire::NonEmptyString,
+) -> Result<Vec<u8>> {
+    let encoded = checkpoint
+        .get("device_hpke_private_key_b64url")
+        .and_then(Value::as_str)
+        .context("stored Device HPKE private key absent")?;
+    let private_key = arkret_canonical::base64url_decode(encoded)
+        .context("invalid stored Device HPKE private key encoding")?;
+    let public_key = arkret::crypto::hpke::x25519_public_key(&private_key)
+        .context("invalid stored Device HPKE private key")?;
+    ensure!(
+        crate::wire::device_hpke_multibase(&public_key)? == *accepted_hpke_key,
+        "stored Device HPKE custody differs from the accepted founding authorization"
+    );
+    Ok(private_key)
 }
 
 const ISSUE_BINDING_CHALLENGE_OPERATION_ID: &str =
@@ -1086,5 +1122,57 @@ impl AccountHandoff {
             bail!("{url} returned {status}: {text}");
         }
         serde_json::from_str(&text).with_context(|| format!("parse response of {url}: {text}"))
+    }
+}
+
+#[cfg(test)]
+mod hpke_custody_tests {
+    use arkret::crypto::hpke;
+
+    use super::*;
+
+    fn checkpoint(key: &hpke::X25519HpkeKeyPair) -> Value {
+        json!({
+            "device_hpke_private_key_b64url": arkret_canonical::base64url_encode(key.private_key())
+        })
+    }
+
+    #[test]
+    fn accepted_device_hpke_custody_reopens_a_real_ciphertext() {
+        let key = hpke::generate_x25519_keypair().unwrap();
+        let accepted = crate::wire::device_hpke_multibase(key.public_key()).unwrap();
+        let sealed = hpke::seal_x25519_chacha20poly1305(
+            key.public_key(),
+            b"private candidate",
+            b"custody probe",
+            b"device",
+        )
+        .unwrap();
+        let restored = restore_device_hpke_custody(&checkpoint(&key), &accepted).unwrap();
+        assert_eq!(
+            hpke::open_x25519_chacha20poly1305(&restored, &sealed, b"custody probe", b"device",)
+                .unwrap(),
+            b"private candidate"
+        );
+    }
+
+    #[test]
+    fn another_devices_private_key_cannot_restore_accepted_custody() {
+        let accepted = hpke::generate_x25519_keypair().unwrap();
+        let other = hpke::generate_x25519_keypair().unwrap();
+        let public_key = crate::wire::device_hpke_multibase(accepted.public_key()).unwrap();
+        assert!(restore_device_hpke_custody(&checkpoint(&other), &public_key).is_err());
+    }
+
+    #[test]
+    fn missing_or_malformed_private_custody_has_no_placeholder_fallback() {
+        let key = hpke::generate_x25519_keypair().unwrap();
+        let public_key = crate::wire::device_hpke_multibase(key.public_key()).unwrap();
+        for value in [
+            json!({}),
+            json!({"device_hpke_private_key_b64url":"invalid="}),
+        ] {
+            assert!(restore_device_hpke_custody(&value, &public_key).is_err());
+        }
     }
 }

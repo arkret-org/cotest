@@ -1811,6 +1811,9 @@ impl ArkretServer {
             device_id: arkret_wire::DeviceId::new(founded.device_id.clone())
                 .map_err(anyhow::Error::msg)?,
             device_signing_key: ed25519_dalek::SigningKey::from_bytes(&event_seed),
+            device_hpke_private_key: Some(zeroize::Zeroizing::new(
+                founded.device_hpke_private_key()?,
+            )),
             root_key_seed: root_material.root_seed,
             pcr_realm_id: creation.pcr_genesis_unit.create().realm_id.clone(),
             founding_authorize_event_id: founding_authorization.event_id.clone(),

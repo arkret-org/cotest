@@ -25,6 +25,9 @@ pub struct ProvisionedTestPrincipal {
     pub device_id: DeviceId,
     /// Founding device signing key (deterministic per principal and device).
     pub device_signing_key: SigningKey,
+    /// Client-held HPKE custody from actual canonical provisioning. Legacy
+    /// metadata-only principals have none and cannot prove content decryption.
+    pub device_hpke_private_key: Option<zeroize::Zeroizing<Vec<u8>>>,
     /// Registration-time WebVH root (control) key seed.
     pub root_key_seed: [u8; 32],
     /// Event-derived Principal Control Realm id.
