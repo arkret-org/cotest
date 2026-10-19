@@ -189,6 +189,22 @@ pub async fn standard_session_grant_revoke_invalidates_current_session() -> Resu
     let bob = server
         .standard_client(&bob_did, "ak:device:01904100-0000-7000-8000-0000000000b1")
         .await?;
+    let realm = bob.create_realm("Revoked ICE identity").await?;
+    let ice_request = arkret_models_collaboration::objects::media::MediaIceConfigRequestBody {
+        realm_id: arkret_wire::RealmId::new(realm)?,
+        call_id: "ak:call:AbhvODyrIRCskAIoS9IXLjMfD-Zsr8lwDpiCU_zLR4it".to_owned(),
+        actor_id: arkret_wire::ActorId::account(arkret_wire::AccountId::new(
+            arkret_wire::project_did_to_core_id(&arkret_wire::Did::new(bob.actor.clone())?)?,
+            server.service_id().clone(),
+        )),
+        device_id: arkret_wire::DeviceId::new(bob.device_id.clone())?,
+        mode: arkret_models_collaboration::objects::media::MediaIceMode::Turn,
+    };
+    expect_json(
+        bob.post("/_arkret/self/rtc/ice-config").json(&ice_request),
+        StatusCode::OK,
+    )
+    .await?;
     let authority_origin = server
         .harness_account_authority_origin()
         .ok_or_else(|| anyhow::anyhow!("standard grant issuer ledger is unavailable"))?;
@@ -213,6 +229,11 @@ pub async fn standard_session_grant_revoke_invalidates_current_session() -> Resu
                 .http()
                 .get(server.url("/_arkret/self/account/viewer")),
         ),
+        StatusCode::UNAUTHORIZED,
+    )
+    .await?;
+    expect_status(
+        bob.post("/_arkret/self/rtc/ice-config").json(&ice_request),
         StatusCode::UNAUTHORIZED,
     )
     .await?;

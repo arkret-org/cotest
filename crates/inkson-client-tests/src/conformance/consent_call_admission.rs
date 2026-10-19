@@ -1857,7 +1857,7 @@ async fn read_complete_roster(
     member: &Member,
     realm: &arkret_wire::RealmId,
     call: &arkret_wire::CallId,
-    count: usize,
+    expected_source: &arkret_wire::EventId,
 ) -> Result<arkret_wire::CurrentRevision> {
     let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(20);
     loop {
@@ -1878,7 +1878,8 @@ async fn read_complete_roster(
                 let current: arkret_models_collaboration::events_payloads::call::CallRosterCurrentValue =
                     serde_json::from_value(value.clone())?;
                 current.validate_for_axis(source_stream_ref, revision)?;
-                if current.assertions.len() == count {
+                if &current.last_source.source_commit.event_ref == expected_source {
+                    arkret::verify_call_roster_bindings(realm, call, &current)?;
                     ensure!(
                         current.effective_participants()?.len() == 1,
                         "complete roster lost the active full-actor leg"
@@ -1903,7 +1904,7 @@ async fn exercise_complete_roster_leave_and_rejoin(
     refresh: &arkret_models_collaboration::objects::media::CallMediaTokenExchangeRequestBody,
 ) -> Result<()> {
     use cotest::scenarios::human_device_producer_live::submit_and_expect_commit;
-    read_complete_roster(member, realm, call, 1).await?;
+    read_complete_roster(member, realm, call, &established.event_id).await?;
     let payload = serde_json::to_value(&established.payload)?;
     let update = member
         .client
@@ -1920,7 +1921,7 @@ async fn exercise_complete_roster_leave_and_rejoin(
         &update,
     )
     .await?;
-    let revision = read_complete_roster(member, realm, call, 2).await?;
+    let revision = read_complete_roster(member, realm, call, &update.event_id).await?;
     let CallMediaJoinContext::Refresh(_) = &refresh.join_context else {
         anyhow::bail!("refresh context missing")
     };
@@ -1963,12 +1964,12 @@ async fn exercise_complete_roster_leave_and_rejoin(
         &rejoin,
     )
     .await?;
-    read_complete_roster(member, realm, call, 4).await?;
+    read_complete_roster(member, realm, call, &rejoin.event_id).await?;
     token_status(member, refresh, reqwest::StatusCode::OK)
         .await
-        .context("fresh accepted rejoin must restore the same anonymous leg")?;
+        .context("fresh accepted rejoin must restore the same full-actor leg")?;
     eprintln!(
-        "[consent-call] complete_roster_assertions=4 active_legs=1 accepted_leave_refresh_denied=1 rejoin_refresh=1"
+        "[consent-call] complete_roster_entries=1 exact_last_source=1 active_legs=1 accepted_leave_refresh_denied=1 rejoin_refresh=1"
     );
     Ok(())
 }

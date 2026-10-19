@@ -17,7 +17,7 @@ use super::{
     ACCOUNT_DATA_CAS_CONVERGENCE_ENTRYPOINT, ACTOR_PRIVATE_EVENTS_SUBMIT_ENTRYPOINT,
     AEAD_NONCE_REPLAY_ENTRYPOINT, AGENT_MLS_KEYPACKAGE_AUTHORIZATION_ENTRYPOINT,
     AUTHORITY_FORWARD_GENESIS_MATERIAL_ENTRYPOINT, BLOB_STREAM_AEAD_ENTRYPOINT,
-    CALL_MEDIA_LIFECYCLE_ENTRYPOINT, CALL_STATE_CORE_ENTRYPOINT,
+    CALL_CURRENT_ENTRYPOINT, CALL_MEDIA_LIFECYCLE_ENTRYPOINT, CALL_STATE_CORE_ENTRYPOINT,
     CAPABILITY_RELINQUISH_AUTHORING_ENTRYPOINT, CRYPTO_HPKE_ENTRYPOINT, CURSOR_NEGATIVE_ENTRYPOINT,
     DETACHED_OBJECT_SIGNATURE_ENTRYPOINT, FRANKING_PROOF_ENTRYPOINT,
     KEY_BACKUP_HARDENING_ENTRYPOINT, KEYPACKAGE_LIFECYCLE_ENTRYPOINT,
@@ -34,7 +34,7 @@ use super::{
     run_agent_membership_cascade_suite, run_agent_mls_keypackage_authorization_suite,
     run_applet_registration_epoch_kat_suite, run_authority_commit_suite,
     run_authority_forward_genesis_material_suite, run_blob_stream_aead_suite,
-    run_call_media_lifecycle_suite, run_call_state_core_suite,
+    run_call_current_suite, run_call_media_lifecycle_suite, run_call_state_core_suite,
     run_capability_relinquish_authoring_suite, run_crypto_hpke_suite, run_cursor_negative_suite,
     run_detached_object_signature_suite, run_encoding_fixture_suite,
     run_event_envelope_fixture_suite, run_fanout_route_miss_suite,
@@ -171,7 +171,7 @@ const REVIEWED_APPLET_DEVICE_SCOPE_CASES: [&str; 15] = [
     "sidecar",
 ];
 
-const RUNNERS: [(&str, Runner); 56] = [
+const RUNNERS: [(&str, Runner); 57] = [
     (
         super::SDK_EVENT_TYPE_AXES_ENTRYPOINT,
         Runner::Cases(super::run_sdk_event_type_axes_suite),
@@ -275,6 +275,10 @@ const RUNNERS: [(&str, Runner); 56] = [
     (
         BLOB_STREAM_AEAD_ENTRYPOINT,
         Runner::Cases(run_blob_stream_aead_suite),
+    ),
+    (
+        CALL_CURRENT_ENTRYPOINT,
+        Runner::Cases(run_call_current_suite),
     ),
     (
         CALL_STATE_CORE_ENTRYPOINT,
@@ -967,7 +971,7 @@ mod tests {
             .collect::<BTreeSet<_>>();
         ensure!(registered.len() == RUNNERS.len() + CLIENT_ENTRYPOINTS.len());
         let unwired = assert_named_gap_inventory(&fixtures, &registered)?;
-        ensure!(unwired.len() == 32);
+        ensure!(unwired.len() == 33);
         let mut added = fixtures.clone();
         added.insert("unregistered_test_entrypoint".to_owned(), Vec::new());
         ensure!(assert_named_gap_inventory(&added, &registered).is_err());
@@ -975,7 +979,7 @@ mod tests {
         ensure!(removed.remove(KNOWN_UNWIRED_ENTRYPOINTS[0]).is_some());
         ensure!(assert_named_gap_inventory(&removed, &registered).is_err());
         println!(
-            "[named-preflight] acknowledged_unwired=32 added_rejected=1 removed_rejected=1 runtime_credit=0"
+            "[named-preflight] acknowledged_unwired=33 added_rejected=1 removed_rejected=1 runtime_credit=0"
         );
         Ok(())
     }
