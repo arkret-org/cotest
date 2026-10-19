@@ -6,7 +6,7 @@
     {
       "task": "2026-09-10-0540-client-current-result-durable-index.md",
       "criteria_count": 4,
-      "criteria_sha256": "7cc735e7b6740a24dc3e58feb347eea5974b51daf745707d41797d644c59e06e",
+      "criteria_sha256": "20eb4a0124c3da24a6820f8e3c33bbd2272180721c5126d777644693e41202c6",
       "spec_refs": [
         "arkret-spec/spec/v1/zh/sync/current-results.md",
         "arkret-spec/spec/v1/zh/sync/privacy-preserving-search.md",
@@ -19,10 +19,13 @@
         "arkret-spec/spec/v1/zh/discovery/client-preferences.md",
         "arkret-spec/spec/v1/zh/governance/content-moderation.md",
         "arkret-spec/spec/v1/zh/sync/service-http-binding.md",
-        "arkret-spec/spec/v1/zh/governance/history-visibility.md"
+        "arkret-spec/spec/v1/zh/governance/history-visibility.md",
+        "arkret-spec/spec/v1/zh/governance/scope-settings.md"
       ],
       "source_refs": [
         "inkson/src/state/current_index/search.rs",
+        "inkson/src/realm_events_engine.rs",
+        "garth/src/current_ingest.rs",
         "inkson/src/views/global_search.rs",
         "inkson/src/realm_events_engine/own_live.rs",
         "coland/crates/storage-postgres/src/issued_realm_snapshots.rs",
@@ -33,6 +36,36 @@
         "inkson/src/account_data/blocklist.rs"
       ],
       "tests": [
+        {
+          "path": "inkson/src/realm_events_engine.rs",
+          "symbol": "signed_floor_snapshot_installs_message_revise_and_redaction",
+          "kind": "product",
+          "covers": "正式共享signed-floor产品验证：独立Event裁剪与Message终态均接纳闭合且精确subject的断言；错Event target、错payload、其它未支持对象及开放／空／外来值仍拒绝"
+        },
+        {
+          "path": "inkson/tests/e2e/inkson.search-event-redaction.spec.ts",
+          "symbol": "current Event cropping withdraws a visible search body and survives reload",
+          "kind": "product",
+          "covers": "正式浏览器搜索UI：签名Full命中、后继签名Event裁剪current撤下已显示正文、重查及重载保持拒绝、零远程search／Event／join写入；不是实际Station准入"
+        },
+        {
+          "path": "inkson/src/state/current_index/search.rs",
+          "symbol": "search_event_redaction_never_releases_cached_full_or_creates_a_message_tombstone",
+          "kind": "product",
+          "covers": "SQLite: Event字段裁剪的current-only、先裁剪后原件、create与revision、preserve元数据、放弃安装、Full重放与缺断言旧cut／冷恢复拒绝；不制造Message终态，不代替完整UI或真实Station验收"
+        },
+        {
+          "path": "inkson/tests/wasm_current_index.rs",
+          "symbol": "search_event_redaction_never_releases_cached_full_across_restart",
+          "kind": "product",
+          "covers": "真实IndexedDB与SQLite共用七组签名Event裁剪输入，五步及每步冷重开；不计完整浏览器搜索UI或真实Station来源"
+        },
+        {
+          "path": "inkson/src/views/global_search/session_tests.rs",
+          "symbol": "native_search_event_crop_withdraws_visible_body_and_full_replay_cannot_restore_it",
+          "kind": "product",
+          "covers": "正式native搜索hook：已显示正文随Event当前裁剪撤下，账号冷重开与Full重放不能恢复原正文"
+        },
         {
           "path": "inkson/tests/e2e/inkson.strands.search-locale.spec.ts",
           "symbol": "global search results preserve local text and routes across language changes",
@@ -240,7 +273,7 @@
       ],
       "engineering_checks": [],
       "remaining_scenarios": [
-        "真实1／100／1000 Realm容量与实机首屏／长任务；完整正式搜索当前授权与holder／Device／session同源矩阵；有效retention／expiry、history／crypto／私密Sidecar、Event字段级redaction及完整修订链展示。精确Actor个人messages block／hide过滤与解除恢复、Message当前撤回终态、最新revision同cut绑定恢复、时间边界及Circle对象门不重复列待实现；其它blocklist targets／完整真实服务入口不以本批夹具计完成。 本批精确Event的withheld→合法Full恢复与再次撤下已闭合；不重复列为待实现，完整retention策略／真实Station披露生命周期仍开放。"
+        "真实1／100／1000 Realm实机首屏与长任务；完整正式搜索授权与holder／Device／session同源矩阵；history收紧、适用retention披露与Policy授权、缺密钥／未验证crypto、私密Sidecar及完整修订链展示。现行v1没有通用消息TTL，不将Policy有效期解释为消息expiry。已闭合的物理事务、跨流依赖、holder时间边界、Circle对象门、Message终态、revision绑定恢复、个人block／hide、withheld恢复及Event字段裁剪正式入口不重复列为待实现；本批夹具不替代真实Station与完整产品矩阵。"
       ]
     },
     {
