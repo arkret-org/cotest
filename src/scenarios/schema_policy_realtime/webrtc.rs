@@ -140,6 +140,93 @@ pub async fn webrtc_session_signal_strand_and_guards_work() -> Result<()> {
     assert!(!turn_username.contains("did:web"));
     assert!(!turn_username.contains("alice"));
 
+    // The same authenticated leg must receive independent signed credentials
+    // for simultaneous requests, even before a Call has been established.
+    let repeated = MediaIceConfigRequestBody {
+        realm_id: RealmId::new(realm_id.clone())?,
+        call_id: call_id.to_owned(),
+        actor_id: account_actor(&alice, &alice_core)?,
+        device_id: DeviceId::new(alice.device_id.clone())?,
+        mode: MediaIceMode::P2p,
+    };
+    let issue = || {
+        expect_json(
+            alice.post("/_arkret/self/rtc/ice-config").json(&repeated),
+            StatusCode::OK,
+        )
+    };
+    let (a, b, c, d) = tokio::try_join!(issue(), issue(), issue(), issue())?;
+    let (_, seed) = crate::harness::test_service_signing_key("rtc-media");
+    let key = ed25519_dalek::SigningKey::from_bytes(&seed);
+    let anchors = arkret_signatures::media::MediaServiceAnchors::new([(
+        server.service_id().clone(),
+        server.service_did().clone(),
+    )])?
+    .with_keys([(
+        format!("{}#notary-key", server.service_did()),
+        key.verifying_key(),
+    )])?;
+    let mut tags = std::collections::BTreeSet::new();
+    let mut buckets = std::collections::BTreeMap::new();
+    for raw in [&ice, &a, &b, &c, &d] {
+        use base64::Engine as _;
+        let outcome: arkret_models_collaboration::objects::media::MediaIceConfigOutcome =
+            serde_json::from_value(raw.clone())?;
+        arkret_signatures::media::verify_ice_config_outcome(&outcome, &anchors)?;
+        let username = outcome
+            .ice_servers
+            .iter()
+            .find_map(|server| server.username.as_ref())
+            .unwrap();
+        let (expiry, tag) = username.split_once(':').unwrap();
+        assert_eq!(
+            expiry.parse::<i64>()?,
+            outcome.issued_at.timestamp() + i64::from(outcome.ttl_seconds)
+        );
+        let tag = tag.strip_prefix("ak_pseudonym_call_").unwrap();
+        assert_eq!(
+            base64::engine::general_purpose::URL_SAFE_NO_PAD
+                .decode(tag)?
+                .len(),
+            16
+        );
+        assert!(
+            tags.insert(tag.to_owned()),
+            "fresh issuance reused a TURN tag"
+        );
+        *buckets
+            .entry(outcome.issued_at.timestamp().div_euclid(300))
+            .or_insert(0usize) += 1;
+    }
+    assert!(
+        buckets.values().any(|count| *count >= 2),
+        "exercise repeated issuance inside one bucket"
+    );
+
+    let mut foreign_station = repeated.clone();
+    foreign_station.actor_id = ActorId::account(AccountId::new(
+        DidCoreId::new(alice_core.clone())?,
+        DidCoreId::new("ak:did_core:web:other.example")?,
+    ));
+    expect_api_error(
+        alice
+            .post("/_arkret/self/rtc/ice-config")
+            .json(&foreign_station),
+        StatusCode::BAD_REQUEST,
+        "param_invalid",
+    )
+    .await?;
+    let mut foreign_device = repeated.clone();
+    foreign_device.device_id = DeviceId::new(carol.device_id.clone())?;
+    expect_api_error(
+        alice
+            .post("/_arkret/self/rtc/ice-config")
+            .json(&foreign_device),
+        StatusCode::BAD_REQUEST,
+        "param_invalid",
+    )
+    .await?;
+
     let turn_only = expect_json(
         alice
             .post("/_arkret/self/rtc/ice-config")

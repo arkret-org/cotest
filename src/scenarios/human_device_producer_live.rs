@@ -67,6 +67,8 @@ const GOVERNANCE_DEVICE: &str = "ak:device:01904100-0000-7000-8000-000000002102"
 const SECOND_MEMBER_DEVICE: &str = "ak:device:01904100-0000-7000-8000-000000002103";
 const EVIDENCE_MEMBER: &str = "producer_device_evidence";
 
+mod call_device_release;
+
 /// A self-submitting client on `server` whose session is a standard DPoP
 /// SessionGrant for its founding device, and the complete Account it acts as.
 pub async fn standard_client(
@@ -222,10 +224,19 @@ async fn run_cross_station_authority_forward_with_watch(watch: bool) -> Result<(
         HARNESS_INTERNAL_AUTHORITY_SECRET,
     )
     .await?;
+    let media_probe = tempfile::tempdir()?;
+    let media_pause = media_probe.path().join("media-token-release.pause");
+    let mut account_env = station_env(&account_database.connect_url, &coauth);
+    if !watch {
+        account_env.push((
+            "COLAND_CONFORMANCE_MEDIA_TOKEN_RELEASE_PAUSE_FILE".into(),
+            media_pause.to_string_lossy().into_owned(),
+        ));
+    }
     let Some(mut group) = TestServerGroup::try_multi_external_with_node_envs(
         FORWARD_GROUP,
         &[
-            station_env(&account_database.connect_url, &coauth),
+            account_env,
             station_env(&governance_database.connect_url, &coauth),
         ],
     )
@@ -507,8 +518,18 @@ async fn run_cross_station_authority_forward_with_watch(watch: bool) -> Result<(
             &old,
             &selected.active_series.authority_commit_id,
         )?;
-        let created = create(&client_a, &rotation).await?;
-        wait_for_accepted_revoke(&client_a, &created).await?;
+        Box::pin(call_device_release::run(
+            account_station,
+            &events_a,
+            &client_c,
+            &alice_account,
+            &media_pause,
+            async {
+                let created = create(&client_a, &rotation).await?;
+                wait_for_accepted_revoke(&client_a, &created).await
+            },
+        ))
+        .await?;
     }
     ensure!(
         refused(&client_c).await?,

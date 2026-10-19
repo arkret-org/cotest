@@ -127,7 +127,7 @@ arkret-test-kit = { path = "../arkret-rust-sdk/crates/test-kit" }
 arkret-wire = { path = "../arkret-rust-sdk/crates/wire" }
 async-trait = "0.1.92"
 base64 = "0.23.1"
-bip39 = { version = "2.2.2", default-features = false, features = ["std"] }
+bip39 = { version = "3.0.0", default-features = false, features = ["std"] }
 chacha20poly1305 = { version = "0.11.0", default-features = false }
 chrono = "0.4.45"
 coauth-backend = { path = "../coauth/crates/backend" }
@@ -148,7 +148,7 @@ hpke-rs = "0.7"
 hpke-rs-crypto = "0.7"
 hpke-rs-rust-crypto = "0.7"
 inkson = { path = "../inkson" }
-jsonschema = { version = "0.52.1", default-features = false }
+jsonschema = { version = "0.59.0", default-features = false }
 postgres = "0.19.14"
 p256 = "0.14.0"
 proptest = { version = "1", default-features = false }
