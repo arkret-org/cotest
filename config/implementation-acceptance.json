@@ -6,7 +6,7 @@
     {
       "task": "2026-09-10-0540-client-current-result-durable-index.md",
       "criteria_count": 4,
-      "criteria_sha256": "20eb4a0124c3da24a6820f8e3c33bbd2272180721c5126d777644693e41202c6",
+      "criteria_sha256": "b7c8962e042040c44f7c4f1782184fc450d53f2509151d71503e7afdfb4c708d",
       "spec_refs": [
         "arkret-spec/spec/v1/zh/sync/current-results.md",
         "arkret-spec/spec/v1/zh/sync/privacy-preserving-search.md",
@@ -20,7 +20,8 @@
         "arkret-spec/spec/v1/zh/governance/content-moderation.md",
         "arkret-spec/spec/v1/zh/sync/service-http-binding.md",
         "arkret-spec/spec/v1/zh/governance/history-visibility.md",
-        "arkret-spec/spec/v1/zh/governance/scope-settings.md"
+        "arkret-spec/spec/v1/zh/governance/scope-settings.md",
+        "arkret-spec/spec/v1/zh/models/governance-objects.md"
       ],
       "source_refs": [
         "inkson/src/state/current_index/search.rs",
@@ -33,9 +34,46 @@
         "garth/src/own_station_results.rs",
         "inkson/src/sync_engine.rs",
         "inkson/src/state/current_index.rs",
-        "inkson/src/account_data/blocklist.rs"
+        "inkson/src/account_data/blocklist.rs",
+        "arkret-rust-sdk/crates/policy/src/signal_authorization.rs"
       ],
       "tests": [
+        {
+          "path": "arkret-rust-sdk/crates/policy/src/signal_authorization.rs",
+          "symbol": "retention_policy_uses_exact_product_read_rules_and_its_own_validity_window",
+          "kind": "product",
+          "covers": "共享SDK求值器：retention精确读取规则、deny、有效期、其它action与未知条件，不提供消息TTL或基础授权"
+        },
+        {
+          "path": "inkson/src/state/current_index/search.rs",
+          "symbol": "search_retention_policy_and_validity_boundaries_use_the_same_durable_cut",
+          "kind": "product",
+          "covers": "SQLite共用签名Policy输入：十种规则／floor场景及有效期精确边界，冷读正文与下一重查时间，不推进current cut"
+        },
+        {
+          "path": "inkson/tests/wasm_current_index.rs",
+          "symbol": "search_retention_policy_and_validity_boundaries_survive_restart",
+          "kind": "product",
+          "covers": "真实浏览器IndexedDB复用相同签名Policy／Event／Commit与时间检查，逐点冷开核正文和重查时间"
+        },
+        {
+          "path": "inkson/src/views/global_search/session_tests.rs",
+          "symbol": "native_search_policy_window_withdraws_and_restores_without_a_new_cut",
+          "kind": "product",
+          "covers": "正式native hook：access／moderation／retention在无新cut时按Policy生效与到期撤下／恢复原Event及Commit"
+        },
+        {
+          "path": "inkson/src/views/global_search/session_tests.rs",
+          "symbol": "native_search_policy_replacement_cancels_the_old_boundary_and_cold_read_rechecks",
+          "kind": "product",
+          "covers": "正式native hook：替换Policy取消旧边界，按新边界撤下，冷读仍核当前策略"
+        },
+        {
+          "path": "inkson/tests/e2e/inkson.search-policy-window.spec.ts",
+          "symbol": "current retention Policy withdraws and restores the same search body at its validity boundaries",
+          "kind": "product",
+          "covers": "正式浏览器搜索：普通Account签名后继cut、异Strand新来源正控、Policy生效撤下／到期恢复／重载同Event与Commit，零搜索远端与写入"
+        },
         {
           "path": "inkson/src/realm_events_engine.rs",
           "symbol": "signed_floor_snapshot_installs_message_revise_and_redaction",
@@ -273,7 +311,7 @@
       ],
       "engineering_checks": [],
       "remaining_scenarios": [
-        "真实1／100／1000 Realm实机首屏与长任务；完整正式搜索授权与holder／Device／session同源矩阵；history收紧、适用retention披露与Policy授权、缺密钥／未验证crypto、私密Sidecar及完整修订链展示。现行v1没有通用消息TTL，不将Policy有效期解释为消息expiry。已闭合的物理事务、跨流依赖、holder时间边界、Circle对象门、Message终态、revision绑定恢复、个人block／hide、withheld恢复及Event字段裁剪正式入口不重复列为待实现；本批夹具不替代真实Station与完整产品矩阵。"
+        "真实1／100／1000 Realm实机首屏与长任务；完整正式搜索授权与holder／Device／session同源矩阵；history收紧、适用retention披露、缺密钥／未验证crypto、私密Sidecar及完整修订链展示。现行v1没有通用消息TTL，不将Policy有效期解释为消息expiry。已闭合的物理事务、跨流依赖、holder时间边界、Circle对象门、Message终态、revision绑定恢复、个人block／hide、withheld恢复、Event字段裁剪正式入口及合法Policy求值／策略时间窗不重复列为待实现；本批夹具不替代真实Station与完整产品矩阵。"
       ]
     },
     {
