@@ -312,6 +312,14 @@ pub(super) async fn run(ctx: &mut MlsApiContext<'_>) -> Result<()> {
             && public.payload.get("encrypted_content").is_none(),
         "Circle activation encrypted its parent Realm"
     );
+    super::receipts::scope_policy_acceptance(
+        ctx,
+        &realm,
+        &basis.scope,
+        &encrypted.basis.scope,
+        &outsider,
+    )
+    .await?;
     let parent =
         crate::scenarios::websocket_live::realm_head(&ctx.source.client, realm.as_str()).await?;
     super::receipts::deliver(

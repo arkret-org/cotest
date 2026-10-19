@@ -4,7 +4,8 @@
 
 当前具名执行入口：
 
-- `tests/api_mls_migrations.rs::read_receipt_signals_api_migration`（isolated_station）。
+- `tests/api_mls_migrations.rs::read_receipt_signals_api_migration`（isolated_station，Realm 加密 relay／策略 current／真实重启）。
+- `tests/api_mls_migrations.rs::discussion_upgrade_api_migration`（Realm＋两个 Circle 独立策略、非成员 Snapshot 隔离、Circle MLS receipt／真实重启）。
 - `tests/private_read_marker_api.rs::canonical_private_read_marker_api_migration`（canonical）。
 
 operation→Rust test 与原选择数量见 `api-only-migration.json.native_live_migrations`。无筛选 joint 强制执行全部 primary／supporting 用例；release-gate 通过其 joint 阶段执行，跳过联合阶段不能发布为 release 通过。缺少环境、零测试、ignore 与失败均不能代替通过。日志位于本轮 `native-api-migrations/`，映射本身不是运行证据。
@@ -13,18 +14,18 @@ operation→Rust test 与原选择数量见 `api-only-migration.json.native_live
 
 ## 历史场景与独立产品目标
 
-本次policy准入切片必须在原owner签发后，回读真实signed Snapshot的唯一 `realm_read_receipt_policy` row：source stream、covering revision/value与accepted Commit逐一匹配，再由cotest-wire复用SDK/Garth验证authority nonce、Station history与Snapshot签名。已接受策略才供接收端解密fixture使用。API测试与session injection分类保留，不用测试本地policy缓存冒充持久current，也不把服务改为识别Signal密文中的receipt类型。其余UI目标仍是产品待验收边界。
+本次policy准入切片必须在原owner签发后，回读真实signed Snapshot中每个目标scope的唯一 `scope_read_receipt_policy` row：source stream、covering revision/value与accepted Commit逐一匹配，再由cotest_test_support::wire复用SDK/Garth验证authority nonce、Station history与Snapshot签名。已接受策略才供接收端解密fixture使用。API测试与session injection分类保留，不用测试本地policy缓存冒充持久current，也不把服务改为识别Signal密文中的receipt类型。其余UI目标仍是产品待验收边界。
 
 ## 目标
 
-验证 read receipt 三层语义:client preference(关闭自己的 receipt 发送)、Realm disclosure policy(`optional`/`required`/`disabled`)、actor-private read marker(多设备同步)。alice 关掉自己的 receipt,bob 看不到 alice 读;alice 重开,bob "catch up";policy=required 时强制覆盖 client 偏好。
+验证 read receipt 三层语义:client preference(关闭自己的 receipt 发送)、独立 Realm/Circle scope disclosure policy(`optional`/`required`/`disabled`，无父子继承)、actor-private read marker(多设备同步)。alice 关掉自己的 receipt,bob 看不到 alice 读;alice 重开,bob "catch up";policy=required 时强制覆盖 client 偏好。
 
 不验证:E2EE 中 receipt 的具体加密路径(留到后续)、基础消息收发(messaging/triad-collaboration)。
 
 ## Spec 锚点
 
 - `discovery/read-receipts.md` §2.1-§2.4 — ephemeral receipt 格式 + debounce + flush
-- `discovery/read-receipts.md` §2.5 — Realm disclosure policy(`disabled` / `optional` / `required` / `scope_overrides_allowed`)
+- `discovery/read-receipts.md` §2.5 — independent Realm/Circle scope policy (`disabled` / `optional` / `required`; no inheritance or overrides)
 - `discovery/read-receipts.md` §3.1-§3.2 — Read Marker actor-private(多设备同步)
 - `discovery/client-preferences.md` — Read receipt 偏好键
 
@@ -73,7 +74,7 @@ operation→Rust test 与原选择数量见 `api-only-migration.json.native_live
 19. 客户端发 `ak.receipt.read { up_to_event: M20.event_id }`
 20. 断言:bob 视图 `M16..M20` 都显示 alice 已读;`M11..M15` 仍**未** 显示 alice 已读(receipt 不回溯到关闭期间的消息)
 
-### Phase E — Realm disclosure = `required` 强制开
+### Phase E — scope disclosure = `required` 强制开
 
 21. alice(owner)把 `S_a` 的 read receipt policy 改成 `disclosure = required`
 22. alice 在自己的 `/settings/privacy` 把"Send read receipts"再次关闭(尝试 bypass)

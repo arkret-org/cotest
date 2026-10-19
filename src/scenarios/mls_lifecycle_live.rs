@@ -792,7 +792,7 @@ async fn run_lifecycle(
         "Bob could not decrypt Alice's message at the accepted epoch"
     );
 
-    if let Some(case) = api_case {
+    let api_restart_probe = if let Some(case) = api_case {
         Box::pin(super::api_mls_migrations::exercise(
             case,
             &alice,
@@ -805,8 +805,10 @@ async fn run_lifecycle(
             &mut alice_group,
             &mut bob_group,
         ))
-        .await?;
-    }
+        .await?
+    } else {
+        None
+    };
 
     if observer
         .and_then(|observer| observer.media_token_ttl_seconds())
@@ -843,6 +845,9 @@ async fn run_lifecycle(
     // Restart: the claim ledger replays byte-identically and the ACKed
     // Welcome is gone.
     group.server_mut(0).restart_external_process().await?;
+    if let Some(probe) = &api_restart_probe {
+        probe.verify(&alice, &bob).await?;
+    }
     if let Some(observer) = observer {
         observer.after_station_restart(&bob).await?;
         if observer.verify_service_signer_rotation() {

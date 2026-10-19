@@ -171,7 +171,7 @@ const REVIEWED_APPLET_DEVICE_SCOPE_CASES: [&str; 15] = [
     "sidecar",
 ];
 
-const RUNNERS: [(&str, Runner); 56] = [
+const RUNNERS: [(&str, Runner); 57] = [
     (
         super::SDK_EVENT_TYPE_AXES_ENTRYPOINT,
         Runner::Cases(super::run_sdk_event_type_axes_suite),
@@ -314,6 +314,10 @@ const RUNNERS: [(&str, Runner); 56] = [
     (
         "ak.suite.file_transfer.stream_aead.v1",
         Runner::EvidenceMapped(run_file_transfer_stream_aead_fixture_suite),
+    ),
+    (
+        "ak.suite.read_receipt.scope_policy.v1",
+        Runner::EvidenceMapped(super::run_read_receipt_policy_fixture_suite),
     ),
     (
         "ak.suite.invite.new_source_quota.v1",

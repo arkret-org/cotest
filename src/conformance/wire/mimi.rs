@@ -135,362 +135,135 @@ pub fn run_mimi_components_fixture_suite() -> Result<()> {
 
     Ok(())
 }
-/// Read receipt disclosure policy + per-scope preference vectors.
-///
-/// Spec: `discovery/read-receipts.md` §2.4-§2.5 and
-/// `discovery/client-preferences.md` §3.6. Vectors describe the
-/// decision rules that compliant clients MUST honor while Sync Service only
-/// enforces the signed outer scope.
-/// This suite is structural — it walks every vector, replays the
-/// decision against the spec rules, and asserts the recorded
-/// `expected.decision` / `expected.is_send` / `expected.is_locked`
-/// fields match.
+/// Execute the canonical independent Realm/Circle receipt policy contract.
+/// Authentication flags are verifier preconditions, not production evidence.
 pub fn run_read_receipt_policy_fixture_suite() -> Result<()> {
-    let fixture = load_local_fixture("read_receipt_policy_fixture.json")?;
-    validate_profile(&fixture, "ak.profile.read_receipt_policy_vectors.v1")?;
-    let vectors = fixture
-        .get("vectors")
-        .and_then(Value::as_array)
-        .ok_or_else(|| anyhow!("read_receipt_policy fixture missing vectors[]"))?;
-    if vectors.is_empty() {
-        bail!("read_receipt_policy fixture has no vectors");
-    }
-
-    let mut covered_required = false;
-    let mut covered_disabled_client_enforcement = false;
-    let mut covered_visibility_private_client_filter = false;
-    let mut covered_display_false_local_only = false;
-    let mut covered_branch_tighten = false;
-    let mut covered_branch_loosen_blocked = false;
-    let mut covered_strand_overrides_realm = false;
-    let mut covered_realm_overrides_default = false;
-
-    for vector in vectors {
-        let name = required_str(vector, "name")?;
-        let policy = vector
-            .get("policy")
-            .ok_or_else(|| anyhow!("vector {name} missing policy"))?;
-        let scope = required_str(policy, "scope")?;
-        let prefs = vector
-            .get("preferences")
-            .ok_or_else(|| anyhow!("vector {name} missing preferences"))?;
-        let expected = vector
-            .get("expected")
-            .ok_or_else(|| anyhow!("vector {name} missing expected"))?;
-
-        // Compose effective policy.
-        let (eff_disclosure, eff_visibility) = match scope {
-            "realm" => {
-                let disclosure = required_str(policy, "disclosure")?;
-                let visibility = required_str(policy, "visibility")?;
-                (disclosure.to_owned(), visibility.to_owned())
-            }
-            "strand" => {
-                // Track-level read-receipt overrides are not in the current v1
-                // catalog. A discussion timeline that needs a
-                // distinct read-receipt policy MUST be upgraded to an
-                // independent Strand/Circle scope (Strand.scope_circle_id, AKP-0007)
-                // whose own ak.realm.read_receipt_policy composes against the
-                // parent Realm policy via the same tighten-only rules.
-                let parent = policy
-                    .get("parent")
-                    .ok_or_else(|| anyhow!("vector {name} strand missing parent"))?;
-                // `child_scope` (not `branch`, which is a forbidden Strand-track
-                // wire term) is the Strand/Circle scope read-receipt policy that
-                // composes against the parent via tighten-only rules.
-                let child_scope = policy
-                    .get("child_scope")
-                    .ok_or_else(|| anyhow!("vector {name} strand missing child_scope"))?;
-                let parent_disclosure = required_str(parent, "disclosure")?;
-                let branch_disclosure = required_str(child_scope, "disclosure")?;
-                let parent_visibility = required_str(parent, "visibility")?;
-                let branch_visibility = required_str(child_scope, "visibility")?;
-                let overrides_allowed = parent
-                    .get("scope_overrides_allowed")
-                    .and_then(Value::as_bool)
-                    .ok_or_else(|| {
-                        anyhow!("vector {name} parent missing scope_overrides_allowed")
-                    })?;
-                let child_rejection = child_policy_rejection(
-                    parent_disclosure,
-                    branch_disclosure,
-                    parent_visibility,
-                    branch_visibility,
-                    overrides_allowed,
-                )?;
-                if let Some(rejection) = child_rejection {
-                    let declared = expected
-                        .get("reducer_action")
-                        .and_then(Value::as_str)
-                        .ok_or_else(|| {
-                            anyhow!("vector {name} rejected child policy missing reducer_action")
-                        })?;
-                    if declared != rejection {
-                        bail!(
-                            "vector {name} reducer_action: expected {declared}, computed {rejection}"
-                        );
-                    }
-                } else if expected.get("reducer_action").is_some() {
-                    bail!("vector {name} declared reducer_action but child policy is valid");
-                }
-                let composed_disclosure = if child_rejection.is_some() {
-                    parent_disclosure.to_owned()
-                } else {
-                    branch_disclosure.to_owned()
-                };
-                let composed_visibility = if child_rejection.is_some() {
-                    parent_visibility.to_owned()
-                } else {
-                    branch_visibility.to_owned()
-                };
-                if let Some(declared) = expected.get("composed_disclosure").and_then(Value::as_str)
-                    && declared != composed_disclosure
-                {
-                    bail!(
-                        "vector {name} composed_disclosure: expected {declared}, computed {composed_disclosure}"
-                    );
-                }
-                if let Some(declared) = expected.get("composed_visibility").and_then(Value::as_str)
-                    && declared != composed_visibility
-                {
-                    bail!(
-                        "vector {name} composed_visibility: expected {declared}, computed {composed_visibility}"
-                    );
-                }
-                (composed_disclosure, composed_visibility)
-            }
-            other => bail!("vector {name} unknown scope {other}"),
-        };
-
-        // Resolve the user preference for the scope_lookup target.
-        let pref_send = resolve_pref_send(vector, prefs)?;
-        let pref_display = resolve_pref_display(vector, prefs)?;
-
-        // Compute decision per spec §2.4-§2.5 rules.
-        let (decision, is_send, is_locked) = match eff_disclosure.as_str() {
-            "required" => ("forced_send", true, true),
-            "disabled" => ("forced_skip", false, true),
-            "optional" => {
-                if pref_send {
-                    ("send", true, false)
-                } else {
-                    ("skip", false, false)
-                }
-            }
-            other => bail!("vector {name} unknown disclosure {other}"),
-        };
-
-        let expected_decision = required_str(expected, "decision")?;
-        if expected_decision != decision {
-            bail!("vector {name} decision: expected {expected_decision}, computed {decision}");
-        }
-        let expected_is_send = expected
-            .get("is_send")
-            .and_then(Value::as_bool)
-            .ok_or_else(|| anyhow!("vector {name} expected.is_send missing"))?;
-        if expected_is_send != is_send {
-            bail!("vector {name} is_send: expected {expected_is_send}, computed {is_send}");
-        }
-        let expected_is_locked = expected
-            .get("is_locked")
-            .and_then(Value::as_bool)
-            .ok_or_else(|| anyhow!("vector {name} expected.is_locked missing"))?;
-        if expected_is_locked != is_locked {
-            bail!("vector {name} is_locked: expected {expected_is_locked}, computed {is_locked}");
-        }
-        if let Some(expected_display) = expected.get("is_display").and_then(Value::as_bool)
-            && expected_display != pref_display
-        {
-            bail!("vector {name} is_display: expected {expected_display}, computed {pref_display}");
-        }
-
-        // Signal payload kind and event_id remain encrypted. The service may
-        // enforce only signed scope fanout; private receipt filtering happens
-        // after decryption on the client.
-        if eff_visibility == "private"
-            && eff_disclosure != "disabled"
-            && (expected.get("sync_service_fanout").and_then(Value::as_str)
-                != Some("scope_members")
-                || expected
-                    .get("client_receive_filter")
-                    .and_then(Value::as_str)
-                    != Some("referenced_event_sender_only"))
-        {
-            bail!(
-                "vector {name} effective visibility=private must record scope-only service fanout and client sender filtering"
-            );
-        }
-        if eff_disclosure == "disabled"
-            && (expected.get("client_generation").and_then(Value::as_str) != Some("forbidden")
-                || expected
-                    .get("client_receive_action")
-                    .and_then(Value::as_str)
-                    != Some("drop_without_display")
-                || expected.get("sync_service_fanout").and_then(Value::as_str)
-                    != Some("scope_members"))
-        {
-            bail!(
-                "vector {name} effective disclosure=disabled must record client generation/drop behavior and opaque scope fanout"
-            );
-        }
-
-        match name {
-            "disclosure_required_locks_client_send" => covered_required = true,
-            "disclosure_disabled_is_enforced_by_clients" => {
-                covered_disabled_client_enforcement = true
-            }
-            "visibility_private_filters_after_client_decryption" => {
-                covered_visibility_private_client_filter = true
-            }
-            "display_false_hides_local_indicator_only" => {
-                covered_display_false_local_only = true;
-                if expected.get("is_display").and_then(Value::as_bool) != Some(false) {
-                    bail!("vector {name} must record expected.is_display=false");
-                }
-                if expected.get("sync_service_fanout").and_then(Value::as_str)
-                    != Some("scope_members")
-                {
-                    bail!("vector {name} must keep Sync Service fanout unchanged");
-                }
-                if expected.get("unread_action").and_then(Value::as_str) != Some("unchanged") {
-                    bail!("vector {name} must keep unread accounting unchanged");
-                }
-            }
-            "branch_overrides_tighten_only" => covered_branch_tighten = true,
-            "branch_overrides_loosen_rejected_when_not_allowed" => {
-                covered_branch_loosen_blocked = true
-            }
-            "prefs_resolution_strand_overrides_realm" => covered_strand_overrides_realm = true,
-            "prefs_resolution_realm_overrides_default" => covered_realm_overrides_default = true,
-            _ => {}
-        }
+    let fixture = crate::conformance::load_fixture_value("read-receipt-scope-policy-fixture.json")?;
+    for case in fixture["schema_cases"]
+        .as_array()
+        .ok_or_else(|| anyhow!("missing schema cases"))?
+    {
+        let valid = crate::conformance::schema_validation_fixture::schema_validator(required_str(
+            case,
+            "schema_ref",
+        )?)?
+        .is_valid(&case["instance"]);
+        anyhow::ensure!(
+            valid == case["expected_valid"].as_bool().unwrap_or(false),
+            "receipt schema case failed: {}",
+            case["name"]
+        );
         emit_vector(
-            "read_receipt_policy.decision",
-            vector,
-            json!({
-                "name": name,
-                "decision": decision,
-                "is_send": is_send,
-                "is_locked": is_locked,
-                "effective_disclosure": eff_disclosure,
-                "effective_visibility": eff_visibility,
-                "is_display": pref_display,
-            }),
+            "read_receipt.scope_policy.schema",
+            case,
+            json!({"valid":valid}),
         );
     }
-
-    if !(covered_required
-        && covered_disabled_client_enforcement
-        && covered_visibility_private_client_filter
-        && covered_display_false_local_only
-        && covered_branch_tighten
-        && covered_branch_loosen_blocked
-        && covered_strand_overrides_realm
-        && covered_realm_overrides_default)
-    {
-        bail!(
-            "read_receipt_policy fixture must cover required-lock / disabled-client-enforcement / private-client-filter / display-false-local-only / branch-tighten / branch-loosen-blocked / strand-overrides-realm / realm-overrides-default"
+    let cases = fixture["decision_cases"]
+        .as_array()
+        .ok_or_else(|| anyhow!("missing decision cases"))?;
+    anyhow::ensure!(cases.len() >= 30, "scope policy decision coverage missing");
+    for case in cases {
+        let actual = scope_receipt_decision(&case["input"])?;
+        anyhow::ensure!(
+            actual == case["expected"],
+            "receipt scope decision failed: {}",
+            case["name"]
         );
+        emit_vector("read_receipt.scope_policy.decision", case, actual);
     }
-
-    Ok(())
-}
-fn child_policy_rejection(
-    parent_disclosure: &str,
-    child_disclosure: &str,
-    parent_visibility: &str,
-    child_visibility: &str,
-    overrides_allowed: bool,
-) -> Result<Option<&'static str>> {
-    validate_disclosure(parent_disclosure)?;
-    validate_disclosure(child_disclosure)?;
-    let parent_visibility_rank = visibility_rank(parent_visibility)?;
-    let child_visibility_rank = visibility_rank(child_visibility)?;
-    if !overrides_allowed
-        && (parent_disclosure != child_disclosure || parent_visibility != child_visibility)
+    for case in fixture["update_cases"]
+        .as_array()
+        .ok_or_else(|| anyhow!("missing update cases"))?
     {
-        return Ok(Some("reject_loosening_strand_scope_move"));
-    }
-    match (parent_disclosure, child_disclosure) {
-        ("required", "required")
-        | ("optional", "optional")
-        | ("optional", "disabled")
-        | ("disabled", "disabled") => {}
-        ("required", "optional" | "disabled") => {
-            return Ok(Some("reject_loosening_strand_scope_move"));
+        let mut seen = true;
+        let mut displays = Vec::new();
+        for policy in case["writes"]
+            .as_array()
+            .ok_or_else(|| anyhow!("missing writes"))?
+        {
+            let mut input = cases[0]["input"].clone();
+            input["viewer"] = case["viewer"].clone();
+            input["target_author"] = case["target_author"].clone();
+            input["policies"][0]["value"] = policy.clone();
+            if case["fresh_receipt_each_step"].as_bool() == Some(true) {
+                seen = true;
+            }
+            seen &= scope_receipt_decision(&input)?["display"] == true;
+            displays.push(seen);
         }
-        _ => return Ok(Some("reject_loosening_strand_scope_move")),
-    }
-    if child_visibility_rank < parent_visibility_rank {
-        return Ok(Some("reject_loosening_strand_scope_move"));
-    }
-    Ok(None)
-}
-
-fn validate_disclosure(value: &str) -> Result<()> {
-    let valid = ["required", "optional", "disabled"];
-    if !valid.contains(&value) {
-        bail!("invalid disclosure {value}");
+        anyhow::ensure!(
+            json!(displays) == case["expected_display"],
+            "receipt display update failed: {}",
+            case["name"]
+        );
+        emit_vector(
+            "read_receipt.scope_policy.updates",
+            case,
+            json!({"display":displays}),
+        );
     }
     Ok(())
 }
 
-fn visibility_rank(value: &str) -> Result<i32> {
-    match value {
-        "public" => Ok(0),
-        "members" => Ok(1),
-        "private" => Ok(2),
-        other => bail!("invalid visibility {other}"),
-    }
-}
-fn resolve_pref_send(vector: &Value, prefs: &Value) -> Result<bool> {
-    // Resolution order per spec discovery/client-preferences.md §3.8:
-    // strand -> realm -> default. Track-level overrides are not in v1.
-    let lookup = vector.get("scope_lookup");
-    if let Some(lookup) = lookup
-        && let Some(strand_id) = lookup.get("strand_id").and_then(Value::as_str)
-        && let Some(strands) = prefs.get("strands").and_then(Value::as_object)
-        && let Some(entry) = strands.get(strand_id)
-        && let Some(send) = entry.get("send").and_then(Value::as_bool)
+fn scope_receipt_decision(input: &Value) -> Result<Value> {
+    let denied = || json!({"send":false,"display":false});
+    let scope: arkret_wire::ScopeRef = serde_json::from_value(input["scope_ref"].clone())?;
+    if !matches!(
+        scope,
+        arkret_wire::ScopeRef::Realm { .. } | arkret_wire::ScopeRef::Circle { .. }
+    ) || [
+        "basis_verified",
+        "complete",
+        "scope_authorized",
+        "target_verified",
+    ]
+    .iter()
+    .any(|key| input[*key] != true)
+        || ["signal_scope_ref", "target_scope_ref", "basis_scope_ref"]
+            .iter()
+            .any(|key| input[*key] != input["scope_ref"])
     {
-        return Ok(send);
+        return Ok(denied());
     }
-    if let Some(lookup) = lookup
-        && let Some(realm_id) = lookup.get("realm_id").and_then(Value::as_str)
-        && let Some(realms) = prefs.get("realms").and_then(Value::as_object)
-        && let Some(entry) = realms.get(realm_id)
-        && let Some(send) = entry.get("send").and_then(Value::as_bool)
-    {
-        return Ok(send);
+    let selector = json!({"kind":"scope_read_receipt_policy","scope_ref":scope});
+    let rows = input["policies"]
+        .as_array()
+        .ok_or_else(|| anyhow!("missing policies"))?
+        .iter()
+        .filter(|row| row["selector"] == selector)
+        .collect::<Vec<_>>();
+    let policy = match (input["current_status"].as_str(), rows.as_slice()) {
+        (Some("never_written"), []) => {
+            arkret_models_collaboration::objects::read_receipts::ReadReceiptPolicy::default()
+        }
+        (Some("present"), [row]) => {
+            let Ok(current) = serde_json::from_value::<
+                arkret_models_collaboration::events_payloads::ScopeReadReceiptPolicyCurrent,
+            >((*row).clone()) else {
+                return Ok(denied());
+            };
+            if current.validate().is_err() {
+                return Ok(denied());
+            }
+            current.value.resolved()
+        }
+        _ => return Ok(denied()),
+    };
+    use arkret_models_collaboration::objects::read_receipts::{
+        ReadReceiptDisclosure as D, ReadReceiptVisibility as V,
+    };
+    if policy.disclosure == D::Disabled {
+        return Ok(denied());
     }
-    Ok(prefs
-        .pointer("/default/send")
-        .and_then(Value::as_bool)
-        .unwrap_or(true))
-}
-
-fn resolve_pref_display(vector: &Value, prefs: &Value) -> Result<bool> {
-    // Resolution order per spec discovery/client-preferences.md Â§3.8:
-    // strand -> realm -> default. Display only gates local rendering.
-    let lookup = vector.get("scope_lookup");
-    if let Some(lookup) = lookup
-        && let Some(strand_id) = lookup.get("strand_id").and_then(Value::as_str)
-        && let Some(strands) = prefs.get("strands").and_then(Value::as_object)
-        && let Some(entry) = strands.get(strand_id)
-        && let Some(display) = entry.get("display").and_then(Value::as_bool)
-    {
-        return Ok(display);
-    }
-    if let Some(lookup) = lookup
-        && let Some(realm_id) = lookup.get("realm_id").and_then(Value::as_str)
-        && let Some(realms) = prefs.get("realms").and_then(Value::as_object)
-        && let Some(entry) = realms.get(realm_id)
-        && let Some(display) = entry.get("display").and_then(Value::as_bool)
-    {
-        return Ok(display);
-    }
-    Ok(prefs
-        .pointer("/default/display")
-        .and_then(Value::as_bool)
-        .unwrap_or(true))
+    let display = input["display_preference"] == true
+        && input["viewer_observer"] == true
+        && match policy.visibility {
+            V::Public => true,
+            V::Members => input["viewer_member"] == true,
+            V::Private => input["viewer"] == input["target_author"],
+        };
+    Ok(
+        json!({"send":policy.disclosure == D::Required || input["sender_preference"] == true,"display":display}),
+    )
 }
