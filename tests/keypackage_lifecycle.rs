@@ -10,3 +10,9 @@ use serial_test::serial;
 async fn same_station_keypackage_claim_genesis_add_and_welcome_lifecycle() -> Result<()> {
     cotest::scenarios::mls_lifecycle_live::run_same_station_mls_keypackage_lifecycle_live().await
 }
+
+#[tokio::test(flavor = "multi_thread")]
+#[serial]
+async fn self_claim_expired_commands_recover_durably_without_new_authority() -> Result<()> {
+    cotest::scenarios::mls_lifecycle_live::run_expired_claim_recovery_live().await
+}

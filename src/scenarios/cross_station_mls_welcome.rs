@@ -370,6 +370,193 @@ async fn forwarded_add(
     Ok((commit_event, welcome, outcome, bytes, commit))
 }
 
+/// An exact remote command is recovered from both real durable ledgers after
+/// its signed deadline and after restarting both Stations.
+pub async fn cross_station_expired_claim_recovery_run() -> Result<()> {
+    let source_database = database(GROUP)?.context("claim recovery requires source PostgreSQL")?;
+    let destination_database =
+        database(GROUP)?.context("claim recovery requires destination PostgreSQL")?;
+    let coauth = MockCoauthIntrospectionServer::spawn_with_internal_secret(
+        HARNESS_INTERNAL_AUTHORITY_SECRET,
+    )
+    .await?;
+    let mut group = TestServerGroup::try_multi_external_with_node_envs(
+        GROUP,
+        &[
+            station_env(&source_database.connect_url, &coauth),
+            station_env(&destination_database.connect_url, &coauth),
+        ],
+    )
+    .await?
+    .context("claim recovery requires a prebuilt real Coland")?;
+    let alice =
+        Member::provision(group.server(0), &coauth, "recovery-source", ALICE_DEVICE).await?;
+    let bob = Member::provision(group.server(1), &coauth, "recovery-target", BOB_DEVICE).await?;
+    create_human_actor_profile(&bob.client, "Recovery Target").await?;
+    let realm = create_realm_with_join_rule(
+        &alice.client,
+        "Claim recovery",
+        "invite",
+        &[group.server(0), group.server(1)],
+    )
+    .await?;
+    join_through_invite(
+        &alice,
+        group.server(0),
+        &bob,
+        &realm,
+        "ak:request:019b0000-0000-7000-8000-000000002709",
+        'b',
+    )
+    .await?;
+    let realm_id = RealmId::new(realm)?;
+    let mls_group = ScopeRef::Realm {
+        realm_id: realm_id.clone(),
+    }
+    .canonical_mls_group_id()?;
+    publish_one(&bob).await?;
+    let request = claim_request_between(
+        &alice,
+        group.server(0),
+        group.server(1),
+        &bob,
+        &realm_id,
+        mls_group.as_str(),
+        [0x73; 16],
+        ChronoDuration::seconds(30),
+    )?;
+    let original = loop {
+        let (status, bytes) = post_claim(&alice.client, &request).await?;
+        if status == StatusCode::OK {
+            break bytes;
+        }
+        ensure!(
+            Utc::now() < request.expires_at && problem_type(&bytes)? == "failed_precondition",
+            "same-identity remote command did not finish: {status} {}",
+            String::from_utf8_lossy(&bytes)
+        );
+        tokio::time::sleep(Duration::from_millis(250)).await;
+    };
+    let original: KeyPackagesClaimOutcome = serde_json::from_slice(&original)?;
+    while Utc::now() <= request.expires_at {
+        tokio::time::sleep(Duration::from_millis(250)).await;
+    }
+    let mut first_terminal = None;
+    for cold in [false, true] {
+        if cold {
+            group.server_mut(0).restart_external_process().await?;
+            group.server_mut(1).restart_external_process().await?;
+        }
+        let (status, bytes) = post_claim(&alice.client, &request).await?;
+        ensure!(
+            status == StatusCode::OK
+                && serde_json::from_slice::<Value>(&bytes)? == serde_json::to_value(&original)?,
+            "expired source relay recovery cold={cold}: {status} {}",
+            String::from_utf8_lossy(&bytes)
+        );
+        let (status, bytes) = peer_post(
+            group.server(1),
+            group.server(0),
+            PEER_CLAIM,
+            &request,
+            request.claim_request_id.as_str(),
+        )
+        .await?;
+        ensure!(
+            status == StatusCode::OK,
+            "expired destination peer recovery cold={cold}: {status} {}",
+            String::from_utf8_lossy(&bytes)
+        );
+        let view = peer_view(&bytes)?;
+        ensure!(
+            view.state == PeerKeyPackagesClaimQueryState::Revoked
+                && serde_json::to_value(&view.claim_outcome)?
+                    == serde_json::to_value(Some(&original))?
+                && view.terminal_receipt.is_some(),
+            "expired destination lost exact outcome or terminal receipt: {view:?}"
+        );
+        let terminal = serde_json::to_value(&view.terminal_receipt)?;
+        if let Some(first) = &first_terminal {
+            ensure!(
+                first == &terminal,
+                "cold restart changed original terminal receipt"
+            );
+        } else {
+            first_terminal = Some(terminal);
+        }
+        for database_url in [
+            &source_database.connect_url,
+            &destination_database.connect_url,
+        ] {
+            let before = super::mls_lifecycle_live::upload_durable_cut(database_url).await?;
+            let (status, bytes) = post_claim(&alice.client, &request).await?;
+            ensure!(
+                status == StatusCode::OK,
+                "remote second recovery: {status} {}",
+                String::from_utf8_lossy(&bytes)
+            );
+            let (status, bytes) = peer_post(
+                group.server(1),
+                group.server(0),
+                PEER_CLAIM,
+                &request,
+                request.claim_request_id.as_str(),
+            )
+            .await?;
+            ensure!(
+                status == StatusCode::OK,
+                "peer second recovery: {status} {}",
+                String::from_utf8_lossy(&bytes)
+            );
+            ensure!(
+                super::mls_lifecycle_live::upload_durable_cut(database_url).await? == before,
+                "remote recovery wrote durable state"
+            );
+        }
+        let mut conflict = request.clone();
+        conflict.expires_at -= ChronoDuration::seconds(1);
+        super::mls_lifecycle_live::resign_claim(&alice, &mut conflict)?;
+        for peer in [false, true] {
+            let source_before =
+                super::mls_lifecycle_live::upload_durable_cut(&source_database.connect_url).await?;
+            let target_before =
+                super::mls_lifecycle_live::upload_durable_cut(&destination_database.connect_url)
+                    .await?;
+            let (status, bytes) = if peer {
+                peer_post(
+                    group.server(1),
+                    group.server(0),
+                    PEER_CLAIM,
+                    &conflict,
+                    conflict.claim_request_id.as_str(),
+                )
+                .await?
+            } else {
+                post_claim(&alice.client, &conflict).await?
+            };
+            ensure!(
+                status == StatusCode::CONFLICT && problem_type(&bytes)? == "duplicate_conflict",
+                "remote digest conflict peer={peer} cold={cold}: {status} {}",
+                String::from_utf8_lossy(&bytes)
+            );
+            ensure!(
+                super::mls_lifecycle_live::upload_durable_cut(&source_database.connect_url).await?
+                    == source_before
+                    && super::mls_lifecycle_live::upload_durable_cut(
+                        &destination_database.connect_url
+                    )
+                    .await?
+                        == target_before,
+                "remote digest conflict wrote durable state"
+            );
+        }
+        eprintln!(
+            "[keypackage-recovery] path=remote_source_and_destination case=expired_single_use state=revoked cold={cold} exact_outcome=true exact_terminal_receipt=true zero_writes=true"
+        );
+    }
+    Ok(())
+}
+
 pub async fn cross_station_mls_welcome_run() -> Result<()> {
     cross_station_mls_welcome_original_run().await
 }

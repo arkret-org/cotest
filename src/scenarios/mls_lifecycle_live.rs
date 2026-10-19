@@ -169,7 +169,7 @@ pub trait MlsGenesisObserver {
 }
 
 pub async fn run_with_genesis_observer(observer: &dyn MlsGenesisObserver) -> Result<()> {
-    run_lifecycle(None, false, Some(observer), None).await
+    run_lifecycle(None, false, Some(observer), None, false).await
 }
 
 pub async fn run_same_station_mls_keypackage_lifecycle_live() -> Result<()> {
@@ -180,11 +180,16 @@ pub async fn run_with_blocklist_observer(
     observer: Option<&dyn MlsClientObserver>,
     observe_receipt: bool,
 ) -> Result<()> {
-    run_lifecycle(observer, observe_receipt, None, None).await
+    run_lifecycle(observer, observe_receipt, None, None, false).await
 }
 
 pub async fn run_with_api_migration(case: super::api_mls_migrations::MlsApiCase) -> Result<()> {
-    run_lifecycle(None, false, None, Some(case)).await
+    run_lifecycle(None, false, None, Some(case), false).await
+}
+
+/// Real PostgreSQL/HTTP recovery across original command expiry and a cold restart.
+pub async fn run_expired_claim_recovery_live() -> Result<()> {
+    run_lifecycle(None, false, None, None, true).await
 }
 
 async fn run_lifecycle(
@@ -192,9 +197,11 @@ async fn run_lifecycle(
     observe_receipt: bool,
     genesis_observer: Option<&dyn MlsGenesisObserver>,
     api_case: Option<super::api_mls_migrations::MlsApiCase>,
+    recovery_matrix: bool,
 ) -> Result<()> {
     let Some(database) = database(GROUP)? else {
-        if observer.is_some() || genesis_observer.is_some() || api_case.is_some() {
+        if observer.is_some() || genesis_observer.is_some() || api_case.is_some() || recovery_matrix
+        {
             bail!("live MLS evidence requires an isolated PostgreSQL database");
         }
         return Ok(());
@@ -219,7 +226,8 @@ async fn run_lifecycle(
     let Some(mut group) =
         TestServerGroup::try_multi_external_with_node_envs(GROUP, &[environment]).await?
     else {
-        if observer.is_some() || genesis_observer.is_some() || api_case.is_some() {
+        if observer.is_some() || genesis_observer.is_some() || api_case.is_some() || recovery_matrix
+        {
             bail!("live MLS evidence requires a prebuilt real Coland binary");
         }
         return skip_or_fail(GROUP, "prebuilt Coland unavailable");
@@ -400,7 +408,8 @@ async fn run_lifecycle(
     let (status, replay_bytes) = post_claim(&alice.client, &first_request).await?;
     ensure!(
         status == StatusCode::OK && json_equal(&replay_bytes, &first_bytes)?,
-        "the exact claim replay did not return the stored outcome: {status}"
+        "the exact claim replay did not return the stored outcome: {status} {}",
+        String::from_utf8_lossy(&replay_bytes)
     );
 
     // Claim read (device-lifecycle §9 `claims/query`): only the claimed
@@ -852,13 +861,27 @@ async fn run_lifecycle(
     let (status, restarted_replay) = post_claim(&alice.client, &first_request).await?;
     ensure!(
         status == StatusCode::OK && json_equal(&restarted_replay, &first_bytes)?,
-        "the claim ledger did not replay its stored outcome after restart: {status}"
+        "the claim ledger did not replay its stored outcome after restart: {status} {}",
+        String::from_utf8_lossy(&restarted_replay)
     );
     let (after_restart, _) = recipient_welcomes(&bob.client).await?;
     ensure!(
         after_restart.is_empty(),
         "the ACKed Welcome was delivered again after restart: {after_restart:?}"
     );
+    if recovery_matrix {
+        expired_claim_recovery_matrix(
+            &mut group,
+            &alice,
+            &bob,
+            &realm_id,
+            group_id.as_str(),
+            &first_request,
+            &first_bytes,
+            &database.connect_url,
+        )
+        .await?;
+    }
     drop(coauth);
     Ok(())
 }
@@ -993,6 +1016,350 @@ pub(crate) async fn assert_closed_upload_boundary(
         );
     }
     Ok(serde_json::from_value(full)?)
+}
+
+#[allow(clippy::too_many_arguments)]
+async fn expired_claim_recovery_matrix(
+    group: &mut TestServerGroup,
+    requester: &Member,
+    target: &Member,
+    realm: &RealmId,
+    mls_group: &str,
+    consumed_request: &KeyPackagesClaimRequestBody,
+    consumed_bytes: &[u8],
+    database_url: &str,
+) -> Result<()> {
+    let identity = target.mls_identity()?;
+    let packages = [
+        identity.key_package_record()?,
+        identity.key_package_record()?,
+        identity.last_resort_key_package_record()?,
+    ];
+    let upload = identity.signed_key_packages_upload_request(&packages, target.method.as_str())?;
+    let response = expect_json(
+        target
+            .client
+            .post("/_arkret/self/keys/keypackages/upload")
+            .header("content-type", "application/json")
+            .body(arkret_canonical::canonical_json_bytes(&upload)?),
+        StatusCode::OK,
+    )
+    .await?;
+    ensure!(
+        response["accepted"] == 3,
+        "recovery packages were not published: {response}"
+    );
+    let expired_request = claim_request(
+        requester,
+        group.server(0),
+        target,
+        realm,
+        mls_group,
+        [0x71; 16],
+        chrono::Duration::seconds(3),
+    )?;
+    let revoked_request = claim_request(
+        requester,
+        group.server(0),
+        target,
+        realm,
+        mls_group,
+        [0x72; 16],
+        chrono::Duration::minutes(4),
+    )?;
+    let (status, expired_bytes) = post_claim(&requester.client, &expired_request).await?;
+    ensure!(
+        status == StatusCode::OK,
+        "initial short claim: {status} {}",
+        String::from_utf8_lossy(&expired_bytes)
+    );
+    let (status, revoked_bytes) = post_claim(&requester.client, &revoked_request).await?;
+    ensure!(
+        status == StatusCode::OK,
+        "initial revoked claim: {status} {}",
+        String::from_utf8_lossy(&revoked_bytes)
+    );
+    let revoked: KeyPackagesClaimOutcome = serde_json::from_slice(&revoked_bytes)?;
+    let unsigned = arkret_models_crypto::KeyPackagesRevokeUnsignedRequest {
+        key_package_refs: vec![revoked.claims[0].keypackage_ref.clone()],
+        device_id: target.device.clone(),
+        reason: None,
+    };
+    let signature = arkret_signatures::keypackages::sign_keypackages_revoke_request(
+        &unsigned,
+        target.method.as_str(),
+        &target.key.to_bytes(),
+    )?;
+    let (status, bytes) = post_bytes_at(
+        &target.client,
+        "/_arkret/self/keys/keypackages/revoke",
+        &unsigned.into_signed(signature),
+    )
+    .await?;
+    let revoked_result: arkret_models_crypto::KeyPackagesRevokeOutcome =
+        serde_json::from_slice(&bytes)?;
+    ensure!(
+        status == StatusCode::OK && revoked_result.revoked == unsigned_refs(&revoked),
+        "real target revoke failed: {status} {}",
+        String::from_utf8_lossy(&bytes)
+    );
+
+    // Ordinary inventory is exhausted; explicitly authorize the genuine
+    // reusable package whose signed OpenMLS extension is generated above.
+    let mut last_resort_request = claim_request(
+        requester,
+        group.server(0),
+        target,
+        realm,
+        mls_group,
+        [0x74; 16],
+        chrono::Duration::seconds(3),
+    )?;
+    last_resort_request.last_resort_allowed = Some(true);
+    resign_claim(requester, &mut last_resort_request)?;
+    let (status, last_resort_bytes) = post_claim(&requester.client, &last_resort_request).await?;
+    ensure!(
+        status == StatusCode::OK,
+        "real last-resort claim: {status} {}",
+        String::from_utf8_lossy(&last_resort_bytes)
+    );
+    let last_resort: KeyPackagesClaimOutcome = serde_json::from_slice(&last_resort_bytes)?;
+    ensure!(
+        last_resort.claims.len() == 1 && last_resort.claims[0].last_resort == Some(true),
+        "last-resort claim selected ordinary inventory"
+    );
+
+    // Wait for real signed deadlines; no mutation of signed bytes, ledger TTL,
+    // database clocks or authorization expiry is used to simulate recovery.
+    let deadline = consumed_request.expires_at.max(revoked_request.expires_at)
+        + chrono::Duration::milliseconds(100);
+    eprintln!("[keypackage-recovery] phase=await_original_expiry deadline={deadline}");
+    while chrono::Utc::now() < deadline {
+        tokio::time::sleep(Duration::from_secs(1)).await;
+    }
+    let cases = [
+        ("consumed", "consumed", consumed_request, consumed_bytes),
+        (
+            "expired_last_resort",
+            "expired",
+            &last_resort_request,
+            last_resort_bytes.as_slice(),
+        ),
+        (
+            "expired_single_use",
+            "revoked",
+            &expired_request,
+            expired_bytes.as_slice(),
+        ),
+        (
+            "explicitly_revoked",
+            "revoked",
+            &revoked_request,
+            revoked_bytes.as_slice(),
+        ),
+    ];
+    for cold in [false, true] {
+        if cold {
+            group.server_mut(0).restart_external_process().await?;
+        }
+        for (label, expected_state, request, original) in cases {
+            let (status, bytes) = post_claim(&requester.client, request).await?;
+            ensure!(
+                status == StatusCode::OK && json_equal(&bytes, original)?,
+                "{expected_state} expired exact recovery cold={cold}: {status} {}",
+                String::from_utf8_lossy(&bytes)
+            );
+            let before = upload_durable_cut(database_url).await?;
+            let row = before["peer_keypackage_claims"]
+                .as_array()
+                .context("ledger snapshot")?
+                .iter()
+                .find(|row| row["claim_request_id"] == request.claim_request_id.as_str())
+                .context("original durable ledger")?;
+            ensure!(
+                row["state"] == expected_state,
+                "recovery changed terminal state: {row}"
+            );
+            ensure!(
+                row["outcome"] == serde_json::from_slice::<Value>(original)?,
+                "stored outcome changed"
+            );
+            let (status, bytes) = post_claim(&requester.client, request).await?;
+            ensure!(
+                status == StatusCode::OK && json_equal(&bytes, original)?,
+                "second recovery: {status} {}",
+                String::from_utf8_lossy(&bytes)
+            );
+            ensure!(
+                upload_durable_cut(database_url).await? == before,
+                "{expected_state} recovery wrote durable state"
+            );
+            eprintln!(
+                "[keypackage-recovery] case={label} state={expected_state} cold={cold} exact_outcome=true zero_writes=true"
+            );
+        }
+        let mut negatives = Vec::new();
+        let request = claim_request(
+            requester,
+            group.server(0),
+            target,
+            realm,
+            mls_group,
+            [0x7a; 16],
+            chrono::Duration::minutes(6),
+        )?;
+        negatives.push(("over_five_minute_window", request, "schema_violation"));
+        let unknown_realm = RealmId::from_event_id(&EventId::from_digest(
+            arkret_canonical::DigestSuite::Sha256,
+            [0x7b; 32],
+        ));
+        let unknown_group = ScopeRef::Realm {
+            realm_id: unknown_realm.clone(),
+        }
+        .canonical_mls_group_id()?;
+        let request = claim_request(
+            requester,
+            group.server(0),
+            target,
+            &unknown_realm,
+            unknown_group.as_str(),
+            [0x7c; 16],
+            chrono::Duration::minutes(4),
+        )?;
+        negatives.push((
+            "new_request_without_current_membership",
+            request,
+            "claim_failed",
+        ));
+        let mut request = consumed_request.clone();
+        request.claim_request_id = arkret_wire::Base64UrlString::new(
+            base64::engine::general_purpose::URL_SAFE_NO_PAD.encode([0x79; 16]),
+        )
+        .map_err(anyhow::Error::msg)?;
+        resign_claim(requester, &mut request)?;
+        negatives.push(("unknown_expired", request, "schema_violation"));
+        let mut request = consumed_request.clone();
+        request.expires_at -= chrono::Duration::seconds(1);
+        resign_claim(requester, &mut request)?;
+        negatives.push(("different_digest", request, "duplicate_conflict"));
+        let mut request = consumed_request.clone();
+        request.service_binding.source_id =
+            arkret_wire::DidCoreId::new("ak:did_core:web:foreign.example")?;
+        resign_claim(requester, &mut request)?;
+        negatives.push(("wrong_source", request, "schema_violation"));
+        let mut request = consumed_request.clone();
+        request.requester_account_id.as_mut().unwrap().station_id =
+            arkret_wire::DidCoreId::new("ak:did_core:web:foreign.example")?;
+        resign_claim(requester, &mut request)?;
+        negatives.push(("wrong_account", request, "capability_denied"));
+        let mut request = consumed_request.clone();
+        if let arkret_models_crypto::PeerKeyPackageRequesterAuthorization::Device {
+            requester_device_id,
+            ..
+        } = &mut request.requester_authorization
+        {
+            *requester_device_id = target.device.clone();
+        }
+        resign_claim(requester, &mut request)?;
+        negatives.push(("wrong_device", request, "capability_denied"));
+        for (label, request, expected_problem) in negatives {
+            let before = upload_durable_cut(database_url).await?;
+            let (status, bytes) = post_claim(&requester.client, &request).await?;
+            ensure!(
+                !status.is_success() && problem_type(&bytes)? == expected_problem,
+                "{label} cold={cold}: {status} {}",
+                String::from_utf8_lossy(&bytes)
+            );
+            ensure!(
+                upload_durable_cut(database_url).await? == before,
+                "{label} wrote durable state"
+            );
+            eprintln!(
+                "[keypackage-recovery] case={label} cold={cold} status={status} problem={}",
+                String::from_utf8_lossy(&bytes)
+            );
+        }
+        let before = upload_durable_cut(database_url).await?;
+        let (status, bytes) = post_claim(&target.client, consumed_request).await?;
+        ensure!(
+            !status.is_success() && problem_type(&bytes)? == "capability_denied",
+            "wrong session: {status} {}",
+            String::from_utf8_lossy(&bytes)
+        );
+        ensure!(
+            upload_durable_cut(database_url).await? == before,
+            "wrong session wrote durable state"
+        );
+
+        // A missing durable ledger must fail closed, never fall back to another
+        // claim. This fault is confined to this isolated test database.
+        execute_recovery_sql(
+            database_url,
+            "ALTER TABLE peer_keypackage_claims RENAME TO unavailable_claim_ledger",
+        )
+        .await?;
+        let unavailable = post_claim(&requester.client, consumed_request).await;
+        execute_recovery_sql(
+            database_url,
+            "ALTER TABLE unavailable_claim_ledger RENAME TO peer_keypackage_claims",
+        )
+        .await?;
+        let (status, bytes) = unavailable?;
+        ensure!(
+            status.is_server_error(),
+            "ledger unavailable: {status} {}",
+            String::from_utf8_lossy(&bytes)
+        );
+        ensure!(
+            upload_durable_cut(database_url).await? == before,
+            "ledger failure wrote durable state"
+        );
+        eprintln!(
+            "[keypackage-recovery] case=ledger_unavailable cold={cold} status={status} problem={}",
+            String::from_utf8_lossy(&bytes)
+        );
+    }
+    Ok(())
+}
+
+fn unsigned_refs(outcome: &KeyPackagesClaimOutcome) -> Vec<String> {
+    outcome
+        .claims
+        .iter()
+        .map(|claim| claim.keypackage_ref.clone())
+        .collect()
+}
+
+pub(crate) fn resign_claim(
+    requester: &Member,
+    body: &mut KeyPackagesClaimRequestBody,
+) -> Result<()> {
+    let bytes = arkret_models_crypto::keypackage_claim_authorization_signing_bytes(
+        &body.unsigned_request(),
+        &body.service_binding,
+        &body.requester_authorization,
+    )?;
+    let arkret_models_crypto::PeerKeyPackageRequesterAuthorization::Device { signature, .. } =
+        &mut body.requester_authorization
+    else {
+        bail!("device fixture required");
+    };
+    signature.sig = arkret_wire::Base64UrlString::new(
+        base64::engine::general_purpose::URL_SAFE_NO_PAD
+            .encode(requester.key.sign(&bytes).to_bytes()),
+    )
+    .map_err(anyhow::Error::msg)?;
+    Ok(())
+}
+
+async fn execute_recovery_sql(database_url: &str, sql: &str) -> Result<()> {
+    let database_url = database_url.to_owned();
+    let sql = sql.to_owned();
+    tokio::task::spawn_blocking(move || -> Result<()> {
+        postgres::Client::connect(&database_url, postgres::NoTls)?.batch_execute(&sql)?;
+        Ok(())
+    })
+    .await?
 }
 
 pub(crate) async fn upload_durable_cut(database_url: &str) -> Result<Value> {

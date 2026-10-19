@@ -12,3 +12,10 @@ async fn cross_station_mls_welcome() -> Result<()> {
     let _guard = init_transcript_writer("cross_station_mls_welcome", None)?;
     cotest::scenarios::cross_station_mls_welcome::cross_station_mls_welcome_run().await
 }
+
+#[tokio::test(flavor = "multi_thread")]
+#[serial]
+async fn remote_claim_expired_commands_recover_at_source_and_destination_after_restart()
+-> Result<()> {
+    cotest::scenarios::cross_station_mls_welcome::cross_station_expired_claim_recovery_run().await
+}

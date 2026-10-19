@@ -244,7 +244,7 @@ aes-gcm = { workspace = true }
 anyhow = { workspace = true }
 arbitrary = { workspace = true, features = ["derive"] }
 argon2 = { workspace = true, default-features = false, features = ["alloc", "password-hash"] }
-arkret = { workspace = true }
+arkret = { workspace = true, features = ["mls-test-utils"] }
 arkret-bootstrap = { workspace = true }
 arkret-canonical = { workspace = true }
 arkret-crypto = { workspace = true, features = ["backup", "blob-aead", "secret-share"] }
