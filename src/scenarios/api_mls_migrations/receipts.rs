@@ -13,6 +13,172 @@ use serde_json::json;
 use super::{MlsApiContext, scan};
 use crate::scenarios::mls_lifecycle_live::Member;
 
+pub(crate) struct ScopePolicyRestartProbe {
+    realm: RealmId,
+    rows: Vec<arkret_wire::TypedCurrentRow>,
+}
+
+impl ScopePolicyRestartProbe {
+    pub(crate) async fn verify(&self, source: &Member, holder: &Member) -> Result<()> {
+        let current = verified_policy_rows(source, holder, &self.realm).await?;
+        ensure!(
+            current == self.rows,
+            "receipt policies changed or disappeared after a real Station restart"
+        );
+        println!(
+            "scope_receipt_policy: cold restart preserved all independent values, sources and exact revisions"
+        );
+        Ok(())
+    }
+}
+
+async fn verified_policy_rows(
+    source: &Member,
+    holder: &Member,
+    realm: &RealmId,
+) -> Result<Vec<arkret_wire::TypedCurrentRow>> {
+    let http = holder.client.sdk();
+    let snapshot = http.realm_state_snapshot_head(realm).await?;
+    use sha2::Digest as _;
+    let request = arkret_wire::AuthorityBundleRequest {
+        realm_id: realm.clone(),
+        nonce: arkret_wire::Base64UrlString::new(arkret_canonical::base64url_encode(
+            sha2::Sha256::digest(arkret_identifiers::new_prefixed_uuid7("ak:request:")),
+        ))
+        .map_err(anyhow::Error::msg)?,
+    };
+    let bundle = http.realm_authority_bundle(&request).await?;
+    let service_id: arkret_identifiers::DidCoreId = source.client.service_id().parse()?;
+    let resolution = http.open_service_resolution(&service_id).await?;
+    ensure!(
+        cotest_test_support::wire::verify_realm_state_snapshot(json!({
+            "snapshot":snapshot,"expected_snapshot_id":snapshot.snapshot_id,
+            "authority_request":request,"authority_bundle":bundle,
+            "trusted_service_id":service_id,"service_resolution":resolution
+        }))? == json!({"verified":true}),
+        "scope policy snapshot failed native SDK/Garth verification"
+    );
+    let mut rows = snapshot
+        .current_state_entries
+        .into_iter()
+        .filter(|row| {
+            matches!(
+                row,
+                arkret_wire::TypedCurrentRow::Value {
+                    selector: arkret_wire::CurrentSelector::ScopeReadReceiptPolicy { .. },
+                    ..
+                }
+            )
+        })
+        .collect::<Vec<_>>();
+    rows.sort_by_key(|row| arkret_canonical::canonical_json_bytes(row).unwrap());
+    for row in &rows {
+        let current: arkret_models_collaboration::events_payloads::ScopeReadReceiptPolicyCurrent =
+            serde_json::from_value(serde_json::to_value(row)?)?;
+        current.validate()?;
+    }
+    Ok(rows)
+}
+
+pub(super) async fn scope_policy_acceptance(
+    ctx: &mut MlsApiContext<'_>,
+    realm: &RealmId,
+    first: &ScopeRef,
+    second: &ScopeRef,
+    outsider: &Member,
+) -> Result<()> {
+    let root = ScopeRef::Realm {
+        realm_id: realm.clone(),
+    };
+    let writes = [
+        (&root, json!({"disclosure":"disabled"})),
+        (
+            first,
+            json!({"disclosure":"required","visibility":"private"}),
+        ),
+        (
+            second,
+            json!({"disclosure":"optional","visibility":"members"}),
+        ),
+        (&root, json!({"disclosure":"required"})),
+        (second, json!({"disclosure":"disabled"})),
+        (second, json!({"visibility":"members"})),
+    ];
+    let mut expected = std::collections::BTreeMap::new();
+    for (scope, value) in writes {
+        let payload: arkret_models_collaboration::events_payloads::ReadReceiptPolicyPayload =
+            serde_json::from_value(value.clone())?;
+        let event = crate::scenarios::signal_live::scoped_event(
+            ctx.source,
+            scope,
+            arkret::EventKind::ScopeReadReceiptPolicy,
+            serde_json::to_value(payload)?,
+        )
+        .await?;
+        let commit = crate::scenarios::human_device_producer_live::submit_and_expect_commit(
+            &ctx.source.client,
+            &ctx.source.account,
+            ctx.source.device.as_str(),
+            &event,
+        )
+        .await?;
+        expected.insert(
+            arkret_canonical::canonical_json_bytes(scope)?,
+            (value, commit),
+        );
+        let rows = verified_policy_rows(ctx.source, ctx.holder, realm).await?;
+        ensure!(
+            rows.len() == expected.len(),
+            "scope policy created, hid or merged another scope row"
+        );
+        for row in rows {
+            let arkret_wire::TypedCurrentRow::Value {
+                selector,
+                source_stream_ref,
+                revision,
+                value,
+            } = row;
+            let arkret_wire::CurrentSelector::ScopeReadReceiptPolicy { scope_ref } = selector
+            else {
+                unreachable!()
+            };
+            let (wanted, accepted) = expected
+                .get(&arkret_canonical::canonical_json_bytes(&scope_ref)?)
+                .context("unexpected scope")?;
+            ensure!(
+                value == *wanted
+                    && source_stream_ref == accepted.stream_ref
+                    && revision.commit_id == accepted.commit_id
+                    && revision.stream_position == accepted.stream_position,
+                "scope policy did not preserve its own accepted whole value/source/revision"
+            );
+        }
+    }
+    let outside = verified_policy_rows(ctx.source, outsider, realm).await?;
+    ensure!(
+        outside.len() == 1
+            && matches!(
+                &outside[0],
+                arkret_wire::TypedCurrentRow::Value {
+                    selector: arkret_wire::CurrentSelector::ScopeReadReceiptPolicy {
+                        scope_ref: ScopeRef::Realm { .. }
+                    },
+                    ..
+                }
+            ),
+        "parent Realm membership exposed a Circle policy"
+    );
+    let rows = verified_policy_rows(ctx.source, ctx.holder, realm).await?;
+    ctx.receipt_policy_probe = Some(ScopePolicyRestartProbe {
+        realm: realm.clone(),
+        rows,
+    });
+    println!(
+        "scope_receipt_policy: live HTTP parent/sibling independence, whole replacement, native verified snapshots and nonmember isolation passed"
+    );
+    Ok(())
+}
+
 #[allow(clippy::too_many_arguments)]
 fn envelope(
     sender: &Member,
@@ -367,7 +533,10 @@ pub(super) async fn run(ctx: &mut MlsApiContext<'_>) -> Result<()> {
             .as_array()
             .context("snapshot current rows")?
             .iter()
-            .filter(|r| r["selector"]["kind"] == "scope_read_receipt_policy")
+            .filter(|r| {
+                r["selector"]["kind"] == "scope_read_receipt_policy"
+                    && r["selector"]["scope_ref"] == json!({"kind":"realm","realm_id":ctx.realm})
+            })
             .collect::<Vec<_>>();
         ensure!(
             rows.len() == 1
@@ -393,6 +562,10 @@ pub(super) async fn run(ctx: &mut MlsApiContext<'_>) -> Result<()> {
         )
         .await?;
     }
+    ctx.receipt_policy_probe = Some(ScopePolicyRestartProbe {
+        realm: ctx.realm.clone(),
+        rows: verified_policy_rows(ctx.source, ctx.holder, ctx.realm).await?,
+    });
     crate::conformance::run_read_receipt_policy_fixture_suite()?;
     println!(
         "read_receipts: real encrypted delivery, exact accepted Device authority, no durable marker, TTL/expiry/actor/membership refusals, accepted policy current rows, separate receiver-policy KAT verified"

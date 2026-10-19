@@ -32,6 +32,7 @@ pub(super) struct MlsApiContext<'a> {
     state: &'a EventId,
     source_group: &'a mut ArkretMlsGroup,
     holder_group: &'a mut ArkretMlsGroup,
+    receipt_policy_probe: Option<receipts::ScopePolicyRestartProbe>,
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -46,7 +47,7 @@ pub(super) async fn exercise(
     state: &EventId,
     source_group: &mut ArkretMlsGroup,
     holder_group: &mut ArkretMlsGroup,
-) -> Result<()> {
+) -> Result<Option<receipts::ScopePolicyRestartProbe>> {
     let mut ctx = MlsApiContext {
         source,
         holder,
@@ -57,6 +58,7 @@ pub(super) async fn exercise(
         state,
         source_group,
         holder_group,
+        receipt_policy_probe: None,
     };
     match case {
         MlsApiCase::AuditedReport => audited_report(&mut ctx).await,
@@ -64,7 +66,8 @@ pub(super) async fn exercise(
         MlsApiCase::CircleMarkers => discussion::markers(&ctx).await,
         MlsApiCase::Discussion => discussion::run(&mut ctx).await,
         MlsApiCase::ReceiptSignals => receipts::run(&mut ctx).await,
-    }
+    }?;
+    Ok(ctx.receipt_policy_probe)
 }
 
 pub(crate) async fn scan(client: &TestActorClient, scope: &ScopeRef) -> Result<StreamScanOutcome> {
