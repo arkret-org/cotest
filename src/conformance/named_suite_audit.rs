@@ -94,7 +94,7 @@ pub fn missing_sync_production_cases(
 /// total number of unwired suites happened to stay constant.
 // Content-key KATs run in arkret-mls; complete authorized-checkpoint
 // remains owned by 0805. Terminal live scenarios execute below.
-const KNOWN_UNWIRED_ENTRYPOINTS: [&str; 34] = [
+const KNOWN_UNWIRED_ENTRYPOINTS: [&str; 33] = [
     "ak.suite.agent.draft_pending_intent.v1",
     "ak.suite.agent.participation.v1",
     "ak.suite.applet.managed_actor_authority.v1",
@@ -124,7 +124,6 @@ const KNOWN_UNWIRED_ENTRYPOINTS: [&str; 34] = [
     "ak.suite.privacy.security.v1",
     "ak.suite.protocol.edge_cases.v1",
     "ak.suite.reaction.authority_order.v1",
-    "ak.suite.read_receipt.scope_policy.v1",
     "ak.suite.scope.circle.v1",
     "ak.suite.signer_key.historical_commit_coordinate.v1",
     "ak.suite.state.registered_atomic_units_and_watch_audit.v1",
@@ -172,7 +171,7 @@ const REVIEWED_APPLET_DEVICE_SCOPE_CASES: [&str; 15] = [
     "sidecar",
 ];
 
-const RUNNERS: [(&str, Runner); 57] = [
+const RUNNERS: [(&str, Runner); 58] = [
     (
         super::SDK_EVENT_TYPE_AXES_ENTRYPOINT,
         Runner::Cases(super::run_sdk_event_type_axes_suite),
@@ -976,7 +975,7 @@ mod tests {
             .collect::<BTreeSet<_>>();
         ensure!(registered.len() == RUNNERS.len() + CLIENT_ENTRYPOINTS.len());
         let unwired = assert_named_gap_inventory(&fixtures, &registered)?;
-        ensure!(unwired.len() == 34);
+        ensure!(unwired.len() == 33);
         let mut added = fixtures.clone();
         added.insert("unregistered_test_entrypoint".to_owned(), Vec::new());
         ensure!(assert_named_gap_inventory(&added, &registered).is_err());
@@ -984,7 +983,7 @@ mod tests {
         ensure!(removed.remove(KNOWN_UNWIRED_ENTRYPOINTS[0]).is_some());
         ensure!(assert_named_gap_inventory(&removed, &registered).is_err());
         println!(
-            "[named-preflight] acknowledged_unwired=34 added_rejected=1 removed_rejected=1 runtime_credit=0"
+            "[named-preflight] acknowledged_unwired=33 added_rejected=1 removed_rejected=1 runtime_credit=0"
         );
         Ok(())
     }
