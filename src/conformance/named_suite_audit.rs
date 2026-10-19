@@ -171,7 +171,7 @@ const REVIEWED_APPLET_DEVICE_SCOPE_CASES: [&str; 15] = [
     "sidecar",
 ];
 
-const RUNNERS: [(&str, Runner); 57] = [
+const RUNNERS: [(&str, Runner); 58] = [
     (
         super::SDK_EVENT_TYPE_AXES_ENTRYPOINT,
         Runner::Cases(super::run_sdk_event_type_axes_suite),
