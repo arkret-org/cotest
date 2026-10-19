@@ -60,7 +60,7 @@ pub use watch_evidence::run_registered_agent_watch_live;
 mod act_on_behalf_conjunction;
 mod act_on_behalf_evidence;
 mod binding_evidence;
-mod coauth_session_evidence;
+pub(crate) mod coauth_session_evidence;
 mod content_ceiling_evidence;
 mod content_cross_authority_evidence;
 mod content_direct_evidence;

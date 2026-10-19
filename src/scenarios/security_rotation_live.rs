@@ -78,6 +78,100 @@ pub(crate) struct RotationAuthor {
 }
 
 impl RotationAuthor {
+    pub(crate) fn from_client(client: &TestActorClient) -> Result<Self> {
+        let principal = client
+            .principal
+            .as_ref()
+            .context("Device signing custody")?
+            .clone();
+        let account = AccountId::new(principal.core_id.clone(), client.service_id().parse()?);
+        let seed = principal.device_signing_key.to_bytes();
+        Ok(Self {
+            actor: principal.did.to_string(),
+            station: account.station_id.clone(),
+            account,
+            method: DidUrl::new(format!("{}#{}", principal.did, principal.device_id))
+                .map_err(anyhow::Error::msg)?,
+            principal,
+            seed,
+        })
+    }
+    pub(crate) async fn prepare_for_client(
+        client: &TestActorClient,
+    ) -> Result<(Self, KeyBackup, RealmCommitId)> {
+        let signer = Self::from_client(client)?;
+        let seed = signer.seed;
+        let old = signer.backup(
+            OLD_BACKUP,
+            &BackupSeriesId::new(SERIES_ONE)?,
+            b"old-ciphertext",
+            seed,
+        )?;
+        let stored = expect_json(
+            client
+                .put(&format!("/_arkret/self/keys/backups/{OLD_BACKUP}"))
+                .header("Idempotency-Key", "rotation-old-backup")
+                .json(&old),
+            StatusCode::OK,
+        )
+        .await?;
+        ensure!(stored["status"] == "accepted", "old backup PUT: {stored}");
+        let installed = listing(client).await?;
+        let pointer = signer.pointer(
+            &BackupSeriesId::new(SERIES_ONE)?,
+            1,
+            Vec::new(),
+            &installed.active_series.authority_commit_id,
+        )?;
+        let commit = super::human_device_producer_live::submit_and_expect_commit(
+            client,
+            &signer.account,
+            signer.principal.device_id.as_str(),
+            &pointer,
+        )
+        .await?;
+        Ok((signer, old, commit.commit_id))
+    }
+    pub(crate) fn local_commit(
+        &self,
+        current: &SecurityTransaction,
+        rotation: &SecurityRotationTransactionCreateRequest,
+    ) -> Result<SecurityTransactionContinueRequest> {
+        let artifact = SecurityRotationLocalCommit {
+            schema: arkret_wire::SchemaId::SECURITY_ROTATION_LOCAL_COMMIT_V1.to_owned(),
+            transaction_id: current.transaction_id.clone(),
+            transaction_request_digest: current.request_digest.clone(),
+            prepared_plan_digest: current.prepared_plan_digest.clone(),
+            local_commit_digest: rotation.prepared_plan.local_commit_digest.clone(),
+            device_id: self.principal.device_id.clone(),
+            committed_at: arkret_canonical::normalize_timestamp_canonical(Utc::now()),
+        };
+        let mut attestation = ClientStepAttestation {
+            step: SecurityTransactionStep::LocalCommit,
+            output_ref: rotation.prepared_plan.local_commit_digest.to_string(),
+            transaction_id: current.transaction_id.clone(),
+            transaction_request_digest: current.request_digest.clone(),
+            prepared_plan_digest: current.prepared_plan_digest.clone(),
+            artifact: ClientStepAttestationArtifact::SecurityRotation(artifact),
+            auth_data: ClientStepAttestationAuthData {
+                verification_method: self.method.clone(),
+                signature_algorithm: "Ed25519".into(),
+                signature: Base64UrlString::new("AA").map_err(anyhow::Error::msg)?,
+            },
+        };
+        attestation.auth_data.signature = Base64UrlString::new(arkret_canonical::base64url_encode(
+            SigningKey::from_bytes(&self.seed)
+                .sign(&attestation.signing_bytes()?)
+                .to_bytes(),
+        ))
+        .map_err(anyhow::Error::msg)?;
+        Ok(SecurityTransactionContinueRequest {
+            request_digest: current.request_digest.clone(),
+            prepared_plan_digest: current.prepared_plan_digest.clone(),
+            expected_accepted_step_count: current.accepted_steps.len().try_into()?,
+            client_attestation: attestation,
+        })
+    }
     /// One `secret_storage` envelope of `series`, signed with `seed` under
     /// A's device method and current authorization.
     fn backup(
@@ -201,7 +295,7 @@ impl RotationAuthor {
         )?;
         Ok(event_envelope_for_device(
             &self.actor,
-            DEVICE_A,
+            self.principal.device_id.as_str(),
             &self.station,
             self.principal.pcr_realm_id.as_str(),
             arkret_wire::EventKind::KeyBackupActiveSeries.as_str(),
@@ -248,7 +342,7 @@ impl RotationAuthor {
         .map_err(anyhow::Error::msg)?;
         Ok(event_envelope_for_device(
             &self.actor,
-            DEVICE_A,
+            self.principal.device_id.as_str(),
             &self.station,
             self.principal.pcr_realm_id.as_str(),
             arkret_wire::EventKind::PolicySet.as_str(),
@@ -257,7 +351,7 @@ impl RotationAuthor {
     }
 
     /// A recovery policy whose single authority is one offline Ed25519 recovery key.
-    fn recovery_unlock_policy(
+    pub(crate) fn recovery_unlock_policy(
         &self,
         policy_id: &str,
         recovery_method: &DidUrl,
@@ -320,7 +414,7 @@ impl RotationAuthor {
         .map_err(anyhow::Error::msg)?;
         Ok(event_envelope_for_device(
             &self.actor,
-            DEVICE_A,
+            self.principal.device_id.as_str(),
             &self.station,
             self.principal.pcr_realm_id.as_str(),
             arkret_wire::EventKind::PolicySet.as_str(),
@@ -371,7 +465,7 @@ impl RotationAuthor {
             arkret_wire::EventKind::DeviceRevoke.as_str(),
             serde_json::json!({
                 "device_id": target,
-                "revoked_by": DEVICE_A,
+                "revoked_by": self.principal.device_id,
                 "revoked_at": arkret_canonical::format_timestamp_canonical(now),
                 "reason": "security_rotation",
             }),
@@ -1858,7 +1952,7 @@ async fn admit_accepted_device(
 }
 
 /// Publish a recovery policy through the formal publication operation.
-async fn publish_recovery_policy(
+pub(crate) async fn publish_recovery_policy(
     client: &TestActorClient,
     event: &Event,
 ) -> Result<reqwest::Response> {
@@ -2094,6 +2188,28 @@ async fn create_verified_recovery_unlock_session(
     recovery_seed: [u8; 32],
     requesting_device_seed: [u8; 32],
 ) -> Result<arkret_models_crypto::RecoverySession> {
+    let coordinates = recovery_grant_coordinates(&signer.principal, &signer.station)?;
+    create_verified_recovery_unlock_session_bound(
+        client,
+        signer,
+        recovery_method,
+        recovery_seed,
+        requesting_device_seed,
+        coordinates,
+        "ak:trust_domain:cotest.example".parse()?,
+    )
+    .await
+}
+
+pub(crate) async fn create_verified_recovery_unlock_session_bound(
+    client: &TestActorClient,
+    signer: &RotationAuthor,
+    recovery_method: &DidUrl,
+    recovery_seed: [u8; 32],
+    requesting_device_seed: [u8; 32],
+    coordinates: (arkret_wire::SessionGrantId, Base64UrlString),
+    trust_domain: arkret_wire::TrustDomainId,
+) -> Result<arkret_models_crypto::RecoverySession> {
     use arkret_models_crypto::{
         GenericRecoveryTranscript, RECOVERY_DEVICE_POSSESSION_DOMAIN,
         RECOVERY_PROOF_TRANSCRIPT_SCHEMA, RecoveryDevicePossessionTranscript, RecoverySession,
@@ -2104,8 +2220,8 @@ async fn create_verified_recovery_unlock_session(
     };
     use arkret_wire::{DidKey, RequestId};
 
-    let (grant_id, cnf_jkt) = recovery_grant_coordinates(&signer.principal, &signer.station)?;
-    let request_id = RequestId::new("ak:request:01904100-0000-7000-8000-0000000000d1".to_owned())?;
+    let (grant_id, cnf_jkt) = coordinates;
+    let request_id = RequestId::new(arkret_identifiers::new_prefixed_uuid7("ak:request:"))?;
     let requesting_device_key = SigningKey::from_bytes(&requesting_device_seed);
     let device_multibase = arkret_canonical::ed25519_pubkey_to_did_key_multibase(
         requesting_device_key.verifying_key().as_bytes(),
@@ -2120,7 +2236,7 @@ async fn create_verified_recovery_unlock_session(
         account_id: signer.account.clone(),
         requesting_device_id: signer.principal.device_id.clone(),
         requesting_device_public_key_did: requesting_device_public_key_did.clone(),
-        trust_domain: arkret_wire::TrustDomainId::new("ak:trust_domain:cotest.example".to_owned())?,
+        trust_domain,
         expected_recovery_policy_ref: None,
     };
     let possession_signature = requesting_device_key.sign(&possession.signing_bytes()?);

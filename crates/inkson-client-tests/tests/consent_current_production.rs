@@ -26,7 +26,7 @@ async fn named_consent_cache_all_fourteen_cases() {
 async fn actual_pcr_authority_live_verdicts() {
     tokio::task::LocalSet::new()
         .run_until(cotest::harness::heap_future(
-            cotest_inkson_client_tests::conformance::consent_cache::run_authority_change_live,
+            cotest_inkson_client_tests::conformance::consent_cache::run_human_station_binding_live,
         ))
         .await
         .unwrap();

@@ -641,7 +641,6 @@ impl Session {
                 identity
                     .principal
                     .validate_restored(
-                        &self.http,
                         &identity.coauth_base,
                         &identity.station_base,
                         &identity.trust_domain,
@@ -689,7 +688,6 @@ impl Session {
                     FoundingDeviceKey::restore(&identity.session_signing_seed_b64url)?;
                 principal
                     .validate_restored(
-                        &self.http,
                         &identity.coauth_base,
                         &identity.station_base,
                         &identity.trust_domain,
@@ -737,7 +735,6 @@ impl Session {
                 identity
                     .principal
                     .validate_restored(
-                        &self.http,
                         &identity.coauth_base,
                         &identity.station_base,
                         &identity.trust_domain,
@@ -780,7 +777,6 @@ impl Session {
                 identity
                     .principal
                     .validate_restored(
-                        &self.http,
                         &identity.coauth_base,
                         &identity.station_base,
                         &identity.trust_domain,

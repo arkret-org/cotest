@@ -447,7 +447,6 @@ impl FoundedPrincipal {
     /// Revalidate disk-restored custody and accepted authority before opening a runtime store.
     pub async fn validate_restored(
         &self,
-        http: &reqwest::Client,
         coauth: &str,
         station: &str,
         trust_domain: &str,
@@ -507,15 +506,8 @@ impl FoundedPrincipal {
                     == Some(trust_domain),
             "stored Device private key or trust domain differs from the accepted founding PCR"
         );
-        verify_accepted_identity_material(
-            http,
-            coauth,
-            station,
-            &self.accepted_request,
-            &self.outcome,
-            session_key,
-        )
-        .await
+        verify_accepted_identity_material(coauth, station, &self.accepted_request, &self.outcome)
+            .await
     }
 
     /// The initial DPoP-bound session grant.
@@ -838,16 +830,9 @@ pub async fn submit_prepared_principal_registration(
         "initial grant does not match the accepted Account, Station, Device and session key"
     );
 
-    verify_accepted_identity_material(
-        http,
-        coauth,
-        station_base,
-        &accepted_request,
-        &outcome,
-        &handoff.device_key,
-    )
-    .await
-    .context("verify canonical registration authority receipts before retaining identity")?;
+    verify_accepted_identity_material(coauth, station_base, &accepted_request, &outcome)
+        .await
+        .context("verify canonical registration authority receipts before retaining identity")?;
 
     let did = checkpoint
         .get("did")
@@ -868,12 +853,10 @@ pub async fn submit_prepared_principal_registration(
 /// Receipt signatures use complete method-native history at their issuance
 /// coordinate. No grant or current DID document substitutes for that history.
 async fn verify_accepted_identity_material(
-    http: &reqwest::Client,
     coauth: &str,
     station: &str,
     request: &AccountRegisterRequestBody,
     outcome: &AccountRegisterOutcome,
-    device_key: &FoundingDeviceKey,
 ) -> Result<()> {
     fn scoped_builder(
         base: &str,
@@ -1005,17 +988,15 @@ async fn verify_accepted_identity_material(
         witnesses.as_deref(),
     )?;
     let log_entries = log.log.raw_entries;
-    arkret_identity::verify_account_binding_receipt_at_issuance(
-        receipt,
-        &CompleteHistory(arkret_models_identity::IdentityLogListOutcome {
-            did: authority_did,
-            method: arkret_models_identity::DidMethodUri::Webvh,
-            native_history: Some(true),
-            entries: log_entries,
-            next_cursor: None,
-            has_more: false,
-        }),
-    )?;
+    let history = CompleteHistory(arkret_models_identity::IdentityLogListOutcome {
+        did: authority_did.clone(),
+        method: arkret_models_identity::DidMethodUri::Webvh,
+        native_history: Some(true),
+        entries: log_entries,
+        next_cursor: None,
+        has_more: false,
+    });
+    arkret_identity::verify_account_binding_receipt_at_issuance(receipt, &history)?;
 
     for (event, commit) in registration.pcr_genesis_unit.events.iter().zip(commits) {
         ensure!(
@@ -1034,7 +1015,7 @@ async fn verify_accepted_identity_material(
     let station_did = arkret_identity::verification_method_did(
         commits[0].signature.verification_method.as_str(),
     )?;
-    let station_resolution = scoped_builder(station, http)?
+    let station_resolution = scoped_builder(station, &discovery)?
         .build()?
         .resolve_service_from_did(&station_did, arkret_wire::ServiceKind::Station)
         .await?;
@@ -1045,42 +1026,60 @@ async fn verify_accepted_identity_material(
                 == url::Url::parse(&format!("{}/", station.trim_end_matches('/')))?,
         "retained Station locator differs from its authenticated native route"
     );
-    let signer = std::sync::Arc::new(device_key.signing_key());
-    let auth = arkret_http_client::Auth::Dpop(arkret_http_client::DpopAuth::with_dpop_token(
-        grant.session_grant.clone(),
-        move |request| {
-            garth::session::dpop::build_http_dpop_proof(request, &signer)
-                .map_err(|error| arkret_http_client::Error::Protocol(error.to_string()))
-        },
-    ));
-    let sdk = scoped_builder(station, http)?.auth(auth).build()?;
-    let authority = garth::AuthorityClient::new(sdk);
-    let nonce = arkret_wire::Base64UrlString::new(random_b64url("pcr_authority_nonce"))
-        .map_err(anyhow::Error::msg)?;
-    let bundle_request = arkret_wire::AuthorityBundleRequest {
-        realm_id: registration.pcr_genesis_unit.create().realm_id.clone(),
-        nonce: nonce.clone(),
-    };
-    let bundle = authority.resolve_authority(&bundle_request).await?;
+    // Immutable Human acceptance is verified from the frozen ordered unit and
+    // the owning Station's original native history. It never needs a public
+    // PCR bundle or a portable current-governor assertion. Current-device
+    // authorization remains a separate native check at each later effect.
+    let unit = &registration.pcr_genesis_unit;
+    arkret_identity::verify_pcr_genesis_events(
+        unit,
+        &registration.principal_registration_anchor,
+        &arkret_wire::ActorId::account(grant.account_id.clone()),
+    )?;
     ensure!(
-        bundle.genesis_event == *registration.pcr_genesis_unit.create(),
-        "PCR authority bundle must contain the original frozen genesis Event"
+        commits[0].stream_position == 0 && commits[0].previous_commit_ref.is_none(),
+        "Human acceptance does not start at the original stream zero"
     );
-    let keys = garth::fetch_historical_station_keys_for_commits(
-        authority.transport(),
-        &bundle,
-        &[&commits[0], &commits[1]],
-    )
-    .await?;
-    let freshness = arkret_identity::RealmAuthorityFreshness::new(chrono::Utc::now(), nonce);
-    let verified = arkret_identity::verify_realm_authority_bundle(&bundle, &freshness, &keys)?;
-    for (event, commit) in registration.pcr_genesis_unit.events.iter().zip(commits) {
-        verified.verify_committed_item(
-            &arkret_wire::CommittedEventFullView {
-                event: event.clone(),
-                commit: commit.clone(),
-            },
-            &keys,
+    commits[1].validate_successor_of(&commits[0])?;
+    for commit in commits {
+        commit.verify_commit_id_matches_content()?;
+        ensure!(
+            commit.governance_generation == 0
+                && commit.stream_ref
+                    == (arkret_wire::CommitStreamRef::Realm {
+                        realm_id: unit.create().realm_id.clone()
+                    })
+                && commit.authority_ref
+                    == arkret_wire::RealmCommitAuthorityRef::GenesisOrChangeEvent(
+                        unit.create().event_id.clone()
+                    )
+                && commit.producer_signer_fact_digest.is_none()
+                && arkret_identity::verification_method_did(
+                    commit.signature.verification_method.as_str()
+                )? == station_did,
+            "Human founding acceptance is not bound to its original Station and tenure"
+        );
+        let point = arkret_signatures::webvh::validate_webvh_history_at(
+            &station_did,
+            &history.0.entries,
+            commit.signature.created_at,
+        )?;
+        let document: arkret_identity::DidDocument = serde_json::from_value(point.document)?;
+        arkret_identity::validate_verification_method_relationship(
+            &document,
+            &commit.signature.verification_method,
+            &station_did,
+            arkret_identity::DidVerificationRelationship::AssertionMethod,
+        )?;
+        let key = arkret_identity::public_key_material_from_document(
+            &document,
+            &commit.signature.verification_method,
+        )?;
+        arkret_signatures::detached_object::verify_detached_object_signature(
+            &commit.signature,
+            &arkret_canonical::canonical::unsigned_value(commit, &["signature"])?,
+            arkret_wire::DetachedSignatureContext::RealmCommit,
+            &key,
         )?;
     }
     Ok(())

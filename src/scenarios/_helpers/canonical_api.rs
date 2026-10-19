@@ -17,6 +17,52 @@ pub struct CanonicalApiFixture {
 }
 
 impl CanonicalApiFixture {
+    pub(crate) fn from_owned(
+        server: ArkretServer,
+        client: TestActorClient,
+        http: reqwest::Client,
+        endpoints: DeploymentEndpoints,
+        oidc_client_id: String,
+    ) -> Self {
+        Self {
+            server,
+            client,
+            http,
+            endpoints,
+            oidc_client_id,
+        }
+    }
+    pub(crate) async fn issue_for_device(
+        &self,
+        client: &TestActorClient,
+    ) -> Result<arkret_models_collaboration::session_grants::SessionGrantOutcome> {
+        pairing::issue_for_device(self, client).await
+    }
+    pub(crate) async fn refresh_for_device(
+        &self,
+        client: &TestActorClient,
+    ) -> Result<arkret_models_collaboration::session_grants::SessionGrantOutcome> {
+        pairing::refresh_for_device(self, client).await
+    }
+    pub(crate) async fn prepare_pairing_request(
+        &self,
+    ) -> Result<(
+        arkret_http_client::Client,
+        arkret_identity::VerifiedSubmission<
+            arkret_models_collaboration::device_pairing::AccountDevicePairRequestBody,
+        >,
+    )> {
+        pairing::prepare_pairing_request(self).await
+    }
+    pub(crate) async fn recovery_candidate(
+        &self,
+    ) -> Result<(
+        TestActorClient,
+        arkret_http_client::Client,
+        arkret_models_identity::InitialSessionGrantIntent,
+    )> {
+        pairing::recovery_candidate(self).await
+    }
     pub async fn pair_sibling(&self) -> Result<TestActorClient> {
         pairing::pair(self).await
     }

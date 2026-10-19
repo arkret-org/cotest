@@ -27,16 +27,18 @@ pub async fn run_agent_longevity_session_boundary() -> Result<()> {
     Ok(())
 }
 
-pub(super) struct ActualAgentDeployment {
+pub(crate) struct ActualAgentDeployment {
+    pub http: reqwest::Client,
+    pub oidc_client_id: String,
     pub station: ArkretServer,
     pub coauth: crate::scenarios::_helpers::coauth_bootstrap::SpawnedCoauth,
     pub controller: crate::harness::TestActorClient,
     pub account: arkret_wire::AccountId,
-    pub(super) endpoints: DeploymentEndpoints,
+    pub(crate) endpoints: DeploymentEndpoints,
     _email: SpawnedExternalProcess,
 }
 
-pub(super) async fn actual_agent_deployment(label: &str) -> Result<ActualAgentDeployment> {
+pub(crate) async fn actual_agent_deployment(label: &str) -> Result<ActualAgentDeployment> {
     let mut port = reserve_port()?;
     let email_base = format!("http://127.0.0.1:{}", port.port());
     port.release();
@@ -233,6 +235,8 @@ pub(super) async fn actual_agent_deployment(label: &str) -> Result<ActualAgentDe
         arkret_wire::AccountId::new(principal.core_id.clone(), station.service_id().clone());
     wait_for_onboarding_activity(&coauth.pg.connect_url).await?;
     Ok(ActualAgentDeployment {
+        http,
+        oidc_client_id: client_id.to_owned(),
         station,
         coauth,
         controller,

@@ -250,11 +250,23 @@ fn describe_external_binary_candidates(spec: &ExternalBinarySpec) -> String {
 /// Determine whether the spec is currently spawnable; if not, return a
 /// machine-readable `SkipReason` so the caller can log + decide.
 pub fn skip_reason(spec: &ExternalBinarySpec) -> Option<SkipReason> {
+    skip_reason_with_extra_env(spec, &[])
+}
+
+fn skip_reason_with_extra_env(
+    spec: &ExternalBinarySpec,
+    extra_env: &[(&str, &str)],
+) -> Option<SkipReason> {
     for &name in spec.required_env_vars {
-        let present = std::env::var(name)
-            .ok()
-            .filter(|value| !value.trim().is_empty())
-            .is_some();
+        // Match Command's effective child environment, including the last
+        // explicit override. A supplied database needs no ambient parent value.
+        let present = extra_env
+            .iter()
+            .rev()
+            .chain(spec.extra_env.iter().rev())
+            .find(|(key, _)| *key == name)
+            .map(|(_, value)| !value.trim().is_empty())
+            .unwrap_or_else(|| std::env::var(name).is_ok_and(|value| !value.trim().is_empty()));
         if !present {
             return Some(SkipReason::MissingEnvVar { name });
         }
@@ -285,7 +297,7 @@ pub async fn try_spawn_with_extra_env(
     spec: &ExternalBinarySpec,
     extra_env: &[(&str, &str)],
 ) -> Result<Option<SpawnedExternalProcess>> {
-    if skip_reason(spec).is_some() {
+    if skip_reason_with_extra_env(spec, extra_env).is_some() {
         return Ok(None);
     }
     let bin_path = locate_external_binary(spec)

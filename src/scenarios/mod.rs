@@ -79,7 +79,7 @@ pub mod websocket_live;
 pub mod account_stream_api;
 pub mod api_mls_migrations;
 pub mod consent_call_context;
-pub mod consent_pcr_handoff;
+pub mod human_pcr_station_binding;
 pub mod invite_addressing_api;
 pub mod peer_semantic_union_live;
 pub mod private_read_marker_api;

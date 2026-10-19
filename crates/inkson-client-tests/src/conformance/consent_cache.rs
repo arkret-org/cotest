@@ -666,7 +666,7 @@ pub async fn run_presence_and_media_cuts_live() -> Result<()> {
     let sequence = 1;
     let (context, native, other, _sequence) = media_phase(context, native, other, sequence).await?;
     drop((context, native, other));
-    cotest::harness::heap_future(run_authority_change_live).await?;
+    cotest::harness::heap_future(run_human_station_binding_live).await?;
     Ok(())
 }
 
@@ -920,7 +920,7 @@ async fn run_three_cuts_evidence() -> Result<Vec<super::CaseExecutionResult>> {
     completed_case(&mut evidence, 10, 8)?;
     completed_case(&mut evidence, 12, 21)?;
     drop((context, native, denied_native));
-    cotest::harness::heap_future(run_authority_change_live).await?;
+    cotest::harness::heap_future(run_human_station_binding_live).await?;
     completed_case(&mut evidence, 13, 5)?;
     Ok(evidence)
 }
@@ -2008,10 +2008,10 @@ async fn reopen_native(
     .await?)
 }
 
-/// Keep the original thirty-second verdict live across the actual authority cut.
-pub async fn run_authority_change_live() -> Result<()> {
+/// A rejected Human transfer preserves the original thirty-second verdict.
+pub async fn run_human_station_binding_live() -> Result<()> {
     let mut context = cotest::harness::heap_future(|| async {
-        ConsentCallContext::create("consent-authority-live", &[])
+        ConsentCallContext::create("human-station-binding-live", &[])
             .await
             .map(Box::new)
     })
@@ -2037,10 +2037,11 @@ pub async fn run_authority_change_live() -> Result<()> {
     .await?;
     let fresh = reopen_native(&context, &native).await?;
     let mut sequence = 1;
-    cotest::harness::heap_future(|| authority_change(&mut context, &fresh, &mut sequence)).await
+    cotest::harness::heap_future(|| human_station_binding(&mut context, &fresh, &mut sequence))
+        .await
 }
 
-async fn authority_change(
+async fn human_station_binding(
     context: &mut ConsentCallContext,
     native: &inkson::sync_engine::NativeAccountHost,
     sequence: &mut u64,
@@ -2054,92 +2055,53 @@ async fn authority_change(
         None,
     )
     .await?;
-    for (from, to) in [(1, 2), (2, 0)] {
-        let (request, received) = actual_product(context, native, sequence)
-            .await
-            .context("authority-change original actual product")?;
-        let started = std::time::Instant::now();
-        let old = inkson::conformance::read_native_consent_current(
-            native,
-            context.caller.actor.clone(),
-            ConsentScope::VoiceCall,
-        )
-        .await?;
-        let previous = old.value()?.governance_generation;
-        let recovery = cotest::harness::heap_future(|| {
-            cotest::scenarios::consent_pcr_handoff::activate_handoff(context, from, to)
-        })
-        .await
-        .context("authority-change native PCR handoff")?;
-        let fresh = inkson::conformance::read_native_consent_current(
-            native,
-            context.caller.actor.clone(),
-            ConsentScope::VoiceCall,
-        )
-        .await?;
-        ensure!(
-            fresh.value()?.governance_generation == previous + 1,
-            "actual PCR tenure did not advance once"
-        );
-        ensure!(
-            inkson::conformance::consume_native_consent_current(native, &fresh).await?,
-            "new authority's real holder read did not recover"
-        );
-        ensure!(
-            inkson::conformance::consume_native_consent_current(native, &old)
-                .await
-                .is_err(),
-            "older authority read crossed the known tenure high water"
-        );
-        eprintln!(
-            "[2141-authority] from_generation={previous} activation_and_current_ms={} original_invitation_remaining_ms={}",
-            started.elapsed().as_millis(),
-            (request.invitation.expires_at - Utc::now()).num_milliseconds()
-        );
-        ensure!(
-            request.invitation.expires_at > Utc::now(),
-            "authority switch test lost its original unexpired invitation"
-        );
-        if let garth::signal::SignalReceiveOutcome::Accepted {
-            call_invitation: Some(view),
-            ..
-        } = &received
-        {
-            ensure!(
-                view.outcome.expires_at > Utc::now(),
-                "authority switch lost its original unexpired product verdict"
-            );
-        }
-        ensure!(
-            inkson::conformance::observe_native_call_projection(native, received).await? == 0,
-            "previous-authority product rang after authority switch"
-        );
-        cotest::harness::heap_future(|| {
-            cotest::scenarios::consent_pcr_handoff::recover_handoff(context, recovery)
-        })
-        .await?;
-        // The original ciphertext was already decrypted before handoff. Recovery
-        // must author a fresh Signal rather than bypass the MLS replay guard.
-        let retry = prepare_invitation(
-            context,
-            &request.invitation.call_id,
-            &request.invitation.holder_account_id,
-            request.invitation.media.clone(),
-            *sequence,
-        )
-        .await?;
-        *sequence += 1;
-        ensure!(
-            product_attempt_after_current(context, &context.holder, native, &retry, true).await?
-                == 1,
-            "fresh authority retry did not pass the real product/ring cuts"
-        );
-        let token = invited_token(context, &retry, retry.invitation.media.clone());
-        let outcome = exchange(&context.holder, &token).await?;
-        verify_token(context, &token, &outcome).await?;
-    }
+    let (request, received) = actual_product(context, native, sequence).await?;
+    let old = inkson::conformance::read_native_consent_current(
+        native,
+        context.caller.actor.clone(),
+        ConsentScope::VoiceCall,
+    )
+    .await?;
+    cotest::harness::heap_future(|| {
+        cotest::scenarios::human_pcr_station_binding::assert_station_binding(context, 1, 2)
+    })
+    .await?;
+    let fresh = inkson::conformance::read_native_consent_current(
+        native,
+        context.caller.actor.clone(),
+        ConsentScope::VoiceCall,
+    )
+    .await?;
+    ensure!(
+        fresh.value()?.governance_generation == old.value()?.governance_generation,
+        "rejected Human transfer changed tenure"
+    );
+    ensure!(
+        inkson::conformance::consume_native_consent_current(native, &fresh).await?,
+        "own Station current did not recover"
+    );
+    ensure!(
+        inkson::conformance::observe_native_call_projection(native, received).await? == 1,
+        "rejected transfer invalidated a legal original product verdict"
+    );
+    let retry = prepare_invitation(
+        context,
+        &request.invitation.call_id,
+        &request.invitation.holder_account_id,
+        request.invitation.media.clone(),
+        *sequence,
+    )
+    .await?;
+    *sequence += 1;
+    ensure!(
+        product_attempt_after_current(context, &context.holder, native, &retry, true).await? == 1,
+        "fresh Call did not pass real product and ring cuts"
+    );
+    let token = invited_token(context, &retry, retry.invitation.media.clone());
+    let outcome = exchange(&context.holder, &token).await?;
+    verify_token(context, &token, &outcome).await?;
     println!(
-        "[2141-live] actual_zero_nonzero_pcr_handoff=1 previous_authority_read_rejected=1 previous_product_rejected=1 fresh_product_ring_token_recovered=1"
+        "[2343-live] human_transfer_refused=1 tenure_unchanged=1 original_verdict_preserved=1 fresh_call_three_cuts=1"
     );
     Ok(())
 }
@@ -2198,6 +2160,110 @@ async fn opaque_response(context: &mut ConsentCallContext, sequence: &mut u64) -
     Ok(())
 }
 
+async fn original_roster_replication(
+    context: &ConsentCallContext,
+    call: &CallId,
+) -> Result<(Vec<u8>, serde_json::Value, String)> {
+    let snapshot = context
+        .holder
+        .client
+        .sdk()
+        .realm_state_snapshot_head(&context.realm)
+        .await?;
+    let row = snapshot.current_state_entries.iter().find(|row| matches!(row,
+        arkret_wire::TypedCurrentRow::Value { selector: arkret_wire::CurrentSelector::CallRoster { call_id }, .. } if call_id == call
+    )).context("accepted original roster")?;
+    let arkret_wire::TypedCurrentRow::Value { value, .. } = row;
+    let roster: arkret_models_collaboration::events_payloads::call::CallRosterCurrentValue =
+        serde_json::from_value(value.clone())?;
+    let entry = roster.entries.iter().find(|entry| matches!(&entry.value,
+        arkret_models_collaboration::events_payloads::call::CallRosterDelta::Join { participant }
+        if participant.actor_id == context.holder.actor && participant.device_id == context.holder.device.as_str()
+    )).context("accepted exact holder participant")?;
+    let frozen = entry
+        .participant_signing_key
+        .as_ref()
+        .context("original issuer key was not frozen")?
+        .public_key_b64u
+        .clone();
+    let original = cotest::scenarios::mls_lifecycle_live::accepted_full_view(
+        &context.holder.client,
+        &entry.source_commit.event_ref,
+    )
+    .await?;
+    ensure!(
+        original.commit == entry.source_commit,
+        "roster source changed its original Commit"
+    );
+    let body = cotest::scenarios::fanout_route_miss_live::replication_body(
+        &context.holder.client,
+        &original.event,
+        &original.commit,
+    )
+    .await?;
+    Ok((body, serde_json::to_value(row)?, frozen))
+}
+
+async fn replay_roster_after_issuer_rotation(
+    context: &ConsentCallContext,
+    call: &CallId,
+    original: &(Vec<u8>, serde_json::Value, String),
+) -> Result<()> {
+    use arkret_models_collaboration::authority_commit::{
+        PeerAuthoritySubmitOutcome, PeerCommittedReplicationOutcomeRecord,
+    };
+    let issuer = context.stations.server(1);
+    ensure!(
+        original.2
+            != arkret_canonical::base64url_encode(
+                issuer.federation_signing_key()?.verifying_key().to_bytes()
+            ),
+        "issuer key did not actually rotate"
+    );
+    let attempt = format!(
+        "2343-roster-original-{}",
+        cotest::scenarios::mls_lifecycle_live::fresh_uuid_v7()
+    );
+    let (status, answer) = issuer
+        .signed_peer_post_with_idempotency_key(
+            context.stations.server(0),
+            "/_arkret/peer/events",
+            &original.0,
+            issuer.service_id(),
+            Some(&attempt),
+        )
+        .await?;
+    ensure!(
+        status == StatusCode::OK,
+        "old roster replication failed: {status} {}",
+        String::from_utf8_lossy(&answer)
+    );
+    let response: PeerAuthoritySubmitOutcome = serde_json::from_slice(&answer)?;
+    ensure!(
+        matches!(&response, PeerAuthoritySubmitOutcome::CommittedReplication(outcome) if matches!(outcome.replication_outcomes.as_slice(),
+            [PeerCommittedReplicationOutcomeRecord::Duplicate {} | PeerCommittedReplicationOutcomeRecord::Stored {}]
+        )),
+        "old original was rejected after issuer rotation: {response:?}"
+    );
+    let snapshot = context
+        .holder
+        .client
+        .sdk()
+        .realm_state_snapshot_head(&context.realm)
+        .await?;
+    let row = snapshot.current_state_entries.iter().find(|row| matches!(row,
+        arkret_wire::TypedCurrentRow::Value { selector: arkret_wire::CurrentSelector::CallRoster { call_id }, .. } if call_id == call
+    )).context("retained roster")?;
+    ensure!(
+        serde_json::to_value(row)? == original.1,
+        "original replay changed effective roster or its frozen key"
+    );
+    println!(
+        "[2343-call-history] actual_issuer_key_rotation=1 authenticated_original_replica=1 effective_roster_unchanged=1"
+    );
+    Ok(())
+}
+
 async fn direct_actor_refresh_matrix(
     context: &mut ConsentCallContext,
     token: &CallMediaTokenExchangeRequestBody,
@@ -2245,6 +2311,7 @@ async fn direct_actor_refresh_matrix(
         &exchange(&context.holder, &request).await?,
     )
     .await?;
+    let original_roster = original_roster_replication(context, &token.call_id).await?;
     let seed = arkret_canonical::base64_standard_encode([0xa7; 32]);
     context
         .stations
@@ -2263,6 +2330,7 @@ async fn direct_actor_refresh_matrix(
         &exchange(&context.holder, &renewal).await?,
     )
     .await?;
+    replay_roster_after_issuer_rotation(context, &token.call_id, &original_roster).await?;
     accept_roster(context, &context.holder, &rotated).await?;
     let current = refresh(token, &rotated);
     verify_token(
@@ -2296,7 +2364,7 @@ const CASE_NAMES: [&str; 14] = [
     "call_invitation_each_holder_is_independent",
     "call_invitation_window_constraints_and_independent_grants",
     "call_invitation_cross_station_inflight_revoke_and_queue",
-    "call_invitation_older_read_retry_and_authority_change",
+    "call_invitation_older_read_retry_and_human_station_binding",
     "call_invitation_first_join_voluntary_refresh_and_expansion",
     "call_invitation_opaque_response_and_recovery",
 ];
@@ -2332,8 +2400,10 @@ pub async fn run_consent_cache_suite_live() -> Result<super::SuiteExecutionResul
         ensure!(case["name"] == name, "Consent case contract changed");
     }
     // These original production flows are required predecessors of cases 1, 2 and 11.
-    cotest::harness::heap_future(cotest::scenarios::consent_pcr_handoff::run_planned_handoff_live)
-        .await?;
+    cotest::harness::heap_future(
+        cotest::scenarios::human_pcr_station_binding::run_station_binding_live,
+    )
+    .await?;
     cotest::harness::heap_future(
         cotest::scenarios::invite_service_fanout_live::consent_current_and_invite_gate_live_run,
     )
