@@ -186,12 +186,9 @@ pub fn run_read_receipt_policy_fixture_suite() -> Result<()> {
                 (disclosure.to_owned(), visibility.to_owned())
             }
             "strand" => {
-                // Track-level read-receipt overrides are not in the current v1
-                // catalog. A discussion timeline that needs a
-                // distinct read-receipt policy MUST be upgraded to an
-                // independent Strand/Circle scope (Strand.scope_circle_id, AKP-0007)
-                // whose own ak.realm.read_receipt_policy composes against the
-                // parent Realm policy via the same tighten-only rules.
+                // Interpret the historical MIMI fixture's parent/child inputs.
+                // This structural runner does not prove the current independent
+                // scope-policy contract; its named runtime suite stays unwired.
                 let parent = policy
                     .get("parent")
                     .ok_or_else(|| anyhow!("vector {name} strand missing parent"))?;

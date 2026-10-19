@@ -319,15 +319,13 @@ pub(super) async fn run(ctx: &mut MlsApiContext<'_>) -> Result<()> {
     .enumerate()
     {
         let payload: arkret_models_collaboration::events_payloads::ReadReceiptPolicyPayload =
-            serde_json::from_value(
-                json!({"disclosure":disclosure,"visibility":visibility,"scope_overrides_allowed":true}),
-            )?;
+            serde_json::from_value(json!({"disclosure":disclosure,"visibility":visibility}))?;
         let event = ctx
             .source
             .client
             .author_event(
                 ctx.realm.as_str(),
-                "ak.realm.read_receipt_policy",
+                "ak.scope.read_receipt_policy",
                 serde_json::to_value(&payload)?,
             )
             .await?;
@@ -369,7 +367,7 @@ pub(super) async fn run(ctx: &mut MlsApiContext<'_>) -> Result<()> {
             .as_array()
             .context("snapshot current rows")?
             .iter()
-            .filter(|r| r["selector"]["kind"] == "realm_read_receipt_policy")
+            .filter(|r| r["selector"]["kind"] == "scope_read_receipt_policy")
             .collect::<Vec<_>>();
         ensure!(
             rows.len() == 1
