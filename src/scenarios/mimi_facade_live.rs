@@ -73,7 +73,16 @@ async fn signed_post_with_mutation(
         Component, ContentDigest, ContentDigestAlgorithm, SignedRequestParts, canonical_message,
         format_signature_input_component_list, parse_signature_input, sign_message,
     };
-    let body = arkret_canonical::canonical_json_bytes(body)?;
+    let mut body = arkret_canonical::canonical_json_bytes(body)?;
+    match tamper {
+        Some("wire-whitespace-resigned") => body.insert(0, b' '),
+        Some("wire-duplicate-key-resigned") => {
+            body = br#"{"notification":{"kind":"delivery"},"notification":{"kind":"delivery"}}"#
+                .to_vec()
+        }
+        Some("wire-bad-json-resigned") => body = b"not json".to_vec(),
+        _ => {}
+    }
     let target = server.url(path);
     let url = reqwest::Url::parse(&target)?;
     let authority = match url.port() {
@@ -110,7 +119,12 @@ async fn signed_post_with_mutation(
     if room.is_some() {
         covered.push(Component::Header("mimi-room-uri".into()));
     }
-    let now = chrono::Utc::now().timestamp();
+    let now = chrono::Utc::now().timestamp()
+        + match tamper {
+            Some("expired_window") => -601,
+            Some("future_window") => 61,
+            _ => 0,
+        };
     let keyid = format!("{}#notary-key", server.service_did());
     let input = format!(
         "{};created={now};expires={};keyid=\"{keyid}\";alg=\"ed25519\"",
@@ -130,17 +144,23 @@ async fn signed_post_with_mutation(
         &parsed,
     )?;
     let signature = sign_message(&transcript, &server.federation_signing_key()?);
-    let mut body = body;
+    if tamper == Some("wire-whitespace-stale-digest") {
+        body.insert(0, b' ');
+    }
     if tamper == Some("body") {
         // Keep the body canonical to isolate the signature/digest boundary.
         let mut altered: Value = serde_json::from_slice(&body)?;
         altered["notification"]["kind"] = json!("delivery-corrupted");
         body = arkret_canonical::canonical_json_bytes(&altered)?;
     }
+    let duplicate_digest = ContentDigest::compute(&body, ContentDigestAlgorithm::Sha256).wire_value;
     let mut request = server.http().post(target).body(body);
     for (name, value) in headers {
         // The operation-selecting client already installs the signed selector.
         if name == "arkret-operation" {
+            continue;
+        }
+        if name == "content-digest" && tamper == Some("missing_digest") {
             continue;
         }
         let value = if name == "provider-id" && provider_override.is_some() {
@@ -152,11 +172,19 @@ async fn signed_post_with_mutation(
         };
         request = request.header(name, value);
     }
-    let response = request
-        .header("signature-input", input)
-        .header("signature", format!("sig1=:{signature}:"))
-        .send()
-        .await?;
+    if tamper != Some("missing_signature") {
+        request = request
+            .header("signature-input", input)
+            .header("signature", format!("sig1=:{signature}:"));
+    }
+    if tamper == Some("duplicate_digest") {
+        request = request.header("content-digest", duplicate_digest);
+    }
+    let mut request = request.build()?;
+    if let Some(name) = tamper.and_then(|value| value.strip_prefix("missing-header:")) {
+        request.headers_mut().remove(name);
+    }
+    let response = server.http().execute(request).await?;
     let status = response.status();
     Ok((status, response.json().await?))
 }

@@ -72,6 +72,48 @@ pub(super) async fn run(
             "{mutation} substitution changed durable state"
         );
     }
+    for (mutation, expected) in [
+        ("wire-whitespace-stale-digest", "http_signature_invalid"),
+        ("wire-whitespace-resigned", "http_signature_invalid"),
+        ("wire-duplicate-key-resigned", "http_signature_invalid"),
+        ("wire-bad-json-resigned", "http_signature_invalid"),
+        ("missing_signature", "http_signature_required"),
+        ("missing_digest", "http_signature_invalid"),
+        ("duplicate_digest", "http_signature_invalid"),
+        ("missing-header:arkret-operation", "http_signature_invalid"),
+        ("missing-header:source-service-id", "http_signature_invalid"),
+        (
+            "missing-header:destination-service-id",
+            "http_signature_invalid",
+        ),
+        ("missing-header:provider-id", "http_signature_invalid"),
+        ("missing-header:mimi-room-uri", "http_signature_invalid"),
+        ("expired_window", "signature_window_invalid"),
+        ("future_window", "signature_window_invalid"),
+    ] {
+        let (status, problem) = signed_post_with_mutation(
+            server,
+            &path,
+            Some(&room),
+            provider,
+            &notify,
+            None,
+            Some(mutation),
+        )
+        .await?;
+        ensure!(
+            status == StatusCode::UNAUTHORIZED
+                && problem["type"] == format!("https://arkret.org/problems/{expected}"),
+            "MIMI ingress {mutation}: {status} {problem}"
+        );
+        ensure!(
+            counts(database, realm).await? == before,
+            "MIMI ingress {mutation} changed durable state"
+        );
+    }
+    eprintln!(
+        "MIMI ingress: 14 exact wire/header/window refusals; zero durable effects; 5 signed component substitutions preserved"
+    );
     let requester = Member::provision(
         server,
         coauth,
