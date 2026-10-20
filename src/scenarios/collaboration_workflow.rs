@@ -210,12 +210,27 @@ pub async fn standard_session_grant_revoke_invalidates_current_session() -> Resu
         .ok_or_else(|| anyhow::anyhow!("standard grant issuer ledger is unavailable"))?;
     let revoke_url = format!("{authority_origin}/_arkret/gate/account/session-grants/revoke");
     expect_status(server.http().post(&revoke_url), StatusCode::UNAUTHORIZED).await?;
-    let logout = expect_json(
-        bob.authorize(server.http().post(&revoke_url)),
-        StatusCode::OK,
-    )
-    .await?;
-    assert_eq!(logout["revoked_count"], 1);
+    let grant_id = server.harness_session_grant_id(&bob)?;
+    let crate::harness::ClientSession::Canonical { grant, signing_key } = bob.session() else {
+        anyhow::bail!("revocation scenario requires a canonical holder");
+    };
+    let signing_key = std::sync::Arc::clone(signing_key);
+    // This issuer is an explicit loopback-only mock. Keep the production
+    // Station client's transport policy intact and opt in only on this client.
+    let authority_client = arkret_http_client::Client::builder(authority_origin.parse()?)
+        .allow_insecure_localhost()
+        .auth(arkret_http_client::Auth::Dpop(
+            arkret_http_client::DpopAuth::with_dpop_token(grant.clone(), move |request| {
+                garth::session::dpop::build_http_dpop_proof(request, &signing_key)
+                    .map_err(|error| arkret_http_client::Error::Protocol(error.to_string()))
+            }),
+        ))
+        .build()?;
+    let request = serde_json::from_value(serde_json::json!({}))?;
+    let revoked = authority_client
+        .session_grant_revoke(&grant_id, &request)
+        .await?;
+    assert_eq!(revoked.revoked_count, 1);
     expect_status(
         bob.authorize(server.http().post(&revoke_url)),
         StatusCode::CONFLICT,

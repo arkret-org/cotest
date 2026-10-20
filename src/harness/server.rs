@@ -554,6 +554,21 @@ impl ArkretServer {
             .map(|issuer| issuer.origin())
     }
 
+    /// Read the typed ID from this fixture issuer's exact ledger. Mock tokens
+    /// are not production SignedSessionGrantClaims and must not be decoded as such.
+    pub(crate) fn harness_session_grant_id(
+        &self,
+        client: &TestActorClient,
+    ) -> Result<arkret_wire::SessionGrantId> {
+        Ok(self
+            .session_grant_issuer
+            .as_ref()
+            .context("harness issuer ledger is unavailable")?
+            .own_station_session_state(client.session().credential(), &self.service_id)?
+            .grant_id
+            .clone())
+    }
+
     /// Bind an externally configured fixture issuer to the native host through
     /// credential-free discovery and the issuer's exact live record.
     pub async fn bind_native_host_session(
