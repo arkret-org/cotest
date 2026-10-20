@@ -13,6 +13,7 @@ use crate::scenarios::human_device_producer_live::{
 };
 use crate::scenarios::identity_test_support::HARNESS_INTERNAL_AUTHORITY_SECRET;
 use crate::scenarios::mls_lifecycle_live::Member;
+mod provider_client;
 mod report_recovery;
 
 const GROUP: &str = "mimi-facade-live";
@@ -28,29 +29,24 @@ pub async fn signed_post(
     signed_post_inner(server, path, Some(room), provider, body, None).await
 }
 
-pub async fn signed_consent_command(
-    server: &ArkretServer,
-    path: &str,
-    provider: &str,
-    body: &Value,
-) -> Result<(StatusCode, Value)> {
-    signed_post_inner(server, path, None, provider, body, None).await
-}
-
-pub async fn signed_identifier_query(
+pub(super) fn provider_sdk(
     server: &ArkretServer,
     provider: &str,
-    body: &arkret_models_collaboration::mimi_operations::MimiIdentifierQueryRequestBody,
-) -> Result<(StatusCode, Value)> {
-    signed_post_inner(
-        server,
-        "/_arkret/open/mimi/identifiers/query",
-        None,
-        provider,
-        &serde_json::to_value(body)?,
-        None,
-    )
-    .await
+) -> Result<arkret_http_client::Client> {
+    arkret_http_client::Client::builder(server.url("/").parse()?)
+        .http_client(std::ops::Deref::deref(&server.http()).clone())
+        .allow_insecure_localhost()
+        .build()?
+        .with_mimi_provider_http_signer(
+            server.service_id().clone(),
+            server.service_id().clone(),
+            arkret_wire::MimiUri::new(provider).map_err(anyhow::Error::msg)?,
+            arkret_http_client::HttpMessageSigner::new(
+                format!("{}#notary-key", server.service_did()),
+                server.federation_signing_key()?,
+            ),
+        )
+        .map_err(Into::into)
 }
 
 async fn signed_post_inner(
@@ -60,6 +56,18 @@ async fn signed_post_inner(
     provider: &str,
     body: &Value,
     provider_override: Option<&str>,
+) -> Result<(StatusCode, Value)> {
+    signed_post_with_mutation(server, path, room, provider, body, provider_override, None).await
+}
+
+async fn signed_post_with_mutation(
+    server: &ArkretServer,
+    path: &str,
+    room: Option<&str>,
+    provider: &str,
+    body: &Value,
+    provider_override: Option<&str>,
+    tamper: Option<&str>,
 ) -> Result<(StatusCode, Value)> {
     use arkret_signatures::http_signature::{
         Component, ContentDigest, ContentDigestAlgorithm, SignedRequestParts, canonical_message,
@@ -122,17 +130,27 @@ async fn signed_post_inner(
         &parsed,
     )?;
     let signature = sign_message(&transcript, &server.federation_signing_key()?);
+    let mut body = body;
+    if tamper == Some("body") {
+        // Keep the body canonical to isolate the signature/digest boundary.
+        let mut altered: Value = serde_json::from_slice(&body)?;
+        altered["notification"]["kind"] = json!("delivery-corrupted");
+        body = arkret_canonical::canonical_json_bytes(&altered)?;
+    }
     let mut request = server.http().post(target).body(body);
     for (name, value) in headers {
         // The operation-selecting client already installs the signed selector.
         if name == "arkret-operation" {
             continue;
         }
-        if name == "provider-id" {
-            request = request.header(name, provider_override.unwrap_or(&value));
+        let value = if name == "provider-id" && provider_override.is_some() {
+            provider_override.unwrap().to_owned()
+        } else if tamper == Some(name.as_str()) {
+            format!("{value}x")
         } else {
-            request = request.header(name, value);
-        }
+            value
+        };
+        request = request.header(name, value);
     }
     let response = request
         .header("signature-input", input)
@@ -239,11 +257,22 @@ pub async fn run_evidence() -> Result<Option<(Vec<CaseExecutionResult>, Vec<Case
             "migrating_event_id":migrating.event_ref,"migrating_commit_id":migrating.commit_id},
     })).await?;
     submit_and_expect_commit(&member.client, &member.account, DEVICE, &resolved).await?;
-    let (status, result) = signed_post(server, &path, &room, provider, &body).await?;
-    ensure!(
-        status.is_success(),
-        "real service-authored MIMI message refused: {status}: {result}"
-    );
+    let sdk = provider_sdk(server, provider)?
+        .with_mimi_room(arkret_wire::MimiRoomUri::new(room.clone()).map_err(anyhow::Error::msg)?)?;
+    let result = serde_json::to_value(
+        sdk.mimi_submit_message(&strand, &serde_json::from_value(body.clone())?)
+            .await?,
+    )?;
+    provider_client::run(
+        server,
+        &member,
+        &coauth,
+        &db.connect_url,
+        &realm,
+        &strand,
+        provider,
+    )
+    .await?;
     record(&mut admission, "hub_binding_passes_observer_guard", 1);
     let follower_room_id = format!("{strand}-follower");
     let follower_room = format!("{provider}/rooms/{follower_room_id}");
@@ -317,18 +346,10 @@ pub async fn run_evidence() -> Result<Option<(Vec<CaseExecutionResult>, Vec<Case
     .map_err(anyhow::Error::msg)?;
     let report = serde_json::to_value(report)?;
     let before = counts(&db.connect_url, &realm).await?;
-    let (status, first) = signed_post(
-        server,
-        "/_arkret/open/mimi/report-abuse",
-        &room,
-        provider,
-        &report,
-    )
-    .await?;
-    ensure!(
-        status.is_success(),
-        "real facade report refused: {status}: {first}"
-    );
+    let first = serde_json::to_value(
+        sdk.mimi_report_abuse(&serde_json::from_value(report.clone())?)
+            .await?,
+    )?;
     let after = counts(&db.connect_url, &realm).await?;
     ensure!(
         after[0] == before[0] + 1 && after[1] == before[1] + 1 && after[5] == before[5] + 1,
@@ -354,16 +375,12 @@ pub async fn run_evidence() -> Result<Option<(Vec<CaseExecutionResult>, Vec<Case
             ))?,
         "MIMI receipt report id is not derived from its actual committed Event"
     );
-    let (status, replay) = signed_post(
-        server,
-        "/_arkret/open/mimi/report-abuse",
-        &room,
-        provider,
-        &report,
-    )
-    .await?;
+    let replay = serde_json::to_value(
+        sdk.mimi_report_abuse(&serde_json::from_value(report.clone())?)
+            .await?,
+    )?;
     ensure!(
-        status.is_success() && replay == first,
+        replay == first,
         "MIMI report replay changed its first receipt"
     );
     ensure!(
@@ -947,12 +964,9 @@ pub async fn verify_consent_identifier_exclusions(
             privacy_profile: None,
             proofs: vec![],
         };
-        let (status, value) = signed_identifier_query(server, provider, &request).await?;
-        ensure!(
-            status == StatusCode::OK,
-            "actual authenticated MIMI identifiers query: {status} {value}"
-        );
-        let response: MimiIdentifierQueryOutcome = serde_json::from_value(value)?;
+        let response: MimiIdentifierQueryOutcome = provider_sdk(server, provider)?
+            .mimi_identifier_query(&request)
+            .await?;
         ensure!(response.matches.len() == request.identifiers.len() && !response.has_more);
         for (requested, matched) in request.identifiers.iter().zip(&response.matches) {
             ensure!(
