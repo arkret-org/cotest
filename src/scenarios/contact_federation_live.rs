@@ -76,11 +76,18 @@ fn receipt_key_at(
 }
 
 async fn issued_locator(holder: &TestActorClient) -> Result<PrincipalLocator> {
+    issued_locator_with_ttl(holder, 900).await
+}
+
+async fn issued_locator_with_ttl(
+    holder: &TestActorClient,
+    ttl_seconds: u32,
+) -> Result<PrincipalLocator> {
     let issued = expect_json(
         holder
             .post("/_arkret/self/invite-locators")
             .json(&InviteLocatorIssueRequestBody {
-                ttl_seconds: Some(900),
+                ttl_seconds: Some(ttl_seconds),
                 ..Default::default()
             }),
         StatusCode::OK,
@@ -643,5 +650,426 @@ pub async fn concurrent_requests_complete_glare_round() -> Result<()> {
         ContactState::Tombstoned,
     )
     .await?;
+    Ok(())
+}
+
+async fn checkpoint_fault(url: &str, install: bool) -> Result<()> {
+    let url = url.to_owned();
+    tokio::task::spawn_blocking(move || -> Result<()> {
+        let mut client=postgres::Client::connect(&url,postgres::NoTls)?;
+        if install {
+            client.batch_execute(r#"
+                CREATE FUNCTION reject_checkpoint_result() RETURNS trigger LANGUAGE plpgsql AS $$
+                BEGIN IF NEW.operation_id='ak.self.contact.command.checkpoint' AND NEW.idempotency_key LIKE 'contact-checkpoint-result:%' THEN RAISE EXCEPTION 'injected checkpoint result failure'; END IF; RETURN NEW; END $$;
+                CREATE TRIGGER reject_checkpoint_result BEFORE INSERT ON idempotency_keys FOR EACH ROW EXECUTE FUNCTION reject_checkpoint_result();
+            "#)?;
+        } else { client.batch_execute("DROP TRIGGER reject_checkpoint_result ON idempotency_keys; DROP FUNCTION reject_checkpoint_result();")?; }
+        Ok(())
+    }).await??;
+    Ok(())
+}
+
+async fn prune_completed_checkpoint_plan(url: &str, key: &str) -> Result<()> {
+    let (url, key) = (url.to_owned(), format!("contact-checkpoint:{key}"));
+    tokio::task::spawn_blocking(move || -> Result<()> {
+        let mut client=postgres::Client::connect(&url,postgres::NoTls)?;
+        client.execute("DELETE FROM idempotency_keys WHERE operation_id='coland://internal/contact-checkpoint-plan' AND idempotency_key=$1",&[&key])?;
+        Ok(())
+    }).await??;
+    Ok(())
+}
+
+async fn frozen_checkpoint_plan(url: &str, key: &str) -> Result<serde_json::Value> {
+    let (url, key) = (url.to_owned(), format!("contact-checkpoint:{key}"));
+    let body=tokio::task::spawn_blocking(move || -> Result<String> {
+        let mut client=postgres::Client::connect(&url,postgres::NoTls)?;
+        Ok(client.query_one("SELECT response_body::text FROM idempotency_keys WHERE operation_id='coland://internal/contact-checkpoint-plan' AND idempotency_key=$1",&[&key])?.get(0))
+    }).await??;
+    Ok(serde_json::from_str(&body)?)
+}
+
+// Read the actual stored tail, before the export view strips carrier metadata.
+// A second checkpoint must leave the same accepted row usable for authoring.
+async fn assert_stored_checkpoint_tail(url: &str, digest: &arkret::Hash) -> Result<()> {
+    let url = url.to_owned();
+    let (current, history) = tokio::task::spawn_blocking(move || -> Result<(String, String)> {
+        let mut client = postgres::Client::connect(&url, postgres::NoTls)?;
+        let rows = client.query("SELECT contact_round_evidence::text,contact_round_evidence_history::text FROM contacts", &[])?;
+        ensure!(rows.len() == 1, "checkpoint fixture must have exactly one durable Contact");
+        Ok((rows[0].get::<_, Option<String>>(0).context("committed current missing")?, rows[0].get(1)))
+    }).await??;
+    let current: arkret::contact_operations::ContactRoundEvidenceBundle =
+        serde_json::from_str(&current)?;
+    let history: Vec<arkret::contact_operations::ContactRoundEvidenceBundle> =
+        serde_json::from_str(&history)?;
+    ensure!(
+        current
+            .continuity_checkpoint
+            .as_ref()
+            .is_some_and(|checkpoint| &checkpoint.checkpoint_digest == digest),
+        "durable current did not install the committed checkpoint"
+    );
+    arkret::contact_operations::validate_recontact_continuity(&current, &history)
+        .context("stored checkpoint tail no longer supports Contact authoring")?;
+    ensure!(
+        history
+            .iter()
+            .all(|bundle| bundle.continuity_checkpoint.is_none()),
+        "retained tail kept superseded checkpoint carrier metadata"
+    );
+    Ok(())
+}
+
+/// Real authoring/PG/HTTP and native process restart; no synthetic Contact history.
+pub async fn checkpoint_replay_and_long_history(cross_station: bool) -> Result<()> {
+    use arkret::contact_operations::{
+        ContactContinuityCheckpointRequestBody, ContactContinuityCheckpointStatus,
+    };
+    let name = if cross_station {
+        "contact-checkpoint-cross-live"
+    } else {
+        "contact-checkpoint-local-live"
+    };
+    let alice_database = database(name)?.context("checkpoint requires PostgreSQL")?;
+    let bob_database = database(name)?.context("checkpoint requires PostgreSQL")?;
+    if cross_station {
+        ensure!(
+            alice_database.connect_url != bob_database.connect_url,
+            "checkpoint Stations require independent databases"
+        );
+    }
+    let coauth = MockCoauthIntrospectionServer::spawn_with_internal_secret(
+        HARNESS_INTERNAL_AUTHORITY_SECRET,
+    )
+    .await?;
+    let mut envs = vec![station_env(&alice_database.connect_url, &coauth)];
+    if cross_station {
+        envs.push(station_env(&bob_database.connect_url, &coauth));
+    }
+    let mut group = TestServerGroup::try_multi_external_with_node_envs(name, &envs)
+        .await?
+        .context("checkpoint requires native Coland")?;
+    let (mut alice, alice_account) =
+        standard_client(group.server(0), &coauth, "checkpoint-alice", ALICE_DEVICE).await?;
+    let (mut bob, bob_account) = standard_client(
+        group.server(usize::from(cross_station)),
+        &coauth,
+        "checkpoint-bob",
+        BOB_DEVICE,
+    )
+    .await?;
+    let alice_actor = ActorId::account(alice_account.clone());
+    let bob_actor = ActorId::account(bob_account.clone());
+    let peer = ContactPeer::Human {
+        account_id: bob_account.clone(),
+    };
+    let total = if cross_station { 66 } else { 3 };
+    // A locator is reusable until expiry or explicit revocation. The live
+    // outbox cadence makes 66 rounds exceed the default 15-minute lifetime;
+    // request the existing v1 one-hour maximum for this long fixture.
+    let locator = issued_locator_with_ttl(&bob, 3600).await?;
+    // Freeze an uncommitted first-request draft. After a real accepted round
+    // becomes terminal, retrying it must replay, not select new server history.
+    let frozen_prepare = if !cross_station {
+        let request = alice.contact_request_prepare_with_peer(
+            peer.clone(),
+            ContactIntroductionEvidence::LocatorRef {
+                principal_locator: locator.clone(),
+            },
+        )?;
+        let prepared = alice
+            .sdk()
+            .contacts_request(&alice.verify_publication(request.clone())?)
+            .await?;
+        ensure!(
+            matches!(
+                prepared,
+                arkret::contact_operations::ContactOperationOutcome::Prepared { .. }
+            ),
+            "initial replay fixture did not prepare"
+        );
+        Some((request, prepared))
+    } else {
+        None
+    };
+    let mut last_checkpoint = None;
+    let mut authenticated_at = Instant::now();
+    for round in 0..total {
+        // Reauthenticate the long fixture through the existing mock issuer
+        // ledger. Never extend the predecessor grant or production expiry.
+        if authenticated_at.elapsed() >= Duration::from_secs(240) {
+            alice = group
+                .server(0)
+                .reissue_mock_native_host_session(&alice, &coauth)
+                .await?;
+            bob = group
+                .server(usize::from(cross_station))
+                .reissue_mock_native_host_session(&bob, &coauth)
+                .await?;
+            authenticated_at = Instant::now();
+            eprintln!("checkpoint live: reauthenticated the same accepted Account/Device");
+        }
+        if round > 0 {
+            let current = wait_contact(&alice, &bob_actor, ContactState::Accepted).await?;
+            tombstone_contact(&alice, &current).await?;
+            wait_contact(&bob, &alice_actor, ContactState::Tombstoned).await?;
+            if round == 1
+                && let Some((request, original)) = &frozen_prepare
+            {
+                let replay = alice
+                    .sdk()
+                    .contacts_request(&alice.verify_publication(request.clone())?)
+                    .await?;
+                ensure!(
+                    serde_json::to_value(original)? == serde_json::to_value(replay)?,
+                    "prepare retry reselected mutable server continuity"
+                );
+                let mut changed = request.clone();
+                let arkret::contact_operations::ContactOperationRequestBody::Prepare(body) =
+                    &mut changed
+                else {
+                    unreachable!()
+                };
+                body.message = Some("different retry bytes".to_owned());
+                ensure!(
+                    matches!(
+                        alice
+                            .sdk()
+                            .contacts_request(&alice.verify_publication(changed)?)
+                            .await,
+                        Err(arkret_http_client::Error::Api { status: 409, .. })
+                    ),
+                    "changed caller bytes reused a frozen prepare identity"
+                );
+            }
+        }
+        ensure!(
+            chrono::Utc::now() < locator.expires_at,
+            "fixture locator expired before live round {round}"
+        );
+        alice
+            .request_contact_with_peer(
+                peer.clone(),
+                ContactIntroductionEvidence::LocatorRef {
+                    principal_locator: locator.clone(),
+                },
+            )
+            .await?;
+        wait_contact(&bob, &alice_actor, ContactState::PendingIncoming).await?;
+        bob.accept_contact(&alice).await?;
+        wait_contact(&alice, &bob_actor, ContactState::Accepted).await?;
+        wait_contact(&bob, &alice_actor, ContactState::Accepted).await?;
+        if round == 1 || (cross_station && (round == 32 || round == 64)) {
+            let request = ContactContinuityCheckpointRequestBody {
+                idempotency_key: arkret::IdempotencyKey::new(format!("checkpoint-{round}"))
+                    .map_err(anyhow::Error::msg)?,
+                peer: peer.clone(),
+            };
+            if round == 1 {
+                checkpoint_fault(&alice_database.connect_url, true).await?;
+            }
+            // Deliberately discard the response before reconstructing the client request.
+            let first = alice
+                .sdk()
+                .contacts_checkpoint(&alice_account, &request)
+                .await;
+            if round == 1 {
+                if !cross_station {
+                    ensure!(
+                        first.is_err(),
+                        "injected local result failure must refuse acceptance"
+                    );
+                }
+                let frozen = frozen_checkpoint_plan(
+                    &alice_database.connect_url,
+                    request.idempotency_key.as_str(),
+                )
+                .await?;
+                let before = alice.sdk().contacts_list_with_continuity().await?;
+                ensure!(
+                    before
+                        .contacts
+                        .iter()
+                        .find(|row| row.peer.contact_actor_id() == bob_actor)
+                        .context("contact disappeared")?
+                        .continuity_evidence
+                        .is_none(),
+                    "failed result transaction installed a checkpoint"
+                );
+                group.server_mut(0).restart_external_process().await?;
+                ensure!(
+                    frozen
+                        == frozen_checkpoint_plan(
+                            &alice_database.connect_url,
+                            request.idempotency_key.as_str()
+                        )
+                        .await?,
+                    "restart rewrote frozen proposal"
+                );
+                checkpoint_fault(&alice_database.connect_url, false).await?;
+            } else {
+                first?;
+            }
+            let deadline = Instant::now() + Duration::from_secs(90);
+            let accepted = loop {
+                let outcome = alice
+                    .sdk()
+                    .contacts_checkpoint(&alice_account, &request)
+                    .await?;
+                if outcome.status == ContactContinuityCheckpointStatus::Committed {
+                    break outcome;
+                }
+                ensure!(Instant::now() < deadline, "checkpoint never committed");
+                tokio::time::sleep(Duration::from_millis(250)).await;
+            };
+            assert_stored_checkpoint_tail(&alice_database.connect_url, &accepted.checkpoint_digest)
+                .await?;
+            if cross_station {
+                assert_stored_checkpoint_tail(
+                    &bob_database.connect_url,
+                    &accepted.checkpoint_digest,
+                )
+                .await?;
+            }
+            let frozen = frozen_checkpoint_plan(
+                &alice_database.connect_url,
+                request.idempotency_key.as_str(),
+            )
+            .await?;
+            ensure!(
+                frozen["proposal"]["checkpoint_digest"]
+                    == serde_json::to_value(&accepted.checkpoint_digest)?,
+                "retry replaced the frozen checkpoint"
+            );
+            let replay = alice
+                .sdk()
+                .contacts_checkpoint(&alice_account, &request)
+                .await?;
+            ensure!(
+                serde_json::to_value(&accepted)? == serde_json::to_value(replay)?,
+                "completed retry changed response bytes"
+            );
+            let evidence = accepted
+                .continuity_evidence
+                .as_ref()
+                .context("committed without evidence")?;
+            ensure!(
+                evidence.uncompressed_tail_entries.len() <= 64
+                    && evidence.checkpoint.signatures[0].signer
+                        != evidence.checkpoint.signatures[1].signer,
+                "checkpoint has no bounded bilateral evidence"
+            );
+            let exported = bob.sdk().contacts_list_with_continuity().await?;
+            ensure!(
+                exported
+                    .contacts
+                    .iter()
+                    .find(|row| row.peer.contact_actor_id() == alice_actor)
+                    .and_then(|row| row.continuity_evidence.as_ref())
+                    .is_some_and(|e| e.checkpoint.checkpoint_digest == accepted.checkpoint_digest),
+                "peer did not commit same checkpoint"
+            );
+            let mut wrong = request.clone();
+            wrong.peer = ContactPeer::Human {
+                account_id: arkret::AccountId::new(
+                    bob_account.principal_id.clone(),
+                    alice_account.station_id.clone(),
+                ),
+            };
+            if cross_station {
+                ensure!(
+                    accepted
+                        .validate_for_request(&alice_account, &wrong)
+                        .is_err(),
+                    "same principal at another Station matched checkpoint"
+                );
+            }
+            wrong.peer = ContactPeer::Human {
+                account_id: arkret::AccountId::new(
+                    bob_account.principal_id.clone(),
+                    arkret::DidCoreId::new("ak:did_core:web:unrelated.example")?,
+                ),
+            };
+            ensure!(
+                matches!(
+                    alice
+                        .sdk()
+                        .contacts_checkpoint(&alice_account, &wrong)
+                        .await,
+                    Err(arkret_http_client::Error::Api { status: 409, .. })
+                ),
+                "changed peer reused checkpoint identity"
+            );
+            let mut altered = accepted.clone();
+            altered.checkpoint_digest = arkret::Hash::new(format!("sha256:{}", "f".repeat(64)))?;
+            ensure!(
+                altered
+                    .validate_for_request(&alice_account, &request)
+                    .is_err(),
+                "changed digest accepted"
+            );
+            let mut altered = accepted.clone();
+            altered
+                .continuity_evidence
+                .as_mut()
+                .unwrap()
+                .uncompressed_tail_entries
+                .clear();
+            ensure!(
+                altered
+                    .validate_for_request(&alice_account, &request)
+                    .is_err(),
+                "missing tail accepted"
+            );
+            if round == 1 {
+                group.server_mut(0).restart_external_process().await?;
+                if cross_station {
+                    group.server_mut(1).restart_external_process().await?;
+                }
+                ensure!(
+                    serde_json::to_value(&accepted)?
+                        == serde_json::to_value(
+                            alice
+                                .sdk()
+                                .contacts_checkpoint(&alice_account, &request)
+                                .await?
+                        )?,
+                    "cold completed replay changed"
+                );
+            }
+            if round == 1 {
+                prune_completed_checkpoint_plan(
+                    &alice_database.connect_url,
+                    request.idempotency_key.as_str(),
+                )
+                .await?;
+                ensure!(
+                    serde_json::to_value(&accepted)?
+                        == serde_json::to_value(
+                            alice
+                                .sdk()
+                                .contacts_checkpoint(&alice_account, &request)
+                                .await?
+                        )?,
+                    "completed replay depended on an expired pending plan"
+                );
+            }
+            last_checkpoint = Some(accepted);
+        }
+        eprintln!(
+            "checkpoint live cross_station={cross_station}: completed round {}/{total}",
+            round + 1
+        );
+    }
+    let last = last_checkpoint.context("checkpoint never executed")?;
+    let evidence = last
+        .continuity_evidence
+        .context("last checkpoint missing evidence")?;
+    if cross_station {
+        ensure!(
+            evidence.checkpoint.core.covered_prefix_count > 32,
+            "long live history was not compacted"
+        );
+    }
     Ok(())
 }

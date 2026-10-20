@@ -122,7 +122,7 @@ impl TestActorClient {
         )
     }
 
-    fn contact_request_prepare_with_peer(
+    pub(crate) fn contact_request_prepare_with_peer(
         &self,
         peer: ContactPeer,
         introduction_evidence: ContactIntroductionEvidence,
