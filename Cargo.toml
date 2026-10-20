@@ -111,6 +111,7 @@ arkret-hlc = { path = "../arkret-rust-sdk/crates/hlc" }
 arkret-http-client = { path = "../arkret-rust-sdk/crates/http-client", features = ["tls-rustls"] }
 arkret-identifiers = { path = "../arkret-rust-sdk/crates/identifiers" }
 arkret-identity = { path = "../arkret-rust-sdk/crates/identity" }
+arkret-keystore = { path = "../arkret-rust-sdk/crates/keystore", features = ["keystore-encrypted-file"] }
 arkret-mls = { path = "../arkret-rust-sdk/crates/mls" }
 arkret-models-collaboration = { path = "../arkret-rust-sdk/crates/models-collaboration" }
 arkret-models-crypto = { path = "../arkret-rust-sdk/crates/models-crypto" }
@@ -253,6 +254,7 @@ arkret-hlc = { workspace = true }
 arkret-http-client = { workspace = true }
 arkret-identifiers = { workspace = true }
 arkret-identity = { workspace = true }
+arkret-keystore = { workspace = true }
 arkret-mls = { workspace = true }
 arkret-models-collaboration = { workspace = true }
 arkret-models-crypto = { workspace = true }

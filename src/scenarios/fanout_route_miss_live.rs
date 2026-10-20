@@ -46,6 +46,7 @@ pub mod erasure_receipt_live;
 pub mod frozen_authority_live;
 pub mod idempotency_live;
 pub mod origin_binding_live;
+pub mod service_route_live;
 pub mod terminal_consumers_live;
 pub mod terminal_gap_live;
 pub mod terminal_restart_live;

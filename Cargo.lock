@@ -2629,6 +2629,7 @@ dependencies = [
  "arkret-http-client",
  "arkret-identifiers",
  "arkret-identity",
+ "arkret-keystore",
  "arkret-mls",
  "arkret-models-collaboration",
  "arkret-models-crypto",
