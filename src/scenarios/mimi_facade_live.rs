@@ -13,6 +13,8 @@ use crate::scenarios::human_device_producer_live::{
 };
 use crate::scenarios::identity_test_support::HARNESS_INTERNAL_AUTHORITY_SECRET;
 use crate::scenarios::mls_lifecycle_live::Member;
+mod report_recovery;
+
 const GROUP: &str = "mimi-facade-live";
 const DEVICE: &str = "ak:device:01904100-0000-7000-8000-000000002881";
 
@@ -23,7 +25,7 @@ pub async fn signed_post(
     provider: &str,
     body: &Value,
 ) -> Result<(StatusCode, Value)> {
-    signed_post_inner(server, path, Some(room), provider, body).await
+    signed_post_inner(server, path, Some(room), provider, body, None).await
 }
 
 pub async fn signed_consent_command(
@@ -32,7 +34,7 @@ pub async fn signed_consent_command(
     provider: &str,
     body: &Value,
 ) -> Result<(StatusCode, Value)> {
-    signed_post_inner(server, path, None, provider, body).await
+    signed_post_inner(server, path, None, provider, body, None).await
 }
 
 pub async fn signed_identifier_query(
@@ -46,6 +48,7 @@ pub async fn signed_identifier_query(
         None,
         provider,
         &serde_json::to_value(body)?,
+        None,
     )
     .await
 }
@@ -56,6 +59,7 @@ async fn signed_post_inner(
     room: Option<&str>,
     provider: &str,
     body: &Value,
+    provider_override: Option<&str>,
 ) -> Result<(StatusCode, Value)> {
     use arkret_signatures::http_signature::{
         Component, ContentDigest, ContentDigestAlgorithm, SignedRequestParts, canonical_message,
@@ -124,7 +128,11 @@ async fn signed_post_inner(
         if name == "arkret-operation" {
             continue;
         }
-        request = request.header(name, value);
+        if name == "provider-id" {
+            request = request.header(name, provider_override.unwrap_or(&value));
+        } else {
+            request = request.header(name, value);
+        }
     }
     let response = request
         .header("signature-input", input)
@@ -158,7 +166,7 @@ pub async fn run_evidence() -> Result<Option<(Vec<CaseExecutionResult>, Vec<Case
         HARNESS_INTERNAL_AUTHORITY_SECRET,
     )
     .await?;
-    let Some(group) = TestServerGroup::try_multi_external_with_node_envs(
+    let Some(mut group) = TestServerGroup::try_multi_external_with_node_envs(
         GROUP,
         &[station_env(&db.connect_url, &coauth)],
     )
@@ -362,6 +370,23 @@ pub async fn run_evidence() -> Result<Option<(Vec<CaseExecutionResult>, Vec<Case
         counts(&db.connect_url, &realm).await? == after,
         "MIMI report replay appended another Event or delivery"
     );
+
+    let probe = report_recovery::exercise(
+        server,
+        &coauth,
+        &member,
+        &db.connect_url,
+        &realm,
+        &room,
+        provider,
+        &report,
+    )
+    .await?;
+    group.server_mut(0).restart_external_process().await?;
+    let server = group.server(0);
+    probe
+        .after_restart(server, &db.connect_url, &realm, &room, provider)
+        .await?;
 
     // An E2EE migration reuses a GroupInfo that the native MLS unit has
     // authenticated and committed, instead of trusting claimed group strings.
