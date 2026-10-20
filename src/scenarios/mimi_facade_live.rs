@@ -13,6 +13,7 @@ use crate::scenarios::human_device_producer_live::{
 };
 use crate::scenarios::identity_test_support::HARNESS_INTERNAL_AUTHORITY_SECRET;
 use crate::scenarios::mls_lifecycle_live::Member;
+mod directory;
 mod provider_client;
 mod report_recovery;
 
@@ -227,18 +228,8 @@ pub async fn run_evidence() -> Result<Option<(Vec<CaseExecutionResult>, Vec<Case
         create_realm_with_join_rule(&member.client, "MIMI facade live", "public", &[server])
             .await?;
     let strand = member.client.default_strand_id(&realm)?;
-    let directory: Value = server
-        .http()
-        .get(server.url("/_arkret/open/mimi/provider-directory"))
-        .send()
-        .await?
-        .error_for_status()?
-        .json()
-        .await?;
-    let provider = directory
-        .pointer("/mimi/provider_id")
-        .and_then(Value::as_str)
-        .context("MIMI directory provider_id")?;
+    let directory = directory::read(server).await?;
+    let provider = directory.directory().mimi.provider_id.as_str();
     let room = format!("{provider}/rooms/{strand}");
     let path = format!("/_arkret/open/mimi/strands/{strand}/messages");
     let content = arkret_canonical::canonical_json_bytes(
@@ -934,18 +925,8 @@ pub async fn verify_consent_identifier_exclusions(
         )
         .await?,
     )?;
-    let directory: Value = server
-        .http()
-        .get(server.url("/_arkret/open/mimi/provider-directory"))
-        .send()
-        .await?
-        .error_for_status()?
-        .json()
-        .await?;
-    let provider = directory
-        .pointer("/mimi/provider_id")
-        .and_then(Value::as_str)
-        .context("actual MIMI provider")?;
+    let directory = directory::read(server).await?;
+    let provider = directory.directory().mimi.provider_id.as_str();
     for revoked in [false, true] {
         if revoked {
             let event = member
