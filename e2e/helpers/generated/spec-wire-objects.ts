@@ -373,7 +373,7 @@ export type AppletInstallRequestBody = {
         "critical": boolean;
       } | {
         "id": string;
-        "role": "attestation" | "parent_event" | "after" | "audit_pair" | "recovery_capability" | "accountability" | "bootstrap_genesis" | "disclosure_authorization" | "capture_stop" | "direct_conversation_binding" | "direct_conversation_founding_unit" | "direct_conversation_contact_round" | "direct_conversation_agent_provision" | "applet_managed_actor_provision";
+        "role": "attestation" | "parent_event" | "after" | "audit_pair" | "recovery_capability" | "accountability" | "bootstrap_genesis" | "disclosure_authorization" | "capture_stop" | "direct_conversation_binding" | "direct_conversation_founding_unit" | "direct_conversation_contact_round" | "direct_conversation_agent_provision";
         "critical": boolean;
       }>;
       "payload": Record<string, unknown>;
@@ -488,7 +488,7 @@ export type AppletInstallRequestBody = {
         "critical": boolean;
       } | {
         "id": string;
-        "role": "attestation" | "parent_event" | "after" | "audit_pair" | "recovery_capability" | "accountability" | "bootstrap_genesis" | "disclosure_authorization" | "capture_stop" | "direct_conversation_binding" | "direct_conversation_founding_unit" | "direct_conversation_contact_round" | "direct_conversation_agent_provision" | "applet_managed_actor_provision";
+        "role": "attestation" | "parent_event" | "after" | "audit_pair" | "recovery_capability" | "accountability" | "bootstrap_genesis" | "disclosure_authorization" | "capture_stop" | "direct_conversation_binding" | "direct_conversation_founding_unit" | "direct_conversation_contact_round" | "direct_conversation_agent_provision";
         "critical": boolean;
       }>;
       "payload": Record<string, unknown>;
@@ -673,7 +673,7 @@ export type AppletAuthorityMaterialOutcome = {
         "critical": boolean;
       } | {
         "id": string;
-        "role": "attestation" | "parent_event" | "after" | "audit_pair" | "recovery_capability" | "accountability" | "bootstrap_genesis" | "disclosure_authorization" | "capture_stop" | "direct_conversation_binding" | "direct_conversation_founding_unit" | "direct_conversation_contact_round" | "direct_conversation_agent_provision" | "applet_managed_actor_provision";
+        "role": "attestation" | "parent_event" | "after" | "audit_pair" | "recovery_capability" | "accountability" | "bootstrap_genesis" | "disclosure_authorization" | "capture_stop" | "direct_conversation_binding" | "direct_conversation_founding_unit" | "direct_conversation_contact_round" | "direct_conversation_agent_provision";
         "critical": boolean;
       }>;
       "payload": Record<string, unknown>;
@@ -959,7 +959,7 @@ export type AppletAuthorityMaterialOutcome = {
         "critical": boolean;
       } | {
         "id": string;
-        "role": "attestation" | "parent_event" | "after" | "audit_pair" | "recovery_capability" | "accountability" | "bootstrap_genesis" | "disclosure_authorization" | "capture_stop" | "direct_conversation_binding" | "direct_conversation_founding_unit" | "direct_conversation_contact_round" | "direct_conversation_agent_provision" | "applet_managed_actor_provision";
+        "role": "attestation" | "parent_event" | "after" | "audit_pair" | "recovery_capability" | "accountability" | "bootstrap_genesis" | "disclosure_authorization" | "capture_stop" | "direct_conversation_binding" | "direct_conversation_founding_unit" | "direct_conversation_contact_round" | "direct_conversation_agent_provision";
         "critical": boolean;
       }>;
       "payload": Record<string, unknown>;
@@ -3522,7 +3522,7 @@ export type ContactRequestBody = {
       "critical": boolean;
     } | {
       "id": string;
-      "role": "attestation" | "parent_event" | "after" | "audit_pair" | "recovery_capability" | "accountability" | "bootstrap_genesis" | "disclosure_authorization" | "capture_stop" | "direct_conversation_binding" | "direct_conversation_founding_unit" | "direct_conversation_contact_round" | "direct_conversation_agent_provision" | "applet_managed_actor_provision";
+      "role": "attestation" | "parent_event" | "after" | "audit_pair" | "recovery_capability" | "accountability" | "bootstrap_genesis" | "disclosure_authorization" | "capture_stop" | "direct_conversation_binding" | "direct_conversation_founding_unit" | "direct_conversation_contact_round" | "direct_conversation_agent_provision";
       "critical": boolean;
     }>;
     "payload": Record<string, unknown>;
@@ -3658,7 +3658,7 @@ export type ContactRespondRequestBody = {
       "critical": boolean;
     } | {
       "id": string;
-      "role": "attestation" | "parent_event" | "after" | "audit_pair" | "recovery_capability" | "accountability" | "bootstrap_genesis" | "disclosure_authorization" | "capture_stop" | "direct_conversation_binding" | "direct_conversation_founding_unit" | "direct_conversation_contact_round" | "direct_conversation_agent_provision" | "applet_managed_actor_provision";
+      "role": "attestation" | "parent_event" | "after" | "audit_pair" | "recovery_capability" | "accountability" | "bootstrap_genesis" | "disclosure_authorization" | "capture_stop" | "direct_conversation_binding" | "direct_conversation_founding_unit" | "direct_conversation_contact_round" | "direct_conversation_agent_provision";
       "critical": boolean;
     }>;
     "payload": Record<string, unknown>;
@@ -3793,7 +3793,7 @@ export type ContactRejectRequestBody = {
       "critical": boolean;
     } | {
       "id": string;
-      "role": "attestation" | "parent_event" | "after" | "audit_pair" | "recovery_capability" | "accountability" | "bootstrap_genesis" | "disclosure_authorization" | "capture_stop" | "direct_conversation_binding" | "direct_conversation_founding_unit" | "direct_conversation_contact_round" | "direct_conversation_agent_provision" | "applet_managed_actor_provision";
+      "role": "attestation" | "parent_event" | "after" | "audit_pair" | "recovery_capability" | "accountability" | "bootstrap_genesis" | "disclosure_authorization" | "capture_stop" | "direct_conversation_binding" | "direct_conversation_founding_unit" | "direct_conversation_contact_round" | "direct_conversation_agent_provision";
       "critical": boolean;
     }>;
     "payload": Record<string, unknown>;
@@ -3930,7 +3930,7 @@ export type ContactTombstoneRequestBody = {
       "critical": boolean;
     } | {
       "id": string;
-      "role": "attestation" | "parent_event" | "after" | "audit_pair" | "recovery_capability" | "accountability" | "bootstrap_genesis" | "disclosure_authorization" | "capture_stop" | "direct_conversation_binding" | "direct_conversation_founding_unit" | "direct_conversation_contact_round" | "direct_conversation_agent_provision" | "applet_managed_actor_provision";
+      "role": "attestation" | "parent_event" | "after" | "audit_pair" | "recovery_capability" | "accountability" | "bootstrap_genesis" | "disclosure_authorization" | "capture_stop" | "direct_conversation_binding" | "direct_conversation_founding_unit" | "direct_conversation_contact_round" | "direct_conversation_agent_provision";
       "critical": boolean;
     }>;
     "payload": Record<string, unknown>;
@@ -4429,7 +4429,7 @@ export type ContactOperationOutcome = {
             "critical": boolean;
           } | {
             "id": string;
-            "role": "attestation" | "parent_event" | "after" | "audit_pair" | "recovery_capability" | "accountability" | "bootstrap_genesis" | "disclosure_authorization" | "capture_stop" | "direct_conversation_binding" | "direct_conversation_founding_unit" | "direct_conversation_contact_round" | "direct_conversation_agent_provision" | "applet_managed_actor_provision";
+            "role": "attestation" | "parent_event" | "after" | "audit_pair" | "recovery_capability" | "accountability" | "bootstrap_genesis" | "disclosure_authorization" | "capture_stop" | "direct_conversation_binding" | "direct_conversation_founding_unit" | "direct_conversation_contact_round" | "direct_conversation_agent_provision";
             "critical": boolean;
           }>;
           "payload": Record<string, unknown>;
@@ -4880,7 +4880,7 @@ export type ContactOperationOutcome = {
             "critical": boolean;
           } | {
             "id": string;
-            "role": "attestation" | "parent_event" | "after" | "audit_pair" | "recovery_capability" | "accountability" | "bootstrap_genesis" | "disclosure_authorization" | "capture_stop" | "direct_conversation_binding" | "direct_conversation_founding_unit" | "direct_conversation_contact_round" | "direct_conversation_agent_provision" | "applet_managed_actor_provision";
+            "role": "attestation" | "parent_event" | "after" | "audit_pair" | "recovery_capability" | "accountability" | "bootstrap_genesis" | "disclosure_authorization" | "capture_stop" | "direct_conversation_binding" | "direct_conversation_founding_unit" | "direct_conversation_contact_round" | "direct_conversation_agent_provision";
             "critical": boolean;
           }>;
           "payload": Record<string, unknown>;
@@ -5221,7 +5221,7 @@ export type ContactOperationOutcome = {
             "critical": boolean;
           } | {
             "id": string;
-            "role": "attestation" | "parent_event" | "after" | "audit_pair" | "recovery_capability" | "accountability" | "bootstrap_genesis" | "disclosure_authorization" | "capture_stop" | "direct_conversation_binding" | "direct_conversation_founding_unit" | "direct_conversation_contact_round" | "direct_conversation_agent_provision" | "applet_managed_actor_provision";
+            "role": "attestation" | "parent_event" | "after" | "audit_pair" | "recovery_capability" | "accountability" | "bootstrap_genesis" | "disclosure_authorization" | "capture_stop" | "direct_conversation_binding" | "direct_conversation_founding_unit" | "direct_conversation_contact_round" | "direct_conversation_agent_provision";
             "critical": boolean;
           }>;
           "payload": Record<string, unknown>;
@@ -5473,7 +5473,7 @@ export type InviteObject = {
     "max_claims"?: number;
   };
   "capability_grant_refs"?: string[];
-  "state": "pending" | "accepted" | "rejected" | "revoked" | "expired" | "claimed" | "send_failed" | "revoked_by_capability_loss" | "revoked_by_inviter_left" | "invalidated_by_rate_limit";
+  "state": "pending" | "accepted" | "rejected" | "revoked" | "expired" | "claimed";
   "expires_at": string;
   "created_at": string;
   "updated_by"?: {
@@ -6317,7 +6317,7 @@ export type InviteDeliveryRequestBody = {
       "critical": boolean;
     } | {
       "id": string;
-      "role": "attestation" | "parent_event" | "after" | "audit_pair" | "recovery_capability" | "accountability" | "bootstrap_genesis" | "disclosure_authorization" | "capture_stop" | "direct_conversation_binding" | "direct_conversation_founding_unit" | "direct_conversation_contact_round" | "direct_conversation_agent_provision" | "applet_managed_actor_provision";
+      "role": "attestation" | "parent_event" | "after" | "audit_pair" | "recovery_capability" | "accountability" | "bootstrap_genesis" | "disclosure_authorization" | "capture_stop" | "direct_conversation_binding" | "direct_conversation_founding_unit" | "direct_conversation_contact_round" | "direct_conversation_agent_provision";
       "critical": boolean;
     }>;
     "payload": Record<string, unknown>;
@@ -7780,7 +7780,7 @@ export type EventAdmissionSubmission = {
       "critical": boolean;
     } | {
       "id": string;
-      "role": "attestation" | "parent_event" | "after" | "audit_pair" | "recovery_capability" | "accountability" | "bootstrap_genesis" | "disclosure_authorization" | "capture_stop" | "direct_conversation_binding" | "direct_conversation_founding_unit" | "direct_conversation_contact_round" | "direct_conversation_agent_provision" | "applet_managed_actor_provision";
+      "role": "attestation" | "parent_event" | "after" | "audit_pair" | "recovery_capability" | "accountability" | "bootstrap_genesis" | "disclosure_authorization" | "capture_stop" | "direct_conversation_binding" | "direct_conversation_founding_unit" | "direct_conversation_contact_round" | "direct_conversation_agent_provision";
       "critical": boolean;
     }>;
     "payload": Record<string, unknown>;

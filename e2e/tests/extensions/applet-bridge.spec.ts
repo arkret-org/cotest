@@ -10,7 +10,7 @@ import {
   verify,
   type KeyObject,
 } from "node:crypto";
-import { encodeEd25519PubkeyMultibase } from "../../helpers/encoding";
+import { encodeEd25519PubkeyMultibase, ed25519PrivateKeySeedB64url } from "../../helpers/encoding";
 import {
   expect,
   operationSelector,
@@ -82,22 +82,20 @@ type SignedPackage = {
     requested_scopes: string[];
     registration_epoch: string;
   };
-  bot_actor_id: Extract<ActorId, { kind: "account" }>;
   package_digest: string;
   signing_did: string;
   service_id_document?: Record<string, unknown>;
   service_id_operation?: BuiltWebvhGenesis;
-  bot_actor_operation?: BuiltWebvhGenesis;
+  bot_actor_operation?: RealmActorIdentity;
   ghost_namespace_token?: string;
   service_signing_private_key?: KeyObject;
-  bot_signing_private_key?: KeyObject;
 };
 
 // Private test bookkeeping combines two independently accepted outcomes.
 // It is never an installation wire response.
 type AppletRegistration = {
   applet_id: string;
-  bot_actor_id: Extract<ActorId, { kind: "account" }>;
+  bot_actor_id: Extract<ActorId, { kind: "realm" }>;
   portal_realm_id: string;
   namespace: string;
   status: string;
@@ -275,7 +273,36 @@ function capabilityGrantRefForAction(
   return grantRef!;
 }
 
-type ManagedActorId = Extract<ActorId, { kind: "account" }>;
+type ManagedActorId = Extract<ActorId, { kind: "realm" }>;
+
+type RealmActorIdentity = BuiltWebvhGenesis & { control_seed_b64url: string };
+
+function buildRealmActorIdentity(baseUrl: string, localId: string): RealmActorIdentity {
+  const root = generateWebvhKey();
+  const next = generateWebvhKey();
+  const control = generateWebvhKey();
+  const controlSeed = ed25519PrivateKeySeedB64url(control.privateKey);
+  return {
+    ...cotestWire<BuiltWebvhGenesis>("realm-actor-inception", {
+      base_url: baseUrl, local_id: localId,
+      root_seed_b64url: ed25519PrivateKeySeedB64url(root.privateKey),
+      next_root_public_key_multibase: next.multibase,
+      control_seed_b64url: controlSeed, version_time: canonicalTimestamp(),
+    }),
+    control_seed_b64url: controlSeed,
+  };
+}
+
+function managedActorId(identity: BuiltWebvhGenesis, realmId: string): ManagedActorId {
+  return { kind: "realm", realm_actor_id: {
+    realm_id: realmId, principal_id: projectDidToCoreId(identity.did),
+  } };
+}
+
+function botActorId(signed: SignedPackage, realmId: string): ManagedActorId {
+  if (!signed.bot_actor_operation) throw new Error("Bot identity is absent");
+  return managedActorId(signed.bot_actor_operation, realmId);
+}
 
 /// Issue one terminal child of the installed Service's action grants.
 ///
@@ -283,7 +310,7 @@ type ManagedActorId = Extract<ActorId, { kind: "account" }>;
 /// explicit grant naming its own complete ActorId; the install grants name the
 /// Applet Service. applet-integration.md §6 / §11 bind the grant to the exact
 /// install with `authority_control` + `applet_authority`. The parent executor
-/// is Service; the terminal child executor is its own complete Account subject.
+/// is Service; the terminal child executor is its own complete RealmActor subject.
 async function grantManagedActorActions(request: APIRequestContext, token: string, signed: SignedPackage, realmId: string, actorId: ManagedActorId, actions: string[]): Promise<string> {
   const effectiveScope = {kind:"realm" as const, realm_id:realmId};
   const service = serviceActorId(signed.applet_package.service_id);
@@ -350,7 +377,7 @@ async function grantManagedActorActions(request: APIRequestContext, token: strin
   return retypeEventDerivedId(String(event.event_id),"grant");
 }
 
-/// Deliberately invalid Service proxy: a child naming the Account cannot
+/// Deliberately invalid Service proxy: a child naming the RealmActor cannot
 /// authorize its Service producer. Used only to verify zero-write rejection.
 function serviceProxyManagedActorEvent(args: {
   signed: SignedPackage;
@@ -427,6 +454,7 @@ async function deliverAppletEvents(
 ): Promise<{
   status: "accepted" | "partial" | "rejected";
   rejections?: Array<Record<string, unknown>>;
+  committed_event_refs?: Array<Record<string, unknown>>;
 }> {
   const response = await rawDeliverAppletEvents(
     request,
@@ -439,58 +467,43 @@ async function deliverAppletEvents(
   return JSON.parse(responseText);
 }
 
-/// A directed Invite is valid, but the Service cannot accept it in place of
-/// the actual Bot/Ghost. subject_only requires that Account's original proof.
-async function rejectServiceProxyInviteAcceptance(args: {
-  request: APIRequestContext;
-  token: string;
-  signed: SignedPackage;
-  realmId: string;
-  actorId: ManagedActorId;
-  authorizationRef: string;
+async function submitManagedActorCreation(
+  request: APIRequestContext, signed: SignedPackage,
+  event: Record<string,unknown>, idempotencyKey: string,
+): Promise<Record<string,unknown>> {
+  const targetUri=`${colandBaseUrl()}/_arkret/self/events`;
+  const body={event};
+  const response=await request.post(targetUri,{
+    headers:signedAppletTransactionHeaders({body,targetUri,
+      sourceServiceId:signed.applet_package.service_id,destinationServiceId:colandServiceId(),
+      idempotencyKey,keyId:appletProducerKeyRef(signed),signingKey:signed.service_signing_private_key}),
+    data:canonicalJson(body),
+  });
+  const text=await response.text();
+  expect(response.status(),text).toBe(200);
+  const outcome=JSON.parse(text);
+  expect(["committed","duplicate"],text).toContain(outcome.status);
+  expect(outcome.commit).toMatchObject({event_ref:event.event_id,realm_id:event.realm_id,stream_ref:event.scope_ref});
+  return outcome.commit;
+}
+
+/// The Account-only Invite carrier is inapplicable to Realm actors. Exercise
+/// the same producer boundary with an actual RealmActor membership candidate.
+async function rejectServiceProxyMembership(args: {
+  request: APIRequestContext; token: string; signed: SignedPackage;
+  realmId: string; actorId: ManagedActorId; authorizationRef: string;
   idempotencyKey: string;
 }): Promise<Record<string, unknown>> {
-  const adminId = await currentActorIdApi(args.request, args.token);
-  const evidence = { kind: "explicit_address" } as const;
-  const inviteEvent = signedEventEnvelope({
-    actorId: adminId,
-    realmId: args.realmId,
-    kind: "ak.invite.create",
-    payload: {
-      invitee_account_id: args.actorId.account_id,
-      introduction_evidence_digest: `sha256:${sha256CanonicalJson(evidence)}`,
-      expires_at: canonicalTimestamp(
-        new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
-      ),
-    },
+  const before = await queryRealmEventsApi(args.request,args.token,args.realmId);
+  const event = serviceProxyManagedActorEvent({
+    signed:args.signed,realmId:args.realmId,actorId:args.actorId,
+    authorizationRef:args.authorizationRef,kind:"ak.member.state",
+    payload:{realm_id:args.realmId,member_id:args.actorId,membership:"join"},
   });
-  await submitSignedEventApi(args.request, args.token, inviteEvent, {
-    context: "administrator invites the managed actor",
-  });
-  const before = await queryRealmEventsApi(args.request, args.token, args.realmId);
-  const accept = serviceProxyManagedActorEvent({
-    signed: args.signed,
-    realmId: args.realmId,
-    actorId: args.actorId,
-    authorizationRef: args.authorizationRef,
-    kind: "ak.invite.accept",
-    payload: {
-      invite_id: retypeEventDerivedId(String(inviteEvent.event_id), "invite"),
-      previous_state: "pending",
-      invitee_account_id: args.actorId.account_id,
-    },
-  });
-  const outcome = await deliverAppletEvents(
-    args.request,
-    args.signed,
-    [accept],
-    args.idempotencyKey,
-  );
-  expect(outcome.status, JSON.stringify(outcome.rejections ?? [])).toBe(
-    "rejected",
-  );
-  expect(await queryRealmEventsApi(args.request, args.token, args.realmId)).toEqual(before);
-  return accept;
+  const outcome = await deliverAppletEvents(args.request,args.signed,[event],args.idempotencyKey);
+  expect(outcome.status,JSON.stringify(outcome.rejections ?? [])).toBe("rejected");
+  expect(await queryRealmEventsApi(args.request,args.token,args.realmId)).toEqual(before);
+  return event;
 }
 
 test.describe("applet bridge", () => {
@@ -509,19 +522,21 @@ test.describe("applet bridge", () => {
     const beforeBots = await queryRealmEventsApi(request,token,realmId);
     expect((beforeBots.events as Array<Record<string,unknown>>).some(event=>event.kind==="ak.applet.managed_actor.provision")).toBe(false);
     const first = await provisionAppletBot(request,signed,realmId,`first-${stamp}`,{exerciseAuthoringKats:false});
-    const key = generateWebvhKey();
-    const versionTime = canonicalTimestamp();
-    const secondIdentity = buildWebvhGenesisEntry({baseUrl:colandBaseUrl(),localId:`applet-bot-second-${stamp}`,rootKey:generateWebvhKey(),nextRootKey:generateWebvhKey(),versionTime,document:did=>({"@context":["https://www.w3.org/ns/did/v1"],id:did,verificationMethod:{[`${did}#bot-event-key`]:encodeEd25519PubkeyMultibase(key.publicKey)},updated:versionTime})});
+    const secondIdentity = buildRealmActorIdentity(colandBaseUrl(),`applet-bot-second-${stamp}`);
     const second = await provisionAppletBot(request,signed,realmId,`second-${stamp}`,{exerciseAuthoringKats:false,botOperation:secondIdentity});
     expect(first.bot_actor_id).not.toEqual(second.bot_actor_id);
-    for (const field of ["managed_actor_provision_ref","principal_control_realm_id","profile_event_ref","accountability_grant_ref"]) {
-      expect(first[field]).toEqual(expect.any(String));
-      expect(second[field]).toEqual(expect.any(String));
-      expect(first[field]).not.toEqual(second[field]);
+    expect(first.creation_ref).not.toEqual(second.creation_ref);
+    for (const outcome of [first,second]) {
+      expect(outcome.creation_ref).toMatchObject({stream_ref:{kind:"realm_control",realm_id:realmId}});
+      for (const field of ["principal_control_realm_id","profile_event_ref","accountability_grant_ref","device_id"])
+        expect(outcome).not.toHaveProperty(field);
     }
+    const afterBots = await queryRealmEventsApi(request,token,realmId);
+    expect(afterBots).toEqual(beforeBots);
+
   });
 
-  test("applet installs and provisions Bot and Ghost; Service child grants cannot authorize Account impersonation", async ({
+  test("applet installs and provisions Bot and Ghost; Service child grants cannot authorize RealmActor impersonation", async ({
     browser,
     request,
   }) => {
@@ -573,7 +588,7 @@ test.describe("applet bridge", () => {
         authorizationRef: typedId("grant"),
         payload: {
           realm_id: realmId,
-          member_id: signed.bot_actor_id,
+          member_id: botActorId(signed,realmId),
           membership: "join",
         },
       });
@@ -596,7 +611,7 @@ test.describe("applet bridge", () => {
         { exerciseAuthoringKats: false },
       );
       expect(registration.status).toBe("installed");
-      expect(registration.bot_actor_id).toEqual(signed.bot_actor_id);
+      expect(registration.bot_actor_id).toEqual(botActorId(signed,realmId));
       expect(registration.portal_realm_id).toBe(realmId);
       const messageGrantRef = capabilityGrantRefForAction(
         registration,
@@ -630,7 +645,7 @@ test.describe("applet bridge", () => {
       expect(registrationOnlyOutcome.status).toBe("rejected");
 
       // Real Service-signed terminal creation succeeds. It grants the Bot,
-      // so it cannot authorize the Service accepting the Bot's Invite.
+      // so it cannot authorize the Service writing the Bot's membership.
       const botGrantRef = await grantManagedActorActions(
         request,
         aliceToken,
@@ -639,7 +654,7 @@ test.describe("applet bridge", () => {
         registration.bot_actor_id,
         ["ak.message.create"],
       );
-      const botAcceptance = await rejectServiceProxyInviteAcceptance({
+      const botAcceptance = await rejectServiceProxyMembership({
         request,
         token: aliceToken,
         signed,
@@ -665,7 +680,7 @@ test.describe("applet bridge", () => {
       expect(
         membershipEvents.some(
           (event) =>
-            event.kind === "ak.invite.accept" &&
+            event.kind === "ak.member.state" &&
             event.event_id === botAcceptance.event_id &&
             canonicalJson(event.actor_id) === canonicalJson(registration.bot_actor_id) &&
             canonicalJson(event.executed_by) ===
@@ -679,19 +694,7 @@ test.describe("applet bridge", () => {
           "signed Applet package is missing its Ghost namespace token",
         );
       }
-      const ghostBuilt = buildWebvhGenesisEntry({
-        baseUrl: colandBaseUrl(),
-        localId: `ghost-${signed.ghost_namespace_token}:${externalUser.id.toLowerCase()}`,
-        rootKey: generateWebvhKey(),
-        nextRootKey: generateWebvhKey(),
-        versionTime: canonicalTimestamp(),
-        document: (did) => ({
-          "@context": ["https://www.w3.org/ns/did/v1"],
-          id: did,
-          updated: canonicalTimestamp(),
-        }),
-      });
-      await submitPrincipalGenesisEntry(request, colandBaseUrl(), ghostBuilt);
+      const ghostBuilt = buildRealmActorIdentity(colandBaseUrl(),`ghost-${signed.ghost_namespace_token}:${externalUser.id.toLowerCase()}`);
       const ghostCreation = await buildGhostManagedActorCreation({
         request,
         token: aliceToken,
@@ -705,13 +708,10 @@ test.describe("applet bridge", () => {
       const standaloneGenesis = await rawSubmitSignedEventApi(
         request,
         aliceToken,
-        ghostCreation.managed_actor_bundle.pcr_genesis_event,
+        ghostCreation.create_event,
       );
       const standaloneGenesisText = await standaloneGenesis.text();
-      // Alice's session cannot submit another Actor's PCR founding Event.
-      // This producer refusal precedes managed-aggregate admission. The
-      // authenticated Applet aggregate below remains the provisioning path.
-      // The exact authenticated producer is a capability boundary, not a CAS conflict.
+      // Alice cannot substitute for the creation original's actual Service producer.
       expect(standaloneGenesis.status(), standaloneGenesisText).toBe(403);
       expect(wireErrCode(JSON.parse(standaloneGenesisText))).toBe("capability_denied");
       expect(JSON.parse(standaloneGenesisText).detail).toContain("exact authenticated actor");
@@ -722,8 +722,6 @@ test.describe("applet bridge", () => {
           destination_id: colandServiceId(),
           applet_id: registration.applet_id,
           realm_id: realmId,
-          authorization_ref: messageGrantRef,
-          provision_authorization_ref: provisionGrantRef,
           external_user: externalUser,
           ghost_creation: ghostCreation,
           payload: { kind: "provision" },
@@ -732,7 +730,7 @@ test.describe("applet bridge", () => {
       const provisionText = await provision.text();
       expect(provision.status(), provisionText).toBe(200);
       const provisionBody = JSON.parse(provisionText);
-      const ghostActorId = accountActorId(projectDidToCoreId(ghostBuilt.did));
+      const ghostActorId = managedActorId(ghostBuilt,realmId);
       expect(provisionBody.ghost_actor_id).toEqual(ghostActorId);
       // Provisioning implies no membership. A terminal child names the
       // Ghost itself; the Service cannot substitute for its original signer.
@@ -744,7 +742,7 @@ test.describe("applet bridge", () => {
         ghostActorId,
         ["ak.message.create"],
       );
-      await rejectServiceProxyInviteAcceptance({
+      await rejectServiceProxyMembership({
         request,
         token: aliceToken,
         signed,
@@ -769,7 +767,6 @@ test.describe("applet bridge", () => {
           realm_id: realmId,
           strand_id: portalStrandId,
           authorization_ref: ghostMessageGrantRef,
-          provision_authorization_ref: provisionGrantRef,
           external_user: externalUser,
           ghost_creation: ghostCreation,
           payload: { kind: "message", text },
@@ -787,67 +784,22 @@ test.describe("applet bridge", () => {
       expect(acceptedEvents.some(event => event.kind === "ak.member.state" &&
         canonicalJson((event.payload as Record<string,unknown>).member_id) === canonicalJson(ghostActorId) &&
         (event.payload as Record<string,unknown>).membership === "join")).toBe(false);
-      // The provisioning aggregate the Ghost was created from: the
-      // accountability grant is portal-scoped private source material, while the
-      // Profile is principal-scoped state in the Ghost's own
-      // `applet_managed_control` PCR and is checked from the submitted unit.
-      const ghostBundle = ghostCreation.managed_actor_bundle;
-      const ghostProfile = ghostBundle.profile_event;
-      expect(ghostProfile.actor_id).toEqual(ghostActorId);
-      expect(ghostProfile.realm_id).toBe(provisionBody.principal_control_realm_id);
-      expect(
-        (ghostProfile.payload as Record<string, unknown> | undefined)?.object,
-      ).toEqual(
-        expect.objectContaining({
-          principal_id: ghostActorId.account_id.principal_id,
-          actor_kind: "integration",
-          accountable_principal_ids: [signed.applet_package.service_id],
-        }),
-      );
-      // federation.md §3.2 keeps private source Events withheld from members.
-      // A covering Commit proves acceptance of the exact producer Event.
-      expect((events.commits as Array<Record<string, unknown>>).find(
-        (commit) => commit.event_ref === ghostBundle.accountability_grant_event.event_id,
-      ), "accepted Ghost accountability grant Commit").toBeDefined();
-      const disclosedAccountabilityGrant = acceptedEvents.find(
-        (event) => event.event_id === ghostBundle.accountability_grant_event.event_id,
-      );
-      if (disclosedAccountabilityGrant) {
-        expect(disclosedAccountabilityGrant).toEqual(ghostBundle.accountability_grant_event);
-      }
-      const accountabilityGrant = ghostBundle.accountability_grant_event;
-      expect(
-        accountabilityGrant,
-        "accepted Ghost accountability grant",
-      ).toEqual(
-        expect.objectContaining({
-          kind: "ak.identity.accountability_grant",
-          actor_id: serviceActorId(signed.applet_package.service_id),
-          authorization_ref: provisionGrantRef,
-        }),
-      );
-      expect(accountabilityGrant?.payload).toEqual(
-        expect.objectContaining({
-          issuer_id: signed.applet_package.service_id,
-          subject_id: ghostActorId.account_id.principal_id,
-          grant_status: "active",
-        }),
-      );
-      expect(ghostProfile.semantic_refs).toEqual(
-        expect.arrayContaining([
-          expect.objectContaining({
-            id: accountabilityGrant?.event_id,
-            role: "accountability",
-            critical: true,
-          }),
-        ]),
-      );
-      // The provisioning outcome echoes the provisioning grant; it never
-      // authorizes later Ghost writes (§9.1).
-      expect(provisionBody.authorization_ref).toBe(provisionGrantRef);
+      // Creation is one immutable Service original accepted in the owning
+      // Realm's private control stream. It creates no PCR/Profile/Device,
+      // membership, or business authorization, and leaks no private original.
+      expect(ghostCreation.create_event.kind).toBe("ak.realm.actor.create");
+      expect(ghostCreation.create_event.scope_ref).toEqual({kind:"realm_control",realm_id:realmId});
+      expect(provisionBody.creation_ref).toMatchObject({
+        event_id:ghostCreation.create_event.event_id,
+        stream_ref:{kind:"realm_control",realm_id:realmId},
+      });
+      for (const field of ["principal_control_realm_id","profile_event_ref","accountability_grant_ref","device_id","authorization_ref"])
+        expect(provisionBody).not.toHaveProperty(field);
+      expect(acceptedEvents.some(event=>event.event_id===ghostCreation.create_event.event_id)).toBe(false);
       expect(ghostMessageGrantRef).not.toBe(provisionGrantRef);
+      expect(ghostMessageGrantRef).not.toBe(messageGrantRef);
       // Direct delivery must also reject this proxy before revocation. The
-      // valid HTTP Service signature cannot replace the Account producer.
+      // valid HTTP Service signature cannot replace the RealmActor producer.
       const directText = `direct Service write after revoke ${stamp}`;
       const directWrite = serviceProxyManagedActorEvent({
         signed,
@@ -878,7 +830,7 @@ test.describe("applet bridge", () => {
       );
       expect(revoke.status).toBe("complete");
       expect(revoke.revoked_refs).toEqual(
-        expect.arrayContaining([registration.bot_actor_id.account_id.principal_id, ghostActorId.account_id.principal_id]),
+        expect.arrayContaining([registration.bot_actor_id.realm_actor_id.principal_id, ghostActorId.realm_actor_id.principal_id]),
       );
 
       const afterRevokeText = `after revoke ${stamp}`;
@@ -891,7 +843,6 @@ test.describe("applet bridge", () => {
           realm_id: realmId,
           strand_id: portalStrandId,
           authorization_ref: ghostMessageGrantRef,
-          provision_authorization_ref: provisionGrantRef,
           external_user: externalUser,
           ghost_creation: ghostCreation,
           payload: { kind: "message", text: afterRevokeText },
@@ -994,7 +945,7 @@ test.describe("applet bridge", () => {
       realmId,
       `revoke-${stamp}`,
     );
-    await rejectServiceProxyInviteAcceptance({
+    await rejectServiceProxyMembership({
       request,
       token: aliceToken,
       signed,
@@ -1021,12 +972,12 @@ test.describe("applet bridge", () => {
     );
     expect(revoke.status).toBe("complete");
     expect(revoke.revoked_refs).toEqual(
-      expect.arrayContaining([registration.bot_actor_id.account_id.principal_id]),
+      expect.arrayContaining([registration.bot_actor_id.realm_actor_id.principal_id]),
     );
 
     const history = await queryRealmEventsApi(request, aliceToken, realmId);
     expect(JSON.stringify(history)).toContain("ak.applet.registration");
-    expect(canonicalJson(history)).toContain(canonicalJson(registration.bot_actor_id));
+    expect((history.events as Array<Record<string,unknown>>).some(event=>event.kind==="ak.realm.actor.create")).toBe(false);
 
     const removedLegacyRoute = await request.post(
       `${colandBaseUrl()}/_coland/edge/applets/${encodeURIComponent(registration.applet_id)}/bot/messages`,
@@ -2072,7 +2023,6 @@ async function signPackage(
 ): Promise<SignedPackage> {
   const ghostNamespaceToken = typedId("operation").split(":").at(-1)!;
   const serviceSigningKey = generateWebvhKey();
-  const botSigningKey = generateWebvhKey();
   const versionTime = canonicalTimestamp();
   const servicePublicJwk = {
     crv: "Ed25519",
@@ -2095,27 +2045,7 @@ async function signPackage(
       updated: versionTime,
     }),
   });
-  const botPublicJwk = {
-    crv: "Ed25519",
-    kty: "OKP",
-    x: botSigningKey.publicKey.toString("base64url"),
-  };
-  const botBuilt = buildWebvhGenesisEntry({
-    baseUrl: colandBaseUrl(),
-    localId: `applet-bot-${typedId("operation").split(":").at(-1)}`,
-    rootKey: generateWebvhKey(),
-    nextRootKey: generateWebvhKey(),
-    versionTime,
-    document: (did) => ({
-      "@context": ["https://www.w3.org/ns/did/v1"],
-      id: did,
-      verificationMethod: {
-        [`${did}#bot-event-key`]: encodeEd25519PubkeyMultibase(botSigningKey.publicKey),
-      },
-      assertionMethod: [`${did}#bot-event-key`],
-      updated: versionTime,
-    }),
-  });
+  const botBuilt = buildRealmActorIdentity(colandBaseUrl(),`applet-bot-${typedId("operation").split(":").at(-1)}`);
   const requestedWebhookAuth =
     data.webhook_auth && typeof data.webhook_auth === "object"
       ? (data.webhook_auth as Record<string, unknown>)
@@ -2135,7 +2065,6 @@ async function signPackage(
       actor_namespace_pattern:
         data.actor_namespace_pattern ??
         `did:webvh:*:${built.did.split(":")[3]}:webvh:ghost-${ghostNamespaceToken}:*`,
-      bot_actor_id: accountActorId(projectDidToCoreId(botBuilt.did)),
       service_id: projectDidToCoreId(built.did),
       service_id_document: built.didDocument,
       service_id_method_version_evidence: {
@@ -2148,14 +2077,6 @@ async function signPackage(
       service_signing_private_jwk: serviceSigningKey.privateKey.export({
         format: "jwk",
       }),
-      bot_signing_verification_method: `${botBuilt.did}#bot-event-key`,
-      bot_signing_private_jwk: botSigningKey.privateKey.export({
-        format: "jwk",
-      }),
-      bot_actor_initial_resolution:
-        webvhManagedActorEvidence(botBuilt).initialResolution,
-      bot_actor_method_history_evidence:
-        webvhManagedActorEvidence(botBuilt).methodHistoryEvidence,
       webhook_auth: {
         kind: "http_message_signature",
         accepted_signature_algorithms: ["ed25519"],
@@ -2173,12 +2094,10 @@ async function signPackage(
   expect(response.status()).toBe(200);
   return {
     ...((await response.json()) as SignedPackage),
-    bot_actor_id: accountActorId(projectDidToCoreId(botBuilt.did)),
     service_id_operation: built,
     bot_actor_operation: botBuilt,
     ghost_namespace_token: ghostNamespaceToken,
     service_signing_private_key: serviceSigningKey.privateKey,
-    bot_signing_private_key: botSigningKey.privateKey,
   };
 }
 
@@ -2192,12 +2111,10 @@ function tamperSignedPackage(
 ): SignedPackage {
   const {
     service_signing_private_key: serviceSigningPrivateKey,
-    bot_signing_private_key: botSigningPrivateKey,
     ...wirePackage
   } = signed;
   const cloned = structuredClone(wirePackage) as SignedPackage;
   cloned.service_signing_private_key = serviceSigningPrivateKey;
-  cloned.bot_signing_private_key = botSigningPrivateKey;
   mutate(cloned.applet_package);
   return cloned;
 }
@@ -2230,12 +2147,12 @@ async function installApplet(
   const bot = await provisionAppletBot(request,signed,realmId,idempotencyKey,options);
   // The registration is local fixture bookkeeping, not a provision wire DTO.
   // Preserve the actual response identity check before using the typed candidate.
-  expect(bot.bot_actor_id).toEqual(signed.bot_actor_id);
+  expect(bot.bot_actor_id).toEqual(botActorId(signed,realmId));
   return installRegistrationFromResponse(
     signed,
     realmId,
     installed,
-    signed.bot_actor_id,
+    botActorId(signed,realmId),
     result.grantActionsById,
   );
 }
@@ -2336,7 +2253,7 @@ async function rawInstallApplet(
   };
 }
 
-async function provisionAppletBot(request: APIRequestContext,signed: SignedPackage,realmId:string,idempotencyKey:string,options:{exerciseAuthoringKats?:boolean; botOperation?: BuiltWebvhGenesis}): Promise<Record<string,unknown>> {
+async function provisionAppletBot(request: APIRequestContext,signed: SignedPackage,realmId:string,idempotencyKey:string,options:{exerciseAuthoringKats?:boolean; botOperation?: RealmActorIdentity}): Promise<Record<string,unknown>> {
     const previewUrl=`${colandBaseUrl()}/_arkret/self/applets/${encodeURIComponent(signed.applet_package.applet_id)}/bots/provision/preview`;
     const previewBody={effective_scope:{kind:"realm",realm_id:realmId},request_id:`${idempotencyKey}-bot`,display_name:"Applet Bot"};
     const serviceHeaders=(body:Record<string,unknown>,targetUri:string,key:string)=>signedAppletTransactionHeaders({body,targetUri,sourceServiceId:signed.applet_package.service_id,destinationServiceId:colandServiceId(),idempotencyKey:key,keyId:appletProducerKeyRef(signed),signingKey:signed.service_signing_private_key});
@@ -2355,10 +2272,9 @@ async function provisionAppletBot(request: APIRequestContext,signed: SignedPacka
     );
     const botOperation = options.botOperation ?? signed.bot_actor_operation;
     if (!botOperation) throw new Error("Independent Bot provision requires its own identity material");
-    await submitPrincipalGenesisEntry(request, colandBaseUrl(), botOperation);
-    const evidence = webvhManagedActorEvidence(botOperation);
     const material = await request.post(`${authorBaseUrl}/inspect/bot-authoring-material`, {
-      data: {applet_id:signed.applet_package.applet_id, effective_scope:previewBody.effective_scope, request_id:previewBody.request_id, material:{actor_id:accountActorId(projectDidToCoreId(botOperation.did)), initial_resolution:evidence.initialResolution, method_history_evidence:evidence.methodHistoryEvidence}},
+      data: {applet_id:signed.applet_package.applet_id,effective_scope:previewBody.effective_scope,request_id:previewBody.request_id,
+        material:{inception:{did:botOperation.did,scid:botOperation.scid,versionId:botOperation.versionId,entry:botOperation.entry,didDocument:botOperation.didDocument},control_seed_b64url:botOperation.control_seed_b64url,request_id:previewBody.request_id}},
     });
     expect(material.status(), await material.text()).toBe(200);
     const authorRequestOptions = {
@@ -2530,28 +2446,24 @@ async function provisionAppletBot(request: APIRequestContext,signed: SignedPacka
         canonicalJson(authorOutcome),
       );
     }
-    const managedActorBundle = authorOutcome.managed_actor_bundle;
-    if (!managedActorBundle || typeof managedActorBundle !== "object") {
-      throw new Error(
-        "Bot provision author endpoint omitted managed_actor_bundle",
-      );
+    const createEvent = authorOutcome.create_event as Record<string,unknown>;
+    expect(Object.keys(authorOutcome)).toEqual(["create_event"]);
+    expect(createEvent.kind).toBe("ak.realm.actor.create");
+    expect(createEvent.scope_ref).toEqual({kind:"realm_control",realm_id:realmId});
+    expect((createEvent.payload as Record<string,unknown>).actor_id).toEqual(managedActorId(botOperation,realmId));
+    const commit = await submitManagedActorCreation(request,signed,createEvent,`${idempotencyKey}-bot-create`);
+    const creationRef={event_id:createEvent.event_id,commit_id:commit.commit_id,stream_ref:commit.stream_ref,stream_position:commit.stream_position};
+    if (exerciseAuthoringKats) {
+      const replay = await submitManagedActorCreation(request,signed,createEvent,`${idempotencyKey}-bot-create`);
+      expect(replay).toEqual(commit);
+      // Retired aggregate carrier cannot be smuggled into current Event admission.
+      const targetUri=`${colandBaseUrl()}/_arkret/self/events`;
+      const obsolete={event:createEvent,managed_actor_bundle:{}};
+      const rejected=await request.post(targetUri,{headers:serviceHeaders(obsolete,targetUri,`${idempotencyKey}-obsolete`),data:canonicalJson(obsolete)});
+      expect(rejected.status(),await rejected.text()).toBe(422);
+      expect(wireErrCode(await rejected.json())).toBe("schema_violation");
     }
-
-    const body={authoring_request:authoringRequest,managed_actor_bundle:managedActorBundle};
-    const provisionUrl=previewUrl.replace(/\/preview$/,"");
-    if(options.exerciseAuthoringKats!==false) {
-        const fifth=structuredClone(body) as Record<string,unknown>;
-        const bundle=fifth.managed_actor_bundle as Record<string,unknown>;
-        bundle.membership_event=structuredClone(bundle.profile_event);
-        const rejected=await request.post(provisionUrl,{headers:serviceHeaders(fifth,provisionUrl,`${idempotencyKey}-bot-fifth`),data:canonicalJson(fifth)});
-        expect(rejected.status()).toBe(422);
-        expect(wireErrCode(await rejected.json())).toBe("schema_violation");
-    }
-    const provision=await request.post(provisionUrl,{headers:serviceHeaders(body,provisionUrl,`${idempotencyKey}-bot-provision`),data:canonicalJson(body)});
-    expect(provision.status(),await provision.text()).toBe(201);
-    const outcome = await provision.json() as Record<string,unknown>;
-    expect(outcome.bot_actor_id).toEqual(accountActorId(projectDidToCoreId(botOperation.did)));
-    return outcome;
+    return {bot_actor_id:managedActorId(botOperation,realmId),creation_ref:creationRef,create_event:createEvent};
 }
 
 async function prepareAppletInstallAuthoringBasis(
@@ -2786,46 +2698,6 @@ function registrationManifestFromBasis(
   return manifest;
 }
 
-function webvhManagedActorEvidence(built: BuiltWebvhGenesis) {
-  const historyHead = `sha256:${createHash("sha256")
-    .update(canonicalJson(built.entry), "utf8")
-    .digest("hex")}`;
-  const emptyWitnessDigest = `sha256:${createHash("sha256")
-    .update(canonicalJson([]), "utf8")
-    .digest("hex")}`;
-  const initialResolution = {
-    did: built.did,
-    method_history_head: historyHead,
-    version_id: built.versionId,
-  };
-  return {
-    initialResolution,
-    methodHistoryEvidence: {
-      evidence_kind: "webvh_log",
-      boundary: {
-        from_method_history_head: historyHead,
-        from_version_id: built.versionId,
-        to_method_history_head: historyHead,
-        to_version_id: built.versionId,
-      },
-      evidence: {
-        kind: "ak.did.binding_evidence.v1",
-        method: "webvh",
-        document_digest: cotestWire<string>("did-document-digest", built.didDocument),
-        method_proofs: [
-          {
-            kind: "webvh_log",
-            history_head: historyHead,
-            witnesses: [],
-            witness_proofs_digest: emptyWitnessDigest,
-          },
-        ],
-      },
-      log_entries: [built.entry],
-      witness_records: [],
-    },
-  };
-}
 
 function requiredAppletServiceDid(signed: SignedPackage): string {
   const did = signed.service_id_operation?.did;
@@ -2841,7 +2713,7 @@ async function buildGhostManagedActorCreation(args: {
   signed: SignedPackage;
   registration: AppletRegistration;
   realmId: string;
-  ghostBuilt: BuiltWebvhGenesis;
+  ghostBuilt: RealmActorIdentity;
   externalUser: { id: string; display_name?: string };
   /// EventId of the exact active Applet registration
   /// (applet-managed-actor.schema.json `registration_ref`).
@@ -2872,17 +2744,16 @@ async function buildGhostManagedActorCreation(args: {
   });
   expect(preview.status(), await preview.text()).toBe(200);
   const { authoring_request: authoringRequest } = await preview.json();
-  const evidence = webvhManagedActorEvidence(args.ghostBuilt);
   const registryBase = String(args.signed.applet_package.base_url).replace(/\/$/, "");
   const material = await args.request.post(`${registryBase}/inspect/ghost-authoring-material`, {
     data: {
       applet_id: args.registration.applet_id,
       external_ref: externalRef,
+      effective_scope:previewBody.effective_scope,
       material: {
-        actor_id: accountActorId(projectDidToCoreId(args.ghostBuilt.did)),
-        initial_resolution: evidence.initialResolution,
-        method_history_evidence: evidence.methodHistoryEvidence,
-        registration_ref: args.registrationRef,
+        inception:{did:args.ghostBuilt.did,scid:args.ghostBuilt.scid,versionId:args.ghostBuilt.versionId,entry:args.ghostBuilt.entry,didDocument:args.ghostBuilt.didDocument},
+        control_seed_b64url:args.ghostBuilt.control_seed_b64url,
+        request_id:typedId("operation").split(":").at(-1)!,
       },
     },
   });
@@ -2894,7 +2765,7 @@ async function buildGhostManagedActorCreation(args: {
   const outcome = await authored.json();
   return {
     authoring_request: authoringRequest,
-    managed_actor_bundle: outcome.managed_actor_bundle as Record<string, Record<string, unknown>>,
+    create_event: outcome.create_event as Record<string, unknown>,
     ghost_actor_did: args.ghostBuilt.did,
     external_ref: externalRef,
   };
@@ -2918,13 +2789,13 @@ function installRegistrationFromResponse(
   signed: SignedPackage,
   realmId: string,
   response: AppletInstallOutcome,
-  botActorId: ActorId,
+  acceptedBotActorId: ActorId,
   grantActionsById: Map<string, string[]>,
 ): AppletRegistration {
-  if (botActorId.kind !== "account") {
-    throw new Error("The local registration fixture requires its Account candidate");
+  if (acceptedBotActorId.kind !== "realm") {
+    throw new Error("The local registration fixture requires its Realm candidate");
   }
-  expect(botActorId).toEqual(signed.bot_actor_id);
+  expect(acceptedBotActorId).toEqual(botActorId(signed,realmId));
   const capabilityGrantRefs = Array.isArray(response.capability_grant_refs)
     ? response.capability_grant_refs.map(String)
     : [];
@@ -2939,7 +2810,7 @@ function installRegistrationFromResponse(
   ).toEqual(expect.stringMatching(/^ak:event:/));
   return {
     applet_id: String(response.applet_id),
-    bot_actor_id: botActorId,
+    bot_actor_id: acceptedBotActorId,
     portal_realm_id: realmId,
     namespace:
       signed.applet_package.namespaces?.handles?.[0]?.pattern ??

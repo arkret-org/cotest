@@ -1947,7 +1947,7 @@ async fn run(
     let server = group.server(0);
 
     // Before Bob consumes his claim the Realm is still provisional.
-    let endorsement = |group_state_ref: &EventId| -> Result<Value> {
+    let binding_payload = |group_state_ref: &EventId| -> Result<Value> {
         let payload = DirectConversationBoundPayload {
             pair_key: pair_key.clone(),
             unordered_participant_ids: vec![alice.actor.clone(), bob.actor.clone()],
@@ -1965,7 +1965,7 @@ async fn run(
         &bob,
         arkret_wire::event_kind_str::DIRECT_CONVERSATION_BOUND,
         scope.clone(),
-        endorsement(&add_ref)?,
+        binding_payload(&add_ref)?,
         Vec::new(),
         Cites::Bootstrap(&create_ref),
     )?;
@@ -2053,13 +2053,13 @@ async fn run(
         "resolver did not return the exact occupied leaf Durable cut"
     );
 
-    // Completion: only an exact endorsement. One naming another group state
+    // Completion accepts one exact binding. Naming another group state
     // fails binding integrity, and the provisional Message no longer passes.
     let wrong_state = authored(
         &bob,
         arkret_wire::event_kind_str::DIRECT_CONVERSATION_BOUND,
         scope.clone(),
-        endorsement(&genesis_ref)?,
+        binding_payload(&genesis_ref)?,
         Vec::new(),
         Cites::Bootstrap(&create_ref),
     )?;
@@ -2083,7 +2083,7 @@ async fn run(
         &bob,
         arkret_wire::event_kind_str::DIRECT_CONVERSATION_BOUND,
         scope.clone(),
-        endorsement(&add_ref)?,
+        binding_payload(&add_ref)?,
         Vec::new(),
         Cites::Bootstrap(&create_ref),
     )?;
@@ -2093,7 +2093,7 @@ async fn run(
         &alice,
         arkret_wire::event_kind_str::DIRECT_CONVERSATION_BOUND,
         scope.clone(),
-        endorsement(&add_ref)?,
+        binding_payload(&add_ref)?,
         Vec::new(),
         Cites::Bootstrap(&create_ref),
     )?;

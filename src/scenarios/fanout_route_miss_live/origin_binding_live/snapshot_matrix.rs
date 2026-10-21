@@ -123,6 +123,32 @@ async fn run_matrix() -> Result<()> {
     let mut fixture =
         manual_current_origin_fixture_with_successor("snapshot-three-station", Some(&successor))
             .await?;
+    // Pin complete deployment locators once every real Station is running.
+    // Endpoint-only discovery can still be pending when governance moves;
+    // these hints do not replace DID, Describe or Realm authority verification.
+    let peers: Vec<Vec<String>> = (0..3)
+        .map(|index| {
+            (0..3)
+                .filter(|other| *other != index)
+                .map(|other| {
+                    let server = fixture.group.server(other);
+                    format!(
+                        "{}|{}|{}",
+                        server.service_id(),
+                        server.base_url(),
+                        server.trust_domain()
+                    )
+                })
+                .collect()
+        })
+        .collect();
+    for (index, endpoints) in peers.iter().enumerate() {
+        fixture
+            .group
+            .server_mut(index)
+            .restart_with_federation_peers(endpoints)
+            .await?;
+    }
     let realm = RealmId::new(fixture.realm.clone())?;
     let actor = ActorId::account(fixture.alice_account.clone());
     let mut circles = Vec::new();
@@ -176,6 +202,45 @@ async fn run_matrix() -> Result<()> {
     );
     assert_hidden_private_stream(&outsider, &target)?;
     assert_hidden_private_stream(&outsider, &sidecar)?;
+    let opening_join = issued.current_state_entries.iter().find_map(|row| {
+        let arkret_wire::TypedCurrentRow::Value { selector, revision, .. } = row;
+        matches!(selector, arkret_wire::CurrentSelector::MemberState { actor_id } if actor_id == &actor).then(|| revision.commit_id.clone())
+    }).context("original accepted opening membership")?;
+    let history_request = arkret_models_collaboration::governance::realm_join_intake::PeerRealmJoinBootstrapRequestBody {
+        request_id: arkret_wire::RequestId::new("ak:request:01904100-0000-7000-8000-0000000000b1").map_err(anyhow::Error::msg)?,
+        realm_id: realm.clone(), member_account_id: fixture.alice_account.clone(), membership_commit_id: opening_join,
+        history_stream_ref: Some(target.clone()),
+    };
+    let (history_status, history_body) = fixture
+        .group
+        .server(0)
+        .signed_peer_post(
+            fixture.group.server(0),
+            "/_arkret/peer/realm-joins/bootstrap",
+            &arkret_canonical::canonical_json_bytes(&history_request)?,
+            fixture.group.server(0).service_id(),
+        )
+        .await?;
+    ensure!(
+        history_status == StatusCode::OK,
+        "source history issuance {history_status}: {}",
+        String::from_utf8_lossy(&history_body)
+    );
+    let history_outcome: arkret_models_collaboration::governance::realm_join_intake::PeerRealmJoinBootstrapOutcome = serde_json::from_slice(&history_body)?;
+    ensure!(history_outcome.request_id == history_request.request_id);
+    let stream_history = history_outcome.snapshot;
+    stream_history.validate_purpose()?;
+    ensure!(
+        stream_history.purpose == arkret_wire::RealmSnapshotPurpose::StreamHistory
+            && stream_history
+                .history_basis
+                .as_ref()
+                .is_some_and(|signed| signed.account_id == fixture.alice_account
+                    && signed.stream_ref == target)
+    );
+    assert_hidden_private_stream(&stream_history, &unrelated)?;
+    assert_hidden_private_stream(&stream_history, &sidecar)?;
+    let history_bytes = arkret_canonical::canonical_json_bytes(&stream_history)?;
     let original_bytes = arkret_canonical::canonical_json_bytes(&issued)?;
     let hidden_request = StreamScanRequest {
         realm_id: realm.clone(),
@@ -204,11 +269,14 @@ async fn run_matrix() -> Result<()> {
         &replication_body(&fixture.alice, &change, &changed).await?,
     )
     .await?;
-    ensure!(matches!(
-        outcomes.as_slice(),
-        [PeerCommittedReplicationOutcomeRecord::Stored {}
-            | PeerCommittedReplicationOutcomeRecord::Duplicate {}]
-    ));
+    ensure!(
+        matches!(
+            outcomes.as_slice(),
+            [PeerCommittedReplicationOutcomeRecord::Stored {}
+                | PeerCommittedReplicationOutcomeRecord::Duplicate {}]
+        ),
+        "handoff replication did not settle: {outcomes:?}"
+    );
     ensure_same_commit(
         &changed,
         &wait_held(&fixture.bob, &change.event_id, HELD_WINDOW).await?,
@@ -277,9 +345,18 @@ async fn run_matrix() -> Result<()> {
     }
     let keys =
         garth::historical_station_key_directory(&bundle, None, Some(&historical), &resolutions)?;
+    let current_keys =
+        garth::historical_station_key_directory(&bundle, None, Some(&current), &resolutions)?;
+    let history_keys = garth::historical_station_key_directory(
+        &bundle,
+        None,
+        Some(&stream_history),
+        &resolutions,
+    )?;
     let mut audit = garth::RealmReplica::new(realm.clone());
     audit.install_verified_authority(&request, bundle, &freshness, &keys)?;
     let mut current_audit = audit.clone();
+    let mut history_audit = audit.clone();
     audit.install_verified_snapshot_heads(&historical, &issued.snapshot_id, &freshness, &keys)?;
     let prior = audit.clone();
     ensure!(
@@ -289,7 +366,7 @@ async fn run_matrix() -> Result<()> {
         "old-tenure original was accepted as current head"
     );
     ensure!(audit == prior);
-    current_audit.install_verified_current_snapshot_heads(&current, &freshness, &keys)?;
+    current_audit.install_verified_current_snapshot_heads(&current, &freshness, &current_keys)?;
     let established = current_audit.clone();
     ensure!(
         current_audit
@@ -299,6 +376,17 @@ async fn run_matrix() -> Result<()> {
     );
     ensure!(current_audit == established);
 
+    history_audit.install_verified_snapshot_heads(
+        &stream_history,
+        &stream_history.snapshot_id,
+        &freshness,
+        &history_keys,
+    )?;
+    ensure!(
+        history_audit
+            .install_verified_current_snapshot_heads(&stream_history, &freshness, &history_keys)
+            .is_err()
+    );
     withheld::run(&fixture, &successor.connect_url).await?;
 
     let leave = circle_event(&fixture.alice, &fixture.realm, &circles[1], EventKind::CircleMemberState,
@@ -334,6 +422,14 @@ async fn run_matrix() -> Result<()> {
             ))
         ),
         "unrelated scope revocation must return the registered whole-original unavailable result: {refused:?}"
+    );
+    ensure!(
+        arkret_canonical::canonical_json_bytes(
+            &authority
+                .exact_snapshot(&description, &realm, &stream_history.snapshot_id)
+                .await?
+        )? == history_bytes,
+        "unrelated scope loss must not withdraw the target's independent original"
     );
     let target_page = fixture
         .alice
@@ -384,8 +480,21 @@ async fn run_matrix() -> Result<()> {
             garth::ExactSnapshotRefusal::Unavailable
         ))
     ));
+    fixture
+        .group
+        .server_mut(0)
+        .restart_external_process()
+        .await?;
+    ensure!(
+        arkret_canonical::canonical_json_bytes(
+            &authority
+                .exact_snapshot(&description, &realm, &stream_history.snapshot_id)
+                .await?
+        )? == history_bytes,
+        "Account Station cold restart lost the issued independent history original"
+    );
     println!(
-        "[2133-snapshot] three_station_processes=1 three_databases=1 private_circle_and_sidecar=1 complete_private_handoff=1 generation=1 original_old_signature_verified=1 old_head_refused=1 unrelated_circle_revoked=1 target_and_sidecar_still_readable=1 exact_original_unavailable=1 successor_restart=1"
+        "[stream-history-snapshot] three_station_processes=1 three_databases=1 private_circle_and_sidecar=1 complete_private_handoff=1 generation=1 original_old_signature_verified=1 old_head_refused=1 unrelated_circle_revoked=1 target_and_sidecar_still_readable=1 full_original_unavailable=1 independent_target_original_retained=1 successor_restart=1 account_station_restart=1"
     );
     Ok(())
 }

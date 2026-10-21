@@ -41,6 +41,8 @@ fn main() -> Result<()> {
         "principal-control-realm-id" => wire::principal_control_realm(input)?,
         "webvh-placeholder-did" => wire::webvh_placeholder_did_command(input)?,
         "webvh-genesis" => wire::webvh_genesis(input)?,
+        "realm-actor-inception" => wire::realm_actor_inception(input)?,
+        "applet-realm-actor-author" => wire::applet_realm_actor_author(input)?,
         "webvh-verify-log" => wire::webvh_verify_log(input)?,
         "account-handoff-outcome" => wire::account_handoff_outcome(input)?,
         "account-handoff-request" => wire::account_handoff_request(input)?,

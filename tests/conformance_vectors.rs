@@ -35,6 +35,16 @@ use cotest::conformance::{
 use serde_json::{Value, json};
 
 #[test]
+fn applet_authority_executes_the_registered_realm_actor_successor() -> Result<()> {
+    cotest::conformance::run_applet_managed_actor_authority_suite()
+}
+
+#[test]
+fn applet_install_authoring_uses_current_realm_actor_approval_contracts() -> Result<()> {
+    cotest::conformance::run_applet_install_authoring_suite()
+}
+
+#[test]
 fn protocol_simplification_shape_cases_execute_without_semantic_credit() -> Result<()> {
     let execution = cotest::conformance::run_protocol_simplification_shape_suite()?;
     let fixture = cotest::conformance::load_fixture_value("protocol-simplification-fixture.json")?;

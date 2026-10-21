@@ -31,6 +31,8 @@ type CotestWireCommand =
   | "principal-control-realm-id"
   | "webvh-placeholder-did"
   | "webvh-genesis"
+  | "realm-actor-inception"
+  | "applet-realm-actor-author"
   | "account-handoff-outcome"
   | "account-handoff-request"
   | "principal-registration-fixture"

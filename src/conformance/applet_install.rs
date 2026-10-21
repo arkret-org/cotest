@@ -5,39 +5,72 @@ use serde_json::{Value, json};
 use crate::transcripts::record_vector_event;
 
 const REGISTRATION_EPOCH_FIXTURE: &str = "applet-registration-epoch-fixture.json";
+const MANAGED_ACTOR_ENTRYPOINT: &str = "ak.suite.applet.managed_actor_authority.v1";
 
-/// Execute the normative successor contract suite. Production lifecycle
-/// evidence is collected separately by the live Realm Actor executors.
+/// Execute the registered Realm Actor successor, never the retired Account/PCR model.
+/// This is a formal contract regression suite and makes no production SUT claim.
 pub fn run_applet_managed_actor_authority_suite() -> Result<()> {
-    let fixture = super::load_fixture_value("applet-managed-actor-fixture.json")?;
-    if fixture["runner"]["entrypoint"] != "ak.suite.applet.managed_actor_authority.v1"
-        || fixture["creation_event_kinds"] != json!(["ak.realm.actor.create"])
+    let fixture = super::load_fixture_value(MANAGED_ACTOR_FIXTURE)?;
+    if fixture["runner"]["kind"] != "named_suite"
+        || fixture["runner"]["entrypoint"] != MANAGED_ACTOR_ENTRYPOINT
+        || fixture["creation_event_kinds"]
+            != json!([arkret_wire::event_kind_str::REALM_ACTOR_CREATE])
     {
-        bail!("Realm Actor authority fixture identity drifted");
+        bail!("Applet authority fixture does not name the current Realm Actor successor");
     }
-    let artifacts = super::spec_artifacts_root();
-    let root = artifacts
-        .parent()
-        .and_then(|p| p.parent())
-        .and_then(|p| p.parent())
-        .context("spec repository root")?;
-    let run = std::process::Command::new("python")
-        .args(["-X", "utf8", "-m", "tools.test_realm_actor_contract"])
-        .current_dir(root)
+    let groups = fixture["acceptance_groups"]
+        .as_array()
+        .context("Realm Actor acceptance groups")?;
+    if groups.is_empty() {
+        bail!("Realm Actor authority fixture has no acceptance groups");
+    }
+    let fixture_path = super::fixture_path(MANAGED_ACTOR_FIXTURE)
+        .canonicalize()
+        .context("resolve the exact registered Realm Actor fixture")?;
+    let spec = fixture_path
+        .ancestors()
+        .nth(5)
+        .context("Spec repository for the registered executor")?;
+    if !spec.join("tools/test_realm_actor_contract.py").is_file() {
+        bail!("The registered Realm Actor contract executor is unavailable");
+    }
+    let python =
+        std::env::var_os("COTEST_PYTHON_BIN").unwrap_or_else(|| std::ffi::OsString::from("python"));
+    let output = std::process::Command::new(python)
+        .args(["-B", "-m", "tools.test_realm_actor_contract"])
+        .env("PYTHONDONTWRITEBYTECODE", "1")
+        .current_dir(spec)
         .output()
-        .context("execute Realm Actor normative contract suite")?;
-    if !run.status.success() {
+        .context("execute the registered Realm Actor contract suite")?;
+    let stdout = String::from_utf8(output.stdout).context("Realm Actor suite stdout")?;
+    let stderr = String::from_utf8(output.stderr).context("Realm Actor suite stderr")?;
+    if !output.status.success() {
         bail!(
-            "Realm Actor contract suite failed: {}\n{}",
-            String::from_utf8_lossy(&run.stdout),
-            String::from_utf8_lossy(&run.stderr)
+            "Realm Actor contract suite failed: {}\n{}\n{}",
+            output.status,
+            stdout,
+            stderr
         );
     }
+    let executed = stderr
+        .lines()
+        .find_map(|line| {
+            line.strip_prefix("Ran ")?
+                .split_whitespace()
+                .next()?
+                .parse::<usize>()
+                .ok()
+        })
+        .filter(|count| *count > 0)
+        .context("Realm Actor executor must run a nonempty test suite")?;
+    if !stderr.lines().any(|line| line == "OK") {
+        bail!("Realm Actor executor did not finish without skips or expected failures: {stderr}");
+    }
     record_vector_event(
-        "applet.managed_actor_authority.contract",
-        &fixture,
-        &json!({"contract_passed":true,"production_sut_claim":false}),
-        &json!({"contract_passed":run.status.success(),"production_sut_claim":false}),
+        "applet.managed_actor.realm_actor_successor",
+        &json!({"entrypoint": MANAGED_ACTOR_ENTRYPOINT, "acceptance_groups": groups}),
+        &json!({"executor": "tools.test_realm_actor_contract", "nonempty": true}),
+        &json!({"executed_tests": executed, "exit_success": true, "production_sut_claim": false}),
     );
     Ok(())
 }
@@ -150,21 +183,33 @@ pub fn run_applet_install_authoring_suite() -> Result<()> {
         }
     }
 
+    let creation = arkret_schema::capability_action_descriptor(
+        arkret_wire::CapabilityActionId::AppletGhostProvision,
+    );
+    if creation.target_event_kinds != [arkret_wire::event_kind_str::REALM_ACTOR_CREATE]
+        || creation.approver_capability_action != Some(arkret_wire::CapabilityActionId::RealmAdmin)
+    {
+        bail!("Ghost creation must use one RealmActor create with explicit Realm admin approval");
+    }
+
     record_vector_event(
         "applet.install.caller_signed_grant_binding",
         &json!({
             "constraint": canonical,
             "resource": expected_resource,
+            "creation_event_kinds": creation.target_event_kinds,
         }),
         &json!({
             "canonical_constraint": true,
             "unregistered_constraint_kind_rejected": true,
             "exact_scope_required": true,
+            "single_realm_actor_create": true,
         }),
         &json!({
             "canonical_constraint": valid,
             "unregistered_constraint_kind_rejected": true,
             "exact_scope_required": true,
+            "single_realm_actor_create": true,
         }),
     );
     Ok(())

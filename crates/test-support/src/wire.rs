@@ -34,6 +34,312 @@ use serde::Deserialize;
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 
+/// Fixture inputs only; all protocol carriers and cryptography belong to SDK.
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct RealmActorInceptionFixture {
+    base_url: String,
+    local_id: String,
+    root_seed_b64url: String,
+    next_root_public_key_multibase: String,
+    control_seed_b64url: String,
+    version_time: chrono::DateTime<Utc>,
+}
+
+pub fn realm_actor_inception(input: Value) -> Result<Value> {
+    let input: RealmActorInceptionFixture = serde_json::from_value(input)?;
+    let root = signing_key_from_seed(&input.root_seed_b64url)?;
+    let control = signing_key_from_seed(&input.control_seed_b64url)?;
+    let endpoint = input.base_url.parse()?;
+    let inception = arkret_signatures::webvh::prepare_realm_actor_inception(
+        &arkret_signatures::webvh::RealmActorInceptionInput {
+            principal_endpoint: &endpoint,
+            local_id: &input.local_id,
+            version_time: input.version_time,
+            root_seed: &root.to_bytes(),
+            next_root_public_key_multibase: &input.next_root_public_key_multibase,
+            controller_public_key: &control.verifying_key().to_bytes(),
+        },
+    )?;
+    Ok(
+        json!({"did":inception.did,"scid":inception.did.split(':').nth(2),
+        "versionId":inception.version_id,"entry":inception.log_entry,
+        "didDocument":inception.log_entry["state"]}),
+    )
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct AppletRealmActorAuthorFixture {
+    authoring_request: Value,
+    applet_package: arkret::AppletPackage,
+    inception: Value,
+    control_seed_b64url: String,
+    request_id: String,
+    service_signing_seed_b64url: String,
+    service_verification_method: DidUrl,
+    station_id: DidCoreId,
+    station_verification_method: DidUrl,
+    station_public_jwk: Value,
+}
+
+/// Author one current RealmActor Event; never reconstruct the retired bundle.
+pub fn applet_realm_actor_author(input: Value) -> Result<Value> {
+    let input: AppletRealmActorAuthorFixture = serde_json::from_value(input)?;
+    let failure = |status, error| json!({"status":status,"error":error});
+    let request: arkret::AppletManagedActorAuthoringRequest =
+        match serde_json::from_value(input.authoring_request.clone()) {
+            Ok(value) => value,
+            Err(_) => return Ok(failure(400, "authoring_request_coordinate_mismatch")),
+        };
+    let now = canonical::normalize_timestamp_canonical(Utc::now());
+    if request.issued_at >= request.expires_at || now >= request.expires_at {
+        return Ok(failure(410, "authoring_request_expired"));
+    }
+    if request.validate_bindings().is_err()
+        || request.issued_at > now
+        || request.governance_station_id != input.station_id
+        || request.basis.service_id() != &input.applet_package.service_id
+    {
+        return Ok(failure(400, "authoring_request_coordinate_mismatch"));
+    }
+    let station_key = input
+        .station_public_jwk
+        .get("x")
+        .and_then(Value::as_str)
+        .context("Station JWK omits x")?;
+    let station_key = canonical::base64url_decode(station_key)?;
+    if request.proof.verification_method != input.station_verification_method
+        || arkret_signatures::Ed25519DetachedJwsVerifier::new()
+            .verify_detached_jws(
+                &request.proof.jws,
+                &request.proof_binding_bytes()?,
+                &arkret_signatures::PublicKeyMaterial::Ed25519Raw { bytes: station_key },
+            )
+            .is_err()
+    {
+        return Ok(failure(400, "authoring_request_proof_invalid"));
+    }
+    let basis = &input.authoring_request["basis"];
+    if basis["applet_id"] != json!(input.applet_package.applet_id)
+        || basis["package_digest"] != json!(input.applet_package.package_digest)
+        || input.service_verification_method != input.applet_package.webhook_auth.key_ref
+    {
+        return Ok(failure(400, "authoring_request_coordinate_mismatch"));
+    }
+    let document: arkret_models_identity::DidDocument =
+        serde_json::from_value(input.inception["didDocument"].clone())?;
+    let entry = input.inception["entry"].clone();
+    let head = canonical::canonical_sha256(&entry)?;
+    let version = input.inception["versionId"]
+        .as_str()
+        .context("inception version absent")?;
+    let method =
+        DidUrl::new(format!("{}#managed-controller", document.id)).map_err(anyhow::Error::msg)?;
+    let control = signing_key_from_seed(&input.control_seed_b64url)?;
+    let scope: arkret_wire::ScopeRef = serde_json::from_value(basis["effective_scope"].clone())?;
+    let actor = arkret_wire::ActorId::realm(arkret_wire::RealmActorId::new(
+        scope.realm_id().clone(),
+        project_did_to_core_id(&document.id)?,
+    ));
+    let mut candidate = json!({
+        "schema":arkret::RealmActorCreatePayload::SCHEMA,"actor_id":actor,
+        "applet_id":input.applet_package.applet_id,"service_id":input.applet_package.service_id,
+        "actor_role":if request.purpose == arkret::AppletManagedActorPurpose::ProvisionBot {"bot"}else{"ghost"},
+        "request_id":input.request_id,"creation_scope":scope,
+        "registration_ref":basis["registration_event_ref"],"creation_authorization_ref":basis["authorization_ref"],
+        "initial_resolution":{"did":document.id,"method_history_head":head,"version_id":version},
+        "method_history_evidence":{"evidence_kind":"webvh_log",
+            "boundary":{"from_method_history_head":head,"from_version_id":version,"to_method_history_head":head,"to_version_id":version},
+            "evidence":{"kind":"ak.did.binding_evidence.v1","method":"webvh",
+                "document_digest":arkret_models_identity::normalized_did_document_digest(&document)?,
+                "method_proofs":[{"kind":"webvh_log","history_head":head,"witnesses":[],
+                    "witness_proofs_digest":canonical::canonical_sha256(&Vec::<Value>::new())?}]},
+            "log_entries":[entry],"witness_records":[]},
+        "control_method_kid":method,"expires_at":request.expires_at,
+        "recovery":{"kind":"manager_native","enabled":true},
+    });
+    if request.purpose == arkret::AppletManagedActorPurpose::ProvisionGhost {
+        candidate["external_ref"] = basis["external_ref"].clone();
+    } else if basis["request_id"] != candidate["request_id"] {
+        return Ok(failure(400, "authoring_request_coordinate_mismatch"));
+    }
+    let transcript: arkret::RealmActorCreationTranscript =
+        serde_json::from_value(candidate.clone())?;
+    candidate["control_signature"] =
+        serde_json::to_value(arkret_signatures::detached_object::sign_detached_object(
+            &transcript,
+            arkret_wire::DetachedSignatureContext::RealmActorCreation,
+            method,
+            now,
+            &control,
+        )?)?;
+    let signer = arkret_signatures::Ed25519PayloadSigner::new(
+        signing_key_from_seed(&input.service_signing_seed_b64url)?,
+        Did::new(
+            input
+                .service_verification_method
+                .as_str()
+                .split('#')
+                .next()
+                .context("service DID absent")?,
+        )?,
+        input.service_verification_method,
+    );
+    let event = arkret::author_realm_actor_create(
+        serde_json::from_value(candidate)?,
+        canonical::DigestSuite::Sha256,
+        now,
+        &signer,
+    )?;
+    Ok(json!({"create_event":event}))
+}
+
+#[cfg(test)]
+mod realm_actor_fixture_tests {
+    use super::*;
+
+    fn inception(seed: u8, control: u8) -> Value {
+        realm_actor_inception(json!({
+            "base_url":"https://applet.example/","local_id":format!("actor-{seed}"),
+            "root_seed_b64url":canonical::base64url_encode([seed;32]),
+            "next_root_public_key_multibase":canonical::ed25519_pubkey_to_did_key_multibase(
+                SigningKey::from_bytes(&[seed+1;32]).verifying_key().as_bytes()),
+            "control_seed_b64url":canonical::base64url_encode([control;32]),
+            "version_time":canonical::format_timestamp_canonical(Utc::now()),
+        }))
+        .unwrap()
+    }
+
+    fn author_input(ghost: bool) -> Value {
+        let service_inception = inception(21, 23);
+        let document: arkret_models_identity::DidDocument =
+            serde_json::from_value(service_inception["didDocument"].clone()).unwrap();
+        let service = project_did_to_core_id(&document.id).unwrap();
+        let service_method = DidUrl::new(format!("{}#managed-controller", document.id)).unwrap();
+        let mut package = arkret::AppletPackage::new(
+            "fixture",
+            arkret_wire::AppletId::new("ak:applet:01904100-0000-7000-8000-bbbbbbbbbbbb").unwrap(),
+            service.clone(),
+            document.id.clone(),
+            service.clone(),
+            "https://applet.example/",
+            vec!["bridge".into()],
+            arkret::AppletWireNamespaces::default(),
+        );
+        package.webhook_auth.key_ref = service_method.clone();
+        package.endpoint_policy = serde_json::from_value(json!({
+            "endpoints":[{"method":"POST","path":"/_arkret/edge/applet/transactions","auth":"webhook_signature"}]
+        }))
+        .unwrap();
+        let evidence = arkret::AppletRegistrationEpochEvidence::from_did_document(
+            &document,
+            arkret::AppletDidMethodVersionEvidence::versioned(
+                "did:webvh",
+                Some(service_inception["versionId"].as_str().unwrap().into()),
+                None,
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        package.stamp_registration_epoch(&evidence).unwrap();
+        package.stamp_package_digest().unwrap();
+        let station_did = Did::new("did:web:station.example").unwrap();
+        let station_id = project_did_to_core_id(&station_did).unwrap();
+        let station_method = DidUrl::new("did:web:station.example#notary-key").unwrap();
+        let key = SigningKey::from_bytes(&[40; 32]);
+        let signer = arkret_signatures::Ed25519PayloadSigner::new(
+            key.clone(),
+            station_did,
+            station_method.clone(),
+        );
+        let realm = arkret_wire::RealmId::from_event_id(&arkret_wire::EventId::from_digest(
+            canonical::DigestSuite::Sha256,
+            [41; 32],
+        ));
+        let mut basis = json!({"schema":if ghost {arkret::AppletGhostAuthoringRequestBasis::SCHEMA}else{arkret::AppletBotAuthoringRequestBasis::SCHEMA},
+            "purpose":if ghost {"provision_ghost"}else{"provision_bot"},"target_station_id":station_id,
+            "applet_id":package.applet_id,"service_id":service,"effective_scope":{"kind":"realm","realm_id":realm},
+            "registration_event_ref":arkret_wire::EventId::from_digest(canonical::DigestSuite::Sha256,[42;32]),
+            "authorization_ref":arkret_wire::GrantId::from_event_id(&arkret_wire::EventId::from_digest(canonical::DigestSuite::Sha256,[43;32])),
+            "registration_epoch_evidence":evidence,"package_digest":package.package_digest});
+        let request_id = "01234567890123456789012345678901";
+        if ghost {
+            basis["external_ref"] =
+                json!({"protocol":"bridge","instance_id":"fixture","external_id":"external-user"});
+        } else {
+            basis["request_id"] = json!(request_id);
+        }
+        let now = canonical::normalize_timestamp_canonical(Utc::now());
+        let request = if ghost {
+            arkret::AppletManagedActorAuthoringRequest::sign_ghost(
+                serde_json::from_value(basis).unwrap(),
+                station_id.clone(),
+                now,
+                now + chrono::Duration::minutes(5),
+                &signer,
+            )
+        } else {
+            arkret::AppletManagedActorAuthoringRequest::sign_bot(
+                serde_json::from_value(basis).unwrap(),
+                station_id.clone(),
+                now,
+                now + chrono::Duration::minutes(5),
+                &signer,
+            )
+        }
+        .unwrap();
+        json!({"authoring_request":request,"applet_package":package,"inception":inception(31,33),
+            "control_seed_b64url":canonical::base64url_encode([33;32]),"request_id":request_id,
+            "service_signing_seed_b64url":canonical::base64url_encode([23;32]),"service_verification_method":service_method,
+            "station_id":station_id,"station_verification_method":station_method,
+            "station_public_jwk":{"kty":"OKP","crv":"Ed25519","x":canonical::base64url_encode(key.verifying_key().as_bytes())}})
+    }
+
+    #[test]
+    fn current_bot_and_ghost_fixture_author_one_private_creation_original() {
+        for ghost in [false, true] {
+            let input = author_input(ghost);
+            let outcome = applet_realm_actor_author(input).unwrap();
+            assert_eq!(outcome.as_object().unwrap().len(), 1);
+            let event: Event = serde_json::from_value(outcome["create_event"].clone()).unwrap();
+            assert_eq!(event.kind, arkret_wire::EventKind::RealmActorCreate);
+            assert!(matches!(
+                event.scope_ref,
+                arkret_wire::ScopeRef::RealmControl { .. }
+            ));
+            assert_eq!(
+                outcome["create_event"]["payload"]["actor_id"]["kind"],
+                "realm"
+            );
+            assert!(outcome.get("managed_actor_bundle").is_none());
+        }
+    }
+
+    #[test]
+    fn current_author_fixture_rejects_untrusted_station_and_retired_or_wrong_material() {
+        let input = author_input(false);
+        let mut stale = input.clone();
+        stale["station_verification_method"] = json!("did:web:station.example#rotated-key");
+        assert_eq!(
+            applet_realm_actor_author(stale).unwrap()["error"],
+            "authoring_request_proof_invalid"
+        );
+        let mut nested = input.clone();
+        nested["authoring_request"]["basis"]["managed_actor_bundle"] = json!({});
+        assert_eq!(
+            applet_realm_actor_author(nested).unwrap()["error"],
+            "authoring_request_coordinate_mismatch"
+        );
+        let mut wrong = input.clone();
+        wrong["control_seed_b64url"] = json!(canonical::base64url_encode([34; 32]));
+        assert!(applet_realm_actor_author(wrong).is_err());
+        let mut retired = input;
+        retired["managed_actor_bundle"] = json!({});
+        assert!(applet_realm_actor_author(retired).is_err());
+    }
+}
+
 #[derive(Debug, Deserialize)]
 struct CanonicalInput {
     value: Value,

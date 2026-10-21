@@ -3,6 +3,7 @@ from __future__ import annotations
 import importlib.util
 import json
 import os
+import stat
 import sys
 import tempfile
 import unittest
@@ -20,6 +21,16 @@ SPEC.loader.exec_module(inventory)
 
 OP_ONE = "ak.server.read.describe.v1"
 OP_TWO = "ak.self.committed_event.read.scan.v1"
+
+
+def directory_link(link: Path, target: Path) -> None:
+    if os.name == "nt":
+        import _winapi
+        _winapi.CreateJunction(str(target), str(link))
+        if link.lstat().st_reparse_tag != stat.IO_REPARSE_TAG_MOUNT_POINT:
+            raise AssertionError("Expected an actual Windows directory junction")
+    else:
+        link.symlink_to(target, target_is_directory=True)
 
 
 class OperationTestCoverageTests(unittest.TestCase):
@@ -65,7 +76,7 @@ class OperationTestCoverageTests(unittest.TestCase):
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_bytes(content.encode("utf-8"))
 
-    def test_source_walk_prunes_ignored_and_directory_symlinks_without_losing_sources(self) -> None:
+    def test_source_walk_prunes_ignored_and_directory_links_without_losing_sources(self) -> None:
         sources = self.root / "source-walk"
         for relative in ("nested/kept.rs", "nested/deeper/kept.ts", "plain.rs", ".rs", "not-source.txt"):
             self.write("source-walk/" + relative, "#[test] fn source() {}")
@@ -75,9 +86,22 @@ class OperationTestCoverageTests(unittest.TestCase):
         outside = self.root / "outside-sources"
         outside.mkdir()
         (outside / "outside.rs").write_text("#[test] fn external() {}", encoding="utf-8")
-        (sources / "linked-directory").symlink_to(outside, target_is_directory=True)
-        (sources / "linked-file.rs").symlink_to(outside / "outside.rs")
-        (sources / "dangling.rs").symlink_to(outside / "missing.rs")
+        directory_link(sources / "linked-directory", outside)
+        if os.name == "nt":
+            # A real hardlink needs no symlink privilege. This Windows branch
+            # proves hardlink handling, not file-symlink support.
+            os.link(outside / "outside.rs", sources / "linked-file.rs")
+            missing_directory = self.root / "missing-directory"
+            missing_directory.mkdir()
+            directory_link(sources / "dangling.rs", missing_directory)
+            missing_directory.rmdir()
+            self.assertEqual(
+                (sources / "dangling.rs").lstat().st_reparse_tag,
+                stat.IO_REPARSE_TAG_MOUNT_POINT,
+            )
+        else:
+            (sources / "linked-file.rs").symlink_to(outside / "outside.rs")
+            (sources / "dangling.rs").symlink_to(outside / "missing.rs")
 
         visited = []
         walk = os.walk
@@ -89,21 +113,28 @@ class OperationTestCoverageTests(unittest.TestCase):
         with mock.patch.object(inventory.os, "walk", side_effect=observed_walk):
             actual = {suffix: set(inventory.source_paths(sources, suffix)) for suffix in (".rs", ".ts")}
         for suffix in (".rs", ".ts"):
-            previous = {path for path in sources.rglob("*" + suffix) if inventory.source_file(path)}
+            # Windows rglob follows junctions, so explicitly exclude that
+            # external directory from the previous-walker comparison.
+            previous = {
+                path for path in sources.rglob("*" + suffix)
+                if inventory.source_file(path)
+                and sources / "linked-directory" not in path.parents
+            }
             self.assertEqual(actual[suffix], previous)
         self.assertIn(sources / "linked-file.rs", actual[".rs"])
         self.assertIn(sources / "nested/deeper/kept.ts", actual[".ts"])
         self.assertNotIn(sources / "dangling.rs", actual[".rs"])
+        self.assertNotIn(sources / "linked-directory/outside.rs", actual[".rs"])
         self.assertTrue(visited)
         self.assertTrue(all(not any(part in inventory.IGNORED_DIRS for part in path.parts) for path in visited))
         self.assertNotIn(sources / "linked-directory", visited)
 
-    def test_source_walk_starting_directory_symlink_matches_previous_rglob(self) -> None:
+    def test_source_walk_starting_directory_link_matches_previous_rglob(self) -> None:
         self.write("actual-source/nested/kept.rs", "#[test] fn kept() {}")
         self.write("actual-source/nested/uppercase.RS", "#[test] fn uppercase() {}")
         self.write("actual-source/target/ignored.rs", "#[test] fn excluded() {}")
         root_link = self.root / "root-source-link"
-        root_link.symlink_to(self.root / "actual-source", target_is_directory=True)
+        directory_link(root_link, self.root / "actual-source")
         expected = {path for path in root_link.rglob("*.rs") if inventory.source_file(path)}
         actual = set(inventory.source_paths(root_link, ".rs"))
         self.assertEqual(actual, expected)
@@ -116,7 +147,7 @@ class OperationTestCoverageTests(unittest.TestCase):
         cotest = next(layer for layer in layers if layer.name == "cotest_rust")
         self.assertIn(self.root / "cotest/crates/inkson-client-tests/src/scenarios/actual_client.rs", cotest.files)
 
-    def test_retained_evidence_sources_cannot_change_the_test_inventory(self) -> None:
+    def test_retained_evidence_and_linked_external_sources_cannot_change_the_test_inventory(self) -> None:
         expected = inventory.generate(self.root)
         self.write(
             "cotest/artifacts/backup/files/tests/original.rs",
@@ -126,6 +157,13 @@ class OperationTestCoverageTests(unittest.TestCase):
             "cotest/artifacts/backup/files/tests/retired.rs",
             rust_test("retained_retired", "ak.self.retired.command.v1", "assert!(result.is_err());"),
         )
+        external = self.root / "outside-inventory"
+        external.mkdir()
+        (external / "external.rs").write_text(
+            rust_test("external_sentinel", "ak.self.unregistered.command.v1", "assert!(result.is_err());"),
+            encoding="utf-8",
+        )
+        directory_link(self.root / "cotest/tests/linked-external", external)
         self.assertEqual(inventory.generate(self.root), expected)
 
     def test_generates_full_matrix_and_exact_duplicate_oracle(self) -> None:

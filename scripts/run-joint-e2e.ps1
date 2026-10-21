@@ -61,6 +61,11 @@ param(
     # process-mode Coland. Multi-server runs always use one isolated ephemeral
     # PostgreSQL instance per server.
     [string]$ColandDatabaseUrl,
+    # Native administrative connection used only to CREATE separate, run-owned
+    # application databases. It is never supplied to a service as its store.
+    [string]$PostgresAdminUrl,
+    [string]$PostgresToolsDirectory,
+    [string]$PostgresDataDirectory,
     [string]$ColandPostgresImage = "postgres:18.6-alpine",
     [switch]$RequireDecisionRace,
     [ValidateSet("process", "docker")]
@@ -294,6 +299,7 @@ $multiServer = $ServerCount -ge 2
 
 . (Join-Path $PSScriptRoot "lib\artifacts.ps1")
 . (Join-Path $PSScriptRoot "lib\build-freshness.ps1")
+. (Join-Path $PSScriptRoot "lib\joint-native-postgres.ps1")
 . (Join-Path $PSScriptRoot "lib\secret-scan.ps1")
 . (Join-Path $PSScriptRoot "lib\failure-fingerprint.ps1")
 . (Join-Path $PSScriptRoot "lib\selection-gate.ps1")
@@ -1025,7 +1031,7 @@ function Invoke-JointE2ePreflight {
         }
     }
 
-    if ($WillStartDefaultColand -and -not $ColandDatabaseUrl) {
+    if ($WillStartDefaultColand -and -not $ColandDatabaseUrl -and -not $PostgresAdminUrl) {
         $docker = Find-CommandPath @("docker.exe", "docker")
         if ($docker) {
             Add-PreflightResult $results "coland postgres docker" "pass" $docker
@@ -1137,7 +1143,7 @@ function Invoke-JointE2ePreflight {
             Add-PreflightResult $results "coauth binary" "fail" $_.Exception.Message
         }
 
-        if ($CoauthPostgresUrl) {
+        if ($CoauthPostgresUrl -or $PostgresAdminUrl) {
             Add-PreflightResult $results "coauth postgres" "pass" "external DSN provided; docker not required"
         } else {
             $docker = Find-CommandPath @("docker.exe", "docker")
@@ -1906,6 +1912,9 @@ function Start-EphemeralPostgres {
         [Parameter(Mandatory = $true)][int]$TimeoutSeconds
     )
 
+    if ($PostgresAdminUrl) {
+        return New-JointNativePostgresDatabase -AdminUrl $PostgresAdminUrl -ToolsDirectory $PostgresToolsDirectory -NamePrefix $NamePrefix -ExpectedDataDirectory $PostgresDataDirectory
+    }
     $null = Get-Command docker -ErrorAction Stop
     $port = Get-FreeTcpPort
     $containerName = "$NamePrefix-pg-$PID"
@@ -1965,6 +1974,10 @@ function Start-EphemeralPostgres {
 
 function Stop-EphemeralPostgres {
     param([Parameter(Mandatory = $true)][string]$ContainerName)
+    if (Test-JointNativePostgresHandle $ContainerName) {
+        Remove-JointNativePostgresDatabase $ContainerName
+        return
+    }
     & docker rm -f $ContainerName 2>$null | Out-Null
 }
 
@@ -1987,6 +2000,9 @@ function Export-EphemeralPostgresDump {
         [Parameter(Mandatory = $true)][string]$OutputPath
     )
 
+    if (Test-JointNativePostgresHandle $ContainerName) {
+        return Export-JointNativePostgresDump $ContainerName $OutputPath
+    }
     $parent = Split-Path -Parent $OutputPath
     if ($parent -and -not (Test-Path -LiteralPath $parent)) {
         New-Item -ItemType Directory -Path $parent -Force | Out-Null
@@ -3068,9 +3084,11 @@ if ($RunnerSelfTest) {
 
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 $workspaceRoot = (Resolve-Path (Join-Path $repoRoot "..")).Path
+if ($PostgresAdminUrl -and $ColandRuntime -ne 'process') { throw '-PostgresAdminUrl requires process-mode services' }
+if ($PostgresAdminUrl -and -not $PostgresDataDirectory) { throw '-PostgresAdminUrl requires an explicit -PostgresDataDirectory verification anchor' }
 $requiresDocker = (
-    ($StartCoauth -and -not $CoauthPostgresUrl) -or
-    ((-not $ColandBaseUrl -and -not $ColandCommand -and -not $ColandDatabaseUrl)) -or
+    ($StartCoauth -and -not $CoauthPostgresUrl -and -not $PostgresAdminUrl) -or
+    ((-not $ColandBaseUrl -and -not $ColandCommand -and -not $ColandDatabaseUrl -and -not $PostgresAdminUrl)) -or
     $ColandRuntime -eq "docker"
 )
 # Decide the Playwright selection, and with it whether this run needs Inkson at

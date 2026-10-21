@@ -285,6 +285,15 @@ Managed `-StartCoauth` runs automatically start only the mock email service requ
 to complete Coauth's verified-contact registration flow. Pass `-StartMocks` only
 when the selected scenarios also need the remaining optional mock services.
 
+For a native PostgreSQL cluster, pass `-PostgresAdminUrl` (the cluster's `postgres`
+database), `-PostgresDataDirectory` (the independently verified data directory),
+and optionally `-PostgresToolsDirectory`. The runner checks `SHOW data_directory`
+before creating a store, creates a different run-owned application database for
+every managed Coland and Coauth, and dumps each store before removing only its
+own database. This supports `-ServerCount 3 -DualCoauth` without Docker. The
+administrative URL is never used as an application database; an explicitly
+provided `-ColandDatabaseUrl` still cannot be shared across Stations.
+
 Evidence lands in `artifacts/runs/joint-e2e/<ts>-<profile>/`:
 `playwright-report/` (HTML with trace/video/failure screenshot),
 `screenshots/` (your `stepShot` captures), and `diagnostics/` (console +
