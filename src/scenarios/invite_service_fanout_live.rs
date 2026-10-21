@@ -265,7 +265,10 @@ async fn receive_verified_fanout_batch(
     let polled = expect_json(holder.get("/_arkret/self/device_messages"), StatusCode::OK).await?;
     let outcome: DeviceMessagesGetOutcome = serde_json::from_value(polled.clone())
         .with_context(|| format!("to-device response is not closed SDK wire data: {polled}"))?;
-    ensure!(!outcome.lost, "invite fanout queue lost deliveries");
+    ensure!(
+        outcome.lost != Some(true),
+        "invite fanout queue lost deliveries"
+    );
     let holder_core_id = actor_core_id(&holder.actor)?;
     let mut messages = Vec::new();
     let mut batch_ids = HashSet::new();
@@ -861,7 +864,7 @@ pub async fn invite_service_fanout_live_run() -> Result<()> {
         .await?;
         let drained: DeviceMessagesGetOutcome = serde_json::from_value(drained)?;
         ensure!(
-            !drained.lost && !drained.has_more,
+            drained.lost != Some(true) && !drained.has_more,
             "final fanout poll lost or omitted deliveries"
         );
         if !drained.deliveries.is_empty() {
