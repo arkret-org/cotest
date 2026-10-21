@@ -6,16 +6,16 @@
     "operation_registry_sha256": "b095ceb7aa90902124668d853fbcbbf14fd6e764ebd8f2e9f643c83b8ff3dec9",
     "test_layers": {
       "coland_unit": {
-        "source_file_count": 455,
-        "source_sha256": "617cfdd4b5e490fc539ff04be2bbca0a5e10226a725a7b1600104dd8f2aae6d7",
-        "evidence_count": 320,
+        "source_file_count": 459,
+        "source_sha256": "55ac5e65b41d5df818834f913b31a51969be433551e1dc20a75c49737a1f831d",
+        "evidence_count": 323,
         "covered_operation_count": 144
       },
       "coland_http": {
-        "source_file_count": 76,
-        "source_sha256": "52fb52a20e50bf05d48d92e76bf36d55ee67b66befed2cdc4571e24adf659996",
-        "evidence_count": 39,
-        "covered_operation_count": 27
+        "source_file_count": 51,
+        "source_sha256": "b525519c0df3a87ba9ad40c73e0d84ac0e22b1b826a7bd949ea30e88d049e018",
+        "evidence_count": 34,
+        "covered_operation_count": 23
       },
       "cotest_rust": {
         "source_file_count": 599,
@@ -25,13 +25,13 @@
       },
       "cotest_e2e": {
         "source_file_count": 110,
-        "source_sha256": "560b5f7d11f7ad5f8d1326ab8f2808e0a33abf8f776af37500e2e8bad3c5970c",
+        "source_sha256": "506ab90b7cbe897ab8062a83d948299142c2e231c75c77bae91e8a29a62946c0",
         "evidence_count": 44,
         "covered_operation_count": 20
       },
       "inkson_e2e": {
         "source_file_count": 33,
-        "source_sha256": "c74c38b054abcf36c665297fce48d5ee312306eaec6af1266e0950cf9a941759",
+        "source_sha256": "62f4ff0cef2588433b12408c0917d770e067f8b22f4d9487b0469bf403b1e439",
         "evidence_count": 21,
         "covered_operation_count": 15
       }
@@ -57,11 +57,10 @@
     "matrix_cell_count": 1125
   },
   "closure": {
-    "covered_operation_count": 167,
+    "covered_operation_count": 168,
     "uncovered_operation_ids": [
       "ak.edge.applet.configuration.command.execute.v1",
       "ak.edge.applet.managed_actor.command.author.v1",
-      "ak.edge.push.command.apply_registration.v1",
       "ak.gate.account.command.abandon_identity_creation.v1",
       "ak.gate.account.command.finalize_device_pairing.v1",
       "ak.gate.account.command.issue_did_binding_challenge.v1",
@@ -352,11 +351,11 @@
         "storage_parity": [
           {
             "file": "coland/crates/storage-postgres/src/applets.rs",
-            "line": 737,
+            "line": 698,
             "scope": "transaction_replay_retains_verified_delivery_record",
             "scope_kind": "rust_test",
             "occurrence_lines": [
-              749
+              710
             ],
             "protected_oracle": false,
             "scope_sha256": "afb63d3e5bbc5b1eab58208f8be3c003711a01f093a60d9fe9e3541cc1bfe27f",
@@ -1212,7 +1211,25 @@
       "responsibilities": {
         "protocol_kat": [],
         "storage_parity": [],
-        "http_binding": [],
+        "http_binding": [
+          {
+            "file": "coland/crates/server/tests/http_api/deactivation_push_fanout.rs",
+            "line": 337,
+            "scope": "<module_helper>",
+            "scope_kind": "module_helper",
+            "occurrence_lines": [
+              337
+            ],
+            "protected_oracle": false,
+            "scope_sha256": "673df95330af37583c3c5a2de2001a9831a7a80e2da1bcae336b83f1474167ab",
+            "input_sha256": "673df95330af37583c3c5a2de2001a9831a7a80e2da1bcae336b83f1474167ab",
+            "assertion_sha256": null,
+            "input_preview": [
+              "Some(\"ak.edge.push.command.apply_registration.v1\")"
+            ],
+            "assertion_preview": []
+          }
+        ],
         "product_flow": [],
         "fault_recovery": [],
         "security_negative": []
@@ -1647,11 +1664,11 @@
         "product_flow": [
           {
             "file": "inkson/tests/e2e/mockArkretApi.ts",
-            "line": 4291,
+            "line": 4292,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              4291
+              4292
             ],
             "protected_oracle": false,
             "scope_sha256": "0d902215a82c1afa6ace39d1ae2490a854c2fce2ae31527d45267ed2971f6342",
@@ -1748,11 +1765,11 @@
         "product_flow": [
           {
             "file": "inkson/tests/e2e/mockArkretApi.ts",
-            "line": 4286,
+            "line": 4287,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              4286
+              4287
             ],
             "protected_oracle": false,
             "scope_sha256": "289c7d2d3ee6c0b2e5b712e781db2e9157556c8c3a1f2ba3a28c52c8e1af93e1",
@@ -4957,11 +4974,11 @@
         "product_flow": [
           {
             "file": "inkson/tests/e2e/mockArkretApi.ts",
-            "line": 4281,
+            "line": 4282,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              4281
+              4282
             ],
             "protected_oracle": false,
             "scope_sha256": "dfa117ced15fa63b40362435ed19e8545f4cdf47b8ad9d9608fec60ed6850fbc",
@@ -5930,11 +5947,11 @@
           },
           {
             "file": "coland/crates/services/src/authority_commit.rs",
-            "line": 2758,
+            "line": 2787,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              2758
+              2787
             ],
             "protected_oracle": false,
             "scope_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
@@ -5947,11 +5964,11 @@
           },
           {
             "file": "coland/crates/services/src/authority_commit.rs",
-            "line": 3656,
+            "line": 3685,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              3656
+              3685
             ],
             "protected_oracle": false,
             "scope_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
@@ -5964,11 +5981,11 @@
           },
           {
             "file": "coland/crates/storage/src/authority_commit.rs",
-            "line": 3312,
+            "line": 3333,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              3312
+              3333
             ],
             "protected_oracle": false,
             "scope_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
@@ -7705,11 +7722,11 @@
           },
           {
             "file": "coland/crates/storage/src/authority_commit.rs",
-            "line": 965,
+            "line": 973,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              965
+              973
             ],
             "protected_oracle": false,
             "scope_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
@@ -9166,11 +9183,11 @@
         "product_flow": [
           {
             "file": "inkson/tests/e2e/mockArkretApi.ts",
-            "line": 4301,
+            "line": 4302,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              4301
+              4302
             ],
             "protected_oracle": false,
             "scope_sha256": "e791abbdd61c9daf8ef38b51a13620dae92b40ad2a374ccd5d3dbb524a3b60c2",
@@ -9798,11 +9815,11 @@
         "product_flow": [
           {
             "file": "inkson/tests/e2e/mockArkretApi.ts",
-            "line": 4296,
+            "line": 4297,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              4296
+              4297
             ],
             "protected_oracle": false,
             "scope_sha256": "de2f906f6a0ed8887a7ac00f9ef1e6a081552297e4681ccfcb5c0f3c3923ada5",
@@ -10411,11 +10428,11 @@
         "product_flow": [
           {
             "file": "inkson/tests/e2e/mockArkretApi.ts",
-            "line": 2187,
+            "line": 2188,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              2187
+              2188
             ],
             "protected_oracle": false,
             "scope_sha256": "7bc8e550bf2b5d638557096f7f54d8426af60f20d53a5e4bfaa690c96eaf9e9e",
@@ -10428,11 +10445,11 @@
           },
           {
             "file": "inkson/tests/e2e/mockArkretApi.ts",
-            "line": 4306,
+            "line": 4307,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              4306
+              4307
             ],
             "protected_oracle": false,
             "scope_sha256": "43e41ea2dcba1bf5ffc01365ea7b25bd575260e8ed6599c21bbd64595acbb106",
@@ -11055,11 +11072,11 @@
         "product_flow": [
           {
             "file": "inkson/tests/e2e/mockArkretApi.ts",
-            "line": 2312,
+            "line": 2313,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              2312
+              2313
             ],
             "protected_oracle": false,
             "scope_sha256": "d46189ef754bb1a106697d0966b6cd49a17a9f9fc8278c0d844448a2b3efa208",
@@ -14227,11 +14244,11 @@
         "storage_parity": [
           {
             "file": "coland/crates/storage-postgres/tests/support/applet_authoring.rs",
-            "line": 5684,
+            "line": 5950,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              5684
+              5950
             ],
             "protected_oracle": false,
             "scope_sha256": "c27e87dede3917dbf9c43437388ef63728c78117b1b8f3ec5d7d55effb591bd3",
@@ -14239,6 +14256,23 @@
             "assertion_sha256": null,
             "input_preview": [
               "\"device\":{\"actions\":[\"ak.applet.join\",\"ak.circle.member.add\",\"ak.event.read\",\"ak.message.create\",\"ak.message.redact\",\"ak.mls.commit\",\"ak.object.read_content\",\"ak.self.blob.resource.get.v1\",\"ak.self.blob.command.presign.v1\",\"ak.self.blob.upload.create.v1\",\"ak.strand.create\"],"
+            ],
+            "assertion_preview": []
+          },
+          {
+            "file": "coland/crates/storage-postgres/tests/support/realm_actor_queue_boundary_fixture.rs",
+            "line": 154,
+            "scope": "<module_helper>",
+            "scope_kind": "module_helper",
+            "occurrence_lines": [
+              154
+            ],
+            "protected_oracle": false,
+            "scope_sha256": "c0442d28a93fd9b199c9e169c21c516802802dd2f3b3fde36da153f2c436fde5",
+            "input_sha256": "c0442d28a93fd9b199c9e169c21c516802802dd2f3b3fde36da153f2c436fde5",
+            "assertion_sha256": null,
+            "input_preview": [
+              "\"ak.self.blob.command.presign.v1\","
             ],
             "assertion_preview": []
           }
@@ -14256,33 +14290,7 @@
       "responsibilities": {
         "protocol_kat": [],
         "storage_parity": [],
-        "http_binding": [
-          {
-            "file": "coland/crates/server/tests/applet_admission.rs",
-            "line": 103,
-            "scope": "managed_devices_require_independent_principal_and_possession_on_service_ingress",
-            "scope_kind": "rust_test",
-            "occurrence_lines": [
-              148
-            ],
-            "protected_oracle": false,
-            "scope_sha256": "d2c03141189a238ab67c247e58afe4165a0eaafc10d7527db0a0dec77a1a2dbb",
-            "input_sha256": "46c10344db24e73b32ae6b7e8e99ba3218437aca53890303620bde4b8e0d7c5d",
-            "assertion_sha256": "e3fb2417bf1c8b8b608665fcd8040b950ee66aa779384e32137841902b8393b9",
-            "input_preview": [
-              "use arkret_models_collaboration::events_payloads::DeviceAuthorizePayload;",
-              "use arkret_wire::DeviceId;",
-              "use coland_storage::DeviceRevocationStore as _;",
-              "use ed25519_dalek::Signer as _;"
-            ],
-            "assertion_preview": [
-              "assert_eq!(status, StatusCode::CREATED, \"{ghost}\");",
-              "assert!(",
-              "assert!(!status.is_success(), \"{result}\");",
-              "assert_eq!("
-            ]
-          }
-        ],
+        "http_binding": [],
         "product_flow": [],
         "fault_recovery": [],
         "security_negative": []
@@ -14336,11 +14344,11 @@
         "storage_parity": [
           {
             "file": "coland/crates/storage-postgres/tests/support/applet_authoring.rs",
-            "line": 5684,
+            "line": 5950,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              5684
+              5950
             ],
             "protected_oracle": false,
             "scope_sha256": "c27e87dede3917dbf9c43437388ef63728c78117b1b8f3ec5d7d55effb591bd3",
@@ -14348,6 +14356,23 @@
             "assertion_sha256": null,
             "input_preview": [
               "\"device\":{\"actions\":[\"ak.applet.join\",\"ak.circle.member.add\",\"ak.event.read\",\"ak.message.create\",\"ak.message.redact\",\"ak.mls.commit\",\"ak.object.read_content\",\"ak.self.blob.resource.get.v1\",\"ak.self.blob.command.presign.v1\",\"ak.self.blob.upload.create.v1\",\"ak.strand.create\"],"
+            ],
+            "assertion_preview": []
+          },
+          {
+            "file": "coland/crates/storage-postgres/tests/support/realm_actor_queue_boundary_fixture.rs",
+            "line": 153,
+            "scope": "<module_helper>",
+            "scope_kind": "module_helper",
+            "occurrence_lines": [
+              153
+            ],
+            "protected_oracle": false,
+            "scope_sha256": "49df910dd226f29046cf7f7da6d5c2da1cc529eb7e019ba95041c38fe649256f",
+            "input_sha256": "49df910dd226f29046cf7f7da6d5c2da1cc529eb7e019ba95041c38fe649256f",
+            "assertion_sha256": null,
+            "input_preview": [
+              "\"ak.self.blob.resource.get.v1\","
             ],
             "assertion_preview": []
           }
@@ -14391,33 +14416,7 @@
       "responsibilities": {
         "protocol_kat": [],
         "storage_parity": [],
-        "http_binding": [
-          {
-            "file": "coland/crates/server/tests/applet_admission.rs",
-            "line": 103,
-            "scope": "managed_devices_require_independent_principal_and_possession_on_service_ingress",
-            "scope_kind": "rust_test",
-            "occurrence_lines": [
-              148
-            ],
-            "protected_oracle": false,
-            "scope_sha256": "d2c03141189a238ab67c247e58afe4165a0eaafc10d7527db0a0dec77a1a2dbb",
-            "input_sha256": "46c10344db24e73b32ae6b7e8e99ba3218437aca53890303620bde4b8e0d7c5d",
-            "assertion_sha256": "e3fb2417bf1c8b8b608665fcd8040b950ee66aa779384e32137841902b8393b9",
-            "input_preview": [
-              "use arkret_models_collaboration::events_payloads::DeviceAuthorizePayload;",
-              "use arkret_wire::DeviceId;",
-              "use coland_storage::DeviceRevocationStore as _;",
-              "use ed25519_dalek::Signer as _;"
-            ],
-            "assertion_preview": [
-              "assert_eq!(status, StatusCode::CREATED, \"{ghost}\");",
-              "assert!(",
-              "assert!(!status.is_success(), \"{result}\");",
-              "assert_eq!("
-            ]
-          }
-        ],
+        "http_binding": [],
         "product_flow": [],
         "fault_recovery": [],
         "security_negative": []
@@ -14508,33 +14507,7 @@
       "responsibilities": {
         "protocol_kat": [],
         "storage_parity": [],
-        "http_binding": [
-          {
-            "file": "coland/crates/server/tests/applet_admission.rs",
-            "line": 103,
-            "scope": "managed_devices_require_independent_principal_and_possession_on_service_ingress",
-            "scope_kind": "rust_test",
-            "occurrence_lines": [
-              148
-            ],
-            "protected_oracle": false,
-            "scope_sha256": "d2c03141189a238ab67c247e58afe4165a0eaafc10d7527db0a0dec77a1a2dbb",
-            "input_sha256": "46c10344db24e73b32ae6b7e8e99ba3218437aca53890303620bde4b8e0d7c5d",
-            "assertion_sha256": "e3fb2417bf1c8b8b608665fcd8040b950ee66aa779384e32137841902b8393b9",
-            "input_preview": [
-              "use arkret_models_collaboration::events_payloads::DeviceAuthorizePayload;",
-              "use arkret_wire::DeviceId;",
-              "use coland_storage::DeviceRevocationStore as _;",
-              "use ed25519_dalek::Signer as _;"
-            ],
-            "assertion_preview": [
-              "assert_eq!(status, StatusCode::CREATED, \"{ghost}\");",
-              "assert!(",
-              "assert!(!status.is_success(), \"{result}\");",
-              "assert_eq!("
-            ]
-          }
-        ],
+        "http_binding": [],
         "product_flow": [],
         "fault_recovery": [],
         "security_negative": []
@@ -14623,11 +14596,11 @@
         "storage_parity": [
           {
             "file": "coland/crates/storage-postgres/tests/support/applet_authoring.rs",
-            "line": 5684,
+            "line": 5950,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              5684
+              5950
             ],
             "protected_oracle": false,
             "scope_sha256": "c27e87dede3917dbf9c43437388ef63728c78117b1b8f3ec5d7d55effb591bd3",
@@ -14635,6 +14608,23 @@
             "assertion_sha256": null,
             "input_preview": [
               "\"device\":{\"actions\":[\"ak.applet.join\",\"ak.circle.member.add\",\"ak.event.read\",\"ak.message.create\",\"ak.message.redact\",\"ak.mls.commit\",\"ak.object.read_content\",\"ak.self.blob.resource.get.v1\",\"ak.self.blob.command.presign.v1\",\"ak.self.blob.upload.create.v1\",\"ak.strand.create\"],"
+            ],
+            "assertion_preview": []
+          },
+          {
+            "file": "coland/crates/storage-postgres/tests/support/realm_actor_queue_boundary_fixture.rs",
+            "line": 155,
+            "scope": "<module_helper>",
+            "scope_kind": "module_helper",
+            "occurrence_lines": [
+              155
+            ],
+            "protected_oracle": false,
+            "scope_sha256": "5f80c50e4325cbec1d213bebf8d900568faf0d9e16770f33120c6fa4e080580d",
+            "input_sha256": "5f80c50e4325cbec1d213bebf8d900568faf0d9e16770f33120c6fa4e080580d",
+            "assertion_sha256": null,
+            "input_preview": [
+              "\"ak.self.blob.upload.create.v1\","
             ],
             "assertion_preview": []
           }
@@ -14653,31 +14643,6 @@
         "protocol_kat": [],
         "storage_parity": [],
         "http_binding": [
-          {
-            "file": "coland/crates/server/tests/applet_admission.rs",
-            "line": 103,
-            "scope": "managed_devices_require_independent_principal_and_possession_on_service_ingress",
-            "scope_kind": "rust_test",
-            "occurrence_lines": [
-              148
-            ],
-            "protected_oracle": false,
-            "scope_sha256": "d2c03141189a238ab67c247e58afe4165a0eaafc10d7527db0a0dec77a1a2dbb",
-            "input_sha256": "46c10344db24e73b32ae6b7e8e99ba3218437aca53890303620bde4b8e0d7c5d",
-            "assertion_sha256": "e3fb2417bf1c8b8b608665fcd8040b950ee66aa779384e32137841902b8393b9",
-            "input_preview": [
-              "use arkret_models_collaboration::events_payloads::DeviceAuthorizePayload;",
-              "use arkret_wire::DeviceId;",
-              "use coland_storage::DeviceRevocationStore as _;",
-              "use ed25519_dalek::Signer as _;"
-            ],
-            "assertion_preview": [
-              "assert_eq!(status, StatusCode::CREATED, \"{ghost}\");",
-              "assert!(",
-              "assert!(!status.is_success(), \"{result}\");",
-              "assert_eq!("
-            ]
-          },
           {
             "file": "coland/crates/server/tests/http_api/blob_upload.rs",
             "line": 1,
@@ -15771,11 +15736,11 @@
           },
           {
             "file": "coland/crates/services/src/authority_commit.rs",
-            "line": 2713,
+            "line": 2742,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              2713
+              2742
             ],
             "protected_oracle": false,
             "scope_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
@@ -15788,11 +15753,11 @@
           },
           {
             "file": "coland/crates/services/src/authority_commit.rs",
-            "line": 3649,
+            "line": 3678,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              3649
+              3678
             ],
             "protected_oracle": false,
             "scope_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
@@ -15805,11 +15770,11 @@
           },
           {
             "file": "coland/crates/storage/src/authority_commit.rs",
-            "line": 3287,
+            "line": 3308,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              3287
+              3308
             ],
             "protected_oracle": false,
             "scope_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
@@ -16224,11 +16189,11 @@
         "product_flow": [
           {
             "file": "inkson/tests/e2e/mockArkretApi.ts",
-            "line": 256,
+            "line": 257,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              256
+              257
             ],
             "protected_oracle": false,
             "scope_sha256": "4b39f13a6a7d6f88a495149587b26326113fcdd4f7ed0806f5c9b28ead97eb86",
@@ -16241,11 +16206,11 @@
           },
           {
             "file": "inkson/tests/e2e/mockArkretApi.ts",
-            "line": 1180,
+            "line": 1181,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              1180
+              1181
             ],
             "protected_oracle": false,
             "scope_sha256": "7c1edd881c90220c5ec6cf29be16f46e907e823dd6305f49bcbc5f8ae5d35a8c",
@@ -16258,11 +16223,11 @@
           },
           {
             "file": "inkson/tests/e2e/mockArkretApi.ts",
-            "line": 2188,
+            "line": 2189,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              2188
+              2189
             ],
             "protected_oracle": false,
             "scope_sha256": "7c1edd881c90220c5ec6cf29be16f46e907e823dd6305f49bcbc5f8ae5d35a8c",
@@ -16275,11 +16240,11 @@
           },
           {
             "file": "inkson/tests/e2e/mockArkretApi.ts",
-            "line": 2684,
+            "line": 2685,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              2684
+              2685
             ],
             "protected_oracle": false,
             "scope_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
@@ -16303,11 +16268,11 @@
         "protocol_kat": [
           {
             "file": "coland/crates/services/src/authority_commit.rs",
-            "line": 2840,
+            "line": 2869,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              2840
+              2869
             ],
             "protected_oracle": false,
             "scope_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
@@ -16337,11 +16302,11 @@
           },
           {
             "file": "coland/crates/storage/src/authority_commit.rs",
-            "line": 3339,
+            "line": 3360,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              3339
+              3360
             ],
             "protected_oracle": false,
             "scope_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
@@ -16513,11 +16478,11 @@
         "product_flow": [
           {
             "file": "inkson/tests/e2e/mockArkretApi.ts",
-            "line": 259,
+            "line": 260,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              259
+              260
             ],
             "protected_oracle": false,
             "scope_sha256": "902bf51e084b13319d27f93d4a53f8c35c68999ac591c49b8c6677c2f80c6329",
@@ -16936,11 +16901,11 @@
         "product_flow": [
           {
             "file": "inkson/tests/e2e/mockArkretApi.ts",
-            "line": 1179,
+            "line": 1180,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              1179
+              1180
             ],
             "protected_oracle": false,
             "scope_sha256": "b3fd7f441260b97a91b25096e04ab6416d325ac7ca75d2bd1cb30a9048e62af6",
@@ -16953,11 +16918,11 @@
           },
           {
             "file": "inkson/tests/e2e/mockArkretApi.ts",
-            "line": 1186,
+            "line": 1187,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              1186
+              1187
             ],
             "protected_oracle": false,
             "scope_sha256": "8e3f776dda16f75f311fa1a1c80dd8129b2d3fbf7ae7be6f71a4223cd85f9fca",
@@ -18014,11 +17979,11 @@
         "protocol_kat": [
           {
             "file": "coland/crates/services/src/authority_commit.rs",
-            "line": 2923,
+            "line": 2952,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              2923
+              2952
             ],
             "protected_oracle": false,
             "scope_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
@@ -18048,11 +18013,11 @@
           },
           {
             "file": "coland/crates/storage/src/authority_commit.rs",
-            "line": 3379,
+            "line": 3400,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              3379
+              3400
             ],
             "protected_oracle": false,
             "scope_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
@@ -18671,11 +18636,11 @@
           },
           {
             "file": "coland/crates/storage-postgres/src/capability_grant_current_results.rs",
-            "line": 1841,
+            "line": 1849,
             "scope": "owned_materializer_rejects_admin_service_unknown_and_mixed_sources",
             "scope_kind": "rust_test",
             "occurrence_lines": [
-              1867
+              1875
             ],
             "protected_oracle": false,
             "scope_sha256": "78efab0cbca3fb8f210228ef68da0c691e1e690db46a7659d16f9a1d9b0ff23a",
@@ -19378,11 +19343,11 @@
         "product_flow": [
           {
             "file": "inkson/tests/e2e/mockArkretApi.ts",
-            "line": 1181,
+            "line": 1182,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              1181
+              1182
             ],
             "protected_oracle": false,
             "scope_sha256": "a49aa403833e455f456910b66763a0177dd1ba3c23a71ccea9018a091007b008",
@@ -20073,11 +20038,11 @@
         "product_flow": [
           {
             "file": "inkson/tests/e2e/mockArkretApi.ts",
-            "line": 2730,
+            "line": 2731,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              2730
+              2731
             ],
             "protected_oracle": false,
             "scope_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
@@ -22062,11 +22027,11 @@
         "protocol_kat": [
           {
             "file": "coland/crates/services/src/authority_commit.rs",
-            "line": 3020,
+            "line": 3049,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              3020
+              3049
             ],
             "protected_oracle": false,
             "scope_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
@@ -22096,11 +22061,11 @@
           },
           {
             "file": "coland/crates/storage/src/authority_commit.rs",
-            "line": 3422,
+            "line": 3443,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              3422
+              3443
             ],
             "protected_oracle": false,
             "scope_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
@@ -23096,11 +23061,11 @@
         "protocol_kat": [
           {
             "file": "coland/crates/services/src/authority_commit.rs",
-            "line": 2876,
+            "line": 2905,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              2876
+              2905
             ],
             "protected_oracle": false,
             "scope_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
@@ -23130,11 +23095,11 @@
           },
           {
             "file": "coland/crates/storage/src/authority_commit.rs",
-            "line": 3354,
+            "line": 3375,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              3354
+              3375
             ],
             "protected_oracle": false,
             "scope_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
@@ -23800,25 +23765,7 @@
       "responsibilities": {
         "protocol_kat": [],
         "storage_parity": [],
-        "http_binding": [
-          {
-            "file": "coland/crates/server/tests/applet_admission/native_device/snapshot_read.rs",
-            "line": 25,
-            "scope": "<module_helper>",
-            "scope_kind": "module_helper",
-            "occurrence_lines": [
-              25
-            ],
-            "protected_oracle": false,
-            "scope_sha256": "cf8a0288ab316f12215bae17ddb8265a073eedea1f3000a50721c2a9edf74716",
-            "input_sha256": "cf8a0288ab316f12215bae17ddb8265a073eedea1f3000a50721c2a9edf74716",
-            "assertion_sha256": null,
-            "input_preview": [
-              "\"ak.self.realm_state_snapshot.read.by_ref.v1\""
-            ],
-            "assertion_preview": []
-          }
-        ],
+        "http_binding": [],
         "product_flow": [],
         "fault_recovery": [],
         "security_negative": []
@@ -23861,11 +23808,11 @@
         "product_flow": [
           {
             "file": "inkson/tests/e2e/mockArkretApi.ts",
-            "line": 221,
+            "line": 222,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              221
+              222
             ],
             "protected_oracle": false,
             "scope_sha256": "5f1de3bb3ad59eac29c567fa3a352b633d97f2ee9f0aed61a867c014dbb43b44",
@@ -23953,25 +23900,7 @@
       "responsibilities": {
         "protocol_kat": [],
         "storage_parity": [],
-        "http_binding": [
-          {
-            "file": "coland/crates/server/tests/applet_admission/native_device/snapshot_read.rs",
-            "line": 27,
-            "scope": "<module_helper>",
-            "scope_kind": "module_helper",
-            "occurrence_lines": [
-              27
-            ],
-            "protected_oracle": false,
-            "scope_sha256": "a9476c5332d54a345ee3205ade654cdd9b32e7d20f5f45cec9c1f2bfabaf5f5b",
-            "input_sha256": "a9476c5332d54a345ee3205ade654cdd9b32e7d20f5f45cec9c1f2bfabaf5f5b",
-            "assertion_sha256": null,
-            "input_preview": [
-              "\"ak.self.realm_state_snapshot.read.manifest_head.v1\""
-            ],
-            "assertion_preview": []
-          }
-        ],
+        "http_binding": [],
         "product_flow": [],
         "fault_recovery": [],
         "security_negative": []
@@ -24032,11 +23961,11 @@
         "product_flow": [
           {
             "file": "inkson/tests/e2e/mockArkretApi.ts",
-            "line": 220,
+            "line": 221,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              220
+              221
             ],
             "protected_oracle": false,
             "scope_sha256": "4584c0d8f0c7ef3b5a3227163c42de370ed03222fa1152be4ecde80db750f1a4",
@@ -25007,11 +24936,11 @@
         "protocol_kat": [
           {
             "file": "coland/crates/services/src/authority_commit.rs",
-            "line": 3000,
+            "line": 3029,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              3000
+              3029
             ],
             "protected_oracle": false,
             "scope_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
@@ -25041,11 +24970,11 @@
           },
           {
             "file": "coland/crates/storage/src/authority_commit.rs",
-            "line": 3408,
+            "line": 3429,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              3408
+              3429
             ],
             "protected_oracle": false,
             "scope_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
@@ -25673,11 +25602,11 @@
         "product_flow": [
           {
             "file": "inkson/tests/e2e/mockArkretApi.ts",
-            "line": 4271,
+            "line": 4272,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              4271
+              4272
             ],
             "protected_oracle": false,
             "scope_sha256": "bff91b0dd11264a51db00878778fe137a8879146a8ff78e3d6e2252bf7f48fe8",
@@ -25690,11 +25619,11 @@
           },
           {
             "file": "inkson/tests/e2e/mockArkretApi.ts",
-            "line": 4276,
+            "line": 4277,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              4276
+              4277
             ],
             "protected_oracle": false,
             "scope_sha256": "bff91b0dd11264a51db00878778fe137a8879146a8ff78e3d6e2252bf7f48fe8",
