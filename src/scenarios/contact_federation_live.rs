@@ -1003,13 +1003,13 @@ async fn bounded_contact_snapshot(url: &str) -> Result<serde_json::Value> {
     .await?
 }
 async fn clear_verified_contact_cache(url: &str, local: &ActorId) -> Result<()> {
-    let (url, local) = (url.to_owned(), local.to_string());
+    let (url, local) = (url.to_owned(), serde_json::to_string(local)?);
     tokio::task::spawn_blocking(move ||->Result<()>{
         let mut client=postgres::Client::connect(&url,postgres::NoTls)?;
         client.batch_execute("DELETE FROM contact_verified_mirrors")?;
         // Drop only foreign leases. Immutable original heads and durable
         // observation floors remain, as after loss of a verified mirror cache.
-        client.execute("UPDATE contacts SET current_state=jsonb_set(current_state,'{directions}',(SELECT jsonb_agg(CASE WHEN d#>'{head_operation,signed_event,actor_id}'=$1::jsonb THEN d ELSE d-'current_proof' END) FROM jsonb_array_elements(current_state->'directions') d)),contact_round_evidence=NULL",&[&local])?;
+        client.execute("UPDATE contacts SET current_state=jsonb_set(current_state,'{directions}',(SELECT jsonb_agg(CASE WHEN d#>'{head_operation,signed_event,actor_id}'=$1::text::jsonb THEN d ELSE d-'current_proof' END) FROM jsonb_array_elements(current_state->'directions') d)),contact_round_evidence=NULL",&[&local])?;
         Ok(())
     }).await?
 }
