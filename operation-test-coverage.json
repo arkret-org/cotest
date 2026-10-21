@@ -7,7 +7,7 @@
     "test_layers": {
       "coland_unit": {
         "source_file_count": 455,
-        "source_sha256": "fa9aafa7097726098e5758f6fcc32143a75f8f88fb40924b49c57850aecce69e",
+        "source_sha256": "ecd9d603f81bf3e4d0e1c8ebbc8199d292ba2207943a4363c257472759760f35",
         "evidence_count": 320,
         "covered_operation_count": 144
       },
@@ -14227,11 +14227,11 @@
         "storage_parity": [
           {
             "file": "coland/crates/storage-postgres/tests/support/applet_authoring.rs",
-            "line": 5669,
+            "line": 5684,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              5669
+              5684
             ],
             "protected_oracle": false,
             "scope_sha256": "c27e87dede3917dbf9c43437388ef63728c78117b1b8f3ec5d7d55effb591bd3",
@@ -14336,11 +14336,11 @@
         "storage_parity": [
           {
             "file": "coland/crates/storage-postgres/tests/support/applet_authoring.rs",
-            "line": 5669,
+            "line": 5684,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              5669
+              5684
             ],
             "protected_oracle": false,
             "scope_sha256": "c27e87dede3917dbf9c43437388ef63728c78117b1b8f3ec5d7d55effb591bd3",
@@ -14623,11 +14623,11 @@
         "storage_parity": [
           {
             "file": "coland/crates/storage-postgres/tests/support/applet_authoring.rs",
-            "line": 5669,
+            "line": 5684,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              5669
+              5684
             ],
             "protected_oracle": false,
             "scope_sha256": "c27e87dede3917dbf9c43437388ef63728c78117b1b8f3ec5d7d55effb591bd3",
