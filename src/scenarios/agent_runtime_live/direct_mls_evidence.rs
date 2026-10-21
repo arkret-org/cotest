@@ -591,7 +591,7 @@ pub(super) async fn join(
     ensure!(group_state_ref == commit.event_id);
     let binding = coordinates
         .binding_event_ref
-        .context("found Direct accepted endorsement")?;
+        .context("found Direct accepted binding")?;
     ensure!(
         binding == controller_bound.event_id,
         "resolver substituted the losing bound Event"
