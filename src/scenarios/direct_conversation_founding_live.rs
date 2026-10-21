@@ -244,12 +244,14 @@ async fn expect_rejected(member: &Member, event: &Event, reason: &str) -> Result
 async fn fixed_station_footprint(
     database: &str,
     realm: &RealmId,
-    claim_request_id: &str,
+    claim_request: &arkret_models_crypto::KeyPackagesClaimRequestBody,
     event_id: &EventId,
 ) -> Result<Value> {
     let database = database.to_owned();
     let realm = realm.to_string();
-    let claim_request_id = claim_request_id.to_owned();
+    let claim_request_id = claim_request.claim_request_id.to_string();
+    let source_id = claim_request.service_binding.source_id.to_string();
+    let destination_id = claim_request.service_binding.destination_id.to_string();
     let event_id = event_id.to_string();
     tokio::task::spawn_blocking(move || -> Result<_> {
         let mut db = postgres::Client::connect(&database, postgres::NoTls)?;
@@ -266,13 +268,16 @@ async fn fixed_station_footprint(
                  'accepted_commit_json',f.accepted_commit_json,'circle_leave_parent_revision',f.circle_leave_parent_revision)\
                  ORDER BY f.event_pk),'[]'::jsonb) FROM authority_forward_attempts f \
                  JOIN canonical_events e ON e.pk=f.event_pk WHERE e.envelope->>'event_id'=$3),\
-             'claims',(SELECT COALESCE(jsonb_agg(to_jsonb(c) ORDER BY source_id,claim_request_id),'[]'::jsonb) FROM peer_keypackage_claims c WHERE claim_request_id=$2),\
-             'claim_sources',(SELECT COALESCE(jsonb_agg(to_jsonb(s) ORDER BY source_id,claim_request_id),'[]'::jsonb) FROM keypackage_claim_sources s WHERE claim_request_id=$2 AND governing_realm_id=$1),\
-             'realm_claim_sources',(SELECT COALESCE(jsonb_agg(to_jsonb(s) ORDER BY source_id,claim_request_id),'[]'::jsonb) FROM realm_keypackage_claim_sources s WHERE claim_request_id=$2 AND governing_realm_id=$1),\
-             'claim_attempts',(SELECT COALESCE(jsonb_agg(to_jsonb(a) ORDER BY source_id,claim_request_id),'[]'::jsonb) FROM keypackage_claim_attempts a WHERE claim_request_id=$2),\
-             'welcome_bindings',(SELECT COALESCE(jsonb_agg(to_jsonb(w) ORDER BY claim_id),'[]'::jsonb) FROM keypackage_claim_welcome_bindings w WHERE claim_request_id=$2),\
-             'packages',(SELECT COALESCE(jsonb_agg(to_jsonb(k) ORDER BY id),'[]'::jsonb) FROM mls_key_packages k WHERE id IN (SELECT keypackage_id FROM peer_keypackage_claims WHERE claim_request_id=$2)))",
-            &[&realm, &claim_request_id, &event_id],
+             'claims',(SELECT COALESCE(jsonb_agg(to_jsonb(c) ORDER BY source_id,claim_request_id),'[]'::jsonb) FROM peer_keypackage_claims c WHERE source_id=$4 AND claim_request_id=$2),\
+             'claim_sources',(SELECT COALESCE(jsonb_agg(to_jsonb(s) ORDER BY source_id,claim_request_id),'[]'::jsonb) FROM keypackage_claim_sources s WHERE source_id=$4 AND claim_request_id=$2),\
+             'realm_claim_sources',(SELECT COALESCE(jsonb_agg(to_jsonb(s) ORDER BY source_id,claim_request_id),'[]'::jsonb) FROM realm_keypackage_claim_sources s WHERE source_id=$4 AND claim_request_id=$2),\
+             'claim_attempts',(SELECT COALESCE(jsonb_agg(to_jsonb(a) ORDER BY source_id,claim_request_id),'[]'::jsonb) FROM keypackage_claim_attempts a WHERE source_id=$4 AND claim_request_id=$2),\
+             'welcome_bindings',(SELECT COALESCE(jsonb_agg(to_jsonb(w) ORDER BY claim_id),'[]'::jsonb) FROM keypackage_claim_welcome_bindings w WHERE source_id=$4 AND claim_request_id=$2),\
+             'claim_relay',(SELECT COALESCE(jsonb_agg(jsonb_build_object(\
+                 'id',o.id,'peer_id',o.peer_id,'endpoint',o.endpoint,'idempotency_key',o.idempotency_key,'payload',o.payload_json::jsonb) ORDER BY o.id),'[]'::jsonb)\
+                 FROM federation_outbox o WHERE peer_id=$5 AND endpoint='/_arkret/peer/keys/keypackages/claim' AND idempotency_key=$2),\
+             'packages',(SELECT COALESCE(jsonb_agg(to_jsonb(k) ORDER BY id),'[]'::jsonb) FROM mls_key_packages k WHERE id IN (SELECT keypackage_id FROM peer_keypackage_claims WHERE source_id=$4 AND claim_request_id=$2)))",
+            &[&realm, &claim_request_id, &event_id, &source_id, &destination_id],
         )?.get(0))
     }).await?
 }
@@ -316,7 +321,7 @@ async fn reject_direct_station_change(
     realm: &RealmId,
     database: &str,
     peer_database: Option<&str>,
-    claim_request_id: &str,
+    claim_request: &arkret_models_crypto::KeyPackagesClaimRequestBody,
     binding: Option<&Event>,
 ) -> Result<()> {
     ensure!(alice.account.station_id != bob.account.station_id);
@@ -355,13 +360,9 @@ async fn reject_direct_station_change(
         Vec::new(),
         Cites::Nothing,
     )?;
-    let before =
-        fixed_station_footprint(database, realm, claim_request_id, &change.event_id).await?;
+    let before = fixed_station_footprint(database, realm, claim_request, &change.event_id).await?;
     let peer_before = if let Some(peer_database) = peer_database {
-        Some(
-            fixed_station_footprint(peer_database, realm, claim_request_id, &change.event_id)
-                .await?,
-        )
+        Some(fixed_station_footprint(peer_database, realm, claim_request, &change.event_id).await?)
     } else {
         None
     };
@@ -380,20 +381,87 @@ async fn reject_direct_station_change(
             "pending Direct already has a binding"
         );
         ensure!(
-            before["realm_claim_sources"]
-                .as_array()
-                .is_some_and(|rows| !rows.is_empty()),
-            "pending Direct has no actual source claim rows"
+            matches!(
+                &claim_request.requester_authorization,
+                arkret_models_crypto::PeerKeyPackageRequesterAuthorization::Device { .. }
+            ) && claim_request.requester_account_id.as_ref() == Some(&alice.account)
+                && claim_request.target_account_id.as_ref() == Some(&bob.account)
+                && claim_request.requester_actor_id.is_none()
+                && claim_request.target_actor_id.is_none()
+                && &claim_request.intended_realm_id == realm
+                && claim_request.service_binding.source_id == alice.account.station_id
+                && claim_request.service_binding.destination_id == bob.account.station_id,
+            "pending Direct claim is not the actual Account Device request"
+        );
+        let peer = peer_before
+            .as_ref()
+            .context("pending Direct needs its destination ledger")?;
+        let peer_request =
+            arkret_models_crypto::PeerKeyPackagesClaimRequestBody::from(claim_request);
+        let original = serde_json::to_value(&peer_request)?;
+        let digest = arkret_canonical::canonical_sha256(&peer_request)?;
+        // Account targets retain their signed original at the destination;
+        // realm_keypackage_claim_sources belongs to RealmDevice requesters.
+        let sources = peer["claim_sources"]
+            .as_array()
+            .context("peer claim sources missing")?;
+        ensure!(
+            sources.len() == 1,
+            "peer must retain exactly the actual claim source"
         );
         ensure!(
-            peer_before
-                .as_ref()
-                .is_some_and(
-                    |footprint| footprint["claims"].as_array().is_some_and(|rows| rows
-                        .iter()
-                        .any(|row| row["state"] == "claimed" && row["consume_receipt"].is_null()))
-                ),
-            "peer does not retain the actual unconsumed claim"
+            sources[0]["request_body"] == original
+                && sources[0]["request_digest"] == digest
+                && sources[0]["governing_realm_id"].is_null(),
+            "peer Account claim source differs from the signed original"
+        );
+        let claims = peer["claims"]
+            .as_array()
+            .context("peer claim ledger missing")?;
+        let mirrors = before["claims"]
+            .as_array()
+            .context("source claim mirror missing")?;
+        ensure!(
+            claims.len() == 1 && mirrors.len() == 1,
+            "pending Direct needs the exact destination claim and source mirror"
+        );
+        for row in [&claims[0], &mirrors[0]] {
+            ensure!(
+                row["request_digest"] == digest
+                    && row["state"] == "claimed"
+                    && row["key_package_use"] == "single_use"
+                    && row["consume_receipt"].is_null()
+                    && row["consume_request_digest"].is_null()
+                    && row["terminal_receipt"].is_null()
+                    && row["claim_expires_at_unix_ms"]
+                        == claim_request.expires_at.timestamp_millis(),
+                "pending Direct does not retain the actual unconsumed claim"
+            );
+        }
+        ensure!(
+            claims[0]["outcome"] == mirrors[0]["outcome"]
+                && !claims[0]["keypackage_id"].is_null()
+                && mirrors[0]["keypackage_id"].is_null(),
+            "source mirror differs from the destination's real claim outcome"
+        );
+        let packages = peer["packages"]
+            .as_array()
+            .context("claimed package missing")?;
+        ensure!(
+            packages.len() == 1
+                && packages[0]["id"] == claims[0]["keypackage_id"]
+                && packages[0]["owner_actor_id"] == serde_json::to_value(&bob.actor)?
+                && packages[0]["device_id"] == bob.device.as_str()
+                && packages[0]["claimed_by_mls_group_id"] == claim_request.mls_group_id.as_str()
+                && packages[0]["consumed_at"].is_null(),
+            "peer KeyPackage is not claimed for the actual pending group"
+        );
+        let relays = before["claim_relay"]
+            .as_array()
+            .context("source claim relay missing")?;
+        ensure!(
+            relays.len() == 1 && relays[0]["payload"] == serde_json::to_value(claim_request)?,
+            "source relay does not retain the original signed Account claim"
         );
     }
     let (status, problem) = post_json(
@@ -407,14 +475,12 @@ async fn reject_direct_station_change(
         "Direct governance change must fail at the immutable-Genesis gate: {status} {problem}"
     );
     ensure!(
-        fixed_station_footprint(database, realm, claim_request_id, &change.event_id).await?
-            == before,
+        fixed_station_footprint(database, realm, claim_request, &change.event_id).await? == before,
         "refused Direct Station change altered authority, Event/Commit count, binding, claims or forwarding intent"
     );
     if let (Some(peer_database), Some(peer_before)) = (peer_database, peer_before) {
         ensure!(
-            fixed_station_footprint(peer_database, realm, claim_request_id, &change.event_id)
-                .await?
+            fixed_station_footprint(peer_database, realm, claim_request, &change.event_id).await?
                 == peer_before,
             "refused Direct Station change altered the peer's claim, authority or forwarding intent"
         );
@@ -1834,7 +1900,7 @@ async fn run(
             &realm_id,
             &governance_database.connect_url,
             Some(peer_database),
-            claim_request.claim_request_id.as_str(),
+            &claim_request,
             None,
         ))
         .await?;
@@ -1848,7 +1914,7 @@ async fn run(
             &realm_id,
             &governance_database.connect_url,
             Some(peer_database),
-            claim_request.claim_request_id.as_str(),
+            &claim_request,
             None,
         ))
         .await?;
@@ -1866,7 +1932,7 @@ async fn run(
                 &realm_id,
                 &governance_database.connect_url,
                 Some(peer_database),
-                claim_request.claim_request_id.as_str(),
+                &claim_request,
                 None,
             )),
         )
@@ -2085,7 +2151,7 @@ async fn run(
             peer_database
                 .as_ref()
                 .map(|database| database.connect_url.as_str()),
-            claim_request.claim_request_id.as_str(),
+            &claim_request,
             Some(&bob_binding),
         ))
         .await?;
