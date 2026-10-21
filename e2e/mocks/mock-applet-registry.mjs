@@ -21,7 +21,7 @@
 //     coland's canonical ak.self.applet.install.command.preview.v1 / ak.self.applet.command.install.v1 strand.
 //   POST /_arkret/edge/applet/managed-actors/author
 //     Delegates the closed-carrier validation, proof verification, and canonical
-//     four-Event construction to cotest-wire's shared Rust SDK authoring kernel.
+//     single RealmActor creation Event construction to cotest-wire's shared Rust SDK authoring kernel.
 //     JavaScript owns only HTTP orchestration and durable exact-replay storage.
 //   POST /external-event
 //     Forwards an external payload to coland's typed applet ingress route.
@@ -32,7 +32,7 @@
 //   - This is a harness shim; real registries enforce package publication,
 //     namespace governance, and controller key rotation. The mock fakes enough
 //     of the contract for joint-e2e to assert "signed package → coland install
-//     → independent Bot provision → Ghost transaction with accountability".
+//     → independent Bot provision → Ghost creation in realm_control".
 
 import { createServer } from "node:http";
 import { spawnSync } from "node:child_process";
@@ -187,12 +187,6 @@ const packagesByApplet = new Map(
         key: packageInfo.signingPrivateJwk,
         format: "jwk",
       }),
-      botSigningKey: packageInfo.botSigningPrivateJwk
-        ? createPrivateKey({
-            key: packageInfo.botSigningPrivateJwk,
-            format: "jwk",
-          })
-        : undefined,
     },
   ]),
 );
@@ -211,15 +205,12 @@ function persistDurableAuthoringState() {
   }
   mkdirSync(dirname(durableStateFile), { recursive: true });
   const packages = [...packagesByApplet].map(([appletId, packageInfo]) => {
-    const { signingKey, botSigningKey, ...serializable } = packageInfo;
+    const { signingKey, ...serializable } = packageInfo;
     return [
       appletId,
       {
         ...serializable,
         signingPrivateJwk: signingKey.export({ format: "jwk" }),
-        ...(botSigningKey
-          ? { botSigningPrivateJwk: botSigningKey.export({ format: "jwk" }) }
-          : {}),
       },
     ];
   });
@@ -255,12 +246,6 @@ function reloadDurableAuthoringState() {
         key: packageInfo.signingPrivateJwk,
         format: "jwk",
       }),
-      botSigningKey: packageInfo.botSigningPrivateJwk
-        ? createPrivateKey({
-            key: packageInfo.botSigningPrivateJwk,
-            format: "jwk",
-          })
-        : undefined,
     });
   }
   managedActorAuthoringOutcomes.clear();
@@ -577,11 +562,12 @@ async function submitSignedAppletTransaction({
   packageInfo,
   event,
   idempotencyKey,
+  controlCreation = false,
 }) {
-  const target = `${String(colandBase).replace(/\/$/, "")}/_arkret/edge/applet/transactions`;
-  const operation = "ak.edge.applet.command.transaction.v1";
+  const target = `${String(colandBase).replace(/\/$/, "")}${controlCreation ? "/_arkret/self/events" : "/_arkret/edge/applet/transactions"}`;
+  const operation = controlCreation ? "ak.self.events.command.submit.v1" : "ak.edge.applet.command.transaction.v1";
   const targetUrl = new URL(target);
-  const transaction = {
+  const transaction = controlCreation ? {event} : {
     applet_id: packageInfo.appletId,
     source_id: packageInfo.serviceId,
     events: [event],
@@ -628,58 +614,6 @@ async function submitSignedAppletTransaction({
   });
 }
 
-async function submitSignedGhostProvision({
-  colandBase,
-  destinationServiceId,
-  packageInfo,
-  appletId,
-  requestBody,
-  idempotencyKey,
-}) {
-  const target = `${String(colandBase).replace(/\/$/, "")}/_arkret/self/applets/${encodeURIComponent(appletId)}/ghosts/provision`;
-  const operation = "ak.self.applet.ghost.command.provision.v1";
-  const targetUrl = new URL(target);
-  const body = canonicalJson(requestBody);
-  const contentDigest = `sha-256=:${createHash("sha256")
-    .update(body, "utf8")
-    .digest("base64")}:`;
-  const created = Math.floor(Date.now() / 1000);
-  const expires = created + 60;
-  const signatureParams =
-    `("@method" "@target-uri" "@authority" "content-digest" "arkret-operation" ` +
-    `"source-service-id" "destination-service-id" "idempotency-key");` +
-    `created=${created};expires=${expires};keyid="${packageInfo.verificationMethod}";` +
-    `alg="ed25519"`;
-  const signatureBase =
-    `"@method": POST\n` +
-    `"@target-uri": ${target}\n` +
-    `"@authority": ${targetUrl.host}\n` +
-    `"content-digest": ${contentDigest}\n` +
-    `"arkret-operation": ${operation}\n` +
-    `"source-service-id": ${packageInfo.serviceId}\n` +
-    `"destination-service-id": ${destinationServiceId}\n` +
-    `"idempotency-key": ${idempotencyKey}\n` +
-    `"@signature-params": ${signatureParams}`;
-  const signature = sign(
-    null,
-    Buffer.from(signatureBase, "utf8"),
-    packageInfo.signingKey,
-  ).toString("base64");
-  return await fetch(target, {
-    method: "POST",
-    headers: {
-      "arkret-operation": operation,
-      "content-type": "application/json",
-      "content-digest": contentDigest,
-      "source-service-id": packageInfo.serviceId,
-      "destination-service-id": destinationServiceId,
-      "idempotency-key": idempotencyKey,
-      "signature-input": `sig1=${signatureParams}`,
-      signature: `sig1=:${signature}:`,
-    },
-    body,
-  });
-}
 
 function requestedScopesFromBody(body) {
   const input = body.requested_scopes ??
@@ -880,18 +814,6 @@ function prepareSignedPackage(body) {
     serviceDid,
     packageDigest,
     registrationEpoch: packageBase.registration_epoch,
-    ...(body.bot_actor_initial_resolution !== undefined
-      ? { botInitialResolution: body.bot_actor_initial_resolution }
-      : {}),
-    ...(body.bot_actor_method_history_evidence !== undefined
-      ? { botMethodHistoryEvidence: body.bot_actor_method_history_evidence }
-      : {}),
-    ...(body.bot_signing_verification_method !== undefined
-      ? { botVerificationMethod: body.bot_signing_verification_method }
-      : {}),
-    botSigningKey: body.bot_signing_private_jwk
-      ? createPrivateKey({ key: body.bot_signing_private_jwk, format: "jwk" })
-      : undefined,
     verificationMethod: webhookAuth.key_ref,
     signingKey: body.service_signing_private_jwk
       ? createPrivateKey({
@@ -1041,13 +963,20 @@ const server = createServer(isolateRequestFailure(async (req, res) => {
   if (url.pathname === "/inspect/ghost-authoring-material" && req.method === "POST") {
     const body = await readJson(req);
     const packageInfo = packagesByApplet.get(body?.applet_id);
-    if (!packageInfo || !body.external_ref || !body.material) {
+    if (!packageInfo || !body.external_ref || !body.effective_scope || !body.material) {
       res.statusCode = 400;
       res.end(JSON.stringify({ error: "invalid_ghost_authoring_material" }));
       return;
     }
     packageInfo.ghostAuthoringMaterials ??= {};
-    packageInfo.ghostAuthoringMaterials[canonicalJson(body.external_ref)] = body.material;
+    const key = canonicalJson([body.effective_scope,body.external_ref]);
+    const existing = packageInfo.ghostAuthoringMaterials[key];
+    if (existing && canonicalJson(existing) !== canonicalJson(body.material)) {
+      res.statusCode = 409;
+      res.end(JSON.stringify({error:"ghost_authoring_material_conflict"}));
+      return;
+    }
+    packageInfo.ghostAuthoringMaterials[key] = body.material;
     persistDurableAuthoringState();
     res.end(JSON.stringify({ status: "stored" }));
     return;
@@ -1087,16 +1016,10 @@ const server = createServer(isolateRequestFailure(async (req, res) => {
       canonicalJson(authoringRequest?.basis?.external_ref ?? null),
     ].join("\n");
     const existing = managedActorAuthoringOutcomes.get(subject);
-    if (existing) {
-      if (existing.requestDigest === requestDigest) {
-        res.end(canonicalJson(existing.outcome));
-        return;
-      }
-    }
     const material = authoringRequest?.purpose === "provision_bot"
       ? packageInfo.botAuthoringMaterials?.[canonicalJson([authoringRequest?.basis?.effective_scope, authoringRequest?.basis?.request_id])]
-      : packageInfo.ghostAuthoringMaterials?.[canonicalJson(authoringRequest?.basis?.external_ref ?? null)];
-    if (!material?.actor_id || !material.initial_resolution || !material.method_history_evidence) {
+      : packageInfo.ghostAuthoringMaterials?.[canonicalJson([authoringRequest?.basis?.effective_scope,authoringRequest?.basis?.external_ref ?? null])];
+    if (!material?.inception || !material.control_seed_b64url || !material.request_id) {
       res.statusCode = 409;
       res.end(JSON.stringify({ error: "applet_managed_actor_authoring_material_missing" }));
       return;
@@ -1107,19 +1030,10 @@ const server = createServer(isolateRequestFailure(async (req, res) => {
       res.end(JSON.stringify({ error: "applet_service_key_unavailable" }));
       return;
     }
-    const registrationRef = authoringRequest?.purpose === "provision_bot"
-      ? authoringRequest?.basis?.registration_event_ref
-      : material.registration_ref;
-    if (typeof registrationRef !== "string") {
-      res.statusCode = 409;
-      res.end(JSON.stringify({ error: "managed_actor_registration_ref_unavailable" }));
-      return;
-    }
-    const outcome = runCotestWire("managed-actor-author", {
+    const outcome = runCotestWire("applet-realm-actor-author", {
       authoring_request: authoringRequest,
       applet_package: packageInfo.appletPackage,
       ...material,
-      registration_ref: registrationRef,
       service_signing_seed_b64url: servicePrivateJwk.d,
       service_verification_method: packageInfo.verificationMethod,
       station_id: stationId(),
@@ -1128,11 +1042,14 @@ const server = createServer(isolateRequestFailure(async (req, res) => {
       station_public_jwk: createPublicKey(
         stationNotaryPrivateKey(),
       ).export({ format: "jwk" }),
-      trust_domain: "ak:trust_domain:coland.local",
     });
     if (outcome.error) {
       res.statusCode = outcome.status ?? 400;
       res.end(canonicalJson({ error: outcome.error, detail: outcome.detail }));
+      return;
+    }
+    if (existing?.requestDigest === requestDigest) {
+      res.end(canonicalJson(existing.outcome));
       return;
     }
     managedActorAuthoringOutcomes.set(subject, {
@@ -1173,6 +1090,7 @@ const server = createServer(isolateRequestFailure(async (req, res) => {
     const requestedExternalRef = body.ghost_creation?.external_ref;
     const ghostKey = [
       body.applet_id,
+      canonicalJson(body.ghost_creation?.create_event?.payload?.creation_scope ?? null),
       requestedExternalRef?.protocol ?? "",
       requestedExternalRef?.instance_id ?? "",
       requestedExternalRef?.external_id ?? externalId,
@@ -1180,34 +1098,28 @@ const server = createServer(isolateRequestFailure(async (req, res) => {
     let provision = provisionedGhosts.get(ghostKey);
     if (!provision) {
       const ghostCreation = body.ghost_creation;
-      const bundle = ghostCreation?.managed_actor_bundle;
-      const ghostActorId = bundle?.managed_actor_provision_event?.payload?.actor_id;
-      if (!ghostCreation?.authoring_request || !bundle || !ghostActorId ||
-          typeof ghostCreation.ghost_actor_did !== "string") {
+      const createEvent = ghostCreation?.create_event;
+      const ghostActorId = createEvent?.payload?.actor_id;
+      if (!ghostCreation?.authoring_request || createEvent?.kind !== "ak.realm.actor.create" || ghostActorId?.kind !== "realm" ||
+          typeof ghostCreation.ghost_actor_did !== "string" ||
+          ghostActorId.realm_actor_id.realm_id !== body.realm_id ||
+          createEvent.applet_id !== body.applet_id ||
+          createEvent.payload.applet_id !== body.applet_id ||
+          createEvent.payload.service_id !== packageInfo.serviceId ||
+          canonicalJson(createEvent.payload.external_ref) !== canonicalJson(ghostCreation.external_ref)) {
         res.statusCode = 400;
         res.end(JSON.stringify({ error: "missing_closed_ghost_creation_unit" }));
         return;
       }
-      const provisionAuthorizationRef = body.provision_authorization_ref;
-      if (!provisionAuthorizationRef) {
-        res.statusCode = 400;
-        res.end(
-          JSON.stringify({ error: "missing_provision_authorization_ref" }),
-        );
-        return;
-      }
       let provisionResponse;
       try {
-        provisionResponse = await submitSignedGhostProvision({
+        provisionResponse = await submitSignedAppletTransaction({
           colandBase,
           destinationServiceId: body.destination_id,
           packageInfo,
-          appletId: body.applet_id,
           idempotencyKey: `provision-${body.applet_id}-${safeToken(externalId)}`,
-          requestBody: {
-            authoring_request: ghostCreation.authoring_request,
-            managed_actor_bundle: bundle,
-          },
+          event: createEvent,
+          controlCreation: true,
         });
       } catch (err) {
         res.statusCode = 502;
@@ -1225,10 +1137,18 @@ const server = createServer(isolateRequestFailure(async (req, res) => {
         res.end(provisionText);
         return;
       }
-      provision = {
-        ...JSON.parse(provisionText),
-        ghost_actor_did: ghostCreation.ghost_actor_did,
-      };
+      const accepted = JSON.parse(provisionText);
+      const commit = accepted.commit;
+      if (!["committed","duplicate"].includes(accepted.status) || !commit ||
+          commit.event_ref !== createEvent.event_id || commit.stream_ref?.kind !== "realm_control" ||
+          commit.stream_ref.realm_id !== ghostActorId.realm_actor_id.realm_id) {
+        res.statusCode = 422;
+        res.end(provisionText);
+        return;
+      }
+      provision = {ghost_actor_id:ghostActorId,
+        creation_ref:{event_id:createEvent.event_id,commit_id:commit.commit_id,stream_ref:commit.stream_ref,stream_position:commit.stream_position},
+        ghost_actor_did:ghostCreation.ghost_actor_did};
       provisionedGhosts.set(ghostKey, provision);
     }
     if (body.payload?.kind !== "message") {
@@ -1236,10 +1156,9 @@ const server = createServer(isolateRequestFailure(async (req, res) => {
         JSON.stringify({
           applet_id: body.applet_id,
           ghost_actor_id: provision.ghost_actor_id,
-          principal_control_realm_id: provision.principal_control_realm_id,
+          creation_ref: provision.creation_ref,
           external_id: externalId,
           display_name: displayName,
-          authorization_ref: provision.authorization_ref,
         }),
       );
       return;
@@ -1257,7 +1176,7 @@ const server = createServer(isolateRequestFailure(async (req, res) => {
     }
     // Deliberately invalid proxy fixture. The terminal child names the Ghost,
     // while this mock signs as Service; live admission must reject the Event.
-    // This endpoint is not a managed Account/Device authoring runtime.
+    // This endpoint does not own the RealmActor Device signing key.
     if (typeof body.authorization_ref !== "string" || !body.authorization_ref.startsWith("ak:grant:")) {
       res.statusCode = 400;
       res.end(JSON.stringify({ error: "missing_authorization_ref" }));
