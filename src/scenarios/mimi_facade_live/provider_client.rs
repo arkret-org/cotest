@@ -347,6 +347,10 @@ pub(super) async fn run(
                 .contains(&arkret_wire::ConsentScope::VoiceCall),
         "exact facade retry restored a removed permission"
     );
+    crate::harness::heap_future(|| {
+        revoke_expired_voice(server, holder, &requester, database, &sdk, &request)
+    })
+    .await?;
 
     let room = arkret_wire::MimiRoomUri::new(format!("{provider}/rooms/{strand}"))
         .map_err(anyhow::Error::msg)?;
@@ -410,7 +414,129 @@ pub(super) async fn run(
         "failed key claim emitted native writes"
     );
     eprintln!(
-        "MIMI provider SDK: request correlations=2; Consent accepted/exact replay=1; wrong-key zero-write=1; room receipt/notify=2; signed no-material claim refusal=1; external-provider-live=0"
+        "MIMI provider SDK: request correlations=3; Consent accepted/exact replay=2; expired-scope removal=1; wrong-key zero-write=1; room receipt/notify=2; signed no-material claim refusal=1; external-provider-live=0"
+    );
+    Ok(())
+}
+
+async fn revoke_expired_voice(
+    server: &ArkretServer,
+    holder: &Member,
+    requester: &Member,
+    database: &str,
+    sdk: &arkret_http_client::Client,
+    original_request: &MimiRequestConsentRequestBody,
+) -> Result<()> {
+    use arkret_models_collaboration::events_payloads::consent::{
+        ConsentPeer, ConsentPermission, ConsentReplacePayload,
+    };
+
+    use crate::scenarios::invite_service_fanout_live::{read_consent_set, submit_consent_set};
+
+    let peer = ConsentPeer::Actor {
+        actor_id: requester.actor.clone(),
+    };
+    let (expected_current, original_permissions) = read_consent_set(&holder.client, &peer).await?;
+    ensure!(
+        original_permissions.len() == 1
+            && original_permissions[0].consent_scope == arkret_wire::ConsentScope::Presence,
+        "expired-removal fixture lost its actual unrelated Presence prestate"
+    );
+    let expired: ConsentPermission = serde_json::from_value(json!({
+        "consent_scope":"voice_call","expires_at":"2020-01-01T00:00:00.000Z",
+        "constraints":[],"evidence_ref":"cotest_expired_voice","reason":""
+    }))?;
+    ensure!(expired.expires_at.is_some_and(|at| at < chrono::Utc::now()));
+    let mut with_expired = original_permissions.clone();
+    with_expired.push(expired);
+    with_expired.sort_by_key(|permission| permission.consent_scope);
+    submit_consent_set(
+        &holder.client,
+        ConsentReplacePayload {
+            peer: peer.clone(),
+            expected_current,
+            permissions: with_expired.clone(),
+        },
+    )
+    .await?;
+    let (expired_current, complete) = read_consent_set(&holder.client, &peer).await?;
+    ensure!(
+        arkret_canonical::canonical_json_bytes(&complete)?
+            == arkret_canonical::canonical_json_bytes(&with_expired)?,
+        "actual native current discarded the expired permission or optional members"
+    );
+
+    let mut request = original_request.clone();
+    request.proofs = vec![proof(server, &requester.method)?];
+    request.proofs[0].payload_digest = request.payload_digest()?;
+    request.proofs[0].jws = sign(
+        &request.unsigned_proof_binding_bytes(&request.proofs[0].unsigned())?,
+        &requester.key,
+    )?;
+    let correlation_count = correlations(database).await?;
+    let correlation = sdk.mimi_request_consent(&request).await?;
+    ensure!(correlations(database).await? == correlation_count + 1);
+    let pcr = &holder
+        .client
+        .principal
+        .as_ref()
+        .context("actual holder PCR")?
+        .pcr_realm_id;
+    let event = holder
+        .client
+        .author_event(
+            pcr.as_str(),
+            EventKind::ConsentReplace.as_str(),
+            serde_json::to_value(ConsentReplacePayload {
+                peer: peer.clone(),
+                expected_current: expired_current.clone(),
+                permissions: original_permissions.clone(),
+            })?,
+        )
+        .await?;
+    let mut revoke = MimiUpdateConsentRequestBody {
+        consent_id: correlation.consent_id,
+        decision: MimiConsentDecision::Revoke,
+        actor_id: holder.actor.clone(),
+        consent_event: EventAdmissionSubmission::new(event.clone()),
+        signature: proof(server, &holder.method)?,
+        reason: None,
+        expires_at: None,
+    };
+    revoke.signature.payload_digest = revoke.payload_digest()?;
+    revoke.signature.jws = sign(
+        &revoke.unsigned_signature_binding_bytes(&revoke.signature.unsigned())?,
+        &holder.key,
+    )?;
+    let before = counts(database, pcr.as_str()).await?;
+    let accepted = sdk.mimi_update_consent(&revoke).await?;
+    let after = counts(database, pcr.as_str()).await?;
+    ensure!(accepted.event_ref == event.event_id && accepted.consent_id == revoke.consent_id);
+    ensure!(
+        after[0] == before[0] + 1 && after[1] == before[1] + 1,
+        "expired permission removal did not accept exactly one original Event/Commit"
+    );
+    let (removed_current, remaining) = read_consent_set(&holder.client, &peer).await?;
+    ensure!(
+        removed_current != expired_current
+            && arkret_canonical::canonical_json_bytes(&remaining)?
+                == arkret_canonical::canonical_json_bytes(&original_permissions)?,
+        "MIMI expired permission removal changed an unrelated complete entry or kept the old cut"
+    );
+    let replay = sdk.mimi_update_consent(&revoke).await?;
+    ensure!(
+        arkret_canonical::canonical_json_bytes(&replay)?
+            == arkret_canonical::canonical_json_bytes(&accepted)?
+            && counts(database, pcr.as_str()).await? == after,
+        "expired permission exact retry did not preserve the original outcome without writes"
+    );
+    let (replayed_current, replayed_permissions) = read_consent_set(&holder.client, &peer).await?;
+    ensure!(
+        replayed_current == removed_current && replayed_permissions == remaining,
+        "expired permission exact retry changed the complete peer current"
+    );
+    eprintln!(
+        "[SC-C3 MIMI] expired_permission_removed=1 unrelated_complete_presence_preserved=1 accepted_original_replay_zero_writes=1"
     );
     Ok(())
 }
