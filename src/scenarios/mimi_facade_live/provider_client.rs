@@ -12,7 +12,7 @@ fn proof(server: &ArkretServer, method: &arkret_wire::DidUrl) -> Result<PayloadP
     Ok(serde_json::from_value(
         json!({"kind":"detached_jws", "verification_method":method,
         "payload_digest":format!("sha256:{}", "0".repeat(64)),
-        "created_at":arkret_canonical::normalize_timestamp_canonical(chrono::Utc::now()),
+        "created_at":arkret_canonical::format_timestamp_canonical(chrono::Utc::now()),
         "domain":server.trust_domain(),"audience":server.service_id(),"jws":"pending"}),
     )?)
 }
@@ -330,7 +330,9 @@ pub(super) async fn run(
     let after_clear = counts(database, pcr.as_str()).await?;
     let replay_after_change = sdk.mimi_update_consent(&update).await?;
     ensure!(
-        replay_after_change == accepted && counts(database, pcr.as_str()).await? == after_clear,
+        arkret_canonical::canonical_json_bytes(&replay_after_change)?
+            == arkret_canonical::canonical_json_bytes(&accepted)?
+            && counts(database, pcr.as_str()).await? == after_clear,
         "an old facade decision was reexecuted after a native replacement"
     );
     let (_, current) =

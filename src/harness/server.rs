@@ -1935,7 +1935,8 @@ impl ArkretServer {
                         arkret_wire::DidUrl::new(format!(
                             "{}#federation-fanout-key",
                             self.service_did
-                        ))?,
+                        ))
+                        .map_err(anyhow::Error::msg)?,
                         self.federation_signing_key()?.verifying_key().to_bytes(),
                     ))
                 })

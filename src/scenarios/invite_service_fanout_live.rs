@@ -407,7 +407,7 @@ pub(crate) async fn submit_consent_set(
     Ok((result, event))
 }
 
-async fn grant_scoped_consent(
+pub(super) async fn grant_scoped_consent(
     holder: &TestActorClient,
     peer: &TestActorClient,
     scope: ConsentScope,
