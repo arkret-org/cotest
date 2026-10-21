@@ -245,10 +245,12 @@ async fn fixed_station_footprint(
     database: &str,
     realm: &RealmId,
     claim_request_id: &str,
+    event_id: &EventId,
 ) -> Result<Value> {
     let database = database.to_owned();
     let realm = realm.to_string();
     let claim_request_id = claim_request_id.to_owned();
+    let event_id = event_id.to_string();
     tokio::task::spawn_blocking(move || -> Result<_> {
         let mut db = postgres::Client::connect(&database, postgres::NoTls)?;
         Ok(db.query_one(
@@ -257,13 +259,20 @@ async fn fixed_station_footprint(
              'events',(SELECT count(*) FROM canonical_events WHERE realm_id=$1),\
              'commits',(SELECT count(*) FROM realm_commits WHERE realm_id=$1),\
              'binding',(SELECT to_jsonb(b) FROM direct_conversation_binding_current_results b WHERE realm_id=$1),\
+             'submission_event',(SELECT to_jsonb(e) FROM canonical_events e WHERE e.envelope->>'event_id'=$3),\
+             'forward_intents',(SELECT COALESCE(jsonb_agg(jsonb_build_object(\
+                 'event_pk',f.event_pk,'status',f.status,'reason_code',f.reason_code,\
+                 'original_submission_json',f.original_submission_json,'peer_request_json',f.peer_request_json,\
+                 'accepted_commit_json',f.accepted_commit_json,'circle_leave_parent_revision',f.circle_leave_parent_revision)\
+                 ORDER BY f.event_pk),'[]'::jsonb) FROM authority_forward_attempts f \
+                 JOIN canonical_events e ON e.pk=f.event_pk WHERE e.envelope->>'event_id'=$3),\
              'claims',(SELECT COALESCE(jsonb_agg(to_jsonb(c) ORDER BY source_id,claim_request_id),'[]'::jsonb) FROM peer_keypackage_claims c WHERE claim_request_id=$2),\
              'claim_sources',(SELECT COALESCE(jsonb_agg(to_jsonb(s) ORDER BY source_id,claim_request_id),'[]'::jsonb) FROM keypackage_claim_sources s WHERE claim_request_id=$2 AND governing_realm_id=$1),\
              'realm_claim_sources',(SELECT COALESCE(jsonb_agg(to_jsonb(s) ORDER BY source_id,claim_request_id),'[]'::jsonb) FROM realm_keypackage_claim_sources s WHERE claim_request_id=$2 AND governing_realm_id=$1),\
              'claim_attempts',(SELECT COALESCE(jsonb_agg(to_jsonb(a) ORDER BY source_id,claim_request_id),'[]'::jsonb) FROM keypackage_claim_attempts a WHERE claim_request_id=$2),\
              'welcome_bindings',(SELECT COALESCE(jsonb_agg(to_jsonb(w) ORDER BY claim_id),'[]'::jsonb) FROM keypackage_claim_welcome_bindings w WHERE claim_request_id=$2),\
              'packages',(SELECT COALESCE(jsonb_agg(to_jsonb(k) ORDER BY id),'[]'::jsonb) FROM mls_key_packages k WHERE id IN (SELECT keypackage_id FROM peer_keypackage_claims WHERE claim_request_id=$2)))",
-            &[&realm, &claim_request_id],
+            &[&realm, &claim_request_id, &event_id],
         )?.get(0))
     }).await?
 }
@@ -297,12 +306,13 @@ async fn fixed_station_bundle(
     Ok(bundle)
 }
 
-/// A genuine current root controller cannot move a Direct Conversation to the
-/// peer's real Station, before or after binding. The pending claim must not be
-/// refreshed or rewritten before the immutable-Genesis gate decides the write.
+/// A root controller or peer cannot move a Direct Conversation to the peer's
+/// real Station. Neither the pending claim nor a remote forwarding intent may
+/// be written before the immutable-Genesis gate decides the write.
 async fn reject_direct_station_change(
     alice: &Member,
     bob: &Member,
+    submitter: &Member,
     realm: &RealmId,
     database: &str,
     peer_database: Option<&str>,
@@ -329,12 +339,41 @@ async fn reject_direct_station_change(
     } else {
         None
     };
-    let before = fixed_station_footprint(database, realm, claim_request_id).await?;
+    let payload =
+        arkret_models_collaboration::events_payloads::RealmGovernanceStationChangePayload {
+            expected_governance_generation: 0,
+            expected_realm_stream_commit_id: bundle.realm_stream_head.commit_id.clone(),
+            new_governance_station_id: bob.account.station_id.clone(),
+        };
+    let change = authored(
+        submitter,
+        arkret_wire::EventKind::RealmGovernanceStationChange.as_str(),
+        ScopeRef::Realm {
+            realm_id: realm.clone(),
+        },
+        serde_json::to_value(payload)?,
+        Vec::new(),
+        Cites::Nothing,
+    )?;
+    let before =
+        fixed_station_footprint(database, realm, claim_request_id, &change.event_id).await?;
     let peer_before = if let Some(peer_database) = peer_database {
-        Some(fixed_station_footprint(peer_database, realm, claim_request_id).await?)
+        Some(
+            fixed_station_footprint(peer_database, realm, claim_request_id, &change.event_id)
+                .await?,
+        )
     } else {
         None
     };
+    for footprint in std::iter::once(&before).chain(peer_before.iter()) {
+        ensure!(
+            footprint["submission_event"].is_null()
+                && footprint["forward_intents"]
+                    .as_array()
+                    .is_some_and(|rows| rows.is_empty()),
+            "fresh governance change already has an Event or forwarding intent"
+        );
+    }
     if binding.is_none() {
         ensure!(
             before["binding"].is_null(),
@@ -357,24 +396,8 @@ async fn reject_direct_station_change(
             "peer does not retain the actual unconsumed claim"
         );
     }
-    let payload =
-        arkret_models_collaboration::events_payloads::RealmGovernanceStationChangePayload {
-            expected_governance_generation: 0,
-            expected_realm_stream_commit_id: bundle.realm_stream_head.commit_id.clone(),
-            new_governance_station_id: bob.account.station_id.clone(),
-        };
-    let change = authored(
-        alice,
-        arkret_wire::EventKind::RealmGovernanceStationChange.as_str(),
-        ScopeRef::Realm {
-            realm_id: realm.clone(),
-        },
-        serde_json::to_value(payload)?,
-        Vec::new(),
-        Cites::Nothing,
-    )?;
     let (status, problem) = post_json(
-        &alice.client,
+        &submitter.client,
         &EventAdmissionSubmission::new(change.clone()),
     )
     .await?;
@@ -384,13 +407,16 @@ async fn reject_direct_station_change(
         "Direct governance change must fail at the immutable-Genesis gate: {status} {problem}"
     );
     ensure!(
-        fixed_station_footprint(database, realm, claim_request_id).await? == before,
-        "refused Direct Station change altered authority, Event/Commit count, binding or complete claim rows"
+        fixed_station_footprint(database, realm, claim_request_id, &change.event_id).await?
+            == before,
+        "refused Direct Station change altered authority, Event/Commit count, binding, claims or forwarding intent"
     );
     if let (Some(peer_database), Some(peer_before)) = (peer_database, peer_before) {
         ensure!(
-            fixed_station_footprint(peer_database, realm, claim_request_id).await? == peer_before,
-            "refused Direct Station change altered the peer's complete claim or authority rows"
+            fixed_station_footprint(peer_database, realm, claim_request_id, &change.event_id)
+                .await?
+                == peer_before,
+            "refused Direct Station change altered the peer's claim, authority or forwarding intent"
         );
     }
     let after = fixed_station_bundle(alice, realm).await?;
@@ -404,7 +430,7 @@ async fn reject_direct_station_change(
         );
     }
     ensure!(
-        alice
+        submitter
             .client
             .sdk()
             .committed_event_get(&change.event_id)
@@ -1804,6 +1830,21 @@ async fn run(
         Box::pin(reject_direct_station_change(
             &alice,
             &bob,
+            &alice,
+            &realm_id,
+            &governance_database.connect_url,
+            Some(peer_database),
+            claim_request.claim_request_id.as_str(),
+            None,
+        ))
+        .await?;
+
+        // The peer's self ingress must refuse before staging a queued Event
+        // or an authority forwarding intent to the original governance Station.
+        Box::pin(reject_direct_station_change(
+            &alice,
+            &bob,
+            &bob,
             &realm_id,
             &governance_database.connect_url,
             Some(peer_database),
@@ -1821,6 +1862,7 @@ async fn run(
             Box::pin(reject_direct_station_change(
                 &alice,
                 &bob,
+                &alice,
                 &realm_id,
                 &governance_database.connect_url,
                 Some(peer_database),
@@ -2037,6 +2079,7 @@ async fn run(
         Box::pin(reject_direct_station_change(
             &alice,
             &bob,
+            &alice,
             &realm_id,
             &governance_database.connect_url,
             peer_database
