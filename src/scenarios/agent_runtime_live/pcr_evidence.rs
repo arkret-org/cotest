@@ -54,6 +54,11 @@ async fn refuse_event(
             problem.detail.contains("delegation"),
             "{label} missed the delegation binding: {problem:?}"
         ),
+        "agent_pcr_governance_change" => ensure!(
+            problem.code() == arkret_wire::ErrorCode::FAILED_PRECONDITION
+                && problem.detail.contains("Agent PCR"),
+            "Agent PCR transfer did not fail at the fixed-Station policy: {problem:?}"
+        ),
         "kind_outside_controller_delegation" => ensure!(
             problem.code() == arkret_wire::ErrorCode::CAPABILITY_DENIED,
             "self-authored Event kind accepted an unsupported controller purpose: {problem:?}"
@@ -232,6 +237,51 @@ pub async fn run_agent_pcr_profile_admission() -> Result<crate::conformance::Sui
             == frozen,
         "profile exact retry changed durable state"
     );
+    let db_url = database.connect_url.clone();
+    let realm = agent.agent_pcr.to_string();
+    let head: arkret_wire::RealmCommit = tokio::task::spawn_blocking(move || -> Result<_> {
+        let mut db = postgres::Client::connect(&db_url, postgres::NoTls)?;
+        let value: serde_json::Value = db.query_one("SELECT commit_json FROM realm_commits WHERE realm_id=$1 AND stream_ref->>'kind'='realm' ORDER BY stream_position DESC LIMIT 1", &[&realm])?.get(0);
+        Ok(serde_json::from_value(value)?)
+    }).await??;
+    ensure!(
+        head.governance_generation == 0,
+        "Agent PCR has a nonzero governance tenure"
+    );
+    let change =
+        sign(
+            arkret_event_draft::TypedEventDraft::<
+                arkret_wire::event_spec::RealmGovernanceStationChange,
+            >::new(
+                ScopeRef::Realm {
+                    realm_id: agent.agent_pcr.clone(),
+                },
+                ActorId::account(agent.agent_account.clone()),
+                arkret_models_collaboration::events_payloads::RealmGovernanceStationChangePayload {
+                    expected_governance_generation: 0,
+                    expected_realm_stream_commit_id: head.commit_id,
+                    new_governance_station_id: DidCoreId::new(
+                        "ak:did_core:web:other-station.example",
+                    )?,
+                },
+            )?
+            .with_executed_by(ActorId::account(account.clone()))
+            .with_authorization_ref(
+                arkret_wire::AuthorizationRef::new(agent.delegation.as_str())
+                    .map_err(anyhow::Error::msg)?,
+            )
+            .into_intent(Utc::now())?
+            .author_with_digest_suite(arkret_canonical::DigestSuite::Sha256)?,
+            &method,
+            principal.device_signing_key.to_bytes(),
+        )?;
+    refuse_event(
+        &controller,
+        &database.connect_url,
+        change,
+        "agent_pcr_governance_change",
+    )
+    .await?;
     let mut patch = arkret_wire::Patch::new();
     patch.insert("display_name", "Updated delegated Agent profile")?;
     let current: arkret_models_collaboration::events_payloads::ActorProfileCreatePayload =
@@ -587,13 +637,13 @@ pub async fn run_agent_pcr_profile_admission() -> Result<crate::conformance::Sui
             && before["realm_commits"] == after["realm_commits"],
         "pairing candidate or approval notification entered PCR history"
     );
-    println!("[agent-pcr] pairing_and_notifications_in_neither_pcr=1 assertions=8");
+    println!("[agent-pcr] pairing_and_notifications_in_neither_pcr=1 assertions=9");
     Ok(crate::conformance::SuiteExecutionResult {
         entrypoint: "ak.suite.agent.vectors.v1",
         fixture: "agent-vectors-fixture.json",
         cases: vec![crate::conformance::CaseExecutionResult {
             case_id: "agent_pcr_separation".to_owned(),
-            assertions: 8,
+            assertions: 9,
         }],
     })
 }
