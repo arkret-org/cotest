@@ -182,6 +182,10 @@ pub(crate) async fn activate_realm_successor(
         &old_key,
         at,
     )?;
+    let (management, private_bytes) = store.export_management_private_state(&typed_realm).await?;
+    store
+        .import_management_private_state(&management, &private_bytes)
+        .await?;
     let originals = store.handoff_originals(&typed_realm).await?;
     let mut facts = Vec::new();
     for full in &originals {
@@ -218,7 +222,7 @@ pub(crate) async fn activate_realm_successor(
     };
     let mut handoff = RealmAuthorityHandoff {
         pcr_private_state_digest: None,
-        management_private_state_digest: None,
+        management_private_state_digest: Some(management.digest()?),
         handoff_id: RealmAuthorityHandoffId::from_digest(arkret_canonical::sha256_bytes(
             change.event_id.as_str().as_bytes(),
         )),
@@ -276,7 +280,7 @@ pub(crate) async fn activate_realm_successor(
         &new_key,
     )?;
     let activation = AuthorityHandoffRequest {
-        management_private_state: None,
+        management_private_state: Some(management.clone()),
         pcr_private_state: None,
         handoff,
         final_stream_heads: heads,
@@ -292,6 +296,12 @@ pub(crate) async fn activate_realm_successor(
     // Realm ledgers, rather than using the public member snapshot as an import.
     new.stop_external_process().await?;
     import_private_database(old_url, new_url).await?;
+    let incoming = Db::connect(Some(new_url), PoolTuning::default()).await?;
+    PgAuthorityCommitStore {
+        pool: incoming.pool.context("incoming pool")?,
+    }
+    .import_management_private_state(&management, &private_bytes)
+    .await?;
     new.start_external_process().await?;
     let (status, body) = new
         .signed_peer_post(

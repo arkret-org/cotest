@@ -4716,6 +4716,7 @@ dependencies = [
  "chacha20poly1305 0.11.0",
  "chrono",
  "ed25519-dalek 3.0.0",
+ "floria-contracts",
  "getrandom 0.4.3",
  "globset",
  "hex",
@@ -4753,6 +4754,13 @@ dependencies = [
  "tracing-subscriber",
  "uuid",
  "x509-parser 0.18.1",
+]
+
+[[package]]
+name = "floria-contracts"
+version = "0.3.0"
+dependencies = [
+ "serde",
 ]
 
 [[package]]

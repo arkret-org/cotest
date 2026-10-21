@@ -5473,7 +5473,7 @@ export type InviteObject = {
     "max_claims"?: number;
   };
   "capability_grant_refs"?: string[];
-  "state": "pending" | "accepted" | "rejected" | "revoked" | "expired" | "claimed" | "send_failed" | "revoked_by_capability_loss" | "revoked_by_inviter_left" | "invalidated_by_rate_limit";
+  "state": "pending" | "accepted" | "rejected" | "revoked" | "expired" | "claimed";
   "expires_at": string;
   "created_at": string;
   "updated_by"?: {

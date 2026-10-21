@@ -895,6 +895,8 @@ fn build_authority_fixture(declared: &[DeclaredStream]) -> Result<AuthorityFixtu
     let snapshot_signature =
         authority_signature(DetachedSignatureContext::RealmSnapshot, OLD_AUTHORITY_DID)?;
     let mut snapshot = RealmStateSnapshot {
+        purpose: arkret_wire::RealmSnapshotPurpose::FullRecovery,
+        history_basis: None,
         snapshot_id: RealmSnapshotId::from_digest(Sha256::digest(b"cotest-snapshot").into()),
         realm_id: realm_id.clone(),
         governance_generation: 0,

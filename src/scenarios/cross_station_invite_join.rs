@@ -340,8 +340,9 @@ pub async fn cross_station_invite_join_run() -> Result<()> {
     let false_status = false_source.status();
     let false_body = false_source.json::<Value>().await?;
     ensure!(
-        false_status == StatusCode::NOT_FOUND && problem_is(&false_body, "not_found"),
-        "a non-governing Station was accepted as the preview source: {false_status} {false_body}"
+        false_status == StatusCode::SERVICE_UNAVAILABLE
+            && problem_is(&false_body, "temporarily_unavailable"),
+        "an unverified locator must remain retryable and confer no preview: {false_status} {false_body}"
     );
     ensure!(
         false_started.elapsed() >= Duration::from_millis(150),

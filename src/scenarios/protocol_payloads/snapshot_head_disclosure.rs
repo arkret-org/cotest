@@ -528,7 +528,7 @@ pub fn window_positions(
 /// Fresh Coland + real PostgreSQL: an Account frame filtered to one Realm with
 /// a limited `window_limit` names a committed-prefix basis only when `/head`
 /// already issued the exact snapshot at the window's anchor; that
-/// `snapshot_ref` reads back by reference as the same signed object. Without
+/// `snapshot_ref` reads back as an independent original signed for that stream. Without
 /// a prior issuance the limited window is `preview_only` with no basis. The
 /// retired `timeline_limit` member and an unprovable Circle selection are
 /// refused rather than degraded.
@@ -590,7 +590,7 @@ pub async fn limited_account_window_names_issued_basis_or_is_preview_only() -> R
     ensure!(
         basis.anchor_position == anchor.stream_position
             && basis.anchor_commit_ref == anchor.commit_id
-            && basis.snapshot_ref == issued.snapshot_id
+            && basis.snapshot_ref != issued.snapshot_id
             && basis.governance_generation == issued.governance_generation,
         "the basis must name the exact issued anchor snapshot: {basis:?}"
     );
@@ -631,7 +631,35 @@ pub async fn limited_account_window_names_issued_basis_or_is_preview_only() -> R
         .await?,
     )
     .context("by-ref body must be a closed signed snapshot")?;
-    ensure_same_object(&issued, &by_ref)?;
+    by_ref.validate_purpose()?;
+    ensure!(by_ref.purpose == arkret_wire::RealmSnapshotPurpose::StreamHistory);
+    let signed = by_ref
+        .history_basis
+        .as_ref()
+        .context("signed history coverage")?;
+    ensure!(
+        signed.anchor_commit_ref == basis.anchor_commit_ref
+            && signed.anchor_position == basis.anchor_position
+            && signed.stream_ref == anchor.stream_ref
+    );
+    ensure!(
+        by_ref.current_state_entries == issued.current_state_entries
+            && by_ref.visible_stream_heads == issued.visible_stream_heads
+            && by_ref.retention_and_history_floor == issued.retention_and_history_floor,
+        "independent original must preserve its exact old cut"
+    );
+    ensure!(
+        by_ref.require_full_recovery().is_err(),
+        "history must never replace current"
+    );
+    let reread: arkret_wire::RealmStateSnapshot = serde_json::from_value(
+        expect_json(
+            by_ref_request(&author, &basis.snapshot_ref, &realm_id),
+            StatusCode::OK,
+        )
+        .await?,
+    )?;
+    ensure_same_object(&by_ref, &reread)?;
     // The window's current equals the signed current of a fresh head at 8.
     let at_head: arkret_wire::RealmStateSnapshot = serde_json::from_value(
         expect_json(
