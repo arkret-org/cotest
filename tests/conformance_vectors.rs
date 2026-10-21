@@ -445,27 +445,15 @@ fn encoding_artifact_vectors_reject_drift() -> Result<()> {
 #[test]
 fn domain_wire_constraint_vectors_reject_drift() {
     let consent = json!({
-        "consent_id": "ak:consent:01904100-0000-7000-8000-000000000001",
-        "peer": {
-            "kind": "actor",
-            "actor_id": {
-                "kind": "account",
-                "account_id": {
-                    "principal_id": "ak:did_core:webvh:z6mkfixture",
-                    "station_id": "ak:did_core:webvh:z6mkfixturestationexample"
-                }
-            }
-        },
-        "consent_scope": "voice_call"
+        "peer":{"kind":"actor","actor_id":{"kind":"service","service_id":"ak:did_core:web:peer.example"}},
+        "expected_current":{"state":"never_written"},
+        "permissions":[{"consent_scope":"voice_call"}]
     });
-    serde_json::from_value::<arkret::ConsentGrantPayload>(consent.clone())
-        .expect("typed UUIDv7 consent identifier must pass");
-    let mut untyped_consent = consent;
-    untyped_consent["consent_id"] = json!("cid");
-    assert!(
-        serde_json::from_value::<arkret::ConsentGrantPayload>(untyped_consent).is_err(),
-        "untyped consent identifier must fail"
-    );
+    let payload: arkret::ConsentReplacePayload = serde_json::from_value(consent.clone()).unwrap();
+    payload.validate().unwrap();
+    let mut obsolete = consent;
+    obsolete["consent_id"] = json!("ak:consent:01904100-0000-7000-8000-000000000001");
+    assert!(serde_json::from_value::<arkret::ConsentReplacePayload>(obsolete).is_err());
 }
 
 #[test]

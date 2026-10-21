@@ -140,15 +140,14 @@ pub async fn run_station_binding_live() -> Result<()> {
         .as_ref()
         .context("actual holder PCR")?
         .pcr_realm_id;
-    let id = arkret_wire::ConsentId::new(crate::harness::next_typed_id("consent"))?;
-    let grant=holder.client.author_event(realm.as_str(),EventKind::ConsentGrant.as_str(),serde_json::json!({"consent_id":id,"peer":{"kind":"actor","actor_id":context.caller.actor},"consent_scope":"voice_call"})).await?;
-    let body = arkret_models_collaboration::consent_operations::ConsentGrantRequestBody {
-        grant_event: EventAdmissionSubmission::new(grant),
+    let grant=holder.client.author_event(realm.as_str(),EventKind::ConsentReplace.as_str(),serde_json::json!({"peer":{"kind":"actor","actor_id":context.caller.actor},"expected_current":{"state":"never_written"},"permissions":[{"consent_scope":"voice_call"}]})).await?;
+    let body = arkret_models_collaboration::consent_operations::ConsentReplaceRequestBody {
+        consent_event: EventAdmissionSubmission::new(grant),
     };
     let original = crate::harness::expect_json(
         holder
             .client
-            .post("/_arkret/self/consent/results/grant")
+            .post("/_arkret/self/consent/results/replace")
             .json(&body),
         reqwest::StatusCode::OK,
     )
@@ -157,7 +156,7 @@ pub async fn run_station_binding_live() -> Result<()> {
     let retry = crate::harness::expect_json(
         holder
             .client
-            .post("/_arkret/self/consent/results/grant")
+            .post("/_arkret/self/consent/results/replace")
             .json(&body),
         reqwest::StatusCode::OK,
     )
@@ -172,24 +171,24 @@ pub async fn run_station_binding_live() -> Result<()> {
         .client
         .author_event(
             realm.as_str(),
-            EventKind::ConsentRevoke.as_str(),
-            serde_json::json!({"consent_id":id,"expected_revision":view.revision}),
+            EventKind::ConsentReplace.as_str(),
+            serde_json::json!({"peer":view.peer,"expected_current":{"state":"present","revision":view.revision},"permissions":[]}),
         )
         .await?;
     let revoked = crate::harness::expect_json(
         holder
             .client
-            .post("/_arkret/self/consent/results/revoke")
+            .post("/_arkret/self/consent/results/replace")
             .json(
-                &arkret_models_collaboration::consent_operations::ConsentRevokeRequestBody {
-                    revoke_event: EventAdmissionSubmission::new(revoke),
+                &arkret_models_collaboration::consent_operations::ConsentReplaceRequestBody {
+                    consent_event: EventAdmissionSubmission::new(revoke),
                 },
             ),
         reqwest::StatusCode::OK,
     )
     .await?;
     ensure!(
-        revoked["state"] == "revoked",
+        revoked["permission_scopes"] == serde_json::json!([]),
         "own Station did not accept the original Revoke"
     );
     Ok(())

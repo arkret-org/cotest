@@ -16,9 +16,10 @@
 //!   refused. Alice claims Bob's KeyPackage and Adds him with a Welcome, still under the bootstrap
 //!   source.
 //! * Bob joins from the Welcome and acknowledges it; before he consumes his claim an endorsement is
-//!   still refused. Once consumed, the completion phase admits only binding endorsements: one
-//!   naming another group state is `direct_conversation_binding_invalid`, the founder's provisional
-//!   Message is refused, and Bob's exact endorsement and Alice's compatible one are both accepted.
+//!   still refused. Once consumed, the completion phase admits one immutable participant binding:
+//!   one naming another group state is `direct_conversation_binding_invalid`, the founder's
+//!   provisional Message is refused, and Bob's exact endorsement and Alice's compatible one are
+//!   both accepted.
 //! * Found: both participants send MLS ciphertext under the participant source citing an
 //!   endorsement and each decrypts the other's committed Message. The bootstrap source no longer
 //!   carries a Message, an invite of a third party is
@@ -203,12 +204,25 @@ fn expect_committed(outcome: &AuthoritySubmitOutcome, event: &Event) -> Result<(
 }
 
 async fn expect_rejected(member: &Member, event: &Event, reason: &str) -> Result<()> {
-    match submit(member, event).await? {
-        AuthoritySubmitOutcome::Rejected { reason_code, .. } if reason_code == reason => {}
-        other => bail!(
-            "{} must be rejected as {reason}, got {other:?}",
+    if reason == "duplicate_conflict" {
+        let (status, body) = post_json(
+            &member.client,
+            &EventAdmissionSubmission::new(event.clone()),
+        )
+        .await?;
+        ensure!(
+            status == StatusCode::CONFLICT && problem_type(&serde_json::to_vec(&body)?)? == reason,
+            "{} must return duplicate_conflict with HTTP 409: {status} {body}",
             event.kind.as_str()
-        ),
+        );
+    } else {
+        match submit(member, event).await? {
+            AuthoritySubmitOutcome::Rejected { reason_code, .. } if reason_code == reason => {}
+            other => bail!(
+                "{} must be rejected as {reason}, got {other:?}",
+                event.kind.as_str()
+            ),
+        }
     }
     ensure!(
         member
@@ -231,19 +245,30 @@ async fn assert_peer_endpoint(
     expected_source: Option<&EventId>,
 ) -> Result<()> {
     let mut previous = None;
-    // Each call is a fresh authenticated read, without client receipt caches.
+    let deadline = Instant::now() + Duration::from_secs(120);
+    // Glare terminal delivery is asynchronous. Require the verified selector
+    // before comparing two fresh reads, without client receipt caches.
     for _ in 0..2 {
-        let row = holder
-            .client
-            .sdk()
-            .contacts_list()
-            .await?
-            .contacts
-            .into_iter()
-            .find(|row| row.peer.contact_actor_id() == peer.actor)
-            .context("accepted peer row")?;
-        ensure!(row.state == arkret::ContactState::Accepted);
-        let endpoint = row.peer_endpoint.context("accepted peer endpoint")?;
+        let endpoint = loop {
+            let row = holder
+                .client
+                .sdk()
+                .contacts_list()
+                .await?
+                .contacts
+                .into_iter()
+                .find(|row| row.peer.contact_actor_id() == peer.actor)
+                .context("accepted peer row")?;
+            ensure!(row.state == arkret::ContactState::Accepted);
+            if let Some(endpoint) = row.peer_endpoint {
+                break endpoint;
+            }
+            ensure!(
+                Instant::now() < deadline,
+                "accepted peer endpoint did not become verifiable"
+            );
+            tokio::time::sleep(Duration::from_millis(250)).await;
+        };
         ensure!(endpoint.device_id == peer.device);
         if let Some(source) = expected_source {
             ensure!(&endpoint.contact_event_ref == source);
@@ -1732,7 +1757,26 @@ async fn run(
         Vec::new(),
         Cites::Bootstrap(&create_ref),
     )?;
-    expect_committed(&submit(&bob, &bob_endorsement).await?, &bob_endorsement)?;
+    let bound_outcome = submit(&bob, &bob_endorsement).await?;
+    expect_committed(&bound_outcome, &bob_endorsement)?;
+    let AuthoritySubmitOutcome::Accepted {
+        commit: original_commit,
+        ..
+    } = &bound_outcome
+    else {
+        unreachable!()
+    };
+    let AuthoritySubmitOutcome::Accepted {
+        commit: retried_commit,
+        ..
+    } = submit(&bob, &bob_endorsement).await?
+    else {
+        bail!("exact bound retry did not recover its original Commit");
+    };
+    ensure!(
+        original_commit == &retried_commit,
+        "exact bound retry changed its covering Commit"
+    );
     let alice_endorsement = authored(
         &alice,
         arkret_wire::event_kind_str::DIRECT_CONVERSATION_BOUND,
@@ -1741,10 +1785,7 @@ async fn run(
         Vec::new(),
         Cites::Bootstrap(&create_ref),
     )?;
-    expect_committed(
-        &submit(&alice, &alice_endorsement).await?,
-        &alice_endorsement,
-    )?;
+    expect_rejected(&alice, &alice_endorsement, "duplicate_conflict").await?;
 
     let resolved = alice
         .client
@@ -1770,10 +1811,7 @@ async fn run(
             && coordinates
                 .binding_event_ref
                 .as_ref()
-                .is_some_and(|event_ref| {
-                    event_ref == &alice_endorsement.event_id
-                        || event_ref == &bob_endorsement.event_id
-                })
+                .is_some_and(|event_ref| { event_ref == &bob_endorsement.event_id })
             && group_state_ref == add_ref
             && send_blockers.is_empty(),
         "resolver did not return the accepted bound coordinates"
@@ -1949,7 +1987,7 @@ async fn run(
             b"hello, Bob",
         )?,
         Vec::new(),
-        Cites::Participant(&alice_endorsement.event_id),
+        Cites::Participant(&bob_endorsement.event_id),
     )?;
     expect_committed(&submit(&alice, &alice_message).await?, &alice_message)?;
     ensure!(
@@ -1958,7 +1996,7 @@ async fn run(
         "Bob did not decrypt Alice's committed Message"
     );
 
-    // Once found the bootstrap source carries nothing but endorsements.
+    // Once found the bootstrap source can carry only the first binding.
     let bootstrap_after = authored(
         &alice,
         arkret_wire::event_kind_str::MESSAGE_CREATE,
@@ -2029,7 +2067,13 @@ async fn run(
         &alice,
         arkret_wire::event_kind_str::REALM_DESTROY,
         scope.clone(),
-        json!({ "realm_id": realm_id }),
+        serde_json::to_value(
+            arkret_models_collaboration::governance::realm_lifecycle::RealmDestroyPayload {
+                reason: "Direct terminal rejection".into(),
+                retention_policy_id: None,
+                verification_stub_required: None,
+            },
+        )?,
         Vec::new(),
         Cites::Nothing,
     )?;
@@ -2067,10 +2111,8 @@ async fn run(
             let value: arkret_models_collaboration::events_payloads::direct_conversation::DirectConversationBindingCurrentValue =
                 serde_json::from_value(binding.0.clone())?;
             ensure!(
-                value.endorsements.len() == 2
-                    && value.endorsed_by(&alice_endorsement.event_id)
-                    && value.endorsed_by(&bob_endorsement.event_id),
-                "signed participant Snapshot did not contain both accepted binding endorsements"
+                value.binding_event_ref == bob_endorsement.event_id,
+                "signed participant Snapshot changed the unique original binding Event"
             );
         }
         let outsider = Member::provision(

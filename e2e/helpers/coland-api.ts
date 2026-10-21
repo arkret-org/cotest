@@ -38,7 +38,6 @@ import type {
   RealmObject,
   SelfInviteDispatchRequestBody,
   RealmJoinPrepareRequestBody,
-  MessagePrepareRequestBody,
 } from "./generated/spec-wire-objects";
 import {
   accountSubscribeDeltaApi,
@@ -513,7 +512,7 @@ function eventActorId(
 
 export function eventPrincipalId(event: Record<string, unknown>): string {
   const actor = eventActorId(event);
-  return actor.kind === "account" ? actor.account_id.principal_id : actor.service_id;
+  return actor.kind === "account" ? actor.account_id.principal_id : actor.kind === "service" ? actor.service_id : actor.realm_actor_id.principal_id;
 }
 function eventSigningPrincipalId(event: Record<string, unknown>): string {
   return eventPrincipalId({ actor_id: event.executed_by ?? event.actor_id });
@@ -1394,91 +1393,17 @@ export async function listInvitesApi(
   return body.invites ?? [];
 }
 
-/** Exercise prepare, exact replay and the ordinary submit without re-authoring. */
-export async function sendPreparedMessageApi(
-  request: APIRequestContext,
-  token: string,
-  realmId: string,
-  body: string,
+/** Author locally and replay the exact signed submission after acceptance. */
+export async function sendFrozenMessageApi(
+  request: APIRequestContext, token: string, realmId: string, body: string,
   opts: { server?: ColandKey } = {},
 ) {
   const principal = await currentActorIdApi(request, token, opts);
-  const actor = accountActorId(principal, opts.server);
   const strandId = await resolveDefaultStrandId(request, token, realmId, opts);
-  const content = { kind: "ak.content.text" as const, body };
-  const intent: MessagePrepareRequestBody["intent"] = {
-    strand_id: strandId,
-    track_name: "discussion",
-    content: { kind: "plaintext", content },
-  };
-  const prepare: MessagePrepareRequestBody = {
-    request_id: typedId("request"),
-    account_id: actor.account_id,
-    realm_id: realmId,
-    intent,
-    created_at: canonicalTimestamp(),
-  };
-  const prepareUrl = `${colandBaseUrl(opts.server)}/_arkret/self/messages/prepare`;
-  const fetch = () => request.post(prepareUrl, {
-    headers: {
-      ...authHeaders(token, "POST", prepareUrl),
-      "content-type": "application/json",
-    },
-    data: canonicalJson(prepare),
+  const event = signedEventEnvelope({ actorId: principal, server: opts.server,
+    realmId, kind: "ak.message.create",
+    payload: { strand_id: strandId, track_name: "discussion", content: { kind: "ak.content.text", body } },
   });
-  const prepared = await expectJsonOk<Record<string, any>>(
-    await fetch(), "typed message prepare",
-  );
-  expect(await expectJsonOk(await fetch(), "exact prepare replay")).toEqual(prepared);
-  const conflicting = await request.post(prepareUrl, {
-    headers: {
-      ...authHeaders(token, "POST", prepareUrl),
-      "content-type": "application/json",
-    },
-    data: canonicalJson({
-      ...prepare,
-      intent: {
-        ...intent,
-        content: { kind: "plaintext", content: { ...content, body: `${body} changed` } },
-      },
-    }),
-  });
-  expect(conflicting.status()).toBe(409);
-  expect(wireErrCode(await conflicting.json())).toBe("duplicate_conflict");
-  expect(prepared.request_digest).toBe(`sha256:${sha256CanonicalJson(prepare)}`);
-  const unsigned = JSON.parse(
-    Buffer.from(prepared.draft.unsigned_event_bytes, "base64url").toString("utf8"),
-  );
-  expect(unsigned.kind).toBe("ak.message.create");
-  expect(unsigned.realm_id).toBe(realmId);
-  expect(unsigned.actor_id).toEqual(actor);
-  expect(unsigned.created_at).toBe(prepare.created_at);
-  expect(unsigned.scope_ref).toEqual({ kind: "realm", realm_id: realmId });
-  expect(unsigned.payload).toEqual({
-    strand_id: strandId, track_name: "discussion", content,
-  });
-  // A prepared draft is the producer envelope and nothing else: the Station
-  // supplies position, predecessor and coverage when it commits, so none of the
-  // retired ordering members may appear in the bytes the producer signs.
-  for (const retired of [
-    "actor_seq",
-    "prev_refs",
-    "causal_refs",
-    "preconditions",
-    "hlc",
-    "seal_ref",
-    "basis",
-  ]) {
-    expect(
-      retired in unsigned,
-      `prepared draft reintroduced the retired member ${retired}`,
-    ).toBe(false);
-  }
-  expect(unsigned.semantic_refs ?? []).toEqual([]);
-  const derived = sdkEventDerivedIds(unsigned);
-  const event = { ...unsigned, event_id: derived.event_id };
-  expect(prepared.draft.event_digest).toBe(`sha256:${sha256CanonicalJson(unsigned)}`);
-  event.producer_proof = eventEnvelopeProof({ actorId: principal, event });
   const url = `${colandBaseUrl(opts.server)}/_arkret/self/events`;
   const submission = canonicalJson({ event });
   const submit = () => request.post(url, {
@@ -1489,9 +1414,9 @@ export async function sendPreparedMessageApi(
     data: submission,
   });
   const outcome = await expectJsonOk<Record<string, unknown>>(
-    await submit(), "prepared message submit",
+    await submit(), "locally authored message submit",
   );
-  assertAuthoritySubmitOutcome(outcome, event, "prepared message submit");
+  assertAuthoritySubmitOutcome(outcome, event, "locally authored message submit");
   expect(outcome.status).toBe("committed");
   const committed = outcome.commit as Record<string, unknown>;
   // The exact signed bytes replay to the commit that already admitted them and

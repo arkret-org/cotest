@@ -6,19 +6,17 @@ mod token_release;
 
 use anyhow::{Context, Result, ensure};
 use arkret_models_collaboration::call_invitation::*;
-use arkret_models_collaboration::consent_operations::{
-    ConsentGrantRequestBody, ConsentRevokeRequestBody, ConsentView,
-};
+use arkret_models_collaboration::consent_operations::{ConsentReplaceRequestBody, ConsentView};
+use arkret_models_collaboration::events_payloads::RealmMediaServicePayload;
 use arkret_models_collaboration::events_payloads::call::{CallCreatePayload, CallLifecycleState};
-use arkret_models_collaboration::events_payloads::{ConsentGrantPayload, RealmMediaServicePayload};
-use arkret_wire::{
-    ActorId, ConsentId, ConsentScope, EventAdmissionSubmission, EventKind, ScopeRef,
-};
+use arkret_models_collaboration::events_payloads::consent::ConsentPermission;
+use arkret_wire::{ActorId, ConsentScope, EventAdmissionSubmission, EventKind, ScopeRef};
 use cotest::scenarios::mls_lifecycle_live::{Member, MlsClientObserver, fresh_uuid_v7};
 
 use super::account_blocklist_projection::{
     ActiveEndpointSigner, native_call_endpoint, next_admitted_signal,
 };
+use super::consent_support::PermissionGrant;
 
 pub async fn run_legal_three_cut_calls() -> Result<()> {
     let observer = CallAdmissionObserver::default();
@@ -279,107 +277,33 @@ impl cotest::scenarios::message_mls_cross_station_live::CrossStationCallObserver
     }
 }
 
-async fn grant(holder: &Member, peer: &ActorId, scope: ConsentScope) -> Result<ConsentView> {
-    let payload = ConsentGrantPayload {
-        consent_id: ConsentId::new(format!("ak:consent:{}", fresh_uuid_v7()))?,
-        peer: arkret_models_collaboration::events_payloads::consent::ConsentPeer::Actor {
-            actor_id: peer.clone(),
-        },
-        consent_scope: scope,
-        not_before: None,
-        expires_at: None,
-        constraints: None,
-        evidence_ref: None,
-        reason: None,
-    };
-    grant_payload(holder, payload).await
+async fn grant(holder: &Member, peer: &ActorId, scope: ConsentScope) -> Result<PermissionGrant> {
+    grant_payload(holder, peer, super::consent_support::permission(scope)).await
 }
-
-async fn grant_payload(holder: &Member, payload: ConsentGrantPayload) -> Result<ConsentView> {
-    grant_payload_record(holder, payload)
+async fn grant_payload(
+    holder: &Member,
+    peer: &ActorId,
+    permission: ConsentPermission,
+) -> Result<PermissionGrant> {
+    grant_payload_record(holder, peer, permission)
         .await
-        .map(|(value, _)| value)
+        .map(|(view, _)| view)
 }
-
 async fn grant_payload_record(
     holder: &Member,
-    payload: ConsentGrantPayload,
-) -> Result<(ConsentView, EventAdmissionSubmission)> {
-    let principal = holder
-        .client
-        .principal
-        .as_ref()
-        .context("accepted holder PCR")?;
-    let event = holder
-        .client
-        .author_event(
-            principal.pcr_realm_id.as_str(),
-            EventKind::ConsentGrant.as_str(),
-            serde_json::to_value(payload)?,
-        )
-        .await?;
-    let submitted = EventAdmissionSubmission::new(event);
-    let result = serde_json::from_value(
-        cotest::harness::expect_json(
-            holder
-                .client
-                .post("/_arkret/self/consent/results/grant")
-                .json(&ConsentGrantRequestBody {
-                    grant_event: submitted.clone(),
-                }),
-            reqwest::StatusCode::OK,
-        )
-        .await?,
-    )?;
-    Ok((result, submitted))
+    peer: &ActorId,
+    permission: ConsentPermission,
+) -> Result<(PermissionGrant, EventAdmissionSubmission)> {
+    super::consent_support::grant(holder, peer, vec![permission]).await
 }
-
-async fn revoke(holder: &Member, grant: &ConsentView) -> Result<()> {
+async fn revoke(holder: &Member, grant: &PermissionGrant) -> Result<()> {
     revoke_record(holder, grant).await.map(|_| ())
 }
-
 async fn revoke_record(
     holder: &Member,
-    grant: &ConsentView,
+    grant: &PermissionGrant,
 ) -> Result<(ConsentView, EventAdmissionSubmission)> {
-    let principal = holder
-        .client
-        .principal
-        .as_ref()
-        .context("accepted holder PCR")?;
-    let event = holder
-        .client
-        .author_event(
-            principal.pcr_realm_id.as_str(),
-            EventKind::ConsentRevoke.as_str(),
-            serde_json::to_value(
-                arkret_models_collaboration::governance_payloads::ConsentRevokePayload {
-                    consent_id: grant.consent_id.clone(),
-                    expected_revision: grant.revision.clone(),
-                    revoked_at: None,
-                    reason: None,
-                },
-            )?,
-        )
-        .await?;
-    let submitted = EventAdmissionSubmission::new(event);
-    let result: ConsentView = serde_json::from_value(
-        cotest::harness::expect_json(
-            holder
-                .client
-                .post("/_arkret/self/consent/results/revoke")
-                .json(&ConsentRevokeRequestBody {
-                    revoke_event: submitted.clone(),
-                }),
-            reqwest::StatusCode::OK,
-        )
-        .await?,
-    )?;
-    ensure!(
-        result.state == arkret_models_collaboration::consent_operations::ConsentState::Revoked,
-        "real revoke did not close holder current"
-    );
-    Ok((result, submitted))
+    super::consent_support::revoke(holder, grant).await
 }
 
 async fn exercise_token_invitation_mismatches(
@@ -659,12 +583,8 @@ fn run_call_cases<'a>(
         for (sequence, video) in [(1, false), (2, true)] {
             let (granted, original_grant) = grant_payload_record(
                 holder,
-                ConsentGrantPayload {
-                    consent_id: ConsentId::new(format!("ak:consent:{}", fresh_uuid_v7()))?,
-                    peer:
-                        arkret_models_collaboration::events_payloads::consent::ConsentPeer::Actor {
-                            actor_id: sender.actor.clone(),
-                        },
+                &sender.actor,
+                ConsentPermission {
                     consent_scope: if video {
                         ConsentScope::VideoCall
                     } else {
@@ -982,16 +902,16 @@ fn run_call_cases<'a>(
             );
             for (path, submitted, original) in [
                 (
-                    "/_arkret/self/consent/results/grant",
-                    serde_json::to_value(ConsentGrantRequestBody {
-                        grant_event: original_grant,
+                    "/_arkret/self/consent/results/replace",
+                    serde_json::to_value(ConsentReplaceRequestBody {
+                        consent_event: original_grant,
                     })?,
-                    &granted,
+                    &granted.view,
                 ),
                 (
-                    "/_arkret/self/consent/results/revoke",
-                    serde_json::to_value(ConsentRevokeRequestBody {
-                        revoke_event: original_revoke,
+                    "/_arkret/self/consent/results/replace",
+                    serde_json::to_value(ConsentReplaceRequestBody {
+                        consent_event: original_revoke,
                     })?,
                     &revoked,
                 ),
@@ -1015,12 +935,7 @@ fn run_call_cases<'a>(
                 "exact retries allocated another Commit"
             );
             ensure!(
-                current.consents.iter().any(|row| {
-                    row.selector.consent_id == revoked.consent_id
-                    && row.revision == revoked.revision
-                    && row.value.status
-                        == arkret_models_collaboration::consent_operations::ConsentState::Revoked
-                }),
+                matches!(&current.current,arkret_models_collaboration::consent_operations::ConsentCurrentReadState::Present{result} if result.selector.peer_id==*revoked.peer.actor_id() && result.revision==revoked.revision && !result.value.permissions.iter().any(|p|p.consent_scope==if video{ConsentScope::VideoCall}else{ConsentScope::VoiceCall})),
                 "exact retry rolled authoritative current back from its accepted revoke"
             );
             eprintln!(
@@ -1045,13 +960,8 @@ fn run_call_cases<'a>(
                 .enumerate()
             {
                 let now = chrono::Utc::now();
-                let consent_payload = ConsentGrantPayload {
-                    consent_id: ConsentId::new(format!("ak:consent:{}", fresh_uuid_v7()))?,
-                    peer:
-                        arkret_models_collaboration::events_payloads::consent::ConsentPeer::Actor {
-                            actor_id: sender.actor.clone(),
-                        },
-                    consent_scope: ConsentScope::Any,
+                let consent_payload = ConsentPermission {
+                    consent_scope: if video {ConsentScope::VideoCall} else {ConsentScope::VoiceCall},
                     not_before: (window == "future").then_some(now + chrono::Duration::hours(1)),
                     expires_at: (window == "expired").then_some(now - chrono::Duration::hours(1)),
                     constraints: (window == "unknown_constraint").then(|| {
@@ -1064,7 +974,7 @@ fn run_call_cases<'a>(
                     evidence_ref: None,
                     reason: None,
                 };
-                grant_payload(holder, consent_payload).await?;
+                grant_payload(holder, &sender.actor, consent_payload).await?;
                 let (fresh_invitation, ineligible) = fresh_call_signal(
                     (sender_host, sender),
                     holder_host,
@@ -1094,9 +1004,9 @@ fn run_call_cases<'a>(
             } else {
                 ConsentScope::VoiceCall
             };
-            let any = grant(holder, &sender.actor, ConsentScope::Any).await?;
-            let concrete = grant(holder, &sender.actor, concrete_scope).await?;
-            revoke(holder, &any).await?;
+            let invite_permission = grant(holder, &sender.actor, ConsentScope::Invite).await?;
+            let _concrete = grant(holder, &sender.actor, concrete_scope).await?;
+            revoke(holder, &invite_permission).await?;
             let (fresh_invitation, concrete_signal) = fresh_call_signal(
                 (sender_host, sender),
                 holder_host,
@@ -1111,16 +1021,17 @@ fn run_call_cases<'a>(
             concrete_request.join_context = invitation_context(&fresh_invitation);
             token_status(holder, &concrete_request, reqwest::StatusCode::OK)
                 .await
-                .context("any revoke erased independent concrete Consent")?;
+                .context("removing Invite erased retained call Consent")?;
             ensure!(
                 inkson::conformance::observe_native_call_projection(&holder_host, concrete_signal)
                     .await?
                     == 1,
-                "any revoke erased independent concrete ringing admission"
+                "removing Invite erased retained call ringing admission"
             );
-            let remaining_any = grant(holder, &sender.actor, ConsentScope::Any).await?;
-            revoke(holder, &concrete).await?;
-            let (fresh_invitation, any_signal) = fresh_call_signal(
+            let unrelated=grant(holder,&sender.actor,ConsentScope::Presence).await?;
+            let remaining_call=grant(holder,&sender.actor,concrete_scope).await?;
+            revoke(holder,&unrelated).await?;
+            let (fresh_invitation, retained_call_signal) = fresh_call_signal(
                 (sender_host, sender),
                 holder_host,
                 holder,
@@ -1130,41 +1041,41 @@ fn run_call_cases<'a>(
                 14,
             )
             .await?;
-            let mut any_request = request.clone();
-            any_request.join_context = invitation_context(&fresh_invitation);
-            token_status(holder, &any_request, reqwest::StatusCode::OK)
+            let mut retained_call_request = request.clone();
+            retained_call_request.join_context = invitation_context(&fresh_invitation);
+            token_status(holder, &retained_call_request, reqwest::StatusCode::OK)
                 .await
-                .context("concrete revoke erased independent any Consent")?;
+                .context("removing Presence erased retained call Consent")?;
             ensure!(
                 inkson::conformance::observe_native_call_projection(
                     &holder_host,
-                    any_signal.clone()
+                    retained_call_signal.clone()
                 )
                 .await?
                     == 1,
-                "concrete revoke erased independent any ringing admission"
+                "removing Presence erased retained call ringing admission"
             );
-            revoke(holder, &remaining_any).await?;
-            token_status(holder, &any_request, reqwest::StatusCode::FORBIDDEN).await?;
+            revoke(holder, &remaining_call).await?;
+            token_status(holder, &retained_call_request, reqwest::StatusCode::FORBIDDEN).await?;
             let garth::signal::SignalReceiveOutcome::Accepted {
                 call_invitation: Some(product),
                 ..
-            } = &any_signal
+            } = &retained_call_signal
             else {
-                anyhow::bail!("fresh independent any control omitted its product verdict");
+                anyhow::bail!("fresh retained call control omitted its product verdict");
             };
             ensure!(
                 product.outcome.expires_at > chrono::Utc::now(),
                 "revocation control crossed its original product window"
             );
             ensure!(
-                inkson::conformance::observe_native_call_projection(&holder_host, any_signal)
+                inkson::conformance::observe_native_call_projection(&holder_host, retained_call_signal)
                     .await?
                     == 0,
-                "revoked any remained eligible through an older product outcome"
+                "removed call scope remained eligible through an older product outcome"
             );
             eprintln!(
-                "[consent-call] video={video} ineligible_windows=3 independent_grant_revokes=2 all_revoked_denied=1"
+                "[consent-call] video={video} ineligible_windows=3 unrelated_scope_removals=2 all_revoked_denied=1"
             );
             Ok::<(), anyhow::Error>(())
             }).await?;
@@ -1533,7 +1444,15 @@ async fn exercise_decrypted_relation_mismatches(
     material: &inkson::signal::SignalKeyMaterial,
     original: &inkson::signal::SignalPayload,
 ) -> Result<()> {
-    let granted = grant(holder, &sender.actor, ConsentScope::Any).await?;
+    let (granted, _) = super::consent_support::grant(
+        holder,
+        &sender.actor,
+        vec![
+            super::consent_support::permission(ConsentScope::VoiceCall),
+            super::consent_support::permission(ConsentScope::VideoCall),
+        ],
+    )
+    .await?;
     for (sequence, mismatch) in [(201, "media"), (202, "call"), (203, "kind")] {
         producer
             .catch_up_selected_realm_until_complete(realm)

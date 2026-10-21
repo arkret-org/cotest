@@ -44,7 +44,7 @@ import {
   readCommitStreamHeadApi,
   scanPeerRealmStreamRowsApi,
   sendMessageApi,
-  sendPreparedMessageApi,
+  sendFrozenMessageApi,
   signedEventEnvelope,
   submitSignedEventApi,
   typedId,
@@ -912,7 +912,7 @@ test.describe("prepared authoring and join", () => {
       );
 
       await test.step("owner prepares, signs and exact-replays a message", async () => {
-        await sendPreparedMessageApi(request, aliceToken, realmId, `owner ready ${stamp}`, {
+        await sendFrozenMessageApi(request, aliceToken, realmId, `owner ready ${stamp}`, {
           server: "server1",
         });
       });
@@ -1050,13 +1050,13 @@ test.describe("prepared authoring and join", () => {
       });
 
       const aliceBody = `alice from server1 ${stamp}`;
-      await sendPreparedMessageApi(request, aliceToken, realmId, aliceBody, {
+      await sendFrozenMessageApi(request, aliceToken, realmId, aliceBody, {
         server: "server1",
       });
       await waitForEventBody(request, bobToken, realmId, aliceBody, "server2");
 
       const bobBody = `bob from server2 ${stamp}`;
-      await sendPreparedMessageApi(request, bobToken, realmId, bobBody, {
+      await sendFrozenMessageApi(request, bobToken, realmId, bobBody, {
         server: "server2",
       });
       await waitForEventBody(request, aliceToken, realmId, bobBody, "server1");

@@ -787,7 +787,7 @@ impl JoinObserver for PendingPayload<'_> {
             .actions
             .iter()
             .copied()
-            .filter(|action| *action != "ak.event.read")
+            .filter(|action| !matches!(*action, "ak.event.read" | "ak.object.read"))
             .collect::<Vec<_>>();
         let (write, claims) = content_direct_evidence::issue(
             self.deployment,
@@ -1072,6 +1072,7 @@ pub async fn run_agent_content_sidecar_production()
         ServiceOperationId::SELF_COMMITTED_EVENT_RESOURCE_GET_V1,
         ServiceOperationId::SELF_REALM_READ_STREAMS_V1,
         ServiceOperationId::SELF_REALM_STATE_SNAPSHOT_READ_MANIFEST_HEAD_V1,
+        ServiceOperationId::SELF_REALM_STATE_SNAPSHOT_READ_BY_REF_V1,
         ServiceOperationId::SELF_MLS_READ_ROSTER_AUTHORITY_V1,
         ServiceOperationId::SELF_MLS_READ_GROUP_STATE_MATERIAL_V1,
         ServiceOperationId::SELF_EVENTS_COMMAND_SUBMIT_V1,
@@ -1081,6 +1082,7 @@ pub async fn run_agent_content_sidecar_production()
         ServiceOperationId::SELF_DEVICE_MESSAGES_READ_LIST_V1,
         ServiceOperationId::SELF_DEVICE_MESSAGES_COMMAND_ACK_V1,
         "ak.event.read",
+        "ak.object.read",
         "ak.message.create",
     ])?;
     let actions = operations.iter().map(String::as_str).collect::<Vec<_>>();

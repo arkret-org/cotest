@@ -189,7 +189,7 @@ pub(super) async fn run(
     let after = after.source().value()?;
     ensure!(
         after.effective_stream_head == before.effective_stream_head
-            && after.consents == before.consents,
+            && after.current == before.current,
         "material recovery duplicated Consent or changed its committed cut"
     );
     revoke(holder, &grant).await?;

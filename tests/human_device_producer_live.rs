@@ -19,9 +19,8 @@ async fn cross_station_authority_forward_admits_human_device_events_and_refuses_
 
 #[tokio::test(flavor = "multi_thread")]
 #[serial]
-async fn optional_prepare_recovery_and_durable_account_cursor_read_back_queued_commit() -> Result<()>
-{
-    cotest::scenarios::human_device_producer_live::run_message_prepare_and_account_cursor_recovery_live().await
+async fn local_message_recovery_and_durable_account_cursor_read_back_queued_commit() -> Result<()> {
+    cotest::scenarios::human_device_producer_live::run_local_message_and_account_cursor_recovery_live().await
 }
 
 #[tokio::test(flavor = "multi_thread")]

@@ -1077,13 +1077,9 @@ async fn wait_for_accepted_revoke(
     }
 }
 
-/// Real optional-prepare expiry and native Account cursor recovery. Preparation
-/// reserves no Commit: expiry affects another prepare, never exact submit replay.
-pub async fn run_message_prepare_and_account_cursor_recovery_live() -> Result<()> {
-    use arkret_models_collaboration::message_authoring::{
-        MessagePrepareOutcome, MessagePrepareRequestBody,
-    };
-    let label = "message-prepare-cursor-recovery";
+/// Local authoring freezes one Event across lost-response and native cold recovery.
+pub async fn run_local_message_and_account_cursor_recovery_live() -> Result<()> {
+    let label = "message-local-cursor-recovery";
     let Some(database) = database(label)? else {
         return Ok(());
     };
@@ -1103,81 +1099,43 @@ pub async fn run_message_prepare_and_account_cursor_recovery_live() -> Result<()
     let (alice, account) = standard_client(
         station,
         &coauth,
-        "prepare-recovery-alice",
+        "local-recovery-alice",
         SAME_STATION_DEVICE,
     )
     .await?;
-    let realm =
-        create_public_realm(&alice, "Prepare and durable cursor recovery", &[station]).await?;
+    let realm = create_public_realm(
+        &alice,
+        "Local authoring and durable cursor recovery",
+        &[station],
+    )
+    .await?;
     let strand = alice.default_strand_id(&realm)?;
     let directory = tempfile::tempdir()?;
     let cursor_path = directory.path().join("account.json");
     let before = run_durable_account_round(&alice, &account, &realm, &cursor_path, None).await?;
-    // Keep a genuine short remaining validity window without changing the
-    // service clock or any server-issued outcome timestamps.
-    let created_at = arkret_canonical::canonical::normalize_timestamp_canonical(
-        chrono::Utc::now() - chrono::Duration::seconds(290),
-    );
-    let request: MessagePrepareRequestBody = serde_json::from_value(json!({
-        "request_id":"ak:request:019b6a40-0000-7000-8000-000000002150",
-        "account_id":account, "realm_id":realm,
-        "intent":{"strand_id":strand,"track_name":"discussion",
-            "content":{"kind":"plaintext","content":{"kind":"ak.content.text","body":"frozen prepared recovery","format":"plain"}}},
-        "created_at":created_at,
-    }))?;
-    let outcome: MessagePrepareOutcome = serde_json::from_value(
-        expect_json(
-            alice.post("/_arkret/self/messages/prepare").json(&request),
-            StatusCode::OK,
+    let intent: arkret_models_collaboration::message_authoring::MessageAuthoringIntent =
+        serde_json::from_value(
+            json!({"strand_id":strand,"track_name":"discussion","content":{"kind":"plaintext","content":{"kind":"ak.content.text","body":"frozen local recovery","format":"plain"}}}),
+        )?;
+    let event = alice
+        .author_event(
+            &realm,
+            "ak.message.create",
+            serde_json::to_value(intent.payload())?,
         )
-        .await?,
+        .await?;
+    let frozen = garth::FrozenMessageSubmission::from_signed_request(
+        arkret_models_collaboration::message_authoring::MessageSubmitRequestBody {
+            submission: arkret_wire::EventAdmissionSubmission::new(event.clone()),
+        },
     )?;
-    outcome.validate_against_request(&request)?;
-    let replay: MessagePrepareOutcome = serde_json::from_value(
-        expect_json(
-            alice.post("/_arkret/self/messages/prepare").json(&request),
-            StatusCode::OK,
-        )
-        .await?,
-    )?;
-    ensure!(
-        arkret_canonical::canonical_json_bytes(&outcome)?
-            == arkret_canonical::canonical_json_bytes(&replay)?,
-        "prepare replay changed the frozen draft"
-    );
-    let mut conflicting = request.clone();
-    conflicting.intent.content = serde_json::from_value(json!({
-        "kind":"plaintext", "content":{"kind":"ak.content.text","body":"another frozen intent","format":"plain"},
-    }))?;
-    let conflict = expect_api_error(
-        alice
-            .post("/_arkret/self/messages/prepare")
-            .json(&conflicting),
-        StatusCode::CONFLICT,
-        "duplicate_conflict",
-    )
-    .await?;
-    ensure!(conflict.code() == "duplicate_conflict");
-    let principal = alice
-        .principal
-        .as_ref()
-        .context("accepted founding device")?;
-    let method = format!("{}#{}", alice.actor, alice.device_id);
-    let signer = arkret_signatures::Ed25519DetachedJwsSigner::new(
-        principal.device_signing_key.clone(),
-        method,
-    );
-    let frozen = garth::MessageAuthoringPreparation::new(request.clone())?
-        .resolve(&outcome)?
-        .sign(&signer, arkret_signatures::SignEventOptions::new())?;
-    let event = frozen.request().submission.event.clone();
     let commit = submit_frozen_message_with_lost_response_and_native_reopen(
         &alice,
         &account,
         frozen.clone(),
     )
     .await?;
-    let after_submit = run_durable_account_round(
+    let after = run_durable_account_round(
         &alice,
         &account,
         &realm,
@@ -1186,25 +1144,9 @@ pub async fn run_message_prepare_and_account_cursor_recovery_live() -> Result<()
     )
     .await?;
     ensure!(
-        after_submit.cursor != before.cursor,
-        "committed message did not advance durable Account cursor"
+        after.cursor != before.cursor,
+        "accepted local message did not advance its durable cursor"
     );
-    let wait = (outcome.expires_at - chrono::Utc::now())
-        .to_std()
-        .unwrap_or_default()
-        + Duration::from_millis(100);
-    ensure!(
-        wait <= Duration::from_secs(15),
-        "near-expiry fixture would wait too long"
-    );
-    tokio::time::sleep(wait).await;
-    let expired = expect_api_error(
-        alice.post("/_arkret/self/messages/prepare").json(&request),
-        StatusCode::GONE,
-        "authoring_request_expired",
-    )
-    .await?;
-    ensure!(expired.code() == "authoring_request_expired");
     let replay: AuthoritySubmitOutcome = serde_json::from_value(
         expect_json(
             alice
@@ -1216,52 +1158,16 @@ pub async fn run_message_prepare_and_account_cursor_recovery_live() -> Result<()
         .await?,
     )?;
     let AuthoritySubmitOutcome::Accepted {
-        commit: replay_commit,
-        ..
+        commit: replayed, ..
     } = replay
     else {
-        bail!("expired prepare changed already accepted submit recovery");
+        bail!("exact local submission retry was refused")
     };
     ensure!(
-        replay_commit == commit,
-        "post-expiry exact replay allocated a second Commit"
+        replayed == commit,
+        "cold exact retry allocated a second Commit"
     );
-    // This expired attempt was never submitted and owns no stream position.
-    let mut never_accepted = request.clone();
-    never_accepted.request_id = RequestId::new("ak:request:019b6a40-0000-7000-8000-000000002151")?;
-    let expired = expect_api_error(
-        alice
-            .post("/_arkret/self/messages/prepare")
-            .json(&never_accepted),
-        StatusCode::GONE,
-        "authoring_request_expired",
-    )
-    .await?;
-    ensure!(expired.code() == "authoring_request_expired");
-    never_accepted.request_id = RequestId::new("ak:request:019b6a40-0000-7000-8000-000000002152")?;
-    never_accepted.created_at =
-        arkret_canonical::canonical::normalize_timestamp_canonical(chrono::Utc::now());
-    let fresh: MessagePrepareOutcome = serde_json::from_value(
-        expect_json(
-            alice
-                .post("/_arkret/self/messages/prepare")
-                .json(&never_accepted),
-            StatusCode::OK,
-        )
-        .await?,
-    )?;
-    let fresh = garth::MessageAuthoringPreparation::new(never_accepted)?
-        .resolve(&fresh)?
-        .sign(&signer, arkret_signatures::SignEventOptions::new())?;
-    let fresh_event = fresh.request().submission.event.clone();
-    ensure!(fresh_event.event_id != event.event_id);
-    let fresh_commit =
-        submit_frozen_message_with_lost_response_and_native_reopen(&alice, &account, fresh).await?;
-    ensure!(
-        fresh_commit.stream_position == commit.stream_position + 1,
-        "prepare, conflict or expired attempts wrote a hidden Commit"
-    );
-    ensure_commit_signed_by(&fresh_commit, station)?;
+    ensure_commit_signed_by(&commit, station)?;
     Ok(())
 }
 
