@@ -16,6 +16,7 @@
 //! keeps an account-subscribe long poll open before dispatch and proves that the
 //! durable fanout wakes it with the invite-delivery update.
 
+use std::collections::HashSet;
 use std::time::{Duration, Instant};
 
 use anyhow::{Context, Result, anyhow, bail, ensure};
@@ -53,16 +54,14 @@ pub use consent_invite_matrix::run_current_invite_matrix;
 
 fn account_data_update_matches(envelope: &DeviceMessageEnvelope, row: &AccountDataRow) -> bool {
     envelope.kind.as_str() == "ak.account_data.update"
-        && envelope.content.get("operation").and_then(Value::as_str) == Some("put")
-        && envelope
-            .content
-            .get("account_data_key")
-            .and_then(Value::as_str)
-            == Some(row.account_data_key.as_str())
-        && envelope.content.get("revision").and_then(Value::as_u64) == Some(row.revision)
-        && envelope.content.get("content") == Some(&row.content)
-        && envelope.content.get("updated_at").and_then(Value::as_str)
-            == Some(arkret_canonical::format_timestamp_canonical(row.updated_at).as_str())
+        && envelope.content
+            == json!({
+                "operation": "put",
+                "account_data_key": row.account_data_key,
+                "revision": row.revision,
+                "content": row.content,
+                "updated_at": arkret_canonical::format_timestamp_canonical(row.updated_at),
+            })
 }
 
 #[derive(Debug)]
@@ -252,83 +251,161 @@ fn contains_retired_server_device(value: &Value) -> bool {
     }
 }
 
-async fn assert_service_account_data_fanout(
+#[derive(Default)]
+struct FanoutTracker {
+    rows: Vec<AccountDataRow>,
+    acknowledged_ids: HashSet<String>,
+}
+
+async fn receive_verified_fanout_batch(
     holder: &TestActorClient,
     expected_service_id: &str,
-    expected_row: &AccountDataRow,
-) -> Result<()> {
+    tracker: &mut FanoutTracker,
+) -> Result<Vec<DeviceMessageEnvelope>> {
     let polled = expect_json(holder.get("/_arkret/self/device_messages"), StatusCode::OK).await?;
     let outcome: DeviceMessagesGetOutcome = serde_json::from_value(polled.clone())
         .with_context(|| format!("to-device response is not closed SDK wire data: {polled}"))?;
     let holder_core_id = actor_core_id(&holder.actor)?;
-    let mut matched = None;
+    let mut messages = Vec::new();
+    let mut batch_ids = HashSet::new();
     for delivery in &outcome.deliveries {
         let RecipientDelivery::DeviceMessage {
             device_message: envelope,
         } = delivery
         else {
-            continue;
+            bail!("unexpected non-DeviceMessage in invite fanout: {delivery:?}");
         };
-        if account_data_update_matches(envelope, expected_row) {
-            matched = Some(envelope);
-            break;
-        }
+        ensure!(
+            matches!(&envelope.sender, DeviceMessageSender::Station { sender_id }
+                if sender_id.as_str() == expected_service_id),
+            "actor-private account-data fanout did not use the local Service sender"
+        );
+        ensure!(
+            envelope.recipient_account_id.principal_id.as_str() == holder_core_id
+                && envelope.recipient_account_id.station_id.as_str() == expected_service_id,
+            "Service fanout recipient AccountId must identify the exact holder account"
+        );
+        ensure!(
+            envelope.recipient_device_id.as_str() == holder.device_id,
+            "Service fanout reached the wrong holder device"
+        );
+        ensure!(
+            tracker
+                .rows
+                .iter()
+                .any(|row| account_data_update_matches(envelope, row)),
+            "fanout does not match an independently read accepted account-data row: {envelope:?}"
+        );
+        let envelope_value = serde_json::to_value(envelope)?;
+        ensure!(
+            envelope_value.get("sender_device_id").is_none(),
+            "Service fanout must not synthesize sender_device_id: {envelope_value}"
+        );
+        ensure!(
+            !contains_retired_server_device(&envelope_value),
+            "Service fanout must not contain a retired server:* fake device: {envelope_value}"
+        );
+        let id = envelope.device_message_id.to_string();
+        ensure!(
+            !tracker.acknowledged_ids.contains(&id) && batch_ids.insert(id),
+            "fanout repeated an already ACKed or duplicate message id: {envelope:?}"
+        );
+        messages.push(envelope.clone());
     }
-    let envelope = matched.ok_or_else(|| {
-        anyhow!(
-            "no account-data fanout for {} revision {}: {}",
-            expected_row.account_data_key,
-            expected_row.revision,
-            serde_json::to_string_pretty(&polled).unwrap_or_default()
-        )
-    })?;
-    ensure!(
-        matches!(
-            &envelope.sender,
-            DeviceMessageSender::Station { sender_id }
-                if sender_id.as_str() == expected_service_id
-        ),
-        "actor-private account-data fanout did not use the local Service sender"
-    );
-    ensure!(
-        envelope.recipient_account_id.principal_id.as_str() == holder_core_id
-            && envelope.recipient_account_id.station_id.as_str() == expected_service_id,
-        "Service fanout recipient AccountId must identify the exact holder account"
-    );
-    ensure!(
-        envelope.recipient_device_id.as_str() == holder.device_id,
-        "Service fanout reached the wrong holder device"
-    );
-    ensure!(
-        account_data_update_matches(envelope, expected_row),
-        "to-device revision/content differs from account-data CAS row"
-    );
-
-    let envelope_value = serde_json::to_value(envelope)?;
-    ensure!(
-        envelope_value.get("sender_device_id").is_none(),
-        "Service fanout must not synthesize sender_device_id: {envelope_value}"
-    );
-    ensure!(
-        !contains_retired_server_device(&envelope_value),
-        "Service fanout must not contain a retired server:* fake device: {envelope_value}"
-    );
-
+    if messages.is_empty() {
+        return Ok(messages);
+    }
     let ack_token = outcome
         .ack_token
         .context("non-empty to-device response omitted ack_token")?;
+    let ack_request = DeviceMessagesAckRequestBody { ack_token };
+    let ack_raw = expect_json(
+        holder
+            .post("/_arkret/self/device_messages/ack")
+            .json(&ack_request),
+        StatusCode::OK,
+    )
+    .await?;
     let ack: arkret_models_collaboration::device_messages::DeviceMessagesAckOutcome =
+        serde_json::from_value(ack_raw)?;
+    ensure!(
+        ack.pruned_count == messages.len() as u64,
+        "to-device ACK did not prune exactly the fully verified batch"
+    );
+    let repeated: arkret_models_collaboration::device_messages::DeviceMessagesAckOutcome =
         serde_json::from_value(
             expect_json(
                 holder
                     .post("/_arkret/self/device_messages/ack")
-                    .json(&DeviceMessagesAckRequestBody { ack_token }),
+                    .json(&ack_request),
                 StatusCode::OK,
             )
             .await?,
         )?;
-    ensure!(ack.pruned_count == 1, "to-device ack pruned no message");
-    Ok(())
+    ensure!(
+        repeated.pruned_count == 0,
+        "repeated ACK was not an idempotent no-op"
+    );
+    eprintln!(
+        "[invite-fanout] device={} verified_batch={} ack_pruned={} repeat_ack=0",
+        holder.device_id,
+        messages.len(),
+        ack.pruned_count
+    );
+    tracker.acknowledged_ids.extend(batch_ids);
+    Ok(messages)
+}
+
+async fn assert_service_account_data_fanout(
+    holder: &TestActorClient,
+    expected_service_id: &str,
+    expected_row: &AccountDataRow,
+    tracker: &mut FanoutTracker,
+) -> Result<()> {
+    // Only independently read CAS originals authorize a notification, including
+    // later worker hints that repeat an older accepted row under a new id.
+    tracker.rows.push(expected_row.clone());
+    let deadline = Instant::now() + Duration::from_secs(15);
+    loop {
+        let messages = receive_verified_fanout_batch(holder, expected_service_id, tracker).await?;
+        if messages
+            .iter()
+            .any(|message| account_data_update_matches(message, expected_row))
+        {
+            return Ok(());
+        }
+        ensure!(
+            Instant::now() < deadline,
+            "no account-data fanout for {} revision {} on {} before timeout",
+            expected_row.account_data_key,
+            expected_row.revision,
+            holder.device_id
+        );
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    }
+}
+
+async fn drain_known_fanout(
+    holder: &TestActorClient,
+    expected_service_id: &str,
+    tracker: &mut FanoutTracker,
+) -> Result<()> {
+    let deadline = Instant::now() + Duration::from_secs(15);
+    let mut empty_since = Instant::now();
+    loop {
+        let messages = receive_verified_fanout_batch(holder, expected_service_id, tracker).await?;
+        if !messages.is_empty() {
+            empty_since = Instant::now();
+        } else if empty_since.elapsed() >= Duration::from_secs(2) {
+            return Ok(());
+        }
+        ensure!(
+            Instant::now() < deadline,
+            "known fanout did not settle on {}",
+            holder.device_id
+        );
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    }
 }
 
 pub(crate) async fn grant_invite_consent(
@@ -483,6 +560,7 @@ async fn assert_notify_invite_wakes_account_subscribe(
     holder: &TestActorClient,
     expected_service_id: &str,
     label: &str,
+    tracker: &mut FanoutTracker,
 ) -> Result<AccountDataRow> {
     set_explicit_address_behavior(holder, InviteReceiveAction::Notify)
         .await
@@ -571,7 +649,7 @@ async fn assert_notify_invite_wakes_account_subscribe(
         "invite_delivery cell omitted the dispatched invite from delivery_entries: {}",
         delivery_row.content
     );
-    assert_service_account_data_fanout(holder, expected_service_id, &delivery_row).await?;
+    assert_service_account_data_fanout(holder, expected_service_id, &delivery_row, tracker).await?;
     Ok(delivery_row)
 }
 
@@ -597,11 +675,13 @@ pub async fn invite_notification_wakeup_live_run() -> Result<()> {
         )
         .await
         .context("bootstrap holder client")?;
+    let mut tracker = FanoutTracker::default();
     assert_notify_invite_wakes_account_subscribe(
         &inviter,
         &holder,
         server.service_id().as_str(),
         "Invite Notification Wakeup",
+        &mut tracker,
     )
     .await?;
     Ok(())
@@ -636,11 +716,14 @@ pub async fn invite_service_fanout_live_run() -> Result<()> {
         .await
         .context("bootstrap secondary active holder device")?;
 
+    let mut primary_tracker = FanoutTracker::default();
+    let mut secondary_tracker = FanoutTracker::default();
     let delivery_row = assert_notify_invite_wakes_account_subscribe(
         &inviter,
         &holder,
         server.service_id().as_str(),
         "Invite Service Fanout Notify",
+        &mut primary_tracker,
     )
     .await?;
     let secondary_delivery_row =
@@ -657,6 +740,7 @@ pub async fn invite_service_fanout_live_run() -> Result<()> {
         &holder_secondary,
         server.service_id().as_str(),
         &secondary_delivery_row,
+        &mut secondary_tracker,
     )
     .await?;
 
@@ -704,12 +788,18 @@ pub async fn invite_service_fanout_live_run() -> Result<()> {
         entry["source_peer_actor_id"] == serde_json::to_value(&source_actor)?,
         "quarantine did not retain the complete authenticated source Actor"
     );
-    assert_service_account_data_fanout(&holder, server.service_id().as_str(), &quarantine_row)
-        .await?;
+    assert_service_account_data_fanout(
+        &holder,
+        server.service_id().as_str(),
+        &quarantine_row,
+        &mut primary_tracker,
+    )
+    .await?;
     assert_service_account_data_fanout(
         &holder_secondary,
         server.service_id().as_str(),
         &quarantine_row,
+        &mut secondary_tracker,
     )
     .await?;
 
@@ -739,16 +829,26 @@ pub async fn invite_service_fanout_live_run() -> Result<()> {
         "consent revoke did not persist the closed quarantine invalidation: {}",
         invalidated_row.content
     );
-    assert_service_account_data_fanout(&holder, server.service_id().as_str(), &invalidated_row)
-        .await?;
+    assert_service_account_data_fanout(
+        &holder,
+        server.service_id().as_str(),
+        &invalidated_row,
+        &mut primary_tracker,
+    )
+    .await?;
     assert_service_account_data_fanout(
         &holder_secondary,
         server.service_id().as_str(),
         &invalidated_row,
+        &mut secondary_tracker,
     )
     .await?;
 
-    for active_holder in [&holder, &holder_secondary] {
+    for (active_holder, tracker) in [
+        (&holder, &mut primary_tracker),
+        (&holder_secondary, &mut secondary_tracker),
+    ] {
+        drain_known_fanout(active_holder, server.service_id().as_str(), tracker).await?;
         let drained = expect_json(
             active_holder.get("/_arkret/self/device_messages"),
             StatusCode::OK,
