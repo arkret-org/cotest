@@ -1,132 +1,75 @@
-//! Direct Conversation bilateral continuity fixture validation.
-//!
-//! The formal `direct-conversation-fixture.json` was retired upstream; its
-//! founding, crash-replay, founder-loss and Contact prepare vectors are
-//! registry-only now and have no machine fixture to execute. What remains
-//! executable here is the bilateral continuity checkpoint fixture. Live MLS
-//! Commit/Welcome finality is verified by the protocol admission suites.
-
-use anyhow::{Result, anyhow, bail};
-use serde_json::{Value, json};
+//! Execute bounded Contact schemas and real source signatures. Native Station
+//! recovery, transactions and founding are exercised by contact_federation_live.
+use anyhow::{Context, Result, ensure};
+use arkret_models_collaboration::contact_operations::ContactCurrentProof;
+use arkret_signatures::{Ed25519DetachedJwsVerifier, PublicKeyMaterial};
+use serde_json::json;
 
 use super::load_artifact_json;
+use super::schema_validation_fixture::SchemaEnv;
 use crate::transcripts::record_vector_event;
 
-fn validate_bilateral_continuity_checkpoint_fixture() -> Result<()> {
-    let fixture = load_artifact_json("fixtures/bilateral-continuity-checkpoint-fixture.json")?;
-    let cases = fixture
-        .get("cases")
-        .and_then(Value::as_array)
-        .ok_or_else(|| anyhow!("bilateral continuity fixture has no cases"))?;
-    for name in [
-        "root_basis_digest_is_sha256_of_jcs_and_not_wire_state",
-        "history_beyond_64_uses_checkpoint_and_bounded_tail",
-        "same_sequence_different_digest_is_fork",
-        "single_roundtrip_countersigns_and_commits_same_checkpoint",
-        "response_loss_replays_same_completed_checkpoint",
-        "rollback_or_missing_checkpoint_predecessor_is_invalid",
-        "wrong_root_pair_accumulator_or_single_signature_is_invalid",
-        "temporarily_missing_portable_material_is_unavailable",
-        "migrated_holder_imports_checkpoint_without_skipping_tail",
-        "same_exact_pair_cannot_restart_root_when_tail_is_full",
-        "different_exact_pair_explicit_first_contact_has_independent_root",
-    ] {
-        if !cases
-            .iter()
-            .any(|case| case.get("name").and_then(Value::as_str) == Some(name))
-        {
-            bail!("bilateral continuity fixture omits `{name}`");
-        }
-    }
-    let root_digest = cases
-        .iter()
-        .find(|case| case["name"] == "root_basis_digest_is_sha256_of_jcs_and_not_wire_state")
-        .unwrap();
-    let canonical_root = arkret_canonical::canonical_json_bytes(&root_digest["root_basis"])?;
-    let actual_root_digest = arkret_canonical::sha256_digest(canonical_root);
-    if root_digest["expected_root_basis_digest"].as_str() != Some(actual_root_digest.as_str())
-        || root_digest["wire_member"].as_bool() != Some(false)
-    {
-        bail!("continuity root basis digest formula drifted or became wire state");
-    }
-    let fork = cases
-        .iter()
-        .find(|case| case["name"] == "same_sequence_different_digest_is_fork")
-        .unwrap();
-    if fork["expected_error"] != "continuity_invalid" || !fork["winner"].is_null() {
-        bail!("checkpoint fork vector reintroduced a winner election");
-    }
-    let unavailable = cases
-        .iter()
-        .find(|case| case["name"] == "temporarily_missing_portable_material_is_unavailable")
-        .unwrap();
-    if unavailable["expected_error"] != "continuity_evidence_unavailable"
-        || unavailable["retry_after_import"] != true
-    {
-        bail!("missing continuity material is no longer retryable after exact import");
-    }
-    let same_pair = cases
-        .iter()
-        .find(|case| case["name"] == "same_exact_pair_cannot_restart_root_when_tail_is_full")
-        .unwrap();
-    if same_pair["same_trust_domain"] != true
-        || same_pair["same_actor_pair"] != true
-        || same_pair["expected_error"] != "continuity_evidence_unavailable"
-        || same_pair["may_restart_root"] != false
-    {
-        bail!("the same exact Contact pair may not reset a blocked lineage");
-    }
-    let new_pair = cases
-        .iter()
-        .find(|case| {
-            case["name"] == "different_exact_pair_explicit_first_contact_has_independent_root"
-        })
-        .unwrap();
-    if new_pair["same_actor_pair"] != false
-        || new_pair["explicit_user_action"] != true
-        || new_pair["inherits_history"] != false
-        || new_pair["inherits_direct_conversation"] != false
-        || new_pair["inherits_mls_state"] != false
-        || new_pair["expected"] != "independent_root"
-    {
-        bail!(
-            "new Contact pair must be explicitly initiated without inherited history, DM or MLS state"
+pub fn run_direct_conversation_flow_suite() -> Result<()> {
+    let fixture = load_artifact_json("fixtures/contact-current-state-fixture.json")?;
+    let env = SchemaEnv::load()?;
+    let cases = fixture["schema_validation_cases"]
+        .as_array()
+        .context("Contact schema cases absent")?;
+    for row in cases {
+        let validator = env.compile(row["schema_ref"].as_str().context("schema_ref absent")?)?;
+        ensure!(
+            validator.is_valid(&row["instance"])
+                == row["expect_valid"]
+                    .as_bool()
+                    .context("expected schema verdict absent")?,
+            "Contact schema case {} failed",
+            row["name"]
         );
     }
-    let registry = load_artifact_json("registry/operation-registry.json")?;
-    let operations = registry["operations"]
-        .as_array()
-        .ok_or_else(|| anyhow!("operation registry has no operations"))?;
-    let self_checkpoint = operations
-        .iter()
-        .find(|operation| operation["operation_id"] == "ak.self.contact.command.checkpoint.v1");
-    if self_checkpoint.and_then(|operation| operation["http"].as_str())
-        != Some("POST /_arkret/self/contacts/continuity-checkpoint")
-    {
-        bail!("bilateral checkpoint has no registered holder-authorized issuance surface");
+    let proof: ContactCurrentProof = serde_json::from_value(fixture["signed_current"].clone())?;
+    proof.validate_shape()?;
+    let bytes = proof.canonical_signing_bytes()?;
+    ensure!(
+        Some(bytes.as_slice()) == fixture["canonical_unsigned"].as_str().map(str::as_bytes),
+        "Contact current canonical bytes differ"
+    );
+    let key = PublicKeyMaterial::Ed25519Raw {
+        bytes: arkret_canonical::base64url_decode(
+            fixture["source_public_key_b64u"]
+                .as_str()
+                .context("source key absent")?,
+        )?,
+    };
+    let verifier = Ed25519DetachedJwsVerifier::new();
+    verifier.verify_detached_jws(&proof.signature.jws, &bytes, &key)?;
+    let mut body = serde_json::to_value(&proof)?;
+    body.as_object_mut().unwrap().remove("signature");
+    for member in body.as_object().unwrap().keys() {
+        let mut changed = body.clone();
+        changed.as_object_mut().unwrap().remove(member);
+        ensure!(
+            verifier
+                .verify_detached_jws(
+                    &proof.signature.jws,
+                    &arkret_canonical::canonical_json_bytes(&changed)?,
+                    &key
+                )
+                .is_err(),
+            "source signature failed to cover {member}"
+        );
     }
-    Ok(())
-}
-
-pub fn run_direct_conversation_flow_suite() -> Result<()> {
-    validate_bilateral_continuity_checkpoint_fixture()?;
     record_vector_event(
         "direct_conversation.end_to_end_flow",
-        &json!({"fixture": "bilateral-continuity-checkpoint-fixture.json"}),
-        &json!({
-            "continuity": "bilateral_checkpoint_plus_bounded_tail_reaches_unique_root"
-        }),
-        &json!({"status": "validated"}),
+        &json!({"fixture":"contact-current-state-fixture.json"}),
+        &json!({"executed":"closed_schemas_and_source_signature","schema_cases":cases.len()}),
+        &json!({"status":"validated","native_station_recovery":"separate_live_suite"}),
     );
     Ok(())
 }
-
 #[cfg(test)]
 mod tests {
-    use super::*;
-
     #[test]
-    fn direct_conversation_flow_suite_validates_continuity_fixture() {
-        run_direct_conversation_flow_suite().expect("Direct Conversation flow suite");
+    fn bounded_contact_fixture_executes_closed_schemas_and_signatures() {
+        super::run_direct_conversation_flow_suite().unwrap();
     }
 }

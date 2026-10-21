@@ -97,6 +97,8 @@ async fn complete_native(
         0,
     )?;
     let mut authorize = DeviceAuthorizePayload {
+        expected_control_revision: None,
+        expected_device_revision: None,
         device_id: custody.device_id.clone(),
         device_public_key_did: nonempty(format!(
             "did:key:{}",

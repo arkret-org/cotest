@@ -984,7 +984,8 @@ pub async fn run_signer_keys_query_live() -> Result<()> {
     let request = SignerKeysQueryRequestBody {
         request_id: RequestId::new("ak:request:019b0000-0000-7000-8000-000000000101")?,
         realm_id: RealmId::new(realm_id)?,
-        recipient_account_id: bob_account.clone(),
+        recipient_account_id: Some(bob_account.clone()),
+        recipient_actor_id: None,
         queries: vec![SignerKeyQuerySelector::CurrentAdmission {
             sender: CurrentSignerKeyQuerySender::AccountDevice {
                 actor: ActorId::account(alice_account),

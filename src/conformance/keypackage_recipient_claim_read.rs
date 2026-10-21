@@ -396,6 +396,8 @@ impl World {
             ClaimedEndpoint::Agent => (None, Vec::new(), Some(())),
         };
         let request = PeerKeyPackagesClaimUnsignedRequest {
+            requester_actor_id: None,
+            target_actor_id: None,
             claim_request_id: claim_request_id.clone(),
             target_account_id,
             requester_account_id: Some(self.alice.clone()),
@@ -416,6 +418,7 @@ impl World {
         };
         let claims = vec![record];
         let mut receipt = PeerKeyPackageClaimReceipt {
+            claim_authority_ref: None,
             claim_request_id: claim_request_id.clone(),
             request_digest: Hash::new(arkret_canonical::canonical_sha256(&request)?)?,
             claims_digest: Hash::new(arkret_canonical::canonical_sha256(&claims)?)?,

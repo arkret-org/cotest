@@ -1870,6 +1870,8 @@ fn device_authorization(
     let mut hpke = vec![0xec, 0x01];
     hpke.extend([seed[0].wrapping_add(1); 32]);
     let mut payload = DeviceAuthorizePayload {
+        expected_control_revision: None,
+        expected_device_revision: None,
         device_id: DeviceId::new(device.to_owned())?,
         device_public_key_did: NonEmptyString::new(format!("did:key:{public}"))
             .map_err(anyhow::Error::msg)?,

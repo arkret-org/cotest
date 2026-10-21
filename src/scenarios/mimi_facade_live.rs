@@ -665,7 +665,7 @@ async fn migration_matrix(
     let binding = |room: &str, status: &str, role: &str| {
         json!({
             "profile":"ak.profile.mimi_interop.v1", "mimi_room_uri":format!("{provider}/rooms/{room}"),
-            "binding_scope":{"realm_id":realm,"strand_id":strand},"hub_provider_id":member.actor.route_service_id(),
+            "binding_scope":{"realm_id":realm,"strand_id":strand},"hub_provider_id":member.actor.fixed_route_service_id().expect("Human fixture has a fixed Station route"),
             "local_provider_role":role,"status":status
         })
     };

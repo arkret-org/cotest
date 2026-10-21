@@ -575,7 +575,6 @@ impl<'a> CaseRun<'a> {
             event_submission: EventAdmissionSubmission::new(event.clone()),
             mls_genesis_material: material,
             producer_device_evidence: None,
-            producer_managed_provenance: None,
             producer_agent_evidence: None,
         };
         let evidence = self
@@ -659,7 +658,6 @@ impl<'a> CaseRun<'a> {
                 ratchet_tree_bytes_b64: tree,
             }),
             producer_device_evidence: None,
-            producer_managed_provenance: None,
             producer_agent_evidence: None,
         };
         Ok(Some(request))

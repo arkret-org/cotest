@@ -2673,7 +2673,8 @@ async fn run_agent_keypackage_journey(terminal: bool) -> Result<()> {
     let query = arkret::SignerKeysQueryRequestBody {
         request_id: RequestId::new(format!("ak:request:{}", unique_uuid7()))?,
         realm_id: joined_realm.clone(),
-        recipient_account_id: controller_account.clone(),
+        recipient_account_id: Some(controller_account.clone()),
+        recipient_actor_id: None,
         queries: vec![arkret::SignerKeyQuerySelector::HistoricalEvent {
             sender: arkret::HistoricalSignerKeyQuerySender::Agent {
                 actor: ActorId::account(agent.agent_account.clone()),

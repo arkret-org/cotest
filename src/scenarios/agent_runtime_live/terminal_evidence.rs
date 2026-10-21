@@ -62,7 +62,8 @@ async fn current_key(material: &Materials<'_>) -> Result<arkret::SignerKeysQuery
     let request = arkret::SignerKeysQueryRequestBody {
         request_id: RequestId::new(format!("ak:request:{}", unique_uuid7()))?,
         realm_id: material.realm.clone(),
-        recipient_account_id: material.agent.controller_account.clone(),
+        recipient_account_id: Some(material.agent.controller_account.clone()),
+        recipient_actor_id: None,
         queries: vec![arkret::SignerKeyQuerySelector::CurrentAdmission {
             sender: arkret::CurrentSignerKeyQuerySender::Agent {
                 actor: ActorId::account(material.agent.agent_account.clone()),

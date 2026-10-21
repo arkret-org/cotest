@@ -262,8 +262,8 @@ pub async fn contact_edges_are_rejected() -> Result<()> {
             .as_str(),
         missing_target_core_id
     );
-    assert_eq!(missing_receipt.core.slot_version, 1);
-    assert!(missing_receipt.core.slot_predecessor.is_none());
+    assert_eq!(missing_receipt.core.version, 1);
+    assert!(missing_receipt.core.predecessor_event_ref.is_none());
 
     let receipt = bob.request_contact(&alice.actor).await?;
     assert_eq!(

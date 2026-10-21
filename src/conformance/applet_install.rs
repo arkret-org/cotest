@@ -550,6 +550,8 @@ fn build_delegated_device_payload(
     };
 
     let mut payload = DeviceAuthorizePayload {
+        expected_control_revision: None,
+        expected_device_revision: None,
         device_id,
         device_public_key_did,
         hpke_key,
@@ -559,7 +561,7 @@ fn build_delegated_device_payload(
         scopes,
         not_before,
         expires_at,
-        authorization_binding_kind: DeviceAuthorizationBindingKind::AppletManagedDelegation,
+        authorization_binding_kind: DeviceAuthorizationBindingKind::RealmManagedDelegation,
         authorized_generation_ref: 1,
         device_signature: SignatureMaterial::NonEmptyString(non_empty("unsigned")?),
         recovery_session_id,
@@ -738,7 +740,7 @@ fn require_registered_delegation_binding_kind() -> Result<()> {
         .collect::<BTreeSet<_>>();
     let modelled = [
         DeviceAuthorizationBindingKind::AcceptedDevice,
-        DeviceAuthorizationBindingKind::AppletManagedDelegation,
+        DeviceAuthorizationBindingKind::RealmManagedDelegation,
         DeviceAuthorizationBindingKind::PcrRecovery,
         DeviceAuthorizationBindingKind::RegistrationAnchor,
     ]

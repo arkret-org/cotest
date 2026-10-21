@@ -155,13 +155,14 @@ pub async fn run_agent_pcr_profile_admission() -> Result<crate::conformance::Sui
     );
     let payload = arkret_models_collaboration::events_payloads::ActorProfileCreatePayload {
         object: arkret_models_identity::actor_profile::ActorProfileDefinition {
-            principal_id: agent.agent_account.principal_id.clone(),
+            principal_id: Some(agent.agent_account.principal_id.clone()),
+            actor_id: None,
             actor_kind: arkret_wire::ActorKind::Agent,
             display_name: "Delegated Agent profile".to_owned(),
             handle: None,
             agent_slug: Some("pcr-profile-agent".to_owned()),
             avatar_blob_ref: None,
-            accountable_principal_ids: vec![account.principal_id.clone()],
+            accountable_principal_ids: Some(vec![account.principal_id.clone()]),
             profile_fields: std::collections::BTreeMap::new(),
         },
     };
@@ -237,6 +238,7 @@ pub async fn run_agent_pcr_profile_admission() -> Result<crate::conformance::Sui
         serde_json::from_value(serde_json::to_value(&event.payload)?)?;
     let profile = current.materialize(&event)?;
     let update = arkret_models_collaboration::events_payloads::ActorProfileUpdatePayload {
+        expected_revision: None,
         target_ref: arkret_wire::ActorProfileId::from_event_id(&event.event_id),
         patch,
         expected_state_digest: Some(
@@ -451,13 +453,14 @@ pub async fn run_agent_pcr_profile_admission() -> Result<crate::conformance::Sui
     }
     let human = arkret_models_collaboration::events_payloads::ActorProfileCreatePayload {
         object: arkret_models_identity::actor_profile::ActorProfileDefinition {
-            principal_id: account.principal_id.clone(),
+            principal_id: Some(account.principal_id.clone()),
+            actor_id: None,
             actor_kind: arkret_wire::ActorKind::User,
             display_name: "Non-PCR controller profile refusal".to_owned(),
             handle: None,
             agent_slug: None,
             avatar_blob_ref: None,
-            accountable_principal_ids: Vec::new(),
+            accountable_principal_ids: None,
             profile_fields: std::collections::BTreeMap::new(),
         },
     };

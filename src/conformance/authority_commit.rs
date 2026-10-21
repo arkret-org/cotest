@@ -917,6 +917,7 @@ fn build_authority_fixture(declared: &[DeclaredStream]) -> Result<AuthorityFixtu
 
     let handoff = RealmAuthorityHandoff {
         pcr_private_state_digest: None,
+        management_private_state_digest: None,
         handoff_id: RealmAuthorityHandoffId::from_digest(Sha256::digest(b"cotest-handoff").into()),
         realm_id: realm_id.clone(),
         from_generation: 0,
@@ -1158,6 +1159,7 @@ fn verify_handoff(fixture: &Value) -> Result<()> {
     );
 
     let request = arkret_models_collaboration::authority_commit::AuthorityHandoffRequest {
+        management_private_state: None,
         pcr_private_state: None,
         handoff: authority.handoff.clone(),
         final_stream_heads: authority.final_stream_heads.clone(),

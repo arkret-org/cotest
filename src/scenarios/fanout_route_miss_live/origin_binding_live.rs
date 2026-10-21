@@ -218,6 +218,7 @@ pub(crate) async fn activate_realm_successor(
     };
     let mut handoff = RealmAuthorityHandoff {
         pcr_private_state_digest: None,
+        management_private_state_digest: None,
         handoff_id: RealmAuthorityHandoffId::from_digest(arkret_canonical::sha256_bytes(
             change.event_id.as_str().as_bytes(),
         )),
@@ -275,6 +276,7 @@ pub(crate) async fn activate_realm_successor(
         &new_key,
     )?;
     let activation = AuthorityHandoffRequest {
+        management_private_state: None,
         pcr_private_state: None,
         handoff,
         final_stream_heads: heads,
