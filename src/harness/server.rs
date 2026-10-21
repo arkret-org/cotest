@@ -1063,6 +1063,22 @@ impl ArkretServer {
             .map(|database| database.connect_url.as_str())
     }
 
+    /// The actual process database, including a scenario-owned isolated database
+    /// supplied to the child at startup. Attached deployments expose no fallback.
+    pub fn configured_database_url(&self) -> Option<&str> {
+        self.external_restart
+            .as_ref()
+            .and_then(|config| {
+                config
+                    .extra_env
+                    .iter()
+                    .rev()
+                    .find(|(key, _)| key == "DATABASE_URL")
+                    .map(|(_, value)| value.as_str())
+            })
+            .or_else(|| self.owned_database_url())
+    }
+
     pub fn service_did(&self) -> &Did {
         &self.service_did
     }

@@ -21,7 +21,7 @@ async fn message_footprint(
     realm: &arkret::RealmId,
 ) -> Result<(i64, i64)> {
     let database = station
-        .owned_database_url()
+        .configured_database_url()
         .context("message conformance requires the actual isolated PostgreSQL")?
         .to_owned();
     let realm = realm.to_string();
