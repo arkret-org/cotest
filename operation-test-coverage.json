@@ -6,14 +6,14 @@
     "operation_registry_sha256": "b095ceb7aa90902124668d853fbcbbf14fd6e764ebd8f2e9f643c83b8ff3dec9",
     "test_layers": {
       "coland_unit": {
-        "source_file_count": 460,
-        "source_sha256": "e8f9e4f85800fdcf615001856e730c56e49206435a998b6bef1320d4d5a4773e",
+        "source_file_count": 470,
+        "source_sha256": "ee349d1f9a00be63e951addaa3c20618ffda1956eaa02cc5b1b491c7065a4285",
         "evidence_count": 323,
         "covered_operation_count": 144
       },
       "coland_http": {
         "source_file_count": 51,
-        "source_sha256": "b525519c0df3a87ba9ad40c73e0d84ac0e22b1b826a7bd949ea30e88d049e018",
+        "source_sha256": "fc21bd52e35ce86b4ebb3cf3628ca444a3d0b4ec722bb1665e8f262a127ce8aa",
         "evidence_count": 34,
         "covered_operation_count": 23
       },
@@ -14244,11 +14244,11 @@
         "storage_parity": [
           {
             "file": "coland/crates/storage-postgres/tests/support/applet_authoring.rs",
-            "line": 5950,
+            "line": 6001,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              5950
+              6001
             ],
             "protected_oracle": false,
             "scope_sha256": "c27e87dede3917dbf9c43437388ef63728c78117b1b8f3ec5d7d55effb591bd3",
@@ -14344,11 +14344,11 @@
         "storage_parity": [
           {
             "file": "coland/crates/storage-postgres/tests/support/applet_authoring.rs",
-            "line": 5950,
+            "line": 6001,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              5950
+              6001
             ],
             "protected_oracle": false,
             "scope_sha256": "c27e87dede3917dbf9c43437388ef63728c78117b1b8f3ec5d7d55effb591bd3",
@@ -14596,11 +14596,11 @@
         "storage_parity": [
           {
             "file": "coland/crates/storage-postgres/tests/support/applet_authoring.rs",
-            "line": 5950,
+            "line": 6001,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              5950
+              6001
             ],
             "protected_oracle": false,
             "scope_sha256": "c27e87dede3917dbf9c43437388ef63728c78117b1b8f3ec5d7d55effb591bd3",
