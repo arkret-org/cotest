@@ -19,7 +19,7 @@
       },
       "cotest_rust": {
         "source_file_count": 599,
-        "source_sha256": "30466f9b03f3aa3d22c7f4b079faca5fba3b5ef0af85ad4133d31bae48701a8c",
+        "source_sha256": "c6b32d1d0411e6c70288d59ae0bd09619fa58b9e4268c916a873082d93cb36d7",
         "evidence_count": 157,
         "covered_operation_count": 78
       },
