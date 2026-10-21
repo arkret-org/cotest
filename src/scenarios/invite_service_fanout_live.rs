@@ -368,14 +368,14 @@ pub async fn complete_peer_current(
         "complete Consent read changed holder PCR"
     );
     Ok(match outcome.current {
-        arkret::ConsentCurrentReadState::Present { result } => (
+        arkret::ConsentCurrentState::Present { result } => (
             arkret::ConsentExpectedCurrent::Present {
                 revision: result.revision,
             },
             result.value.permissions,
         ),
-        arkret::ConsentCurrentReadState::NeverWritten {} => {
-            (arkret::ConsentExpectedCurrent::NeverWritten {}, vec![])
+        arkret::ConsentCurrentState::NeverWritten => {
+            (arkret::ConsentExpectedCurrent::NeverWritten, vec![])
         }
     })
 }

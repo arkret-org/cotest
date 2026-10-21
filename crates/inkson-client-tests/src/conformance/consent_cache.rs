@@ -1516,7 +1516,7 @@ async fn independent_windows(
         .await?
     );
     ensure!(
-        matches!(&current.value()?.current,arkret_models_collaboration::consent_operations::ConsentCurrentReadState::Present{result} if result.value.permissions.iter().any(|p|p.consent_scope==ConsentScope::VoiceCall))
+        matches!(&current.value()?.current,arkret_models_collaboration::consent_operations::ConsentCurrentState::Present{result} if result.value.permissions.iter().any(|p|p.consent_scope==ConsentScope::VoiceCall))
     );
     verify_token(context, &token, &exchange(&context.holder, &token).await?).await?;
     let (other_permission, _) = grant(
@@ -1694,7 +1694,7 @@ async fn presence_current(
         inkson::conformance::read_native_consent_current(native, context.caller.actor.clone())
             .await?;
     ensure!(
-        matches!(&current.value()?.current, arkret_models_collaboration::consent_operations::ConsentCurrentReadState::Present { result } if result.revision == empty.revision && result.value.permissions.is_empty()),
+        matches!(&current.value()?.current, arkret_models_collaboration::consent_operations::ConsentCurrentState::Present { result } if result.revision == empty.revision && result.value.permissions.is_empty()),
         "empty was not retained as a real present revision"
     );
     for scope in ConsentScope::ALL {

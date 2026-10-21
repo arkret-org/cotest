@@ -1472,8 +1472,35 @@ impl ArkretServer {
         self.start_external_process().await
     }
 
+    fn scoped_sdk_builder(&self) -> Result<arkret_http_client::ClientBuilder> {
+        let endpoint = self.base_url();
+        let mut builder = SdkClient::builder(endpoint.clone());
+        // Only this harness-owned TLS endpoint authorizes local method reads.
+        // Keep the exact namespace and port; do not derive trust from a DID.
+        if self._tls.is_some() {
+            let host = endpoint.host_str().unwrap_or_default();
+            if let Some(namespace) =
+                ["127.0.0.1", "localhost", "local.host"]
+                    .into_iter()
+                    .find(|namespace| {
+                        host == *namespace
+                            || (*namespace != "127.0.0.1"
+                                && host.ends_with(&format!(".{namespace}")))
+                    })
+            {
+                builder = builder.loopback_service_discovery(
+                    namespace,
+                    endpoint
+                        .port_or_known_default()
+                        .context("owned TLS Station has no port")?,
+                )?;
+            }
+        }
+        Ok(builder)
+    }
+
     pub fn sdk(&self) -> Result<SdkClient> {
-        let builder = SdkClient::builder(self.base_url());
+        let builder = self.scoped_sdk_builder()?;
         Ok(if self._tls.is_some() {
             builder.http_client(self.http_client.clone()).build()?
         } else {
@@ -1908,7 +1935,7 @@ impl ArkretServer {
                 ))
             }
         };
-        let builder = SdkClient::builder(self.base_url()).auth(auth);
+        let builder = self.scoped_sdk_builder()?.auth(auth);
         let sdk = if self._tls.is_some() {
             builder.http_client(self.http_client.clone()).build()?
         } else {

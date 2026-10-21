@@ -935,7 +935,7 @@ fn run_call_cases<'a>(
                 "exact retries allocated another Commit"
             );
             ensure!(
-                matches!(&current.current,arkret_models_collaboration::consent_operations::ConsentCurrentReadState::Present{result} if result.selector.peer_id==*revoked.peer.actor_id() && result.revision==revoked.revision && !result.value.permissions.iter().any(|p|p.consent_scope==if video{ConsentScope::VideoCall}else{ConsentScope::VoiceCall})),
+                matches!(&current.current,arkret_models_collaboration::consent_operations::ConsentCurrentState::Present{result} if result.selector.peer_id==*revoked.peer.actor_id() && result.revision==revoked.revision && !result.value.permissions.iter().any(|p|p.consent_scope==if video{ConsentScope::VideoCall}else{ConsentScope::VoiceCall})),
                 "exact retry rolled authoritative current back from its accepted revoke"
             );
             eprintln!(
