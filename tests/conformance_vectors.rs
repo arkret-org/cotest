@@ -37,7 +37,7 @@ use serde_json::{Value, json};
 #[test]
 fn protocol_simplification_shape_cases_execute_without_semantic_credit() -> Result<()> {
     let execution = cotest::conformance::run_protocol_simplification_shape_suite()?;
-    let fixture = load_local_fixture_value("protocol-simplification-fixture.json")?;
+    let fixture = cotest::conformance::load_fixture_value("protocol-simplification-fixture.json")?;
     execution
         .assert_complete_against_cases(fixture["schema_validation_cases"].as_array().unwrap())?;
     assert_eq!(execution.cases.len(), 26);
