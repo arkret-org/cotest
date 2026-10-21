@@ -311,7 +311,14 @@ pub fn verify_consent_current_read_material(
         "Consent current names a different authority method"
     );
     outcome.validate_for_request(request, expected_generation, now)?;
-    arkret_signatures::call_invitation::verify_consent_current_read(outcome, request, key, now)?;
+    arkret_signatures::call_invitation::verify_consent_current_read(
+        outcome,
+        request,
+        expected_verification_method,
+        key,
+        expected_generation,
+        now,
+    )?;
     Ok(())
 }
 
