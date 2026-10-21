@@ -116,6 +116,18 @@ class OperationTestCoverageTests(unittest.TestCase):
         cotest = next(layer for layer in layers if layer.name == "cotest_rust")
         self.assertIn(self.root / "cotest/crates/inkson-client-tests/src/scenarios/actual_client.rs", cotest.files)
 
+    def test_retained_evidence_sources_cannot_change_the_test_inventory(self) -> None:
+        expected = inventory.generate(self.root)
+        self.write(
+            "cotest/artifacts/backup/files/tests/original.rs",
+            rust_test("retained_original", OP_ONE, "assert!(result.is_ok());"),
+        )
+        self.write(
+            "cotest/artifacts/backup/files/tests/retired.rs",
+            rust_test("retained_retired", "ak.self.retired.command.v1", "assert!(result.is_err());"),
+        )
+        self.assertEqual(inventory.generate(self.root), expected)
+
     def test_generates_full_matrix_and_exact_duplicate_oracle(self) -> None:
         result = inventory.generate(self.root)
         self.assertEqual(result["dimensions"]["operation_count"], 2)

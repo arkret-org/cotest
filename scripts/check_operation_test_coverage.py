@@ -112,7 +112,7 @@ SECURITY_KEYWORDS = (
     "traversal",
     "unknown_",
 )
-IGNORED_DIRS = {".git", "node_modules", "target", "vendor"}
+IGNORED_DIRS = {".git", "artifacts", "node_modules", "target", "vendor"}
 
 
 @dataclass(frozen=True)

@@ -7,7 +7,7 @@
     "test_layers": {
       "coland_unit": {
         "source_file_count": 455,
-        "source_sha256": "d84808655ead106a132b4ccc37bee98d4a1f5a132fc1d6e2e850884eb1afa379",
+        "source_sha256": "3094a4ebff69e5c5c33f621821430d554b8b5c7d2e5c3ef92256182ad43ff3f2",
         "evidence_count": 320,
         "covered_operation_count": 144
       },
@@ -18,14 +18,14 @@
         "covered_operation_count": 27
       },
       "cotest_rust": {
-        "source_file_count": 598,
-        "source_sha256": "6a62b8711f1c2c2851c92fcbe7d99a0ef546bebbb99f6cea523519ffd5202ea5",
+        "source_file_count": 599,
+        "source_sha256": "db002c4c61d2e2d5f5bd260415ef71c76d0edd9baa779f5dacfe16324cae03b0",
         "evidence_count": 157,
         "covered_operation_count": 78
       },
       "cotest_e2e": {
         "source_file_count": 110,
-        "source_sha256": "2d064af79311bc4d563116e937588ec7c7bdc558a8d1846f7b8df70eb46918e7",
+        "source_sha256": "3531300d72b24b525dd8be5e1993ca63c308f0250d9079c14bc005123a8a7481",
         "evidence_count": 44,
         "covered_operation_count": 20
       },
@@ -22396,11 +22396,11 @@
           },
           {
             "file": "coland/crates/http/src/state/authority_self_event_unit.rs",
-            "line": 729,
+            "line": 734,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              729
+              734
             ],
             "protected_oracle": false,
             "scope_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
