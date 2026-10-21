@@ -19,20 +19,18 @@
 use std::time::{Duration, Instant};
 
 use anyhow::{Context, Result, anyhow, bail, ensure};
-use arkret_identifiers::{ConsentId, DidCoreId, InviteId};
-use arkret_models_collaboration::consent_operations::{
-    ConsentGrantRequestBody, ConsentRevokeRequestBody, ConsentView,
-};
+use arkret_identifiers::{DidCoreId, InviteId};
+use arkret_models_collaboration::consent_operations::{ConsentReplaceRequestBody, ConsentView};
 use arkret_models_collaboration::device_messages::{
     DeviceMessageEnvelope, DeviceMessageSender, DeviceMessagesAckRequestBody,
     DeviceMessagesGetOutcome, RecipientDelivery,
 };
-use arkret_models_collaboration::events_payloads::ConsentGrantPayload;
-use arkret_models_collaboration::events_payloads::consent::ConsentPeer;
+use arkret_models_collaboration::events_payloads::consent::{
+    ConsentExpectedCurrent, ConsentPeer, ConsentPermission, ConsentReplacePayload,
+};
 use arkret_models_collaboration::governance::invite_addressing::{
     IntroductionEvidence, InviteAddress, InviteReceivePolicy, SelfInviteDispatchRequestBody,
 };
-use arkret_models_collaboration::governance_payloads::ConsentRevokePayload;
 use arkret_models_identity::ServiceResolutionCarrier;
 use arkret_models_identity::account::{AccountDataList, AccountDataRow};
 use arkret_wire::{
@@ -44,7 +42,7 @@ use serde_json::{Value, json};
 
 use crate::harness::{
     TestActorClient, TestServerGroup, actor_core_id, expect_account_subscribe_delta, expect_json,
-    invite_create_payload, next_typed_id,
+    invite_create_payload,
 };
 use crate::scenarios::identity_test_support::actor_did_for_service_did;
 
@@ -340,92 +338,135 @@ pub(crate) async fn grant_invite_consent(
     grant_scoped_consent(holder, peer, ConsentScope::Invite).await
 }
 
+pub(crate) async fn read_consent_set(
+    holder: &TestActorClient,
+    peer: &ConsentPeer,
+) -> Result<(ConsentExpectedCurrent, Vec<ConsentPermission>)> {
+    use arkret_models_collaboration::call_invitation::{
+        ConsentCurrentReadRequestBody, ConsentCurrentState,
+    };
+    let principal = holder.principal.as_ref().context("holder has no PCR")?;
+    let account = AccountId::new(
+        principal.core_id.clone(),
+        DidCoreId::new(holder.service_id())?,
+    );
+    let request = ConsentCurrentReadRequestBody {
+        holder_account_id: account.clone(),
+        peer: peer.clone(),
+        audience_actor_id: ActorId::service(account.station_id),
+        nonce: {
+            let mut bytes = [0_u8; 32];
+            getrandom::fill(&mut bytes).map_err(anyhow::Error::msg)?;
+            arkret_canonical::base64url_encode(&bytes)
+        },
+    };
+    let outcome = holder.sdk().consent_current_read(&request).await?;
+    holder.verify_consent_current_read(&request, &outcome)?;
+    let mut bad_proof = outcome.clone();
+    bad_proof.proof.jws.clear();
+    ensure!(
+        holder
+            .verify_consent_current_read(&request, &bad_proof)
+            .is_err(),
+        "a malformed Consent current proof supplied an editing prestate"
+    );
+    match outcome.current {
+        ConsentCurrentState::NeverWritten => Ok((ConsentExpectedCurrent::NeverWritten, vec![])),
+        ConsentCurrentState::Present { result } => Ok((
+            ConsentExpectedCurrent::Present {
+                revision: result.revision,
+            },
+            result.value.permissions,
+        )),
+    }
+}
+
+pub(crate) async fn submit_consent_set(
+    holder: &TestActorClient,
+    payload: ConsentReplacePayload,
+) -> Result<(ConsentView, arkret_wire::Event)> {
+    let principal = holder.principal.as_ref().context("holder has no PCR")?;
+    let event = holder
+        .author_event(
+            principal.pcr_realm_id.as_str(),
+            "ak.consent.replace",
+            serde_json::to_value(payload)?,
+        )
+        .await?;
+    let result: ConsentView = serde_json::from_value(
+        expect_json(
+            holder
+                .post("/_arkret/self/consent/results/replace")
+                .json(&ConsentReplaceRequestBody {
+                    consent_event: EventAdmissionSubmission::new(event.clone()),
+                }),
+            StatusCode::OK,
+        )
+        .await?,
+    )?;
+    Ok((result, event))
+}
+
 async fn grant_scoped_consent(
     holder: &TestActorClient,
     peer: &TestActorClient,
     scope: ConsentScope,
 ) -> Result<(ConsentView, arkret_wire::Event)> {
-    let principal = holder
-        .principal
-        .as_ref()
-        .context("holder was not provisioned with a Principal Control Realm")?;
-    let peer_principal = peer
-        .principal
-        .as_ref()
-        .context("peer was not provisioned with a Principal Control Realm")?;
-    let _holder_core_id = principal.core_id.clone();
-    let consent_id = ConsentId::new(next_typed_id("consent"))?;
-    let grant_payload = ConsentGrantPayload {
-        consent_id: consent_id.clone(),
-        peer: ConsentPeer::Actor {
-            actor_id: ActorId::account(AccountId::new(
-                peer_principal.core_id.clone(),
-                DidCoreId::new(peer.service_id())?,
-            )),
-        },
+    let peer_principal = peer.principal.as_ref().context("peer has no PCR")?;
+    let peer = ConsentPeer::Actor {
+        actor_id: ActorId::account(AccountId::new(
+            peer_principal.core_id.clone(),
+            DidCoreId::new(peer.service_id())?,
+        )),
+    };
+    let (expected_current, mut permissions) = read_consent_set(holder, &peer).await?;
+    permissions.retain(|permission| permission.consent_scope != scope);
+    permissions.push(ConsentPermission {
         consent_scope: scope,
         not_before: None,
         expires_at: Some(Utc::now() + ChronoDuration::days(1)),
         constraints: None,
         evidence_ref: None,
         reason: Some("cotest_holder_quarantine_invalidation".to_owned()),
-    };
-    let grant_event = holder
-        .author_event(
-            principal.pcr_realm_id.as_str(),
-            "ak.consent.grant",
-            serde_json::to_value(grant_payload)?,
-        )
-        .await?;
-    let grant_submission = EventAdmissionSubmission::new(grant_event.clone());
-    let granted = expect_json(
-        holder
-            .post("/_arkret/self/consent/results/grant")
-            .json(&ConsentGrantRequestBody {
-                grant_event: grant_submission,
-            }),
-        StatusCode::OK,
+    });
+    permissions.sort_by_key(|permission| match permission.consent_scope {
+        ConsentScope::Invite => 0,
+        ConsentScope::VoiceCall => 1,
+        ConsentScope::VideoCall => 2,
+        ConsentScope::Presence => 3,
+    });
+    let (view, event) = submit_consent_set(
+        holder,
+        ConsentReplacePayload {
+            peer,
+            expected_current,
+            permissions,
+        },
     )
     .await?;
-    let granted: ConsentView =
-        serde_json::from_value(granted).context("consent grant response is not a ConsentView")?;
     ensure!(
-        granted.state == arkret_models_collaboration::consent_operations::ConsentState::Active,
-        "consent grant did not produce active current state: {granted:?}"
+        view.permission_scopes.contains(&scope),
+        "replacement omitted its concrete scope"
     );
-
-    Ok((granted, grant_event))
+    Ok((view, event))
 }
 
 async fn revoke_invite_consent(
     holder: &TestActorClient,
     granted: ConsentView,
 ) -> Result<ConsentView> {
-    let principal = holder.principal.as_ref().context("holder has no PCR")?;
-    let revoke_payload = ConsentRevokePayload {
-        consent_id: granted.consent_id,
-        expected_revision: granted.revision,
-        revoked_at: Some(Utc::now()),
-        reason: Some("cotest_holder_quarantine_invalidation".to_owned()),
-    };
-    let revoke_event = holder
-        .author_event(
-            principal.pcr_realm_id.as_str(),
-            "ak.consent.revoke",
-            serde_json::to_value(revoke_payload)?,
-        )
-        .await?;
-    let revoke_submission = EventAdmissionSubmission::new(revoke_event);
-    let revoked = expect_json(
-        holder
-            .post("/_arkret/self/consent/results/revoke")
-            .json(&ConsentRevokeRequestBody {
-                revoke_event: revoke_submission,
-            }),
-        StatusCode::OK,
+    let (expected_current, mut permissions) = read_consent_set(holder, &granted.peer).await?;
+    permissions.retain(|permission| permission.consent_scope != ConsentScope::Invite);
+    let (view, _) = submit_consent_set(
+        holder,
+        ConsentReplacePayload {
+            peer: granted.peer,
+            expected_current,
+            permissions,
+        },
     )
     .await?;
-    serde_json::from_value(revoked).context("consent revoke response is not a ConsentView")
+    Ok(view)
 }
 
 async fn grant_then_revoke_invite_consent(
@@ -645,6 +686,23 @@ pub async fn invite_service_fanout_live_run() -> Result<()> {
         "holder_quarantine cell is not the closed non-empty v1 shape: {}",
         quarantine_row.content
     );
+    let source_actor = ActorId::account(AccountId::new(
+        inviter
+            .principal
+            .as_ref()
+            .context("inviter has no PCR")?
+            .core_id
+            .clone(),
+        DidCoreId::new(inviter.service_id())?,
+    ));
+    let entry = quarantine_row.content["quarantine_entries"]
+        .as_array()
+        .and_then(|entries| entries.first())
+        .context("quarantine omitted its authenticated source")?;
+    ensure!(
+        entry["source_peer_actor_id"] == serde_json::to_value(&source_actor)?,
+        "quarantine did not retain the complete authenticated source Actor"
+    );
     assert_service_account_data_fanout(&holder, server.service_id().as_str(), &quarantine_row)
         .await?;
     assert_service_account_data_fanout(
@@ -656,7 +714,7 @@ pub async fn invite_service_fanout_live_run() -> Result<()> {
 
     let revoked = grant_then_revoke_invite_consent(&holder, &inviter).await?;
     ensure!(
-        revoked.state == arkret_models_collaboration::consent_operations::ConsentState::Revoked,
+        revoked.permission_scopes.is_empty(),
         "consent revoke did not produce revoked current state: {revoked:?}"
     );
     let invalidated_row = account_data_row_on_both_devices(
@@ -674,6 +732,8 @@ pub async fn invite_service_fanout_live_run() -> Result<()> {
             .as_array()
             .is_some_and(Vec::is_empty)
             && invalidated_row.content["last_invalidation"]["reason"] == "consent_revoke"
+            && invalidated_row.content["last_invalidation"]["peer_actor_id"]
+                == serde_json::to_value(&source_actor)?
             && invalidated_row.content["last_invalidation"]["removed_entries"] == json!(1),
         "consent revoke did not persist the closed quarantine invalidation: {}",
         invalidated_row.content
@@ -737,13 +797,13 @@ pub async fn consent_current_and_invite_gate_live_run() -> Result<()> {
     )
     .await?;
     let (granted, grant_event) = grant_invite_consent(&holder, &inviter).await?;
-    let retry_body = ConsentGrantRequestBody {
-        grant_event: EventAdmissionSubmission::new(grant_event.clone()),
+    let retry_body = ConsentReplaceRequestBody {
+        consent_event: EventAdmissionSubmission::new(grant_event.clone()),
     };
     let duplicate: ConsentView = serde_json::from_value(
         expect_json(
             holder
-                .post("/_arkret/self/consent/results/grant")
+                .post("/_arkret/self/consent/results/replace")
                 .json(&retry_body),
             StatusCode::OK,
         )
@@ -755,7 +815,7 @@ pub async fn consent_current_and_invite_gate_live_run() -> Result<()> {
     );
     expect_json(
         inviter
-            .post("/_arkret/self/consent/results/grant")
+            .post("/_arkret/self/consent/results/replace")
             .json(&retry_body),
         StatusCode::FORBIDDEN,
     )
@@ -769,10 +829,9 @@ pub async fn consent_current_and_invite_gate_live_run() -> Result<()> {
     );
     let read: ConsentView = serde_json::from_value(
         expect_json(
-            holder.get("/_arkret/self/consent/result").query(&[
-                ("peer", serde_json::to_string(&granted.peer)?),
-                ("consent_scope", "invite".to_owned()),
-            ]),
+            holder
+                .get("/_arkret/self/consent/result")
+                .query(&[("peer", serde_json::to_string(&granted.peer)?)]),
             StatusCode::OK,
         )
         .await?,
@@ -790,7 +849,6 @@ pub async fn consent_current_and_invite_gate_live_run() -> Result<()> {
     );
     let evidence = IntroductionEvidence::ConsentGrant {
         consent_grant_ref: grant_event.event_id.clone(),
-        consent_id: Some(granted.consent_id.to_string()),
     };
     let prepared =
         prepare_invite_with_evidence(&inviter, &holder, "Consent active invite", evidence.clone())
@@ -807,26 +865,27 @@ pub async fn consent_current_and_invite_gate_live_run() -> Result<()> {
                 .context("holder PCR")?
                 .pcr_realm_id
                 .as_str(),
-            "ak.consent.revoke",
-            serde_json::to_value(ConsentRevokePayload {
-                consent_id: granted.consent_id.clone(),
-                expected_revision: stale_revision,
-                revoked_at: None,
-                reason: None,
+            "ak.consent.replace",
+            serde_json::to_value(ConsentReplacePayload {
+                peer: granted.peer.clone(),
+                expected_current: ConsentExpectedCurrent::Present {
+                    revision: stale_revision,
+                },
+                permissions: vec![],
             })?,
         )
         .await?;
     let stale = expect_json(
         holder
-            .post("/_arkret/self/consent/results/revoke")
-            .json(&ConsentRevokeRequestBody {
-                revoke_event: EventAdmissionSubmission::new(stale_event),
+            .post("/_arkret/self/consent/results/replace")
+            .json(&ConsentReplaceRequestBody {
+                consent_event: EventAdmissionSubmission::new(stale_event),
             }),
         StatusCode::CONFLICT,
     )
     .await?;
     ensure!(
-        stale["type"] == "https://arkret.org/problems/cas_conflict",
+        stale["type"] == "https://arkret.org/problems/failed_precondition",
         "stale Consent did not keep its registered CAS error"
     );
     let preflight_before_revoke = prepare_invite_with_evidence(
@@ -838,13 +897,13 @@ pub async fn consent_current_and_invite_gate_live_run() -> Result<()> {
     .await?;
     let revoked = revoke_invite_consent(&holder, granted.clone()).await?;
     ensure!(
-        revoked.state == arkret_models_collaboration::consent_operations::ConsentState::Revoked,
+        revoked.permission_scopes.is_empty(),
         "revoke did not close current"
     );
     let old_result: ConsentView = serde_json::from_value(
         expect_json(
             holder
-                .post("/_arkret/self/consent/results/grant")
+                .post("/_arkret/self/consent/results/replace")
                 .json(&retry_body),
             StatusCode::OK,
         )
@@ -878,69 +937,184 @@ pub async fn consent_current_and_invite_gate_live_run() -> Result<()> {
         &holder,
         IntroductionEvidence::ConsentGrant {
             consent_grant_ref: grant_event.event_id.clone(),
-            consent_id: Some(granted.consent_id.to_string()),
         },
     )
     .await?;
-    let (any, any_event) = grant_scoped_consent(&holder, &inviter, ConsentScope::Any).await?;
-    let evidence = IntroductionEvidence::ConsentGrant {
-        consent_grant_ref: any_event.event_id.clone(),
-        consent_id: Some(any.consent_id.to_string()),
-    };
+    // Another permission in the same exact-peer set cannot authorize invite.
+    let (voice, voice_event) =
+        grant_scoped_consent(&holder, &inviter, ConsentScope::VoiceCall).await?;
     let prepared = prepare_invite_with_evidence(
         &inviter,
         &holder,
-        "any scope actual invite",
-        evidence.clone(),
+        "voice cannot authorize invite",
+        IntroductionEvidence::ConsentGrant {
+            consent_grant_ref: voice_event.event_id,
+        },
     )
     .await?;
     dispatch_explicit_invite(&inviter, prepared).await?;
-    let active = account_data_row(&holder, AccountDataKey::ACCOUNT_INVITE_DELIVERY).await?;
-    ensure!(
-        active.revision > unchanged.revision,
-        "any scope did not authorize actual invite delivery"
-    );
-    let stale =
-        prepare_invite_with_evidence(&inviter, &holder, "any scope pre-revoke", evidence).await?;
-    let (independent, independent_event) = grant_invite_consent(&holder, &inviter).await?;
-    revoke_invite_consent(&holder, any).await?;
-    dispatch_explicit_invite(&inviter, stale).await?;
     let after = account_data_row(&holder, AccountDataKey::ACCOUNT_INVITE_DELIVERY).await?;
     ensure!(
-        after.revision == active.revision && after.content == active.content,
-        "revoked any invitation reused its earlier decision"
+        after.revision == unchanged.revision && after.content == unchanged.content,
+        "voice scope authorized an Invite"
     );
-    let prepared = prepare_invite_with_evidence(
-        &inviter,
-        &holder,
-        "independent concrete invite",
-        IntroductionEvidence::ConsentGrant {
-            consent_grant_ref: independent_event.event_id,
-            consent_id: Some(independent.consent_id.to_string()),
+    let (invite, _) = grant_invite_consent(&holder, &inviter).await?;
+    ensure!(invite.permission_scopes == vec![ConsentScope::Invite, ConsentScope::VoiceCall]);
+    let without_invite = revoke_invite_consent(&holder, invite).await?;
+    ensure!(
+        without_invite.permission_scopes == voice.permission_scopes,
+        "removing invite changed the other permission"
+    );
+    verify_full_set_concurrent_replacement(&holder, without_invite.peer).await?;
+    println!(
+        "[0179-live] exact_replace_replay=1 stale_cas_rejected=1 present_empty=1 concrete_scope_gate=1 unrelated_permission_preserved=1 opaque_deferred=1"
+    );
+    Ok(())
+}
+
+async fn verify_full_set_concurrent_replacement(
+    holder: &TestActorClient,
+    peer: ConsentPeer,
+) -> Result<()> {
+    use crate::harness::CanonicalJsonBody;
+    let (expected_current, _) = read_consent_set(holder, &peer).await?;
+    let permissions: Vec<ConsentPermission> = serde_json::from_value(json!([
+        {"consent_scope":"voice_call", "expires_at":"2026-01-01T00:00:00.000Z", "constraints":[]},
+        {"consent_scope":"presence", "not_before":"2099-01-01T00:00:00.000Z",
+         "constraints":[{"unregistered":{"retain":true}}], "evidence_ref":"", "reason":""}
+    ]))?;
+    submit_consent_set(
+        holder,
+        ConsentReplacePayload {
+            peer: peer.clone(),
+            expected_current,
+            permissions: permissions.clone(),
         },
     )
     .await?;
-    dispatch_explicit_invite(&inviter, prepared).await?;
-    let retained: ConsentList = serde_json::from_value(
-        expect_json(holder.get("/_arkret/self/consent/results"), StatusCode::OK).await?,
-    )?;
+    let (expected_current, complete) = read_consent_set(holder, &peer).await?;
     ensure!(
-        retained
-            .consents
-            .iter()
-            .find(|v| v.consent_id == independent.consent_id)
-            == Some(&independent),
-        "any revoke changed independent Invite grant"
+        complete == permissions,
+        "editing read dropped expired/future entries, unknown constraints or optional presence"
     );
+    let retained = vec![complete[1].clone()];
+    let (removed, _) = submit_consent_set(
+        holder,
+        ConsentReplacePayload {
+            peer: peer.clone(),
+            expected_current,
+            permissions: retained.clone(),
+        },
+    )
+    .await?;
+    let (expected_current, full) = read_consent_set(holder, &peer).await?;
     ensure!(
-        account_data_row(&holder, AccountDataKey::ACCOUNT_INVITE_DELIVERY)
-            .await?
-            .revision
-            > active.revision,
-        "independent concrete Invite grant did not remain eligible"
+        full == retained && removed.permission_scopes == vec![ConsentScope::Presence],
+        "removing voice changed the complete presence entry"
+    );
+
+    let pcr = holder
+        .principal
+        .as_ref()
+        .context("holder PCR")?
+        .pcr_realm_id
+        .as_str();
+    let mut contenders = Vec::new();
+    for reason in ["left", "right"] {
+        let mut permissions = full.clone();
+        permissions[0].reason = Some(reason.to_owned());
+        let event = holder
+            .author_event(
+                pcr,
+                "ak.consent.replace",
+                serde_json::to_value(ConsentReplacePayload {
+                    peer: peer.clone(),
+                    expected_current: expected_current.clone(),
+                    permissions,
+                })?,
+            )
+            .await?;
+        contenders.push(ConsentReplaceRequestBody {
+            consent_event: EventAdmissionSubmission::new(event),
+        });
+    }
+    let (left, right) = tokio::join!(
+        holder
+            .post("/_arkret/self/consent/results/replace")
+            .canonical_json(&contenders[0])?
+            .send(),
+        holder
+            .post("/_arkret/self/consent/results/replace")
+            .canonical_json(&contenders[1])?
+            .send(),
+    );
+    let mut winner = None;
+    for (index, response) in [left?, right?].into_iter().enumerate() {
+        let status = response.status();
+        let body: Value = response.json().await?;
+        if status == StatusCode::OK {
+            ensure!(
+                winner.is_none(),
+                "two writers accepted the same prior revision"
+            );
+            winner = Some((index, serde_json::from_value::<ConsentView>(body)?));
+        } else {
+            ensure!(
+                status == StatusCode::CONFLICT
+                    && body["type"] == "https://arkret.org/problems/failed_precondition",
+                "stale concurrent write did not fail at CAS: {status} {body}"
+            );
+        }
+    }
+    let (winner_index, winner_view) = winner.context("neither concurrent replacement committed")?;
+    let signed_permissions: ConsentReplacePayload = serde_json::from_value(Value::Object(
+        contenders[winner_index]
+            .consent_event
+            .event
+            .payload
+            .clone()
+            .into_iter()
+            .collect(),
+    ))?;
+    let (expected_current, winner_permissions) = read_consent_set(holder, &peer).await?;
+    ensure!(
+        expected_current
+            == ConsentExpectedCurrent::Present {
+                revision: winner_view.revision.clone()
+            }
+            && winner_permissions == signed_permissions.permissions,
+        "current did not retain exactly the winning signed set"
+    );
+    let (empty, _) = submit_consent_set(
+        holder,
+        ConsentReplacePayload {
+            peer: peer.clone(),
+            expected_current,
+            permissions: vec![],
+        },
+    )
+    .await?;
+    let replay: ConsentView = serde_json::from_value(
+        expect_json(
+            holder
+                .post("/_arkret/self/consent/results/replace")
+                .json(&contenders[winner_index]),
+            StatusCode::OK,
+        )
+        .await?,
+    )?;
+    let (current, permissions) = read_consent_set(holder, &peer).await?;
+    ensure!(
+        replay == winner_view
+            && permissions.is_empty()
+            && current
+                == ConsentExpectedCurrent::Present {
+                    revision: empty.revision
+                },
+        "old accepted replay reexecuted CAS or turned present empty into never_written"
     );
     println!(
-        "[2141-live] actual_invite_final_cas_revoke=1 any_derived_invite_denied=1 independent_concrete_invite_current_unchanged=1 opaque_deferred=1"
+        "[0179-set] complete_optional_preservation=1 concurrent_cas_one_winner=1 old_replay_keeps_present_empty=1"
     );
     Ok(())
 }

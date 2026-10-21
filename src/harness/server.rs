@@ -1927,6 +1927,19 @@ impl ArkretServer {
             device_id: device_id.to_owned(),
             session,
             principal,
+            consent_current_authority: self
+                .external_restart
+                .as_ref()
+                .map(|_| -> Result<_> {
+                    Ok((
+                        arkret_wire::DidUrl::new(format!(
+                            "{}#federation-fanout-key",
+                            self.service_did
+                        ))?,
+                        self.federation_signing_key()?.verifying_key().to_bytes(),
+                    ))
+                })
+                .transpose()?,
             controlled_realms: std::sync::Arc::new(std::sync::Mutex::new(
                 std::collections::BTreeSet::new(),
             )),

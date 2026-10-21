@@ -104,7 +104,11 @@ mod profile_matrix;
 mod profile_registry;
 mod proof_context_domain_separation;
 mod protocol_gap_closure;
+mod protocol_simplification;
 mod protocol_time_tolerance;
+pub use protocol_simplification::{
+    PROTOCOL_SIMPLIFICATION_ENTRYPOINT, run_protocol_simplification_shape_suite,
+};
 mod protocol_version;
 mod push_route_revision;
 mod push_rule_core;

@@ -73,7 +73,7 @@ export type AppletPackage = {
     "token_scope": {
       "actions": string[];
       "resources": Array<{
-        "kind": "realm" | "space" | "circle" | "strand" | "message" | "morph" | "object" | "relation" | "view" | "event" | "actor" | "schema" | "policy" | "invite" | "notification" | "read_cursor" | "blob" | "*";
+        "kind": "realm" | "space" | "circle" | "strand" | "message" | "morph" | "object" | "relation" | "view" | "event" | "actor" | "schema" | "policy" | "invite" | "notification" | "read_cursor" | "blob" | "*" | "realm_actor";
         "realm_id"?: string;
         "space_id"?: string;
         "circle_id"?: string;
@@ -96,6 +96,12 @@ export type AppletPackage = {
         } | {
           "kind": "service";
           "service_id": string;
+        } | {
+          "kind": "realm";
+          "realm_actor_id": {
+            "realm_id": string;
+            "principal_id": string;
+          };
         };
         "schema_ref"?: string;
         "policy_id"?: string;
@@ -190,7 +196,7 @@ export type AppletInstallRequestBody = {
       "token_scope": {
         "actions": string[];
         "resources": Array<{
-          "kind": "realm" | "space" | "circle" | "strand" | "message" | "morph" | "object" | "relation" | "view" | "event" | "actor" | "schema" | "policy" | "invite" | "notification" | "read_cursor" | "blob" | "*";
+          "kind": "realm" | "space" | "circle" | "strand" | "message" | "morph" | "object" | "relation" | "view" | "event" | "actor" | "schema" | "policy" | "invite" | "notification" | "read_cursor" | "blob" | "*" | "realm_actor";
           "realm_id"?: string;
           "space_id"?: string;
           "circle_id"?: string;
@@ -213,6 +219,12 @@ export type AppletInstallRequestBody = {
           } | {
             "kind": "service";
             "service_id": string;
+          } | {
+            "kind": "realm";
+            "realm_actor_id": {
+              "realm_id": string;
+              "principal_id": string;
+            };
           };
           "schema_ref"?: string;
           "policy_id"?: string;
@@ -253,6 +265,12 @@ export type AppletInstallRequestBody = {
     } | {
       "kind": "service";
       "service_id": string;
+    } | {
+      "kind": "realm";
+      "realm_actor_id": {
+        "realm_id": string;
+        "principal_id": string;
+      };
     };
     "applet_id": string;
     "service_id": string;
@@ -298,6 +316,9 @@ export type AppletInstallRequestBody = {
         "sidecar_id": string;
       } | {
         "kind": "realm_genesis";
+      } | {
+        "kind": "realm_control";
+        "realm_id": string;
       };
       "actor_id": {
         "kind": "account";
@@ -308,6 +329,12 @@ export type AppletInstallRequestBody = {
       } | {
         "kind": "service";
         "service_id": string;
+      } | {
+        "kind": "realm";
+        "realm_actor_id": {
+          "realm_id": string;
+          "principal_id": string;
+        };
       };
       "executed_by"?: {
         "kind": "account";
@@ -318,6 +345,12 @@ export type AppletInstallRequestBody = {
       } | {
         "kind": "service";
         "service_id": string;
+      } | {
+        "kind": "realm";
+        "realm_actor_id": {
+          "realm_id": string;
+          "principal_id": string;
+        };
       };
       "authorization_ref"?: string | "ak.authority.direct_conversation_participant.v1" | "ak.authority.direct_conversation_bootstrap_participant.v1";
       "applet_id"?: string;
@@ -398,6 +431,9 @@ export type AppletInstallRequestBody = {
         "sidecar_id": string;
       } | {
         "kind": "realm_genesis";
+      } | {
+        "kind": "realm_control";
+        "realm_id": string;
       };
       "actor_id": {
         "kind": "account";
@@ -408,6 +444,12 @@ export type AppletInstallRequestBody = {
       } | {
         "kind": "service";
         "service_id": string;
+      } | {
+        "kind": "realm";
+        "realm_actor_id": {
+          "realm_id": string;
+          "principal_id": string;
+        };
       };
       "executed_by"?: {
         "kind": "account";
@@ -418,6 +460,12 @@ export type AppletInstallRequestBody = {
       } | {
         "kind": "service";
         "service_id": string;
+      } | {
+        "kind": "realm";
+        "realm_actor_id": {
+          "realm_id": string;
+          "principal_id": string;
+        };
       };
       "authorization_ref"?: string | "ak.authority.direct_conversation_participant.v1" | "ak.authority.direct_conversation_bootstrap_participant.v1";
       "applet_id"?: string;
@@ -492,518 +540,6 @@ export type AppletBotPreviewRequestBody = {
   "display_name"?: string;
 };
 
-/** `applet-bot-operations.schema.json#/$defs/bot_actor_provision_request_body` — closed object schema. */
-export type AppletBotProvisionRequestBody = {
-  "authoring_request": {
-    "schema": "ak.schema.applet_managed_actor_authoring_request.v1";
-    "purpose": "provision_bot" | "provision_ghost";
-    "basis": {
-      "schema": "ak.schema.applet_bot_authoring_request_basis.v1";
-      "purpose": "provision_bot";
-      "target_station_id": string;
-      "applet_id": string;
-      "service_id": string;
-      "display_name"?: string;
-      "registration_event_ref": string;
-      "authorization_ref": string;
-      "registration_epoch_evidence": {
-        "did": string;
-        "document_digest": string;
-        "method_version_evidence": {
-          "method": "did:webvh" | "did:key";
-          "unversioned_refetch": false;
-          [key: string]: unknown;
-        } | {
-          "method": "did:webvh";
-          "unversioned_refetch": false;
-          [key: string]: unknown;
-        };
-        "accepted_signing_keys": Array<{
-          "key_ref": string;
-          "public_key_digest": string;
-        }>;
-      };
-      "package_digest": string;
-      "effective_scope": {
-        "kind": "realm";
-        "realm_id": string;
-      } | {
-        "kind": "circle";
-        "realm_id": string;
-        "circle_id": string;
-      };
-      "request_id": string;
-    } | {
-      "schema": "ak.schema.applet_ghost_authoring_request_basis.v1";
-      "purpose": "provision_ghost";
-      "target_station_id": string;
-      "applet_id": string;
-      "service_id": string;
-      "external_ref": {
-        "protocol": string;
-        "instance_id": string;
-        "external_id": string;
-      };
-      "display_name"?: string;
-      "registration_event_ref": string;
-      "authorization_ref": string;
-      "registration_epoch_evidence": {
-        "did": string;
-        "document_digest": string;
-        "method_version_evidence": {
-          "method": "did:webvh" | "did:key";
-          "unversioned_refetch": false;
-          [key: string]: unknown;
-        } | {
-          "method": "did:webvh";
-          "unversioned_refetch": false;
-          [key: string]: unknown;
-        };
-        "accepted_signing_keys": Array<{
-          "key_ref": string;
-          "public_key_digest": string;
-        }>;
-      };
-      "package_digest": string;
-      "effective_scope": {
-        "kind": "realm";
-        "realm_id": string;
-      } | {
-        "kind": "circle";
-        "realm_id": string;
-        "circle_id": string;
-      };
-      "existing_managed_actor"?: {
-        "ghost_actor_id": {
-          "kind": "account";
-          "account_id": {
-            "principal_id": string;
-            "station_id": string;
-          };
-        } | {
-          "kind": "service";
-          "service_id": string;
-        };
-        "managed_actor_provision_ref": string;
-        "principal_control_realm_id": string;
-        "profile_event_ref": string;
-        "accountability_grant_ref": string;
-      };
-    };
-    "governance_station_id": string;
-    "issued_at": string;
-    "expires_at": string;
-    "proof": {
-      "kind": "detached_jws";
-      "verification_method": string;
-      "payload_digest": string;
-      "created_at": string;
-      "audience_id": string;
-      "jws": string;
-    };
-  } & {
-    "purpose"?: "provision_bot";
-    [key: string]: unknown;
-  };
-  "managed_actor_bundle": {
-    "schema": "ak.schema.applet_managed_actor_authoring_bundle.v1";
-    "authoring_request_digest": string;
-    "managed_actor_provision_event": {
-      "event_id": string;
-      "kind": string;
-      "realm_id"?: string;
-      "scope_ref": {
-        "kind": "realm";
-        "realm_id": string;
-      } | {
-        "kind": "circle";
-        "realm_id": string;
-        "circle_id": string;
-      } | {
-        "kind": "sidecar";
-        "realm_id": string;
-        "sidecar_id": string;
-      } | {
-        "kind": "realm_genesis";
-      };
-      "actor_id": {
-        "kind": "account";
-        "account_id": {
-          "principal_id": string;
-          "station_id": string;
-        };
-      } | {
-        "kind": "service";
-        "service_id": string;
-      };
-      "executed_by"?: {
-        "kind": "account";
-        "account_id": {
-          "principal_id": string;
-          "station_id": string;
-        };
-      } | {
-        "kind": "service";
-        "service_id": string;
-      };
-      "authorization_ref"?: string | "ak.authority.direct_conversation_participant.v1" | "ak.authority.direct_conversation_bootstrap_participant.v1";
-      "applet_id"?: string;
-      "external_ref"?: {
-        "schema"?: string;
-        "protocol"?: string;
-        "network_id"?: string;
-        "instance_id"?: string;
-        "user_id"?: string;
-        "location_id"?: string;
-        "event_id"?: string;
-        "external_id"?: string;
-        "uri"?: string;
-        [key: string]: unknown;
-      };
-      "created_at": string;
-      "semantic_refs"?: Array<{
-        "id": string;
-        "role": "authorized_by";
-        "critical": boolean;
-      } | {
-        "id": string;
-        "role": "attestation" | "parent_event" | "after" | "audit_pair" | "recovery_capability" | "accountability" | "bootstrap_genesis" | "disclosure_authorization" | "capture_stop" | "direct_conversation_binding" | "direct_conversation_founding_unit" | "direct_conversation_contact_round" | "direct_conversation_agent_provision" | "applet_managed_actor_provision";
-        "critical": boolean;
-      }>;
-      "payload": Record<string, unknown>;
-      "producer_proof": {
-        "kind": "detached_jws";
-        "verification_method": string;
-        "event_digest": string;
-        "created_at": string;
-        "domain"?: string;
-        "audience"?: string | string[];
-        "proof_purpose"?: "issuer_attestation" | "holder_acceptance";
-        "jws": string;
-      };
-    } & {
-      "kind": "ak.applet.managed_actor.provision";
-      [key: string]: unknown;
-    };
-    "pcr_genesis_event": {
-      "event_id": string;
-      "kind": string;
-      "realm_id"?: string;
-      "scope_ref": {
-        "kind": "realm";
-        "realm_id": string;
-      } | {
-        "kind": "circle";
-        "realm_id": string;
-        "circle_id": string;
-      } | {
-        "kind": "sidecar";
-        "realm_id": string;
-        "sidecar_id": string;
-      } | {
-        "kind": "realm_genesis";
-      };
-      "actor_id": {
-        "kind": "account";
-        "account_id": {
-          "principal_id": string;
-          "station_id": string;
-        };
-      } | {
-        "kind": "service";
-        "service_id": string;
-      };
-      "executed_by"?: {
-        "kind": "account";
-        "account_id": {
-          "principal_id": string;
-          "station_id": string;
-        };
-      } | {
-        "kind": "service";
-        "service_id": string;
-      };
-      "authorization_ref"?: string | "ak.authority.direct_conversation_participant.v1" | "ak.authority.direct_conversation_bootstrap_participant.v1";
-      "applet_id"?: string;
-      "external_ref"?: {
-        "schema"?: string;
-        "protocol"?: string;
-        "network_id"?: string;
-        "instance_id"?: string;
-        "user_id"?: string;
-        "location_id"?: string;
-        "event_id"?: string;
-        "external_id"?: string;
-        "uri"?: string;
-        [key: string]: unknown;
-      };
-      "created_at": string;
-      "semantic_refs"?: Array<{
-        "id": string;
-        "role": "authorized_by";
-        "critical": boolean;
-      } | {
-        "id": string;
-        "role": "attestation" | "parent_event" | "after" | "audit_pair" | "recovery_capability" | "accountability" | "bootstrap_genesis" | "disclosure_authorization" | "capture_stop" | "direct_conversation_binding" | "direct_conversation_founding_unit" | "direct_conversation_contact_round" | "direct_conversation_agent_provision" | "applet_managed_actor_provision";
-        "critical": boolean;
-      }>;
-      "payload": Record<string, unknown>;
-      "producer_proof": {
-        "kind": "detached_jws";
-        "verification_method": string;
-        "event_digest": string;
-        "created_at": string;
-        "domain"?: string;
-        "audience"?: string | string[];
-        "proof_purpose"?: "issuer_attestation" | "holder_acceptance";
-        "jws": string;
-      };
-    } & {
-      "kind": "ak.realm.create";
-      [key: string]: unknown;
-    };
-    "accountability_grant_event": {
-      "event_id": string;
-      "kind": string;
-      "realm_id"?: string;
-      "scope_ref": {
-        "kind": "realm";
-        "realm_id": string;
-      } | {
-        "kind": "circle";
-        "realm_id": string;
-        "circle_id": string;
-      } | {
-        "kind": "sidecar";
-        "realm_id": string;
-        "sidecar_id": string;
-      } | {
-        "kind": "realm_genesis";
-      };
-      "actor_id": {
-        "kind": "account";
-        "account_id": {
-          "principal_id": string;
-          "station_id": string;
-        };
-      } | {
-        "kind": "service";
-        "service_id": string;
-      };
-      "executed_by"?: {
-        "kind": "account";
-        "account_id": {
-          "principal_id": string;
-          "station_id": string;
-        };
-      } | {
-        "kind": "service";
-        "service_id": string;
-      };
-      "authorization_ref"?: string | "ak.authority.direct_conversation_participant.v1" | "ak.authority.direct_conversation_bootstrap_participant.v1";
-      "applet_id"?: string;
-      "external_ref"?: {
-        "schema"?: string;
-        "protocol"?: string;
-        "network_id"?: string;
-        "instance_id"?: string;
-        "user_id"?: string;
-        "location_id"?: string;
-        "event_id"?: string;
-        "external_id"?: string;
-        "uri"?: string;
-        [key: string]: unknown;
-      };
-      "created_at": string;
-      "semantic_refs"?: Array<{
-        "id": string;
-        "role": "authorized_by";
-        "critical": boolean;
-      } | {
-        "id": string;
-        "role": "attestation" | "parent_event" | "after" | "audit_pair" | "recovery_capability" | "accountability" | "bootstrap_genesis" | "disclosure_authorization" | "capture_stop" | "direct_conversation_binding" | "direct_conversation_founding_unit" | "direct_conversation_contact_round" | "direct_conversation_agent_provision" | "applet_managed_actor_provision";
-        "critical": boolean;
-      }>;
-      "payload": Record<string, unknown>;
-      "producer_proof": {
-        "kind": "detached_jws";
-        "verification_method": string;
-        "event_digest": string;
-        "created_at": string;
-        "domain"?: string;
-        "audience"?: string | string[];
-        "proof_purpose"?: "issuer_attestation" | "holder_acceptance";
-        "jws": string;
-      };
-    } & {
-      "kind": "ak.identity.accountability_grant";
-      [key: string]: unknown;
-    };
-    "profile_event": {
-      "event_id": string;
-      "kind": string;
-      "realm_id"?: string;
-      "scope_ref": {
-        "kind": "realm";
-        "realm_id": string;
-      } | {
-        "kind": "circle";
-        "realm_id": string;
-        "circle_id": string;
-      } | {
-        "kind": "sidecar";
-        "realm_id": string;
-        "sidecar_id": string;
-      } | {
-        "kind": "realm_genesis";
-      };
-      "actor_id": {
-        "kind": "account";
-        "account_id": {
-          "principal_id": string;
-          "station_id": string;
-        };
-      } | {
-        "kind": "service";
-        "service_id": string;
-      };
-      "executed_by"?: {
-        "kind": "account";
-        "account_id": {
-          "principal_id": string;
-          "station_id": string;
-        };
-      } | {
-        "kind": "service";
-        "service_id": string;
-      };
-      "authorization_ref"?: string | "ak.authority.direct_conversation_participant.v1" | "ak.authority.direct_conversation_bootstrap_participant.v1";
-      "applet_id"?: string;
-      "external_ref"?: {
-        "schema"?: string;
-        "protocol"?: string;
-        "network_id"?: string;
-        "instance_id"?: string;
-        "user_id"?: string;
-        "location_id"?: string;
-        "event_id"?: string;
-        "external_id"?: string;
-        "uri"?: string;
-        [key: string]: unknown;
-      };
-      "created_at": string;
-      "semantic_refs"?: Array<{
-        "id": string;
-        "role": "authorized_by";
-        "critical": boolean;
-      } | {
-        "id": string;
-        "role": "attestation" | "parent_event" | "after" | "audit_pair" | "recovery_capability" | "accountability" | "bootstrap_genesis" | "disclosure_authorization" | "capture_stop" | "direct_conversation_binding" | "direct_conversation_founding_unit" | "direct_conversation_contact_round" | "direct_conversation_agent_provision" | "applet_managed_actor_provision";
-        "critical": boolean;
-      }>;
-      "payload": Record<string, unknown>;
-      "producer_proof": {
-        "kind": "detached_jws";
-        "verification_method": string;
-        "event_digest": string;
-        "created_at": string;
-        "domain"?: string;
-        "audience"?: string | string[];
-        "proof_purpose"?: "issuer_attestation" | "holder_acceptance";
-        "jws": string;
-      };
-    } & {
-      "kind": "ak.profile.create";
-      [key: string]: unknown;
-    };
-    "proof": {
-      "kind": "detached_jws";
-      "verification_method": string;
-      "payload_digest": string;
-      "created_at": string;
-      "audience_id": string;
-      "jws": string;
-    };
-  };
-  "approval_signatures"?: Array<{
-    "input": {
-      "approval_context": {
-        "context_kind": "grant";
-        "grant_id": string;
-      } | {
-        "context_kind": "realm_governance";
-      } | {
-        "context_kind": "list_wip";
-        "list_space_id": string;
-        "list_policy_revision": {
-          "commit_id": string;
-          "stream_position": number;
-        };
-      } | {
-        "context_kind": "management";
-        "management_operation": "join" | "publish" | "create_bot" | "map_ghost";
-        "effective_scope": {
-          "kind": "realm";
-          "realm_id": string;
-        } | {
-          "kind": "circle";
-          "realm_id": string;
-          "circle_id": string;
-        };
-        "request_id": string;
-      };
-      "approval_target": {
-        "target_kind": "event";
-        "event_id": string;
-      } | {
-        "target_kind": "operation";
-      };
-      "request_canonical_digest": string;
-      "operation": string;
-      "action": string;
-      "realm_id": string;
-      "initiating_actor_id": {
-        "kind": "account";
-        "account_id": {
-          "principal_id": string;
-          "station_id": string;
-        };
-      } | {
-        "kind": "service";
-        "service_id": string;
-      };
-      "approver_did": string;
-      "approved_at": string;
-      "nonce": string;
-    };
-    "proof": {
-      "kind": "detached_jws";
-      "verification_method": string;
-      "jws": string;
-    };
-  }>;
-};
-
-/** `applet-bot-operations.schema.json#/$defs/bot_actor_provision_outcome` — closed object schema. */
-export type AppletBotProvisionOutcome = {
-  "managed_actor_provision_ref": string;
-  "principal_control_realm_id": string;
-  "profile_event_ref": string;
-  "accountability_grant_ref": string;
-  "authorization_ref": string;
-  "display_name"?: string;
-  "bot_actor_id": {
-    "kind": "account";
-    "account_id": {
-      "principal_id": string;
-      "station_id": string;
-    };
-  } | {
-    "kind": "service";
-    "service_id": string;
-  };
-};
-
 /** `applet-authority-material.schema.json#/$defs/request` — closed object schema. */
 export type AppletAuthorityMaterialRequestBody = {
   "effective_scope": {
@@ -1043,6 +579,9 @@ export type AppletAuthorityMaterialOutcome = {
         "kind": "sidecar";
         "realm_id": string;
         "sidecar_id": string;
+      } | {
+        "kind": "realm_control";
+        "realm_id": string;
       };
       "stream_position": number;
       "previous_commit_ref": string | null;
@@ -1062,7 +601,7 @@ export type AppletAuthorityMaterialOutcome = {
     };
     "event": {
       "event_id": string;
-      "kind": "ak.agent.action_approve" | "ak.agent.interaction.set" | "ak.agent.key.authorize" | "ak.agent.key.revoke" | "ak.agent.provision" | "ak.agent.sidecar.exchange.control" | "ak.applet.bridge_error" | "ak.applet.discovery" | "ak.applet.managed_actor.provision" | "ak.applet.registration" | "ak.audit.accessed" | "ak.audit.erasure_receipt" | "ak.call.create" | "ak.call.recording.start" | "ak.call.state" | "ak.capability.grant" | "ak.capability.relinquish" | "ak.capability.revoke" | "ak.circle.archive" | "ak.circle.create" | "ak.circle.history_access" | "ak.circle.member.state" | "ak.circle.restore" | "ak.circle.tombstone" | "ak.circle.update" | "ak.consent.grant" | "ak.consent.revoke" | "ak.contact.accepted" | "ak.contact.rejected" | "ak.contact.requested" | "ak.contact.scope.update" | "ak.contact.tombstone" | "ak.device.authorize" | "ak.device.reanchor" | "ak.device.revoke" | "ak.direct_conversation.bound" | "ak.identity.accountability_grant" | "ak.identity.resolution.update" | "ak.invite.accept" | "ak.invite.cancel" | "ak.invite.claim" | "ak.invite.create" | "ak.invite.revoke" | "ak.invite.third_party" | "ak.key_backup.active_series" | "ak.member.identity.update" | "ak.member.state" | "ak.message.create" | "ak.message.redact" | "ak.message.revise" | "ak.mimi.room_binding" | "ak.mls.commit" | "ak.mls.genesis" | "ak.moderation.decision" | "ak.moderation.decision.lift" | "ak.moderation.franking_proof" | "ak.morph.archive" | "ak.morph.create" | "ak.morph.restore" | "ak.morph.stage.set" | "ak.morph.update" | "ak.organization.moderation_policy" | "ak.pin.add" | "ak.pin.remove" | "ak.pin.reorder" | "ak.policy.action" | "ak.policy.set" | "ak.profile.create" | "ak.profile.realm_override" | "ak.profile.update" | "ak.reaction.add" | "ak.reaction.remove" | "ak.realm.alias" | "ak.realm.archive" | "ak.realm.asset_privacy_policy" | "ak.realm.authority.reset" | "ak.realm.create" | "ak.realm.destroy" | "ak.realm.discovery" | "ak.realm.freeze" | "ak.realm.governance_station.change" | "ak.realm.history_access" | "ak.realm.join_rule" | "ak.realm.link" | "ak.realm.media_service" | "ak.realm.organization" | "ak.realm.owner.transfer" | "ak.realm.plaintext_visible_services" | "ak.realm.policy_bundle" | "ak.realm.preview_policy" | "ak.realm.profile" | "ak.realm.restore" | "ak.realm.schema" | "ak.realm.search_policy" | "ak.realm.set_default_strand" | "ak.realm.tombstone" | "ak.realm.unfreeze" | "ak.redaction" | "ak.relation.create" | "ak.relation.tombstone" | "ak.relation.update" | "ak.rsvp.set" | "ak.schema.define" | "ak.scope.read_receipt_policy" | "ak.self.agent.deactivate" | "ak.self.agent.pause" | "ak.self.agent.resume" | "ak.self.moderation.report" | "ak.sidecar.context.attach" | "ak.sidecar.create" | "ak.space.archive" | "ak.space.create" | "ak.space.parent" | "ak.space.restore" | "ak.space.tombstone" | "ak.space.update" | "ak.strand.archive" | "ak.strand.create" | "ak.strand.move" | "ak.strand.reorder" | "ak.strand.restore" | "ak.strand.stage.set" | "ak.strand.tracks.update" | "ak.strand.update" | "ak.strand.watch.set" | "ak.view.create" | "ak.view.reconcile" | "ak.view.update";
+      "kind": "ak.agent.action_approve" | "ak.agent.interaction.set" | "ak.agent.key.authorize" | "ak.agent.key.revoke" | "ak.agent.provision" | "ak.agent.sidecar.exchange.control" | "ak.applet.bridge_error" | "ak.applet.discovery" | "ak.applet.registration" | "ak.audit.accessed" | "ak.audit.erasure_receipt" | "ak.call.create" | "ak.call.recording.start" | "ak.call.state" | "ak.capability.grant" | "ak.capability.relinquish" | "ak.capability.revoke" | "ak.circle.archive" | "ak.circle.create" | "ak.circle.history_access" | "ak.circle.member.state" | "ak.circle.restore" | "ak.circle.tombstone" | "ak.circle.update" | "ak.consent.replace" | "ak.contact.accepted" | "ak.contact.rejected" | "ak.contact.requested" | "ak.contact.scope.update" | "ak.contact.tombstone" | "ak.device.authorize" | "ak.device.reanchor" | "ak.device.revoke" | "ak.direct_conversation.bound" | "ak.identity.accountability_grant" | "ak.identity.resolution.update" | "ak.invite.accept" | "ak.invite.cancel" | "ak.invite.claim" | "ak.invite.create" | "ak.invite.revoke" | "ak.invite.third_party" | "ak.key_backup.active_series" | "ak.member.identity.update" | "ak.member.state" | "ak.message.create" | "ak.message.redact" | "ak.message.revise" | "ak.mimi.room_binding" | "ak.mls.commit" | "ak.mls.genesis" | "ak.moderation.decision" | "ak.moderation.decision.lift" | "ak.moderation.franking_proof" | "ak.morph.archive" | "ak.morph.create" | "ak.morph.restore" | "ak.morph.stage.set" | "ak.morph.update" | "ak.organization.moderation_policy" | "ak.pin.add" | "ak.pin.remove" | "ak.pin.reorder" | "ak.policy.action" | "ak.policy.set" | "ak.profile.create" | "ak.profile.realm_override" | "ak.profile.update" | "ak.reaction.add" | "ak.reaction.remove" | "ak.realm.actor.control.reset" | "ak.realm.actor.control.update" | "ak.realm.actor.create" | "ak.realm.actor.devices.reset" | "ak.realm.actor.manager.change" | "ak.realm.actor.recovery.begin" | "ak.realm.actor.recovery.set" | "ak.realm.actor.status.set" | "ak.realm.alias" | "ak.realm.archive" | "ak.realm.asset_privacy_policy" | "ak.realm.authority.reset" | "ak.realm.create" | "ak.realm.destroy" | "ak.realm.discovery" | "ak.realm.freeze" | "ak.realm.governance_station.change" | "ak.realm.history_access" | "ak.realm.join_rule" | "ak.realm.link" | "ak.realm.media_service" | "ak.realm.organization" | "ak.realm.owner.transfer" | "ak.realm.plaintext_visible_services" | "ak.realm.policy_bundle" | "ak.realm.preview_policy" | "ak.realm.profile" | "ak.realm.restore" | "ak.realm.schema" | "ak.realm.search_policy" | "ak.realm.set_default_strand" | "ak.realm.tombstone" | "ak.realm.unfreeze" | "ak.redaction" | "ak.relation.create" | "ak.relation.tombstone" | "ak.relation.update" | "ak.rsvp.set" | "ak.schema.define" | "ak.scope.read_receipt_policy" | "ak.self.agent.deactivate" | "ak.self.agent.pause" | "ak.self.agent.resume" | "ak.self.moderation.report" | "ak.sidecar.context.attach" | "ak.sidecar.create" | "ak.space.archive" | "ak.space.create" | "ak.space.parent" | "ak.space.restore" | "ak.space.tombstone" | "ak.space.update" | "ak.strand.archive" | "ak.strand.create" | "ak.strand.move" | "ak.strand.reorder" | "ak.strand.restore" | "ak.strand.stage.set" | "ak.strand.tracks.update" | "ak.strand.update" | "ak.strand.watch.set" | "ak.view.create" | "ak.view.reconcile" | "ak.view.update";
       "realm_id"?: string;
       "scope_ref": {
         "kind": "realm";
@@ -1077,6 +616,9 @@ export type AppletAuthorityMaterialOutcome = {
         "sidecar_id": string;
       } | {
         "kind": "realm_genesis";
+      } | {
+        "kind": "realm_control";
+        "realm_id": string;
       };
       "actor_id": {
         "kind": "account";
@@ -1087,6 +629,12 @@ export type AppletAuthorityMaterialOutcome = {
       } | {
         "kind": "service";
         "service_id": string;
+      } | {
+        "kind": "realm";
+        "realm_actor_id": {
+          "realm_id": string;
+          "principal_id": string;
+        };
       };
       "executed_by"?: {
         "kind": "account";
@@ -1097,6 +645,12 @@ export type AppletAuthorityMaterialOutcome = {
       } | {
         "kind": "service";
         "service_id": string;
+      } | {
+        "kind": "realm";
+        "realm_actor_id": {
+          "realm_id": string;
+          "principal_id": string;
+        };
       };
       "authorization_ref"?: string | "ak.authority.direct_conversation_participant.v1" | "ak.authority.direct_conversation_bootstrap_participant.v1";
       "applet_id"?: string;
@@ -1280,6 +834,20 @@ export type AppletAuthorityMaterialOutcome = {
           }>;
         };
       };
+    };
+    "producer_signer_fact"?: {
+      "kind": "realm_device";
+      "event_id": string;
+      "actor_id": {
+        "kind": "realm";
+        [key: string]: unknown;
+      };
+      "verification_method": string;
+      "public_key_b64u": string;
+      "accepted_at": string;
+      "device_id": string;
+      "authorization_event_id": string;
+      "authorized_generation_ref": number;
     };
   };
   "grant_events": Array<{
@@ -1297,6 +865,9 @@ export type AppletAuthorityMaterialOutcome = {
         "kind": "sidecar";
         "realm_id": string;
         "sidecar_id": string;
+      } | {
+        "kind": "realm_control";
+        "realm_id": string;
       };
       "stream_position": number;
       "previous_commit_ref": string | null;
@@ -1316,7 +887,7 @@ export type AppletAuthorityMaterialOutcome = {
     };
     "event": {
       "event_id": string;
-      "kind": "ak.agent.action_approve" | "ak.agent.interaction.set" | "ak.agent.key.authorize" | "ak.agent.key.revoke" | "ak.agent.provision" | "ak.agent.sidecar.exchange.control" | "ak.applet.bridge_error" | "ak.applet.discovery" | "ak.applet.managed_actor.provision" | "ak.applet.registration" | "ak.audit.accessed" | "ak.audit.erasure_receipt" | "ak.call.create" | "ak.call.recording.start" | "ak.call.state" | "ak.capability.grant" | "ak.capability.relinquish" | "ak.capability.revoke" | "ak.circle.archive" | "ak.circle.create" | "ak.circle.history_access" | "ak.circle.member.state" | "ak.circle.restore" | "ak.circle.tombstone" | "ak.circle.update" | "ak.consent.grant" | "ak.consent.revoke" | "ak.contact.accepted" | "ak.contact.rejected" | "ak.contact.requested" | "ak.contact.scope.update" | "ak.contact.tombstone" | "ak.device.authorize" | "ak.device.reanchor" | "ak.device.revoke" | "ak.direct_conversation.bound" | "ak.identity.accountability_grant" | "ak.identity.resolution.update" | "ak.invite.accept" | "ak.invite.cancel" | "ak.invite.claim" | "ak.invite.create" | "ak.invite.revoke" | "ak.invite.third_party" | "ak.key_backup.active_series" | "ak.member.identity.update" | "ak.member.state" | "ak.message.create" | "ak.message.redact" | "ak.message.revise" | "ak.mimi.room_binding" | "ak.mls.commit" | "ak.mls.genesis" | "ak.moderation.decision" | "ak.moderation.decision.lift" | "ak.moderation.franking_proof" | "ak.morph.archive" | "ak.morph.create" | "ak.morph.restore" | "ak.morph.stage.set" | "ak.morph.update" | "ak.organization.moderation_policy" | "ak.pin.add" | "ak.pin.remove" | "ak.pin.reorder" | "ak.policy.action" | "ak.policy.set" | "ak.profile.create" | "ak.profile.realm_override" | "ak.profile.update" | "ak.reaction.add" | "ak.reaction.remove" | "ak.realm.alias" | "ak.realm.archive" | "ak.realm.asset_privacy_policy" | "ak.realm.authority.reset" | "ak.realm.create" | "ak.realm.destroy" | "ak.realm.discovery" | "ak.realm.freeze" | "ak.realm.governance_station.change" | "ak.realm.history_access" | "ak.realm.join_rule" | "ak.realm.link" | "ak.realm.media_service" | "ak.realm.organization" | "ak.realm.owner.transfer" | "ak.realm.plaintext_visible_services" | "ak.realm.policy_bundle" | "ak.realm.preview_policy" | "ak.realm.profile" | "ak.realm.restore" | "ak.realm.schema" | "ak.realm.search_policy" | "ak.realm.set_default_strand" | "ak.realm.tombstone" | "ak.realm.unfreeze" | "ak.redaction" | "ak.relation.create" | "ak.relation.tombstone" | "ak.relation.update" | "ak.rsvp.set" | "ak.schema.define" | "ak.scope.read_receipt_policy" | "ak.self.agent.deactivate" | "ak.self.agent.pause" | "ak.self.agent.resume" | "ak.self.moderation.report" | "ak.sidecar.context.attach" | "ak.sidecar.create" | "ak.space.archive" | "ak.space.create" | "ak.space.parent" | "ak.space.restore" | "ak.space.tombstone" | "ak.space.update" | "ak.strand.archive" | "ak.strand.create" | "ak.strand.move" | "ak.strand.reorder" | "ak.strand.restore" | "ak.strand.stage.set" | "ak.strand.tracks.update" | "ak.strand.update" | "ak.strand.watch.set" | "ak.view.create" | "ak.view.reconcile" | "ak.view.update";
+      "kind": "ak.agent.action_approve" | "ak.agent.interaction.set" | "ak.agent.key.authorize" | "ak.agent.key.revoke" | "ak.agent.provision" | "ak.agent.sidecar.exchange.control" | "ak.applet.bridge_error" | "ak.applet.discovery" | "ak.applet.registration" | "ak.audit.accessed" | "ak.audit.erasure_receipt" | "ak.call.create" | "ak.call.recording.start" | "ak.call.state" | "ak.capability.grant" | "ak.capability.relinquish" | "ak.capability.revoke" | "ak.circle.archive" | "ak.circle.create" | "ak.circle.history_access" | "ak.circle.member.state" | "ak.circle.restore" | "ak.circle.tombstone" | "ak.circle.update" | "ak.consent.replace" | "ak.contact.accepted" | "ak.contact.rejected" | "ak.contact.requested" | "ak.contact.scope.update" | "ak.contact.tombstone" | "ak.device.authorize" | "ak.device.reanchor" | "ak.device.revoke" | "ak.direct_conversation.bound" | "ak.identity.accountability_grant" | "ak.identity.resolution.update" | "ak.invite.accept" | "ak.invite.cancel" | "ak.invite.claim" | "ak.invite.create" | "ak.invite.revoke" | "ak.invite.third_party" | "ak.key_backup.active_series" | "ak.member.identity.update" | "ak.member.state" | "ak.message.create" | "ak.message.redact" | "ak.message.revise" | "ak.mimi.room_binding" | "ak.mls.commit" | "ak.mls.genesis" | "ak.moderation.decision" | "ak.moderation.decision.lift" | "ak.moderation.franking_proof" | "ak.morph.archive" | "ak.morph.create" | "ak.morph.restore" | "ak.morph.stage.set" | "ak.morph.update" | "ak.organization.moderation_policy" | "ak.pin.add" | "ak.pin.remove" | "ak.pin.reorder" | "ak.policy.action" | "ak.policy.set" | "ak.profile.create" | "ak.profile.realm_override" | "ak.profile.update" | "ak.reaction.add" | "ak.reaction.remove" | "ak.realm.actor.control.reset" | "ak.realm.actor.control.update" | "ak.realm.actor.create" | "ak.realm.actor.devices.reset" | "ak.realm.actor.manager.change" | "ak.realm.actor.recovery.begin" | "ak.realm.actor.recovery.set" | "ak.realm.actor.status.set" | "ak.realm.alias" | "ak.realm.archive" | "ak.realm.asset_privacy_policy" | "ak.realm.authority.reset" | "ak.realm.create" | "ak.realm.destroy" | "ak.realm.discovery" | "ak.realm.freeze" | "ak.realm.governance_station.change" | "ak.realm.history_access" | "ak.realm.join_rule" | "ak.realm.link" | "ak.realm.media_service" | "ak.realm.organization" | "ak.realm.owner.transfer" | "ak.realm.plaintext_visible_services" | "ak.realm.policy_bundle" | "ak.realm.preview_policy" | "ak.realm.profile" | "ak.realm.restore" | "ak.realm.schema" | "ak.realm.search_policy" | "ak.realm.set_default_strand" | "ak.realm.tombstone" | "ak.realm.unfreeze" | "ak.redaction" | "ak.relation.create" | "ak.relation.tombstone" | "ak.relation.update" | "ak.rsvp.set" | "ak.schema.define" | "ak.scope.read_receipt_policy" | "ak.self.agent.deactivate" | "ak.self.agent.pause" | "ak.self.agent.resume" | "ak.self.moderation.report" | "ak.sidecar.context.attach" | "ak.sidecar.create" | "ak.space.archive" | "ak.space.create" | "ak.space.parent" | "ak.space.restore" | "ak.space.tombstone" | "ak.space.update" | "ak.strand.archive" | "ak.strand.create" | "ak.strand.move" | "ak.strand.reorder" | "ak.strand.restore" | "ak.strand.stage.set" | "ak.strand.tracks.update" | "ak.strand.update" | "ak.strand.watch.set" | "ak.view.create" | "ak.view.reconcile" | "ak.view.update";
       "realm_id"?: string;
       "scope_ref": {
         "kind": "realm";
@@ -1331,6 +902,9 @@ export type AppletAuthorityMaterialOutcome = {
         "sidecar_id": string;
       } | {
         "kind": "realm_genesis";
+      } | {
+        "kind": "realm_control";
+        "realm_id": string;
       };
       "actor_id": {
         "kind": "account";
@@ -1341,6 +915,12 @@ export type AppletAuthorityMaterialOutcome = {
       } | {
         "kind": "service";
         "service_id": string;
+      } | {
+        "kind": "realm";
+        "realm_actor_id": {
+          "realm_id": string;
+          "principal_id": string;
+        };
       };
       "executed_by"?: {
         "kind": "account";
@@ -1351,6 +931,12 @@ export type AppletAuthorityMaterialOutcome = {
       } | {
         "kind": "service";
         "service_id": string;
+      } | {
+        "kind": "realm";
+        "realm_actor_id": {
+          "realm_id": string;
+          "principal_id": string;
+        };
       };
       "authorization_ref"?: string | "ak.authority.direct_conversation_participant.v1" | "ak.authority.direct_conversation_bootstrap_participant.v1";
       "applet_id"?: string;
@@ -1534,6 +1120,20 @@ export type AppletAuthorityMaterialOutcome = {
           }>;
         };
       };
+    };
+    "producer_signer_fact"?: {
+      "kind": "realm_device";
+      "event_id": string;
+      "actor_id": {
+        "kind": "realm";
+        [key: string]: unknown;
+      };
+      "verification_method": string;
+      "public_key_b64u": string;
+      "accepted_at": string;
+      "device_id": string;
+      "authorization_event_id": string;
+      "authorized_generation_ref": number;
     };
   }>;
   "current_results": Array<{
@@ -1552,6 +1152,9 @@ export type AppletAuthorityMaterialOutcome = {
         "kind": "sidecar";
         "realm_id": string;
         "sidecar_id": string;
+      } | {
+        "kind": "realm_control";
+        "realm_id": string;
       };
       "stream_position": number;
       "commit_id": string;
@@ -1571,6 +1174,12 @@ export type AppletAuthorityMaterialOutcome = {
           } | {
             "kind": "service";
             "service_id": string;
+          } | {
+            "kind": "realm";
+            "realm_actor_id": {
+              "realm_id": string;
+              "principal_id": string;
+            };
           };
           "to_ref"?: string | {
             "kind": "account";
@@ -1581,6 +1190,12 @@ export type AppletAuthorityMaterialOutcome = {
           } | {
             "kind": "service";
             "service_id": string;
+          } | {
+            "kind": "realm";
+            "realm_actor_id": {
+              "realm_id": string;
+              "principal_id": string;
+            };
           };
         };
       };
@@ -1595,6 +1210,9 @@ export type AppletAuthorityMaterialOutcome = {
         "kind": "sidecar";
         "realm_id": string;
         "sidecar_id": string;
+      } | {
+        "kind": "realm_control";
+        "realm_id": string;
       };
       "revision": {
         "commit_id": string;
@@ -1623,6 +1241,12 @@ export type AppletAuthorityMaterialOutcome = {
         } | {
           "kind": "service";
           "service_id": string;
+        } | {
+          "kind": "realm";
+          "realm_actor_id": {
+            "realm_id": string;
+            "principal_id": string;
+          };
         };
         "to_ref": string | {
           "kind": "account";
@@ -1633,6 +1257,12 @@ export type AppletAuthorityMaterialOutcome = {
         } | {
           "kind": "service";
           "service_id": string;
+        } | {
+          "kind": "realm";
+          "realm_actor_id": {
+            "realm_id": string;
+            "principal_id": string;
+          };
         };
         "rank"?: string;
         "fields"?: Record<string, unknown>;
@@ -1647,6 +1277,12 @@ export type AppletAuthorityMaterialOutcome = {
         } | {
           "kind": "service";
           "service_id": string;
+        } | {
+          "kind": "realm";
+          "realm_actor_id": {
+            "realm_id": string;
+            "principal_id": string;
+          };
         };
         "created_at": string;
         "updated_by"?: {
@@ -1658,6 +1294,12 @@ export type AppletAuthorityMaterialOutcome = {
         } | {
           "kind": "service";
           "service_id": string;
+        } | {
+          "kind": "realm";
+          "realm_actor_id": {
+            "realm_id": string;
+            "principal_id": string;
+          };
         };
         "updated_at"?: string;
       };
@@ -1677,6 +1319,9 @@ export type AppletAuthorityMaterialOutcome = {
         "kind": "sidecar";
         "realm_id": string;
         "sidecar_id": string;
+      } | {
+        "kind": "realm_control";
+        "realm_id": string;
       };
       "revision": {
         "commit_id": string;
@@ -1727,6 +1372,9 @@ export type AppletAuthorityMaterialOutcome = {
         "kind": "sidecar";
         "realm_id": string;
         "sidecar_id": string;
+      } | {
+        "kind": "realm_control";
+        "realm_id": string;
       };
       "revision": {
         "commit_id": string;
@@ -1755,6 +1403,9 @@ export type AppletAuthorityMaterialOutcome = {
         "kind": "sidecar";
         "realm_id": string;
         "sidecar_id": string;
+      } | {
+        "kind": "realm_control";
+        "realm_id": string;
       };
       "revision": {
         "commit_id": string;
@@ -1773,6 +1424,12 @@ export type AppletAuthorityMaterialOutcome = {
         } | {
           "kind": "service";
           "service_id": string;
+        } | {
+          "kind": "realm";
+          "realm_actor_id": {
+            "realm_id": string;
+            "principal_id": string;
+          };
         };
         "subject": {
           "kind": "account";
@@ -1784,13 +1441,19 @@ export type AppletAuthorityMaterialOutcome = {
           "kind": "service";
           "service_id": string;
         } | {
+          "kind": "realm";
+          "realm_actor_id": {
+            "realm_id": string;
+            "principal_id": string;
+          };
+        } | {
           "kind": "condition";
           "required_claims": unknown[];
           [key: string]: unknown;
         };
         "actions": string[];
         "resources": Array<{
-          "kind": "realm" | "space" | "circle" | "strand" | "message" | "morph" | "object" | "relation" | "view" | "event" | "actor" | "schema" | "policy" | "invite" | "notification" | "read_cursor" | "blob" | "*";
+          "kind": "realm" | "space" | "circle" | "strand" | "message" | "morph" | "object" | "relation" | "view" | "event" | "actor" | "schema" | "policy" | "invite" | "notification" | "read_cursor" | "blob" | "*" | "realm_actor";
           "realm_id"?: string;
           "space_id"?: string;
           "circle_id"?: string;
@@ -1813,6 +1476,12 @@ export type AppletAuthorityMaterialOutcome = {
           } | {
             "kind": "service";
             "service_id": string;
+          } | {
+            "kind": "realm";
+            "realm_actor_id": {
+              "realm_id": string;
+              "principal_id": string;
+            };
           };
           "schema_ref"?: string;
           "policy_id"?: string;
@@ -1900,6 +1569,12 @@ export type AppletAuthorityMaterialOutcome = {
           } | {
             "kind": "service";
             "service_id": string;
+          } | {
+            "kind": "realm";
+            "realm_actor_id": {
+              "realm_id": string;
+              "principal_id": string;
+            };
           };
           "registration_epoch"?: string;
           "blob_max_bytes"?: number;
@@ -1949,6 +1624,12 @@ export type AppletAuthorityMaterialOutcome = {
         } | {
           "kind": "service";
           "service_id": string;
+        } | {
+          "kind": "realm";
+          "realm_actor_id": {
+            "realm_id": string;
+            "principal_id": string;
+          };
         };
         "updated_at"?: string;
         "revoked_by"?: {
@@ -1960,6 +1641,12 @@ export type AppletAuthorityMaterialOutcome = {
         } | {
           "kind": "service";
           "service_id": string;
+        } | {
+          "kind": "realm";
+          "realm_actor_id": {
+            "realm_id": string;
+            "principal_id": string;
+          };
         };
         "revoked_at"?: string;
         "issuer_authority_refs": Array<{
@@ -2013,6 +1700,9 @@ export type AppletAuthorityMaterialOutcome = {
         "kind": "sidecar";
         "realm_id": string;
         "sidecar_id": string;
+      } | {
+        "kind": "realm_control";
+        "realm_id": string;
       };
       "revision": {
         "commit_id": string;
@@ -2032,6 +1722,9 @@ export type AppletAuthorityMaterialOutcome = {
           "sidecar_id": string;
         } | {
           "kind": "realm_genesis";
+        } | {
+          "kind": "realm_control";
+          "realm_id": string;
         };
         "source": {
           "event_id": string;
@@ -2047,6 +1740,9 @@ export type AppletAuthorityMaterialOutcome = {
             "kind": "sidecar";
             "realm_id": string;
             "sidecar_id": string;
+          } | {
+            "kind": "realm_control";
+            "realm_id": string;
           };
           "stream_position": number;
         } | null;
@@ -2069,6 +1765,9 @@ export type AppletAuthorityMaterialOutcome = {
               "kind": "sidecar";
               "realm_id": string;
               "sidecar_id": string;
+            } | {
+              "kind": "realm_control";
+              "realm_id": string;
             };
             "stream_position": number;
           };
@@ -2082,6 +1781,12 @@ export type AppletAuthorityMaterialOutcome = {
           } | {
             "kind": "service";
             "service_id": string;
+          } | {
+            "kind": "realm";
+            "realm_actor_id": {
+              "realm_id": string;
+              "principal_id": string;
+            };
           };
           "payload_digest": string;
         } | null;
@@ -2102,6 +1807,9 @@ export type AppletAuthorityMaterialOutcome = {
         "kind": "sidecar";
         "realm_id": string;
         "sidecar_id": string;
+      } | {
+        "kind": "realm_control";
+        "realm_id": string;
       };
       "revision": {
         "commit_id": string;
@@ -2163,6 +1871,12 @@ export type AppletAuthorityMaterialOutcome = {
             } | {
               "kind": "service";
               "service_id": string;
+            } | {
+              "kind": "realm";
+              "realm_actor_id": {
+                "realm_id": string;
+                "principal_id": string;
+              };
             };
           } | {
             "kind": "installation";
@@ -2193,6 +1907,12 @@ export type AppletAuthorityMaterialOutcome = {
             } | {
               "kind": "service";
               "service_id": string;
+            } | {
+              "kind": "realm";
+              "realm_actor_id": {
+                "realm_id": string;
+                "principal_id": string;
+              };
             }>;
             "threshold": number;
             "max_age_seconds": number;
@@ -2209,6 +1929,12 @@ export type AppletAuthorityMaterialOutcome = {
           } | {
             "kind": "service";
             "service_id": string;
+          } | {
+            "kind": "realm";
+            "realm_actor_id": {
+              "realm_id": string;
+              "principal_id": string;
+            };
           }>;
           "threshold": number;
           "max_age_seconds": number;
@@ -2226,6 +1952,12 @@ export type AppletAuthorityMaterialOutcome = {
         } | {
           "kind": "service";
           "service_id": string;
+        } | {
+          "kind": "realm";
+          "realm_actor_id": {
+            "realm_id": string;
+            "principal_id": string;
+          };
         };
         "created_at": string;
         "updated_by"?: {
@@ -2237,6 +1969,12 @@ export type AppletAuthorityMaterialOutcome = {
         } | {
           "kind": "service";
           "service_id": string;
+        } | {
+          "kind": "realm";
+          "realm_actor_id": {
+            "realm_id": string;
+            "principal_id": string;
+          };
         };
         "updated_at"?: string;
       } | {
@@ -2295,13 +2033,40 @@ export type AppletAuthorityMaterialOutcome = {
       };
     };
   }>;
+  "current_binding": {
+    "status": "active";
+    "registration_ref": {
+      "event_id": string;
+      "commit_id": string;
+      "stream_ref": {
+        "kind": "realm";
+        "realm_id": string;
+      } | {
+        "kind": "circle";
+        "realm_id": string;
+        "circle_id": string;
+      } | {
+        "kind": "sidecar";
+        "realm_id": string;
+        "sidecar_id": string;
+      } | {
+        "kind": "realm_control";
+        "realm_id": string;
+      };
+      "stream_position": number;
+    };
+    "registration_epoch": string;
+    "service_id": string;
+  } | {
+    "status": "inactive";
+  };
 };
 
 /** `applet-device-authentication.schema.json` — closed object schema. */
 export type AppletManagedDeviceMetadata = {
-  "account_id": {
-    "principal_id": string;
-    "station_id": string;
+  "actor_id": {
+    "kind": "realm";
+    [key: string]: unknown;
   };
   "device_id": string;
   "authorization_event_id": string;
@@ -2338,450 +2103,235 @@ export type RealmJoinPrepareRequestBody = {
   };
 };
 
-/** `message-authoring.schema.json#/$defs/message_prepare_request_body` — closed object schema. */
-export type MessagePrepareRequestBody = {
-  "request_id": string;
-  "account_id": {
+/** `event-payload.schema.json#/$defs/consent_peer` — closed object schema. */
+export type ConsentPeer = {
+  "kind": "actor";
+  "actor_id": {
+    "kind": "account";
+    "account_id": {
+      "principal_id": string;
+      "station_id": string;
+    };
+  } | {
+    "kind": "service";
+    "service_id": string;
+  } | {
+    "kind": "realm";
+    "realm_actor_id": {
+      "realm_id": string;
+      "principal_id": string;
+    };
+  };
+};
+
+/** `event-payload.schema.json#/$defs/consent_permission` — closed object schema. */
+export type ConsentPermission = {
+  "consent_scope": "invite" | "voice_call" | "video_call" | "presence";
+  "not_before"?: string;
+  "expires_at"?: string;
+  "constraints"?: Array<Record<string, unknown>>;
+  "evidence_ref"?: string;
+  "reason"?: string;
+};
+
+/** `event-payload.schema.json#/$defs/consent_replace_payload` — closed object schema. */
+export type ConsentReplacePayload = {
+  "peer": {
+    "kind": "actor";
+    "actor_id": {
+      "kind": "account";
+      "account_id": {
+        "principal_id": string;
+        "station_id": string;
+      };
+    } | {
+      "kind": "service";
+      "service_id": string;
+    } | {
+      "kind": "realm";
+      "realm_actor_id": {
+        "realm_id": string;
+        "principal_id": string;
+      };
+    };
+  };
+  "expected_current": {
+    "state": "never_written";
+  } | {
+    "state": "present";
+    "revision": {
+      "commit_id": string;
+      "stream_position": number;
+    };
+  };
+  "permissions": Array<{
+    "consent_scope": "invite" | "voice_call" | "video_call" | "presence";
+    "not_before"?: string;
+    "expires_at"?: string;
+    "constraints"?: Array<Record<string, unknown>>;
+    "evidence_ref"?: string;
+    "reason"?: string;
+  }>;
+};
+
+/** `consent-operations.schema.json#/$defs/consent_view` — closed object schema. */
+export type ConsentView = {
+  "peer": {
+    "kind": "actor";
+    "actor_id": {
+      "kind": "account";
+      "account_id": {
+        "principal_id": string;
+        "station_id": string;
+      };
+    } | {
+      "kind": "service";
+      "service_id": string;
+    } | {
+      "kind": "realm";
+      "realm_actor_id": {
+        "realm_id": string;
+        "principal_id": string;
+      };
+    };
+  };
+  "permission_scopes": Array<"invite" | "voice_call" | "video_call" | "presence">;
+  "updated_at": string;
+  "revision": {
+    "commit_id": string;
+    "stream_position": number;
+  };
+};
+
+/** `consent-operations.schema.json#/$defs/consent_current_read_request_body` — closed object schema. */
+export type ConsentCurrentReadRequestBody = {
+  "holder_account_id": {
     "principal_id": string;
     "station_id": string;
   };
-  "realm_id": string;
-  "intent": {
-    "strand_id": string;
-    "track_name": "discussion";
-    "content": {
-      "kind": "plaintext";
-      "content": {
-        "kind": string;
-        "body": string;
-        "format"?: "plain" | "markdown" | "prosemirror_json";
-        "formatted_body"?: string | Record<string, unknown>;
-        "parts"?: Array<{
-          "kind": string;
-          "body": string;
-          "format"?: "plain" | "markdown" | "prosemirror_json";
-          "formatted_body"?: string | Record<string, unknown>;
-          "parts"?: Array<{
-            "kind": string;
-            "body": string;
-            "format"?: "plain" | "markdown" | "prosemirror_json";
-            "formatted_body"?: string | Record<string, unknown>;
-            "parts"?: Array<{
-              "kind": string;
-              "body": string;
-              "format"?: "plain" | "markdown" | "prosemirror_json";
-              "formatted_body"?: string | Record<string, unknown>;
-              "parts"?: Array<{
-                "kind": string;
-                "body": string;
-                "format"?: "plain" | "markdown" | "prosemirror_json";
-                "formatted_body"?: string | Record<string, unknown>;
-                "parts"?: Array<{
-                  "kind": string;
-                  "body": string;
-                  "format"?: "plain" | "markdown" | "prosemirror_json";
-                  "formatted_body"?: string | Record<string, unknown>;
-                  "parts"?: Array<{
-                    "kind": string;
-                    "body": string;
-                    "format"?: "plain" | "markdown" | "prosemirror_json";
-                    "formatted_body"?: string | Record<string, unknown>;
-                    "parts"?: Array<{
-                      "kind": string;
-                      "body": string;
-                      "format"?: "plain" | "markdown" | "prosemirror_json";
-                      "formatted_body"?: string | Record<string, unknown>;
-                      "parts"?: Array<{
-                        "kind": unknown;
-                        "body": string;
-                        "format"?: "plain" | "markdown" | "prosemirror_json";
-                        "formatted_body"?: unknown;
-                        "parts"?: unknown[];
-                        "mentions"?: unknown[];
-                        "audience_mentions"?: unknown[];
-                        "attachments"?: unknown[];
-                        "reply_context"?: {
-                          "message_ref"?: unknown;
-                          "sender_actor_id"?: unknown;
-                          "excerpt"?: unknown;
-                          [key: string]: unknown;
-                        };
-                        [key: string]: unknown;
-                      }>;
-                      "mentions"?: Array<{
-                        "kind": "mention";
-                        "subject_account_id": unknown;
-                        "display_name_at_time"?: string;
-                        "handle_at_time"?: unknown;
-                        "controller_subject_account_id"?: unknown;
-                        "controller_handle_at_time"?: unknown;
-                        "agent_slug_at_time"?: unknown;
-                        "mention_text_original"?: string;
-                        "resolved_at"?: unknown;
-                      }>;
-                      "audience_mentions"?: Array<{
-                        "kind": "audience_mention";
-                        "audience": "effective_scope_members" | "strand_participants" | "strand_watchers" | "strand_engaged" | "assigned_actors";
-                        "mention_text_original"?: string;
-                        "resolved_at"?: unknown;
-                      }>;
-                      "attachments"?: Array<Record<string, unknown>>;
-                      "reply_context"?: {
-                        "message_ref"?: string;
-                        "sender_actor_id"?: {
-                          "kind": unknown;
-                          "account_id": unknown;
-                        } | {
-                          "kind": unknown;
-                          "service_id": unknown;
-                        };
-                        "excerpt"?: string;
-                        [key: string]: unknown;
-                      };
-                      [key: string]: unknown;
-                    }>;
-                    "mentions"?: Array<{
-                      "kind": "mention";
-                      "subject_account_id": {
-                        "principal_id": string;
-                        "station_id": string;
-                      };
-                      "display_name_at_time"?: string;
-                      "handle_at_time"?: string;
-                      "controller_subject_account_id"?: {
-                        "principal_id": string;
-                        "station_id": string;
-                      };
-                      "controller_handle_at_time"?: string;
-                      "agent_slug_at_time"?: string;
-                      "mention_text_original"?: string;
-                      "resolved_at"?: string;
-                    }>;
-                    "audience_mentions"?: Array<{
-                      "kind": "audience_mention";
-                      "audience": "effective_scope_members" | "strand_participants" | "strand_watchers" | "strand_engaged" | "assigned_actors";
-                      "mention_text_original"?: string;
-                      "resolved_at"?: string;
-                    }>;
-                    "attachments"?: Array<Record<string, unknown>>;
-                    "reply_context"?: {
-                      "message_ref"?: string;
-                      "sender_actor_id"?: {
-                        "kind": "account";
-                        "account_id": {
-                          "principal_id": unknown;
-                          "station_id": unknown;
-                        };
-                      } | {
-                        "kind": "service";
-                        "service_id": string;
-                      };
-                      "excerpt"?: string;
-                      [key: string]: unknown;
-                    };
-                    [key: string]: unknown;
-                  }>;
-                  "mentions"?: Array<{
-                    "kind": "mention";
-                    "subject_account_id": {
-                      "principal_id": string;
-                      "station_id": string;
-                    };
-                    "display_name_at_time"?: string;
-                    "handle_at_time"?: string;
-                    "controller_subject_account_id"?: {
-                      "principal_id": string;
-                      "station_id": string;
-                    };
-                    "controller_handle_at_time"?: string;
-                    "agent_slug_at_time"?: string;
-                    "mention_text_original"?: string;
-                    "resolved_at"?: string;
-                  }>;
-                  "audience_mentions"?: Array<{
-                    "kind": "audience_mention";
-                    "audience": "effective_scope_members" | "strand_participants" | "strand_watchers" | "strand_engaged" | "assigned_actors";
-                    "mention_text_original"?: string;
-                    "resolved_at"?: string;
-                  }>;
-                  "attachments"?: Array<Record<string, unknown>>;
-                  "reply_context"?: {
-                    "message_ref"?: string;
-                    "sender_actor_id"?: {
-                      "kind": "account";
-                      "account_id": {
-                        "principal_id": string;
-                        "station_id": string;
-                      };
-                    } | {
-                      "kind": "service";
-                      "service_id": string;
-                    };
-                    "excerpt"?: string;
-                    [key: string]: unknown;
-                  };
-                  [key: string]: unknown;
-                }>;
-                "mentions"?: Array<{
-                  "kind": "mention";
-                  "subject_account_id": {
-                    "principal_id": string;
-                    "station_id": string;
-                  };
-                  "display_name_at_time"?: string;
-                  "handle_at_time"?: string;
-                  "controller_subject_account_id"?: {
-                    "principal_id": string;
-                    "station_id": string;
-                  };
-                  "controller_handle_at_time"?: string;
-                  "agent_slug_at_time"?: string;
-                  "mention_text_original"?: string;
-                  "resolved_at"?: string;
-                }>;
-                "audience_mentions"?: Array<{
-                  "kind": "audience_mention";
-                  "audience": "effective_scope_members" | "strand_participants" | "strand_watchers" | "strand_engaged" | "assigned_actors";
-                  "mention_text_original"?: string;
-                  "resolved_at"?: string;
-                }>;
-                "attachments"?: Array<Record<string, unknown>>;
-                "reply_context"?: {
-                  "message_ref"?: string;
-                  "sender_actor_id"?: {
-                    "kind": "account";
-                    "account_id": {
-                      "principal_id": string;
-                      "station_id": string;
-                    };
-                  } | {
-                    "kind": "service";
-                    "service_id": string;
-                  };
-                  "excerpt"?: string;
-                  [key: string]: unknown;
-                };
-                [key: string]: unknown;
-              }>;
-              "mentions"?: Array<{
-                "kind": "mention";
-                "subject_account_id": {
-                  "principal_id": string;
-                  "station_id": string;
-                };
-                "display_name_at_time"?: string;
-                "handle_at_time"?: string;
-                "controller_subject_account_id"?: {
-                  "principal_id": string;
-                  "station_id": string;
-                };
-                "controller_handle_at_time"?: string;
-                "agent_slug_at_time"?: string;
-                "mention_text_original"?: string;
-                "resolved_at"?: string;
-              }>;
-              "audience_mentions"?: Array<{
-                "kind": "audience_mention";
-                "audience": "effective_scope_members" | "strand_participants" | "strand_watchers" | "strand_engaged" | "assigned_actors";
-                "mention_text_original"?: string;
-                "resolved_at"?: string;
-              }>;
-              "attachments"?: Array<Record<string, unknown>>;
-              "reply_context"?: {
-                "message_ref"?: string;
-                "sender_actor_id"?: {
-                  "kind": "account";
-                  "account_id": {
-                    "principal_id": string;
-                    "station_id": string;
-                  };
-                } | {
-                  "kind": "service";
-                  "service_id": string;
-                };
-                "excerpt"?: string;
-                [key: string]: unknown;
-              };
-              [key: string]: unknown;
-            }>;
-            "mentions"?: Array<{
-              "kind": "mention";
-              "subject_account_id": {
-                "principal_id": string;
-                "station_id": string;
-              };
-              "display_name_at_time"?: string;
-              "handle_at_time"?: string;
-              "controller_subject_account_id"?: {
-                "principal_id": string;
-                "station_id": string;
-              };
-              "controller_handle_at_time"?: string;
-              "agent_slug_at_time"?: string;
-              "mention_text_original"?: string;
-              "resolved_at"?: string;
-            }>;
-            "audience_mentions"?: Array<{
-              "kind": "audience_mention";
-              "audience": "effective_scope_members" | "strand_participants" | "strand_watchers" | "strand_engaged" | "assigned_actors";
-              "mention_text_original"?: string;
-              "resolved_at"?: string;
-            }>;
-            "attachments"?: Array<Record<string, unknown>>;
-            "reply_context"?: {
-              "message_ref"?: string;
-              "sender_actor_id"?: {
-                "kind": "account";
-                "account_id": {
-                  "principal_id": string;
-                  "station_id": string;
-                };
-              } | {
-                "kind": "service";
-                "service_id": string;
-              };
-              "excerpt"?: string;
-              [key: string]: unknown;
-            };
-            [key: string]: unknown;
-          }>;
-          "mentions"?: Array<{
-            "kind": "mention";
-            "subject_account_id": {
-              "principal_id": string;
-              "station_id": string;
-            };
-            "display_name_at_time"?: string;
-            "handle_at_time"?: string;
-            "controller_subject_account_id"?: {
-              "principal_id": string;
-              "station_id": string;
-            };
-            "controller_handle_at_time"?: string;
-            "agent_slug_at_time"?: string;
-            "mention_text_original"?: string;
-            "resolved_at"?: string;
-          }>;
-          "audience_mentions"?: Array<{
-            "kind": "audience_mention";
-            "audience": "effective_scope_members" | "strand_participants" | "strand_watchers" | "strand_engaged" | "assigned_actors";
-            "mention_text_original"?: string;
-            "resolved_at"?: string;
-          }>;
-          "attachments"?: Array<Record<string, unknown>>;
-          "reply_context"?: {
-            "message_ref"?: string;
-            "sender_actor_id"?: {
-              "kind": "account";
-              "account_id": {
-                "principal_id": string;
-                "station_id": string;
-              };
-            } | {
-              "kind": "service";
-              "service_id": string;
-            };
-            "excerpt"?: string;
-            [key: string]: unknown;
-          };
-          [key: string]: unknown;
-        }>;
-        "mentions"?: Array<{
-          "kind": "mention";
-          "subject_account_id": {
-            "principal_id": string;
-            "station_id": string;
-          };
-          "display_name_at_time"?: string;
-          "handle_at_time"?: string;
-          "controller_subject_account_id"?: {
-            "principal_id": string;
-            "station_id": string;
-          };
-          "controller_handle_at_time"?: string;
-          "agent_slug_at_time"?: string;
-          "mention_text_original"?: string;
-          "resolved_at"?: string;
-        }>;
-        "audience_mentions"?: Array<{
-          "kind": "audience_mention";
-          "audience": "effective_scope_members" | "strand_participants" | "strand_watchers" | "strand_engaged" | "assigned_actors";
-          "mention_text_original"?: string;
-          "resolved_at"?: string;
-        }>;
-        "attachments"?: Array<Record<string, unknown>>;
-        "reply_context"?: {
-          "message_ref"?: string;
-          "sender_actor_id"?: {
-            "kind": "account";
-            "account_id": {
-              "principal_id": string;
-              "station_id": string;
-            };
-          } | {
-            "kind": "service";
-            "service_id": string;
-          };
-          "excerpt"?: string;
-          [key: string]: unknown;
-        };
-        [key: string]: unknown;
-      };
-      "metadata"?: {
-        "fields"?: Record<string, unknown>;
-        [key: string]: unknown;
+  "peer": {
+    "kind": "actor";
+    "actor_id": {
+      "kind": "account";
+      "account_id": {
+        "principal_id": string;
+        "station_id": string;
       };
     } | {
-      "kind": "mls";
-      "encrypted_content": {
-        "version": "1.0";
-        "content_type": string;
-        "encryption_context": {
-          "epoch": number;
-          "group_state_ref": string;
-          "routing_context"?: {
-            "target_ref": string;
-            "routing_tag": string;
-          };
-        };
-        "ciphertext": string;
-      };
-      "encrypted_metadata"?: {
-        "version": "1.0";
-        "content_type": string;
-        "encryption_context": {
-          "epoch": number;
-          "group_state_ref": string;
-          "routing_context"?: {
-            "target_ref": string;
-            "routing_tag": string;
-          };
-        };
-        "ciphertext": string;
-      };
-      "encryption_context": {
-        "scheme": "mls_rfc9420";
-        "effective_scope": {
-          "kind": "realm";
-          "realm_id": string;
-        } | {
-          "kind": "circle";
-          "realm_id": string;
-          "circle_id": string;
-        } | {
-          "kind": "sidecar";
-          "realm_id": string;
-          "sidecar_id": string;
-        } | {
-          "kind": "realm_genesis";
-        };
-        "sender_domain": string;
+      "kind": "service";
+      "service_id": string;
+    } | {
+      "kind": "realm";
+      "realm_actor_id": {
+        "realm_id": string;
+        "principal_id": string;
       };
     };
-    "blob_refs"?: string[];
-    "reply_to_id"?: string;
   };
-  "created_at": string;
+  "audience_actor_id": {
+    "kind": "account";
+    "account_id": {
+      "principal_id": string;
+      "station_id": string;
+    };
+  } | {
+    "kind": "service";
+    "service_id": string;
+  } | {
+    "kind": "realm";
+    "realm_actor_id": {
+      "realm_id": string;
+      "principal_id": string;
+    };
+  };
+  "nonce": string;
+};
+
+/** `consent-operations.schema.json#/$defs/consent_current_read_outcome` — closed object schema. */
+export type ConsentCurrentReadOutcome = {
+  "request_digest": string;
+  "realm_id": string;
+  "governance_generation": number;
+  "effective_stream_head": {
+    "stream_ref": {
+      "kind": "realm";
+      "realm_id": string;
+    } | {
+      "kind": "circle";
+      "realm_id": string;
+      "circle_id": string;
+    } | {
+      "kind": "sidecar";
+      "realm_id": string;
+      "sidecar_id": string;
+    } | {
+      "kind": "realm_control";
+      "realm_id": string;
+    };
+    "stream_position": number;
+    "commit_id": string;
+  };
+  "current": {
+    "state": "present";
+    "result": {
+      "selector": {
+        "kind": "consent";
+        "peer_id": {
+          "kind": "account";
+          "account_id": {
+            "principal_id": string;
+            "station_id": string;
+          };
+        } | {
+          "kind": "service";
+          "service_id": string;
+        } | {
+          "kind": "realm";
+          "realm_actor_id": {
+            "realm_id": string;
+            "principal_id": string;
+          };
+        };
+      };
+      "source_stream_ref": {
+        "kind": "realm";
+        "realm_id": string;
+      } | {
+        "kind": "circle";
+        "realm_id": string;
+        "circle_id": string;
+      } | {
+        "kind": "sidecar";
+        "realm_id": string;
+        "sidecar_id": string;
+      } | {
+        "kind": "realm_control";
+        "realm_id": string;
+      };
+      "revision": {
+        "commit_id": string;
+        "stream_position": number;
+      };
+      "value": {
+        "permissions": Array<{
+          "consent_scope": "invite" | "voice_call" | "video_call" | "presence";
+          "not_before"?: string;
+          "expires_at"?: string;
+          "constraints"?: Array<Record<string, unknown>>;
+          "evidence_ref"?: string;
+          "reason"?: string;
+        }>;
+      };
+    };
+  } | {
+    "state": "never_written";
+  };
+  "evaluated_at": string;
+  "expires_at": string;
+  "proof": {
+    "verification_method": string;
+    "jws": string;
+  };
 };
 
 /** `identity-resolution.schema.json#/$defs/public_principal_resolution` — closed object schema. */
@@ -2918,6 +2468,12 @@ export type CircleView = {
   } | {
     "kind": "service";
     "service_id": string;
+  } | {
+    "kind": "realm";
+    "realm_actor_id": {
+      "realm_id": string;
+      "principal_id": string;
+    };
   }>;
   "created_by": {
     "kind": "account";
@@ -2928,6 +2484,12 @@ export type CircleView = {
   } | {
     "kind": "service";
     "service_id": string;
+  } | {
+    "kind": "realm";
+    "realm_actor_id": {
+      "realm_id": string;
+      "principal_id": string;
+    };
   };
   "created_at": string;
   "updated_by"?: {
@@ -2939,6 +2501,12 @@ export type CircleView = {
   } | {
     "kind": "service";
     "service_id": string;
+  } | {
+    "kind": "realm";
+    "realm_actor_id": {
+      "realm_id": string;
+      "principal_id": string;
+    };
   };
   "updated_at"?: string;
 };
@@ -2955,6 +2523,12 @@ export type CircleMembershipOutcome = {
   } | {
     "kind": "service";
     "service_id": string;
+  } | {
+    "kind": "realm";
+    "realm_actor_id": {
+      "realm_id": string;
+      "principal_id": string;
+    };
   };
   "membership": "join" | "knock" | "leave" | "ban";
 };
@@ -2977,11 +2551,2405 @@ export type ContactPeer = {
   } | {
     "kind": "service";
     "service_id": string;
+  } | {
+    "kind": "realm";
+    "realm_actor_id": {
+      "realm_id": string;
+      "principal_id": string;
+    };
   };
   "controller_account_id": {
     "principal_id": string;
     "station_id": string;
   };
+};
+
+/** `contact-operations.schema.json#/$defs/contact_list_row` — closed object schema. */
+export type ContactListRow = {
+  "peer": {
+    "kind": "human";
+    "account_id": {
+      "principal_id": string;
+      "station_id": string;
+    };
+  } | {
+    "kind": "agent";
+    "actor_id": {
+      "kind": "account";
+      "account_id": {
+        "principal_id": string;
+        "station_id": string;
+      };
+    } | {
+      "kind": "service";
+      "service_id": string;
+    } | {
+      "kind": "realm";
+      "realm_actor_id": {
+        "realm_id": string;
+        "principal_id": string;
+      };
+    };
+    "controller_account_id": {
+      "principal_id": string;
+      "station_id": string;
+    };
+  };
+  "state": "pending_outgoing" | "pending_incoming" | "accepted" | "rejected" | "expired" | "tombstoned";
+  "request_event_ref"?: string;
+  "request_message"?: string;
+  "response_event_ref"?: string;
+  "tombstone_event_ref"?: string;
+  "next_prepare_input"?: {
+    "contact_round_id": string;
+    "version": number;
+    "predecessor_event_ref": string;
+  };
+  "granted_to_peer_scopes": Array<"invite" | "direct_message" | "voice_call" | "video_call" | "presence">;
+  "granted_by_peer_scopes": Array<"invite" | "direct_message" | "voice_call" | "video_call" | "presence">;
+  "bidirectional_scopes": Array<"invite" | "direct_message" | "voice_call" | "video_call" | "presence">;
+  "effective_scopes"?: Array<"invite" | "direct_message" | "voice_call" | "video_call" | "presence">;
+  "direct_conversation"?: {
+    "realm_id": string;
+    "main_strand_id": string;
+    "binding_event_ref": string;
+    "state": "found" | "suspended";
+  };
+  "contact_agents"?: Array<{
+    "actor_id": {
+      "kind": "account";
+      "account_id": {
+        "principal_id": string;
+        "station_id": string;
+      };
+    } | {
+      "kind": "service";
+      "service_id": string;
+    } | {
+      "kind": "realm";
+      "realm_actor_id": {
+        "realm_id": string;
+        "principal_id": string;
+      };
+    };
+    "controller_account_id": {
+      "principal_id": string;
+      "station_id": string;
+    };
+    "display_name"?: string;
+    "agent_slug"?: string;
+    "avatar_blob_ref"?: string;
+    "direct_conversation"?: {
+      "realm_id": string;
+      "main_strand_id": string;
+      "binding_event_ref": string;
+      "state": "found" | "suspended";
+    };
+  }>;
+  "peer_endpoint"?: {
+    "contact_event_ref": string;
+    "device_id": string;
+  };
+};
+
+/** `contact-operations.schema.json#/$defs/contact_operation_request` — closed object schema. */
+export type ContactRequestBody = {
+  "phase": "prepare";
+  "operation_id": string;
+  "idempotency_key": string;
+  "peer": {
+    "kind": "human";
+    "account_id": {
+      "principal_id": string;
+      "station_id": string;
+    };
+  } | {
+    "kind": "agent";
+    "actor_id": {
+      "kind": "account";
+      "account_id": {
+        "principal_id": string;
+        "station_id": string;
+      };
+    } | {
+      "kind": "service";
+      "service_id": string;
+    } | {
+      "kind": "realm";
+      "realm_actor_id": {
+        "realm_id": string;
+        "principal_id": string;
+      };
+    };
+    "controller_account_id": {
+      "principal_id": string;
+      "station_id": string;
+    };
+  };
+  "granted_to_peer_scopes": Array<"invite" | "direct_message" | "voice_call" | "video_call" | "presence">;
+  "introduction_evidence": {
+    "kind": "locator_ref";
+    "principal_locator": {
+      "schema": "ak.schema.principal_locator.v1";
+      "account_id": {
+        "principal_id": string;
+        "station_id": string;
+      };
+      "service_resolution": {
+        "inline": {
+          "service_id": string;
+          "service_kind": string;
+          "method_history_evidence": {
+            "evidence_kind": "webvh_log";
+            "boundary": {
+              "from_method_history_head": string;
+              "from_version_id": string;
+              "to_method_history_head": string;
+              "to_version_id": string;
+            };
+            "evidence": {
+              "kind": "ak.did.binding_evidence.v1";
+              "method": string;
+              "document_digest": string;
+              "method_proofs": Array<{
+                "kind": "webvh_log";
+                "history_head": string;
+                "witnesses": Array<{
+                  "witness_did": string;
+                  "controlling_organization_did": string;
+                }>;
+                "witness_proofs_digest": string;
+              }>;
+            };
+            "log_entries": Array<Record<string, unknown>>;
+            "witness_records": Array<Record<string, unknown>>;
+          } | {
+            "evidence_kind": "did_web_document";
+            "boundary": {
+              "from_method_history_head": string;
+              "from_version_id": string;
+              "to_method_history_head": string;
+              "to_version_id": string;
+            };
+            "evidence": {
+              "kind": "ak.did.binding_evidence.v1";
+              "method": string;
+              "document_digest": string;
+              "method_proofs": Array<{
+                "kind": "webvh_log";
+                "history_head": string;
+                "witnesses": Array<{
+                  "witness_did": string;
+                  "controlling_organization_did": string;
+                }>;
+                "witness_proofs_digest": string;
+              }>;
+            };
+          } | {
+            "evidence_kind": "did_key_expansion";
+            "boundary": {
+              "from_method_history_head": string;
+              "from_version_id": string;
+              "to_method_history_head": string;
+              "to_version_id": string;
+            };
+            "evidence": {
+              "kind": "ak.did.binding_evidence.v1";
+              "method": string;
+              "document_digest": string;
+              "method_proofs": Array<{
+                "kind": "webvh_log";
+                "history_head": string;
+                "witnesses": Array<{
+                  "witness_did": string;
+                  "controlling_organization_did": string;
+                }>;
+                "witness_proofs_digest": string;
+              }>;
+            };
+          };
+          "normalized_did_document": {
+            "did": string;
+            "contexts": Array<string | Record<string, unknown>>;
+            "controller_dids": string[];
+            "also_known_as": string[];
+            "verification_methods": Array<{
+              "verification_method": string;
+              "controller_did": string;
+              "verification_method_suite": string;
+              "public_key_material": Record<string, unknown>;
+              "extensions": Array<{
+                "name": string;
+                "value": unknown;
+              }>;
+            }>;
+            "authentication": Array<{
+              "verification_method": string;
+            }>;
+            "assertion_methods": Array<{
+              "verification_method": string;
+            }>;
+            "key_agreements": Array<{
+              "verification_method": string;
+            }>;
+            "capability_invocations": Array<{
+              "verification_method": string;
+            }>;
+            "capability_delegations": Array<{
+              "verification_method": string;
+            }>;
+            "services": Array<{
+              "uri": string;
+              "protocol_names": string[];
+              "endpoint": unknown;
+              "extensions": Array<{
+                "name": string;
+                "value": unknown;
+              }>;
+            }>;
+            "metadata": {
+              "primary_handle"?: string;
+            };
+            "extensions": Array<{
+              "name": string;
+              "value": unknown;
+            }>;
+          };
+        };
+      } | {
+        "resolution_url": string;
+      };
+      "route_assistance"?: {
+        "mirror_hints": Array<{
+          "mirror_id": string;
+          "service_resolution": {
+            "inline": {
+              "service_id": string;
+              "service_kind": string;
+              "method_history_evidence": {
+                "evidence_kind": "webvh_log";
+                "boundary": {
+                  "from_method_history_head": string;
+                  "from_version_id": string;
+                  "to_method_history_head": string;
+                  "to_version_id": string;
+                };
+                "evidence": {
+                  "kind": "ak.did.binding_evidence.v1";
+                  "method": string;
+                  "document_digest": string;
+                  "method_proofs": Array<{
+                    "kind": "webvh_log";
+                    "history_head": string;
+                    "witnesses": Array<{
+                      "witness_did": string;
+                      "controlling_organization_did": string;
+                    }>;
+                    "witness_proofs_digest": string;
+                  }>;
+                };
+                "log_entries": Array<Record<string, unknown>>;
+                "witness_records": Array<Record<string, unknown>>;
+              } | {
+                "evidence_kind": "did_web_document";
+                "boundary": {
+                  "from_method_history_head": string;
+                  "from_version_id": string;
+                  "to_method_history_head": string;
+                  "to_version_id": string;
+                };
+                "evidence": {
+                  "kind": "ak.did.binding_evidence.v1";
+                  "method": string;
+                  "document_digest": string;
+                  "method_proofs": Array<{
+                    "kind": "webvh_log";
+                    "history_head": string;
+                    "witnesses": Array<{
+                      "witness_did": string;
+                      "controlling_organization_did": string;
+                    }>;
+                    "witness_proofs_digest": string;
+                  }>;
+                };
+              } | {
+                "evidence_kind": "did_key_expansion";
+                "boundary": {
+                  "from_method_history_head": string;
+                  "from_version_id": string;
+                  "to_method_history_head": string;
+                  "to_version_id": string;
+                };
+                "evidence": {
+                  "kind": "ak.did.binding_evidence.v1";
+                  "method": string;
+                  "document_digest": string;
+                  "method_proofs": Array<{
+                    "kind": "webvh_log";
+                    "history_head": string;
+                    "witnesses": Array<{
+                      "witness_did": string;
+                      "controlling_organization_did": string;
+                    }>;
+                    "witness_proofs_digest": string;
+                  }>;
+                };
+              };
+              "normalized_did_document": {
+                "did": string;
+                "contexts": Array<string | Record<string, unknown>>;
+                "controller_dids": string[];
+                "also_known_as": string[];
+                "verification_methods": Array<{
+                  "verification_method": string;
+                  "controller_did": string;
+                  "verification_method_suite": string;
+                  "public_key_material": Record<string, unknown>;
+                  "extensions": Array<{
+                    "name": string;
+                    "value": unknown;
+                  }>;
+                }>;
+                "authentication": Array<{
+                  "verification_method": string;
+                }>;
+                "assertion_methods": Array<{
+                  "verification_method": string;
+                }>;
+                "key_agreements": Array<{
+                  "verification_method": string;
+                }>;
+                "capability_invocations": Array<{
+                  "verification_method": string;
+                }>;
+                "capability_delegations": Array<{
+                  "verification_method": string;
+                }>;
+                "services": Array<{
+                  "uri": string;
+                  "protocol_names": string[];
+                  "endpoint": unknown;
+                  "extensions": Array<{
+                    "name": string;
+                    "value": unknown;
+                  }>;
+                }>;
+                "metadata": {
+                  "primary_handle"?: string;
+                };
+                "extensions": Array<{
+                  "name": string;
+                  "value": unknown;
+                }>;
+              };
+            };
+          } | {
+            "resolution_url": string;
+          };
+        }>;
+      };
+      "issued_at": string;
+      "expires_at": string;
+      "locator_ref_digest": string;
+      "display_hint"?: {
+        "display_name_hint"?: string;
+        "avatar_blob_ref"?: string;
+      };
+      "proofs": Array<{
+        "proof_purpose": "subject_locator_authorization" | "recipient_service_acceptance";
+        "proof": {
+          "kind": "detached_jws";
+          "verification_method": string;
+          "payload_digest": string;
+          "created_at": string;
+          "domain"?: string;
+          "audience"?: string | string[];
+          "proof_purpose"?: "issuer_attestation" | "holder_acceptance" | "status_attestation" | "revocation_authorization" | "governance_authorization";
+          "jws": string;
+        };
+      }>;
+    };
+  } | {
+    "kind": "shared_realm";
+    "realm_id": string;
+    "requester_member_ref": string;
+    "target_member_ref": string;
+  } | {
+    "kind": "handle_claim";
+    "handle": string;
+    "handle_claim": {
+      "schema": "ak.schema.handle_claim.v1";
+      "claim": {
+        "schema": "ak.schema.handle_claim_core.v1";
+        "handle": string;
+        "handle_aliases": string[];
+        "subject_account_id": {
+          "principal_id": string;
+          "station_id": string;
+        };
+        "issuer_id": string;
+        "claim": {
+          "kind": "handle_binding";
+        } | {
+          "kind": "organization_handle";
+          "organization_id": string;
+        };
+        "visibility": "public" | "restricted" | "private";
+        "audience": string | null;
+        "issued_at": string;
+        "expires_at": string | null;
+        "source_refs": string[];
+        "proofs": unknown[];
+      };
+      "status": "pending" | "verified" | "revoked";
+      "as_of": string;
+      "verifier_id": string;
+      "verified_at": string | null;
+      "revocation": {
+        "schema": "ak.schema.handle_claim_revocation.v1";
+        "claim_digest": string;
+        "revoked_at": string;
+        "revoker": {
+          "role": "issuer";
+          "issuer_id": string;
+        } | {
+          "role": "holder";
+          "subject_account_id": {
+            "principal_id": string;
+            "station_id": string;
+          };
+        };
+        "proof": {
+          "kind": "detached_jws";
+          "verification_method": string;
+          "payload_digest": string;
+          "created_at": string;
+          "domain"?: string;
+          "audience"?: string | string[];
+          "proof_purpose"?: "issuer_attestation" | "holder_acceptance" | "status_attestation" | "revocation_authorization" | "governance_authorization";
+          "jws": string;
+        } & {
+          "domain": "ak.handle_claim_revocation.v1";
+          "proof_purpose": "revocation_authorization";
+          [key: string]: unknown;
+        };
+      } | null;
+      "fresh_until": string;
+      "status_proof": {
+        "kind": "detached_jws";
+        "verification_method": string;
+        "payload_digest": string;
+        "created_at": string;
+        "domain"?: string;
+        "audience"?: string | string[];
+        "proof_purpose"?: "issuer_attestation" | "holder_acceptance" | "status_attestation" | "revocation_authorization" | "governance_authorization";
+        "jws": string;
+      } & {
+        "domain": "ak.handle_claim_status.v1";
+        "proof_purpose": "status_attestation";
+        [key: string]: unknown;
+      };
+    };
+    "resolved_by"?: string;
+    "resolved_at"?: string;
+  } | {
+    "kind": "same_station";
+  } | {
+    "kind": "explicit_address";
+  };
+  "message"?: string;
+} | {
+  "phase": "commit";
+  "operation_id": string;
+  "idempotency_key": string;
+  "reservation_handle": string;
+  "signed_event": {
+    "event_id": string;
+    "kind": string;
+    "realm_id"?: string;
+    "scope_ref": {
+      "kind": "realm";
+      "realm_id": string;
+    } | {
+      "kind": "circle";
+      "realm_id": string;
+      "circle_id": string;
+    } | {
+      "kind": "sidecar";
+      "realm_id": string;
+      "sidecar_id": string;
+    } | {
+      "kind": "realm_genesis";
+    } | {
+      "kind": "realm_control";
+      "realm_id": string;
+    };
+    "actor_id": {
+      "kind": "account";
+      "account_id": {
+        "principal_id": string;
+        "station_id": string;
+      };
+    } | {
+      "kind": "service";
+      "service_id": string;
+    } | {
+      "kind": "realm";
+      "realm_actor_id": {
+        "realm_id": string;
+        "principal_id": string;
+      };
+    };
+    "executed_by"?: {
+      "kind": "account";
+      "account_id": {
+        "principal_id": string;
+        "station_id": string;
+      };
+    } | {
+      "kind": "service";
+      "service_id": string;
+    } | {
+      "kind": "realm";
+      "realm_actor_id": {
+        "realm_id": string;
+        "principal_id": string;
+      };
+    };
+    "authorization_ref"?: string | "ak.authority.direct_conversation_participant.v1" | "ak.authority.direct_conversation_bootstrap_participant.v1";
+    "applet_id"?: string;
+    "external_ref"?: {
+      "schema"?: string;
+      "protocol"?: string;
+      "network_id"?: string;
+      "instance_id"?: string;
+      "user_id"?: string;
+      "location_id"?: string;
+      "event_id"?: string;
+      "external_id"?: string;
+      "uri"?: string;
+      [key: string]: unknown;
+    };
+    "created_at": string;
+    "semantic_refs"?: Array<{
+      "id": string;
+      "role": "authorized_by";
+      "critical": boolean;
+    } | {
+      "id": string;
+      "role": "attestation" | "parent_event" | "after" | "audit_pair" | "recovery_capability" | "accountability" | "bootstrap_genesis" | "disclosure_authorization" | "capture_stop" | "direct_conversation_binding" | "direct_conversation_founding_unit" | "direct_conversation_contact_round" | "direct_conversation_agent_provision" | "applet_managed_actor_provision";
+      "critical": boolean;
+    }>;
+    "payload": Record<string, unknown>;
+    "producer_proof": {
+      "kind": "detached_jws";
+      "verification_method": string;
+      "event_digest": string;
+      "created_at": string;
+      "domain"?: string;
+      "audience"?: string | string[];
+      "proof_purpose"?: "issuer_attestation" | "holder_acceptance";
+      "jws": string;
+    };
+  } & {
+    "kind": "ak.contact.requested";
+    [key: string]: unknown;
+  };
+};
+
+/** `contact-operations.schema.json#/$defs/contact_accept_request` — closed object schema. */
+export type ContactRespondRequestBody = {
+  "phase": "prepare";
+  "operation_id": string;
+  "idempotency_key": string;
+  "peer": {
+    "kind": "human";
+    "account_id": {
+      "principal_id": string;
+      "station_id": string;
+    };
+  } | {
+    "kind": "agent";
+    "actor_id": {
+      "kind": "account";
+      "account_id": {
+        "principal_id": string;
+        "station_id": string;
+      };
+    } | {
+      "kind": "service";
+      "service_id": string;
+    } | {
+      "kind": "realm";
+      "realm_actor_id": {
+        "realm_id": string;
+        "principal_id": string;
+      };
+    };
+    "controller_account_id": {
+      "principal_id": string;
+      "station_id": string;
+    };
+  };
+  "request_event_ref": string;
+  "action": "accept";
+  "granted_to_peer_scopes": Array<"invite" | "direct_message" | "voice_call" | "video_call" | "presence">;
+} | {
+  "phase": "commit";
+  "operation_id": string;
+  "idempotency_key": string;
+  "reservation_handle": string;
+  "signed_event": {
+    "event_id": string;
+    "kind": string;
+    "realm_id"?: string;
+    "scope_ref": {
+      "kind": "realm";
+      "realm_id": string;
+    } | {
+      "kind": "circle";
+      "realm_id": string;
+      "circle_id": string;
+    } | {
+      "kind": "sidecar";
+      "realm_id": string;
+      "sidecar_id": string;
+    } | {
+      "kind": "realm_genesis";
+    } | {
+      "kind": "realm_control";
+      "realm_id": string;
+    };
+    "actor_id": {
+      "kind": "account";
+      "account_id": {
+        "principal_id": string;
+        "station_id": string;
+      };
+    } | {
+      "kind": "service";
+      "service_id": string;
+    } | {
+      "kind": "realm";
+      "realm_actor_id": {
+        "realm_id": string;
+        "principal_id": string;
+      };
+    };
+    "executed_by"?: {
+      "kind": "account";
+      "account_id": {
+        "principal_id": string;
+        "station_id": string;
+      };
+    } | {
+      "kind": "service";
+      "service_id": string;
+    } | {
+      "kind": "realm";
+      "realm_actor_id": {
+        "realm_id": string;
+        "principal_id": string;
+      };
+    };
+    "authorization_ref"?: string | "ak.authority.direct_conversation_participant.v1" | "ak.authority.direct_conversation_bootstrap_participant.v1";
+    "applet_id"?: string;
+    "external_ref"?: {
+      "schema"?: string;
+      "protocol"?: string;
+      "network_id"?: string;
+      "instance_id"?: string;
+      "user_id"?: string;
+      "location_id"?: string;
+      "event_id"?: string;
+      "external_id"?: string;
+      "uri"?: string;
+      [key: string]: unknown;
+    };
+    "created_at": string;
+    "semantic_refs"?: Array<{
+      "id": string;
+      "role": "authorized_by";
+      "critical": boolean;
+    } | {
+      "id": string;
+      "role": "attestation" | "parent_event" | "after" | "audit_pair" | "recovery_capability" | "accountability" | "bootstrap_genesis" | "disclosure_authorization" | "capture_stop" | "direct_conversation_binding" | "direct_conversation_founding_unit" | "direct_conversation_contact_round" | "direct_conversation_agent_provision" | "applet_managed_actor_provision";
+      "critical": boolean;
+    }>;
+    "payload": Record<string, unknown>;
+    "producer_proof": {
+      "kind": "detached_jws";
+      "verification_method": string;
+      "event_digest": string;
+      "created_at": string;
+      "domain"?: string;
+      "audience"?: string | string[];
+      "proof_purpose"?: "issuer_attestation" | "holder_acceptance";
+      "jws": string;
+    };
+  } & {
+    "kind": "ak.contact.accepted";
+    [key: string]: unknown;
+  };
+};
+
+/** `contact-operations.schema.json#/$defs/contact_reject_request` — closed object schema. */
+export type ContactRejectRequestBody = {
+  "phase": "prepare";
+  "operation_id": string;
+  "idempotency_key": string;
+  "peer": {
+    "kind": "human";
+    "account_id": {
+      "principal_id": string;
+      "station_id": string;
+    };
+  } | {
+    "kind": "agent";
+    "actor_id": {
+      "kind": "account";
+      "account_id": {
+        "principal_id": string;
+        "station_id": string;
+      };
+    } | {
+      "kind": "service";
+      "service_id": string;
+    } | {
+      "kind": "realm";
+      "realm_actor_id": {
+        "realm_id": string;
+        "principal_id": string;
+      };
+    };
+    "controller_account_id": {
+      "principal_id": string;
+      "station_id": string;
+    };
+  };
+  "request_event_ref": string;
+  "action": "reject";
+} | {
+  "phase": "commit";
+  "operation_id": string;
+  "idempotency_key": string;
+  "reservation_handle": string;
+  "signed_event": {
+    "event_id": string;
+    "kind": string;
+    "realm_id"?: string;
+    "scope_ref": {
+      "kind": "realm";
+      "realm_id": string;
+    } | {
+      "kind": "circle";
+      "realm_id": string;
+      "circle_id": string;
+    } | {
+      "kind": "sidecar";
+      "realm_id": string;
+      "sidecar_id": string;
+    } | {
+      "kind": "realm_genesis";
+    } | {
+      "kind": "realm_control";
+      "realm_id": string;
+    };
+    "actor_id": {
+      "kind": "account";
+      "account_id": {
+        "principal_id": string;
+        "station_id": string;
+      };
+    } | {
+      "kind": "service";
+      "service_id": string;
+    } | {
+      "kind": "realm";
+      "realm_actor_id": {
+        "realm_id": string;
+        "principal_id": string;
+      };
+    };
+    "executed_by"?: {
+      "kind": "account";
+      "account_id": {
+        "principal_id": string;
+        "station_id": string;
+      };
+    } | {
+      "kind": "service";
+      "service_id": string;
+    } | {
+      "kind": "realm";
+      "realm_actor_id": {
+        "realm_id": string;
+        "principal_id": string;
+      };
+    };
+    "authorization_ref"?: string | "ak.authority.direct_conversation_participant.v1" | "ak.authority.direct_conversation_bootstrap_participant.v1";
+    "applet_id"?: string;
+    "external_ref"?: {
+      "schema"?: string;
+      "protocol"?: string;
+      "network_id"?: string;
+      "instance_id"?: string;
+      "user_id"?: string;
+      "location_id"?: string;
+      "event_id"?: string;
+      "external_id"?: string;
+      "uri"?: string;
+      [key: string]: unknown;
+    };
+    "created_at": string;
+    "semantic_refs"?: Array<{
+      "id": string;
+      "role": "authorized_by";
+      "critical": boolean;
+    } | {
+      "id": string;
+      "role": "attestation" | "parent_event" | "after" | "audit_pair" | "recovery_capability" | "accountability" | "bootstrap_genesis" | "disclosure_authorization" | "capture_stop" | "direct_conversation_binding" | "direct_conversation_founding_unit" | "direct_conversation_contact_round" | "direct_conversation_agent_provision" | "applet_managed_actor_provision";
+      "critical": boolean;
+    }>;
+    "payload": Record<string, unknown>;
+    "producer_proof": {
+      "kind": "detached_jws";
+      "verification_method": string;
+      "event_digest": string;
+      "created_at": string;
+      "domain"?: string;
+      "audience"?: string | string[];
+      "proof_purpose"?: "issuer_attestation" | "holder_acceptance";
+      "jws": string;
+    };
+  } & {
+    "kind": "ak.contact.rejected";
+    [key: string]: unknown;
+  };
+};
+
+/** `contact-operations.schema.json#/$defs/contact_tombstone_request` — closed object schema. */
+export type ContactTombstoneRequestBody = {
+  "phase": "prepare";
+  "operation_id": string;
+  "idempotency_key": string;
+  "peer": {
+    "kind": "human";
+    "account_id": {
+      "principal_id": string;
+      "station_id": string;
+    };
+  } | {
+    "kind": "agent";
+    "actor_id": {
+      "kind": "account";
+      "account_id": {
+        "principal_id": string;
+        "station_id": string;
+      };
+    } | {
+      "kind": "service";
+      "service_id": string;
+    } | {
+      "kind": "realm";
+      "realm_actor_id": {
+        "realm_id": string;
+        "principal_id": string;
+      };
+    };
+    "controller_account_id": {
+      "principal_id": string;
+      "station_id": string;
+    };
+  };
+  "contact_round_id": string;
+  "version": number;
+  "predecessor_event_ref": string;
+  "block_peer": boolean;
+} | {
+  "phase": "commit";
+  "operation_id": string;
+  "idempotency_key": string;
+  "reservation_handle": string;
+  "signed_event": {
+    "event_id": string;
+    "kind": string;
+    "realm_id"?: string;
+    "scope_ref": {
+      "kind": "realm";
+      "realm_id": string;
+    } | {
+      "kind": "circle";
+      "realm_id": string;
+      "circle_id": string;
+    } | {
+      "kind": "sidecar";
+      "realm_id": string;
+      "sidecar_id": string;
+    } | {
+      "kind": "realm_genesis";
+    } | {
+      "kind": "realm_control";
+      "realm_id": string;
+    };
+    "actor_id": {
+      "kind": "account";
+      "account_id": {
+        "principal_id": string;
+        "station_id": string;
+      };
+    } | {
+      "kind": "service";
+      "service_id": string;
+    } | {
+      "kind": "realm";
+      "realm_actor_id": {
+        "realm_id": string;
+        "principal_id": string;
+      };
+    };
+    "executed_by"?: {
+      "kind": "account";
+      "account_id": {
+        "principal_id": string;
+        "station_id": string;
+      };
+    } | {
+      "kind": "service";
+      "service_id": string;
+    } | {
+      "kind": "realm";
+      "realm_actor_id": {
+        "realm_id": string;
+        "principal_id": string;
+      };
+    };
+    "authorization_ref"?: string | "ak.authority.direct_conversation_participant.v1" | "ak.authority.direct_conversation_bootstrap_participant.v1";
+    "applet_id"?: string;
+    "external_ref"?: {
+      "schema"?: string;
+      "protocol"?: string;
+      "network_id"?: string;
+      "instance_id"?: string;
+      "user_id"?: string;
+      "location_id"?: string;
+      "event_id"?: string;
+      "external_id"?: string;
+      "uri"?: string;
+      [key: string]: unknown;
+    };
+    "created_at": string;
+    "semantic_refs"?: Array<{
+      "id": string;
+      "role": "authorized_by";
+      "critical": boolean;
+    } | {
+      "id": string;
+      "role": "attestation" | "parent_event" | "after" | "audit_pair" | "recovery_capability" | "accountability" | "bootstrap_genesis" | "disclosure_authorization" | "capture_stop" | "direct_conversation_binding" | "direct_conversation_founding_unit" | "direct_conversation_contact_round" | "direct_conversation_agent_provision" | "applet_managed_actor_provision";
+      "critical": boolean;
+    }>;
+    "payload": Record<string, unknown>;
+    "producer_proof": {
+      "kind": "detached_jws";
+      "verification_method": string;
+      "event_digest": string;
+      "created_at": string;
+      "domain"?: string;
+      "audience"?: string | string[];
+      "proof_purpose"?: "issuer_attestation" | "holder_acceptance";
+      "jws": string;
+    };
+  } & {
+    "kind": "ak.contact.tombstone";
+    [key: string]: unknown;
+  };
+};
+
+/** `contact-operations.schema.json#/$defs/contact_operation_outcome` — closed object schema. */
+export type ContactOperationOutcome = {
+  "status": "prepared";
+  "result_kind": "request";
+  "operation_id": string;
+  "reservation_handle": string;
+  "expires_at": string;
+  "event_draft": {
+    "unsigned_event_bytes": string;
+    "event_digest": string;
+  };
+} | {
+  "status": "prepared";
+  "result_kind": "response";
+  "operation_id": string;
+  "reservation_handle": string;
+  "expires_at": string;
+  "event_draft": {
+    "unsigned_event_bytes": string;
+    "event_digest": string;
+  };
+} | {
+  "status": "prepared";
+  "result_kind": "reject";
+  "operation_id": string;
+  "reservation_handle": string;
+  "expires_at": string;
+  "event_draft": {
+    "unsigned_event_bytes": string;
+    "event_digest": string;
+  };
+} | {
+  "status": "prepared";
+  "result_kind": "scope_update";
+  "operation_id": string;
+  "reservation_handle": string;
+  "expires_at": string;
+  "event_draft": {
+    "unsigned_event_bytes": string;
+    "event_digest": string;
+  };
+} | {
+  "status": "prepared";
+  "result_kind": "tombstone";
+  "operation_id": string;
+  "reservation_handle": string;
+  "expires_at": string;
+  "event_draft": {
+    "unsigned_event_bytes": string;
+    "event_digest": string;
+  };
+} | {
+  "status": "accepted";
+  "result_kind": "request";
+  "operation_id": string;
+  "request_acceptance_receipt": {
+    "core": {
+      "trust_domain_id": string;
+      "holder": {
+        "kind": "human";
+        "account_id": {
+          "principal_id": string;
+          "station_id": string;
+        };
+      } | {
+        "kind": "agent";
+        "actor_id": {
+          "kind": "account";
+          "account_id": {
+            "principal_id": string;
+            "station_id": string;
+          };
+        } | {
+          "kind": "service";
+          "service_id": string;
+        } | {
+          "kind": "realm";
+          "realm_actor_id": {
+            "realm_id": string;
+            "principal_id": string;
+          };
+        };
+        "controller_account_id": {
+          "principal_id": string;
+          "station_id": string;
+        };
+      };
+      "peer": {
+        "kind": "human";
+        "account_id": {
+          "principal_id": string;
+          "station_id": string;
+        };
+      } | {
+        "kind": "agent";
+        "actor_id": {
+          "kind": "account";
+          "account_id": {
+            "principal_id": string;
+            "station_id": string;
+          };
+        } | {
+          "kind": "service";
+          "service_id": string;
+        } | {
+          "kind": "realm";
+          "realm_actor_id": {
+            "realm_id": string;
+            "principal_id": string;
+          };
+        };
+        "controller_account_id": {
+          "principal_id": string;
+          "station_id": string;
+        };
+      };
+      "initial_contact_round_id"?: string;
+      "version": number;
+      "predecessor_event_ref"?: string;
+      "request_event_ref": string;
+      "producer_signer": {
+        "verification_method": string;
+        "public_key_b64u": string;
+      } | {
+        "verification_method": string;
+        "public_key_b64u": string;
+        "delegated_actor_did": string;
+      };
+      "source_checkpoint": string;
+      "accepted_at": string;
+      "issuer_id": string;
+    };
+    "receipt_digest": string;
+    "signature": {
+      "verification_method": string;
+      "created_at": string;
+      "jws": string;
+    };
+  };
+} | {
+  "status": "accepted";
+  "result_kind": "response";
+  "operation_id": string;
+  "normal_response_acceptance_receipt": {
+    "trust_domain_id": string;
+    "initial_contact_round_id"?: string;
+    "version": number;
+    "predecessor_event_ref"?: string;
+    "contact_round_id": string;
+    "request_receipt": {
+      "core": {
+        "trust_domain_id": string;
+        "holder": {
+          "kind": "human";
+          "account_id": {
+            "principal_id": string;
+            "station_id": string;
+          };
+        } | {
+          "kind": "agent";
+          "actor_id": {
+            "kind": "account";
+            "account_id": {
+              "principal_id": string;
+              "station_id": string;
+            };
+          } | {
+            "kind": "service";
+            "service_id": string;
+          } | {
+            "kind": "realm";
+            "realm_actor_id": {
+              "realm_id": string;
+              "principal_id": string;
+            };
+          };
+          "controller_account_id": {
+            "principal_id": string;
+            "station_id": string;
+          };
+        };
+        "peer": {
+          "kind": "human";
+          "account_id": {
+            "principal_id": string;
+            "station_id": string;
+          };
+        } | {
+          "kind": "agent";
+          "actor_id": {
+            "kind": "account";
+            "account_id": {
+              "principal_id": string;
+              "station_id": string;
+            };
+          } | {
+            "kind": "service";
+            "service_id": string;
+          } | {
+            "kind": "realm";
+            "realm_actor_id": {
+              "realm_id": string;
+              "principal_id": string;
+            };
+          };
+          "controller_account_id": {
+            "principal_id": string;
+            "station_id": string;
+          };
+        };
+        "initial_contact_round_id"?: string;
+        "version": number;
+        "predecessor_event_ref"?: string;
+        "request_event_ref": string;
+        "producer_signer": {
+          "verification_method": string;
+          "public_key_b64u": string;
+        } | {
+          "verification_method": string;
+          "public_key_b64u": string;
+          "delegated_actor_did": string;
+        };
+        "source_checkpoint": string;
+        "accepted_at": string;
+        "issuer_id": string;
+      };
+      "receipt_digest": string;
+      "signature": {
+        "verification_method": string;
+        "created_at": string;
+        "jws": string;
+      };
+    };
+    "response_event_ref": string;
+    "producer_signer": {
+      "verification_method": string;
+      "public_key_b64u": string;
+    } | {
+      "verification_method": string;
+      "public_key_b64u": string;
+      "delegated_actor_did": string;
+    };
+    "outgoing_slot_absence_digest": string;
+    "accepted_at": string;
+    "issuer_id": string;
+    "signature": {
+      "verification_method": string;
+      "created_at": string;
+      "jws": string;
+    };
+  };
+  "lineage": {
+    "trust_domain_id": string;
+    "initial_contact_round_id"?: string;
+    "contact_round_id"?: string;
+    "issuer": {
+      "kind": "human";
+      "account_id": {
+        "principal_id": string;
+        "station_id": string;
+      };
+    } | {
+      "kind": "agent";
+      "actor_id": {
+        "kind": "account";
+        "account_id": {
+          "principal_id": string;
+          "station_id": string;
+        };
+      } | {
+        "kind": "service";
+        "service_id": string;
+      } | {
+        "kind": "realm";
+        "realm_actor_id": {
+          "realm_id": string;
+          "principal_id": string;
+        };
+      };
+      "controller_account_id": {
+        "principal_id": string;
+        "station_id": string;
+      };
+    };
+    "peer": {
+      "kind": "human";
+      "account_id": {
+        "principal_id": string;
+        "station_id": string;
+      };
+    } | {
+      "kind": "agent";
+      "actor_id": {
+        "kind": "account";
+        "account_id": {
+          "principal_id": string;
+          "station_id": string;
+        };
+      } | {
+        "kind": "service";
+        "service_id": string;
+      } | {
+        "kind": "realm";
+        "realm_actor_id": {
+          "realm_id": string;
+          "principal_id": string;
+        };
+      };
+      "controller_account_id": {
+        "principal_id": string;
+        "station_id": string;
+      };
+    };
+    "version": number;
+    "predecessor_event_ref"?: string;
+    "event_ref": string;
+    "producer_signer": {
+      "verification_method": string;
+      "public_key_b64u": string;
+    } | {
+      "verification_method": string;
+      "public_key_b64u": string;
+      "delegated_actor_did": string;
+    };
+    "granted_to_peer_scopes": Array<"invite" | "direct_message" | "voice_call" | "video_call" | "presence">;
+    "accepted_at": string;
+    "signature": {
+      "verification_method": string;
+      "created_at": string;
+      "jws": string;
+    };
+  };
+  "current_proof": {
+    "trust_domain_id": string;
+    "holder": {
+      "kind": "human";
+      "account_id": {
+        "principal_id": string;
+        "station_id": string;
+      };
+    } | {
+      "kind": "agent";
+      "actor_id": {
+        "kind": "account";
+        "account_id": {
+          "principal_id": string;
+          "station_id": string;
+        };
+      } | {
+        "kind": "service";
+        "service_id": string;
+      } | {
+        "kind": "realm";
+        "realm_actor_id": {
+          "realm_id": string;
+          "principal_id": string;
+        };
+      };
+      "controller_account_id": {
+        "principal_id": string;
+        "station_id": string;
+      };
+    };
+    "peer": {
+      "kind": "human";
+      "account_id": {
+        "principal_id": string;
+        "station_id": string;
+      };
+    } | {
+      "kind": "agent";
+      "actor_id": {
+        "kind": "account";
+        "account_id": {
+          "principal_id": string;
+          "station_id": string;
+        };
+      } | {
+        "kind": "service";
+        "service_id": string;
+      } | {
+        "kind": "realm";
+        "realm_actor_id": {
+          "realm_id": string;
+          "principal_id": string;
+        };
+      };
+      "controller_account_id": {
+        "principal_id": string;
+        "station_id": string;
+      };
+    };
+    "initial_contact_round_id"?: string;
+    "contact_round_id"?: string;
+    "issuer_id": string;
+    "head_event_ref": string;
+    "version": number;
+    "scope_instances": Array<{
+      "contact_scope": "invite" | "direct_message" | "voice_call" | "video_call" | "presence";
+      "grant_event_ref": string;
+    }>;
+    "closed_round"?: {
+      "contact_round_id": string;
+      "operation": {
+        "kind": "tombstone";
+        "signed_event": {
+          "event_id": string;
+          "kind": string;
+          "realm_id"?: string;
+          "scope_ref": {
+            "kind": "realm";
+            "realm_id": string;
+          } | {
+            "kind": "circle";
+            "realm_id": string;
+            "circle_id": string;
+          } | {
+            "kind": "sidecar";
+            "realm_id": string;
+            "sidecar_id": string;
+          } | {
+            "kind": "realm_genesis";
+          } | {
+            "kind": "realm_control";
+            "realm_id": string;
+          };
+          "actor_id": {
+            "kind": "account";
+            "account_id": {
+              "principal_id": string;
+              "station_id": string;
+            };
+          } | {
+            "kind": "service";
+            "service_id": string;
+          } | {
+            "kind": "realm";
+            "realm_actor_id": {
+              "realm_id": string;
+              "principal_id": string;
+            };
+          };
+          "executed_by"?: {
+            "kind": "account";
+            "account_id": {
+              "principal_id": string;
+              "station_id": string;
+            };
+          } | {
+            "kind": "service";
+            "service_id": string;
+          } | {
+            "kind": "realm";
+            "realm_actor_id": {
+              "realm_id": string;
+              "principal_id": string;
+            };
+          };
+          "authorization_ref"?: string | "ak.authority.direct_conversation_participant.v1" | "ak.authority.direct_conversation_bootstrap_participant.v1";
+          "applet_id"?: string;
+          "external_ref"?: {
+            "schema"?: string;
+            "protocol"?: string;
+            "network_id"?: string;
+            "instance_id"?: string;
+            "user_id"?: string;
+            "location_id"?: string;
+            "event_id"?: string;
+            "external_id"?: string;
+            "uri"?: string;
+            [key: string]: unknown;
+          };
+          "created_at": string;
+          "semantic_refs"?: Array<{
+            "id": string;
+            "role": "authorized_by";
+            "critical": boolean;
+          } | {
+            "id": string;
+            "role": "attestation" | "parent_event" | "after" | "audit_pair" | "recovery_capability" | "accountability" | "bootstrap_genesis" | "disclosure_authorization" | "capture_stop" | "direct_conversation_binding" | "direct_conversation_founding_unit" | "direct_conversation_contact_round" | "direct_conversation_agent_provision" | "applet_managed_actor_provision";
+            "critical": boolean;
+          }>;
+          "payload": Record<string, unknown>;
+          "producer_proof": {
+            "kind": "detached_jws";
+            "verification_method": string;
+            "event_digest": string;
+            "created_at": string;
+            "domain"?: string;
+            "audience"?: string | string[];
+            "proof_purpose"?: "issuer_attestation" | "holder_acceptance";
+            "jws": string;
+          };
+        } & {
+          "kind": "ak.contact.tombstone";
+          [key: string]: unknown;
+        };
+        "lineage": {
+          "trust_domain_id": string;
+          "initial_contact_round_id"?: string;
+          "contact_round_id"?: string;
+          "issuer": {
+            "kind": "human";
+            "account_id": {
+              "principal_id": string;
+              "station_id": string;
+            };
+          } | {
+            "kind": "agent";
+            "actor_id": {
+              "kind": "account";
+              "account_id": {
+                "principal_id": string;
+                "station_id": string;
+              };
+            } | {
+              "kind": "service";
+              "service_id": string;
+            } | {
+              "kind": "realm";
+              "realm_actor_id": {
+                "realm_id": string;
+                "principal_id": string;
+              };
+            };
+            "controller_account_id": {
+              "principal_id": string;
+              "station_id": string;
+            };
+          };
+          "peer": {
+            "kind": "human";
+            "account_id": {
+              "principal_id": string;
+              "station_id": string;
+            };
+          } | {
+            "kind": "agent";
+            "actor_id": {
+              "kind": "account";
+              "account_id": {
+                "principal_id": string;
+                "station_id": string;
+              };
+            } | {
+              "kind": "service";
+              "service_id": string;
+            } | {
+              "kind": "realm";
+              "realm_actor_id": {
+                "realm_id": string;
+                "principal_id": string;
+              };
+            };
+            "controller_account_id": {
+              "principal_id": string;
+              "station_id": string;
+            };
+          };
+          "version": number;
+          "predecessor_event_ref"?: string;
+          "event_ref": string;
+          "producer_signer": {
+            "verification_method": string;
+            "public_key_b64u": string;
+          } | {
+            "verification_method": string;
+            "public_key_b64u": string;
+            "delegated_actor_did": string;
+          };
+          "granted_to_peer_scopes": Array<"invite" | "direct_message" | "voice_call" | "video_call" | "presence">;
+          "accepted_at": string;
+          "signature": {
+            "verification_method": string;
+            "created_at": string;
+            "jws": string;
+          };
+        };
+      };
+    };
+    "issued_at": string;
+    "fresh_until": string;
+    "signature": {
+      "verification_method": string;
+      "created_at": string;
+      "jws": string;
+    };
+  };
+} | {
+  "status": "accepted";
+  "result_kind": "reject";
+  "operation_id": string;
+  "reject_acceptance_receipt": {
+    "trust_domain_id": string;
+    "initial_contact_round_id"?: string;
+    "version": number;
+    "predecessor_event_ref"?: string;
+    "request_receipt": {
+      "core": {
+        "trust_domain_id": string;
+        "holder": {
+          "kind": "human";
+          "account_id": {
+            "principal_id": string;
+            "station_id": string;
+          };
+        } | {
+          "kind": "agent";
+          "actor_id": {
+            "kind": "account";
+            "account_id": {
+              "principal_id": string;
+              "station_id": string;
+            };
+          } | {
+            "kind": "service";
+            "service_id": string;
+          } | {
+            "kind": "realm";
+            "realm_actor_id": {
+              "realm_id": string;
+              "principal_id": string;
+            };
+          };
+          "controller_account_id": {
+            "principal_id": string;
+            "station_id": string;
+          };
+        };
+        "peer": {
+          "kind": "human";
+          "account_id": {
+            "principal_id": string;
+            "station_id": string;
+          };
+        } | {
+          "kind": "agent";
+          "actor_id": {
+            "kind": "account";
+            "account_id": {
+              "principal_id": string;
+              "station_id": string;
+            };
+          } | {
+            "kind": "service";
+            "service_id": string;
+          } | {
+            "kind": "realm";
+            "realm_actor_id": {
+              "realm_id": string;
+              "principal_id": string;
+            };
+          };
+          "controller_account_id": {
+            "principal_id": string;
+            "station_id": string;
+          };
+        };
+        "initial_contact_round_id"?: string;
+        "version": number;
+        "predecessor_event_ref"?: string;
+        "request_event_ref": string;
+        "producer_signer": {
+          "verification_method": string;
+          "public_key_b64u": string;
+        } | {
+          "verification_method": string;
+          "public_key_b64u": string;
+          "delegated_actor_did": string;
+        };
+        "source_checkpoint": string;
+        "accepted_at": string;
+        "issuer_id": string;
+      };
+      "receipt_digest": string;
+      "signature": {
+        "verification_method": string;
+        "created_at": string;
+        "jws": string;
+      };
+    };
+    "reject_event_ref": string;
+    "producer_signer": {
+      "verification_method": string;
+      "public_key_b64u": string;
+    } | {
+      "verification_method": string;
+      "public_key_b64u": string;
+      "delegated_actor_did": string;
+    };
+    "accepted_at": string;
+    "issuer_id": string;
+    "signature": {
+      "verification_method": string;
+      "created_at": string;
+      "jws": string;
+    };
+  };
+} | {
+  "status": "accepted";
+  "result_kind": "scope_update";
+  "operation_id": string;
+  "lineage": {
+    "trust_domain_id": string;
+    "initial_contact_round_id"?: string;
+    "contact_round_id"?: string;
+    "issuer": {
+      "kind": "human";
+      "account_id": {
+        "principal_id": string;
+        "station_id": string;
+      };
+    } | {
+      "kind": "agent";
+      "actor_id": {
+        "kind": "account";
+        "account_id": {
+          "principal_id": string;
+          "station_id": string;
+        };
+      } | {
+        "kind": "service";
+        "service_id": string;
+      } | {
+        "kind": "realm";
+        "realm_actor_id": {
+          "realm_id": string;
+          "principal_id": string;
+        };
+      };
+      "controller_account_id": {
+        "principal_id": string;
+        "station_id": string;
+      };
+    };
+    "peer": {
+      "kind": "human";
+      "account_id": {
+        "principal_id": string;
+        "station_id": string;
+      };
+    } | {
+      "kind": "agent";
+      "actor_id": {
+        "kind": "account";
+        "account_id": {
+          "principal_id": string;
+          "station_id": string;
+        };
+      } | {
+        "kind": "service";
+        "service_id": string;
+      } | {
+        "kind": "realm";
+        "realm_actor_id": {
+          "realm_id": string;
+          "principal_id": string;
+        };
+      };
+      "controller_account_id": {
+        "principal_id": string;
+        "station_id": string;
+      };
+    };
+    "version": number;
+    "predecessor_event_ref"?: string;
+    "event_ref": string;
+    "producer_signer": {
+      "verification_method": string;
+      "public_key_b64u": string;
+    } | {
+      "verification_method": string;
+      "public_key_b64u": string;
+      "delegated_actor_did": string;
+    };
+    "granted_to_peer_scopes": Array<"invite" | "direct_message" | "voice_call" | "video_call" | "presence">;
+    "accepted_at": string;
+    "signature": {
+      "verification_method": string;
+      "created_at": string;
+      "jws": string;
+    };
+  };
+  "current_proof": {
+    "trust_domain_id": string;
+    "holder": {
+      "kind": "human";
+      "account_id": {
+        "principal_id": string;
+        "station_id": string;
+      };
+    } | {
+      "kind": "agent";
+      "actor_id": {
+        "kind": "account";
+        "account_id": {
+          "principal_id": string;
+          "station_id": string;
+        };
+      } | {
+        "kind": "service";
+        "service_id": string;
+      } | {
+        "kind": "realm";
+        "realm_actor_id": {
+          "realm_id": string;
+          "principal_id": string;
+        };
+      };
+      "controller_account_id": {
+        "principal_id": string;
+        "station_id": string;
+      };
+    };
+    "peer": {
+      "kind": "human";
+      "account_id": {
+        "principal_id": string;
+        "station_id": string;
+      };
+    } | {
+      "kind": "agent";
+      "actor_id": {
+        "kind": "account";
+        "account_id": {
+          "principal_id": string;
+          "station_id": string;
+        };
+      } | {
+        "kind": "service";
+        "service_id": string;
+      } | {
+        "kind": "realm";
+        "realm_actor_id": {
+          "realm_id": string;
+          "principal_id": string;
+        };
+      };
+      "controller_account_id": {
+        "principal_id": string;
+        "station_id": string;
+      };
+    };
+    "initial_contact_round_id"?: string;
+    "contact_round_id"?: string;
+    "issuer_id": string;
+    "head_event_ref": string;
+    "version": number;
+    "scope_instances": Array<{
+      "contact_scope": "invite" | "direct_message" | "voice_call" | "video_call" | "presence";
+      "grant_event_ref": string;
+    }>;
+    "closed_round"?: {
+      "contact_round_id": string;
+      "operation": {
+        "kind": "tombstone";
+        "signed_event": {
+          "event_id": string;
+          "kind": string;
+          "realm_id"?: string;
+          "scope_ref": {
+            "kind": "realm";
+            "realm_id": string;
+          } | {
+            "kind": "circle";
+            "realm_id": string;
+            "circle_id": string;
+          } | {
+            "kind": "sidecar";
+            "realm_id": string;
+            "sidecar_id": string;
+          } | {
+            "kind": "realm_genesis";
+          } | {
+            "kind": "realm_control";
+            "realm_id": string;
+          };
+          "actor_id": {
+            "kind": "account";
+            "account_id": {
+              "principal_id": string;
+              "station_id": string;
+            };
+          } | {
+            "kind": "service";
+            "service_id": string;
+          } | {
+            "kind": "realm";
+            "realm_actor_id": {
+              "realm_id": string;
+              "principal_id": string;
+            };
+          };
+          "executed_by"?: {
+            "kind": "account";
+            "account_id": {
+              "principal_id": string;
+              "station_id": string;
+            };
+          } | {
+            "kind": "service";
+            "service_id": string;
+          } | {
+            "kind": "realm";
+            "realm_actor_id": {
+              "realm_id": string;
+              "principal_id": string;
+            };
+          };
+          "authorization_ref"?: string | "ak.authority.direct_conversation_participant.v1" | "ak.authority.direct_conversation_bootstrap_participant.v1";
+          "applet_id"?: string;
+          "external_ref"?: {
+            "schema"?: string;
+            "protocol"?: string;
+            "network_id"?: string;
+            "instance_id"?: string;
+            "user_id"?: string;
+            "location_id"?: string;
+            "event_id"?: string;
+            "external_id"?: string;
+            "uri"?: string;
+            [key: string]: unknown;
+          };
+          "created_at": string;
+          "semantic_refs"?: Array<{
+            "id": string;
+            "role": "authorized_by";
+            "critical": boolean;
+          } | {
+            "id": string;
+            "role": "attestation" | "parent_event" | "after" | "audit_pair" | "recovery_capability" | "accountability" | "bootstrap_genesis" | "disclosure_authorization" | "capture_stop" | "direct_conversation_binding" | "direct_conversation_founding_unit" | "direct_conversation_contact_round" | "direct_conversation_agent_provision" | "applet_managed_actor_provision";
+            "critical": boolean;
+          }>;
+          "payload": Record<string, unknown>;
+          "producer_proof": {
+            "kind": "detached_jws";
+            "verification_method": string;
+            "event_digest": string;
+            "created_at": string;
+            "domain"?: string;
+            "audience"?: string | string[];
+            "proof_purpose"?: "issuer_attestation" | "holder_acceptance";
+            "jws": string;
+          };
+        } & {
+          "kind": "ak.contact.tombstone";
+          [key: string]: unknown;
+        };
+        "lineage": {
+          "trust_domain_id": string;
+          "initial_contact_round_id"?: string;
+          "contact_round_id"?: string;
+          "issuer": {
+            "kind": "human";
+            "account_id": {
+              "principal_id": string;
+              "station_id": string;
+            };
+          } | {
+            "kind": "agent";
+            "actor_id": {
+              "kind": "account";
+              "account_id": {
+                "principal_id": string;
+                "station_id": string;
+              };
+            } | {
+              "kind": "service";
+              "service_id": string;
+            } | {
+              "kind": "realm";
+              "realm_actor_id": {
+                "realm_id": string;
+                "principal_id": string;
+              };
+            };
+            "controller_account_id": {
+              "principal_id": string;
+              "station_id": string;
+            };
+          };
+          "peer": {
+            "kind": "human";
+            "account_id": {
+              "principal_id": string;
+              "station_id": string;
+            };
+          } | {
+            "kind": "agent";
+            "actor_id": {
+              "kind": "account";
+              "account_id": {
+                "principal_id": string;
+                "station_id": string;
+              };
+            } | {
+              "kind": "service";
+              "service_id": string;
+            } | {
+              "kind": "realm";
+              "realm_actor_id": {
+                "realm_id": string;
+                "principal_id": string;
+              };
+            };
+            "controller_account_id": {
+              "principal_id": string;
+              "station_id": string;
+            };
+          };
+          "version": number;
+          "predecessor_event_ref"?: string;
+          "event_ref": string;
+          "producer_signer": {
+            "verification_method": string;
+            "public_key_b64u": string;
+          } | {
+            "verification_method": string;
+            "public_key_b64u": string;
+            "delegated_actor_did": string;
+          };
+          "granted_to_peer_scopes": Array<"invite" | "direct_message" | "voice_call" | "video_call" | "presence">;
+          "accepted_at": string;
+          "signature": {
+            "verification_method": string;
+            "created_at": string;
+            "jws": string;
+          };
+        };
+      };
+    };
+    "issued_at": string;
+    "fresh_until": string;
+    "signature": {
+      "verification_method": string;
+      "created_at": string;
+      "jws": string;
+    };
+  };
+} | {
+  "status": "accepted";
+  "result_kind": "tombstone";
+  "operation_id": string;
+  "lineage": {
+    "trust_domain_id": string;
+    "initial_contact_round_id"?: string;
+    "contact_round_id"?: string;
+    "issuer": {
+      "kind": "human";
+      "account_id": {
+        "principal_id": string;
+        "station_id": string;
+      };
+    } | {
+      "kind": "agent";
+      "actor_id": {
+        "kind": "account";
+        "account_id": {
+          "principal_id": string;
+          "station_id": string;
+        };
+      } | {
+        "kind": "service";
+        "service_id": string;
+      } | {
+        "kind": "realm";
+        "realm_actor_id": {
+          "realm_id": string;
+          "principal_id": string;
+        };
+      };
+      "controller_account_id": {
+        "principal_id": string;
+        "station_id": string;
+      };
+    };
+    "peer": {
+      "kind": "human";
+      "account_id": {
+        "principal_id": string;
+        "station_id": string;
+      };
+    } | {
+      "kind": "agent";
+      "actor_id": {
+        "kind": "account";
+        "account_id": {
+          "principal_id": string;
+          "station_id": string;
+        };
+      } | {
+        "kind": "service";
+        "service_id": string;
+      } | {
+        "kind": "realm";
+        "realm_actor_id": {
+          "realm_id": string;
+          "principal_id": string;
+        };
+      };
+      "controller_account_id": {
+        "principal_id": string;
+        "station_id": string;
+      };
+    };
+    "version": number;
+    "predecessor_event_ref"?: string;
+    "event_ref": string;
+    "producer_signer": {
+      "verification_method": string;
+      "public_key_b64u": string;
+    } | {
+      "verification_method": string;
+      "public_key_b64u": string;
+      "delegated_actor_did": string;
+    };
+    "granted_to_peer_scopes": Array<"invite" | "direct_message" | "voice_call" | "video_call" | "presence">;
+    "accepted_at": string;
+    "signature": {
+      "verification_method": string;
+      "created_at": string;
+      "jws": string;
+    };
+  };
+  "current_proof": {
+    "trust_domain_id": string;
+    "holder": {
+      "kind": "human";
+      "account_id": {
+        "principal_id": string;
+        "station_id": string;
+      };
+    } | {
+      "kind": "agent";
+      "actor_id": {
+        "kind": "account";
+        "account_id": {
+          "principal_id": string;
+          "station_id": string;
+        };
+      } | {
+        "kind": "service";
+        "service_id": string;
+      } | {
+        "kind": "realm";
+        "realm_actor_id": {
+          "realm_id": string;
+          "principal_id": string;
+        };
+      };
+      "controller_account_id": {
+        "principal_id": string;
+        "station_id": string;
+      };
+    };
+    "peer": {
+      "kind": "human";
+      "account_id": {
+        "principal_id": string;
+        "station_id": string;
+      };
+    } | {
+      "kind": "agent";
+      "actor_id": {
+        "kind": "account";
+        "account_id": {
+          "principal_id": string;
+          "station_id": string;
+        };
+      } | {
+        "kind": "service";
+        "service_id": string;
+      } | {
+        "kind": "realm";
+        "realm_actor_id": {
+          "realm_id": string;
+          "principal_id": string;
+        };
+      };
+      "controller_account_id": {
+        "principal_id": string;
+        "station_id": string;
+      };
+    };
+    "initial_contact_round_id"?: string;
+    "contact_round_id"?: string;
+    "issuer_id": string;
+    "head_event_ref": string;
+    "version": number;
+    "scope_instances": Array<{
+      "contact_scope": "invite" | "direct_message" | "voice_call" | "video_call" | "presence";
+      "grant_event_ref": string;
+    }>;
+    "closed_round"?: {
+      "contact_round_id": string;
+      "operation": {
+        "kind": "tombstone";
+        "signed_event": {
+          "event_id": string;
+          "kind": string;
+          "realm_id"?: string;
+          "scope_ref": {
+            "kind": "realm";
+            "realm_id": string;
+          } | {
+            "kind": "circle";
+            "realm_id": string;
+            "circle_id": string;
+          } | {
+            "kind": "sidecar";
+            "realm_id": string;
+            "sidecar_id": string;
+          } | {
+            "kind": "realm_genesis";
+          } | {
+            "kind": "realm_control";
+            "realm_id": string;
+          };
+          "actor_id": {
+            "kind": "account";
+            "account_id": {
+              "principal_id": string;
+              "station_id": string;
+            };
+          } | {
+            "kind": "service";
+            "service_id": string;
+          } | {
+            "kind": "realm";
+            "realm_actor_id": {
+              "realm_id": string;
+              "principal_id": string;
+            };
+          };
+          "executed_by"?: {
+            "kind": "account";
+            "account_id": {
+              "principal_id": string;
+              "station_id": string;
+            };
+          } | {
+            "kind": "service";
+            "service_id": string;
+          } | {
+            "kind": "realm";
+            "realm_actor_id": {
+              "realm_id": string;
+              "principal_id": string;
+            };
+          };
+          "authorization_ref"?: string | "ak.authority.direct_conversation_participant.v1" | "ak.authority.direct_conversation_bootstrap_participant.v1";
+          "applet_id"?: string;
+          "external_ref"?: {
+            "schema"?: string;
+            "protocol"?: string;
+            "network_id"?: string;
+            "instance_id"?: string;
+            "user_id"?: string;
+            "location_id"?: string;
+            "event_id"?: string;
+            "external_id"?: string;
+            "uri"?: string;
+            [key: string]: unknown;
+          };
+          "created_at": string;
+          "semantic_refs"?: Array<{
+            "id": string;
+            "role": "authorized_by";
+            "critical": boolean;
+          } | {
+            "id": string;
+            "role": "attestation" | "parent_event" | "after" | "audit_pair" | "recovery_capability" | "accountability" | "bootstrap_genesis" | "disclosure_authorization" | "capture_stop" | "direct_conversation_binding" | "direct_conversation_founding_unit" | "direct_conversation_contact_round" | "direct_conversation_agent_provision" | "applet_managed_actor_provision";
+            "critical": boolean;
+          }>;
+          "payload": Record<string, unknown>;
+          "producer_proof": {
+            "kind": "detached_jws";
+            "verification_method": string;
+            "event_digest": string;
+            "created_at": string;
+            "domain"?: string;
+            "audience"?: string | string[];
+            "proof_purpose"?: "issuer_attestation" | "holder_acceptance";
+            "jws": string;
+          };
+        } & {
+          "kind": "ak.contact.tombstone";
+          [key: string]: unknown;
+        };
+        "lineage": {
+          "trust_domain_id": string;
+          "initial_contact_round_id"?: string;
+          "contact_round_id"?: string;
+          "issuer": {
+            "kind": "human";
+            "account_id": {
+              "principal_id": string;
+              "station_id": string;
+            };
+          } | {
+            "kind": "agent";
+            "actor_id": {
+              "kind": "account";
+              "account_id": {
+                "principal_id": string;
+                "station_id": string;
+              };
+            } | {
+              "kind": "service";
+              "service_id": string;
+            } | {
+              "kind": "realm";
+              "realm_actor_id": {
+                "realm_id": string;
+                "principal_id": string;
+              };
+            };
+            "controller_account_id": {
+              "principal_id": string;
+              "station_id": string;
+            };
+          };
+          "peer": {
+            "kind": "human";
+            "account_id": {
+              "principal_id": string;
+              "station_id": string;
+            };
+          } | {
+            "kind": "agent";
+            "actor_id": {
+              "kind": "account";
+              "account_id": {
+                "principal_id": string;
+                "station_id": string;
+              };
+            } | {
+              "kind": "service";
+              "service_id": string;
+            } | {
+              "kind": "realm";
+              "realm_actor_id": {
+                "realm_id": string;
+                "principal_id": string;
+              };
+            };
+            "controller_account_id": {
+              "principal_id": string;
+              "station_id": string;
+            };
+          };
+          "version": number;
+          "predecessor_event_ref"?: string;
+          "event_ref": string;
+          "producer_signer": {
+            "verification_method": string;
+            "public_key_b64u": string;
+          } | {
+            "verification_method": string;
+            "public_key_b64u": string;
+            "delegated_actor_did": string;
+          };
+          "granted_to_peer_scopes": Array<"invite" | "direct_message" | "voice_call" | "video_call" | "presence">;
+          "accepted_at": string;
+          "signature": {
+            "verification_method": string;
+            "created_at": string;
+            "jws": string;
+          };
+        };
+      };
+    };
+    "issued_at": string;
+    "fresh_until": string;
+    "signature": {
+      "verification_method": string;
+      "created_at": string;
+      "jws": string;
+    };
+  };
+} | {
+  "status": "failed";
+  "result_kind": "request" | "response" | "reject" | "scope_update" | "tombstone";
+  "operation_id": string;
+  "reason": "contact_idempotency_conflict" | "contact_round_conflict" | "contact_lineage_conflict" | "contact_terminal" | "contact_scope_stale";
 };
 
 /** `common-ids.schema.json#/$defs/actor_id` — closed object schema. */
@@ -2994,6 +4962,12 @@ export type ActorId = {
 } | {
   "kind": "service";
   "service_id": string;
+} | {
+  "kind": "realm";
+  "realm_actor_id": {
+    "realm_id": string;
+    "principal_id": string;
+  };
 };
 
 /** `common-ids.schema.json#/$defs/account_id` — closed object schema. */
@@ -3126,6 +5100,12 @@ export type InviteObject = {
   } | {
     "kind": "service";
     "service_id": string;
+  } | {
+    "kind": "realm";
+    "realm_actor_id": {
+      "realm_id": string;
+      "principal_id": string;
+    };
   };
   "updated_at"?: string;
 };
@@ -3143,6 +5123,12 @@ export type MembershipPayload = {
   } | {
     "kind": "service";
     "service_id": string;
+  } | {
+    "kind": "realm";
+    "realm_actor_id": {
+      "realm_id": string;
+      "principal_id": string;
+    };
   };
   "membership": "join" | "knock" | "leave" | "ban";
   "gate_proofs"?: Array<{
@@ -3158,6 +5144,12 @@ export type MembershipPayload = {
     } | {
       "kind": "service";
       "service_id": string;
+    } | {
+      "kind": "realm";
+      "realm_actor_id": {
+        "realm_id": string;
+        "principal_id": string;
+      };
     };
     "policy_digest": string;
     "created_at": string;
@@ -3200,7 +5192,7 @@ export type RealmObject = {
   "owning_organization_ids"?: string[];
   "schema_refs": string[];
   "fields"?: {
-    "purpose"?: "principal_control" | "agent_control" | "applet_managed_control";
+    "purpose"?: "principal_control" | "agent_control";
     "collaboration_role"?: "direct_conversation";
     [key: string]: unknown;
   };
@@ -3233,6 +5225,12 @@ export type RealmObject = {
   } | {
     "kind": "service";
     "service_id": string;
+  } | {
+    "kind": "realm";
+    "realm_actor_id": {
+      "realm_id": string;
+      "principal_id": string;
+    };
   };
   "created_at": string;
   "updated_by"?: {
@@ -3244,6 +5242,12 @@ export type RealmObject = {
   } | {
     "kind": "service";
     "service_id": string;
+  } | {
+    "kind": "realm";
+    "realm_actor_id": {
+      "realm_id": string;
+      "principal_id": string;
+    };
   };
   "updated_at"?: string;
 };
@@ -3251,7 +5255,7 @@ export type RealmObject = {
 /** `realm-genesis.schema.json` — closed object schema. */
 export type RealmGenesisObject = {
   "schema": "ak.schema.realm_genesis.v1";
-  "purpose": "collaboration" | "direct_conversation" | "principal_control" | "agent_control" | "applet_managed_control";
+  "purpose": "collaboration" | "direct_conversation" | "principal_control" | "agent_control";
   "genesis_salt": string;
   "founding_device_descriptor"?: {
     "descriptor_version": 1;
@@ -3324,6 +5328,12 @@ export type SpaceObject = {
   } | {
     "kind": "service";
     "service_id": string;
+  } | {
+    "kind": "realm";
+    "realm_actor_id": {
+      "realm_id": string;
+      "principal_id": string;
+    };
   };
   "created_at": string;
   "updated_by"?: {
@@ -3335,6 +5345,12 @@ export type SpaceObject = {
   } | {
     "kind": "service";
     "service_id": string;
+  } | {
+    "kind": "realm";
+    "realm_actor_id": {
+      "realm_id": string;
+      "principal_id": string;
+    };
   };
   "updated_at"?: string;
 };
@@ -3353,6 +5369,12 @@ export type CapabilityGrantObject = {
   } | {
     "kind": "service";
     "service_id": string;
+  } | {
+    "kind": "realm";
+    "realm_actor_id": {
+      "realm_id": string;
+      "principal_id": string;
+    };
   };
   "subject": {
     "kind": "account";
@@ -3364,13 +5386,19 @@ export type CapabilityGrantObject = {
     "kind": "service";
     "service_id": string;
   } | {
+    "kind": "realm";
+    "realm_actor_id": {
+      "realm_id": string;
+      "principal_id": string;
+    };
+  } | {
     "kind": "condition";
     "required_claims": unknown[];
     [key: string]: unknown;
   };
   "actions": string[];
   "resources": Array<{
-    "kind": "realm" | "space" | "circle" | "strand" | "message" | "morph" | "object" | "relation" | "view" | "event" | "actor" | "schema" | "policy" | "invite" | "notification" | "read_cursor" | "blob" | "*";
+    "kind": "realm" | "space" | "circle" | "strand" | "message" | "morph" | "object" | "relation" | "view" | "event" | "actor" | "schema" | "policy" | "invite" | "notification" | "read_cursor" | "blob" | "*" | "realm_actor";
     "realm_id"?: string;
     "space_id"?: string;
     "circle_id"?: string;
@@ -3393,6 +5421,12 @@ export type CapabilityGrantObject = {
     } | {
       "kind": "service";
       "service_id": string;
+    } | {
+      "kind": "realm";
+      "realm_actor_id": {
+        "realm_id": string;
+        "principal_id": string;
+      };
     };
     "schema_ref"?: string;
     "policy_id"?: string;
@@ -3480,6 +5514,12 @@ export type CapabilityGrantObject = {
     } | {
       "kind": "service";
       "service_id": string;
+    } | {
+      "kind": "realm";
+      "realm_actor_id": {
+        "realm_id": string;
+        "principal_id": string;
+      };
     };
     "registration_epoch"?: string;
     "blob_max_bytes"?: number;
@@ -3529,6 +5569,12 @@ export type CapabilityGrantObject = {
   } | {
     "kind": "service";
     "service_id": string;
+  } | {
+    "kind": "realm";
+    "realm_actor_id": {
+      "realm_id": string;
+      "principal_id": string;
+    };
   };
   "updated_at"?: string;
   "revoked_by"?: {
@@ -3540,6 +5586,12 @@ export type CapabilityGrantObject = {
   } | {
     "kind": "service";
     "service_id": string;
+  } | {
+    "kind": "realm";
+    "realm_actor_id": {
+      "realm_id": string;
+      "principal_id": string;
+    };
   };
   "revoked_at"?: string;
   "issuer_authority_refs": Array<{
@@ -3592,6 +5644,12 @@ export type CapabilityGrantPayload = {
     } | {
       "kind": "service";
       "service_id": string;
+    } | {
+      "kind": "realm";
+      "realm_actor_id": {
+        "realm_id": string;
+        "principal_id": string;
+      };
     };
     "subject": {
       "kind": "account";
@@ -3603,13 +5661,19 @@ export type CapabilityGrantPayload = {
       "kind": "service";
       "service_id": string;
     } | {
+      "kind": "realm";
+      "realm_actor_id": {
+        "realm_id": string;
+        "principal_id": string;
+      };
+    } | {
       "kind": "condition";
       "required_claims": unknown[];
       [key: string]: unknown;
     };
     "actions": string[];
     "resources": Array<{
-      "kind": "realm" | "space" | "circle" | "strand" | "message" | "morph" | "object" | "relation" | "view" | "event" | "actor" | "schema" | "policy" | "invite" | "notification" | "read_cursor" | "blob" | "*";
+      "kind": "realm" | "space" | "circle" | "strand" | "message" | "morph" | "object" | "relation" | "view" | "event" | "actor" | "schema" | "policy" | "invite" | "notification" | "read_cursor" | "blob" | "*" | "realm_actor";
       "realm_id"?: string;
       "space_id"?: string;
       "circle_id"?: string;
@@ -3632,6 +5696,12 @@ export type CapabilityGrantPayload = {
       } | {
         "kind": "service";
         "service_id": string;
+      } | {
+        "kind": "realm";
+        "realm_actor_id": {
+          "realm_id": string;
+          "principal_id": string;
+        };
       };
       "schema_ref"?: string;
       "policy_id"?: string;
@@ -3719,6 +5789,12 @@ export type CapabilityGrantPayload = {
       } | {
         "kind": "service";
         "service_id": string;
+      } | {
+        "kind": "realm";
+        "realm_actor_id": {
+          "realm_id": string;
+          "principal_id": string;
+        };
       };
       "registration_epoch"?: string;
       "blob_max_bytes"?: number;
@@ -3799,6 +5875,9 @@ export type InviteDeliveryRequestBody = {
       "sidecar_id": string;
     } | {
       "kind": "realm_genesis";
+    } | {
+      "kind": "realm_control";
+      "realm_id": string;
     };
     "actor_id": {
       "kind": "account";
@@ -3809,6 +5888,12 @@ export type InviteDeliveryRequestBody = {
     } | {
       "kind": "service";
       "service_id": string;
+    } | {
+      "kind": "realm";
+      "realm_actor_id": {
+        "realm_id": string;
+        "principal_id": string;
+      };
     };
     "executed_by"?: {
       "kind": "account";
@@ -3819,6 +5904,12 @@ export type InviteDeliveryRequestBody = {
     } | {
       "kind": "service";
       "service_id": string;
+    } | {
+      "kind": "realm";
+      "realm_actor_id": {
+        "realm_id": string;
+        "principal_id": string;
+      };
     };
     "authorization_ref"?: string | "ak.authority.direct_conversation_participant.v1" | "ak.authority.direct_conversation_bootstrap_participant.v1";
     "applet_id"?: string;
@@ -3870,6 +5961,9 @@ export type InviteDeliveryRequestBody = {
       "kind": "sidecar";
       "realm_id": string;
       "sidecar_id": string;
+    } | {
+      "kind": "realm_control";
+      "realm_id": string;
     };
     "stream_position": number;
     "previous_commit_ref": string | null;
@@ -3914,6 +6008,9 @@ export type InviteDeliveryRequestBody = {
           "kind": "sidecar";
           "realm_id": string;
           "sidecar_id": string;
+        } | {
+          "kind": "realm_control";
+          "realm_id": string;
         };
         "stream_position": number;
       };
@@ -4475,7 +6572,6 @@ export type InviteDeliveryRequestBody = {
   } | {
     "kind": "consent_grant";
     "consent_grant_ref": string;
-    "consent_id"?: string;
   } | {
     "kind": "shared_realm";
     "realm_id": string;
@@ -5113,7 +7209,6 @@ export type SelfInviteDispatchRequestBody = {
   } | {
     "kind": "consent_grant";
     "consent_grant_ref": string;
-    "consent_id"?: string;
   } | {
     "kind": "shared_realm";
     "realm_id": string;
@@ -5216,6 +7311,9 @@ export type CommitStreamHead = {
     "kind": "sidecar";
     "realm_id": string;
     "sidecar_id": string;
+  } | {
+    "kind": "realm_control";
+    "realm_id": string;
   };
   "stream_position": number;
   "commit_id": string;
@@ -5240,6 +7338,9 @@ export type EventAdmissionSubmission = {
       "sidecar_id": string;
     } | {
       "kind": "realm_genesis";
+    } | {
+      "kind": "realm_control";
+      "realm_id": string;
     };
     "actor_id": {
       "kind": "account";
@@ -5250,6 +7351,12 @@ export type EventAdmissionSubmission = {
     } | {
       "kind": "service";
       "service_id": string;
+    } | {
+      "kind": "realm";
+      "realm_actor_id": {
+        "realm_id": string;
+        "principal_id": string;
+      };
     };
     "executed_by"?: {
       "kind": "account";
@@ -5260,6 +7367,12 @@ export type EventAdmissionSubmission = {
     } | {
       "kind": "service";
       "service_id": string;
+    } | {
+      "kind": "realm";
+      "realm_actor_id": {
+        "realm_id": string;
+        "principal_id": string;
+      };
     };
     "authorization_ref"?: string | "ak.authority.direct_conversation_participant.v1" | "ak.authority.direct_conversation_bootstrap_participant.v1";
     "applet_id"?: string;
@@ -5343,6 +7456,12 @@ export type EventAdmissionSubmission = {
       } | {
         "kind": "service";
         "service_id": string;
+      } | {
+        "kind": "realm";
+        "realm_actor_id": {
+          "realm_id": string;
+          "principal_id": string;
+        };
       };
       "approver_did": string;
       "approved_at": string;

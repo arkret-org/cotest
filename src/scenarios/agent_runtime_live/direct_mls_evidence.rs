@@ -64,7 +64,7 @@ fn authored(
     .expect_verifiable())
 }
 
-async fn submit(controller: &TestActorClient, event: &Event) -> Result<()> {
+async fn submit(controller: &TestActorClient, event: &Event) -> Result<arkret_wire::RealmCommit> {
     let outcome: AuthoritySubmitOutcome = serde_json::from_value(
         expect_json(
             controller
@@ -77,10 +77,13 @@ async fn submit(controller: &TestActorClient, event: &Event) -> Result<()> {
         )
         .await?,
     )?;
-    ensure!(
-        matches!(outcome, AuthoritySubmitOutcome::Accepted { status: AuthorityCommitStatus::Committed, commit } if commit.event_ref == event.event_id)
-    );
-    Ok(())
+    match outcome {
+        AuthoritySubmitOutcome::Accepted {
+            status: AuthorityCommitStatus::Committed,
+            commit,
+        } if commit.event_ref == event.event_id => Ok(commit),
+        other => bail!("submitted Event did not commit: {other:?}"),
+    }
 }
 
 async fn blob(controller: &TestActorClient, bytes: &[u8]) -> Result<arkret_wire::BlobRef> {
@@ -513,7 +516,7 @@ pub(super) async fn join(
         Utc::now(),
         Some(&founded.create_ref),
     )?;
-    submit(controller_client, &controller_bound).await?;
+    let binding_commit = submit(controller_client, &controller_bound).await?;
     let mut agent_bound = agent_session.author_scoped_event(
         arkret_wire::EventKind::DirectConversationBound,
         scope,
@@ -533,7 +536,43 @@ pub(super) async fn join(
         &mut agent_bound,
         agent_session.runtime_key.to_bytes(),
     )?;
-    submit(runtime, &agent_bound).await?;
+    let loser: AuthoritySubmitOutcome =
+        serde_json::from_value(
+            expect_json(
+                runtime.post("/_arkret/self/events").json(
+                    &arkret_wire::EventAdmissionSubmission::new(agent_bound.clone()),
+                ),
+                StatusCode::OK,
+            )
+            .await?,
+        )?;
+    ensure!(
+        matches!(loser, AuthoritySubmitOutcome::Rejected { ref reason_code, .. }
+        if reason_code == "duplicate_conflict"),
+        "equivalent Agent binding was accepted: {loser:?}"
+    );
+    ensure!(
+        runtime
+            .sdk()
+            .committed_event_get(&agent_bound.event_id)
+            .await
+            .is_err(),
+        "losing binding Event left a committed write"
+    );
+    let retry: AuthoritySubmitOutcome = serde_json::from_value(
+        expect_json(
+            controller_client.post("/_arkret/self/events").json(
+                &arkret_wire::EventAdmissionSubmission::new(controller_bound.clone()),
+            ),
+            StatusCode::OK,
+        )
+        .await?,
+    )?;
+    ensure!(
+        matches!(&retry, AuthoritySubmitOutcome::Accepted { status: AuthorityCommitStatus::Duplicate, commit }
+        if commit == &binding_commit && commit.event_ref == controller_bound.event_id),
+        "exact controller binding retry did not replay its original Commit: {retry:?}"
+    );
     let result = controller_client
         .sdk()
         .direct_conversation_resolve(&DirectConversationResolveRequestBody {
@@ -555,8 +594,12 @@ pub(super) async fn join(
     let binding = coordinates
         .binding_event_ref
         .context("found Direct accepted endorsement")?;
+    ensure!(
+        binding == controller_bound.event_id,
+        "resolver substituted the losing bound Event"
+    );
     println!(
-        "[agent-direct-mls] actual_genesis_add_welcome=1 verified_complete_roster=1 durable_private_reopen=1 actual_claim_consume=1 two_signed_binding_endorsements=1 resolver_found=1"
+        "[agent-direct-mls] actual_genesis_add_welcome=1 verified_complete_roster=1 durable_private_reopen=1 actual_claim_consume=1 single_binding_ref=1 equivalent_loser_zero_write=1 exact_replay=1 resolver_found=1"
     );
     Ok(Joined {
         realm,

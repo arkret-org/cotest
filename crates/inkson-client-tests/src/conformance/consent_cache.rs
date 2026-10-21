@@ -2,20 +2,19 @@
 use anyhow::{Context, Result, ensure};
 use arkret_models_collaboration::call_invitation::*;
 use arkret_models_collaboration::call_signal::*;
-use arkret_models_collaboration::consent_operations::{
-    ConsentGrantRequestBody, ConsentRevokeRequestBody, ConsentView,
-};
-use arkret_models_collaboration::events_payloads::consent::{ConsentGrantPayload, ConsentPeer};
-use arkret_models_collaboration::governance_payloads::ConsentRevokePayload;
+use arkret_models_collaboration::consent_operations::{ConsentReplaceRequestBody, ConsentView};
+use arkret_models_collaboration::events_payloads::consent::{ConsentPeer, ConsentPermission};
 use arkret_models_collaboration::objects::media::{
     CallMediaDesiredMedia, CallMediaTokenExchangeOutcome, CallMediaTokenExchangeRequestBody,
 };
 use arkret_wire::{CallId, ConsentScope, Event, EventAdmissionSubmission, EventKind, ScopeRef};
 use chrono::{Duration, Utc};
-use cotest::harness::{expect_json, next_typed_id};
+use cotest::harness::expect_json;
 use cotest::scenarios::consent_call_context::ConsentCallContext;
 use cotest::scenarios::mls_lifecycle_live::Member;
 use reqwest::StatusCode;
+
+use super::consent_set::PermissionWrite;
 
 pub const CONSENT_CACHE_ENTRYPOINT: &str = "ak.suite.consent.cache_invalidation.v1";
 const SFU_API_KEY: &str = "consent-2141-owned-test";
@@ -28,74 +27,24 @@ async fn grant(
     not_before: Option<chrono::DateTime<Utc>>,
     expires_at: Option<chrono::DateTime<Utc>>,
     constraints: Option<Vec<std::collections::BTreeMap<String, serde_json::Value>>>,
-) -> Result<(ConsentView, Event)> {
-    let principal = holder
-        .client
-        .principal
-        .as_ref()
-        .context("real holder PCR")?;
-    let event = holder
-        .client
-        .author_event(
-            principal.pcr_realm_id.as_str(),
-            EventKind::ConsentGrant.as_str(),
-            serde_json::to_value(ConsentGrantPayload {
-                consent_id: arkret_wire::ConsentId::new(next_typed_id("consent"))?,
-                peer: ConsentPeer::Actor {
-                    actor_id: context.caller.actor.clone(),
-                },
-                consent_scope: scope,
-                not_before,
-                expires_at,
-                constraints,
-                evidence_ref: None,
-                reason: None,
-            })?,
-        )
-        .await?;
-    let view = expect_json(
-        holder
-            .client
-            .post("/_arkret/self/consent/results/grant")
-            .json(&ConsentGrantRequestBody {
-                grant_event: EventAdmissionSubmission::new(event.clone()),
-            }),
-        StatusCode::OK,
+) -> Result<(PermissionWrite, Event)> {
+    super::consent_set::grant(
+        holder,
+        &context.caller.actor,
+        ConsentPermission {
+            consent_scope: scope,
+            not_before,
+            expires_at,
+            constraints,
+            evidence_ref: None,
+            reason: None,
+        },
     )
-    .await?;
-    Ok((serde_json::from_value(view)?, event))
+    .await
 }
 
-async fn revoke(holder: &Member, view: &ConsentView) -> Result<Event> {
-    let principal = holder
-        .client
-        .principal
-        .as_ref()
-        .context("real holder PCR")?;
-    let event = holder
-        .client
-        .author_event(
-            principal.pcr_realm_id.as_str(),
-            EventKind::ConsentRevoke.as_str(),
-            serde_json::to_value(ConsentRevokePayload {
-                consent_id: view.consent_id.clone(),
-                expected_revision: view.revision.clone(),
-                revoked_at: None,
-                reason: None,
-            })?,
-        )
-        .await?;
-    expect_json(
-        holder
-            .client
-            .post("/_arkret/self/consent/results/revoke")
-            .json(&ConsentRevokeRequestBody {
-                revoke_event: EventAdmissionSubmission::new(event.clone()),
-            }),
-        StatusCode::OK,
-    )
-    .await?;
-    Ok(event)
+async fn revoke(holder: &Member, view: &PermissionWrite) -> Result<Event> {
+    Ok(super::consent_set::remove(holder, view).await?.1)
 }
 
 async fn new_call(context: &ConsentCallContext) -> Result<CallId> {
@@ -793,13 +742,17 @@ async fn run_three_cuts_evidence() -> Result<Vec<super::CaseExecutionResult>> {
             && refreshed.device_id == outcome.device_id
             && refreshed.participant_id == outcome.participant_id
     );
-    let old_read = inkson::conformance::read_native_consent_current(
-        &native,
-        context.caller.actor.clone(),
-        ConsentScope::VoiceCall,
-    )
-    .await?;
-    ensure!(inkson::conformance::consume_native_consent_current(&native, &old_read).await?);
+    let old_read =
+        inkson::conformance::read_native_consent_current(&native, context.caller.actor.clone())
+            .await?;
+    ensure!(
+        inkson::conformance::consume_native_consent_current(
+            &native,
+            ConsentScope::VoiceCall,
+            &old_read
+        )
+        .await?
+    );
     let exact_revoke = revoke(&context.holder, &voice_grant).await?;
     let revoke_footprint = consent_commit_count(&context).await?;
     let replayed: ConsentView = serde_json::from_value(
@@ -807,29 +760,37 @@ async fn run_three_cuts_evidence() -> Result<Vec<super::CaseExecutionResult>> {
             context
                 .holder
                 .client
-                .post("/_arkret/self/consent/results/revoke")
-                .json(&ConsentRevokeRequestBody {
-                    revoke_event: EventAdmissionSubmission::new(exact_revoke),
+                .post("/_arkret/self/consent/results/replace")
+                .json(&ConsentReplaceRequestBody {
+                    consent_event: EventAdmissionSubmission::new(exact_revoke),
                 }),
             StatusCode::OK,
         )
         .await?,
     )?;
     ensure!(
-        replayed.state == arkret_models_collaboration::consent_operations::ConsentState::Revoked,
+        replayed.permission_scopes.is_empty(),
         "exact Revoke retry lost original outcome"
     );
-    let revoked_read = inkson::conformance::read_native_consent_current(
-        &native,
-        context.caller.actor.clone(),
-        ConsentScope::VoiceCall,
-    )
-    .await?;
-    ensure!(!inkson::conformance::consume_native_consent_current(&native, &revoked_read).await?);
+    let revoked_read =
+        inkson::conformance::read_native_consent_current(&native, context.caller.actor.clone())
+            .await?;
     ensure!(
-        inkson::conformance::consume_native_consent_current(&native, &old_read)
-            .await
-            .is_err()
+        !inkson::conformance::consume_native_consent_current(
+            &native,
+            ConsentScope::VoiceCall,
+            &revoked_read
+        )
+        .await?
+    );
+    ensure!(
+        inkson::conformance::consume_native_consent_current(
+            &native,
+            ConsentScope::VoiceCall,
+            &old_read
+        )
+        .await
+        .is_err()
     );
     reject_token(&context, &context.holder, &token).await?;
     let after_revoke = exchange(&context.holder, &refresh(&token, &outcome)).await?;
@@ -843,40 +804,23 @@ async fn run_three_cuts_evidence() -> Result<Vec<super::CaseExecutionResult>> {
             context
                 .holder
                 .client
-                .post("/_arkret/self/consent/results/grant")
-                .json(&ConsentGrantRequestBody {
-                    grant_event: EventAdmissionSubmission::new(voice_event),
+                .post("/_arkret/self/consent/results/replace")
+                .json(&ConsentReplaceRequestBody {
+                    consent_event: EventAdmissionSubmission::new(voice_event),
                 }),
             StatusCode::OK,
         )
         .await?,
     )?;
     ensure!(
-        retried == voice_grant,
+        retried == voice_grant.view,
         "exact grant replay changed its original result"
     );
-    let latest = inkson::conformance::read_native_consent_current(
-        &native,
-        context.caller.actor.clone(),
-        ConsentScope::VoiceCall,
-    )
-    .await?;
-    ensure!(
-        latest
-            .value()?
-            .consents
-            .iter()
-            .find(|r| r.value.consent_id == voice_grant.consent_id)
-            .context("revoked current")?
-            .revision
-            == revoked_read
-                .value()?
-                .consents
-                .iter()
-                .find(|r| r.value.consent_id == voice_grant.consent_id)
-                .context("revoke revision")?
-                .revision
-    );
+    let latest =
+        inkson::conformance::read_native_consent_current(&native, context.caller.actor.clone())
+            .await?;
+    ensure!(latest.value()?.expected_current() == revoked_read.value()?.expected_current());
+    ensure!(latest.value()?.current_permissions() == revoked_read.value()?.current_permissions());
     cotest::harness::heap_future(|| {
         direct_actor_refresh_matrix(&mut context, &token, &outcome, &refreshed)
     })
@@ -1477,21 +1421,40 @@ async fn independent_windows(
     native: &inkson::sync_engine::NativeAccountHost,
     sequence: &mut u64,
 ) -> Result<()> {
-    let mut invalid = Vec::new();
     let now = Utc::now();
-    invalid.push(
-        grant(
-            context,
-            &context.holder,
+    grant(
+        context,
+        &context.holder,
+        ConsentScope::VoiceCall,
+        None,
+        Some(now + Duration::seconds(5)),
+        None,
+    )
+    .await?;
+    tokio::time::sleep(std::time::Duration::from_secs(6)).await;
+    let expired =
+        inkson::conformance::read_native_consent_current(native, context.caller.actor.clone())
+            .await?;
+    ensure!(
+        !inkson::conformance::consume_native_consent_current(
+            native,
             ConsentScope::VoiceCall,
-            None,
-            Some(now + Duration::seconds(5)),
-            None,
+            &expired
         )
         .await?
-        .0,
     );
-    tokio::time::sleep(std::time::Duration::from_secs(6)).await;
+    ensure!(
+        expired
+            .value()?
+            .current_permissions()
+            .unwrap_or_default()
+            .iter()
+            .any(
+                |permission| permission.consent_scope == ConsentScope::VoiceCall
+                    && permission.expires_at.is_some()
+            )
+    );
+
     for (begin, end, constraints) in [
         (Some(now + Duration::minutes(5)), None, None),
         (
@@ -1503,26 +1466,48 @@ async fn independent_windows(
             )])]),
         ),
     ] {
-        invalid.push(
-            grant(
-                context,
-                &context.holder,
+        grant(
+            context,
+            &context.holder,
+            ConsentScope::VoiceCall,
+            begin,
+            end,
+            constraints,
+        )
+        .await?;
+        let ineligible =
+            inkson::conformance::read_native_consent_current(native, context.caller.actor.clone())
+                .await?;
+        ensure!(
+            !inkson::conformance::consume_native_consent_current(
+                native,
                 ConsentScope::VoiceCall,
-                begin,
-                end,
-                constraints,
+                &ineligible
             )
             .await?
-            .0,
+        );
+        ensure!(
+            ineligible
+                .value()?
+                .current_permissions()
+                .unwrap_or_default()
+                .iter()
+                .filter(|permission| permission.consent_scope == ConsentScope::VoiceCall)
+                .count()
+                == 1
         );
     }
-    let current = inkson::conformance::read_native_consent_current(
-        native,
-        context.caller.actor.clone(),
-        ConsentScope::VoiceCall,
-    )
-    .await?;
-    ensure!(!inkson::conformance::consume_native_consent_current(native, &current).await?);
+    let current =
+        inkson::conformance::read_native_consent_current(native, context.caller.actor.clone())
+            .await?;
+    ensure!(
+        !inkson::conformance::consume_native_consent_current(
+            native,
+            ConsentScope::VoiceCall,
+            &current
+        )
+        .await?
+    );
     let call = new_call(context).await?;
     let holder = context.holder.account.clone();
     let request = prepare_invitation(
@@ -1549,55 +1534,81 @@ async fn independent_windows(
         None,
     )
     .await?;
-    let (any, _) = grant(
+    let (unrelated, _) = grant(
         context,
         &context.holder,
-        ConsentScope::Any,
+        ConsentScope::Presence,
         None,
         None,
         None,
     )
     .await?;
-    revoke(&context.holder, &any).await?;
-    let current = inkson::conformance::read_native_consent_current(
-        native,
-        context.caller.actor.clone(),
-        ConsentScope::VoiceCall,
-    )
-    .await?;
-    ensure!(inkson::conformance::consume_native_consent_current(native, &current).await?);
+    revoke(&context.holder, &unrelated).await?;
+    let current =
+        inkson::conformance::read_native_consent_current(native, context.caller.actor.clone())
+            .await?;
+    ensure!(
+        inkson::conformance::consume_native_consent_current(
+            native,
+            ConsentScope::VoiceCall,
+            &current
+        )
+        .await?
+    );
     ensure!(
         current
             .value()?
-            .consents
-            .iter()
-            .any(|row| row.value.consent_id == concrete.consent_id
-                && row.revision == concrete.revision)
+            .current_permissions()
+            .is_some_and(|permissions| permissions
+                .iter()
+                .any(|p| p.consent_scope == concrete.scope))
     );
     verify_token(context, &token, &exchange(&context.holder, &token).await?).await?;
-    let (other_any, _) = grant(
+    let (replacement, _) = grant(
         context,
         &context.holder,
-        ConsentScope::Any,
-        None,
-        None,
-        None,
-    )
-    .await?;
-    revoke(&context.holder, &concrete).await?;
-    let current = inkson::conformance::read_native_consent_current(
-        native,
-        context.caller.actor.clone(),
         ConsentScope::VoiceCall,
+        None,
+        Some(Utc::now() + Duration::minutes(5)),
+        None,
     )
     .await?;
-    ensure!(inkson::conformance::consume_native_consent_current(native, &current).await?);
+    let current =
+        inkson::conformance::read_native_consent_current(native, context.caller.actor.clone())
+            .await?;
+    ensure!(
+        current
+            .value()?
+            .current_permissions()
+            .unwrap_or_default()
+            .iter()
+            .filter(|p| p.consent_scope == ConsentScope::VoiceCall)
+            .count()
+            == 1
+    );
+    ensure!(
+        inkson::conformance::consume_native_consent_current(
+            native,
+            ConsentScope::VoiceCall,
+            &current
+        )
+        .await?
+    );
     verify_token(context, &token, &exchange(&context.holder, &token).await?).await?;
-    revoke(&context.holder, &other_any).await?;
+    revoke(&context.holder, &replacement).await?;
     reject_token(&context, &context.holder, &token).await?;
-    for permission in invalid {
-        revoke(&context.holder, &permission).await?;
-    }
+    let current =
+        inkson::conformance::read_native_consent_current(native, context.caller.actor.clone())
+            .await?;
+    ensure!(
+        !inkson::conformance::consume_native_consent_current(
+            native,
+            ConsentScope::VoiceCall,
+            &current
+        )
+        .await?
+    );
+    ensure!(current.value()?.current_permissions().is_some());
     Ok(())
 }
 
@@ -1605,27 +1616,21 @@ async fn presence_peer_grant(
     context: &ConsentCallContext,
     peer: &arkret_wire::ActorId,
     scope: ConsentScope,
-) -> Result<ConsentView> {
-    let holder = &context.holder;
-    let realm = &holder
-        .client
-        .principal
-        .as_ref()
-        .context("holder PCR")?
-        .pcr_realm_id;
-    let event=holder.client.author_event(realm.as_str(),EventKind::ConsentGrant.as_str(),serde_json::json!({"consent_id":next_typed_id("consent"),"peer":{"kind":"actor","actor_id":peer},"consent_scope":scope})).await?;
-    Ok(serde_json::from_value(
-        expect_json(
-            holder
-                .client
-                .post("/_arkret/self/consent/results/grant")
-                .json(&ConsentGrantRequestBody {
-                    grant_event: EventAdmissionSubmission::new(event),
-                }),
-            StatusCode::OK,
-        )
-        .await?,
-    )?)
+) -> Result<PermissionWrite> {
+    Ok(super::consent_set::grant(
+        &context.holder,
+        peer,
+        ConsentPermission {
+            consent_scope: scope,
+            not_before: None,
+            expires_at: None,
+            constraints: None,
+            evidence_ref: None,
+            reason: None,
+        },
+    )
+    .await?
+    .0)
 }
 async fn presence_attempt(
     context: &ConsentCallContext,
@@ -1715,8 +1720,12 @@ async fn presence_current(
     let caller =
         presence_peer_grant(context, &context.caller.actor, ConsentScope::Presence).await?;
     cotest::harness::heap_future(|| presence_attempt(context, native, &receiver, false)).await?;
-    let other =
-        presence_peer_grant(context, &context.denied_holder.actor, ConsentScope::Any).await?;
+    let other = presence_peer_grant(
+        context,
+        &context.denied_holder.actor,
+        ConsentScope::Presence,
+    )
+    .await?;
     cotest::harness::heap_future(|| presence_attempt(context, native, &receiver, true)).await?;
     revoke(&context.holder, &other).await?;
     cotest::harness::heap_future(|| presence_attempt(context, native, &receiver, false)).await?;
@@ -1727,10 +1736,10 @@ async fn presence_current(
     )
     .await?;
     let independent =
-        presence_peer_grant(context, &context.caller.actor, ConsentScope::Any).await?;
-    revoke(&context.holder, &caller).await?;
-    cotest::harness::heap_future(|| presence_attempt(context, native, &receiver, true)).await?;
+        presence_peer_grant(context, &context.caller.actor, ConsentScope::VoiceCall).await?;
     revoke(&context.holder, &independent).await?;
+    cotest::harness::heap_future(|| presence_attempt(context, native, &receiver, true)).await?;
+    revoke(&context.holder, &caller).await?;
     cotest::harness::heap_future(|| presence_attempt(context, native, &receiver, false)).await?;
     store.write(|s| s.set_presence_visibility(PresenceVisibility::Nobody));
     cotest::harness::heap_future(|| presence_attempt(context, native, &receiver, false)).await?;
@@ -1739,7 +1748,7 @@ async fn presence_current(
     store.write(|s| s.set_presence_visibility(PresenceVisibility::Public));
     cotest::harness::heap_future(|| presence_attempt(context, native, &receiver, true)).await?;
     println!(
-        "[2141-live] actual_presence_whole_scope=1 partial_audience_denied=1 any_independent=1 revoke_before_send=1 nobody_denied=1 contacts_no_consent_fallback=1 explicit_public=1 actual_device_mls_decrypt=1"
+        "[2141-live] actual_presence_whole_scope=1 partial_audience_denied=1 unrelated_scope_preserved=1 revoke_before_send=1 nobody_denied=1 contacts_no_consent_fallback=1 explicit_public=1 actual_device_mls_decrypt=1"
     );
     Ok(())
 }
@@ -2056,28 +2065,27 @@ async fn human_station_binding(
     )
     .await?;
     let (request, received) = actual_product(context, native, sequence).await?;
-    let old = inkson::conformance::read_native_consent_current(
-        native,
-        context.caller.actor.clone(),
-        ConsentScope::VoiceCall,
-    )
-    .await?;
+    let old =
+        inkson::conformance::read_native_consent_current(native, context.caller.actor.clone())
+            .await?;
     cotest::harness::heap_future(|| {
         cotest::scenarios::human_pcr_station_binding::assert_station_binding(context, 1, 2)
     })
     .await?;
-    let fresh = inkson::conformance::read_native_consent_current(
-        native,
-        context.caller.actor.clone(),
-        ConsentScope::VoiceCall,
-    )
-    .await?;
+    let fresh =
+        inkson::conformance::read_native_consent_current(native, context.caller.actor.clone())
+            .await?;
     ensure!(
         fresh.value()?.governance_generation == old.value()?.governance_generation,
         "rejected Human transfer changed tenure"
     );
     ensure!(
-        inkson::conformance::consume_native_consent_current(native, &fresh).await?,
+        inkson::conformance::consume_native_consent_current(
+            native,
+            ConsentScope::VoiceCall,
+            &fresh
+        )
+        .await?,
         "own Station current did not recover"
     );
     ensure!(

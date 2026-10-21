@@ -35,6 +35,40 @@ use cotest::conformance::{
 use serde_json::{Value, json};
 
 #[test]
+fn protocol_simplification_shape_cases_execute_without_semantic_credit() -> Result<()> {
+    let execution = cotest::conformance::run_protocol_simplification_shape_suite()?;
+    let fixture = load_local_fixture_value("protocol-simplification-fixture.json")?;
+    execution
+        .assert_complete_against_cases(fixture["schema_validation_cases"].as_array().unwrap())?;
+    assert_eq!(execution.cases.len(), 26);
+    assert_eq!(fixture["cases"].as_array().unwrap().len(), 35);
+    Ok(())
+}
+
+#[test]
+fn retired_message_prepare_and_native_consent_mutations_are_rejected() {
+    for operation in [
+        "ak.self.messages.command.prepare.v1",
+        "ak.self.consent.command.grant.v1",
+        "ak.self.consent.command.revoke.v1",
+    ] {
+        assert!(
+            serde_json::from_value::<arkret_wire::ServiceOperationId>(json!(operation)).is_err()
+        );
+    }
+    for kind in ["ak.consent.grant", "ak.consent.revoke"] {
+        assert!(arkret_wire::EventKind::try_new(kind).is_none());
+    }
+    assert!(
+        serde_json::from_value::<arkret_wire::ServiceOperationId>(json!(
+            "ak.self.consent.command.replace.v1"
+        ))
+        .is_ok()
+    );
+    assert!(arkret_wire::EventKind::try_new("ak.consent.replace").is_some());
+}
+
+#[test]
 fn keypackage_write_transcript_named_suite_returns_one_result_per_case() -> Result<()> {
     let execution = run_keypackage_write_transcripts_suite()?;
     assert_eq!(execution.cases.len(), 4);
@@ -445,26 +479,20 @@ fn encoding_artifact_vectors_reject_drift() -> Result<()> {
 #[test]
 fn domain_wire_constraint_vectors_reject_drift() {
     let consent = json!({
-        "consent_id": "ak:consent:01904100-0000-7000-8000-000000000001",
-        "peer": {
-            "kind": "actor",
-            "actor_id": {
-                "kind": "account",
-                "account_id": {
-                    "principal_id": "ak:did_core:webvh:z6mkfixture",
-                    "station_id": "ak:did_core:webvh:z6mkfixturestationexample"
-                }
-            }
-        },
-        "consent_scope": "voice_call"
+        "peer": {"kind":"actor", "actor_id": {"kind":"account", "account_id": {
+            "principal_id":"ak:did_core:webvh:z6mkfixture",
+            "station_id":"ak:did_core:webvh:z6mkfixturestationexample"
+        }}},
+        "expected_current": {"state":"never_written"},
+        "permissions": [{"consent_scope":"voice_call"}]
     });
-    serde_json::from_value::<arkret::ConsentGrantPayload>(consent.clone())
-        .expect("typed UUIDv7 consent identifier must pass");
-    let mut untyped_consent = consent;
-    untyped_consent["consent_id"] = json!("cid");
+    let payload: arkret::ConsentReplacePayload = serde_json::from_value(consent.clone()).unwrap();
+    payload.validate().unwrap();
+    let mut legacy = consent;
+    legacy["consent_id"] = json!("ak:consent:01904100-0000-7000-8000-000000000001");
     assert!(
-        serde_json::from_value::<arkret::ConsentGrantPayload>(untyped_consent).is_err(),
-        "untyped consent identifier must fail"
+        serde_json::from_value::<arkret::ConsentReplacePayload>(legacy).is_err(),
+        "native Consent must reject a private correlation identifier"
     );
 }
 

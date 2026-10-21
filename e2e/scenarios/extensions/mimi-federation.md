@@ -93,7 +93,7 @@
 
 19. alice 收到 bob_mimi 的请求 (Phase B 的 inbound),实际上隐含了一次 consent 决策:approve 等价于授予 bob_mimi 在该 Realm 中的成员权限,但**不**等价于跨 Realm 的全局 consent
 20. 断言:bob_mimi 的 pairwise DID 只对当前 Realm `R` 有效;尝试在另一个 Realm `R2` 中以同一 pairwise DID 投递消息应被拒绝
-21. cross-link 到 identity/consent-grant scenario:Arkret 的 consent strand 在 MIMI 互通中由 pairwise DID 的 scoping 隐式提供
+21. cross-link 到 identity/consent-grant scenario：MIMI 相关性标识不产生原生授权。holder 对完整 peer ActorId 的授权仅来自其 PCR 中完整 permissions current；更新携带单份原签 `ak.consent.replace` 与精确 CAS，历史相关性重放不恢复旧权限。
 
 ## Observable assertions (合并清单)
 

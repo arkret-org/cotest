@@ -1,4 +1,4 @@
-//! Real independent grants and requester equivalence on the private writer.
+//! Exact-peer permission replacement and requester equivalence on the private writer.
 
 use super::consent_delivery_race::{delivery_cell, holder_independent_invite};
 use super::*;
@@ -57,51 +57,43 @@ pub async fn run_current_invite_matrix() -> Result<()> {
     .await?
     .parse()?;
     super::verify_consent_delivery_race(&alice, &bob, &realm, &path).await?;
-    let any = super::grant_scoped_consent(&bob.client, &alice.client, ConsentScope::Any).await?;
-    let concrete = super::grant_invite_consent(&bob.client, &alice.client).await?;
-    let consent_evidence =
-        |grant: &(ConsentView, arkret_wire::Event)| IntroductionEvidence::ConsentGrant {
-            consent_grant_ref: grant.1.event_id.clone(),
-            consent_id: Some(grant.0.consent_id.to_string()),
-        };
-    positive(&alice, &bob, &realm, consent_evidence(&any)).await?;
-    super::revoke_invite_consent(&bob.client, any.0).await?;
+    let voice =
+        super::grant_scoped_consent(&bob.client, &alice.client, ConsentScope::VoiceCall).await?;
     negative(
         &alice,
         &bob,
         &realm,
         IntroductionEvidence::ConsentGrant {
-            consent_grant_ref: any.1.event_id,
-            consent_id: None,
+            consent_grant_ref: voice.1.event_id,
         },
     )
     .await?;
-    let current: arkret_models_collaboration::consent_operations::ConsentList =
-        serde_json::from_value(
-            expect_json(
-                bob.client.get("/_arkret/self/consent/results"),
-                StatusCode::OK,
-            )
-            .await?,
-        )?;
+    let concrete = super::grant_invite_consent(&bob.client, &alice.client).await?;
+    positive(
+        &alice,
+        &bob,
+        &realm,
+        IntroductionEvidence::ConsentGrant {
+            consent_grant_ref: concrete.1.event_id.clone(),
+        },
+    )
+    .await?;
+    let remaining = super::revoke_invite_consent(&bob.client, concrete.0).await?;
     ensure!(
-        current.consents.iter().any(|value| value == &concrete.0),
-        "any revoke changed the independent concrete revision"
+        remaining.permission_scopes == vec![ConsentScope::VoiceCall],
+        "invite removal changed the other concrete permission"
     );
-    positive(&alice, &bob, &realm, consent_evidence(&concrete)).await?;
-    super::revoke_invite_consent(&bob.client, concrete.0).await?;
     negative(
         &alice,
         &bob,
         &realm,
         IntroductionEvidence::ConsentGrant {
             consent_grant_ref: concrete.1.event_id,
-            consent_id: None,
         },
     )
     .await?;
     eprintln!(
-        "[consent-invite] any_permitted=1 revoked_any_rejected=1 concrete_revision_preserved=1 concrete_permitted=1 all_revoked_rejected=1"
+        "[consent-invite] voice_cannot_authorize_invite=1 concrete_permitted=1 removed_invite_rejected=1 unrelated_permission_preserved=1"
     );
 
     let (revoked, grant_event) = super::grant_invite_consent(&bob.client, &alice.client).await?;
@@ -127,7 +119,6 @@ pub async fn run_current_invite_matrix() -> Result<()> {
             let evidence = IntroductionEvidence::ConsentGrant {
                 // The never-granted source cannot borrow Alice's actual grant.
                 consent_grant_ref: grant_event.event_id.clone(),
-                consent_id: None,
             };
             let invite = holder_independent_invite(sender, &bob, target, evidence).await?;
             let id = invite.invite_id.clone();

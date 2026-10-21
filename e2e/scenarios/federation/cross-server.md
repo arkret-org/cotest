@@ -15,7 +15,7 @@
 
 1. Alice 的浏览器创建 Realm、通过 admin 发出定向邀请，本地 pending 行和 Bob 本站邀请通知可见；通知不代表加入。
 2. Bob 从本站准备并提交自己的 join，server1 返回其精确 covering Commit；成员完整 AccountId 在双方获准 current 中出现。
-3. typed message prepare 核对完整 unsigned Event、request digest、producer Actor、scope、时间和 payload；exact prepare replay 相同，异 intent 同 request ID 为 duplicate_conflict。原签 Event 提交后 exact replay 返回原 Commit，零新 position。
+3. 普通消息在本地固化完整 Event 与 producer proof；存在已接受 MLS genesis 时，使用本地 private group 加密一次并固化 ciphertext。重放原签请求返回原 Commit，零新 position，不重新签名或加密。
 4. Alice/Bob 双向消息都在对方本站获准 stream 可读；不要求 Bob 获得 join 前 Event。
 5. server2 没有托管 joined 成员时，bootstrap 的合法原签 pairs 每项 rejected 且零持有；join 后 exact message pair 重放均 duplicate。
 6. peer scan 恢复返回获准连续 source pairs；接收只 stored/duplicate，同一 Event 本地恰一次。
@@ -24,7 +24,7 @@
 
 ## 大历史边界
 
-`prepared authoring and join` 的大历史变体先接受并退出一个本地成员，再接受18条不同原签 Event 的相同 Schema definition。Schema subject 不可变，同一 `$id` 的内容保持逐字相同，current 只有一个定义；不能通过替换不同字节或扩大8MiB Snapshot预算实现。
+`local authoring and join` 的大历史变体先接受并退出一个本地成员，再接受18条不同原签 Event 的相同 Schema definition。Schema subject 不可变，同一 `$id` 的内容保持逐字相同，current 只有一个定义；不能通过替换不同字节或扩大8MiB Snapshot预算实现。
 
 owner 从自己的获准 Realm stream 以limit5逐页读取，断言每项 full Event 与Commit绑定、position连续、分页有界、18个 accepted Event ID恰一次，实际读回payload合计超过8MiB，且超过一页。`accepted-history-audit.json`仅记录subject数、accepted数、读回字节、页数和最终position。Bob之后通过标准join/bootstrap取得获准current，并完成双向typed Message；不能用合成大包、未提交history或API准备成功代替最终读取。
 

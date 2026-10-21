@@ -38,7 +38,6 @@ pub(crate) async fn verify_consent_delivery_race(
         let (grant, event) = super::grant_invite_consent(&holder.client, &inviter.client).await?;
         let evidence = IntroductionEvidence::ConsentGrant {
             consent_grant_ref: event.event_id.clone(),
-            consent_id: Some(grant.consent_id.to_string()),
         };
         let create = holder_independent_invite(inviter, holder, realm, evidence).await?;
         let before = delivery_cell(&holder.client).await?;

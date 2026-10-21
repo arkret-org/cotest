@@ -55,7 +55,7 @@ pub async fn applet_lifecycle_surfaces_are_advertised_when_routes_exist() -> Res
         "ak.self.applet.install.command.preview.v1",
         "ak.self.applet.command.install.v1",
         "ak.self.applet.command.revoke.v1",
-        "ak.self.applet.ghost.command.provision.v1",
+        "ak.self.applet.ghost.command.preview.v1",
     ] {
         assert!(
             advertised.contains(&required),

@@ -38,14 +38,18 @@ import type {
   RealmObject,
   SelfInviteDispatchRequestBody,
   RealmJoinPrepareRequestBody,
-  MessagePrepareRequestBody,
 } from "./generated/spec-wire-objects";
 import {
   accountSubscribeDeltaApi,
   accountSubscribeFramesApi,
   accountSubscribeRealmFramesApi,
 } from "./coland-api/account-stream";
-import { activateRealmMlsApi } from "./coland-api/mls";
+import {
+  activateRealmMlsApi,
+  encryptMlsMessageContent,
+  readScopeMlsGroupCurrentApi,
+  scopeMlsMemberGroupApi,
+} from "./coland-api/mls";
 import {
   authHeaders,
   expectJsonOk,
@@ -508,12 +512,21 @@ function eventActorId(
     requireDidCoreId(actor.service_id);
     return actor;
   }
-  throw new Error("Event envelope requires a complete account or service actor_id");
+  if (actor?.kind === "realm") {
+    requireDidCoreId(actor.realm_actor_id.principal_id);
+    if (!actor.realm_actor_id.realm_id) throw new Error("Realm Actor omits realm_id");
+    return actor;
+  }
+  throw new Error("Event envelope requires a complete actor_id");
 }
 
 export function eventPrincipalId(event: Record<string, unknown>): string {
   const actor = eventActorId(event);
-  return actor.kind === "account" ? actor.account_id.principal_id : actor.service_id;
+  switch (actor.kind) {
+    case "account": return actor.account_id.principal_id;
+    case "realm": return actor.realm_actor_id.principal_id;
+    case "service": return actor.service_id;
+  }
 }
 function eventSigningPrincipalId(event: Record<string, unknown>): string {
   return eventPrincipalId({ actor_id: event.executed_by ?? event.actor_id });
@@ -1394,8 +1407,8 @@ export async function listInvitesApi(
   return body.invites ?? [];
 }
 
-/** Exercise prepare, exact replay and the ordinary submit without re-authoring. */
-export async function sendPreparedMessageApi(
+/** Freeze one locally authored Event and replay only its original signed bytes. */
+export async function sendLocalAuthoredMessageApi(
   request: APIRequestContext,
   token: string,
   realmId: string,
@@ -1403,82 +1416,15 @@ export async function sendPreparedMessageApi(
   opts: { server?: ColandKey } = {},
 ) {
   const principal = await currentActorIdApi(request, token, opts);
-  const actor = accountActorId(principal, opts.server);
   const strandId = await resolveDefaultStrandId(request, token, realmId, opts);
-  const content = { kind: "ak.content.text" as const, body };
-  const intent: MessagePrepareRequestBody["intent"] = {
-    strand_id: strandId,
-    track_name: "discussion",
-    content: { kind: "plaintext", content },
-  };
-  const prepare: MessagePrepareRequestBody = {
-    request_id: typedId("request"),
-    account_id: actor.account_id,
-    realm_id: realmId,
-    intent,
-    created_at: canonicalTimestamp(),
-  };
-  const prepareUrl = `${colandBaseUrl(opts.server)}/_arkret/self/messages/prepare`;
-  const fetch = () => request.post(prepareUrl, {
-    headers: {
-      ...authHeaders(token, "POST", prepareUrl),
-      "content-type": "application/json",
-    },
-    data: canonicalJson(prepare),
+  const content = { kind: "ak.content.text", body };
+  const payload = await localMessagePayload(request, token, realmId, strandId, content, opts);
+  // The MLS private state advanced exactly once above; transport retries keep
+  // this Event, producer proof and ciphertext rather than encrypting again.
+  const event = signedEventEnvelope({
+    actorId: principal, server: opts.server, realmId,
+    kind: "ak.message.create", payload,
   });
-  const prepared = await expectJsonOk<Record<string, any>>(
-    await fetch(), "typed message prepare",
-  );
-  expect(await expectJsonOk(await fetch(), "exact prepare replay")).toEqual(prepared);
-  const conflicting = await request.post(prepareUrl, {
-    headers: {
-      ...authHeaders(token, "POST", prepareUrl),
-      "content-type": "application/json",
-    },
-    data: canonicalJson({
-      ...prepare,
-      intent: {
-        ...intent,
-        content: { kind: "plaintext", content: { ...content, body: `${body} changed` } },
-      },
-    }),
-  });
-  expect(conflicting.status()).toBe(409);
-  expect(wireErrCode(await conflicting.json())).toBe("duplicate_conflict");
-  expect(prepared.request_digest).toBe(`sha256:${sha256CanonicalJson(prepare)}`);
-  const unsigned = JSON.parse(
-    Buffer.from(prepared.draft.unsigned_event_bytes, "base64url").toString("utf8"),
-  );
-  expect(unsigned.kind).toBe("ak.message.create");
-  expect(unsigned.realm_id).toBe(realmId);
-  expect(unsigned.actor_id).toEqual(actor);
-  expect(unsigned.created_at).toBe(prepare.created_at);
-  expect(unsigned.scope_ref).toEqual({ kind: "realm", realm_id: realmId });
-  expect(unsigned.payload).toEqual({
-    strand_id: strandId, track_name: "discussion", content,
-  });
-  // A prepared draft is the producer envelope and nothing else: the Station
-  // supplies position, predecessor and coverage when it commits, so none of the
-  // retired ordering members may appear in the bytes the producer signs.
-  for (const retired of [
-    "actor_seq",
-    "prev_refs",
-    "causal_refs",
-    "preconditions",
-    "hlc",
-    "seal_ref",
-    "basis",
-  ]) {
-    expect(
-      retired in unsigned,
-      `prepared draft reintroduced the retired member ${retired}`,
-    ).toBe(false);
-  }
-  expect(unsigned.semantic_refs ?? []).toEqual([]);
-  const derived = sdkEventDerivedIds(unsigned);
-  const event = { ...unsigned, event_id: derived.event_id };
-  expect(prepared.draft.event_digest).toBe(`sha256:${sha256CanonicalJson(unsigned)}`);
-  event.producer_proof = eventEnvelopeProof({ actorId: principal, event });
   const url = `${colandBaseUrl(opts.server)}/_arkret/self/events`;
   const submission = canonicalJson({ event });
   const submit = () => request.post(url, {
@@ -1489,9 +1435,9 @@ export async function sendPreparedMessageApi(
     data: submission,
   });
   const outcome = await expectJsonOk<Record<string, unknown>>(
-    await submit(), "prepared message submit",
+    await submit(), "locally authored message submit",
   );
-  assertAuthoritySubmitOutcome(outcome, event, "prepared message submit");
+  assertAuthoritySubmitOutcome(outcome, event, "locally authored message submit");
   expect(outcome.status).toBe("committed");
   const committed = outcome.commit as Record<string, unknown>;
   // The exact signed bytes replay to the commit that already admitted them and
@@ -1514,6 +1460,23 @@ export async function sendPreparedMessageApi(
     commit_id: String(committed.commit_id),
     stream_position: Number(committed.stream_position),
   };
+}
+
+async function localMessagePayload(
+  request: APIRequestContext, token: string, realmId: string, strandId: string,
+  content: Record<string, unknown>, opts: { server?: ColandKey; encrypted?: boolean },
+): Promise<Record<string, unknown>> {
+  const scopeRef = { kind: "realm", realm_id: realmId };
+  const current = await readScopeMlsGroupCurrentApi(request, token, realmId, scopeRef, opts.server);
+  const payload: Record<string, unknown> = { strand_id: strandId, track_name: "discussion" };
+  if (current) {
+    const group = await scopeMlsMemberGroupApi(request, token, realmId, scopeRef, undefined, opts.server);
+    payload.encrypted_content = encryptMlsMessageContent(group, content);
+  } else {
+    if (opts.encrypted) throw new Error("Encrypted Message requires accepted MLS genesis and local private state");
+    payload.content = content;
+  }
+  return payload;
 }
 
 export async function sendMessageApi(
@@ -1545,33 +1508,18 @@ export async function sendMessageApi(
   const strandId = await resolveDefaultStrandId(request, token, realmId, {
     server: opts.server,
   });
+  const content = {
+    kind: "ak.content.text", body,
+    ...(opts.mentions ? {
+      mentions: opts.mentions.map((mention) => typeof mention === "string" ? {
+        kind: "mention", subject_account_id: accountActorId(mention, opts.server).account_id,
+      } : mention),
+    } : {}),
+  };
+  const payload = await localMessagePayload(request, token, realmId, strandId, content, opts);
   const envelope = signedEventEnvelope({
-    actorId,
-    server: opts.server,
-    realmId,
-    kind: "ak.message.create",
-    createdAt: opts.createdAt,
-    payload: {
-      strand_id: strandId,
-      track_name: "discussion",
-      content: {
-        kind: "ak.content.text",
-        body,
-        ...(opts.mentions
-          ? {
-              mentions: opts.mentions.map((mention) =>
-                typeof mention === "string"
-                  ? {
-                      kind: "mention",
-                      subject_account_id: accountActorId(mention, opts.server)
-                        .account_id,
-                    }
-                  : mention,
-              ),
-            }
-          : {}),
-      },
-    },
+    actorId, server: opts.server, realmId, kind: "ak.message.create",
+    createdAt: opts.createdAt, payload,
   });
   const submission = await submitSignedEventApi(request, token, envelope, {
     server: opts.server,

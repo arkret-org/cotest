@@ -2677,44 +2677,10 @@ pub(crate) async fn observe_ordinary_call_invite(
         )
     };
     if !observe_receipt {
-        let principal = holder
-            .client
-            .principal
-            .as_ref()
-            .context("actual holder PCR")?;
-        let payload = arkret_models_collaboration::events_payloads::ConsentGrantPayload {
-            consent_id: arkret_wire::ConsentId::new(format!(
-                "ak:consent:{}",
-                cotest::scenarios::mls_lifecycle_live::fresh_uuid_v7()
-            ))?,
-            peer: arkret_models_collaboration::events_payloads::consent::ConsentPeer::Actor {
-                actor_id: sender.actor.clone(),
-            },
-            consent_scope: arkret_wire::ConsentScope::VoiceCall,
-            not_before: None,
-            expires_at: None,
-            constraints: None,
-            evidence_ref: None,
-            reason: None,
-        };
-        let event = holder
-            .client
-            .author_event(
-                principal.pcr_realm_id.as_str(),
-                arkret_wire::EventKind::ConsentGrant.as_str(),
-                serde_json::to_value(payload)?,
-            )
-            .await?;
-        expect_json(
-            holder
-                .client
-                .post("/_arkret/self/consent/results/grant")
-                .json(
-                    &arkret_models_collaboration::consent_operations::ConsentGrantRequestBody {
-                        grant_event: arkret_wire::EventAdmissionSubmission::new(event),
-                    },
-                ),
-            StatusCode::OK,
+        super::consent_set::grant(
+            holder,
+            &sender.actor,
+            serde_json::from_value(serde_json::json!({"consent_scope":"voice_call"}))?,
         )
         .await?;
     }

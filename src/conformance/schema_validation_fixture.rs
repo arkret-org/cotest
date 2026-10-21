@@ -64,6 +64,11 @@ enum FixtureIdentity<'a> {
 /// fixture instead of adding a parallel schema runner.
 const SCHEMA_VALIDATION_FIXTURE_FILES: &[(&str, FixtureIdentity<'static>, &str)] = &[
     (
+        "protocol-simplification-fixture.json",
+        FixtureIdentity::Profile("ak.profile.station.v1"),
+        "protocol_simplification",
+    ),
+    (
         SCHEMA_VALIDATION_FIXTURE,
         FixtureIdentity::Profile(
             crate::conformance::helpers::PRIVACY_SECURITY_VECTOR_GROUP_PROFILE,

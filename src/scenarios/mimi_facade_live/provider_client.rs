@@ -125,7 +125,7 @@ pub(super) async fn run(
     let mut request = MimiRequestConsentRequestBody {
         requester_actor_id: requester.actor.clone(),
         holder_account_id: holder.account.clone(),
-        purpose: MimiConsentPurpose::Any,
+        purpose: MimiConsentPurpose::VoiceCall,
         strand_id: Some(StrandId::new(strand.to_owned())?),
         expires_at: None,
         proofs: vec![proof(server, &requester.method)?],
@@ -153,9 +153,38 @@ pub(super) async fn run(
         .as_ref()
         .context("actual holder PCR")?
         .pcr_realm_id;
-    let event=holder.client.author_event(pcr.as_str(), EventKind::ConsentGrant.as_str(), json!({
-        "consent_id":first.consent_id,"peer":{"kind":"actor","actor_id":requester.actor},"consent_scope":"any"
-    })).await?;
+    let peer = arkret_models_collaboration::events_payloads::consent::ConsentPeer::Actor {
+        actor_id: requester.actor.clone(),
+    };
+    let (expected_current, mut permissions) =
+        crate::scenarios::invite_service_fanout_live::read_consent_set(&holder.client, &peer)
+            .await?;
+    permissions.retain(|p| p.consent_scope != arkret_wire::ConsentScope::VoiceCall);
+    permissions.push(
+        arkret_models_collaboration::events_payloads::consent::ConsentPermission {
+            consent_scope: arkret_wire::ConsentScope::VoiceCall,
+            not_before: None,
+            expires_at: None,
+            constraints: None,
+            evidence_ref: None,
+            reason: None,
+        },
+    );
+    permissions.sort_by_key(|p| p.consent_scope);
+    let event = holder
+        .client
+        .author_event(
+            pcr.as_str(),
+            EventKind::ConsentReplace.as_str(),
+            serde_json::to_value(
+                arkret_models_collaboration::events_payloads::consent::ConsentReplacePayload {
+                    peer,
+                    expected_current,
+                    permissions,
+                },
+            )?,
+        )
+        .await?;
     let mut update = MimiUpdateConsentRequestBody {
         consent_id: first.consent_id.clone(),
         decision: MimiConsentDecision::Accept,
@@ -199,6 +228,41 @@ pub(super) async fn run(
             && replay.updated_at == accepted.updated_at
             && counts(database, pcr.as_str()).await? == committed,
         "typed Consent retry duplicated its Event"
+    );
+
+    let peer = arkret_models_collaboration::events_payloads::consent::ConsentPeer::Actor {
+        actor_id: requester.actor.clone(),
+    };
+    let (expected_current, mut permissions) =
+        crate::scenarios::invite_service_fanout_live::read_consent_set(&holder.client, &peer)
+            .await?;
+    permissions.retain(|p| p.consent_scope != arkret_wire::ConsentScope::VoiceCall);
+    let (cleared, _) = crate::scenarios::invite_service_fanout_live::submit_consent_set(
+        &holder.client,
+        arkret_models_collaboration::events_payloads::consent::ConsentReplacePayload {
+            peer: peer.clone(),
+            expected_current,
+            permissions,
+        },
+    )
+    .await?;
+    let after_clear = counts(database, pcr.as_str()).await?;
+    let replay_after_change = sdk.mimi_update_consent(&update).await?;
+    ensure!(
+        replay_after_change == accepted && counts(database, pcr.as_str()).await? == after_clear,
+        "an old facade decision was reexecuted after a native replacement"
+    );
+    let (_, current) =
+        crate::scenarios::invite_service_fanout_live::read_consent_set(&holder.client, &peer)
+            .await?;
+    ensure!(
+        current
+            .iter()
+            .all(|p| p.consent_scope != arkret_wire::ConsentScope::VoiceCall)
+            && !cleared
+                .permission_scopes
+                .contains(&arkret_wire::ConsentScope::VoiceCall),
+        "exact facade retry restored a removed permission"
     );
 
     let room = arkret_wire::MimiRoomUri::new(format!("{provider}/rooms/{strand}"))

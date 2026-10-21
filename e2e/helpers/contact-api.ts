@@ -31,6 +31,7 @@ import {
   refreshEventEnvelopeProof,
   signWithRegisteredEventSigner,
   signedEventEnvelope,
+  sha256CanonicalJson,
   submitPeerInviteDeliveryApi,
   submitSignedEventApi,
   cotestWire,
@@ -40,68 +41,67 @@ import {
   wireErrCode,
 } from "./coland-api";
 import type { JointUser } from "./users";
-import type { ContactPeer, InviteObject } from "./generated/spec-wire-objects";
+import { replaceConsentScopeApi } from "./consent-api";
+import type {
+  ContactPeer, ContactListRow as WireContactListRow, ContactOperationOutcome,
+  ContactRequestBody, ContactRespondRequestBody, ContactRejectRequestBody,
+  ContactTombstoneRequestBody, InviteObject,
+} from "./generated/spec-wire-objects";
 
-// ── Contact list / request / respond wire types (subset we assert on). ──
-type ContactState =
-  | "pending_outgoing"
-  | "pending_incoming"
-  | "accepted"
-  | "rejected"
-  | "tombstoned";
-type DirectConversationSummary = {
-  realm_id: string;
-  main_strand_id: string;
-  binding_event_ref?: string;
-  state: string;
-};
-type ContactAgentProjection = {
-  actor_id: ReturnType<typeof accountActorId> | {
-    kind: "service";
-    service_id: string;
-  };
-  controller_account_id: { principal_id: string; station_id: string };
-  display_name?: string;
-  agent_slug?: string;
-  direct_conversation?: DirectConversationSummary;
-};
-
-export type ContactListRow = {
-  peer: string | Record<string, unknown>;
+// The extra names below are harness projections, derived from formal wire DTOs.
+type ContactState = WireContactListRow["state"];
+type ContactRequestPrepare = Extract<ContactRequestBody, { phase: "prepare" }>;
+type ContactScope = WireContactListRow["granted_to_peer_scopes"][number];
+export type ContactListRow = Omit<WireContactListRow, "peer"> & {
+  peer: string;
   peerIdentity: ContactPeer;
-  state: ContactState;
-  request_event_ref?: string;
-  response_event_ref?: string;
-  next_prepare_input?: {
-    contact_round_id: string;
-    version: number;
-    predecessor_event_ref: string;
-  };
-  tombstone_event_ref?: string;
-  granted_by_me: string[];
-  granted_to_me: string[];
-  bidirectional_scopes: string[];
-  effective_scopes?: string[];
-  direct_conversation?: DirectConversationSummary;
-  agents?: ContactAgentProjection[];
-  contact_agents?: ContactAgentProjection[];
+  granted_by_me: ContactScope[];
+  granted_to_me: ContactScope[];
 };
 type ContactRequestOutcome = {
   request_event_ref: string;
-  request_acceptance_receipt: Record<string, unknown>;
+  request_acceptance_receipt: Extract<ContactOperationOutcome, { status: "accepted"; result_kind: "request" }>["request_acceptance_receipt"];
   state: ContactState;
 };
 type ContactRespondOutcome = {
   response_event_ref: string;
-  acceptance_receipt: Record<string, unknown>;
+  acceptance_receipt: Extract<ContactOperationOutcome, { status: "accepted"; result_kind: "response" }>["normal_response_acceptance_receipt"]
+    | Extract<ContactOperationOutcome, { status: "accepted"; result_kind: "reject" }>["reject_acceptance_receipt"];
   state: ContactState;
 };
-type ContactTombstoneOutcome = {
-  tombstone_event_ref: string;
-  consent_revoke_refs: string[];
-  state: ContactState;
-  partial_revoke?: boolean;
-};
+type ContactTombstoneOutcome = { tombstone_event_ref: string; state: "tombstoned" };
+
+function contactScopes(scopes: string[]): ContactScope[] {
+  const order: ContactScope[] = ["invite", "direct_message", "voice_call", "video_call", "presence"];
+  for (const scope of scopes) {
+    if (!order.includes(scope as ContactScope)) throw new Error(`invalid Contact scope ${scope}`);
+  }
+  return [...new Set(scopes)].sort((a, b) => order.indexOf(a as ContactScope) - order.indexOf(b as ContactScope)) as ContactScope[];
+}
+
+type PreparedContact = Extract<ContactOperationOutcome, { status: "prepared" }>;
+function signContactDraft(
+  prepared: ContactOperationOutcome, operationId: string,
+  resultKind: PreparedContact["result_kind"], expectedKind: string,
+  actor: ReturnType<typeof accountActorId>, peer: ContactPeer,
+): { prepared: PreparedContact; signedEvent: Record<string, unknown> } {
+  if (prepared.status !== "prepared" || prepared.result_kind !== resultKind || prepared.operation_id !== operationId) {
+    throw new Error(`Contact prepare did not return its exact operation and branch: ${JSON.stringify(prepared)}`);
+  }
+  expect(Date.parse(prepared.expires_at)).toBeGreaterThan(Date.now());
+  const bytes = Buffer.from(prepared.event_draft.unsigned_event_bytes, "base64url").toString("utf8");
+  const signedEvent = JSON.parse(bytes) as Record<string, unknown>;
+  expect(canonicalJson(signedEvent)).toBe(bytes);
+  expect(`sha256:${sha256CanonicalJson(signedEvent)}`).toBe(prepared.event_draft.event_digest);
+  expect(signedEvent.kind).toBe(expectedKind);
+  expect(signedEvent.actor_id).toEqual(actor);
+  expect(signedEvent.realm_id).toBe(principalControlRealmForId(actor.account_id.principal_id));
+  expect(signedEvent.scope_ref).toEqual({ kind: "realm", realm_id: signedEvent.realm_id });
+  expect((signedEvent.payload as Record<string, unknown>).peer).toEqual(peer);
+  refreshEventEnvelopeProof(signedEvent);
+  expect((signedEvent.producer_proof as { event_digest: string }).event_digest).toBe(prepared.event_draft.event_digest);
+  return { prepared, signedEvent };
+}
 
 export type DirectConversationResolveOutcome = {
   state:
@@ -126,10 +126,7 @@ export type DirectConversationResolveOutcome = {
 // (`delivered | blocked`). Quarantine MUST NOT be disclosed at all — it is
 // reported as `status="deferred"` with no `disclosed_outcome`.
 type InviteDeliveryOutcome = InviteDeliveryOutcomeView;
-type InviteConsentGrant = {
-  consentId: string;
-  eventRef: string;
-};
+type InviteConsentGrant = { eventRef: string };
 
 export async function grantInviteConsentArkret(
   request: APIRequestContext,
@@ -138,53 +135,15 @@ export async function grantInviteConsentArkret(
   peerId: string,
   opts: { server?: ColandKey; peerStationId?: string } = {},
 ): Promise<InviteConsentGrant> {
-  const consentId = `ak:consent:${uuidV7()}`;
   const peer = {
-    kind: "actor",
+    kind: "actor" as const,
     actor_id: accountActorId(peerId, opts.server, opts.peerStationId),
   };
-  const envelope = signedEventEnvelope({
-    actorId: holder.id,
-    realmId: principalControlRealmForId(holder.id),
-    kind: "ak.consent.grant",
-    authorizationRef: principalControlRootAuthorizationRefForId(holder.id),
-    server: opts.server,
-    payload: {
-      consent_id: consentId,
-      peer,
-      consent_scope: "invite",
-      expires_at: canonicalTimestamp(
-        new Date(Date.now() + 24 * 60 * 60 * 1000),
-      ),
-    },
-  });
-  await submitSignedEventApi(request, token, envelope, {
-    server: opts.server,
-    context: `grant invite consent to ${peerId}`,
-  });
-  const eventRef = String(envelope.event_id);
-  // `ak.self.consent.resource.get.v1`: the holder reads the typed current
-  // Consent result selected by peer and scope.
-  await expect
-    .poll(
-      async () => {
-        const resultUrl =
-          `${colandBaseUrl(opts.server)}/_arkret/self/consent/result` +
-          `?peer=${encodeURIComponent(canonicalJson(peer))}&consent_scope=invite`;
-        const response = await request.get(resultUrl, {
-          headers: authHeaders(token, "GET", resultUrl),
-        });
-        if (!response.ok()) return false;
-        const body = (await response.json()) as {
-          consent_id?: string;
-          state?: string;
-        };
-        return body.state === "active" && body.consent_id === consentId;
-      },
-      { timeout: 30_000, intervals: [250, 500, 1_000, 2_000] },
-    )
-    .toBe(true);
-  return { consentId, eventRef };
+  const { event } = await replaceConsentScopeApi(request, token, holder.id, peer, "invite", {
+    consent_scope: "invite",
+    expires_at: canonicalTimestamp(new Date(Date.now() + 24 * 60 * 60 * 1000)),
+  }, opts);
+  return { eventRef: String(event.event_id) };
 }
 
 // ── Contact request / respond / list / tombstone. ──
@@ -257,19 +216,19 @@ export async function requestContactArkret(
      * `explicit_address`, so callers exercising a real federation delivery
      * should pass a locator (or another allow-listed evidence kind).
      */
-    introductionEvidence?: Record<string, unknown>;
+    introductionEvidence?: ContactRequestPrepare["introduction_evidence"];
   },
 ): Promise<{ outcome: ContactRequestOutcome; response: APIResponse }> {
   const nonce = uuidV7();
   const operationId = `ak:operation:contact.request.${nonce}`;
   const idempotencyKey = opts.idempotencyKey ?? nonce;
   const url = `${colandBaseUrl(opts.server)}/_arkret/self/contacts/request`;
-  const prepareBody = {
+  const prepareBody: ContactRequestPrepare = {
     phase: "prepare",
     operation_id: operationId,
     idempotency_key: idempotencyKey,
     peer: { kind: "human", account_id: accountActorId(target, opts.server, opts.recipientServiceId).account_id },
-    granted_to_peer_scopes: opts.requestedScopes,
+    granted_to_peer_scopes: contactScopes(opts.requestedScopes),
     introduction_evidence: opts.introductionEvidence ?? {
       kind: "same_station",
     },
@@ -282,18 +241,12 @@ export async function requestContactArkret(
     },
     data: canonicalJson(prepareBody),
   });
-  const prepared = await expectJsonOk<{
-    operation_id: string;
-    reservation_handle: string;
-    event_draft: { unsigned_event_bytes: string };
-  }>(preparedResponse, `prepare contact request -> ${target}`);
-  const signedEvent = JSON.parse(
-    Buffer.from(
-      prepared.event_draft.unsigned_event_bytes,
-      "base64url",
-    ).toString("utf8"),
-  ) as Record<string, unknown>;
-  refreshEventEnvelopeProof(signedEvent);
+  const actor = accountActorId(await currentActorIdApi(request, token, opts), opts.server);
+  const { prepared, signedEvent } = signContactDraft(
+    await expectJsonOk<ContactOperationOutcome>(preparedResponse, `prepare contact request -> ${target}`),
+    operationId, "request", "ak.contact.requested", actor, prepareBody.peer,
+  );
+  expect((signedEvent.payload as Record<string, unknown>).granted_to_peer_scopes).toEqual(prepareBody.granted_to_peer_scopes);
   const response = await submitContactCommit(request, token, url, {
     phase: "commit",
     operation_id: operationId,
@@ -301,18 +254,13 @@ export async function requestContactArkret(
     reservation_handle: prepared.reservation_handle,
     signed_event: signedEvent,
   });
-  const accepted = await expectJsonOk<{
-    status: "accepted" | "failed";
-    reason?: string;
-    request_acceptance_receipt?: Record<string, unknown> & {
-      core: { request_event_ref: string };
-    };
-  }>(response, `contact request -> ${target}`);
-  if (accepted.status !== "accepted" || !accepted.request_acceptance_receipt) {
-    throw new Error(
-      `contact request -> ${target} was not accepted: ${JSON.stringify(accepted)}`,
-    );
+  const accepted = await expectJsonOk<ContactOperationOutcome>(response, `contact request -> ${target}`);
+  if (accepted.status !== "accepted" || accepted.result_kind !== "request" || accepted.operation_id !== operationId) {
+    throw new Error(`Contact request was not accepted for its exact operation: ${JSON.stringify(accepted)}`);
   }
+  expect(accepted.request_acceptance_receipt.core.request_event_ref).toBe(signedEvent.event_id);
+  expect(accepted.request_acceptance_receipt.core.holder).toEqual({ kind: "human", account_id: actor.account_id });
+  expect(accepted.request_acceptance_receipt.core.peer).toEqual(prepareBody.peer);
   const outcome: ContactRequestOutcome = {
     request_event_ref:
       accepted.request_acceptance_receipt.core.request_event_ref,
@@ -334,7 +282,7 @@ export async function resolvePrincipalLocator(
   subjectId: string,
   server: ColandKey,
   sessionToken: string,
-): Promise<Record<string, unknown>> {
+): Promise<Extract<ContactRequestPrepare["introduction_evidence"], { kind: "locator_ref" }>["principal_locator"]> {
   const issueUrl = `${colandBaseUrl(server)}/_arkret/self/invite-locators`;
   const issue = await request.post(issueUrl, {
     headers: {
@@ -353,7 +301,7 @@ export async function resolvePrincipalLocator(
       data: canonicalJson({ locator_token: issued.locator_token }),
     },
   );
-  const locator = await expectJsonOk<Record<string, unknown>>(
+  const locator = await expectJsonOk<Extract<ContactRequestPrepare["introduction_evidence"], { kind: "locator_ref" }>["principal_locator"]>(
     response,
     `resolve principal locator for ${subjectId}`,
   );
@@ -408,17 +356,13 @@ export async function respondContactArkret(
   const nonce = uuidV7();
   const operationId = `ak:operation:contact.${opts.action}.${nonce}`;
   const url = `${colandBaseUrl(opts.server)}/_arkret/self/contacts/${opts.action === "accept" ? "respond" : "reject"}`;
-  const prepareBody = {
-    phase: "prepare",
-    operation_id: operationId,
-    idempotency_key: nonce,
-    peer: row.peerIdentity,
-    request_event_ref: row.request_event_ref,
-    action: opts.action,
-    ...(opts.action === "accept"
-      ? { granted_to_peer_scopes: opts.grantedScopes ?? [] }
-      : {}),
+  const common = {
+    phase: "prepare" as const, operation_id: operationId, idempotency_key: nonce,
+    peer: row.peerIdentity, request_event_ref: row.request_event_ref,
   };
+  const prepareBody: ContactRespondRequestBody | ContactRejectRequestBody = opts.action === "accept"
+    ? { ...common, action: "accept", granted_to_peer_scopes: contactScopes(opts.grantedScopes ?? []) }
+    : { ...common, action: "reject" };
   const preparedResponse = await request.post(url, {
     headers: {
       ...authHeaders(token, "POST", url),
@@ -426,17 +370,14 @@ export async function respondContactArkret(
     },
     data: canonicalJson(prepareBody),
   });
-  const prepared = await expectJsonOk<{
-    reservation_handle: string;
-    event_draft: { unsigned_event_bytes: string };
-  }>(preparedResponse, `prepare contact ${opts.action} <- ${opts.requesterId}`);
-  const signedEvent = JSON.parse(
-    Buffer.from(
-      prepared.event_draft.unsigned_event_bytes,
-      "base64url",
-    ).toString("utf8"),
-  ) as Record<string, unknown>;
-  refreshEventEnvelopeProof(signedEvent);
+  const resultKind = opts.action === "accept" ? "response" : "reject";
+  const actor = accountActorId(await currentActorIdApi(request, token, opts), opts.server);
+  const { prepared, signedEvent } = signContactDraft(
+    await expectJsonOk<ContactOperationOutcome>(preparedResponse, `prepare contact ${opts.action} <- ${opts.requesterId}`),
+    operationId, resultKind, opts.action === "accept" ? "ak.contact.accepted" : "ak.contact.rejected",
+    actor, row.peerIdentity,
+  );
+  expect((signedEvent.payload as Record<string, unknown>).request_event_ref).toBe(row.request_event_ref);
   const response = await submitContactCommit(request, token, url, {
     phase: "commit",
     operation_id: operationId,
@@ -444,25 +385,20 @@ export async function respondContactArkret(
     reservation_handle: prepared.reservation_handle,
     signed_event: signedEvent,
   });
-  const accepted = await expectJsonOk<Record<string, unknown>>(
-    response,
-    `contact respond ${opts.action} <- ${opts.requesterId}`,
-  );
-  const receipt =
-    (accepted.normal_response_acceptance_receipt as
-      Record<string, unknown> | undefined) ??
-    (accepted.reject_acceptance_receipt as Record<string, unknown> | undefined);
-  const core = receipt?.core as Record<string, unknown> | undefined;
-  return {
-    response_event_ref: String(
-      core?.response_event_ref ??
-        core?.reject_event_ref ??
-        signedEvent.event_id,
-    ),
-    acceptance_receipt: receipt ?? {},
-    state: opts.action === "accept" ? "accepted" : "rejected",
-  };
+  const accepted = await expectJsonOk<ContactOperationOutcome>(response, `contact respond ${opts.action} <- ${opts.requesterId}`);
+  if (accepted.status !== "accepted" || accepted.operation_id !== operationId ||
+      (accepted.result_kind !== "response" && accepted.result_kind !== "reject") || accepted.result_kind !== resultKind) {
+    throw new Error(`Contact response was not accepted for its exact operation and branch: ${JSON.stringify(accepted)}`);
+  }
+  const receipt = accepted.result_kind === "response"
+    ? accepted.normal_response_acceptance_receipt : accepted.reject_acceptance_receipt;
+  const eventRef = accepted.result_kind === "response"
+    ? accepted.normal_response_acceptance_receipt.response_event_ref : accepted.reject_acceptance_receipt.reject_event_ref;
+  expect(eventRef).toBe(signedEvent.event_id);
+  return { response_event_ref: eventRef, acceptance_receipt: receipt,
+    state: accepted.result_kind === "response" ? "accepted" : "rejected" };
 }
+
 async function listContactsArkret(
   request: APIRequestContext,
   token: string,
@@ -472,13 +408,12 @@ async function listContactsArkret(
   const response = await request.get(url, {
     headers: authHeaders(token, "GET", url),
   });
-  const body = await expectJsonOk<{ contacts?: ContactListRow[] }>(
+  const body = await expectJsonOk<{ contacts: WireContactListRow[] }>(
     response,
     "list contacts",
   );
-  return (body.contacts ?? []).map((row) => {
-    const wire = row as unknown as Record<string, unknown>;
-    const peer = wire.peer as ContactPeer;
+  return body.contacts.map((row) => {
+    const peer = row.peer;
     const peerId =
       peer?.kind === "human" && typeof peer.account_id?.principal_id === "string"
         ? peer.account_id.principal_id
@@ -486,16 +421,14 @@ async function listContactsArkret(
           ? eventPrincipalId({ actor_id: peer.actor_id })
           : undefined;
     if (!peerId) {
-      throw new Error(`contact row has an invalid canonical peer: ${JSON.stringify(wire.peer)}`);
+      throw new Error(`contact row has an invalid canonical peer: ${JSON.stringify(row.peer)}`);
     }
     return {
       ...row,
       peer: peerId,
       peerIdentity: peer,
-      granted_by_me:
-        (wire.granted_to_peer_scopes as string[] | undefined) ?? [],
-      granted_to_me:
-        (wire.granted_by_peer_scopes as string[] | undefined) ?? [],
+      granted_by_me: row.granted_to_peer_scopes,
+      granted_to_me: row.granted_by_peer_scopes,
     };
   });
 }
@@ -517,8 +450,6 @@ export async function tombstoneContactArkret(
   token: string,
   contact: string,
   opts: {
-    revokeScopes?: string[];
-    fullPeerRevoke?: boolean;
     blockPeer?: boolean;
     // Cross-PS addressing (spec contact-and-direct-conversation.md §4.1): the
     // peer's home service DID so coland federates the `ak.contact.tombstone`
@@ -547,46 +478,39 @@ export async function tombstoneContactArkret(
   const url = `${colandBaseUrl(opts.server)}/_arkret/self/contacts/tombstone`;
   const nonce = uuidV7();
   const operationId = `ak:operation:contact.tombstone.${nonce}`;
-  const prepare = await expectJsonOk<{
-    reservation_handle: string;
-    event_draft: { unsigned_event_bytes: string };
-  }>(
-    await request.post(url, {
-      headers: {
-        ...authHeaders(token, "POST", url),
-        "content-type": "application/json",
-      },
-      data: canonicalJson({
-        phase: "prepare",
-        operation_id: operationId,
-        idempotency_key: nonce,
-        peer: row.peerIdentity,
-        contact_round_id: contactRoundId,
-        version,
-        predecessor_event_ref: predecessorEventRef,
-        block_peer: opts.blockPeer ?? false,
-      }),
-    }),
-    `prepare tombstone contact ${contact}`,
+  const prepareBody: Extract<ContactTombstoneRequestBody, { phase: "prepare" }> = {
+    phase: "prepare", operation_id: operationId, idempotency_key: nonce,
+    peer: row.peerIdentity, contact_round_id: contactRoundId, version,
+    predecessor_event_ref: predecessorEventRef, block_peer: opts.blockPeer ?? false,
+  };
+  const preparedResponse = await request.post(url, {
+    headers: { ...authHeaders(token, "POST", url), "content-type": "application/json" },
+    data: canonicalJson(prepareBody),
+  });
+  const actor = accountActorId(await currentActorIdApi(request, token, opts), opts.server);
+  const { prepared, signedEvent } = signContactDraft(
+    await expectJsonOk<ContactOperationOutcome>(preparedResponse, `prepare tombstone contact ${contact}`),
+    operationId, "tombstone", "ak.contact.tombstone", actor, row.peerIdentity,
   );
-  const signedEvent = JSON.parse(
-    Buffer.from(prepare.event_draft.unsigned_event_bytes, "base64url").toString(
-      "utf8",
-    ),
-  ) as Record<string, unknown>;
-  refreshEventEnvelopeProof(signedEvent);
+  const payload = signedEvent.payload as Record<string, unknown>;
+  expect(payload.contact_round_id).toBe(contactRoundId);
+  expect(payload.version).toBe(version);
+  expect(payload.predecessor_event_ref).toBe(predecessorEventRef);
   const response = await submitContactCommit(request, token, url, {
     phase: "commit",
     operation_id: operationId,
     idempotency_key: nonce,
-    reservation_handle: prepare.reservation_handle,
+    reservation_handle: prepared.reservation_handle,
     signed_event: signedEvent,
   });
-  const accepted = await expectJsonOk<ContactTombstoneOutcome>(
-    response,
-    `tombstone contact ${contact}`,
-  );
-  return { ...accepted, state: "tombstoned" };
+  const accepted = await expectJsonOk<ContactOperationOutcome>(response, `tombstone contact ${contact}`);
+  if (accepted.status !== "accepted" || accepted.result_kind !== "tombstone" || accepted.operation_id !== operationId) {
+    throw new Error(`Contact tombstone was not accepted for its exact operation: ${JSON.stringify(accepted)}`);
+  }
+  expect(accepted.lineage.event_ref).toBe(signedEvent.event_id);
+  expect(accepted.lineage.peer).toEqual(row.peerIdentity);
+  expect(accepted.lineage.contact_round_id).toBe(contactRoundId);
+  return { tombstone_event_ref: accepted.lineage.event_ref, state: "tombstoned" };
 }
 
 async function uploadDirectConversationKeyPackage(
@@ -678,7 +602,7 @@ export type InviteReceivePolicy = {
 // ── Realm-pull (consent_grant evidence) invite delivery. ──
 
 export type IntroductionEvidence =
-  | { kind: "consent_grant"; consent_grant_ref: string; consent_id?: string }
+  | { kind: "consent_grant"; consent_grant_ref: string }
   | { kind: "explicit_address" };
 
 // Build a `ak.invite.create` invite event whose payload satisfies coland's

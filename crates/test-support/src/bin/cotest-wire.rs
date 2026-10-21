@@ -22,6 +22,7 @@ fn main() -> Result<()> {
         "historical-human-signer-fact" => wire::historical_human_signer_fact(input)?,
         "event-envelope-parse" => wire::event_envelope_parse(input)?,
         "verify-realm-state-snapshot" => wire::verify_realm_state_snapshot(input)?,
+        "verify-consent-current" => wire::verify_consent_current(input)?,
         "mimi-consent-proof" => wire::mimi_consent_proof(input)?,
         "mimi-request-consent-proof" => wire::mimi_request_consent_proof(input)?,
         "key-backup-auth-signature" => wire::key_backup_auth_signature(input)?,

@@ -268,6 +268,110 @@ pub fn verify_realm_state_snapshot(input: Value) -> Result<Value> {
     })
 }
 
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ConsentCurrentVerificationInput {
+    request: arkret_models_collaboration::call_invitation::ConsentCurrentReadRequestBody,
+    outcome: arkret_models_collaboration::call_invitation::ConsentCurrentReadOutcome,
+    expected_realm_id: arkret_wire::RealmId,
+    expected_generation: u64,
+    expected_verification_method: DidUrl,
+    authority: ConsentCurrentVerificationAuthority,
+}
+
+#[derive(Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
+enum ConsentCurrentVerificationAuthority {
+    PublicKey {
+        public_key_multibase: String,
+    },
+    ServiceResolution {
+        trusted_service_id: DidCoreId,
+        service_resolution: arkret_models_identity::AuthenticatedServiceResolution,
+    },
+}
+
+/// Verify a complete editing read against independently obtained authority
+/// material. None of these anchors are learned from the outcome being checked.
+pub fn verify_consent_current_read_material(
+    request: &arkret_models_collaboration::call_invitation::ConsentCurrentReadRequestBody,
+    outcome: &arkret_models_collaboration::call_invitation::ConsentCurrentReadOutcome,
+    expected_realm_id: &arkret_wire::RealmId,
+    expected_generation: u64,
+    expected_verification_method: &DidUrl,
+    key: &arkret_signatures::PublicKeyMaterial,
+    now: chrono::DateTime<Utc>,
+) -> Result<()> {
+    ensure!(
+        &outcome.realm_id == expected_realm_id,
+        "Consent current names a different holder PCR"
+    );
+    ensure!(
+        &outcome.proof.verification_method == expected_verification_method,
+        "Consent current names a different authority method"
+    );
+    outcome.validate_for_request(request, expected_generation, now)?;
+    arkret_signatures::call_invitation::verify_consent_current_read(outcome, request, key, now)?;
+    Ok(())
+}
+
+/// Read-only CLI oracle. A service-resolution carrier must include its
+/// authenticated method history; a bare advertised DID document is insufficient.
+pub fn verify_consent_current(input: Value) -> Result<Value> {
+    let input: ConsentCurrentVerificationInput = serde_json::from_value(input)?;
+    let now = Utc::now();
+    let mut failure_stage = "authority";
+    let checked = (|| -> Result<()> {
+        let key = match &input.authority {
+            ConsentCurrentVerificationAuthority::PublicKey {
+                public_key_multibase,
+            } => arkret_signatures::PublicKeyMaterial::Ed25519Multibase {
+                value: public_key_multibase.clone(),
+            },
+            ConsentCurrentVerificationAuthority::ServiceResolution {
+                trusted_service_id,
+                service_resolution,
+            } => {
+                arkret_identity::verify_authenticated_service_resolution_history(
+                    service_resolution,
+                    trusted_service_id,
+                    now,
+                )?;
+                let method_did = arkret_identity::verification_method_did(
+                    input.expected_verification_method.as_str(),
+                )?;
+                ensure!(&project_did_to_core_id(&method_did)? == trusted_service_id);
+                arkret_identity::validate_verification_method_relationship(
+                    &service_resolution.normalized_did_document,
+                    &input.expected_verification_method,
+                    &method_did,
+                    arkret_identity::DidVerificationRelationship::AssertionMethod,
+                )?;
+                arkret_identity::resolve_verification_method_key_from_document(
+                    &service_resolution.normalized_did_document,
+                    input.expected_verification_method.as_str(),
+                )?
+                .public_key
+            }
+        };
+        failure_stage = "current";
+        verify_consent_current_read_material(
+            &input.request,
+            &input.outcome,
+            &input.expected_realm_id,
+            input.expected_generation,
+            &input.expected_verification_method,
+            &key,
+            now,
+        )
+    })();
+    Ok(if checked.is_ok() {
+        json!({"verified": true})
+    } else {
+        json!({"verified": false, "failure_stage": failure_stage})
+    })
+}
+
 #[derive(Debug, Deserialize)]
 struct EventProofInput {
     actor_did: String,
@@ -1653,6 +1757,94 @@ fn event_digest(event: &Value, _mode: EventDigestMode) -> Result<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn consent_current_oracle_requires_independent_anchors_and_a_real_proof() {
+        use arkret_models_collaboration::call_invitation::{
+            ConsentCurrentReadOutcome, ConsentCurrentReadRequestBody,
+        };
+        let account = AccountId::new(
+            DidCoreId::new("ak:did_core:web:holder.example").unwrap(),
+            DidCoreId::new("ak:did_core:web:station.example").unwrap(),
+        );
+        let request: ConsentCurrentReadRequestBody = serde_json::from_value(json!({
+            "holder_account_id":account,
+            "peer":{"kind":"actor","actor_id":{"kind":"account","account_id":account}},
+            "audience_actor_id":{"kind":"service","service_id":account.station_id},
+            "nonce":canonical::base64url_encode(&[19;32]),
+        }))
+        .unwrap();
+        let realm = arkret_wire::RealmId::from_event_id(&EventId::from_digest(
+            canonical::DigestSuite::Sha256,
+            [43; 32],
+        ));
+        let method = DidUrl::new("did:web:station.example#federation-fanout-key").unwrap();
+        let now = Utc::now().with_nanosecond(0).unwrap();
+        let signer = SigningKey::from_bytes(&[41; 32]);
+        let mut outcome: ConsentCurrentReadOutcome = serde_json::from_value(json!({
+            "request_digest":arkret_models_collaboration::call_invitation::canonical_request_digest(&request).unwrap(),
+            "realm_id":realm,
+            "governance_generation":0,
+            "effective_stream_head":{"stream_ref":{"kind":"realm","realm_id":realm},
+                "stream_position":2,"commit_id":arkret_wire::RealmCommitId::from_digest([47;32])},
+            "current":{"state":"never_written"},
+            "evaluated_at":canonical::normalize_timestamp_canonical(now),
+            "expires_at":canonical::normalize_timestamp_canonical(now+chrono::Duration::seconds(30)),
+            "proof":{"verification_method":method,"jws":"pending"},
+        })).unwrap();
+        arkret_signatures::call_invitation::sign_consent_current_read(&mut outcome, &signer)
+            .unwrap();
+        let input = json!({
+            "request":request,
+            "outcome":outcome,
+            "expected_realm_id":realm,
+            "expected_generation":0,
+            "expected_verification_method":method,
+            "authority":{"kind":"public_key","public_key_multibase":
+                canonical::ed25519_pubkey_to_did_key_multibase(&signer.verifying_key().to_bytes())},
+        });
+        assert_eq!(
+            verify_consent_current(input.clone()).unwrap()["verified"],
+            true
+        );
+        for mutation in ["realm", "generation", "method", "proof", "nonce", "key"] {
+            let mut changed = input.clone();
+            match mutation {
+                "realm" => {
+                    changed["expected_realm_id"] = json!(arkret_wire::RealmId::from_event_id(
+                        &EventId::from_digest(canonical::DigestSuite::Sha256, [53; 32],)
+                    ))
+                }
+                "generation" => changed["expected_generation"] = json!(1),
+                "method" => {
+                    changed["expected_verification_method"] =
+                        json!("did:web:another.example#federation-fanout-key")
+                }
+                "proof" => changed["outcome"]["proof"]["jws"] = json!("invalid"),
+                "nonce" => {
+                    changed["request"]["nonce"] = json!(canonical::base64url_encode(&[59; 32]))
+                }
+                "key" => {
+                    changed["authority"]["public_key_multibase"] =
+                        json!(canonical::ed25519_pubkey_to_did_key_multibase(
+                            &SigningKey::from_bytes(&[61; 32]).verifying_key().to_bytes()
+                        ))
+                }
+                _ => unreachable!(),
+            }
+            assert_eq!(
+                verify_consent_current(changed).unwrap()["verified"],
+                false,
+                "accepted substituted {mutation}"
+            );
+        }
+        let mut missing_anchor = input;
+        missing_anchor
+            .as_object_mut()
+            .unwrap()
+            .remove("expected_generation");
+        assert!(verify_consent_current(missing_anchor).is_err());
+    }
 
     #[test]
     fn founding_device_event_and_hpke_custody_are_fresh_independent_keys() {
