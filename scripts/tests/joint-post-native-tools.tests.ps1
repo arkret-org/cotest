@@ -59,7 +59,7 @@ fn actual_auto_binary_uses_test_feature_graph() {
  $prepare=Join-Path $repoRoot 'scripts/prepare-cargo-artifact.ps1'
  $normal=@(Prepare-JointPostNativeTools -RepositoryRoot $fixture -TargetDirectory $target -PrepareScriptPath $prepare -DiagnosticPath (Join-Path $parent 'normal.json') -Jobs 1)
  Assert-True ($normal.Count -eq 2) 'both product tools must be reported'
- $testOutput=Invoke-BuildInputNative -FilePath $cargo -WorkingDirectory $fixture -Arguments @('test','--locked','--offline','--manifest-path',(Join-Path $fixture 'Cargo.toml'),'--test','provisioning_live','--jobs','1')
+ $testOutput=Invoke-BuildInputNative -FilePath $cargo -WorkingDirectory $fixture -Arguments @('test','--locked','--offline','--manifest-path',(Join-Path $fixture 'Cargo.toml'),'--target-dir',$target,'--test','provisioning_live','--jobs','1')
  Assert-True ($testOutput.Contains('1 passed; 0 failed')) 'integration gate must actually run and prove dev-feature tool variant'
  foreach($name in @('cotest-wire','cotest-provision')){
   $exe=if($IsWindows){"$name.exe"}else{$name};$path=Join-Path $target "debug/$exe"
