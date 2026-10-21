@@ -2361,12 +2361,21 @@ async fn direct_actor_refresh_matrix(
     )
     .await?;
     let original_roster = original_roster_replication(context, &token.call_id).await?;
-    let seed = arkret_canonical::base64_standard_encode([0xa7; 32]);
+    let rotation_seed = [0xa7; 32];
+    let seed = arkret_canonical::base64_standard_encode(rotation_seed);
     context
         .stations
         .server_mut(1)
         .restart_external_process_with_notary_signing_key(&seed)
         .await?;
+    let public_key = ed25519_dalek::SigningKey::from_bytes(&rotation_seed)
+        .verifying_key()
+        .to_bytes();
+    let issuer = context.stations.server(1);
+    context.holder.client =
+        issuer.reanchor_consent_current_client(&context.holder.client, public_key)?;
+    context.denied_holder.client =
+        issuer.reanchor_consent_current_client(&context.denied_holder.client, public_key)?;
     let rotated = exchange(&context.holder, &request).await?;
     verify_token(context, &request, &rotated).await?;
     ensure!(
