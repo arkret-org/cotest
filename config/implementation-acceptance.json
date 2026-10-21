@@ -605,7 +605,9 @@
         "arkret-rust-sdk/crates/identity/src/realm_authority_chain.rs",
         "coland/crates/storage-postgres/src/authority_commit.rs",
         "coland/crates/storage-postgres/src/pcr_private_authority.rs",
-        "coland/crates/storage-postgres/src/realm_management_archive.rs"
+        "coland/crates/storage-postgres/src/realm_management_archive.rs",
+        "coland/crates/storage-postgres/src/authority_commit/replica.rs",
+        "coland/crates/http/src/state/authority_self_event_unit.rs"
       ],
       "tests": [
         {
@@ -696,7 +698,25 @@
           "path": "cotest/tests/direct_conversation_founding_live.rs",
           "symbol": "cross_station_contact_round_founds_direct_conversation",
           "kind": "live",
-          "covers": "双方真实跨站创立/消息互解、gen0已验bundle、change失败零写与原binding/ref/Commit、迟到原件重复"
+          "covers": "双方真实跨站创立/消息互解、gen0已验bundle；pending claim在线及B站真实离线时change直接失败且两库原件零写，恢复原B后完成唯一绑定与迟到原件重复；待实际运行"
+        },
+        {
+          "path": "coland/crates/storage-postgres/tests/direct_conversation_founding_unit.rs",
+          "symbol": "peer_founding_missing_contact_dependency_writes_nothing",
+          "kind": "live",
+          "covers": "真实Direct原Genesis与since_join anchor两cut，原站有效gen0签change在普通/peer receipt/Welcome副本入口重复拒绝且全表零写；待最终合并输入实跑"
+        },
+        {
+          "path": "coland/crates/storage-postgres/tests/realm_membership_fanout.rs",
+          "symbol": "collaboration_governance_change_replica_uses_verified_since_join_genesis",
+          "kind": "live",
+          "covers": "普通Collaboration真实准入change由since_join成员副本Stored与exact Duplicate；待实跑"
+        },
+        {
+          "path": "cotest/tests/consent_invite_admission.rs",
+          "symbol": "full_peer_replacements_and_exact_requesters_use_the_real_invite_writer",
+          "kind": "live",
+          "covers": "真实全权限替换/空集合、exact requester与Invite writer完整矩阵；待本轮SUT实跑"
         }
       ],
       "engineering_checks": [
