@@ -25,10 +25,12 @@ pub fn run_applet_managed_actor_authority_suite() -> Result<()> {
     if groups.is_empty() {
         bail!("Realm Actor authority fixture has no acceptance groups");
     }
-    let artifacts = super::spec_artifacts_root();
-    let spec = artifacts
+    let fixture_path = super::fixture_path(MANAGED_ACTOR_FIXTURE)
+        .canonicalize()
+        .context("resolve the exact registered Realm Actor fixture")?;
+    let spec = fixture_path
         .ancestors()
-        .nth(3)
+        .nth(5)
         .context("Spec repository for the registered executor")?;
     if !spec.join("tools/test_realm_actor_contract.py").is_file() {
         bail!("The registered Realm Actor contract executor is unavailable");
@@ -62,6 +64,9 @@ pub fn run_applet_managed_actor_authority_suite() -> Result<()> {
         })
         .filter(|count| *count > 0)
         .context("Realm Actor executor must run a nonempty test suite")?;
+    if !stderr.lines().any(|line| line == "OK") {
+        bail!("Realm Actor executor did not finish without skips or expected failures: {stderr}");
+    }
     record_vector_event(
         "applet.managed_actor.realm_actor_successor",
         &json!({"entrypoint": MANAGED_ACTOR_ENTRYPOINT, "acceptance_groups": groups}),
