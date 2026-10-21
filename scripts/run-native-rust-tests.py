@@ -29,6 +29,7 @@ def native_child(command: list[str]) -> int:
     with tempfile.TemporaryDirectory(prefix="cotest-native-client-") as scratch:
         root = Path(scratch)
         environment = os.environ.copy()
+        environment.setdefault("COTEST_PYTHON_BIN", sys.executable)
         environment.update({
             CLIENT_CONFIG_SCOPE: str(root),
             "INKSON_CONFIG_PATH": str(root / "inkson" / "config.json"),
@@ -140,6 +141,7 @@ def run(command: list[str]) -> int:
         for private_key in (key, ca_key):
             private_key.chmod(0o600)
         environment = os.environ.copy()
+        environment.setdefault("COTEST_PYTHON_BIN", sys.executable)
         environment.update({
             "COLAND_TLS_CERT_PATH": str(chain),
             "COLAND_TLS_KEY_PATH": str(key),

@@ -569,10 +569,9 @@ fn core_id(did: &str) -> Result<DidCoreId> {
 }
 
 fn realm_id() -> RealmId {
-    RealmId::from_event_id(&EventId::from_digest(
-        arkret_canonical::DigestSuite::Sha256,
-        [0x10; 32],
-    ))
+    event(EventKind::RealmCreate, 0)
+        .expect("fixed genesis fixture")
+        .realm_id
 }
 
 fn realm_stream() -> CommitStreamRef {
@@ -602,12 +601,20 @@ fn placeholder_signature(context: DetachedSignatureContext) -> Result<DetachedOb
 fn event(kind: EventKind, seconds: i64) -> Result<Event> {
     Ok(arkret_wire::test_support::raw_event_at(
         kind.as_str(),
-        ScopeRef::Realm {
-            realm_id: realm_id(),
+        if kind == EventKind::RealmCreate {
+            ScopeRef::RealmGenesis
+        } else {
+            ScopeRef::Realm {
+                realm_id: realm_id(),
+            }
         },
         DidCoreId::new("ak:did_core:web:founder.example")?,
         core_id(STATION_A)?,
-        json!({}),
+        if kind == EventKind::RealmCreate {
+            json!({"object":{"purpose":"collaboration","governance_station_id":core_id(STATION_A)?}})
+        } else {
+            json!({})
+        },
         Utc.timestamp_opt(1_800_000_000 + seconds, 0).unwrap(),
     )?)
 }

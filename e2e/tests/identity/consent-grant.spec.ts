@@ -55,16 +55,26 @@ test("holder edits the complete peer set, retains inactive fields, and writes a 
 
     await read();
     await expect(voice.locator('[id^="consent-expires_at-"]')).toHaveValue("2026-02-01T00:00:00.000Z");
-    await expect(voice.locator('[id^="consent-constraints-"]')).toHaveValue('[{"unknown_rule":true}]');
-    await ui.page.locator('fieldset[data-scope="presence"]').getByRole("checkbox").check();
+    expect(JSON.parse(await voice.locator('[id^="consent-constraints-"]').inputValue())).toEqual([{ unknown_rule: true }]);
+    for (const scope of ["invite", "video_call", "presence"]) {
+      await ui.page.locator(`fieldset[data-scope="${scope}"]`).getByRole("checkbox").check();
+    }
     await replace();
     const extended = await summary(request, token, peer.user.id);
-    expect(extended.permission_scopes).toEqual(["voice_call", "presence"]);
+    expect(extended.permission_scopes).toEqual(["invite", "voice_call", "video_call", "presence"]);
     expect(extended.revision).not.toEqual(first.revision);
 
+    // Restore from durable application state and read the authenticated full set.
+    await ui.page.reload();
+    await ui.gotoAppPanel("/settings/consent", "consent-settings-panel");
+    await ui.page.getByTestId("consent-peer-input").fill(peer.user.id);
+    await ui.page.getByTestId("consent-peer-station-input").fill(colandServiceId());
     await read();
+    await expect(ui.page.getByTestId("consent-full-editor").getByRole("checkbox", { checked: true })).toHaveCount(4);
     await expect(voice.locator('[id^="consent-reason-"]')).toHaveValue("retained inactive permission");
-    for (const scope of ["voice_call", "presence"]) {
+    expect(JSON.parse(await voice.locator('[id^="consent-constraints-"]').inputValue())).toEqual([{ unknown_rule: true }]);
+    await expect(voice.locator('[id^="consent-expires_at-"]')).toHaveValue("2026-02-01T00:00:00.000Z");
+    for (const scope of ["invite", "voice_call", "video_call", "presence"]) {
       await ui.page.locator(`fieldset[data-scope="${scope}"]`).getByRole("checkbox").uncheck();
     }
     await replace();

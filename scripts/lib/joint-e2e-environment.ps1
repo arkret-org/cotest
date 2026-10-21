@@ -353,3 +353,22 @@ function Assert-CotestTopologyIsolation {
             -FailureMessage "topology reuses Coauth storage.$property across servers"
     }
 }
+
+function Get-CotestArtifactDrive {
+    param(
+        [Parameter(Mandatory = $true)][string]$OutputDirectory,
+        [object[]]$Drives = [System.IO.DriveInfo]::GetDrives()
+    )
+    $fullPath = [System.IO.Path]::GetFullPath($OutputDirectory)
+    $comparison = if ($IsWindows) { [System.StringComparison]::OrdinalIgnoreCase } else { [System.StringComparison]::Ordinal }
+    $separator = [System.IO.Path]::DirectorySeparatorChar
+    # Unix path roots are '/', even when artifacts live on another mount.
+    # Match directory boundaries and prefer the deepest actual mounted drive.
+    $matches = @($Drives | Where-Object {
+        $name = [System.IO.Path]::GetFullPath($_.Name)
+        $prefix = $name.TrimEnd($separator) + $separator
+        $fullPath.Equals($name, $comparison) -or $fullPath.StartsWith($prefix, $comparison)
+    } | Sort-Object { $_.Name.Length } -Descending)
+    if ($matches.Count -eq 0) { throw "No mounted drive contains the artifact directory: $fullPath" }
+    return $matches[0]
+}

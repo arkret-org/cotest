@@ -466,12 +466,10 @@
       "declared_test_bypasses": [
         "prepare_mls_device_false",
         "raw_http_fixture_or_oracle",
-        "session_injection",
-        "test_only_signer_or_wire_builder"
+        "session_injection"
       ],
       "claims_excluded": [
         "mls_device_and_keypackage_readiness",
-        "product_protocol_object_generation",
         "registration_login_authorization",
         "ui_driven_business_flow_for_raw_http_steps"
       ]
