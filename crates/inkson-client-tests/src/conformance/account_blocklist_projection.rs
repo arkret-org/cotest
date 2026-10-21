@@ -2421,6 +2421,17 @@ async fn native_endpoint(
     let host = Box::pin(open_host)
         .await
         .context("Open native Account host at the actual Station")?;
+    let registration = member
+        .client
+        .principal
+        .as_ref()
+        .context("native endpoint lacks its accepted principal registration")?;
+    inkson::conformance::persist_native_registration_pin(
+        &host,
+        &member.account,
+        &member.device,
+        &registration.pcr_realm_id,
+    )?;
     let record = group.export_state_record()?;
     let accepted = member
         .client
