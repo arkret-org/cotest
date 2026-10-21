@@ -1710,7 +1710,8 @@ pub async fn original_human_signer_fact(
             crate::scenarios::mls_lifecycle_live::fresh_uuid_v7()
         ))?,
         realm_id: event.realm_id.clone(),
-        recipient_account_id: recipient_account,
+        recipient_account_id: Some(recipient_account),
+        recipient_actor_id: None,
         queries: vec![SignerKeyQuerySelector::HistoricalEvent {
             sender: HistoricalSignerKeyQuerySender::AccountDevice {
                 actor: event.actual_signer().clone(),

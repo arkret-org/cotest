@@ -1119,6 +1119,7 @@ async fn attest_add_http_round_trip(
     let did_method = format!("{}#notary-key", recipient_station.service_did());
     let (_, station_seed) = test_service_signing_key(&format!("{GROUP}-1"));
     let mut attestation = MlsAddAuthorityAttestation {
+        claim_authority_ref: None,
         attestor_station_id: recipient_station.service_id().clone(),
         realm_id: welcome.realm_id.clone(),
         effective_scope: scope.clone(),

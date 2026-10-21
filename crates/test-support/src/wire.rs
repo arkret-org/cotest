@@ -24,8 +24,8 @@ use arkret_models_collaboration::mimi_operations::{
     MimiConsentDecision, MimiRequestConsentRequestBody, MimiUpdateConsentRequestBody,
 };
 use arkret_wire::{
-    AccountId, Audience, AuditReasonText, DidUrl, Event, EventAdmissionSubmission, EventId,
-    NonEmptyString, PayloadProof, ProducerEventProof, SecurityClass, proof_kind,
+    AccountId, Audience, AuditReasonText, DidUrl, Event, EventAdmissionSubmission, NonEmptyString,
+    PayloadProof, ProducerEventProof, proof_kind,
 };
 use base64::Engine as _;
 use chrono::{Timelike as _, Utc};
@@ -99,7 +99,8 @@ pub fn historical_human_signer_query(input: Value) -> Result<Value> {
     let query = arkret_models_identity::SignerKeysQueryRequestBody {
         request_id: arkret_wire::RequestId::new_v7_at(Utc::now().timestamp_millis() as u64),
         realm_id: input.event.realm_id.clone(),
-        recipient_account_id: input.recipient_account_id,
+        recipient_account_id: Some(input.recipient_account_id),
+        recipient_actor_id: None,
         queries: vec![historical_human_selector(&input.event, &input.commit)?],
     };
     query.validate()?;
@@ -387,23 +388,6 @@ struct WebvhVerifyLogInput {
     profile: Option<String>,
 }
 
-#[derive(Debug, Deserialize)]
-#[serde(deny_unknown_fields)]
-struct ManagedActorAuthorInput {
-    authoring_request: Value,
-    applet_package: arkret::AppletPackage,
-    actor_id: arkret_wire::ActorId,
-    initial_resolution: arkret::ResolutionCommitment,
-    method_history_evidence: arkret::ResolutionMethodHistoryEvidence,
-    registration_ref: EventId,
-    service_signing_seed_b64url: String,
-    service_verification_method: DidUrl,
-    station_id: DidCoreId,
-    station_verification_method: DidUrl,
-    station_public_jwk: Value,
-    trust_domain: arkret::TrustDomainId,
-}
-
 pub fn invite_subject_proof(input: Value) -> Result<Value> {
     let input: InviteSubjectProofInput =
         serde_json::from_value(input).context("parse invite subject proof input")?;
@@ -474,202 +458,6 @@ pub fn validate_applet_authority_material(input: Value) -> Result<Value> {
         view.validate_shape()?;
     }
     Ok(json!({"valid": true}))
-}
-
-pub fn managed_actor_author(input: Value) -> Result<Value> {
-    let input: ManagedActorAuthorInput =
-        serde_json::from_value(input).context("parse managed-actor author input")?;
-    let raw = &input.authoring_request;
-    let basis = raw.get("basis").and_then(Value::as_object);
-    let purpose = raw.get("purpose").and_then(Value::as_str);
-    let target = basis
-        .and_then(|value| value.get("target_station_id"))
-        .and_then(Value::as_str);
-    let applet_id = basis
-        .and_then(|value| value.get("applet_id"))
-        .and_then(Value::as_str);
-    let service_id = basis
-        .and_then(|value| value.get("service_id"))
-        .and_then(Value::as_str);
-    let package_digest = basis
-        .and_then(|value| value.get("package_digest"))
-        .and_then(Value::as_str);
-    if !matches!(purpose, Some("provision_bot" | "provision_ghost"))
-        || target != Some(input.station_id.as_str())
-        || applet_id != Some(input.applet_package.applet_id.as_str())
-        || service_id != Some(input.applet_package.service_id.as_str())
-        || package_digest
-            != input
-                .applet_package
-                .package_digest
-                .as_ref()
-                .map(arkret::Hash::as_str)
-    {
-        return Ok(author_rejection(
-            "authoring_request_coordinate_mismatch",
-            400,
-            "signed request does not match the package-build authority coordinates",
-        ));
-    }
-
-    let now = Utc::now();
-    let issued_at = raw
-        .get("issued_at")
-        .and_then(Value::as_str)
-        .and_then(|value| value.parse::<chrono::DateTime<Utc>>().ok());
-    let expires_at = raw
-        .get("expires_at")
-        .and_then(Value::as_str)
-        .and_then(|value| value.parse::<chrono::DateTime<Utc>>().ok());
-    if !matches!((issued_at, expires_at), (Some(issued), Some(expires)) if issued < expires
-        && expires - issued <= chrono::Duration::minutes(5)
-        && expires > now
-        && expires - now <= chrono::Duration::minutes(5))
-    {
-        return Ok(author_rejection(
-            "authoring_request_expired",
-            410,
-            "authoring request freshness window is invalid",
-        ));
-    }
-
-    let request: arkret::AppletManagedActorAuthoringRequest =
-        match serde_json::from_value(input.authoring_request.clone()) {
-            Ok(request) => request,
-            Err(error) => {
-                return Ok(author_rejection(
-                    "authoring_request_coordinate_mismatch",
-                    400,
-                    &format!("authoring request is not a closed SDK carrier: {error}"),
-                ));
-            }
-        };
-    if let Err(error) = request.validate_bindings() {
-        return Ok(author_rejection(
-            "authoring_request_proof_invalid",
-            400,
-            &format!("authoring request bindings are invalid: {error}"),
-        ));
-    }
-    if request.proof.created_at > now + chrono::Duration::seconds(30) {
-        return Ok(author_rejection(
-            "authoring_request_proof_invalid",
-            400,
-            "authoring request proof creation time is in the future",
-        ));
-    }
-    if request.proof.verification_method != input.station_verification_method
-        || request.governance_station_id != input.station_id
-    {
-        return Ok(author_rejection(
-            "authoring_request_proof_invalid",
-            400,
-            "authoring request was not signed by the current Station key",
-        ));
-    }
-    let principal_key = arkret_signatures::PublicKeyMaterial::Jwk {
-        value: input.station_public_jwk,
-    };
-    if arkret_signatures::Ed25519DetachedJwsVerifier::new()
-        .verify_detached_jws(
-            &request.proof.jws,
-            &request.proof_binding_bytes()?,
-            &principal_key,
-        )
-        .is_err()
-    {
-        return Ok(author_rejection(
-            "authoring_request_proof_invalid",
-            400,
-            "authoring request detached proof is invalid",
-        ));
-    }
-
-    let actor_account = input.actor_id.as_account_id();
-    if actor_account.is_none_or(|account| account.station_id != input.station_id)
-        || input.service_verification_method != input.applet_package.webhook_auth.key_ref
-    {
-        return Ok(author_rejection(
-            "authoring_request_coordinate_mismatch",
-            400,
-            "package managed-actor material does not match the signed request",
-        ));
-    }
-    let registration_evidence = match &request.basis {
-        arkret::AppletManagedActorAuthoringBasis::ProvisionBot(basis) => {
-            &basis.registration_epoch_evidence
-        }
-        arkret::AppletManagedActorAuthoringBasis::ProvisionGhost(basis) => {
-            &basis.registration_epoch_evidence
-        }
-    };
-    if let Err(error) = input
-        .applet_package
-        .validate_with_epoch_evidence(registration_evidence)
-    {
-        return Ok(author_rejection(
-            "authoring_request_event_binding_invalid",
-            400,
-            &format!("signed basis does not bind the package epoch: {error}"),
-        ));
-    }
-    if !registration_evidence.contains_signing_key(input.service_verification_method.as_str()) {
-        return Ok(author_rejection(
-            "authoring_request_event_binding_invalid",
-            400,
-            "registration epoch evidence does not bind the package service key",
-        ));
-    }
-    let seed = signing_key_from_seed(&input.service_signing_seed_b64url)?.to_bytes();
-    let service_did = Did::new(
-        input
-            .service_verification_method
-            .as_str()
-            .split_once('#')
-            .map(|(did, _)| did)
-            .context("service verification method has no DID fragment")?,
-    )?;
-    let signer = arkret::Ed25519PayloadSigner::from_did_key_seed(
-        seed,
-        service_did,
-        input.service_verification_method,
-    );
-    let request_digest = request.canonical_digest()?;
-    let digest_bytes = hex::decode(
-        request_digest
-            .as_str()
-            .strip_prefix("sha256:")
-            .context("install authoring request digest is not SHA-256")?,
-    )
-    .context("decode install authoring request digest")?;
-    let bundle = arkret::author_applet_managed_actor_bundle(
-        &request,
-        arkret::AppletManagedActorBundleAuthoringInput {
-            actor_id: actor_account
-                .context("validated managed account is missing")?
-                .principal_id
-                .clone(),
-            initial_resolution: input.initial_resolution,
-            method_history_evidence: input.method_history_evidence,
-            registration_ref: input.registration_ref,
-            digest_suite: arkret::DigestSuite::Sha256,
-            trust_domain: input.trust_domain,
-            security_class: SecurityClass::Standard,
-            genesis_salt: arkret::GenesisSalt::new(
-                base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(digest_bytes),
-            )?,
-            initial_join_rule: arkret::JoinRule::Invite,
-            initial_history_access: arkret::HistoryAccess::SinceJoin,
-            initial_discoverability: arkret::Discoverability::Unlisted,
-            bot_display_name: "Applet Bot".to_owned(),
-        },
-        &signer,
-    )?;
-    Ok(json!({ "managed_actor_bundle": bundle }))
-}
-
-fn author_rejection(code: &str, status: u16, detail: &str) -> Value {
-    json!({ "error": code, "status": status, "detail": detail })
 }
 
 pub fn mls_keypackage_upload_entry(input: Value) -> Result<Value> {
@@ -924,6 +712,7 @@ fn build_pcr_genesis_unit(
             // `registration_anchor` is one of the three branches that MUST NOT
             // carry an install fence (`device-lifecycle.md` section 5.2.3).
             applet_id: None,
+        expected_control_revision:None,expected_device_revision:None,
         };
     authorize_payload.device_signature =
         arkret_models_collaboration::events_payloads::SignatureMaterial::NonEmptyString(non_empty(
@@ -1427,6 +1216,8 @@ pub fn device_pairing_approval(input: Value) -> Result<Value> {
         // `accepted_device` is one of the three branches that MUST NOT carry an
         // install fence (`device-lifecycle.md` section 5.2.3).
         applet_id: None,
+        expected_control_revision: None,
+        expected_device_revision: None,
     };
     payload
         .validate_wire_constraints()

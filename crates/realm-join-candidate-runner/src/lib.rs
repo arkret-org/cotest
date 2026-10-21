@@ -769,6 +769,7 @@ fn signed_chain() -> Result<SignedChain> {
     let handoff = seal_handoff(
         RealmAuthorityHandoff {
             pcr_private_state_digest: None,
+            management_private_state_digest: None,
             handoff_id: RealmAuthorityHandoffId::from_digest([0x21; 32]),
             realm_id: realm_id(),
             from_generation: 0,

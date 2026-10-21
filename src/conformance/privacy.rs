@@ -1415,6 +1415,7 @@ fn validate_peer_device_directory_failure_blinding(case: &super::NamedCase) -> R
         .first()
         .ok_or_else(|| anyhow!("blinded request selects no target"))?;
     let failure_row = PeerKeysQueryOutcome {
+        requester_actor_id: None,
         request_id: request.request_id.clone(),
         requester_account_id: request.requester_account_id.clone(),
         device_keys: Vec::new(),

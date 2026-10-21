@@ -736,7 +736,8 @@ fn governance_submit(world: &World, variant: &Value) -> Result<Value> {
         .filter(|member| member.joined)
         .map(|member| {
             ActorId::account(member.account.clone())
-                .route_service_id()
+                .fixed_route_service_id()
+                .expect("Account fixture has a fixed route")
                 .clone()
         })
         .filter(|service| service != governance)
@@ -745,7 +746,11 @@ fn governance_submit(world: &World, variant: &Value) -> Result<Value> {
     let mut bindings = Vec::new();
     for welcome in &welcomes {
         let name = world.recipient_name(welcome)?;
-        let service = welcome.recipient_actor_id.route_service_id().clone();
+        let service = welcome
+            .recipient_actor_id
+            .fixed_route_service_id()
+            .expect("Human Welcome fixture has a fixed route")
+            .clone();
         if service == *governance {
             // A hosted recipient: its claim in this Station's own ledger and
             // the first-admission capacity bound.
@@ -1123,7 +1128,9 @@ impl MemberStation {
     /// row.
     fn reverify(&self, world: &World, name: &str, welcome: &MlsWelcomeDelivery) -> bool {
         let member = &world.members[name];
-        if welcome.recipient_actor_id.route_service_id() != &self.station_id || !member.joined {
+        if welcome.recipient_actor_id.fixed_route_service_id() != Some(&self.station_id)
+            || !member.joined
+        {
             return false;
         }
         let Some(claim) = self.claims.get(welcome.keypackage_claim_ref.as_str()) else {

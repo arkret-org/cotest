@@ -61,7 +61,11 @@ pub async fn handle_to_join_e2e_run() -> Result<()> {
     );
 
     let actor: ActorId = serde_json::from_value(payload["member_id"].clone())?;
-    ensure!(actor.route_service_id().as_str() == STATION_A);
+    ensure!(
+        actor
+            .fixed_route_service_id()
+            .is_some_and(|station| station.as_str() == STATION_A)
+    );
     ensure!(actor.signing_principal_id().as_str() == PRINCIPAL_ID);
     Ok(())
 }

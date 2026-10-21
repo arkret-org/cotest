@@ -480,13 +480,14 @@ pub async fn run_agent_same_key_renewal_boundary() -> Result<()> {
     );
     let profile = arkret_models_collaboration::events_payloads::ActorProfileCreatePayload {
         object: arkret_models_identity::actor_profile::ActorProfileDefinition {
-            principal_id: agent.agent_account.principal_id.clone(),
+            principal_id: Some(agent.agent_account.principal_id.clone()),
+            actor_id: None,
             actor_kind: arkret_wire::ActorKind::Agent,
             display_name: "Nonexpiring accountability Agent".to_owned(),
             handle: None,
             agent_slug: None,
             avatar_blob_ref: None,
-            accountable_principal_ids: vec![agent.controller_account.principal_id.clone()],
+            accountable_principal_ids: Some(vec![agent.controller_account.principal_id.clone()]),
             profile_fields: std::collections::BTreeMap::new(),
         },
     };

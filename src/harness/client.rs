@@ -139,7 +139,6 @@ impl TestActorClient {
                 peer,
                 granted_to_peer_scopes: vec![ContactScope::DirectMessage],
                 introduction_evidence,
-                continuity_evidence: None,
                 message: None,
             },
         ))

@@ -112,7 +112,6 @@ pub async fn run() -> Result<()> {
                     branch: AuthorityForwardBranch::AuthorityForward,
                     event_submission: submission,
                     producer_device_evidence: Some(forward_evidence.clone()),
-                    producer_managed_provenance: None,
                     producer_agent_evidence: None,
                     mls_genesis_material: None,
                 },

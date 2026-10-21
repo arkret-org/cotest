@@ -224,6 +224,8 @@ fn validate_pcr_genesis_helpers() -> Result<()> {
     let hpke_key = non_empty("z6LSCotestPcrGenesisHpkeKey")?;
     let algorithms = vec![non_empty("ak.hpke_x25519_aead_chacha20poly1305.v1")?];
     let mut authorize_payload = DeviceAuthorizePayload {
+        expected_control_revision: None,
+        expected_device_revision: None,
         pairing_challenge_transcript_digest: None,
         device_id: device_id.clone(),
         device_public_key_did: device_public_key.clone(),
@@ -461,6 +463,8 @@ fn validate_recovery_candidate_key_from_frozen_unit() -> Result<()> {
     let device_id = DeviceId::new("ak:device:019a4100-0000-7000-8000-00000000000a")?;
     let not_before = arkret_canonical::parse_timestamp_canonical("2026-09-15T00:00:00.000Z")?;
     let mut replacement_authorize = DeviceAuthorizePayload {
+        expected_control_revision: None,
+        expected_device_revision: None,
         device_id: device_id.clone(),
         device_public_key_did: replacement_public_key.clone(),
         hpke_key: non_empty("z6LSCotestRecoveryReplacementHpkeKey")?,

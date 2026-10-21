@@ -524,6 +524,8 @@ async fn authorize_additional_principal_device(
         .generation_for(&account)
         .context("keys/query omitted the current PCR device generation")?;
     let mut payload = DeviceAuthorizePayload {
+        expected_control_revision: None,
+        expected_device_revision: None,
         pairing_challenge_transcript_digest: Some(Hash::new(arkret_canonical::sha256_digest(
             format!("cotest:device-pairing:{actor}:{device_id}").as_bytes(),
         ))?),
@@ -751,6 +753,8 @@ async fn bootstrap_test_device_authorization(
             .map_err(anyhow::Error::msg)?,
     ];
     let mut payload = DeviceAuthorizePayload {
+        expected_control_revision: None,
+        expected_device_revision: None,
         pairing_challenge_transcript_digest: None,
         device_id: device_id.clone(),
         device_public_key_did: device_public_key.clone(),
