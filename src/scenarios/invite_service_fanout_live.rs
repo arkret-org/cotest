@@ -54,7 +54,7 @@ pub use consent_invite_matrix::run_current_invite_matrix;
 
 fn account_data_update_matches(envelope: &DeviceMessageEnvelope, row: &AccountDataRow) -> bool {
     envelope.kind.as_str() == "ak.account_data.update"
-        && envelope.content
+        && serde_json::to_value(&envelope.content).expect("JSON content map is serializable")
             == json!({
                 "operation": "put",
                 "account_data_key": row.account_data_key,
@@ -265,6 +265,7 @@ async fn receive_verified_fanout_batch(
     let polled = expect_json(holder.get("/_arkret/self/device_messages"), StatusCode::OK).await?;
     let outcome: DeviceMessagesGetOutcome = serde_json::from_value(polled.clone())
         .with_context(|| format!("to-device response is not closed SDK wire data: {polled}"))?;
+    ensure!(!outcome.lost, "invite fanout queue lost deliveries");
     let holder_core_id = actor_core_id(&holder.actor)?;
     let mut messages = Vec::new();
     let mut batch_ids = HashSet::new();
@@ -313,6 +314,10 @@ async fn receive_verified_fanout_batch(
         messages.push(envelope.clone());
     }
     if messages.is_empty() {
+        ensure!(
+            !outcome.has_more,
+            "empty fanout page omitted pending deliveries"
+        );
         return Ok(messages);
     }
     let ack_token = outcome
@@ -855,6 +860,10 @@ pub async fn invite_service_fanout_live_run() -> Result<()> {
         )
         .await?;
         let drained: DeviceMessagesGetOutcome = serde_json::from_value(drained)?;
+        ensure!(
+            !drained.lost && !drained.has_more,
+            "final fanout poll lost or omitted deliveries"
+        );
         if !drained.deliveries.is_empty() {
             bail!(
                 "acked actor-private fanout queue did not drain for {}: {drained:?}",
