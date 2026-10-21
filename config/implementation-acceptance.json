@@ -317,7 +317,7 @@
     {
       "task": "2026-09-13-0847-applet-authoring-result-runtime-installation.md",
       "criteria_count": 5,
-      "criteria_sha256": "6bb2ddaece90b79ab6b341ad5038f8a20d0f1c42f18badeb6401c0542060a2ed",
+      "criteria_sha256": "1ce4e7541d2dd876ac047ae9c51cdf1fae699046652aacdd8aa4142a569f7954",
       "spec_refs": [
         "arkret-spec/spec/v1/zh/extensions/applet-integration.md",
         "arkret-spec/spec/v1/zh/authz/managed-governance.md",
@@ -326,7 +326,6 @@
         "arkret-spec/spec/v1/artifacts/registry/contract-registry.json"
       ],
       "source_refs": [
-        "coland/crates/http/src/routing/extensions/applet_bridge/delegated_device.rs",
         "coland/crates/storage-postgres/src/applet_admission.rs",
         "coland/crates/http/src/routing/extensions/applet_bridge/endpoints.rs",
         "coland/crates/http/src/routing/management_review.rs",
@@ -338,7 +337,6 @@
         "coland/crates/storage-postgres/src/pcr_device_status_reader.rs",
         "coland/crates/storage-postgres/src/pcr_device_revocation_proposals.rs",
         "coland/crates/http/src/routing/identity/device_generation/confirmed.rs",
-        "coland/crates/storage-postgres/src/pcr_applet_device.rs",
         "arkret-rust-sdk/crates/signatures/src/webvh/inception.rs",
         "arkret-rust-sdk/crates/http-client/src/http_did_resolver.rs",
         "bridges/crates/runtime/src/managed_actor_authoring.rs",
@@ -370,7 +368,7 @@
           "path": "coland/crates/server/tests/applet_admission.rs",
           "symbol": "managed_pcr_genesis_initializes_generation_without_a_device_and_rejects_corrupt_current",
           "kind": "live",
-          "covers": "Atomic managed PCR generation initialization, device-free Bot/Ghost history reconstruction from retained originals, rollback, exact retries, corrupted current refusal and missing-root refusal; does not prove first Device admission or full runtime support"
+          "covers": "Existing named Realm actor generation/control regression entrypoint; legacy test name is not an independent Bot/Ghost PCR capability. Not executed by this batch; complete Device/runtime acceptance remains with 0847."
         },
         {
           "path": "coland/crates/server/tests/applet_admission.rs",
@@ -380,9 +378,9 @@
         },
         {
           "path": "bridges/crates/runtime/src/managed_actor_authoring.rs",
-          "symbol": "shared_http_author_uses_durable_custody_across_restart_and_refuses_wrong_kek",
-          "kind": "live",
-          "covers": "Canonical Bot/Ghost HTTP author and native DID document/JSONL publication with real random encrypted custody, verified native proof, exact replay/public resources across durable reopen, wrong origin/KEK and unknown refusal; not full Device/MLS runtime or live Savfox host acceptance"
+          "symbol": "realm_creation_preserves_independent_native_custody_and_exact_preparation",
+          "kind": "contract",
+          "covers": "Current Realm actor native custody and exact preparation unit fixture; does not prove live HTTP, Device, MLS or runtime acceptance."
         },
         {
           "path": "cotest/tests/conformance_fixtures.rs",
@@ -575,6 +573,80 @@
       "engineering_checks": [],
       "remaining_scenarios": [
         "逐case named生产消费/required-ref合取；原origin binding移除；最终签名SDK/profile闭包"
+      ]
+    },
+    {
+      "task": "2026-09-25-2132-commit-stream-chain-and-planned-handoff.md",
+      "spec_refs": [
+        "arkret-spec/spec/v1/zh/sync/authority-commit-log.md",
+        "arkret-spec/spec/v1/zh/identity/key-management.md"
+      ],
+      "source_refs": [
+        "arkret-rust-sdk/crates/wire/src/authority_commit.rs",
+        "coland/crates/storage-postgres/src/pcr_private_authority.rs",
+        "coland/crates/http/src/state/authority_handoff.rs"
+      ],
+      "tests": [
+        {
+          "path": "coland/crates/http/src/state/authority_control_exact_replay_tests.rs",
+          "symbol": "accepted_agent_pcr_rejects_every_independent_handoff_entry_without_effects",
+          "kind": "live",
+          "covers": "Native accepted Agent/provision over leased PostgreSQL, self state-port/peer native/storage/export/import/activation and corrupt-current refusals with full row digests; not authenticated peer TCP or lawful Organization handoff."
+        },
+        {
+          "path": "cotest/tests/agent_pcr_profile_live.rs",
+          "symbol": "controller_signed_agent_profile_uses_its_own_pcr",
+          "kind": "live",
+          "covers": "Real Station process/TLS/PG Agent provision/profile/key/lifecycle and controller-signed governance-change HTTP refusal; Coauth introspection fixture, not full real issuer onboarding."
+        },
+        {
+          "path": "coland/crates/storage-postgres/tests/planned_authority_handoff.rs",
+          "symbol": "handoff_freezes_writes_preserves_current_and_reads_old_snapshots",
+          "kind": "live",
+          "covers": "Ordinary planned handoff PG regression; does not prove complete independent old/new Station or Organization acceptance."
+        },
+        {
+          "path": "coland/crates/http/src/state/authority_control_exact_replay_tests.rs",
+          "symbol": "accepted_agent_rejects_private_proxy_and_effect_publication_without_effects",
+          "kind": "live",
+          "covers": "Native accepted Agent private proxy eligibility and publication projection refusal over real PostgreSQL with all public table row digests; structural candidate context does not establish an Agent Human Device or Consent session."
+        }
+      ],
+      "engineering_checks": [],
+      "criteria_count": 3,
+      "criteria_sha256": "e2659f28d90dac22e8599715cf07def171c1655a6b84d4e629c86bc236e5d119",
+      "remaining_scenarios": [
+        "在最新冻结组合中，用独立旧／新 Station 和不同签名密钥实际执行已挂载的认证 handoff：合法切换、错 peer、缺任一双签、错 generation／change CAS／DID route／历史 key 和不完整导入均按登记结果拒绝；重放、响应丢失及旧站永久拒写保留耐久结果。",
+        "对完整 frozen state 迁移执行独立数据库与重启复验：所有 stream 原件、typed current、history floors、既有 private audit、pending outbox、public MLS tracker／epoch／revision／claims／Welcome queues 均延续；不迁移成员 private MLS state，不以仅 current snapshot 代替完整数据导入。",
+        "在切换后的真实多站读取组合复验 caller-aware generation>0 `/head`、Realm／Circle／Sidecar／PCR 的 snapshot＋tail 恢复及旧任期 exact by-ref；普通客户端消费本站验证后的原件，消费 Station／独立审计者以 fresh bundle 与原签名时刻的方法历史验治理链；成员 floor、隐藏流、撤权、retention 与 redaction 边界不能被交接权限扩大。"
+      ]
+    },
+    {
+      "task": "2026-09-26-1121-space-and-kanban-admission.md",
+      "spec_refs": [
+        "arkret-spec/spec/v1/zh/models/space-hierarchy.md",
+        "arkret-spec/spec/v1/zh/models/strand-and-message.md"
+      ],
+      "source_refs": [
+        "inkson/src/state/projection/kanban_ops.rs",
+        "coland/crates/storage-postgres/tests/space_create_current_results.rs"
+      ],
+      "tests": [
+        {
+          "path": "coland/crates/storage-postgres/tests/space_create_current_results.rs",
+          "symbol": "space_create_root_and_child_have_three_sibling_results_and_exact_replay",
+          "kind": "live",
+          "covers": "PG Space admission entrypoint only; not executed by this batch and not the full 23-case Kanban, offline placement or real restart/revocation product acceptance."
+        }
+      ],
+      "engineering_checks": [],
+      "criteria_count": 4,
+      "criteria_sha256": "ba37d9cd2df183a41f67423a399e9354424e01b3e648a3b8567452e68bd8a797",
+      "remaining_scenarios": [
+        "离线 Card create 的 exact 原 Event 后台接受后，耐久续接正式 placement Move；覆盖接受后丢响应、进程冷重启、原件重试及拒绝，不重新创建卡片、不丢失位置或假称业务完成。复用原 authoring/queue owner，不在页面构造第二恢复账本。",
+        "当前 source21 或后继明确冻结源码的完整23项 kanban 回归全部实跑通过，不能拼接 source20 的22绿与 source21 的三项定向绿。",
+        "真实 Station 重启后的看板恢复与双方内容可见验证，不能以浏览器刷新或其它领域重启用例替代。",
+        "真实 leave／revoke 后的看板 UI 权限失效验证，不能以 mock403、PG leave 或原生 terminal 测试替代。"
       ]
     }
   ]
