@@ -1,6 +1,7 @@
 //! Actual Inkson local message authoring, durable unknown outcome and cold replay.
 use anyhow::{Context as _, Result, bail, ensure};
 use arkret::{ArkretMlsGroup, EventKind, ScopeRef};
+use arkret_models_collaboration::authority_commit::SelfAuthoritySubmitRequest;
 use cotest::scenarios::mls_lifecycle_live::{Member, MlsClientObserver};
 
 use super::account_blocklist_projection::{native_account_session, native_call_endpoint};
@@ -82,7 +83,7 @@ impl MlsClientObserver for MessageObserver {
             // genuine accepted reply. Queue and private state are already durable.
         };
         drop(lost);
-        let arkret::SelfAuthoritySubmitRequest::Event(submission) = &original else {
+        let SelfAuthoritySubmitRequest::Event(submission) = &original else {
             bail!("ordinary author produced a non Event request");
         };
         ensure!(submission.event.kind == EventKind::MessageCreate);
