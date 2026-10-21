@@ -134,7 +134,8 @@ pub fn applet_realm_actor_author(input: Value) -> Result<Value> {
     let version = input.inception["versionId"]
         .as_str()
         .context("inception version absent")?;
-    let method = DidUrl::new(format!("{}#managed-controller", document.id))?;
+    let method =
+        DidUrl::new(format!("{}#managed-controller", document.id)).map_err(anyhow::Error::msg)?;
     let control = signing_key_from_seed(&input.control_seed_b64url)?;
     let scope: arkret_wire::ScopeRef = serde_json::from_value(basis["effective_scope"].clone())?;
     let actor = arkret_wire::ActorId::realm(arkret_wire::RealmActorId::new(
@@ -227,6 +228,10 @@ mod realm_actor_fixture_tests {
             arkret::AppletWireNamespaces::default(),
         );
         package.webhook_auth.key_ref = service_method.clone();
+        package.endpoint_policy = serde_json::from_value(json!({
+            "endpoints":[{"method":"POST","path":"/_arkret/edge/applet/transactions","auth":"webhook_signature"}]
+        }))
+        .unwrap();
         let evidence = arkret::AppletRegistrationEpochEvidence::from_did_document(
             &document,
             arkret::AppletDidMethodVersionEvidence::versioned(
