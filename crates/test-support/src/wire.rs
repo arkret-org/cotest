@@ -1763,6 +1763,8 @@ fn event_digest(event: &Value, _mode: EventDigestMode) -> Result<String> {
 
 #[cfg(test)]
 mod tests {
+    use arkret_wire::EventId;
+
     use super::*;
 
     #[test]
