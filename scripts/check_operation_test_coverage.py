@@ -15,6 +15,7 @@ import hashlib
 import json
 import os
 import re
+import stat
 import sys
 from dataclasses import dataclass
 from pathlib import Path
@@ -150,6 +151,16 @@ def source_file(path: Path) -> bool:
     return path.is_file() and not any(part in IGNORED_DIRS for part in path.parts)
 
 
+def directory_reparse_link(path: Path) -> bool:
+    try:
+        return path.is_symlink() or (
+            os.name == "nt"
+            and path.lstat().st_reparse_tag == stat.IO_REPARSE_TAG_MOUNT_POINT
+        )
+    except FileNotFoundError:
+        return True
+
+
 def source_paths(root: Path, suffix: str) -> Iterable[Path]:
     """Walk source files while pruning the existing ignored directories."""
     if not root.is_dir() or any(part in IGNORED_DIRS for part in root.parts):
@@ -158,7 +169,8 @@ def source_paths(root: Path, suffix: str) -> Iterable[Path]:
         parent = Path(directory)
         directories[:] = sorted(
             name for name in directories
-            if name not in IGNORED_DIRS and not (parent / name).is_symlink()
+            if name not in IGNORED_DIRS
+            and not directory_reparse_link(parent / name)
         )
         for name in sorted(files):
             path = parent / name

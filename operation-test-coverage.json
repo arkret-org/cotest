@@ -6,32 +6,32 @@
     "operation_registry_sha256": "ff082deecca35c41d482f0ff7e93ac076cd557c624d67b42a26ecd1496a8295c",
     "test_layers": {
       "coland_unit": {
-        "source_file_count": 455,
-        "source_sha256": "24be6bcdbdf2dc5e725dfd2a76c26ba49d65f78917da6425c036f7d152565965",
+        "source_file_count": 457,
+        "source_sha256": "8982c36bbb4974a441d83edfba883d3a05bca845560a8184a254fc797668edd4",
         "evidence_count": 320,
         "covered_operation_count": 144
       },
       "coland_http": {
-        "source_file_count": 76,
-        "source_sha256": "52fb52a20e50bf05d48d92e76bf36d55ee67b66befed2cdc4571e24adf659996",
-        "evidence_count": 39,
-        "covered_operation_count": 27
+        "source_file_count": 51,
+        "source_sha256": "825ad6cf15ced5eb353bef6e7d032f1d7b4b3ff2611bd54ccfc3922423e825fc",
+        "evidence_count": 33,
+        "covered_operation_count": 22
       },
       "cotest_rust": {
         "source_file_count": 599,
-        "source_sha256": "f80df68d6052df2a56d87b27cc86a9a5e7a8e69fd3d699833c0b7f8a7767f0bd",
+        "source_sha256": "85c37ef54a98f30c881928c72f63aca206b3f3ac886ea145d24127bdb8635c19",
         "evidence_count": 157,
         "covered_operation_count": 78
       },
       "cotest_e2e": {
         "source_file_count": 110,
-        "source_sha256": "6be517977922590428e24e54ad208d5cdbbefb893726be44391efe75ff38ff0b",
+        "source_sha256": "5a9d0345f236ab193f89602e26aba53ef378974df80fd4f73a32184d1f0284d2",
         "evidence_count": 44,
         "covered_operation_count": 20
       },
       "inkson_e2e": {
         "source_file_count": 33,
-        "source_sha256": "9f9faf48aef3e72f9df76cab14bf65e870c0851a367c582b9bec2a7b789a981b",
+        "source_sha256": "5faea6c882fe43e160ddcf6a9f29759d5b4cbace91576e6741bd82edf4b25191",
         "evidence_count": 21,
         "covered_operation_count": 15
       }
@@ -14227,11 +14227,11 @@
         "storage_parity": [
           {
             "file": "coland/crates/storage-postgres/tests/support/applet_authoring.rs",
-            "line": 5684,
+            "line": 5745,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              5684
+              5745
             ],
             "protected_oracle": false,
             "scope_sha256": "c27e87dede3917dbf9c43437388ef63728c78117b1b8f3ec5d7d55effb591bd3",
@@ -14256,33 +14256,7 @@
       "responsibilities": {
         "protocol_kat": [],
         "storage_parity": [],
-        "http_binding": [
-          {
-            "file": "coland/crates/server/tests/applet_admission.rs",
-            "line": 103,
-            "scope": "managed_devices_require_independent_principal_and_possession_on_service_ingress",
-            "scope_kind": "rust_test",
-            "occurrence_lines": [
-              148
-            ],
-            "protected_oracle": false,
-            "scope_sha256": "d2c03141189a238ab67c247e58afe4165a0eaafc10d7527db0a0dec77a1a2dbb",
-            "input_sha256": "46c10344db24e73b32ae6b7e8e99ba3218437aca53890303620bde4b8e0d7c5d",
-            "assertion_sha256": "e3fb2417bf1c8b8b608665fcd8040b950ee66aa779384e32137841902b8393b9",
-            "input_preview": [
-              "use arkret_models_collaboration::events_payloads::DeviceAuthorizePayload;",
-              "use arkret_wire::DeviceId;",
-              "use coland_storage::DeviceRevocationStore as _;",
-              "use ed25519_dalek::Signer as _;"
-            ],
-            "assertion_preview": [
-              "assert_eq!(status, StatusCode::CREATED, \"{ghost}\");",
-              "assert!(",
-              "assert!(!status.is_success(), \"{result}\");",
-              "assert_eq!("
-            ]
-          }
-        ],
+        "http_binding": [],
         "product_flow": [],
         "fault_recovery": [],
         "security_negative": []
@@ -14336,11 +14310,11 @@
         "storage_parity": [
           {
             "file": "coland/crates/storage-postgres/tests/support/applet_authoring.rs",
-            "line": 5684,
+            "line": 5745,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              5684
+              5745
             ],
             "protected_oracle": false,
             "scope_sha256": "c27e87dede3917dbf9c43437388ef63728c78117b1b8f3ec5d7d55effb591bd3",
@@ -14391,33 +14365,7 @@
       "responsibilities": {
         "protocol_kat": [],
         "storage_parity": [],
-        "http_binding": [
-          {
-            "file": "coland/crates/server/tests/applet_admission.rs",
-            "line": 103,
-            "scope": "managed_devices_require_independent_principal_and_possession_on_service_ingress",
-            "scope_kind": "rust_test",
-            "occurrence_lines": [
-              148
-            ],
-            "protected_oracle": false,
-            "scope_sha256": "d2c03141189a238ab67c247e58afe4165a0eaafc10d7527db0a0dec77a1a2dbb",
-            "input_sha256": "46c10344db24e73b32ae6b7e8e99ba3218437aca53890303620bde4b8e0d7c5d",
-            "assertion_sha256": "e3fb2417bf1c8b8b608665fcd8040b950ee66aa779384e32137841902b8393b9",
-            "input_preview": [
-              "use arkret_models_collaboration::events_payloads::DeviceAuthorizePayload;",
-              "use arkret_wire::DeviceId;",
-              "use coland_storage::DeviceRevocationStore as _;",
-              "use ed25519_dalek::Signer as _;"
-            ],
-            "assertion_preview": [
-              "assert_eq!(status, StatusCode::CREATED, \"{ghost}\");",
-              "assert!(",
-              "assert!(!status.is_success(), \"{result}\");",
-              "assert_eq!("
-            ]
-          }
-        ],
+        "http_binding": [],
         "product_flow": [],
         "fault_recovery": [],
         "security_negative": []
@@ -14508,33 +14456,7 @@
       "responsibilities": {
         "protocol_kat": [],
         "storage_parity": [],
-        "http_binding": [
-          {
-            "file": "coland/crates/server/tests/applet_admission.rs",
-            "line": 103,
-            "scope": "managed_devices_require_independent_principal_and_possession_on_service_ingress",
-            "scope_kind": "rust_test",
-            "occurrence_lines": [
-              148
-            ],
-            "protected_oracle": false,
-            "scope_sha256": "d2c03141189a238ab67c247e58afe4165a0eaafc10d7527db0a0dec77a1a2dbb",
-            "input_sha256": "46c10344db24e73b32ae6b7e8e99ba3218437aca53890303620bde4b8e0d7c5d",
-            "assertion_sha256": "e3fb2417bf1c8b8b608665fcd8040b950ee66aa779384e32137841902b8393b9",
-            "input_preview": [
-              "use arkret_models_collaboration::events_payloads::DeviceAuthorizePayload;",
-              "use arkret_wire::DeviceId;",
-              "use coland_storage::DeviceRevocationStore as _;",
-              "use ed25519_dalek::Signer as _;"
-            ],
-            "assertion_preview": [
-              "assert_eq!(status, StatusCode::CREATED, \"{ghost}\");",
-              "assert!(",
-              "assert!(!status.is_success(), \"{result}\");",
-              "assert_eq!("
-            ]
-          }
-        ],
+        "http_binding": [],
         "product_flow": [],
         "fault_recovery": [],
         "security_negative": []
@@ -14623,11 +14545,11 @@
         "storage_parity": [
           {
             "file": "coland/crates/storage-postgres/tests/support/applet_authoring.rs",
-            "line": 5684,
+            "line": 5745,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              5684
+              5745
             ],
             "protected_oracle": false,
             "scope_sha256": "c27e87dede3917dbf9c43437388ef63728c78117b1b8f3ec5d7d55effb591bd3",
@@ -14653,31 +14575,6 @@
         "protocol_kat": [],
         "storage_parity": [],
         "http_binding": [
-          {
-            "file": "coland/crates/server/tests/applet_admission.rs",
-            "line": 103,
-            "scope": "managed_devices_require_independent_principal_and_possession_on_service_ingress",
-            "scope_kind": "rust_test",
-            "occurrence_lines": [
-              148
-            ],
-            "protected_oracle": false,
-            "scope_sha256": "d2c03141189a238ab67c247e58afe4165a0eaafc10d7527db0a0dec77a1a2dbb",
-            "input_sha256": "46c10344db24e73b32ae6b7e8e99ba3218437aca53890303620bde4b8e0d7c5d",
-            "assertion_sha256": "e3fb2417bf1c8b8b608665fcd8040b950ee66aa779384e32137841902b8393b9",
-            "input_preview": [
-              "use arkret_models_collaboration::events_payloads::DeviceAuthorizePayload;",
-              "use arkret_wire::DeviceId;",
-              "use coland_storage::DeviceRevocationStore as _;",
-              "use ed25519_dalek::Signer as _;"
-            ],
-            "assertion_preview": [
-              "assert_eq!(status, StatusCode::CREATED, \"{ghost}\");",
-              "assert!(",
-              "assert!(!status.is_success(), \"{result}\");",
-              "assert_eq!("
-            ]
-          },
           {
             "file": "coland/crates/server/tests/http_api/blob_upload.rs",
             "line": 1,
@@ -23800,25 +23697,7 @@
       "responsibilities": {
         "protocol_kat": [],
         "storage_parity": [],
-        "http_binding": [
-          {
-            "file": "coland/crates/server/tests/applet_admission/native_device/snapshot_read.rs",
-            "line": 25,
-            "scope": "<module_helper>",
-            "scope_kind": "module_helper",
-            "occurrence_lines": [
-              25
-            ],
-            "protected_oracle": false,
-            "scope_sha256": "cf8a0288ab316f12215bae17ddb8265a073eedea1f3000a50721c2a9edf74716",
-            "input_sha256": "cf8a0288ab316f12215bae17ddb8265a073eedea1f3000a50721c2a9edf74716",
-            "assertion_sha256": null,
-            "input_preview": [
-              "\"ak.self.realm_state_snapshot.read.by_ref.v1\""
-            ],
-            "assertion_preview": []
-          }
-        ],
+        "http_binding": [],
         "product_flow": [],
         "fault_recovery": [],
         "security_negative": []
@@ -23953,25 +23832,7 @@
       "responsibilities": {
         "protocol_kat": [],
         "storage_parity": [],
-        "http_binding": [
-          {
-            "file": "coland/crates/server/tests/applet_admission/native_device/snapshot_read.rs",
-            "line": 27,
-            "scope": "<module_helper>",
-            "scope_kind": "module_helper",
-            "occurrence_lines": [
-              27
-            ],
-            "protected_oracle": false,
-            "scope_sha256": "a9476c5332d54a345ee3205ade654cdd9b32e7d20f5f45cec9c1f2bfabaf5f5b",
-            "input_sha256": "a9476c5332d54a345ee3205ade654cdd9b32e7d20f5f45cec9c1f2bfabaf5f5b",
-            "assertion_sha256": null,
-            "input_preview": [
-              "\"ak.self.realm_state_snapshot.read.manifest_head.v1\""
-            ],
-            "assertion_preview": []
-          }
-        ],
+        "http_binding": [],
         "product_flow": [],
         "fault_recovery": [],
         "security_negative": []
