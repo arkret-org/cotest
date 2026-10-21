@@ -30,6 +30,17 @@ pub async fn signed_post(
     signed_post_inner(server, path, Some(room), provider, body, None).await
 }
 
+pub async fn read_provider_identifiers(
+    server: &ArkretServer,
+    provider: &str,
+    request: &arkret_models_collaboration::mimi_operations::MimiIdentifierQueryRequestBody,
+) -> Result<(StatusCode, Value)> {
+    let outcome = provider_sdk(server, provider)?
+        .mimi_identifier_query(request)
+        .await?;
+    Ok((StatusCode::OK, serde_json::to_value(outcome)?))
+}
+
 pub(super) fn provider_sdk(
     server: &ArkretServer,
     provider: &str,

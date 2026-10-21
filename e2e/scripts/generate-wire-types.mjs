@@ -57,6 +57,7 @@ const TARGETS = [
   { file: "applet-authority-material.schema.json", pointer: "#/$defs/outcome", typeName: "AppletAuthorityMaterialOutcome" },
   { file: "applet-device-authentication.schema.json", typeName: "AppletManagedDeviceMetadata" },
   { file: "realm-join-intake.schema.json", pointer: "#/$defs/self_prepare_request_body", typeName: "RealmJoinPrepareRequestBody" },
+  { file: "message-authoring.schema.json", pointer: "#/$defs/message_authoring_intent", typeName: "MessageAuthoringIntent" },
   { file: "event-payload.schema.json", pointer: "#/$defs/consent_peer", typeName: "ConsentPeer" },
   { file: "event-payload.schema.json", pointer: "#/$defs/consent_permission", typeName: "ConsentPermission" },
   { file: "event-payload.schema.json", pointer: "#/$defs/consent_replace_payload", typeName: "ConsentReplacePayload" },

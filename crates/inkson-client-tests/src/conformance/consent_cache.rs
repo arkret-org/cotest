@@ -419,7 +419,7 @@ async fn excluded_discovery(context: &ConsentCallContext) -> Result<()> {
             serde_json::json!({"identifiers":(["mimi_uri","did","handle","phone","email","opaque"].iter().map(|kind|serde_json::json!({"kind":kind,"identifier_commitment":arkret_canonical::sha256_digest(kind.as_bytes())})).collect::<Vec<_>>())}),
         )?;
     let (status, value) =
-        cotest::scenarios::mimi_facade_live::signed_identifier_query(station, provider, &body)
+        cotest::scenarios::mimi_facade_live::read_provider_identifiers(station, provider, &body)
             .await?;
     ensure!(
         status == StatusCode::OK,
@@ -1741,6 +1741,47 @@ async fn presence_current(
     cotest::harness::heap_future(|| presence_attempt(context, native, &receiver, true)).await?;
     revoke(&context.holder, &caller).await?;
     cotest::harness::heap_future(|| presence_attempt(context, native, &receiver, false)).await?;
+    super::consent_support::grant(
+        &context.holder,
+        &context.caller.actor,
+        ConsentScope::ALL
+            .iter()
+            .copied()
+            .map(super::consent_support::permission)
+            .collect(),
+    )
+    .await?;
+    let all =
+        inkson::conformance::read_native_consent_current(native, context.caller.actor.clone())
+            .await?;
+    for scope in ConsentScope::ALL {
+        ensure!(
+            inkson::conformance::consume_native_consent_current(native, *scope, &all).await?,
+            "stored concrete scope did not authorize"
+        );
+    }
+    let (empty, _) = super::consent_support::clear(&context.holder, &context.caller.actor).await?;
+    ensure!(empty.permission_scopes.is_empty());
+    let current =
+        inkson::conformance::read_native_consent_current(native, context.caller.actor.clone())
+            .await?;
+    ensure!(
+        current.value()?.expected_current()
+            == arkret::ConsentExpectedCurrent::Present {
+                revision: empty.revision,
+            }
+            && current
+                .value()?
+                .current_permissions()
+                .is_some_and(|permissions| permissions.is_empty()),
+        "empty was not retained as a real present revision"
+    );
+    for scope in ConsentScope::ALL {
+        ensure!(
+            !inkson::conformance::consume_native_consent_current(native, *scope, &current).await?,
+            "empty retained an older scope decision"
+        );
+    }
     store.write(|s| s.set_presence_visibility(PresenceVisibility::Nobody));
     cotest::harness::heap_future(|| presence_attempt(context, native, &receiver, false)).await?;
     store.write(|s| s.set_presence_visibility(PresenceVisibility::ContactsOnly));
@@ -2363,14 +2404,14 @@ const FIXTURE: &str = "consent-cache-invalidation-fixture.json";
 const CASE_NAMES: [&str; 14] = [
     "excluded_private_discovery_and_psi_remain_unavailable",
     "cached_invite_gate_is_reevaluated_before_the_next_submission",
-    "an_any_scope_revoke_clears_every_scope_cache",
+    "empty_replacement_clears_every_scope_cache",
     "older_reads_and_exact_retries_never_rollback_current_revision",
     "revocation_is_not_distinguishable_from_never_matching",
     "call_invitation_three_cuts_allow_a_legal_voice_and_video_call",
     "call_invitation_plain_rail_cannot_enter_product",
     "call_invitation_exact_relation_and_plaintext_mismatch",
     "call_invitation_each_holder_is_independent",
-    "call_invitation_window_constraints_and_independent_grants",
+    "call_invitation_window_constraints_and_single_scope",
     "call_invitation_cross_station_inflight_revoke_and_queue",
     "call_invitation_older_read_retry_and_human_station_binding",
     "call_invitation_first_join_voluntary_refresh_and_expansion",

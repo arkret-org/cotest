@@ -206,12 +206,25 @@ fn expect_committed(outcome: &AuthoritySubmitOutcome, event: &Event) -> Result<(
 }
 
 async fn expect_rejected(member: &Member, event: &Event, reason: &str) -> Result<()> {
-    match submit(member, event).await? {
-        AuthoritySubmitOutcome::Rejected { reason_code, .. } if reason_code == reason => {}
-        other => bail!(
-            "{} must be rejected as {reason}, got {other:?}",
+    if reason == "duplicate_conflict" {
+        let (status, body) = post_json(
+            &member.client,
+            &EventAdmissionSubmission::new(event.clone()),
+        )
+        .await?;
+        ensure!(
+            status == StatusCode::CONFLICT && problem_type(&serde_json::to_vec(&body)?)? == reason,
+            "{} must return duplicate_conflict with HTTP 409: {status} {body}",
             event.kind.as_str()
-        ),
+        );
+    } else {
+        match submit(member, event).await? {
+            AuthoritySubmitOutcome::Rejected { reason_code, .. } if reason_code == reason => {}
+            other => bail!(
+                "{} must be rejected as {reason}, got {other:?}",
+                event.kind.as_str()
+            ),
+        }
     }
     ensure!(
         member
@@ -410,19 +423,30 @@ async fn assert_peer_endpoint(
     expected_source: Option<&EventId>,
 ) -> Result<()> {
     let mut previous = None;
-    // Each call is a fresh authenticated read, without client receipt caches.
+    let deadline = Instant::now() + Duration::from_secs(120);
+    // Glare terminal delivery is asynchronous. Require the verified selector
+    // before comparing two fresh reads, without client receipt caches.
     for _ in 0..2 {
-        let row = holder
-            .client
-            .sdk()
-            .contacts_list()
-            .await?
-            .contacts
-            .into_iter()
-            .find(|row| row.peer.contact_actor_id() == peer.actor)
-            .context("accepted peer row")?;
-        ensure!(row.state == arkret::ContactState::Accepted);
-        let endpoint = row.peer_endpoint.context("accepted peer endpoint")?;
+        let endpoint = loop {
+            let row = holder
+                .client
+                .sdk()
+                .contacts_list()
+                .await?
+                .contacts
+                .into_iter()
+                .find(|row| row.peer.contact_actor_id() == peer.actor)
+                .context("accepted peer row")?;
+            ensure!(row.state == arkret::ContactState::Accepted);
+            if let Some(endpoint) = row.peer_endpoint {
+                break endpoint;
+            }
+            ensure!(
+                Instant::now() < deadline,
+                "accepted peer endpoint did not become verifiable"
+            );
+            tokio::time::sleep(Duration::from_millis(250)).await;
+        };
         ensure!(endpoint.device_id == peer.device);
         if let Some(source) = expected_source {
             ensure!(&endpoint.contact_event_ref == source);
@@ -1812,6 +1836,7 @@ async fn run(
             .context("restart the original peer after pending Direct governance refusal")?;
         refused.context("offline peer delayed the local Direct governance refusal")??;
     }
+    let server = group.server(0);
 
     // Before Bob consumes his claim the Realm is still provisional.
     let endorsement = |group_state_ref: &EventId| -> Result<Value> {
@@ -2295,7 +2320,13 @@ async fn run(
         &alice,
         arkret_wire::event_kind_str::REALM_DESTROY,
         scope.clone(),
-        json!({ "realm_id": realm_id }),
+        serde_json::to_value(
+            arkret_models_collaboration::governance::realm_lifecycle::RealmDestroyPayload {
+                reason: "Direct terminal rejection".into(),
+                retention_policy_id: None,
+                verification_stub_required: None,
+            },
+        )?,
         Vec::new(),
         Cites::Nothing,
     )?;

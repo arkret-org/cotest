@@ -8,6 +8,7 @@ pub mod conformance {
     pub mod consent_cache;
     pub mod consent_call_admission;
     mod consent_set;
+    mod consent_support;
     pub mod message_send;
     pub mod webrtc_media_plaintext;
     pub use account_blocklist_projection::*;

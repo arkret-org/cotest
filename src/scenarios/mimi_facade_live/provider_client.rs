@@ -212,6 +212,13 @@ pub(super) async fn run(
         "wrong actor proof changed durable state"
     );
     update.signature.jws = sign(&bytes, &holder.key)?;
+    // Persist before transport; a later local recovery reuses this exact Event.
+    let frozen_dir = tempfile::tempdir()?;
+    let frozen_path = frozen_dir.path().join("consent-update.json");
+    std::fs::write(
+        &frozen_path,
+        arkret_canonical::canonical_json_bytes(&update)?,
+    )?;
     let accepted = sdk.mimi_update_consent(&update).await?;
     ensure!(
         accepted.event_ref == event.event_id && accepted.consent_id == first.consent_id,
@@ -222,12 +229,86 @@ pub(super) async fn run(
         committed[0] == before[0] + 1 && committed[1] == before[1] + 1,
         "Consent did not admit one Event and Commit"
     );
-    let replay = sdk.mimi_update_consent(&update).await?;
+    // Recover from the durable original after a distinct native replacement.
+    super::super::invite_service_fanout_live::grant_scoped_consent(
+        &holder.client,
+        &requester.client,
+        arkret_wire::ConsentScope::Presence,
+    )
+    .await?;
+    let later = counts(database, pcr.as_str()).await?;
+    ensure!(
+        later[0] == committed[0] + 1,
+        "distinct peer scope edit was not accepted"
+    );
+    let recovered: MimiUpdateConsentRequestBody =
+        serde_json::from_slice(&std::fs::read(&frozen_path)?)?;
+    ensure!(
+        arkret_canonical::canonical_json_bytes(&recovered.consent_event)?
+            == arkret_canonical::canonical_json_bytes(&update.consent_event)?,
+        "recovery rebuilt the Event"
+    );
+    let replay = sdk.mimi_update_consent(&recovered).await?;
     ensure!(
         replay.event_ref == accepted.event_ref
             && replay.updated_at == accepted.updated_at
-            && counts(database, pcr.as_str()).await? == committed,
-        "typed Consent retry duplicated its Event"
+            && counts(database, pcr.as_str()).await? == later,
+        "frozen Consent retry lost its original outcome or changed later current"
+    );
+    let (revision, permissions) = super::super::invite_service_fanout_live::read_consent_set(
+        &holder.client,
+        &arkret::ConsentPeer::Actor {
+            actor_id: requester.actor.clone(),
+        },
+    )
+    .await?;
+    ensure!(
+        permissions.len() == 2
+            && permissions
+                .iter()
+                .any(|p| p.consent_scope == arkret_wire::ConsentScope::Presence),
+        "accepted retry rolled back the other scope"
+    );
+    let mut other_correlation = recovered.clone();
+    other_correlation.consent_id = second.consent_id;
+    other_correlation.signature.payload_digest = other_correlation.payload_digest()?;
+    other_correlation.signature.jws = sign(
+        &other_correlation
+            .unsigned_signature_binding_bytes(&other_correlation.signature.unsigned())?,
+        &holder.key,
+    )?;
+    let failure = sdk
+        .mimi_update_consent(&other_correlation)
+        .await
+        .unwrap_err();
+    ensure!(
+        matches!(failure,arkret_http_client::Error::Api { ref error,.. } if error.code()=="not_found"),
+        "accepted original was reused in another correlation: {failure:?}"
+    );
+    ensure!(
+        counts(database, pcr.as_str()).await? == later,
+        "correlation substitution wrote native state"
+    );
+
+    // Repeat actual HTTP recovery without manufacturing a facade terminal row.
+    let replay = sdk.mimi_update_consent(&recovered).await?;
+    ensure!(
+        replay.event_ref == accepted.event_ref && replay.updated_at == accepted.updated_at,
+        "durable exact retry did not recover original result"
+    );
+    ensure!(
+        super::super::invite_service_fanout_live::read_consent_set(
+            &holder.client,
+            &arkret::ConsentPeer::Actor {
+                actor_id: requester.actor.clone()
+            }
+        )
+        .await?
+        .0 == revision,
+        "exact recovery rewrote peer current"
+    );
+    eprintln!(
+        "SC MIMI: durable original recovery; later other-scope edit preserved; cross-correlation Event reuse refused; repeated exact native replay"
     );
 
     let peer = arkret_models_collaboration::events_payloads::consent::ConsentPeer::Actor {

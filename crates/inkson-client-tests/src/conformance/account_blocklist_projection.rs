@@ -1644,7 +1644,6 @@ pub async fn contact_first_dm_cross_station_private_boundary_live() -> Result<()
         introduction_evidence: ContactIntroductionEvidence::LocatorRef {
             principal_locator: locator,
         },
-        continuity_evidence: None,
         message: None,
     });
     let prepared = expect_json(

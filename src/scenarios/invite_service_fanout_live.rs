@@ -424,7 +424,9 @@ async fn grant_scoped_consent(
     permissions.push(ConsentPermission {
         consent_scope: scope,
         not_before: None,
-        expires_at: Some(Utc::now() + ChronoDuration::days(1)),
+        expires_at: Some(arkret_canonical::normalize_timestamp_canonical(
+            Utc::now() + ChronoDuration::days(1),
+        )),
         constraints: None,
         evidence_ref: None,
         reason: Some("cotest_holder_quarantine_invalidation".to_owned()),
@@ -450,7 +452,6 @@ async fn grant_scoped_consent(
     );
     Ok((view, event))
 }
-
 async fn revoke_invite_consent(
     holder: &TestActorClient,
     granted: ConsentView,

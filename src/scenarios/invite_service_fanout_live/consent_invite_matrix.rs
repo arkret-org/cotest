@@ -69,6 +69,9 @@ pub async fn run_current_invite_matrix() -> Result<()> {
     )
     .await?;
     let concrete = super::grant_invite_consent(&bob.client, &alice.client).await?;
+    // The cited accepted Invite entry remains historical after another scope's
+    // replacement. Admission must recheck today's complete exact-peer set.
+    super::grant_scoped_consent(&bob.client, &alice.client, ConsentScope::VoiceCall).await?;
     positive(
         &alice,
         &bob,

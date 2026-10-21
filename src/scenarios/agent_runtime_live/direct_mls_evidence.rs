@@ -536,19 +536,17 @@ pub(super) async fn join(
         &mut agent_bound,
         agent_session.runtime_key.to_bytes(),
     )?;
-    let loser: AuthoritySubmitOutcome =
-        serde_json::from_value(
-            expect_json(
-                runtime.post("/_arkret/self/events").json(
-                    &arkret_wire::EventAdmissionSubmission::new(agent_bound.clone()),
-                ),
-                StatusCode::OK,
-            )
-            .await?,
-        )?;
+    let loser = expect_json(
+        runtime
+            .post("/_arkret/self/events")
+            .json(&arkret_wire::EventAdmissionSubmission::new(
+                agent_bound.clone(),
+            )),
+        StatusCode::CONFLICT,
+    )
+    .await?;
     ensure!(
-        matches!(loser, AuthoritySubmitOutcome::Rejected { ref reason_code, .. }
-        if reason_code == "duplicate_conflict"),
+        loser["type"] == "https://arkret.org/problems/duplicate_conflict",
         "equivalent Agent binding was accepted: {loser:?}"
     );
     ensure!(

@@ -4,30 +4,29 @@ use serial_test::serial;
 #[tokio::test]
 #[serial]
 async fn contact_round_founds_direct_conversation() -> Result<()> {
-    cotest::scenarios::direct_conversation_founding_live::contact_round_founds_direct_conversation()
-        .await
+    cotest::harness::heap_future(cotest::scenarios::direct_conversation_founding_live::contact_round_founds_direct_conversation).await
 }
 
 #[tokio::test]
 #[serial]
 async fn cross_station_contact_round_founds_direct_conversation() -> Result<()> {
-    cotest::scenarios::direct_conversation_founding_live::cross_station_contact_round_founds_direct_conversation().await
+    cotest::harness::heap_future(cotest::scenarios::direct_conversation_founding_live::cross_station_contact_round_founds_direct_conversation).await
 }
 
 #[tokio::test]
 #[serial]
 async fn cross_station_glare_founds_direct_conversation() -> Result<()> {
-    cotest::scenarios::direct_conversation_founding_live::cross_station_glare_founds_direct_conversation().await
+    cotest::harness::heap_future(cotest::scenarios::direct_conversation_founding_live::cross_station_glare_founds_direct_conversation).await
 }
 
 #[tokio::test]
 #[serial]
 async fn cross_station_missing_contact_dependency_is_atomic() -> Result<()> {
-    cotest::scenarios::direct_conversation_founding_live::cross_station_missing_contact_dependency_is_atomic().await
+    cotest::harness::heap_future(cotest::scenarios::direct_conversation_founding_live::cross_station_missing_contact_dependency_is_atomic).await
 }
 
 #[tokio::test]
 #[serial]
 async fn cross_station_two_authorized_devices_race_founding() -> Result<()> {
-    cotest::scenarios::direct_conversation_founding_live::cross_station_two_authorized_devices_race_founding().await
+    cotest::harness::heap_future(cotest::scenarios::direct_conversation_founding_live::cross_station_two_authorized_devices_race_founding).await
 }
