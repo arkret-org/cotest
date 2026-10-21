@@ -159,6 +159,10 @@ pub(super) async fn run(
     let (expected_current, mut permissions) =
         crate::scenarios::invite_service_fanout_live::read_consent_set(&holder.client, &peer)
             .await?;
+    let undisclosed_never_written = crate::harness::heap_future(|| {
+        reject_nonholder_current_reads(server, holder, &requester, database, false)
+    })
+    .await?;
     permissions.retain(|p| p.consent_scope != arkret_wire::ConsentScope::VoiceCall);
     permissions.push(
         arkret_models_collaboration::events_payloads::consent::ConsentPermission {
@@ -228,6 +232,14 @@ pub(super) async fn run(
     ensure!(
         committed[0] == before[0] + 1 && committed[1] == before[1] + 1,
         "Consent did not admit one Event and Commit"
+    );
+    let undisclosed_present = crate::harness::heap_future(|| {
+        reject_nonholder_current_reads(server, holder, &requester, database, true)
+    })
+    .await?;
+    ensure!(
+        undisclosed_present == undisclosed_never_written,
+        "a nonholder distinguished present Consent from never-written Consent"
     );
     // Recover from the durable original after a distinct native replacement.
     super::super::invite_service_fanout_live::grant_scoped_consent(
@@ -414,9 +426,163 @@ pub(super) async fn run(
         "failed key claim emitted native writes"
     );
     eprintln!(
-        "MIMI provider SDK: request correlations=3; Consent accepted/exact replay=2; expired-scope removal=1; wrong-key zero-write=1; room receipt/notify=2; signed no-material claim refusal=1; external-provider-live=0"
+        "MIMI provider SDK: request correlations=3; Consent accepted/exact replay=2; expired-scope removal=1; requester-self/private-current refusals=2; hosting-provider-peer/Human-private-current refusals=2; wrong-key zero-write=1; room receipt/notify=2; signed no-material claim refusal=1; external-provider-live=0"
     );
     Ok(())
+}
+
+/// The existing provider uses this Station's real service signer. Its valid
+/// peer signature still cannot open a Human holder's editing surface.
+async fn reject_nonholder_current_reads(
+    server: &ArkretServer,
+    holder: &Member,
+    requester: &Member,
+    database: &str,
+    present: bool,
+) -> Result<Vec<Value>> {
+    use arkret_models_collaboration::call_invitation::ConsentCurrentReadRequestBody;
+    use arkret_models_collaboration::events_payloads::consent::{
+        ConsentExpectedCurrent, ConsentPeer,
+    };
+
+    use crate::scenarios::invite_service_fanout_live::read_consent_set;
+
+    let peer = ConsentPeer::Actor {
+        actor_id: requester.actor.clone(),
+    };
+    let original = read_consent_set(&holder.client, &peer).await?;
+    ensure!(
+        matches!(&original.0, ConsentExpectedCurrent::Present { .. }) == present,
+        "privacy probe did not use the intended actual holder current"
+    );
+    let nonce = || -> Result<String> {
+        let mut bytes = [0_u8; 32];
+        getrandom::fill(&mut bytes).map_err(anyhow::Error::msg)?;
+        Ok(arkret_canonical::base64url_encode(bytes))
+    };
+    let mut request = ConsentCurrentReadRequestBody {
+        holder_account_id: holder.account.clone(),
+        peer,
+        audience_actor_id: arkret_wire::ActorId::service(holder.account.station_id.clone()),
+        nonce: nonce()?,
+    };
+    let before = private_current_footprint(database, holder).await?;
+    // Use the authenticated request builder, not SDK input validation: this
+    // must reach the receiver's exact holder comparison after session/DPoP.
+    let response = requester
+        .client
+        .post("/_arkret/self/consent/current")
+        .canonical_json(&request)?
+        .send()
+        .await?;
+    ensure!(response.status() == StatusCode::FORBIDDEN);
+    let requester_problem: Value = response.json().await?;
+    let requester_problem = private_current_refusal(
+        requester_problem,
+        StatusCode::FORBIDDEN,
+        "capability_denied",
+    )?;
+    ensure!(
+        private_current_footprint(database, holder).await? == before,
+        "requester private-current refusal changed accepted or pending business state"
+    );
+
+    request.nonce = nonce()?;
+    let (status, body) = server
+        .signed_peer_post(
+            server,
+            "/_arkret/peer/consent/current",
+            &arkret_canonical::canonical_json_bytes(&request)?,
+            server.service_id(),
+        )
+        .await?;
+    // This is the already authenticated hosting service, also the provider
+    // signer in this fixture. Human PCR forbids the peer read even for it.
+    ensure!(status == StatusCode::CONFLICT);
+    let provider_problem = private_current_refusal(
+        serde_json::from_slice(&body)?,
+        StatusCode::CONFLICT,
+        "failed_precondition",
+    )?;
+    ensure!(
+        private_current_footprint(database, holder).await? == before,
+        "hosting-provider private-current refusal changed business state"
+    );
+    // Verify a fresh proof at the independent holder anchor, then compare the
+    // actual source revision and complete permissions, never fresh proof bytes.
+    ensure!(
+        read_consent_set(&holder.client, &request.peer).await? == original,
+        "private-current probes changed the holder's complete current"
+    );
+    Ok(vec![requester_problem, provider_problem])
+}
+
+fn private_current_refusal(mut problem: Value, status: StatusCode, code: &str) -> Result<Value> {
+    ensure!(
+        problem["type"] == format!("https://arkret.org/problems/{code}")
+            && problem["status"] == status.as_u16(),
+        "private-current refusal has the wrong registered error: {problem}"
+    );
+    fn contains_private_result(value: &Value) -> bool {
+        match value {
+            Value::Object(object) => object.iter().any(|(key, value)| {
+                matches!(
+                    key.as_str(),
+                    "current"
+                        | "result"
+                        | "value"
+                        | "state"
+                        | "revision"
+                        | "permissions"
+                        | "commit_id"
+                        | "stream_position"
+                        | "effective_stream_head"
+                        | "realm_id"
+                        | "proof"
+                        | "request_digest"
+                ) || contains_private_result(value)
+            }),
+            Value::Array(values) => values.iter().any(contains_private_result),
+            _ => false,
+        }
+    }
+    ensure!(
+        !contains_private_result(&problem),
+        "private-current refusal disclosed a complete result or state: {problem}"
+    );
+    problem
+        .as_object_mut()
+        .context("private-current problem must be an object")?
+        .remove("instance");
+    Ok(problem)
+}
+
+async fn private_current_footprint(database: &str, holder: &Member) -> Result<String> {
+    let database = database.to_owned();
+    let holder_json = String::from_utf8(arkret_canonical::canonical_json_bytes(&holder.account)?)?;
+    let realm = holder
+        .client
+        .principal
+        .as_ref()
+        .context("actual holder PCR")?
+        .pcr_realm_id
+        .to_string();
+    tokio::task::spawn_blocking(move || -> Result<_> {
+        let mut db = postgres::Client::connect(&database, postgres::NoTls)?;
+        Ok(db.query_one(
+            "SELECT jsonb_build_object(\
+             'current',(SELECT jsonb_agg(to_jsonb(r) ORDER BY to_jsonb(r)::text) FROM consent_current_results r WHERE holder_account_id=$1::text::jsonb),\
+             'versions',(SELECT jsonb_agg(to_jsonb(r) ORDER BY to_jsonb(r)::text) FROM consent_result_versions r JOIN realm_commits c ON c.commit_id=r.commit_id WHERE c.realm_id=$2),\
+             'correlations',(SELECT jsonb_agg(to_jsonb(r) ORDER BY to_jsonb(r)::text) FROM mimi_consent_correlations r WHERE holder_account_id=$1),\
+             'decisions',(SELECT jsonb_agg(to_jsonb(r) ORDER BY to_jsonb(r)::text) FROM mimi_consent_decision_attempts r JOIN mimi_consent_correlations c USING(consent_id) WHERE c.holder_account_id=$1),\
+             'events',(SELECT jsonb_agg(to_jsonb(r) ORDER BY to_jsonb(r)::text) FROM canonical_events r WHERE realm_id=$2),\
+             'commits',(SELECT jsonb_agg(to_jsonb(r) ORDER BY to_jsonb(r)::text) FROM realm_commits r WHERE realm_id=$2),\
+             'authority',(SELECT to_jsonb(r) FROM realm_authorities r WHERE realm_id=$2)\
+             )::text",
+            &[&holder_json, &realm],
+        )?.get(0))
+    })
+    .await?
 }
 
 async fn revoke_expired_voice(
