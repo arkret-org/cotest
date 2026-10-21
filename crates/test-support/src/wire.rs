@@ -1797,8 +1797,8 @@ mod tests {
             "effective_stream_head":{"stream_ref":{"kind":"realm","realm_id":realm},
                 "stream_position":2,"commit_id":arkret_wire::RealmCommitId::from_digest([47;32])},
             "current":{"state":"never_written"},
-            "evaluated_at":canonical::normalize_timestamp_canonical(now),
-            "expires_at":canonical::normalize_timestamp_canonical(now+chrono::Duration::seconds(30)),
+            "evaluated_at":canonical::format_timestamp_canonical(now),
+            "expires_at":canonical::format_timestamp_canonical(now+chrono::Duration::seconds(30)),
             "proof":{"verification_method":method,"jws":"pending"},
         })).unwrap();
         arkret_signatures::call_invitation::sign_consent_current_read(&mut outcome, &signer)
