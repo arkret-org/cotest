@@ -3,7 +3,7 @@ use anyhow::{Context, Result, ensure};
 use arkret_models_collaboration::call_invitation::*;
 use arkret_models_collaboration::call_signal::*;
 use arkret_models_collaboration::consent_operations::{ConsentReplaceRequestBody, ConsentView};
-use arkret_models_collaboration::events_payloads::consent::{ConsentPeer, ConsentPermission};
+use arkret_models_collaboration::events_payloads::consent::ConsentPermission;
 use arkret_models_collaboration::objects::media::{
     CallMediaDesiredMedia, CallMediaTokenExchangeOutcome, CallMediaTokenExchangeRequestBody,
 };

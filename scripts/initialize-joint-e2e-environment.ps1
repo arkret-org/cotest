@@ -467,7 +467,7 @@ if ($platform.os -eq "windows") {
     }
     Add-Check "available memory" $memoryStatus "available_gb=$availableMemoryGb; recommended_gb=$recommendedMemoryGb; minimum_gb=$minimumMemoryGb"
 }
-$outputDrive = [System.IO.DriveInfo]::new([System.IO.Path]::GetPathRoot($OutputDirectory))
+$outputDrive = Get-CotestArtifactDrive -OutputDirectory $OutputDirectory
 $freeDiskGb = [math]::Round($outputDrive.AvailableFreeSpace / 1GB, 2)
 Add-Check "artifact disk" $(if ($freeDiskGb -ge 10) { "pass" } else { "fail" }) "path=$OutputDirectory; free_gb=$freeDiskGb; required_gb=10"
 

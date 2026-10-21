@@ -1,5 +1,7 @@
 //! Verify actual issuer output using its accepted own-Station media binding.
 
+use cotest::scenarios::mls_lifecycle_live::fresh_uuid_v7;
+
 use super::*;
 
 #[inline(never)]

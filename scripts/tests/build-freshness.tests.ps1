@@ -13,7 +13,9 @@ function Assert-True {
     }
 }
 
-$testRoot = Join-Path ([System.IO.Path]::GetTempPath()) "cotest-build-freshness-$([guid]::NewGuid().ToString('N'))"
+# macOS exposes its temporary directory through /var; provenance uses canonical paths.
+$fixtureTempRoot = Resolve-BuildInputPath -Path ([System.IO.Path]::GetTempPath())
+$testRoot = Join-Path $fixtureTempRoot "cotest-build-freshness-$([guid]::NewGuid().ToString('N'))"
 $null = New-Item -ItemType Directory -Path $testRoot
 try {
     $artifact = Join-Path $testRoot "service.exe"
@@ -410,9 +412,10 @@ path = "src/main.rs"
 }
 finally {
     if (Test-Path -LiteralPath $testRoot) {
-        $resolvedTestRoot = [System.IO.Path]::GetFullPath($testRoot)
-        $tempRoot = [System.IO.Path]::GetFullPath([System.IO.Path]::GetTempPath()).TrimEnd('\', '/') + [System.IO.Path]::DirectorySeparatorChar
-        if (-not $resolvedTestRoot.StartsWith($tempRoot, [System.StringComparison]::OrdinalIgnoreCase)) {
+        $resolvedTestRoot = Resolve-BuildInputPath -Path $testRoot
+        $tempRoot = $fixtureTempRoot.TrimEnd('\', '/') + [System.IO.Path]::DirectorySeparatorChar
+        if (-not $resolvedTestRoot.StartsWith($tempRoot, [System.StringComparison]::OrdinalIgnoreCase) -or
+            -not (Split-Path -Leaf $resolvedTestRoot).StartsWith('cotest-build-freshness-', [System.StringComparison]::Ordinal)) {
             throw "Test cleanup path is outside the temporary directory"
         }
         Remove-Item -LiteralPath $testRoot -Recurse -Force

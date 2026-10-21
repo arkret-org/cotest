@@ -131,4 +131,17 @@ Assert-True ($initializerScript -notmatch '(?m)^\s*&\s*.*restore-joint-e2e-hosts
 $restoreScript = Get-Content -Raw -LiteralPath (Join-Path $PSScriptRoot "..\restore-joint-e2e-hosts.ps1")
 Assert-True ($restoreScript -match 'backup_sha256' -and $restoreScript -match 'SetSecurityDescriptorSddlForm') "restore must validate backup integrity and restore the ACL"
 
+
+if (-not $IsWindows) {
+    $drives = @(
+        [pscustomobject]@{ Name = '/'; AvailableFreeSpace = 1 },
+        [pscustomobject]@{ Name = '/Volumes/Data'; AvailableFreeSpace = 200 },
+        [pscustomobject]@{ Name = '/Volumes/Data/build'; AvailableFreeSpace = 300 }
+    )
+    Assert-Equal 300 (Get-CotestArtifactDrive -OutputDirectory '/Volumes/Data/build/run' -Drives $drives).AvailableFreeSpace 'nested artifact mount must win over filesystem root'
+    Assert-Equal 200 (Get-CotestArtifactDrive -OutputDirectory '/Volumes/Data/artifacts' -Drives $drives).AvailableFreeSpace 'external artifact volume must supply free space'
+    Assert-Equal 1 (Get-CotestArtifactDrive -OutputDirectory '/Volumes/Database/run' -Drives $drives).AvailableFreeSpace 'similar path prefix is not a mounted parent'
+    Assert-Equal 200 (Get-CotestArtifactDrive -OutputDirectory '/Volumes/Data' -Drives $drives).AvailableFreeSpace 'mount root itself must match'
+}
+
 Write-Host "joint-e2e-environment.tests.ps1: PASS"

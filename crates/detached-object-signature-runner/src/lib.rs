@@ -100,7 +100,7 @@ fn other_context(context: DetachedSignatureContext) -> DetachedSignatureContext 
     DetachedSignatureContext::ALL
         .into_iter()
         .find(|candidate| *candidate != context)
-        .expect("closed context enum has six values")
+        .expect("closed context enum has multiple values")
 }
 
 pub fn run_detached_object_signature_suite() -> Result<DetachedObjectSignatureExecution> {
@@ -115,9 +115,27 @@ pub fn run_detached_object_signature_suite() -> Result<DetachedObjectSignatureEx
     let cases = fixture["cases"]
         .as_array()
         .context("detached-object signature fixture has no cases")?;
+    // This vector owns six host families. New domains have independently
+    // registered fixtures; they must not silently change this suite's scope.
+    let owned_contexts = [
+        DetachedSignatureContext::RealmCommit,
+        DetachedSignatureContext::RealmAuthorityHandoffOld,
+        DetachedSignatureContext::RealmAuthorityHandoffNewAcceptance,
+        DetachedSignatureContext::RealmAuthorityCurrentAssertion,
+        DetachedSignatureContext::RealmSnapshot,
+        DetachedSignatureContext::MlsWelcomeDelivery,
+    ];
+    let expected: std::collections::BTreeSet<_> = owned_contexts
+        .into_iter()
+        .map(|context| context.as_wire_str())
+        .collect();
+    let actual: std::collections::BTreeSet<_> = cases
+        .iter()
+        .map(|case| case["context"].as_str().context("case context missing"))
+        .collect::<Result<_>>()?;
     ensure!(
-        cases.len() == DetachedSignatureContext::ALL.len(),
-        "fixture does not cover all detached signature contexts"
+        cases.len() == expected.len() && actual == expected,
+        "fixture must cover every owned detached signature host exactly once"
     );
 
     let mut results = Vec::new();

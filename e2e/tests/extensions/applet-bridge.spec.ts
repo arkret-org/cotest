@@ -65,7 +65,7 @@ import {
   type BuiltWebvhGenesis,
 } from "../../helpers/webvh-api";
 
-import type { ActorId, AppletInstallOutcome, AppletBotProvisionOutcome, AppletAuthorityMaterialRequestBody, AppletAuthorityMaterialOutcome, CapabilityGrantObject } from "../../helpers/generated/spec-wire-objects";
+import type { ActorId, AppletInstallOutcome, AppletAuthorityMaterialRequestBody, AppletAuthorityMaterialOutcome, CapabilityGrantObject } from "../../helpers/generated/spec-wire-objects";
 
 // Each case provisions its own identities and Realm; a failed case must not
 // skip the remaining independent admission and replay checks.
@@ -2228,11 +2228,14 @@ async function installApplet(
   const installed = JSON.parse(responseText) as AppletInstallOutcome;
   expect(installed).not.toHaveProperty("bot_actor_id");
   const bot = await provisionAppletBot(request,signed,realmId,idempotencyKey,options);
+  // The registration is local fixture bookkeeping, not a provision wire DTO.
+  // Preserve the actual response identity check before using the typed candidate.
+  expect(bot.bot_actor_id).toEqual(signed.bot_actor_id);
   return installRegistrationFromResponse(
     signed,
     realmId,
     installed,
-    bot as AppletBotProvisionOutcome,
+    signed.bot_actor_id,
     result.grantActionsById,
   );
 }
@@ -2915,13 +2918,13 @@ function installRegistrationFromResponse(
   signed: SignedPackage,
   realmId: string,
   response: AppletInstallOutcome,
-  bot: AppletBotProvisionOutcome,
+  botActorId: ActorId,
   grantActionsById: Map<string, string[]>,
 ): AppletRegistration {
-  if (bot.bot_actor_id.kind !== "account") {
-    throw new Error("A Bot provision outcome must name an Account actor");
+  if (botActorId.kind !== "account") {
+    throw new Error("The local registration fixture requires its Account candidate");
   }
-  expect(bot.bot_actor_id).toEqual(signed.bot_actor_id);
+  expect(botActorId).toEqual(signed.bot_actor_id);
   const capabilityGrantRefs = Array.isArray(response.capability_grant_refs)
     ? response.capability_grant_refs.map(String)
     : [];
@@ -2936,7 +2939,7 @@ function installRegistrationFromResponse(
   ).toEqual(expect.stringMatching(/^ak:event:/));
   return {
     applet_id: String(response.applet_id),
-    bot_actor_id: bot.bot_actor_id,
+    bot_actor_id: botActorId,
     portal_realm_id: realmId,
     namespace:
       signed.applet_package.namespaces?.handles?.[0]?.pattern ??
