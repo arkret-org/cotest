@@ -1077,9 +1077,9 @@ async fn wait_for_accepted_revoke(
     }
 }
 
-/// Local authoring freezes one Event across lost-response and native cold recovery.
+/// Local authoring, exact frozen submission recovery and durable Account cursor replay.
 pub async fn run_local_message_and_account_cursor_recovery_live() -> Result<()> {
-    let label = "message-local-cursor-recovery";
+    let label = "local-message-cursor-recovery";
     let Some(database) = database(label)? else {
         return Ok(());
     };
@@ -1113,22 +1113,17 @@ pub async fn run_local_message_and_account_cursor_recovery_live() -> Result<()> 
     let directory = tempfile::tempdir()?;
     let cursor_path = directory.path().join("account.json");
     let before = run_durable_account_round(&alice, &account, &realm, &cursor_path, None).await?;
-    let intent: arkret_models_collaboration::message_authoring::MessageAuthoringIntent =
-        serde_json::from_value(
-            json!({"strand_id":strand,"track_name":"discussion","content":{"kind":"plaintext","content":{"kind":"ak.content.text","body":"frozen local recovery","format":"plain"}}}),
-        )?;
     let event = alice
         .author_event(
             &realm,
-            "ak.message.create",
-            serde_json::to_value(intent.payload())?,
+            EventKind::MessageCreate.as_str(),
+            message_create_text_payload(&strand, "frozen local recovery")?,
         )
         .await?;
-    let frozen = garth::FrozenMessageSubmission::from_signed_request(
-        arkret_models_collaboration::message_authoring::MessageSubmitRequestBody {
+    let frozen =
+        garth::FrozenMessageSubmission::from_signed_request(garth::MessageSubmitRequestBody {
             submission: arkret_wire::EventAdmissionSubmission::new(event.clone()),
-        },
-    )?;
+        })?;
     let commit = submit_frozen_message_with_lost_response_and_native_reopen(
         &alice,
         &account,
@@ -1145,7 +1140,7 @@ pub async fn run_local_message_and_account_cursor_recovery_live() -> Result<()> 
     .await?;
     ensure!(
         after.cursor != before.cursor,
-        "accepted local message did not advance its durable cursor"
+        "committed message did not advance durable Account cursor"
     );
     let replay: AuthoritySubmitOutcome = serde_json::from_value(
         expect_json(
@@ -1158,16 +1153,30 @@ pub async fn run_local_message_and_account_cursor_recovery_live() -> Result<()> 
         .await?,
     )?;
     let AuthoritySubmitOutcome::Accepted {
-        commit: replayed, ..
+        commit: replay_commit,
+        ..
     } = replay
     else {
-        bail!("exact local submission retry was refused")
+        bail!("exact local submission retry was not accepted");
     };
     ensure!(
-        replayed == commit,
-        "cold exact retry allocated a second Commit"
+        replay_commit == commit,
+        "exact replay allocated a second Commit"
     );
-    ensure_commit_signed_by(&commit, station)?;
+    let fresh_event = alice
+        .author_event(
+            &realm,
+            EventKind::MessageCreate.as_str(),
+            message_create_text_payload(&strand, "a separate local intent")?,
+        )
+        .await?;
+    let fresh_commit =
+        submit_message_with_lost_response_and_native_reopen(&alice, &account, &fresh_event).await?;
+    ensure!(
+        fresh_commit.stream_position == commit.stream_position + 1,
+        "local authoring or exact retry wrote a hidden Commit"
+    );
+    ensure_commit_signed_by(&fresh_commit, station)?;
     Ok(())
 }
 

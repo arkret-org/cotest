@@ -7,7 +7,9 @@ pub mod conformance {
     pub mod client_sync;
     pub mod consent_cache;
     pub mod consent_call_admission;
+    mod consent_set;
     mod consent_support;
+    pub mod message_send;
     pub mod webrtc_media_plaintext;
     pub use account_blocklist_projection::*;
     pub use webrtc_media_plaintext::*;

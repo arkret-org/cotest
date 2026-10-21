@@ -2421,6 +2421,17 @@ async fn native_endpoint(
     let host = Box::pin(open_host)
         .await
         .context("Open native Account host at the actual Station")?;
+    let registration = member
+        .client
+        .principal
+        .as_ref()
+        .context("native endpoint lacks its accepted principal registration")?;
+    inkson::conformance::persist_native_registration_pin(
+        &host,
+        &member.account,
+        &member.device,
+        &registration.pcr_realm_id,
+    )?;
     let record = group.export_state_record()?;
     let accepted = member
         .client
@@ -2676,12 +2687,10 @@ pub(crate) async fn observe_ordinary_call_invite(
         )
     };
     if !observe_receipt {
-        super::consent_support::grant(
+        super::consent_set::grant(
             holder,
             &sender.actor,
-            vec![super::consent_support::permission(
-                arkret_wire::ConsentScope::VoiceCall,
-            )],
+            serde_json::from_value(serde_json::json!({"consent_scope":"voice_call"}))?,
         )
         .await?;
     }

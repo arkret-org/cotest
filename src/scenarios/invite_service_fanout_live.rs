@@ -16,6 +16,7 @@
 //! keeps an account-subscribe long poll open before dispatch and proves that the
 //! durable fanout wakes it with the invite-delivery update.
 
+use std::collections::HashSet;
 use std::time::{Duration, Instant};
 
 use anyhow::{Context, Result, anyhow, bail, ensure};
@@ -25,7 +26,9 @@ use arkret_models_collaboration::device_messages::{
     DeviceMessageEnvelope, DeviceMessageSender, DeviceMessagesAckRequestBody,
     DeviceMessagesGetOutcome, RecipientDelivery,
 };
-use arkret_models_collaboration::events_payloads::consent::ConsentPeer;
+use arkret_models_collaboration::events_payloads::consent::{
+    ConsentExpectedCurrent, ConsentPeer, ConsentPermission, ConsentReplacePayload,
+};
 use arkret_models_collaboration::governance::invite_addressing::{
     IntroductionEvidence, InviteAddress, InviteReceivePolicy, SelfInviteDispatchRequestBody,
 };
@@ -51,16 +54,14 @@ pub use consent_invite_matrix::run_current_invite_matrix;
 
 fn account_data_update_matches(envelope: &DeviceMessageEnvelope, row: &AccountDataRow) -> bool {
     envelope.kind.as_str() == "ak.account_data.update"
-        && envelope.content.get("operation").and_then(Value::as_str) == Some("put")
-        && envelope
-            .content
-            .get("account_data_key")
-            .and_then(Value::as_str)
-            == Some(row.account_data_key.as_str())
-        && envelope.content.get("revision").and_then(Value::as_u64) == Some(row.revision)
-        && envelope.content.get("content") == Some(&row.content)
-        && envelope.content.get("updated_at").and_then(Value::as_str)
-            == Some(arkret_canonical::format_timestamp_canonical(row.updated_at).as_str())
+        && serde_json::to_value(&envelope.content).expect("JSON content map is serializable")
+            == json!({
+                "operation": "put",
+                "account_data_key": row.account_data_key,
+                "revision": row.revision,
+                "content": row.content,
+                "updated_at": arkret_canonical::format_timestamp_canonical(row.updated_at),
+            })
 }
 
 #[derive(Debug)]
@@ -250,83 +251,169 @@ fn contains_retired_server_device(value: &Value) -> bool {
     }
 }
 
-async fn assert_service_account_data_fanout(
+#[derive(Default)]
+struct FanoutTracker {
+    rows: Vec<AccountDataRow>,
+    acknowledged_ids: HashSet<String>,
+}
+
+async fn receive_verified_fanout_batch(
     holder: &TestActorClient,
     expected_service_id: &str,
-    expected_row: &AccountDataRow,
-) -> Result<()> {
+    tracker: &mut FanoutTracker,
+) -> Result<Vec<DeviceMessageEnvelope>> {
     let polled = expect_json(holder.get("/_arkret/self/device_messages"), StatusCode::OK).await?;
     let outcome: DeviceMessagesGetOutcome = serde_json::from_value(polled.clone())
         .with_context(|| format!("to-device response is not closed SDK wire data: {polled}"))?;
+    ensure!(
+        outcome.lost != Some(true),
+        "invite fanout queue lost deliveries"
+    );
     let holder_core_id = actor_core_id(&holder.actor)?;
-    let mut matched = None;
+    let mut messages = Vec::new();
+    let mut batch_ids = HashSet::new();
     for delivery in &outcome.deliveries {
         let RecipientDelivery::DeviceMessage {
             device_message: envelope,
         } = delivery
         else {
-            continue;
+            bail!("unexpected non-DeviceMessage in invite fanout: {delivery:?}");
         };
-        if account_data_update_matches(envelope, expected_row) {
-            matched = Some(envelope);
-            break;
-        }
+        ensure!(
+            matches!(&envelope.sender, DeviceMessageSender::Station { sender_id }
+                if sender_id.as_str() == expected_service_id),
+            "actor-private account-data fanout did not use the local Service sender"
+        );
+        ensure!(
+            envelope.recipient_account_id.principal_id.as_str() == holder_core_id
+                && envelope.recipient_account_id.station_id.as_str() == expected_service_id,
+            "Service fanout recipient AccountId must identify the exact holder account"
+        );
+        ensure!(
+            envelope.recipient_device_id.as_str() == holder.device_id,
+            "Service fanout reached the wrong holder device"
+        );
+        ensure!(
+            tracker
+                .rows
+                .iter()
+                .any(|row| account_data_update_matches(envelope, row)),
+            "fanout does not match an independently read accepted account-data row: {envelope:?}"
+        );
+        let envelope_value = serde_json::to_value(envelope)?;
+        ensure!(
+            envelope_value.get("sender_device_id").is_none(),
+            "Service fanout must not synthesize sender_device_id: {envelope_value}"
+        );
+        ensure!(
+            !contains_retired_server_device(&envelope_value),
+            "Service fanout must not contain a retired server:* fake device: {envelope_value}"
+        );
+        let id = envelope.device_message_id.to_string();
+        ensure!(
+            !tracker.acknowledged_ids.contains(&id) && batch_ids.insert(id),
+            "fanout repeated an already ACKed or duplicate message id: {envelope:?}"
+        );
+        messages.push(envelope.clone());
     }
-    let envelope = matched.ok_or_else(|| {
-        anyhow!(
-            "no account-data fanout for {} revision {}: {}",
-            expected_row.account_data_key,
-            expected_row.revision,
-            serde_json::to_string_pretty(&polled).unwrap_or_default()
-        )
-    })?;
-    ensure!(
-        matches!(
-            &envelope.sender,
-            DeviceMessageSender::Station { sender_id }
-                if sender_id.as_str() == expected_service_id
-        ),
-        "actor-private account-data fanout did not use the local Service sender"
-    );
-    ensure!(
-        envelope.recipient_account_id.principal_id.as_str() == holder_core_id
-            && envelope.recipient_account_id.station_id.as_str() == expected_service_id,
-        "Service fanout recipient AccountId must identify the exact holder account"
-    );
-    ensure!(
-        envelope.recipient_device_id.as_str() == holder.device_id,
-        "Service fanout reached the wrong holder device"
-    );
-    ensure!(
-        account_data_update_matches(envelope, expected_row),
-        "to-device revision/content differs from account-data CAS row"
-    );
-
-    let envelope_value = serde_json::to_value(envelope)?;
-    ensure!(
-        envelope_value.get("sender_device_id").is_none(),
-        "Service fanout must not synthesize sender_device_id: {envelope_value}"
-    );
-    ensure!(
-        !contains_retired_server_device(&envelope_value),
-        "Service fanout must not contain a retired server:* fake device: {envelope_value}"
-    );
-
+    if messages.is_empty() {
+        ensure!(
+            !outcome.has_more,
+            "empty fanout page omitted pending deliveries"
+        );
+        return Ok(messages);
+    }
     let ack_token = outcome
         .ack_token
         .context("non-empty to-device response omitted ack_token")?;
+    let ack_request = DeviceMessagesAckRequestBody { ack_token };
+    let ack_raw = expect_json(
+        holder
+            .post("/_arkret/self/device_messages/ack")
+            .json(&ack_request),
+        StatusCode::OK,
+    )
+    .await?;
     let ack: arkret_models_collaboration::device_messages::DeviceMessagesAckOutcome =
+        serde_json::from_value(ack_raw)?;
+    ensure!(
+        ack.pruned_count == messages.len() as u64,
+        "to-device ACK did not prune exactly the fully verified batch"
+    );
+    let repeated: arkret_models_collaboration::device_messages::DeviceMessagesAckOutcome =
         serde_json::from_value(
             expect_json(
                 holder
                     .post("/_arkret/self/device_messages/ack")
-                    .json(&DeviceMessagesAckRequestBody { ack_token }),
+                    .json(&ack_request),
                 StatusCode::OK,
             )
             .await?,
         )?;
-    ensure!(ack.pruned_count == 1, "to-device ack pruned no message");
-    Ok(())
+    ensure!(
+        repeated.pruned_count == 0,
+        "repeated ACK was not an idempotent no-op"
+    );
+    eprintln!(
+        "[invite-fanout] device={} verified_batch={} ack_pruned={} repeat_ack=0",
+        holder.device_id,
+        messages.len(),
+        ack.pruned_count
+    );
+    tracker.acknowledged_ids.extend(batch_ids);
+    Ok(messages)
+}
+
+async fn assert_service_account_data_fanout(
+    holder: &TestActorClient,
+    expected_service_id: &str,
+    expected_row: &AccountDataRow,
+    tracker: &mut FanoutTracker,
+) -> Result<()> {
+    // Only independently read CAS originals authorize a notification, including
+    // later worker hints that repeat an older accepted row under a new id.
+    tracker.rows.push(expected_row.clone());
+    let deadline = Instant::now() + Duration::from_secs(15);
+    loop {
+        let messages = receive_verified_fanout_batch(holder, expected_service_id, tracker).await?;
+        if messages
+            .iter()
+            .any(|message| account_data_update_matches(message, expected_row))
+        {
+            return Ok(());
+        }
+        ensure!(
+            Instant::now() < deadline,
+            "no account-data fanout for {} revision {} on {} before timeout",
+            expected_row.account_data_key,
+            expected_row.revision,
+            holder.device_id
+        );
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    }
+}
+
+async fn drain_known_fanout(
+    holder: &TestActorClient,
+    expected_service_id: &str,
+    tracker: &mut FanoutTracker,
+) -> Result<()> {
+    let deadline = Instant::now() + Duration::from_secs(15);
+    let mut empty_since = Instant::now();
+    loop {
+        let messages = receive_verified_fanout_batch(holder, expected_service_id, tracker).await?;
+        if !messages.is_empty() {
+            empty_since = Instant::now();
+        } else if empty_since.elapsed() >= Duration::from_secs(2) {
+            return Ok(());
+        }
+        ensure!(
+            Instant::now() < deadline,
+            "known fanout did not settle on {}",
+            holder.device_id
+        );
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    }
 }
 
 pub(crate) async fn grant_invite_consent(
@@ -336,81 +423,54 @@ pub(crate) async fn grant_invite_consent(
     grant_scoped_consent(holder, peer, ConsentScope::Invite).await
 }
 
-pub async fn complete_peer_current(
+pub(crate) async fn read_consent_set(
     holder: &TestActorClient,
-    peer: ConsentPeer,
-) -> Result<(
-    arkret::ConsentExpectedCurrent,
-    Vec<arkret::ConsentPermission>,
-)> {
-    let principal = holder.principal.as_ref().context("holder PCR")?;
-    let mut nonce = [0u8; 32];
-    getrandom::fill(&mut nonce).map_err(|error| anyhow::anyhow!("Consent nonce: {error}"))?;
-    let request = arkret::ConsentCurrentReadRequestBody {
-        holder_account_id: AccountId::new(
-            principal.core_id.clone(),
-            DidCoreId::new(holder.service_id())?,
-        ),
-        peer,
-        audience_actor_id: ActorId::service(DidCoreId::new(holder.service_id())?),
-        nonce: arkret_canonical::base64url_encode(nonce),
+    peer: &ConsentPeer,
+) -> Result<(ConsentExpectedCurrent, Vec<ConsentPermission>)> {
+    use arkret_models_collaboration::call_invitation::{
+        ConsentCurrentReadRequestBody, ConsentCurrentState,
     };
-    let outcome: arkret::ConsentCurrentReadOutcome = serde_json::from_value(
-        expect_json(
-            holder.post("/_arkret/self/consent/current").json(&request),
-            StatusCode::OK,
-        )
-        .await?,
-    )?;
-    outcome.validate_for_request(&request, outcome.governance_generation, Utc::now())?;
-    ensure!(
-        outcome.realm_id == principal.pcr_realm_id,
-        "complete Consent read changed holder PCR"
+    let principal = holder.principal.as_ref().context("holder has no PCR")?;
+    let account = AccountId::new(
+        principal.core_id.clone(),
+        DidCoreId::new(holder.service_id())?,
     );
-    Ok(match outcome.current {
-        arkret::ConsentCurrentState::Present { result } => (
-            arkret::ConsentExpectedCurrent::Present {
+    let request = ConsentCurrentReadRequestBody {
+        holder_account_id: account.clone(),
+        peer: peer.clone(),
+        audience_actor_id: ActorId::service(account.station_id),
+        nonce: {
+            let mut bytes = [0_u8; 32];
+            getrandom::fill(&mut bytes).map_err(anyhow::Error::msg)?;
+            arkret_canonical::base64url_encode(&bytes)
+        },
+    };
+    let outcome = holder.sdk().consent_current_read(&request).await?;
+    holder.verify_consent_current_read(&request, &outcome)?;
+    let mut bad_proof = outcome.clone();
+    bad_proof.proof.jws.clear();
+    ensure!(
+        holder
+            .verify_consent_current_read(&request, &bad_proof)
+            .is_err(),
+        "a malformed Consent current proof supplied an editing prestate"
+    );
+    match outcome.current {
+        ConsentCurrentState::NeverWritten => Ok((ConsentExpectedCurrent::NeverWritten, vec![])),
+        ConsentCurrentState::Present { result } => Ok((
+            ConsentExpectedCurrent::Present {
                 revision: result.revision,
             },
             result.value.permissions,
-        ),
-        arkret::ConsentCurrentState::NeverWritten => {
-            (arkret::ConsentExpectedCurrent::NeverWritten, vec![])
-        }
-    })
+        )),
+    }
 }
-pub async fn grant_scoped_consent(
+
+pub(crate) async fn submit_consent_set(
     holder: &TestActorClient,
-    peer: &TestActorClient,
-    scope: ConsentScope,
+    payload: ConsentReplacePayload,
 ) -> Result<(ConsentView, arkret_wire::Event)> {
-    let principal = holder.principal.as_ref().context("holder PCR")?;
-    let peer_principal = peer.principal.as_ref().context("peer PCR")?;
-    let peer = ConsentPeer::Actor {
-        actor_id: ActorId::account(AccountId::new(
-            peer_principal.core_id.clone(),
-            DidCoreId::new(peer.service_id())?,
-        )),
-    };
-    let (expected_current, mut permissions) = complete_peer_current(holder, peer.clone()).await?;
-    permissions.retain(|p| p.consent_scope != scope);
-    permissions.push(arkret::ConsentPermission {
-        consent_scope: scope,
-        not_before: None,
-        expires_at: Some(arkret_canonical::normalize_timestamp_canonical(
-            Utc::now() + ChronoDuration::days(1),
-        )),
-        constraints: None,
-        evidence_ref: None,
-        reason: Some("joint consent replacement".into()),
-    });
-    permissions.sort_by_key(|p| p.consent_scope);
-    let payload = arkret::ConsentReplacePayload {
-        peer,
-        expected_current,
-        permissions,
-    };
-    payload.validate()?;
+    let principal = holder.principal.as_ref().context("holder has no PCR")?;
     let event = holder
         .author_event(
             principal.pcr_realm_id.as_str(),
@@ -418,54 +478,81 @@ pub async fn grant_scoped_consent(
             serde_json::to_value(payload)?,
         )
         .await?;
-    let view = serde_json::from_value(
+    let result: ConsentView = serde_json::from_value(
         expect_json(
-            holder.post("/_arkret/self/consent/results/replace").json(
-                &arkret::ConsentReplaceRequestBody {
+            holder
+                .post("/_arkret/self/consent/results/replace")
+                .json(&ConsentReplaceRequestBody {
                     consent_event: EventAdmissionSubmission::new(event.clone()),
-                },
-            ),
+                }),
             StatusCode::OK,
         )
         .await?,
     )?;
+    Ok((result, event))
+}
+
+pub(super) async fn grant_scoped_consent(
+    holder: &TestActorClient,
+    peer: &TestActorClient,
+    scope: ConsentScope,
+) -> Result<(ConsentView, arkret_wire::Event)> {
+    let peer_principal = peer.principal.as_ref().context("peer has no PCR")?;
+    let peer = ConsentPeer::Actor {
+        actor_id: ActorId::account(AccountId::new(
+            peer_principal.core_id.clone(),
+            DidCoreId::new(peer.service_id())?,
+        )),
+    };
+    let (expected_current, mut permissions) = read_consent_set(holder, &peer).await?;
+    permissions.retain(|permission| permission.consent_scope != scope);
+    permissions.push(ConsentPermission {
+        consent_scope: scope,
+        not_before: None,
+        expires_at: Some(arkret_canonical::normalize_timestamp_canonical(
+            Utc::now() + ChronoDuration::days(1),
+        )),
+        constraints: None,
+        evidence_ref: None,
+        reason: Some("cotest_holder_quarantine_invalidation".to_owned()),
+    });
+    permissions.sort_by_key(|permission| match permission.consent_scope {
+        ConsentScope::Invite => 0,
+        ConsentScope::VoiceCall => 1,
+        ConsentScope::VideoCall => 2,
+        ConsentScope::Presence => 3,
+    });
+    let (view, event) = submit_consent_set(
+        holder,
+        ConsentReplacePayload {
+            peer,
+            expected_current,
+            permissions,
+        },
+    )
+    .await?;
+    ensure!(
+        view.permission_scopes.contains(&scope),
+        "replacement omitted its concrete scope"
+    );
     Ok((view, event))
 }
 async fn revoke_invite_consent(
     holder: &TestActorClient,
     granted: ConsentView,
 ) -> Result<ConsentView> {
-    let principal = holder.principal.as_ref().context("holder PCR")?;
-    let (expected_current, mut permissions) =
-        complete_peer_current(holder, granted.peer.clone()).await?;
-    ensure!(
-        matches!(&expected_current,arkret::ConsentExpectedCurrent::Present{revision} if *revision==granted.revision),
-        "fixture changed before reviewed replacement"
-    );
-    permissions.retain(|p| p.consent_scope != ConsentScope::Invite);
-    let event = holder
-        .author_event(
-            principal.pcr_realm_id.as_str(),
-            "ak.consent.replace",
-            serde_json::to_value(arkret::ConsentReplacePayload {
-                peer: granted.peer,
-                expected_current,
-                permissions,
-            })?,
-        )
-        .await?;
-    serde_json::from_value(
-        expect_json(
-            holder.post("/_arkret/self/consent/results/replace").json(
-                &arkret::ConsentReplaceRequestBody {
-                    consent_event: EventAdmissionSubmission::new(event),
-                },
-            ),
-            StatusCode::OK,
-        )
-        .await?,
+    let (expected_current, mut permissions) = read_consent_set(holder, &granted.peer).await?;
+    permissions.retain(|permission| permission.consent_scope != ConsentScope::Invite);
+    let (view, _) = submit_consent_set(
+        holder,
+        ConsentReplacePayload {
+            peer: granted.peer,
+            expected_current,
+            permissions,
+        },
     )
-    .context("exact-peer replacement summary")
+    .await?;
+    Ok(view)
 }
 
 async fn grant_then_revoke_invite_consent(
@@ -481,6 +568,7 @@ async fn assert_notify_invite_wakes_account_subscribe(
     holder: &TestActorClient,
     expected_service_id: &str,
     label: &str,
+    tracker: &mut FanoutTracker,
 ) -> Result<AccountDataRow> {
     set_explicit_address_behavior(holder, InviteReceiveAction::Notify)
         .await
@@ -569,7 +657,7 @@ async fn assert_notify_invite_wakes_account_subscribe(
         "invite_delivery cell omitted the dispatched invite from delivery_entries: {}",
         delivery_row.content
     );
-    assert_service_account_data_fanout(holder, expected_service_id, &delivery_row).await?;
+    assert_service_account_data_fanout(holder, expected_service_id, &delivery_row, tracker).await?;
     Ok(delivery_row)
 }
 
@@ -595,11 +683,13 @@ pub async fn invite_notification_wakeup_live_run() -> Result<()> {
         )
         .await
         .context("bootstrap holder client")?;
+    let mut tracker = FanoutTracker::default();
     assert_notify_invite_wakes_account_subscribe(
         &inviter,
         &holder,
         server.service_id().as_str(),
         "Invite Notification Wakeup",
+        &mut tracker,
     )
     .await?;
     Ok(())
@@ -634,11 +724,14 @@ pub async fn invite_service_fanout_live_run() -> Result<()> {
         .await
         .context("bootstrap secondary active holder device")?;
 
+    let mut primary_tracker = FanoutTracker::default();
+    let mut secondary_tracker = FanoutTracker::default();
     let delivery_row = assert_notify_invite_wakes_account_subscribe(
         &inviter,
         &holder,
         server.service_id().as_str(),
         "Invite Service Fanout Notify",
+        &mut primary_tracker,
     )
     .await?;
     let secondary_delivery_row =
@@ -655,6 +748,7 @@ pub async fn invite_service_fanout_live_run() -> Result<()> {
         &holder_secondary,
         server.service_id().as_str(),
         &secondary_delivery_row,
+        &mut secondary_tracker,
     )
     .await?;
 
@@ -685,18 +779,41 @@ pub async fn invite_service_fanout_live_run() -> Result<()> {
         "holder_quarantine cell is not the closed non-empty v1 shape: {}",
         quarantine_row.content
     );
-    assert_service_account_data_fanout(&holder, server.service_id().as_str(), &quarantine_row)
-        .await?;
+    let source_actor = ActorId::account(AccountId::new(
+        inviter
+            .principal
+            .as_ref()
+            .context("inviter has no PCR")?
+            .core_id
+            .clone(),
+        DidCoreId::new(inviter.service_id())?,
+    ));
+    let entry = quarantine_row.content["quarantine_entries"]
+        .as_array()
+        .and_then(|entries| entries.first())
+        .context("quarantine omitted its authenticated source")?;
+    ensure!(
+        entry["source_peer_actor_id"] == serde_json::to_value(&source_actor)?,
+        "quarantine did not retain the complete authenticated source Actor"
+    );
+    assert_service_account_data_fanout(
+        &holder,
+        server.service_id().as_str(),
+        &quarantine_row,
+        &mut primary_tracker,
+    )
+    .await?;
     assert_service_account_data_fanout(
         &holder_secondary,
         server.service_id().as_str(),
         &quarantine_row,
+        &mut secondary_tracker,
     )
     .await?;
 
     let revoked = grant_then_revoke_invite_consent(&holder, &inviter).await?;
     ensure!(
-        !revoked.permission_scopes.contains(&ConsentScope::Invite),
+        revoked.permission_scopes.is_empty(),
         "consent revoke did not produce revoked current state: {revoked:?}"
     );
     let invalidated_row = account_data_row_on_both_devices(
@@ -714,26 +831,42 @@ pub async fn invite_service_fanout_live_run() -> Result<()> {
             .as_array()
             .is_some_and(Vec::is_empty)
             && invalidated_row.content["last_invalidation"]["reason"] == "consent_revoke"
+            && invalidated_row.content["last_invalidation"]["peer_actor_id"]
+                == serde_json::to_value(&source_actor)?
             && invalidated_row.content["last_invalidation"]["removed_entries"] == json!(1),
         "consent revoke did not persist the closed quarantine invalidation: {}",
         invalidated_row.content
     );
-    assert_service_account_data_fanout(&holder, server.service_id().as_str(), &invalidated_row)
-        .await?;
+    assert_service_account_data_fanout(
+        &holder,
+        server.service_id().as_str(),
+        &invalidated_row,
+        &mut primary_tracker,
+    )
+    .await?;
     assert_service_account_data_fanout(
         &holder_secondary,
         server.service_id().as_str(),
         &invalidated_row,
+        &mut secondary_tracker,
     )
     .await?;
 
-    for active_holder in [&holder, &holder_secondary] {
+    for (active_holder, tracker) in [
+        (&holder, &mut primary_tracker),
+        (&holder_secondary, &mut secondary_tracker),
+    ] {
+        drain_known_fanout(active_holder, server.service_id().as_str(), tracker).await?;
         let drained = expect_json(
             active_holder.get("/_arkret/self/device_messages"),
             StatusCode::OK,
         )
         .await?;
         let drained: DeviceMessagesGetOutcome = serde_json::from_value(drained)?;
+        ensure!(
+            drained.lost != Some(true) && !drained.has_more,
+            "final fanout poll lost or omitted deliveries"
+        );
         if !drained.deliveries.is_empty() {
             bail!(
                 "acked actor-private fanout queue did not drain for {}: {drained:?}",
@@ -809,10 +942,9 @@ pub async fn consent_current_and_invite_gate_live_run() -> Result<()> {
     );
     let read: ConsentView = serde_json::from_value(
         expect_json(
-            holder.get("/_arkret/self/consent/result").query(&[
-                ("peer", serde_json::to_string(&granted.peer)?),
-                ("consent_scope", "invite".to_owned()),
-            ]),
+            holder
+                .get("/_arkret/self/consent/result")
+                .query(&[("peer", serde_json::to_string(&granted.peer)?)]),
             StatusCode::OK,
         )
         .await?,
@@ -847,9 +979,9 @@ pub async fn consent_current_and_invite_gate_live_run() -> Result<()> {
                 .pcr_realm_id
                 .as_str(),
             "ak.consent.replace",
-            serde_json::to_value(arkret::ConsentReplacePayload {
+            serde_json::to_value(ConsentReplacePayload {
                 peer: granted.peer.clone(),
-                expected_current: arkret::ConsentExpectedCurrent::Present {
+                expected_current: ConsentExpectedCurrent::Present {
                     revision: stale_revision,
                 },
                 permissions: vec![],
@@ -878,7 +1010,7 @@ pub async fn consent_current_and_invite_gate_live_run() -> Result<()> {
     .await?;
     let revoked = revoke_invite_consent(&holder, granted.clone()).await?;
     ensure!(
-        !revoked.permission_scopes.contains(&ConsentScope::Invite),
+        revoked.permission_scopes.is_empty(),
         "revoke did not close current"
     );
     let old_result: ConsentView = serde_json::from_value(
@@ -921,54 +1053,181 @@ pub async fn consent_current_and_invite_gate_live_run() -> Result<()> {
         },
     )
     .await?;
-    let (_, original) = grant_invite_consent(&holder, &inviter).await?;
-    let (complete, _) = grant_scoped_consent(&holder, &inviter, ConsentScope::VoiceCall).await?;
-    let evidence = IntroductionEvidence::ConsentGrant {
-        consent_grant_ref: original.event_id,
-    };
+    // Another permission in the same exact-peer set cannot authorize invite.
+    let (voice, voice_event) =
+        grant_scoped_consent(&holder, &inviter, ConsentScope::VoiceCall).await?;
     let prepared = prepare_invite_with_evidence(
         &inviter,
         &holder,
-        "historical ref after unrelated replacement",
-        evidence.clone(),
-    )
-    .await?;
-    dispatch_explicit_invite(&inviter, prepared).await?;
-    let active = account_data_row(&holder, AccountDataKey::ACCOUNT_INVITE_DELIVERY).await?;
-    let stale =
-        prepare_invite_with_evidence(&inviter, &holder, "frozen before removing invite", evidence)
-            .await?;
-    let removed = revoke_invite_consent(&holder, complete).await?;
-    dispatch_explicit_invite(&inviter, stale).await?;
-    let after = account_data_row(&holder, AccountDataKey::ACCOUNT_INVITE_DELIVERY).await?;
-    ensure!(
-        after.revision == active.revision && after.content == active.content,
-        "removed invite reused an old decision"
-    );
-    ensure!(
-        removed.permission_scopes == vec![ConsentScope::VoiceCall],
-        "invite removal changed an unrelated scope"
-    );
-    let (_, new_event) = grant_invite_consent(&holder, &inviter).await?;
-    let prepared = prepare_invite_with_evidence(
-        &inviter,
-        &holder,
-        "new explicit invite entry",
+        "voice cannot authorize invite",
         IntroductionEvidence::ConsentGrant {
-            consent_grant_ref: new_event.event_id,
+            consent_grant_ref: voice_event.event_id,
         },
     )
     .await?;
     dispatch_explicit_invite(&inviter, prepared).await?;
+    let after = account_data_row(&holder, AccountDataKey::ACCOUNT_INVITE_DELIVERY).await?;
     ensure!(
-        account_data_row(&holder, AccountDataKey::ACCOUNT_INVITE_DELIVERY)
-            .await?
-            .revision
-            > active.revision,
-        "new complete target was not applied"
+        after.revision == unchanged.revision && after.content == unchanged.content,
+        "voice scope authorized an Invite"
+    );
+    let (invite, _) = grant_invite_consent(&holder, &inviter).await?;
+    ensure!(invite.permission_scopes == vec![ConsentScope::Invite, ConsentScope::VoiceCall]);
+    let without_invite = revoke_invite_consent(&holder, invite).await?;
+    ensure!(
+        without_invite.permission_scopes == voice.permission_scopes,
+        "removing invite changed the other permission"
+    );
+    verify_full_set_concurrent_replacement(&holder, without_invite.peer).await?;
+    println!(
+        "[0179-live] exact_replace_replay=1 stale_cas_rejected=1 present_empty=1 concrete_scope_gate=1 unrelated_permission_preserved=1 opaque_deferred=1"
+    );
+    Ok(())
+}
+
+async fn verify_full_set_concurrent_replacement(
+    holder: &TestActorClient,
+    peer: ConsentPeer,
+) -> Result<()> {
+    use crate::harness::CanonicalJsonBody;
+    let (expected_current, _) = read_consent_set(holder, &peer).await?;
+    let permissions: Vec<ConsentPermission> = serde_json::from_value(json!([
+        {"consent_scope":"voice_call", "expires_at":"2026-01-01T00:00:00.000Z", "constraints":[]},
+        {"consent_scope":"presence", "not_before":"2099-01-01T00:00:00.000Z",
+         "constraints":[{"unregistered":{"retain":true}}], "evidence_ref":"", "reason":""}
+    ]))?;
+    submit_consent_set(
+        holder,
+        ConsentReplacePayload {
+            peer: peer.clone(),
+            expected_current,
+            permissions: permissions.clone(),
+        },
+    )
+    .await?;
+    let (expected_current, complete) = read_consent_set(holder, &peer).await?;
+    ensure!(
+        complete == permissions,
+        "editing read dropped expired/future entries, unknown constraints or optional presence"
+    );
+    let retained = vec![complete[1].clone()];
+    let (removed, _) = submit_consent_set(
+        holder,
+        ConsentReplacePayload {
+            peer: peer.clone(),
+            expected_current,
+            permissions: retained.clone(),
+        },
+    )
+    .await?;
+    let (expected_current, full) = read_consent_set(holder, &peer).await?;
+    ensure!(
+        full == retained && removed.permission_scopes == vec![ConsentScope::Presence],
+        "removing voice changed the complete presence entry"
+    );
+
+    let pcr = holder
+        .principal
+        .as_ref()
+        .context("holder PCR")?
+        .pcr_realm_id
+        .as_str();
+    let mut contenders = Vec::new();
+    for reason in ["left", "right"] {
+        let mut permissions = full.clone();
+        permissions[0].reason = Some(reason.to_owned());
+        let event = holder
+            .author_event(
+                pcr,
+                "ak.consent.replace",
+                serde_json::to_value(ConsentReplacePayload {
+                    peer: peer.clone(),
+                    expected_current: expected_current.clone(),
+                    permissions,
+                })?,
+            )
+            .await?;
+        contenders.push(ConsentReplaceRequestBody {
+            consent_event: EventAdmissionSubmission::new(event),
+        });
+    }
+    let (left, right) = tokio::join!(
+        holder
+            .post("/_arkret/self/consent/results/replace")
+            .canonical_json(&contenders[0])?
+            .send(),
+        holder
+            .post("/_arkret/self/consent/results/replace")
+            .canonical_json(&contenders[1])?
+            .send(),
+    );
+    let mut winner = None;
+    for (index, response) in [left?, right?].into_iter().enumerate() {
+        let status = response.status();
+        let body: Value = response.json().await?;
+        if status == StatusCode::OK {
+            ensure!(
+                winner.is_none(),
+                "two writers accepted the same prior revision"
+            );
+            winner = Some((index, serde_json::from_value::<ConsentView>(body)?));
+        } else {
+            ensure!(
+                status == StatusCode::CONFLICT
+                    && body["type"] == "https://arkret.org/problems/failed_precondition",
+                "stale concurrent write did not fail at CAS: {status} {body}"
+            );
+        }
+    }
+    let (winner_index, winner_view) = winner.context("neither concurrent replacement committed")?;
+    let signed_permissions: ConsentReplacePayload = serde_json::from_value(Value::Object(
+        contenders[winner_index]
+            .consent_event
+            .event
+            .payload
+            .clone()
+            .into_iter()
+            .collect(),
+    ))?;
+    let (expected_current, winner_permissions) = read_consent_set(holder, &peer).await?;
+    ensure!(
+        expected_current
+            == ConsentExpectedCurrent::Present {
+                revision: winner_view.revision.clone()
+            }
+            && winner_permissions == signed_permissions.permissions,
+        "current did not retain exactly the winning signed set"
+    );
+    let (empty, _) = submit_consent_set(
+        holder,
+        ConsentReplacePayload {
+            peer: peer.clone(),
+            expected_current,
+            permissions: vec![],
+        },
+    )
+    .await?;
+    let replay: ConsentView = serde_json::from_value(
+        expect_json(
+            holder
+                .post("/_arkret/self/consent/results/replace")
+                .json(&contenders[winner_index]),
+            StatusCode::OK,
+        )
+        .await?,
+    )?;
+    let (current, permissions) = read_consent_set(holder, &peer).await?;
+    ensure!(
+        replay == winner_view
+            && permissions.is_empty()
+            && current
+                == ConsentExpectedCurrent::Present {
+                    revision: empty.revision
+                },
+        "old accepted replay reexecuted CAS or turned present empty into never_written"
     );
     println!(
-        "[consent-live] current_full_set=1 historical_ref_rechecked=1 removed_invite_denied=1 unrelated_scope_retained=1"
+        "[0179-set] complete_optional_preservation=1 concurrent_cas_one_winner=1 old_replay_keeps_present_empty=1"
     );
     Ok(())
 }

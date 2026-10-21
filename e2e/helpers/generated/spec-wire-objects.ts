@@ -2488,6 +2488,77 @@ export type MessageAuthoringIntent = {
   "reply_to_id"?: string;
 };
 
+/** `event-payload.schema.json#/$defs/consent_peer` — closed object schema. */
+export type ConsentPeer = {
+  "kind": "actor";
+  "actor_id": {
+    "kind": "account";
+    "account_id": {
+      "principal_id": string;
+      "station_id": string;
+    };
+  } | {
+    "kind": "service";
+    "service_id": string;
+  } | {
+    "kind": "realm";
+    "realm_actor_id": {
+      "realm_id": string;
+      "principal_id": string;
+    };
+  };
+};
+
+/** `event-payload.schema.json#/$defs/consent_permission` — closed object schema. */
+export type ConsentPermission = {
+  "consent_scope": "invite" | "voice_call" | "video_call" | "presence";
+  "not_before"?: string;
+  "expires_at"?: string;
+  "constraints"?: Array<Record<string, unknown>>;
+  "evidence_ref"?: string;
+  "reason"?: string;
+};
+
+/** `event-payload.schema.json#/$defs/consent_replace_payload` — closed object schema. */
+export type ConsentReplacePayload = {
+  "peer": {
+    "kind": "actor";
+    "actor_id": {
+      "kind": "account";
+      "account_id": {
+        "principal_id": string;
+        "station_id": string;
+      };
+    } | {
+      "kind": "service";
+      "service_id": string;
+    } | {
+      "kind": "realm";
+      "realm_actor_id": {
+        "realm_id": string;
+        "principal_id": string;
+      };
+    };
+  };
+  "expected_current": {
+    "state": "never_written";
+  } | {
+    "state": "present";
+    "revision": {
+      "commit_id": string;
+      "stream_position": number;
+    };
+  };
+  "permissions": Array<{
+    "consent_scope": "invite" | "voice_call" | "video_call" | "presence";
+    "not_before"?: string;
+    "expires_at"?: string;
+    "constraints"?: Array<Record<string, unknown>>;
+    "evidence_ref"?: string;
+    "reason"?: string;
+  }>;
+};
+
 /** `consent-operations.schema.json#/$defs/consent_view` — closed object schema. */
 export type ConsentView = {
   "peer": {
@@ -2514,6 +2585,137 @@ export type ConsentView = {
   "revision": {
     "commit_id": string;
     "stream_position": number;
+  };
+};
+
+/** `consent-operations.schema.json#/$defs/consent_current_read_request_body` — closed object schema. */
+export type ConsentCurrentReadRequestBody = {
+  "holder_account_id": {
+    "principal_id": string;
+    "station_id": string;
+  };
+  "peer": {
+    "kind": "actor";
+    "actor_id": {
+      "kind": "account";
+      "account_id": {
+        "principal_id": string;
+        "station_id": string;
+      };
+    } | {
+      "kind": "service";
+      "service_id": string;
+    } | {
+      "kind": "realm";
+      "realm_actor_id": {
+        "realm_id": string;
+        "principal_id": string;
+      };
+    };
+  };
+  "audience_actor_id": {
+    "kind": "account";
+    "account_id": {
+      "principal_id": string;
+      "station_id": string;
+    };
+  } | {
+    "kind": "service";
+    "service_id": string;
+  } | {
+    "kind": "realm";
+    "realm_actor_id": {
+      "realm_id": string;
+      "principal_id": string;
+    };
+  };
+  "nonce": string;
+};
+
+/** `consent-operations.schema.json#/$defs/consent_current_read_outcome` — closed object schema. */
+export type ConsentCurrentReadOutcome = {
+  "request_digest": string;
+  "realm_id": string;
+  "governance_generation": number;
+  "effective_stream_head": {
+    "stream_ref": {
+      "kind": "realm";
+      "realm_id": string;
+    } | {
+      "kind": "circle";
+      "realm_id": string;
+      "circle_id": string;
+    } | {
+      "kind": "sidecar";
+      "realm_id": string;
+      "sidecar_id": string;
+    } | {
+      "kind": "realm_control";
+      "realm_id": string;
+    };
+    "stream_position": number;
+    "commit_id": string;
+  };
+  "current": {
+    "state": "present";
+    "result": {
+      "selector": {
+        "kind": "consent";
+        "peer_id": {
+          "kind": "account";
+          "account_id": {
+            "principal_id": string;
+            "station_id": string;
+          };
+        } | {
+          "kind": "service";
+          "service_id": string;
+        } | {
+          "kind": "realm";
+          "realm_actor_id": {
+            "realm_id": string;
+            "principal_id": string;
+          };
+        };
+      };
+      "source_stream_ref": {
+        "kind": "realm";
+        "realm_id": string;
+      } | {
+        "kind": "circle";
+        "realm_id": string;
+        "circle_id": string;
+      } | {
+        "kind": "sidecar";
+        "realm_id": string;
+        "sidecar_id": string;
+      } | {
+        "kind": "realm_control";
+        "realm_id": string;
+      };
+      "revision": {
+        "commit_id": string;
+        "stream_position": number;
+      };
+      "value": {
+        "permissions": Array<{
+          "consent_scope": "invite" | "voice_call" | "video_call" | "presence";
+          "not_before"?: string;
+          "expires_at"?: string;
+          "constraints"?: Array<Record<string, unknown>>;
+          "evidence_ref"?: string;
+          "reason"?: string;
+        }>;
+      };
+    };
+  } | {
+    "state": "never_written";
+  };
+  "evaluated_at": string;
+  "expires_at": string;
+  "proof": {
+    "verification_method": string;
+    "jws": string;
   };
 };
 
@@ -2745,6 +2947,2394 @@ export type ContactPeer = {
     "principal_id": string;
     "station_id": string;
   };
+};
+
+/** `contact-operations.schema.json#/$defs/contact_list_row` — closed object schema. */
+export type ContactListRow = {
+  "peer": {
+    "kind": "human";
+    "account_id": {
+      "principal_id": string;
+      "station_id": string;
+    };
+  } | {
+    "kind": "agent";
+    "actor_id": {
+      "kind": "account";
+      "account_id": {
+        "principal_id": string;
+        "station_id": string;
+      };
+    } | {
+      "kind": "service";
+      "service_id": string;
+    } | {
+      "kind": "realm";
+      "realm_actor_id": {
+        "realm_id": string;
+        "principal_id": string;
+      };
+    };
+    "controller_account_id": {
+      "principal_id": string;
+      "station_id": string;
+    };
+  };
+  "state": "pending_outgoing" | "pending_incoming" | "accepted" | "rejected" | "expired" | "tombstoned";
+  "request_event_ref"?: string;
+  "request_message"?: string;
+  "response_event_ref"?: string;
+  "tombstone_event_ref"?: string;
+  "next_prepare_input"?: {
+    "contact_round_id": string;
+    "version": number;
+    "predecessor_event_ref": string;
+  };
+  "granted_to_peer_scopes": Array<"invite" | "direct_message" | "voice_call" | "video_call" | "presence">;
+  "granted_by_peer_scopes": Array<"invite" | "direct_message" | "voice_call" | "video_call" | "presence">;
+  "bidirectional_scopes": Array<"invite" | "direct_message" | "voice_call" | "video_call" | "presence">;
+  "effective_scopes"?: Array<"invite" | "direct_message" | "voice_call" | "video_call" | "presence">;
+  "direct_conversation"?: {
+    "realm_id": string;
+    "main_strand_id": string;
+    "binding_event_ref": string;
+    "state": "found" | "suspended";
+  };
+  "contact_agents"?: Array<{
+    "actor_id": {
+      "kind": "account";
+      "account_id": {
+        "principal_id": string;
+        "station_id": string;
+      };
+    } | {
+      "kind": "service";
+      "service_id": string;
+    } | {
+      "kind": "realm";
+      "realm_actor_id": {
+        "realm_id": string;
+        "principal_id": string;
+      };
+    };
+    "controller_account_id": {
+      "principal_id": string;
+      "station_id": string;
+    };
+    "display_name"?: string;
+    "agent_slug"?: string;
+    "avatar_blob_ref"?: string;
+    "direct_conversation"?: {
+      "realm_id": string;
+      "main_strand_id": string;
+      "binding_event_ref": string;
+      "state": "found" | "suspended";
+    };
+  }>;
+  "peer_endpoint"?: {
+    "contact_event_ref": string;
+    "device_id": string;
+  };
+};
+
+/** `contact-operations.schema.json#/$defs/contact_operation_request` — closed object schema. */
+export type ContactRequestBody = {
+  "phase": "prepare";
+  "operation_id": string;
+  "idempotency_key": string;
+  "peer": {
+    "kind": "human";
+    "account_id": {
+      "principal_id": string;
+      "station_id": string;
+    };
+  } | {
+    "kind": "agent";
+    "actor_id": {
+      "kind": "account";
+      "account_id": {
+        "principal_id": string;
+        "station_id": string;
+      };
+    } | {
+      "kind": "service";
+      "service_id": string;
+    } | {
+      "kind": "realm";
+      "realm_actor_id": {
+        "realm_id": string;
+        "principal_id": string;
+      };
+    };
+    "controller_account_id": {
+      "principal_id": string;
+      "station_id": string;
+    };
+  };
+  "granted_to_peer_scopes": Array<"invite" | "direct_message" | "voice_call" | "video_call" | "presence">;
+  "introduction_evidence": {
+    "kind": "locator_ref";
+    "principal_locator": {
+      "schema": "ak.schema.principal_locator.v1";
+      "account_id": {
+        "principal_id": string;
+        "station_id": string;
+      };
+      "service_resolution": {
+        "inline": {
+          "service_id": string;
+          "service_kind": string;
+          "method_history_evidence": {
+            "evidence_kind": "webvh_log";
+            "boundary": {
+              "from_method_history_head": string;
+              "from_version_id": string;
+              "to_method_history_head": string;
+              "to_version_id": string;
+            };
+            "evidence": {
+              "kind": "ak.did.binding_evidence.v1";
+              "method": string;
+              "document_digest": string;
+              "method_proofs": Array<{
+                "kind": "webvh_log";
+                "history_head": string;
+                "witnesses": Array<{
+                  "witness_did": string;
+                  "controlling_organization_did": string;
+                }>;
+                "witness_proofs_digest": string;
+              }>;
+            };
+            "log_entries": Array<Record<string, unknown>>;
+            "witness_records": Array<Record<string, unknown>>;
+          } | {
+            "evidence_kind": "did_web_document";
+            "boundary": {
+              "from_method_history_head": string;
+              "from_version_id": string;
+              "to_method_history_head": string;
+              "to_version_id": string;
+            };
+            "evidence": {
+              "kind": "ak.did.binding_evidence.v1";
+              "method": string;
+              "document_digest": string;
+              "method_proofs": Array<{
+                "kind": "webvh_log";
+                "history_head": string;
+                "witnesses": Array<{
+                  "witness_did": string;
+                  "controlling_organization_did": string;
+                }>;
+                "witness_proofs_digest": string;
+              }>;
+            };
+          } | {
+            "evidence_kind": "did_key_expansion";
+            "boundary": {
+              "from_method_history_head": string;
+              "from_version_id": string;
+              "to_method_history_head": string;
+              "to_version_id": string;
+            };
+            "evidence": {
+              "kind": "ak.did.binding_evidence.v1";
+              "method": string;
+              "document_digest": string;
+              "method_proofs": Array<{
+                "kind": "webvh_log";
+                "history_head": string;
+                "witnesses": Array<{
+                  "witness_did": string;
+                  "controlling_organization_did": string;
+                }>;
+                "witness_proofs_digest": string;
+              }>;
+            };
+          };
+          "normalized_did_document": {
+            "did": string;
+            "contexts": Array<string | Record<string, unknown>>;
+            "controller_dids": string[];
+            "also_known_as": string[];
+            "verification_methods": Array<{
+              "verification_method": string;
+              "controller_did": string;
+              "verification_method_suite": string;
+              "public_key_material": Record<string, unknown>;
+              "extensions": Array<{
+                "name": string;
+                "value": unknown;
+              }>;
+            }>;
+            "authentication": Array<{
+              "verification_method": string;
+            }>;
+            "assertion_methods": Array<{
+              "verification_method": string;
+            }>;
+            "key_agreements": Array<{
+              "verification_method": string;
+            }>;
+            "capability_invocations": Array<{
+              "verification_method": string;
+            }>;
+            "capability_delegations": Array<{
+              "verification_method": string;
+            }>;
+            "services": Array<{
+              "uri": string;
+              "protocol_names": string[];
+              "endpoint": unknown;
+              "extensions": Array<{
+                "name": string;
+                "value": unknown;
+              }>;
+            }>;
+            "metadata": {
+              "primary_handle"?: string;
+            };
+            "extensions": Array<{
+              "name": string;
+              "value": unknown;
+            }>;
+          };
+        };
+      } | {
+        "resolution_url": string;
+      };
+      "route_assistance"?: {
+        "mirror_hints": Array<{
+          "mirror_id": string;
+          "service_resolution": {
+            "inline": {
+              "service_id": string;
+              "service_kind": string;
+              "method_history_evidence": {
+                "evidence_kind": "webvh_log";
+                "boundary": {
+                  "from_method_history_head": string;
+                  "from_version_id": string;
+                  "to_method_history_head": string;
+                  "to_version_id": string;
+                };
+                "evidence": {
+                  "kind": "ak.did.binding_evidence.v1";
+                  "method": string;
+                  "document_digest": string;
+                  "method_proofs": Array<{
+                    "kind": "webvh_log";
+                    "history_head": string;
+                    "witnesses": Array<{
+                      "witness_did": string;
+                      "controlling_organization_did": string;
+                    }>;
+                    "witness_proofs_digest": string;
+                  }>;
+                };
+                "log_entries": Array<Record<string, unknown>>;
+                "witness_records": Array<Record<string, unknown>>;
+              } | {
+                "evidence_kind": "did_web_document";
+                "boundary": {
+                  "from_method_history_head": string;
+                  "from_version_id": string;
+                  "to_method_history_head": string;
+                  "to_version_id": string;
+                };
+                "evidence": {
+                  "kind": "ak.did.binding_evidence.v1";
+                  "method": string;
+                  "document_digest": string;
+                  "method_proofs": Array<{
+                    "kind": "webvh_log";
+                    "history_head": string;
+                    "witnesses": Array<{
+                      "witness_did": string;
+                      "controlling_organization_did": string;
+                    }>;
+                    "witness_proofs_digest": string;
+                  }>;
+                };
+              } | {
+                "evidence_kind": "did_key_expansion";
+                "boundary": {
+                  "from_method_history_head": string;
+                  "from_version_id": string;
+                  "to_method_history_head": string;
+                  "to_version_id": string;
+                };
+                "evidence": {
+                  "kind": "ak.did.binding_evidence.v1";
+                  "method": string;
+                  "document_digest": string;
+                  "method_proofs": Array<{
+                    "kind": "webvh_log";
+                    "history_head": string;
+                    "witnesses": Array<{
+                      "witness_did": string;
+                      "controlling_organization_did": string;
+                    }>;
+                    "witness_proofs_digest": string;
+                  }>;
+                };
+              };
+              "normalized_did_document": {
+                "did": string;
+                "contexts": Array<string | Record<string, unknown>>;
+                "controller_dids": string[];
+                "also_known_as": string[];
+                "verification_methods": Array<{
+                  "verification_method": string;
+                  "controller_did": string;
+                  "verification_method_suite": string;
+                  "public_key_material": Record<string, unknown>;
+                  "extensions": Array<{
+                    "name": string;
+                    "value": unknown;
+                  }>;
+                }>;
+                "authentication": Array<{
+                  "verification_method": string;
+                }>;
+                "assertion_methods": Array<{
+                  "verification_method": string;
+                }>;
+                "key_agreements": Array<{
+                  "verification_method": string;
+                }>;
+                "capability_invocations": Array<{
+                  "verification_method": string;
+                }>;
+                "capability_delegations": Array<{
+                  "verification_method": string;
+                }>;
+                "services": Array<{
+                  "uri": string;
+                  "protocol_names": string[];
+                  "endpoint": unknown;
+                  "extensions": Array<{
+                    "name": string;
+                    "value": unknown;
+                  }>;
+                }>;
+                "metadata": {
+                  "primary_handle"?: string;
+                };
+                "extensions": Array<{
+                  "name": string;
+                  "value": unknown;
+                }>;
+              };
+            };
+          } | {
+            "resolution_url": string;
+          };
+        }>;
+      };
+      "issued_at": string;
+      "expires_at": string;
+      "locator_ref_digest": string;
+      "display_hint"?: {
+        "display_name_hint"?: string;
+        "avatar_blob_ref"?: string;
+      };
+      "proofs": Array<{
+        "proof_purpose": "subject_locator_authorization" | "recipient_service_acceptance";
+        "proof": {
+          "kind": "detached_jws";
+          "verification_method": string;
+          "payload_digest": string;
+          "created_at": string;
+          "domain"?: string;
+          "audience"?: string | string[];
+          "proof_purpose"?: "issuer_attestation" | "holder_acceptance" | "status_attestation" | "revocation_authorization" | "governance_authorization";
+          "jws": string;
+        };
+      }>;
+    };
+  } | {
+    "kind": "shared_realm";
+    "realm_id": string;
+    "requester_member_ref": string;
+    "target_member_ref": string;
+  } | {
+    "kind": "handle_claim";
+    "handle": string;
+    "handle_claim": {
+      "schema": "ak.schema.handle_claim.v1";
+      "claim": {
+        "schema": "ak.schema.handle_claim_core.v1";
+        "handle": string;
+        "handle_aliases": string[];
+        "subject_account_id": {
+          "principal_id": string;
+          "station_id": string;
+        };
+        "issuer_id": string;
+        "claim": {
+          "kind": "handle_binding";
+        } | {
+          "kind": "organization_handle";
+          "organization_id": string;
+        };
+        "visibility": "public" | "restricted" | "private";
+        "audience": string | null;
+        "issued_at": string;
+        "expires_at": string | null;
+        "source_refs": string[];
+        "proofs": unknown[];
+      };
+      "status": "pending" | "verified" | "revoked";
+      "as_of": string;
+      "verifier_id": string;
+      "verified_at": string | null;
+      "revocation": {
+        "schema": "ak.schema.handle_claim_revocation.v1";
+        "claim_digest": string;
+        "revoked_at": string;
+        "revoker": {
+          "role": "issuer";
+          "issuer_id": string;
+        } | {
+          "role": "holder";
+          "subject_account_id": {
+            "principal_id": string;
+            "station_id": string;
+          };
+        };
+        "proof": {
+          "kind": "detached_jws";
+          "verification_method": string;
+          "payload_digest": string;
+          "created_at": string;
+          "domain"?: string;
+          "audience"?: string | string[];
+          "proof_purpose"?: "issuer_attestation" | "holder_acceptance" | "status_attestation" | "revocation_authorization" | "governance_authorization";
+          "jws": string;
+        } & {
+          "domain": "ak.handle_claim_revocation.v1";
+          "proof_purpose": "revocation_authorization";
+          [key: string]: unknown;
+        };
+      } | null;
+      "fresh_until": string;
+      "status_proof": {
+        "kind": "detached_jws";
+        "verification_method": string;
+        "payload_digest": string;
+        "created_at": string;
+        "domain"?: string;
+        "audience"?: string | string[];
+        "proof_purpose"?: "issuer_attestation" | "holder_acceptance" | "status_attestation" | "revocation_authorization" | "governance_authorization";
+        "jws": string;
+      } & {
+        "domain": "ak.handle_claim_status.v1";
+        "proof_purpose": "status_attestation";
+        [key: string]: unknown;
+      };
+    };
+    "resolved_by"?: string;
+    "resolved_at"?: string;
+  } | {
+    "kind": "same_station";
+  } | {
+    "kind": "explicit_address";
+  };
+  "message"?: string;
+} | {
+  "phase": "commit";
+  "operation_id": string;
+  "idempotency_key": string;
+  "reservation_handle": string;
+  "signed_event": {
+    "event_id": string;
+    "kind": string;
+    "realm_id"?: string;
+    "scope_ref": {
+      "kind": "realm";
+      "realm_id": string;
+    } | {
+      "kind": "circle";
+      "realm_id": string;
+      "circle_id": string;
+    } | {
+      "kind": "sidecar";
+      "realm_id": string;
+      "sidecar_id": string;
+    } | {
+      "kind": "realm_genesis";
+    } | {
+      "kind": "realm_control";
+      "realm_id": string;
+    };
+    "actor_id": {
+      "kind": "account";
+      "account_id": {
+        "principal_id": string;
+        "station_id": string;
+      };
+    } | {
+      "kind": "service";
+      "service_id": string;
+    } | {
+      "kind": "realm";
+      "realm_actor_id": {
+        "realm_id": string;
+        "principal_id": string;
+      };
+    };
+    "executed_by"?: {
+      "kind": "account";
+      "account_id": {
+        "principal_id": string;
+        "station_id": string;
+      };
+    } | {
+      "kind": "service";
+      "service_id": string;
+    } | {
+      "kind": "realm";
+      "realm_actor_id": {
+        "realm_id": string;
+        "principal_id": string;
+      };
+    };
+    "authorization_ref"?: string | "ak.authority.direct_conversation_participant.v1" | "ak.authority.direct_conversation_bootstrap_participant.v1";
+    "applet_id"?: string;
+    "external_ref"?: {
+      "schema"?: string;
+      "protocol"?: string;
+      "network_id"?: string;
+      "instance_id"?: string;
+      "user_id"?: string;
+      "location_id"?: string;
+      "event_id"?: string;
+      "external_id"?: string;
+      "uri"?: string;
+      [key: string]: unknown;
+    };
+    "created_at": string;
+    "semantic_refs"?: Array<{
+      "id": string;
+      "role": "authorized_by";
+      "critical": boolean;
+    } | {
+      "id": string;
+      "role": "attestation" | "parent_event" | "after" | "audit_pair" | "recovery_capability" | "accountability" | "bootstrap_genesis" | "disclosure_authorization" | "capture_stop" | "direct_conversation_binding" | "direct_conversation_founding_unit" | "direct_conversation_contact_round" | "direct_conversation_agent_provision" | "applet_managed_actor_provision";
+      "critical": boolean;
+    }>;
+    "payload": Record<string, unknown>;
+    "producer_proof": {
+      "kind": "detached_jws";
+      "verification_method": string;
+      "event_digest": string;
+      "created_at": string;
+      "domain"?: string;
+      "audience"?: string | string[];
+      "proof_purpose"?: "issuer_attestation" | "holder_acceptance";
+      "jws": string;
+    };
+  } & {
+    "kind": "ak.contact.requested";
+    [key: string]: unknown;
+  };
+};
+
+/** `contact-operations.schema.json#/$defs/contact_accept_request` — closed object schema. */
+export type ContactRespondRequestBody = {
+  "phase": "prepare";
+  "operation_id": string;
+  "idempotency_key": string;
+  "peer": {
+    "kind": "human";
+    "account_id": {
+      "principal_id": string;
+      "station_id": string;
+    };
+  } | {
+    "kind": "agent";
+    "actor_id": {
+      "kind": "account";
+      "account_id": {
+        "principal_id": string;
+        "station_id": string;
+      };
+    } | {
+      "kind": "service";
+      "service_id": string;
+    } | {
+      "kind": "realm";
+      "realm_actor_id": {
+        "realm_id": string;
+        "principal_id": string;
+      };
+    };
+    "controller_account_id": {
+      "principal_id": string;
+      "station_id": string;
+    };
+  };
+  "request_event_ref": string;
+  "action": "accept";
+  "granted_to_peer_scopes": Array<"invite" | "direct_message" | "voice_call" | "video_call" | "presence">;
+} | {
+  "phase": "commit";
+  "operation_id": string;
+  "idempotency_key": string;
+  "reservation_handle": string;
+  "signed_event": {
+    "event_id": string;
+    "kind": string;
+    "realm_id"?: string;
+    "scope_ref": {
+      "kind": "realm";
+      "realm_id": string;
+    } | {
+      "kind": "circle";
+      "realm_id": string;
+      "circle_id": string;
+    } | {
+      "kind": "sidecar";
+      "realm_id": string;
+      "sidecar_id": string;
+    } | {
+      "kind": "realm_genesis";
+    } | {
+      "kind": "realm_control";
+      "realm_id": string;
+    };
+    "actor_id": {
+      "kind": "account";
+      "account_id": {
+        "principal_id": string;
+        "station_id": string;
+      };
+    } | {
+      "kind": "service";
+      "service_id": string;
+    } | {
+      "kind": "realm";
+      "realm_actor_id": {
+        "realm_id": string;
+        "principal_id": string;
+      };
+    };
+    "executed_by"?: {
+      "kind": "account";
+      "account_id": {
+        "principal_id": string;
+        "station_id": string;
+      };
+    } | {
+      "kind": "service";
+      "service_id": string;
+    } | {
+      "kind": "realm";
+      "realm_actor_id": {
+        "realm_id": string;
+        "principal_id": string;
+      };
+    };
+    "authorization_ref"?: string | "ak.authority.direct_conversation_participant.v1" | "ak.authority.direct_conversation_bootstrap_participant.v1";
+    "applet_id"?: string;
+    "external_ref"?: {
+      "schema"?: string;
+      "protocol"?: string;
+      "network_id"?: string;
+      "instance_id"?: string;
+      "user_id"?: string;
+      "location_id"?: string;
+      "event_id"?: string;
+      "external_id"?: string;
+      "uri"?: string;
+      [key: string]: unknown;
+    };
+    "created_at": string;
+    "semantic_refs"?: Array<{
+      "id": string;
+      "role": "authorized_by";
+      "critical": boolean;
+    } | {
+      "id": string;
+      "role": "attestation" | "parent_event" | "after" | "audit_pair" | "recovery_capability" | "accountability" | "bootstrap_genesis" | "disclosure_authorization" | "capture_stop" | "direct_conversation_binding" | "direct_conversation_founding_unit" | "direct_conversation_contact_round" | "direct_conversation_agent_provision" | "applet_managed_actor_provision";
+      "critical": boolean;
+    }>;
+    "payload": Record<string, unknown>;
+    "producer_proof": {
+      "kind": "detached_jws";
+      "verification_method": string;
+      "event_digest": string;
+      "created_at": string;
+      "domain"?: string;
+      "audience"?: string | string[];
+      "proof_purpose"?: "issuer_attestation" | "holder_acceptance";
+      "jws": string;
+    };
+  } & {
+    "kind": "ak.contact.accepted";
+    [key: string]: unknown;
+  };
+};
+
+/** `contact-operations.schema.json#/$defs/contact_reject_request` — closed object schema. */
+export type ContactRejectRequestBody = {
+  "phase": "prepare";
+  "operation_id": string;
+  "idempotency_key": string;
+  "peer": {
+    "kind": "human";
+    "account_id": {
+      "principal_id": string;
+      "station_id": string;
+    };
+  } | {
+    "kind": "agent";
+    "actor_id": {
+      "kind": "account";
+      "account_id": {
+        "principal_id": string;
+        "station_id": string;
+      };
+    } | {
+      "kind": "service";
+      "service_id": string;
+    } | {
+      "kind": "realm";
+      "realm_actor_id": {
+        "realm_id": string;
+        "principal_id": string;
+      };
+    };
+    "controller_account_id": {
+      "principal_id": string;
+      "station_id": string;
+    };
+  };
+  "request_event_ref": string;
+  "action": "reject";
+} | {
+  "phase": "commit";
+  "operation_id": string;
+  "idempotency_key": string;
+  "reservation_handle": string;
+  "signed_event": {
+    "event_id": string;
+    "kind": string;
+    "realm_id"?: string;
+    "scope_ref": {
+      "kind": "realm";
+      "realm_id": string;
+    } | {
+      "kind": "circle";
+      "realm_id": string;
+      "circle_id": string;
+    } | {
+      "kind": "sidecar";
+      "realm_id": string;
+      "sidecar_id": string;
+    } | {
+      "kind": "realm_genesis";
+    } | {
+      "kind": "realm_control";
+      "realm_id": string;
+    };
+    "actor_id": {
+      "kind": "account";
+      "account_id": {
+        "principal_id": string;
+        "station_id": string;
+      };
+    } | {
+      "kind": "service";
+      "service_id": string;
+    } | {
+      "kind": "realm";
+      "realm_actor_id": {
+        "realm_id": string;
+        "principal_id": string;
+      };
+    };
+    "executed_by"?: {
+      "kind": "account";
+      "account_id": {
+        "principal_id": string;
+        "station_id": string;
+      };
+    } | {
+      "kind": "service";
+      "service_id": string;
+    } | {
+      "kind": "realm";
+      "realm_actor_id": {
+        "realm_id": string;
+        "principal_id": string;
+      };
+    };
+    "authorization_ref"?: string | "ak.authority.direct_conversation_participant.v1" | "ak.authority.direct_conversation_bootstrap_participant.v1";
+    "applet_id"?: string;
+    "external_ref"?: {
+      "schema"?: string;
+      "protocol"?: string;
+      "network_id"?: string;
+      "instance_id"?: string;
+      "user_id"?: string;
+      "location_id"?: string;
+      "event_id"?: string;
+      "external_id"?: string;
+      "uri"?: string;
+      [key: string]: unknown;
+    };
+    "created_at": string;
+    "semantic_refs"?: Array<{
+      "id": string;
+      "role": "authorized_by";
+      "critical": boolean;
+    } | {
+      "id": string;
+      "role": "attestation" | "parent_event" | "after" | "audit_pair" | "recovery_capability" | "accountability" | "bootstrap_genesis" | "disclosure_authorization" | "capture_stop" | "direct_conversation_binding" | "direct_conversation_founding_unit" | "direct_conversation_contact_round" | "direct_conversation_agent_provision" | "applet_managed_actor_provision";
+      "critical": boolean;
+    }>;
+    "payload": Record<string, unknown>;
+    "producer_proof": {
+      "kind": "detached_jws";
+      "verification_method": string;
+      "event_digest": string;
+      "created_at": string;
+      "domain"?: string;
+      "audience"?: string | string[];
+      "proof_purpose"?: "issuer_attestation" | "holder_acceptance";
+      "jws": string;
+    };
+  } & {
+    "kind": "ak.contact.rejected";
+    [key: string]: unknown;
+  };
+};
+
+/** `contact-operations.schema.json#/$defs/contact_tombstone_request` — closed object schema. */
+export type ContactTombstoneRequestBody = {
+  "phase": "prepare";
+  "operation_id": string;
+  "idempotency_key": string;
+  "peer": {
+    "kind": "human";
+    "account_id": {
+      "principal_id": string;
+      "station_id": string;
+    };
+  } | {
+    "kind": "agent";
+    "actor_id": {
+      "kind": "account";
+      "account_id": {
+        "principal_id": string;
+        "station_id": string;
+      };
+    } | {
+      "kind": "service";
+      "service_id": string;
+    } | {
+      "kind": "realm";
+      "realm_actor_id": {
+        "realm_id": string;
+        "principal_id": string;
+      };
+    };
+    "controller_account_id": {
+      "principal_id": string;
+      "station_id": string;
+    };
+  };
+  "contact_round_id": string;
+  "version": number;
+  "predecessor_event_ref": string;
+  "block_peer": boolean;
+} | {
+  "phase": "commit";
+  "operation_id": string;
+  "idempotency_key": string;
+  "reservation_handle": string;
+  "signed_event": {
+    "event_id": string;
+    "kind": string;
+    "realm_id"?: string;
+    "scope_ref": {
+      "kind": "realm";
+      "realm_id": string;
+    } | {
+      "kind": "circle";
+      "realm_id": string;
+      "circle_id": string;
+    } | {
+      "kind": "sidecar";
+      "realm_id": string;
+      "sidecar_id": string;
+    } | {
+      "kind": "realm_genesis";
+    } | {
+      "kind": "realm_control";
+      "realm_id": string;
+    };
+    "actor_id": {
+      "kind": "account";
+      "account_id": {
+        "principal_id": string;
+        "station_id": string;
+      };
+    } | {
+      "kind": "service";
+      "service_id": string;
+    } | {
+      "kind": "realm";
+      "realm_actor_id": {
+        "realm_id": string;
+        "principal_id": string;
+      };
+    };
+    "executed_by"?: {
+      "kind": "account";
+      "account_id": {
+        "principal_id": string;
+        "station_id": string;
+      };
+    } | {
+      "kind": "service";
+      "service_id": string;
+    } | {
+      "kind": "realm";
+      "realm_actor_id": {
+        "realm_id": string;
+        "principal_id": string;
+      };
+    };
+    "authorization_ref"?: string | "ak.authority.direct_conversation_participant.v1" | "ak.authority.direct_conversation_bootstrap_participant.v1";
+    "applet_id"?: string;
+    "external_ref"?: {
+      "schema"?: string;
+      "protocol"?: string;
+      "network_id"?: string;
+      "instance_id"?: string;
+      "user_id"?: string;
+      "location_id"?: string;
+      "event_id"?: string;
+      "external_id"?: string;
+      "uri"?: string;
+      [key: string]: unknown;
+    };
+    "created_at": string;
+    "semantic_refs"?: Array<{
+      "id": string;
+      "role": "authorized_by";
+      "critical": boolean;
+    } | {
+      "id": string;
+      "role": "attestation" | "parent_event" | "after" | "audit_pair" | "recovery_capability" | "accountability" | "bootstrap_genesis" | "disclosure_authorization" | "capture_stop" | "direct_conversation_binding" | "direct_conversation_founding_unit" | "direct_conversation_contact_round" | "direct_conversation_agent_provision" | "applet_managed_actor_provision";
+      "critical": boolean;
+    }>;
+    "payload": Record<string, unknown>;
+    "producer_proof": {
+      "kind": "detached_jws";
+      "verification_method": string;
+      "event_digest": string;
+      "created_at": string;
+      "domain"?: string;
+      "audience"?: string | string[];
+      "proof_purpose"?: "issuer_attestation" | "holder_acceptance";
+      "jws": string;
+    };
+  } & {
+    "kind": "ak.contact.tombstone";
+    [key: string]: unknown;
+  };
+};
+
+/** `contact-operations.schema.json#/$defs/contact_operation_outcome` — closed object schema. */
+export type ContactOperationOutcome = {
+  "status": "prepared";
+  "result_kind": "request";
+  "operation_id": string;
+  "reservation_handle": string;
+  "expires_at": string;
+  "event_draft": {
+    "unsigned_event_bytes": string;
+    "event_digest": string;
+  };
+} | {
+  "status": "prepared";
+  "result_kind": "response";
+  "operation_id": string;
+  "reservation_handle": string;
+  "expires_at": string;
+  "event_draft": {
+    "unsigned_event_bytes": string;
+    "event_digest": string;
+  };
+} | {
+  "status": "prepared";
+  "result_kind": "reject";
+  "operation_id": string;
+  "reservation_handle": string;
+  "expires_at": string;
+  "event_draft": {
+    "unsigned_event_bytes": string;
+    "event_digest": string;
+  };
+} | {
+  "status": "prepared";
+  "result_kind": "scope_update";
+  "operation_id": string;
+  "reservation_handle": string;
+  "expires_at": string;
+  "event_draft": {
+    "unsigned_event_bytes": string;
+    "event_digest": string;
+  };
+} | {
+  "status": "prepared";
+  "result_kind": "tombstone";
+  "operation_id": string;
+  "reservation_handle": string;
+  "expires_at": string;
+  "event_draft": {
+    "unsigned_event_bytes": string;
+    "event_digest": string;
+  };
+} | {
+  "status": "accepted";
+  "result_kind": "request";
+  "operation_id": string;
+  "request_acceptance_receipt": {
+    "core": {
+      "trust_domain_id": string;
+      "holder": {
+        "kind": "human";
+        "account_id": {
+          "principal_id": string;
+          "station_id": string;
+        };
+      } | {
+        "kind": "agent";
+        "actor_id": {
+          "kind": "account";
+          "account_id": {
+            "principal_id": string;
+            "station_id": string;
+          };
+        } | {
+          "kind": "service";
+          "service_id": string;
+        } | {
+          "kind": "realm";
+          "realm_actor_id": {
+            "realm_id": string;
+            "principal_id": string;
+          };
+        };
+        "controller_account_id": {
+          "principal_id": string;
+          "station_id": string;
+        };
+      };
+      "peer": {
+        "kind": "human";
+        "account_id": {
+          "principal_id": string;
+          "station_id": string;
+        };
+      } | {
+        "kind": "agent";
+        "actor_id": {
+          "kind": "account";
+          "account_id": {
+            "principal_id": string;
+            "station_id": string;
+          };
+        } | {
+          "kind": "service";
+          "service_id": string;
+        } | {
+          "kind": "realm";
+          "realm_actor_id": {
+            "realm_id": string;
+            "principal_id": string;
+          };
+        };
+        "controller_account_id": {
+          "principal_id": string;
+          "station_id": string;
+        };
+      };
+      "initial_contact_round_id"?: string;
+      "version": number;
+      "predecessor_event_ref"?: string;
+      "request_event_ref": string;
+      "producer_signer": {
+        "verification_method": string;
+        "public_key_b64u": string;
+      } | {
+        "verification_method": string;
+        "public_key_b64u": string;
+        "delegated_actor_did": string;
+      };
+      "source_checkpoint": string;
+      "accepted_at": string;
+      "issuer_id": string;
+    };
+    "receipt_digest": string;
+    "signature": {
+      "verification_method": string;
+      "created_at": string;
+      "jws": string;
+    };
+  };
+} | {
+  "status": "accepted";
+  "result_kind": "response";
+  "operation_id": string;
+  "normal_response_acceptance_receipt": {
+    "trust_domain_id": string;
+    "initial_contact_round_id"?: string;
+    "version": number;
+    "predecessor_event_ref"?: string;
+    "contact_round_id": string;
+    "request_receipt": {
+      "core": {
+        "trust_domain_id": string;
+        "holder": {
+          "kind": "human";
+          "account_id": {
+            "principal_id": string;
+            "station_id": string;
+          };
+        } | {
+          "kind": "agent";
+          "actor_id": {
+            "kind": "account";
+            "account_id": {
+              "principal_id": string;
+              "station_id": string;
+            };
+          } | {
+            "kind": "service";
+            "service_id": string;
+          } | {
+            "kind": "realm";
+            "realm_actor_id": {
+              "realm_id": string;
+              "principal_id": string;
+            };
+          };
+          "controller_account_id": {
+            "principal_id": string;
+            "station_id": string;
+          };
+        };
+        "peer": {
+          "kind": "human";
+          "account_id": {
+            "principal_id": string;
+            "station_id": string;
+          };
+        } | {
+          "kind": "agent";
+          "actor_id": {
+            "kind": "account";
+            "account_id": {
+              "principal_id": string;
+              "station_id": string;
+            };
+          } | {
+            "kind": "service";
+            "service_id": string;
+          } | {
+            "kind": "realm";
+            "realm_actor_id": {
+              "realm_id": string;
+              "principal_id": string;
+            };
+          };
+          "controller_account_id": {
+            "principal_id": string;
+            "station_id": string;
+          };
+        };
+        "initial_contact_round_id"?: string;
+        "version": number;
+        "predecessor_event_ref"?: string;
+        "request_event_ref": string;
+        "producer_signer": {
+          "verification_method": string;
+          "public_key_b64u": string;
+        } | {
+          "verification_method": string;
+          "public_key_b64u": string;
+          "delegated_actor_did": string;
+        };
+        "source_checkpoint": string;
+        "accepted_at": string;
+        "issuer_id": string;
+      };
+      "receipt_digest": string;
+      "signature": {
+        "verification_method": string;
+        "created_at": string;
+        "jws": string;
+      };
+    };
+    "response_event_ref": string;
+    "producer_signer": {
+      "verification_method": string;
+      "public_key_b64u": string;
+    } | {
+      "verification_method": string;
+      "public_key_b64u": string;
+      "delegated_actor_did": string;
+    };
+    "outgoing_slot_absence_digest": string;
+    "accepted_at": string;
+    "issuer_id": string;
+    "signature": {
+      "verification_method": string;
+      "created_at": string;
+      "jws": string;
+    };
+  };
+  "lineage": {
+    "trust_domain_id": string;
+    "initial_contact_round_id"?: string;
+    "contact_round_id"?: string;
+    "issuer": {
+      "kind": "human";
+      "account_id": {
+        "principal_id": string;
+        "station_id": string;
+      };
+    } | {
+      "kind": "agent";
+      "actor_id": {
+        "kind": "account";
+        "account_id": {
+          "principal_id": string;
+          "station_id": string;
+        };
+      } | {
+        "kind": "service";
+        "service_id": string;
+      } | {
+        "kind": "realm";
+        "realm_actor_id": {
+          "realm_id": string;
+          "principal_id": string;
+        };
+      };
+      "controller_account_id": {
+        "principal_id": string;
+        "station_id": string;
+      };
+    };
+    "peer": {
+      "kind": "human";
+      "account_id": {
+        "principal_id": string;
+        "station_id": string;
+      };
+    } | {
+      "kind": "agent";
+      "actor_id": {
+        "kind": "account";
+        "account_id": {
+          "principal_id": string;
+          "station_id": string;
+        };
+      } | {
+        "kind": "service";
+        "service_id": string;
+      } | {
+        "kind": "realm";
+        "realm_actor_id": {
+          "realm_id": string;
+          "principal_id": string;
+        };
+      };
+      "controller_account_id": {
+        "principal_id": string;
+        "station_id": string;
+      };
+    };
+    "version": number;
+    "predecessor_event_ref"?: string;
+    "event_ref": string;
+    "producer_signer": {
+      "verification_method": string;
+      "public_key_b64u": string;
+    } | {
+      "verification_method": string;
+      "public_key_b64u": string;
+      "delegated_actor_did": string;
+    };
+    "granted_to_peer_scopes": Array<"invite" | "direct_message" | "voice_call" | "video_call" | "presence">;
+    "accepted_at": string;
+    "signature": {
+      "verification_method": string;
+      "created_at": string;
+      "jws": string;
+    };
+  };
+  "current_proof": {
+    "trust_domain_id": string;
+    "holder": {
+      "kind": "human";
+      "account_id": {
+        "principal_id": string;
+        "station_id": string;
+      };
+    } | {
+      "kind": "agent";
+      "actor_id": {
+        "kind": "account";
+        "account_id": {
+          "principal_id": string;
+          "station_id": string;
+        };
+      } | {
+        "kind": "service";
+        "service_id": string;
+      } | {
+        "kind": "realm";
+        "realm_actor_id": {
+          "realm_id": string;
+          "principal_id": string;
+        };
+      };
+      "controller_account_id": {
+        "principal_id": string;
+        "station_id": string;
+      };
+    };
+    "peer": {
+      "kind": "human";
+      "account_id": {
+        "principal_id": string;
+        "station_id": string;
+      };
+    } | {
+      "kind": "agent";
+      "actor_id": {
+        "kind": "account";
+        "account_id": {
+          "principal_id": string;
+          "station_id": string;
+        };
+      } | {
+        "kind": "service";
+        "service_id": string;
+      } | {
+        "kind": "realm";
+        "realm_actor_id": {
+          "realm_id": string;
+          "principal_id": string;
+        };
+      };
+      "controller_account_id": {
+        "principal_id": string;
+        "station_id": string;
+      };
+    };
+    "initial_contact_round_id"?: string;
+    "contact_round_id"?: string;
+    "issuer_id": string;
+    "head_event_ref": string;
+    "version": number;
+    "scope_instances": Array<{
+      "contact_scope": "invite" | "direct_message" | "voice_call" | "video_call" | "presence";
+      "grant_event_ref": string;
+    }>;
+    "closed_round"?: {
+      "contact_round_id": string;
+      "operation": {
+        "kind": "tombstone";
+        "signed_event": {
+          "event_id": string;
+          "kind": string;
+          "realm_id"?: string;
+          "scope_ref": {
+            "kind": "realm";
+            "realm_id": string;
+          } | {
+            "kind": "circle";
+            "realm_id": string;
+            "circle_id": string;
+          } | {
+            "kind": "sidecar";
+            "realm_id": string;
+            "sidecar_id": string;
+          } | {
+            "kind": "realm_genesis";
+          } | {
+            "kind": "realm_control";
+            "realm_id": string;
+          };
+          "actor_id": {
+            "kind": "account";
+            "account_id": {
+              "principal_id": string;
+              "station_id": string;
+            };
+          } | {
+            "kind": "service";
+            "service_id": string;
+          } | {
+            "kind": "realm";
+            "realm_actor_id": {
+              "realm_id": string;
+              "principal_id": string;
+            };
+          };
+          "executed_by"?: {
+            "kind": "account";
+            "account_id": {
+              "principal_id": string;
+              "station_id": string;
+            };
+          } | {
+            "kind": "service";
+            "service_id": string;
+          } | {
+            "kind": "realm";
+            "realm_actor_id": {
+              "realm_id": string;
+              "principal_id": string;
+            };
+          };
+          "authorization_ref"?: string | "ak.authority.direct_conversation_participant.v1" | "ak.authority.direct_conversation_bootstrap_participant.v1";
+          "applet_id"?: string;
+          "external_ref"?: {
+            "schema"?: string;
+            "protocol"?: string;
+            "network_id"?: string;
+            "instance_id"?: string;
+            "user_id"?: string;
+            "location_id"?: string;
+            "event_id"?: string;
+            "external_id"?: string;
+            "uri"?: string;
+            [key: string]: unknown;
+          };
+          "created_at": string;
+          "semantic_refs"?: Array<{
+            "id": string;
+            "role": "authorized_by";
+            "critical": boolean;
+          } | {
+            "id": string;
+            "role": "attestation" | "parent_event" | "after" | "audit_pair" | "recovery_capability" | "accountability" | "bootstrap_genesis" | "disclosure_authorization" | "capture_stop" | "direct_conversation_binding" | "direct_conversation_founding_unit" | "direct_conversation_contact_round" | "direct_conversation_agent_provision" | "applet_managed_actor_provision";
+            "critical": boolean;
+          }>;
+          "payload": Record<string, unknown>;
+          "producer_proof": {
+            "kind": "detached_jws";
+            "verification_method": string;
+            "event_digest": string;
+            "created_at": string;
+            "domain"?: string;
+            "audience"?: string | string[];
+            "proof_purpose"?: "issuer_attestation" | "holder_acceptance";
+            "jws": string;
+          };
+        } & {
+          "kind": "ak.contact.tombstone";
+          [key: string]: unknown;
+        };
+        "lineage": {
+          "trust_domain_id": string;
+          "initial_contact_round_id"?: string;
+          "contact_round_id"?: string;
+          "issuer": {
+            "kind": "human";
+            "account_id": {
+              "principal_id": string;
+              "station_id": string;
+            };
+          } | {
+            "kind": "agent";
+            "actor_id": {
+              "kind": "account";
+              "account_id": {
+                "principal_id": string;
+                "station_id": string;
+              };
+            } | {
+              "kind": "service";
+              "service_id": string;
+            } | {
+              "kind": "realm";
+              "realm_actor_id": {
+                "realm_id": string;
+                "principal_id": string;
+              };
+            };
+            "controller_account_id": {
+              "principal_id": string;
+              "station_id": string;
+            };
+          };
+          "peer": {
+            "kind": "human";
+            "account_id": {
+              "principal_id": string;
+              "station_id": string;
+            };
+          } | {
+            "kind": "agent";
+            "actor_id": {
+              "kind": "account";
+              "account_id": {
+                "principal_id": string;
+                "station_id": string;
+              };
+            } | {
+              "kind": "service";
+              "service_id": string;
+            } | {
+              "kind": "realm";
+              "realm_actor_id": {
+                "realm_id": string;
+                "principal_id": string;
+              };
+            };
+            "controller_account_id": {
+              "principal_id": string;
+              "station_id": string;
+            };
+          };
+          "version": number;
+          "predecessor_event_ref"?: string;
+          "event_ref": string;
+          "producer_signer": {
+            "verification_method": string;
+            "public_key_b64u": string;
+          } | {
+            "verification_method": string;
+            "public_key_b64u": string;
+            "delegated_actor_did": string;
+          };
+          "granted_to_peer_scopes": Array<"invite" | "direct_message" | "voice_call" | "video_call" | "presence">;
+          "accepted_at": string;
+          "signature": {
+            "verification_method": string;
+            "created_at": string;
+            "jws": string;
+          };
+        };
+      };
+    };
+    "issued_at": string;
+    "fresh_until": string;
+    "signature": {
+      "verification_method": string;
+      "created_at": string;
+      "jws": string;
+    };
+  };
+} | {
+  "status": "accepted";
+  "result_kind": "reject";
+  "operation_id": string;
+  "reject_acceptance_receipt": {
+    "trust_domain_id": string;
+    "initial_contact_round_id"?: string;
+    "version": number;
+    "predecessor_event_ref"?: string;
+    "request_receipt": {
+      "core": {
+        "trust_domain_id": string;
+        "holder": {
+          "kind": "human";
+          "account_id": {
+            "principal_id": string;
+            "station_id": string;
+          };
+        } | {
+          "kind": "agent";
+          "actor_id": {
+            "kind": "account";
+            "account_id": {
+              "principal_id": string;
+              "station_id": string;
+            };
+          } | {
+            "kind": "service";
+            "service_id": string;
+          } | {
+            "kind": "realm";
+            "realm_actor_id": {
+              "realm_id": string;
+              "principal_id": string;
+            };
+          };
+          "controller_account_id": {
+            "principal_id": string;
+            "station_id": string;
+          };
+        };
+        "peer": {
+          "kind": "human";
+          "account_id": {
+            "principal_id": string;
+            "station_id": string;
+          };
+        } | {
+          "kind": "agent";
+          "actor_id": {
+            "kind": "account";
+            "account_id": {
+              "principal_id": string;
+              "station_id": string;
+            };
+          } | {
+            "kind": "service";
+            "service_id": string;
+          } | {
+            "kind": "realm";
+            "realm_actor_id": {
+              "realm_id": string;
+              "principal_id": string;
+            };
+          };
+          "controller_account_id": {
+            "principal_id": string;
+            "station_id": string;
+          };
+        };
+        "initial_contact_round_id"?: string;
+        "version": number;
+        "predecessor_event_ref"?: string;
+        "request_event_ref": string;
+        "producer_signer": {
+          "verification_method": string;
+          "public_key_b64u": string;
+        } | {
+          "verification_method": string;
+          "public_key_b64u": string;
+          "delegated_actor_did": string;
+        };
+        "source_checkpoint": string;
+        "accepted_at": string;
+        "issuer_id": string;
+      };
+      "receipt_digest": string;
+      "signature": {
+        "verification_method": string;
+        "created_at": string;
+        "jws": string;
+      };
+    };
+    "reject_event_ref": string;
+    "producer_signer": {
+      "verification_method": string;
+      "public_key_b64u": string;
+    } | {
+      "verification_method": string;
+      "public_key_b64u": string;
+      "delegated_actor_did": string;
+    };
+    "accepted_at": string;
+    "issuer_id": string;
+    "signature": {
+      "verification_method": string;
+      "created_at": string;
+      "jws": string;
+    };
+  };
+} | {
+  "status": "accepted";
+  "result_kind": "scope_update";
+  "operation_id": string;
+  "lineage": {
+    "trust_domain_id": string;
+    "initial_contact_round_id"?: string;
+    "contact_round_id"?: string;
+    "issuer": {
+      "kind": "human";
+      "account_id": {
+        "principal_id": string;
+        "station_id": string;
+      };
+    } | {
+      "kind": "agent";
+      "actor_id": {
+        "kind": "account";
+        "account_id": {
+          "principal_id": string;
+          "station_id": string;
+        };
+      } | {
+        "kind": "service";
+        "service_id": string;
+      } | {
+        "kind": "realm";
+        "realm_actor_id": {
+          "realm_id": string;
+          "principal_id": string;
+        };
+      };
+      "controller_account_id": {
+        "principal_id": string;
+        "station_id": string;
+      };
+    };
+    "peer": {
+      "kind": "human";
+      "account_id": {
+        "principal_id": string;
+        "station_id": string;
+      };
+    } | {
+      "kind": "agent";
+      "actor_id": {
+        "kind": "account";
+        "account_id": {
+          "principal_id": string;
+          "station_id": string;
+        };
+      } | {
+        "kind": "service";
+        "service_id": string;
+      } | {
+        "kind": "realm";
+        "realm_actor_id": {
+          "realm_id": string;
+          "principal_id": string;
+        };
+      };
+      "controller_account_id": {
+        "principal_id": string;
+        "station_id": string;
+      };
+    };
+    "version": number;
+    "predecessor_event_ref"?: string;
+    "event_ref": string;
+    "producer_signer": {
+      "verification_method": string;
+      "public_key_b64u": string;
+    } | {
+      "verification_method": string;
+      "public_key_b64u": string;
+      "delegated_actor_did": string;
+    };
+    "granted_to_peer_scopes": Array<"invite" | "direct_message" | "voice_call" | "video_call" | "presence">;
+    "accepted_at": string;
+    "signature": {
+      "verification_method": string;
+      "created_at": string;
+      "jws": string;
+    };
+  };
+  "current_proof": {
+    "trust_domain_id": string;
+    "holder": {
+      "kind": "human";
+      "account_id": {
+        "principal_id": string;
+        "station_id": string;
+      };
+    } | {
+      "kind": "agent";
+      "actor_id": {
+        "kind": "account";
+        "account_id": {
+          "principal_id": string;
+          "station_id": string;
+        };
+      } | {
+        "kind": "service";
+        "service_id": string;
+      } | {
+        "kind": "realm";
+        "realm_actor_id": {
+          "realm_id": string;
+          "principal_id": string;
+        };
+      };
+      "controller_account_id": {
+        "principal_id": string;
+        "station_id": string;
+      };
+    };
+    "peer": {
+      "kind": "human";
+      "account_id": {
+        "principal_id": string;
+        "station_id": string;
+      };
+    } | {
+      "kind": "agent";
+      "actor_id": {
+        "kind": "account";
+        "account_id": {
+          "principal_id": string;
+          "station_id": string;
+        };
+      } | {
+        "kind": "service";
+        "service_id": string;
+      } | {
+        "kind": "realm";
+        "realm_actor_id": {
+          "realm_id": string;
+          "principal_id": string;
+        };
+      };
+      "controller_account_id": {
+        "principal_id": string;
+        "station_id": string;
+      };
+    };
+    "initial_contact_round_id"?: string;
+    "contact_round_id"?: string;
+    "issuer_id": string;
+    "head_event_ref": string;
+    "version": number;
+    "scope_instances": Array<{
+      "contact_scope": "invite" | "direct_message" | "voice_call" | "video_call" | "presence";
+      "grant_event_ref": string;
+    }>;
+    "closed_round"?: {
+      "contact_round_id": string;
+      "operation": {
+        "kind": "tombstone";
+        "signed_event": {
+          "event_id": string;
+          "kind": string;
+          "realm_id"?: string;
+          "scope_ref": {
+            "kind": "realm";
+            "realm_id": string;
+          } | {
+            "kind": "circle";
+            "realm_id": string;
+            "circle_id": string;
+          } | {
+            "kind": "sidecar";
+            "realm_id": string;
+            "sidecar_id": string;
+          } | {
+            "kind": "realm_genesis";
+          } | {
+            "kind": "realm_control";
+            "realm_id": string;
+          };
+          "actor_id": {
+            "kind": "account";
+            "account_id": {
+              "principal_id": string;
+              "station_id": string;
+            };
+          } | {
+            "kind": "service";
+            "service_id": string;
+          } | {
+            "kind": "realm";
+            "realm_actor_id": {
+              "realm_id": string;
+              "principal_id": string;
+            };
+          };
+          "executed_by"?: {
+            "kind": "account";
+            "account_id": {
+              "principal_id": string;
+              "station_id": string;
+            };
+          } | {
+            "kind": "service";
+            "service_id": string;
+          } | {
+            "kind": "realm";
+            "realm_actor_id": {
+              "realm_id": string;
+              "principal_id": string;
+            };
+          };
+          "authorization_ref"?: string | "ak.authority.direct_conversation_participant.v1" | "ak.authority.direct_conversation_bootstrap_participant.v1";
+          "applet_id"?: string;
+          "external_ref"?: {
+            "schema"?: string;
+            "protocol"?: string;
+            "network_id"?: string;
+            "instance_id"?: string;
+            "user_id"?: string;
+            "location_id"?: string;
+            "event_id"?: string;
+            "external_id"?: string;
+            "uri"?: string;
+            [key: string]: unknown;
+          };
+          "created_at": string;
+          "semantic_refs"?: Array<{
+            "id": string;
+            "role": "authorized_by";
+            "critical": boolean;
+          } | {
+            "id": string;
+            "role": "attestation" | "parent_event" | "after" | "audit_pair" | "recovery_capability" | "accountability" | "bootstrap_genesis" | "disclosure_authorization" | "capture_stop" | "direct_conversation_binding" | "direct_conversation_founding_unit" | "direct_conversation_contact_round" | "direct_conversation_agent_provision" | "applet_managed_actor_provision";
+            "critical": boolean;
+          }>;
+          "payload": Record<string, unknown>;
+          "producer_proof": {
+            "kind": "detached_jws";
+            "verification_method": string;
+            "event_digest": string;
+            "created_at": string;
+            "domain"?: string;
+            "audience"?: string | string[];
+            "proof_purpose"?: "issuer_attestation" | "holder_acceptance";
+            "jws": string;
+          };
+        } & {
+          "kind": "ak.contact.tombstone";
+          [key: string]: unknown;
+        };
+        "lineage": {
+          "trust_domain_id": string;
+          "initial_contact_round_id"?: string;
+          "contact_round_id"?: string;
+          "issuer": {
+            "kind": "human";
+            "account_id": {
+              "principal_id": string;
+              "station_id": string;
+            };
+          } | {
+            "kind": "agent";
+            "actor_id": {
+              "kind": "account";
+              "account_id": {
+                "principal_id": string;
+                "station_id": string;
+              };
+            } | {
+              "kind": "service";
+              "service_id": string;
+            } | {
+              "kind": "realm";
+              "realm_actor_id": {
+                "realm_id": string;
+                "principal_id": string;
+              };
+            };
+            "controller_account_id": {
+              "principal_id": string;
+              "station_id": string;
+            };
+          };
+          "peer": {
+            "kind": "human";
+            "account_id": {
+              "principal_id": string;
+              "station_id": string;
+            };
+          } | {
+            "kind": "agent";
+            "actor_id": {
+              "kind": "account";
+              "account_id": {
+                "principal_id": string;
+                "station_id": string;
+              };
+            } | {
+              "kind": "service";
+              "service_id": string;
+            } | {
+              "kind": "realm";
+              "realm_actor_id": {
+                "realm_id": string;
+                "principal_id": string;
+              };
+            };
+            "controller_account_id": {
+              "principal_id": string;
+              "station_id": string;
+            };
+          };
+          "version": number;
+          "predecessor_event_ref"?: string;
+          "event_ref": string;
+          "producer_signer": {
+            "verification_method": string;
+            "public_key_b64u": string;
+          } | {
+            "verification_method": string;
+            "public_key_b64u": string;
+            "delegated_actor_did": string;
+          };
+          "granted_to_peer_scopes": Array<"invite" | "direct_message" | "voice_call" | "video_call" | "presence">;
+          "accepted_at": string;
+          "signature": {
+            "verification_method": string;
+            "created_at": string;
+            "jws": string;
+          };
+        };
+      };
+    };
+    "issued_at": string;
+    "fresh_until": string;
+    "signature": {
+      "verification_method": string;
+      "created_at": string;
+      "jws": string;
+    };
+  };
+} | {
+  "status": "accepted";
+  "result_kind": "tombstone";
+  "operation_id": string;
+  "lineage": {
+    "trust_domain_id": string;
+    "initial_contact_round_id"?: string;
+    "contact_round_id"?: string;
+    "issuer": {
+      "kind": "human";
+      "account_id": {
+        "principal_id": string;
+        "station_id": string;
+      };
+    } | {
+      "kind": "agent";
+      "actor_id": {
+        "kind": "account";
+        "account_id": {
+          "principal_id": string;
+          "station_id": string;
+        };
+      } | {
+        "kind": "service";
+        "service_id": string;
+      } | {
+        "kind": "realm";
+        "realm_actor_id": {
+          "realm_id": string;
+          "principal_id": string;
+        };
+      };
+      "controller_account_id": {
+        "principal_id": string;
+        "station_id": string;
+      };
+    };
+    "peer": {
+      "kind": "human";
+      "account_id": {
+        "principal_id": string;
+        "station_id": string;
+      };
+    } | {
+      "kind": "agent";
+      "actor_id": {
+        "kind": "account";
+        "account_id": {
+          "principal_id": string;
+          "station_id": string;
+        };
+      } | {
+        "kind": "service";
+        "service_id": string;
+      } | {
+        "kind": "realm";
+        "realm_actor_id": {
+          "realm_id": string;
+          "principal_id": string;
+        };
+      };
+      "controller_account_id": {
+        "principal_id": string;
+        "station_id": string;
+      };
+    };
+    "version": number;
+    "predecessor_event_ref"?: string;
+    "event_ref": string;
+    "producer_signer": {
+      "verification_method": string;
+      "public_key_b64u": string;
+    } | {
+      "verification_method": string;
+      "public_key_b64u": string;
+      "delegated_actor_did": string;
+    };
+    "granted_to_peer_scopes": Array<"invite" | "direct_message" | "voice_call" | "video_call" | "presence">;
+    "accepted_at": string;
+    "signature": {
+      "verification_method": string;
+      "created_at": string;
+      "jws": string;
+    };
+  };
+  "current_proof": {
+    "trust_domain_id": string;
+    "holder": {
+      "kind": "human";
+      "account_id": {
+        "principal_id": string;
+        "station_id": string;
+      };
+    } | {
+      "kind": "agent";
+      "actor_id": {
+        "kind": "account";
+        "account_id": {
+          "principal_id": string;
+          "station_id": string;
+        };
+      } | {
+        "kind": "service";
+        "service_id": string;
+      } | {
+        "kind": "realm";
+        "realm_actor_id": {
+          "realm_id": string;
+          "principal_id": string;
+        };
+      };
+      "controller_account_id": {
+        "principal_id": string;
+        "station_id": string;
+      };
+    };
+    "peer": {
+      "kind": "human";
+      "account_id": {
+        "principal_id": string;
+        "station_id": string;
+      };
+    } | {
+      "kind": "agent";
+      "actor_id": {
+        "kind": "account";
+        "account_id": {
+          "principal_id": string;
+          "station_id": string;
+        };
+      } | {
+        "kind": "service";
+        "service_id": string;
+      } | {
+        "kind": "realm";
+        "realm_actor_id": {
+          "realm_id": string;
+          "principal_id": string;
+        };
+      };
+      "controller_account_id": {
+        "principal_id": string;
+        "station_id": string;
+      };
+    };
+    "initial_contact_round_id"?: string;
+    "contact_round_id"?: string;
+    "issuer_id": string;
+    "head_event_ref": string;
+    "version": number;
+    "scope_instances": Array<{
+      "contact_scope": "invite" | "direct_message" | "voice_call" | "video_call" | "presence";
+      "grant_event_ref": string;
+    }>;
+    "closed_round"?: {
+      "contact_round_id": string;
+      "operation": {
+        "kind": "tombstone";
+        "signed_event": {
+          "event_id": string;
+          "kind": string;
+          "realm_id"?: string;
+          "scope_ref": {
+            "kind": "realm";
+            "realm_id": string;
+          } | {
+            "kind": "circle";
+            "realm_id": string;
+            "circle_id": string;
+          } | {
+            "kind": "sidecar";
+            "realm_id": string;
+            "sidecar_id": string;
+          } | {
+            "kind": "realm_genesis";
+          } | {
+            "kind": "realm_control";
+            "realm_id": string;
+          };
+          "actor_id": {
+            "kind": "account";
+            "account_id": {
+              "principal_id": string;
+              "station_id": string;
+            };
+          } | {
+            "kind": "service";
+            "service_id": string;
+          } | {
+            "kind": "realm";
+            "realm_actor_id": {
+              "realm_id": string;
+              "principal_id": string;
+            };
+          };
+          "executed_by"?: {
+            "kind": "account";
+            "account_id": {
+              "principal_id": string;
+              "station_id": string;
+            };
+          } | {
+            "kind": "service";
+            "service_id": string;
+          } | {
+            "kind": "realm";
+            "realm_actor_id": {
+              "realm_id": string;
+              "principal_id": string;
+            };
+          };
+          "authorization_ref"?: string | "ak.authority.direct_conversation_participant.v1" | "ak.authority.direct_conversation_bootstrap_participant.v1";
+          "applet_id"?: string;
+          "external_ref"?: {
+            "schema"?: string;
+            "protocol"?: string;
+            "network_id"?: string;
+            "instance_id"?: string;
+            "user_id"?: string;
+            "location_id"?: string;
+            "event_id"?: string;
+            "external_id"?: string;
+            "uri"?: string;
+            [key: string]: unknown;
+          };
+          "created_at": string;
+          "semantic_refs"?: Array<{
+            "id": string;
+            "role": "authorized_by";
+            "critical": boolean;
+          } | {
+            "id": string;
+            "role": "attestation" | "parent_event" | "after" | "audit_pair" | "recovery_capability" | "accountability" | "bootstrap_genesis" | "disclosure_authorization" | "capture_stop" | "direct_conversation_binding" | "direct_conversation_founding_unit" | "direct_conversation_contact_round" | "direct_conversation_agent_provision" | "applet_managed_actor_provision";
+            "critical": boolean;
+          }>;
+          "payload": Record<string, unknown>;
+          "producer_proof": {
+            "kind": "detached_jws";
+            "verification_method": string;
+            "event_digest": string;
+            "created_at": string;
+            "domain"?: string;
+            "audience"?: string | string[];
+            "proof_purpose"?: "issuer_attestation" | "holder_acceptance";
+            "jws": string;
+          };
+        } & {
+          "kind": "ak.contact.tombstone";
+          [key: string]: unknown;
+        };
+        "lineage": {
+          "trust_domain_id": string;
+          "initial_contact_round_id"?: string;
+          "contact_round_id"?: string;
+          "issuer": {
+            "kind": "human";
+            "account_id": {
+              "principal_id": string;
+              "station_id": string;
+            };
+          } | {
+            "kind": "agent";
+            "actor_id": {
+              "kind": "account";
+              "account_id": {
+                "principal_id": string;
+                "station_id": string;
+              };
+            } | {
+              "kind": "service";
+              "service_id": string;
+            } | {
+              "kind": "realm";
+              "realm_actor_id": {
+                "realm_id": string;
+                "principal_id": string;
+              };
+            };
+            "controller_account_id": {
+              "principal_id": string;
+              "station_id": string;
+            };
+          };
+          "peer": {
+            "kind": "human";
+            "account_id": {
+              "principal_id": string;
+              "station_id": string;
+            };
+          } | {
+            "kind": "agent";
+            "actor_id": {
+              "kind": "account";
+              "account_id": {
+                "principal_id": string;
+                "station_id": string;
+              };
+            } | {
+              "kind": "service";
+              "service_id": string;
+            } | {
+              "kind": "realm";
+              "realm_actor_id": {
+                "realm_id": string;
+                "principal_id": string;
+              };
+            };
+            "controller_account_id": {
+              "principal_id": string;
+              "station_id": string;
+            };
+          };
+          "version": number;
+          "predecessor_event_ref"?: string;
+          "event_ref": string;
+          "producer_signer": {
+            "verification_method": string;
+            "public_key_b64u": string;
+          } | {
+            "verification_method": string;
+            "public_key_b64u": string;
+            "delegated_actor_did": string;
+          };
+          "granted_to_peer_scopes": Array<"invite" | "direct_message" | "voice_call" | "video_call" | "presence">;
+          "accepted_at": string;
+          "signature": {
+            "verification_method": string;
+            "created_at": string;
+            "jws": string;
+          };
+        };
+      };
+    };
+    "issued_at": string;
+    "fresh_until": string;
+    "signature": {
+      "verification_method": string;
+      "created_at": string;
+      "jws": string;
+    };
+  };
+} | {
+  "status": "failed";
+  "result_kind": "request" | "response" | "reject" | "scope_update" | "tombstone";
+  "operation_id": string;
+  "reason": "contact_idempotency_conflict" | "contact_round_conflict" | "contact_lineage_conflict" | "contact_terminal" | "contact_scope_stale";
 };
 
 /** `common-ids.schema.json#/$defs/actor_id` — closed object schema. */

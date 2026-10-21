@@ -1063,6 +1063,22 @@ impl ArkretServer {
             .map(|database| database.connect_url.as_str())
     }
 
+    /// The actual process database, including a scenario-owned isolated database
+    /// supplied to the child at startup. Attached deployments expose no fallback.
+    pub fn configured_database_url(&self) -> Option<&str> {
+        self.external_restart
+            .as_ref()
+            .and_then(|config| {
+                config
+                    .extra_env
+                    .iter()
+                    .rev()
+                    .find(|(key, _)| key == "DATABASE_URL")
+                    .map(|(_, value)| value.as_str())
+            })
+            .or_else(|| self.owned_database_url())
+    }
+
     pub fn service_did(&self) -> &Did {
         &self.service_did
     }
@@ -1120,6 +1136,34 @@ impl ArkretServer {
             .try_into()
             .map_err(|_| anyhow!("the harness notary seed is not 32 bytes"))?;
         Ok(ed25519_dalek::SigningKey::from_bytes(&seed))
+    }
+
+    /// Re-anchor a fixture after its explicit owned-Station key rotation.
+    /// Neither the method nor the key comes from a Consent response.
+    pub fn reanchor_consent_current_client(
+        &self,
+        client: &TestActorClient,
+        expected_public_key: [u8; 32],
+    ) -> Result<TestActorClient> {
+        anyhow::ensure!(
+            client.service_id == self.service_id.as_str(),
+            "Consent authority rotation belongs to another Station"
+        );
+        let (old_method, old_key) = client
+            .consent_current_authority
+            .as_ref()
+            .context("Consent authority rotation requires its original configured anchor")?;
+        let method =
+            arkret_wire::DidUrl::new(format!("{}#federation-fanout-key", self.service_did))
+                .map_err(anyhow::Error::msg)?;
+        let public_key = self.federation_signing_key()?.verifying_key().to_bytes();
+        anyhow::ensure!(
+            old_method == &method && public_key == expected_public_key && old_key != &public_key,
+            "Consent authority rotation differs from the explicit harness configuration"
+        );
+        let mut anchored = client.clone();
+        anchored.consent_current_authority = Some((method, public_key));
+        Ok(anchored)
     }
 
     /// POST `body` to this Station's peer `path` as a request `source` signs
@@ -1954,6 +1998,20 @@ impl ArkretServer {
             device_id: device_id.to_owned(),
             session,
             principal,
+            consent_current_authority: self
+                .external_restart
+                .as_ref()
+                .map(|_| -> Result<_> {
+                    Ok((
+                        arkret_wire::DidUrl::new(format!(
+                            "{}#federation-fanout-key",
+                            self.service_did
+                        ))
+                        .map_err(anyhow::Error::msg)?,
+                        self.federation_signing_key()?.verifying_key().to_bytes(),
+                    ))
+                })
+                .transpose()?,
             controlled_realms: std::sync::Arc::new(std::sync::Mutex::new(
                 std::collections::BTreeSet::new(),
             )),

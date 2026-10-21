@@ -31,10 +31,10 @@ return async ({ jointUsers, request, browser }: { jointUsers: JointUsersFixture;
     bobPage.completeRecoveryKeySetupIfPrompted(30_000).then(() => phase("bob_recovery_finished")),
   ]);
   phase("contact_request_start");
-  const remoteLocator = remoteBob && await resolvePrincipalLocator(request, bobSession.user.id, "server2", bobSession.grantJwt);
+  const remoteLocator = remoteBob ? await resolvePrincipalLocator(request, bobSession.user.id, "server2", bobSession.grantJwt) : undefined;
   const { outcome } = await requestContactArkret(request, aliceSession.grantJwt, bobSession.user.id, {
     requestedScopes: ["direct_message", "presence"],
-    ...(remoteBob ? { recipientServiceId: bobSession.accountId.station_id,
+    ...(remoteLocator ? { recipientServiceId: bobSession.accountId.station_id,
       introductionEvidence: { kind: "locator_ref", principal_locator: remoteLocator } } : {}),
   });
   const accepted = await respondContactArkret(request, bobSession.grantJwt, {

@@ -94,10 +94,11 @@ pub fn missing_sync_production_cases(
 /// total number of unwired suites happened to stay constant.
 // Content-key KATs run in arkret-mls; complete authorized-checkpoint
 // remains owned by 0805. Terminal live scenarios execute below.
-const KNOWN_UNWIRED_ENTRYPOINTS: [&str; 32] = [
+const KNOWN_UNWIRED_ENTRYPOINTS: [&str; 33] = [
     "ak.suite.agent.draft_pending_intent.v1",
     "ak.suite.agent.participation.v1",
     "ak.suite.applet.managed_actor_authority.v1",
+    "ak.suite.applet.management_source.v1",
     "ak.suite.applet.revoke_saga.v1",
     "ak.suite.auth.session_proof.v1",
     "ak.suite.authority_commit_projection.result_consumption_roles.v1",
@@ -112,7 +113,6 @@ const KNOWN_UNWIRED_ENTRYPOINTS: [&str; 32] = [
     "ak.suite.direct_conversation.signal_admission.v1",
     "ak.suite.encoding.content_bound_event_id.v1",
     "ak.suite.events.redaction.v1",
-    "ak.suite.federation.managed_forward_provenance.v1",
     "ak.suite.identity.independent_admission.v1",
     "ak.suite.identity.pcr_genesis.v1",
     "ak.suite.invite.claim_security.v1",
@@ -123,6 +123,7 @@ const KNOWN_UNWIRED_ENTRYPOINTS: [&str; 32] = [
     "ak.suite.privacy.security.v1",
     "ak.suite.protocol.edge_cases.v1",
     "ak.suite.reaction.authority_order.v1",
+    "ak.suite.realm_actor.contract.v1",
     "ak.suite.scope.circle.v1",
     "ak.suite.signer_key.historical_commit_coordinate.v1",
     "ak.suite.state.registered_atomic_units_and_watch_audit.v1",
@@ -170,7 +171,14 @@ const REVIEWED_APPLET_DEVICE_SCOPE_CASES: [&str; 15] = [
     "sidecar",
 ];
 
-const RUNNERS: [(&str, Runner); 58] = [
+const RUNNERS: [(&str, Runner); 59] = [
+    (
+        super::PROTOCOL_SIMPLIFICATION_ENTRYPOINT,
+        Runner::CasesAt {
+            run: super::run_protocol_simplification_shape_suite,
+            pointer: "/schema_validation_cases",
+        },
+    ),
     (
         super::SDK_EVENT_TYPE_AXES_ENTRYPOINT,
         Runner::Cases(super::run_sdk_event_type_axes_suite),

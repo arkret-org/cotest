@@ -12,7 +12,7 @@ fn proof(server: &ArkretServer, method: &arkret_wire::DidUrl) -> Result<PayloadP
     Ok(serde_json::from_value(
         json!({"kind":"detached_jws", "verification_method":method,
         "payload_digest":format!("sha256:{}", "0".repeat(64)),
-        "created_at":arkret_canonical::normalize_timestamp_canonical(chrono::Utc::now()),
+        "created_at":arkret_canonical::format_timestamp_canonical(chrono::Utc::now()),
         "domain":server.trust_domain(),"audience":server.service_id(),"jws":"pending"}),
     )?)
 }
@@ -153,9 +153,42 @@ pub(super) async fn run(
         .as_ref()
         .context("actual holder PCR")?
         .pcr_realm_id;
-    let event=holder.client.author_event(pcr.as_str(), EventKind::ConsentReplace.as_str(), json!({
-        "peer":{"kind":"actor","actor_id":requester.actor},"expected_current":{"state":"never_written"},"permissions":[{"consent_scope":"voice_call"}]
-    })).await?;
+    let peer = arkret_models_collaboration::events_payloads::consent::ConsentPeer::Actor {
+        actor_id: requester.actor.clone(),
+    };
+    let (expected_current, mut permissions) =
+        crate::scenarios::invite_service_fanout_live::read_consent_set(&holder.client, &peer)
+            .await?;
+    let undisclosed_never_written = crate::harness::heap_future(|| {
+        reject_nonholder_current_reads(server, holder, &requester, database, false)
+    })
+    .await?;
+    permissions.retain(|p| p.consent_scope != arkret_wire::ConsentScope::VoiceCall);
+    permissions.push(
+        arkret_models_collaboration::events_payloads::consent::ConsentPermission {
+            consent_scope: arkret_wire::ConsentScope::VoiceCall,
+            not_before: None,
+            expires_at: None,
+            constraints: None,
+            evidence_ref: None,
+            reason: None,
+        },
+    );
+    permissions.sort_by_key(|p| p.consent_scope);
+    let event = holder
+        .client
+        .author_event(
+            pcr.as_str(),
+            EventKind::ConsentReplace.as_str(),
+            serde_json::to_value(
+                arkret_models_collaboration::events_payloads::consent::ConsentReplacePayload {
+                    peer,
+                    expected_current,
+                    permissions,
+                },
+            )?,
+        )
+        .await?;
     let mut update = MimiUpdateConsentRequestBody {
         consent_id: first.consent_id.clone(),
         decision: MimiConsentDecision::Accept,
@@ -183,6 +216,13 @@ pub(super) async fn run(
         "wrong actor proof changed durable state"
     );
     update.signature.jws = sign(&bytes, &holder.key)?;
+    // Persist before transport; a later local recovery reuses this exact Event.
+    let frozen_dir = tempfile::tempdir()?;
+    let frozen_path = frozen_dir.path().join("consent-update.json");
+    std::fs::write(
+        &frozen_path,
+        arkret_canonical::canonical_json_bytes(&update)?,
+    )?;
     let accepted = sdk.mimi_update_consent(&update).await?;
     ensure!(
         accepted.event_ref == event.event_id && accepted.consent_id == first.consent_id,
@@ -193,14 +233,15 @@ pub(super) async fn run(
         committed[0] == before[0] + 1 && committed[1] == before[1] + 1,
         "Consent did not admit one Event and Commit"
     );
-    // Retain the exact application request before sending. Recover it after
-    // losing the local applied outcome and after a distinct native replacement.
-    let frozen_dir = tempfile::tempdir()?;
-    let frozen_path = frozen_dir.path().join("consent-update.json");
-    std::fs::write(
-        &frozen_path,
-        arkret_canonical::canonical_json_bytes(&update)?,
-    )?;
+    let undisclosed_present = crate::harness::heap_future(|| {
+        reject_nonholder_current_reads(server, holder, &requester, database, true)
+    })
+    .await?;
+    ensure!(
+        undisclosed_present == undisclosed_never_written,
+        "a nonholder distinguished present Consent from never-written Consent"
+    );
+    // Recover from the durable original after a distinct native replacement.
     super::super::invite_service_fanout_live::grant_scoped_consent(
         &holder.client,
         &requester.client,
@@ -226,9 +267,9 @@ pub(super) async fn run(
             && counts(database, pcr.as_str()).await? == later,
         "frozen Consent retry lost its original outcome or changed later current"
     );
-    let (revision, permissions) = super::super::invite_service_fanout_live::complete_peer_current(
+    let (revision, permissions) = super::super::invite_service_fanout_live::read_consent_set(
         &holder.client,
-        arkret::ConsentPeer::Actor {
+        &arkret::ConsentPeer::Actor {
             actor_id: requester.actor.clone(),
         },
     )
@@ -261,37 +302,67 @@ pub(super) async fn run(
         "correlation substitution wrote native state"
     );
 
-    // Crash after native acceptance but before facade outcome persistence:
-    // retain the frozen original and recover via native exact Event admission.
-    let crash_database = database.to_owned();
-    let correlation = update.consent_id.to_string();
-    tokio::task::spawn_blocking(move || -> Result<()> {
-        postgres::Client::connect(&crash_database, postgres::NoTls)?.execute(
-            "UPDATE mimi_consent_updates SET terminal_outcome=NULL WHERE consent_id=$1",
-            &[&correlation],
-        )?;
-        Ok(())
-    })
-    .await??;
+    // Repeat actual HTTP recovery without manufacturing a facade terminal row.
     let replay = sdk.mimi_update_consent(&recovered).await?;
     ensure!(
         replay.event_ref == accepted.event_ref && replay.updated_at == accepted.updated_at,
-        "unknown native acceptance did not recover original result"
+        "durable exact retry did not recover original result"
     );
     ensure!(
-        super::super::invite_service_fanout_live::complete_peer_current(
+        super::super::invite_service_fanout_live::read_consent_set(
             &holder.client,
-            arkret::ConsentPeer::Actor {
+            &arkret::ConsentPeer::Actor {
                 actor_id: requester.actor.clone()
             }
         )
         .await?
         .0 == revision,
-        "unknown recovery rewrote peer current"
+        "exact recovery rewrote peer current"
     );
     eprintln!(
-        "SC MIMI: durable original recovery; later other-scope edit preserved; cross-correlation Event reuse refused; terminal-loss exact native replay"
+        "SC MIMI: durable original recovery; later other-scope edit preserved; cross-correlation Event reuse refused; repeated exact native replay"
     );
+
+    let peer = arkret_models_collaboration::events_payloads::consent::ConsentPeer::Actor {
+        actor_id: requester.actor.clone(),
+    };
+    let (expected_current, mut permissions) =
+        crate::scenarios::invite_service_fanout_live::read_consent_set(&holder.client, &peer)
+            .await?;
+    permissions.retain(|p| p.consent_scope != arkret_wire::ConsentScope::VoiceCall);
+    let (cleared, _) = crate::scenarios::invite_service_fanout_live::submit_consent_set(
+        &holder.client,
+        arkret_models_collaboration::events_payloads::consent::ConsentReplacePayload {
+            peer: peer.clone(),
+            expected_current,
+            permissions,
+        },
+    )
+    .await?;
+    let after_clear = counts(database, pcr.as_str()).await?;
+    let replay_after_change = sdk.mimi_update_consent(&update).await?;
+    ensure!(
+        arkret_canonical::canonical_json_bytes(&replay_after_change)?
+            == arkret_canonical::canonical_json_bytes(&accepted)?
+            && counts(database, pcr.as_str()).await? == after_clear,
+        "an old facade decision was reexecuted after a native replacement"
+    );
+    let (_, current) =
+        crate::scenarios::invite_service_fanout_live::read_consent_set(&holder.client, &peer)
+            .await?;
+    ensure!(
+        current
+            .iter()
+            .all(|p| p.consent_scope != arkret_wire::ConsentScope::VoiceCall)
+            && !cleared
+                .permission_scopes
+                .contains(&arkret_wire::ConsentScope::VoiceCall),
+        "exact facade retry restored a removed permission"
+    );
+    crate::harness::heap_future(|| {
+        revoke_expired_voice(server, holder, &requester, database, &sdk, &request)
+    })
+    .await?;
 
     let room = arkret_wire::MimiRoomUri::new(format!("{provider}/rooms/{strand}"))
         .map_err(anyhow::Error::msg)?;
@@ -355,7 +426,283 @@ pub(super) async fn run(
         "failed key claim emitted native writes"
     );
     eprintln!(
-        "MIMI provider SDK: request correlations=2; Consent accepted/exact replay=1; wrong-key zero-write=1; room receipt/notify=2; signed no-material claim refusal=1; external-provider-live=0"
+        "MIMI provider SDK: request correlations=3; Consent accepted/exact replay=2; expired-scope removal=1; requester-self/private-current refusals=2; hosting-provider-peer/Human-private-current refusals=2; wrong-key zero-write=1; room receipt/notify=2; signed no-material claim refusal=1; external-provider-live=0"
+    );
+    Ok(())
+}
+
+/// The existing provider uses this Station's real service signer. Its valid
+/// peer signature still cannot open a Human holder's editing surface.
+async fn reject_nonholder_current_reads(
+    server: &ArkretServer,
+    holder: &Member,
+    requester: &Member,
+    database: &str,
+    present: bool,
+) -> Result<Vec<Value>> {
+    use arkret_models_collaboration::call_invitation::ConsentCurrentReadRequestBody;
+    use arkret_models_collaboration::events_payloads::consent::{
+        ConsentExpectedCurrent, ConsentPeer,
+    };
+
+    use crate::scenarios::invite_service_fanout_live::read_consent_set;
+
+    let peer = ConsentPeer::Actor {
+        actor_id: requester.actor.clone(),
+    };
+    let original = read_consent_set(&holder.client, &peer).await?;
+    ensure!(
+        matches!(&original.0, ConsentExpectedCurrent::Present { .. }) == present,
+        "privacy probe did not use the intended actual holder current"
+    );
+    let nonce = || -> Result<String> {
+        let mut bytes = [0_u8; 32];
+        getrandom::fill(&mut bytes).map_err(anyhow::Error::msg)?;
+        Ok(arkret_canonical::base64url_encode(bytes))
+    };
+    let mut request = ConsentCurrentReadRequestBody {
+        holder_account_id: holder.account.clone(),
+        peer,
+        audience_actor_id: arkret_wire::ActorId::service(holder.account.station_id.clone()),
+        nonce: nonce()?,
+    };
+    let before = private_current_footprint(database, holder).await?;
+    // Use the authenticated request builder, not SDK input validation: this
+    // must reach the receiver's exact holder comparison after session/DPoP.
+    let response = requester
+        .client
+        .post("/_arkret/self/consent/current")
+        .canonical_json(&request)?
+        .send()
+        .await?;
+    ensure!(response.status() == StatusCode::FORBIDDEN);
+    let requester_problem: Value = response.json().await?;
+    let requester_problem = private_current_refusal(
+        requester_problem,
+        StatusCode::FORBIDDEN,
+        "capability_denied",
+    )?;
+    ensure!(
+        private_current_footprint(database, holder).await? == before,
+        "requester private-current refusal changed accepted or pending business state"
+    );
+
+    request.nonce = nonce()?;
+    let (status, body) = server
+        .signed_peer_post(
+            server,
+            "/_arkret/peer/consent/current",
+            &arkret_canonical::canonical_json_bytes(&request)?,
+            server.service_id(),
+        )
+        .await?;
+    // This is the already authenticated hosting service, also the provider
+    // signer in this fixture. Human PCR forbids the peer read even for it.
+    ensure!(status == StatusCode::CONFLICT);
+    let provider_problem = private_current_refusal(
+        serde_json::from_slice(&body)?,
+        StatusCode::CONFLICT,
+        "failed_precondition",
+    )?;
+    ensure!(
+        private_current_footprint(database, holder).await? == before,
+        "hosting-provider private-current refusal changed business state"
+    );
+    // Verify a fresh proof at the independent holder anchor, then compare the
+    // actual source revision and complete permissions, never fresh proof bytes.
+    ensure!(
+        read_consent_set(&holder.client, &request.peer).await? == original,
+        "private-current probes changed the holder's complete current"
+    );
+    Ok(vec![requester_problem, provider_problem])
+}
+
+fn private_current_refusal(mut problem: Value, status: StatusCode, code: &str) -> Result<Value> {
+    ensure!(
+        problem["type"] == format!("https://arkret.org/problems/{code}")
+            && problem["status"] == status.as_u16(),
+        "private-current refusal has the wrong registered error: {problem}"
+    );
+    fn contains_private_result(value: &Value) -> bool {
+        match value {
+            Value::Object(object) => object.iter().any(|(key, value)| {
+                matches!(
+                    key.as_str(),
+                    "current"
+                        | "result"
+                        | "value"
+                        | "state"
+                        | "revision"
+                        | "permissions"
+                        | "commit_id"
+                        | "stream_position"
+                        | "effective_stream_head"
+                        | "realm_id"
+                        | "proof"
+                        | "request_digest"
+                ) || contains_private_result(value)
+            }),
+            Value::Array(values) => values.iter().any(contains_private_result),
+            _ => false,
+        }
+    }
+    ensure!(
+        !contains_private_result(&problem),
+        "private-current refusal disclosed a complete result or state: {problem}"
+    );
+    problem
+        .as_object_mut()
+        .context("private-current problem must be an object")?
+        .remove("instance");
+    Ok(problem)
+}
+
+async fn private_current_footprint(database: &str, holder: &Member) -> Result<String> {
+    let database = database.to_owned();
+    let holder_json = String::from_utf8(arkret_canonical::canonical_json_bytes(&holder.account)?)?;
+    let realm = holder
+        .client
+        .principal
+        .as_ref()
+        .context("actual holder PCR")?
+        .pcr_realm_id
+        .to_string();
+    tokio::task::spawn_blocking(move || -> Result<_> {
+        let mut db = postgres::Client::connect(&database, postgres::NoTls)?;
+        Ok(db.query_one(
+            "SELECT jsonb_build_object(\
+             'current',(SELECT jsonb_agg(to_jsonb(r) ORDER BY to_jsonb(r)::text) FROM consent_current_results r WHERE holder_account_id=$1::text::jsonb),\
+             'versions',(SELECT jsonb_agg(to_jsonb(r) ORDER BY to_jsonb(r)::text) FROM consent_result_versions r JOIN realm_commits c ON c.commit_id=r.commit_id WHERE c.realm_id=$2),\
+             'correlations',(SELECT jsonb_agg(to_jsonb(r) ORDER BY to_jsonb(r)::text) FROM mimi_consent_correlations r WHERE holder_account_id=$1),\
+             'decisions',(SELECT jsonb_agg(to_jsonb(r) ORDER BY to_jsonb(r)::text) FROM mimi_consent_decision_attempts r JOIN mimi_consent_correlations c USING(consent_id) WHERE c.holder_account_id=$1),\
+             'events',(SELECT jsonb_agg(to_jsonb(r) ORDER BY to_jsonb(r)::text) FROM canonical_events r WHERE realm_id=$2),\
+             'commits',(SELECT jsonb_agg(to_jsonb(r) ORDER BY to_jsonb(r)::text) FROM realm_commits r WHERE realm_id=$2),\
+             'authority',(SELECT to_jsonb(r) FROM realm_authorities r WHERE realm_id=$2)\
+             )::text",
+            &[&holder_json, &realm],
+        )?.get(0))
+    })
+    .await?
+}
+
+async fn revoke_expired_voice(
+    server: &ArkretServer,
+    holder: &Member,
+    requester: &Member,
+    database: &str,
+    sdk: &arkret_http_client::Client,
+    original_request: &MimiRequestConsentRequestBody,
+) -> Result<()> {
+    use arkret_models_collaboration::events_payloads::consent::{
+        ConsentPeer, ConsentPermission, ConsentReplacePayload,
+    };
+
+    use crate::scenarios::invite_service_fanout_live::{read_consent_set, submit_consent_set};
+
+    let peer = ConsentPeer::Actor {
+        actor_id: requester.actor.clone(),
+    };
+    let (expected_current, original_permissions) = read_consent_set(&holder.client, &peer).await?;
+    ensure!(
+        original_permissions.len() == 1
+            && original_permissions[0].consent_scope == arkret_wire::ConsentScope::Presence,
+        "expired-removal fixture lost its actual unrelated Presence prestate"
+    );
+    let expired: ConsentPermission = serde_json::from_value(json!({
+        "consent_scope":"voice_call","expires_at":"2020-01-01T00:00:00.000Z",
+        "constraints":[],"evidence_ref":"cotest_expired_voice","reason":""
+    }))?;
+    ensure!(expired.expires_at.is_some_and(|at| at < chrono::Utc::now()));
+    let mut with_expired = original_permissions.clone();
+    with_expired.push(expired);
+    with_expired.sort_by_key(|permission| permission.consent_scope);
+    submit_consent_set(
+        &holder.client,
+        ConsentReplacePayload {
+            peer: peer.clone(),
+            expected_current,
+            permissions: with_expired.clone(),
+        },
+    )
+    .await?;
+    let (expired_current, complete) = read_consent_set(&holder.client, &peer).await?;
+    ensure!(
+        arkret_canonical::canonical_json_bytes(&complete)?
+            == arkret_canonical::canonical_json_bytes(&with_expired)?,
+        "actual native current discarded the expired permission or optional members"
+    );
+
+    let mut request = original_request.clone();
+    request.proofs = vec![proof(server, &requester.method)?];
+    request.proofs[0].payload_digest = request.payload_digest()?;
+    request.proofs[0].jws = sign(
+        &request.unsigned_proof_binding_bytes(&request.proofs[0].unsigned())?,
+        &requester.key,
+    )?;
+    let correlation_count = correlations(database).await?;
+    let correlation = sdk.mimi_request_consent(&request).await?;
+    ensure!(correlations(database).await? == correlation_count + 1);
+    let pcr = &holder
+        .client
+        .principal
+        .as_ref()
+        .context("actual holder PCR")?
+        .pcr_realm_id;
+    let event = holder
+        .client
+        .author_event(
+            pcr.as_str(),
+            EventKind::ConsentReplace.as_str(),
+            serde_json::to_value(ConsentReplacePayload {
+                peer: peer.clone(),
+                expected_current: expired_current.clone(),
+                permissions: original_permissions.clone(),
+            })?,
+        )
+        .await?;
+    let mut revoke = MimiUpdateConsentRequestBody {
+        consent_id: correlation.consent_id,
+        decision: MimiConsentDecision::Revoke,
+        actor_id: holder.actor.clone(),
+        consent_event: EventAdmissionSubmission::new(event.clone()),
+        signature: proof(server, &holder.method)?,
+        reason: None,
+        expires_at: None,
+    };
+    revoke.signature.payload_digest = revoke.payload_digest()?;
+    revoke.signature.jws = sign(
+        &revoke.unsigned_signature_binding_bytes(&revoke.signature.unsigned())?,
+        &holder.key,
+    )?;
+    let before = counts(database, pcr.as_str()).await?;
+    let accepted = sdk.mimi_update_consent(&revoke).await?;
+    let after = counts(database, pcr.as_str()).await?;
+    ensure!(accepted.event_ref == event.event_id && accepted.consent_id == revoke.consent_id);
+    ensure!(
+        after[0] == before[0] + 1 && after[1] == before[1] + 1,
+        "expired permission removal did not accept exactly one original Event/Commit"
+    );
+    let (removed_current, remaining) = read_consent_set(&holder.client, &peer).await?;
+    ensure!(
+        removed_current != expired_current
+            && arkret_canonical::canonical_json_bytes(&remaining)?
+                == arkret_canonical::canonical_json_bytes(&original_permissions)?,
+        "MIMI expired permission removal changed an unrelated complete entry or kept the old cut"
+    );
+    let replay = sdk.mimi_update_consent(&revoke).await?;
+    ensure!(
+        arkret_canonical::canonical_json_bytes(&replay)?
+            == arkret_canonical::canonical_json_bytes(&accepted)?
+            && counts(database, pcr.as_str()).await? == after,
+        "expired permission exact retry did not preserve the original outcome without writes"
+    );
+    let (replayed_current, replayed_permissions) = read_consent_set(&holder.client, &peer).await?;
+    ensure!(
+        replayed_current == removed_current && replayed_permissions == remaining,
+        "expired permission exact retry changed the complete peer current"
+    );
+    eprintln!(
+        "[SC-C3 MIMI] expired_permission_removed=1 unrelated_complete_presence_preserved=1 accepted_original_replay_zero_writes=1"
     );
     Ok(())
 }

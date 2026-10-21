@@ -6,17 +6,16 @@ mod token_release;
 
 use anyhow::{Context, Result, ensure};
 use arkret_models_collaboration::call_invitation::*;
-use arkret_models_collaboration::consent_operations::{ConsentReplaceRequestBody, ConsentView};
-use arkret_models_collaboration::events_payloads::RealmMediaServicePayload;
+use arkret_models_collaboration::consent_operations::ConsentReplaceRequestBody;
 use arkret_models_collaboration::events_payloads::call::{CallCreatePayload, CallLifecycleState};
-use arkret_models_collaboration::events_payloads::consent::ConsentPermission;
+use arkret_models_collaboration::events_payloads::{ConsentPermission, RealmMediaServicePayload};
 use arkret_wire::{ActorId, ConsentScope, EventAdmissionSubmission, EventKind, ScopeRef};
-use cotest::scenarios::mls_lifecycle_live::{Member, MlsClientObserver, fresh_uuid_v7};
+use cotest::scenarios::mls_lifecycle_live::{Member, MlsClientObserver};
 
 use super::account_blocklist_projection::{
     ActiveEndpointSigner, native_call_endpoint, next_admitted_signal,
 };
-use super::consent_support::PermissionGrant;
+use super::consent_set::PermissionWrite;
 
 pub async fn run_legal_three_cut_calls() -> Result<()> {
     let observer = CallAdmissionObserver::default();
@@ -277,33 +276,49 @@ impl cotest::scenarios::message_mls_cross_station_live::CrossStationCallObserver
     }
 }
 
-async fn grant(holder: &Member, peer: &ActorId, scope: ConsentScope) -> Result<PermissionGrant> {
-    grant_payload(holder, peer, super::consent_support::permission(scope)).await
+async fn grant(holder: &Member, peer: &ActorId, scope: ConsentScope) -> Result<PermissionWrite> {
+    grant_payload(
+        holder,
+        peer,
+        ConsentPermission {
+            consent_scope: scope,
+            not_before: None,
+            expires_at: None,
+            constraints: None,
+            evidence_ref: None,
+            reason: None,
+        },
+    )
+    .await
 }
 async fn grant_payload(
     holder: &Member,
     peer: &ActorId,
     permission: ConsentPermission,
-) -> Result<PermissionGrant> {
-    grant_payload_record(holder, peer, permission)
-        .await
-        .map(|(view, _)| view)
+) -> Result<PermissionWrite> {
+    Ok(grant_payload_record(holder, peer, permission).await?.0)
 }
 async fn grant_payload_record(
     holder: &Member,
     peer: &ActorId,
     permission: ConsentPermission,
-) -> Result<(PermissionGrant, EventAdmissionSubmission)> {
-    super::consent_support::grant(holder, peer, vec![permission]).await
+) -> Result<(PermissionWrite, EventAdmissionSubmission)> {
+    let (view, event) = super::consent_set::grant(holder, peer, permission).await?;
+    Ok((view, EventAdmissionSubmission::new(event)))
 }
-async fn revoke(holder: &Member, grant: &PermissionGrant) -> Result<()> {
-    revoke_record(holder, grant).await.map(|_| ())
+async fn revoke(holder: &Member, previous: &PermissionWrite) -> Result<()> {
+    revoke_record(holder, previous).await.map(|_| ())
 }
 async fn revoke_record(
     holder: &Member,
-    grant: &PermissionGrant,
-) -> Result<(ConsentView, EventAdmissionSubmission)> {
-    super::consent_support::revoke(holder, grant).await
+    previous: &PermissionWrite,
+) -> Result<(PermissionWrite, EventAdmissionSubmission)> {
+    let (view, event) = super::consent_set::remove(holder, previous).await?;
+    ensure!(
+        !view.permission_scopes.contains(&previous.scope),
+        "replacement did not remove selected scope"
+    );
+    Ok((view, EventAdmissionSubmission::new(event)))
 }
 
 async fn exercise_token_invitation_mismatches(
@@ -906,7 +921,7 @@ fn run_call_cases<'a>(
                     serde_json::to_value(ConsentReplaceRequestBody {
                         consent_event: original_grant,
                     })?,
-                    &granted.view,
+                    &granted,
                 ),
                 (
                     "/_arkret/self/consent/results/replace",
@@ -922,7 +937,7 @@ fn run_call_cases<'a>(
                 )
                 .await?;
                 ensure!(
-                    replay == serde_json::to_value(original)?,
+                    replay == serde_json::to_value(&original.view)?,
                     "exact retry changed its original accepted outcome"
                 );
             }
@@ -934,10 +949,11 @@ fn run_call_cases<'a>(
                 current.effective_stream_head == revoked_head,
                 "exact retries allocated another Commit"
             );
-            ensure!(
-                matches!(&current.current,arkret_models_collaboration::consent_operations::ConsentCurrentState::Present{result} if result.selector.peer_id==*revoked.peer.actor_id() && result.revision==revoked.revision && !result.value.permissions.iter().any(|p|p.consent_scope==if video{ConsentScope::VideoCall}else{ConsentScope::VoiceCall})),
-                "exact retry rolled authoritative current back from its accepted revoke"
-            );
+            ensure!(current.expected_current() == arkret_models_collaboration::events_payloads::consent::ConsentExpectedCurrent::Present { revision: revoked.revision.clone() },
+                "exact retry rolled current back from its accepted replacement");
+            ensure!(current.current_permissions().is_some_and(|permissions| {
+                !permissions.iter().any(|p| p.consent_scope == revoked.scope)
+            }));
             eprintln!(
                 "[consent-call] video={video} original_grant_revoke_retries=2 new_commits=0 actual_older_read_rejected=1"
             );
@@ -961,7 +977,7 @@ fn run_call_cases<'a>(
             {
                 let now = chrono::Utc::now();
                 let consent_payload = ConsentPermission {
-                    consent_scope: if video {ConsentScope::VideoCall} else {ConsentScope::VoiceCall},
+                    consent_scope: if video { ConsentScope::VideoCall } else { ConsentScope::VoiceCall },
                     not_before: (window == "future").then_some(now + chrono::Duration::hours(1)),
                     expires_at: (window == "expired").then_some(now - chrono::Duration::hours(1)),
                     constraints: (window == "unknown_constraint").then(|| {
@@ -1004,78 +1020,47 @@ fn run_call_cases<'a>(
             } else {
                 ConsentScope::VoiceCall
             };
-            let invite_permission = grant(holder, &sender.actor, ConsentScope::Invite).await?;
-            let _concrete = grant(holder, &sender.actor, concrete_scope).await?;
-            revoke(holder, &invite_permission).await?;
+            let unrelated = grant(holder, &sender.actor, ConsentScope::Presence).await?;
+            let concrete = grant(holder, &sender.actor, concrete_scope).await?;
+            revoke(holder, &unrelated).await?;
             let (fresh_invitation, concrete_signal) = fresh_call_signal(
-                (sender_host, sender),
-                holder_host,
-                holder,
-                realm,
-                &material,
-                &payload,
-                13,
-            )
-            .await?;
+                (sender_host, sender), holder_host, holder, realm, &material, &payload, 13,
+            ).await?;
             let mut concrete_request = request.clone();
             concrete_request.join_context = invitation_context(&fresh_invitation);
-            token_status(holder, &concrete_request, reqwest::StatusCode::OK)
-                .await
-                .context("removing Invite erased retained call Consent")?;
-            ensure!(
-                inkson::conformance::observe_native_call_projection(&holder_host, concrete_signal)
-                    .await?
-                    == 1,
-                "removing Invite erased retained call ringing admission"
-            );
-            let unrelated=grant(holder,&sender.actor,ConsentScope::Presence).await?;
-            let remaining_call=grant(holder,&sender.actor,concrete_scope).await?;
-            revoke(holder,&unrelated).await?;
-            let (fresh_invitation, retained_call_signal) = fresh_call_signal(
-                (sender_host, sender),
-                holder_host,
-                holder,
-                realm,
-                &material,
-                &payload,
-                14,
-            )
-            .await?;
-            let mut retained_call_request = request.clone();
-            retained_call_request.join_context = invitation_context(&fresh_invitation);
-            token_status(holder, &retained_call_request, reqwest::StatusCode::OK)
-                .await
-                .context("removing Presence erased retained call Consent")?;
-            ensure!(
-                inkson::conformance::observe_native_call_projection(
-                    &holder_host,
-                    retained_call_signal.clone()
-                )
-                .await?
-                    == 1,
-                "removing Presence erased retained call ringing admission"
-            );
-            revoke(holder, &remaining_call).await?;
-            token_status(holder, &retained_call_request, reqwest::StatusCode::FORBIDDEN).await?;
+            token_status(holder, &concrete_request, reqwest::StatusCode::OK).await
+                .context("unrelated scope replacement erased concrete permission")?;
+            ensure!(inkson::conformance::observe_native_call_projection(&holder_host, concrete_signal).await? == 1);
+            let replacement = grant(holder, &sender.actor, concrete_scope).await?;
+            ensure!(replacement.revision != concrete.revision);
+            let (fresh_invitation, replacement_signal) = fresh_call_signal(
+                (sender_host, sender), holder_host, holder, realm, &material, &payload, 14,
+            ).await?;
+            let mut replacement_request = request.clone();
+            replacement_request.join_context = invitation_context(&fresh_invitation);
+            token_status(holder, &replacement_request, reqwest::StatusCode::OK).await?;
+            ensure!(inkson::conformance::observe_native_call_projection(&holder_host, replacement_signal.clone()).await? == 1);
+            revoke(holder, &replacement).await?;
+            token_status(holder, &replacement_request, reqwest::StatusCode::FORBIDDEN).await?;
             let garth::signal::SignalReceiveOutcome::Accepted {
                 call_invitation: Some(product),
                 ..
-            } = &retained_call_signal
+            } = &replacement_signal
             else {
-                anyhow::bail!("fresh retained call control omitted its product verdict");
+                anyhow::bail!("fresh replacement control omitted its product verdict");
             };
             ensure!(
                 product.outcome.expires_at > chrono::Utc::now(),
                 "revocation control crossed its original product window"
             );
             ensure!(
-                inkson::conformance::observe_native_call_projection(&holder_host, retained_call_signal)
+                inkson::conformance::observe_native_call_projection(&holder_host, replacement_signal)
                     .await?
                     == 0,
-                "removed call scope remained eligible through an older product outcome"
+                "removed concrete scope remained eligible through an older product outcome"
             );
             eprintln!(
-                "[consent-call] video={video} ineligible_windows=3 unrelated_scope_removals=2 all_revoked_denied=1"
+                "[consent-call] video={video} ineligible_windows=3 single_scope_replacements=2 all_revoked_denied=1"
             );
             Ok::<(), anyhow::Error>(())
             }).await?;
@@ -1444,15 +1429,8 @@ async fn exercise_decrypted_relation_mismatches(
     material: &inkson::signal::SignalKeyMaterial,
     original: &inkson::signal::SignalPayload,
 ) -> Result<()> {
-    let (granted, _) = super::consent_support::grant(
-        holder,
-        &sender.actor,
-        vec![
-            super::consent_support::permission(ConsentScope::VoiceCall),
-            super::consent_support::permission(ConsentScope::VideoCall),
-        ],
-    )
-    .await?;
+    let granted = grant(holder, &sender.actor, ConsentScope::VoiceCall).await?;
+    let video_granted = grant(holder, &sender.actor, ConsentScope::VideoCall).await?;
     for (sequence, mismatch) in [(201, "media"), (202, "call"), (203, "kind")] {
         producer
             .catch_up_selected_realm_until_complete(realm)
@@ -1545,6 +1523,7 @@ async fn exercise_decrypted_relation_mismatches(
         eprintln!("[consent-call] mismatch={mismatch} actual_decrypt_reject=1");
     }
     revoke(holder, &granted).await?;
+    revoke(holder, &video_granted).await?;
     eprintln!("[consent-call] real_decrypted_media_call_kind_mismatches=3 accepted_products=0");
     Ok(())
 }

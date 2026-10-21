@@ -44,7 +44,12 @@ import {
   accountSubscribeFramesApi,
   accountSubscribeRealmFramesApi,
 } from "./coland-api/account-stream";
-import { activateRealmMlsApi } from "./coland-api/mls";
+import {
+  activateRealmMlsApi,
+  encryptMlsMessageContent,
+  readScopeMlsGroupCurrentApi,
+  scopeMlsMemberGroupApi,
+} from "./coland-api/mls";
 import {
   authHeaders,
   expectJsonOk,
@@ -507,12 +512,21 @@ function eventActorId(
     requireDidCoreId(actor.service_id);
     return actor;
   }
-  throw new Error("Event envelope requires a complete account or service actor_id");
+  if (actor?.kind === "realm") {
+    requireDidCoreId(actor.realm_actor_id.principal_id);
+    if (!actor.realm_actor_id.realm_id) throw new Error("Realm Actor omits realm_id");
+    return actor;
+  }
+  throw new Error("Event envelope requires a complete actor_id");
 }
 
 export function eventPrincipalId(event: Record<string, unknown>): string {
   const actor = eventActorId(event);
-  return actor.kind === "account" ? actor.account_id.principal_id : actor.kind === "service" ? actor.service_id : actor.realm_actor_id.principal_id;
+  switch (actor.kind) {
+    case "account": return actor.account_id.principal_id;
+    case "realm": return actor.realm_actor_id.principal_id;
+    case "service": return actor.service_id;
+  }
 }
 function eventSigningPrincipalId(event: Record<string, unknown>): string {
   return eventPrincipalId({ actor_id: event.executed_by ?? event.actor_id });
@@ -1393,16 +1407,23 @@ export async function listInvitesApi(
   return body.invites ?? [];
 }
 
-/** Author locally and replay the exact signed submission after acceptance. */
-export async function sendFrozenMessageApi(
-  request: APIRequestContext, token: string, realmId: string, body: string,
+/** Freeze one locally authored Event and replay only its original signed bytes. */
+export async function sendLocalAuthoredMessageApi(
+  request: APIRequestContext,
+  token: string,
+  realmId: string,
+  body: string,
   opts: { server?: ColandKey } = {},
 ) {
   const principal = await currentActorIdApi(request, token, opts);
   const strandId = await resolveDefaultStrandId(request, token, realmId, opts);
-  const event = signedEventEnvelope({ actorId: principal, server: opts.server,
-    realmId, kind: "ak.message.create",
-    payload: { strand_id: strandId, track_name: "discussion", content: { kind: "ak.content.text", body } },
+  const content = { kind: "ak.content.text", body };
+  const payload = await localMessagePayload(request, token, realmId, strandId, content, opts);
+  // The MLS private state advanced exactly once above; transport retries keep
+  // this Event, producer proof and ciphertext rather than encrypting again.
+  const event = signedEventEnvelope({
+    actorId: principal, server: opts.server, realmId,
+    kind: "ak.message.create", payload,
   });
   const url = `${colandBaseUrl(opts.server)}/_arkret/self/events`;
   const submission = canonicalJson({ event });
@@ -1441,6 +1462,23 @@ export async function sendFrozenMessageApi(
   };
 }
 
+async function localMessagePayload(
+  request: APIRequestContext, token: string, realmId: string, strandId: string,
+  content: Record<string, unknown>, opts: { server?: ColandKey; encrypted?: boolean },
+): Promise<Record<string, unknown>> {
+  const scopeRef = { kind: "realm", realm_id: realmId };
+  const current = await readScopeMlsGroupCurrentApi(request, token, realmId, scopeRef, opts.server);
+  const payload: Record<string, unknown> = { strand_id: strandId, track_name: "discussion" };
+  if (current) {
+    const group = await scopeMlsMemberGroupApi(request, token, realmId, scopeRef, undefined, opts.server);
+    payload.encrypted_content = encryptMlsMessageContent(group, content);
+  } else {
+    if (opts.encrypted) throw new Error("Encrypted Message requires accepted MLS genesis and local private state");
+    payload.content = content;
+  }
+  return payload;
+}
+
 export async function sendMessageApi(
   request: APIRequestContext,
   token: string,
@@ -1470,33 +1508,18 @@ export async function sendMessageApi(
   const strandId = await resolveDefaultStrandId(request, token, realmId, {
     server: opts.server,
   });
+  const content = {
+    kind: "ak.content.text", body,
+    ...(opts.mentions ? {
+      mentions: opts.mentions.map((mention) => typeof mention === "string" ? {
+        kind: "mention", subject_account_id: accountActorId(mention, opts.server).account_id,
+      } : mention),
+    } : {}),
+  };
+  const payload = await localMessagePayload(request, token, realmId, strandId, content, opts);
   const envelope = signedEventEnvelope({
-    actorId,
-    server: opts.server,
-    realmId,
-    kind: "ak.message.create",
-    createdAt: opts.createdAt,
-    payload: {
-      strand_id: strandId,
-      track_name: "discussion",
-      content: {
-        kind: "ak.content.text",
-        body,
-        ...(opts.mentions
-          ? {
-              mentions: opts.mentions.map((mention) =>
-                typeof mention === "string"
-                  ? {
-                      kind: "mention",
-                      subject_account_id: accountActorId(mention, opts.server)
-                        .account_id,
-                    }
-                  : mention,
-              ),
-            }
-          : {}),
-      },
-    },
+    actorId, server: opts.server, realmId, kind: "ak.message.create",
+    createdAt: opts.createdAt, payload,
   });
   const submission = await submitSignedEventApi(request, token, envelope, {
     server: opts.server,

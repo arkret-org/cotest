@@ -64,7 +64,7 @@ fn authored(
     .expect_verifiable())
 }
 
-async fn submit(controller: &TestActorClient, event: &Event) -> Result<()> {
+async fn submit(controller: &TestActorClient, event: &Event) -> Result<arkret_wire::RealmCommit> {
     let outcome: AuthoritySubmitOutcome = serde_json::from_value(
         expect_json(
             controller
@@ -77,10 +77,13 @@ async fn submit(controller: &TestActorClient, event: &Event) -> Result<()> {
         )
         .await?,
     )?;
-    ensure!(
-        matches!(outcome, AuthoritySubmitOutcome::Accepted { status: AuthorityCommitStatus::Committed, commit } if commit.event_ref == event.event_id)
-    );
-    Ok(())
+    match outcome {
+        AuthoritySubmitOutcome::Accepted {
+            status: AuthorityCommitStatus::Committed,
+            commit,
+        } if commit.event_ref == event.event_id => Ok(commit),
+        other => bail!("submitted Event did not commit: {other:?}"),
+    }
 }
 
 async fn blob(controller: &TestActorClient, bytes: &[u8]) -> Result<arkret_wire::BlobRef> {
@@ -96,6 +99,47 @@ async fn blob(controller: &TestActorClient, bytes: &[u8]) -> Result<arkret_wire:
             .as_str()
             .context("unbound public MLS Blob")?,
     )?)
+}
+
+async fn capture_claim_diagnostics(
+    station: &ArkretServer,
+    request: &KeyPackagesClaimRequestBody,
+) -> Result<()> {
+    let url = station
+        .owned_database_url()
+        .context("owned Direct claim database")?
+        .to_owned();
+    let state = tokio::task::spawn_blocking(move || -> Result<serde_json::Value> {
+        let mut connection = postgres::Client::connect(&url, postgres::NoTls)?;
+        let mut transaction = connection
+            .build_transaction()
+            .isolation_level(postgres::IsolationLevel::RepeatableRead)
+            .start()?;
+        transaction.batch_execute("SET TRANSACTION READ ONLY")?;
+        let state = transaction.query_one(
+            "SELECT jsonb_build_object(\
+                'packages',(SELECT COALESCE(jsonb_agg(to_jsonb(k)),'[]'::jsonb) FROM mls_key_packages k),\
+                'claims',(SELECT COALESCE(jsonb_agg(to_jsonb(c)),'[]'::jsonb) FROM peer_keypackage_claims c),\
+                'agent_status',(SELECT COALESCE(jsonb_agg(to_jsonb(s)),'[]'::jsonb) FROM agent_status_current_results s),\
+                'agent_keys',(SELECT COALESCE(jsonb_agg(to_jsonb(k)),'[]'::jsonb) FROM agent_key_current_results k),\
+                'accounts',(SELECT COALESCE(jsonb_agg(jsonb_build_object('pk',a.pk,'principal_id',a.principal_id,'station_id',a.station_id)),'[]'::jsonb) FROM accounts a))",
+            &[],
+        )?.get(0);
+        transaction.rollback()?;
+        Ok(state)
+    })
+    .await??;
+    let directory = std::env::var_os("COTEST_SERVICE_LOG_DIR")
+        .or_else(|| std::env::var_os("COTEST_ARTIFACT_DIR"))
+        .context("owned Direct claim diagnostic directory")?;
+    std::fs::write(
+        std::path::PathBuf::from(directory).join(format!(
+            "direct-claim-private-diagnostic-{}.json",
+            request.claim_request_id
+        )),
+        serde_json::to_vec_pretty(&json!({"request":request,"state":state}))?,
+    )?;
+    Ok(())
 }
 
 pub(super) async fn join(
@@ -221,6 +265,13 @@ pub(super) async fn join(
         StatusCode::OK,
     )
     .await;
+    if claim_result.is_err() {
+        let captured = capture_claim_diagnostics(station, &request).await;
+        eprintln!(
+            "[agent-direct-claim-diagnostic] read_only_snapshot_saved={} raw_local_only=1",
+            captured.is_ok()
+        );
+    }
     let claims: arkret_models_crypto::KeyPackagesClaimOutcome =
         serde_json::from_value(claim_result?)?;
     let [claim] = claims.claims.as_slice() else {
@@ -465,7 +516,7 @@ pub(super) async fn join(
         Utc::now(),
         Some(&founded.create_ref),
     )?;
-    submit(controller_client, &controller_bound).await?;
+    let binding_commit = submit(controller_client, &controller_bound).await?;
     let mut agent_bound = agent_session.author_scoped_event(
         arkret_wire::EventKind::DirectConversationBound,
         scope,
@@ -485,20 +536,40 @@ pub(super) async fn join(
         &mut agent_bound,
         agent_session.runtime_key.to_bytes(),
     )?;
-    let rejected = expect_json(
+    let loser = expect_json(
         runtime
             .post("/_arkret/self/events")
-            .header("Content-Type", "application/json")
-            .body(arkret_canonical::canonical_json_bytes(
-                &arkret_wire::EventAdmissionSubmission::new(agent_bound),
-            )?),
+            .json(&arkret_wire::EventAdmissionSubmission::new(
+                agent_bound.clone(),
+            )),
         StatusCode::CONFLICT,
     )
     .await?;
     ensure!(
-        rejected.get("type").and_then(serde_json::Value::as_str)
-            == Some("https://arkret.org/problems/duplicate_conflict"),
-        "a second Agent binding Event replaced the original"
+        loser["type"] == "https://arkret.org/problems/duplicate_conflict",
+        "equivalent Agent binding was accepted: {loser:?}"
+    );
+    ensure!(
+        runtime
+            .sdk()
+            .committed_event_get(&agent_bound.event_id)
+            .await
+            .is_err(),
+        "losing binding Event left a committed write"
+    );
+    let retry: AuthoritySubmitOutcome = serde_json::from_value(
+        expect_json(
+            controller_client.post("/_arkret/self/events").json(
+                &arkret_wire::EventAdmissionSubmission::new(controller_bound.clone()),
+            ),
+            StatusCode::OK,
+        )
+        .await?,
+    )?;
+    ensure!(
+        matches!(&retry, AuthoritySubmitOutcome::Accepted { status: AuthorityCommitStatus::Duplicate, commit }
+        if commit == &binding_commit && commit.event_ref == controller_bound.event_id),
+        "exact controller binding retry did not replay its original Commit: {retry:?}"
     );
     let result = controller_client
         .sdk()
@@ -520,13 +591,13 @@ pub(super) async fn join(
     ensure!(group_state_ref == commit.event_id);
     let binding = coordinates
         .binding_event_ref
-        .context("found Direct original binding")?;
+        .context("found Direct accepted endorsement")?;
     ensure!(
         binding == controller_bound.event_id,
-        "resolver changed the original binding ref"
+        "resolver substituted the losing bound Event"
     );
     println!(
-        "[agent-direct-mls] actual_genesis_add_welcome=1 verified_complete_roster=1 durable_private_reopen=1 actual_claim_consume=1 unique_signed_binding_event=1 resolver_found=1"
+        "[agent-direct-mls] actual_genesis_add_welcome=1 verified_complete_roster=1 durable_private_reopen=1 actual_claim_consume=1 single_binding_ref=1 equivalent_loser_zero_write=1 exact_replay=1 resolver_found=1"
     );
     Ok(Joined {
         realm,

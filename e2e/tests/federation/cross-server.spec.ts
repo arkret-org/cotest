@@ -44,7 +44,7 @@ import {
   readCommitStreamHeadApi,
   scanPeerRealmStreamRowsApi,
   sendMessageApi,
-  sendFrozenMessageApi,
+  sendLocalAuthoredMessageApi,
   signedEventEnvelope,
   submitSignedEventApi,
   typedId,
@@ -865,7 +865,7 @@ test.describe("cross-server federation", () => {
   });
 });
 
-test.describe("prepared authoring and join", () => {
+test.describe("local authoring and join", () => {
   test.describe.configure({ mode: "default" });
   for (const largeHistory of [false, true]) {
     test(`two-way timeline messaging${largeHistory ? " after paged governance history" : ""}: alice@server1 and bob@server2 exchange messages and both servers converge on identical effective state`, async ({
@@ -875,7 +875,7 @@ test.describe("prepared authoring and join", () => {
       const stamp = Date.now();
       const aliceSession = await createDpopUserSession(request, `s2-msg-alice-${stamp}`, { server: "server1" });
       const bobSession = await createDpopUserSession(request, `s2-msg-bob-${stamp}`, { server: "server2" });
-      if (!aliceSession || !bobSession) throw new Error("prepared authoring requires real Coauth sessions");
+      if (!aliceSession || !bobSession) throw new Error("local authoring requires real Coauth sessions");
       const charlieSession = largeHistory
         ? await createDpopUserSession(request, `s2-history-charlie-${stamp}`, { server: "server1" })
         : undefined;
@@ -911,8 +911,8 @@ test.describe("prepared authoring and join", () => {
         { server: "server1" },
       );
 
-      await test.step("owner prepares, signs and exact-replays a message", async () => {
-        await sendFrozenMessageApi(request, aliceToken, realmId, `owner ready ${stamp}`, {
+      await test.step("owner locally signs and exact-replays a message", async () => {
+        await sendLocalAuthoredMessageApi(request, aliceToken, realmId, `owner ready ${stamp}`, {
           server: "server1",
         });
       });
@@ -1050,13 +1050,13 @@ test.describe("prepared authoring and join", () => {
       });
 
       const aliceBody = `alice from server1 ${stamp}`;
-      await sendFrozenMessageApi(request, aliceToken, realmId, aliceBody, {
+      await sendLocalAuthoredMessageApi(request, aliceToken, realmId, aliceBody, {
         server: "server1",
       });
       await waitForEventBody(request, bobToken, realmId, aliceBody, "server2");
 
       const bobBody = `bob from server2 ${stamp}`;
-      await sendFrozenMessageApi(request, bobToken, realmId, bobBody, {
+      await sendLocalAuthoredMessageApi(request, bobToken, realmId, bobBody, {
         server: "server2",
       });
       await waitForEventBody(request, aliceToken, realmId, bobBody, "server1");

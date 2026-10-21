@@ -1,4 +1,4 @@
-//! Real independent grants and requester equivalence on the private writer.
+//! Exact-peer permission replacement and requester equivalence on the private writer.
 
 use super::consent_delivery_race::{delivery_cell, holder_independent_invite};
 use super::*;
@@ -57,20 +57,21 @@ pub async fn run_current_invite_matrix() -> Result<()> {
     .await?
     .parse()?;
     super::verify_consent_delivery_race(&alice, &bob, &realm, &path).await?;
-    let initial = super::grant_invite_consent(&bob.client, &alice.client).await?;
-    let with_voice =
+    let voice =
         super::grant_scoped_consent(&bob.client, &alice.client, ConsentScope::VoiceCall).await?;
-    let evidence = IntroductionEvidence::ConsentGrant {
-        consent_grant_ref: initial.1.event_id.clone(),
-    };
-    positive(&alice, &bob, &realm, evidence.clone()).await?;
-    let removed = super::revoke_invite_consent(&bob.client, with_voice.0).await?;
-    ensure!(
-        removed.permission_scopes == vec![ConsentScope::VoiceCall],
-        "invite removal lost another stored scope"
-    );
-    negative(&alice, &bob, &realm, evidence).await?;
+    negative(
+        &alice,
+        &bob,
+        &realm,
+        IntroductionEvidence::ConsentGrant {
+            consent_grant_ref: voice.1.event_id,
+        },
+    )
+    .await?;
     let concrete = super::grant_invite_consent(&bob.client, &alice.client).await?;
+    // The cited accepted Invite entry remains historical after another scope's
+    // replacement. Admission must recheck today's complete exact-peer set.
+    super::grant_scoped_consent(&bob.client, &alice.client, ConsentScope::VoiceCall).await?;
     positive(
         &alice,
         &bob,
@@ -80,7 +81,11 @@ pub async fn run_current_invite_matrix() -> Result<()> {
         },
     )
     .await?;
-    super::revoke_invite_consent(&bob.client, concrete.0).await?;
+    let remaining = super::revoke_invite_consent(&bob.client, concrete.0).await?;
+    ensure!(
+        remaining.permission_scopes == vec![ConsentScope::VoiceCall],
+        "invite removal changed the other concrete permission"
+    );
     negative(
         &alice,
         &bob,
@@ -90,6 +95,9 @@ pub async fn run_current_invite_matrix() -> Result<()> {
         },
     )
     .await?;
+    eprintln!(
+        "[consent-invite] voice_cannot_authorize_invite=1 concrete_permitted=1 removed_invite_rejected=1 unrelated_permission_preserved=1"
+    );
 
     let (revoked, grant_event) = super::grant_invite_consent(&bob.client, &alice.client).await?;
     super::revoke_invite_consent(&bob.client, revoked).await?;

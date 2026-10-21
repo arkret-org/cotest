@@ -15,21 +15,23 @@
 //! * Provisional phase: only the founder sends under the bootstrap source; Bob's attempt is
 //!   refused. Alice claims Bob's KeyPackage and Adds him with a Welcome, still under the bootstrap
 //!   source.
-//! * Bob joins from the Welcome and acknowledges it; before he consumes his claim an endorsement is
-//!   still refused. Once consumed, the completion phase admits one immutable participant binding:
-//!   one naming another group state is `direct_conversation_binding_invalid`, the founder's
-//!   provisional Message is refused, and Bob's exact endorsement and Alice's compatible one are
-//!   both accepted.
-//! * Found: both participants send MLS ciphertext under the participant source citing an
-//!   endorsement and each decrypts the other's committed Message. The bootstrap source no longer
+//! * Bob joins from the Welcome and acknowledges it; before he consumes his claim a binding Event
+//!   is still refused. Once consumed, the completion phase admits the immutable binding: one naming
+//!   another group state is `direct_conversation_binding_invalid`, the founder's provisional
+//!   Message is refused, and Bob's exact confirmation wins and Alice's compatible new Event is
+//!   rejected.
+//! * Found: both participants send MLS ciphertext under the participant source citing the unique
+//!   binding Event and each decrypts the other's committed Message. The bootstrap source no longer
 //!   carries a Message, an invite of a third party is
 //!   `direct_conversation_third_party_member_forbidden` although it is also an invite, an invite of
 //!   the peer is `direct_conversation_invite_forbidden`, banning the peer relies on the technical
 //!   root and is `direct_conversation_root_mask_violation`, and a destroy by the root is
 //!   `direct_conversation_terminal_forbidden` although it also relies on the root.
 //!
-//! Every refusal is the closed `{status="rejected",reason_code}` outcome and
-//! leaves no committed Event.
+//! Ordinary profile refusals use the closed `{status="rejected",reason_code}`
+//! outcome. Governance Station changes fail earlier with HTTP 409
+//! `failed_precondition`, including while the peer's claim is pending and its
+//! Station is offline. Neither refusal leaves a committed Event.
 
 use std::time::{Duration, Instant};
 
@@ -233,6 +235,274 @@ async fn expect_rejected(member: &Member, event: &Event, reason: &str) -> Result
             .is_err(),
         "a rejected {} left a committed Event",
         event.kind.as_str()
+    );
+    Ok(())
+}
+
+/// Read only the rows whose invariance distinguishes a refused migration from
+/// an accepted transition. No fixture state is manufactured in PostgreSQL.
+async fn fixed_station_footprint(
+    database: &str,
+    realm: &RealmId,
+    claim_request: &arkret_models_crypto::KeyPackagesClaimRequestBody,
+    event_id: &EventId,
+) -> Result<Value> {
+    let database = database.to_owned();
+    let realm = realm.to_string();
+    let claim_request_id = claim_request.claim_request_id.to_string();
+    let source_id = claim_request.service_binding.source_id.to_string();
+    let destination_id = claim_request.service_binding.destination_id.to_string();
+    let event_id = event_id.to_string();
+    tokio::task::spawn_blocking(move || -> Result<_> {
+        let mut db = postgres::Client::connect(&database, postgres::NoTls)?;
+        Ok(db.query_one(
+            "SELECT jsonb_build_object(\
+             'authority',(SELECT to_jsonb(a) FROM realm_authorities a WHERE realm_id=$1),\
+             'events',(SELECT count(*) FROM canonical_events WHERE realm_id=$1),\
+             'commits',(SELECT count(*) FROM realm_commits WHERE realm_id=$1),\
+             'binding',(SELECT to_jsonb(b) FROM direct_conversation_binding_current_results b WHERE realm_id=$1),\
+             'submission_event',(SELECT to_jsonb(e) FROM canonical_events e WHERE e.envelope->>'event_id'=$3),\
+             'forward_intents',(SELECT COALESCE(jsonb_agg(jsonb_build_object(\
+                 'event_pk',f.event_pk,'status',f.status,'reason_code',f.reason_code,\
+                 'original_submission_json',f.original_submission_json,'peer_request_json',f.peer_request_json,\
+                 'accepted_commit_json',f.accepted_commit_json,'circle_leave_parent_revision',f.circle_leave_parent_revision)\
+                 ORDER BY f.event_pk),'[]'::jsonb) FROM authority_forward_attempts f \
+                 JOIN canonical_events e ON e.pk=f.event_pk WHERE e.envelope->>'event_id'=$3),\
+             'claims',(SELECT COALESCE(jsonb_agg(to_jsonb(c) ORDER BY source_id,claim_request_id),'[]'::jsonb) FROM peer_keypackage_claims c WHERE source_id=$4 AND claim_request_id=$2),\
+             'claim_sources',(SELECT COALESCE(jsonb_agg(to_jsonb(s) ORDER BY source_id,claim_request_id),'[]'::jsonb) FROM keypackage_claim_sources s WHERE source_id=$4 AND claim_request_id=$2),\
+             'realm_claim_sources',(SELECT COALESCE(jsonb_agg(to_jsonb(s) ORDER BY source_id,claim_request_id),'[]'::jsonb) FROM realm_keypackage_claim_sources s WHERE source_id=$4 AND claim_request_id=$2),\
+             'claim_attempts',(SELECT COALESCE(jsonb_agg(to_jsonb(a) ORDER BY source_id,claim_request_id),'[]'::jsonb) FROM keypackage_claim_attempts a WHERE source_id=$4 AND claim_request_id=$2),\
+             'welcome_bindings',(SELECT COALESCE(jsonb_agg(to_jsonb(w) ORDER BY claim_id),'[]'::jsonb) FROM keypackage_claim_welcome_bindings w WHERE source_id=$4 AND claim_request_id=$2),\
+             'claim_relay',(SELECT COALESCE(jsonb_agg(jsonb_build_object(\
+                 'id',o.id,'peer_id',o.peer_id,'endpoint',o.endpoint,'idempotency_key',o.idempotency_key,'payload',o.payload_json::jsonb) ORDER BY o.id),'[]'::jsonb)\
+                 FROM federation_outbox o WHERE peer_id=$5 AND endpoint='/_arkret/peer/keys/keypackages/claim' AND idempotency_key=$2),\
+             'packages',(SELECT COALESCE(jsonb_agg(to_jsonb(k) ORDER BY id),'[]'::jsonb) FROM mls_key_packages k WHERE id IN (SELECT keypackage_id FROM peer_keypackage_claims WHERE source_id=$4 AND claim_request_id=$2)))",
+            &[&realm, &claim_request_id, &event_id, &source_id, &destination_id],
+        )?.get(0))
+    }).await?
+}
+
+async fn fixed_station_bundle(
+    alice: &Member,
+    realm: &RealmId,
+) -> Result<arkret_wire::RealmAuthorityBundle> {
+    let mut entropy = [0_u8; 32];
+    getrandom::fill(&mut entropy).map_err(|error| anyhow::anyhow!("authority nonce: {error}"))?;
+    let request = arkret_wire::AuthorityBundleRequest {
+        realm_id: realm.clone(),
+        nonce: arkret_wire::Base64UrlString::new(arkret_canonical::base64url_encode(entropy))
+            .map_err(anyhow::Error::msg)?,
+    };
+    let http = alice.client.sdk();
+    let bundle = http.realm_authority_bundle(&request).await?;
+    let keys = garth::fetch_historical_station_key_directory(&http, &bundle, None, None).await?;
+    arkret_identity::verify_realm_authority_bundle(
+        &bundle,
+        &arkret_identity::RealmAuthorityFreshness::new(chrono::Utc::now(), request.nonce),
+        &keys,
+    )?;
+    ensure!(
+        bundle.current_generation == 0
+            && bundle.current_service_id == alice.account.station_id
+            && bundle.authority_transitions.is_empty()
+            && bundle.current_assertion.last_handoff_ref.is_none(),
+        "Direct Conversation did not retain its founding governance Station at generation zero"
+    );
+    Ok(bundle)
+}
+
+/// A root controller or peer cannot move a Direct Conversation to the peer's
+/// real Station. Neither the pending claim nor a remote forwarding intent may
+/// be written before the immutable-Genesis gate decides the write.
+async fn reject_direct_station_change(
+    alice: &Member,
+    bob: &Member,
+    submitter: &Member,
+    realm: &RealmId,
+    database: &str,
+    peer_database: Option<&str>,
+    claim_request: &arkret_models_crypto::KeyPackagesClaimRequestBody,
+    binding: Option<&Event>,
+) -> Result<()> {
+    ensure!(alice.account.station_id != bob.account.station_id);
+    let bundle = fixed_station_bundle(alice, realm).await?;
+    let binding_row =
+        |snapshot: &arkret_wire::RealmStateSnapshot| -> Result<Value> {
+            let row = snapshot.current_state_entries.iter().find(|row| matches!(row,
+            arkret_wire::TypedCurrentRow::Value {
+                selector: arkret_wire::CurrentSelector::DirectConversationBinding { .. }, ..
+            }
+        )).context("Direct Conversation binding current missing")?;
+            Ok(serde_json::to_value(row)?)
+        };
+    let current_before = if let Some(binding) = binding {
+        let snapshot =
+            crate::scenarios::strand_watch_live::signed_snapshot(&alice.client, realm).await?;
+        let current = binding_row(&snapshot)?;
+        ensure!(current["value"]["binding_event_ref"] == binding.event_id.as_str());
+        Some(current)
+    } else {
+        None
+    };
+    let payload =
+        arkret_models_collaboration::events_payloads::RealmGovernanceStationChangePayload {
+            expected_governance_generation: 0,
+            expected_realm_stream_commit_id: bundle.realm_stream_head.commit_id.clone(),
+            new_governance_station_id: bob.account.station_id.clone(),
+        };
+    let change = authored(
+        submitter,
+        arkret_wire::EventKind::RealmGovernanceStationChange.as_str(),
+        ScopeRef::Realm {
+            realm_id: realm.clone(),
+        },
+        serde_json::to_value(payload)?,
+        Vec::new(),
+        Cites::Nothing,
+    )?;
+    let before = fixed_station_footprint(database, realm, claim_request, &change.event_id).await?;
+    let peer_before = if let Some(peer_database) = peer_database {
+        Some(fixed_station_footprint(peer_database, realm, claim_request, &change.event_id).await?)
+    } else {
+        None
+    };
+    for footprint in std::iter::once(&before).chain(peer_before.iter()) {
+        ensure!(
+            footprint["submission_event"].is_null()
+                && footprint["forward_intents"]
+                    .as_array()
+                    .is_some_and(|rows| rows.is_empty()),
+            "fresh governance change already has an Event or forwarding intent"
+        );
+    }
+    if binding.is_none() {
+        ensure!(
+            before["binding"].is_null(),
+            "pending Direct already has a binding"
+        );
+        ensure!(
+            matches!(
+                &claim_request.requester_authorization,
+                arkret_models_crypto::PeerKeyPackageRequesterAuthorization::Device { .. }
+            ) && claim_request.requester_account_id.as_ref() == Some(&alice.account)
+                && claim_request.target_account_id.as_ref() == Some(&bob.account)
+                && claim_request.requester_actor_id.is_none()
+                && claim_request.target_actor_id.is_none()
+                && &claim_request.intended_realm_id == realm
+                && claim_request.service_binding.source_id == alice.account.station_id
+                && claim_request.service_binding.destination_id == bob.account.station_id,
+            "pending Direct claim is not the actual Account Device request"
+        );
+        let peer = peer_before
+            .as_ref()
+            .context("pending Direct needs its destination ledger")?;
+        let peer_request =
+            arkret_models_crypto::PeerKeyPackagesClaimRequestBody::from(claim_request);
+        let original = serde_json::to_value(&peer_request)?;
+        let digest = arkret_canonical::canonical_sha256(&peer_request)?;
+        // Account targets retain their signed original at the destination;
+        // realm_keypackage_claim_sources belongs to RealmDevice requesters.
+        let sources = peer["claim_sources"]
+            .as_array()
+            .context("peer claim sources missing")?;
+        ensure!(
+            sources.len() == 1,
+            "peer must retain exactly the actual claim source"
+        );
+        ensure!(
+            sources[0]["request_body"] == original
+                && sources[0]["request_digest"] == digest
+                && sources[0]["governing_realm_id"].is_null(),
+            "peer Account claim source differs from the signed original"
+        );
+        let claims = peer["claims"]
+            .as_array()
+            .context("peer claim ledger missing")?;
+        let mirrors = before["claims"]
+            .as_array()
+            .context("source claim mirror missing")?;
+        ensure!(
+            claims.len() == 1 && mirrors.len() == 1,
+            "pending Direct needs the exact destination claim and source mirror"
+        );
+        for row in [&claims[0], &mirrors[0]] {
+            ensure!(
+                row["request_digest"] == digest
+                    && row["state"] == "claimed"
+                    && row["key_package_use"] == "single_use"
+                    && row["consume_receipt"].is_null()
+                    && row["consume_request_digest"].is_null()
+                    && row["terminal_receipt"].is_null()
+                    && row["claim_expires_at_unix_ms"]
+                        == claim_request.expires_at.timestamp_millis(),
+                "pending Direct does not retain the actual unconsumed claim"
+            );
+        }
+        ensure!(
+            claims[0]["outcome"] == mirrors[0]["outcome"]
+                && !claims[0]["keypackage_id"].is_null()
+                && mirrors[0]["keypackage_id"].is_null(),
+            "source mirror differs from the destination's real claim outcome"
+        );
+        let packages = peer["packages"]
+            .as_array()
+            .context("claimed package missing")?;
+        ensure!(
+            packages.len() == 1
+                && packages[0]["id"] == claims[0]["keypackage_id"]
+                && packages[0]["owner_actor_id"] == serde_json::to_value(&bob.actor)?
+                && packages[0]["device_id"] == bob.device.as_str()
+                && packages[0]["claimed_by_mls_group_id"] == claim_request.mls_group_id.as_str()
+                && packages[0]["consumed_at"].is_null(),
+            "peer KeyPackage is not claimed for the actual pending group"
+        );
+        let relays = before["claim_relay"]
+            .as_array()
+            .context("source claim relay missing")?;
+        ensure!(
+            relays.len() == 1 && relays[0]["payload"] == serde_json::to_value(claim_request)?,
+            "source relay does not retain the original signed Account claim"
+        );
+    }
+    let (status, problem) = post_json(
+        &submitter.client,
+        &EventAdmissionSubmission::new(change.clone()),
+    )
+    .await?;
+    ensure!(
+        status == StatusCode::CONFLICT
+            && problem["type"] == "https://arkret.org/problems/failed_precondition",
+        "Direct governance change must fail at the immutable-Genesis gate: {status} {problem}"
+    );
+    ensure!(
+        fixed_station_footprint(database, realm, claim_request, &change.event_id).await? == before,
+        "refused Direct Station change altered authority, Event/Commit count, binding, claims or forwarding intent"
+    );
+    if let (Some(peer_database), Some(peer_before)) = (peer_database, peer_before) {
+        ensure!(
+            fixed_station_footprint(peer_database, realm, claim_request, &change.event_id).await?
+                == peer_before,
+            "refused Direct Station change altered the peer's claim, authority or forwarding intent"
+        );
+    }
+    let after = fixed_station_bundle(alice, realm).await?;
+    ensure!(after.realm_stream_head == bundle.realm_stream_head);
+    if let Some(current_before) = current_before {
+        ensure!(
+            binding_row(
+                &crate::scenarios::strand_watch_live::signed_snapshot(&alice.client, realm).await?
+            )? == current_before,
+            "refused Station change altered the signed binding value, revision or original ref"
+        );
+    }
+    ensure!(
+        submitter
+            .client
+            .sdk()
+            .committed_event_get(&change.event_id)
+            .await
+            .is_err(),
+        "refused Station change left an accepted Event"
     );
     Ok(())
 }
@@ -1050,7 +1320,8 @@ async fn run(
     if let Some(peer_database) = &peer_database {
         node_envs.push(station_env(&peer_database.connect_url, &coauth));
     }
-    let Some(group) = TestServerGroup::try_multi_external_with_node_envs(GROUP, &node_envs).await?
+    let Some(mut group) =
+        TestServerGroup::try_multi_external_with_node_envs(GROUP, &node_envs).await?
     else {
         return skip_or_fail(GROUP, "prebuilt Coland unavailable");
     };
@@ -1616,6 +1887,65 @@ async fn run(
         "resolver did not return the exact occupied leaf Pending cut"
     );
 
+    let recipient_service_id = peer_server.service_id().clone();
+    if cross_station {
+        let peer_database = &peer_database
+            .as_ref()
+            .context("pending cross-Station claim needs the peer database")?
+            .connect_url;
+        Box::pin(reject_direct_station_change(
+            &alice,
+            &bob,
+            &alice,
+            &realm_id,
+            &governance_database.connect_url,
+            Some(peer_database),
+            &claim_request,
+            None,
+        ))
+        .await?;
+
+        // The peer's self ingress must refuse before staging a queued Event
+        // or an authority forwarding intent to the original governance Station.
+        Box::pin(reject_direct_station_change(
+            &alice,
+            &bob,
+            &bob,
+            &realm_id,
+            &governance_database.connect_url,
+            Some(peer_database),
+            &claim_request,
+            None,
+        ))
+        .await?;
+
+        // A local immutable-Genesis refusal must not require a peer refresh.
+        // Restart the same durable peer even if the assertion fails, then let
+        // the existing consume, binding and two-way MLS flow continue.
+        group.server_mut(1).stop_external_process().await?;
+        let refused = tokio::time::timeout(
+            Duration::from_secs(30),
+            Box::pin(reject_direct_station_change(
+                &alice,
+                &bob,
+                &alice,
+                &realm_id,
+                &governance_database.connect_url,
+                Some(peer_database),
+                &claim_request,
+                None,
+            )),
+        )
+        .await;
+        group
+            .server_mut(1)
+            .start_external_process()
+            .await
+            .context("restart the original peer after pending Direct governance refusal")?;
+        refused.context("offline peer delayed the local Direct governance refusal")??;
+    }
+    let server = group.server(0);
+
     // Before Bob consumes his claim the Realm is still provisional.
     let endorsement = |group_state_ref: &EventId| -> Result<Value> {
         let payload = DirectConversationBoundPayload {
@@ -1656,7 +1986,7 @@ async fn run(
                 recipient_device_id: bob.device.clone(),
                 device_verification_method: bob.method.clone(),
             },
-            recipient_id: peer_server.service_id().clone(),
+            recipient_id: recipient_service_id,
             realm_id: realm_id.clone(),
             mls_group_id: group_id.clone(),
             mls_epoch: 1,
@@ -1749,7 +2079,7 @@ async fn run(
         Cites::Bootstrap(&create_ref),
     )?;
     expect_rejected(&alice, &late_provisional, PARTICIPANT_DENIED).await?;
-    let bob_endorsement = authored(
+    let bob_binding = authored(
         &bob,
         arkret_wire::event_kind_str::DIRECT_CONVERSATION_BOUND,
         scope.clone(),
@@ -1757,27 +2087,9 @@ async fn run(
         Vec::new(),
         Cites::Bootstrap(&create_ref),
     )?;
-    let bound_outcome = submit(&bob, &bob_endorsement).await?;
-    expect_committed(&bound_outcome, &bob_endorsement)?;
-    let AuthoritySubmitOutcome::Accepted {
-        commit: original_commit,
-        ..
-    } = &bound_outcome
-    else {
-        unreachable!()
-    };
-    let AuthoritySubmitOutcome::Accepted {
-        commit: retried_commit,
-        ..
-    } = submit(&bob, &bob_endorsement).await?
-    else {
-        bail!("exact bound retry did not recover its original Commit");
-    };
-    ensure!(
-        original_commit == &retried_commit,
-        "exact bound retry changed its covering Commit"
-    );
-    let alice_endorsement = authored(
+    let winning_binding = submit(&bob, &bob_binding).await?;
+    expect_committed(&winning_binding, &bob_binding)?;
+    let alice_binding = authored(
         &alice,
         arkret_wire::event_kind_str::DIRECT_CONVERSATION_BOUND,
         scope.clone(),
@@ -1785,7 +2097,19 @@ async fn run(
         Vec::new(),
         Cites::Bootstrap(&create_ref),
     )?;
-    expect_rejected(&alice, &alice_endorsement, "duplicate_conflict").await?;
+    expect_rejected(&alice, &alice_binding, "duplicate_conflict").await?;
+    let retry = submit(&bob, &bob_binding).await?;
+    let AuthoritySubmitOutcome::Accepted {
+        commit: original_commit,
+        ..
+    } = &winning_binding
+    else {
+        bail!("the original binding did not commit");
+    };
+    ensure!(
+        matches!(&retry, AuthoritySubmitOutcome::Accepted { status: AuthorityCommitStatus::Duplicate, commit } if commit == original_commit && commit.event_ref == bob_binding.event_id),
+        "exact binding retry allocated or substituted its original Commit"
+    );
 
     let resolved = alice
         .client
@@ -1811,11 +2135,27 @@ async fn run(
             && coordinates
                 .binding_event_ref
                 .as_ref()
-                .is_some_and(|event_ref| { event_ref == &bob_endorsement.event_id })
+                .is_some_and(|event_ref| { event_ref == &bob_binding.event_id })
             && group_state_ref == add_ref
             && send_blockers.is_empty(),
         "resolver did not return the accepted bound coordinates"
     );
+
+    if cross_station {
+        Box::pin(reject_direct_station_change(
+            &alice,
+            &bob,
+            &alice,
+            &realm_id,
+            &governance_database.connect_url,
+            peer_database
+                .as_ref()
+                .map(|database| database.connect_url.as_str()),
+            &claim_request,
+            Some(&bob_binding),
+        ))
+        .await?;
+    }
 
     // Found: both participants send under the binding and read each other.
     if observe_dm_receipt {
@@ -1831,7 +2171,7 @@ async fn run(
         scope.clone(),
         sealed_message(&mut bob_group, &scope, &strand_id, &add_ref, &bob_plaintext)?,
         Vec::new(),
-        Cites::Participant(&bob_endorsement.event_id),
+        Cites::Participant(&bob_binding.event_id),
     )?;
     let blocked_dm_sender = if observe_dm_receipt {
         let observation = crate::conformance::shared_submission::observed_authored_shared_message(
@@ -1873,7 +2213,7 @@ async fn run(
                 b"after Alice unblocks",
             )?,
             Vec::new(),
-            Cites::Participant(&bob_endorsement.event_id),
+            Cites::Participant(&bob_binding.event_id),
         )?;
         let unblocked_dm_sender =
             crate::conformance::shared_submission::observed_authored_shared_message(
@@ -1946,7 +2286,7 @@ async fn run(
                     b"Contact terminal refused this request",
                 )?,
                 Vec::new(),
-                Cites::Participant(&bob_endorsement.event_id),
+                Cites::Participant(&bob_binding.event_id),
             )?;
             expect_rejected(&bob, &refused, PARTICIPANT_DENIED).await?;
             observer
@@ -1987,7 +2327,7 @@ async fn run(
             b"hello, Bob",
         )?,
         Vec::new(),
-        Cites::Participant(&bob_endorsement.event_id),
+        Cites::Participant(&bob_binding.event_id),
     )?;
     expect_committed(&submit(&alice, &alice_message).await?, &alice_message)?;
     ensure!(
@@ -1996,7 +2336,29 @@ async fn run(
         "Bob did not decrypt Alice's committed Message"
     );
 
-    // Once found the bootstrap source can carry only the first binding.
+    if cross_station {
+        // Both normal Messages above still use the original Station. A late
+        // exact binding retry and both private readers retain the same original.
+        let late = submit(&bob, &bob_binding).await?;
+        ensure!(matches!(late, AuthoritySubmitOutcome::Accepted {
+            status: AuthorityCommitStatus::Duplicate, ref commit
+        } if commit == original_commit));
+        for participant in [&alice, &bob] {
+            let retained = participant
+                .client
+                .sdk()
+                .committed_event_get(&bob_binding.event_id)
+                .await?;
+            ensure!(
+                retained.reducer_input() == Some(&bob_binding)
+                    && retained.commit() == original_commit,
+                "Direct original binding Event/Commit changed after rejected migration and Messages"
+            );
+        }
+        Box::pin(fixed_station_bundle(&alice, &realm_id)).await?;
+    }
+
+    // A binding closes bootstrap authorization for later Messages.
     let bootstrap_after = authored(
         &alice,
         arkret_wire::event_kind_str::MESSAGE_CREATE,
@@ -2111,8 +2473,10 @@ async fn run(
             let value: arkret_models_collaboration::events_payloads::direct_conversation::DirectConversationBindingCurrentValue =
                 serde_json::from_value(binding.0.clone())?;
             ensure!(
-                value.binding_event_ref == bob_endorsement.event_id,
-                "signed participant Snapshot changed the unique original binding Event"
+                value.binding_event_ref == bob_binding.event_id
+                    && serde_json::to_value(value.binding)?
+                        == serde_json::to_value(&bob_binding.payload)?,
+                "signed participant Snapshot did not retain the original accepted binding"
             );
         }
         let outsider = Member::provision(

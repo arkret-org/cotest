@@ -613,14 +613,15 @@ export async function scopeMlsMemberGroupApi(
   realmId: string,
   scopeRef: Record<string, unknown>,
   sender?: { actorId: string; deviceId: string },
+  server?: ColandKey,
 ): Promise<MlsMemberGroup> {
-  const scopeKey = realmKey(undefined, realmId, scopeRef);
+  const scopeKey = realmKey(server, realmId, scopeRef);
   const creator = realmMlsCreators.get(scopeKey);
   const matches = (device: MlsDevice) => sender
     ? device.id === sender.actorId && device.deviceId === sender.deviceId
     : device.token === token;
   if (creator && matches(creator.owner)) {
-    return realmMlsCreatorGroupApi(request, realmId, { scopeRef });
+    return realmMlsCreatorGroupApi(request, realmId, { scopeRef, server });
   }
   const candidates = [...memberDevices.entries()].filter(
     ([key, device]) => key.startsWith(`${scopeKey}\0`) && matches(device),
@@ -632,7 +633,7 @@ export async function scopeMlsMemberGroupApi(
   const group = joinedMembers.get(key) ?? await joinRealmMlsWelcomeApi(
     request, realmId, device, { scopeRef },
   );
-  const current = await readScopeMlsGroupCurrentApi(request, token, realmId, scopeRef);
+  const current = await readScopeMlsGroupCurrentApi(request, token, realmId, scopeRef, server);
   if (!current || group.groupStateRef !== current.current_mls_commit_event_ref ||
       group.epoch !== current.epoch) {
     throw new Error("Signal endpoint has not installed the accepted current MLS epoch");

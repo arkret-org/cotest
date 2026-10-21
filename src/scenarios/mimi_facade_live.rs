@@ -888,88 +888,52 @@ pub async fn verify_consent_identifier_exclusions(
     peer: &arkret_wire::ActorId,
     server: &ArkretServer,
 ) -> Result<()> {
-    use arkret_models_collaboration::consent_operations::{ConsentReplaceRequestBody, ConsentView};
-    use arkret_models_collaboration::events_payloads::consent::ConsentPeer;
+    use arkret_models_collaboration::events_payloads::consent::{
+        ConsentPeer, ConsentPermission, ConsentReplacePayload,
+    };
     use arkret_models_collaboration::mimi_operations::{
         MimiIdentifierQueryOutcome, MimiIdentifierQueryRequestBody,
     };
     use arkret_models_collaboration::objects::mimi::{MimiIdentifier, MimiIdentifierKind};
-    let pcr = &member
-        .client
-        .principal
-        .as_ref()
-        .context("actual holder PCR")?
-        .pcr_realm_id;
-    let peer = ConsentPeer::Actor {
+
+    use crate::scenarios::invite_service_fanout_live::{read_consent_set, submit_consent_set};
+    let consent_peer = ConsentPeer::Actor {
         actor_id: peer.clone(),
     };
-    let (expected_current, _) =
-        crate::scenarios::invite_service_fanout_live::complete_peer_current(
-            &member.client,
-            peer.clone(),
-        )
-        .await?;
-    let permissions = arkret_wire::ConsentScope::ALL
-        .iter()
-        .map(|scope| arkret::ConsentPermission {
-            consent_scope: *scope,
-            not_before: None,
-            expires_at: None,
-            constraints: None,
-            evidence_ref: None,
-            reason: None,
-        })
-        .collect();
-    let event = member
-        .client
-        .author_event(
-            pcr.as_str(),
-            EventKind::ConsentReplace.as_str(),
-            serde_json::to_value(arkret::ConsentReplacePayload {
-                peer,
-                expected_current,
-                permissions,
-            })?,
-        )
-        .await?;
-    let grant: ConsentView = serde_json::from_value(
-        expect_json(
-            member
-                .client
-                .post("/_arkret/self/consent/results/replace")
-                .json(&ConsentReplaceRequestBody {
-                    consent_event: arkret_wire::EventAdmissionSubmission::new(event),
-                }),
-            StatusCode::OK,
-        )
-        .await?,
-    )?;
+    let (expected_current, mut permissions) =
+        read_consent_set(&member.client, &consent_peer).await?;
+    permissions.retain(|p| p.consent_scope != arkret_wire::ConsentScope::Presence);
+    permissions.push(ConsentPermission {
+        consent_scope: arkret_wire::ConsentScope::Presence,
+        not_before: None,
+        expires_at: None,
+        constraints: None,
+        evidence_ref: None,
+        reason: None,
+    });
+    submit_consent_set(
+        &member.client,
+        ConsentReplacePayload {
+            peer: consent_peer.clone(),
+            expected_current,
+            permissions,
+        },
+    )
+    .await?;
     let directory = directory::read(server).await?;
     let provider = directory.directory().mimi.provider_id.as_str();
     for revoked in [false, true] {
         if revoked {
-            let event = member
-                .client
-                .author_event(
-                    pcr.as_str(),
-                    EventKind::ConsentReplace.as_str(),
-                    serde_json::to_value(arkret::ConsentReplacePayload {
-                        peer: grant.peer.clone(),
-                        expected_current: arkret::ConsentExpectedCurrent::Present {
-                            revision: grant.revision.clone(),
-                        },
-                        permissions: vec![],
-                    })?,
-                )
-                .await?;
-            expect_json(
-                member
-                    .client
-                    .post("/_arkret/self/consent/results/replace")
-                    .json(&ConsentReplaceRequestBody {
-                        consent_event: arkret_wire::EventAdmissionSubmission::new(event),
-                    }),
-                StatusCode::OK,
+            let (expected_current, mut permissions) =
+                read_consent_set(&member.client, &consent_peer).await?;
+            permissions.retain(|p| p.consent_scope != arkret_wire::ConsentScope::Presence);
+            submit_consent_set(
+                &member.client,
+                ConsentReplacePayload {
+                    peer: consent_peer.clone(),
+                    expected_current,
+                    permissions,
+                },
             )
             .await?;
         }

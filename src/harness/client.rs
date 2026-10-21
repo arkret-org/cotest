@@ -63,6 +63,9 @@ pub struct TestActorClient {
     /// `None` only for explicitly opted-out negative fixtures and raw
     /// token-carrier clients.
     pub principal: Option<super::ProvisionedTestPrincipal>,
+    /// Public authority material captured from the harness-owned Station
+    /// configuration, never from a Consent read response.
+    pub(super) consent_current_authority: Option<(arkret_wire::DidUrl, [u8; 32])>,
     /// Exact accepted default-Strand coordinates for Realms created by this
     /// harness actor. Realm and Strand ids are independent Event-derived
     /// identities, so callers must consume this carrier rather than retype.
@@ -83,6 +86,42 @@ type HeldGrants = std::sync::Arc<
 impl TestActorClient {
     pub fn sdk(&self) -> SdkClient {
         self.sdk.clone()
+    }
+
+    /// These fixture clients are registered Humans: their accepted PCR remains
+    /// at the hosting Station's initial generation. Missing independent
+    /// authority material requires a newly anchored client, not a response key.
+    pub fn verify_consent_current_read(
+        &self,
+        request: &arkret_models_collaboration::call_invitation::ConsentCurrentReadRequestBody,
+        outcome: &arkret_models_collaboration::call_invitation::ConsentCurrentReadOutcome,
+    ) -> Result<()> {
+        let principal = self
+            .principal
+            .as_ref()
+            .context("holder has no accepted PCR")?;
+        let holder = AccountId::new(
+            principal.core_id.clone(),
+            DidCoreId::new(self.service_id.clone())?,
+        );
+        anyhow::ensure!(request.holder_account_id == holder);
+        arkret_wire::GenesisGovernance::Human(holder.clone())
+            .validate_current(&holder.station_id, outcome.governance_generation)?;
+        let (method, bytes) = self
+            .consent_current_authority
+            .as_ref()
+            .context("Consent read lacks an independently configured authority key")?;
+        cotest_test_support::wire::verify_consent_current_read_material(
+            request,
+            outcome,
+            &principal.pcr_realm_id,
+            0,
+            method,
+            &arkret_signatures::PublicKeyMaterial::Ed25519Raw {
+                bytes: bytes.to_vec(),
+            },
+            chrono::Utc::now(),
+        )
     }
 
     pub fn verify_publication<T: arkret::PublicationRequest>(
