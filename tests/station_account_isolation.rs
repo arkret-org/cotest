@@ -365,7 +365,11 @@ async fn verify_isolation(
 /// principal root key that signed it.
 fn verify_portable_event(event: &Event, station: &str) -> Result<()> {
     event.validate_proof_bindings_with_digest_suite(DigestSuite::Sha256)?;
-    ensure!(event.actor_id.route_service_id() == &station_core(station)?);
+    ensure!(
+        event.actor_id.as_account_id().is_some(),
+        "PCR producer must be an Account"
+    );
+    ensure!(event.actor_id.fixed_route_service_id() == Some(&station_core(station)?));
     let producer = event.producer_proof.as_ref().context("producer proof")?;
     arkret_signatures::verify_ed25519_detached_jws_proof_with_digest_suite(
         producer,

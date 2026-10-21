@@ -445,15 +445,26 @@ fn encoding_artifact_vectors_reject_drift() -> Result<()> {
 #[test]
 fn domain_wire_constraint_vectors_reject_drift() {
     let consent = json!({
-        "peer":{"kind":"actor","actor_id":{"kind":"service","service_id":"ak:did_core:web:peer.example"}},
+        "peer": {"kind":"actor","actor_id":{"kind":"account","account_id":{
+            "principal_id":"ak:did_core:webvh:z6mkfixture","station_id":"ak:did_core:webvh:z6mkfixturestationexample"
+        }}},
         "expected_current":{"state":"never_written"},
         "permissions":[{"consent_scope":"voice_call"}]
     });
-    let payload: arkret::ConsentReplacePayload = serde_json::from_value(consent.clone()).unwrap();
-    payload.validate().unwrap();
-    let mut obsolete = consent;
-    obsolete["consent_id"] = json!("ak:consent:01904100-0000-7000-8000-000000000001");
-    assert!(serde_json::from_value::<arkret::ConsentReplacePayload>(obsolete).is_err());
+    serde_json::from_value::<arkret::ConsentReplacePayload>(consent.clone())
+        .expect("closed peer replacement must pass");
+    let mut unknown_scope = consent.clone();
+    unknown_scope["permissions"][0]["consent_scope"] = json!("any");
+    assert!(
+        serde_json::from_value::<arkret::ConsentReplacePayload>(unknown_scope).is_err(),
+        "non-concrete permission scope must fail"
+    );
+    let mut obsolete_id = consent;
+    obsolete_id["consent_id"] = json!("ak:consent:01904100-0000-7000-8000-000000000001");
+    assert!(
+        serde_json::from_value::<arkret::ConsentReplacePayload>(obsolete_id).is_err(),
+        "opaque correlation identifier must not enter native replacement"
+    );
 }
 
 #[test]
