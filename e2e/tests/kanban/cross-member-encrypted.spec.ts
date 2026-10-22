@@ -890,9 +890,16 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
         expect(pin.accepted_create.accepted_event).toEqual(record!.accepted_create.accepted_event);
         expect(pin.governance_binding).toEqual(record!.intent.proposed_group_genesis_binding.proposed_group_genesis_binding);
         expect(pin.canonical_proposal_bytes).toEqual(Array.from(new TextEncoder().encode(canonicalJson(record!.intent.proposed_group_genesis_binding))));
-        expect(pin.creator_device_authority.account_id).toEqual(record!.intent.owner_actor_id.account_id);
-        expect(pin.creator_device_authority.device_id).toBe(record!.intent.creator_device_id);
-        expect(pin.creator_device_authority.projection.authorized_generation_ref).toBe(pin.creator_device_authority.generation.current_device_generation_ref);
+        expect(pin.creator_authority).toMatchObject({
+          kind: "device",
+          evidence: {
+            account_id: record!.intent.owner_actor_id.account_id,
+            device_id: record!.intent.creator_device_id,
+          },
+        });
+        const creatorDeviceAuthority = pin.creator_authority.evidence;
+        expect(creatorDeviceAuthority.projection.authorized_generation_ref).toEqual(expect.any(Number));
+        expect(creatorDeviceAuthority.projection.authorized_generation_ref).toBe(creatorDeviceAuthority.generation.current_device_generation_ref);
         expect(pin.genesis_absence.current_state_entries.some(
           (entry: Record<string, any>) => entry.selector?.kind === "mls_group" && entry.selector.scope_ref.realm_id === payload.event.realm_id,
         )).toBe(false);

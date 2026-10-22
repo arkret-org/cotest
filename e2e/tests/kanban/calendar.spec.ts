@@ -33,6 +33,7 @@ test("@fully-implemented calendar schedule and RSVP survive the canonical Strand
     browser,
     request,
     `calendar-ui-${stamp}`,
+    { refreshGrantBeforeUse: true },
   );
   if (!flow) {
     assertJointStackNotRequired("calendar UI DPoP login");
@@ -48,6 +49,7 @@ test("@fully-implemented calendar schedule and RSVP survive the canonical Strand
   const location = `Room ${stamp}`;
 
   try {
+    await page.waitForSessionGrantRefresh();
     const realmId = await page.createRealm({
       title: `Calendar Realm ${stamp}`,
       discoverability: "listed",
