@@ -247,7 +247,7 @@ function responseRows(
   pollRef: string,
   actor: ReturnType<typeof accountActorId>,
 ) {
-  return scan.events.map((event, index) => ({ event, commit: scan.commits[index]! }))
+  return scan.events.map(event => ({ event, commit: scan.commits.find(commit => commit.event_ref === event.event_id)! }))
     .filter(({ event }) => event.kind === "ak.message.create"
       && canonicalJson(event.actor_id) === canonicalJson(actor)
       && ((event.payload as Record<string, unknown>)?.content as Record<string, unknown>)?.kind === "ak.content.poll.response"

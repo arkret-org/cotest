@@ -757,7 +757,7 @@ export async function rejectDirectStructureEvent(proof: DirectStructureProof, te
   expect(unchangedRows((await snapshot()).current_state_entries)).toEqual(unchangedRows(before));
   const after = await scanRealmStreamApi(proof.request, proof.token, realm, { afterPosition: beforeHead!.stream_position });
   expect(after.truncated).toBe(false);
-  expect(after.commits.length).toBe(after.events.length);
+  expect(after.commits.length).toBe(after.eventSlots.length);
   expect(after.events.some(row => row?.event_id === event.event_id), "refused Event never enters the accepted stream").toBe(false);
   expect(after.commits.some(commit => commit.event_ref === event.event_id), "refused Event has no accepting Commit").toBe(false);
   let independentFrankingSuccessors = 0;
@@ -773,7 +773,7 @@ export async function rejectDirectStructureEvent(proof: DirectStructureProof, te
     // checks accepted kind/ID plus the same full Commit, without exposing the
     // hidden payload or treating omission as a protocol proof.
     let stored: Array<{ commit: Record<string, unknown>; event_id: string; event_kind: string }> = [];
-    if (after.events.slice(0, end + 1).some(row => row === undefined)) {
+    if (after.eventSlots.slice(0, end + 1).some(row => row === undefined)) {
       // Verify the accepted Genesis/current authority before selecting a
       // private runner lease. Direct's governor is fixed from creation; an
       // observer can legally hold only the same disclosed Withheld Commit.
@@ -803,7 +803,7 @@ export async function rejectDirectStructureEvent(proof: DirectStructureProof, te
     }
     for (const [offset, commit] of after.commits.slice(0, end + 1).entries()) {
       expect(commit.stream_position).toBe(beforeHead!.stream_position + offset + 1);
-      let original = after.events[offset];
+      const original = after.eventSlots[offset];
       if (original === undefined) {
         expect(stored[offset].commit, "the stored original has the same entire accepting Commit").toEqual(commit);
         expect(stored[offset].event_id).toBe(commit.event_ref);
@@ -1332,6 +1332,7 @@ async function runFlatTopicChats(alice: Page, bob: Page, mainMessages: string[],
       .filter(event => ["ak.strand.create", "ak.strand.update", "ak.strand.archive", "ak.strand.restore",
         "ak.space.create", "ak.space.update", "ak.space.archive", "ak.space.restore", "ak.space.tombstone"].includes(String(event.kind)));
     const sharedEvents = structuralEvents(originalRead.events);
+    expect(sharedEvents.map(event => event.event_id)).toEqual(expect.arrayContaining([chat.event_id, topic.event_id]));
     let peerRead: Awaited<ReturnType<typeof scanRealmStreamApi>> | undefined;
     await expect(async () => {
       peerRead = await scanRealmStreamApi(proof.request, proof.peer!.token, realmId, { server: proof.peer!.server });

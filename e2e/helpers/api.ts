@@ -244,13 +244,8 @@ export async function listRealmEventsViaApi(
     server: opts.server,
     limit: opts.limit ?? 50,
   });
-  // service-http-binding.md: a `CommittedEventView` is either `{commit,event}`
-  // or the closed withheld branch `{commit,event_disclosure}`; a withheld slot
-  // discloses no Event, so the Event list carries only the full branch.
-  const events = scan.events.filter(
-    (event): event is Record<string, unknown> =>
-      event !== undefined && event !== null,
-  );
+  // The SDK-backed scan adapter projects full Events; withheld slots stay in commits.
+  const events = scan.events;
   return opts.order === "descending" ? [...events].reverse() : events;
 }
 

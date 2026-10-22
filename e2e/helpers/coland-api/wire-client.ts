@@ -11,6 +11,7 @@ type CotestWireCommand =
   | "local-message-payload"
   | "historical-human-signer-query"
   | "historical-human-signer-fact"
+  | "project-committed-stream-scan"
   | "verify-realm-state-snapshot"
   | "verify-consent-current"
   | "validate-applet-authority-material"

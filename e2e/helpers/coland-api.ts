@@ -1578,8 +1578,8 @@ export async function setStrandWatchLevelApi(
 ///
 /// There is no Realm-wide Event query any more: a reader walks one stream by
 /// continuous `stream_position`. The flattened `events` list is returned in
-/// commit order alongside the commits that carry them, so a caller can assert
-/// either the Event payloads or the ordering the Station assigned them.
+/// commit order. Every Commit is retained, including withheld slots; use
+/// `eventSlots` for positional pairing, or match a disclosed Event by event_ref.
 export async function scanRealmStreamApi(
   request: APIRequestContext,
   token: string,
@@ -1594,22 +1594,25 @@ export async function scanRealmStreamApi(
 ): Promise<{
   commits: Array<Record<string, unknown>>;
   events: Array<Record<string, unknown>>;
+  // Positional slots pair one-to-one with commits; withheld rows have no Event.
+  eventSlots: Array<Record<string, unknown> | undefined>;
   truncated: boolean;
   authorizationPending?: boolean;
 }> {
   const streamRef = opts.streamRef ?? { kind: "realm", realm_id: realmId };
   const url = `${colandBaseUrl(opts.server)}/_arkret/self/streams/scan`;
+  const scanRequest = {
+    realm_id: realmId,
+    stream_ref: streamRef,
+    after_position: opts.afterPosition ?? null,
+    limit: opts.limit ?? 256,
+  };
   const response = await request.post(url, {
     headers: {
       ...authHeaders(token, "POST", url),
       "content-type": "application/json",
     },
-    data: canonicalJson({
-      realm_id: realmId,
-      stream_ref: streamRef,
-      after_position: opts.afterPosition ?? null,
-      limit: opts.limit ?? 256,
-    }),
+    data: canonicalJson(scanRequest),
   });
   if (opts.waitForJoinedCut && [403, 503].includes(response.status())) {
     const problem = await response.json() as { type?: string; detail?: string };
@@ -1619,26 +1622,22 @@ export async function scanRealmStreamApi(
         (response.status() === 503 &&
          problem.type === "https://arkret.org/problems/temporarily_unavailable" &&
          problem.detail === "the caller's readable interval cannot be proved at this cut")) {
-      return { commits: [], events: [], truncated: false, authorizationPending: true };
+      return { commits: [], events: [], eventSlots: [], truncated: false, authorizationPending: true };
     }
   }
-  const body = await expectJsonOk<{
-    committed_events: Array<{
-      commit: Record<string, unknown>;
-      event: Record<string, unknown>;
-    }>;
-    truncated?: boolean;
-  }>(response, `scan Realm stream for ${realmId}`);
-  const items = body.committed_events;
-  expect(Array.isArray(items), "stream scan must return committed_events").toBeTruthy();
-  return {
-    commits: items.map((item) => item.commit),
-    events: items.map((item) => item.event),
-    truncated: body.truncated === true,
-  };
+  const body = await expectJsonOk<unknown>(response, `scan Realm stream for ${realmId}`);
+  const projected = cotestWire<{
+    commits: Array<Record<string, unknown>>;
+    events: Array<Record<string, unknown>>;
+    event_slots: Array<Record<string, unknown> | null>;
+    truncated: boolean;
+  }>("project-committed-stream-scan", { request: scanRequest, outcome: body });
+  return { commits: projected.commits,
+    eventSlots: projected.event_slots.map(event => event ?? undefined),
+    events: projected.events, truncated: projected.truncated };
 }
 
-/// Back-compatible projection of [`scanRealmStreamApi`] for callers that only
+/// Event-only projection of [`scanRealmStreamApi`] for callers that only
 /// read the Event list. The Events arrive in the order the governance Station
 /// committed them, which is the only order that exists.
 ///
@@ -1653,7 +1652,7 @@ export async function queryRealmEventsApi(
 ): Promise<Record<string, unknown>> {
   const scan = await scanRealmStreamApi(request, token, realmId, opts);
   return {
-    events: scan.events.filter((event) => event !== undefined),
+    events: scan.events,
     commits: scan.commits,
     ...(scan.authorizationPending ? { authorizationPending: true } : {}),
   };

@@ -1380,8 +1380,8 @@ async function updateCardDescription(
         .textContent({ timeout: Math.min(1_000, remaining) }).catch(() => null);
       // Retry the retained draft only for a known refusal before any ingress.
       // Once a request exists, recovery belongs to the original signed Event.
-      if (!ingressObserved
-        && /^MLS send gate is not ready: account checkpoint changed (?:before|during) committed read$/.test(status?.trim() ?? "")
+      if (!ingressObserved && preAuthoringRetries < 3
+        && /^encrypted card write is not ready: MLS send gate is not ready: account checkpoint changed (?:before|during) committed read$/.test(status?.trim() ?? "")
         && Date.now() < deadline
         && await save.isEnabled({ timeout: Math.min(1_000, remaining) }).catch(() => false)) {
         preAuthoringRetries++;
@@ -1391,7 +1391,7 @@ async function updateCardDescription(
     }, { timeout: 120_000, intervals: [100, 250, 500] }).toContain(description);
   } finally {
     page.off("request", captureRequest);
-    if (preAuthoringRetries) await test.info().attach("kanban-description-pre-authoring-retries", {
+    await test.info().attach("kanban-description-pre-authoring-retries", {
       body: JSON.stringify({ pre_authoring_retries: preAuthoringRetries, ingress_observed: ingressObserved }),
       contentType: "application/json",
     });

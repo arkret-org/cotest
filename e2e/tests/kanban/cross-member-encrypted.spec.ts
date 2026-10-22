@@ -504,30 +504,50 @@ async function addEncryptedDescription(
       (candidate.request().postData() ?? "").includes("ak.strand.update"),
     { timeout: 120_000 },
   ).catch(() => undefined);
-  await page.getByTestId("card-detail-save-button").click();
-  while (Date.now() < responseDeadline) {
-    response = await Promise.race([
-      strandUpdate,
-      page.waitForTimeout(Math.min(10_000, responseDeadline - Date.now())).then(() => undefined),
-    ]);
-    if (response) break;
+  const save = page.getByTestId("card-detail-save-button");
+  let ingressObserved = false;
+  let preAuthoringRetries = 0;
+  const captureRequest = (request: import("@playwright/test").Request) => {
+    if (request.method() === "POST" && new URL(request.url()).pathname === "/_arkret/self/events") ingressObserved = true;
+  };
+  page.on("request", captureRequest);
+  try {
+    await save.click();
+    while (Date.now() < responseDeadline) {
+      response = await Promise.race([
+        strandUpdate,
+        page.waitForTimeout(Math.min(10_000, responseDeadline - Date.now())).then(() => undefined),
+      ]);
+      if (response) break;
 
-    const status =
-      (
-        await page.getByTestId("card-detail-edit-status").textContent()
-      )?.trim() ?? "";
-    expect(
-      status,
-      "description save produced neither ak.strand.update nor a visible failure status",
-    ).not.toBe("");
-    expect(
-      status.includes("encryption_transition_pending")
-        || status === "Restoring encrypted Realm state before saving...",
-      `description save failed before submission: ${status}`,
-    ).toBe(true);
-    if (status.includes("encryption_transition_pending") && Date.now() < responseDeadline) {
-      await page.getByTestId("card-detail-save-button").click();
+      const status =
+        (
+          await page.getByTestId("card-detail-edit-status").textContent()
+        )?.trim() ?? "";
+      expect(
+        status,
+        "description save produced neither ak.strand.update nor a visible failure status",
+      ).not.toBe("");
+      // A checkpoint read refusal precedes Event authoring. Never retry ingress.
+      const checkpointRefused = /^encrypted card write is not ready: (?:MLS send gate is not ready: )?account checkpoint changed (?:before|during) committed read$/.test(status);
+      expect(
+        checkpointRefused || status.includes("encryption_transition_pending")
+          || status === "Restoring encrypted Realm state before saving...",
+        `description save failed before submission: ${status}`,
+      ).toBe(true);
+      if (!ingressObserved && Date.now() < responseDeadline
+        && ((checkpointRefused && preAuthoringRetries < 3) || status.includes("encryption_transition_pending"))
+        && await save.isEnabled()) {
+        if (checkpointRefused) preAuthoringRetries++;
+        await save.click();
+      }
     }
+  } finally {
+    page.off("request", captureRequest);
+    await test.info().attach("creator-description-pre-authoring-retries", {
+      body: JSON.stringify({ pre_authoring_retries: preAuthoringRetries, ingress_observed: ingressObserved }),
+      contentType: "application/json",
+    });
   }
   expect(
     response,
