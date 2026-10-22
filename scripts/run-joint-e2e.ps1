@@ -194,6 +194,22 @@ param(
     [switch]$ForbidSkippedTests
 )
 
+function Get-JointInksonBuildPlan {
+    param(
+        [Parameter(Mandatory = $true)][bool]$StartMockAppletRegistry,
+        [Parameter(Mandatory = $true)][bool]$ArtifactFresh,
+        [Parameter(Mandatory = $true)][bool]$TestFeaturePresent
+    )
+    $features = "web,wasm-localstorage-secrets-test"
+    if ($StartMockAppletRegistry) { $features += ",experimental-applets" }
+    [pscustomobject]@{
+        # Source/content stamps do not record the Cargo feature selection.
+        # Always build the Applet lane rather than reuse a feature-ambiguous bundle.
+        ShouldBuild = $StartMockAppletRegistry -or -not $ArtifactFresh -or -not $TestFeaturePresent
+        Command = "dx build --profile joint-e2e --platform web --features $features"
+    }
+}
+
 function Prepare-JointPostNativeTools {
     [CmdletBinding()]
     param(
@@ -3978,11 +3994,15 @@ try {
         $inksonTestFeaturePresent = Test-BinaryContainsAsciiMarker `
             -Path $inksonWasm `
             -Marker "inkson.test.session_injection.v1"
-        if (-not $inksonFreshness.Fresh -or -not $inksonTestFeaturePresent) {
+        $inksonBuildPlan = Get-JointInksonBuildPlan `
+            -StartMockAppletRegistry ([bool]$StartMockAppletRegistry) `
+            -ArtifactFresh ([bool]$inksonFreshness.Fresh) `
+            -TestFeaturePresent ([bool]$inksonTestFeaturePresent)
+        if ($inksonBuildPlan.ShouldBuild) {
             Write-Host "Preparing inkson web bundle: $($inksonFreshness.Detail)"
             $started = Get-Date
             $buildCommand = Add-DioxusNoDownloadsEnvironment `
-                -Command "dx build --profile joint-e2e --platform web --features web,wasm-localstorage-secrets-test" `
+                -Command $inksonBuildPlan.Command `
                 -ProjectRoot $InksonRoot
             # Dioxus 0.7.10 can assemble the shared debug output from a stale
             # wasm-dev executable even though Cargo built the requested custom
