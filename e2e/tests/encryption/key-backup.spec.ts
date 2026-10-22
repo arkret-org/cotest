@@ -1,5 +1,6 @@
 import { authHeaders } from "../../helpers/coland-api";
 import { readCreatorRecords } from "../../helpers/creator-bootstrap";
+import { accountTransportRotationProbe, assertOriginalAcceptedMlsRows } from "../../helpers/session-transport-recovery";
 // Key backup + restore
 // Contract: e2e/scenarios/encryption/key-backup.md
 // Spec refs:
@@ -224,7 +225,8 @@ test.describe("key backup + restore", () => {
     const keyBackupPuts = collectKeyBackupPuts(deviceA.page);
     const protocolFailures: string[] = [];
     let deviceAReloading = false;
-    collectA1ProtocolFailures(deviceA.page, protocolFailures, () => deviceAReloading);
+    const transportRecovery = accountTransportRotationProbe(deviceA.page, request, deviceASession);
+    collectA1ProtocolFailures(deviceA.page, protocolFailures, () => deviceAReloading, transportRecovery.expectedRetiredRead);
 
     try {
       await deviceA.gotoHome();
@@ -262,6 +264,9 @@ test.describe("key backup + restore", () => {
       }
       await expectMlsAccountSecretBackupUploaded(keyBackupPuts);
 
+      const originalAcceptedRows = await transportRecovery.read(realmId);
+      await transportRecovery.arm();
+
       const deviceB = await openAndPairFreshDeviceForAccount(
         browser,
         deviceA,
@@ -295,6 +300,8 @@ test.describe("key backup + restore", () => {
           timeout: 120_000,
         })
         .toBeGreaterThan(deviceBPrivatePlaintextBackupsBefore);
+      // Verify recovery before reload could construct an unrelated new client.
+      const recoveryEvidence = await transportRecovery.verify();
       await deviceA.gotoTimelineRealm(realmId);
       if (await restoreMlsHistoryIfPrompted(deviceA.page, recoveryKey)) {
         await deviceA.gotoTimelineRealm(realmId);
@@ -314,6 +321,11 @@ test.describe("key backup + restore", () => {
         deviceA, realmId, deviceACard, keyBackupPuts,
       );
       await expect(deviceB.timelineEvent(deviceACard)).toBeVisible({ timeout: 90_000 });
+      assertOriginalAcceptedMlsRows(originalAcceptedRows, await transportRecovery.read(realmId));
+      await testInfo.attach("a1-real-successor-transport-recovery", {
+        contentType: "application/json",
+        body: JSON.stringify(recoveryEvidence),
+      });
 
       expect(
         protocolFailures.filter((line) =>
@@ -1016,6 +1028,7 @@ function collectA1ProtocolFailures(
   page: Page,
   failures: string[],
   isIntentionalReload: () => boolean = () => false,
+  isExpectedRetiredRead: (response: import("@playwright/test").Response) => boolean | Promise<boolean> = () => false,
 ) {
   page.on("console", (message) => {
     const text = message.text();
@@ -1054,8 +1067,9 @@ function collectA1ProtocolFailures(
       failures.push(`requestfailed:${request.method()} ${url} ${errorText}`);
     }
   });
-  page.on("response", (response) => {
+  page.on("response", async (response) => {
     const url = response.url();
+    if (await isExpectedRetiredRead(response)) return;
     if (
       response.status() >= 400 &&
       /\/(?:api\/v1|_arkret\/self)\/(account\/subscribe|subscribe|describe|events)/.test(
