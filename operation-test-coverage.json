@@ -3,11 +3,11 @@
   "source_of_truth": false,
   "generated_from": {
     "operation_registry": "arkret-spec/spec/v1/artifacts/registry/operation-registry.json",
-    "operation_registry_sha256": "3a2a7ecde6ec8b58a099f9305b18c5f5c83aa357c8f2a050e81dcb06460173f9",
+    "operation_registry_sha256": "637eb1273e77dd5ec9f1d4fbe859ed226454dab4ca5312a4db051098fd876618",
     "test_layers": {
       "coland_unit": {
         "source_file_count": 470,
-        "source_sha256": "247088ab8e0bd6b622436eeb732f7f8cc21cfc53fd6423cb2d6fec86cda357b5",
+        "source_sha256": "0312fbff71ed7ee6ad4ebf973e42527623517cd03366cd91e3da4e5ca36d5fac",
         "evidence_count": 323,
         "covered_operation_count": 144
       },
