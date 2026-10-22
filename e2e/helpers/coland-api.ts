@@ -157,7 +157,7 @@ function requireRealmAuthorityRootRef(
   return eventId;
 }
 
-async function discoverRealmAuthorityRootRef(
+export async function discoverRealmAuthorityRootRef(
   request: APIRequestContext,
   token: string,
   realmId: string,
