@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import importlib.util
+import hashlib
+import io
 import json
 import os
 import re
@@ -359,6 +361,75 @@ fn typed_operation() {
         expected = inventory.serialized(inventory.generate(self.root)).encode("utf-8")
         self.assertEqual(output.read_bytes(), expected)
         self.assertTrue(inventory.check_output(expected.decode("utf-8"), output))
+
+    def test_lf_sources_with_escaped_cr_literals_generate_without_rewriting_bytes(self) -> None:
+        relative = "cotest/tests/escaped.rs"
+        content = rust_test("escaped_literals", OP_ONE, r'assert_eq!("\r\n", "\r\n");')
+        self.write(relative, content)
+        source = self.root / relative
+        original = source.read_bytes()
+        self.assertNotIn(b"\r", original)
+        self.assertIn(br"\r\n", original)
+        output = self.root / "inventory.json"
+        self.assertEqual(inventory.main(["--workspace-root", str(self.root), "--output", str(output)]), 0)
+        self.assertEqual(source.read_bytes(), original)
+        self.assertEqual(output.read_bytes(), inventory.serialized(inventory.generate(self.root)).encode("utf-8"))
+
+    def test_non_lf_sources_fail_before_overwriting_existing_output(self) -> None:
+        output = self.root / "inventory.json"
+        original_output = b"retained previous inventory\n"
+        for relative in (
+            "coland/crates/storage/src/contract_tests.rs",
+            "cotest/tests/oracle_a.rs",
+            "cotest/e2e/tests/flow.spec.ts",
+            "arkret-rust-sdk/crates/wire/src/generated/operation_ids.rs",
+        ):
+            source = self.root / relative
+            original_source = source.read_bytes()
+            for ending in (b"\r\n", b"\r"):
+                with self.subTest(source=relative, ending=ending):
+                    changed = original_source.replace(b"\n", ending)
+                    source.write_bytes(changed)
+                    output.write_bytes(original_output)
+                    stderr = io.StringIO()
+                    with mock.patch.object(sys, "stderr", stderr):
+                        result = inventory.main(["--workspace-root", str(self.root), "--output", str(output)])
+                    self.assertEqual(result, 1)
+                    self.assertIn("LF line endings", stderr.getvalue())
+                    self.assertIn(str(source), stderr.getvalue())
+                    self.assertEqual(output.read_bytes(), original_output)
+                    self.assertEqual(source.read_bytes(), changed)
+                source.write_bytes(original_source)
+
+    def test_aggregate_digest_uses_relative_posix_string_order_and_actual_bytes(self) -> None:
+        relatives = ["cotest/tests/a/b.rs", "cotest/tests/a.rs", "cotest/tests/Z.rs"]
+        for relative in relatives:
+            self.write(relative, "// " + relative + "\n")
+        files = [self.root / relative for relative in relatives]
+        expected_order = sorted(relatives)
+        # Component ordering places a/b.rs before a.rs; POSIX strings do not.
+        self.assertNotEqual([path.relative_to(self.root).as_posix() for path in sorted(files)], expected_order)
+        preimage = b"".join(
+            relative.encode("utf-8") + b"\0" + hashlib.sha256((self.root / relative).read_bytes()).digest()
+            for relative in expected_order
+        )
+        with mock.patch.object(inventory, "WORKSPACE_ROOT", self.root):
+            expected = hashlib.sha256(preimage).hexdigest()
+            self.assertEqual(inventory.aggregate_source_digest(files), expected)
+            self.assertEqual(inventory.aggregate_source_digest(reversed(files)), expected)
+            with (self.root / relatives[0]).open("ab") as source:
+                source.write(b"// changed source bytes\n")
+            self.assertNotEqual(inventory.aggregate_source_digest(files), expected)
+
+    def test_inventory_is_independent_of_native_discovery_order(self) -> None:
+        self.write("cotest/tests/a/b.rs", rust_test("nested_oracle", OP_ONE, "assert_eq!(actual, expected);"))
+        self.write("cotest/tests/a.rs", rust_test("sibling_oracle", OP_ONE, "assert_eq!(actual, expected);"))
+        expected = inventory.generate(self.root)
+        discover = inventory.discover_layer_sources
+        def reversed_sources(root):
+            return tuple(inventory.LayerSource(layer.name, tuple(reversed(layer.files))) for layer in discover(root))
+        with mock.patch.object(inventory, "discover_layer_sources", side_effect=reversed_sources):
+            self.assertEqual(inventory.generate(self.root), expected)
 
     def test_unclassified_operation_shaped_literal_fails_closed(self) -> None:
         self.write(

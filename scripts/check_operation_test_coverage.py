@@ -153,6 +153,20 @@ def relative_path(path: Path) -> str:
     return path.resolve().relative_to(WORKSPACE_ROOT).as_posix()
 
 
+def read_source_bytes(path: Path) -> bytes:
+    """Fingerprint the actual LF source bytes; never repair a checkout here."""
+    content = path.read_bytes()
+    if b"\r" in content:
+        raise ValueError(f"source must use LF line endings (CRLF/CR forbidden): {path}")
+    return content
+
+
+def read_source_text(path: Path) -> str:
+    # Keep the existing lexical treatment of non-UTF-8 bytes. Line endings are
+    # checked before decoding, so universal-newline translation cannot hide CR.
+    return read_source_bytes(path).decode("utf-8", errors="replace")
+
+
 def source_file(path: Path) -> bool:
     return path.is_file() and not any(part in IGNORED_DIRS for part in path.parts)
 
@@ -214,7 +228,7 @@ def discover_layer_sources(workspace_root: Path = WORKSPACE_ROOT) -> tuple[Layer
         for path in source_paths(crates, ".rs"):
             if not source_file(path) or path in coland_http:
                 continue
-            text = path.read_text(encoding="utf-8", errors="replace")
+            text = read_source_text(path)
             if rust_test_like(path, text):
                 coland_unit.add(path)
 
@@ -236,7 +250,7 @@ def discover_layer_sources(workspace_root: Path = WORKSPACE_ROOT) -> tuple[Layer
         cotest_rust.update(
             path for path in source_paths(cotest_crates, ".rs")
             if source_file(path)
-            and rust_test_like(path, path.read_text(encoding="utf-8", errors="replace"))
+            and rust_test_like(path, read_source_text(path))
         )
     cotest_e2e = {
         path
@@ -423,10 +437,12 @@ def responsibility_for(layer: str, path: str, scope_name: str, scope_text: str) 
 
 def aggregate_source_digest(files: Iterable[Path]) -> str:
     preimage = bytearray()
-    for path in sorted(files):
+    # Path ordering compares native components (and case-folds on Windows).
+    # The hash contract instead orders the exact relative POSIX inventory strings.
+    for path in sorted(files, key=relative_path):
         preimage.extend(relative_path(path).encode("utf-8"))
         preimage.append(0)
-        preimage.extend(hashlib.sha256(path.read_bytes()).digest())
+        preimage.extend(hashlib.sha256(read_source_bytes(path)).digest())
     return sha256_bytes(bytes(preimage))
 
 
@@ -520,7 +536,7 @@ def evidence_from_file(
     operation_ids: set[str],
     constants: dict[str, str],
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]]]:
-    text = path.read_text(encoding="utf-8", errors="replace")
+    text = read_source_text(path)
     scopes = source_scopes(path, text)
     path_text = relative_path(path)
     grouped: dict[tuple[str, str, int], dict[str, Any]] = {}
@@ -589,7 +605,7 @@ def broader_test_sources(workspace_root: Path = WORKSPACE_ROOT) -> set[Path]:
         for path in source_paths(repo, ".rs"):
             if not source_file(path):
                 continue
-            text = path.read_text(encoding="utf-8", errors="replace")
+            text = read_source_text(path)
             if rust_test_like(path, text):
                 sources.add(path)
     for root in (
@@ -683,7 +699,7 @@ def generate(workspace_root: Path = WORKSPACE_ROOT) -> dict[str, Any]:
         if len(operations) != len(operation_rows):
             raise ValueError("operation registry contains invalid or duplicate rows")
         constants_path = WORKSPACE_ROOT / "arkret-rust-sdk/crates/wire/src/generated/operation_ids.rs"
-        constants_bytes = constants_path.read_bytes()
+        constants_bytes = read_source_bytes(constants_path)
         constants = sdk_operation_symbols(constants_bytes.decode("utf-8"), set(operations))
 
         layer_sources = discover_layer_sources(WORKSPACE_ROOT)
@@ -719,7 +735,7 @@ def generate(workspace_root: Path = WORKSPACE_ROOT) -> dict[str, Any]:
         for path in broader_test_sources(WORKSPACE_ROOT):
             if path.resolve() in assigned_files:
                 continue
-            text = path.read_text(encoding="utf-8", errors="replace")
+            text = read_source_text(path)
             if any(token in operations for token, _, _ in operation_references(text, path.suffix, constants)):
                 unknown_test_files.append(relative_path(path))
 
