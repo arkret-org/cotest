@@ -409,24 +409,24 @@ fn patch_station_config_file(
 ) -> Result<()> {
     let file = config_file.as_file_mut();
     file.seek(SeekFrom::Start(0))?;
-    let mut config: serde_yaml_ng::Value = serde_yaml_ng::from_reader(&mut *file)
+    let mut config: serde_json::Value = serde_saphyr::from_reader(&mut *file)
         .context("decode generated coauth config for Station wiring")?;
     let root = config
-        .as_mapping_mut()
+        .as_object_mut()
         .context("generated coauth config root must be a mapping")?;
-    let arkret_key = serde_yaml_ng::Value::String("arkret".to_owned());
+    let arkret_key = "arkret".to_owned();
     let arkret = root
         .entry(arkret_key)
-        .or_insert_with(|| serde_yaml_ng::Value::Mapping(Default::default()))
-        .as_mapping_mut()
+        .or_insert_with(|| serde_json::Value::Object(Default::default()))
+        .as_object_mut()
         .context("generated coauth arkret config must be a mapping")?;
     arkret.insert(
-        serde_yaml_ng::Value::String("trust_domain".to_owned()),
-        serde_yaml_ng::Value::String(JOINT_TRUST_DOMAIN.to_owned()),
+        "trust_domain".to_owned(),
+        serde_json::Value::String(JOINT_TRUST_DOMAIN.to_owned()),
     );
     arkret.insert(
-        serde_yaml_ng::Value::String("stations".to_owned()),
-        serde_yaml_ng::to_value(vec![serde_json::json!({
+        "stations".to_owned(),
+        serde_json::to_value(vec![serde_json::json!({
             "name": "cotest-coland",
             "endpoint": endpoint,
             "internal_authority_shared_secret": internal_authority_shared_secret,
@@ -435,8 +435,8 @@ fn patch_station_config_file(
         })])?,
     );
     arkret.insert(
-        serde_yaml_ng::Value::String("identity_registry".to_owned()),
-        serde_yaml_ng::to_value(serde_json::json!({
+        "identity_registry".to_owned(),
+        serde_json::to_value(serde_json::json!({
             "resolver": format!(
                 "{}/_arkret/root/identity/resolve",
                 endpoint.trim_end_matches('/')
@@ -445,7 +445,7 @@ fn patch_station_config_file(
     );
     file.set_len(0)?;
     file.seek(SeekFrom::Start(0))?;
-    serde_yaml_ng::to_writer(&mut *file, &config).context("write Station-wired coauth config")?;
+    serde_saphyr::to_io_writer(&mut *file, &config).context("write Station-wired coauth config")?;
     file.flush()?;
     Ok(())
 }
@@ -779,21 +779,20 @@ pub fn bootstrap_coauth_config(
 /// Repoint generated custody without a development posture or platform
 /// keychain dependency. The caller owns the directory throughout restarts.
 fn isolated_custody_config(raw: &str, directory: &Path) -> Result<String> {
-    let mut config: serde_yaml_ng::Value =
-        serde_yaml_ng::from_str(raw).context("decode generated Coauth configuration")?;
+    let mut config: serde_json::Value =
+        serde_saphyr::from_str(raw).context("decode generated Coauth configuration")?;
     let root = config
-        .as_mapping_mut()
+        .as_object_mut()
         .context("generated Coauth configuration must be a mapping")?;
     anyhow::ensure!(
         root.get("secrets")
-            .is_some_and(serde_yaml_ng::Value::is_mapping),
+            .is_some_and(serde_json::Value::is_object),
         "generated Coauth configuration lacks the secrets section"
     );
     // RootConfig omits default filesystem storage. An absent section is
     // valid; an explicitly emitted section must still have the known shape.
     anyhow::ensure!(
-        root.get("storage")
-            .is_none_or(serde_yaml_ng::Value::is_mapping),
+        root.get("storage").is_none_or(serde_json::Value::is_object),
         "generated Coauth storage section must be a mapping"
     );
     let key_store = directory.join("keystore");
@@ -823,7 +822,7 @@ fn isolated_custody_config(raw: &str, directory: &Path) -> Result<String> {
         .context("write isolated Coauth master key")?;
     root.insert(
         "secrets".into(),
-        serde_yaml_ng::to_value(serde_json::json!({
+        serde_json::to_value(serde_json::json!({
             "backend": "encrypted_file",
             "path": key_store.join("coauth.v1"),
             "master_key_file": master_key_file,
@@ -831,9 +830,9 @@ fn isolated_custody_config(raw: &str, directory: &Path) -> Result<String> {
     );
     root.insert(
         "storage".into(),
-        serde_yaml_ng::to_value(serde_json::json!({"backend": "fs", "root": media}))?,
+        serde_json::to_value(serde_json::json!({"backend": "fs", "root": media}))?,
     );
-    serde_yaml_ng::to_string(&config).context("encode isolated Coauth configuration")
+    serde_saphyr::to_string(&config).context("encode isolated Coauth configuration")
 }
 
 /// Find the coauth repo root — the directory holding `policies/cedar` and
@@ -1202,10 +1201,10 @@ mod tests {
         let raw = "secrets:\n  backend: platform\npasswords:\n  enabled: false\nhttp:\n  public_base_url: https://auth.example/\n";
         let first = tempfile::tempdir().unwrap();
         let second = tempfile::tempdir().unwrap();
-        let first_config: serde_yaml_ng::Value =
-            serde_yaml_ng::from_str(&isolated_custody_config(raw, first.path()).unwrap()).unwrap();
-        let second_config: serde_yaml_ng::Value =
-            serde_yaml_ng::from_str(&isolated_custody_config(raw, second.path()).unwrap()).unwrap();
+        let first_config: serde_json::Value =
+            serde_saphyr::from_str(&isolated_custody_config(raw, first.path()).unwrap()).unwrap();
+        let second_config: serde_json::Value =
+            serde_saphyr::from_str(&isolated_custody_config(raw, second.path()).unwrap()).unwrap();
         let mut masters = Vec::new();
         for (config, directory) in [(&first_config, &first), (&second_config, &second)] {
             assert_eq!(config["secrets"]["backend"], "encrypted_file");

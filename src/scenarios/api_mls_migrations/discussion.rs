@@ -289,8 +289,8 @@ pub(super) async fn run(ctx: &mut MlsApiContext<'_>) -> Result<()> {
         .find(|e| e.event_id == encrypted_message.event_ref)
         .context("Circle MLS Message")?;
     ensure!(
-        message.payload.get("encrypted_content").is_some()
-            && message.payload.get("content").is_none(),
+        message.payload.contains_key("encrypted_content")
+            && !message.payload.contains_key("content"),
         "Circle MLS content was not sealed"
     );
     let public_scan = scan(&ctx.source.client, &realm_scope).await?;
@@ -308,8 +308,7 @@ pub(super) async fn run(ctx: &mut MlsApiContext<'_>) -> Result<()> {
         .find(|e| e.event_id == public_after.event_ref)
         .unwrap();
     ensure!(
-        public.payload.get("content").is_some()
-            && public.payload.get("encrypted_content").is_none(),
+        public.payload.contains_key("content") && !public.payload.contains_key("encrypted_content"),
         "Circle activation encrypted its parent Realm"
     );
     super::receipts::scope_policy_acceptance(

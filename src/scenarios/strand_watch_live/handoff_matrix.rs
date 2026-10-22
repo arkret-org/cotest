@@ -15,6 +15,10 @@ use serde_json::json;
 use super::*;
 use crate::harness::CanonicalJsonBody;
 
+#[expect(
+    clippy::too_many_arguments,
+    reason = "Handoff matrix carries both Stations and the original accepted unit and frozen read"
+)]
 pub(super) async fn run(
     group: &mut TestServerGroup,
     delivery: &crate::harness::ScanGapControl,

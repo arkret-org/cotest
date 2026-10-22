@@ -176,8 +176,9 @@ async function runHolderRevocation(
     const retainedSource = await native("issuer-holder-remains-valid-during-local-replacement", owner);
     await expect(replacingPage.getByTestId("login-panel")).toBeVisible();
     await expect(replacingPage.getByTestId("global-search-result-item")).toHaveCount(0);
-    await replacingPage.getByTestId("account-switch-select").first().selectOption(savedProfile);
+    await replacingPage.getByTestId("return-previous-account").click();
     await expect(replacingPage.getByTestId("client-shell")).toBeVisible({ timeout: 120_000 });
+    expect(await replacingPage.evaluate(() => JSON.parse(localStorage.getItem("inkson.config.v1") ?? "{}").active_account?.profile_id)).toBe(savedProfile);
     await flows[0]!.page.completeRecoveryKeySetupIfPrompted(100);
     expect(await replacingPage.evaluate(() => performance.timeOrigin)).toBe(origin);
     await replacingPage.keyboard.press("Control+F");

@@ -88,7 +88,7 @@ pub async fn realm_genesis_with_client(client: &TestActorClient) -> Result<()> {
         .create_realm_bootstrap_with(json!({ "title": "API migration genesis" }))
         .await?;
     let realm = RealmId::new(bootstrap["realm_id"].as_str().context("bootstrap Realm")?)?;
-    let before = scan(&client, &realm).await?;
+    let before = scan(client, &realm).await?;
     assert_chain(&before, &realm)?;
     let events = before
         .committed_events
@@ -155,7 +155,7 @@ pub async fn realm_genesis_with_client(client: &TestActorClient) -> Result<()> {
         "bootstrap retry changed exact Commits"
     );
     ensure!(
-        scan(&client, &realm).await? == before,
+        scan(client, &realm).await? == before,
         "bootstrap replay changed the stream"
     );
 
@@ -163,7 +163,7 @@ pub async fn realm_genesis_with_client(client: &TestActorClient) -> Result<()> {
     client
         .send_message(realm.as_str(), &strand, "owner write after genesis")
         .await?;
-    let after = scan(&client, &realm).await?;
+    let after = scan(client, &realm).await?;
     assert_chain(&after, &realm)?;
     ensure!(
         after.committed_events[..before.committed_events.len()] == before.committed_events,

@@ -12,6 +12,10 @@ use super::*;
 use crate::harness::{ArkretServer, CanonicalJsonBody};
 use crate::scenarios::circle_poll_scope_live::{circle_create, circle_event};
 
+#[expect(
+    clippy::too_many_arguments,
+    reason = "Circle disclosure matrix binds independent principals and exact parent revisions"
+)]
 pub(super) async fn run(
     alice: &TestActorClient,
     alice_account: &AccountId,

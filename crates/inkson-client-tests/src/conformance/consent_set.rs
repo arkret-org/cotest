@@ -30,7 +30,7 @@ pub(super) async fn read(holder: &Member, peer: &ConsentPeer) -> Result<ConsentC
         nonce: {
             let mut bytes = [0_u8; 32];
             getrandom::fill(&mut bytes).map_err(anyhow::Error::msg)?;
-            arkret_canonical::base64url_encode(&bytes)
+            arkret_canonical::base64url_encode(bytes)
         },
     };
     let outcome = holder.client.sdk().consent_current_read(&request).await?;

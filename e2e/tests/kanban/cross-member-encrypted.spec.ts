@@ -915,6 +915,7 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
         expect(creatorDeviceAuthority.account_id).toEqual(record!.intent.owner_actor_id.account_id);
         expect(creatorDeviceAuthority.device_id).toBe(record!.intent.creator_device_id);
         expect(record!.intent.creator_endpoint).toEqual({ kind: "device", device_id: creatorDeviceAuthority.device_id });
+        expect(creatorDeviceAuthority.projection.authorized_generation_ref).toEqual(expect.any(Number));
         expect(creatorDeviceAuthority.projection.authorized_generation_ref).toBe(creatorDeviceAuthority.generation.current_device_generation_ref);
         expect(pin.genesis_absence.current_state_entries.some(
           (entry: Record<string, any>) => entry.selector?.kind === "mls_group" && entry.selector.scope_ref.realm_id === payload.event.realm_id,

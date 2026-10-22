@@ -1014,6 +1014,8 @@ mod tests {
     }
 
     #[test]
+    /// Gating: requires current Station, Coauth, browser bundle and native Savfox worker.
+    /// Tier: live
     #[ignore = "requires current Station, Coauth, browser bundle and native Savfox worker"]
     fn reviewed_agent_cases_cross_the_registered_executor() -> Result<()> {
         let entrypoint = "ak.suite.agent.vectors.v1";

@@ -34,6 +34,9 @@ def check_artifact(manifest):
     known = {str(Path(item["path"]).resolve()) for item in [manifest["sdk"], *manifest["dependencies"]]}
     if not all(str(Path(path).resolve()) in known for path in manifest["externs"].values()):
         raise ValueError("an extern is outside the artifact inventory")
+    directories = {str(Path(path).parent) for path in known}
+    if not all(str(Path(path).resolve()) in directories for path in manifest.get("native_search", [])):
+        raise ValueError("a native search path is outside the sealed artifact inventory")
 
 
 def axes(root, output):
@@ -120,6 +123,8 @@ def run(args):
         base += ["--extern", f"{name}={path}"]
     for directory in manifest["dependency_search"]:
         base += ["-L", f"dependency={directory}"]
+    for directory in manifest.get("native_search", []):
+        base += ["-L", f"native={directory}"]
 
     def compile_run(name, fragment, compiles):
         check_artifact(manifest)

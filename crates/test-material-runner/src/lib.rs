@@ -438,7 +438,7 @@ fn coauth_rejects_before_binding_state(public_key: &[u8]) -> Result<()> {
     let resolution = DidResolution {
         document: DidDocument {
             id: did.to_owned(),
-            also_known_as: Vec::new(),
+            also_known_as: None,
             verification_method: vec![VerificationMethod {
                 id: format!("{did}#runtime-1"),
                 kind: "JsonWebKey2020".to_owned(),
@@ -449,11 +449,13 @@ fn coauth_rejects_before_binding_state(public_key: &[u8]) -> Result<()> {
                     "kty": "OKP"
                 }))?),
                 public_key_multibase: None,
+                additional_properties: Default::default(),
             }],
             authentication: Vec::new(),
             assertion_method: Vec::new(),
             service: Vec::new(),
             metadata: None,
+            additional_properties: Default::default(),
         },
         source: DidResolutionSource::DelegatedResolver,
         verified_local_binding: false,
@@ -491,7 +493,7 @@ fn coauth_rejects_before_binding_state(public_key: &[u8]) -> Result<()> {
     // today's Coauth formal-admission guard is deliberately bypassed.
     let legacy_document = DidDocument {
         id: did.to_owned(),
-        also_known_as: Vec::new(),
+        also_known_as: None,
         verification_method: vec![VerificationMethod {
             id: format!("{did}#runtime-1"),
             kind: "JsonWebKey2020".to_owned(),
@@ -502,11 +504,13 @@ fn coauth_rejects_before_binding_state(public_key: &[u8]) -> Result<()> {
                 "kty": "OKP"
             }))?),
             public_key_multibase: None,
+            additional_properties: Default::default(),
         }],
         authentication: Vec::new(),
         assertion_method: Vec::new(),
         service: Vec::new(),
         metadata: None,
+        additional_properties: Default::default(),
     };
     let shared_document = to_shared_document(&legacy_document)?;
     let document_digest = arkret_identity::document_canonical_digest(&shared_document)?;
@@ -590,7 +594,7 @@ fn coauth_identifier_admission(
     let resolution = DidResolution {
         document: DidDocument {
             id: did.to_owned(),
-            also_known_as: Vec::new(),
+            also_known_as: None,
             verification_method: vec![VerificationMethod {
                 id: format!("{did}#{fragment}"),
                 kind: "JsonWebKey2020".to_owned(),
@@ -601,11 +605,13 @@ fn coauth_identifier_admission(
                     "kty": "OKP"
                 }))?),
                 public_key_multibase: None,
+                additional_properties: Default::default(),
             }],
             authentication: Vec::new(),
             assertion_method: Vec::new(),
             service: Vec::new(),
             metadata: None,
+            additional_properties: Default::default(),
         },
         source: DidResolutionSource::DelegatedResolver,
         verified_local_binding: false,

@@ -188,7 +188,7 @@ pub async fn canonical_account_stream_api_migration() -> Result<()> {
     let strand = first["default_strand_id"]
         .as_str()
         .context("first Strand")?;
-    let selected = filter(&[realm.clone()], 100)?;
+    let selected = filter(std::slice::from_ref(&realm), 100)?;
     let old = send(client, &realm, strand, "before saved cursor").await?;
     let baseline = collect_messages(client, None, selected.clone(), &realm, &[old]).await?;
     let saved = cursor(&baseline)?;
@@ -233,8 +233,14 @@ pub async fn canonical_account_stream_api_migration() -> Result<()> {
     )
     .await?;
     let ordered = filter(&[other_realm.clone(), realm.clone()], 100)?;
-    let combined =
-        collect_messages(client, None, ordered, &other_realm, &[excluded.clone()]).await?;
+    let combined = collect_messages(
+        client,
+        None,
+        ordered,
+        &other_realm,
+        std::slice::from_ref(&excluded),
+    )
+    .await?;
     let reordered = filter(&[realm.clone(), other_realm.clone()], 100)?;
     let sentinel = send(client, &realm, strand, "set-order cursor sentinel").await?;
     collect_messages(
@@ -261,7 +267,13 @@ pub async fn canonical_account_stream_api_migration() -> Result<()> {
 
     let complete = frames(client, None, Some(selected.clone()), true).await?;
     let complete_ids = messages(&complete, &realm)?;
-    let limited = frames(client, None, Some(filter(&[realm.clone()], 2)?), true).await?;
+    let limited = frames(
+        client,
+        None,
+        Some(filter(std::slice::from_ref(&realm), 2)?),
+        true,
+    )
+    .await?;
     let mut visible = Vec::new();
     let mut declared_limited = false;
     for (_, bucket) in buckets(&limited)?
@@ -338,7 +350,7 @@ pub async fn canonical_account_stream_api_migration() -> Result<()> {
         let wrong_filter = if cross_account {
             selected.clone()
         } else {
-            filter(&[realm.clone()], 99)?
+            filter(std::slice::from_ref(&realm), 99)?
         };
         let query = url::form_urlencoded::Serializer::new(String::new())
             .append_pair("catchup", "true")

@@ -777,7 +777,7 @@ fn is_request_event_kind_path(source: &str) -> bool {
 fn load_openapi_operations(path: &Path) -> Result<BTreeMap<OperationKey, String>> {
     let raw = fs::read_to_string(path)
         .map_err(|error| anyhow!("failed to read OpenAPI {}: {error}", path.display()))?;
-    let value: Value = serde_yaml_ng::from_str(&raw)
+    let value: Value = serde_saphyr::from_str(&raw)
         .map_err(|error| anyhow!("failed to parse OpenAPI {}: {error}", path.display()))?;
     let paths = value
         .get("paths")

@@ -13,6 +13,10 @@ use super::*;
 use crate::harness::{ArkretServer, CanonicalJsonBody};
 use crate::scenarios::identity_test_support::test_principal_root_signing_authority;
 
+#[expect(
+    clippy::too_many_arguments,
+    reason = "Approval matrix keeps independent principals and the accepted governor context explicit"
+)]
 pub(super) async fn run(
     alice: &TestActorClient,
     alice_account: &AccountId,

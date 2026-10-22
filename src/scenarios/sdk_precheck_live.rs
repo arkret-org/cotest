@@ -177,7 +177,7 @@ pub async fn run_sdk_precheck_production() -> Result<SuiteExecutionResult> {
         .get_mut("object")
         .and_then(Value::as_object_mut)
         .context("Strand object")?
-        .insert("created_at".into(), serde_json::to_value(&base.created_at)?);
+        .insert("created_at".into(), serde_json::to_value(base.created_at)?);
     // Canonical Event timestamps retain fixed milliseconds.
     let at = arkret_canonical::format_timestamp_canonical(base.created_at);
     base.payload.get_mut("object").unwrap()["created_at"] = json!(at);

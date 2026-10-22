@@ -58,6 +58,10 @@ pub trait CrossStationCallObserver: Send + Sync {
         observe_receipt: bool,
     ) -> Result<()>;
     async fn after_station_restart(&self, holder: &Member) -> Result<()>;
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "Recovery observation binds both holders, their accepted MLS state, and scan control"
+    )]
     async fn observe_material_recovery(
         &self,
         sender: &Member,

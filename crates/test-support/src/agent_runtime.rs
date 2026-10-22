@@ -243,6 +243,10 @@ fn disclosure(
 impl AgentRuntimeHandle {
     /// The accepted controller transport reads the original create-locked
     /// key state. No pairing code or scope supplied by the caller is trusted.
+    #[allow(
+        clippy::too_many_arguments,
+        reason = "The pairing fixture binds each accepted controller credential, service endpoint and durable device location explicitly."
+    )]
     pub async fn pair(
         http: reqwest::Client,
         station_base: &str,

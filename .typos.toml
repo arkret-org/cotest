@@ -4,6 +4,7 @@ extend-ignore-re = [
     "ak:[a-z_]+:[A-Za-z0-9_-]{43,}",
     "AZk4PXzJ6MpkxXnYTUmgXzeIYNd0Wfnz3N0hwLHNV6Xq",
     "Y29ubmVjdGlvbi0wMTIzNDU2Nzg5YWJjZGVm",
+    "c2RrMDIzLW9wYXF1ZS1jb250ZW50",
     # DID key multibase strings are opaque test vectors, not prose.
     "z6Mk[0-9A-Za-z]+",
 ]

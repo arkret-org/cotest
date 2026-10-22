@@ -227,7 +227,7 @@ pub async fn run_agent_act_on_behalf_boundary() -> Result<()> {
     let database = station
         .owned_database_url()
         .context("actual Station database")?;
-    let unselected_before = acceptance_rows_with_agent_stores(&database, true).await?;
+    let unselected_before = acceptance_rows_with_agent_stores(database, true).await?;
     let unselected = runtime
         .post("/_arkret/self/events")
         .canonical_json(&arkret_wire::EventAdmissionSubmission::new(target.clone()))?
@@ -248,7 +248,7 @@ pub async fn run_agent_act_on_behalf_boundary() -> Result<()> {
             && serde_json::to_value(&unselected_problem)?["reason_code"] == "approval_required",
         "unselected attributed publication without fresh approval: {unselected_status} {unselected_problem:?}"
     );
-    ensure!(unselected_before == acceptance_rows_with_agent_stores(&database, true).await?);
+    ensure!(unselected_before == acceptance_rows_with_agent_stores(database, true).await?);
     let requested_at = arkret_canonical::normalize_timestamp_canonical(Utc::now());
     let request: AgentActionRequestPayload = serde_json::from_value(json!({
         "request_id":unique_uuid7(), "agent_id":agent.agent_account.principal_id,
@@ -279,7 +279,7 @@ pub async fn run_agent_act_on_behalf_boundary() -> Result<()> {
         response.status(),
         response.text().await?
     );
-    let before = acceptance_rows_with_agent_stores(&database, true).await?;
+    let before = acceptance_rows_with_agent_stores(database, true).await?;
     let mismatched = controller
         .post("/_arkret/self/events")
         .canonical_json(&arkret_wire::EventAdmissionSubmission::new(target.clone()))?
@@ -292,7 +292,7 @@ pub async fn run_agent_act_on_behalf_boundary() -> Result<()> {
             && problem.code() == arkret_wire::ErrorCode::CAPABILITY_DENIED,
         "controller session borrowed the independent Agent producer: {status} {problem:?}"
     );
-    ensure!(before == acceptance_rows_with_agent_stores(&database, true).await?);
+    ensure!(before == acceptance_rows_with_agent_stores(database, true).await?);
     let response = runtime
         .post("/_arkret/self/events")
         .canonical_json(&arkret_wire::EventAdmissionSubmission::new(target.clone()))?
@@ -306,7 +306,7 @@ pub async fn run_agent_act_on_behalf_boundary() -> Result<()> {
             && serde_json::to_value(&refused)?["reason_code"] == "approval_required",
         "selected attributed publication without confirmation: {status} {refused:?}"
     );
-    ensure!(before == acceptance_rows_with_agent_stores(&database, true).await?);
+    ensure!(before == acceptance_rows_with_agent_stores(database, true).await?);
     let mut nonce = [0u8; 32];
     getrandom::fill(&mut nonce)
         .map_err(|error| anyhow::anyhow!("approval nonce generation failed: {error}"))?;
@@ -346,7 +346,7 @@ pub async fn run_agent_act_on_behalf_boundary() -> Result<()> {
             ..
         }
     ));
-    let after_confirmation = acceptance_rows_with_agent_stores(&database, true).await?;
+    let after_confirmation = acceptance_rows_with_agent_stores(database, true).await?;
     let retried_confirmation: AuthoritySubmitOutcome = serde_json::from_value(
         expect_json(
             controller.post("/_arkret/self/events").canonical_json(
@@ -370,7 +370,7 @@ pub async fn run_agent_act_on_behalf_boundary() -> Result<()> {
         anyhow::bail!("confirmation retry lost its accepted Commit");
     };
     ensure!(original_confirmation == confirmation_retry);
-    ensure!(after_confirmation == acceptance_rows_with_agent_stores(&database, true).await?);
+    ensure!(after_confirmation == acceptance_rows_with_agent_stores(database, true).await?);
     let mut rebound = approval.clone();
     rebound.approval_id = unique_uuid7();
     let rebound_event = controller
@@ -392,7 +392,7 @@ pub async fn run_agent_act_on_behalf_boundary() -> Result<()> {
             && serde_json::to_value(&problem)?["reason_code"] == "approval_nonce_reused",
         "nonce rebinding returned {status} {problem:?}"
     );
-    ensure!(after_confirmation == acceptance_rows_with_agent_stores(&database, true).await?);
+    ensure!(after_confirmation == acceptance_rows_with_agent_stores(database, true).await?);
     let mut foreign_request = approval.clone();
     foreign_request.approval_id = unique_uuid7();
     foreign_request.request_id = Some(unique_uuid7());
@@ -418,7 +418,7 @@ pub async fn run_agent_act_on_behalf_boundary() -> Result<()> {
             && problem.code() == arkret_wire::ErrorCode::FAILED_PRECONDITION,
         "unknown private request confirmation returned {status} {problem:?}"
     );
-    ensure!(after_confirmation == acceptance_rows_with_agent_stores(&database, true).await?);
+    ensure!(after_confirmation == acceptance_rows_with_agent_stores(database, true).await?);
     let submitted = arkret_wire::EventAdmissionSubmission::new(target.clone());
     let response = runtime
         .post("/_arkret/self/events")
@@ -449,7 +449,7 @@ pub async fn run_agent_act_on_behalf_boundary() -> Result<()> {
             .reducer_input()
             == Some(&target)
     );
-    let published_rows = acceptance_rows_with_agent_stores(&database, true).await?;
+    let published_rows = acceptance_rows_with_agent_stores(database, true).await?;
     let wrong_holder = controller
         .post("/_arkret/self/events")
         .canonical_json(&submitted)?
@@ -462,7 +462,7 @@ pub async fn run_agent_act_on_behalf_boundary() -> Result<()> {
             && problem.code() == arkret_wire::ErrorCode::UNAUTHENTICATED,
         "controller borrowed the accepted Agent producer on recovery: {status} {problem:?}"
     );
-    ensure!(published_rows == acceptance_rows_with_agent_stores(&database, true).await?);
+    ensure!(published_rows == acceptance_rows_with_agent_stores(database, true).await?);
     let response = runtime
         .post("/_arkret/self/events")
         .canonical_json(&submitted)?
@@ -487,7 +487,7 @@ pub async fn run_agent_act_on_behalf_boundary() -> Result<()> {
         original_commit == retried_commit,
         "exact publication retry changed the covering Commit"
     );
-    ensure!(published_rows == acceptance_rows_with_agent_stores(&database, true).await?);
+    ensure!(published_rows == acceptance_rows_with_agent_stores(database, true).await?);
     // Each denied publication has its own accepted exact confirmation, so a
     // missing fresh approval cannot conceal the independently tested gate.
     let no_reference = attributed_message(
@@ -509,7 +509,7 @@ pub async fn run_agent_act_on_behalf_boundary() -> Result<()> {
     .await?;
     refuse_target(
         &runtime,
-        &database,
+        database,
         &no_reference,
         &[
             arkret_wire::ErrorCode::SCHEMA_VIOLATION,
@@ -528,7 +528,7 @@ pub async fn run_agent_act_on_behalf_boundary() -> Result<()> {
     confirm_target(&deployment, &runtime, &agent, &realm, &strand, &wrong_scope).await?;
     refuse_target(
         &runtime,
-        &database,
+        database,
         &wrong_scope,
         &[arkret_wire::ErrorCode::CAPABILITY_DENIED],
     )
@@ -572,7 +572,7 @@ pub async fn run_agent_act_on_behalf_boundary() -> Result<()> {
     );
     let refused = refuse_target(
         &runtime,
-        &database,
+        database,
         &participation_target,
         &[arkret_wire::ErrorCode::FAILED_PRECONDITION],
     )
@@ -589,7 +589,7 @@ pub async fn run_agent_act_on_behalf_boundary() -> Result<()> {
         .sdk()
         .agent_participation_replace(agent.agent_account.principal_id.as_str(), &restored)
         .await?;
-    let before_sidecar = acceptance_rows_with_agent_stores(&database, true).await?;
+    let before_sidecar = acceptance_rows_with_agent_stores(database, true).await?;
     let illegal_sidecar = arkret_models_collaboration::sidecar_operations::SidecarEnsureRequestBody::Prepare(
         arkret_models_collaboration::sidecar_operations::SidecarEnsurePrepareRequestBody {
             phase: arkret_models_collaboration::sidecar_operations::SidecarEnsurePreparePhase::Prepare,
@@ -615,14 +615,14 @@ pub async fn run_agent_act_on_behalf_boundary() -> Result<()> {
             && serde_json::to_value(&problem)?["reason_code"] == "sidecar_create_denied",
         "foreign-controller Sidecar creation returned {status} {problem:?}"
     );
-    ensure!(before_sidecar == acceptance_rows_with_agent_stores(&database, true).await?);
+    ensure!(before_sidecar == acceptance_rows_with_agent_stores(database, true).await?);
     controller
         .revoke_realm_grant(realm.as_str(), wrong_action_grant.as_str())
         .await?;
     controller
         .revoke_realm_grant(realm.as_str(), grant_id.as_str())
         .await?;
-    let revoked = acceptance_rows_with_agent_stores(&database, true).await?;
+    let revoked = acceptance_rows_with_agent_stores(database, true).await?;
     let issue_url = format!(
         "{}/_arkret/gate/account/session-grants",
         deployment.coauth.base_url()
@@ -645,7 +645,7 @@ pub async fn run_agent_act_on_behalf_boundary() -> Result<()> {
     )
     .await
     .context("revoked content source refuses a fresh actual issuance")?;
-    ensure!(revoked == acceptance_rows_with_agent_stores(&database, true).await?);
+    ensure!(revoked == acceptance_rows_with_agent_stores(database, true).await?);
     let ledger = coauth_session_evidence::grant_ledger(&deployment.coauth.pg.connect_url).await?;
     let http_proof = arkret_signatures::dpop::build_dpop_proof(
         &arkret_signatures::dpop::DpopProofRequest::new("POST", &issue_url),
@@ -674,7 +674,7 @@ pub async fn run_agent_act_on_behalf_boundary() -> Result<()> {
     ensure!(
         ledger == coauth_session_evidence::grant_ledger(&deployment.coauth.pg.connect_url).await?
     );
-    ensure!(revoked == acceptance_rows_with_agent_stores(&database, true).await?);
+    ensure!(revoked == acceptance_rows_with_agent_stores(database, true).await?);
     println!(
         "[agent-act-on-behalf] real_narrow_content_issuer=1 actual_private_selection=1 unselected_attribution_requires_fresh_approval=1 missing_confirmation_zero_effect_refused=1 actual_controller_confirmation_publication=1 exact_confirmation_retry_original_commit_zero_effect=1 confirmation_nonce_rebinding_zero_effect_refused=1 unknown_confirmation_request_zero_effect_refused=1 exact_publication_retry_original_commit_zero_effect=1 accepted_recovery_wrong_producer_zero_effect_refused=1 authenticated_actual_producer_mismatch_zero_effect_refused=1 revoked_content_source_fresh_issue_zero_effect_refused=1 completed_issue_replay_after_revoke_original=1 missing_authorization_ref_zero_effect_refused=1 selected_wrong_action_grant_zero_effect_refused=1 participation_closed_with_fresh_confirmation_zero_effect_refused=1 foreign_controller_sidecar_create_denied_zero_effect=1 canonical_case_completion_claim=0"
     );

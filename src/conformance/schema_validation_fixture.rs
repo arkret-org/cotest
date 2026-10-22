@@ -700,8 +700,7 @@ impl SchemaEnv {
         let openapi = if openapi_path.is_file() {
             let raw = fs::read_to_string(&openapi_path)
                 .with_context(|| format!("read openapi {}", openapi_path.display()))?;
-            let yaml: serde_yaml_ng::Value = serde_yaml_ng::from_str(&raw)?;
-            Some(yaml_to_json(&yaml)?)
+            Some(serde_saphyr::from_str::<Value>(&raw)?)
         } else {
             None
         };
@@ -828,13 +827,6 @@ fn split_fragment(input: &str) -> (&str, Option<&str>) {
         Some(idx) => (&input[..idx], Some(&input[idx + 1..])),
         None => (input, None),
     }
-}
-
-fn yaml_to_json(value: &serde_yaml_ng::Value) -> Result<Value> {
-    // Round-trip via serde_json to swap representations.
-    let s = serde_json::to_string(&value)
-        .map_err(|err| anyhow!("yaml to json round-trip failed: {err}"))?;
-    serde_json::from_str(&s).map_err(|err| anyhow!("re-decode yaml-as-json failed: {err}"))
 }
 
 /// Inline every `{ "$ref": "#/components/schemas/Name" }` reference found

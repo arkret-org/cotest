@@ -1298,25 +1298,26 @@ impl SidecarSyncObserver for Probe {
             matches!(&failed,Err(garth::Error::Protocol(message)) if message.contains("injected client account commit failure")),
             "the verified Account did not reach its real transaction boundary: {failed:?}"
         );
-        let observed = rail.observed.lock().unwrap();
-        window_dependencies::assert_issued_dependencies(
-            &observed,
-            &arkret_wire::CommitStreamRef::from_scope(&genesis.scope_ref, None)?,
-        )?;
-        ensure!(
-            observed.len() == 1
-                && observed[0]
-                    .frames
-                    .iter()
-                    .flat_map(|frame| frame.realms.iter())
-                    .flat_map(|realms| realms.entries.values())
-                    .flat_map(|entry| entry.committed_events.iter().flatten())
-                    .any(|row| row
-                        .reducer_input()
-                        .is_some_and(|event| event.event_id == genesis.event_id)),
-            "persistence negative never delivered its authentic new private history"
-        );
-        drop(observed);
+        {
+            let observed = rail.observed.lock().unwrap();
+            window_dependencies::assert_issued_dependencies(
+                &observed,
+                &arkret_wire::CommitStreamRef::from_scope(&genesis.scope_ref, None)?,
+            )?;
+            ensure!(
+                observed.len() == 1
+                    && observed[0]
+                        .frames
+                        .iter()
+                        .flat_map(|frame| frame.realms.iter())
+                        .flat_map(|realms| realms.entries.values())
+                        .flat_map(|entry| entry.committed_events.iter().flatten())
+                        .any(|row| row
+                            .reducer_input()
+                            .is_some_and(|event| event.event_id == genesis.event_id)),
+                "persistence negative never delivered its authentic new private history"
+            );
+        }
         ensure!(
             host.state_store().conformance_account_checkpoint_token()? == token_before
                 && serde_json::to_value(host.state_store().conformance_committed_account_state()?)?

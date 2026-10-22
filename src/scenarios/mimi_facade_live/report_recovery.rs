@@ -220,6 +220,10 @@ impl ReplayProbe {
     }
 }
 
+#[expect(
+    clippy::too_many_arguments,
+    reason = "Recovery fixture binds the report holder, Station, database, and original receipt"
+)]
 pub(super) async fn exercise(
     server: &ArkretServer,
     coauth: &MockCoauthIntrospectionServer,

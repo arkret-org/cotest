@@ -989,19 +989,19 @@ fn product_attempt_after_current<'a>(
 // Poll the actual media fixture as its own task, after the parent driver
 // returns Pending. The services, native hosts and MLS material remain owned
 // across the join; nested large debug poll frames do not share one stack.
+type MediaPhaseState = (
+    Box<ConsentCallContext>,
+    Box<inkson::sync_engine::NativeAccountHost>,
+    Box<inkson::sync_engine::NativeAccountHost>,
+    u64,
+);
+
 fn media_phase(
     mut context: Box<ConsentCallContext>,
     native: Box<inkson::sync_engine::NativeAccountHost>,
     other: Box<inkson::sync_engine::NativeAccountHost>,
     mut sequence: u64,
-) -> impl std::future::Future<
-    Output = Result<(
-        Box<ConsentCallContext>,
-        Box<inkson::sync_engine::NativeAccountHost>,
-        Box<inkson::sync_engine::NativeAccountHost>,
-        u64,
-    )>,
-> {
+) -> impl std::future::Future<Output = Result<MediaPhaseState>> {
     let task = tokio::task::spawn_local(cotest::harness::heap_future(move || async move {
         cotest::harness::heap_future(|| sfu_media(&mut context, &native, &other, &mut sequence))
             .await?;
@@ -1292,11 +1292,11 @@ async fn independent_holders(
     let mut denied_token = invited_token(context, &request, media);
     denied_token.actor_id = context.denied_holder.actor.clone();
     denied_token.device_id = context.denied_holder.device.clone();
-    reject_token(&context, &context.denied_holder, &denied_token).await?;
+    reject_token(context, &context.denied_holder, &denied_token).await?;
     let mut borrowed = token;
     borrowed.actor_id = context.denied_holder.actor.clone();
     borrowed.device_id = context.denied_holder.device.clone();
-    reject_token(&context, &context.denied_holder, &borrowed).await?;
+    reject_token(context, &context.denied_holder, &borrowed).await?;
     revoke(&context.holder, &permission).await?;
     Ok(())
 }
@@ -1393,7 +1393,7 @@ async fn relation_mutations(
                 &invited.invitation.signature_input()?,
             )?;
         }
-        reject_token(&context, &context.holder, &changed).await?;
+        reject_token(context, &context.holder, &changed).await?;
     }
     for mutation in 0..3 {
         let other_call = new_call(context).await?;
@@ -1524,7 +1524,7 @@ async fn independent_windows(
     .await?;
     *sequence += 1;
     let token = invited_token(context, &request, request.invitation.media.clone());
-    reject_token(&context, &context.holder, &token).await?;
+    reject_token(context, &context.holder, &token).await?;
     let (concrete, _) = grant(
         context,
         &context.holder,
@@ -1596,7 +1596,7 @@ async fn independent_windows(
     );
     verify_token(context, &token, &exchange(&context.holder, &token).await?).await?;
     revoke(&context.holder, &replacement).await?;
-    reject_token(&context, &context.holder, &token).await?;
+    reject_token(context, &context.holder, &token).await?;
     let current =
         inkson::conformance::read_native_consent_current(native, context.caller.actor.clone())
             .await?;
@@ -2048,14 +2048,14 @@ async fn reopen_native(
     previous: &inkson::sync_engine::NativeAccountHost,
 ) -> Result<inkson::sync_engine::NativeAccountHost> {
     // Cold RTC opened this same durable root; resume with its committed metadata.
-    Ok(inkson::sync_engine::NativeAccountHost::new_for_realm(
+    inkson::sync_engine::NativeAccountHost::new_for_realm(
         context.holder.client.sdk(),
         context.holder.account.clone(),
         context.holder.device.clone(),
         previous.state_store().conformance_reopen(),
         context.realm.clone(),
     )
-    .await?)
+    .await
 }
 
 /// A rejected Human transfer preserves the original thirty-second verdict.

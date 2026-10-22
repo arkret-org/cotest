@@ -63,7 +63,8 @@ skip-tree = []
 unknown-registry = "deny"
 unknown-git = "deny"
 allow-registry = ["https://github.com/rust-lang/crates.io-index"]
-allow-git = []
+# SDK Linux keystore fork; the manifest pins the reviewed commit.
+allow-git = ["https://github.com/arkret-org/secret-service-rs"]
 
 [sources.allow-org]
 github = []

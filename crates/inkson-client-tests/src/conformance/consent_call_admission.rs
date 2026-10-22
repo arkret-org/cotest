@@ -31,18 +31,24 @@ pub async fn run_cross_station_three_cut_calls() -> Result<()> {
         .await
 }
 
+type CallTokenRefresh = (
+    arkret_models_collaboration::objects::media::CallMediaTokenExchangeRequestBody,
+    chrono::DateTime<chrono::Utc>,
+);
+type CallCaseFuture<'a> =
+    std::pin::Pin<Box<dyn std::future::Future<Output = Result<Vec<CallTokenRefresh>>> + 'a>>;
+
 #[derive(Default)]
 struct CallAdmissionObserver {
-    refreshes: std::sync::Mutex<
-        Vec<(
-            arkret_models_collaboration::objects::media::CallMediaTokenExchangeRequestBody,
-            chrono::DateTime<chrono::Utc>,
-        )>,
-    >,
+    refreshes: std::sync::Mutex<Vec<CallTokenRefresh>>,
     recoveries: std::sync::atomic::AtomicUsize,
     emission_probe: std::sync::Mutex<Option<std::path::PathBuf>>,
 }
 impl CallAdmissionObserver {
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "Call observation binds both holders, accepted MLS state, and independent Stations"
+    )]
     async fn observe_ordinary_call_invite(
         &self,
         sender: &Member,
@@ -464,6 +470,10 @@ async fn token_precondition(
     Ok(())
 }
 
+#[expect(
+    clippy::too_many_arguments,
+    reason = "Call fixture binds the complete accepted MLS cut and native holder pair"
+)]
 async fn run_at_accepted_mls(
     sender: &Member,
     holder: &Member,
@@ -475,12 +485,7 @@ async fn run_at_accepted_mls(
     holder_group: &arkret::ArkretMlsGroup,
     emission_probe: Option<&std::path::Path>,
     other_holder: Option<(&Member, &arkret::ArkretMlsGroup)>,
-) -> Result<
-    Vec<(
-        arkret_models_collaboration::objects::media::CallMediaTokenExchangeRequestBody,
-        chrono::DateTime<chrono::Utc>,
-    )>,
-> {
+) -> Result<Vec<CallTokenRefresh>> {
     use cotest::scenarios::human_device_producer_live::{
         grant_realm_actions, submit_and_expect_commit,
     };
@@ -578,8 +583,13 @@ async fn run_at_accepted_mls(
 }
 
 #[inline(never)]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "Call matrix keeps native holders, independent Stations, and emission observation explicit"
+)]
 fn run_call_cases<'a>(
-    sender: &'a Member, holder: &'a Member,
+    sender: &'a Member,
+    holder: &'a Member,
     holder_station: &'a cotest::harness::ArkretServer,
     realm: &'a arkret_wire::RealmId,
     sender_host: &'a inkson::sync_engine::NativeAccountHost,
@@ -587,10 +597,7 @@ fn run_call_cases<'a>(
     other_holder: Option<(&'a Member, &'a arkret::ArkretMlsGroup)>,
     other_host: Option<&'a inkson::sync_engine::NativeAccountHost>,
     emission_probe: Option<&'a std::path::Path>,
-) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<Vec<(
-    arkret_models_collaboration::objects::media::CallMediaTokenExchangeRequestBody,
-    chrono::DateTime<chrono::Utc>,
-)>>> + 'a>>{
+) -> CallCaseFuture<'a> {
     Box::pin(async move {
         use cotest::scenarios::human_device_producer_live::submit_and_expect_commit;
         let mut receiver = garth::signal::SignalReceiver::new();
@@ -684,7 +691,7 @@ fn run_call_cases<'a>(
             );
             eprintln!("[consent-call] phase=sent_invitation video={video}");
             let received =
-                next_admitted_signal(&mut stream, &holder_host, holder, &mut receiver).await?;
+                next_admitted_signal(&mut stream, holder_host, holder, &mut receiver).await?;
             let garth::signal::SignalReceiveOutcome::Accepted {
                 call_invitation: Some(delivery),
                 ..
@@ -722,7 +729,7 @@ fn run_call_cases<'a>(
             sender.client.sdk().signal_send(&ordinary_envelope).await?;
             let ordinary = next_admitted_signal(
                 &mut stream,
-                &holder_host,
+                holder_host,
                 holder,
                 &mut garth::signal::SignalReceiver::new(),
             )
@@ -738,14 +745,14 @@ fn run_call_cases<'a>(
                 "ordinary encrypted rail acquired product admission material"
             );
             ensure!(
-                inkson::conformance::observe_native_call_projection(&holder_host, ordinary).await?
+                inkson::conformance::observe_native_call_projection(holder_host, ordinary).await?
                     == 0,
                 "ordinary encrypted Invite entered the ringing product"
             );
-            media_verification::reject_changed_admission_requests(sender, &holder_host, &received)
+            media_verification::reject_changed_admission_requests(sender, holder_host, &received)
                 .await?;
             ensure!(
-                inkson::conformance::observe_native_call_projection(&holder_host, received.clone())
+                inkson::conformance::observe_native_call_projection(holder_host, received.clone())
                     .await?
                     == 1,
                 "valid full current did not reach the native ringing product"
@@ -894,11 +901,11 @@ fn run_call_cases<'a>(
                 .context("voice invitation must not authorize video expansion")?;
             }
             let older =
-                inkson::conformance::read_native_call_consent(&holder_host, &delivery.invitation)
+                inkson::conformance::read_native_call_consent(holder_host, &delivery.invitation)
                     .await?;
             let (revoked, original_revoke) = revoke_record(holder, &granted).await?;
             let fresh =
-                inkson::conformance::read_native_call_consent(&holder_host, &delivery.invitation)
+                inkson::conformance::read_native_call_consent(holder_host, &delivery.invitation)
                     .await?;
             let revoked_head = fresh.source().value()?.effective_stream_head.clone();
             let generation = fresh.authority_generation()?;
@@ -942,7 +949,7 @@ fn run_call_cases<'a>(
                 );
             }
             let after_retry =
-                inkson::conformance::read_native_call_consent(&holder_host, &delivery.invitation)
+                inkson::conformance::read_native_call_consent(holder_host, &delivery.invitation)
                     .await?;
             let current = after_retry.source().value()?;
             ensure!(
@@ -958,7 +965,7 @@ fn run_call_cases<'a>(
                 "[consent-call] video={video} original_grant_revoke_retries=2 new_commits=0 actual_older_read_rejected=1"
             );
             ensure!(
-                inkson::conformance::observe_native_call_projection(&holder_host, received.clone())
+                inkson::conformance::observe_native_call_projection(holder_host, received.clone())
                     .await?
                     == 0,
                 "previous product admission rang after accepted revoke"
@@ -1009,7 +1016,7 @@ fn run_call_cases<'a>(
                         format!("{window} Consent authorized the actual invitation token cut")
                     })?;
                 ensure!(
-                    inkson::conformance::observe_native_call_projection(&holder_host, ineligible)
+                    inkson::conformance::observe_native_call_projection(holder_host, ineligible)
                         .await?
                         == 0,
                     "ineligible Consent authorized ringing"
@@ -1030,7 +1037,7 @@ fn run_call_cases<'a>(
             concrete_request.join_context = invitation_context(&fresh_invitation);
             token_status(holder, &concrete_request, reqwest::StatusCode::OK).await
                 .context("unrelated scope replacement erased concrete permission")?;
-            ensure!(inkson::conformance::observe_native_call_projection(&holder_host, concrete_signal).await? == 1);
+            ensure!(inkson::conformance::observe_native_call_projection(holder_host, concrete_signal).await? == 1);
             let replacement = grant(holder, &sender.actor, concrete_scope).await?;
             ensure!(replacement.revision != concrete.revision);
             let (fresh_invitation, replacement_signal) = fresh_call_signal(
@@ -1039,7 +1046,7 @@ fn run_call_cases<'a>(
             let mut replacement_request = request.clone();
             replacement_request.join_context = invitation_context(&fresh_invitation);
             token_status(holder, &replacement_request, reqwest::StatusCode::OK).await?;
-            ensure!(inkson::conformance::observe_native_call_projection(&holder_host, replacement_signal.clone()).await? == 1);
+            ensure!(inkson::conformance::observe_native_call_projection(holder_host, replacement_signal.clone()).await? == 1);
             revoke(holder, &replacement).await?;
             token_status(holder, &replacement_request, reqwest::StatusCode::FORBIDDEN).await?;
             let garth::signal::SignalReceiveOutcome::Accepted {
@@ -1054,7 +1061,7 @@ fn run_call_cases<'a>(
                 "revocation control crossed its original product window"
             );
             ensure!(
-                inkson::conformance::observe_native_call_projection(&holder_host, replacement_signal)
+                inkson::conformance::observe_native_call_projection(holder_host, replacement_signal)
                     .await?
                     == 0,
                 "removed concrete scope remained eligible through an older product outcome"
@@ -1090,7 +1097,7 @@ fn run_call_cases<'a>(
                     sender,
                     holder,
                     other,
-                    &sender_host,
+                    sender_host,
                     other_host,
                     realm,
                     &material,
@@ -1100,39 +1107,37 @@ fn run_call_cases<'a>(
                 )
                 .await?;
             }
-            if video {
-                if let Some(probe) = emission_probe {
-                    token_release::run(
-                        sender,
-                        holder,
-                        &sender_host,
-                        realm,
-                        &material,
-                        &payload,
-                        probe,
-                    )
-                    .await?;
-                    exercise_inflight_product_revoke(
-                        sender,
-                        holder,
-                        holder_station,
-                        &sender_host,
-                        &holder_host,
-                        realm,
-                        &call,
-                        &material,
-                        &payload,
-                        probe,
-                    )
-                    .await?;
-                }
+            if video && let Some(probe) = emission_probe {
+                token_release::run(
+                    sender,
+                    holder,
+                    sender_host,
+                    realm,
+                    &material,
+                    &payload,
+                    probe,
+                )
+                .await?;
+                exercise_inflight_product_revoke(
+                    sender,
+                    holder,
+                    holder_station,
+                    sender_host,
+                    holder_host,
+                    realm,
+                    &call,
+                    &material,
+                    &payload,
+                    probe,
+                )
+                .await?;
             }
             if video {
                 exercise_decrypted_relation_mismatches(
                     sender,
                     holder,
-                    &sender_host,
-                    &holder_host,
+                    sender_host,
+                    holder_host,
                     realm,
                     &refreshes[0].0.call_id,
                     &material,
@@ -1205,10 +1210,10 @@ fn invitation_context(request: &CallInvitationSendRequestBody) -> CallMediaJoinC
 async fn probe_observation(path: &std::path::Path) -> Result<serde_json::Value> {
     let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(10);
     loop {
-        if let Ok(bytes) = tokio::fs::read(path).await {
-            if let Ok(value) = serde_json::from_slice(&bytes) {
-                return Ok(value);
-            }
+        if let Ok(bytes) = tokio::fs::read(path).await
+            && let Ok(value) = serde_json::from_slice(&bytes)
+        {
+            return Ok(value);
         }
         ensure!(
             tokio::time::Instant::now() < deadline,
@@ -1220,7 +1225,7 @@ async fn probe_observation(path: &std::path::Path) -> Result<serde_json::Value> 
 
 enum ProductRail {
     Http(arkret_http_client::SignalSubscribeFrameStream),
-    WebSocket(cotest::scenarios::websocket_live::LiveSignalReader),
+    WebSocket(Box<cotest::scenarios::websocket_live::LiveSignalReader>),
 }
 
 impl ProductRail {
@@ -1311,13 +1316,13 @@ async fn exercise_inflight_product_revoke(
                 )
                 .await?;
             let mut rail = if websocket {
-                ProductRail::WebSocket(
+                ProductRail::WebSocket(Box::new(
                     cotest::scenarios::websocket_live::LiveSignalReader::connect_signal(
                         holder_station,
                         &holder.client,
                     )
                     .await?,
-                )
+                ))
             } else {
                 ProductRail::Http(ready_signal_rail(holder).await?)
             };

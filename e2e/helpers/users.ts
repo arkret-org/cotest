@@ -58,6 +58,7 @@ import { deviceSuffix, newDeviceId } from "./ids";
 import { base58btcEncode } from "./encoding";
 import { withOperationSelectors } from "./arkret-test";
 import { SessionDiagnostics, accountViewerHandleDiagnostic } from "./session-diagnostics";
+import { observeBrowserSessionRefresh } from "./browser-session-refresh";
 import { revealTimelineEvent } from "./timeline-visibility";
 import {
   completeRecoverySetup,
@@ -99,6 +100,8 @@ type SessionGrantMaterial = {
   grantId: string;
   accountId: { principal_id: string; station_id: string };
   audience: string;
+  issuerUrl?: string;
+  grantedScope?: string[];
   /// base64url-no-pad 32-byte Ed25519 seed of the DPoP device key the grant is
   /// bound to (`cnf.jkt`).
   dpopSeedB64url: string;
@@ -236,10 +239,25 @@ function stringField(
 export class JointUserPage {
   readonly user: JointUser;
   readonly session: UserSession;
+  private readonly browserRefresh?: ReturnType<typeof observeBrowserSessionRefresh>;
 
   constructor(user: JointUser, session: UserSession) {
     this.user = user;
     this.session = session;
+    const grant = session.grant;
+    if (grant?.issuerUrl && grant.grantedScope && grant.grantId &&
+        grant.audience === grant.accountId.station_id) {
+      this.browserRefresh = observeBrowserSessionRefresh(session.page, {
+        issuerUrl: grant.issuerUrl,
+        accountId: grant.accountId,
+        deviceId: user.deviceId,
+        audience: grant.audience,
+        grantedScope: grant.grantedScope,
+        holderJwk: dpopDeviceKeyFromSeedB64url(grant.dpopSeedB64url).publicJwk,
+        initialCredential: grant.grantJwt,
+        initialGrantId: grant.grantId,
+      });
+    }
   }
 
   get page(): Page {
@@ -248,6 +266,11 @@ export class JointUserPage {
 
   get serverUrl(): string {
     return this.session.serverUrl;
+  }
+
+  async waitForSessionGrantRefresh() {
+    if (!this.browserRefresh) throw new Error("browser fixture has no bound refresh observer");
+    await expect.poll(() => this.browserRefresh!.refreshCount(), { timeout: 30_000 }).toBeGreaterThan(0);
   }
 
   async gotoHome() {
@@ -1203,7 +1226,7 @@ export class JointUserPage {
     if (grant) {
       return selfPathGrantHeaders({
         deviceKey: dpopDeviceKeyFromSeedB64url(grant.dpopSeedB64url),
-        grantJwt: grant.grantJwt,
+        grantJwt: this.browserRefresh?.credential() ?? grant.grantJwt,
         method,
         url,
       });
@@ -1935,6 +1958,7 @@ export async function openDpopUserPage(
     coauthBase?: string;
     prepareMlsDevice?: boolean;
     allowExplicitInviteNotifications?: boolean;
+    refreshGrantBeforeUse?: boolean;
   } = {},
 ): Promise<DpopUserPageSession | undefined> {
   const session = await createDpopUserSession(request, prefix, opts);
@@ -2457,14 +2481,26 @@ export async function openDpopUserPageFromSession(
     server?: ColandKey;
     prepareMlsDevice?: boolean;
     autoCompleteRecoveryKeySetup?: boolean;
+    refreshGrantBeforeUse?: boolean;
   } = {},
 ): Promise<DpopUserPageSession | undefined> {
   if (!session) {
     return undefined;
   }
+  let localExpiry = session.grantExpiresAt;
+  if (opts.refreshGrantBeforeUse) {
+    const acceptedExpiry = Date.parse(localExpiry ?? "");
+    if (!Number.isFinite(acceptedExpiry) || acceptedExpiry <= Date.now()) {
+      throw new Error("cannot lower unknown or expired fixture grant validity");
+    }
+    // Lower only local metadata through the existing boot test seam. The
+    // issuer's opaque grant and its real validity are never changed here.
+    localExpiry = new Date(Math.min(acceptedExpiry, Date.now() + 5_000)).toISOString();
+  }
   const page = await openUserPage(browser, session.user, {
     server: opts.server,
     ...canonicalSessionOptions(session),
+    grantExpiresAt: localExpiry,
     autoCompleteRecoveryKeySetup: opts.autoCompleteRecoveryKeySetup,
   });
   // Session injection is applied asynchronously after Inkson acquires the
@@ -2798,6 +2834,8 @@ export async function openUser(
           grantId: opts.grantId ?? "",
           accountId: opts.accountId!,
           audience: opts.grantAudience ?? "",
+          issuerUrl: coauthBaseUrl(opts.server),
+          grantedScope: sessionInjection?.granted_scope,
           dpopSeedB64url: opts.dpopSeedB64url,
         }
       : undefined;
