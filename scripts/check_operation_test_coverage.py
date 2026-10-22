@@ -62,6 +62,12 @@ OPERATION_TOKEN = re.compile(
     r"ak\.(?:server|self|peer|open|find|gate|root|edge)"
     r"(?:\.[a-z0-9_]+)+\.v\d+"
 )
+RUST_OPERATION_CONSTANT_DEFINITION = re.compile(
+    r"pub\s+const\s+([A-Z][A-Z0-9_]*)\s*:\s*&'static\s+str\s*=\s*\"([^\"]+)\"\s*;"
+)
+RUST_OPERATION_CONSTANT_REFERENCE = re.compile(
+    r"\bServiceOperationId::([A-Z][A-Z0-9_]*)\b"
+)
 RUST_TEST_ATTRIBUTE = re.compile(r"#\[[^\]]*test[^\]]*\]", re.MULTILINE)
 RUST_TEST_FUNCTION = re.compile(
     r"(?P<attrs>(?:\s*#\[[^\]]+\]\s*)+)"
@@ -439,10 +445,24 @@ def source_scopes(path: Path, text: str) -> list[TestScope]:
     return rust_test_scopes(text) if path.suffix == ".rs" else typescript_test_scopes(text)
 
 
+def operation_references(
+    text: str, suffix: str, constants: dict[str, str]
+) -> list[tuple[str, int, int]]:
+    references = [(match.group(0), match.start(), match.end()) for match in OPERATION_TOKEN.finditer(text)]
+    if suffix == ".rs":
+        references.extend(
+            (constants[match.group(1)], match.start(), match.end())
+            for match in RUST_OPERATION_CONSTANT_REFERENCE.finditer(text)
+            if match.group(1) in constants
+        )
+    return sorted(references, key=lambda reference: reference[1])
+
+
 def evidence_from_file(
     layer: str,
     path: Path,
     operation_ids: set[str],
+    constants: dict[str, str],
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]]]:
     text = path.read_text(encoding="utf-8", errors="replace")
     scopes = source_scopes(path, text)
@@ -451,21 +471,20 @@ def evidence_from_file(
     classified_non_registry: list[dict[str, Any]] = []
     unknown_literals: list[dict[str, Any]] = []
 
-    for match in OPERATION_TOKEN.finditer(text):
-        token = match.group(0)
-        line = text.count("\n", 0, match.start()) + 1
-        scope = scope_for_position(scopes, match.start(), line)
+    for token, start, end in operation_references(text, path.suffix, constants):
+        line = text.count("\n", 0, start) + 1
+        scope = scope_for_position(scopes, start, line)
         if scope.kind == "module_helper":
-            line_start = text.rfind("\n", 0, match.start()) + 1
-            line_end = text.find("\n", match.end())
+            line_start = text.rfind("\n", 0, start) + 1
+            line_end = text.find("\n", end)
             line_end = len(text) if line_end < 0 else line_end
             scope_text = text[line_start:line_end]
         else:
             scope_text = text[scope.start : scope.end]
 
         if token not in operation_ids:
-            context_start = max(0, match.start() - 160)
-            context_end = min(len(text), match.end() + 160)
+            context_start = max(0, start - 160)
+            context_end = min(len(text), end + 160)
             context = text[context_start:context_end]
             classification = classify_non_registry_literal(path_text, scope, context)
             item = {
@@ -607,6 +626,17 @@ def generate(workspace_root: Path = WORKSPACE_ROOT) -> dict[str, Any]:
         }
         if len(operations) != len(operation_rows):
             raise ValueError("operation registry contains invalid or duplicate rows")
+        constants_path = WORKSPACE_ROOT / "arkret-rust-sdk/crates/wire/src/generated/operation_ids.rs"
+        constants_bytes = constants_path.read_bytes()
+        constants: dict[str, str] = {}
+        for name, operation in RUST_OPERATION_CONSTANT_DEFINITION.findall(constants_bytes.decode("utf-8")):
+            if not OPERATION_TOKEN.fullmatch(operation):
+                continue
+            if name in constants or operation not in operations:
+                raise ValueError(f"SDK operation constant is duplicated or outside the registry: {name}")
+            constants[name] = operation
+        if not constants:
+            raise ValueError("SDK generated operation constants are absent")
 
         layer_sources = discover_layer_sources(WORKSPACE_ROOT)
         assigned_files = {
@@ -622,7 +652,7 @@ def generate(workspace_root: Path = WORKSPACE_ROOT) -> dict[str, Any]:
             layer_evidence: list[dict[str, Any]] = []
             for path in layer.files:
                 evidence, classified, unknown = evidence_from_file(
-                    layer.name, path, set(operations)
+                    layer.name, path, set(operations), constants
                 )
                 layer_evidence.extend(evidence)
                 classified_non_registry.extend(classified)
@@ -642,7 +672,7 @@ def generate(workspace_root: Path = WORKSPACE_ROOT) -> dict[str, Any]:
             if path.resolve() in assigned_files:
                 continue
             text = path.read_text(encoding="utf-8", errors="replace")
-            if any(operation_id in text for operation_id in operations):
+            if any(token in operations for token, _, _ in operation_references(text, path.suffix, constants)):
                 unknown_test_files.append(relative_path(path))
 
         unassigned = [
@@ -704,6 +734,8 @@ def generate(workspace_root: Path = WORKSPACE_ROOT) -> dict[str, Any]:
             "generated_from": {
                 "operation_registry": relative_path(REGISTRY_PATH),
                 "operation_registry_sha256": sha256_bytes(registry_bytes),
+                "operation_constants": relative_path(constants_path),
+                "operation_constants_sha256": sha256_bytes(constants_bytes),
                 "test_layers": layer_metadata,
             },
             "dimensions": {

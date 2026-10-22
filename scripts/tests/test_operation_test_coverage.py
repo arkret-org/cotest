@@ -49,6 +49,12 @@ class OperationTestCoverageTests(unittest.TestCase):
             ),
         )
         self.write(
+            "arkret-rust-sdk/crates/wire/src/generated/operation_ids.rs",
+            f"impl ServiceOperationId {{\n"
+            f"pub const SERVER_READ_DESCRIBE_V1: &'static str = \"{OP_ONE}\";\n"
+            f"pub const SELF_COMMITTED_EVENT_READ_SCAN_V1: &'static str =\n\"{OP_TWO}\";\n}}\n",
+        )
+        self.write(
             "coland/crates/storage/src/contract_tests.rs",
             rust_test("shared_storage_oracle", OP_ONE, "assert_eq!(value, value);")
         )
@@ -202,6 +208,46 @@ class OperationTestCoverageTests(unittest.TestCase):
         self.assertTrue(inventory.check_output(generated, output))
         output.write_text(generated + " ", encoding="utf-8")
         self.assertFalse(inventory.check_output(generated, output))
+
+    def test_sdk_associated_constants_retain_real_operation_evidence_and_source_lines(self) -> None:
+        path = "coland/crates/server/tests/http_api/constants.rs"
+        self.write(path, """#[tokio::test]
+async fn typed_http_operations() {
+    let first = arkret_wire::ServiceOperationId::SERVER_READ_DESCRIBE_V1;
+    let second = ServiceOperationId::SELF_COMMITTED_EVENT_READ_SCAN_V1;
+    assert_eq!(actual, expected);
+}
+""")
+        result = inventory.generate(self.root)
+        for operation, line in ((OP_ONE, 3), (OP_TWO, 4)):
+            evidence = matrix_cell(result, operation, "coland_http")["responsibilities"]["http_binding"]
+            row = next(item for item in evidence if item["file"] == path)
+            self.assertEqual(row["scope"], "typed_http_operations")
+            self.assertEqual(row["occurrence_lines"], [line])
+            self.assertTrue(row["assertion_preview"])
+        # Names alone in TypeScript do not refer to Rust SDK constants.
+        self.assertEqual(inventory.operation_references(
+            "ServiceOperationId::SERVER_READ_DESCRIBE_V1", ".ts",
+            {"SERVER_READ_DESCRIBE_V1": OP_ONE},
+        ), [])
+
+    def test_sdk_constant_reference_cannot_hide_an_unassigned_test_file(self) -> None:
+        self.write("coland/other-tests/unassigned.rs", """#[test]
+fn typed_operation() {
+    let operation = ServiceOperationId::SERVER_READ_DESCRIBE_V1;
+    assert!(result.is_ok());
+}
+""")
+        with self.assertRaisesRegex(ValueError, "unknown_test_files"):
+            inventory.generate(self.root)
+
+    def test_sdk_constant_outside_formal_registry_fails_closed(self) -> None:
+        self.write(
+            "arkret-rust-sdk/crates/wire/src/generated/operation_ids.rs",
+            "pub const RETIRED_V1: &'static str = \"ak.self.retired.command.v1\";",
+        )
+        with self.assertRaisesRegex(ValueError, "outside the registry"):
+            inventory.generate(self.root)
 
     def test_main_generates_exact_utf8_inventory_on_supported_python(self) -> None:
         output = self.root / "generated-inventory.json"
