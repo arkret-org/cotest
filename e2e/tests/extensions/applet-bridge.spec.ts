@@ -122,6 +122,7 @@ async function revokeAppletRuntime(
   token: string,
   actorId: string,
   appletId: string,
+  serviceId: string,
   realmId: string,
   idempotencyKey: string,
   onCommit?: () => Promise<APIResponse>,
@@ -137,6 +138,7 @@ async function revokeAppletRuntime(
       "content-type": "application/json",
     },
     data: canonicalJson({
+      service_id: serviceId,
       effective_scope: effectiveScope,
       reason_code: reasonCode,
       revoke_mode: revokeMode,
@@ -189,7 +191,6 @@ async function revokeAppletRuntime(
       kind: "ak.member.state",
       scopeRef: effectiveScope,
       payload: {
-        realm_id: realmId,
         member_id: intent.member_id,
         membership: intent.membership,
         reason: intent.reason_code,
@@ -209,6 +210,7 @@ async function revokeAppletRuntime(
     { context: `prepare Applet membership removal ${appletId}` },
   );
   const body = canonicalJson({
+    service_id: serviceId,
     revoke_plan_digest: revokePlanDigest,
     effective_scope: effectiveScope,
     reason_code: reasonCode,
@@ -227,7 +229,15 @@ async function revokeAppletRuntime(
     });
     const responseText = await response.text();
     expect(response.status(), responseText).toBe(200);
-    return JSON.parse(responseText) as Record<string, unknown>;
+    const outcome = JSON.parse(responseText) as Record<string, unknown>;
+    if (outcome.status === "complete") {
+      const refs = outcome.revoked_refs as Array<Record<string, unknown> | string>;
+      for (const event of [...revokeEvents, ...membershipEvents]) {
+        expect(refs).toEqual(expect.arrayContaining([expect.objectContaining({event_id:event.event_id})]));
+      }
+      expect(refs.some(ref => typeof ref === "string" && ref.startsWith("ak:"))).toBe(true);
+    }
+    return outcome;
   };
   const concurrentDelivery = onCommit?.();
   const outcome = await submit();
@@ -825,13 +835,13 @@ test.describe("applet bridge", () => {
         aliceToken,
         alice.id,
         registration.applet_id,
+        signed.applet_package.service_id,
         realmId,
         `revoke-${stamp}`,
       );
       expect(revoke.status).toBe("complete");
-      expect(revoke.revoked_refs).toEqual(
-        expect.arrayContaining([registration.bot_actor_id.realm_actor_id.principal_id, ghostActorId.realm_actor_id.principal_id]),
-      );
+      expect(revoke.revoked_refs).not.toContain(registration.bot_actor_id.realm_actor_id.principal_id);
+      expect(revoke.revoked_refs).not.toContain(ghostActorId.realm_actor_id.principal_id);
 
       const afterRevokeText = `after revoke ${stamp}`;
       const afterRevoke = await request.post(`${registryBase}/external-event`, {
@@ -967,13 +977,12 @@ test.describe("applet bridge", () => {
       aliceToken,
       alice.id,
       registration.applet_id,
+      signed.applet_package.service_id,
       realmId,
       `revoke-bot-${stamp}`,
     );
     expect(revoke.status).toBe("complete");
-    expect(revoke.revoked_refs).toEqual(
-      expect.arrayContaining([registration.bot_actor_id.realm_actor_id.principal_id]),
-    );
+    expect(revoke.revoked_refs).not.toContain(registration.bot_actor_id.realm_actor_id.principal_id);
 
     const history = await queryRealmEventsApi(request, aliceToken, realmId);
     expect(JSON.stringify(history)).toContain("ak.applet.registration");
@@ -1731,7 +1740,7 @@ test.describe("applet inbound transaction push — per-delivery source signature
       ),
     };
     let racingDelivery: ReturnType<typeof deliver> | undefined;
-    const revoked = await test.step("inbound preparation: revoked", () => revokeAppletRuntime(request, token, alice.id, registration.applet_id, realmId, `inbound-revoke-${stamp}`, () => {
+    const revoked = await test.step("inbound preparation: revoked", () => revokeAppletRuntime(request, token, alice.id, registration.applet_id, signed.applet_package.service_id, realmId, `inbound-revoke-${stamp}`, () => {
       racingDelivery = deliver({ ...body, events: [next] }, `inbound-revoke-race-${stamp}`);
       return racingDelivery;
     }), { box: true });
@@ -2062,9 +2071,6 @@ async function signPackage(
     data: {
       ...data,
       requested_scopes: [...new Set([...(data.requested_scopes as string[] ?? data.requested_capabilities as string[] ?? data.capabilities as string[] ?? ["ak.message.create", "ak.applet.ghost.provision"]), "ak.applet.bot.provision"])],
-      actor_namespace_pattern:
-        data.actor_namespace_pattern ??
-        `did:webvh:*:${built.did.split(":")[3]}:webvh:ghost-${ghostNamespaceToken}:*`,
       service_id: projectDidToCoreId(built.did),
       service_id_document: built.didDocument,
       service_id_method_version_evidence: {
@@ -2255,7 +2261,7 @@ async function rawInstallApplet(
 
 async function provisionAppletBot(request: APIRequestContext,signed: SignedPackage,realmId:string,idempotencyKey:string,options:{exerciseAuthoringKats?:boolean; botOperation?: RealmActorIdentity}): Promise<Record<string,unknown>> {
     const previewUrl=`${colandBaseUrl()}/_arkret/self/applets/${encodeURIComponent(signed.applet_package.applet_id)}/bots/provision/preview`;
-    const previewBody={effective_scope:{kind:"realm",realm_id:realmId},request_id:`${idempotencyKey}-bot`,display_name:"Applet Bot"};
+    const previewBody={effective_scope:{kind:"realm",realm_id:realmId},service_id:signed.applet_package.service_id,request_id:`${idempotencyKey}-bot`,display_name:"Applet Bot"};
     const serviceHeaders=(body:Record<string,unknown>,targetUri:string,key:string)=>signedAppletTransactionHeaders({body,targetUri,sourceServiceId:signed.applet_package.service_id,destinationServiceId:colandServiceId(),idempotencyKey:key,keyId:appletProducerKeyRef(signed),signingKey:signed.service_signing_private_key});
     const preview=await request.post(previewUrl,{headers:serviceHeaders(previewBody,previewUrl,`${idempotencyKey}-bot-preview`),data:canonicalJson(previewBody)});
     expect(preview.status(),await preview.text()).toBe(200);
@@ -2657,6 +2663,7 @@ function appletRegistrationPayload(
   return {
     applet_id: pkg.applet_id,
     service_id: pkg.service_id,
+    expected_revision: null,
     controller_principal_id: pkg.controller_principal_id,
     base_url: pkg.base_url,
     claimed_profiles: pkg.claimed_profiles,

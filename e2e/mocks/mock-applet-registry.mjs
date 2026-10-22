@@ -709,13 +709,6 @@ function prepareSignedPackage(body) {
     ],
     protocols: body.protocols ?? ["bridge"],
     namespaces: body.namespaces ?? {
-      actors: [
-        {
-          exclusive: true,
-          pattern:
-            body.actor_namespace_pattern ?? `did:webvh:*:${serviceDid.split(":")[3]}:ghost-${safe}:*`,
-        },
-      ],
       realms: [{ exclusive: true, pattern: `bridge:${safe}:*` }],
       handles: [{ exclusive: true, pattern: `${safe}/*` }],
     },
