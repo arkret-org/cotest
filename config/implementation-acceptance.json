@@ -5,8 +5,8 @@
   "tasks": [
     {
       "task": "2026-09-06-0915-protocol-fixtures-mock-and-api-test-convergence.md",
-      "criteria_count": 3,
-      "criteria_sha256": "1cfaf527846258b3bd210faffbf98aa33d2e131420de37a451745a0d29e65cc7",
+      "criteria_count": 5,
+      "criteria_sha256": "810ff833045f8dbf3718367baf18f7fb438dfed8fc13a12d328d36e8fcfcdc32",
       "spec_refs": [
         "arkret-spec/spec/v1/artifacts/schemas/event-envelope.schema.json",
         "arkret-spec/spec/v1/zh/extensions/realm-actors.md",
