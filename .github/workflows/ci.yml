@@ -225,7 +225,12 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.13"
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: "1.98"
       - name: generator unit tests
+        # The artifact-capture regression compiles a small offline Cargo graph
+        # with separate host/runtime units using the SDK023 lane's compiler.
         working-directory: cotest
         run: >-
           python -m unittest
