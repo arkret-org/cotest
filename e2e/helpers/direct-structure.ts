@@ -1108,9 +1108,24 @@ async function runFlatTopicChats(alice: Page, bob: Page, mainMessages: string[],
   const secondRank = ((secondClassification.payload?.patch as any).topic.value as { rank: string }).rank;
   const firstRank = (patch.topic.value as { space_id: string; rank: string }).rank;
   expect(secondRank > firstRank, "new Chat receives a rank after the existing actual Chat").toBe(true);
+  expect(secondClassification.payload?.target_ref).toBe(secondChatId);
+  // The accepted receipt can precede installation in the visible current view.
+  // Reorder only after both actual Chat classifications are visible and the
+  // router has selected the intended first Chat.
+  for (const page of allPages) {
+    await expect(chatOptions(page).locator(`option[value=${JSON.stringify(secondChatId)}]`))
+      .toContainText(topicName, { timeout: 90_000 });
+  }
   await chooseAlice.selectOption(chatId);
+  await expect.poll(() => decodeURIComponent(new URL(alice.url()).pathname).split("/")[3]).toBe(chatId);
+  await expect(chooseAlice).toHaveValue(chatId);
   const reorder = await structureWrite(alice, "reorder", "ak.strand.update", undefined, topicId);
   const reordered = (reorder.payload?.patch as any).topic.value;
+  await test.info().attach("direct-reorder-target-and-ranks", {
+    body: JSON.stringify({ actual_target_ref: reorder.payload?.target_ref, expected_chat_id: chatId,
+      first_rank: firstRank, second_rank: secondRank, reordered_rank: reordered.rank }), contentType: "application/json",
+  });
+  expect(reorder.payload?.target_ref).toBe(chatId);
   expect(reordered.space_id).toBe(topicId);
   expect(reordered.rank > secondRank).toBe(true);
   for (const page of allPages) {
