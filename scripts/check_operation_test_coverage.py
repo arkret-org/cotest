@@ -66,7 +66,7 @@ RUST_OPERATION_CONSTANT_DEFINITION = re.compile(
     r"pub\s+const\s+([A-Z][A-Z0-9_]*)\s*:\s*&'static\s+str\s*=\s*\"([^\"]+)\"\s*;"
 )
 RUST_OPERATION_CONSTANT_REFERENCE = re.compile(
-    r"\bServiceOperationId::([A-Z][A-Z0-9_]*)\b"
+    r"\bServiceOperationId::([A-Z][A-Za-z0-9_]*)\b"
 )
 RUST_TEST_ATTRIBUTE = re.compile(r"#\[[^\]]*test[^\]]*\]", re.MULTILINE)
 RUST_TEST_FUNCTION = re.compile(
@@ -445,6 +445,62 @@ def source_scopes(path: Path, text: str) -> list[TestScope]:
     return rust_test_scopes(text) if path.suffix == ".rs" else typescript_test_scopes(text)
 
 
+def sdk_operation_symbols(text: str, operation_ids: set[str]) -> dict[str, str]:
+    """Resolve symbols only through the generated enum/as_str/constant tables."""
+    constants: dict[str, str] = {}
+    for name, operation in RUST_OPERATION_CONSTANT_DEFINITION.findall(text):
+        if not OPERATION_TOKEN.fullmatch(operation):
+            continue
+        if name in constants or operation not in operation_ids:
+            raise ValueError(f"SDK operation constant is duplicated or outside the registry: {name}")
+        constants[name] = operation
+    if not constants or set(constants.values()) != operation_ids:
+        raise ValueError("SDK generated operation constants do not close the registry")
+
+    def unique_block(pattern: str, description: str) -> str:
+        matches = list(re.finditer(pattern, text))
+        if len(matches) != 1:
+            raise ValueError(f"SDK generated {description} is absent or ambiguous")
+        opening = matches[0].end() - 1
+        return text[opening + 1 : matching_brace(text, opening) - 1]
+
+    enum_body = unique_block(r"\bpub\s+enum\s+ServiceOperationId\s*\{", "operation enum")
+    variant_pattern = re.compile(r"\s*([A-Z][A-Za-z0-9]*)\s*,")
+    variants = variant_pattern.findall(enum_body)
+    if variant_pattern.sub("", enum_body).strip() or len(set(variants)) != len(variants):
+        raise ValueError("SDK operation enum contains an unparsed or duplicate variant")
+
+    method = unique_block(
+        r"\bpub\s+const\s+fn\s+as_str\(self\)\s*->\s*&'static\s+str\s*\{",
+        "operation as_str method",
+    )
+    match_self = re.fullmatch(r"\s*match\s+self\s*\{(.*)\}\s*", method, re.DOTALL)
+    if match_self is None:
+        raise ValueError("SDK operation as_str is not a closed match on self")
+    arms = match_self.group(1)
+    arm_pattern = re.compile(
+        r"\s*Self::([A-Z][A-Za-z0-9]*)\s*=>\s*"
+        r"(?:\{\s*Self::([A-Z][A-Z0-9_]*)\s*\}\s*,?|Self::([A-Z][A-Z0-9_]*)\s*,)"
+    )
+    aliases: dict[str, str] = {}
+    targets: list[str] = []
+    for arm in arm_pattern.finditer(arms):
+        variant, braced, direct = arm.groups()
+        target = braced or direct
+        if variant in aliases or target not in constants:
+            raise ValueError(f"SDK operation as_str has a duplicate variant or unknown target: {variant}")
+        aliases[variant] = constants[target]
+        targets.append(target)
+    if (
+        arm_pattern.sub("", arms).strip()
+        or set(aliases) != set(variants)
+        or len(targets) != len(set(targets))
+        or set(targets) != set(constants)
+    ):
+        raise ValueError("SDK operation enum/as_str/constants mapping is not closed")
+    return {**constants, **aliases}
+
+
 def operation_references(
     text: str, suffix: str, constants: dict[str, str]
 ) -> list[tuple[str, int, int]]:
@@ -628,15 +684,7 @@ def generate(workspace_root: Path = WORKSPACE_ROOT) -> dict[str, Any]:
             raise ValueError("operation registry contains invalid or duplicate rows")
         constants_path = WORKSPACE_ROOT / "arkret-rust-sdk/crates/wire/src/generated/operation_ids.rs"
         constants_bytes = constants_path.read_bytes()
-        constants: dict[str, str] = {}
-        for name, operation in RUST_OPERATION_CONSTANT_DEFINITION.findall(constants_bytes.decode("utf-8")):
-            if not OPERATION_TOKEN.fullmatch(operation):
-                continue
-            if name in constants or operation not in operations:
-                raise ValueError(f"SDK operation constant is duplicated or outside the registry: {name}")
-            constants[name] = operation
-        if not constants:
-            raise ValueError("SDK generated operation constants are absent")
+        constants = sdk_operation_symbols(constants_bytes.decode("utf-8"), set(operations))
 
         layer_sources = discover_layer_sources(WORKSPACE_ROOT)
         assigned_files = {

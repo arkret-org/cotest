@@ -3,6 +3,7 @@ from __future__ import annotations
 import importlib.util
 import json
 import os
+import re
 import stat
 import sys
 import tempfile
@@ -21,6 +22,24 @@ SPEC.loader.exec_module(inventory)
 
 OP_ONE = "ak.server.read.describe.v1"
 OP_TWO = "ak.self.committed_event.read.scan.v1"
+SDK_OPERATIONS = f"""pub enum ServiceOperationId {{
+    ServerReadDescribeV1,
+    SelfCommittedEventReadScanV1,
+}}
+impl ServiceOperationId {{
+    pub const SERVER_READ_DESCRIBE_V1: &'static str = "{OP_ONE}";
+    pub const SELF_COMMITTED_EVENT_READ_SCAN_V1: &'static str =
+        "{OP_TWO}";
+    pub const fn as_str(self) -> &'static str {{
+        match self {{
+            Self::ServerReadDescribeV1 => Self::SERVER_READ_DESCRIBE_V1,
+            Self::SelfCommittedEventReadScanV1 => {{
+                Self::SELF_COMMITTED_EVENT_READ_SCAN_V1
+            }}
+        }}
+    }}
+}}
+"""
 
 
 def directory_link(link: Path, target: Path) -> None:
@@ -50,9 +69,7 @@ class OperationTestCoverageTests(unittest.TestCase):
         )
         self.write(
             "arkret-rust-sdk/crates/wire/src/generated/operation_ids.rs",
-            f"impl ServiceOperationId {{\n"
-            f"pub const SERVER_READ_DESCRIBE_V1: &'static str = \"{OP_ONE}\";\n"
-            f"pub const SELF_COMMITTED_EVENT_READ_SCAN_V1: &'static str =\n\"{OP_TWO}\";\n}}\n",
+            SDK_OPERATIONS,
         )
         self.write(
             "coland/crates/storage/src/contract_tests.rs",
@@ -248,6 +265,90 @@ fn typed_operation() {
         )
         with self.assertRaisesRegex(ValueError, "outside the registry"):
             inventory.generate(self.root)
+
+    def test_sdk_enum_aliases_merge_with_constants_without_changing_fingerprints(self) -> None:
+        path = "coland/crates/server/tests/http_api/enums.rs"
+        self.write(path, """#[tokio::test]
+async fn typed_enum_operations() {
+    let first = arkret_wire::ServiceOperationId::ServerReadDescribeV1;
+    let same = ServiceOperationId::SERVER_READ_DESCRIBE_V1;
+    let literal = "ak.server.read.describe.v1";
+    let second = ServiceOperationId::SelfCommittedEventReadScanV1;
+    assert_eq!(actual, expected);
+}
+""")
+        result = inventory.generate(self.root)
+        with mock.patch.object(
+            inventory, "RUST_OPERATION_CONSTANT_REFERENCE",
+            re.compile(r"\bServiceOperationId::([A-Z][A-Z0-9_]*)\b"),
+        ):
+            previous = inventory.generate(self.root)
+        old_row = next(
+            row for row in matrix_cell(previous, OP_ONE, "coland_http")["responsibilities"]["http_binding"]
+            if row["file"] == path
+        )
+        self.assertEqual(old_row["occurrence_lines"], [4, 5])
+        for operation, lines in ((OP_ONE, [3, 4, 5]), (OP_TWO, [6])):
+            evidence = matrix_cell(result, operation, "coland_http")["responsibilities"]["http_binding"]
+            row = next(item for item in evidence if item["file"] == path)
+            self.assertEqual(row["scope_kind"], "rust_test")
+            self.assertEqual(row["occurrence_lines"], lines)
+            original = (self.root / path).read_text()
+            scope = inventory.rust_test_scopes(original)[0]
+            fingerprints = inventory.evidence_fingerprints(original[scope.start:scope.end], operation)
+            for key, value in fingerprints.items():
+                self.assertEqual(row[key], value)
+                if operation == OP_ONE:
+                    self.assertEqual(row[key], old_row[key])
+
+    def test_sdk_enum_helper_is_not_promoted_to_a_test(self) -> None:
+        path = "cotest/tests/enum_helper.rs"
+        self.write(path, """fn helper() {
+    let operation = ServiceOperationId::ServerReadDescribeV1;
+    assert!(result.is_ok());
+}
+""")
+        result = inventory.generate(self.root)
+        evidence = matrix_cell(result, OP_ONE, "cotest_rust")["responsibilities"]["protocol_kat"]
+        row = next(item for item in evidence if item["file"] == path)
+        self.assertEqual(row["scope_kind"], "module_helper")
+        self.assertEqual(row["scope"], "<module_helper>")
+        self.assertEqual(row["occurrence_lines"], [2])
+
+    def test_sdk_enum_reference_cannot_hide_an_unassigned_test_file(self) -> None:
+        self.write("coland/other-tests/unassigned.rs", """#[test]
+fn typed_operation() {
+    let operation = ServiceOperationId::ServerReadDescribeV1;
+    assert!(result.is_ok());
+}
+""")
+        with self.assertRaisesRegex(ValueError, "unknown_test_files"):
+            inventory.generate(self.root)
+
+    def test_sdk_enum_as_str_and_constants_must_be_closed(self) -> None:
+        mutations = {
+            "unknown_target": SDK_OPERATIONS.replace(
+                "Self::ServerReadDescribeV1 => Self::SERVER_READ_DESCRIBE_V1,",
+                "Self::ServerReadDescribeV1 => Self::UNREGISTERED_V1,",
+            ),
+            "missing_variant_arm": SDK_OPERATIONS.replace(
+                "Self::ServerReadDescribeV1 => Self::SERVER_READ_DESCRIBE_V1,", "",
+            ),
+            "duplicate_variant_arm": SDK_OPERATIONS.replace(
+                "Self::ServerReadDescribeV1 => Self::SERVER_READ_DESCRIBE_V1,",
+                "Self::ServerReadDescribeV1 => Self::SERVER_READ_DESCRIBE_V1, "
+                "Self::ServerReadDescribeV1 => Self::SERVER_READ_DESCRIBE_V1,",
+            ),
+            "undeclared_variant": SDK_OPERATIONS.replace(
+                "Self::ServerReadDescribeV1 =>", "Self::UndeclaredV1 =>",
+            ),
+            "reused_target": SDK_OPERATIONS.replace(
+                "Self::SELF_COMMITTED_EVENT_READ_SCAN_V1\n", "Self::SERVER_READ_DESCRIBE_V1\n",
+            ),
+        }
+        for name, text in mutations.items():
+            with self.subTest(name=name), self.assertRaisesRegex(ValueError, "SDK operation"):
+                inventory.sdk_operation_symbols(text, {OP_ONE, OP_TWO})
 
     def test_main_generates_exact_utf8_inventory_on_supported_python(self) -> None:
         output = self.root / "generated-inventory.json"
