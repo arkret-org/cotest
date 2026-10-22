@@ -98,7 +98,13 @@ param(
     [string]$FlagonBin,
     [string]$FlagonBaseUrl,
     [string]$FlagonDatabaseUrl,
-    [string]$FlagonServiceId = "did:webvh:z6mkfixture:flagon.joint-e2e.local",
+    # Optional independently configured core-id pin; never a raw DID alias.
+    [string]$FlagonServiceId,
+    # Required for an owned process behind a caller-provided HTTPS endpoint.
+    # The default managed TLS topology mints and verifies these itself.
+    [string]$FlagonServiceDid,
+    [string]$FlagonServiceMethodHistoryHead,
+    [string]$FlagonServiceVersionId,
     [switch]$StartSavfox,
     [switch]$StartNativeArkretPublicReply,
     [string]$SavfoxRoot,
@@ -187,6 +193,22 @@ param(
     # topology-dependent skips and therefore do not enable it by default.
     [switch]$ForbidSkippedTests
 )
+
+function Get-JointInksonBuildPlan {
+    param(
+        [Parameter(Mandatory = $true)][bool]$StartMockAppletRegistry,
+        [Parameter(Mandatory = $true)][bool]$ArtifactFresh,
+        [Parameter(Mandatory = $true)][bool]$TestFeaturePresent
+    )
+    $features = "web,wasm-localstorage-secrets-test"
+    if ($StartMockAppletRegistry) { $features += ",experimental-applets" }
+    [pscustomobject]@{
+        # Source/content stamps do not record the Cargo feature selection.
+        # Always build the Applet lane rather than reuse a feature-ambiguous bundle.
+        ShouldBuild = $StartMockAppletRegistry -or -not $ArtifactFresh -or -not $TestFeaturePresent
+        Command = "dx build --profile joint-e2e --platform web --features $features"
+    }
+}
 
 function Prepare-JointPostNativeTools {
     [CmdletBinding()]
@@ -1542,6 +1564,24 @@ function Sync-JointControlledServices {
     return @($failures)
 }
 
+function Invoke-JointFlagonIdentity {
+    param([Parameter(Mandatory=$true)][string]$Command, [Parameter(Mandatory=$true)]$InputValue)
+    if (-not $env:COTEST_WIRE_BIN -or -not (Test-Path -LiteralPath $env:COTEST_WIRE_BIN -PathType Leaf)) {
+        throw "Flagon identity requires the prepared run-scoped cotest-wire binary"
+    }
+    $json = $InputValue | ConvertTo-Json -Depth 100 -Compress
+    $output = $json | & node (Join-Path $PSScriptRoot 'lib/joint-flagon-identity.mjs') $Command
+    if ($LASTEXITCODE -ne 0) { throw "Flagon identity $Command failed" }
+    return $output | ConvertFrom-Json
+}
+
+function Get-JointFlagonDescription {
+    param([Parameter(Mandatory=$true)][string]$BaseUrl)
+    $options = @{ Headers = @{ 'Arkret-Operation' = 'ak.find.directory.read.describe.v1' } }
+    if (([Uri]$BaseUrl).Scheme -eq 'https' -and $env:COTEST_RUN_SCOPED_CA_PEM) { $options.SkipCertificateCheck = $true }
+    return Invoke-RestMethod -Uri "$($BaseUrl.TrimEnd('/'))/_arkret/find/directory/describe" -Method Get -NoProxy:(Test-JointLoopbackUrl -Url $BaseUrl) -TimeoutSec 10 -ErrorAction Stop @options
+}
+
 function Write-JointCaddyConfig {
     param(
         [Parameter(Mandatory = $true)][string]$Path,
@@ -1565,7 +1605,49 @@ function Write-JointCaddyConfig {
         $lines += "`tbind 127.0.0.1"
         $lines += "`ttls $certificate $key"
         $logoutBackend = $route.PSObject.Properties['LogoutBackendPort']
-        if ($null -ne $logoutBackend) {
+        $didRoot = $route.PSObject.Properties['DidRoot']
+        if ($null -ne $didRoot) {
+            $publicRoot = ([string]$didRoot.Value).Replace('\', '/').Replace('"', '\"')
+            # This run owns both the HTTPS Directory and its public identity
+            # files. Browser access is limited to this run's exact UI origins
+            # and public read paths; admin and other backends gain no CORS.
+            $corsProperty = $route.PSObject.Properties['CorsOrigins']
+            $corsOrigins = @(if ($null -ne $corsProperty) {
+                @($corsProperty.Value) | ForEach-Object {
+                    $originUri = [Uri]$_
+                    if ($originUri.Scheme -notin @('http', 'https') -or $originUri.UserInfo) {
+                        throw 'Directory browser origin must be credential-free HTTP(S)'
+                    }
+                    $originUri.GetLeftPart([UriPartial]::Authority)
+                } | Select-Object -Unique
+            })
+            if ($corsOrigins.Count -gt 0) {
+                $lines += "`t@directoryBrowser {"
+                $lines += "`t`tpath /_arkret/find/directory/describe /_arkret/find/directory/search-realms /_arkret/find/directory/resolve-realm /webvh/flagon/did.json /webvh/flagon/did.jsonl /webvh/flagon/did-witness.json"
+                $lines += "`t`tmethod GET POST OPTIONS"
+                foreach ($origin in $corsOrigins) {
+                    $lines += "`t`theader Origin `"$origin`""
+                }
+                $lines += "`t}"
+                $lines += "`theader @directoryBrowser {"
+                $lines += "`t`tAccess-Control-Allow-Origin `"{http.request.header.Origin}`""
+                $lines += "`t`t+Vary Origin"
+                $lines += "`t`tAccess-Control-Allow-Methods `"GET, POST, OPTIONS`""
+                $lines += "`t`tAccess-Control-Allow-Headers `"Arkret-Operation, Content-Type`""
+                $lines += "`t}"
+            }
+            # Only the exact public SDK originals are served; there is no
+            # directory listing or resolver override, and no private key file.
+            $lines += "`t@directoryIdentity path /webvh/flagon/did.json /webvh/flagon/did.jsonl"
+            $lines += "`thandle @directoryIdentity {"
+            $lines += "`t`troot * `"$publicRoot`""
+            $lines += "`t`theader Content-Type application/json"
+            $lines += "`t`tfile_server"
+            $lines += "`t}"
+            $lines += "`thandle {"
+            $lines += "`t`treverse_proxy 127.0.0.1:$($route.BackendPort)"
+            $lines += "`t}"
+        } elseif ($null -ne $logoutBackend) {
             # service-http-binding §2.1.2 exposes one Account Authority base
             # to clients. The deployment gateway dispatches the canonical hard
             # logout to the Principal service that owns its to-device/push
@@ -3184,6 +3266,7 @@ $environmentArgs = @(
 $environmentPostgresImages = @($ColandPostgresImage, $CoauthPostgresImage) | Sort-Object -Unique
 $environmentArgs += $environmentPostgresImages
 if ($StartCoauth) { $environmentArgs += "-StartCoauth" }
+if ($StartFlagon -and -not $FlagonBaseUrl) { $environmentArgs += "-StartFlagon" }
 if ($requiresInkson) { $environmentArgs += "-RequireBrowser" }
 if ($requiresDocker) { $environmentArgs += "-RequireDocker" }
 & (Get-Process -Id $PID).Path @environmentArgs
@@ -3284,18 +3367,21 @@ $colandChaosControlFile = $serverArtifactLayouts["server1"].ColandChaosControlPa
 # docker-runtime lanes keep their existing URLs unchanged.
 $jointTlsProcessColand = (-not $ColandCommand -and -not $ColandBaseUrl -and $ColandRuntime -eq "process")
 $jointTlsCoauth = ($StartCoauth -and -not $CoauthBaseUrl)
-$jointTlsEnabled = $jointTlsProcessColand -or $jointTlsCoauth
+$jointTlsFlagon = ($StartFlagon -and -not $FlagonBaseUrl)
+$jointTlsEnabled = $jointTlsProcessColand -or $jointTlsCoauth -or $jointTlsFlagon
 $jointTlsPort = $null
 $colandPublicHost = $null
 $colandServer2PublicHost = $null
 $coauthPublicHost = $null
 $coauthServer2PublicHost = $null
+$flagonPublicHost = $null
 $jointTlsAssets = $null
 $jointTlsHostNames = @()
 $jointTlsHostsMarker = New-CotestHostsMarker -RunId $timestamp
 $jointTlsUnregisteredProbeHost = "unregistered.$DnsSuffix"
 if ($jointTlsEnabled) {
     $jointTlsPort = Get-FreeTcpPort
+    if ($jointTlsFlagon) { $flagonPublicHost = "flagon.$DnsSuffix" }
     if ($jointTlsProcessColand) {
         $colandPublicHost = "coland-server1.$DnsSuffix"
         if ($multiServer) {
@@ -3482,9 +3568,27 @@ if ($StartFlagon) {
     if (-not $FlagonDatabaseUrl -and -not $env:DATABASE_URL) {
         throw "-StartFlagon requires -FlagonDatabaseUrl (or DATABASE_URL in env). Flagon refuses to boot without a Postgres DSN."
     }
-    if (-not $FlagonBaseUrl) {
-        $flagonPort = Get-FreeTcpPort
-        $FlagonBaseUrl = "http://127.0.0.1:$flagonPort"
+    # Preserve the explicit-base listener contract: the caller owns its TLS
+    # proxy/identity hosting and forwards to this loopback port. The default
+    # managed topology allocates its own separate backend port.
+    $flagonPort = if ($jointTlsFlagon) { Get-FreeTcpPort } else { ([Uri]$FlagonBaseUrl).Port }
+    if ($jointTlsFlagon) {
+        if ($FlagonServiceDid -or $FlagonServiceMethodHistoryHead -or $FlagonServiceVersionId) {
+            throw "Default managed Flagon identity is run-owned; use -FlagonBaseUrl plus a complete verified identity tuple for an external identity host."
+        }
+        $FlagonBaseUrl = "https://${flagonPublicHost}:$jointTlsPort"
+    } elseif (-not $FlagonServiceDid -or -not $FlagonServiceMethodHistoryHead -or -not $FlagonServiceVersionId) {
+        throw "-StartFlagon with a caller-provided -FlagonBaseUrl requires -FlagonServiceDid, -FlagonServiceMethodHistoryHead and -FlagonServiceVersionId."
+    }
+}
+if ($FlagonServiceId -and -not $FlagonServiceId.StartsWith("ak:did_core:", [StringComparison]::Ordinal)) {
+    throw "-FlagonServiceId is an expected ak:did_core pin, not a raw DID."
+}
+if ($FlagonBaseUrl) {
+    $FlagonBaseUrl = $FlagonBaseUrl.TrimEnd('/')
+    $flagonPublicUri = [Uri]$FlagonBaseUrl
+    if ($flagonPublicUri.Scheme -ne 'https' -or $flagonPublicUri.AbsolutePath -ne '/' -or $flagonPublicUri.Query -or $flagonPublicUri.Fragment -or $flagonPublicUri.UserInfo) {
+        throw "Flagon public endpoint must be a credential-free canonical HTTPS origin."
     }
 }
 
@@ -3921,11 +4025,15 @@ try {
         $inksonTestFeaturePresent = Test-BinaryContainsAsciiMarker `
             -Path $inksonWasm `
             -Marker "inkson.test.session_injection.v1"
-        if (-not $inksonFreshness.Fresh -or -not $inksonTestFeaturePresent) {
+        $inksonBuildPlan = Get-JointInksonBuildPlan `
+            -StartMockAppletRegistry ([bool]$StartMockAppletRegistry) `
+            -ArtifactFresh ([bool]$inksonFreshness.Fresh) `
+            -TestFeaturePresent ([bool]$inksonTestFeaturePresent)
+        if ($inksonBuildPlan.ShouldBuild) {
             Write-Host "Preparing inkson web bundle: $($inksonFreshness.Detail)"
             $started = Get-Date
             $buildCommand = Add-DioxusNoDownloadsEnvironment `
-                -Command "dx build --profile joint-e2e --platform web --features web,wasm-localstorage-secrets-test" `
+                -Command $inksonBuildPlan.Command `
                 -ProjectRoot $InksonRoot
             # Dioxus 0.7.10 can assemble the shared debug output from a stale
             # wasm-dev executable even though Cargo built the requested custom
@@ -4081,6 +4189,17 @@ try {
         $inksonStaticRoot = $inksonRuntimeRoot
     }
 
+    $flagonIdentityDirectory = $null
+    $flagonIdentity = $null
+    if ($jointTlsFlagon) {
+        $flagonIdentityDirectory = Join-Path $jointDir 'flagon-identity'
+        $flagonMinted = Invoke-JointFlagonIdentity -Command 'mint' -InputValue @{
+            wireBin = $env:COTEST_WIRE_BIN; repoRoot = $repoRoot
+            baseUrl = $FlagonBaseUrl; directory = $flagonIdentityDirectory
+        }
+        $FlagonServiceDid = [string]$flagonMinted.did
+    }
+
     # 0530-C: stand up the HTTPS identity front before any owned service
     # starts, so readiness probes, service-to-service calls and the browser all
     # traverse the real TLS path from the first request. Trust is confined to
@@ -4090,7 +4209,7 @@ try {
     if ($jointTlsEnabled) {
         $jointTlsDir = Join-Path $jointDir "tls"
         $jointTlsHostNames = @(
-            @($colandPublicHost, $colandServer2PublicHost, $coauthPublicHost, $coauthServer2PublicHost, $mockAppletRegistryPublicHost) +
+            @($colandPublicHost, $colandServer2PublicHost, $coauthPublicHost, $coauthServer2PublicHost, $mockAppletRegistryPublicHost, $flagonPublicHost) +
             @($additionalServers | ForEach-Object { @($_.ColandHost, $_.CoauthHost) })
         ) | ForEach-Object { $_ } | Where-Object { $_ }
         $jointTlsAssets = New-JointTlsAssets `
@@ -4107,6 +4226,9 @@ try {
         $env:COTEST_TLS_SPKI_SHA256 = $jointTlsAssets.ServerSpkiSha256
 
         $jointTlsRoutes = @()
+        if ($flagonPublicHost) {
+            $jointTlsRoutes += [pscustomobject]@{ Host = $flagonPublicHost; BackendPort = $flagonPort; DidRoot = $flagonIdentityDirectory; CorsOrigins = @($allInksonBaseUrls) }
+        }
         if ($mockAppletRegistryPublicHost) {
             $jointTlsRoutes += [pscustomobject]@{ Host = $mockAppletRegistryPublicHost; BackendPort = $mockAppletRegistryPort }
         }
@@ -4155,7 +4277,8 @@ try {
         }
         $caddyCommand = "& {0} run --config {1} --adapter caddyfile" -f `
             (Quote-PsLiteral $caddyBinary), (Quote-PsLiteral $caddyfilePath)
-        $managedServices.Add((Start-ManagedCommand -Name "tls-proxy" -Command $caddyCommand -WorkingDirectory $jointTlsDir -LogDirectory $serviceLogDir))
+        $tlsProxyService = Start-ManagedCommand -Name "tls-proxy" -Command $caddyCommand -WorkingDirectory $jointTlsDir -LogDirectory $serviceLogDir
+        $managedServices.Add($tlsProxyService)
         # Only the listener is provable at this point; the backends start below
         # and the full topology is asserted after every service is ready.
         $tlsDeadline = (Get-Date).AddSeconds(30)
@@ -4426,9 +4549,19 @@ try {
     # above already guaranteed $FlagonDatabaseUrl is set when -StartFlagon
     # is passed.
     if ($StartFlagon) {
-        if (-not $flagonPort) {
-            $flagonUri = [System.Uri]$FlagonBaseUrl
-            $flagonPort = $flagonUri.Port
+        # Fetch through the real method-native HTTPS host BEFORE configuring
+        # Flagon. No placeholder history/version and no mock-host redirect.
+        if ($jointTlsFlagon) {
+            # Readiness is only a timing probe; verify-remote below still
+            # authenticates the served history/document using the run CA.
+            Wait-HttpReady -Url (Get-WebvhLogUrlFromDid -Did $FlagonServiceDid) -TimeoutSeconds $StartupTimeoutSeconds -ManagedService $tlsProxyService
+        }
+        $flagonIdentity = Invoke-JointFlagonIdentity -Command 'verify-remote' -InputValue @{
+            wireBin = $env:COTEST_WIRE_BIN; directory = $flagonIdentityDirectory
+            did = $FlagonServiceDid; logUrl = $(if ($FlagonServiceDid.StartsWith('did:webvh:')) { Get-WebvhLogUrlFromDid -Did $FlagonServiceDid } else { $null })
+            baseUrl = $FlagonBaseUrl; caPath = $(if ($jointTlsFlagon) { $jointTlsAssets.CaPemPath } else { $null })
+            evidenceDirectory = (Join-Path $jointDir 'flagon-identity-verified')
+            expectedHistoryHead = $FlagonServiceMethodHistoryHead; expectedVersionId = $FlagonServiceVersionId
         }
         $flagonBinary = Resolve-FlagonBinary -ExplicitPath $FlagonBin -WorkspaceRoot $workspaceRoot
         $flagonDb = if ($FlagonDatabaseUrl) { $FlagonDatabaseUrl } else { $env:DATABASE_URL }
@@ -4442,7 +4575,10 @@ try {
         Write-DotEnvFile -Path $flagonConfigPath -Values ([ordered]@{
                 DATABASE_URL = $flagonDb
                 FLAGON_PUBLIC_BASE_URL = $FlagonBaseUrl
-                FLAGON_SERVICE_ID = $FlagonServiceId
+                FLAGON_SERVICE_DID = [string]$flagonIdentity.did
+                FLAGON_SERVICE_METHOD_HISTORY_HEAD = [string]$flagonIdentity.method_history_head
+                FLAGON_SERVICE_VERSION_ID = [string]$flagonIdentity.version_id
+                FLAGON_TRUST_DOMAIN = "ak:trust_domain:local.host"
                 FLAGON_DEVELOPMENT_MODE = "true"
                 FLAGON_METRICS_BIND = "127.0.0.1:$flagonMetricsPort"
             })
@@ -4450,8 +4586,15 @@ try {
             (Quote-PsLiteral $flagonBinary),
             (Quote-PsLiteral $flagonConfigPath),
             $flagonPort
-        $managedServices.Add((Start-ManagedCommand -Name "flagon" -Command $flagonCmd -WorkingDirectory (Split-Path -Parent $flagonBinary) -LogDirectory $serviceLogDir))
-        Wait-HttpReady -Url "$($FlagonBaseUrl.TrimEnd('/'))/health" -TimeoutSeconds $StartupTimeoutSeconds
+        $flagonService = Start-ManagedCommand -Name "flagon" -Command $flagonCmd -WorkingDirectory (Split-Path -Parent $flagonBinary) -LogDirectory $serviceLogDir
+        $managedServices.Add($flagonService)
+        Wait-HttpReady -Url "$($FlagonBaseUrl.TrimEnd('/'))/health" -TimeoutSeconds $StartupTimeoutSeconds -ManagedService $flagonService
+        $flagonDescribe = Get-JointFlagonDescription -BaseUrl $FlagonBaseUrl
+        $flagonValidated = Invoke-JointFlagonIdentity -Command 'assert-describe' -InputValue @{
+            describe = $flagonDescribe; commitment = $flagonIdentity; expectedServiceId = $FlagonServiceId
+        }
+        $FlagonServiceId = [string]$flagonValidated.service_id
+        $flagonDescribe | ConvertTo-Json -Depth 100 | Set-Content -LiteralPath (Join-Path $jointDir 'flagon-describe.json') -Encoding utf8NoBOM
     }
 
     if ($StartSavfox) {
@@ -5090,6 +5233,9 @@ try {
             throw "joint TLS topology verification requires the cotest-wire binary; rerun without -SkipBuild or set COTEST_WIRE_BIN"
         }
         $jointTlsServices = @()
+        if ($flagonPublicHost -and $FlagonServiceDid) {
+            $jointTlsServices += [pscustomobject]@{ Name = 'flagon'; ServiceDid = $FlagonServiceDid }
+        }
         if ($colandPublicHost -and $ColandServiceDid) {
             $jointTlsServices += [pscustomobject]@{ Name = "coland-server1"; ServiceDid = $ColandServiceDid }
         }
@@ -5282,6 +5428,24 @@ try {
         Remove-Item Env:COTEST_REQUIRE_JOINT_STACK -ErrorAction SilentlyContinue
         Remove-Item Env:COTEST_REAL_OIDC_LOGIN -ErrorAction SilentlyContinue
         Remove-Item Env:COTEST_COAUTH_SECONDARY_BASE_URL -ErrorAction SilentlyContinue
+    }
+    if ($FlagonBaseUrl -and -not $StartFlagon) {
+        # Caller-owned Directory: do not mutate/start it or mint a replacement
+        # identity. Verify its advertised exact current through its own DID.
+        $flagonDescribe = Get-JointFlagonDescription -BaseUrl $FlagonBaseUrl
+        if ($FlagonServiceDid -and $FlagonServiceDid -cne [string]$flagonDescribe.service_resolution.did) { throw 'Caller-owned Flagon DID pin mismatch' }
+        $flagonIdentity = Invoke-JointFlagonIdentity -Command 'verify-remote' -InputValue @{
+            wireBin = $env:COTEST_WIRE_BIN; did = [string]$flagonDescribe.service_resolution.did
+            logUrl = $(if (([string]$flagonDescribe.service_resolution.did).StartsWith('did:webvh:')) { Get-WebvhLogUrlFromDid -Did ([string]$flagonDescribe.service_resolution.did) } else { $null })
+            baseUrl = $FlagonBaseUrl; evidenceDirectory = (Join-Path $jointDir 'flagon-identity-verified')
+            expectedHistoryHead = $(if ($FlagonServiceMethodHistoryHead) { $FlagonServiceMethodHistoryHead } else { [string]$flagonDescribe.service_resolution.method_history_head })
+            expectedVersionId = $(if ($FlagonServiceVersionId) { $FlagonServiceVersionId } else { [string]$flagonDescribe.service_resolution.version_id })
+        }
+        $flagonValidated = Invoke-JointFlagonIdentity -Command 'assert-describe' -InputValue @{
+            describe = $flagonDescribe; commitment = $flagonIdentity; expectedServiceId = $FlagonServiceId
+        }
+        $FlagonServiceId = [string]$flagonValidated.service_id
+        $FlagonServiceDid = [string]$flagonIdentity.did
     }
     if ($FlagonBaseUrl) {
         $env:COTEST_FLAGON_BASE_URL = $FlagonBaseUrl.TrimEnd("/")
@@ -6611,6 +6775,7 @@ $summary = [pscustomobject]@{
     coauth_server1_service_id = if ($CoauthBaseUrl) { $CoauthServiceId } else { $null }
     flagon_base_url = if ($FlagonBaseUrl) { $FlagonBaseUrl } else { $null }
     flagon_service_id = if ($FlagonBaseUrl) { $FlagonServiceId } else { $null }
+    flagon_service_resolution = if ($FlagonBaseUrl) { $flagonIdentity } else { $null }
     flagon_database_url = if ($FlagonBaseUrl) { $FlagonDatabaseUrl } else { $null }
     coauth_server1_oauth_introspection_url = if ($CoauthBaseUrl) { "$($CoauthBaseUrl.TrimEnd('/'))/oauth/introspect" } else { $null }
     coauth_server1_session_grant_introspection_url = if ($CoauthBaseUrl) { "$($CoauthBaseUrl.TrimEnd('/'))/_coauth/internal/session-grants/introspect" } else { $null }

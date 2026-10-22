@@ -11,6 +11,7 @@ param(
     [ValidateRange(1, 32)][int]$ServerCount = 1,
     [ValidateSet('local.host', 'localhost')][string]$DnsSuffix = 'local.host',
     [switch]$StartCoauth,
+    [switch]$StartFlagon,
     # Browserless profiles still use Playwright's test runner, but do not need
     # its multi-hundred-megabyte Chromium payload.
     [switch]$RequireBrowser,
@@ -236,7 +237,7 @@ function Initialize-CotestWindowsHostsAccess {
         if ($LASTEXITCODE -ne 0) { throw "icacls grant failed: $($icaclsOutput -join ' ')" }
 
         $probeMarker = New-CotestHostsMarker -RunId "setup-probe-$PID"
-        $probeHosts = Get-CotestJointHostNames -ServerCount $ServerCount -IncludeCoauth $true -IncludeUnregisteredProbe $true
+        $probeHosts = Get-CotestJointHostNames -ServerCount $ServerCount -IncludeCoauth $true -IncludeFlagon $StartFlagon.IsPresent -IncludeUnregisteredProbe $true
         $before = [System.IO.File]::ReadAllText($resolvedHostsPath)
         $withProbe = Add-CotestHostsBlock -Content $before -Hosts $probeHosts -Marker $probeMarker
         [System.IO.File]::WriteAllText($resolvedHostsPath, $withProbe, [System.Text.UTF8Encoding]::new($false))
@@ -400,7 +401,7 @@ Add-Check "caddy" $caddy.status $caddy.detail $caddyRepair
 
 if ($DnsSuffix -eq 'localhost') {
     try {
-        Assert-CotestLoopbackDns -Hosts (Get-CotestJointHostNames -ServerCount $ServerCount -IncludeCoauth $StartCoauth.IsPresent -DnsSuffix $DnsSuffix)
+        Assert-CotestLoopbackDns -Hosts (Get-CotestJointHostNames -ServerCount $ServerCount -IncludeCoauth $StartCoauth.IsPresent -IncludeFlagon $StartFlagon.IsPresent -DnsSuffix $DnsSuffix)
         Add-Check "loopback DNS" "pass" "all localhost service names and the unregistered probe resolve only to loopback"
     } catch {
         Add-Check "loopback DNS" "fail" $_.Exception.Message
@@ -446,16 +447,18 @@ if ($DnsSuffix -eq 'localhost') {
     Add-Check "hosts setup adapter" "pass" "Windows ACL backup/grant/restore adapter available"
 }
 
-$requiredHosts = @(Get-CotestJointHostNames -ServerCount $ServerCount -IncludeCoauth $StartCoauth.IsPresent -IncludeUnregisteredProbe $true -DnsSuffix $DnsSuffix)
+$requiredHosts = @(Get-CotestJointHostNames -ServerCount $ServerCount -IncludeCoauth $StartCoauth.IsPresent -IncludeFlagon $StartFlagon.IsPresent -IncludeUnregisteredProbe $true -DnsSuffix $DnsSuffix)
 $portsPerServer = if ($StartCoauth) { 4 } else { 2 }
-$recommendedMemoryGb = [math]::Max(4, 2 + ($ServerCount * $(if ($StartCoauth) { 2 } else { 1 })))
+$flagonPorts = if ($StartFlagon) { 2 } else { 0 }
+$flagonDatabases = if ($StartFlagon) { 1 } else { 0 }
+$recommendedMemoryGb = [math]::Max(4, 2 + ($ServerCount * $(if ($StartCoauth) { 2 } else { 1 }) + $flagonDatabases))
 # The recommendation includes headroom for transient browser/build activity;
 # treating that exact boundary as a hard prerequisite made healthy machines
 # fail preflight because free memory naturally fluctuates by a few hundred MB.
 # Keep a lower safety floor as the actual gate and surface the headroom gap as
 # a warning so callers can close applications before a resource-heavy run.
 $minimumMemoryGb = [math]::Max(4, [math]::Ceiling($recommendedMemoryGb * 0.75))
-Add-Check "topology budget" "pass" "servers=$ServerCount; hosts=$($requiredHosts -join ','); estimated_tcp_ports=$($ServerCount * $portsPerServer + 1); recommended_memory_gb=$recommendedMemoryGb; minimum_memory_gb=$minimumMemoryGb; independent_databases=$($ServerCount * $(if ($StartCoauth) { 2 } else { 1 }))"
+Add-Check "topology budget" "pass" "servers=$ServerCount; hosts=$($requiredHosts -join ','); estimated_tcp_ports=$($ServerCount * $portsPerServer + 1 + $flagonPorts); recommended_memory_gb=$recommendedMemoryGb; minimum_memory_gb=$minimumMemoryGb; independent_databases=$($ServerCount * $(if ($StartCoauth) { 2 } else { 1 }) + $flagonDatabases)"
 if ($platform.os -eq "windows") {
     $availableMemoryGb = [math]::Round((Get-CimInstance Win32_OperatingSystem).FreePhysicalMemory / 1MB, 2)
     $memoryStatus = if ($availableMemoryGb -ge $recommendedMemoryGb) {
@@ -494,6 +497,7 @@ $report = [pscustomobject]@{
     platform = $platform
     server_count = $ServerCount
     start_coauth = $StartCoauth.IsPresent
+    start_flagon = $StartFlagon.IsPresent
     require_docker = $RequireDocker.IsPresent
     postgres_images = @($PostgresImage | Sort-Object -Unique)
     hosts_path = $resolvedHostsPath
