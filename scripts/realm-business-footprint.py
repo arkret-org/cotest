@@ -62,7 +62,7 @@ def private_path(path, directory=False):
         raise ValueError("private control permissions or owner differ")
 
 
-def connection_for(server):
+def connection_for(server, expected_station_id=None):
     if not re.fullmatch(r"server[1-9][0-9]*", server):
         raise ValueError("invalid Station locator")
     topology = json.loads(Path(os.environ["COTEST_TOPOLOGY_PATH"]).read_text())
@@ -75,6 +75,8 @@ def connection_for(server):
     private_path(path)
     control = json.loads(path.read_text())
     coland = matches[0]["coland"]
+    if expected_station_id is not None and coland["service_id"] != expected_station_id:
+        raise ValueError("Direct governor differs from the exact Station lease")
     if (control["server"] != server
             or control["station_id"] != coland["service_id"]
             or control["public_url"] != coland["public_url"]):
@@ -85,7 +87,7 @@ def connection_for(server):
     return connection
 
 
-def sql_for(realm, candidate, stream_after=None, stream_end=None):
+def sql_for(realm, candidate, stream_after=None, stream_end=None, direct_source=None):
     # Identifiers come from metadata, with PostgreSQL format(%I) quoting them.
     # Realm/Event locators are validated before interpolation into SQL literals.
     if not re.fullmatch(r"ak:realm:[A-Za-z0-9_-]+", realm):
@@ -96,6 +98,10 @@ def sql_for(realm, candidate, stream_after=None, stream_end=None):
         raise ValueError("both exact stream bounds are required")
     if stream_after is not None and not (0 <= stream_after <= stream_end <= 9007199254740991):
         raise ValueError("invalid exact stream bounds")
+    if direct_source is not None:
+        validate_direct_source(direct_source)
+        if stream_after is None:
+            raise ValueError("Direct source requires an exact stream interval")
     sql = f"""
 BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY;
 SET LOCAL statement_timeout = '15s';
@@ -146,15 +152,65 @@ AND c.stream_position>{stream_after} AND c.stream_position<={stream_end}
 AND e.state='committed' AND e.kind=e.envelope->>'kind'
 AND c.commit_json->>'event_ref'=e.envelope->>'event_id';
 """
+    if direct_source is not None:
+        sql += f"""SELECT json_build_object('direct_origin',COALESCE(jsonb_agg(jsonb_build_object(
+'event_id',e.envelope->>'event_id','purpose',e.envelope#>>'{{payload,object,purpose}}',
+'governance_station_id',e.envelope#>>'{{payload,object,governance_station_id}}',
+'commit',c.commit_json)),'[]'::jsonb))::text
+FROM public.canonical_events e JOIN public.realm_commits c ON c.event_pk=e.pk
+WHERE c.realm_id='{realm}' AND c.stream_ref=jsonb_build_object('kind','realm','realm_id','{realm}')
+AND c.stream_position=0 AND c.governance_generation=0 AND c.previous_commit_ref IS NULL
+AND e.state='committed' AND e.kind='ak.realm.create' AND c.commit_json->>'event_ref'=e.envelope->>'event_id';
+"""
     return sql + "COMMIT;\n"
 
 
-def summarize(output):
+def validate_direct_source(source):
+    # This is private test-tool input, not a protocol DTO or signature verifier.
+    # The caller must first verify this Genesis/current authority with the SDK.
+    if (not isinstance(source, dict) or set(source) != {"service_id", "genesis_event_id", "genesis_commit", "expected_commits"}
+            or not isinstance(source["service_id"], str)
+            or not re.fullmatch(r"ak:did_core:[A-Za-z0-9:_-]+", source["service_id"])
+            or not isinstance(source["genesis_event_id"], str)
+            or not re.fullmatch(r"ak:event:[A-Za-z0-9_-]+", source["genesis_event_id"])
+            or not isinstance(source["genesis_commit"], dict)
+            or not isinstance(source["expected_commits"], list)
+            or not source["expected_commits"]):
+        raise ValueError("invalid verified Direct source metadata")
+
+
+def validate_direct_originals(origin, successors, source, realm, stream_after, stream_end):
+    validate_direct_source(source)
+    if origin != [{"event_id": source["genesis_event_id"], "purpose": "direct_conversation",
+                   "governance_station_id": source["service_id"], "commit": source["genesis_commit"]}]:
+        raise ValueError("Direct original does not match its verified fixed governor Genesis")
+    expected = source["expected_commits"]
+    if (stream_after is None or stream_end is None or len(expected) != stream_end - stream_after
+            or not isinstance(successors, list) or len(successors) != len(expected)):
+        raise ValueError("Direct original interval is incomplete")
+    for index, (row, commit) in enumerate(zip(successors, expected)):
+        if (not isinstance(row, dict) or set(row) != {"commit", "event_id", "event_kind"}
+                or not isinstance(commit, dict) or row["commit"] != commit
+                or commit.get("realm_id") != realm
+                or commit.get("stream_ref") != {"kind": "realm", "realm_id": realm}
+                or commit.get("stream_position") != stream_after + index + 1
+                or row["event_id"] != commit.get("event_ref")
+                or row["event_kind"] != "ak.moderation.franking_proof"):
+            raise ValueError("Direct original differs from the disclosed Commit or franking Event")
+
+
+def summarize(output, direct_source=None, realm=None, stream_after=None, stream_end=None):
     tables = {}
     candidate = None
     successors = None
+    origin = None
     for line in output.splitlines():
         row = json.loads(line)
+        if "direct_origin" in row:
+            if origin is not None or direct_source is None:
+                raise ValueError("unexpected or duplicate Direct origin cut")
+            origin = row["direct_origin"]
+            continue
         if "stream_successors" in row:
             if successors is not None or not isinstance(row["stream_successors"], list):
                 raise ValueError("invalid accepted stream metadata cut")
@@ -178,6 +234,8 @@ def summarize(output):
                 "event_federation_outbox_business"}
     if not required.issubset(tables):
         raise ValueError("required business tables are absent")
+    if direct_source is not None:
+        validate_direct_originals(origin, successors, direct_source, realm, stream_after, stream_end)
     result = {"tables": dict(sorted(tables.items())),
               "excluded_independent_bookkeeping": ["worker leases and attempts", "relay TTL collection", "notification read receipts"]}
     if candidate is not None:
@@ -194,9 +252,11 @@ def main():
     parser.add_argument("--candidate-event")
     parser.add_argument("--stream-after-position", type=int)
     parser.add_argument("--stream-end-position", type=int)
+    parser.add_argument("--verified-direct-source")
     args = parser.parse_args()
-    sql = sql_for(args.realm, args.candidate_event, args.stream_after_position, args.stream_end_position)
-    connection = connection_for(args.server)
+    direct_source = json.loads(args.verified_direct_source) if args.verified_direct_source else None
+    sql = sql_for(args.realm, args.candidate_event, args.stream_after_position, args.stream_end_position, direct_source)
+    connection = connection_for(args.server, direct_source["service_id"] if direct_source else None)
     executable = shutil.which("psql")
     if not executable:
         raise ValueError("psql is required for real readonly sampling")
@@ -207,7 +267,7 @@ def main():
     if process.returncode != 0:
         code = re.search(r"(?:ERROR|FATAL):\s*([0-9A-Z]{5})\b", process.stderr)
         raise PostgresSamplingFailure(code.group(1) if code else "unavailable")
-    result = summarize(process.stdout)
+    result = summarize(process.stdout, direct_source, args.realm, args.stream_after_position, args.stream_end_position)
     if args.candidate_event and "candidate_absence" not in result:
         raise ValueError("candidate absence cut is missing")
     print(json.dumps(result, separators=(",", ":"), sort_keys=True))

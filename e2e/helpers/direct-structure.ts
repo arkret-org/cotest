@@ -194,6 +194,29 @@ async function observeSelectedHumanSend(page: Page, strandId: string) {
 const structuralBoundaries = new WeakMap<Page, DirectStructureProof>();
 type StructureCut = { rows: Array<Record<string, any>>; floor: unknown;
   position: number; head: string; groups: Array<Record<string, unknown>> };
+async function verifyStructureSnapshotAuthority(request: APIRequestContext, realm: string,
+  snapshot: Record<string, any>) {
+  // Replicas retain the governing Station's original Snapshot signature.
+  // Its method is only a routing hint; the SDK below must still qualify the
+  // complete nonce-bound authority chain and method-native key history.
+  const signerDid = snapshot.signature?.verification_method?.split("#")[0];
+  const candidates = configuredServerKeys().filter(key => colandServiceDid(key) === signerDid);
+  expect(candidates.length, "Snapshot signer has one configured authority candidate").toBe(1);
+  const candidate = candidates[0]!;
+  const authorityRequest = { realm_id: realm, nonce: randomBytes(32).toString("base64url") };
+  const authority = await request.post(`${colandBaseUrl(candidate)}/_arkret/open/realm-authority/bundle`, {
+    headers: { "content-type": "application/json" }, data: canonicalJson(authorityRequest) });
+  expect(authority.status(), "candidate must supply the actual nonce-bound authority bundle").toBe(200);
+  const resolution = await request.get(colandServiceResolution(candidate).resolution_url);
+  expect(resolution.status(), "candidate's method-native service history is available").toBe(200);
+  const authorityBundle = await authority.json();
+  expect(cotestWire<{ verified: boolean }>("verify-realm-state-snapshot", {
+    snapshot, expected_snapshot_id: snapshot.snapshot_id, authority_request: authorityRequest,
+    authority_bundle: authorityBundle, trusted_service_id: colandServiceId(candidate),
+    service_resolution: await resolution.json(),
+  }).verified, "SDK must verify the whole current snapshot and native authority history").toBe(true);
+  return authorityBundle as Record<string, any>;
+}
 async function structureCut(proof: DirectStructureProof, realm: string,
   viewer?: { token: string; server: ColandKey }): Promise<StructureCut> {
   let result!: StructureCut;
@@ -203,24 +226,7 @@ async function structureCut(proof: DirectStructureProof, realm: string,
     const response = await proof.request.get(url, { headers: authHeaders(viewer?.token ?? proof.token, "GET", url) });
     expect(response.status(), "complete signed structure-boundary snapshot").toBe(200);
     const snapshot = await response.json();
-    // Replicas retain the governing Station's original Snapshot signature.
-    // Its method is only a routing hint; the SDK below must still qualify the
-    // complete nonce-bound authority chain and method-native key history.
-    const signerDid = snapshot.signature?.verification_method?.split("#")[0];
-    const candidates = configuredServerKeys().filter(key => colandServiceDid(key) === signerDid);
-    expect(candidates.length, "Snapshot signer has one configured authority candidate").toBe(1);
-    const candidate = candidates[0]!;
-    const authorityRequest = { realm_id: realm, nonce: randomBytes(32).toString("base64url") };
-    const authority = await proof.request.post(`${colandBaseUrl(candidate)}/_arkret/open/realm-authority/bundle`, {
-      headers: { "content-type": "application/json" }, data: canonicalJson(authorityRequest) });
-    expect(authority.status(), "candidate must supply the actual nonce-bound authority bundle").toBe(200);
-    const resolution = await proof.request.get(colandServiceResolution(candidate).resolution_url);
-    expect(resolution.status(), "candidate's method-native service history is available").toBe(200);
-    expect(cotestWire<{ verified: boolean }>("verify-realm-state-snapshot", {
-      snapshot, expected_snapshot_id: snapshot.snapshot_id, authority_request: authorityRequest,
-      authority_bundle: await authority.json(), trusted_service_id: colandServiceId(candidate),
-      service_resolution: await resolution.json(),
-    }).verified, "SDK must verify the whole current snapshot and native authority history").toBe(true);
+    await verifyStructureSnapshotAuthority(proof.request, realm, snapshot);
     const stream = { kind: "realm", realm_id: realm };
     const heads = snapshot.visible_stream_heads.filter((head: any) => isDeepStrictEqual(head.stream_ref, stream));
     expect(heads.length, "exact visible Realm head").toBe(1);
@@ -710,11 +716,12 @@ export async function rejectDirectStructureEvent(proof: DirectStructureProof, te
     url.searchParams.set("realm_id", realm);
     const response = await proof.request.get(url.toString(), { headers: authHeaders(proof.token, "GET", url.toString()) });
     expect(response.ok(), await response.text()).toBe(true);
-    return (await response.json()).current_state_entries;
+    return await response.json();
   };
   const beforeHead = await readCommitStreamHeadApi(proof.request, proof.token, realm);
   expect(beforeHead, "refusal must have a real observer's accepted head").toBeDefined();
-  const before = await snapshot();
+  const beforeSnapshot = await snapshot();
+  const before = beforeSnapshot.current_state_entries;
   const event = signedEventEnvelope({
     actorId: sender?.actor ?? template.actor_id as ActorId, realmId: realm, kind, payload,
     authorizationRef: template.authorization_ref as string,
@@ -747,7 +754,7 @@ export async function rejectDirectStructureEvent(proof: DirectStructureProof, te
   const unchangedRows = (entries: Array<Record<string, any>>) => entries
     .filter(row => row.selector.kind !== "moderation_franking_proof")
     .sort((a, b) => canonicalJson(a.selector).localeCompare(canonicalJson(b.selector)));
-  expect(unchangedRows(await snapshot())).toEqual(unchangedRows(before));
+  expect(unchangedRows((await snapshot()).current_state_entries)).toEqual(unchangedRows(before));
   const after = await scanRealmStreamApi(proof.request, proof.token, realm, { afterPosition: beforeHead!.stream_position });
   expect(after.truncated).toBe(false);
   expect(after.commits.length).toBe(after.events.length);
@@ -767,14 +774,29 @@ export async function rejectDirectStructureEvent(proof: DirectStructureProof, te
     // hidden payload or treating omission as a protocol proof.
     let stored: Array<{ commit: Record<string, unknown>; event_id: string; event_kind: string }> = [];
     if (after.events.slice(0, end + 1).some(row => row === undefined)) {
+      // Verify the accepted Genesis/current authority before selecting a
+      // private runner lease. Direct's governor is fixed from creation; an
+      // observer can legally hold only the same disclosed Withheld Commit.
+      const authority = await verifyStructureSnapshotAuthority(proof.request, realm, beforeSnapshot);
+      const genesis = authority.genesis_event;
+      const fixed = genesis.payload.object;
+      expect(genesis.kind).toBe("ak.realm.create");
+      expect(fixed.purpose, "private original lookup is restricted to verified Direct Genesis").toBe("direct_conversation");
+      expect(authority.authority_transitions, "Direct has no governance transfer history").toEqual([]);
+      expect(authority.current_generation).toBe(0);
+      expect(authority.current_service_id).toBe(fixed.governance_station_id);
       const topology = JSON.parse(await readFile(process.env.COTEST_TOPOLOGY_PATH!, "utf8"));
       const servers = topology.servers.filter((server: { coland: { service_id: string } }) =>
-        server.coland.service_id === colandServiceId());
-      expect(servers).toHaveLength(1);
+        server.coland.service_id === fixed.governance_station_id);
+      expect(servers, "verified fixed Direct governor has exactly one runner-owned lease").toHaveLength(1);
+      const directSource = { service_id: fixed.governance_station_id,
+        genesis_event_id: genesis.event_id, genesis_commit: authority.genesis_commit,
+        expected_commits: after.commits.slice(0, end + 1) };
       const script = fileURLToPath(new URL("../../scripts/realm-business-footprint.py", import.meta.url));
       const { stdout } = await promisify(execFile)("python3", [script, "--server", servers[0].name,
         "--realm", realm, "--stream-after-position", String(beforeHead!.stream_position),
-        "--stream-end-position", String(afterHead!.stream_position)], { timeout: 45_000, maxBuffer: 1_048_576 });
+        "--stream-end-position", String(afterHead!.stream_position),
+        "--verified-direct-source", JSON.stringify(directSource)], { timeout: 45_000, maxBuffer: 1_048_576 });
       stored = JSON.parse(stdout).stream_successors;
       expect(Array.isArray(stored)).toBe(true);
       expect(stored).toHaveLength(end + 1);
