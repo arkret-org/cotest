@@ -19,10 +19,6 @@ export type AppletPackage = {
   "claimed_profiles": string[];
   "protocols": string[];
   "namespaces": {
-    "actors": Array<{
-      "exclusive": boolean;
-      "pattern": string;
-    }>;
     "realms": Array<{
       "exclusive": boolean;
       "pattern": string;
@@ -142,10 +138,6 @@ export type AppletInstallRequestBody = {
     "claimed_profiles": string[];
     "protocols": string[];
     "namespaces": {
-      "actors": Array<{
-        "exclusive": boolean;
-        "pattern": string;
-      }>;
       "realms": Array<{
         "exclusive": boolean;
         "pattern": string;
@@ -514,6 +506,7 @@ export type AppletInstallRequestBody = {
 export type AppletInstallOutcome = {
   "install_id": string;
   "applet_id": string;
+  "service_id": string;
   "registration_event_ref": string;
   "registration_epoch": string;
   "capability_grant_refs": string[];
@@ -536,6 +529,7 @@ export type AppletBotPreviewRequestBody = {
     "realm_id": string;
     "circle_id": string;
   };
+  "service_id": string;
   "request_id": string;
   "display_name"?: string;
 };
@@ -556,6 +550,7 @@ export type AppletAuthorityMaterialRequestBody = {
 /** `applet-authority-material.schema.json#/$defs/outcome` — closed object schema. */
 export type AppletAuthorityMaterialOutcome = {
   "applet_id": string;
+  "service_id": string;
   "effective_scope": {
     "kind": "realm";
     "realm_id": string;
@@ -1861,6 +1856,9 @@ export type AppletAuthorityMaterialOutcome = {
           "applet_target"?: {
             "kind": "all";
           } | {
+            "kind": "applet";
+            "applet_id": string;
+          } | {
             "kind": "requester";
             "actor_id": {
               "kind": "account";
@@ -1881,6 +1879,7 @@ export type AppletAuthorityMaterialOutcome = {
           } | {
             "kind": "installation";
             "applet_id": string;
+            "service_id": string;
             "effective_scope": {
               "kind": "realm";
               "realm_id": string;
