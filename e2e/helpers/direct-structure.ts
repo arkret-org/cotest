@@ -195,7 +195,7 @@ async function observeSelectedHumanSend(page: Page, strandId: string) {
 // The WeakMap is process-only and tied to the actual page owning this fixture.
 const structuralBoundaries = new WeakMap<Page, DirectStructureProof>();
 type StructureCut = { rows: Array<Record<string, any>>; floor: unknown;
-  position: number; head: string; groups: Array<Record<string, unknown>> };
+  position: number; head: string; groups: Array<Record<string, unknown>>; authority: Record<string, any> };
 async function verifyStructureSnapshotAuthority(request: APIRequestContext, realm: string,
   snapshot: Record<string, any>) {
   // Replicas retain the governing Station's original Snapshot signature.
@@ -241,7 +241,7 @@ async function structureCut(proof: DirectStructureProof, realm: string,
     const response = await proof.request.get(url, { headers: authHeaders(viewer?.token ?? proof.token, "GET", url) });
     expect(response.status(), "complete signed structure-boundary snapshot").toBe(200);
     const snapshot = await response.json();
-    await verifyStructureSnapshotAuthority(proof.request, realm, snapshot);
+    const authority = await verifyStructureSnapshotAuthority(proof.request, realm, snapshot);
     const stream = { kind: "realm", realm_id: realm };
     const heads = snapshot.visible_stream_heads.filter((head: any) => isDeepStrictEqual(head.stream_ref, stream));
     expect(heads.length, "exact visible Realm head").toBe(1);
@@ -289,9 +289,38 @@ async function structureCut(proof: DirectStructureProof, realm: string,
       groups.push(material);
     }
     result = { rows, floor: snapshot.retention_and_history_floor,
-      position: heads[0].stream_position, head: heads[0].commit_id, groups };
+      position: heads[0].stream_position, head: heads[0].commit_id, groups, authority };
   }).toPass({ timeout: 90_000 });
   return result;
+}
+async function readVerifiedDirectSuccessors(proof: DirectStructureProof, realm: string,
+  authority: Record<string, any>, beforePosition: number, endPosition: number,
+  commits: Array<Record<string, unknown>>): Promise<Array<{
+    commit: Record<string, unknown>; event_id: string; event_kind: string;
+  }>> {
+  const genesis = authority.genesis_event;
+  const fixed = genesis.payload.object;
+  expect(genesis.kind).toBe("ak.realm.create");
+  expect(fixed.purpose, "private original lookup is restricted to verified Direct Genesis").toBe("direct_conversation");
+  expect(authority.authority_transitions, "Direct has no governance transfer history").toEqual([]);
+  expect(authority.current_generation).toBe(0);
+  expect(authority.current_service_id).toBe(fixed.governance_station_id);
+  const topology = JSON.parse(await readFile(process.env.COTEST_TOPOLOGY_PATH!, "utf8"));
+  const servers = topology.servers.filter((server: { coland: { service_id: string } }) =>
+    server.coland.service_id === fixed.governance_station_id);
+  expect(servers, "verified fixed Direct governor has exactly one runner-owned lease").toHaveLength(1);
+  const directSource = { service_id: fixed.governance_station_id,
+    genesis_event_id: genesis.event_id, genesis_commit: authority.genesis_commit,
+    expected_commits: commits };
+  const script = fileURLToPath(new URL("../../scripts/realm-business-footprint.py", import.meta.url));
+  const { stdout } = await promisify(execFile)("python3", [script, "--server", servers[0].name,
+    "--realm", realm, "--stream-after-position", String(beforePosition),
+    "--stream-end-position", String(endPosition),
+    "--verified-direct-source", JSON.stringify(directSource)], { timeout: 45_000, maxBuffer: 1_048_576 });
+  const stored = JSON.parse(stdout).stream_successors;
+  expect(Array.isArray(stored)).toBe(true);
+  expect(stored).toHaveLength(commits.length);
+  return stored;
 }
 async function assertStructureBoundary(proof: DirectStructureProof, realm: string,
   before: StructureCut[], event: IngressEvent) {
@@ -305,15 +334,29 @@ async function assertStructureBoundary(proof: DirectStructureProof, realm: strin
     const successor = await scanRealmStreamApi(proof.request, viewers[index]?.token ?? proof.token, realm,
       { limit: 1000, server: viewers[index]?.server, afterPosition: before[index].position });
     expect(successor.truncated).toBe(false);
-    expect(successor.commits.length).toBe(successor.events.length);
+    expect(successor.commits.length).toBe(successor.eventSlots.length);
     const end = successor.commits.findIndex(commit => commit.commit_id === after.head
       && commit.stream_position === after.position);
     expect(end, "accepted tail reaches the exact after-Snapshot head").toBeGreaterThanOrEqual(0);
-    const interval = successor.events.slice(0, end + 1);
+    const slots = successor.eventSlots.slice(0, end + 1);
+    const commits = successor.commits.slice(0, end + 1);
+    const stored = slots.some(row => row === undefined)
+      ? await readVerifiedDirectSuccessors(proof, realm, after.authority,
+        before[index].position, after.position, commits) : [];
+    const interval = slots.filter((row): row is Record<string, unknown> => row !== undefined);
     for (const [offset, commit] of successor.commits.slice(0, end + 1).entries()) {
       expect(commit.stream_position, "structure interval is a complete continuous accepted tail")
         .toBe(before[index].position + offset + 1);
-      expect(commit.event_ref, "each interval Commit binds its actual Event").toBe(interval[offset].event_id);
+      const original = slots[offset];
+      if (original === undefined) {
+        expect(isDeepStrictEqual(stored[offset].commit, commit),
+          "hidden successor retains the entire publicly disclosed accepting Commit").toBe(true);
+        expect(stored[offset].event_id === commit.event_ref).toBe(true);
+        expect(stored[offset].event_kind, "only a verified independent franking receipt may be withheld")
+          .toBe("ak.moderation.franking_proof");
+      } else {
+        expect(commit.event_ref, "each visible interval Commit binds its actual Event").toBe(original.event_id);
+      }
     }
     expect(interval.some((row: any) => row.event_id === event.event_id)).toBe(true);
     // Ordinary encrypted messages and their receiving-service franking
@@ -328,7 +371,7 @@ async function assertStructureBoundary(proof: DirectStructureProof, realm: strin
       body: JSON.stringify({ realm_id: realm, viewer_station: viewers[index]?.server ?? "default",
         protected_rows: after.rows.length, groups: after.groups, history_floor_unchanged: true,
         member_and_mls_rows_exact: true, before_head: before[index].head, after_head: after.head,
-        actual_structure_event: event.event_id, accepted_successors: interval.length }), contentType: "application/json" });
+        actual_structure_event: event.event_id, accepted_successors: commits.length, withheld_franking_successors: slots.length - interval.length }), contentType: "application/json" });
   }
 }
 
@@ -790,28 +833,8 @@ export async function rejectDirectStructureEvent(proof: DirectStructureProof, te
       // private runner lease. Direct's governor is fixed from creation; an
       // observer can legally hold only the same disclosed Withheld Commit.
       const authority = await verifyStructureSnapshotAuthority(proof.request, realm, beforeSnapshot);
-      const genesis = authority.genesis_event;
-      const fixed = genesis.payload.object;
-      expect(genesis.kind).toBe("ak.realm.create");
-      expect(fixed.purpose, "private original lookup is restricted to verified Direct Genesis").toBe("direct_conversation");
-      expect(authority.authority_transitions, "Direct has no governance transfer history").toEqual([]);
-      expect(authority.current_generation).toBe(0);
-      expect(authority.current_service_id).toBe(fixed.governance_station_id);
-      const topology = JSON.parse(await readFile(process.env.COTEST_TOPOLOGY_PATH!, "utf8"));
-      const servers = topology.servers.filter((server: { coland: { service_id: string } }) =>
-        server.coland.service_id === fixed.governance_station_id);
-      expect(servers, "verified fixed Direct governor has exactly one runner-owned lease").toHaveLength(1);
-      const directSource = { service_id: fixed.governance_station_id,
-        genesis_event_id: genesis.event_id, genesis_commit: authority.genesis_commit,
-        expected_commits: after.commits.slice(0, end + 1) };
-      const script = fileURLToPath(new URL("../../scripts/realm-business-footprint.py", import.meta.url));
-      const { stdout } = await promisify(execFile)("python3", [script, "--server", servers[0].name,
-        "--realm", realm, "--stream-after-position", String(beforeHead!.stream_position),
-        "--stream-end-position", String(afterHead!.stream_position),
-        "--verified-direct-source", JSON.stringify(directSource)], { timeout: 45_000, maxBuffer: 1_048_576 });
-      stored = JSON.parse(stdout).stream_successors;
-      expect(Array.isArray(stored)).toBe(true);
-      expect(stored).toHaveLength(end + 1);
+      stored = await readVerifiedDirectSuccessors(proof, realm, authority,
+        beforeHead!.stream_position, afterHead!.stream_position, after.commits.slice(0, end + 1));
     }
     for (const [offset, commit] of after.commits.slice(0, end + 1).entries()) {
       expect(commit.stream_position).toBe(beforeHead!.stream_position + offset + 1);
