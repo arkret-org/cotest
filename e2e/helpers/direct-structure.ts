@@ -10,6 +10,7 @@ import { promisify } from "node:util";
 import { fileURLToPath } from "node:url";
 import { colandBaseUrl, colandServiceDid, colandServiceId, colandServiceResolution, configuredServerKeys, type ColandKey } from "./env";
 import { cotestWire } from "./coland-api/wire-client";
+import { orderByCanonicalKey } from "./direct-structure-order";
 import type { ActorId } from "./generated/spec-wire-objects";
 
 // Negative structure targets must exist outside Direct's protected Realm.
@@ -237,8 +238,10 @@ async function structureCut(proof: DirectStructureProof, realm: string,
     expect(last?.commit_id === heads[0].commit_id, "scan and complete current must cover one exact head").toBe(true);
     const protectedKinds = ["member_state", "circle_member_state", "realm_history_access",
       "direct_conversation_binding", "mls_group"];
-    const rows = snapshot.current_state_entries.filter((row: any) => protectedKinds.includes(row.selector.kind))
-      .sort((a: any, b: any) => canonicalJson(a.selector).localeCompare(canonicalJson(b.selector)));
+    const rows = orderByCanonicalKey(
+      snapshot.current_state_entries.filter((row: any) => protectedKinds.includes(row.selector.kind)),
+      (row: any) => canonicalJson(row.selector),
+    );
     expect(rows.filter((r: any) => r.selector.kind === "member_state").length).toBeGreaterThan(0);
     expect(rows.filter((r: any) => r.selector.kind === "direct_conversation_binding").length).toBe(1);
     const mls = rows.filter((r: any) => r.selector.kind === "mls_group");
@@ -751,9 +754,10 @@ export async function rejectDirectStructureEvent(proof: DirectStructureProof, te
   const afterHead = await readCommitStreamHeadApi(proof.request, proof.token, realm);
   expect(afterHead, "refusal observer retains its actual accepted head").toBeDefined();
   expect(afterHead!.stream_ref).toEqual(beforeHead!.stream_ref);
-  const unchangedRows = (entries: Array<Record<string, any>>) => entries
-    .filter(row => row.selector.kind !== "moderation_franking_proof")
-    .sort((a, b) => canonicalJson(a.selector).localeCompare(canonicalJson(b.selector)));
+  const unchangedRows = (entries: Array<Record<string, any>>) => orderByCanonicalKey(
+    entries.filter(row => row.selector.kind !== "moderation_franking_proof"),
+    row => canonicalJson(row.selector),
+  );
   expect(unchangedRows((await snapshot()).current_state_entries)).toEqual(unchangedRows(before));
   const after = await scanRealmStreamApi(proof.request, proof.token, realm, { afterPosition: beforeHead!.stream_position });
   expect(after.truncated).toBe(false);
@@ -1322,9 +1326,10 @@ async function runFlatTopicChats(alice: Page, bob: Page, mainMessages: string[],
   const originalRead = await scanRealmStreamApi(proof!.request, proof!.token, realmId);
   expect(originalRead.truncated, "full Direct history read cannot hide a truncated prefix").toBe(false);
   if (proof?.peer) {
-    const structuralCurrent = (entries: Array<Record<string, unknown>> | undefined) => entries!
-      .filter(entry => ["strand", "space"].includes(String((entry.selector as { kind?: string })?.kind)))
-      .sort((left, right) => canonicalJson(left.selector).localeCompare(canonicalJson(right.selector)));
+    const structuralCurrent = (entries: Array<Record<string, unknown>> | undefined) => orderByCanonicalKey(
+      entries!.filter(entry => ["strand", "space"].includes(String((entry.selector as { kind?: string })?.kind))),
+      row => canonicalJson(row.selector),
+    );
     const shared = structuralCurrent(visibleCurrent);
     expect(shared.length, "the complete typed current includes actual Chat and Topic results").toBeGreaterThan(0);
     await expect.poll(async () => structuralCurrent(await snapshot(proof.peer)), { timeout: 90_000 }).toEqual(shared);
