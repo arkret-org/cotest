@@ -32,7 +32,7 @@ if ($stackReserve -ne 1048576) { throw "Expected the original 1 MiB default main
 
 $cli = Join-Path $repoRoot 'e2e/node_modules/playwright/cli.js'
 if (-not (Test-Path -LiteralPath $cli)) { throw 'Use the already installed Playwright CLI from the managed run' }
-$node = (Get-Command node -ErrorAction Stop).Source
+$node = (Get-Command node -CommandType Application -ErrorAction Stop | Select-Object -First 1).Source
 $oldEnvironment = @{}
 foreach ($name in @('RUST_MIN_STACK', 'COTEST_PROVISION_BIN', 'COTEST_JOINT_RUN_DIR')) {
     $oldEnvironment[$name] = [Environment]::GetEnvironmentVariable($name, 'Process')
