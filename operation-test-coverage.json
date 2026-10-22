@@ -9,7 +9,7 @@
     "test_layers": {
       "coland_unit": {
         "source_file_count": 471,
-        "source_sha256": "954e1bf6298656a2de91d0e81694d1bbaebe6f6b6434f389ce760b0a0aeb4e3e",
+        "source_sha256": "b456fab9d424d27f352af218bb92673b70ee4c6761756798dfdf0fb1576cf705",
         "evidence_count": 824,
         "covered_operation_count": 170
       },
@@ -27,13 +27,13 @@
       },
       "cotest_e2e": {
         "source_file_count": 118,
-        "source_sha256": "0bf9a206d357795e1416f8277a8e93d511533de46307f86a200fed81d0544779",
+        "source_sha256": "43811b1f26b5af39254f6c38f5355c388f393580dd3da353b10e9e5816ae681f",
         "evidence_count": 44,
         "covered_operation_count": 20
       },
       "inkson_e2e": {
         "source_file_count": 34,
-        "source_sha256": "930f35e87112ec6dcae26f6da2907c8f6e12051d67fdc6599a5d69b6423fe890",
+        "source_sha256": "0bdbe0ab79754e0f2240cd8ac10b79ceece2d9184d9734d93e1ad689b3a9b8b9",
         "evidence_count": 21,
         "covered_operation_count": 15
       }
@@ -17135,11 +17135,11 @@
           },
           {
             "file": "coland/crates/storage-postgres/tests/support/applet_authoring.rs",
-            "line": 5885,
+            "line": 5901,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              5885
+              5901
             ],
             "protected_oracle": false,
             "scope_sha256": "173f9efe4e31c224c4013b54d08033a2bd97212ae00d9cacaf1a9a976453b54d",
@@ -17152,11 +17152,11 @@
           },
           {
             "file": "coland/crates/storage-postgres/tests/support/applet_authoring.rs",
-            "line": 7060,
+            "line": 7076,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              7060
+              7076
             ],
             "protected_oracle": false,
             "scope_sha256": "a02e525f0d411c852e6476aefb2ccc67e094220ace1f5df806cee06e74ebb471",
@@ -18771,11 +18771,11 @@
         "storage_parity": [
           {
             "file": "coland/crates/storage-postgres/tests/support/applet_authoring.rs",
-            "line": 6006,
+            "line": 6022,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              6006
+              6022
             ],
             "protected_oracle": false,
             "scope_sha256": "c27e87dede3917dbf9c43437388ef63728c78117b1b8f3ec5d7d55effb591bd3",
@@ -18948,11 +18948,11 @@
           },
           {
             "file": "coland/crates/storage-postgres/tests/support/applet_authoring.rs",
-            "line": 6006,
+            "line": 6022,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              6006
+              6022
             ],
             "protected_oracle": false,
             "scope_sha256": "c27e87dede3917dbf9c43437388ef63728c78117b1b8f3ec5d7d55effb591bd3",
@@ -19270,11 +19270,11 @@
         "storage_parity": [
           {
             "file": "coland/crates/storage-postgres/tests/support/applet_authoring.rs",
-            "line": 6006,
+            "line": 6022,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              6006
+              6022
             ],
             "protected_oracle": false,
             "scope_sha256": "c27e87dede3917dbf9c43437388ef63728c78117b1b8f3ec5d7d55effb591bd3",
@@ -25873,11 +25873,11 @@
           },
           {
             "file": "coland/crates/storage-postgres/tests/support/applet_authoring.rs",
-            "line": 3421,
+            "line": 3437,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              3421
+              3437
             ],
             "protected_oracle": false,
             "scope_sha256": "94ef2c9106019140aaa7b088f7d8edcd9946570f40a9726c031c6222ca5c5c04",
@@ -25890,11 +25890,11 @@
           },
           {
             "file": "coland/crates/storage-postgres/tests/support/applet_authoring.rs",
-            "line": 3463,
+            "line": 3479,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              3463
+              3479
             ],
             "protected_oracle": false,
             "scope_sha256": "94ef2c9106019140aaa7b088f7d8edcd9946570f40a9726c031c6222ca5c5c04",
@@ -25907,11 +25907,11 @@
           },
           {
             "file": "coland/crates/storage-postgres/tests/support/applet_authoring.rs",
-            "line": 3485,
+            "line": 3501,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              3485
+              3501
             ],
             "protected_oracle": false,
             "scope_sha256": "94ef2c9106019140aaa7b088f7d8edcd9946570f40a9726c031c6222ca5c5c04",
@@ -25924,11 +25924,11 @@
           },
           {
             "file": "coland/crates/storage-postgres/tests/support/applet_authoring.rs",
-            "line": 3645,
+            "line": 3661,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              3645
+              3661
             ],
             "protected_oracle": false,
             "scope_sha256": "94ef2c9106019140aaa7b088f7d8edcd9946570f40a9726c031c6222ca5c5c04",
@@ -25941,11 +25941,11 @@
           },
           {
             "file": "coland/crates/storage-postgres/tests/support/applet_authoring.rs",
-            "line": 3883,
+            "line": 3899,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              3883
+              3899
             ],
             "protected_oracle": false,
             "scope_sha256": "6846d16b9c007d1e13805ff9eb5535db7c0e5addae301bb565ea16433c1b80df",
@@ -25958,11 +25958,11 @@
           },
           {
             "file": "coland/crates/storage-postgres/tests/support/applet_authoring.rs",
-            "line": 3932,
+            "line": 3948,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              3932
+              3948
             ],
             "protected_oracle": false,
             "scope_sha256": "6846d16b9c007d1e13805ff9eb5535db7c0e5addae301bb565ea16433c1b80df",
@@ -25975,11 +25975,11 @@
           },
           {
             "file": "coland/crates/storage-postgres/tests/support/applet_authoring.rs",
-            "line": 3961,
+            "line": 3977,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              3961
+              3977
             ],
             "protected_oracle": false,
             "scope_sha256": "6846d16b9c007d1e13805ff9eb5535db7c0e5addae301bb565ea16433c1b80df",
@@ -25992,11 +25992,11 @@
           },
           {
             "file": "coland/crates/storage-postgres/tests/support/applet_authoring.rs",
-            "line": 4039,
+            "line": 4055,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              4039
+              4055
             ],
             "protected_oracle": false,
             "scope_sha256": "94ef2c9106019140aaa7b088f7d8edcd9946570f40a9726c031c6222ca5c5c04",
@@ -26004,23 +26004,6 @@
             "assertion_sha256": null,
             "input_preview": [
               "arkret_wire::ServiceOperationId::SelfEventsCommandSubmitV1,"
-            ],
-            "assertion_preview": []
-          },
-          {
-            "file": "coland/crates/storage-postgres/tests/support/applet_authoring.rs",
-            "line": 4089,
-            "scope": "<module_helper>",
-            "scope_kind": "module_helper",
-            "occurrence_lines": [
-              4089
-            ],
-            "protected_oracle": false,
-            "scope_sha256": "6846d16b9c007d1e13805ff9eb5535db7c0e5addae301bb565ea16433c1b80df",
-            "input_sha256": "6846d16b9c007d1e13805ff9eb5535db7c0e5addae301bb565ea16433c1b80df",
-            "assertion_sha256": null,
-            "input_preview": [
-              "arkret_wire::ServiceOperationId::SELF_EVENTS_COMMAND_SUBMIT_V1,"
             ],
             "assertion_preview": []
           },
@@ -26043,11 +26026,11 @@
           },
           {
             "file": "coland/crates/storage-postgres/tests/support/applet_authoring.rs",
-            "line": 4133,
+            "line": 4121,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              4133
+              4121
             ],
             "protected_oracle": false,
             "scope_sha256": "6846d16b9c007d1e13805ff9eb5535db7c0e5addae301bb565ea16433c1b80df",
@@ -26060,11 +26043,28 @@
           },
           {
             "file": "coland/crates/storage-postgres/tests/support/applet_authoring.rs",
-            "line": 4200,
+            "line": 4149,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              4200
+              4149
+            ],
+            "protected_oracle": false,
+            "scope_sha256": "6846d16b9c007d1e13805ff9eb5535db7c0e5addae301bb565ea16433c1b80df",
+            "input_sha256": "6846d16b9c007d1e13805ff9eb5535db7c0e5addae301bb565ea16433c1b80df",
+            "assertion_sha256": null,
+            "input_preview": [
+              "arkret_wire::ServiceOperationId::SELF_EVENTS_COMMAND_SUBMIT_V1,"
+            ],
+            "assertion_preview": []
+          },
+          {
+            "file": "coland/crates/storage-postgres/tests/support/applet_authoring.rs",
+            "line": 4216,
+            "scope": "<module_helper>",
+            "scope_kind": "module_helper",
+            "occurrence_lines": [
+              4216
             ],
             "protected_oracle": false,
             "scope_sha256": "94ef2c9106019140aaa7b088f7d8edcd9946570f40a9726c031c6222ca5c5c04",
@@ -26077,11 +26077,11 @@
           },
           {
             "file": "coland/crates/storage-postgres/tests/support/applet_authoring.rs",
-            "line": 4268,
+            "line": 4284,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              4268
+              4284
             ],
             "protected_oracle": false,
             "scope_sha256": "94ef2c9106019140aaa7b088f7d8edcd9946570f40a9726c031c6222ca5c5c04",
@@ -26094,11 +26094,11 @@
           },
           {
             "file": "coland/crates/storage-postgres/tests/support/applet_authoring.rs",
-            "line": 4402,
+            "line": 4418,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              4402
+              4418
             ],
             "protected_oracle": false,
             "scope_sha256": "94ef2c9106019140aaa7b088f7d8edcd9946570f40a9726c031c6222ca5c5c04",
@@ -26111,11 +26111,11 @@
           },
           {
             "file": "coland/crates/storage-postgres/tests/support/applet_authoring.rs",
-            "line": 4477,
+            "line": 4493,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              4477
+              4493
             ],
             "protected_oracle": false,
             "scope_sha256": "6846d16b9c007d1e13805ff9eb5535db7c0e5addae301bb565ea16433c1b80df",
@@ -26128,11 +26128,11 @@
           },
           {
             "file": "coland/crates/storage-postgres/tests/support/applet_authoring.rs",
-            "line": 4636,
+            "line": 4652,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              4636
+              4652
             ],
             "protected_oracle": false,
             "scope_sha256": "94ef2c9106019140aaa7b088f7d8edcd9946570f40a9726c031c6222ca5c5c04",
@@ -26145,11 +26145,11 @@
           },
           {
             "file": "coland/crates/storage-postgres/tests/support/applet_authoring.rs",
-            "line": 4666,
+            "line": 4682,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              4666
+              4682
             ],
             "protected_oracle": false,
             "scope_sha256": "94ef2c9106019140aaa7b088f7d8edcd9946570f40a9726c031c6222ca5c5c04",
@@ -26162,11 +26162,11 @@
           },
           {
             "file": "coland/crates/storage-postgres/tests/support/applet_authoring.rs",
-            "line": 4704,
+            "line": 4720,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              4704
+              4720
             ],
             "protected_oracle": false,
             "scope_sha256": "94ef2c9106019140aaa7b088f7d8edcd9946570f40a9726c031c6222ca5c5c04",
@@ -26179,11 +26179,11 @@
           },
           {
             "file": "coland/crates/storage-postgres/tests/support/applet_authoring.rs",
-            "line": 4852,
+            "line": 4868,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              4852
+              4868
             ],
             "protected_oracle": false,
             "scope_sha256": "6846d16b9c007d1e13805ff9eb5535db7c0e5addae301bb565ea16433c1b80df",
@@ -26196,11 +26196,11 @@
           },
           {
             "file": "coland/crates/storage-postgres/tests/support/applet_authoring.rs",
-            "line": 5295,
+            "line": 5311,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              5295
+              5311
             ],
             "protected_oracle": false,
             "scope_sha256": "6846d16b9c007d1e13805ff9eb5535db7c0e5addae301bb565ea16433c1b80df",
@@ -26213,11 +26213,11 @@
           },
           {
             "file": "coland/crates/storage-postgres/tests/support/applet_authoring.rs",
-            "line": 5355,
+            "line": 5371,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              5355
+              5371
             ],
             "protected_oracle": false,
             "scope_sha256": "6846d16b9c007d1e13805ff9eb5535db7c0e5addae301bb565ea16433c1b80df",
@@ -26230,11 +26230,11 @@
           },
           {
             "file": "coland/crates/storage-postgres/tests/support/applet_authoring.rs",
-            "line": 5497,
+            "line": 5513,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              5497
+              5513
             ],
             "protected_oracle": false,
             "scope_sha256": "6846d16b9c007d1e13805ff9eb5535db7c0e5addae301bb565ea16433c1b80df",
@@ -26247,11 +26247,11 @@
           },
           {
             "file": "coland/crates/storage-postgres/tests/support/applet_authoring.rs",
-            "line": 5723,
+            "line": 5739,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              5723
+              5739
             ],
             "protected_oracle": false,
             "scope_sha256": "6846d16b9c007d1e13805ff9eb5535db7c0e5addae301bb565ea16433c1b80df",
@@ -26264,11 +26264,11 @@
           },
           {
             "file": "coland/crates/storage-postgres/tests/support/applet_authoring.rs",
-            "line": 6968,
+            "line": 6984,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              6968
+              6984
             ],
             "protected_oracle": false,
             "scope_sha256": "6846d16b9c007d1e13805ff9eb5535db7c0e5addae301bb565ea16433c1b80df",
@@ -26281,11 +26281,11 @@
           },
           {
             "file": "coland/crates/storage-postgres/tests/support/applet_authoring.rs",
-            "line": 7131,
+            "line": 7147,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              7131
+              7147
             ],
             "protected_oracle": false,
             "scope_sha256": "6846d16b9c007d1e13805ff9eb5535db7c0e5addae301bb565ea16433c1b80df",
@@ -30309,11 +30309,11 @@
           },
           {
             "file": "coland/crates/storage-postgres/tests/support/realm_actor_mls_handoff_fixture.rs",
-            "line": 801,
+            "line": 802,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              801
+              802
             ],
             "protected_oracle": false,
             "scope_sha256": "13a114a0a5d0fa55ff55e7e438d6ca902950068f708cb392e1db92c55f4918ec",
@@ -30326,11 +30326,11 @@
           },
           {
             "file": "coland/crates/storage-postgres/tests/support/realm_actor_mls_handoff_fixture.rs",
-            "line": 822,
+            "line": 823,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              822
+              823
             ],
             "protected_oracle": false,
             "scope_sha256": "13a114a0a5d0fa55ff55e7e438d6ca902950068f708cb392e1db92c55f4918ec",
@@ -30343,11 +30343,11 @@
           },
           {
             "file": "coland/crates/storage-postgres/tests/support/realm_actor_mls_handoff_fixture.rs",
-            "line": 845,
+            "line": 846,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              845
+              846
             ],
             "protected_oracle": false,
             "scope_sha256": "13a114a0a5d0fa55ff55e7e438d6ca902950068f708cb392e1db92c55f4918ec",
@@ -35060,11 +35060,11 @@
           },
           {
             "file": "coland/crates/storage-postgres/tests/support/applet_authoring.rs",
-            "line": 3536,
+            "line": 3552,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              3536
+              3552
             ],
             "protected_oracle": false,
             "scope_sha256": "5eb9de94b61076b468dc41cf46aec3ee1a1d2b0b99f6a33d950c760c7de8e1ed",
@@ -35077,11 +35077,11 @@
           },
           {
             "file": "coland/crates/storage-postgres/tests/support/applet_authoring.rs",
-            "line": 4156,
+            "line": 4172,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              4156
+              4172
             ],
             "protected_oracle": false,
             "scope_sha256": "1d731fc3b06618fe0a9f4fc85dc74fb38728a39c05520399f455c10c386d1f81",
@@ -35094,11 +35094,11 @@
           },
           {
             "file": "coland/crates/storage-postgres/tests/support/applet_authoring.rs",
-            "line": 4777,
+            "line": 4793,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              4777
+              4793
             ],
             "protected_oracle": false,
             "scope_sha256": "1d731fc3b06618fe0a9f4fc85dc74fb38728a39c05520399f455c10c386d1f81",
@@ -35106,23 +35106,6 @@
             "assertion_sha256": null,
             "input_preview": [
               "arkret_wire::ServiceOperationId::SelfRealmActorReadMaterialV1.as_str(),"
-            ],
-            "assertion_preview": []
-          },
-          {
-            "file": "coland/crates/storage-postgres/tests/support/applet_authoring.rs",
-            "line": 4878,
-            "scope": "<module_helper>",
-            "scope_kind": "module_helper",
-            "occurrence_lines": [
-              4878
-            ],
-            "protected_oracle": false,
-            "scope_sha256": "2aff2032981c7664f8ff4825e99eb093d8430765582ac2e97c5864f0ff77761b",
-            "input_sha256": "2aff2032981c7664f8ff4825e99eb093d8430765582ac2e97c5864f0ff77761b",
-            "assertion_sha256": null,
-            "input_preview": [
-              "arkret_wire::ServiceOperationId::SELF_REALM_ACTOR_READ_MATERIAL_V1,"
             ],
             "assertion_preview": []
           },
@@ -35145,11 +35128,11 @@
           },
           {
             "file": "coland/crates/storage-postgres/tests/support/applet_authoring.rs",
-            "line": 5335,
+            "line": 4910,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              5335
+              4910
             ],
             "protected_oracle": false,
             "scope_sha256": "2aff2032981c7664f8ff4825e99eb093d8430765582ac2e97c5864f0ff77761b",
@@ -35162,11 +35145,28 @@
           },
           {
             "file": "coland/crates/storage-postgres/tests/support/applet_authoring.rs",
-            "line": 5396,
+            "line": 5351,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              5396
+              5351
+            ],
+            "protected_oracle": false,
+            "scope_sha256": "2aff2032981c7664f8ff4825e99eb093d8430765582ac2e97c5864f0ff77761b",
+            "input_sha256": "2aff2032981c7664f8ff4825e99eb093d8430765582ac2e97c5864f0ff77761b",
+            "assertion_sha256": null,
+            "input_preview": [
+              "arkret_wire::ServiceOperationId::SELF_REALM_ACTOR_READ_MATERIAL_V1,"
+            ],
+            "assertion_preview": []
+          },
+          {
+            "file": "coland/crates/storage-postgres/tests/support/applet_authoring.rs",
+            "line": 5412,
+            "scope": "<module_helper>",
+            "scope_kind": "module_helper",
+            "occurrence_lines": [
+              5412
             ],
             "protected_oracle": false,
             "scope_sha256": "2aff2032981c7664f8ff4825e99eb093d8430765582ac2e97c5864f0ff77761b",
