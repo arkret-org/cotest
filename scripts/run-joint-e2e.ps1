@@ -3742,6 +3742,8 @@ if ($StartMockChallengeProvider) {
     $mockChallengeProviderBaseUrl = "http://127.0.0.1:$mockChallengeProviderPort"
 }
 
+$flagonIdentityDirectory = $null
+$flagonIdentity = $null
 $managedServices = New-Object System.Collections.Generic.List[object]
 $managedServiceFailures = @()
 $runtimeServers = [System.Collections.Generic.List[object]]::new()
@@ -4243,8 +4245,6 @@ try {
         $inksonStaticRoot = $inksonRuntimeRoot
     }
 
-    $flagonIdentityDirectory = $null
-    $flagonIdentity = $null
     if ($jointTlsFlagon) {
         $flagonIdentityDirectory = Join-Path $jointDir 'flagon-identity'
         $flagonMinted = Invoke-JointFlagonIdentity -Command 'mint' -InputValue @{
