@@ -583,13 +583,92 @@
         }
       ],
       "engineering_checks": [],
-      "criteria_count": 4,
-      "criteria_sha256": "ba37d9cd2df183a41f67423a399e9354424e01b3e648a3b8567452e68bd8a797",
+      "criteria_count": 6,
+      "criteria_sha256": "ba887f186b987f6642520e760dded9d11865654006de4863e1911ab661f955af",
       "remaining_scenarios": [
         "离线 Card create 的 exact 原 Event 后台接受后，耐久续接正式 placement Move；覆盖接受后丢响应、进程冷重启、原件重试及拒绝，不重新创建卡片、不丢失位置或假称业务完成。复用原 authoring/queue owner，不在页面构造第二恢复账本。",
-        "当前 source21 或后继明确冻结源码的完整23项 kanban 回归全部实跑通过，不能拼接 source20 的22绿与 source21 的三项定向绿。",
         "真实 Station 重启后的看板恢复与双方内容可见验证，不能以浏览器刷新或其它领域重启用例替代。",
-        "真实 leave／revoke 后的看板 UI 权限失效验证，不能以 mock403、PG leave 或原生 terminal 测试替代。"
+        "真实 leave／revoke 后的看板 UI 权限失效验证，不能以 mock403、PG leave 或原生 terminal 测试替代。",
+        "**KB-NET-01 本地重投影与精准补数。** 已安装完整目标current/所需已验证历史时，普通消息、无关Realm current generation或无关scope MLS更新只触发必要本地重投影，新增Space/Strand list与起点backfill请求均为0；确有对象/历史覆盖缺口时只获取缺少的正式分页/尾部。Realm至少501条历史且最新卡片/变更在第一页之后仍正确显示，不以反复起点500条或无界全历史重扫作为恢复。覆盖首次载入、since-join保留对象、晚到MLS解锁、current-only变化、archive/redaction、权限收紧；历史覆盖和current完整性分别证明。",
+        "**KB-NET-02 单轮读取与晚到隔离。** 首次加载与live刷新共享等价读取；同Realm/scope/session至多1个进行中的同类读取，新key在途时合并为一次确需的后续刷新，不能丢最后变化。Space和Strand等独立取材可有界并发，单列表分页继续遵守完整generation/cursor；结果绑定完整账户/Station、页面目标、会话代数与实际覆盖，旧请求晚到不得覆盖新current、退群终态或新看板。用户快速切换、失败/取消及一个waiter退出有定向计数和状态断言。",
+        "**KB-NET-03 真实调用与成本。** 增补生产fetch出口的计数回归并在真实浏览器/Station复验：同cut重复20次无变化通知不重复整组读取；20次实际变化若需远程补数也不产生并行20套读。分别记录首次/稳态/缺口/故障的HTTP请求、WS channel、分页行数/字节与首屏/交互；1725实际WS优先与强制HTTP降级两种传输下结果一致，撤权及冷恢复保持原门。新定向成功不替代原完整23项及其它三项验收；不能拼接旧source20/source21成功。"
+      ]
+    },
+    {
+      "task": "2026-09-06-1725-joint-e2e-inkson-decoupling-and-provisioning-convergence.md",
+      "criteria_count": 14,
+      "criteria_sha256": "de40d16aa27e09d301c48849c5abce1c4a80ca2ed5dd7565ebd05008812925cb",
+      "spec_refs": [
+        "arkret-spec/spec/v1/zh/sync/websocket-binding.md",
+        "arkret-spec/spec/v1/zh/sync/client-sync.md"
+      ],
+      "source_refs": [
+        "inkson/src/transport/websocket_rail.rs",
+        "inkson/src/realm_events_engine/own_live.rs"
+      ],
+      "tests": [],
+      "engineering_checks": [
+        "Product/runtime and NET01–09 inventory only; no new work, execution or acceptance credit."
+      ],
+      "remaining_scenarios": [
+        "AV-UI-BOUND：冻结构建、设备和普通/Sidecar混合大历史规模；实际WASM消息DOM保持实现上限（当前窗口最多120条），输入、滚动、取消、定位旧消息/回最新持续响应；覆盖可变正文、图片晚到与生成预览增长的阅读锚点，留主线程长任务/交互延迟证据。独立浏览器presentation夹具与native测试不能代替真实账号完整历史验收。",
+        "AV-UI-INVALIDATION：UI重绘、opaque cursor/presence等bookkeeping不得重复fold/decrypt/merge或唤醒creator；accepted完整Event无需改变cursor即可更新，revision/redaction/Poll与exact current变化自动安装；账号、scope、head、历史签名、MLS及权限变化仍重验和撤权拒显。含大历史首次重建的分批响应预算，不能只以DOM窗口证明验证/持久化有界。",
+        "AV-UI-LIVE：原卡片普通消息及连续三次`@me/<slug>`私密回复无需刷新自动可见，分别留accepted、执行完成、客户端安装/验证和可见证据，并验双用户无私密披露；`encryption_policy_pending`或不完整current cut保持失败关闭，独立恢复，不能默认策略或用历史合成current。",
+        "AV-MODE/ROSTER/ROUTE/EXEC/OBS：补齐跨站受权 mode current、远端 PCR 及 runtime 第三方完整 participation 观察；保持 controller-only exact CAS、群路由、Sidecar 自动派生成员和失败关闭，验转换在途、附件/编辑 scope、private 强提及无触发和 owner Direct/Sidecar 私有。",
+        "保留上游逐CommitStream后台维护、Sidecar草稿current路由与task生命周期恢复；和本地Bound current发布、持久会话fence共同验证，连续三次private回复、大历史预算与完整跨站矩阵仍未验收。",
+        "**NET-01 WebSocket优先与单owner。** 合法完整descriptor+bundle且健康ready时，三类订阅均选WebSocket，稳定阶段同selector的HTTP订阅请求为0；慢握手可有界临时HTTP保活，ready后先释放HTTP consumer再打开对应socket channel。缺广告/不合法descriptor、代理或Upgrade失败、channel拒绝/配额耗尽时在其合法范围降级；连接错误按§8.1精确执行1002/1009立即HTTP并等descriptor变化或显式重试、1008至多一次fresh grant+fresh socket、1001/1012遵守drain及三次无welcome预算。HTTP恢复与WebSocket恢复都不产生双consumer、不重置其它channel cursor、不补发离线Signal；native和浏览器均证明实际路径。",
+        "**NET-02 提示合并与发现公平性。** 受控夹具先排入同stream 20条提示，首次独立snapshot已覆盖其全部head；处理完整批次只执行1轮必要snapshot/历史追赶，后19条不各自重读同cut。相同position冲突、治理/披露/成员变化、resync/unauthorized/quarantine/control不得当作普通重复提示跳过。超过64条可见stream的第65条及后续新增流，在既有30秒发现周期加必要网络/处理时间内可被发现和追赶；不因健康WebSocket而删除唯一发现兜底，busy流不得饿死其它流。周期发现、控制处理与按需取材分开计数。",
+        "**NET-03 Sidecar局部补尾。** 同会话原件已接纳且10条Sidecar前缀完整、其中1条只缺尾部1条时，只扫描该stream必要尾页，其余9条不重新扫genesis；snapshot/authoritative current与全部所需历史仍同cut原子安装。新会话/冷重启、floor>0、withheld、fork、失败flush及并发新cut有独立正负例，不用持久坐标冒充本次接纳，不部分发布current或提前推进cursor。独立私有写入的accepted回读不依赖live提示必须到达。",
+        "**NET-04 MLS依赖调度与设备复用。** 10个已稳定候选Realm在普通消息/无关cursor重铸时不重复发起10套准入取材；真正设备授权/撤销、成员变化、runtime key替换、KeyPackage暂不可用及pending Welcome/Commit能独立唤醒。一次合法同会话协调轮次内账户设备viewer只取1份，授权/代数变化立即废弃该轮复用。把超过500条、加入/授权事件在501条之后的场景接入实际协调，获取确切所需原件/当前依赖并成功恢复，不再反复取旧第一页，也不每次全历史重放；未知结果不重复Add或重签原意图。看板锁定私有字段的恢复也复用同一账户/Device/会话恢复owner：同卡20次开关或无关Realm epoch不重复并发key-backup列表/解锁，实际新backup/密钥/私有sidecar可独立唤醒；保留受界定的必要发现、Retry-After、失败退避及显式重试，禁止把旧解锁证明当跨会话授权票。定向计数区分初始恢复、真实新材料和重复交互，不能仅证明Space/Strand为0就宣称恢复取材为0。",
+        "**NET-05 联系人共享读取。** 在受控同一新鲜度窗口内同时挂载首页、侧栏、Contacts，只有1个进行中的contacts list读取；后台已成功加载后开侧栏/页面不再无条件重读。联系人写后统一失效并合并回读，显式刷新可强制取新；凭证轮换不单凭token字符串变化重拉展示数据，真实身份/权限变化仍失效。没有已登记且覆盖全部变化的Contact订阅时保留一个有界轮询owner，WebSocket本身不等于有Contact通知；离线/隐藏/持续失败降频，恢复可见后在已声明活性预算内补读。",
+        "**NET-06 viewer/describe复用。** 同一次启动的身份、展示标签、管理员标记共享已获取viewer，展示不阻塞Chat必要历史；安全设备/撤销探测在需要新证据时仍请求，不复用旧grant授权票。连接describe共用合法信任校验结果/进行中任务，创建Realm获取service id/trust_domain不重复describe，WebSocket引擎复用同连接描述。并发首取、失败后重试、服务/账户切换、同DID不同Station、连接信任变化及ABA均无串用；缓存的是有界数据，不是永久权限结论。",
+        "**NET-07 Agent批量/失败局部化。** 固定Realm head且5个Agent仅1个暂失败时，成功4项不会被后续每轮重复读取，最多只重试失败目标；同轮多Agent共享必要bound snapshot，缺行的exact-read仍保留前后cut验证，不把absence当never-written。无相关变化的participation、Contact Profile不重复拉取，同目标并发首次请求合并；HTTP失败也有退避，不能只有成功结果才抑制重复。审批通知先占用exact approval request的in-flight键，store无关写入不重复agent_get；未广告通知能力才运行单个N+1兜底，正常无待审结果逐步降频，仍有明确恢复/发现预算。",
+        "**NET-08 取消与探测。** 默认Strand已被同步补齐、Realm/route切换、会话替换时下一次重试前不再发旧请求，晚到结果不得覆盖新目标；401/403/不可恢复schema/能力错误不走统一20轮重试。身份健康区分临时故障与长期不兼容，退避遵守Retry-After和取消，显式重连/描述变化可恢复；不把本地取消轮询计为网络请求，也不因隐藏页面停掉必要耐久处理。",
+        "**NET-09 真实成本与安全回归。** 固定源/SUT，在native与真实浏览器分别记录三订阅的WS open/HTTP订阅、snapshot、scan及行数/字节、contacts/viewer/describe、Agent读取、重试/取消的前后数量与延迟；首屏、60秒静默、20提示突发、>64流、10Realm、501+历史、换账号/撤权/断线均非空执行。按正常/故障/发现/安全回读分别计数，不能把必要HTTP回读或WebSocket帧数记成重复订阅；实际外部模型/工具调用次数不增加。原五项产品验收仍开放，定向效率成功不能替代它们或0900 full。"
+      ]
+    },
+    {
+      "task": "2026-10-22-1920-inkson-attachment-demand-loading.md",
+      "criteria_count": 5,
+      "criteria_sha256": "4116c3772c989330573b25c5309ad16bfcd481c367fc3db0cd706790b2814e9a",
+      "spec_refs": [
+        "arkret-spec/spec/v1/zh/crypto-media/media-and-blob.md",
+        "arkret-spec/spec/v1/zh/sync/client-sync.md"
+      ],
+      "source_refs": [
+        "inkson/src/views/chat/attachment_renderer.rs",
+        "inkson/src/attachments/artifact.rs",
+        "inkson/src/transport/blob.rs"
+      ],
+      "tests": [],
+      "engineering_checks": [
+        "ATT01–05 inventory only. Existing attachment tests do not prove these new efficiency/security criteria; no execution or complete claim."
+      ],
+      "remaining_scenarios": [
+        "**ATT-01 需求门。** 渲染含文件/音视频附件的时间线但不点击下载/播放时，附件body Range为0；图片/预览仅进入明确视口/有界预取范围后加载，屏外附件body Range为0。LongText显示已认证前缀，首次需要完整正文时再加载，不能丢失原语义。取消、切换目标、组件卸载后不继续无需求下载；共享任务仍有其它合法消费者时继续，失败/取消有可重试UI而不陷入永久loading。",
+        "**ATT-02 跨实例复用。** 同一账户/设备/会话内两个合法展示实例同时请求同一个确切附件，只发一组等价Blob下载；已验证完成后卸载重挂载不重复传输完整密文。复用key绑定完整账户/Station、Device、认证source Event/scope、descriptor/内容承诺及所需MLS provenance；同blob ref不同授权来源不能共享授权结论，错账号/旧会话/撤权/withheld/redaction/current失效拒绝释放。只共享同cut已验证不可变材料，真正需要的新授权取材照常执行。密文缓存有容量、清理和回收边界，未验证/损坏数据不作为完整cache命中。",
+        "**ATT-03 Range效率与内存。** 不改AEAD段大小而合并相邻HTTP Range或使用现有流式响应，在固定默认256 KiB明文段、64 MiB明文对象上，完整正常下载最多64个Blob body请求（含重定向/额外HEAD应分别报告；故障重试另计），不再每段固定一次往返。Range偏移/长度按SDK实际密文段长度计算并包含每段AEAD tag，不能把四个256 KiB明文段误当恰好1 MiB密文；SUT合法容量须覆盖该对象的完整密文及段开销。同时保持缓冲/并发有界、不全文件常驻内存。206/Content-Range、字节数、段序、末段、AEAD及整体digest分别验证；同对象网络中断按明确阶段保留或丢弃临时字节，不能把未完整验证对象提交为完整缓存。恶意内容失败仍执行规范丢弃，不以复用保留其可展示字节。",
+        "**ATT-04 安全与artifact生命周期。** 正常Realm/Circle/Sidecar及合法历史epoch在当前读取授权下可用；撤权、Device/session替换、late join不可读历史、错source/descriptor/group-state、段篡改/重排/重复/缺末段/整体digest不符均无完整预览或可下载成品。若提供增量播放，逐段/整体状态明确分离，失败终止并回收临时明文/URL；持久成品只有完整验证后发布。原消息多附件可合并同cut公共取材，但每份descriptor/KDF与授权绑定独立，拒绝一项不扩大其它项权限。",
+        "**ATT-05 同源真实验证。** 为native与真实浏览器记录屏外/未点击、两个并发实例、同页重挂载、重进聊天、冷重启、显式清理、取消、中断恢复及换账号的请求数/密文字节/内存和首可见时间；包含小图片、64 MiB多段文件、音视频及LongText。运行真实双Device加密发送/接收、历史及篡改负例，复用0805原关键断言；浏览器使用正式供给和同源WASM，不把本地fixture或下载次数减少当作真实授权通过。确认没有把Blob迁到WebSocket、presign或未登记端点。"
+      ]
+    },
+    {
+      "task": "2026-10-22-2129-local-ci-repair.md",
+      "criteria_count": 2,
+      "criteria_sha256": "0f353aec8b64b2016b687fd844314e220a5ee92e6f055422bf52271bd4b5cdd0",
+      "spec_refs": [],
+      "source_refs": [
+        "coland/Cargo.toml",
+        "coland/deny.toml",
+        "arkret-work/reports/2026-10-23-ci-main-delivery.md"
+      ],
+      "tests": [],
+      "engineering_checks": [
+        "Engineering-only CI inventory. Preserve separate upstream platform/security failures; no product acceptance or CI green claim."
+      ],
+      "remaining_scenarios": [
+        "修复 Coland 经 Savfox keyring 3 Linux 后端引入的三项 unmaintained，保持 OS 凭据语义并通过对应平台验证及严格 cargo-deny，不添加 advisory 忽略。",
+        "在具备环境时验证组织 Actions 策略下的 Linux Docker 构建及相关平台门；本轮仅完成 Docker 路径静态检查，未修改组织策略，未执行 ASAN fuzz、macOS / iOS / Android 和完整浏览器联合旅程。"
       ]
     }
   ]
