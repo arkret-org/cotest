@@ -36,6 +36,20 @@ foreach ($foreignMock in @("mock-applet-registry.example.com", "mock-applet-regi
     try { Add-CotestHostsBlock -Content $original -Hosts @("mock-applet-registry.local.host", $foreignMock) -Marker $marker | Out-Null } catch { $rejected = $true }
     Assert-True $rejected "a foreign or injected mock host must fail closed: $foreignMock"
 }
+# The managed Directory has one exact additional hostname, not a broader namespace.
+Assert-Equal 8 @(Get-CotestJointHostNames -ServerCount 3 -IncludeFlagon $true).Count "managed Directory must be included in the environment host inventory"
+Assert-True (@(Get-CotestJointHostNames -ServerCount 1 -IncludeFlagon $true -DnsSuffix localhost) -contains 'flagon.localhost') "localhost Directory must retain the configured DNS suffix"
+foreach ($newline in @("`r`n", "`n")) {
+    $content = "127.0.0.1 localhost${newline}10.0.0.8 user-owned.example${newline}"
+    $directoryBlock = Add-CotestHostsBlock -Content $content -Hosts (@($hosts) + @(' FLAGON.Local.Host ', 'flagon.local.host')) -Marker $marker
+    Assert-Equal 1 ([regex]::Matches($directoryBlock, '(?m)^127\.0\.0\.1\tflagon\.local\.host\r?$').Count) "Directory host must be normalized and written only once"
+    Assert-Equal $content (Remove-CotestHostsBlocks -Content $directoryBlock -Marker $marker) "Directory cleanup must preserve unrelated hosts and newline style"
+}
+foreach ($foreignDirectory in @('flagon.example.com', 'flagon.local.host.example.com', 'flagon2.local.host', 'other-flagon.local.host', "flagon.local.host`n192.0.2.1 example.com")) {
+    $rejected = $false
+    try { Add-CotestHostsBlock -Content $original -Hosts @('flagon.local.host', $foreignDirectory) -Marker $marker | Out-Null } catch { $rejected = $true }
+    Assert-True $rejected "foreign or injected Directory host must fail closed: $foreignDirectory"
+}
 $stale = Add-CotestHostsBlock -Content $withBlock -Hosts @("coland-server1.local.host") -Marker (New-CotestHostsMarker -RunId "unit-stale")
 Assert-Equal $original (Remove-CotestHostsBlocks -Content $stale) "stale cleanup must remove every cotest block and preserve foreign content"
 # Blocks written before `b6ab807b` separated the prefix from the stamp with a

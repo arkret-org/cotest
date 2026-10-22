@@ -52,6 +52,7 @@ function Get-CotestJointHostNames {
     param(
         [ValidateRange(1, 32)][int]$ServerCount = 1,
         [bool]$IncludeCoauth = $true,
+        [bool]$IncludeFlagon = $false,
         [bool]$IncludeUnregisteredProbe = $true,
         [ValidateSet('local.host', 'localhost')][string]$DnsSuffix = 'local.host'
     )
@@ -60,6 +61,7 @@ function Get-CotestJointHostNames {
         $names.Add("coland-server$index.$DnsSuffix")
         if ($IncludeCoauth) { $names.Add("coauth-server$index.$DnsSuffix") }
     }
+    if ($IncludeFlagon) { $names.Add("flagon.$DnsSuffix") }
     if ($IncludeUnregisteredProbe) { $names.Add("unregistered.$DnsSuffix") }
     return @($names)
 }
@@ -103,7 +105,7 @@ function Add-CotestHostsBlock {
     if ($normalizedHosts.Count -eq 0) { throw "At least one hosts name is required" }
     foreach ($hostName in $normalizedHosts) {
         if ($hostName -notmatch '^(?:coland|coauth)-server[1-9][0-9]*\.local\.host$' -and
-            $hostName -notin @("unregistered.local.host", "mock-applet-registry.local.host")) {
+            $hostName -notin @("unregistered.local.host", "mock-applet-registry.local.host", "flagon.local.host")) {
             throw "Refusing host outside the cotest joint namespace: $hostName"
         }
     }

@@ -1579,7 +1579,7 @@ function Get-JointFlagonDescription {
     param([Parameter(Mandatory=$true)][string]$BaseUrl)
     $options = @{ Headers = @{ 'Arkret-Operation' = 'ak.find.directory.read.describe.v1' } }
     if (([Uri]$BaseUrl).Scheme -eq 'https' -and $env:COTEST_RUN_SCOPED_CA_PEM) { $options.SkipCertificateCheck = $true }
-    return Invoke-RestMethod -Uri "$($BaseUrl.TrimEnd('/'))/_arkret/describe" -Method Get -NoProxy:(Test-JointLoopbackUrl -Url $BaseUrl) -TimeoutSec 10 -ErrorAction Stop @options
+    return Invoke-RestMethod -Uri "$($BaseUrl.TrimEnd('/'))/_arkret/find/directory/describe" -Method Get -NoProxy:(Test-JointLoopbackUrl -Url $BaseUrl) -TimeoutSec 10 -ErrorAction Stop @options
 }
 
 function Write-JointCaddyConfig {
@@ -3236,6 +3236,7 @@ $environmentArgs = @(
 $environmentPostgresImages = @($ColandPostgresImage, $CoauthPostgresImage) | Sort-Object -Unique
 $environmentArgs += $environmentPostgresImages
 if ($StartCoauth) { $environmentArgs += "-StartCoauth" }
+if ($StartFlagon -and -not $FlagonBaseUrl) { $environmentArgs += "-StartFlagon" }
 if ($requiresInkson) { $environmentArgs += "-RequireBrowser" }
 if ($requiresDocker) { $environmentArgs += "-RequireDocker" }
 & (Get-Process -Id $PID).Path @environmentArgs
