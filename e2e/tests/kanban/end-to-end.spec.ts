@@ -476,7 +476,7 @@ test.describe("kanban end-to-end", () => {
     const scan = await scanRealmStreamApi(request, aliceToken, realmId);
     const moves = scan.commits.filter(
       (_commit: Record<string, unknown>, index: number) =>
-        scan.events[index]!.kind === "ak.strand.move",
+        scan.eventSlots[index]?.kind === "ak.strand.move",
     );
     expect(moves.length, "both moves were committed").toBe(2);
     expect(

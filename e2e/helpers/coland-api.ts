@@ -1627,14 +1627,21 @@ export async function scanRealmStreamApi(
   }
   const body = await expectJsonOk<unknown>(response, `scan Realm stream for ${realmId}`);
   const projected = cotestWire<{
-    commits: Array<Record<string, unknown>>;
-    events: Array<Record<string, unknown>>;
-    event_slots: Array<Record<string, unknown> | null>;
+    full_positions: number[];
     truncated: boolean;
   }>("project-committed-stream-scan", { request: scanRequest, outcome: body });
-  return { commits: projected.commits,
-    eventSlots: projected.event_slots.map(event => event ?? undefined),
-    events: projected.events, truncated: projected.truncated };
+  // Only project after the SDK validated the closed carrier and complete chain.
+  // Keep the HTTP originals in JS instead of echoing large pages through stdout.
+  const items = (body as Record<string, unknown>).committed_events as Array<Record<string, unknown>>;
+  const fullPositions = new Set(projected.full_positions);
+  const eventSlots = items.map((item, index) => fullPositions.has(index)
+    ? item.event as Record<string, unknown> : undefined);
+  return {
+    commits: items.map(item => item.commit as Record<string, unknown>),
+    eventSlots,
+    events: projected.full_positions.map(index => eventSlots[index]!),
+    truncated: projected.truncated,
+  };
 }
 
 /// Event-only projection of [`scanRealmStreamApi`] for callers that only

@@ -1335,10 +1335,11 @@ async function createKanbanBoardListAndCard(
   await column.getByTestId("add-card-button").click();
   await column.getByTestId("new-card-title-input").fill(cardTitle);
   await column.getByTestId("save-card-button").click();
-  await expect(
-    column.getByTestId("kanban-card").filter({ hasText: cardTitle }),
-  ).toBeVisible({
-    timeout: 45_000,
+  const createdCard = column.getByTestId("kanban-card").filter({ hasText: cardTitle });
+  await expect(createdCard).toBeVisible({ timeout: 45_000 });
+  // Editing requires the accepted Strand, not its optimistic queued draft.
+  await expect(createdCard).toHaveAttribute("data-card-draft", "false", {
+    timeout: 120_000,
   });
   return boardId;
 }

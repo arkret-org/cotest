@@ -188,6 +188,8 @@ export function sdkMimiRequestConsentProof(args: {
 
 export function cotestWire<T>(command: CotestWireCommand, input: unknown): T {
   const binary = process.env.COTEST_WIRE_BIN;
+  const inputJson = JSON.stringify(input);
+  if (typeof inputJson !== "string") throw new TypeError(`cotest-wire ${command} requires JSON input`);
   const result = spawnSync(
     binary ?? "cargo",
     binary
@@ -208,12 +210,12 @@ export function cotestWire<T>(command: CotestWireCommand, input: unknown): T {
     {
       cwd: cotestRepoRoot,
       encoding: "utf8",
-      input: JSON.stringify(input),
+      input: inputJson,
       maxBuffer: 10 * 1024 * 1024,
     },
   );
   if (result.error) {
-    throw result.error;
+    throw new Error(`cotest-wire ${command} launch failed: ${(result.error as NodeJS.ErrnoException).code ?? "unknown"}; input_bytes=${Buffer.byteLength(inputJson)}; stdout_bytes=${Buffer.byteLength(result.stdout ?? "")}; stderr_bytes=${Buffer.byteLength(result.stderr ?? "")}`, { cause: result.error });
   }
   if (result.status !== 0) {
     throw new Error(

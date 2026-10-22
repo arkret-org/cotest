@@ -899,38 +899,29 @@ pub fn mls_keypackage_upload_entry(input: Value) -> Result<Value> {
     serde_json::to_value(entry).context("serialize MLS KeyPackage upload entry")
 }
 
-/// Shape-check a self stream page through the authoritative SDK before flattening.
-/// Keep the original JSON values: typed reserialization must not rewrite originals.
+/// Validate a self stream page with the SDK and return its disclosure coordinates.
+/// The caller retains the originals; never reserialize or duplicate Event bytes.
 /// Authentication and disclosure authority remain the caller's responsibility.
 pub fn project_committed_stream_scan(input: Value) -> Result<Value> {
     #[derive(Deserialize)]
     #[serde(deny_unknown_fields)]
     struct Input {
         request: arkret_wire::StreamScanRequest,
-        outcome: Value,
+        outcome: arkret_wire::StreamScanOutcome,
     }
-    let input: Input = serde_json::from_value(input).context("parse stream projection input")?;
-    let page: arkret_wire::StreamScanOutcome = serde_json::from_value(input.outcome.clone())
-        .context("parse closed SDK stream scan outcome")?;
-    page.validate_for_request(&input.request)?;
-    let originals = input.outcome["committed_events"]
-        .as_array()
-        .context("validated stream outcome has no originals")?;
-    let mut commits = Vec::with_capacity(originals.len());
-    let mut events = Vec::new();
-    let mut event_slots = Vec::with_capacity(originals.len());
-    for (view, original) in page.committed_events.iter().zip(originals) {
-        commits.push(original["commit"].clone());
-        if matches!(view, arkret_wire::CommittedEventView::Full(_)) {
-            events.push(original["event"].clone());
-            event_slots.push(original["event"].clone());
-        } else {
-            event_slots.push(Value::Null);
-        }
-    }
-    Ok(
-        json!({"commits": commits, "events": events, "event_slots": event_slots, "truncated": page.truncated}),
-    )
+    let input: Input =
+        serde_json::from_value(input).context("parse SDK stream projection input")?;
+    input.outcome.validate_for_request(&input.request)?;
+    let full_positions: Vec<usize> = input
+        .outcome
+        .committed_events
+        .iter()
+        .enumerate()
+        .filter_map(|(position, view)| {
+            matches!(view, arkret_wire::CommittedEventView::Full(_)).then_some(position)
+        })
+        .collect();
+    Ok(json!({"full_positions": full_positions, "truncated": input.outcome.truncated}))
 }
 
 pub fn event_envelope_parse(input: Value) -> Result<Value> {
@@ -2196,21 +2187,12 @@ mod tests {
     }
 
     #[test]
-    fn committed_stream_projection_preserves_disclosure_and_original_values() -> Result<()> {
+    fn committed_stream_projection_reports_disclosure_without_copying_originals() -> Result<()> {
         // ak.vector.sync.committed_event_view_integrity.v1
         let input = stream_projection_fixture(1)?;
-        let output = project_committed_stream_scan(input.clone())?;
-        let rows = input["outcome"]["committed_events"].as_array().unwrap();
-        assert_eq!(output["events"], json!([rows[0]["event"].clone()]));
-        assert_eq!(
-            output["commits"],
-            json!([rows[0]["commit"].clone(), rows[1]["commit"].clone()])
-        );
-        assert_eq!(
-            output["event_slots"],
-            json!([rows[0]["event"].clone(), null])
-        );
-        assert_eq!(output["truncated"], false);
+        let output = project_committed_stream_scan(input)?;
+        assert_eq!(output, json!({"full_positions": [0], "truncated": false}));
+        assert!(serde_json::to_vec(&output)?.len() < 128);
         Ok(())
     }
 
