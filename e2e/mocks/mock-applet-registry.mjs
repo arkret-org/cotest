@@ -1038,7 +1038,7 @@ const server = createServer(isolateRequestFailure(async (req, res) => {
     });
     if (outcome.error) {
       res.statusCode = outcome.status ?? 400;
-      res.end(canonicalJson({ error: outcome.error, detail: outcome.detail }));
+      res.end(canonicalJson({ error: outcome.error }));
       return;
     }
     if (existing?.requestDigest === requestDigest) {

@@ -35,6 +35,7 @@ import {
   sdkEventDerivedIds,
   sdkEventEnvelopeProof,
   createRealmApi,
+  discoverRealmAuthorityRootRef,
   currentActorIdApi,
   queryRealmEventsApi,
   rawSubmitSignedEventApi,
@@ -520,25 +521,25 @@ test.describe("applet bridge", () => {
   test("configuration preserves its exact intent across a browser reload when the Applet is unavailable", async ({ browser, request }) => {
     test.setTimeout(300_000);
     const stamp = typedId("operation").split(":").at(-1)!;
-    const flow = await openDpopUserPage(browser, request, `applet-config-${stamp}`, { prepareMlsDevice: false });
+    const flow = await openDpopUserPage(browser, request, `applet-config-${stamp}`);
     expect(flow, "the joint stack must provide an authenticated browser").toBeDefined();
     const { page: client, user } = flow!;
     try {
       const token = await issueUserSession(request, user);
-      const realmId = await createAppletInstallRealm(request, token, { title: `configuration ${stamp}`, discoverability: "listed", history_access: "since_join" });
+      const realmId = await client.createRealm({ title: `configuration ${stamp}`, discoverability: "listed", historyAccess: "since_join", mlsActivated: false });
       // This package deliberately has no configuration endpoint. A real Station
       // rejection must leave the browser's original intent recoverable.
       const signed = await signPackage(request, requireMockAppletRegistry(), { package_id: `package:configuration:${stamp}`, namespace: `configuration.${stamp}`, capabilities: ["ak.applet.bot.provision"] });
       const installed = await rawInstallApplet(request, token, signed, realmId, `configuration-${stamp}`, undefined, { exerciseAuthoringKats: false });
       expect(installed.response.status(), await installed.response.text()).toBe(201);
-      const before = await queryRealmEventsApi(request, token, realmId);
-      await client.gotoTimelineRealm(realmId, { completeRecoveryKeySetup: false });
+      await client.gotoTimelineRealm(realmId);
       await client.gotoAppPanel("/applets", "applets-panel");
       const row = client.page.locator(`[data-testid="applet-row"][data-applet-id="${signed.applet_package.applet_id}"][data-service-id="${signed.applet_package.service_id}"]`);
       await expect(row).toBeVisible({ timeout: 60_000 });
       const name = row.getByTestId("applet-bot-name");
       const create = row.getByTestId("applet-create-bot");
       await expect(create).toBeEnabled({ timeout: 30_000 });
+      const before = await queryRealmEventsApi(request, token, realmId);
       await name.fill(`Durable Bot ${stamp}`);
       const endpoint = `/_arkret/self/applets/${signed.applet_package.applet_id}/configuration`;
       const responseForClick = async (testId: string) => {
@@ -556,7 +557,7 @@ test.describe("applet bridge", () => {
       expect(original.intent.request_id).toMatch(/^ak:request:/);
       await expect(create).toBeDisabled();
       await client.page.reload({ waitUntil: "domcontentloaded" });
-      await client.gotoTimelineRealm(realmId, { completeRecoveryKeySetup: false });
+      await client.gotoTimelineRealm(realmId);
       await client.gotoAppPanel("/applets", "applets-panel");
       await expect(name).toHaveValue(`Durable Bot ${stamp}`, { timeout: 30_000 });
       await expect(name).toBeDisabled();
@@ -612,7 +613,6 @@ test.describe("applet bridge", () => {
       browser,
       request,
       `applet-alice-${stamp}`,
-      { prepareMlsDevice: false },
     );
     if (!aliceFlow) {
       assertJointStackNotRequired("applet bridge UI setup");
@@ -633,11 +633,11 @@ test.describe("applet bridge", () => {
         "ak.profile.applet_bridge.v1",
         "ak.profile.applet_service.v1",
       ]);
-      const realmId = await createAppletInstallRealm(request, aliceToken, {
+      const realmId = await alicePage.createRealm({
         title: `applet-bridge Demo Space ${stamp}`,
         discoverability: "listed",
-        history_access: "since_join",
-        ownerId: alice.id,
+        historyAccess: "since_join",
+        mlsActivated: false,
       });
       await publishAppletServiceIdDocument(request, signed);
       const preInstallMembership = signedEventEnvelope({
@@ -759,7 +759,7 @@ test.describe("applet bridge", () => {
           "signed Applet package is missing its Ghost namespace token",
         );
       }
-      const ghostBuilt = buildRealmActorIdentity(colandBaseUrl(),`ghost-${signed.ghost_namespace_token}:${externalUser.id.toLowerCase()}`);
+      const ghostBuilt = buildRealmActorIdentity(colandBaseUrl(),`ghost-${signed.ghost_namespace_token}-${externalUser.id.toLowerCase()}`);
       const ghostCreation = await buildGhostManagedActorCreation({
         request,
         token: aliceToken,
@@ -779,7 +779,7 @@ test.describe("applet bridge", () => {
       // Alice cannot substitute for the creation original's actual Service producer.
       expect(standaloneGenesis.status(), standaloneGenesisText).toBe(403);
       expect(wireErrCode(JSON.parse(standaloneGenesisText))).toBe("capability_denied");
-      expect(JSON.parse(standaloneGenesisText).detail).toContain("exact authenticated actor");
+      expect(JSON.parse(standaloneGenesisText).detail).toContain("exact authenticated producer");
       const provision = await request.post(`${registryBase}/external-event`, {
         headers: authHeaders(aliceToken, "POST", `${registryBase}/external-event`),
         data: {
@@ -2343,25 +2343,28 @@ async function provisionAppletBot(request: APIRequestContext,signed: SignedPacka
       data: canonicalJson({ authoring_request: authoringRequest }),
     };
     if (options.exerciseAuthoringKats !== false) {
-      const rotateStationTrust = await request.post(
-        `${authorBaseUrl}/inspect/station-key-current`,
-        { data: { rotated: true } },
-      );
-      expect(rotateStationTrust.status()).toBe(200);
-      const staleButCryptographicallyValid = await request.post(
-        `${authorBaseUrl}/_arkret/edge/applet/managed-actors/author`,
-        authorRequestOptions,
-      );
-      const staleTrustBody = await staleButCryptographicallyValid.json();
-      expect(staleButCryptographicallyValid.status(), JSON.stringify(staleTrustBody)).toBeGreaterThanOrEqual(400);
-      expect(staleTrustBody.error, JSON.stringify(staleTrustBody)).toBe(
-        "authoring_request_proof_invalid",
-      );
-      const restoreStationTrust = await request.post(
-        `${authorBaseUrl}/inspect/station-key-current`,
-        { data: { rotated: false } },
-      );
-      expect(restoreStationTrust.status()).toBe(200);
+      try {
+        const rotateStationTrust = await request.post(
+          `${authorBaseUrl}/inspect/station-key-current`,
+          { data: { rotated: true } },
+        );
+        expect(rotateStationTrust.status()).toBe(200);
+        const staleButCryptographicallyValid = await request.post(
+          `${authorBaseUrl}/_arkret/edge/applet/managed-actors/author`,
+          authorRequestOptions,
+        );
+        const staleTrustBody = await staleButCryptographicallyValid.json();
+        expect(staleButCryptographicallyValid.status(), JSON.stringify(staleTrustBody)).toBeGreaterThanOrEqual(400);
+        expect(staleTrustBody.error, JSON.stringify(staleTrustBody)).toBe(
+          "authoring_request_proof_invalid",
+        );
+      } finally {
+        const restoreStationTrust = await request.post(
+          `${authorBaseUrl}/inspect/station-key-current`,
+          { data: { rotated: false } },
+        );
+        expect(restoreStationTrust.status()).toBe(200);
+      }
       const wrongTarget = structuredClone(authoringRequest) as Record<
         string,
         unknown
@@ -2541,6 +2544,7 @@ async function prepareAppletInstallAuthoringBasis(
   grantActionsById: Map<string, string[]>;
 }> {
   const actorId = await currentActorIdApi(request, token);
+  await discoverRealmAuthorityRootRef(request, token, realmId);
   const registrationPayload = appletRegistrationPayload(signed);
   const registrationManifest = registrationPayload.manifest;
   if (
