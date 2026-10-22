@@ -598,13 +598,13 @@ async fn issuance_racing_revocation(repeatable_read: bool, realm_list: bool) -> 
                 ..Default::default()
             })
             .await?;
-        let token = response
+
+        response
             .frames
             .iter()
             .find_map(|frame| frame.realm_list.as_ref())
             .and_then(|page| page.next_cursor.clone())
-            .context("actual Realm-list continuation")?;
-        token
+            .context("actual Realm-list continuation")?
     } else {
         cursor(&client).await?
     };

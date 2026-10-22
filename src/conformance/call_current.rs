@@ -224,14 +224,14 @@ fn session(
     )
     .map(|s| s.with_provider_identity(Default::default()))
 }
-fn client(
-    bodies: Vec<Value>,
-) -> Result<(
+type CurrentCallFixture = (
     OwnStationResultClient,
     Arc<Mutex<Option<OwnStationSessionSnapshot>>>,
     arkret_models_discovery::StationConnectionBinding,
     std::thread::JoinHandle<Result<()>>,
-)> {
+);
+
+fn client(bodies: Vec<Value>) -> Result<CurrentCallFixture> {
     let listener = std::net::TcpListener::bind("127.0.0.1:0")?;
     let base = format!("http://{}/", listener.local_addr()?);
     let station = "ak:did_core:web:station.example".parse()?;
@@ -293,7 +293,8 @@ async fn bound_candidate(
         replica.install_bound_snapshot(&client.snapshot_head(&snapshot.realm_id).await?)?;
     }
     let accepted = if let Some(reference) = historical {
-        match client.snapshot_by_ref(&snapshot.realm_id, &reference).await {
+        let current_before = replica.snapshot().cloned();
+        let accepted = match client.snapshot_by_ref(&snapshot.realm_id, &reference).await {
             Ok(response) => {
                 let head = &snapshot.visible_stream_heads[0];
                 let basis=arkret_models_collaboration::sync_frames::account_sync::StreamWindowStartBasis {anchor_position:head.stream_position,anchor_commit_ref:head.commit_id.clone(),snapshot_ref:reference,governance_generation:snapshot.governance_generation,accepted_dependency_refs:None};
@@ -315,7 +316,12 @@ async fn bound_candidate(
             }
             Err(arkret_http_client::Error::Protocol(_)) => false,
             Err(error) => return Err(error.into()),
-        }
+        };
+        ensure!(
+            replica.snapshot() == current_before.as_ref(),
+            "historical basis replaced accepted current coverage"
+        );
+        accepted
     } else {
         let response = client.snapshot_head(&snapshot.realm_id).await?;
         if epoch_change {
@@ -651,6 +657,17 @@ async fn run_case(fixture: &Value, case: &Value) -> Result<&'static str> {
             sign_snapshot(&mut current)?;
             prior = Some(current);
             if name != "old_tenure_as_current" {
+                let head = snapshot["visible_stream_heads"][0].clone();
+                snapshot["purpose"] = json!("stream_history");
+                snapshot["history_basis"] = json!({
+                    "account_id": fixture["request_context"]["account_id"],
+                    "stream_ref": head["stream_ref"],
+                    "anchor_position": head["stream_position"],
+                    "anchor_commit_ref": head["commit_id"],
+                    "accepted_dependency_refs": []
+                });
+                sign_snapshot(&mut snapshot)?;
+                resign = false;
                 exact = Some(if name == "wrong_historical_ref" {
                     RealmSnapshotId::from_digest([99; 32])
                 } else {

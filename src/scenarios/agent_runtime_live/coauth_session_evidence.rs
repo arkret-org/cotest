@@ -126,18 +126,18 @@ pub(crate) async fn actual_agent_deployment(label: &str) -> Result<ActualAgentDe
     coauth.bind_station(&station, secret, registration).await?;
     let client_id = "01GFWR28C4KNE04WG3HKXB7C9R";
     coauth.config.as_file_mut().seek(SeekFrom::Start(0))?;
-    let mut config: serde_yaml_ng::Value = serde_yaml_ng::from_reader(coauth.config.as_file_mut())?;
-    config["clients"] = serde_yaml_ng::to_value(json!([{
+    let mut config: serde_json::Value = serde_saphyr::from_reader(coauth.config.as_file_mut())?;
+    config["clients"] = serde_json::to_value(json!([{
         "client_id": client_id,
         "client_auth_method": "none",
         "redirect_uris": ["http://127.0.0.1/auth/callback"]
     }]))?;
-    config["account"] = serde_yaml_ng::to_value(json!({
+    config["account"] = serde_json::to_value(json!({
         "password_registration_enabled": true,
         "password_registration_contact_required": true,
         "registration_email_delivery_bypass_allowed": false
     }))?;
-    config["email"] = serde_yaml_ng::to_value(json!({
+    config["email"] = serde_json::to_value(json!({
         "from": "Cotest <noreply@example.test>",
         "provider": {
             "type": "http_webhook",
@@ -148,7 +148,7 @@ pub(crate) async fn actual_agent_deployment(label: &str) -> Result<ActualAgentDe
     let file = coauth.config.as_file_mut();
     file.seek(SeekFrom::Start(0))?;
     file.set_len(0)?;
-    serde_yaml_ng::to_writer(&mut *file, &config)?;
+    serde_saphyr::to_io_writer(&mut *file, &config)?;
     file.flush()?;
     let synced = Command::new(&coauth.server.bin_path)
         .args(["config", "sync", "--config"])
@@ -324,13 +324,13 @@ async fn run_agent_issuer_boundary(
     let controller = &deployment.controller;
     let account = &deployment.account;
     let mut agent = super::AgentRuntimeSession::establish_observed(
-        &station,
+        station,
         super::AgentSessionIssuer::Coauth {
             base: coauth.base_url(),
             database_url: &coauth.pg.connect_url,
         },
-        &controller,
-        &account,
+        controller,
+        account,
         "real-coauth-agent",
         super::requested_scope(&super::runtime_operations())?,
         None,
@@ -369,15 +369,10 @@ async fn run_agent_issuer_boundary(
         );
     }
     if longevity {
-        super::longevity_evidence::renew_with_real_issuer(
-            &station,
-            &coauth,
-            &controller,
-            &mut agent,
-        )
-        .await?;
+        super::longevity_evidence::renew_with_real_issuer(station, coauth, controller, &mut agent)
+            .await?;
     }
-    lifecycle_refusals(&station, &coauth, &controller, &agent).await?;
+    lifecycle_refusals(station, coauth, controller, &agent).await?;
     let issue_url = format!("{}/_arkret/gate/account/session-grants", coauth.base_url());
     let header = arkret_signatures::dpop::build_dpop_proof(
         &arkret_signatures::dpop::DpopProofRequest::new("POST", &issue_url),
@@ -390,7 +385,7 @@ async fn run_agent_issuer_boundary(
         base64::engine::general_purpose::URL_SAFE_NO_PAD.encode([0u8; 64])
     );
     expect_issue_refusal(
-        &station,
+        station,
         &coauth.pg.connect_url,
         &issue_url,
         agent
@@ -565,6 +560,10 @@ pub(super) fn build_runtime_session_request(
     Ok(body)
 }
 
+#[expect(
+    clippy::too_many_arguments,
+    reason = "Session fixture binds the accepted Agent authority, signing key, and requested scope"
+)]
 pub(super) async fn issue_runtime_session_with_scope(
     station: &crate::harness::ArkretServer,
     base: &str,

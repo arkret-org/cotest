@@ -314,6 +314,10 @@ async fn fixed_station_bundle(
 /// A root controller or peer cannot move a Direct Conversation to the peer's
 /// real Station. Neither the pending claim nor a remote forwarding intent may
 /// be written before the immutable-Genesis gate decides the write.
+#[expect(
+    clippy::too_many_arguments,
+    reason = "Fixture checks both controllers and Station databases against immutable Genesis"
+)]
 async fn reject_direct_station_change(
     alice: &Member,
     bob: &Member,

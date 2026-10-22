@@ -159,7 +159,7 @@ reqwest = { version = "0.13.4", default-features = false }
 salvo = { version = "=1.0.1", default-features = false }
 serde = "1.0.229"
 serde_json = "1.0.151"
-serde_yaml_ng = "0.10.0"
+serde-saphyr = "1.3.0"
 serial_test = "4.0.1"
 sha2 = "0.11.0"
 coland-domain = { path = "../coland/crates/domain" }
@@ -245,7 +245,7 @@ aes-gcm = { workspace = true }
 anyhow = { workspace = true }
 arbitrary = { workspace = true, features = ["derive"] }
 argon2 = { workspace = true, default-features = false, features = ["alloc", "password-hash"] }
-arkret = { workspace = true, features = ["mls-test-utils"] }
+arkret = { workspace = true, features = ["client", "mls-test-utils"] }
 arkret-bootstrap = { workspace = true }
 arkret-canonical = { workspace = true }
 arkret-crypto = { workspace = true, features = ["backup", "blob-aead", "secret-share"] }
@@ -294,7 +294,7 @@ reqwest = { workspace = true, features = ["json", "multipart", "rustls"] }
 salvo = { workspace = true, features = ["fix-http1-request-uri", "server", "server-handle", "http1", "rfc9457", "affix-state", "rustls"] }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
-serde_yaml_ng = { workspace = true }
+serde-saphyr = { workspace = true }
 sha2 = { workspace = true }
 coland-domain = { workspace = true }
 coland-services = { workspace = true }

@@ -593,7 +593,7 @@ enum ConsentCurrentVerificationAuthority {
     },
     ServiceResolution {
         trusted_service_id: DidCoreId,
-        service_resolution: arkret_models_identity::AuthenticatedServiceResolution,
+        service_resolution: Box<arkret_models_identity::AuthenticatedServiceResolution>,
     },
 }
 
@@ -2193,7 +2193,7 @@ mod tests {
             "holder_account_id":account,
             "peer":{"kind":"actor","actor_id":{"kind":"account","account_id":account}},
             "audience_actor_id":{"kind":"service","service_id":account.station_id},
-            "nonce":canonical::base64url_encode(&[19;32]),
+            "nonce":canonical::base64url_encode([19;32]),
         }))
         .unwrap();
         let realm = arkret_wire::RealmId::from_event_id(&EventId::from_digest(
@@ -2244,7 +2244,7 @@ mod tests {
                 }
                 "proof" => changed["outcome"]["proof"]["jws"] = json!("invalid"),
                 "nonce" => {
-                    changed["request"]["nonce"] = json!(canonical::base64url_encode(&[59; 32]))
+                    changed["request"]["nonce"] = json!(canonical::base64url_encode([59; 32]))
                 }
                 "key" => {
                     changed["authority"]["public_key_multibase"] =

@@ -83,6 +83,12 @@ jobs:
           repository: ${{ github.repository_owner }}/coland
           path: coland
           ref: ${{ env.SIBLING_REF }}
+      - name: Complete Coland build dependency layout
+        working-directory: coland
+        env:
+          CI_REPO_TOKEN: ${{ secrets.CI_REPO_TOKEN || github.token }}
+        run: bash .ci/checkout-build-dependencies.sh
+
       - uses: actions/checkout@v4
         with:
           repository: ${{ github.repository_owner }}/coauth
@@ -176,6 +182,18 @@ jobs:
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f coauth/crates/storage-postgres/migrations/00000000000000_initial/up.sql
         env:
           PGPASSWORD: cotest-ci
+      - name: Capture SDK artifact for native contract tests
+        working-directory: cotest
+        run: |
+          mkdir -p artifacts/sdk-artifact-build
+          cargo metadata --locked --format-version 1 > artifacts/sdk-artifact-build/metadata.json
+          cargo build --locked -p cotest --lib --message-format=json > artifacts/sdk-artifact-build/build.jsonl
+          python scripts/capture_sdk_artifact.py \
+            --cargo-messages artifacts/sdk-artifact-build/build.jsonl \
+            --cargo-metadata artifacts/sdk-artifact-build/metadata.json \
+            --sdk-manifest ../arkret-rust-sdk/crates/sdk/Cargo.toml \
+            --output "$RUNNER_TEMP/cotest-sdk-artifact"
+          echo "COTEST_SDK_ARTIFACT_MANIFEST=$RUNNER_TEMP/cotest-sdk-artifact/artifact.json" >> "$GITHUB_ENV"
       - name: run cotest harness
         working-directory: cotest
         # Default tests must pass before any live opt-in gates run.

@@ -175,8 +175,10 @@ async fn signed_post_with_mutation(
         if name == "content-digest" && tamper == Some("missing_digest") {
             continue;
         }
-        let value = if name == "provider-id" && provider_override.is_some() {
-            provider_override.unwrap().to_owned()
+        let value = if name == "provider-id"
+            && let Some(provider) = provider_override
+        {
+            provider.to_owned()
         } else if tamper == Some(name.as_str()) {
             format!("{value}x")
         } else {

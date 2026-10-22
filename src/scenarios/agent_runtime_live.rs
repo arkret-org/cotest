@@ -828,7 +828,7 @@ impl AgentRuntimeSession {
                 && committed.reducer_input() == Some(&authorize),
             "the controller must resolve the exact committed Agent authorization"
         );
-        if let Some(evidence) = evidence.as_deref_mut() {
+        if let Some(evidence) = evidence {
             evidence.accepted_key_scope(
                 &AgentKeyAuthorizePayload::try_from(
                     committed

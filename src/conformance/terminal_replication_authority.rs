@@ -45,7 +45,7 @@ pub async fn run_terminal_replication_authority_case(name: &str) -> Result<CaseE
     // the single conjunctive assertion in the canonical case is recorded.
     match name {
         "joined_holder_terminal" => {
-            heap_live(|| fanout_route_miss_live::terminal_consumers_live::run()).await?;
+            heap_live(fanout_route_miss_live::terminal_consumers_live::run).await?;
             heap_live(|| {
                 fanout_route_miss_live::terminal_restart_live::pending_terminal_survives_restart(
                     true,
@@ -58,7 +58,7 @@ pub async fn run_terminal_replication_authority_case(name: &str) -> Result<CaseE
                 )
             })
             .await?;
-            heap_live(|| signal_live::run_terminal()).await?;
+            heap_live(signal_live::run_terminal).await?;
         }
         "last_member_leave_then_terminal" => {
             heap_live(|| {
@@ -69,16 +69,16 @@ pub async fn run_terminal_replication_authority_case(name: &str) -> Result<CaseE
                 fanout_route_miss_live::terminal_restart_live::departure_survives_restart(true)
             })
             .await?;
-            heap_live(|| signal_live::run()).await?;
-            heap_live(|| signal_live::run_ban()).await?;
+            heap_live(signal_live::run).await?;
+            heap_live(signal_live::run_ban).await?;
         }
         "another_joined_member_remains" => {
             heap_live(|| {
                 fanout_route_miss_live::frozen_authority_live::remaining_witness_and_rejoin()
             })
             .await?;
-            heap_live(|| signal_live::run_remaining_member_leave()).await?;
-            heap_live(|| signal_live::run_remaining_member_ban()).await?;
+            heap_live(signal_live::run_remaining_member_leave).await?;
+            heap_live(signal_live::run_remaining_member_ban).await?;
         }
         "authority_lost_before_send" => {
             heap_live(|| fanout_route_miss_live::frozen_authority_live::terminal_disclosure(true))

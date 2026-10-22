@@ -35,6 +35,8 @@ async fn registry_drift_runs_against_station() -> Result<()> {
 }
 
 #[tokio::test]
+/// Gating: requires the real Coauth/Coland deployment; mandatory in the joint API migration gate.
+/// Tier: live
 #[ignore = "requires the real Coauth/Coland deployment; mandatory in the joint API migration gate"]
 async fn canonical_registry_drift_api_migration() -> Result<()> {
     cotest::scenarios::registry_drift::canonical_registry_drift_api_migration().await
