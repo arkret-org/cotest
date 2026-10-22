@@ -26,8 +26,8 @@
         "covered_operation_count": 95
       },
       "cotest_e2e": {
-        "source_file_count": 123,
-        "source_sha256": "09a8d6bf6ca2cea1c53c467a4723e0563a5f829b3d3396418c065ae2ece0ca0d",
+        "source_file_count": 124,
+        "source_sha256": "c1d185cf88807ea725363475bf4a0c8e73c6d0493588a36e955ab68dafce9d5b",
         "evidence_count": 44,
         "covered_operation_count": 20
       },
@@ -28349,11 +28349,11 @@
           },
           {
             "file": "cotest/e2e/helpers/direct-structure.ts",
-            "line": 101,
+            "line": 102,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              101
+              102
             ],
             "protected_oracle": false,
             "scope_sha256": "2b20b33f52b34ccb272cd134abbddeb67de7018545d8c8298d049d1de54531b9",
@@ -28366,11 +28366,11 @@
           },
           {
             "file": "cotest/e2e/helpers/direct-structure.ts",
-            "line": 120,
+            "line": 121,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              120
+              121
             ],
             "protected_oracle": false,
             "scope_sha256": "57abd0f292761d21ae088ae0cbd21a448c1b56999c8d5090aa7bf6feaa31a0d2",

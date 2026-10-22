@@ -30,22 +30,6 @@ return async ({ jointUsers, request, browser }: { jointUsers: JointUsersFixture;
     alicePage.completeRecoveryKeySetupIfPrompted(30_000).then(() => phase("alice_recovery_finished")),
     bobPage.completeRecoveryKeySetupIfPrompted(30_000).then(() => phase("bob_recovery_finished")),
   ]);
-  phase("contact_request_start");
-  const remoteLocator = remoteBob ? await resolvePrincipalLocator(request, bobSession.user.id, "server2", bobSession.grantJwt) : undefined;
-  const { outcome } = await requestContactArkret(request, aliceSession.grantJwt, bobSession.user.id, {
-    requestedScopes: ["direct_message", "presence"],
-    ...(remoteLocator ? { recipientServiceId: bobSession.accountId.station_id,
-      introductionEvidence: { kind: "locator_ref", principal_locator: remoteLocator } } : {}),
-  });
-  const accepted = await respondContactArkret(request, bobSession.grantJwt, {
-    requestId: outcome.request_event_ref,
-    requesterId: aliceSession.user.id,
-    action: "accept",
-    grantedScopes: ["direct_message", "presence"],
-    ...(remoteBob ? { server: "server2" as const, requesterServiceId: aliceSession.accountId.station_id } : {}),
-  });
-  expect(accepted.state).toBe("accepted");
-  phase("contact_accepted");
 
   // Claim blocking fixes the pre-join boundary at epoch 0; since_join forbids
   // delivering that epoch to the future peer. Consume blocking instead tests
@@ -70,15 +54,34 @@ return async ({ jointUsers, request, browser }: { jointUsers: JointUsersFixture;
       await route.abort("failed");
     });
   }
-  phase("participant_reload_start");
-  await Promise.all([alice.reload(), bob.reload()]);
-  phase("participant_reload_finished");
   let founder: Page | undefined;
   let foundingAcceptedAt: number | undefined;
   let releaseResolve!: () => void;
   const resolveDelay = new Promise<void>(resolve => { releaseResolve = resolve; });
   let acceptFounding!: (response: Response) => void;
   const foundingAccepted = new Promise<Response>(resolve => { acceptFounding = resolve; });
+  let foundingRequestCount = 0;
+  let foundingResponseCount = 0;
+  const waitForFoundingAcceptance = async () => {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      return await Promise.race([
+        foundingAccepted,
+        new Promise<never>((_, reject) => {
+          timer = setTimeout(() => reject(new Error("Direct founding acceptance was not observed within180s")), 180_000);
+        }),
+      ]);
+    } catch (error) {
+      const diagnostic = { mode, cross_station: remoteBob, founding_requests: foundingRequestCount,
+        founding_responses: foundingResponseCount, committed_response_observed: foundingAcceptedAt !== undefined,
+        resolver_observations: [...resolveObservations.values()].map(value => JSON.parse(value)) };
+      console.warn("Direct founding observation timeout", JSON.stringify(diagnostic));
+      await test.info().attach("direct-founding-observation-timeout", {
+        body: JSON.stringify(diagnostic), contentType: "application/json",
+      });
+      throw error;
+    } finally { if (timer) clearTimeout(timer); }
+  };
   const resolvePath = "**/_arkret/self/direct-conversations/resolve";
   const pendingResolveRoutes = new Set<Promise<void>>();
   let browserCancelledOldResolves = 0;
@@ -140,11 +143,15 @@ return async ({ jointUsers, request, browser }: { jointUsers: JointUsersFixture;
     for (const page of [alice, bob]) {
       page.on("request", request => {
         if (request.method() !== "POST" || new URL(request.url()).pathname !== "/_arkret/self/events") return;
-        if (request.postDataJSON()?.unit_kind === "direct_conversation_founding") founder = page;
+        if (request.postDataJSON()?.unit_kind === "direct_conversation_founding") {
+          foundingRequestCount += 1;
+          founder = page;
+        }
       });
       page.on("response", async response => {
         if (response.request().method() !== "POST" || new URL(response.url()).pathname !== "/_arkret/self/events") return;
         if (response.request().postDataJSON()?.unit_kind !== "direct_conversation_founding") return;
+        foundingResponseCount += 1;
         const outcome = await response.json().catch(() => null);
         const committed = response.ok() && outcome?.unit_kind === "direct_conversation_founding"
           && outcome.status === "committed" && Array.isArray(outcome.commits) && outcome.commits.length === 4;
@@ -213,6 +220,25 @@ return async ({ jointUsers, request, browser }: { jointUsers: JointUsersFixture;
     }
   }
   try {
+  phase("contact_request_start");
+  const remoteLocator = remoteBob ? await resolvePrincipalLocator(request, bobSession.user.id, "server2", bobSession.grantJwt) : undefined;
+  const { outcome } = await requestContactArkret(request, aliceSession.grantJwt, bobSession.user.id, {
+    requestedScopes: ["direct_message", "presence"],
+    ...(remoteLocator ? { recipientServiceId: bobSession.accountId.station_id,
+      introductionEvidence: { kind: "locator_ref", principal_locator: remoteLocator } } : {}),
+  });
+  const accepted = await respondContactArkret(request, bobSession.grantJwt, {
+    requestId: outcome.request_event_ref,
+    requesterId: aliceSession.user.id,
+    action: "accept",
+    grantedScopes: ["direct_message", "presence"],
+    ...(remoteBob ? { server: "server2" as const, requesterServiceId: aliceSession.accountId.station_id } : {}),
+  });
+  expect(accepted.state).toBe("accepted");
+  phase("contact_accepted");
+  phase("participant_reload_start");
+  await Promise.all([alice.reload(), bob.reload()]);
+  phase("participant_reload_finished");
   for (const [page, peer] of [[alice, bobSession.user.id], [bob, aliceSession.user.id]] as const) {
     phase(page === alice ? "alice_direct_open_start" : "bob_direct_open_start");
     await page.getByTestId("realm-sidebar-tab-direct").click();
@@ -231,7 +257,7 @@ return async ({ jointUsers, request, browser }: { jointUsers: JointUsersFixture;
     await founder!.reload();
   }
   if (holdSecondResolve) {
-    const acceptedResponse = await foundingAccepted;
+    const acceptedResponse = await waitForFoundingAcceptance();
     phase("founding_accepted");
     expect(acceptedResponse.ok(), await acceptedResponse.text()).toBeTruthy();
     const unit = ingressEvents(decodeEventIngressBody(acceptedResponse.request().postDataJSON()));

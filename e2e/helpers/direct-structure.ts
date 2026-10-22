@@ -11,6 +11,7 @@ import { fileURLToPath } from "node:url";
 import { colandBaseUrl, colandServiceDid, colandServiceId, colandServiceResolution, configuredServerKeys, type ColandKey } from "./env";
 import { cotestWire } from "./coland-api/wire-client";
 import { orderByCanonicalKey } from "./direct-structure-order";
+import { readCurrentSnapshot } from "./direct-current-snapshot";
 import type { ActorId } from "./generated/spec-wire-objects";
 
 // Negative structure targets must exist outside Direct's protected Realm.
@@ -217,6 +218,19 @@ async function verifyStructureSnapshotAuthority(request: APIRequestContext, real
     service_resolution: await resolution.json(),
   }).verified, "SDK must verify the whole current snapshot and native authority history").toBe(true);
   return authorityBundle as Record<string, any>;
+}
+async function readDirectCurrentSnapshot(proof: DirectStructureProof, realm: string,
+  viewer?: { token: string; server: ColandKey }): Promise<Record<string, any>> {
+  const url = new URL(`${colandBaseUrl(viewer?.server)}/_arkret/self/realm-state-snapshot/head`);
+  url.searchParams.set("realm_id", realm);
+  return readCurrentSnapshot(
+    remainingMs => proof.request.get(url.toString(), { headers: authHeaders(viewer?.token ?? proof.token, "GET", url.toString()), timeout: Math.min(30_000, remainingMs) }),
+    async body => {
+      const snapshot = body as Record<string, any>;
+      await verifyStructureSnapshotAuthority(proof.request, realm, snapshot);
+      return snapshot;
+    },
+  );
 }
 async function structureCut(proof: DirectStructureProof, realm: string,
   viewer?: { token: string; server: ColandKey }): Promise<StructureCut> {
@@ -430,8 +444,8 @@ export async function structureWrite(page: Page, action: string, kind: string, t
         // Retry the retained editor draft only while no signed request exists;
         // an emitted request still follows the exact original Event checks.
         const status = await panel.getByTestId("direct-structure-status").textContent();
-        if (!signedRequestEmitted
-          && /^MLS send gate is not ready: account checkpoint changed (?:before|during) committed read$/.test(status?.trim() ?? "")
+        if (!signedRequestEmitted && preAuthoringRetries < 3
+          && /^(?:MLS send gate is not ready: )?account checkpoint changed (?:before|during) committed read$/.test(status?.trim() ?? "")
           && await panel.getByRole("button", { name: "Save", exact: true }).isEnabled()
           && Date.now() < deadline) {
           preAuthoringRetries++;
@@ -714,13 +728,7 @@ export async function rejectDirectStructureEvent(proof: DirectStructureProof, te
   name: string, kind: string, payload: Record<string, unknown>, reason?: string,
   sender?: { token: string; server?: ColandKey; actor?: ActorId; scope?: Record<string, unknown> }) {
   const realm = template.realm_id!;
-  const snapshot = async () => {
-    const url = new URL(`${colandBaseUrl()}/_arkret/self/realm-state-snapshot/head`);
-    url.searchParams.set("realm_id", realm);
-    const response = await proof.request.get(url.toString(), { headers: authHeaders(proof.token, "GET", url.toString()) });
-    expect(response.ok(), await response.text()).toBe(true);
-    return await response.json();
-  };
+  const snapshot = () => readDirectCurrentSnapshot(proof, realm);
   const beforeHead = await readCommitStreamHeadApi(proof.request, proof.token, realm);
   expect(beforeHead, "refusal must have a real observer's accepted head").toBeDefined();
   const beforeSnapshot = await snapshot();
@@ -1134,11 +1142,7 @@ async function runFlatTopicChats(alice: Page, bob: Page, mainMessages: string[],
     await expect(option).toContainText(secondTopicName);
     await expect(option).not.toContainText("(archived)");
   }
-  const currentUrl = new URL(`${colandBaseUrl()}/_arkret/self/realm-state-snapshot/head`);
-  currentUrl.searchParams.set("realm_id", migrated.realm_id!);
-  const rawCurrent = await proof!.request.get(currentUrl.toString(), { headers: authHeaders(proof!.token, "GET", currentUrl.toString()) });
-  expect(rawCurrent.ok(), await rawCurrent.text()).toBe(true);
-  const rawEntries = (await rawCurrent.json()).current_state_entries as Array<{ selector: { kind: string; strand_id?: string }; value: unknown }>;
+  const rawEntries = (await readDirectCurrentSnapshot(proof!, migrated.realm_id!)).current_state_entries as Array<{ selector: { kind: string; strand_id?: string }; value: unknown }>;
   const exactChat = rawEntries.filter(row => row.selector.kind === "strand" && row.selector.strand_id === chatId);
   expect(exactChat).toHaveLength(1);
   await rejectDirectStructureEvent(proof!, migrated, "classify-archived-topic", "ak.strand.update", {
@@ -1250,12 +1254,8 @@ async function runFlatTopicChats(alice: Page, bob: Page, mainMessages: string[],
   const realmId = decodeURIComponent(mainPath.split("/")[2]);
   const snapshot = async (viewer?: { token: string; server: ColandKey }) => {
     if (!proof) return undefined;
-    const url = new URL(`${colandBaseUrl(viewer?.server)}/_arkret/self/realm-state-snapshot/head`);
-    url.searchParams.set("realm_id", realmId);
-    const response = await proof.request.get(url.toString(), { headers: authHeaders(viewer?.token ?? proof.token, "GET", url.toString()) });
-    expect(response.ok(), await response.text()).toBeTruthy();
-    const body = await response.json() as { current_state_entries: Array<Record<string, unknown>> };
-    return body.current_state_entries;
+    const body = await readDirectCurrentSnapshot(proof, realmId, viewer);
+    return body.current_state_entries as Array<Record<string, unknown>>;
   };
   const rejectSigned = (name: string, template: IngressEvent, kind: string, payload: Record<string, unknown>, reason?: string) =>
     rejectDirectStructureEvent(proof!, template, name, kind, payload, reason);
@@ -1287,10 +1287,7 @@ async function runFlatTopicChats(alice: Page, bob: Page, mainMessages: string[],
     "direct_conversation_participant_authority_denied", { token: boundary.thirdToken, actor: boundary.thirdActor });
   const privateCurrent = new URL(`${colandBaseUrl()}/_arkret/self/realm-state-snapshot/head`);
   privateCurrent.searchParams.set("realm_id", realmId);
-  const visible = await proof!.request.get(privateCurrent.toString(), {
-    headers: authHeaders(proof!.token, "GET", privateCurrent.toString()),
-  });
-  expect(visible.status(), "the same snapshot route must be available to its participant").toBe(200);
+  await readDirectCurrentSnapshot(proof!, realmId);
   const hidden = await proof!.request.get(privateCurrent.toString(), {
     headers: authHeaders(boundary.thirdToken, "GET", privateCurrent.toString()),
   });
