@@ -1,6 +1,7 @@
 import { expect, type APIRequestContext, type Page, type Response } from "@playwright/test";
 import { registerRequestAuth, scanRealmStreamApi, wireErrCode } from "./coland-api";
 import { selfPathHeadersForDpopSession, type DpopUserSession } from "./users";
+import { assertAcceptedRealmScanAlignment, orderedResponseObservation } from "./session-transport-observation";
 
 const hook = "__inkson_captured_transport_rotation_v1";
 const retiredReads = new Set([
@@ -19,18 +20,21 @@ export function accountTransportRotationProbe(page: Page, request: APIRequestCon
   let viewerRecovered = false;
   const failures: string[] = [];
   const refreshes: Array<{ previous: unknown; successor: unknown }> = [];
-  const pending = new Set<Promise<void>>();
+  const observations = orderedResponseObservation<Response>(observe, () => {
+    failures.push("transport observation failed");
+  });
 
   async function expectedRetiredRead(response: Response): Promise<boolean> {
-    return armed && response.status() === 401
-      && retiredReads.has(new URL(response.url()).pathname)
-      && retiredAuthorizations.has((await response.request().allHeaders()).authorization ?? "");
+    if (!armed || response.status() !== 401 || !retiredReads.has(new URL(response.url()).pathname)) return false;
+    await observations.observed(response);
+    return retiredAuthorizations.has((await response.request().allHeaders()).authorization ?? "");
   }
 
   page.on("response", response => {
-    const job = observe(response).catch(() => { failures.push("transport observation failed"); });
-    pending.add(job);
-    void job.finally(() => pending.delete(job));
+    const path = new URL(response.url()).pathname;
+    if (path.startsWith("/_arkret/self/") || path === "/_arkret/gate/account/session-grants/refresh") {
+      observations.enqueue(response);
+    }
   });
 
   async function observe(response: Response) {
@@ -50,7 +54,9 @@ export function accountTransportRotationProbe(page: Page, request: APIRequestCon
       latestGrant = authorization.slice("DPoP ".length);
       if (viewerDenied && path === "/_arkret/self/account/viewer") viewerRecovered = true;
     }
-    if (await expectedRetiredRead(response)) {
+    // Do not wait on observations.observed here: this is that very job.
+    if (armed && response.status() === 401 && retiredReads.has(path)
+      && retiredAuthorizations.has(authorization ?? "")) {
       if (path === "/_arkret/self/account/viewer") viewerDenied = true;
       const body: unknown = await response.json();
       if (wireErrCode(body) !== "unauthenticated") failures.push("old transport denial was not issuer inactivity");
@@ -58,12 +64,11 @@ export function accountTransportRotationProbe(page: Page, request: APIRequestCon
   }
 
   async function read(realm: string) {
-    await Promise.all([...pending]);
+    await observations.settled();
     const grant = latestGrant;
     registerRequestAuth(grant, (method, url) => selfPathHeadersForDpopSession({ ...session, grantJwt: grant }, method, url));
     const result = await scanRealmStreamApi(request, grant, realm);
-    expect(result.truncated, "the exact accepted stream must reach its head").toBe(false);
-    expect(result.events.length).toBe(result.commits.length);
+    assertAcceptedRealmScanAlignment(realm, result);
     return result;
   }
 
@@ -89,7 +94,7 @@ export function accountTransportRotationProbe(page: Page, request: APIRequestCon
       expect(evidence.session_generation_after).toBe(evidence.session_generation_before);
       expect(evidence.successor_grant_id).not.toBe(evidence.predecessor_grant_id);
       await expect.poll(() => viewerDenied && viewerRecovered, { timeout: 90_000 }).toBe(true);
-      await Promise.all([...pending]);
+      await observations.settled();
       expect(refreshes).toContainEqual({ previous: evidence.predecessor_grant_id, successor: evidence.successor_grant_id });
       expect(failures).toEqual([]);
       return evidence;
