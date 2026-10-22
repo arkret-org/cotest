@@ -1110,6 +1110,26 @@ pub async fn run_local_message_and_account_cursor_recovery_live() -> Result<()> 
     )
     .await?;
     let strand = alice.default_strand_id(&realm)?;
+    let realm_id = RealmId::new(realm.clone())?;
+    let snapshot = crate::scenarios::strand_watch_live::signed_snapshot(&alice, &realm_id).await?;
+    let accepted_strand = snapshot
+        .current_state_entries
+        .iter()
+        .find_map(|row| match row {
+            arkret_wire::TypedCurrentRow::Value {
+                selector: arkret_wire::CurrentSelector::Strand { strand_id },
+                value,
+                ..
+            } if strand_id.as_str() == strand => Some(value.clone()),
+            _ => None,
+        })
+        .context("accepted signed current has no target Strand")?;
+    let accepted_strand: arkret_models_collaboration::objects::strand::Strand =
+        serde_json::from_value(accepted_strand)?;
+    ensure!(
+        accepted_strand.realm_id == realm_id && accepted_strand.scope_circle_id.is_none(),
+        "default target is not the accepted Realm-scoped Strand"
+    );
     let directory = tempfile::tempdir()?;
     let cursor_path = directory.path().join("account.json");
     let before = run_durable_account_round(&alice, &account, &realm, &cursor_path, None).await?;
@@ -1153,16 +1173,12 @@ pub async fn run_local_message_and_account_cursor_recovery_live() -> Result<()> 
         .await?,
     )?;
     let AuthoritySubmitOutcome::Accepted {
-        commit: replay_commit,
-        ..
+        commit: replayed, ..
     } = replay
     else {
         bail!("exact local submission retry was not accepted");
     };
-    ensure!(
-        replay_commit == commit,
-        "exact replay allocated a second Commit"
-    );
+    ensure!(replayed == commit, "exact replay allocated a second Commit");
     let fresh_event = alice
         .author_event(
             &realm,
@@ -1176,6 +1192,7 @@ pub async fn run_local_message_and_account_cursor_recovery_live() -> Result<()> 
         fresh_commit.stream_position == commit.stream_position + 1,
         "local authoring or exact retry wrote a hidden Commit"
     );
+    ensure_commit_signed_by(&commit, station)?;
     ensure_commit_signed_by(&fresh_commit, station)?;
     Ok(())
 }

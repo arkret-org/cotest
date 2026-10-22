@@ -1053,6 +1053,68 @@ pub async fn consent_current_and_invite_gate_live_run() -> Result<()> {
         },
     )
     .await?;
+    // An explicit full set remains one signed replacement and one revision.
+    let (expected_current, _) = read_consent_set(&holder, &granted.peer).await?;
+    let permissions = ConsentScope::ALL
+        .iter()
+        .map(|scope| ConsentPermission {
+            consent_scope: *scope,
+            not_before: None,
+            expires_at: None,
+            constraints: Some(vec![]),
+            evidence_ref: None,
+            reason: Some("explicit four scopes".into()),
+        })
+        .collect::<Vec<_>>();
+    let (all, all_event) = submit_consent_set(
+        &holder,
+        ConsentReplacePayload {
+            peer: granted.peer.clone(),
+            expected_current,
+            permissions: permissions.clone(),
+        },
+    )
+    .await?;
+    ensure!(all.permission_scopes == ConsentScope::ALL);
+    let (expected_current, reloaded) = read_consent_set(&holder, &granted.peer).await?;
+    ensure!(
+        reloaded == permissions,
+        "complete read lost optional permission details"
+    );
+    let prepared = prepare_invite_with_evidence(
+        &inviter,
+        &holder,
+        "explicit full-set Invite permission",
+        IntroductionEvidence::ConsentGrant {
+            consent_grant_ref: all_event.event_id,
+        },
+    )
+    .await?;
+    dispatch_explicit_invite(&inviter, prepared).await?;
+    let delivered = account_data_row(&holder, AccountDataKey::ACCOUNT_INVITE_DELIVERY).await?;
+    ensure!(
+        delivered.revision > unchanged.revision,
+        "the explicit full set did not authorize Invite delivery"
+    );
+    let (empty, _) = submit_consent_set(
+        &holder,
+        ConsentReplacePayload {
+            peer: granted.peer.clone(),
+            expected_current,
+            permissions: vec![],
+        },
+    )
+    .await?;
+    let (empty_current, remaining) = read_consent_set(&holder, &granted.peer).await?;
+    ensure!(
+        remaining.is_empty()
+            && empty_current
+                == ConsentExpectedCurrent::Present {
+                    revision: empty.revision
+                },
+        "clearing the full set must retain an accepted present revision"
+    );
+    let unchanged = account_data_row(&holder, AccountDataKey::ACCOUNT_INVITE_DELIVERY).await?;
     // Another permission in the same exact-peer set cannot authorize invite.
     let (voice, voice_event) =
         grant_scoped_consent(&holder, &inviter, ConsentScope::VoiceCall).await?;
