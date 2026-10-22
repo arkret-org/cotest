@@ -3,7 +3,7 @@
   "source_of_truth": false,
   "generated_from": {
     "operation_registry": "arkret-spec/spec/v1/artifacts/registry/operation-registry.json",
-    "operation_registry_sha256": "637eb1273e77dd5ec9f1d4fbe859ed226454dab4ca5312a4db051098fd876618",
+    "operation_registry_sha256": "15ea872a56ebb2441b276a50987ec091e6bc55807d0dc9e48dca5102962994d7",
     "operation_constants": "arkret-rust-sdk/crates/wire/src/generated/operation_ids.rs",
     "operation_constants_sha256": "a8723e1e5216bc5d53ad6e60278f008b567dbd0e03f07a6a5b52e29173c23cc5",
     "test_layers": {
@@ -27,13 +27,13 @@
       },
       "cotest_e2e": {
         "source_file_count": 118,
-        "source_sha256": "47c7534734d989008c0b3b02fad6a62d8f015ccff3a852f48b10432290fa3af6",
+        "source_sha256": "43811b1f26b5af39254f6c38f5355c388f393580dd3da353b10e9e5816ae681f",
         "evidence_count": 44,
         "covered_operation_count": 20
       },
       "inkson_e2e": {
         "source_file_count": 34,
-        "source_sha256": "930f35e87112ec6dcae26f6da2907c8f6e12051d67fdc6599a5d69b6423fe890",
+        "source_sha256": "0bdbe0ab79754e0f2240cd8ac10b79ceece2d9184d9734d93e1ad689b3a9b8b9",
         "evidence_count": 21,
         "covered_operation_count": 15
       }
