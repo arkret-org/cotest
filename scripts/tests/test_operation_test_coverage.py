@@ -413,7 +413,7 @@ fn typed_operation() {
             relative.encode("utf-8") + b"\0" + hashlib.sha256((self.root / relative).read_bytes()).digest()
             for relative in expected_order
         )
-        with mock.patch.object(inventory, "WORKSPACE_ROOT", self.root):
+        with mock.patch.object(inventory, "WORKSPACE_ROOT", self.root.resolve()):
             expected = hashlib.sha256(preimage).hexdigest()
             self.assertEqual(inventory.aggregate_source_digest(files), expected)
             self.assertEqual(inventory.aggregate_source_digest(reversed(files)), expected)
