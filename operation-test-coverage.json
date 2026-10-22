@@ -9,7 +9,7 @@
     "test_layers": {
       "coland_unit": {
         "source_file_count": 473,
-        "source_sha256": "7eb4379d54f6f1122794f6d4a1d671fd063dc29a6cfb32a10ccdd8aea90aaa92",
+        "source_sha256": "2ccba7f689ed2d5a8be6dd059cbb3a3f64aa0a9dec735cd7ade4d4a132357b4e",
         "evidence_count": 838,
         "covered_operation_count": 165
       },
@@ -27,7 +27,7 @@
       },
       "cotest_e2e": {
         "source_file_count": 118,
-        "source_sha256": "ce56bc6bbc51e9de09699faeba7204ed162d9213e0aa29a886de103ceee762c5",
+        "source_sha256": "4e03a2b56f4a40c58a7ca1dc16406dad1323b7f96ac49705cc4a200680d25d29",
         "evidence_count": 44,
         "covered_operation_count": 20
       },
@@ -275,11 +275,11 @@
           },
           {
             "file": "coland/crates/http/src/routing/extensions/applet_bridge/endpoints.rs",
-            "line": 1686,
+            "line": 1672,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              1686
+              1672
             ],
             "protected_oracle": false,
             "scope_sha256": "8a395f97b2edc5743d1c7f47cc6cc38ced4f6334256a37131e87e2c87ce706e8",
@@ -17684,11 +17684,11 @@
         "protocol_kat": [
           {
             "file": "coland/crates/http/src/routing/extensions/applet_bridge/endpoints.rs",
-            "line": 1572,
+            "line": 1558,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              1572
+              1558
             ],
             "protected_oracle": false,
             "scope_sha256": "ad47ebeda44d9fc861e6058c6a2ecedc5869a683b72cac336eb7843dc9d0e3f5",

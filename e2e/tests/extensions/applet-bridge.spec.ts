@@ -35,6 +35,7 @@ import {
   sdkEventDerivedIds,
   sdkEventEnvelopeProof,
   createRealmApi,
+  discoverRealmAuthorityRootRef,
   currentActorIdApi,
   queryRealmEventsApi,
   rawSubmitSignedEventApi,
@@ -612,7 +613,6 @@ test.describe("applet bridge", () => {
       browser,
       request,
       `applet-alice-${stamp}`,
-      { prepareMlsDevice: false },
     );
     if (!aliceFlow) {
       assertJointStackNotRequired("applet bridge UI setup");
@@ -633,11 +633,11 @@ test.describe("applet bridge", () => {
         "ak.profile.applet_bridge.v1",
         "ak.profile.applet_service.v1",
       ]);
-      const realmId = await createAppletInstallRealm(request, aliceToken, {
+      const realmId = await alicePage.createRealm({
         title: `applet-bridge Demo Space ${stamp}`,
         discoverability: "listed",
-        history_access: "since_join",
-        ownerId: alice.id,
+        historyAccess: "since_join",
+        mlsActivated: false,
       });
       await publishAppletServiceIdDocument(request, signed);
       const preInstallMembership = signedEventEnvelope({
@@ -779,7 +779,7 @@ test.describe("applet bridge", () => {
       // Alice cannot substitute for the creation original's actual Service producer.
       expect(standaloneGenesis.status(), standaloneGenesisText).toBe(403);
       expect(wireErrCode(JSON.parse(standaloneGenesisText))).toBe("capability_denied");
-      expect(JSON.parse(standaloneGenesisText).detail).toContain("exact authenticated actor");
+      expect(JSON.parse(standaloneGenesisText).detail).toContain("exact authenticated producer");
       const provision = await request.post(`${registryBase}/external-event`, {
         headers: authHeaders(aliceToken, "POST", `${registryBase}/external-event`),
         data: {
@@ -2544,6 +2544,7 @@ async function prepareAppletInstallAuthoringBasis(
   grantActionsById: Map<string, string[]>;
 }> {
   const actorId = await currentActorIdApi(request, token);
+  await discoverRealmAuthorityRootRef(request, token, realmId);
   const registrationPayload = appletRegistrationPayload(signed);
   const registrationManifest = registrationPayload.manifest;
   if (
