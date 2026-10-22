@@ -1,5 +1,5 @@
 import { expect, type APIRequestContext, type Page, type Response } from "@playwright/test";
-import { registerRequestAuth, scanRealmStreamApi, wireErrCode } from "./coland-api";
+import { registerRequestAuth, scanRealmStreamApi, sdkEventDerivedIds, wireErrCode } from "./coland-api";
 import { selfPathHeadersForDpopSession, type DpopUserSession } from "./users";
 import { assertAcceptedRealmScanAlignment, orderedResponseObservation } from "./session-transport-observation";
 
@@ -68,7 +68,7 @@ export function accountTransportRotationProbe(page: Page, request: APIRequestCon
     const grant = latestGrant;
     registerRequestAuth(grant, (method, url) => selfPathHeadersForDpopSession({ ...session, grantJwt: grant }, method, url));
     const result = await scanRealmStreamApi(request, grant, realm);
-    assertAcceptedRealmScanAlignment(realm, result);
+    assertAcceptedRealmScanAlignment(realm, result, sdkEventDerivedIds);
     return result;
   }
 

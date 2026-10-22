@@ -1,5 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { existsSync, readFileSync } from "node:fs";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+import { sdkEventDerivedIds } from "../helpers/coland-api/wire-client.ts";
 import { orderedResponseObservation, assertAcceptedRealmScanAlignment } from "../helpers/session-transport-observation.ts";
 
 function deferred() {
@@ -67,7 +71,7 @@ function aligned() {
 }
 
 test("exact Event/Commit scan accepts key-order-independent stream coordinates", () => {
-  assert.doesNotThrow(() => assertAcceptedRealmScanAlignment("realm", aligned()));
+  assert.doesNotThrow(() => assertAcceptedRealmScanAlignment("realm", aligned(), unexpectedGenesis));
 });
 
 test("same-length swapped, duplicated, foreign and noncontinuous scan pairs fail closed", () => {
@@ -84,6 +88,71 @@ test("same-length swapped, duplicated, foreign and noncontinuous scan pairs fail
   ]) {
     const scan = aligned();
     corrupt(scan);
-    assert.throws(() => assertAcceptedRealmScanAlignment("realm", scan), /accepted Realm/);
+    assert.throws(() => assertAcceptedRealmScanAlignment("realm", scan, unexpectedGenesis), /accepted Realm/);
+  }
+});
+
+function unexpectedGenesis() { assert.fail("ordinary rows must not invoke the genesis oracle"); }
+
+// These are the formal constructive Event bytes, not an invented Genesis DTO.
+// The SDK oracle proves content identity; this test does not claim live admission.
+function constructiveGenesisScan() {
+  assert.ok(process.env.COTEST_WIRE_BIN && existsSync(process.env.COTEST_WIRE_BIN),
+    "COTEST_WIRE_BIN must identify an existing executable; never fall back to Cargo");
+  const specRoot = process.env.COTEST_SPEC_ROOT
+    ?? resolve(dirname(fileURLToPath(import.meta.url)), "../../../arkret-spec");
+  const fixture = JSON.parse(readFileSync(resolve(specRoot,
+    "spec/v1/artifacts/fixtures/content-bound-event-id-fixture.json"), "utf8"));
+  const vector = fixture.cases.find(item => item.name ===
+    "principal_control_realm_id_is_event_derived_and_nonzero_nibble_rejected");
+  assert.ok(vector);
+  const event = structuredClone(vector.complete_wire_event);
+  const derived = sdkEventDerivedIds(event);
+  assert.equal(derived.event_id, vector.derived_event_id);
+  assert.equal(derived.realm_id, vector.derived_realm_id);
+  return {
+    realm: vector.derived_realm_id,
+    scan: {
+      truncated: false,
+      events: [event],
+      commits: [{ commit_id: "observed-c0", event_ref: event.event_id,
+        realm_id: vector.derived_realm_id,
+        stream_ref: { kind: "realm", realm_id: vector.derived_realm_id },
+        stream_position: 0, previous_commit_ref: null }],
+    },
+  };
+}
+
+test("formal constructive genesis omits realm_id and matches SDK-derived identity", () => {
+  const { realm, scan } = constructiveGenesisScan();
+  assert.equal(Object.hasOwn(scan.events[0], "realm_id"), false);
+  assert.doesNotThrow(() => assertAcceptedRealmScanAlignment(realm, scan, sdkEventDerivedIds));
+});
+
+test("forged genesis coordinates and Event refs fail without weakening ordinary alignment", () => {
+  const original = constructiveGenesisScan();
+  for (const corrupt of [
+    ({ realm, scan }) => { scan.events[0].realm_id = realm; },
+    ({ scan }) => { scan.events[0].realm_id = null; },
+    ({ realm, scan }) => { scan.events[0].scope_ref = { kind: "realm", realm_id: realm }; },
+    ({ scan }) => { scan.events[0].event_id = "ak:event:AQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
+      scan.commits[0].event_ref = scan.events[0].event_id; },
+    ({ scan }) => { scan.commits[0].event_ref = "ak:event:AQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"; },
+    (fixture) => { fixture.realm = "ak:realm:AQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
+      fixture.scan.commits[0].realm_id = fixture.realm;
+      fixture.scan.commits[0].stream_ref.realm_id = fixture.realm; },
+    ({ scan }) => { scan.commits[0].previous_commit_ref = "not-genesis"; },
+    ({ scan }) => { scan.events.push(structuredClone(scan.events[0]));
+      scan.commits.push({ ...scan.commits[0], commit_id: "observed-c1", stream_position: 1,
+        previous_commit_ref: scan.commits[0].commit_id }); },
+    ({ realm, scan }) => { scan.events.push({ event_id: "ordinary", kind: "ak.message.create" });
+      scan.commits.push({ commit_id: "observed-c1", event_ref: "ordinary", realm_id: realm,
+        stream_ref: { kind: "realm", realm_id: realm }, stream_position: 1,
+        previous_commit_ref: scan.commits[0].commit_id }); },
+  ]) {
+    const changed = structuredClone(original);
+    corrupt(changed);
+    assert.throws(() => assertAcceptedRealmScanAlignment(changed.realm, changed.scan, sdkEventDerivedIds),
+      /accepted Realm/);
   }
 });
