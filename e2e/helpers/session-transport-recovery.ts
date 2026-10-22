@@ -1,7 +1,9 @@
 import { expect, type APIRequestContext, type Page, type Response } from "@playwright/test";
 import { registerRequestAuth, scanRealmStreamApi, sdkEventDerivedIds, wireErrCode } from "./coland-api";
 import { selfPathHeadersForDpopSession, type DpopUserSession } from "./users";
-import { assertAcceptedRealmScanAlignment, orderedResponseObservation } from "./session-transport-observation";
+import { assertAcceptedRealmScanAlignment, orderedResponseObservation, sessionGrantRotationObservation } from "./session-transport-observation";
+
+import { colandBaseUrl, colandServiceId } from "./env";
 
 const hook = "__inkson_captured_transport_rotation_v1";
 const retiredReads = new Set([
@@ -13,26 +15,30 @@ const retiredReads = new Set([
 // The hook rotates through the actual Rust provider and issuer. It neither
 // substitutes a response nor exports grant tokens, holder keys or MLS leaves.
 export function accountTransportRotationProbe(page: Page, request: APIRequestContext, session: DpopUserSession) {
+  expect(session.accountId.station_id).toBe(colandServiceId());
+  const stationOrigin = new URL(colandBaseUrl()).origin;
   let armed = false;
-  const retiredAuthorizations = new Set<string>();
+  const rotation = sessionGrantRotationObservation(session.accountId);
   let latestGrant = session.grantJwt;
-  let viewerDenied = false;
-  let viewerRecovered = false;
   const failures: string[] = [];
-  const refreshes: Array<{ previous: unknown; successor: unknown }> = [];
   const observations = orderedResponseObservation<Response>(observe, () => {
     failures.push("transport observation failed");
   });
 
   async function expectedRetiredRead(response: Response): Promise<boolean> {
-    if (!armed || response.status() !== 401 || !retiredReads.has(new URL(response.url()).pathname)) return false;
+    const url = new URL(response.url());
+    if (!armed || url.origin !== stationOrigin || response.status() !== 401 || !retiredReads.has(url.pathname)) return false;
     await observations.observed(response);
-    return retiredAuthorizations.has((await response.request().allHeaders()).authorization ?? "");
+    const evidence = await hookEvidence();
+    if (evidence?.phase !== "rotated_before_request" || wireErrCode(await response.json()) !== "unauthenticated") return false;
+    return rotation.matchesPredecessor(evidence.predecessor_grant_id, evidence.successor_grant_id,
+      (await response.request().allHeaders()).authorization);
   }
 
   page.on("response", response => {
-    const path = new URL(response.url()).pathname;
-    if (path.startsWith("/_arkret/self/") || path === "/_arkret/gate/account/session-grants/refresh") {
+    const url = new URL(response.url());
+    const path = url.pathname;
+    if ((url.origin === stationOrigin && path.startsWith("/_arkret/self/")) || path === "/_arkret/gate/account/session-grants/refresh") {
       observations.enqueue(response);
     }
   });
@@ -45,22 +51,24 @@ export function accountTransportRotationProbe(page: Page, request: APIRequestCon
         failures.push("issuer refresh did not carry a real captured grant");
         return;
       }
-      retiredAuthorizations.add(authorization);
-      const body = await response.json() as { previous_session_grant_id?: unknown; session_grant_id?: unknown };
-      refreshes.push({ previous: body.previous_session_grant_id, successor: body.session_grant_id });
+      rotation.refresh(authorization, await response.json() as Record<string, unknown>);
     }
-    if (!path.startsWith("/_arkret/self/")) return;
-    if (response.status() === 200 && authorization?.startsWith("DPoP ") && !retiredAuthorizations.has(authorization)) {
+    if (new URL(response.url()).origin !== stationOrigin || !path.startsWith("/_arkret/self/")) return;
+    if (response.status() === 200 && authorization?.startsWith("DPoP ") && !rotation.isRetiredAuthorization(authorization)) {
       latestGrant = authorization.slice("DPoP ".length);
-      if (viewerDenied && path === "/_arkret/self/account/viewer") viewerRecovered = true;
     }
     // Do not wait on observations.observed here: this is that very job.
-    if (armed && response.status() === 401 && retiredReads.has(path)
-      && retiredAuthorizations.has(authorization ?? "")) {
-      if (path === "/_arkret/self/account/viewer") viewerDenied = true;
-      const body: unknown = await response.json();
-      if (wireErrCode(body) !== "unauthenticated") failures.push("old transport denial was not issuer inactivity");
+    if (armed && path === "/_arkret/self/account/viewer") {
+      const code = response.status() === 401 ? wireErrCode(await response.json()) : undefined;
+      rotation.viewer(response.status(), authorization, code);
     }
+  }
+
+  async function hookEvidence() {
+    return page.evaluate(name => {
+      const value = (window as unknown as Record<string, unknown>)[name];
+      return typeof value === "string" ? JSON.parse(value) as Record<string, unknown> : undefined;
+    }, hook);
   }
 
   async function read(realm: string) {
@@ -84,18 +92,15 @@ export function accountTransportRotationProbe(page: Page, request: APIRequestCon
       }, hook);
     },
     async verify() {
-      await expect.poll(async () => page.evaluate(name => {
-        const value = (window as unknown as Record<string, unknown>)[name];
-        return typeof value === "string" ? JSON.parse(value) as Record<string, unknown> : undefined;
-      }, hook), { timeout: 90_000 }).toMatchObject({ phase: "rotated_before_request" });
-      const evidence = await page.evaluate(name => JSON.parse(String((window as unknown as Record<string, unknown>)[name])) as Record<string, unknown>, hook);
+      await expect.poll(hookEvidence, { timeout: 90_000 }).toMatchObject({ phase: "rotated_before_request" });
+      const evidence = (await hookEvidence())!;
       expect(evidence.account_id).toEqual(session.accountId);
       expect(evidence.device_id).toBe(session.user.deviceId);
       expect(evidence.session_generation_after).toBe(evidence.session_generation_before);
       expect(evidence.successor_grant_id).not.toBe(evidence.predecessor_grant_id);
-      await expect.poll(() => viewerDenied && viewerRecovered, { timeout: 90_000 }).toBe(true);
+      await expect.poll(() => rotation.recovered(evidence.predecessor_grant_id, evidence.successor_grant_id),
+        { timeout: 90_000 }).toBe(true);
       await observations.settled();
-      expect(refreshes).toContainEqual({ previous: evidence.predecessor_grant_id, successor: evidence.successor_grant_id });
       expect(failures).toEqual([]);
       return evidence;
     },

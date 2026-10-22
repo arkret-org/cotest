@@ -4,7 +4,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { sdkEventDerivedIds } from "../helpers/coland-api/wire-client.ts";
-import { orderedResponseObservation, assertAcceptedRealmScanAlignment } from "../helpers/session-transport-observation.ts";
+import { orderedResponseObservation, assertAcceptedRealmScanAlignment, sessionGrantRotationObservation } from "../helpers/session-transport-observation.ts";
 
 function deferred() {
   let resolve;
@@ -155,4 +155,67 @@ test("forged genesis coordinates and Event refs fail without weakening ordinary 
     assert.throws(() => assertAcceptedRealmScanAlignment(changed.realm, changed.scan, sdkEventDerivedIds),
       /accepted Realm/);
   }
+});
+
+// Opaque tool-only strings exercise attribution; no JWT validation is simulated.
+const holder = { principal_id: "principal", station_id: "station" };
+function refreshBody(previous, successor, grant) {
+  return { account_id: holder, previous_session_grant_id: previous,
+    session_grant_id: successor, session_grant: grant };
+}
+
+test("concurrent refresh cannot substitute another pair's viewer denial and recovery", () => {
+  const tracker = sessionGrantRotationObservation(holder);
+  tracker.refresh("DPoP target-old", refreshBody("target-before", "target-after", "target-new"));
+  tracker.refresh("DPoP other-old", refreshBody("other-before", "other-after", "other-new"));
+  tracker.viewer(401, "DPoP other-old", "unauthenticated");
+  tracker.viewer(200, "DPoP other-new");
+  assert.equal(tracker.recovered("other-before", "other-after"), true);
+  assert.equal(tracker.recovered("target-before", "target-after"), false);
+  assert.equal(tracker.matchesPredecessor("target-before", "target-after", "DPoP other-old"), false);
+  tracker.viewer(401, "DPoP target-old", "unauthenticated");
+  tracker.viewer(200, "DPoP other-new");
+  assert.equal(tracker.recovered("target-before", "target-after"), false);
+  tracker.viewer(200, "DPoP target-new");
+  assert.equal(tracker.recovered("target-before", "target-after"), true);
+  assert.equal(tracker.matchesPredecessor("target-before", "target-after", "DPoP target-old"), true);
+  assert.equal(tracker.matchesPredecessor("target-before", "other-after", "DPoP target-old"), false);
+});
+
+test("wrong grant, wrong problem and successor before predecessor denial do not satisfy recovery", () => {
+  const tracker = sessionGrantRotationObservation(holder);
+  tracker.refresh("DPoP old", refreshBody("before", "after", "new"));
+  tracker.viewer(200, "DPoP new");
+  tracker.viewer(401, "DPoP wrong", "unauthenticated");
+  tracker.viewer(401, "DPoP old", "capability_denied");
+  tracker.viewer(200, "DPoP new");
+  assert.equal(tracker.recovered("before", "after"), false);
+  tracker.viewer(401, "DPoP old", "unauthenticated");
+  assert.equal(tracker.recovered("before", "after"), false);
+  tracker.viewer(200, "DPoP wrong");
+  assert.equal(tracker.recovered("before", "after"), false);
+  tracker.viewer(200, "DPoP new");
+  assert.equal(tracker.recovered("before", "after"), true);
+});
+
+test("refresh attribution rejects different complete holders, missing ids and changed opaque bindings", () => {
+  for (const mutate of [
+    body => { body.account_id = { ...holder, principal_id: "other" }; },
+    body => { body.account_id = { ...holder, station_id: "other" }; },
+    body => { delete body.previous_session_grant_id; },
+    body => { body.session_grant_id = body.previous_session_grant_id; },
+    body => { delete body.session_grant; },
+  ]) {
+    const tracker = sessionGrantRotationObservation(holder);
+    const body = refreshBody("before", "after", "new");
+    mutate(body);
+    assert.throws(() => tracker.refresh("DPoP old", body), /expected holder and distinct grant pair/);
+    assert.equal(tracker.recovered("before", "after"), false);
+  }
+  const tracker = sessionGrantRotationObservation(holder);
+  tracker.refresh("DPoP old", refreshBody("before", "after", "new"));
+  assert.throws(() => tracker.refresh("DPoP substituted", refreshBody("before", "after", "new")),
+    /opaque authorization binding/);
+  assert.throws(() => tracker.refresh("DPoP old", refreshBody("before", "after", "substituted")),
+    /opaque authorization binding/);
 });

@@ -1,4 +1,5 @@
 import type { scanRealmStreamApi } from "./coland-api";
+import type { DpopUserSession } from "./users";
 
 // Response events arrive in protocol order; asynchronous header/body reads
 // must not reorder a refresh and the captured predecessor's later denial.
@@ -19,6 +20,69 @@ export function orderedResponseObservation<T extends object>(
       await job;
     },
     async settled() { await tail; },
+  };
+}
+
+// Opaque authorizations stay inside this observer. Public hook ids choose one
+// actual issuer refresh; a concurrent refresh cannot satisfy that pair's reads.
+export function sessionGrantRotationObservation(account: DpopUserSession["accountId"]) {
+  const pairs: Array<{
+    previous: string; successor: string; predecessorAuthorization: string;
+    successorAuthorization: string; deniedAt?: number; recoveredAt?: number;
+  }> = [];
+  let sequence = 0;
+  function pair(previous: unknown, successor: unknown) {
+    return pairs.find(item => item.previous === previous && item.successor === successor);
+  }
+  return {
+    refresh(predecessorAuthorization: string, body: Record<string, unknown>) {
+      const holder = body.account_id as Record<string, unknown> | null | undefined;
+      if (!holder || Object.keys(holder).sort().join(",") !== "principal_id,station_id"
+        || holder.principal_id !== account.principal_id || holder.station_id !== account.station_id
+        || typeof body.previous_session_grant_id !== "string" || typeof body.session_grant_id !== "string"
+        || body.previous_session_grant_id === body.session_grant_id
+        || typeof body.session_grant !== "string" || !body.session_grant
+        || !predecessorAuthorization.startsWith("DPoP ")
+        || predecessorAuthorization === `DPoP ${body.session_grant}`) {
+        throw new Error("issuer refresh did not bind the expected holder and distinct grant pair");
+      }
+      const successorAuthorization = `DPoP ${body.session_grant}`;
+      const existing = pair(body.previous_session_grant_id, body.session_grant_id);
+      if (existing) {
+        if (existing.predecessorAuthorization !== predecessorAuthorization
+          || existing.successorAuthorization !== successorAuthorization) {
+          throw new Error("issuer refresh pair changed its opaque authorization binding");
+        }
+        return;
+      }
+      pairs.push({ previous: body.previous_session_grant_id, successor: body.session_grant_id,
+        predecessorAuthorization, successorAuthorization });
+    },
+    viewer(status: number, authorization: string | undefined, problemCode?: string) {
+      sequence += 1;
+      for (const item of pairs) {
+        if (status === 401 && problemCode === "unauthenticated"
+          && authorization === item.predecessorAuthorization && item.deniedAt === undefined) {
+          item.deniedAt = sequence;
+        }
+        if (status === 200 && authorization === item.successorAuthorization
+          && item.deniedAt !== undefined && sequence > item.deniedAt) {
+          item.recoveredAt = sequence;
+        }
+      }
+    },
+    isRetiredAuthorization(authorization: string | undefined) {
+      return pairs.some(item => item.predecessorAuthorization === authorization);
+    },
+    matchesPredecessor(previous: unknown, successor: unknown, authorization: string | undefined) {
+      const item = pair(previous, successor);
+      return item !== undefined && item.predecessorAuthorization === authorization;
+    },
+    recovered(previous: unknown, successor: unknown) {
+      const item = pair(previous, successor);
+      return item?.deniedAt !== undefined && item.recoveredAt !== undefined
+        && item.recoveredAt > item.deniedAt;
+    },
   };
 }
 
