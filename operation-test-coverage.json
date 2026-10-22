@@ -9,7 +9,7 @@
     "test_layers": {
       "coland_unit": {
         "source_file_count": 473,
-        "source_sha256": "e0778df5bfff4004f5d8fd59de37fb40b6c21bcc69c621e2854f33549b1e5876",
+        "source_sha256": "79fa48a52f69ee515c466b5d0f1d47baef25fc550a82647d095f3edd1a4938b4",
         "evidence_count": 838,
         "covered_operation_count": 165
       },
@@ -26,8 +26,8 @@
         "covered_operation_count": 95
       },
       "cotest_e2e": {
-        "source_file_count": 118,
-        "source_sha256": "3436d7d83dac3574c73ca8d5b0f2706c50a03a3a15285b29d6cf96caa08f8abf",
+        "source_file_count": 120,
+        "source_sha256": "4deed8d5434b08920f0ef17989d88ee330c67ff055a61e43b7df81669aa63d35",
         "evidence_count": 44,
         "covered_operation_count": 20
       },

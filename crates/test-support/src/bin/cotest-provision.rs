@@ -40,6 +40,22 @@ use cotest_test_support::provisioning::{
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
+type OperationFuture<'a> = std::pin::Pin<Box<dyn std::future::Future<Output = Result<Value>> + 'a>>;
+
+// Run child-future construction outside the operation's poll frame.
+#[inline(never)]
+fn heap_operation<'a, T: 'a, F: std::future::Future<Output = T> + 'a>(
+    make: impl FnOnce() -> F,
+) -> std::pin::Pin<Box<dyn std::future::Future<Output = T> + 'a>> {
+    Box::pin(make())
+}
+
+fn required_field(body: &Value, name: &str) -> Result<Value> {
+    body.get(name)
+        .cloned()
+        .with_context(|| format!("{name} required"))
+}
+
 #[derive(Debug, Deserialize)]
 struct Request {
     id: String,
@@ -357,6 +373,76 @@ impl Session {
         self.agent_runtimes
             .insert(runtime_id.as_str().to_owned(), runtime);
         Ok(json!({"runtime_id":runtime_id,"authorization_event_id":authorization}))
+    }
+
+    fn garth_client_for_body(&self, body: &Value) -> Result<&GarthClientHandle> {
+        let handoff_id = body
+            .get("handoff_id")
+            .and_then(Value::as_str)
+            .context("handoff_id required")?;
+        self.garth_clients
+            .get(handoff_id)
+            .context("Garth runtime not opened")
+    }
+
+    #[inline(never)]
+    fn garth_create_realm(&self, body: Value) -> OperationFuture<'_> {
+        heap_operation(|| async move {
+            let client = self.garth_client_for_body(&body)?;
+            let title = required_field(&body, "title")?;
+            let title = title.as_str().context("title must be a string")?;
+            heap_operation(|| client.create_realm(title)).await
+        })
+    }
+
+    #[inline(never)]
+    fn garth_join_realm(&self, body: Value) -> OperationFuture<'_> {
+        heap_operation(|| async move {
+            let client = self.garth_client_for_body(&body)?;
+            let realm = serde_json::from_value(required_field(&body, "realm_id")?)?;
+            heap_operation(|| client.join_realm(realm)).await
+        })
+    }
+
+    #[inline(never)]
+    fn garth_grant_messages(&self, body: Value) -> OperationFuture<'_> {
+        heap_operation(|| async move {
+            let client = self.garth_client_for_body(&body)?;
+            let realm = serde_json::from_value(required_field(&body, "realm_id")?)?;
+            let genesis = serde_json::from_value(required_field(&body, "genesis_event_id")?)?;
+            let subject = serde_json::from_value(required_field(&body, "subject_account_id")?)?;
+            heap_operation(|| client.grant_messages(realm, genesis, subject)).await
+        })
+    }
+
+    #[inline(never)]
+    fn garth_send_message(&self, body: Value) -> OperationFuture<'_> {
+        heap_operation(|| async move {
+            let client = self.garth_client_for_body(&body)?;
+            let realm = serde_json::from_value(required_field(&body, "realm_id")?)?;
+            let strand = serde_json::from_value(required_field(&body, "strand_id")?)?;
+            let text = required_field(&body, "body")?;
+            let text = text.as_str().context("message body must be a string")?;
+            heap_operation(|| client.send_message(realm, strand, text)).await
+        })
+    }
+
+    #[inline(never)]
+    fn garth_read_messages(&self, body: Value) -> OperationFuture<'_> {
+        heap_operation(|| async move {
+            let client = self.garth_client_for_body(&body)?;
+            let realm = serde_json::from_value(required_field(&body, "realm_id")?)?;
+            Ok(json!({"messages": heap_operation(|| client.read_messages(realm)).await?}))
+        })
+    }
+
+    #[inline(never)]
+    fn garth_retained_message(&self, body: Value) -> OperationFuture<'_> {
+        heap_operation(|| async move {
+            let client = self.garth_client_for_body(&body)?;
+            let event = serde_json::from_value(required_field(&body, "event_id")?)?;
+            heap_operation(|| client.retained_message(event)).await
+        })
     }
 
     // Separate operation state machines keep founding and restored-identity
@@ -968,72 +1054,12 @@ impl Session {
                     json!({ "cursor":cursor,"rounds":sync.rounds,"projected":sync.projected,"stop_reason":sync.stop_reason,"identity_restored_from_disk":true }),
                 )
             }),
-            "garth_create_realm"
-            | "garth_join_realm"
-            | "garth_grant_messages"
-            | "garth_send_message"
-            | "garth_read_messages"
-            | "garth_retained_message" => Box::pin(async move {
-                let handoff_id = request
-                    .body
-                    .get("handoff_id")
-                    .and_then(Value::as_str)
-                    .context("handoff_id required")?;
-                let client = self
-                    .garth_clients
-                    .get(handoff_id)
-                    .context("Garth runtime not opened")?;
-                let field = |name: &str| {
-                    request
-                        .body
-                        .get(name)
-                        .cloned()
-                        .with_context(|| format!("{name} required"))
-                };
-                match request.op.as_str() {
-                    "garth_create_realm" => {
-                        client
-                            .create_realm(
-                                field("title")?.as_str().context("title must be a string")?,
-                            )
-                            .await
-                    }
-                    "garth_join_realm" => {
-                        client
-                            .join_realm(serde_json::from_value(field("realm_id")?)?)
-                            .await
-                    }
-                    "garth_grant_messages" => {
-                        client
-                            .grant_messages(
-                                serde_json::from_value(field("realm_id")?)?,
-                                serde_json::from_value(field("genesis_event_id")?)?,
-                                serde_json::from_value(field("subject_account_id")?)?,
-                            )
-                            .await
-                    }
-                    "garth_send_message" => {
-                        client
-                            .send_message(
-                                serde_json::from_value(field("realm_id")?)?,
-                                serde_json::from_value(field("strand_id")?)?,
-                                field("body")?
-                                    .as_str()
-                                    .context("message body must be a string")?,
-                            )
-                            .await
-                    }
-                    "garth_read_messages" => Ok(
-                        json!({"messages":client.read_messages(serde_json::from_value(field("realm_id")?)?).await?}),
-                    ),
-                    "garth_retained_message" => {
-                        client
-                            .retained_message(serde_json::from_value(field("event_id")?)?)
-                            .await
-                    }
-                    _ => unreachable!(),
-                }
-            }),
+            "garth_create_realm" => self.garth_create_realm(request.body),
+            "garth_join_realm" => self.garth_join_realm(request.body),
+            "garth_grant_messages" => self.garth_grant_messages(request.body),
+            "garth_send_message" => self.garth_send_message(request.body),
+            "garth_read_messages" => self.garth_read_messages(request.body),
+            "garth_retained_message" => self.garth_retained_message(request.body),
             other => {
                 let operation = other.to_owned();
                 Box::pin(async move { bail!("unknown provisioning op {operation:?}") })
