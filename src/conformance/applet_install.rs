@@ -4,6 +4,7 @@ use serde_json::{Value, json};
 
 use crate::transcripts::record_vector_event;
 
+const MANAGED_ACTOR_FIXTURE: &str = "applet-managed-actor-fixture.json";
 const REGISTRATION_EPOCH_FIXTURE: &str = "applet-registration-epoch-fixture.json";
 const MANAGED_ACTOR_ENTRYPOINT: &str = "ak.suite.applet.managed_actor_authority.v1";
 
