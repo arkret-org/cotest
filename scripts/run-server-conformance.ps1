@@ -692,8 +692,17 @@ function Invoke-CargoTestInvocation {
 
     $process = $null
     try {
-        $cargo = (Get-Command cargo -CommandType Application -ErrorAction Stop).Source
-        $nativeArguments = (($CargoArgs | ForEach-Object {
+        $cargo = (Get-Command cargo -CommandType Application -ErrorAction Stop | Select-Object -First 1).Source
+        $python = (Get-Command python -CommandType Application -ErrorAction Stop | Select-Object -First 1).Source
+        $nativeWrapper = Join-Path $PSScriptRoot "run-native-rust-tests.py"
+        if (-not (Test-Path -LiteralPath $nativeWrapper -PathType Leaf)) {
+            throw "Native Rust TLS wrapper is missing: $nativeWrapper"
+        }
+        # One wrapper per invocation owns its CA and Cargo native-child scope.
+        # Never export a runner to the mandatory joint child: its isolated
+        # migration cases create their own native scopes and reject overrides.
+        $nativeCommandArguments = @("-B", $nativeWrapper, $cargo) + $CargoArgs
+        $nativeArguments = (($nativeCommandArguments | ForEach-Object {
                     ConvertTo-NativeCommandLineArgument -Argument $_
                 }) -join ' ')
         $logStem = ($Label -replace '[^A-Za-z0-9_.-]', '_')
@@ -701,13 +710,13 @@ function Invoke-CargoTestInvocation {
         $stdoutPath = Join-Path $logRoot "$logStem.cargo.stdout.log"
         $stderrPath = Join-Path $logRoot "$logStem.cargo.stderr.log"
 
-        # Redirect Cargo directly to files instead of anonymous pipes. On
-        # Windows, a test-launched service can retain an inherited pipe handle
-        # after Cargo exits; ReadToEndAsync then waits forever even though the
-        # direct Cargo process has completed. File-backed output preserves the
-        # complete report without coupling runner completion to descendants.
+        # Redirect the native wrapper and Cargo output to files instead of
+        # anonymous pipes. On Windows, a test-launched service can retain an
+        # inherited pipe handle after Cargo exits. File-backed output preserves
+        # the complete report and the wrapper's real child exit without waiting
+        # for a descendant to close an inherited anonymous-pipe handle.
         $process = Start-Process `
-            -FilePath $cargo `
+            -FilePath $python `
             -ArgumentList $nativeArguments `
             -WorkingDirectory (Join-Path $PSScriptRoot "..") `
             -NoNewWindow `
@@ -1514,9 +1523,12 @@ function New-ReleaseGate {
                 -RequiredTests @("account_auth_and_session_edges_are_enforced")))
     $checks.Add((New-ReleaseGateCheck `
                 -Id "federation_replay" `
-                -Description "Federation replay, invalid semantic, and redaction contract checks." `
+                -Description "Current-auth federation replay and exact signed snapshots with redaction/withheld continuity across real Stations." `
                 -Tests $Tests `
-                -RequiredTests @("federation_replay_snapshot_and_redaction_contracts_work")))
+                -RequiredTests @(
+                    "canonical_federation_cases_use_real_ingress_and_current_origin_binding",
+                    "three_station_stream_history_survives_unrelated_scope_loss_and_cold_restart"
+                )))
     $checks.Add((New-ReleaseGateCheck `
                 -Id "session_grant_bridge" `
                 -Description "coauth-style introspection backs coland session grant presentation and push registration." `

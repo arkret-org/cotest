@@ -152,11 +152,11 @@ foreach ($invocation in $servicesLive.invocations) {
 }
 
 $release = Invoke-Planner -Arguments @("-Profile", "release-gate", "-PlanOnly")
-Assert-Equal -Actual $release.invocations.Count -Expected 22 -Message "release-gate invocation count drifted"
-foreach ($target in @("registry_drift", "realm_genesis_commit_stream")) {
+Assert-Equal -Actual $release.invocations.Count -Expected 24 -Message "release-gate invocation count drifted"
+foreach ($target in @("registry_drift", "realm_genesis_commit_stream", "federation_idempotency_production", "snapshot_handoff_live")) {
     Assert-True -Condition (@($release.invocations | Where-Object target -eq $target).Count -eq 1) -Message "release-gate dropped migrated native target $target"
 }
-Assert-Equal -Actual @($release.invocations | Select-Object -ExpandProperty target -Unique).Count -Expected 12 -Message "release-gate target count drifted"
+Assert-Equal -Actual @($release.invocations | Select-Object -ExpandProperty target -Unique).Count -Expected 14 -Message "release-gate target count drifted"
 
 $all = Invoke-Planner -Arguments @("-Profile", "all", "-PlanOnly")
 Assert-Equal -Actual $all.invocations.Count -Expected 2 -Message "all profile must include both packages"
