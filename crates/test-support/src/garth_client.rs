@@ -29,6 +29,15 @@ use garth::{
 };
 use serde_json::{Value, json};
 
+// Construct large child futures in a separate frame, then poll only their heap storage.
+// Boxing an already constructed child in its caller's poll still leaves that large temporary there.
+#[inline(never)]
+fn heap_future<'a, T: 'a, F: std::future::Future<Output = T> + 'a>(
+    make: impl FnOnce() -> F,
+) -> std::pin::Pin<Box<dyn std::future::Future<Output = T> + 'a>> {
+    Box::pin(make())
+}
+
 /// A Garth client bound to one founded principal.
 ///
 /// The store path is stable for the life of this handle, which is what lets a
@@ -381,6 +390,20 @@ impl GarthClientHandle {
     /// Found a normal plaintext collaboration Realm through Garth's durable queue.
     /// The explicitly declared Station receives plaintext; this does not claim MLS coverage.
     pub async fn create_realm(&self, title: &str) -> Result<Value> {
+        // Each synchronous authoring frame has returned before any outbound future is polled.
+        // Keep bootstrap, Strand and default selection strictly sequential and submit their
+        // original bytes.
+        let (realm_id, genesis_id, bootstrap) = self.prepare_realm_bootstrap(title)?;
+        heap_future(|| self.submit(bootstrap)).await?;
+        let (strand_id, strand) = self.prepare_default_strand(&realm_id)?;
+        heap_future(|| self.submit(strand)).await?;
+        let selection = self.prepare_default_strand_selection(&realm_id, &strand_id)?;
+        heap_future(|| self.submit(selection)).await?;
+        Ok(json!({"realm_id":realm_id,"strand_id":strand_id,"genesis_event_id":genesis_id}))
+    }
+
+    #[inline(never)]
+    fn prepare_realm_bootstrap(&self, title: &str) -> Result<(RealmId, EventId, QueuedSubmission)> {
         let salt = arkret::GenesisSalt::generate()?;
         let station = &self
             .actor_id
@@ -452,8 +475,18 @@ impl GarthClientHandle {
             idempotency_key: arkret_wire::UuidV7::new(request_id.uuid())?,
             events,
         };
-        self.submit(QueuedSubmission::realm_bootstrap(unit)?)
-            .await?;
+        Ok((
+            realm_id,
+            genesis_id,
+            QueuedSubmission::realm_bootstrap(unit)?,
+        ))
+    }
+
+    #[inline(never)]
+    fn prepare_default_strand(&self, realm_id: &RealmId) -> Result<(StrandId, QueuedSubmission)> {
+        let scope = ScopeRef::Realm {
+            realm_id: realm_id.clone(),
+        };
         let strand_created_at = chrono::Utc::now();
         let mut strand = self.draft_at::<event_spec::StrandCreate>(scope.clone(), json!({"object":{
             "schema":"ak.schema.strand.v1","realm_id":realm_id,
@@ -463,15 +496,30 @@ impl GarthClientHandle {
         sign_event(&mut strand, &self.signer, SignEventOptions::default())?;
         let strand = strand.into_event();
         let strand_id = StrandId::from_event_id(&strand.event_id);
-        self.submit_event(strand).await?;
-        self.submit_event(self.signed::<event_spec::RealmSetDefaultStrand>(
-            scope,
-            json!({
-                "realm_id":realm_id,"strand_id":strand_id
-            }),
+        Ok((
+            strand_id,
+            QueuedSubmission::new(arkret_wire::AuthoritySubmitRequest::Event(
+                arkret_wire::EventAdmissionSubmission::new(strand),
+            ))?,
+        ))
+    }
+
+    #[inline(never)]
+    fn prepare_default_strand_selection(
+        &self,
+        realm_id: &RealmId,
+        strand_id: &StrandId,
+    ) -> Result<QueuedSubmission> {
+        Ok(QueuedSubmission::new(
+            arkret_wire::AuthoritySubmitRequest::Event(arkret_wire::EventAdmissionSubmission::new(
+                self.signed::<event_spec::RealmSetDefaultStrand>(
+                    ScopeRef::Realm {
+                        realm_id: realm_id.clone(),
+                    },
+                    json!({"realm_id":realm_id,"strand_id":strand_id}),
+                )?,
+            )),
         )?)
-        .await?;
-        Ok(json!({"realm_id":realm_id,"strand_id":strand_id,"genesis_event_id":genesis_id}))
     }
 
     pub async fn join_realm(&self, realm_id: RealmId) -> Result<Value> {
