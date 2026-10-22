@@ -26,16 +26,16 @@
         "covered_operation_count": 95
       },
       "cotest_e2e": {
-        "source_file_count": 120,
-        "source_sha256": "fc007b68f6d71e4e8baa47127d4da3617629c427755fbdd0376e2571b2a970d3",
+        "source_file_count": 121,
+        "source_sha256": "a97cc275a0ea70408cc5d7a81fa0a49465e97be2ed31c754ac796ffc61511170",
         "evidence_count": 44,
         "covered_operation_count": 20
       },
       "inkson_e2e": {
         "source_file_count": 34,
-        "source_sha256": "f7721364ddf95246c1e94f849c4826142685c157d3e4311a9b70bdbd89426f32",
-        "evidence_count": 24,
-        "covered_operation_count": 16
+        "source_sha256": "80f7e6f0fd0a3770a732d19b9f286922d5f16bc479746a4c6d5aa655de217a30",
+        "evidence_count": 27,
+        "covered_operation_count": 17
       }
     }
   },
@@ -2068,11 +2068,11 @@
         "product_flow": [
           {
             "file": "inkson/tests/e2e/mockArkretApi.ts",
-            "line": 2623,
+            "line": 2708,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              2623
+              2708
             ],
             "protected_oracle": false,
             "scope_sha256": "84bee0ed2609ad43c8eb5ad33a2fdb43eb6bc66f00da4505b0ae538de597fc0a",
@@ -2087,11 +2087,11 @@
           },
           {
             "file": "inkson/tests/e2e/mockArkretApi.ts",
-            "line": 4314,
+            "line": 4435,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              4314
+              4435
             ],
             "protected_oracle": false,
             "scope_sha256": "0d902215a82c1afa6ace39d1ae2490a854c2fce2ae31527d45267ed2971f6342",
@@ -2256,11 +2256,11 @@
         "product_flow": [
           {
             "file": "inkson/tests/e2e/mockArkretApi.ts",
-            "line": 2612,
+            "line": 2697,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              2612
+              2697
             ],
             "protected_oracle": false,
             "scope_sha256": "8cbc52d86fa5cc57040433f11f88448e7e2c7c7ff6c72b586aebc22d75ee50ce",
@@ -2275,11 +2275,11 @@
           },
           {
             "file": "inkson/tests/e2e/mockArkretApi.ts",
-            "line": 4309,
+            "line": 4430,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              4309
+              4430
             ],
             "protected_oracle": false,
             "scope_sha256": "289c7d2d3ee6c0b2e5b712e781db2e9157556c8c3a1f2ba3a28c52c8e1af93e1",
@@ -2444,11 +2444,11 @@
         "product_flow": [
           {
             "file": "inkson/tests/e2e/mockArkretApi.ts",
-            "line": 2580,
+            "line": 2665,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              2580
+              2665
             ],
             "protected_oracle": false,
             "scope_sha256": "1a3eff34f481bf829dc4f2f8f4830822574fa300a7e5b4971853ef473c7bb40c",
@@ -6580,11 +6580,11 @@
         "product_flow": [
           {
             "file": "inkson/tests/e2e/mockArkretApi.ts",
-            "line": 4304,
+            "line": 4425,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              4304
+              4425
             ],
             "protected_oracle": false,
             "scope_sha256": "dfa117ced15fa63b40362435ed19e8545f4cdf47b8ad9d9608fec60ed6850fbc",
@@ -11843,11 +11843,11 @@
         "product_flow": [
           {
             "file": "inkson/tests/e2e/mockArkretApi.ts",
-            "line": 4324,
+            "line": 4445,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              4324
+              4445
             ],
             "protected_oracle": false,
             "scope_sha256": "e791abbdd61c9daf8ef38b51a13620dae92b40ad2a374ccd5d3dbb524a3b60c2",
@@ -12649,11 +12649,11 @@
         "product_flow": [
           {
             "file": "inkson/tests/e2e/mockArkretApi.ts",
-            "line": 4319,
+            "line": 4440,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              4319
+              4440
             ],
             "protected_oracle": false,
             "scope_sha256": "de2f906f6a0ed8887a7ac00f9ef1e6a081552297e4681ccfcb5c0f3c3923ada5",
@@ -13405,11 +13405,11 @@
         "product_flow": [
           {
             "file": "inkson/tests/e2e/mockArkretApi.ts",
-            "line": 2198,
+            "line": 2283,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              2198
+              2283
             ],
             "protected_oracle": false,
             "scope_sha256": "7bc8e550bf2b5d638557096f7f54d8426af60f20d53a5e4bfaa690c96eaf9e9e",
@@ -13422,11 +13422,11 @@
           },
           {
             "file": "inkson/tests/e2e/mockArkretApi.ts",
-            "line": 4329,
+            "line": 4450,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              4329
+              4450
             ],
             "protected_oracle": false,
             "scope_sha256": "43e41ea2dcba1bf5ffc01365ea7b25bd575260e8ed6599c21bbd64595acbb106",
@@ -14083,11 +14083,11 @@
         "product_flow": [
           {
             "file": "inkson/tests/e2e/mockArkretApi.ts",
-            "line": 2323,
+            "line": 2408,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              2323
+              2408
             ],
             "protected_oracle": false,
             "scope_sha256": "d46189ef754bb1a106697d0966b6cd49a17a9f9fc8278c0d844448a2b3efa208",
@@ -21444,11 +21444,11 @@
         "product_flow": [
           {
             "file": "inkson/tests/e2e/mockArkretApi.ts",
-            "line": 257,
+            "line": 301,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              257
+              301
             ],
             "protected_oracle": false,
             "scope_sha256": "4b39f13a6a7d6f88a495149587b26326113fcdd4f7ed0806f5c9b28ead97eb86",
@@ -21461,11 +21461,11 @@
           },
           {
             "file": "inkson/tests/e2e/mockArkretApi.ts",
-            "line": 1181,
+            "line": 1261,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              1181
+              1261
             ],
             "protected_oracle": false,
             "scope_sha256": "7c1edd881c90220c5ec6cf29be16f46e907e823dd6305f49bcbc5f8ae5d35a8c",
@@ -21478,11 +21478,11 @@
           },
           {
             "file": "inkson/tests/e2e/mockArkretApi.ts",
-            "line": 2199,
+            "line": 2284,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              2199
+              2284
             ],
             "protected_oracle": false,
             "scope_sha256": "7c1edd881c90220c5ec6cf29be16f46e907e823dd6305f49bcbc5f8ae5d35a8c",
@@ -21495,11 +21495,11 @@
           },
           {
             "file": "inkson/tests/e2e/mockArkretApi.ts",
-            "line": 2707,
+            "line": 2792,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              2707
+              2792
             ],
             "protected_oracle": false,
             "scope_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
@@ -22014,11 +22014,11 @@
         "product_flow": [
           {
             "file": "inkson/tests/e2e/mockArkretApi.ts",
-            "line": 260,
+            "line": 326,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              260
+              326
             ],
             "protected_oracle": false,
             "scope_sha256": "902bf51e084b13319d27f93d4a53f8c35c68999ac591c49b8c6677c2f80c6329",
@@ -22596,11 +22596,11 @@
         "product_flow": [
           {
             "file": "inkson/tests/e2e/mockArkretApi.ts",
-            "line": 1180,
+            "line": 1260,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              1180
+              1260
             ],
             "protected_oracle": false,
             "scope_sha256": "b3fd7f441260b97a91b25096e04ab6416d325ac7ca75d2bd1cb30a9048e62af6",
@@ -22613,11 +22613,11 @@
           },
           {
             "file": "inkson/tests/e2e/mockArkretApi.ts",
-            "line": 1187,
+            "line": 1267,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              1187
+              1267
             ],
             "protected_oracle": false,
             "scope_sha256": "8e3f776dda16f75f311fa1a1c80dd8129b2d3fbf7ae7be6f71a4223cd85f9fca",
@@ -28349,11 +28349,11 @@
           },
           {
             "file": "cotest/e2e/helpers/direct-structure.ts",
-            "line": 100,
+            "line": 101,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              100
+              101
             ],
             "protected_oracle": false,
             "scope_sha256": "2b20b33f52b34ccb272cd134abbddeb67de7018545d8c8298d049d1de54531b9",
@@ -28366,11 +28366,11 @@
           },
           {
             "file": "cotest/e2e/helpers/direct-structure.ts",
-            "line": 119,
+            "line": 120,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              119
+              120
             ],
             "protected_oracle": false,
             "scope_sha256": "57abd0f292761d21ae088ae0cbd21a448c1b56999c8d5090aa7bf6feaa31a0d2",
@@ -28473,11 +28473,45 @@
         "product_flow": [
           {
             "file": "inkson/tests/e2e/mockArkretApi.ts",
-            "line": 1182,
+            "line": 305,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              1182
+              305
+            ],
+            "protected_oracle": false,
+            "scope_sha256": "85de118b723a1ccf7a5fa4fee203c39b6c737a834988a2080d4bba326091e11d",
+            "input_sha256": "85de118b723a1ccf7a5fa4fee203c39b6c737a834988a2080d4bba326091e11d",
+            "assertion_sha256": null,
+            "input_preview": [
+              "const operations = mockOperationErrorMapping.operations.filter(operation => operation.operation_id === \"ak.self.events.command.submit.v1\");"
+            ],
+            "assertion_preview": []
+          },
+          {
+            "file": "inkson/tests/e2e/mockArkretApi.ts",
+            "line": 529,
+            "scope": "<module_helper>",
+            "scope_kind": "module_helper",
+            "occurrence_lines": [
+              529
+            ],
+            "protected_oracle": false,
+            "scope_sha256": "1e519962e18d76904bb5a28ef476d6335a01d4d03ae7343b31241eb233a0ace6",
+            "input_sha256": "1e519962e18d76904bb5a28ef476d6335a01d4d03ae7343b31241eb233a0ace6",
+            "assertion_sha256": null,
+            "input_preview": [
+              "if (operation.operation_id === \"ak.self.events.command.submit.v1\""
+            ],
+            "assertion_preview": []
+          },
+          {
+            "file": "inkson/tests/e2e/mockArkretApi.ts",
+            "line": 1262,
+            "scope": "<module_helper>",
+            "scope_kind": "module_helper",
+            "occurrence_lines": [
+              1262
             ],
             "protected_oracle": false,
             "scope_sha256": "a49aa403833e455f456910b66763a0177dd1ba3c23a71ccea9018a091007b008",
@@ -29313,11 +29347,11 @@
         "product_flow": [
           {
             "file": "inkson/tests/e2e/mockArkretApi.ts",
-            "line": 2753,
+            "line": 2838,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              2753
+              2838
             ],
             "protected_oracle": false,
             "scope_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
@@ -36156,11 +36190,11 @@
         "product_flow": [
           {
             "file": "inkson/tests/e2e/mockArkretApi.ts",
-            "line": 222,
+            "line": 266,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              222
+              266
             ],
             "protected_oracle": false,
             "scope_sha256": "5f1de3bb3ad59eac29c567fa3a352b633d97f2ee9f0aed61a867c014dbb43b44",
@@ -36479,11 +36513,11 @@
         "product_flow": [
           {
             "file": "inkson/tests/e2e/mockArkretApi.ts",
-            "line": 221,
+            "line": 265,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              221
+              265
             ],
             "protected_oracle": false,
             "scope_sha256": "4584c0d8f0c7ef3b5a3227163c42de370ed03222fa1152be4ecde80db750f1a4",
@@ -37949,7 +37983,25 @@
         "protocol_kat": [],
         "storage_parity": [],
         "http_binding": [],
-        "product_flow": [],
+        "product_flow": [
+          {
+            "file": "inkson/tests/e2e/mockArkretApi.ts",
+            "line": 302,
+            "scope": "<module_helper>",
+            "scope_kind": "module_helper",
+            "occurrence_lines": [
+              302
+            ],
+            "protected_oracle": false,
+            "scope_sha256": "8a3db6f885931cffa61558d987464d49db4a84c2601c96f0a8516c8fb80d956a",
+            "input_sha256": "8a3db6f885931cffa61558d987464d49db4a84c2601c96f0a8516c8fb80d956a",
+            "assertion_sha256": null,
+            "input_preview": [
+              "const watchReadOperationId = \"ak.self.strand.watch.read.current.v1\";"
+            ],
+            "assertion_preview": []
+          }
+        ],
         "fault_recovery": [],
         "security_negative": []
       }
@@ -38604,11 +38656,11 @@
         "product_flow": [
           {
             "file": "inkson/tests/e2e/mockArkretApi.ts",
-            "line": 4294,
+            "line": 4415,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              4294
+              4415
             ],
             "protected_oracle": false,
             "scope_sha256": "bff91b0dd11264a51db00878778fe137a8879146a8ff78e3d6e2252bf7f48fe8",
@@ -38621,11 +38673,11 @@
           },
           {
             "file": "inkson/tests/e2e/mockArkretApi.ts",
-            "line": 4299,
+            "line": 4420,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              4299
+              4420
             ],
             "protected_oracle": false,
             "scope_sha256": "bff91b0dd11264a51db00878778fe137a8879146a8ff78e3d6e2252bf7f48fe8",

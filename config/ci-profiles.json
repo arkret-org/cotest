@@ -221,6 +221,16 @@
           "target": "registry_drift",
           "filter": "registry_drift_runs_against_station",
           "package": "cotest"
+        },
+        {
+          "target": "federation_idempotency_production",
+          "filter": "canonical_federation_cases_use_real_ingress_and_current_origin_binding",
+          "package": "cotest"
+        },
+        {
+          "target": "snapshot_handoff_live",
+          "filter": "three_station_stream_history_survives_unrelated_scope_loss_and_cold_restart",
+          "package": "cotest"
         }
       ],
       "excluded_quarantine_labels": [],
