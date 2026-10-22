@@ -9,7 +9,7 @@
     "test_layers": {
       "coland_unit": {
         "source_file_count": 473,
-        "source_sha256": "b6635502107c082ef44f7f795f8b8852887c3a9e48510f6a3a1d26c34dffdade",
+        "source_sha256": "e0778df5bfff4004f5d8fd59de37fb40b6c21bcc69c621e2854f33549b1e5876",
         "evidence_count": 838,
         "covered_operation_count": 165
       },
@@ -27,7 +27,7 @@
       },
       "cotest_e2e": {
         "source_file_count": 118,
-        "source_sha256": "4e03a2b56f4a40c58a7ca1dc16406dad1323b7f96ac49705cc4a200680d25d29",
+        "source_sha256": "3436d7d83dac3574c73ca8d5b0f2706c50a03a3a15285b29d6cf96caa08f8abf",
         "evidence_count": 44,
         "covered_operation_count": 20
       },
@@ -17210,11 +17210,11 @@
           },
           {
             "file": "coland/crates/storage-postgres/tests/support/applet_authoring.rs",
-            "line": 8400,
+            "line": 8406,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              8400
+              8406
             ],
             "protected_oracle": false,
             "scope_sha256": "a02e525f0d411c852e6476aefb2ccc67e094220ace1f5df806cee06e74ebb471",
@@ -26424,11 +26424,11 @@
           },
           {
             "file": "coland/crates/storage-postgres/tests/support/applet_authoring.rs",
-            "line": 8308,
+            "line": 8314,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              8308
+              8314
             ],
             "protected_oracle": false,
             "scope_sha256": "6846d16b9c007d1e13805ff9eb5535db7c0e5addae301bb565ea16433c1b80df",
@@ -26441,11 +26441,11 @@
           },
           {
             "file": "coland/crates/storage-postgres/tests/support/applet_authoring.rs",
-            "line": 8472,
+            "line": 8478,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              8472
+              8478
             ],
             "protected_oracle": false,
             "scope_sha256": "6846d16b9c007d1e13805ff9eb5535db7c0e5addae301bb565ea16433c1b80df",

@@ -19,11 +19,13 @@ try {
     # An actual child shell records its argv; no database or service is simulated.
     @'
 param(
-    [string]$JointDir, [switch]$StartCoauth, [int]$ServerCount,
+    [string]$JointDir, [switch]$StartCoauth, [switch]$StartMocks, [switch]$StartSavfox, [int]$ServerCount,
     [string]$RunProfile, [string]$PlaywrightProject, [string]$DnsSuffix,
     [string]$PostgresAdminUrl, [string]$PostgresToolsDirectory, [string]$PostgresDataDirectory
 )
 $null = New-Item -ItemType Directory -Path $JointDir -Force
+$PSBoundParameters["StartMocks"] = [bool]$StartMocks
+$PSBoundParameters["StartSavfox"] = [bool]$StartSavfox
 $PSBoundParameters | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $JointDir "arguments.json")
 '@ | Set-Content -LiteralPath (Join-Path $scratch "scripts/run-joint-e2e.ps1")
     $tools = Join-Path $scratch "Postgres Tools"
@@ -31,9 +33,13 @@ $PSBoundParameters | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $Joint
     $admin = "postgres://fixture@127.0.0.1:54329/fixture"
     $result = Invoke-JointSmokeGate -RepoRoot $scratch -RunDir $scratch `
         -RawLog (Join-Path $scratch "raw.log") -DnsSuffix localhost `
+        -StartMocks $true -StartSavfox $true `
         -PostgresAdminUrl $admin -PostgresToolsDirectory $tools -PostgresDataDirectory $data
     if ($result.exit_code -ne 0) { throw "Joint child did not complete" }
     $actual = Get-Content -Raw -LiteralPath (Join-Path $scratch "joint-smoke/arguments.json") | ConvertFrom-Json
+    if ($actual.StartMocks -ne $true -or $actual.StartSavfox -ne $true) {
+        throw "Selected smoke prerequisites were not forwarded to the actual child"
+    }
     foreach ($pair in @(
         @("DnsSuffix", "localhost"), @("PostgresAdminUrl", $admin),
         @("PostgresToolsDirectory", $tools), @("PostgresDataDirectory", $data),

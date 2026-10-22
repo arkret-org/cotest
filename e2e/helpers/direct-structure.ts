@@ -1,4 +1,4 @@
-import { expect, test, operationSelector } from "./arkret-test";
+import { expect, test, operationSelector, isDirectAdmissionOutcomeReason } from "./arkret-test";
 import type { Page, Response, Request, APIRequestContext } from "@playwright/test";
 import { assertAuthoritySubmitOutcome, authHeaders, canonicalJson, readCommitStreamHeadApi, scanRealmStreamApi, sdkEventDerivedIds, sha256CanonicalJson, signedEventEnvelope, wireErrCode } from "./coland-api";
 import { decodeEventIngressBody, ingressEvents, type IngressEvent } from "./event-ingress";
@@ -729,7 +729,7 @@ export async function rejectDirectStructureEvent(proof: DirectStructureProof, te
   });
   const body = await response.json() as Record<string, unknown>;
   const outcomeDiagnostic = structureOutcomeDiagnostic(body);
-  if (reason?.startsWith("direct_conversation_")) {
+  if (isDirectAdmissionOutcomeReason(reason)) {
     expect(response.status(), outcomeDiagnostic).toBe(200);
     expect(body.status, outcomeDiagnostic).toBe("rejected");
     expect(Object.keys(body).sort()).toEqual(["reason_code", "status"]);

@@ -5,7 +5,7 @@ import { requestContactArkret, respondContactArkret, resolvePrincipalLocator, to
 import { accountActorId, assertAuthoritySubmitOutcome, canonicalJson, createRealmApi, resolveDefaultStrandId, scanRealmStreamApi, signedEventEnvelope, submitSignedEventApi } from "../../helpers/coland-api";
 import { decodeEventIngressBody, ingressEvents } from "../../helpers/event-ingress";
 
-import { approvePairingLinkOnAuthorizedDevice, createDpopUserSession, openUserPage, selfPathHeadersForDpopSession } from "../../helpers/users";
+import { approvePairingLinkOnAuthorizedDevice, createDpopUserSession, openDpopUserPageFromSession, selfPathHeadersForDpopSession } from "../../helpers/users";
 import { serverLoginViaCoauth, submitCoauthPasswordCredentials } from "../../helpers/real-oidc-login";
 import { colandBaseUrl } from "../../helpers/env";
 
@@ -218,6 +218,12 @@ return async ({ jointUsers, request, browser }: { jointUsers: JointUsersFixture;
     await page.getByTestId("realm-sidebar-tab-direct").click();
     await page.locator(`[data-testid="direct-conversation-row"][data-peer=${JSON.stringify(canonicalJson(accountActorId(peer, peer === bobSession.user.id && remoteBob ? "server2" : "default")))}]`).click();
     phase(page === alice ? "alice_direct_open_finished" : "bob_direct_open_finished");
+  }
+  if (remoteBob) {
+    await Promise.all([
+      alicePage.completeRecoveryKeySetupIfPrompted(2_000).then(() => phase("alice_direct_recovery_finished")),
+      bobPage.completeRecoveryKeySetupIfPrompted(2_000).then(() => phase("bob_direct_recovery_finished")),
+    ]);
   }
   if (mode === "lost") {
     await lostAcceptance;
@@ -564,16 +570,10 @@ test("cross-station Direct Conversation preserves encrypted Chat and Topic state
   test.setTimeout(1_200_000);
   const session = await createDpopUserSession(request, "direct-cross-bob", { server: "server2" });
   expect(session, "the official two-Station runner must supply a real second Station").toBeDefined();
-  const remote = await openUserPage(browser, session!.user, {
-    server: "server2", grantJwt: session!.grantJwt, dpopSeedB64url: session!.dpopSeedB64url,
-    eventSigningSeedB64url: session!.eventSigningSeedB64url, grantId: session!.grantId,
-    accountId: session!.accountId, principalControlRealmId: session!.principalControlRealmId,
-    grantAudience: session!.grantAudience, recoveryKey: session!.recoveryKey,
-    recoveryMaterialEvidence: session!.recoveryMaterialEvidence,
-    onRecoveryKeyConfigured: key => { session!.recoveryKey = key; },
-  });
+  const remoteFlow = await openDpopUserPageFromSession(browser, session, { server: "server2" });
+  expect(remoteFlow, "the remote participant must complete canonical browser session initialization").toBeDefined();
+  const remote = remoteFlow!.page;
   try {
-    await remote.gotoHome();
     await directConversationCase("normal", true)({ browser, request, jointUsers: {
       ...jointUsers, bob: session!.user, bobSession: session!, bobToken: session!.grantJwt, bobPage: remote,
     } });

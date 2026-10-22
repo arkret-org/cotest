@@ -209,6 +209,7 @@ function Invoke-JointSmokeGate {
         [bool]$StartCoauth = $true,
         [ValidateRange(1, 32)][int]$ServerCount = 1,
         [bool]$StartMocks = $false,
+        [bool]$StartSavfox = $false,
         [string]$DnsSuffix = "local.host",
         [string]$PostgresAdminUrl,
         [string]$PostgresToolsDirectory,
@@ -239,6 +240,9 @@ function Invoke-JointSmokeGate {
     $args += @("-ServerCount", "$ServerCount")
     if ($StartMocks) {
         $args += "-StartMocks"
+    }
+    if ($StartSavfox) {
+        $args += "-StartSavfox"
     }
     if ($ColandRuntime -eq "docker") {
         $args += @("-ColandRuntime", "docker", "-ColandImage", $ColandImage)
@@ -2200,6 +2204,8 @@ if ($Profile -eq "joint") {
         -PostgresAdminUrl $PostgresAdminUrl `
         -PostgresToolsDirectory $PostgresToolsDirectory `
         -PostgresDataDirectory $PostgresDataDirectory `
+        -StartMocks $true `
+        -StartSavfox $true `
         -OutputName "joint" `
         -RunProfile "joint-smoke" `
         -PlaywrightProject "joint-inkson" `
@@ -2610,6 +2616,8 @@ if ($Profile -eq "release-gate" -and -not $SkipJointSmokeGate) {
         -PostgresAdminUrl $PostgresAdminUrl `
         -PostgresToolsDirectory $PostgresToolsDirectory `
         -PostgresDataDirectory $PostgresDataDirectory `
+        -StartMocks $true `
+        -StartSavfox $true `
         -ColandRuntime $Runtime `
         -ColandImage $SutImage `
         -BuildColandImage $false `

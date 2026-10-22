@@ -24,7 +24,18 @@ const operationRegistryPath = resolve(
 );
 const operationRegistry = JSON.parse(readFileSync(operationRegistryPath, "utf8")) as {
   operations: Array<{ operation_id: string; http?: string }>;
+  direct_conversation_admission_mappings: {
+    rules: Array<{ reason_code: string }>;
+  };
 };
+
+const directAdmissionOutcomeReasons = new Set(
+  operationRegistry.direct_conversation_admission_mappings.rules.map(rule => rule.reason_code),
+);
+
+export function isDirectAdmissionOutcomeReason(reason: string | undefined): boolean {
+  return reason !== undefined && directAdmissionOutcomeReasons.has(reason);
+}
 
 const registeredHttpOperations = operationRegistry.operations.flatMap(
   (operation): RegisteredHttpOperation[] => {

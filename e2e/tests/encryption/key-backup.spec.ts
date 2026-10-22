@@ -15,6 +15,7 @@ import {
   type APIRequestContext,
   type Browser,
   type Page,
+  type Request,
 } from "../../helpers/arkret-test";
 import {
   coauthBaseUrl,
@@ -1343,13 +1344,44 @@ async function updateCardDescription(
   });
   await page.getByTestId("card-detail-edit-description-button").click();
   await setCardDetailEditorValue(page, description);
-  await page.getByTestId("card-detail-save-button").click();
-  await expect(page.getByTestId("card-description-panel")).toContainText(
-    description,
-    {
-      timeout: 120_000,
-    },
-  );
+  const save = page.getByTestId("card-detail-save-button");
+  const panel = page.getByTestId("card-description-panel");
+  let ingressObserved = false;
+  let preAuthoringRetries = 0;
+  const captureRequest = (request: Request) => {
+    if (request.method() === "POST"
+      && new URL(request.url()).pathname === "/_arkret/self/events") {
+      ingressObserved = true;
+    }
+  };
+  page.on("request", captureRequest);
+  try {
+    await save.click();
+    const deadline = Date.now() + 120_000;
+    await expect.poll(async () => {
+      const text = await panel.textContent() ?? "";
+      if (text.includes(description)) return text;
+      const remaining = Math.max(1, deadline - Date.now());
+      const status = await page.getByTestId("card-detail-edit-status")
+        .textContent({ timeout: Math.min(1_000, remaining) }).catch(() => null);
+      // Retry the retained draft only for a known refusal before any ingress.
+      // Once a request exists, recovery belongs to the original signed Event.
+      if (!ingressObserved
+        && /^MLS send gate is not ready: account checkpoint changed (?:before|during) committed read$/.test(status?.trim() ?? "")
+        && Date.now() < deadline
+        && await save.isEnabled({ timeout: Math.min(1_000, remaining) }).catch(() => false)) {
+        preAuthoringRetries++;
+        await save.click({ timeout: Math.max(1, Math.min(3_000, deadline - Date.now())) });
+      }
+      return await panel.textContent() ?? "";
+    }, { timeout: 120_000, intervals: [100, 250, 500] }).toContain(description);
+  } finally {
+    page.off("request", captureRequest);
+    if (preAuthoringRetries) await test.info().attach("kanban-description-pre-authoring-retries", {
+      body: JSON.stringify({ pre_authoring_retries: preAuthoringRetries, ingress_observed: ingressObserved }),
+      contentType: "application/json",
+    });
+  }
 }
 
 async function setCardDetailEditorValue(
