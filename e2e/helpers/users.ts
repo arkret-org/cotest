@@ -127,6 +127,8 @@ type OpenUserOpts = {
   /// coauth-assigned grant id (DB row id), persisted by inkson with the grant
   /// so refresh/logout paths can identify the current grant chain.
   grantId?: string;
+  grantExpiresAt?: string;
+  grantedScope?: string[];
   /// Exact Station account that issued the injected grant.
   accountId?: { principal_id: string; station_id: string };
   /// Exact principal-control Realm created by the accepted PCR genesis unit.
@@ -149,6 +151,8 @@ export type DpopUserSession = {
   account: CoauthPasswordAccount;
   grantJwt: string;
   grantId: string;
+  grantExpiresAt: string;
+  grantedScope: string[];
   accountId: { principal_id: string; station_id: string };
   grantAudience: string;
   dpopSeedB64url: string;
@@ -477,7 +481,7 @@ export class JointUserPage {
     await this.dismissDeviceAuthorizationPrompt();
   }
 
-  async gotoTimelineRealm(realmId: string) {
+  async gotoTimelineRealm(realmId: string, opts: { completeRecoveryKeySetup?: boolean } = {}) {
     // Chat is a supported deep-link route but is no longer present in the
     // Realm context navigation (Board is the only top-level product surface).
     // Use a real same-origin document navigation so Dioxus initializes from
@@ -493,7 +497,7 @@ export class JointUserPage {
     await expect(this.page.getByTestId("chat-panel")).toBeVisible({
       timeout: 120_000,
     });
-    await this.dismissPassiveBlockingPrompts();
+    await this.dismissPassiveBlockingPrompts(opts.completeRecoveryKeySetup ?? true);
     await expect(this.page.getByTestId("message-list")).toBeVisible({
       timeout: 120_000,
     });
@@ -854,7 +858,12 @@ export class JointUserPage {
       "the account's confirmed Recovery Key is required for the MLS backup").toBe(true);
     const existingKey = prompt.getByTestId("mls-backup-existing-key");
     await expect(existingKey).toBeVisible({ timeout: 30_000 });
-    await existingKey.fill(recoveryKey);
+    // Dispatch the normal input event without exposing Recovery Key words
+    // in a locator.fill failure's reporter-visible call log.
+    await existingKey.evaluate((element, secret) => {
+      Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")!.set!.call(element, secret);
+      element.dispatchEvent(new Event("input", { bubbles: true }));
+    }, recoveryKey);
     const submit = prompt.getByTestId("mls-backup-submit");
     await expect(submit).toBeEnabled({ timeout: 30_000 });
     const accepted = this.page.waitForResponse((response) =>
@@ -1449,9 +1458,9 @@ export class JointUserPage {
     await closeUser(this.session);
   }
 
-  private async dismissPassiveBlockingPrompts(): Promise<boolean> {
+  private async dismissPassiveBlockingPrompts(completeRecoveryKeySetup = true): Promise<boolean> {
     return await this.dismissCreateRealmBlockingPrompts({
-      completeRecoveryKeySetup: true,
+      completeRecoveryKeySetup,
       allowPassivePromptDismissal: true,
     });
   }
@@ -1818,6 +1827,8 @@ export async function createDpopUserSessionForAccount(
     account,
     grantJwt: grant.grantJwt,
     grantId: grant.grantId,
+    grantExpiresAt: grant.expiresAt,
+    grantedScope: grant.scopes,
     accountId: grant.accountId,
     grantAudience: grant.audience,
     dpopSeedB64url: dpopDeviceSeedB64url(deviceKey),
@@ -2148,6 +2159,8 @@ export async function pairSiblingDeviceSession(
     const grant = await expectJsonOk<{
       session_grant?: string;
       session_grant_id?: string;
+      expires_at: string;
+      granted_scope: string[];
       account_id?: { principal_id?: string; station_id?: string };
       audience_id?: string;
       device_id?: string;
@@ -2211,6 +2224,8 @@ export async function pairSiblingDeviceSession(
       account: foundingSession.account,
       grantJwt: grantJwt!,
       grantId: grantId!,
+      grantExpiresAt: grant.expires_at,
+      grantedScope: grant.granted_scope,
       accountId,
       grantAudience: accountId.station_id,
       dpopSeedB64url: dpopDeviceSeedB64url(holderKey),
@@ -2422,6 +2437,8 @@ function canonicalSessionOptions(session: DpopUserSession): OpenUserOpts {
     dpopSeedB64url: session.dpopSeedB64url,
     eventSigningSeedB64url: session.eventSigningSeedB64url,
     grantId: session.grantId,
+    grantExpiresAt: session.grantExpiresAt,
+    grantedScope: session.grantedScope,
     accountId: session.accountId,
     principalControlRealmId: session.principalControlRealmId,
     grantAudience: session.grantAudience,
@@ -2544,6 +2561,8 @@ export async function openUser(
             ? { event_signing_seed_b64url: opts.eventSigningSeedB64url }
             : {}),
           grant_id: opts.grantId ?? "",
+          expires_at: opts.grantExpiresAt ?? canonicalSessionsByGrant.get(opts.grantJwt)?.grantExpiresAt,
+          granted_scope: opts.grantedScope ?? canonicalSessionsByGrant.get(opts.grantJwt)?.grantedScope,
           audience: opts.grantAudience ?? "",
         }
       : undefined;

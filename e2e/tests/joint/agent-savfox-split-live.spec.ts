@@ -1,3 +1,4 @@
+import { observeNativeSearch } from "../../helpers/native-search";
 import { openAndPairSecondController } from "../../helpers/paired-controller";
 import { agentTopicChats } from "../../helpers/direct-structure";
 import {
@@ -139,6 +140,9 @@ jointTest.describe("Agent Savfox split live @fully-implemented", () => {
       const agentSlug = `savfox-live-${Date.now().toString(36)}`;
       const lifecycleEvidenceOnly =
         process.env.COTEST_AGENT_LIFECYCLE_EVIDENCE_ONLY === "1";
+      if (process.env.COTEST_SEARCH_ACCEPTANCE === "1" && lifecycleEvidenceOnly) {
+        throw new Error("search privacy acceptance requires the complete Sidecar chain");
+      }
       const stationDescribe = await expectJsonOk(
         await request.get(`${colandBaseUrl()}/_arkret/describe`),
         "Station describe for approval notifications",
@@ -1110,10 +1114,11 @@ jointTest.describe("Agent Savfox split live @fully-implemented", () => {
           .filter({ hasText: privacyPrompt })
           .last();
         await expect(privacyRequest).toBeVisible({ timeout: 30_000 });
+        const privacyRequestId = await eventIdFromMessage(privacyRequest);
         const privacyFold = await sidecarFoldProjection(
           inkson,
           jointRealm.realmId,
-          await eventIdFromMessage(privacyRequest),
+          privacyRequestId,
         );
         expect(privacyFold.projection.sidecar_id).toBe(ensured.sidecar_id);
         expect(privacyFold.projection.addressed_agent_ids).toEqual([
@@ -1136,6 +1141,11 @@ jointTest.describe("Agent Savfox split live @fully-implemented", () => {
         });
         const privacyPong = privacyPongs.last();
         await expect(privacyPong).toBeVisible({ timeout: 180_000 });
+        const privacyReplyId = await eventIdFromMessage(
+          privacyCard.getByTestId("chat-message").filter({
+            has: inkson.getByTestId("content-block-text").filter({ hasText: /^pong(?:\r?\n|$)/ }),
+          }).last(),
+        );
         await testInfo.attach("sidecar-unaddressed-runtime-gate", {
           body: Buffer.from(
             JSON.stringify(
@@ -1301,6 +1311,12 @@ jointTest.describe("Agent Savfox split live @fully-implemented", () => {
         expect(JSON.stringify(publishSubmission)).not.toMatch(
           /sidecar_id|backing_circle|private_relation|exchange_id|private_history|context_locator/,
         );
+        if (process.env.COTEST_SEARCH_ACCEPTANCE === "1") {
+          await assertSidecarLocalSearchPrivacy(jointRealm, testInfo, sidecarPrompt,
+            ensured.sidecar_id, decodeURIComponent(new URL(sourceCardUrl).pathname).split("/task/")[1]!,
+            String(publishSubmission.event_id),
+            [evidence.request_event_id, evidence.response_event_id, privacyRequestId, privacyReplyId]);
+        }
       } finally {
         await unaddressedRuntimeContext?.close();
         await secondController?.close();
@@ -2455,6 +2471,11 @@ async function createSidecarSourceCard(
     }
   }
   await expect(page).toHaveURL(acceptedBoardRoute, { timeout: 1 });
+  // The accepted route can converge while the retry picker is open. Close
+  // that ordinary product popover before interacting with the Board below it.
+  const boardPicker = page.getByTestId("board-space-select-button");
+  if (await boardPicker.getAttribute("aria-expanded") === "true") await boardPicker.click();
+  await expect(page.locator(".board-popover-scrim")).toHaveCount(0);
   await page.getByTestId("new-column-input").fill("Work");
   await expect(page.getByTestId("new-column-input")).toHaveValue("Work");
   await page.getByTestId("add-column-button").click();
@@ -2865,4 +2886,67 @@ function trackDirectConversationBindings(page: Page): {
 function displayPairingCode(pairingCode: string): string {
   expect(pairingCode).toMatch(/^[0-9]{8}$/);
   return `${pairingCode.slice(0, 4)} ${pairingCode.slice(4)}`;
+}
+
+// Append to the existing complete real Savfox Sidecar scenario, under its
+// explicit search acceptance flag. Every private source was rendered there.
+async function assertSidecarLocalSearchPrivacy(
+  joint: JointRealmFixture,
+  testInfo: TestInfo,
+  privateBody: string,
+  sidecarId: string,
+  sourceStrandId: string,
+  sharedEventId: string,
+  privateEventIds: string[],
+): Promise<void> {
+  const observations: Array<Record<string, unknown>> = [];
+  for (const [label, user, session] of [
+    ["controller", joint.alicePage, joint.aliceSession],
+    ["ordinary-parent-member", joint.bobPage, joint.bobSession],
+  ] as const) {
+    await user.gotoTimelineRealm(joint.realmId);
+    await user.page.reload({ waitUntil: "domcontentloaded" });
+    await expect(user.page.getByTestId("client-shell")).toBeVisible({ timeout: 120_000 });
+    await user.completeRecoveryKeySetupIfPrompted(100);
+    await user.page.keyboard.press("Control+F");
+    const panel = user.page.getByTestId("global-search-panel");
+    const rows = panel.getByTestId("global-search-result-item");
+    for (const query of ["pong", privateBody, sourceStrandId]) {
+      await panel.getByTestId("global-search-input").fill(query);
+      await panel.getByTestId("global-search-submit").click();
+      if (query === "pong") {
+        await expect(panel.locator(`[data-testid="global-search-result-item"][data-event-id="${sharedEventId}"]`))
+          .toHaveCount(1);
+      } else if (query === privateBody) {
+        await expect(panel.getByTestId("global-search-results-no-results")).toBeVisible();
+        await expect(rows).toHaveCount(0);
+      } else {
+        await expect(panel.getByTestId("global-search-results-loading")).toHaveCount(0);
+      }
+      const visible = await rows.evaluateAll(elements => elements.map(element => ({
+        event_id: element.getAttribute("data-event-id"), text: element.textContent,
+      })));
+      for (const result of visible) {
+        expect(privateEventIds).not.toContain(result.event_id);
+        expect(JSON.stringify(result)).not.toContain(sidecarId);
+        expect(result.text).not.toContain(privateBody);
+      }
+      const native = await observeNativeSearch(session, joint.realmId, query,
+        testInfo.outputPath(`search-sidecar-${label}.json`));
+      if (query === "pong") {
+        expect(native.view.results.some(result => result.event_id === sharedEventId)).toBe(true);
+      } else if (query === privateBody) expect(native.view.results).toEqual([]);
+      for (const result of native.view.results) {
+        expect(privateEventIds).not.toContain(result.event_id);
+        expect(result.covering_commit.stream_ref.kind).not.toBe("sidecar");
+        expect(JSON.stringify(result)).not.toContain(sidecarId);
+        expect(result.content.body).not.toContain(privateBody);
+      }
+      observations.push({ label, query, visible, native });
+    }
+  }
+  await testInfo.attach("0540-real-Sidecar-local-search.json", {
+    body: JSON.stringify({ sharedEventId, privateEventIds, observations }, null, 2),
+    contentType: "application/json",
+  });
 }

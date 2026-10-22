@@ -7,7 +7,7 @@ This static inventory does not claim runtime verification; use an Arkret Joint P
 |---|---:|---:|---:|---:|
 | UJ-A - First login and multi-device recovery | 27 | 27 | 100.0% | 0 |
 | UJ-B - Workspace creation, invites, and archive visibility | 5 | 5 | 100.0% | 0 |
-| UJ-C - Daily messaging, edits, reactions, receipts, and mentions | 20 | 20 | 100.0% | 0 |
+| UJ-C - Daily messaging, edits, reactions, receipts, and mentions | 27 | 27 | 100.0% | 0 |
 | UJ-D - Encrypted realm lifecycle and cross-device decrypt | 5 | 5 | 100.0% | 0 |
 | UJ-E - Federation and cross-domain collaboration | 20 | 20 | 100.0% | 0 |
 | UJ-F - Kanban collaboration and concurrent work | 36 | 36 | 100.0% | 0 |
@@ -44,6 +44,12 @@ This static inventory does not claim runtime verification; use an Arkret Joint P
 |---|---|---:|---:|---:|
 | discovery/notifications | domain-fallback | 2 | 2 | 0 |
 | messaging/chat-advanced | domain-fallback | 11 | 11 | 0 |
+| messaging/current-index-capacity | domain-fallback | 1 | 1 | 0 |
+| messaging/local-search-authorization | domain-fallback | 1 | 1 | 0 |
+| messaging/local-search-circle | domain-fallback | 1 | 1 | 0 |
+| messaging/local-search-crypto | domain-fallback | 1 | 1 | 0 |
+| messaging/local-search-holder | domain-fallback | 2 | 2 | 0 |
+| messaging/local-search-lifecycle | domain-fallback | 1 | 1 | 0 |
 | messaging/timeline-history | domain-fallback | 1 | 1 | 0 |
 | messaging/triad-collaboration | domain-fallback | 6 | 6 | 0 |
 

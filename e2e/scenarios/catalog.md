@@ -34,7 +34,7 @@ Static source definitions are implementation inventory, never runtime verificati
 | identity | 9 | 10 | 22 | 22 | 100.0% | 0 | 22 |
 | joint | 4 | 13 | 26 | 26 | 100.0% | 0 | 2 |
 | kanban | 4 | 4 | 19 | 19 | 100.0% | 0 | 11 |
-| messaging | 5 | 3 | 18 | 18 | 100.0% | 0 | 10 |
+| messaging | 5 | 9 | 25 | 25 | 100.0% | 0 | 10 |
 | models | 3 | 1 | 5 | 5 | 100.0% | 0 | 1 |
 | spaces | 4 | 3 | 5 | 5 | 100.0% | 0 | 2 |
 | sync | 5 | 3 | 14 | 14 | 100.0% | 0 | 3 |
@@ -87,6 +87,12 @@ Static source definitions are implementation inventory, never runtime verificati
 | kanban/end-to-end | 9 | 9 | 100.0% | 0 | 6 | live-only | yes |  |
 | kanban/project-simulation | 7 | 7 | 100.0% | 0 | 2 | live-only | yes |  |
 | messaging/chat-advanced | 11 | 11 | 100.0% | 0 | 8 | live-only | yes |  |
+| messaging/current-index-capacity | 1 | 1 | 100.0% | 0 | 0 | live-only | no |  |
+| messaging/local-search-authorization | 1 | 1 | 100.0% | 0 | 0 | live-only | no |  |
+| messaging/local-search-circle | 1 | 1 | 100.0% | 0 | 0 | live-only | no |  |
+| messaging/local-search-crypto | 1 | 1 | 100.0% | 0 | 0 | live-only | no |  |
+| messaging/local-search-holder | 2 | 2 | 100.0% | 0 | 0 | live-only | no |  |
+| messaging/local-search-lifecycle | 1 | 1 | 100.0% | 0 | 0 | live-only | no |  |
 | messaging/timeline-history | 1 | 1 | 100.0% | 0 | 0 | live-only | yes |  |
 | messaging/triad-collaboration | 6 | 6 | 100.0% | 0 | 2 | live-only | yes |  |
 | models/core-object-invariants | 5 | 5 | 100.0% | 0 | 1 | live-only | yes |  |
@@ -126,6 +132,12 @@ Static source definitions are implementation inventory, never runtime verificati
   - `joint/encrypted-attachment-two-device`
   - `joint/multi-profile-same-server`
   - `joint/owned-agent-authority-live`
+  - `messaging/current-index-capacity`
+  - `messaging/local-search-authorization`
+  - `messaging/local-search-circle`
+  - `messaging/local-search-crypto`
+  - `messaging/local-search-holder`
+  - `messaging/local-search-lifecycle`
 - scenarios without spec file:
   - `authz/capability-chain`
   - `calls/webrtc`

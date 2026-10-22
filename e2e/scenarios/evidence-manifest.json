@@ -1198,6 +1198,170 @@
       ]
     },
     {
+      "scenario_key": "messaging/current-index-capacity",
+      "suite_kind": "joint-e2e",
+      "realism_level": "fixture-only",
+      "evidence_class": "fixture-only",
+      "real_services": [
+        "coauth",
+        "coland",
+        "inkson"
+      ],
+      "mocks": [],
+      "identity_establishment": [
+        "session_injection"
+      ],
+      "protocol_object_producers": [
+        "inkson_product_client"
+      ],
+      "declared_test_bypasses": [
+        "prepare_mls_device_false",
+        "session_injection"
+      ],
+      "claims_excluded": [
+        "mls_device_and_keypackage_readiness",
+        "registration_login_authorization"
+      ]
+    },
+    {
+      "scenario_key": "messaging/local-search-authorization",
+      "suite_kind": "joint-e2e",
+      "realism_level": "fixture-only",
+      "evidence_class": "fixture-only",
+      "real_services": [
+        "coauth",
+        "coland",
+        "inkson"
+      ],
+      "mocks": [],
+      "identity_establishment": [
+        "session_injection"
+      ],
+      "protocol_object_producers": [
+        "cotest_wire_oracle",
+        "inkson_product_client"
+      ],
+      "declared_test_bypasses": [
+        "prepare_mls_device_false",
+        "session_injection",
+        "test_only_signer_or_wire_builder"
+      ],
+      "claims_excluded": [
+        "mls_device_and_keypackage_readiness",
+        "product_protocol_object_generation",
+        "registration_login_authorization"
+      ]
+    },
+    {
+      "scenario_key": "messaging/local-search-circle",
+      "suite_kind": "joint-e2e",
+      "realism_level": "fixture-only",
+      "evidence_class": "fixture-only",
+      "real_services": [
+        "inkson"
+      ],
+      "mocks": [],
+      "identity_establishment": [
+        "session_injection"
+      ],
+      "protocol_object_producers": [
+        "cotest_wire_oracle",
+        "inkson_product_client"
+      ],
+      "declared_test_bypasses": [
+        "prepare_mls_device_false",
+        "session_injection",
+        "test_only_signer_or_wire_builder"
+      ],
+      "claims_excluded": [
+        "mls_device_and_keypackage_readiness",
+        "product_protocol_object_generation",
+        "registration_login_authorization"
+      ]
+    },
+    {
+      "scenario_key": "messaging/local-search-crypto",
+      "suite_kind": "joint-e2e",
+      "realism_level": "fixture-only",
+      "evidence_class": "fixture-only",
+      "real_services": [
+        "inkson"
+      ],
+      "mocks": [],
+      "identity_establishment": [
+        "session_injection"
+      ],
+      "protocol_object_producers": [
+        "inkson_product_client"
+      ],
+      "declared_test_bypasses": [
+        "create_realm_passive_prompt_dismissal",
+        "prepare_mls_device_false",
+        "session_injection"
+      ],
+      "claims_excluded": [
+        "mls_backup_unlock_and_missing_recovery_prompt_behavior",
+        "mls_device_and_keypackage_readiness",
+        "registration_login_authorization"
+      ]
+    },
+    {
+      "scenario_key": "messaging/local-search-holder",
+      "suite_kind": "joint-e2e",
+      "realism_level": "fixture-only",
+      "evidence_class": "fixture-only",
+      "real_services": [
+        "coauth",
+        "coland",
+        "inkson"
+      ],
+      "mocks": [],
+      "identity_establishment": [
+        "session_injection"
+      ],
+      "protocol_object_producers": [
+        "inkson_product_client",
+        "raw_http_fixture"
+      ],
+      "declared_test_bypasses": [
+        "raw_http_fixture_or_oracle",
+        "session_injection"
+      ],
+      "claims_excluded": [
+        "registration_login_authorization",
+        "ui_driven_business_flow_for_raw_http_steps"
+      ]
+    },
+    {
+      "scenario_key": "messaging/local-search-lifecycle",
+      "suite_kind": "joint-e2e",
+      "realism_level": "fixture-only",
+      "evidence_class": "fixture-only",
+      "real_services": [
+        "coauth",
+        "coland",
+        "inkson"
+      ],
+      "mocks": [],
+      "identity_establishment": [
+        "session_injection"
+      ],
+      "protocol_object_producers": [
+        "cotest_wire_oracle",
+        "inkson_product_client"
+      ],
+      "declared_test_bypasses": [
+        "prepare_mls_device_false",
+        "session_injection",
+        "test_only_signer_or_wire_builder"
+      ],
+      "claims_excluded": [
+        "mls_device_and_keypackage_readiness",
+        "product_protocol_object_generation",
+        "registration_login_authorization"
+      ]
+    },
+    {
       "scenario_key": "messaging/timeline-history",
       "suite_kind": "joint-e2e",
       "realism_level": "fixture-only",

@@ -2013,6 +2013,13 @@ pub fn mimi_request_consent_proof(input: Value) -> Result<Value> {
     serde_json::to_value(proof).context("serialize MIMI request-consent proof")
 }
 
+/// Construct the message payload with the same local SDK intent as native clients.
+pub fn local_message_payload(input: Value) -> Result<Value> {
+    let intent: arkret_models_collaboration::message_authoring::MessageAuthoringIntent =
+        serde_json::from_value(input)?;
+    Ok(serde_json::to_value(intent.payload())?)
+}
+
 /// The content-bound `event_id` of an envelope, derived the SDK way.
 ///
 /// `encoding.md` section 4.0 makes an Event id a function of the Event's own

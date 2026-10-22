@@ -763,7 +763,7 @@ async function deliverInvite(
 }
 
 // High-trust `consent_grant` pull: the invitee already issued the inviter an
-// active `invite`/`any` grant (§2), so §5.1 lets the outcome be disclosed.
+// current explicit `invite` permission (§2), so §5.1 lets the outcome be disclosed.
 export async function deliverInviteWithConsentGrant(
   request: APIRequestContext,
   args: {
@@ -771,7 +771,7 @@ export async function deliverInviteWithConsentGrant(
     inviterToken: string;
     realmId: string;
     inviteeId: string;
-    consentGrantRef: string;
+    consentGrantRef: Extract<IntroductionEvidence, { kind: "consent_grant" }>["consent_grant_ref"];
     originServer: ColandKey;
     recipientServer: ColandKey;
     idempotencyKey?: string;

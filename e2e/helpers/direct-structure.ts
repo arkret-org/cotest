@@ -387,13 +387,22 @@ export async function structureWrite(page: Page, action: string, kind: string, t
   const boundaryBefore = boundaryProof ? await Promise.all([structureCut(boundaryProof, boundaryRealm),
     ...(boundaryProof.peer ? [structureCut(boundaryProof, boundaryRealm, boundaryProof.peer)] : [])]) : undefined;
   const responses: Response[] = [];
+  let signedRequestEmitted = false;
+  let preAuthoringRetries = 0;
   let wake: (() => void) | undefined;
+  const captureRequest = (request: Request) => {
+    if (request.method() !== "POST" || new URL(request.url()).pathname !== "/_arkret/self/events") return;
+    if (ingressEvents(decodeEventIngressBody(request.postDataJSON())).some(event => event.kind === kind)) {
+      signedRequestEmitted = true;
+    }
+  };
   const capture = (response: Response) => {
     if (response.request().method() !== "POST" || new URL(response.url()).pathname !== "/_arkret/self/events") return;
     if (!ingressEvents(decodeEventIngressBody(response.request().postDataJSON())).some(event => event.kind === kind)) return;
     responses.push(response);
     wake?.();
   };
+  page.on("request", captureRequest);
   page.on("response", capture);
   const deadline = Date.now() + 90_000;
   let frozen: IngressEvent | undefined;
@@ -402,12 +411,27 @@ export async function structureWrite(page: Page, action: string, kind: string, t
     while (Date.now() < deadline) {
       if (!responses.length) {
         await new Promise<void>(resolve => {
-          const timer = setTimeout(() => { wake = undefined; resolve(); }, Math.max(0, deadline - Date.now()));
+          const timer = setTimeout(() => { wake = undefined; resolve(); }, Math.max(0, Math.min(100, deadline - Date.now())));
           wake = () => { clearTimeout(timer); wake = undefined; resolve(); };
         });
       }
       const accepted = responses.shift();
-      if (!accepted) break;
+      if (!accepted) {
+        // A concurrent committed read may refuse before an Event is frozen.
+        // Retry the retained editor draft only while no signed request exists;
+        // an emitted request still follows the exact original Event checks.
+        const status = await panel.getByTestId("direct-structure-status").textContent();
+        if (!signedRequestEmitted
+          && /^MLS send gate is not ready: account checkpoint changed (?:before|during) committed read$/.test(status?.trim() ?? "")
+          && await panel.getByRole("button", { name: "Save", exact: true }).isEnabled()
+          && Date.now() < deadline) {
+          preAuthoringRetries++;
+          await panel.getByRole("button", { name: "Save", exact: true }).click({
+            timeout: Math.max(1, Math.min(3_000, deadline - Date.now())),
+          });
+        }
+        continue;
+      }
       const event = ingressEvents(decodeEventIngressBody(accepted.request().postDataJSON())).find(event => event.kind === kind)!;
       if (!frozen) frozen = event;
       expect(isDeepStrictEqual(event, frozen), "retry must preserve the complete frozen signed Event").toBe(true);
@@ -433,7 +457,8 @@ export async function structureWrite(page: Page, action: string, kind: string, t
       action,
       expected_kind: kind,
       matching_responses_remaining: responses.length,
-      signed_event_observed: frozen !== undefined,
+      signed_event_observed: signedRequestEmitted,
+      pre_authoring_retries: preAuthoringRetries,
       panel_visible: await panel.isVisible().catch(() => false),
       status: await panel.getByTestId("direct-structure-status").textContent().catch(() => null),
       save_enabled: await panel.getByRole("button", { name: "Save", exact: true }).isEnabled().catch(() => false),
@@ -444,8 +469,13 @@ export async function structureWrite(page: Page, action: string, kind: string, t
     console.warn("Direct structure timeout diagnostic", JSON.stringify(diagnostic));
     throw new Error("structure write did not commit within the original 90 second budget");
   } finally {
+    page.off("request", captureRequest);
     page.off("response", capture);
     wake?.();
+    if (preAuthoringRetries) await test.info().attach("direct-structure-pre-authoring-retries", {
+      body: JSON.stringify({ action, expected_kind: kind, pre_authoring_retries: preAuthoringRetries,
+        signed_request_emitted: signedRequestEmitted }), contentType: "application/json",
+    });
   }
 }
 

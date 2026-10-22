@@ -282,7 +282,7 @@ pub(super) async fn run(
         "accepted retry rolled back the other scope"
     );
     let mut other_correlation = recovered.clone();
-    other_correlation.consent_id = second.consent_id;
+    other_correlation.consent_id = second.consent_id.clone();
     other_correlation.signature.payload_digest = other_correlation.payload_digest()?;
     other_correlation.signature.jws = sign(
         &other_correlation
@@ -363,6 +363,121 @@ pub(super) async fn run(
         revoke_expired_voice(server, holder, &requester, database, &sdk, &request)
     })
     .await?;
+
+    // A second correlation signs a new complete target while preserving the
+    // unrelated permission and the first correlation's immutable retry unit.
+    let current =
+        crate::scenarios::consent_call_context::read_peer_current(&holder.client, &peer).await?;
+    let mut permissions = current
+        .current_permissions()
+        .context("complete peer pre-state")?
+        .to_vec();
+    permissions.retain(|item| item.consent_scope != arkret_wire::ConsentScope::VoiceCall);
+    let preserved = permissions.clone();
+    ensure!(
+        preserved
+            .iter()
+            .any(|item| item.consent_scope == arkret_wire::ConsentScope::Presence)
+    );
+    permissions.push(
+        arkret_models_collaboration::events_payloads::consent::ConsentPermission {
+            consent_scope: arkret_wire::ConsentScope::VoiceCall,
+            not_before: None,
+            expires_at: Some(
+                chrono::DateTime::parse_from_rfc3339("2020-01-01T00:00:00.000Z")?
+                    .with_timezone(&chrono::Utc),
+            ),
+            constraints: Some(vec![]),
+            evidence_ref: None,
+            reason: Some("second explicit correlation".into()),
+        },
+    );
+    permissions.sort_by_key(|item| item.consent_scope);
+    let later_event = holder.client.author_event(pcr.as_str(), EventKind::ConsentReplace.as_str(), json!({
+        "peer":peer, "expected_current":current.expected_current(), "permissions":permissions
+    })).await?;
+    let mut later = update.clone();
+    later.consent_id = second.consent_id.clone();
+    later.consent_event = EventAdmissionSubmission::new(later_event.clone());
+    later.signature = proof(server, &holder.method)?;
+    later.signature.payload_digest = later.payload_digest()?;
+    later.signature.jws = sign(
+        &later.unsigned_signature_binding_bytes(&later.signature.unsigned())?,
+        &holder.key,
+    )?;
+    ensure!(sdk.mimi_update_consent(&later).await?.event_ref == later_event.event_id);
+    let before_replay = counts(database, pcr.as_str()).await?;
+    let replay = sdk.mimi_update_consent(&update).await?;
+    ensure!(
+        replay.event_ref == accepted.event_ref
+            && replay.updated_at == accepted.updated_at
+            && counts(database, pcr.as_str()).await? == before_replay,
+        "original correlation replay changed a later peer revision"
+    );
+    let current =
+        crate::scenarios::consent_call_context::read_peer_current(&holder.client, &peer).await?;
+    ensure!(
+        current
+            .current_permissions()
+            .context("second correlation current")?
+            == permissions.as_slice()
+    );
+    let mut relabeled = update.clone();
+    relabeled.consent_id = second.consent_id.clone();
+    relabeled.signature = proof(server, &holder.method)?;
+    relabeled.signature.payload_digest = relabeled.payload_digest()?;
+    relabeled.signature.jws = sign(
+        &relabeled.unsigned_signature_binding_bytes(&relabeled.signature.unsigned())?,
+        &holder.key,
+    )?;
+    let failure = sdk.mimi_update_consent(&relabeled).await.unwrap_err();
+    ensure!(
+        matches!(failure, arkret_http_client::Error::Api { ref error, .. } if error.code() == "not_found"),
+        "accepted Event was relabeled onto another correlation: {failure:?}"
+    );
+    ensure!(counts(database, pcr.as_str()).await? == before_replay);
+
+    // Each new decision gets its own explicit request correlation. An unknown
+    // or accepted correlation cannot be relabeled to another Event or decision.
+    let mut removal_request = request.clone();
+    removal_request.proofs = vec![proof(server, &requester.method)?];
+    removal_request.proofs[0].payload_digest = removal_request.payload_digest()?;
+    removal_request.proofs[0].jws = sign(
+        &removal_request.unsigned_proof_binding_bytes(&removal_request.proofs[0].unsigned())?,
+        &requester.key,
+    )?;
+    let removal_correlation = sdk.mimi_request_consent(&removal_request).await?;
+    ensure!(removal_correlation.consent_id != second.consent_id);
+    let remove = holder
+        .client
+        .author_event(
+            pcr.as_str(),
+            EventKind::ConsentReplace.as_str(),
+            json!({
+                "peer":peer, "expected_current":current.expected_current(), "permissions":preserved
+            }),
+        )
+        .await?;
+    let mut deny = later;
+    deny.consent_id = removal_correlation.consent_id;
+    deny.decision = MimiConsentDecision::Deny;
+    deny.consent_event = EventAdmissionSubmission::new(remove.clone());
+    deny.signature = proof(server, &holder.method)?;
+    deny.signature.payload_digest = deny.payload_digest()?;
+    deny.signature.jws = sign(
+        &deny.unsigned_signature_binding_bytes(&deny.signature.unsigned())?,
+        &holder.key,
+    )?;
+    ensure!(sdk.mimi_update_consent(&deny).await?.event_ref == remove.event_id);
+    let current =
+        crate::scenarios::consent_call_context::read_peer_current(&holder.client, &peer).await?;
+    ensure!(
+        current
+            .current_permissions()
+            .context("remaining accepted revision")?
+            == preserved.as_slice(),
+        "removing an expired correlated permission changed an unrelated entry"
+    );
 
     let room = arkret_wire::MimiRoomUri::new(format!("{provider}/rooms/{strand}"))
         .map_err(anyhow::Error::msg)?;

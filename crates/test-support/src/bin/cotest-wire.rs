@@ -17,6 +17,7 @@ fn main() -> Result<()> {
         "sha256-canonical-json" => wire::sha256_canonical_json(input)?,
         "did-document-digest" => wire::did_document_digest(input)?,
         "event-envelope-proof" => wire::event_proof(input, EventDigestMode::RawCanonicalJson)?,
+        "local-message-payload" => wire::local_message_payload(input)?,
         "event-derived-id" => wire::event_derived_id(input)?,
         "historical-human-signer-query" => wire::historical_human_signer_query(input)?,
         "historical-human-signer-fact" => wire::historical_human_signer_fact(input)?,

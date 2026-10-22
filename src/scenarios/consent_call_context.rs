@@ -21,6 +21,130 @@ use super::mls_lifecycle_live::{
 };
 use crate::harness::TestServerGroup;
 
+/// Read the complete exact peer cut through the authenticated Human holder path.
+/// The signature, nonce, PCR and fixed native authority are verified before edit.
+pub async fn read_peer_current(
+    holder: &crate::harness::TestActorClient,
+    peer: &arkret_models_collaboration::events_payloads::consent::ConsentPeer,
+) -> Result<arkret_models_collaboration::consent_operations::ConsentCurrentReadOutcome> {
+    use arkret_models_collaboration::consent_operations::ConsentCurrentReadRequestBody;
+    let principal = holder
+        .principal
+        .as_ref()
+        .context("accepted holder identity")?;
+    let account =
+        arkret_wire::AccountId::new(principal.core_id.clone(), holder.service_id().parse()?);
+    let mut nonce = [0u8; 32];
+    getrandom::fill(&mut nonce).map_err(anyhow::Error::msg)?;
+    let request = ConsentCurrentReadRequestBody {
+        holder_account_id: account.clone(),
+        peer: peer.clone(),
+        audience_actor_id: arkret_wire::ActorId::service(account.station_id.clone()),
+        nonce: arkret_canonical::base64url_encode(nonce),
+    };
+    let http = holder.sdk();
+    let outcome = http.consent_current_read(&request).await?;
+    outcome.validate_for_request(&request, 0, chrono::Utc::now())?;
+    ensure!(
+        outcome.realm_id == principal.pcr_realm_id,
+        "complete Consent cut belongs to another PCR"
+    );
+    let did = arkret_identity::verification_method_did(outcome.proof.verification_method.as_str())?;
+    let service = arkret_wire::project_did_to_core_id(&did)?;
+    ensure!(
+        service == account.station_id,
+        "Human Consent authority differs from its owning Station"
+    );
+    let resolution = http.open_service_resolution(&service).await?;
+    let document = arkret_identity::authenticated_service_document_at(
+        &resolution,
+        &service,
+        outcome.evaluated_at,
+    )?;
+    arkret_identity::validate_verification_method_relationship(
+        &document,
+        &outcome.proof.verification_method,
+        &did,
+        arkret_identity::DidVerificationRelationship::AssertionMethod,
+    )?;
+    let key = arkret_identity::resolve_verification_method_key_from_document(
+        &document,
+        outcome.proof.verification_method.as_str(),
+    )?
+    .public_key;
+    arkret_signatures::proof::Ed25519DetachedJwsVerifier::new().verify_detached_jws(
+        &outcome.proof.jws,
+        &outcome.signature_input()?,
+        &key,
+    )?;
+    Ok(outcome)
+}
+
+pub async fn replace_peer_permissions(
+    holder: &crate::harness::TestActorClient,
+    peer: arkret_models_collaboration::events_payloads::consent::ConsentPeer,
+    current: &arkret_models_collaboration::consent_operations::ConsentCurrentReadOutcome,
+    permissions: Vec<arkret_models_collaboration::events_payloads::consent::ConsentPermission>,
+) -> Result<(
+    arkret_models_collaboration::consent_operations::ConsentView,
+    arkret_wire::Event,
+)> {
+    use arkret_models_collaboration::consent_operations::{ConsentReplaceRequestBody, ConsentView};
+    use arkret_models_collaboration::events_payloads::consent::ConsentReplacePayload;
+    let principal = holder.principal.as_ref().context("accepted holder PCR")?;
+    ensure!(
+        current.realm_id == principal.pcr_realm_id,
+        "replacement read belongs to another holder"
+    );
+    if let arkret_models_collaboration::consent_operations::ConsentCurrentState::Present {
+        result: row,
+    } = &current.current
+    {
+        ensure!(
+            &row.selector.peer_id == peer.actor_id(),
+            "replacement read belongs to another exact peer"
+        );
+    }
+    let payload = ConsentReplacePayload {
+        peer: peer.clone(),
+        expected_current: current.expected_current(),
+        permissions,
+    };
+    payload.validate()?;
+    let event = holder
+        .author_event(
+            principal.pcr_realm_id.as_str(),
+            EventKind::ConsentReplace.as_str(),
+            serde_json::to_value(&payload)?,
+        )
+        .await?;
+    let body = ConsentReplaceRequestBody {
+        consent_event: arkret_wire::EventAdmissionSubmission::new(event.clone()),
+    };
+    body.validate()?;
+    let view: ConsentView = serde_json::from_value(
+        crate::harness::expect_json(
+            holder
+                .post("/_arkret/self/consent/results/replace")
+                .json(&body),
+            reqwest::StatusCode::OK,
+        )
+        .await?,
+    )?;
+    view.validate()?;
+    ensure!(
+        view.peer == peer
+            && view.permission_scopes
+                == payload
+                    .permissions
+                    .iter()
+                    .map(|item| item.consent_scope)
+                    .collect::<Vec<_>>(),
+        "replacement summary differs from its exact signed target"
+    );
+    Ok((view, event))
+}
+
 pub struct ConsentCallContext {
     pub stations: TestServerGroup,
     pub issuer: MockCoauthIntrospectionServer,
