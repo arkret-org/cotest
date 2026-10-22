@@ -147,12 +147,14 @@
         "raw_http_fixture"
       ],
       "declared_test_bypasses": [
+        "create_realm_passive_prompt_dismissal",
         "prepare_mls_device_false",
         "raw_http_fixture_or_oracle",
         "session_injection",
         "test_only_signer_or_wire_builder"
       ],
       "claims_excluded": [
+        "mls_backup_unlock_and_missing_recovery_prompt_behavior",
         "mls_device_and_keypackage_readiness",
         "product_protocol_object_generation",
         "registration_login_authorization",
