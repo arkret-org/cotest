@@ -1,12 +1,10 @@
 //! coland's `did:webvh` provider discovery when an *external* provider is
 //! configured.
 //!
-//! Nothing here starts an external service: coland is spawned pointing at an
-//! unreachable provider URL, and the assertions are entirely about what
-//! coland's own `/_arkret/root/identity/describe` publishes in the
-//! `x_coland_identity_registry` extension — default provider id, provider
-//! entry, resolver allow-list, and trust roots (including its local identity
-//! store's webvh proof-validation policy).
+//! Coland is spawned with an unreachable external provider URL. The assertions
+//! validate its current typed IdentityRegistry ServiceDescribe and the published
+//! method allow-list and trust roots. A provider summary is not DID method
+//! evidence, and this discovery test does not claim external resolution.
 //!
 //! The provider URL below is a placeholder that is never dialled.
 
@@ -37,26 +35,27 @@ pub async fn external_webvh_provider_is_discoverable() -> Result<()> {
         StatusCode::OK,
     )
     .await?;
-    let identity = &describe["x_coland_identity_registry"];
-    let did_webvh = &identity["did_webvh"];
-    assert_eq!(did_webvh["enabled"], true);
-    assert_eq!(did_webvh["method"], "did:webvh");
-    // `did-method-adapter-registry.json` names the method version
-    // `adapter_version`; it is not a `ak.profile.*` id.
+    let typed: arkret_models_discovery::ServiceDescribe = serde_json::from_value(describe.clone())?;
+    typed.validate()?;
     assert_eq!(
-        did_webvh["adapter_version"],
-        arkret_models_identity::did_document::DID_WEBVH_V1_METHOD
+        typed.service_kind,
+        arkret_wire::ServiceKind::IdentityRegistry
     );
-    assert_eq!(did_webvh["default_provider_id"], "external.webvh");
-    let providers = did_webvh["providers"]
-        .as_array()
-        .expect("did_webvh providers");
-    let external = providers
-        .iter()
-        .find(|provider| provider["id"] == "external.webvh")
-        .expect("external did:webvh provider");
-    assert_eq!(external["kind"], "external");
-    assert_eq!(external["base_url"], EXTERNAL_PROVIDER_URL);
+    assert_eq!(
+        typed.supported_profiles,
+        vec![arkret_wire::ProfileId::IDENTITY_REGISTRY_V1.to_owned()]
+    );
+    assert!(typed.supported_operation_bundles.iter().any(|bundle| {
+        bundle == arkret_wire::OperationBundleDescriptor::IDENTITY_REGISTRY_DESCRIBE_V1
+    }));
+    let identity = &describe["x_coland_identity_registry"];
+    assert!(
+        identity["supported_did_methods"]
+            .as_array()
+            .expect("advertised DID methods")
+            .iter()
+            .any(|method| method.as_str() == Some("did:webvh"))
+    );
     assert!(
         identity["resolver_allow_methods"]
             .as_array()
