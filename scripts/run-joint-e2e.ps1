@@ -1894,8 +1894,8 @@ function Resolve-FlagonBinary {
     if ($ExplicitPath) { $candidates += $ExplicitPath }
     if ($env:FLAGON_BIN) { $candidates += $env:FLAGON_BIN }
     $targetDirectory = Get-CargoTargetDirectory -RepositoryRoot (Join-Path $WorkspaceRoot "flagon")
-    $candidates += (Join-Path $targetDirectory ("debug/" + (Get-NativeExecutableName -Name "flagon")))
-    $candidates += (Join-Path $targetDirectory ("release/" + (Get-NativeExecutableName -Name "flagon")))
+    $candidates += (Join-Path $targetDirectory ("debug/" + (Get-NativeExecutableName -Name "server")))
+    $candidates += (Join-Path $targetDirectory ("release/" + (Get-NativeExecutableName -Name "server")))
 
     foreach ($candidate in $candidates) {
         if ($candidate -and (Test-Path $candidate)) {
