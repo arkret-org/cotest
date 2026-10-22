@@ -1608,10 +1608,40 @@ function Write-JointCaddyConfig {
         $didRoot = $route.PSObject.Properties['DidRoot']
         if ($null -ne $didRoot) {
             $publicRoot = ([string]$didRoot.Value).Replace('\', '/').Replace('"', '\"')
+            # This run owns both the HTTPS Directory and its public identity
+            # files. Browser access is limited to this run's exact UI origins
+            # and public read paths; admin and other backends gain no CORS.
+            $corsProperty = $route.PSObject.Properties['CorsOrigins']
+            $corsOrigins = @(if ($null -ne $corsProperty) {
+                @($corsProperty.Value) | ForEach-Object {
+                    $originUri = [Uri]$_
+                    if ($originUri.Scheme -notin @('http', 'https') -or $originUri.UserInfo) {
+                        throw 'Directory browser origin must be credential-free HTTP(S)'
+                    }
+                    $originUri.GetLeftPart([UriPartial]::Authority)
+                } | Select-Object -Unique
+            })
+            if ($corsOrigins.Count -gt 0) {
+                $lines += "`t@directoryBrowser {"
+                $lines += "`t`tpath /_arkret/find/directory/describe /_arkret/find/directory/search-realms /_arkret/find/directory/resolve-realm /webvh/flagon/did.json /webvh/flagon/did.jsonl /webvh/flagon/did-witness.json"
+                $lines += "`t`tmethod GET POST OPTIONS"
+                foreach ($origin in $corsOrigins) {
+                    $lines += "`t`theader Origin `"$origin`""
+                }
+                $lines += "`t}"
+                $lines += "`theader @directoryBrowser {"
+                $lines += "`t`tAccess-Control-Allow-Origin `"{http.request.header.Origin}`""
+                $lines += "`t`t+Vary Origin"
+                $lines += "`t`tAccess-Control-Allow-Methods `"GET, POST, OPTIONS`""
+                $lines += "`t`tAccess-Control-Allow-Headers `"Arkret-Operation, Content-Type`""
+                $lines += "`t}"
+            }
             # Only the exact public SDK originals are served; there is no
             # directory listing or resolver override, and no private key file.
-            $lines += "`thandle /webvh/flagon/did.json /webvh/flagon/did.jsonl {"
+            $lines += "`t@directoryIdentity path /webvh/flagon/did.json /webvh/flagon/did.jsonl"
+            $lines += "`thandle @directoryIdentity {"
             $lines += "`t`troot * `"$publicRoot`""
+            $lines += "`t`theader Content-Type application/json"
             $lines += "`t`tfile_server"
             $lines += "`t}"
             $lines += "`thandle {"
@@ -4197,7 +4227,7 @@ try {
 
         $jointTlsRoutes = @()
         if ($flagonPublicHost) {
-            $jointTlsRoutes += [pscustomobject]@{ Host = $flagonPublicHost; BackendPort = $flagonPort; DidRoot = $flagonIdentityDirectory }
+            $jointTlsRoutes += [pscustomobject]@{ Host = $flagonPublicHost; BackendPort = $flagonPort; DidRoot = $flagonIdentityDirectory; CorsOrigins = @($allInksonBaseUrls) }
         }
         if ($mockAppletRegistryPublicHost) {
             $jointTlsRoutes += [pscustomobject]@{ Host = $mockAppletRegistryPublicHost; BackendPort = $mockAppletRegistryPort }

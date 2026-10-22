@@ -26,7 +26,7 @@ try {
 $config = Join-Path $temporary 'Caddyfile'
 Write-JointCaddyConfig -Path $config -TlsPort 44321 -CertificatePath 'D:/fixture/public.crt' -KeyPath 'D:/fixture/private.key' -Routes @([pscustomobject]@{ Host = 'flagon.local.host'; BackendPort = 44322; DidRoot = 'D:/fixture/public identity' })
 $content = Get-Content -LiteralPath $config -Raw
-foreach ($expected in @('https://flagon.local.host:44321 {', 'handle /webvh/flagon/did.json /webvh/flagon/did.jsonl {', 'root * "D:/fixture/public identity"', 'reverse_proxy 127.0.0.1:44322')) {
+foreach ($expected in @('https://flagon.local.host:44321 {', '@directoryIdentity path /webvh/flagon/did.json /webvh/flagon/did.jsonl', 'handle @directoryIdentity {', 'root * "D:/fixture/public identity"', 'reverse_proxy 127.0.0.1:44322')) {
     if (-not $content.Contains($expected)) { throw "Missing exact Directory route: $expected" }
 }
 if ($content.Contains('handle /webvh/*') -or $content.Contains('file_server browse')) { throw 'Directory identity route must not expose a broader filesystem view' }
