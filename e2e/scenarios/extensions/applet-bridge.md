@@ -28,6 +28,8 @@ mock 只编排 HTTP 与耐久重试。身份、签名、closed carrier 和摘要
 5. 管理员明确 service_id 和 scope，读取撤销预览，签原 capability／membership 效果，再按计划摘要提交。返回的是真实 Commit 引用或本地 fence 引用，不把主体 DID 当作撤销结果。历史创建保留，新的业务由当前 fence 拒绝。
 6. 验证同 key／body 重试恢复原结果、篡改 package／proof 拒绝、缺失／伪造／过期 HTTP 签名拒绝，以及撤销与 transaction 竞争的唯一接纳或零写入。
 
+7. Inkson 配置入口遇到 Applet 不提供配置端点时，真实治理站拒绝请求。浏览器重载仍保留原名称、请求编号、Service 和 scope；恢复与重试沿用原意图，不产生新请求或把未知结果当成功。配置成功和候选审批链路另由真实 Applet runtime／治理站 HTTPS 场景验证。
+
 ## 运行
 
 ```powershell
