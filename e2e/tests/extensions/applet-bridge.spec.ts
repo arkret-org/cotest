@@ -517,6 +517,61 @@ async function rejectServiceProxyMembership(args: {
 }
 
 test.describe("applet bridge", () => {
+  test("configuration preserves its exact intent across a browser reload when the Applet is unavailable", async ({ browser, request }) => {
+    test.setTimeout(300_000);
+    const stamp = typedId("operation").split(":").at(-1)!;
+    const flow = await openDpopUserPage(browser, request, `applet-config-${stamp}`, { prepareMlsDevice: false });
+    expect(flow, "the joint stack must provide an authenticated browser").toBeDefined();
+    const { page: client, user } = flow!;
+    try {
+      const token = await issueUserSession(request, user);
+      const realmId = await createAppletInstallRealm(request, token, { title: `configuration ${stamp}`, discoverability: "listed", history_access: "since_join" });
+      // This package deliberately has no configuration endpoint. A real Station
+      // rejection must leave the browser's original intent recoverable.
+      const signed = await signPackage(request, requireMockAppletRegistry(), { package_id: `package:configuration:${stamp}`, namespace: `configuration.${stamp}`, capabilities: ["ak.applet.bot.provision"] });
+      const installed = await rawInstallApplet(request, token, signed, realmId, `configuration-${stamp}`, undefined, { exerciseAuthoringKats: false });
+      expect(installed.response.status(), await installed.response.text()).toBe(201);
+      const before = await queryRealmEventsApi(request, token, realmId);
+      await client.gotoTimelineRealm(realmId, { completeRecoveryKeySetup: false });
+      await client.gotoAppPanel("/applets", "applets-panel");
+      const row = client.page.locator(`[data-testid="applet-row"][data-applet-id="${signed.applet_package.applet_id}"][data-service-id="${signed.applet_package.service_id}"]`);
+      await expect(row).toBeVisible({ timeout: 60_000 });
+      const name = row.getByTestId("applet-bot-name");
+      const create = row.getByTestId("applet-create-bot");
+      await expect(create).toBeEnabled({ timeout: 30_000 });
+      await name.fill(`Durable Bot ${stamp}`);
+      const endpoint = `/_arkret/self/applets/${signed.applet_package.applet_id}/configuration`;
+      const responseForClick = async (testId: string) => {
+        const received = client.page.waitForResponse(response => decodeURIComponent(new URL(response.url()).pathname) === endpoint && response.request().method() === "POST");
+        await row.getByTestId(testId).click();
+        const response = await received;
+        expect(response.status(), await response.text()).toBe(403);
+        expect(wireErrCode(await response.json())).toBe("capability_denied");
+        await expect(row.getByTestId("applet-configuration-status")).not.toBeEmpty();
+        return response.request().postDataJSON();
+      };
+      const original = await responseForClick("applet-create-bot");
+      expect(original.command).toBe("configure");
+      expect(original.intent).toMatchObject({ service_id: signed.applet_package.service_id, effective_scope: { kind: "realm", realm_id: realmId }, selection: { kind: "new_bot", display_name: `Durable Bot ${stamp}` } });
+      expect(original.intent.request_id).toMatch(/^ak:request:/);
+      await expect(create).toBeDisabled();
+      await client.page.reload({ waitUntil: "domcontentloaded" });
+      await client.gotoTimelineRealm(realmId, { completeRecoveryKeySetup: false });
+      await client.gotoAppPanel("/applets", "applets-panel");
+      await expect(name).toHaveValue(`Durable Bot ${stamp}`, { timeout: 30_000 });
+      await expect(name).toBeDisabled();
+      await expect(create).toBeDisabled();
+      const recovered = await responseForClick("applets.configure_recover");
+      expect(recovered).toEqual({ ...original, command: "recover" });
+      const replayed = await responseForClick("applets.configure_retry");
+      expect(replayed).toEqual(original);
+      await expect(create).toBeDisabled();
+      expect(await queryRealmEventsApi(request, token, realmId)).toEqual(before);
+    } finally {
+      await client.close();
+    }
+  });
+
   test("Service installation creates zero Bots and permits two independent Bot provisions", async ({request}) => {
     test.setTimeout(300_000);
     const stamp = typedId("operation").split(":").at(-1)!;
