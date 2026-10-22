@@ -39,9 +39,10 @@ pub async fn flagon_directory_service_profile_is_discoverable() -> Result<()> {
     assert_current_v1_registry_contract()?;
 
     let Some(directory) = directory_target().await? else {
-        eprintln!(
-            "skipping flagon Directory cotest: set FLAGON_BASE_URL or build flagon and set DATABASE_URL"
-        );
+        crate::scenarios::_helpers::live_gate::skip_or_fail(
+            "flagon_directory_service_profile_is_discoverable",
+            "set FLAGON_BASE_URL or build flagon and set DATABASE_URL",
+        )?;
         return Ok(());
     };
     let http = Client::builder()

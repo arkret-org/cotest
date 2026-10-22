@@ -21,7 +21,7 @@
       },
       "cotest_rust": {
         "source_file_count": 599,
-        "source_sha256": "b136de23a887701142f0899ce665800a7a25f9d5606b2ef76dd4dc1696416814",
+        "source_sha256": "c176ee656ecd8c667643d449b97f5fe737fedbfb374d06523f3133930a83a260",
         "evidence_count": 305,
         "covered_operation_count": 95
       },
@@ -1970,11 +1970,11 @@
         "protocol_kat": [
           {
             "file": "cotest/src/scenarios/directory_service.rs",
-            "line": 57,
+            "line": 58,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              57
+              58
             ],
             "protected_oracle": false,
             "scope_sha256": "6d8b2604fed7237d1eec9f5deb5cface56a073730d54dc5448788ce7f9929852",
@@ -1987,11 +1987,11 @@
           },
           {
             "file": "cotest/src/scenarios/directory_service.rs",
-            "line": 94,
+            "line": 95,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              94
+              95
             ],
             "protected_oracle": false,
             "scope_sha256": "6d8b2604fed7237d1eec9f5deb5cface56a073730d54dc5448788ce7f9929852",
@@ -2004,11 +2004,11 @@
           },
           {
             "file": "cotest/src/scenarios/directory_service.rs",
-            "line": 159,
+            "line": 160,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              159
+              160
             ],
             "protected_oracle": false,
             "scope_sha256": "77a716dc94ec999acd5cbc80fa409f64e248ff955180210b868f5a22e2bf8cdc",
@@ -2021,11 +2021,11 @@
           },
           {
             "file": "cotest/src/scenarios/directory_service.rs",
-            "line": 255,
+            "line": 256,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              255
+              256
             ],
             "protected_oracle": false,
             "scope_sha256": "6d8b2604fed7237d1eec9f5deb5cface56a073730d54dc5448788ce7f9929852",
@@ -2139,11 +2139,11 @@
           },
           {
             "file": "cotest/src/scenarios/directory_service.rs",
-            "line": 104,
+            "line": 105,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              104
+              105
             ],
             "protected_oracle": false,
             "scope_sha256": "60cbd1d94c4ca996bec1828113e78a56d768d477c683b604816a7a5240b5f891",
@@ -2156,11 +2156,11 @@
           },
           {
             "file": "cotest/src/scenarios/directory_service.rs",
-            "line": 163,
+            "line": 164,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              163
+              164
             ],
             "protected_oracle": false,
             "scope_sha256": "74c851a40263b214ad77750bfbca5d021e060756edc3494a674ebeba0f933e56",
@@ -2325,11 +2325,11 @@
           },
           {
             "file": "cotest/src/scenarios/directory_service.rs",
-            "line": 99,
+            "line": 100,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              99
+              100
             ],
             "protected_oracle": false,
             "scope_sha256": "02a7a43bfb995a3e7560ef1e8567c20671e0802b3dfd2befdc51f4cfd44c3928",
@@ -2342,11 +2342,11 @@
           },
           {
             "file": "cotest/src/scenarios/directory_service.rs",
-            "line": 167,
+            "line": 168,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              167
+              168
             ],
             "protected_oracle": false,
             "scope_sha256": "593b108ff54a8a09ce3c7f5723acd1a246459efdfafc7b31f5b13790ed8dfada",

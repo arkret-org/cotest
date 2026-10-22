@@ -152,11 +152,11 @@ foreach ($invocation in $servicesLive.invocations) {
 }
 
 $release = Invoke-Planner -Arguments @("-Profile", "release-gate", "-PlanOnly")
-Assert-Equal -Actual $release.invocations.Count -Expected 25 -Message "release-gate invocation count drifted"
+Assert-Equal -Actual $release.invocations.Count -Expected 22 -Message "release-gate invocation count drifted"
 foreach ($target in @("registry_drift", "realm_genesis_commit_stream")) {
     Assert-True -Condition (@($release.invocations | Where-Object target -eq $target).Count -eq 1) -Message "release-gate dropped migrated native target $target"
 }
-Assert-Equal -Actual @($release.invocations | Select-Object -ExpandProperty target -Unique).Count -Expected 11 -Message "release-gate target count drifted"
+Assert-Equal -Actual @($release.invocations | Select-Object -ExpandProperty target -Unique).Count -Expected 12 -Message "release-gate target count drifted"
 
 $all = Invoke-Planner -Arguments @("-Profile", "all", "-PlanOnly")
 Assert-Equal -Actual $all.invocations.Count -Expected 2 -Message "all profile must include both packages"
@@ -181,7 +181,7 @@ Assert-True -Condition ($broadScan.invocations[0].cargo_args -contains "--tests"
 Assert-Equal -Actual $broadScan.invocations.Count -Expected 2 -Message "filter-only must scan both packages"
 Assert-Equal -Actual (($all.invocations.package | Sort-Object) -join ',') -Expected 'cotest,cotest-inkson-client-tests' -Message "all must not hide the client package"
 $client = Invoke-Planner -Arguments @("-Profile", "inkson-client-live", "-PlanOnly")
-Assert-Equal -Actual $client.invocations.Count -Expected 31 -Message "client lane must retain every moved test"
+Assert-Equal -Actual $client.invocations.Count -Expected 35 -Message "client lane must retain every moved test"
 Assert-True -Condition (@($client.invocations | Where-Object { $_.package -ne "cotest-inkson-client-tests" }).Count -eq 0) -Message "client lane coordinates must be explicit"
 Assert-True -Condition (@($client.invocations | Where-Object { $_.filter -eq "named_suite_audit_executes_registered_runners_and_exposes_every_gap" }).Count -eq 1) -Message "mandatory combined full audit must execute exactly once"
 Invoke-ExpectedPlannerFailure -Arguments @("-Profile", "all", "-CargoTestTarget", "conformance_vectors", "-PlanOnly") -ExpectedMessage "select -CargoTestPackage explicitly"

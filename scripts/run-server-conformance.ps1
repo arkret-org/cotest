@@ -25,6 +25,12 @@ param(
     [switch]$DockerPull,
     [switch]$DockerNoCache,
     [switch]$SkipJointSmokeGate,
+    # Forward the selected native topology to the mandatory joint child.
+    [ValidateSet("local.host", "localhost")]
+    [string]$DnsSuffix = "local.host",
+    [string]$PostgresAdminUrl,
+    [string]$PostgresToolsDirectory,
+    [string]$PostgresDataDirectory,
     # How many timestamped run directories to keep under <OutputRoot>/runs.
     # 0 disables pruning.
     [int]$KeepRuns = 20
@@ -203,6 +209,10 @@ function Invoke-JointSmokeGate {
         [bool]$StartCoauth = $true,
         [ValidateRange(1, 32)][int]$ServerCount = 1,
         [bool]$StartMocks = $false,
+        [string]$DnsSuffix = "local.host",
+        [string]$PostgresAdminUrl,
+        [string]$PostgresToolsDirectory,
+        [string]$PostgresDataDirectory,
         [string]$Grep,
         [ValidateSet("process", "docker")][string]$ColandRuntime = "process",
         [string]$ColandImage = "cotest-coland:latest",
@@ -253,6 +263,16 @@ function Invoke-JointSmokeGate {
         "-RunProfile", $RunProfile,
         "-PlaywrightProject", $PlaywrightProject
     )
+    $args += @("-DnsSuffix", $DnsSuffix)
+    if ($PostgresAdminUrl) {
+        $args += @("-PostgresAdminUrl", $PostgresAdminUrl)
+        if ($PostgresToolsDirectory) {
+            $args += @("-PostgresToolsDirectory", $PostgresToolsDirectory)
+        }
+        if ($PostgresDataDirectory) {
+            $args += @("-PostgresDataDirectory", $PostgresDataDirectory)
+        }
+    }
     if ($Grep) {
         $args += @("-Grep", $Grep)
     }
@@ -262,9 +282,12 @@ function Invoke-JointSmokeGate {
     $childLabel = ($OutputName -replace '[^A-Za-z0-9_.-]', '_')
     $childStdout = Join-Path $RunDir "$childLabel.stdout.log"
     $childStderr = Join-Path $RunDir "$childLabel.stderr.log"
+    $nativeJointArguments = (($args | ForEach-Object {
+                ConvertTo-NativeCommandLineArgument -Argument $_
+            }) -join ' ')
     $process = Start-Process `
         -FilePath $psExe `
-        -ArgumentList $args `
+        -ArgumentList $nativeJointArguments `
         -NoNewWindow `
         -Wait `
         -PassThru `
@@ -1455,8 +1478,8 @@ function New-ReleaseGate {
                 -Tests $Tests `
                 -RequiredTests @(
                     "event_envelope_fixture_suite_matches_reference_semantics",
-                    "capability_fixture_suite_matches_reference_semantics",
-                    "state_resolution_fixture_suite_matches_reference_semantics",
+                    "capability_facet_suite_matches_reference_semantics",
+                    "authority_commit_independent_streams_vector_executes",
                     "sync_fixture_suite_matches_reference_semantics"
                 ) `
                 -AdditionalGatePassed ($CoverageGate.status -ne "failed" -and $SpecSyncGate.status -eq "passed") `
@@ -2173,6 +2196,10 @@ if ($Profile -eq "joint") {
         -RepoRoot $repoRoot `
         -RunDir $runDir `
         -RawLog $rawLog `
+        -DnsSuffix $DnsSuffix `
+        -PostgresAdminUrl $PostgresAdminUrl `
+        -PostgresToolsDirectory $PostgresToolsDirectory `
+        -PostgresDataDirectory $PostgresDataDirectory `
         -OutputName "joint" `
         -RunProfile "joint-smoke" `
         -PlaywrightProject "joint-inkson" `
@@ -2227,6 +2254,10 @@ if ($Profile -eq "multi-server") {
         -RepoRoot $repoRoot `
         -RunDir $runDir `
         -RawLog $rawLog `
+        -DnsSuffix $DnsSuffix `
+        -PostgresAdminUrl $PostgresAdminUrl `
+        -PostgresToolsDirectory $PostgresToolsDirectory `
+        -PostgresDataDirectory $PostgresDataDirectory `
         -OutputName "multi-server" `
         -RunProfile "joint-full" `
         -PlaywrightProject "chromium" `
@@ -2575,6 +2606,10 @@ if ($Profile -eq "release-gate" -and -not $SkipJointSmokeGate) {
         -RepoRoot $repoRoot `
         -RunDir $runDir `
         -RawLog $rawLog `
+        -DnsSuffix $DnsSuffix `
+        -PostgresAdminUrl $PostgresAdminUrl `
+        -PostgresToolsDirectory $PostgresToolsDirectory `
+        -PostgresDataDirectory $PostgresDataDirectory `
         -ColandRuntime $Runtime `
         -ColandImage $SutImage `
         -BuildColandImage $false `
