@@ -233,6 +233,7 @@ jobs:
           scripts.tests.test_api_only_migration
           scripts.tests.test_package_graph
           scripts.tests.test_capture_sdk_artifact
+          scripts.tests.test_prepare_linux_joint_e2e
       - name: validate current cross-repository inventory
         working-directory: cotest
         # Sibling main branches move independently. Validate current source,
