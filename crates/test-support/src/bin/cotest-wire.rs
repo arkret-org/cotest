@@ -14,8 +14,10 @@ fn main() -> Result<()> {
 
     let output = match command.as_str() {
         "canonical-json" => wire::canonical_json(input)?,
+        "project-did-core-id" => wire::project_did_core_id(input)?,
         "sha256-canonical-json" => wire::sha256_canonical_json(input)?,
         "did-document-digest" => wire::did_document_digest(input)?,
+        "did-web-document-url" => wire::did_web_document_url(input)?,
         "event-envelope-proof" => wire::event_proof(input, EventDigestMode::RawCanonicalJson)?,
         "local-message-payload" => wire::local_message_payload(input)?,
         "event-derived-id" => wire::event_derived_id(input)?,

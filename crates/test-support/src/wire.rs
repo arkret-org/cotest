@@ -1281,6 +1281,7 @@ pub fn webvh_verify_log(input: Value) -> Result<Value> {
         "verified": true,
         "head_version_id": verified.head_version_id,
         "entry_count": verified.entries.len(),
+        "did_core_id": project_did_to_core_id(&did)?,
     }))
 }
 
@@ -1785,6 +1786,29 @@ pub fn read_stdin_json() -> Result<Value> {
     serde_json::from_str(&stdin).context("parse stdin JSON")
 }
 
+/// Project through an active SDK DID adapter; this does not verify a DID or history.
+pub fn project_did_core_id(input: Value) -> Result<Value> {
+    #[derive(Deserialize)]
+    #[serde(deny_unknown_fields)]
+    struct Input {
+        did: Did,
+    }
+    let input: Input = serde_json::from_value(input).context("parse DID projection input")?;
+    Ok(json!({"did_core_id":project_did_to_core_id(&input.did)?}))
+}
+
+/// Derive the document locator through the SDK adapter; no network verification is implied.
+pub fn did_web_document_url(input: Value) -> Result<Value> {
+    #[derive(Deserialize)]
+    #[serde(deny_unknown_fields)]
+    struct Input {
+        did: Did,
+    }
+    let input: Input =
+        serde_json::from_value(input).context("parse did:web document locator input")?;
+    Ok(json!({"document_url":arkret_models_identity::did_web_document_url(&input.did)?}))
+}
+
 pub fn did_document_digest(input: Value) -> Result<Value> {
     let document: arkret_models_identity::DidDocument =
         serde_json::from_value(input).context("parse DID document for normalized digest")?;
@@ -2079,6 +2103,82 @@ mod tests {
     use arkret_wire::EventId;
 
     use super::*;
+
+    #[test]
+    fn webvh_service_log_exposes_core_only_after_verified_history() -> Result<()> {
+        use arkret_test_kit::service_identity::ServiceIdentityFixture;
+
+        let now = Utc::now();
+        let fixture = ServiceIdentityFixture::webvh(
+            &url::Url::parse("https://flagon-wire.example/")?,
+            781,
+            [51; 32],
+            "service-key",
+            now,
+            now,
+        )?;
+        let mut nonce = [0_u8; 16];
+        getrandom::fill(&mut nonce).map_err(anyhow::Error::msg)?;
+        struct LogFile(std::path::PathBuf);
+        impl Drop for LogFile {
+            fn drop(&mut self) {
+                let _ = std::fs::remove_file(&self.0);
+            }
+        }
+        let file = LogFile(std::env::temp_dir().join(format!(
+            "cotest-verified-service-{}.jsonl",
+            hex::encode(nonce)
+        )));
+        let write = |entry: &Value| -> Result<()> {
+            let mut bytes = canonical::canonical_json_bytes(entry)?;
+            bytes.push(b'\n');
+            std::fs::write(&file.0, bytes)?;
+            Ok(())
+        };
+        let entry = &fixture.history.entries[0];
+        write(entry)?;
+        let request = json!({
+            "did":fixture.history.did, "log_path":file.0, "profile":"service"
+        });
+        let verified = webvh_verify_log(request.clone())?;
+        assert_eq!(verified["verified"], true);
+        assert_eq!(verified["did_core_id"], json!(fixture.service_id));
+        assert_eq!(verified["head_version_id"], entry["versionId"]);
+        assert_eq!(verified["entry_count"], 1);
+        assert_ne!(verified["did_core_id"], json!(fixture.history.did));
+
+        for field in ["state", "proof"] {
+            let mut tampered = entry.clone();
+            if field == "state" {
+                tampered["state"]["service"][0]["serviceEndpoint"] =
+                    json!("https://substituted.example/");
+            } else {
+                tampered["proof"][0]["proofValue"] = json!("zInvalidSignature");
+            }
+            write(&tampered)?;
+            assert!(
+                webvh_verify_log(request.clone()).is_err(),
+                "accepted tampered {field}"
+            );
+        }
+        write(entry)?;
+        let other = ServiceIdentityFixture::webvh(
+            &url::Url::parse("https://other-wire.example/")?,
+            782,
+            [52; 32],
+            "service-key",
+            now,
+            now,
+        )?;
+        let mut wrong_did = request.clone();
+        wrong_did["did"] = json!(other.history.did);
+        assert!(webvh_verify_log(wrong_did).is_err());
+        assert_eq!(
+            webvh_verify_log(request)?["did_core_id"],
+            json!(fixture.service_id)
+        );
+        Ok(())
+    }
 
     #[test]
     fn consent_current_oracle_requires_independent_anchors_and_a_real_proof() {
@@ -2588,5 +2688,55 @@ mod tests {
             serde_json::from_value(session_request).unwrap();
         body.validate().unwrap();
         assert!(matches!(body, arkret::SessionGrantRequestBody::Human(_)));
+    }
+    #[test]
+    fn project_did_core_id_is_an_adapter_projection_without_verification_credit() -> Result<()> {
+        let projected = project_did_core_id(json!({"did":"did:web:flagon.example"}))?;
+        assert_eq!(
+            projected,
+            json!({"did_core_id":"ak:did_core:web:flagon.example"})
+        );
+        assert!(projected.get("verified").is_none());
+        for invalid in [
+            json!({"did":"not-a-did"}),
+            json!({"did":"ak:did_core:web:flagon.example"}),
+            json!({"did":"did:example:flagon"}),
+            json!({"did":"did:web:flagon.example#key"}),
+            json!({"did":null}),
+            json!({"did":"did:web:flagon.example","verified":true}),
+        ] {
+            assert!(project_did_core_id(invalid).is_err());
+        }
+        Ok(())
+    }
+    #[test]
+    fn did_web_document_url_uses_sdk_locator_and_rejects_non_document_subjects() -> Result<()> {
+        for (did, document_url) in [
+            (
+                "did:web:flagon.example",
+                "https://flagon.example/.well-known/did.json",
+            ),
+            (
+                "did:web:flagon.example%3A9443:directory",
+                "https://flagon.example:9443/directory/did.json",
+            ),
+        ] {
+            assert_eq!(
+                did_web_document_url(json!({"did":did}))?,
+                json!({"document_url":document_url})
+            );
+        }
+        for invalid in [
+            json!({"did":"did:web:flagon.example#key"}),
+            json!({"did":"ak:did_core:web:flagon.example"}),
+            json!({"did":"did:example:flagon"}),
+            json!({"did":"did:web:flagon.example::directory"}),
+            json!({"did":"did:web:flagon.example:.."}),
+            json!({"did":null}),
+            json!({"did":"did:web:flagon.example","document_url":"https://substituted.example/"}),
+        ] {
+            assert!(did_web_document_url(invalid).is_err());
+        }
+        Ok(())
     }
 }
