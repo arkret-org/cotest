@@ -869,11 +869,12 @@ async function ownWatchTransitions(page: Page, otherPages: Page[], strandId: str
     await page.getByTestId("watch-level-toggle").click();
     const option = page.getByTestId("watch-level-menu").locator(`[data-watch-level="${level}"]`);
     await expect(option, "the actual self current must enable this choice before observing its write").toBeEnabled({ timeout: 30_000 });
-    const accepted = page.waitForResponse(response => response.request().method() === "POST"
-      && new URL(response.url()).pathname === "/_arkret/self/events"
-      && ingressEvents(decodeEventIngressBody(response.request().postDataJSON())).some(event => event.kind === "ak.strand.watch.set"));
-    await option.click();
-    const response = await accepted;
+    const [response] = await Promise.all([
+      page.waitForResponse(response => response.request().method() === "POST"
+        && new URL(response.url()).pathname === "/_arkret/self/events"
+        && ingressEvents(decodeEventIngressBody(response.request().postDataJSON())).some(event => event.kind === "ak.strand.watch.set")),
+      option.click(),
+    ]);
     expect(response.ok(), await response.text()).toBe(true);
     const event = ingressEvents(decodeEventIngressBody(response.request().postDataJSON())).find(event => event.kind === "ak.strand.watch.set")!;
     const outcome = await response.json() as Record<string, unknown>;
