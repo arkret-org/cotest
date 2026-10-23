@@ -546,6 +546,8 @@
       ],
       "mocks": [],
       "identity_establishment": [
+        "coauth_registration_ui",
+        "inkson_identity_onboarding_ui",
         "oauth_authorization_ui"
       ],
       "protocol_object_producers": [
@@ -669,6 +671,8 @@
       ],
       "mocks": [],
       "identity_establishment": [
+        "coauth_registration_ui",
+        "inkson_identity_onboarding_ui",
         "oauth_authorization_ui"
       ],
       "protocol_object_producers": [
@@ -688,6 +692,8 @@
       ],
       "mocks": [],
       "identity_establishment": [
+        "coauth_registration_ui",
+        "inkson_identity_onboarding_ui",
         "oauth_authorization_ui"
       ],
       "protocol_object_producers": [
@@ -1083,6 +1089,32 @@
         "registration_login_authorization",
         "ui_driven_business_flow_for_raw_http_steps"
       ]
+    },
+    {
+      "scenario_key": "joint/private-accepted-readback",
+      "suite_kind": "joint-e2e",
+      "realism_level": "live-product",
+      "evidence_class": "live-product",
+      "real_services": [
+        "coauth",
+        "coland",
+        "inkson",
+        "savfox"
+      ],
+      "mocks": [
+        "email",
+        "savfox_model"
+      ],
+      "identity_establishment": [
+        "coauth_registration_ui",
+        "inkson_identity_onboarding_ui",
+        "oauth_authorization_ui"
+      ],
+      "protocol_object_producers": [
+        "inkson_product_client"
+      ],
+      "declared_test_bypasses": [],
+      "claims_excluded": []
     },
     {
       "scenario_key": "kanban/calendar",

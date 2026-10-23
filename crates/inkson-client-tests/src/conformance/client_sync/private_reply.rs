@@ -442,6 +442,59 @@ impl SidecarSyncObserver for PrivateReplyProbe {
         );
         let request_accepted = accepted_full_view(&controller.client, &request.event_id).await?;
         await_franking(&request.event_id, realm, database_url).await?;
+        let cursor_before_readback = host.state_store().sync_cursor();
+        let readback_fault = self
+            .relay
+            .borrow()
+            .as_ref()
+            .context("readback HTTP relay")?
+            .control();
+        readback_fault.clear_scan_requests();
+        inkson::conformance::read_back_native_accepted_sidecar(
+            &session.client(),
+            &controller.account,
+            scope,
+            &request.event_id,
+            host.state_store_handle(),
+        )
+        .await?;
+        let readback_scans = readback_fault.scan_requests();
+        ensure!(
+            readback_scans
+                .iter()
+                .any(|scan| scan.stream_ref == request_accepted.commit.stream_ref),
+            "accepted readback did not issue an independent private history request"
+        );
+        let readback_cut = inkson::conformance::retained_sidecar_cut(&host.state_store(), scope)?;
+        ensure!(
+            readback_cut.1.last() == Some(&request_accepted),
+            "accepted private readback did not durably install the exact request cut"
+        );
+        ensure!(
+            host.state_store().sync_cursor() == cursor_before_readback,
+            "independent readback advanced the Account subscription cursor"
+        );
+        let readback_projection = inkson::sidecar::cached_sidecar_exchange_projections(
+            &host.state_store(),
+            &controller.account,
+            realm.as_str(),
+        )?;
+        ensure!(
+            readback_projection
+                .iter()
+                .any(|p| p.private_request_event_id == request.event_id
+                    && p.source_track_ref == source),
+            "accepted readback did not publish the authenticated source-card request"
+        );
+        let readback_mls = host
+            .state_store()
+            .mls_checkpoint_for_scope(scope)
+            .context("accepted readback lost the native MLS checkpoint")?;
+        ensure!(
+            readback_mls.epoch == 1
+                && readback_mls.group_state_event_id.as_ref() == Some(&accepted.event.event_id),
+            "accepted readback changed its exact MLS basis"
+        );
         host.catch_up_selected_realm_until_complete(realm).await?;
         let prior_projection = inkson::sidecar::cached_sidecar_exchange_projections(
             &host.state_store(),
@@ -819,11 +872,13 @@ impl SidecarSyncObserver for PrivateReplyProbe {
                 "initial_scan_requests":*initial_scans,"automatic_recovery_scan_requests":recovery_scans,
                 "ordinary_reply_franking_head":healthy_expected,
                 "private_projection":projection,"visible_reply_digest":arkret_canonical::canonical_sha256(&serde_json::from_slice::<Value>(&visible)?)?,
-                "ack_preserved":true,"business_writes_repeated":false,"baseline_redone":false,"mls_group_preserved":true,"fresh_process_readback":true}),
+                "ack_preserved":true,"business_writes_repeated":false,"baseline_redone":false,"mls_group_preserved":true,"fresh_process_readback":true,
+                "accepted_request_independent_readback":true,"readback_account_cursor_preserved":true,"readback_exact_mls_and_durable_cut":true,
+                "accepted_readback_scan_requests":readback_scans}),
         );
         *self.result.borrow_mut() = Some(super::super::CaseExecutionResult {
             case_id: CASE.into(),
-            assertions: 30,
+            assertions: 35,
         });
         Ok(())
     }

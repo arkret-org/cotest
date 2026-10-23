@@ -40,7 +40,9 @@ foreach ($file in Get-ChildItem -LiteralPath $testsRoot -Recurse -File -Filter "
     if ($usesRawHttp) { $bypasses.Add("raw_http_fixture_or_oracle") }
 
     $identity = New-Object System.Collections.Generic.List[string]
-    if ($scenarioKey -eq "identity/recovery-key-to-encrypted-realm") {
+    $usesRegistrationUi = $source -match 'choose-new-identity' -and
+        $source -match 'onboarding-bind-identity' -and $source -match 'coauth-oauth-approve'
+    if ($usesRegistrationUi) {
         $identity.Add("coauth_registration_ui")
         $identity.Add("oauth_authorization_ui")
         $identity.Add("inkson_identity_onboarding_ui")
