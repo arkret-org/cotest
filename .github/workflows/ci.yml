@@ -759,6 +759,11 @@ jobs:
         run: |
           npm ci
           npx playwright install --with-deps ${{ matrix.project }}
+      - name: Expose the locked Dioxus JavaScript bundler
+        working-directory: cotest/e2e
+        run: |
+          test "$(node_modules/.bin/esbuild --version)" = "0.28.2"
+          printf '%s\n' "$PWD/node_modules/.bin" >> "$GITHUB_PATH"
       - name: Prepare Linux joint prerequisites
         id: joint_prerequisites
         run: bash cotest/scripts/prepare-linux-joint-e2e.sh setup

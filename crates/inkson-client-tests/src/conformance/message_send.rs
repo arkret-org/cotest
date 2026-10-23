@@ -120,7 +120,7 @@ async fn run_message_case(
         tokio::time::timeout(std::time::Duration::from_secs(90), async {
                 tokio::select! {
                     outcome = &mut send => bail!("message finished before the real accepted-response crash point: {outcome:?}"),
-                    request = lost.accepted() => Ok(request),
+                    request = lost.accepted() => request,
                 }
             }).await.context("real Inkson message did not reach authenticated SUT admission")??
         // Dropping `send` here models process loss before consuming the
