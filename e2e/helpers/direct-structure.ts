@@ -1446,6 +1446,6 @@ async function runFlatTopicChats(alice: Page, bob: Page, mainMessages: string[],
     await page.getByTestId("direct-structure").getByRole("combobox", { name: "Chat", exact: true }).selectOption(mainId);
     for (const message of mainMessages) await expect(page.getByTestId("chat-message").filter({ hasText: message })).toBeVisible({ timeout: 90_000 });
   }
-  expect(new URL(alice.url()).pathname).toBe(mainPath);
+  expect(decodeURIComponent(new URL(alice.url()).pathname)).toBe(decodeURIComponent(mainPath));
   expect(decodeURIComponent(new URL(bob.url()).pathname.split("/")[2])).toBe(decodeURIComponent(mainPath.split("/")[2]));
 }

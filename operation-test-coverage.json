@@ -27,7 +27,7 @@
       },
       "cotest_e2e": {
         "source_file_count": 124,
-        "source_sha256": "2c38891552ebef1db828ffa7d44586d08775dc7ccd5c7a8212197b40e1c9d651",
+        "source_sha256": "42085876d0f8d6419f3cfc98a58a5f708b5f7e9b0d497d50da14c4a6f685dca7",
         "evidence_count": 44,
         "covered_operation_count": 20
       },

@@ -242,7 +242,12 @@ return async ({ jointUsers, request, browser }: { jointUsers: JointUsersFixture;
   for (const [page, peer] of [[alice, bobSession.user.id], [bob, aliceSession.user.id]] as const) {
     phase(page === alice ? "alice_direct_open_start" : "bob_direct_open_start");
     await page.getByTestId("realm-sidebar-tab-direct").click();
-    await page.locator(`[data-testid="direct-conversation-row"][data-peer=${JSON.stringify(canonicalJson(accountActorId(peer, peer === bobSession.user.id && remoteBob ? "server2" : "default")))}]`).click();
+    const row = page.locator(`[data-testid="direct-conversation-row"][data-peer=${JSON.stringify(canonicalJson(accountActorId(peer, peer === bobSession.user.id && remoteBob ? "server2" : "default")))}]`);
+    // The API receipt can precede the remote Contact projection. A pending
+    // row is clickable but intentionally cannot start a Direct resolver.
+    await expect(row).toHaveAttribute("data-state", "accepted", { timeout: 90_000 });
+    await expect(row).not.toHaveClass(/\bis-dim\b/, { timeout: 90_000 });
+    await row.click();
     phase(page === alice ? "alice_direct_open_finished" : "bob_direct_open_finished");
   }
   if (remoteBob) {
@@ -401,7 +406,12 @@ return async ({ jointUsers, request, browser }: { jointUsers: JointUsersFixture;
     await expect(async () => {
       if (!new URL(page.url()).pathname.startsWith("/direct/")) {
         await page.getByTestId("realm-sidebar-tab-direct").click();
-        await page.locator(`[data-testid="direct-conversation-row"][data-peer=${JSON.stringify(canonicalJson(accountActorId(peer, peer === bobSession.user.id && remoteBob ? "server2" : "default")))}]`).click();
+        const row = page.locator(`[data-testid="direct-conversation-row"][data-peer=${JSON.stringify(canonicalJson(accountActorId(peer, peer === bobSession.user.id && remoteBob ? "server2" : "default")))}]`);
+    // The API receipt can precede the remote Contact projection. A pending
+    // row is clickable but intentionally cannot start a Direct resolver.
+    await expect(row).toHaveAttribute("data-state", "accepted", { timeout: 90_000 });
+    await expect(row).not.toHaveClass(/\bis-dim\b/, { timeout: 90_000 });
+    await row.click();
       }
       await expect(page).toHaveURL(/\/direct\/ak:realm:.*\/ak:strand:/, { timeout: 5_000 });
     }).toPass({ timeout: 180_000, intervals: [2_000] });
