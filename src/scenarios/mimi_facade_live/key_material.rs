@@ -252,8 +252,10 @@ pub(super) async fn run(
     let expired = sdk
         .mimi_request_key_material(&expiring, server.trust_domain(), server.trust_domain())
         .await?;
+    // Ordinary single-use claims become revoked/unusable on expiry (§9).
+    // Recovery still retains the original outcome; it cannot republish it.
     ensure!(
-        expired.state == arkret_models_crypto::PeerKeyPackagesClaimQueryState::Expired
+        expired.state == arkret_models_crypto::PeerKeyPackagesClaimQueryState::Revoked
             && serde_json::to_value(&expired.claim_outcome)?
                 == serde_json::to_value(&allocated.claim_outcome)?,
         "expired intent lost its original signed result: {expired:?}"
