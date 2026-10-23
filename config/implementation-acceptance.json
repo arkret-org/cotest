@@ -673,6 +673,29 @@
       ]
     },
     {
+      "task": "2026-09-25-2142-mimi-facade-production-path.md",
+      "criteria_count": 5,
+      "criteria_sha256": "6d9db0d85658f8864659ddd0dc2d72eed3e97d9c9dadca3e821d35b65dfd7e35",
+      "spec_refs": [],
+      "source_refs": [
+        "arkret-work/tasks/impl-active/2026-09-25-2142-mimi-facade-production-path.md",
+        "arkret-rust-sdk/Cargo.toml",
+        "coland/Cargo.toml",
+        "cotest/Cargo.toml"
+      ],
+      "tests": [],
+      "engineering_checks": [
+        "Inventory only: reconcile the omitted active entry already declared by upstream e8933b59 and its unchanged task text. No MI implementation, provider execution or product acceptance is claimed."
+      ],
+      "remaining_scenarios": [
+        "最新冻结源码下，认证服务签 Message Event 与 covering RealmCommit 同事务；observer 在构造/写入/fanout 前拒绝，authenticated GroupInfo、current room binding、scope 派生 group id 不一致时零 Event/Commit/outbox/receipt/fanout。",
+        "room binding migration 的 completed/rolled_back 正例和非法 proof、相邻 binding、拓扑、MLS installed state/GroupInfo 拒绝路径全部以真实 PG/HTTP 执行；有具体缺口才补生产接线，不恢复旧“缺 GroupInfo 一律停线”结论。",
+        "在真实独立provider及其它未验收组合继续复核report事务与Provider-ID分区；单Station accepted-binding下服务签Event／covering Commit／current／ledger、实际report ID、晚期故障回滚、并发与冷重启exact retry已由MI交付，不重复持有该子边界。",
+        "reporter 的 Actor/Account、membership_ref、room_binding_ref、device proof 与受限 Circle 可见性按同一 accepted cut 验证；缺失/歧义/撤销/跨 provider/同 principal 异 Station 均拒绝，moderation evidence 不提供身份 authority，self moderation 不被用作 facade 代签入口。",
+        "2326正式闭合后，真实独立provider成功claim→原claim单次Welcome使用→consumed，以及重放／到期／错scope／撤权均按正式合同验明，拒绝时零非法副作用；Cotest现有runner的fixture case集完整且实际执行；旧授权用例以正式 PCR Event/RealmCommit 重建，保留 accepted material、重放和零副作用断言，并记录 SHA/features/SUT/退出码。"
+      ]
+    },
+    {
       "task": "2026-09-26-1121-space-and-kanban-admission.md",
       "spec_refs": [
         "arkret-spec/spec/v1/zh/models/space-hierarchy.md",
