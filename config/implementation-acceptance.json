@@ -654,8 +654,8 @@
     },
     {
       "task": "2026-10-22-2129-local-ci-repair.md",
-      "criteria_count": 2,
-      "criteria_sha256": "0f353aec8b64b2016b687fd844314e220a5ee92e6f055422bf52271bd4b5cdd0",
+      "criteria_count": 4,
+      "criteria_sha256": "eaa0eb7401eca4d7b00c9d9a1061aea2e80fd0ddf8d5925f406a3254e2fef0e6",
       "spec_refs": [],
       "source_refs": [
         "coland/Cargo.toml",
@@ -667,8 +667,10 @@
         "Engineering-only CI inventory. Preserve separate upstream platform/security failures; no product acceptance or CI green claim."
       ],
       "remaining_scenarios": [
-        "修复 Coland 经 Savfox keyring 3 Linux 后端引入的三项 unmaintained，保持 OS 凭据语义并通过对应平台验证及严格 cargo-deny，不添加 advisory 忽略。",
-        "在具备环境时验证组织 Actions 策略下的 Linux Docker 构建及相关平台门；本轮仅完成 Docker 路径静态检查，未修改组织策略，未执行 ASAN fuzz、macOS / iOS / Android 和完整浏览器联合旅程。"
+        "核验最新 main 上 Coland `01d56ca1` 的原生 TLS 整仓测试、Cotest `18fb7ae5` 的实际 SDK 产物捕获/完整测试、Inkson `70132ac1` 的完整浏览器 E2E；已完成的局部检查见报告，不重复记作剩项。",
+        "解决 Savfox keyring4 自动升级的已移除特性不兼容，并验证实际 OS 凭据行为；Windows原生 vault Error(8)仍待定位，不能以单元测试替代原生验收。",
+        "恢复协调仓跨仓 baseline 对私有 Flagon 的 CI 读取凭据，统一当前仓布局/工具链并执行完整 lane；本轮没有修改组织策略或写入个人令牌。",
+        "在具备环境时完成原任务尚缺的相关平台/完整联合验收；不接管其它产品 owner 的验收，不把本轮 CI 通过代替未运行的平台。"
       ]
     }
   ]

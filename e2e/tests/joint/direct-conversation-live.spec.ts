@@ -407,11 +407,11 @@ return async ({ jointUsers, request, browser }: { jointUsers: JointUsersFixture;
       if (!new URL(page.url()).pathname.startsWith("/direct/")) {
         await page.getByTestId("realm-sidebar-tab-direct").click();
         const row = page.locator(`[data-testid="direct-conversation-row"][data-peer=${JSON.stringify(canonicalJson(accountActorId(peer, peer === bobSession.user.id && remoteBob ? "server2" : "default")))}]`);
-    // The API receipt can precede the remote Contact projection. A pending
-    // row is clickable but intentionally cannot start a Direct resolver.
-    await expect(row).toHaveAttribute("data-state", "accepted", { timeout: 90_000 });
-    await expect(row).not.toHaveClass(/\bis-dim\b/, { timeout: 90_000 });
-    await row.click();
+        // The API receipt can precede the remote Contact projection. A pending
+        // row is clickable but intentionally cannot start a Direct resolver.
+        await expect(row).toHaveAttribute("data-state", "accepted", { timeout: 90_000 });
+        await expect(row).not.toHaveClass(/\bis-dim\b/, { timeout: 90_000 });
+        await row.click();
       }
       await expect(page).toHaveURL(/\/direct\/ak:realm:.*\/ak:strand:/, { timeout: 5_000 });
     }).toPass({ timeout: 180_000, intervals: [2_000] });
