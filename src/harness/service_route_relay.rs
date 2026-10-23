@@ -192,8 +192,8 @@ impl ArkretServer {
         Ok(relay)
     }
 
-    /// Keep the original method host, retire its service API, and let actual
-    /// bootstrap publish an owner-authorized native endpoint successor.
+    /// Keep the original method host and explicitly sign an endpoint successor
+    /// through the real CLI before retiring the old service API.
     pub async fn move_service_endpoint(
         &mut self,
         old: &ServiceRouteControl,
@@ -211,12 +211,24 @@ impl ArkretServer {
         let mut port = reserve_port()?;
         let public = Url::parse(&format!("https://127.0.0.1:{}/", port.port()))?;
         self.stop_external_process().await?;
+        self.migrate_public_base_with_hosting(&public, true, true)
+            .await?;
+        self.migrate_public_base_with_hosting(&public, false, true)
+            .await?;
+        self.external_restart.as_mut().unwrap().bind = bind.clone();
         port.release();
         let relay = listen(&tls, &public, Url::parse(&format!("https://{bind}/"))?).await?;
         self._port_reservations.push(port);
         old.0.lock().unwrap().method_only = true;
         self.base_url = public;
         self.start_external_process().await?;
+        let metadata = arkret_identity::DidWebvhResolver::log_url(&self.service_did)?;
+        let response = self.http_client.get(&metadata).send().await?;
+        ensure!(
+            response.status().is_success(),
+            "retained method host {metadata} returned {}",
+            response.status()
+        );
         Ok(relay)
     }
 

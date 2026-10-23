@@ -460,8 +460,17 @@ impl TestActorClient {
         subject: &TestActorClient,
         actions: &[&str],
     ) -> Result<String> {
+        let subject_account = AccountId::new(
+            project_did_to_core_id(&Did::new(subject.actor.clone())?)?,
+            DidCoreId::new(subject.service_id().to_owned())?,
+        );
         let (grant_id, _response) = self
-            .grant_realm_actions_to(realm_id, &subject.actor, actions)
+            .grant_realm_actions_with_constraints_to_account(
+                realm_id,
+                &subject_account,
+                actions,
+                Vec::new(),
+            )
             .await?;
         let grant_id_typed = arkret_identifiers::GrantId::new(grant_id.clone())?;
         let grant_event_id = EventId::from_token_bytes(grant_id_typed.token_bytes())?;
@@ -807,6 +816,31 @@ impl TestActorClient {
             .await
             .context("commit the directed invite")?;
         let invite_id = arkret_wire::InviteId::from_event_id(&super::submitted_event_id(&created)?);
+        if self.service_id() != member.service_id() {
+            use arkret_models_collaboration::governance::realm_join_intake::{
+                AuthorityLocatorSource, RealmJoinCandidate, RealmJoinCandidateServiceKind,
+                RealmJoinIntent, RealmJoinTarget, SelfRealmJoinPrepareRequestBody,
+            };
+            member
+                .sdk
+                .self_realm_join_prepare(&SelfRealmJoinPrepareRequestBody {
+                    request_id: next_typed_id("request").parse()?,
+                    target: RealmJoinTarget {
+                        realm_id: realm_id.parse()?,
+                        invite_id: Some(invite_id.clone()),
+                        authority_locator_hints: vec![RealmJoinCandidate {
+                            service_kind: RealmJoinCandidateServiceKind::Station,
+                            service_id: self.service_id.parse()?,
+                            endpoint_url: None,
+                            source: AuthorityLocatorSource::Invite,
+                        }],
+                    },
+                    intent: RealmJoinIntent::InviteAccept {
+                        invite_id: invite_id.clone(),
+                    },
+                })
+                .await?;
+        }
         let invitee = arkret_wire::AccountId::new(
             project_did_to_core_id(&Did::new(member.actor.clone())?)?,
             DidCoreId::new(member.service_id().to_owned())?,
@@ -925,6 +959,28 @@ impl TestActorClient {
             arkret_models_collaboration::governance::grant_constraint::GrantConstraint,
         >,
     ) -> Result<(String, Value)> {
+        let subject = AccountId::new(
+            project_did_to_core_id(&Did::new(subject.to_owned())?)?,
+            DidCoreId::new(self.service_id.clone())?,
+        );
+        self.grant_realm_actions_with_constraints_to_account(
+            realm_id,
+            &subject,
+            actions,
+            constraints,
+        )
+        .await
+    }
+
+    async fn grant_realm_actions_with_constraints_to_account(
+        &self,
+        realm_id: &str,
+        subject: &AccountId,
+        actions: &[&str],
+        constraints: Vec<
+            arkret_models_collaboration::governance::grant_constraint::GrantConstraint,
+        >,
+    ) -> Result<(String, Value)> {
         let issued_at = chrono::Utc::now();
         let grant = arkret_models_collaboration::events_payloads::CapabilityGrantCreateBody {
             schema: "ak.schema.capability.v1".to_owned(),
@@ -935,10 +991,7 @@ impl TestActorClient {
             )),
             subject:
                 arkret_models_collaboration::governance::grant_constraint::CapabilitySubject::Actor(
-                    ActorId::account(AccountId::new(
-                        project_did_to_core_id(&Did::new(subject.to_owned())?)?,
-                        DidCoreId::new(self.service_id.clone())?,
-                    )),
+                    ActorId::account(subject.clone()),
                 ),
             actions: actions.iter().map(|action| (*action).to_owned()).collect(),
             resources: vec![serde_json::from_value(json!({

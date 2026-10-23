@@ -1794,6 +1794,7 @@ dependencies = [
  "headers",
  "hex",
  "hmac 0.12.1",
+ "horme",
  "http",
  "http-body",
  "hyper",
@@ -2116,9 +2117,11 @@ dependencies = [
  "diesel_migrations",
  "futures-util",
  "hex",
+ "horme",
  "ipnetwork",
  "opentelemetry 0.32.0",
  "opentelemetry-semantic-conventions 0.32.1",
+ "pq-sys",
  "rand_chacha 0.3.1",
  "rand_core 0.6.4",
  "serde",
@@ -2155,6 +2158,7 @@ dependencies = [
  "cron",
  "diesel",
  "diesel-async",
+ "horme",
  "opentelemetry 0.32.0",
  "opentelemetry-semantic-conventions 0.32.1",
  "rand_chacha 0.3.1",
@@ -2335,7 +2339,9 @@ dependencies = [
  "diesel_migrations",
  "ed25519-dalek 3.0.0",
  "hmac 0.13.0",
+ "horme",
  "parking_lot",
+ "pq-sys",
  "rand 0.10.2",
  "serde",
  "serde_json",
@@ -3688,7 +3694,6 @@ dependencies = [
  "ipnetwork",
  "itoa",
  "libc",
- "pq-src",
  "pq-sys",
  "r2d2",
  "serde_json",
@@ -5367,6 +5372,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "589533453244b0995c858700322199b2becb13b627df2851f64a2775d024abcf"
 dependencies = [
  "windows-sys 0.59.0",
+]
+
+[[package]]
+name = "horme"
+version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "03f12bd171012a6b73d4ab11dc6ad1fd5e528103b88ff545afd8d13a33616493"
+dependencies = [
+ "deadpool",
+ "diesel",
+ "diesel-async",
 ]
 
 [[package]]
@@ -8768,6 +8784,7 @@ checksum = "574ddd6a267294433f140b02a726b0640c43cf7c6f717084684aaa3b285aba61"
 dependencies = [
  "libc",
  "pkg-config",
+ "pq-src",
  "vcpkg",
 ]
 

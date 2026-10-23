@@ -8,6 +8,10 @@
 
 pub mod contacts;
 pub mod identity;
+pub mod relocation;
+pub mod relocation_business;
 
 pub use contacts::contacts_invites_listing_export_and_audit_work;
 pub use identity::identity_surface_and_receipts_work;
+
+pub mod relocation_service;

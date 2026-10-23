@@ -8,6 +8,8 @@ use std::sync::{Arc, Mutex, OnceLock};
 use std::time::{Duration, SystemTime};
 use std::{fs, mem};
 
+#[path = "public_base.rs"]
+mod public_base;
 #[path = "scan_gap_relay.rs"]
 mod scan_gap_relay;
 #[path = "service_route_relay.rs"]
