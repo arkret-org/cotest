@@ -2705,6 +2705,40 @@ function Add-DioxusNoDownloadsEnvironment {
     return "$prefix$Command"
 }
 
+function Get-ManagedDockerIdentityArguments {
+    param(
+        [Parameter(Mandatory = $true)][bool]$LinuxHost,
+        [Parameter(Mandatory = $true)][string]$Image,
+        [Parameter(Mandatory = $true)][string[]]$MountDirectories
+    )
+
+    if (-not $LinuxHost) { return @() }
+    $runtimeUid = (Invoke-NativeCapture -FilePath "id" -Arguments @("-u") | Out-String).Trim()
+    if ($LASTEXITCODE -ne 0 -or $runtimeUid -notmatch '^\d+$') { throw "Cannot resolve the fixture driver's UID" }
+    $runtimeGid = (Invoke-NativeCapture -FilePath "id" -Arguments @("-g") | Out-String).Trim()
+    if ($LASTEXITCODE -ne 0 -or $runtimeGid -notmatch '^\d+$') { throw "Cannot resolve the fixture driver's GID" }
+
+    # Linux bind mounts retain host ownership, including private fixture files.
+    # Keep the service unprivileged and its writes readable by the same driver.
+    if ($runtimeUid -ne "0") {
+        return @("--user", "${runtimeUid}:${runtimeGid}", "--workdir", "/tmp/coland-state")
+    }
+
+    # A root driver can instead preserve the image user and prepare only its
+    # three owned mount directories. Never make private state world-writable.
+    $imageUser = (Invoke-NativeCapture -FilePath "docker" -Arguments @("image", "inspect", "--format", "{{.Config.User}}", $Image) | Out-String).Trim()
+    if ($LASTEXITCODE -ne 0) { throw "Cannot resolve the Coland image user" }
+    if ($imageUser -match '^(\d+)(?::.*)?$') {
+        $imageUid = $Matches[1]
+    } else {
+        $imageUid = (Invoke-NativeCapture -FilePath "docker" -Arguments @("run", "--rm", "--network", "none", "--entrypoint", "id", $Image, "-u") | Out-String).Trim()
+        if ($LASTEXITCODE -ne 0 -or $imageUid -notmatch '^\d+$') { throw "Cannot resolve the Coland image UID" }
+    }
+    Invoke-NativeCapture -FilePath "chown" -Arguments (@("--", $imageUid) + $MountDirectories) | Out-Null
+    if ($LASTEXITCODE -ne 0) { throw "Cannot prepare owned Coland fixture mount directories" }
+    return @("--workdir", "/tmp/coland-state")
+}
+
 function Start-ManagedDockerColand {
     param(
         [Parameter(Mandatory = $true)][string]$Name,
@@ -2727,6 +2761,8 @@ function Start-ManagedDockerColand {
     $stderr = Join-Path $LogDirectory "$Name.stderr.log"
     $commandLog = Join-Path $LogDirectory "$Name.command.txt"
 
+    $identityArguments = @(Get-ManagedDockerIdentityArguments -LinuxHost $IsLinux -Image $Image -MountDirectories @($ObjectsRoot, $StateRoot, $LogDirectory))
+
     $runArgs = @(
         "run",
         "-d",
@@ -2738,6 +2774,7 @@ function Start-ManagedDockerColand {
         "-v", ("{0}:/tmp/coland-state" -f $StateRoot),
         "-v", ("{0}:/cotest-logs" -f $LogDirectory)
     )
+    $runArgs += $identityArguments
     foreach ($key in $Environment.Keys) {
         $value = [string]$Environment[$key]
         $runArgs += @("-e", "$key=$value")
