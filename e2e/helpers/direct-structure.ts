@@ -1244,12 +1244,37 @@ async function runFlatTopicChats(alice: Page, bob: Page, mainMessages: string[],
       await expect(navigation.getByRole("combobox", { name: "Action", exact: true })).toHaveCount(0);
       await navigation.getByRole("combobox", { name: "Chat", exact: true }).selectOption(mainId);
     }
+    const selectedPath = `/direct/${decodeURIComponent(mainPath.split("/")[2])}/${chatId}`;
+    await expect(sender).toHaveURL(url => decodeURIComponent(url.pathname) === selectedPath, { timeout: 90_000 });
+    const senderSelection = sender.getByTestId("direct-structure").getByRole("combobox", { name: "Chat", exact: true });
+    await expect(senderSelection).toHaveValue(chatId);
     await sender.getByTestId("chat-input").fill(text);
-    const sending = sender.waitForResponse(response => response.request().method() === "POST"
-      && new URL(response.url()).pathname === "/_arkret/self/events"
-      && ingressEvents(decodeEventIngressBody(response.request().postDataJSON())).some(event => event.kind === "ak.message.create"));
-    await sender.getByTestId("send-chat-button").click();
-    const sent = await sending;
+    await expect(sender.getByTestId("chat-input")).toHaveValue(text);
+    const sendButton = sender.getByTestId("send-chat-button");
+    // Start the response budget only after the real selected Chat permits a
+    // send. Navigation can precede its verified current/MLS installation.
+    try {
+      await expect(sendButton).toBeEnabled({ timeout: 90_000 });
+    } catch (error) {
+      await test.info().attach("direct-topic-chat-send-readiness", {
+        body: JSON.stringify({ side: sender === alice ? "alice" : "bob", selected_chat: chatId,
+          route_matches_selected_chat: decodeURIComponent(new URL(sender.url()).pathname) === selectedPath,
+          selector_matches_selected_chat: await senderSelection.inputValue().then(value => value === chatId).catch(() => false),
+          input_matches_marker: await sender.getByTestId("chat-input").inputValue().then(value => value === text).catch(() => false),
+          send_enabled: await sendButton.isEnabled().catch(() => false),
+          mls_binding_pending: await sendButton.getAttribute("data-mls-binding-pending").then(value => value === null ? null : value === "true").catch(() => null),
+          creator_bootstrap_pending: await sendButton.getAttribute("data-creator-bootstrap-pending").then(value => value === null ? null : value === "true").catch(() => null),
+          readiness_checking: await sendButton.getAttribute("data-readiness-checking").then(value => value === null ? null : value === "true").catch(() => null),
+          blocker_diagnostic_present: await sendButton.getAttribute("data-send-blockers").then(Boolean).catch(() => false) }), contentType: "application/json",
+      });
+      throw error;
+    }
+    const [sent] = await Promise.all([
+      sender.waitForResponse(response => response.request().method() === "POST"
+        && new URL(response.url()).pathname === "/_arkret/self/events"
+        && ingressEvents(decodeEventIngressBody(response.request().postDataJSON())).some(event => event.kind === "ak.message.create")),
+      sendButton.click(),
+    ]);
     const message = ingressEvents(decodeEventIngressBody(sent.request().postDataJSON())).find(event => event.kind === "ak.message.create")!;
     expect(message.payload?.strand_id).toBe(chatId);
     expect(message.payload?.encrypted_content).toBeTruthy();
