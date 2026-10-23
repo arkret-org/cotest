@@ -813,8 +813,6 @@ jobs:
           name: joint-failure-${{ github.run_id }}-${{ matrix.project }}
           path: |
             cotest/artifacts/runs/joint-e2e/**/services/prepare-*.log
-            cotest/artifacts/runs/joint-e2e/**/runner-error.log
-            cotest/artifacts/runs/joint-e2e/**/summary.md
             cotest/e2e/test-results/
             ${{ runner.temp }}/joint-public-failure/
           if-no-files-found: ignore
