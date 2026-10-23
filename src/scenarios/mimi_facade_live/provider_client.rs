@@ -528,18 +528,26 @@ pub(super) async fn run(
     let key_request = arkret_models_crypto::PeerKeyPackagesClaimRequestBody::from(&native);
     let failure = room_sdk
         .mimi_request_key_material(&key_request, server.trust_domain(), server.trust_domain())
-        .await
-        .unwrap_err();
-    let arkret_http_client::Error::Api { error, .. } = failure else {
-        anyhow::bail!("expected closed key claim refusal, got {failure:?}")
-    };
+        .await?;
     ensure!(
-        error.code() == "claim_failed",
-        "signed no-material key claim: {error:?}"
+        failure.state == arkret_models_crypto::PeerKeyPackagesClaimQueryState::ClaimFailed
+            && failure.claim_outcome.is_none()
+            && failure.terminal_receipt.is_some(),
+        "signed no-material key claim: {failure:?}"
+    );
+    let retained = crate::scenarios::mls_lifecycle_live::upload_durable_cut(database).await?;
+    let retry = room_sdk
+        .mimi_request_key_material(&key_request, server.trust_domain(), server.trust_domain())
+        .await?;
+    ensure!(
+        serde_json::to_value(retry)? == serde_json::to_value(failure)?
+            && crate::scenarios::mls_lifecycle_live::upload_durable_cut(database).await?
+                == retained,
+        "no-material recovery changed its original closed result"
     );
     ensure!(
         counts(database, realm).await? == before,
-        "failed key claim emitted native writes"
+        "failed key claim emitted native Events or MIMI receipts"
     );
     eprintln!(
         "MIMI provider SDK: request correlations=3; Consent accepted/exact replay=2; expired-scope removal=1; requester-self/private-current refusals=2; hosting-provider-peer/Human-private-current refusals=2; wrong-key zero-write=1; room receipt/notify=2; signed no-material claim refusal=1; external-provider-live=0"
