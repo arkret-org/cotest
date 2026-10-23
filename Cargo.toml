@@ -145,9 +145,9 @@ getrandom = { version = "0.4.3", default-features = false, features = ["std"] }
 hex = "0.4.3"
 hkdf = "0.13.0"
 hmac = "0.13.0"
-hpke-rs = "0.7"
-hpke-rs-crypto = "0.7"
-hpke-rs-rust-crypto = "0.7"
+hpke-rs = "0.8"
+hpke-rs-crypto = "0.8"
+hpke-rs-rust-crypto = "0.8"
 inkson = { path = "../inkson" }
 jsonschema = { version = "0.59.0", default-features = false }
 postgres = "0.19.14"

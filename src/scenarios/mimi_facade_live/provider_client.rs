@@ -1,7 +1,7 @@
 //! Shared provider SDK against the actual TLS receiver and durable Consent.
 use arkret_models_collaboration::mimi_operations::{
-    MimiConsentDecision, MimiKeyMaterialRequestBody, MimiNotifyRequestBody,
-    MimiRequestConsentRequestBody, MimiRoomUpdateRequestBody, MimiUpdateConsentRequestBody,
+    MimiConsentDecision, MimiNotifyRequestBody, MimiRequestConsentRequestBody,
+    MimiRoomUpdateRequestBody, MimiUpdateConsentRequestBody,
 };
 use arkret_models_collaboration::objects::mimi::MimiConsentPurpose;
 use arkret_wire::{EventAdmissionSubmission, PayloadProof, RealmId, ScopeRef, StrandId};
@@ -511,22 +511,23 @@ pub(super) async fn run(
         "receipt-only room/notify emitted native writes"
     );
 
-    let mut key_request: MimiKeyMaterialRequestBody = serde_json::from_value(json!({
-        "requester_id":server.service_id(),"strand_id":strand,"device_id":requester.device,
-        "realm_id":realm,"mls_group_id":group
-    }))?;
-    key_request.proofs.push(proof(
+    let mut native = crate::scenarios::mls_lifecycle_live::claim_request_between(
+        &requester,
         server,
-        &arkret_wire::DidUrl::new(format!("{}#notary-key", server.service_did()))
-            .map_err(anyhow::Error::msg)?,
-    )?);
-    key_request.proofs[0].payload_digest = key_request.payload_digest()?;
-    key_request.proofs[0].jws = sign(
-        &key_request.unsigned_proof_binding_bytes(&key_request.proofs[0].unsigned())?,
-        &server.federation_signing_key()?,
+        server,
+        holder,
+        &RealmId::new(realm.to_owned())?,
+        group.as_str(),
+        [218; 16],
+        chrono::Duration::minutes(5),
     )?;
-    let failure = sdk
-        .mimi_request_key_material(&key_request)
+    native.required_capabilities =
+        vec![arkret_wire::NonEmptyString::new("mimi.content.v1").map_err(anyhow::Error::msg)?];
+    native.strand_id = Some(StrandId::new(strand.to_owned())?);
+    crate::scenarios::mls_lifecycle_live::resign_claim(&requester, &mut native)?;
+    let key_request = arkret_models_crypto::PeerKeyPackagesClaimRequestBody::from(&native);
+    let failure = room_sdk
+        .mimi_request_key_material(&key_request, server.trust_domain(), server.trust_domain())
         .await
         .unwrap_err();
     let arkret_http_client::Error::Api { error, .. } = failure else {

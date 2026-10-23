@@ -12,7 +12,7 @@ use arkret_canonical::base64url::base64url_encode;
 use arkret_wire::{HPKE_SUITES, HpkeSuiteId};
 use hpke_rs::{Hpke, HpkePrivateKey, Mode};
 use hpke_rs_crypto::HpkeCrypto;
-use hpke_rs_crypto::types::{AeadAlgorithm, KdfAlgorithm, KemAlgorithm};
+use hpke_rs_crypto::types::{AeadAlgorithm, KdfAlgorithm, KemAlgorithm, TwoStageKdfAlgorithm};
 use hpke_rs_rust_crypto::HpkeRustCrypto;
 use serde_json::Value;
 
@@ -115,7 +115,7 @@ fn labeled_extract(salt: &[u8], suite_id: &[u8], label: &[u8], ikm: &[u8]) -> Re
     labeled_ikm.extend_from_slice(suite_id);
     labeled_ikm.extend_from_slice(label);
     labeled_ikm.extend_from_slice(ikm);
-    HpkeRustCrypto::kdf_extract(KdfAlgorithm::HkdfSha256, salt, &labeled_ikm)
+    HpkeRustCrypto::kdf_extract(TwoStageKdfAlgorithm::HkdfSha256, salt, &labeled_ikm)
         .map_err(|error| anyhow!("production HPKE KDF extract failed: {error}"))
 }
 
@@ -134,7 +134,7 @@ fn labeled_expand(
     labeled_info.extend_from_slice(label);
     labeled_info.extend_from_slice(info);
     HpkeRustCrypto::kdf_expand(
-        KdfAlgorithm::HkdfSha256,
+        TwoStageKdfAlgorithm::HkdfSha256,
         prk,
         &labeled_info,
         usize::from(length),
@@ -242,9 +242,10 @@ fn run_positive(
         "{case_id} ephemeral public key KAT differs"
     );
 
-    hpke.seed(&ikm_e)?;
-    let (enc, mut sender) =
-        hpke.setup_sender(receiver_pair.public_key(), &info, None, None, None)?;
+    // The provider no longer exposes seeded production RNGs. Derive the
+    // frozen DHKEM ephemeral key with the real provider and keep every RFC
+    // byte assertion; the receiver still performs production decapsulation.
+    let enc = ephemeral_pair.public_key().as_slice().to_vec();
     ensure!(enc == expected_enc, "{case_id} encapsulated key differs");
     let shared_secret = shared_secret(algorithms, &sk_r, &pk_r, &enc)
         .with_context(|| format!("{case_id} production decapsulation failed"))?;
@@ -252,6 +253,7 @@ fn run_positive(
         shared_secret == bytes(vector, "shared_secret_hex")?,
         "{case_id} shared secret differs"
     );
+    let mut sender = hpke.key_schedule(&shared_secret, &info, &[], &[])?;
     let (key_schedule_context, secret) =
         key_schedule_intermediates(algorithms, &info, &shared_secret)?;
     ensure!(
@@ -340,6 +342,27 @@ fn run_positive(
         );
     }
 
+    // Also exercise fresh production encapsulation with its system-backed
+    // RNG, independently of the deterministic known-answer context above.
+    let (fresh_enc, mut fresh_sender) =
+        hpke.setup_sender(receiver_pair.public_key(), &info, None, None, None)?;
+    let mut fresh_receiver = hpke.setup_receiver(
+        &fresh_enc,
+        receiver_pair.private_key(),
+        &info,
+        None,
+        None,
+        None,
+    )?;
+    let first = &encryptions[0];
+    let aad = bytes(first, "aad_hex")?;
+    let plaintext = bytes(first, "pt_hex")?;
+    let ciphertext = fresh_sender.seal(&aad, &plaintext)?;
+    ensure!(
+        fresh_receiver.open(&aad, &ciphertext)? == plaintext,
+        "{case_id} fresh production encapsulation failed"
+    );
+
     ensure!(
         accepted_sink
             .insert(case_id.to_owned(), vector.clone())
@@ -347,7 +370,7 @@ fn run_positive(
     );
     Ok(CaseExecutionResult {
         case_id: case_id.to_owned(),
-        assertions: 14 + encryptions.len() * 4 + exports.len(),
+        assertions: 15 + encryptions.len() * 4 + exports.len(),
         accepted_effects: 1,
         rejected_zero_effect: false,
     })

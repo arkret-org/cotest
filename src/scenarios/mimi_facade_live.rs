@@ -14,6 +14,7 @@ use crate::scenarios::human_device_producer_live::{
 use crate::scenarios::identity_test_support::HARNESS_INTERNAL_AUTHORITY_SECRET;
 use crate::scenarios::mls_lifecycle_live::Member;
 mod directory;
+mod key_material;
 mod provider_client;
 mod report_recovery;
 
@@ -130,6 +131,21 @@ async fn signed_post_with_mutation(
     ];
     if room.is_some() {
         covered.push(Component::Header("mimi-room-uri".into()));
+    }
+    if path == "/_arkret/open/mimi/key-material" {
+        let claim: arkret_models_crypto::PeerKeyPackagesClaimRequestBody =
+            serde_json::from_slice(&body)?;
+        for (name, value) in [
+            ("idempotency-key", claim.claim_request_id.to_string()),
+            ("source-trust-domain", server.trust_domain().to_string()),
+            (
+                "destination-trust-domain",
+                server.trust_domain().to_string(),
+            ),
+        ] {
+            headers.push((name.into(), value));
+            covered.push(Component::Header(name.into()));
+        }
     }
     let now = chrono::Utc::now().timestamp()
         + match tamper {
@@ -626,6 +642,16 @@ pub async fn run_evidence() -> Result<Option<(Vec<CaseExecutionResult>, Vec<Case
             .is_some_and(|kind| kind.ends_with("http_signature_required")),
         "Bearer shortcut survived: {result}"
     );
+    key_material::run(
+        server,
+        &member,
+        &coauth,
+        &db.connect_url,
+        &realm,
+        &strand,
+        provider,
+    )
+    .await?;
     Ok(Some((admission, migration)))
 }
 

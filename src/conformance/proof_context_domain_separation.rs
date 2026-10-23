@@ -2,14 +2,13 @@
 //! (`extensions/mimi-interop.md` §5.1) request and outcome families.
 //!
 //! v1 has no `ak.directory_operation_proof.v1` / `ak.mimi_operation_proof.v1`.
-//! Every request and outcome family carries its own registered context, so a
+//! Each proof family below carries its own registered context, so a
 //! signature minted for one family can never be replayed onto another. This
 //! module drives that closure from three sides:
 //!
-//! 1. **Registry closure** — the six per-family contexts exist in `registry/proof-context-
+//! 1. **Registry closure** — the four current per-family contexts exist in `registry/proof-context-
 //!    registry.json`, are bound to their own `object_family`, are pairwise distinct and are all
-//!    reachable through the shared [`ProofContextId`] vocabulary. The two retired over-broad
-//!    contexts resolve nowhere.
+//!    reachable through the shared [`ProofContextId`] vocabulary. Retired contexts resolve nowhere.
 //! 2. **Owner closure** — each family's SDK binding transcript really emits its own context. The
 //!    context string is read back out of the canonical transcript the owning type produced, never
 //!    restated here.
@@ -29,8 +28,7 @@ use std::collections::BTreeSet;
 
 use anyhow::{Result, anyhow, bail};
 use arkret_models_collaboration::mimi_operations::{
-    MimiIdentifierQueryOutcome, MimiIdentifierQueryRequestBody, MimiKeyMaterialOutcome,
-    MimiKeyMaterialRequestBody, MimiRequestConsentRequestBody,
+    MimiIdentifierQueryOutcome, MimiIdentifierQueryRequestBody, MimiRequestConsentRequestBody,
 };
 use arkret_signatures::proof::sign_ed25519_detached_jws;
 use arkret_signatures::{PublicKeyMaterial, verify_ed25519_detached_jws_payload_proof};
@@ -42,7 +40,7 @@ use serde_json::{Value, json};
 
 use super::load_artifact_json;
 
-/// The six MIMI operation families that replaced the retired over-broad
+/// The four current MIMI operation families that replaced the retired over-broad
 /// `ak.mimi_operation_proof.v1`.
 pub const MIMI_PER_FAMILY_PROOF_CONTEXTS: &[(&str, &str)] = &[
     (
@@ -54,14 +52,6 @@ pub const MIMI_PER_FAMILY_PROOF_CONTEXTS: &[(&str, &str)] = &[
         "mimi_identifier_query_request",
     ),
     (
-        ProofContextId::MIMI_KEY_MATERIAL_OUTCOME_PROOF_V1,
-        "mimi_key_material_outcome",
-    ),
-    (
-        ProofContextId::MIMI_KEY_MATERIAL_REQUEST_PROOF_V1,
-        "mimi_key_material_request",
-    ),
-    (
         ProofContextId::MIMI_REQUEST_CONSENT_REQUEST_PROOF_V1,
         "mimi_request_consent_request",
     ),
@@ -71,12 +61,14 @@ pub const MIMI_PER_FAMILY_PROOF_CONTEXTS: &[(&str, &str)] = &[
     ),
 ];
 
-/// Contexts the spec retired when the per-family split landed. They must not
+/// Generic contexts and the superseded MIMI key-material contexts must not
 /// resolve through the registry or the shared vocabulary; a receiver that still
 /// accepted one would accept a proof minted for any sibling operation.
-const RETIRED_OVER_BROAD_CONTEXTS: &[&str] = &[
+const RETIRED_PROOF_CONTEXTS: &[&str] = &[
     "ak.directory_operation_proof.v1",
     "ak.mimi_operation_proof.v1",
+    "ak.mimi_key_material_request_proof.v1",
+    "ak.mimi_key_material_outcome_proof.v1",
 ];
 
 const MIMI_AUDIENCE: &str = "ak:did_core:web:provider.example";
@@ -160,14 +152,15 @@ fn assert_registry_closure() -> Result<()> {
             bail!("per-family proof context `{context}` is absent from the shared vocabulary");
         }
     }
-    if seen.len() != 6 {
+    if seen.len() != MIMI_PER_FAMILY_PROOF_CONTEXTS.len() {
         bail!(
-            "expected 6 per-family MIMI proof contexts, found {}",
+            "expected {} current per-family MIMI proof contexts, found {}",
+            MIMI_PER_FAMILY_PROOF_CONTEXTS.len(),
             seen.len()
         );
     }
 
-    for retired in RETIRED_OVER_BROAD_CONTEXTS {
+    for retired in RETIRED_PROOF_CONTEXTS {
         let registered = contexts
             .iter()
             .any(|row| row.get("context").and_then(Value::as_str) == Some(*retired))
@@ -175,12 +168,12 @@ fn assert_registry_closure() -> Result<()> {
                 .iter()
                 .any(|row| row.get("domain").and_then(Value::as_str) == Some(*retired));
         if registered {
-            bail!("retired over-broad proof context `{retired}` is still registered");
+            bail!("retired proof context `{retired}` is still registered");
         }
         if ProofContextId::from_wire(retired).is_some()
             || DomainSeparationId::from_wire(retired).is_some()
         {
-            bail!("retired over-broad proof context `{retired}` still parses in the SDK");
+            bail!("retired proof context `{retired}` still parses in the SDK");
         }
     }
     Ok(())
@@ -403,13 +396,6 @@ fn mimi_families() -> Result<Vec<FamilyUnderTest>> {
         }],
         "requester_id": REQUESTER_ID
     }))?;
-    let key_material_outcome: MimiKeyMaterialOutcome =
-        serde_json::from_value(json!({"failures": []}))?;
-    let key_material_request: MimiKeyMaterialRequestBody = serde_json::from_value(json!({
-        "requester_id": REQUESTER_ID,
-        "strand_id": "ak:strand:Aepgr15HbtERKfqPAh9SrfWBdihSvX_c94JvujvBS2f-",
-        "device_id": "ak:device:01904100-0000-7000-8000-000000000001"
-    }))?;
     // The signed request names both identities in full; the proof issuer is
     // the complete Actor and holder_account_id is a binding field. Contract:
     // `arkret-spec/spec/v1/zh/extensions/mimi-interop.md` (consent proof binding).
@@ -441,18 +427,6 @@ fn mimi_families() -> Result<Vec<FamilyUnderTest>> {
             ProofContextId::MIMI_IDENTIFIER_QUERY_REQUEST_PROOF_V1,
             identifier_query_request.payload_digest()?,
             move |proof| Ok(identifier_query_request.proof_binding_bytes(proof)?),
-        ),
-        family(
-            "mimi_key_material_outcome",
-            ProofContextId::MIMI_KEY_MATERIAL_OUTCOME_PROOF_V1,
-            key_material_outcome.payload_digest()?,
-            move |proof| Ok(key_material_outcome.proof_binding_bytes(proof)?),
-        ),
-        family(
-            "mimi_key_material_request",
-            ProofContextId::MIMI_KEY_MATERIAL_REQUEST_PROOF_V1,
-            key_material_request.payload_digest()?,
-            move |proof| Ok(key_material_request.proof_binding_bytes(proof)?),
         ),
         family(
             "mimi_request_consent_request",
