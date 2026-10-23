@@ -145,6 +145,7 @@ type OpenUserOpts = {
   /// across closing and relaunching the Chromium process.
   persistentUserDataDir?: string;
   resumePersistentProfile?: boolean;
+  beforeNavigate?: (page: Page) => Promise<void>;
 };
 
 export type DpopUserSession = {
@@ -2455,7 +2456,7 @@ export async function allowExplicitInviteNotifications(
   expect(updated.status(), await updated.text()).toBe(200);
 }
 
-function canonicalSessionOptions(session: DpopUserSession): OpenUserOpts {
+export function canonicalSessionOptions(session: DpopUserSession): OpenUserOpts {
   return {
     grantJwt: session.grantJwt,
     dpopSeedB64url: session.dpopSeedB64url,
@@ -2482,6 +2483,9 @@ export async function openDpopUserPageFromSession(
     prepareMlsDevice?: boolean;
     autoCompleteRecoveryKeySetup?: boolean;
     refreshGrantBeforeUse?: boolean;
+    persistentUserDataDir?: string;
+    resumePersistentProfile?: boolean;
+    beforeNavigate?: (page: Page) => Promise<void>;
   } = {},
 ): Promise<DpopUserPageSession | undefined> {
   if (!session) {
@@ -2499,6 +2503,9 @@ export async function openDpopUserPageFromSession(
   }
   const page = await openUserPage(browser, session.user, {
     server: opts.server,
+    persistentUserDataDir: opts.persistentUserDataDir,
+    resumePersistentProfile: opts.resumePersistentProfile,
+    beforeNavigate: opts.beforeNavigate,
     ...canonicalSessionOptions(session),
     grantExpiresAt: localExpiry,
     autoCompleteRecoveryKeySetup: opts.autoCompleteRecoveryKeySetup,
@@ -2735,6 +2742,7 @@ export async function openUser(
     },
   );
   const page = context.pages()[0] ?? await context.newPage();
+  await opts.beforeNavigate?.(page);
   // With real-grant injection enabled, device enrollment triggers inkson's
   // mandatory "Set up your 24-word Recovery Key" modal ("required before
   // encryption"). It can pop asynchronously mid-flow and covers the page, so a

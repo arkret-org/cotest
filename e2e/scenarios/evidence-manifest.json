@@ -678,6 +678,25 @@
       "claims_excluded": []
     },
     {
+      "scenario_key": "identity/saved-account-session-switch",
+      "suite_kind": "joint-e2e",
+      "realism_level": "fixture-only",
+      "evidence_class": "fixture-only",
+      "real_services": [
+        "coauth",
+        "coland"
+      ],
+      "mocks": [],
+      "identity_establishment": [
+        "oauth_authorization_ui"
+      ],
+      "protocol_object_producers": [
+        "fixture_or_not_applicable"
+      ],
+      "declared_test_bypasses": [],
+      "claims_excluded": []
+    },
+    {
       "scenario_key": "joint/agent-provision-recovery-prerequisite",
       "suite_kind": "joint-e2e",
       "realism_level": "fixture-only",
@@ -1089,10 +1108,12 @@
       "declared_test_bypasses": [
         "create_realm_passive_prompt_dismissal",
         "raw_http_fixture_or_oracle",
-        "session_injection"
+        "session_injection",
+        "test_only_signer_or_wire_builder"
       ],
       "claims_excluded": [
         "mls_backup_unlock_and_missing_recovery_prompt_behavior",
+        "product_protocol_object_generation",
         "registration_login_authorization",
         "ui_driven_business_flow_for_raw_http_steps"
       ]

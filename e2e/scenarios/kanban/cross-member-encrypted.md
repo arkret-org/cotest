@@ -125,3 +125,108 @@ Carol 按自身 Welcome 加入；Bob 不取得 Carol 的加入 secret，必须�
 `quarantines a rejected original independently proved accepted` 先注入本地 403 拒绝并保留9，再用独立 fixture HTTP caller 将完全相同的原 frozen request送达真实 Station并取得 accepted outcome。产品明确重试必须独立认证 accepted 原 Event，由9进入11，保留原拒绝、私有单元、signed coordinates及已知 accepted winner，不能把同一拒绝原件当新代或 distinct winner进入10。真实 snapshot cut不可用时只核原9原样并有界明确重试；reload后11诊断不变、无重试入口、不重新提交 create／Genesis。注入拒绝和独立 caller仍为 fixture-only；实际 Station acceptance不能将整个身份设置改标 live product。
 
 Quarantine private／write-failure 切点保持原私有信封的合法 JSON 与字段坐标，只篡改合法 hex 密文，同时重算测试 fixture 声明的 private byte binding。因此 SDK opaque-byte 结构检查仍可通过，失败必须由持有原设备密钥的真实私有解密恢复入口发现；该切点不把 fixture vault 读写当作 portable authority proof。
+
+## Durable Card placement recovery (1121)
+
+The three `recovers card-before-send`, `recovers card-create-response-lost`, and
+`recovers card-move-response-lost` cases use the same real two-member encrypted
+flow. The transport cuts the original Card create before sending, or discards
+an actual Station-accepted create/Move response. Before closing the original persistent Chromium client process,
+the test checks that the encrypted outbound vault contains exactly one original
+create and its durable placement intent; a frozen Move, when present, is linked
+exactly once. An unplaced card remains a draft rather than claiming completion.
+
+A new Chromium process reopens the same profile without reseeding IndexedDB or
+exporting its non-extractable wrapping key. After restoring transport, the same card must reach its intended List without a
+second create or Move identity. Every observed retry must retain its exact request
+bytes. Both members then decrypt the description, reload, and edit in both
+directions through the existing flow. The fixture attaches only public Event and
+Commit coordinates and counts. Native queue tests separately cover terminal
+create/Move refusal and changed destination rejection; the browser fault cases do
+not pretend an injected error proves real permission revocation.
+
+## Station restart and membership terminal UI (1121)
+
+`recovers station-restart` finishes the real two-member encrypted exchange first,
+then uses the original runner's process controller to terminate the owned Station
+tree and restart its exact config, home and database. It requires a different PID,
+the old PID in the controller's terminated identities, and a successful formal
+`/_arkret/describe` probe. Both members reload and must decrypt both original cards
+and their distinct private descriptions. A browser reload alone cannot satisfy it.
+
+`recovers member-leave` submits the target's own `ak.member.state{membership=leave}`;
+`recovers member-revoke` submits the creator/admin's `membership=ban` for that same
+complete target Account ActorId. Both follow common-fields section 4.5 and the
+closed membership payload. The target has a private description open at the real
+accepted terminal change. Its plaintext, Card and enabled Card-create control must
+withdraw before reload and remain unavailable after reload. The remaining member
+must still decrypt the original content. These cases supply no mock 403, database
+membership edits, synthetic current, or separate admin endpoint.
+After reload the test waits for the authenticated product shell and observes DOM
+mutations for five seconds; private Card content or an enabled Card writer must
+never reappear. An empty not-yet-initialized document cannot satisfy this gate.
+
+## History after the first 500 commits (1121)
+
+`recovers history-after-501` inserts 501 distinct, SDK-signed metadata-free
+discussion Strand creates into the real Realm stream after Bob joins, then
+creates the encrypted Board, List and Card through Inkson. Bob's original browser
+is closed before the seed and an empty context opens after the Card description
+commits, using the existing real session and Recovery Key backup recovery without
+copying product current, history or private MLS cache. Both readers' formal
+500-row first scans must be truncated and exclude that Card Event; a scan after
+the last first-page stream position must contain it. These fixture reads are
+delivery oracles, not product requests or proof of the product's history coverage.
+Bob must still decrypt the distinct Card description, retain it after reload,
+and create his own Card that Alice decrypts. The test never injects a product
+current snapshot or cached history. The fixture writer supplies no private Card
+plaintext; this remains fixture-only evidence.
+
+The case also creates a real Board and List before Bob joins, retaining their
+accepted public identities and create position. Bob's historical scan must not
+disclose that pre-join create, while his empty browser must still show the exact
+retained List under its current Board. Current structural coverage is checked
+separately from historical Event disclosure; the test does not require sharing
+pre-join MLS keys or private content.
+
+## Browser request costs and subscription fallback (1121)
+
+The observer is installed before initial navigation and records browser HTTP
+requests, encoded body/header byte counts, known list row counts, per-Realm
+list concurrency, first reader display time, WebSocket application bytes and
+logical channel opens. Node fixture/oracle requests are excluded. Unavailable
+sizes/row counts remain null; open streams are not reported as zero-cost.
+WebSocket byte counts exclude transport framing and TLS.
+
+`recovers requests-websocket` requires an actual account subscription channel,
+then repeats an authentic already-received account delta byte-for-byte 20 times.
+It requires no new inventory list or stream scan in that steady interval.
+`recovers requests-http-fallback` connects to the real advertised WebSocket and
+injects a client-side 1002 close after the first real server frame (the backing
+browser connection closes normally); the product must use formal
+HTTP subscriptions and still complete the same encrypted two-member flow.
+Both cases commit 20 real alternating archive/restore changes to the original
+Card, require the final Card to decrypt, and assert no parallel inventory read
+sets or unnecessary list rereads. The duplication and binding-failure cuts are
+test instrumentation, not additional real server notifications or successful
+WebSocket authentication evidence for the HTTP fallback case.
+
+The HTTP subscription observer tees an observation branch of the original
+Response stream. It retains only decoded byte/frame counts and bounded public
+Event/Commit references, without modifying the product Response or exporting
+frames. Both transport cases require the actual subscription to deliver the
+final accepted Event or Commit before checking the restored Card, preventing an
+unchanged initial Card from masquerading as recovery after twenty changes.
+
+The two transport cases also create a second actual Board and Card, then use
+the product Board selector 21 times without a hard navigation. The final Board
+must show its original private Card and no Card from the other Board, with zero
+inventory rereads during switching. This verifies Board-target switching; the
+native session/HTTP tests separately cover complete Account/Station/device-bound
+grant, provider/epoch replacement, last-waiter cancellation and late responses.
+
+Before lifecycle changes, Bob sends twenty actual encrypted ordinary discussion
+messages through the product UI while Alice keeps the Board open. Alice's real
+subscription must deliver the final accepted cut and issue zero new inventory
+lists. These messages exercise receive-chain/current updates that do not change
+the Board inventory. The count is separate from the twenty lifecycle changes.

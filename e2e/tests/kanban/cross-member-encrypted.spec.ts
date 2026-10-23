@@ -1,3 +1,11 @@
+import { restartRunnerStation } from "../../helpers/station-runtime";
+import { proveKanbanHistoryTail, seedKanbanHistory } from "../../helpers/kanban-history";
+import { observeRequestCost } from "../../helpers/request-cost";
+import { installSubscriptionCut } from "../../helpers/subscription-cut";
+import os from "node:os";
+import path from "node:path";
+import { rm } from "node:fs/promises";
+import { installCardPlacementFault } from "../../helpers/card-placement-fault";
 import { readCreatorRecords } from "../../helpers/creator-bootstrap";
 // Cross-member encrypted kanban
 // Contract: e2e/scenarios/kanban/cross-member-encrypted.md
@@ -43,7 +51,7 @@ import {
   type Page,
 } from "../../helpers/arkret-test";
 import { colandBaseUrl } from "../../helpers/env";
-import { assertAuthoritySubmitOutcome, canonicalJson, grantCapabilityEventApi, queryRealmEventsApi } from "../../helpers/coland-api";
+import { assertAuthoritySubmitOutcome, canonicalJson, grantCapabilityEventApi, queryRealmEventsApi, retypeEventDerivedId, signedEventEnvelope, submitSignedEventApi } from "../../helpers/coland-api";
 import { grantInviteConsentArkret } from "../../helpers/contact-api";
 import { stepShot } from "../../helpers/screenshots";
 import { selfPathGrantHeaders } from "../../helpers/session-grant-dpop";
@@ -53,6 +61,7 @@ import { selectDxcOption } from "../../helpers/dxc-select";
 import {
   assertJointStackNotRequired,
   createDpopUserSession,
+  canonicalSessionOptions,
   issueInviteLocatorToken,
   openDpopUserPageFromSession,
   openUserPage,
@@ -399,6 +408,7 @@ async function buildEncryptedBoardListCard(
   cardTitle: string,
   createCard = true,
   creatorRecoveryProof?: CreatorRecoveryProof,
+  afterCardSubmitted?: () => Promise<Page | void>,
 ): Promise<string> {
   await page.goto(`/kanban/${realmId}`, { waitUntil: "domcontentloaded" });
   const readinessDeadline = Date.now() + 120_000;
@@ -443,7 +453,10 @@ async function buildEncryptedBoardListCard(
   await column.getByTestId("add-card-button").click();
   await column.getByTestId("new-card-title-input").fill(cardTitle);
   await column.getByTestId("save-card-button").click();
-  const createdCard = column.getByTestId("kanban-card").filter({ hasText: cardTitle });
+  const resumed = await afterCardSubmitted?.();
+  if (resumed) page = resumed;
+  const createdCard = page.getByTestId("kanban-column").filter({ hasText: listTitle }).first()
+    .getByTestId("kanban-card").filter({ hasText: cardTitle });
   await expect(createdCard).toBeVisible({ timeout: 45_000 });
   // A visible optimistic draft does not yet name an accepted Strand. Editing
   // its private tracks requires the confirmed object identity.
@@ -1512,7 +1525,7 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
   });
   }
 
-  for (const fault of [undefined, "commit-response-lost", "welcome-before-durable", "welcome-response-lost", "retryable-unavailable", "private-state-blocked", "late-transition-tail"] as const) {
+  for (const fault of [undefined, "commit-response-lost", "welcome-before-durable", "welcome-response-lost", "retryable-unavailable", "private-state-blocked", "late-transition-tail", "card-before-send", "card-create-response-lost", "card-move-response-lost", "station-restart", "member-leave", "member-revoke", "history-after-501", "requests-websocket", "requests-http-fallback"] as const) {
     test("bob joins an MLS-encrypted realm and decrypts alice's encrypted card content; survives reload; bob's own card projects back to alice" + (fault ? `; recovers ${fault}` : ""), async ({
       browser,
       request,
@@ -1521,7 +1534,7 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
       // encrypt, invite, Welcome, join, cross-member decrypt, reload, reverse
       // direction) does not fit the 180s default — mirror the sibling MLS browser
       // budget so it does not time out mid-flow.
-      test.setTimeout(600_000);
+      test.setTimeout(fault === "history-after-501" ? 900_000 : 600_000);
 
       const stamp = Date.now();
       const [aliceSession, bobSession] = await Promise.all([
@@ -1543,12 +1556,23 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
 
       const alice = aliceSession.user;
       const bob = bobSession.user;
-      const aliceFlow = await openDpopUserPageFromSession(browser, aliceSession);
+      const profileName = `cotest-card-placement-${stamp}`;
+      const profile = fault?.startsWith("card-") ? path.join(os.tmpdir(), profileName) : undefined;
+      const costs: Array<{ reader: string; cost: ReturnType<typeof observeRequestCost> }> = [];
+      let subscriptionCut: Awaited<ReturnType<typeof installSubscriptionCut>> | undefined;
+      const requestCase = fault === "requests-websocket" || fault === "requests-http-fallback";
+      const observeAlice = async (page: Page) => {
+        costs.push({ reader: "alice", cost: observeRequestCost(page) });
+        if (requestCase) subscriptionCut = await installSubscriptionCut(page, fault === "requests-http-fallback");
+      };
+      const aliceFlow = await openDpopUserPageFromSession(browser, aliceSession,
+        { persistentUserDataDir: profile, beforeNavigate: observeAlice });
       expect(aliceFlow).toBeTruthy();
-      const alicePage = aliceFlow!.page;
+      let alicePage = aliceFlow!.page;
       let bobPage: JointUserPage | undefined;
       let carolPage: JointUserPage | undefined;
       let outboundFault: Awaited<ReturnType<typeof installMlsOutboundFault>> | undefined;
+      let cardFault: Awaited<ReturnType<typeof installCardPlacementFault>> | undefined;
       const privateClaimQuery = /\/_arkret\/self\/keys\/keypackages\/claims\/query(?:\?.*)?$/;
       let holdPrivateState = fault === "private-state-blocked";
       let privateReadCuts = 0;
@@ -1561,6 +1585,7 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
       const bobDescription = `Bob private reply ${stamp}`;
       const bobEditOfAliceCard = `Bob edited Alice card ${stamp}`;
       const aliceEditOfBobCard = `Alice edited Bob card ${stamp}`;
+      let retainedBoard: { boardId: string; listId: string; eventId: string; streamPosition: number } | undefined;
 
       try {
         // The session opener already bootstraps Home. A second hard navigation
@@ -1582,6 +1607,26 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
         // Key to seal its new checkpoint secret. Complete the real backup,
         // rather than hiding a modal or treating an optimistic Realm as ready.
         await alicePage.completeMlsAccountRecoveryIfPrompted(aliceSession.recoveryKey!);
+        if (fault === "history-after-501") {
+          const receipt = alicePage.page.waitForResponse(response => {
+            const request = response.request();
+            if (request.method() !== "POST" || new URL(request.url()).pathname !== "/_arkret/self/events") return false;
+            const event = request.postDataJSON()?.event;
+            return event?.realm_id === realmId && event?.kind === "ak.space.create" && event.payload?.object?.kind === "board";
+          }, { timeout: 120_000 });
+          const boardId = await buildEncryptedBoardListCard(alicePage.page, realmId,
+            `Retained board ${stamp}`, `Retained list ${stamp}`, "unused", false);
+          await expect(alicePage.page.getByTestId("kanban-column").first()).toHaveAttribute("data-column-draft", "false");
+          const response = await receipt;
+          const event = response.request().postDataJSON().event as Record<string, unknown>;
+          const outcome = await response.json();
+          assertAuthoritySubmitOutcome(outcome, event, "pre-join retained Board");
+          expect(retypeEventDerivedId(String(event.event_id), "space")).toBe(boardId);
+          const listId = await alicePage.page.getByTestId("kanban-column").first()
+            .getByTestId("list-archive-button").getAttribute("data-space-container-id");
+          expect(listId).toMatch(/^ak:space:/);
+          retainedBoard = { boardId, listId: listId!, eventId: String(event.event_id), streamPosition: Number(outcome.commit.stream_position) };
+        }
         await grantInviteConsentArkret(
           request,
           bobSession.grantJwt,
@@ -1611,7 +1656,8 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
         // Bob now completes the atomic PCR create + founding-device authorization.
         // This publishes his real event-signer KeyPackage after the invite already
         // exists, exercising the deferred Welcome reconciliation path.
-        const bobFlow = await openDpopUserPageFromSession(browser, bobSession);
+        const bobFlow = await openDpopUserPageFromSession(browser, bobSession,
+          { beforeNavigate: async page => { costs.push({ reader: "bob", cost: observeRequestCost(page) }); } });
         expect(bobFlow).toBeTruthy();
         bobPage = bobFlow!.page;
         await bobPage.completeRecoveryKeySetupIfPrompted();
@@ -1660,18 +1706,95 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
 
         // 4) Alice builds the board + encrypted card AFTER bob is a member, so it is
         //    post-join shared content for bob.
+        if (fault === "history-after-501") {
+          // Keep the reader offline through the whole seed and Card creation.
+          // A later empty browser must recover current/history; consuming 501
+          // live deltas beforehand would not exercise this boundary.
+          await bobPage.close();
+          const proof = await seedKanbanHistory(request, aliceSession, realmId);
+          await testInfo.attach("kanban-501-real-history-seed.json", {
+            contentType: "application/json", body: JSON.stringify(proof) });
+        }
+        let latestCardEventId: string | undefined;
+        let historyTailAfterPosition: number | null = null;
+        const observeCard = (request: import("@playwright/test").Request) => {
+          if (!(fault === "history-after-501" || requestCase) || request.method() !== "POST"
+              || new URL(request.url()).pathname !== "/_arkret/self/events") return;
+          const event = request.postDataJSON()?.event;
+          if (event?.realm_id === realmId && event?.kind === "ak.strand.create"
+              && event.payload?.object?.tracks?.synthesis?.profile === "kanban_card") {
+            expect(latestCardEventId === undefined || latestCardEventId === event.event_id).toBe(true);
+            latestCardEventId = event.event_id;
+          }
+        };
+        alicePage.page.on("request", observeCard);
+        if (fault === "card-before-send" || fault === "card-create-response-lost" || fault === "card-move-response-lost") {
+          cardFault = await installCardPlacementFault(alicePage.page, realmId, fault, aliceCard);
+        }
         const boardId = await buildEncryptedBoardListCard(
           alicePage.page,
           realmId,
           boardTitle,
           listTitle,
           aliceCard,
+          true,
+          undefined,
+          cardFault ? async () => {
+            const proof = await cardFault!.restartAtCut(profile ? async () => {
+              await alicePage.close();
+              alicePage = await openUserPage(browser, alice, {
+                ...canonicalSessionOptions(aliceSession),
+                persistentUserDataDir: profile,
+                resumePersistentProfile: true,
+                beforeNavigate: observeAlice,
+              });
+              return alicePage.page;
+            } : undefined);
+            expect(proof.browser_process_restarted).toBe(true);
+            await alicePage.completeMlsAccountRecoveryIfPrompted(aliceSession.recoveryKey!);
+            await testInfo.attach("card-placement-runtime-cut.json", { contentType: "application/json", body: JSON.stringify(proof) });
+            return alicePage.page;
+          } : undefined,
         );
+        alicePage.page.off("request", observeCard);
+        if (fault === "history-after-501") {
+          expect(typeof latestCardEventId).toBe("string");
+          for (const reader of [aliceSession, bobSession]) {
+            const proof = await proveKanbanHistoryTail(request, reader, realmId, latestCardEventId!,
+              reader === bobSession ? retainedBoard : undefined);
+            if (reader === bobSession) historyTailAfterPosition = proof.next_page_after_position;
+            await testInfo.attach(`kanban-history-tail-${reader === aliceSession ? "alice" : "bob"}.json`, {
+              contentType: "application/json", body: JSON.stringify(proof) });
+          }
+        }
+        if (cardFault) {
+          await expect(alicePage.page.getByTestId("kanban-card").filter({ hasText: aliceCard })).toHaveCount(1);
+          await testInfo.attach("card-placement-exact-originals.json", { contentType: "application/json", body: JSON.stringify(cardFault.assertOneCardAndPlacement()) });
+        }
         await addEncryptedDescription(
           alicePage.page,
           aliceCard,
           aliceDescription,
         );
+        if (fault === "history-after-501") {
+          const fresh = await openDpopUserPageFromSession(browser, bobSession,
+            { beforeNavigate: async page => { costs.push({ reader: "bob", cost: observeRequestCost(page) }); } });
+          expect(fresh).toBeTruthy();
+          bobPage = fresh!.page;
+          await bobPage.completeRecoveryKeySetupIfPrompted();
+          await bobPage.acknowledgeRecommendedEncryptionPromptIfVisible();
+          await bobPage.completeMlsAccountRecoveryIfPrompted(bobSession.recoveryKey!);
+          expect(retainedBoard).toBeTruthy();
+          await openReaderBoard(bobPage, realmId, retainedBoard!.boardId);
+          await expect(bobPage.page.getByTestId("kanban-column")).toHaveCount(1);
+          await expect(bobPage.page.getByTestId("kanban-column").first()).toHaveAttribute("data-column-draft", "false");
+          await expect(bobPage.page.getByTestId("kanban-column").first().getByTestId("list-archive-button"))
+            .toHaveAttribute("data-space-container-id", retainedBoard!.listId);
+          await testInfo.attach("kanban-history-fresh-reader.json", { contentType: "application/json",
+            body: JSON.stringify({ reader_closed_before_seed: true, fresh_context_after_card_commit: true,
+              no_product_current_or_history_cache_copied: true,
+              pre_join_board_and_list_retained_by_current: true, pre_join_board_id: retainedBoard!.boardId }) });
+        }
         await stepShot(alicePage.page, testInfo, "A-alice-encrypted-card");
 
         // 4b) Cross-member DELIVERY gate (isolates coland delivery from inkson
@@ -1689,7 +1812,7 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
                 data: canonicalJson({
                   realm_id: realmId,
                   stream_ref: { kind: "realm", realm_id: realmId },
-                  after_position: null,
+                  after_position: historyTailAfterPosition,
                   limit: 500,
                 }),
                 headers: {
@@ -1715,6 +1838,8 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
 
         // 5) THE CORE ASSERTION: bob opens the board and decrypts alice's private
         //    card content.
+        const firstReaderCost = costs.filter(entry => entry.reader === "bob").at(-1)!.cost;
+        const firstBoardStart = firstReaderCost.mark();
         await openReaderBoard(bobPage, realmId, boardId);
         if (holdPrivateState) {
           await expect.poll(() => privateReadCuts, { timeout: 90_000 }).toBeGreaterThan(0);
@@ -1736,6 +1861,9 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
           await openReaderBoard(bobPage, realmId, boardId);
         }
         await assertCardDecrypts(bobPage, aliceCard, aliceDescription);
+        await testInfo.attach("kanban-first-reader-display-cost.json", { contentType: "application/json",
+          body: JSON.stringify({ first_board_decrypt_ms: firstReaderCost.mark() - firstBoardStart,
+            browser: await firstReaderCost.snapshot(firstBoardStart) }) });
         await assertE2eeStorageIsHardened(bobPage.page, [aliceDescription]);
         await stepShot(bobPage.page, testInfo, "B-bob-decrypted-card");
 
@@ -1793,7 +1921,7 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
           }],
         });
 
-        if (!fault || fault === "late-transition-tail") {
+        if (!fault || fault === "late-transition-tail" || cardFault) {
           // Both members must be able to edit the same accepted encrypted
           // Strand, rather than merely decrypt each other's own cards.
           await addEncryptedDescription(bobPage.page, aliceCard, bobEditOfAliceCard);
@@ -1837,7 +1965,7 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
         await assertE2eeStorageIsHardened(alicePage.page, [bobDescription]);
         await stepShot(alicePage.page, testInfo, "D-alice-sees-bob-card");
 
-        if (!fault) {
+        if (!fault || cardFault) {
           await alicePage.page.reload({ waitUntil: "domcontentloaded" });
           await readyReaderBoard(alicePage, boardId);
           await assertCardDecrypts(alicePage, bobCard, bobDescription);
@@ -1855,7 +1983,7 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
           data: canonicalJson({
             realm_id: realmId,
             stream_ref: { kind: "realm", realm_id: realmId },
-            after_position: null,
+            after_position: historyTailAfterPosition,
             limit: 200,
           }),
           headers: {
@@ -1874,7 +2002,173 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
         expect(rawEventBody).not.toContain(bobDescription);
         expect(rawEventBody).not.toContain(bobEditOfAliceCard);
         expect(rawEventBody).not.toContain(aliceEditOfBobCard);
+        if (fault === "station-restart") {
+          const proof = await restartRunnerStation(request);
+          await testInfo.attach("kanban-station-process-restart.json", { contentType: "application/json", body: JSON.stringify(proof) });
+          for (const reader of [alicePage, bobPage]) {
+            await reader.page.reload({ waitUntil: "domcontentloaded" });
+            await readyReaderBoard(reader, boardId);
+            await assertCardDecrypts(reader, aliceCard, aliceDescription);
+            await assertCardDecrypts(reader, bobCard, bobDescription);
+          }
+        }
+        if (fault === "member-leave" || fault === "member-revoke") {
+          await openReaderBoard(bobPage, realmId, boardId);
+          await assertCardDecrypts(bobPage, aliceCard, aliceDescription);
+          await bobPage.page.getByTestId("kanban-card").filter({ hasText: aliceCard }).first().click();
+          await bobPage.page.getByTestId("card-detail-tab-description").click();
+          await expect(bobPage.page.getByTestId("card-description-panel")).toContainText(aliceDescription);
+          const event = signedEventEnvelope({
+            actorId: fault === "member-leave" ? bob.id : alice.id,
+            realmId,
+            kind: "ak.member.state",
+            payload: { realm_id: realmId, member_id: { kind: "account", account_id: bobSession.accountId },
+              membership: fault === "member-leave" ? "leave" : "ban",
+              reason: "kanban_access_revocation" },
+          });
+          const outcome = await submitSignedEventApi(request,
+            fault === "member-leave" ? bobSession.grantJwt : aliceSession.grantJwt,
+            event, { context: `real kanban ${fault}` });
+          assertAuthoritySubmitOutcome(outcome, event, `real kanban ${fault}`);
+          const terminalCommit = outcome.commit as Record<string, unknown>;
+          expect(typeof terminalCommit.commit_id).toBe("string");
+          const assertClosed = async () => {
+            await expect(bobPage!.page.getByText(aliceDescription, { exact: false })).toHaveCount(0, { timeout: 90_000 });
+            await expect(bobPage!.page.getByTestId("kanban-card").filter({ hasText: aliceCard })).toHaveCount(0);
+            await expect(bobPage!.page.locator('[data-testid="kanban-panel"] [data-testid="add-card-button"]:enabled')).toHaveCount(0);
+          };
+          await assertClosed();
+          await bobPage.page.addInitScript(({ description, title }) => {
+            const probe = { private_content_observed: false, enabled_write_observed: false };
+            (window as unknown as { __cotestRevocationProbe: typeof probe }).__cotestRevocationProbe = probe;
+            const check = () => {
+              if (document.body?.innerText.includes(description)
+                  || Array.from(document.querySelectorAll('[data-testid="kanban-card"]')).some(card => card.textContent?.includes(title))) {
+                probe.private_content_observed = true;
+              }
+              if (document.querySelector('[data-testid="kanban-panel"] [data-testid="add-card-button"]:enabled')) {
+                probe.enabled_write_observed = true;
+              }
+            };
+            new MutationObserver(check).observe(document, { childList: true, subtree: true, characterData: true,
+              attributes: true, attributeFilter: ["disabled"] });
+            check();
+          }, { description: aliceDescription, title: aliceCard });
+          await bobPage.page.reload({ waitUntil: "domcontentloaded" });
+          await expect(bobPage.page.getByTestId("client-shell")).toBeVisible({ timeout: 90_000 });
+          await bobPage.page.waitForTimeout(5_000);
+          await assertClosed();
+          const cold = await bobPage.page.evaluate(() =>
+            (window as unknown as { __cotestRevocationProbe: {
+              private_content_observed: boolean; enabled_write_observed: boolean } }).__cotestRevocationProbe);
+          expect(cold.private_content_observed).toBe(false);
+          expect(cold.enabled_write_observed).toBe(false);
+          await openReaderBoard(alicePage, realmId, boardId);
+          await assertCardDecrypts(alicePage, aliceCard, aliceDescription);
+          await testInfo.attach("kanban-membership-terminal-ui.json", { contentType: "application/json",
+            body: JSON.stringify({ fault, event_id: event.event_id, commit_id: terminalCommit.commit_id,
+              open_detail_invalidated: true, reload_remains_closed: true,
+              cold_start_probe: cold, remaining_member_still_decrypts: true }) });
+        }
+        if (requestCase) {
+          const cost = costs.find(entry => entry.reader === "alice")!.cost;
+          const lists = (snapshot: Awaited<ReturnType<typeof cost.snapshot>>) => snapshot.http.filter(row =>
+            /\/_arkret\/self\/realms\/[^/]+\/(spaces|strands)$/.test(row.path));
+          const first = await cost.snapshot();
+          await testInfo.attach("kanban-request-first.json", { contentType: "application/json", body: JSON.stringify(first) });
+          if (fault === "requests-websocket") {
+            expect(subscriptionCut!.proof().real_websocket_costs.some(socket => socket.opened_channels.some(channel =>
+              channel.operation_id === "ak.self.account.stream.subscribe.v1"))).toBe(true);
+            const steadyStart = cost.mark();
+            await subscriptionCut!.repeatSameCut();
+            await alicePage.page.waitForTimeout(2_000);
+            const steady = await cost.snapshot(steadyStart);
+            expect(lists(steady)).toHaveLength(0);
+            expect(steady.http.filter(row => row.path === "/_arkret/self/streams/scan")).toHaveLength(0);
+            await testInfo.attach("kanban-request-same-cut-20.json", { contentType: "application/json", body: JSON.stringify(steady) });
+          } else {
+            expect(subscriptionCut!.proof().rejected_real_connections).toBeGreaterThan(0);
+            expect(first.http.some(row => /\/(account|events)\/subscribe$/.test(row.path))).toBe(true);
+            expect((await subscriptionCut!.httpProof())?.successful ?? 0).toBeGreaterThan(0);
+          }
+          const ordinaryStart = cost.mark();
+          const ordinary: string[] = [];
+          let ordinaryCommit = "";
+          await bobPage.gotoTimelineRealm(realmId);
+          for (let index = 0; index < 20; index += 1) {
+            const receipt = bobPage.page.waitForResponse(response => {
+              const request = response.request();
+              if (response.status() >= 300 || request.method() !== "POST"
+                  || new URL(request.url()).pathname !== "/_arkret/self/events") return false;
+              const event = request.postDataJSON()?.event;
+              return event?.realm_id === realmId && event?.kind === "ak.message.create";
+            }, { timeout: 90_000 });
+            await bobPage.sendTimelineMessage(realmId, `Net ordinary ${stamp}/${index}`);
+            const response = await receipt;
+            const event = response.request().postDataJSON().event as Record<string, unknown>;
+            const outcome = await response.json();
+            assertAuthoritySubmitOutcome(outcome, event, `ordinary message ${index + 1}/20`);
+            ordinary.push(String(event.event_id)); ordinaryCommit = String(outcome.commit.commit_id);
+          }
+          expect(new Set(ordinary).size).toBe(20);
+          const ordinaryDelivered = await subscriptionCut!.waitForCut(ordinary.at(-1)!, ordinaryCommit);
+          const ordinaryCost = await cost.snapshot(ordinaryStart);
+          expect(lists(ordinaryCost)).toHaveLength(0);
+          await testInfo.attach("kanban-request-ordinary-messages-20.json", { contentType: "application/json",
+            body: JSON.stringify({ accepted_messages: ordinary, delivered: ordinaryDelivered, browser: ordinaryCost }) });
+          expect(typeof latestCardEventId).toBe("string");
+          const cardId = retypeEventDerivedId(latestCardEventId!, "strand");
+          const changedStart = cost.mark();
+          const accepted: string[] = [];
+          let lastCommitId = "";
+          // Twenty real alternating lifecycle changes retain the same Card
+          // identity and finish Active; none is a synthetic current response.
+          for (let index = 0; index < 20; index += 1) {
+            const event = signedEventEnvelope({ actorId: alice.id, realmId,
+              kind: index % 2 === 0 ? "ak.strand.archive" : "ak.strand.restore",
+              payload: { target_ref: cardId } });
+            const outcome = await submitSignedEventApi(request, aliceSession.grantJwt, event,
+              { context: `kanban real lifecycle change ${index + 1}/20` });
+            lastCommitId = String((outcome.commit as Record<string, unknown>).commit_id);
+            accepted.push(String(event.event_id));
+          }
+          expect(new Set(accepted).size).toBe(20);
+          const delivered = await subscriptionCut!.waitForCut(accepted.at(-1)!, lastCommitId);
+          const deliveredHttpCost = await subscriptionCut!.httpProof();
+          await openReaderBoard(alicePage, realmId, boardId);
+          await assertCardDecrypts(alicePage, aliceCard, aliceDescription);
+          const changes = await cost.snapshot(changedStart);
+          expect(Object.values(changes.maximum_parallel_lists).every(value => value <= 1)).toBe(true);
+          expect(lists(changes)).toHaveLength(0);
+          await testInfo.attach("kanban-request-real-changes-20.json", { contentType: "application/json", body: JSON.stringify(changes) });
+          await testInfo.attach("kanban-request-transport-cut.json", { contentType: "application/json",
+            body: JSON.stringify({ ...subscriptionCut!.proof(), accepted_lifecycle_events: accepted,
+              delivered, http_stream_cost: deliveredHttpCost, final_original_card_decrypts: true }) });
+          const otherCard = `Other board card ${stamp}`;
+          const otherBoardId = await buildEncryptedBoardListCard(alicePage.page, realmId,
+            `Other board ${stamp}`, `Other list ${stamp}`, otherCard);
+          const switchingStart = cost.mark();
+          for (let index = 0; index < 20; index += 1) {
+            await selectDxcOption(alicePage.page.getByTestId("board-space-select"),
+              index % 2 === 0 ? boardId : otherBoardId);
+          }
+          await selectDxcOption(alicePage.page.getByTestId("board-space-select"), boardId);
+          await expect(alicePage.page.getByTestId("kanban-card").filter({ hasText: aliceCard })).toBeVisible();
+          await expect(alicePage.page.getByTestId("kanban-card").filter({ hasText: otherCard })).toHaveCount(0);
+          await assertCardDecrypts(alicePage, aliceCard, aliceDescription);
+          const switching = await cost.snapshot(switchingStart);
+          expect(lists(switching)).toHaveLength(0);
+          expect(Object.values(switching.maximum_parallel_lists).every(value => value <= 1)).toBe(true);
+          await testInfo.attach("kanban-request-rapid-board-switch.json", { contentType: "application/json",
+            body: JSON.stringify({ user_board_switches: 21, final_target_content_verified: true,
+              switch_elapsed_ms: switching.observed_ms - switchingStart, browser: switching }) });
+        }
         outboundFault?.assertExactReplay();
+        if (cardFault) {
+          await expect(alicePage.page.getByTestId("kanban-card").filter({ hasText: aliceCard })).toHaveCount(1);
+          await expect(bobPage.page.getByTestId("kanban-card").filter({ hasText: aliceCard })).toHaveCount(1);
+          await testInfo.attach("card-placement-final-originals.json", { contentType: "application/json", body: JSON.stringify(cardFault.assertOneCardAndPlacement()) });
+        }
       } catch (error) {
         const records = await readCreatorRecords(alicePage.page, true).catch(() => []);
         const privateFailure = (detail: unknown) => {
@@ -1897,14 +2191,26 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
         });
         throw error;
       } finally {
+        for (const [index, entry] of costs.entries()) {
+          await testInfo.attach(`kanban-browser-cost-${entry.reader}-${index}.json`, {
+            contentType: "application/json", body: JSON.stringify(await entry.cost.snapshot()) });
+          entry.cost.dispose();
+        }
         holdPrivateState = false;
         await bobPage?.page.unroute(privateClaimQuery);
         await outboundFault?.dispose();
+        await cardFault?.dispose();
         await Promise.allSettled([
           bobPage?.close() ?? Promise.resolve(),
           carolPage?.close() ?? Promise.resolve(),
           alicePage.close(),
         ]);
+        if (profile) {
+          if (path.dirname(path.resolve(profile)) !== path.resolve(os.tmpdir()) || path.basename(profile) !== profileName) {
+            throw new Error("card profile cleanup escaped its task temp directory");
+          }
+          await rm(profile, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
+        }
       }
     });
   }
