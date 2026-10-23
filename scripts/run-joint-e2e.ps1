@@ -210,6 +210,20 @@ function Get-JointInksonBuildPlan {
     }
 }
 
+function Get-JointSavfoxBuildCommand {
+    param(
+        [Parameter(Mandatory = $true)][string]$PowerShellPath,
+        [Parameter(Mandatory = $true)][string]$WebBuildPath,
+        [Parameter(Mandatory = $true)][string]$ManifestPath,
+        [Parameter(Mandatory = $true)][bool]$WindowsPlatform
+    )
+    # The Windows final CLI link does not need a multi-gigabyte development
+    # PDB. Keep the ordinary dev profile and every runtime/assertion setting.
+    $debugOverride = if ($WindowsPlatform) { " --config 'profile.dev.package.savfox-cli.debug=0'" } else { "" }
+    return ("& {0} -NoProfile -File {1}; if (`$LASTEXITCODE -ne 0) {{ exit `$LASTEXITCODE }}; cargo build --manifest-path {2} --bin savfox --features savfox-gateway-server/arkret{3}" -f `
+        (Quote-PsLiteral $PowerShellPath), (Quote-PsLiteral $WebBuildPath), (Quote-PsLiteral $ManifestPath), $debugOverride)
+}
+
 function Prepare-JointPostNativeTools {
     [CmdletBinding()]
     param(
@@ -3773,6 +3787,10 @@ $storeDumpDir = Join-Path $jointDir "stores"
 $storeDumpFailures = [System.Collections.Generic.List[string]]::new()
 $exitCode = 1
 $runnerError = $null
+# Preparation can fail before Directory identity setup. Cleanup and the final
+# summary still own these optional values for the entire managed lifecycle.
+$flagonIdentityDirectory = $null
+$flagonIdentity = $null
 $provisionCustodyRoot = $null
 $previousProvisionCustodyRoot = $env:COTEST_PROVISION_CUSTODY_ROOT
 $previousReadonlyDatabaseControls = $env:COTEST_READONLY_DATABASE_CONTROLS
@@ -4036,10 +4054,8 @@ try {
         if (-not $savfoxPowerShell) {
             throw "Preparing the Savfox web bundle requires PowerShell 7 (pwsh)"
         }
-        $buildCommand = "& {0} -NoProfile -File {1}; if (`$LASTEXITCODE -ne 0) {{ exit `$LASTEXITCODE }}; cargo build --manifest-path {2} --bin savfox --features savfox-gateway-server/arkret" -f `
-            (Quote-PsLiteral $savfoxPowerShell),
-            (Quote-PsLiteral $savfoxWebBuild),
-            (Quote-PsLiteral $savfoxManifest)
+        $buildCommand = Get-JointSavfoxBuildCommand -PowerShellPath $savfoxPowerShell `
+            -WebBuildPath $savfoxWebBuild -ManifestPath $savfoxManifest -WindowsPlatform ([bool]$IsWindows)
         $preBuildStates = @(Get-ArtifactBuildRepositoryStates -ArtifactPath $defaultSavfoxBinary -RepositoryRoots @($SavfoxRoot, (Join-Path $workspaceRoot "arkret-rust-sdk")))
         $service = Start-ManagedCommand `
             -Name "prepare-savfox" `

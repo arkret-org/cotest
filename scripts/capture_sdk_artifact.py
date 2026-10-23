@@ -25,6 +25,41 @@ def single(values, description):
     return values[0]
 
 
+def cargo_unit(path, artifact, package_name):
+    """Read the exact Cargo unit, including cached host/target dependency edges.
+
+    Cargo's unit metadata is internal, so unknown layouts fail closed. Never
+    infer a direct extern from profile equality: package overrides and host
+    feature resolution can produce several libraries with the same profile.
+    """
+    target = artifact["target"]["name"]
+    units = set()
+    for filename in [path, *map(Path, artifact["filenames"])]:
+        if filename.suffix not in {".rlib", ".rmeta"} or filename.parent.name != "deps":
+            continue
+        prefix = f"lib{target}-"
+        if filename.stem.startswith(prefix):
+            units.add((filename.parent.parent.resolve(), filename.stem[len(prefix):]))
+    directory, suffix = single(list(units), f"Cargo unit location for {target}")
+    root = directory / ".fingerprint" / f"{package_name}-{suffix}"
+    record = root / f"lib-{target}.json"
+    fingerprint = root / f"lib-{target}"
+    data = json.loads(record.read_text(encoding="utf-8"))
+    if sorted(json.loads(data["features"])) != sorted(artifact["features"]):
+        raise ValueError(f"Cargo unit features disagree with the build message: {target}")
+    encoded = bytes.fromhex(fingerprint.read_text(encoding="ascii").strip())
+    if len(encoded) != 8 or not isinstance(data["rustc"], int):
+        raise ValueError(f"unsupported Cargo unit fingerprint: {target}")
+    return {
+        "directory": directory,
+        "dependencies": data["deps"],
+        "rustc": data["rustc"],
+        "fingerprint": int.from_bytes(encoded, "little"),
+        "record_sha256": digest(record),
+        "fingerprint_sha256": digest(fingerprint),
+    }
+
+
 def capture(messages_path, metadata_path, sdk_manifest, output):
     messages = [json.loads(line) for line in Path(messages_path).read_text(encoding="utf-8").splitlines() if line.startswith("{")]
     finished = [item for item in messages if item.get("reason") == "build-finished"]
@@ -33,6 +68,7 @@ def capture(messages_path, metadata_path, sdk_manifest, output):
     metadata = json.loads(Path(metadata_path).read_text(encoding="utf-8"))
     package = single([item for item in metadata["packages"] if item["name"] == "arkret" and Path(item["manifest_path"]).resolve() == Path(sdk_manifest).resolve()], "SDK package")
     nodes = {item["id"]: item for item in metadata["resolve"]["nodes"]}
+    package_names = {item["id"]: item["name"] for item in metadata["packages"]}
     artifacts = {}
     for item in messages:
         if item.get("reason") != "compiler-artifact":
@@ -47,21 +83,43 @@ def capture(messages_path, metadata_path, sdk_manifest, output):
                     raise ValueError(f"conflicting Cargo artifacts: {path}")
             artifacts[path] = item
 
-    def library(package_id, name, profile=None):
-        choices = [(path, item) for path, item in artifacts.items() if item["package_id"] == package_id and item["target"]["name"] == name and path.suffix == ".rlib" and not item["profile"]["test"]]
-        if len(choices) > 1 and profile is not None:
-            choices = [(path, item) for path, item in choices if item["profile"] == profile]
-        return single(choices, f"same-build {name} library")
+    def libraries(package_id, name):
+        return [(path, item) for path, item in artifacts.items() if item["package_id"] == package_id and item["target"]["name"] == name and path.suffix == ".rlib" and not item["profile"]["test"]]
 
-    sdk_path, sdk = library(package["id"], "arkret")
+    sdk_path, sdk = single(libraries(package["id"], "arkret"), "same-build arkret library")
     if Path(sdk["manifest_path"]).resolve() != Path(sdk_manifest).resolve():
         raise ValueError("SDK artifact and metadata name different manifests")
     if not REQUIRED_FEATURES.issubset(sdk["features"]):
         raise ValueError("SDK artifact omits a required actual API feature")
     externs = {"arkret": sdk_path}
+    unit_selection = {}
     for name in EXTERNS:
         dependency = single([item["pkg"] for item in nodes[package["id"]]["deps"] if item["name"] == name], f"SDK {name} dependency")
-        externs[name] = library(dependency, name, sdk["profile"])[0]
+        choices = libraries(dependency, name)
+        if len(choices) > 1:
+            try:
+                sdk_unit = cargo_unit(sdk_path, sdk, package["name"])
+                edges = [item for item in sdk_unit["dependencies"] if len(item) == 4 and item[1] == name]
+                expected = single(edges, f"SDK Cargo unit {name} edge")[3]
+                if type(expected) is not int:
+                    raise ValueError("unsupported Cargo dependency fingerprint")
+                matches = []
+                for path, item in choices:
+                    unit = cargo_unit(path, item, package_names[dependency])
+                    if unit["directory"] == sdk_unit["directory"] and unit["rustc"] == sdk_unit["rustc"] and unit["fingerprint"] == expected:
+                        matches.append((path, item, unit))
+                selected, _, unit = single(matches, f"same-build {name} SDK Cargo unit")
+                unit_selection[name] = {
+                    "dependency_fingerprint": f"{expected:016x}",
+                    "sdk_unit_record_sha256": sdk_unit["record_sha256"],
+                    "dependency_unit_record_sha256": unit["record_sha256"],
+                    "dependency_unit_fingerprint_sha256": unit["fingerprint_sha256"],
+                }
+                externs[name] = selected
+            except (OSError, ValueError, KeyError, TypeError) as error:
+                raise ValueError(f"cannot identify same-build {name} from Cargo unit metadata: {error}") from error
+        else:
+            externs[name] = single(choices, f"same-build {name} library")[0]
 
     reachable = set()
     pending = [package["id"]]
@@ -137,6 +195,7 @@ def capture(messages_path, metadata_path, sdk_manifest, output):
         "native_search": native_search,
         "cargo_messages_sha256": digest(messages_path),
         "cargo_metadata_sha256": digest(metadata_path),
+        "cargo_unit_selection": unit_selection,
     }
     manifest = output / "artifact.json"
     manifest.write_text(json.dumps(result, indent=2) + "\n", encoding="utf-8", newline="\n")
