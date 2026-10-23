@@ -899,6 +899,31 @@ pub fn mls_keypackage_upload_entry(input: Value) -> Result<Value> {
     serde_json::to_value(entry).context("serialize MLS KeyPackage upload entry")
 }
 
+/// Validate a self stream page with the SDK and return its disclosure coordinates.
+/// The caller retains the originals; never reserialize or duplicate Event bytes.
+/// Authentication and disclosure authority remain the caller's responsibility.
+pub fn project_committed_stream_scan(input: Value) -> Result<Value> {
+    #[derive(Deserialize)]
+    #[serde(deny_unknown_fields)]
+    struct Input {
+        request: arkret_wire::StreamScanRequest,
+        outcome: arkret_wire::StreamScanOutcome,
+    }
+    let input: Input =
+        serde_json::from_value(input).context("parse SDK stream projection input")?;
+    input.outcome.validate_for_request(&input.request)?;
+    let full_positions: Vec<usize> = input
+        .outcome
+        .committed_events
+        .iter()
+        .enumerate()
+        .filter_map(|(position, view)| {
+            matches!(view, arkret_wire::CommittedEventView::Full(_)).then_some(position)
+        })
+        .collect();
+    Ok(json!({"full_positions": full_positions, "truncated": input.outcome.truncated}))
+}
+
 pub fn event_envelope_parse(input: Value) -> Result<Value> {
     let _: Event = serde_json::from_value(input).context("parse closed Event envelope")?;
     Ok(json!({ "valid": true }))
@@ -2103,6 +2128,104 @@ mod tests {
     use arkret_wire::EventId;
 
     use super::*;
+
+    fn stream_projection_fixture(second_position: u64) -> Result<Value> {
+        use arkret_wire::{CommitStreamRef, EventId, RealmId, ScopeRef};
+        let at = chrono::DateTime::parse_from_rfc3339("2026-01-01T00:00:00Z")?.with_timezone(&Utc);
+        let genesis = EventId::from_digest(canonical::DigestSuite::Sha256, [61; 32]);
+        let realm = RealmId::from_event_id(&genesis);
+        let scope = ScopeRef::Realm {
+            realm_id: realm.clone(),
+        };
+        let actor = DidCoreId::new("ak:did_core:web:reader.example")?;
+        let station = DidCoreId::new("ak:did_core:web:station.example")?;
+        let first = arkret_test_kit::raw_event_at(
+            "ak.realm.freeze",
+            scope.clone(),
+            actor.clone(),
+            station.clone(),
+            json!({}),
+            at,
+        )?;
+        let second = arkret_test_kit::raw_event_at(
+            "ak.realm.freeze",
+            scope,
+            actor,
+            station,
+            json!({}),
+            at + chrono::Duration::seconds(1),
+        )?;
+        let key = SigningKey::from_bytes(&[62; 32]);
+        let method =
+            DidUrl::new("did:web:station.example#commit-key").map_err(anyhow::Error::msg)?;
+        let first_commit = arkret_test_kit::authority_objects::signed_commit(
+            &method,
+            &key,
+            &first,
+            0,
+            None,
+            genesis.clone(),
+            None,
+        )?;
+        let second_commit = arkret_test_kit::authority_objects::signed_commit(
+            &method,
+            &key,
+            &second,
+            second_position,
+            Some(first_commit.commit_id.clone()),
+            genesis,
+            None,
+        )?;
+        // Shape/disclosure vectors only; this fixture does not prove live admission.
+        Ok(json!({
+            "request": {"realm_id":realm,"stream_ref":CommitStreamRef::Realm { realm_id: first.realm_id.clone() },"after_position":null,"limit":256},
+            "outcome": {"committed_events":[
+                {"commit":first_commit,"event":first},
+                {"commit":second_commit,"event_disclosure":{"status":"withheld"}}
+            ],"readable_floor":{"oldest_position":0,"floor_commit_id":first_commit.commit_id,"floor_reason":"stream_start"},"truncated":false}
+        }))
+    }
+
+    #[test]
+    fn committed_stream_projection_reports_disclosure_without_copying_originals() -> Result<()> {
+        // ak.vector.sync.committed_event_view_integrity.v1
+        let input = stream_projection_fixture(1)?;
+        let output = project_committed_stream_scan(input)?;
+        assert_eq!(output, json!({"full_positions": [0], "truncated": false}));
+        assert!(serde_json::to_vec(&output)?.len() < 128);
+        Ok(())
+    }
+
+    #[test]
+    fn committed_stream_projection_rejects_malformed_views_and_gaps() -> Result<()> {
+        let base = stream_projection_fixture(1)?;
+        let mut mixed = base.clone();
+        mixed["outcome"]["committed_events"][0]["event_disclosure"] = json!({"status":"withheld"});
+        assert!(project_committed_stream_scan(mixed).is_err());
+        let mut missing = base.clone();
+        missing["outcome"]["committed_events"][0]
+            .as_object_mut()
+            .unwrap()
+            .remove("event");
+        assert!(project_committed_stream_scan(missing).is_err());
+        let mut obsolete = base.clone();
+        obsolete["outcome"]["committed_events"][1]["event_disclosure"]["status"] =
+            json!("redacted");
+        assert!(project_committed_stream_scan(obsolete).is_err());
+        let mut mismatch = base.clone();
+        mismatch["outcome"]["committed_events"][0]["event"]["event_id"] = json!(
+            EventId::from_digest(canonical::DigestSuite::Sha256, [63; 32])
+        );
+        assert!(project_committed_stream_scan(mismatch).is_err());
+        let mut no_truncation = base;
+        no_truncation["outcome"]
+            .as_object_mut()
+            .unwrap()
+            .remove("truncated");
+        assert!(project_committed_stream_scan(no_truncation).is_err());
+        assert!(project_committed_stream_scan(stream_projection_fixture(2)?).is_err());
+        Ok(())
+    }
 
     #[test]
     fn webvh_service_log_exposes_core_only_after_verified_history() -> Result<()> {

@@ -210,6 +210,20 @@ function Get-JointInksonBuildPlan {
     }
 }
 
+function Get-JointSavfoxBuildCommand {
+    param(
+        [Parameter(Mandatory = $true)][string]$PowerShellPath,
+        [Parameter(Mandatory = $true)][string]$WebBuildPath,
+        [Parameter(Mandatory = $true)][string]$ManifestPath,
+        [Parameter(Mandatory = $true)][bool]$WindowsPlatform
+    )
+    # The Windows final CLI link does not need a multi-gigabyte development
+    # PDB. Keep the ordinary dev profile and every runtime/assertion setting.
+    $debugOverride = if ($WindowsPlatform) { " --config 'profile.dev.package.savfox-cli.debug=0'" } else { "" }
+    return ("& {0} -NoProfile -File {1}; if (`$LASTEXITCODE -ne 0) {{ exit `$LASTEXITCODE }}; cargo build --manifest-path {2} --bin savfox --features savfox-gateway-server/arkret{3}" -f `
+        (Quote-PsLiteral $PowerShellPath), (Quote-PsLiteral $WebBuildPath), (Quote-PsLiteral $ManifestPath), $debugOverride)
+}
+
 function Prepare-JointPostNativeTools {
     [CmdletBinding()]
     param(
@@ -926,6 +940,7 @@ function Invoke-JointE2ePreflight {
         [bool]$WillStartDefaultInkson = $false,
         [string]$InksonRoot,
         [string]$InksonStaticIndex,
+        [string]$InksonWireBinary,
         [bool]$JointTlsTopology = $false,
         [string]$JsonPath,
         [string]$MarkdownPath
@@ -1092,6 +1107,21 @@ function Invoke-JointE2ePreflight {
             }
         } else {
             Add-PreflightResult $results "docker cli" "fail" "docker is required for -ColandRuntime docker"
+        }
+    }
+
+    if ($RequiresInkson) {
+        if ($InksonWireBinary -and (Test-Path -LiteralPath $InksonWireBinary -PathType Leaf)) {
+            Add-PreflightResult $results "inkson native search observer" "pass" $InksonWireBinary
+            if (-not $env:INKSON_WIRE_BIN) {
+                Add-BinaryFreshnessPreflight -Results $results -Name "inkson native observer freshness" `
+                    -BinaryPath $InksonWireBinary -RepositoryRoots @(
+                        $InksonRoot, (Join-Path $WorkspaceRoot "arkret-rust-sdk"),
+                        (Join-Path $WorkspaceRoot "garth"), (Join-Path $WorkspaceRoot "chime")
+                    )
+            }
+        } else {
+            Add-PreflightResult $results "inkson native search observer" "fail" "missing inkson-wire; rerun without -SkipBuild or set INKSON_WIRE_BIN"
         }
     }
 
@@ -3297,6 +3327,13 @@ if ($requiresInkson) {
     $InksonRoot = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($InksonRoot)
     $inksonTargetDirectory = Get-CargoTargetDirectory -RepositoryRoot $InksonRoot
 }
+$selectedInksonWireBinary = if ($requiresInkson) {
+    if ($env:INKSON_WIRE_BIN) {
+        $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($env:INKSON_WIRE_BIN)
+    } else {
+        Join-Path $inksonTargetDirectory ("joint-e2e/" + (Get-NativeExecutableName -Name "inkson-wire"))
+    }
+} else { $null }
 $cotestTargetDirectory = Get-CargoTargetDirectory -RepositoryRoot $repoRoot
 $colandTargetDirectory = Get-CargoTargetDirectory -RepositoryRoot (Split-Path -Parent $SutManifest)
 $coauthTargetDirectory = Get-CargoTargetDirectory -RepositoryRoot (Join-Path $workspaceRoot "coauth")
@@ -3719,6 +3756,8 @@ if ($StartMockChallengeProvider) {
     $mockChallengeProviderBaseUrl = "http://127.0.0.1:$mockChallengeProviderPort"
 }
 
+$flagonIdentityDirectory = $null
+$flagonIdentity = $null
 $managedServices = New-Object System.Collections.Generic.List[object]
 $managedServiceFailures = @()
 $runtimeServers = [System.Collections.Generic.List[object]]::new()
@@ -3748,6 +3787,10 @@ $storeDumpDir = Join-Path $jointDir "stores"
 $storeDumpFailures = [System.Collections.Generic.List[string]]::new()
 $exitCode = 1
 $runnerError = $null
+# Preparation can fail before Directory identity setup. Cleanup and the final
+# summary still own these optional values for the entire managed lifecycle.
+$flagonIdentityDirectory = $null
+$flagonIdentity = $null
 $provisionCustodyRoot = $null
 $previousProvisionCustodyRoot = $env:COTEST_PROVISION_CUSTODY_ROOT
 $previousReadonlyDatabaseControls = $env:COTEST_READONLY_DATABASE_CONTROLS
@@ -3925,6 +3968,24 @@ try {
         }
     }
 
+    # The local-search lane observes the real native Account host as well as
+    # WASM. Prepare it from the same checkout instead of failing late in tests.
+    if ($requiresInkson -and -not $SkipBuild -and -not $env:INKSON_WIRE_BIN) {
+        $observerRoots = @($InksonRoot, (Join-Path $workspaceRoot "arkret-rust-sdk"),
+            (Join-Path $workspaceRoot "garth"), (Join-Path $workspaceRoot "chime"))
+        $observerFreshness = Get-ArtifactFreshness -ArtifactPath $selectedInksonWireBinary -RepositoryRoots $observerRoots
+        if (-not $observerFreshness.Fresh) {
+            $observerBefore = @(Get-ArtifactBuildRepositoryStates -ArtifactPath $selectedInksonWireBinary -RepositoryRoots $observerRoots)
+            $started = Get-Date
+            $service = Start-ManagedCommand -Name "prepare-inkson-wire" `
+                -Command ("cargo build --locked --manifest-path {0} --profile joint-e2e --features spec-conformance --bin inkson-wire" -f (Quote-PsLiteral (Join-Path $InksonRoot "Cargo.toml"))) `
+                -WorkingDirectory $InksonRoot -LogDirectory $serviceLogDir
+            $preparationTasks.Add([pscustomobject]@{ Name = "inkson-wire"; BuildInputsBefore = $observerBefore; Service = $service; Started = $started; Artifact = $selectedInksonWireBinary; AllowUnchangedArtifact = $true; RepositoryRoots = $observerRoots })
+        } else {
+            $preparationTimings.Add([pscustomobject]@{ name = "inkson-wire"; status = "cache-hit"; duration_seconds = 0; detail = $observerFreshness.Detail })
+        }
+    }
+
     if (-not $SkipBuild -and $StartCoauth -and -not $CoauthBin) {
         # Coauth serves its browser UI from ./dist. Building only the backend
         # binary can therefore run current handlers behind a stale frontend
@@ -3993,10 +4054,8 @@ try {
         if (-not $savfoxPowerShell) {
             throw "Preparing the Savfox web bundle requires PowerShell 7 (pwsh)"
         }
-        $buildCommand = "& {0} -NoProfile -File {1}; if (`$LASTEXITCODE -ne 0) {{ exit `$LASTEXITCODE }}; cargo build --manifest-path {2} --bin savfox --features savfox-gateway-server/arkret" -f `
-            (Quote-PsLiteral $savfoxPowerShell),
-            (Quote-PsLiteral $savfoxWebBuild),
-            (Quote-PsLiteral $savfoxManifest)
+        $buildCommand = Get-JointSavfoxBuildCommand -PowerShellPath $savfoxPowerShell `
+            -WebBuildPath $savfoxWebBuild -ManifestPath $savfoxManifest -WindowsPlatform ([bool]$IsWindows)
         $preBuildStates = @(Get-ArtifactBuildRepositoryStates -ArtifactPath $defaultSavfoxBinary -RepositoryRoots @($SavfoxRoot, (Join-Path $workspaceRoot "arkret-rust-sdk")))
         $service = Start-ManagedCommand `
             -Name "prepare-savfox" `
@@ -4129,6 +4188,7 @@ try {
         -WillStartDefaultInkson $willStartDefaultInkson `
         -InksonRoot $InksonRoot `
         -InksonStaticIndex $inksonStaticIndex `
+        -InksonWireBinary $selectedInksonWireBinary `
         -JointTlsTopology ([bool]$jointTlsEnabled) `
         -JsonPath $preflightJson `
         -MarkdownPath $preflightMd
@@ -4160,6 +4220,18 @@ try {
             -DestinationRoot $nativeRuntimeRoot -RepositoryStates $provisionBuildStates
     }
 
+    if ($requiresInkson) {
+        $callerProvidedObserver = [bool]$env:INKSON_WIRE_BIN
+        $observerStates = if ($callerProvidedObserver) { $null } else {
+            @(Get-ArtifactBuildRepositoryStates -ArtifactPath $selectedInksonWireBinary -RepositoryRoots @(
+                $InksonRoot, (Join-Path $workspaceRoot "arkret-rust-sdk"),
+                (Join-Path $workspaceRoot "garth"), (Join-Path $workspaceRoot "chime")
+            ))
+        }
+        $env:INKSON_WIRE_BIN = Copy-RunScopedNativeArtifact -ArtifactPath $selectedInksonWireBinary `
+            -DestinationRoot $nativeRuntimeRoot -RepositoryStates $observerStates -CallerProvided:$callerProvidedObserver
+    }
+
     # Serve an immutable, run-scoped copy of the verified Inkson bundle. A
     # separately running `dx serve` watches the same repository and can replace
     # target\dx\...\public in place with a dev build while a long joint-full run
@@ -4189,8 +4261,6 @@ try {
         $inksonStaticRoot = $inksonRuntimeRoot
     }
 
-    $flagonIdentityDirectory = $null
-    $flagonIdentity = $null
     if ($jointTlsFlagon) {
         $flagonIdentityDirectory = Join-Path $jointDir 'flagon-identity'
         $flagonMinted = Invoke-JointFlagonIdentity -Command 'mint' -InputValue @{

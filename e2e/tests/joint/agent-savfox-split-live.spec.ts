@@ -1,6 +1,7 @@
 import { observeNativeSearch } from "../../helpers/native-search";
 import { openAndPairSecondController } from "../../helpers/paired-controller";
 import { agentTopicChats } from "../../helpers/direct-structure";
+import { revealTimelineEvent } from "../../helpers/timeline-visibility";
 import {
   expect,
   type APIRequestContext,
@@ -1260,7 +1261,14 @@ jointTest.describe("Agent Savfox split live @fully-implemented", () => {
         // The private reading surface has no publish dialog. The controller
         // explicitly edits and confirms a fresh ordinary message containing
         // only the chosen text, rather than copying a private Event envelope.
-        const sharedBody = await resumedCard.getByTestId("content-block-text")
+        const retainedReply = resumedCard.locator(
+          `[id=${JSON.stringify(`chat-msg-${evidence.response_event_id}`)}]`,
+        );
+        await revealTimelineEvent(inkson, retainedReply, 30_000,
+          resumedCard.getByTestId("message-list").last());
+        await expect(retainedReply).toBeVisible();
+        expect(await eventIdFromMessage(retainedReply)).toBe(evidence.response_event_id);
+        const sharedBody = await retainedReply.getByTestId("content-block-text")
           .filter({ hasText: /^pong(?:\r?\n|$)/ }).last().innerText();
         expect(sharedBody.trim()).toBe("pong");
         const publishCard = await createSidecarSourceCard(

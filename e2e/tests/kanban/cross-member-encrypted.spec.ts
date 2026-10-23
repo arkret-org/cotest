@@ -517,30 +517,50 @@ async function addEncryptedDescription(
       (candidate.request().postData() ?? "").includes("ak.strand.update"),
     { timeout: 120_000 },
   ).catch(() => undefined);
-  await page.getByTestId("card-detail-save-button").click();
-  while (Date.now() < responseDeadline) {
-    response = await Promise.race([
-      strandUpdate,
-      page.waitForTimeout(Math.min(10_000, responseDeadline - Date.now())).then(() => undefined),
-    ]);
-    if (response) break;
+  const save = page.getByTestId("card-detail-save-button");
+  let ingressObserved = false;
+  let preAuthoringRetries = 0;
+  const captureRequest = (request: import("@playwright/test").Request) => {
+    if (request.method() === "POST" && new URL(request.url()).pathname === "/_arkret/self/events") ingressObserved = true;
+  };
+  page.on("request", captureRequest);
+  try {
+    await save.click();
+    while (Date.now() < responseDeadline) {
+      response = await Promise.race([
+        strandUpdate,
+        page.waitForTimeout(Math.min(10_000, responseDeadline - Date.now())).then(() => undefined),
+      ]);
+      if (response) break;
 
-    const status =
-      (
-        await page.getByTestId("card-detail-edit-status").textContent()
-      )?.trim() ?? "";
-    expect(
-      status,
-      "description save produced neither ak.strand.update nor a visible failure status",
-    ).not.toBe("");
-    expect(
-      status.includes("encryption_transition_pending")
-        || status === "Restoring encrypted Realm state before saving...",
-      `description save failed before submission: ${status}`,
-    ).toBe(true);
-    if (status.includes("encryption_transition_pending") && Date.now() < responseDeadline) {
-      await page.getByTestId("card-detail-save-button").click();
+      const status =
+        (
+          await page.getByTestId("card-detail-edit-status").textContent()
+        )?.trim() ?? "";
+      expect(
+        status,
+        "description save produced neither ak.strand.update nor a visible failure status",
+      ).not.toBe("");
+      // A checkpoint read refusal precedes Event authoring. Never retry ingress.
+      const checkpointRefused = /^encrypted card write is not ready: (?:MLS send gate is not ready: )?account checkpoint changed (?:before|during) committed read$/.test(status);
+      expect(
+        checkpointRefused || status.includes("encryption_transition_pending")
+          || status === "Restoring encrypted Realm state before saving...",
+        `description save failed before submission: ${status}`,
+      ).toBe(true);
+      if (!ingressObserved && Date.now() < responseDeadline
+        && ((checkpointRefused && preAuthoringRetries < 3) || status.includes("encryption_transition_pending"))
+        && await save.isEnabled()) {
+        if (checkpointRefused) preAuthoringRetries++;
+        await save.click();
+      }
     }
+  } finally {
+    page.off("request", captureRequest);
+    await test.info().attach("creator-description-pre-authoring-retries", {
+      body: JSON.stringify({ pre_authoring_retries: preAuthoringRetries, ingress_observed: ingressObserved }),
+      contentType: "application/json",
+    });
   }
   expect(
     response,
@@ -903,14 +923,11 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
         expect(pin.accepted_create.accepted_event).toEqual(record!.accepted_create.accepted_event);
         expect(pin.governance_binding).toEqual(record!.intent.proposed_group_genesis_binding.proposed_group_genesis_binding);
         expect(pin.canonical_proposal_bytes).toEqual(Array.from(new TextEncoder().encode(canonicalJson(record!.intent.proposed_group_genesis_binding))));
-        expect(pin.creator_authority).toMatchObject({
-          kind: "device",
-          evidence: {
-            account_id: record!.intent.owner_actor_id.account_id,
-            device_id: record!.intent.creator_device_id,
-          },
-        });
+        expect(pin.creator_authority.kind).toBe("device");
         const creatorDeviceAuthority = pin.creator_authority.evidence;
+        expect(creatorDeviceAuthority.account_id).toEqual(record!.intent.owner_actor_id.account_id);
+        expect(creatorDeviceAuthority.device_id).toBe(record!.intent.creator_device_id);
+        expect(record!.intent.creator_endpoint).toEqual({ kind: "device", device_id: creatorDeviceAuthority.device_id });
         expect(creatorDeviceAuthority.projection.authorized_generation_ref).toEqual(expect.any(Number));
         expect(creatorDeviceAuthority.projection.authorized_generation_ref).toBe(creatorDeviceAuthority.generation.current_device_generation_ref);
         expect(pin.genesis_absence.current_state_entries.some(

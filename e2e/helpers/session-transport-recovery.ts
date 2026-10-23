@@ -111,16 +111,16 @@ export function assertOriginalAcceptedMlsRows(
   before: Awaited<ReturnType<typeof scanRealmStreamApi>>,
   after: Awaited<ReturnType<typeof scanRealmStreamApi>>,
 ) {
-  const originals = before.events.flatMap((event, index) =>
+  const originals = before.events.flatMap((event) =>
     event?.kind === "ak.message.create" || event?.kind === "ak.mls.genesis"
-      ? [{ event, commit: before.commits[index] }] : []);
+      ? [{ event, commit: before.commits.find(commit => commit.event_ref === event.event_id) }] : []);
   expect(originals.filter(row => row.event.kind === "ak.message.create")).toHaveLength(3);
   expect(originals.filter(row => row.event.kind === "ak.mls.genesis")).toHaveLength(1);
   for (const original of originals) {
     const indexes = after.events.flatMap((event, index) => event?.event_id === original.event.event_id ? [index] : []);
     expect(indexes, "a previously accepted original is neither replaced nor duplicated").toHaveLength(1);
     expect(after.events[indexes[0]!]).toEqual(original.event);
-    expect(after.commits[indexes[0]!]).toEqual(original.commit);
+    expect(after.commits.find(commit => commit.event_ref === original.event.event_id)).toEqual(original.commit);
   }
   const newAdds = after.events.filter(event => event?.kind === "ak.mls.commit"
     && !before.events.some(old => old?.event_id === event.event_id));

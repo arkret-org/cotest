@@ -1,5 +1,7 @@
-import { spawnSync } from "node:child_process";
-import { dirname, resolve } from "node:path";
+import { spawnSync, type SpawnSyncReturns } from "node:child_process";
+import { chmodSync, closeSync, mkdtempSync, openSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 type CotestWireCommand =
@@ -11,6 +13,7 @@ type CotestWireCommand =
   | "local-message-payload"
   | "historical-human-signer-query"
   | "historical-human-signer-fact"
+  | "project-committed-stream-scan"
   | "verify-realm-state-snapshot"
   | "verify-consent-current"
   | "validate-applet-authority-material"
@@ -185,9 +188,43 @@ export function sdkMimiRequestConsentProof(args: {
   });
 }
 
+// A regular read-only descriptor has a finite EOF independently of the
+// parent's synchronous stdio pump. Preserve the exact JSON bytes and keep
+// temporary private material accessible only to this user, then remove it.
+export function runCotestWireJsonProcess(
+  executable: string,
+  args: string[],
+  inputJson: string,
+  { cwd, timeoutMs = 90_000 }: { cwd: string; timeoutMs?: number },
+): SpawnSyncReturns<string> {
+  const scratch = mkdtempSync(join(tmpdir(), "cotest-wire-json-"));
+  let descriptor: number | undefined;
+  try {
+    chmodSync(scratch, 0o700);
+    const inputPath = join(scratch, "stdin.json");
+    writeFileSync(inputPath, inputJson, { encoding: "utf8", flag: "wx", mode: 0o600 });
+    descriptor = openSync(inputPath, "r");
+    return spawnSync(executable, args, {
+      cwd,
+      encoding: "utf8",
+      stdio: [descriptor, "pipe", "pipe"],
+      maxBuffer: 10 * 1024 * 1024,
+      timeout: timeoutMs,
+    });
+  } finally {
+    try {
+      if (descriptor !== undefined) closeSync(descriptor);
+    } finally {
+      rmSync(scratch, { recursive: true, force: true, maxRetries: 3, retryDelay: 10 });
+    }
+  }
+}
+
 export function cotestWire<T>(command: CotestWireCommand, input: unknown): T {
   const binary = process.env.COTEST_WIRE_BIN;
-  const result = spawnSync(
+  const inputJson = JSON.stringify(input);
+  if (typeof inputJson !== "string") throw new TypeError(`cotest-wire ${command} requires JSON input`);
+  const result = runCotestWireJsonProcess(
     binary ?? "cargo",
     binary
       ? [command]
@@ -204,15 +241,16 @@ export function cotestWire<T>(command: CotestWireCommand, input: unknown): T {
           "--",
           command,
         ],
+    inputJson,
     {
       cwd: cotestRepoRoot,
-      encoding: "utf8",
-      input: JSON.stringify(input),
-      maxBuffer: 10 * 1024 * 1024,
+      // Joint lanes bind a prebuilt oracle. Preserve the standalone Cargo
+      // preparation fallback without imposing a native-call build deadline.
+      timeoutMs: binary ? 90_000 : 0,
     },
   );
   if (result.error) {
-    throw result.error;
+    throw new Error(`cotest-wire ${command} launch failed: ${(result.error as NodeJS.ErrnoException).code ?? "unknown"}; input_bytes=${Buffer.byteLength(inputJson)}; stdout_bytes=${Buffer.byteLength(result.stdout ?? "")}; stderr_bytes=${Buffer.byteLength(result.stderr ?? "")}`, { cause: result.error });
   }
   if (result.status !== 0) {
     throw new Error(

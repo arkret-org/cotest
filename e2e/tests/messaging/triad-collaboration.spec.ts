@@ -144,16 +144,17 @@ test.describe("single-server triad collaboration", () => {
     const slot = (eventId: string) => {
       const index = scan.commits.findIndex((commit) => commit.event_ref === eventId);
       expect(index, `Commit slot for ${eventId}`).toBeGreaterThanOrEqual(0);
-      return scan.events[index];
+      return scan.eventSlots[index];
     };
-    expect(slot(created.event_id), "redacted create is withheld").toBeUndefined();
-    expect(slot(reviseEventId), "redacted revise is withheld").toBeUndefined();
+    // A failing disclosure oracle must not print signed original Event bytes.
+    expect(slot(created.event_id) === undefined, "redacted create is withheld").toBe(true);
+    expect(slot(reviseEventId) === undefined, "redacted revise is withheld").toBe(true);
     const events = scan.events.filter(
       (event): event is Record<string, unknown> => event !== undefined,
     );
     expect(events.map(eventKind)).toContain("ak.message.redact");
-    expect(JSON.stringify(scan)).not.toContain(createBody);
-    expect(JSON.stringify(scan)).not.toContain(revisedBody);
+    expect(JSON.stringify(scan).includes(createBody), "redacted create body stays undisclosed").toBe(false);
+    expect(JSON.stringify(scan).includes(revisedBody), "redacted revise body stays undisclosed").toBe(false);
   });
 
   test("API late-join triad member sees only post-join messages in joined history", async ({

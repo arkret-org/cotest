@@ -5,7 +5,7 @@ import { requestContactArkret, respondContactArkret, resolvePrincipalLocator, to
 import { accountActorId, assertAuthoritySubmitOutcome, canonicalJson, createRealmApi, resolveDefaultStrandId, scanRealmStreamApi, signedEventEnvelope, submitSignedEventApi } from "../../helpers/coland-api";
 import { decodeEventIngressBody, ingressEvents } from "../../helpers/event-ingress";
 
-import { approvePairingLinkOnAuthorizedDevice, createDpopUserSession, openUserPage, selfPathHeadersForDpopSession } from "../../helpers/users";
+import { approvePairingLinkOnAuthorizedDevice, createDpopUserSession, openDpopUserPageFromSession, selfPathHeadersForDpopSession } from "../../helpers/users";
 import { serverLoginViaCoauth, submitCoauthPasswordCredentials } from "../../helpers/real-oidc-login";
 import { colandBaseUrl } from "../../helpers/env";
 
@@ -30,22 +30,6 @@ return async ({ jointUsers, request, browser }: { jointUsers: JointUsersFixture;
     alicePage.completeRecoveryKeySetupIfPrompted(30_000).then(() => phase("alice_recovery_finished")),
     bobPage.completeRecoveryKeySetupIfPrompted(30_000).then(() => phase("bob_recovery_finished")),
   ]);
-  phase("contact_request_start");
-  const remoteLocator = remoteBob ? await resolvePrincipalLocator(request, bobSession.user.id, "server2", bobSession.grantJwt) : undefined;
-  const { outcome } = await requestContactArkret(request, aliceSession.grantJwt, bobSession.user.id, {
-    requestedScopes: ["direct_message", "presence"],
-    ...(remoteLocator ? { recipientServiceId: bobSession.accountId.station_id,
-      introductionEvidence: { kind: "locator_ref", principal_locator: remoteLocator } } : {}),
-  });
-  const accepted = await respondContactArkret(request, bobSession.grantJwt, {
-    requestId: outcome.request_event_ref,
-    requesterId: aliceSession.user.id,
-    action: "accept",
-    grantedScopes: ["direct_message", "presence"],
-    ...(remoteBob ? { server: "server2" as const, requesterServiceId: aliceSession.accountId.station_id } : {}),
-  });
-  expect(accepted.state).toBe("accepted");
-  phase("contact_accepted");
 
   // Claim blocking fixes the pre-join boundary at epoch 0; since_join forbids
   // delivering that epoch to the future peer. Consume blocking instead tests
@@ -70,15 +54,34 @@ return async ({ jointUsers, request, browser }: { jointUsers: JointUsersFixture;
       await route.abort("failed");
     });
   }
-  phase("participant_reload_start");
-  await Promise.all([alice.reload(), bob.reload()]);
-  phase("participant_reload_finished");
   let founder: Page | undefined;
   let foundingAcceptedAt: number | undefined;
   let releaseResolve!: () => void;
   const resolveDelay = new Promise<void>(resolve => { releaseResolve = resolve; });
   let acceptFounding!: (response: Response) => void;
   const foundingAccepted = new Promise<Response>(resolve => { acceptFounding = resolve; });
+  let foundingRequestCount = 0;
+  let foundingResponseCount = 0;
+  const waitForFoundingAcceptance = async () => {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      return await Promise.race([
+        foundingAccepted,
+        new Promise<never>((_, reject) => {
+          timer = setTimeout(() => reject(new Error("Direct founding acceptance was not observed within180s")), 180_000);
+        }),
+      ]);
+    } catch (error) {
+      const diagnostic = { mode, cross_station: remoteBob, founding_requests: foundingRequestCount,
+        founding_responses: foundingResponseCount, committed_response_observed: foundingAcceptedAt !== undefined,
+        resolver_observations: [...resolveObservations.values()].map(value => JSON.parse(value)) };
+      console.warn("Direct founding observation timeout", JSON.stringify(diagnostic));
+      await test.info().attach("direct-founding-observation-timeout", {
+        body: JSON.stringify(diagnostic), contentType: "application/json",
+      });
+      throw error;
+    } finally { if (timer) clearTimeout(timer); }
+  };
   const resolvePath = "**/_arkret/self/direct-conversations/resolve";
   const pendingResolveRoutes = new Set<Promise<void>>();
   let browserCancelledOldResolves = 0;
@@ -140,11 +143,15 @@ return async ({ jointUsers, request, browser }: { jointUsers: JointUsersFixture;
     for (const page of [alice, bob]) {
       page.on("request", request => {
         if (request.method() !== "POST" || new URL(request.url()).pathname !== "/_arkret/self/events") return;
-        if (request.postDataJSON()?.unit_kind === "direct_conversation_founding") founder = page;
+        if (request.postDataJSON()?.unit_kind === "direct_conversation_founding") {
+          foundingRequestCount += 1;
+          founder = page;
+        }
       });
       page.on("response", async response => {
         if (response.request().method() !== "POST" || new URL(response.url()).pathname !== "/_arkret/self/events") return;
         if (response.request().postDataJSON()?.unit_kind !== "direct_conversation_founding") return;
+        foundingResponseCount += 1;
         const outcome = await response.json().catch(() => null);
         const committed = response.ok() && outcome?.unit_kind === "direct_conversation_founding"
           && outcome.status === "committed" && Array.isArray(outcome.commits) && outcome.commits.length === 4;
@@ -213,11 +220,41 @@ return async ({ jointUsers, request, browser }: { jointUsers: JointUsersFixture;
     }
   }
   try {
+  phase("contact_request_start");
+  const remoteLocator = remoteBob ? await resolvePrincipalLocator(request, bobSession.user.id, "server2", bobSession.grantJwt) : undefined;
+  const { outcome } = await requestContactArkret(request, aliceSession.grantJwt, bobSession.user.id, {
+    requestedScopes: ["direct_message", "presence"],
+    ...(remoteLocator ? { recipientServiceId: bobSession.accountId.station_id,
+      introductionEvidence: { kind: "locator_ref", principal_locator: remoteLocator } } : {}),
+  });
+  const accepted = await respondContactArkret(request, bobSession.grantJwt, {
+    requestId: outcome.request_event_ref,
+    requesterId: aliceSession.user.id,
+    action: "accept",
+    grantedScopes: ["direct_message", "presence"],
+    ...(remoteBob ? { server: "server2" as const, requesterServiceId: aliceSession.accountId.station_id } : {}),
+  });
+  expect(accepted.state).toBe("accepted");
+  phase("contact_accepted");
+  phase("participant_reload_start");
+  await Promise.all([alice.reload(), bob.reload()]);
+  phase("participant_reload_finished");
   for (const [page, peer] of [[alice, bobSession.user.id], [bob, aliceSession.user.id]] as const) {
     phase(page === alice ? "alice_direct_open_start" : "bob_direct_open_start");
     await page.getByTestId("realm-sidebar-tab-direct").click();
-    await page.locator(`[data-testid="direct-conversation-row"][data-peer=${JSON.stringify(canonicalJson(accountActorId(peer, peer === bobSession.user.id && remoteBob ? "server2" : "default")))}]`).click();
+    const row = page.locator(`[data-testid="direct-conversation-row"][data-peer=${JSON.stringify(canonicalJson(accountActorId(peer, peer === bobSession.user.id && remoteBob ? "server2" : "default")))}]`);
+    // The API receipt can precede the remote Contact projection. A pending
+    // row is clickable but intentionally cannot start a Direct resolver.
+    await expect(row).toHaveAttribute("data-state", "accepted", { timeout: 90_000 });
+    await expect(row).not.toHaveClass(/\bis-dim\b/, { timeout: 90_000 });
+    await row.click();
     phase(page === alice ? "alice_direct_open_finished" : "bob_direct_open_finished");
+  }
+  if (remoteBob) {
+    await Promise.all([
+      alicePage.completeRecoveryKeySetupIfPrompted(2_000).then(() => phase("alice_direct_recovery_finished")),
+      bobPage.completeRecoveryKeySetupIfPrompted(2_000).then(() => phase("bob_direct_recovery_finished")),
+    ]);
   }
   if (mode === "lost") {
     await lostAcceptance;
@@ -225,7 +262,7 @@ return async ({ jointUsers, request, browser }: { jointUsers: JointUsersFixture;
     await founder!.reload();
   }
   if (holdSecondResolve) {
-    const acceptedResponse = await foundingAccepted;
+    const acceptedResponse = await waitForFoundingAcceptance();
     phase("founding_accepted");
     expect(acceptedResponse.ok(), await acceptedResponse.text()).toBeTruthy();
     const unit = ingressEvents(decodeEventIngressBody(acceptedResponse.request().postDataJSON()));
@@ -369,7 +406,12 @@ return async ({ jointUsers, request, browser }: { jointUsers: JointUsersFixture;
     await expect(async () => {
       if (!new URL(page.url()).pathname.startsWith("/direct/")) {
         await page.getByTestId("realm-sidebar-tab-direct").click();
-        await page.locator(`[data-testid="direct-conversation-row"][data-peer=${JSON.stringify(canonicalJson(accountActorId(peer, peer === bobSession.user.id && remoteBob ? "server2" : "default")))}]`).click();
+        const row = page.locator(`[data-testid="direct-conversation-row"][data-peer=${JSON.stringify(canonicalJson(accountActorId(peer, peer === bobSession.user.id && remoteBob ? "server2" : "default")))}]`);
+        // The API receipt can precede the remote Contact projection. A pending
+        // row is clickable but intentionally cannot start a Direct resolver.
+        await expect(row).toHaveAttribute("data-state", "accepted", { timeout: 90_000 });
+        await expect(row).not.toHaveClass(/\bis-dim\b/, { timeout: 90_000 });
+        await row.click();
       }
       await expect(page).toHaveURL(/\/direct\/ak:realm:.*\/ak:strand:/, { timeout: 5_000 });
     }).toPass({ timeout: 180_000, intervals: [2_000] });
@@ -564,16 +606,10 @@ test("cross-station Direct Conversation preserves encrypted Chat and Topic state
   test.setTimeout(1_200_000);
   const session = await createDpopUserSession(request, "direct-cross-bob", { server: "server2" });
   expect(session, "the official two-Station runner must supply a real second Station").toBeDefined();
-  const remote = await openUserPage(browser, session!.user, {
-    server: "server2", grantJwt: session!.grantJwt, dpopSeedB64url: session!.dpopSeedB64url,
-    eventSigningSeedB64url: session!.eventSigningSeedB64url, grantId: session!.grantId,
-    accountId: session!.accountId, principalControlRealmId: session!.principalControlRealmId,
-    grantAudience: session!.grantAudience, recoveryKey: session!.recoveryKey,
-    recoveryMaterialEvidence: session!.recoveryMaterialEvidence,
-    onRecoveryKeyConfigured: key => { session!.recoveryKey = key; },
-  });
+  const remoteFlow = await openDpopUserPageFromSession(browser, session, { server: "server2" });
+  expect(remoteFlow, "the remote participant must complete canonical browser session initialization").toBeDefined();
+  const remote = remoteFlow!.page;
   try {
-    await remote.gotoHome();
     await directConversationCase("normal", true)({ browser, request, jointUsers: {
       ...jointUsers, bob: session!.user, bobSession: session!, bobToken: session!.grantJwt, bobPage: remote,
     } });

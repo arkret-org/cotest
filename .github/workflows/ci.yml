@@ -225,7 +225,12 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.13"
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: "1.98"
       - name: generator unit tests
+        # The artifact-capture regression compiles a small offline Cargo graph
+        # with separate host/runtime units using the SDK023 lane's compiler.
         working-directory: cotest
         run: >-
           python -m unittest
@@ -233,6 +238,7 @@ jobs:
           scripts.tests.test_api_only_migration
           scripts.tests.test_package_graph
           scripts.tests.test_capture_sdk_artifact
+          scripts.tests.test_prepare_linux_joint_e2e
       - name: validate current cross-repository inventory
         working-directory: cotest
         # Sibling main branches move independently. Validate current source,

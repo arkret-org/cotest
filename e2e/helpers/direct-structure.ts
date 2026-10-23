@@ -1,4 +1,4 @@
-import { expect, test, operationSelector } from "./arkret-test";
+import { expect, test, operationSelector, isDirectAdmissionOutcomeReason } from "./arkret-test";
 import type { Page, Response, Request, APIRequestContext } from "@playwright/test";
 import { assertAuthoritySubmitOutcome, authHeaders, canonicalJson, readCommitStreamHeadApi, scanRealmStreamApi, sdkEventDerivedIds, sha256CanonicalJson, signedEventEnvelope, wireErrCode } from "./coland-api";
 import { decodeEventIngressBody, ingressEvents, type IngressEvent } from "./event-ingress";
@@ -11,6 +11,7 @@ import { fileURLToPath } from "node:url";
 import { colandBaseUrl, colandServiceDid, colandServiceId, colandServiceResolution, configuredServerKeys, type ColandKey } from "./env";
 import { cotestWire } from "./coland-api/wire-client";
 import { orderByCanonicalKey } from "./direct-structure-order";
+import { readCurrentSnapshot } from "./direct-current-snapshot";
 import type { ActorId } from "./generated/spec-wire-objects";
 
 // Negative structure targets must exist outside Direct's protected Realm.
@@ -194,7 +195,7 @@ async function observeSelectedHumanSend(page: Page, strandId: string) {
 // The WeakMap is process-only and tied to the actual page owning this fixture.
 const structuralBoundaries = new WeakMap<Page, DirectStructureProof>();
 type StructureCut = { rows: Array<Record<string, any>>; floor: unknown;
-  position: number; head: string; groups: Array<Record<string, unknown>> };
+  position: number; head: string; groups: Array<Record<string, unknown>>; authority: Record<string, any> };
 async function verifyStructureSnapshotAuthority(request: APIRequestContext, realm: string,
   snapshot: Record<string, any>) {
   // Replicas retain the governing Station's original Snapshot signature.
@@ -218,6 +219,19 @@ async function verifyStructureSnapshotAuthority(request: APIRequestContext, real
   }).verified, "SDK must verify the whole current snapshot and native authority history").toBe(true);
   return authorityBundle as Record<string, any>;
 }
+async function readDirectCurrentSnapshot(proof: DirectStructureProof, realm: string,
+  viewer?: { token: string; server: ColandKey }): Promise<Record<string, any>> {
+  const url = new URL(`${colandBaseUrl(viewer?.server)}/_arkret/self/realm-state-snapshot/head`);
+  url.searchParams.set("realm_id", realm);
+  return readCurrentSnapshot(
+    remainingMs => proof.request.get(url.toString(), { headers: authHeaders(viewer?.token ?? proof.token, "GET", url.toString()), timeout: Math.min(30_000, remainingMs) }),
+    async body => {
+      const snapshot = body as Record<string, any>;
+      await verifyStructureSnapshotAuthority(proof.request, realm, snapshot);
+      return snapshot;
+    },
+  );
+}
 async function structureCut(proof: DirectStructureProof, realm: string,
   viewer?: { token: string; server: ColandKey }): Promise<StructureCut> {
   let result!: StructureCut;
@@ -227,7 +241,7 @@ async function structureCut(proof: DirectStructureProof, realm: string,
     const response = await proof.request.get(url, { headers: authHeaders(viewer?.token ?? proof.token, "GET", url) });
     expect(response.status(), "complete signed structure-boundary snapshot").toBe(200);
     const snapshot = await response.json();
-    await verifyStructureSnapshotAuthority(proof.request, realm, snapshot);
+    const authority = await verifyStructureSnapshotAuthority(proof.request, realm, snapshot);
     const stream = { kind: "realm", realm_id: realm };
     const heads = snapshot.visible_stream_heads.filter((head: any) => isDeepStrictEqual(head.stream_ref, stream));
     expect(heads.length, "exact visible Realm head").toBe(1);
@@ -275,9 +289,38 @@ async function structureCut(proof: DirectStructureProof, realm: string,
       groups.push(material);
     }
     result = { rows, floor: snapshot.retention_and_history_floor,
-      position: heads[0].stream_position, head: heads[0].commit_id, groups };
+      position: heads[0].stream_position, head: heads[0].commit_id, groups, authority };
   }).toPass({ timeout: 90_000 });
   return result;
+}
+async function readVerifiedDirectSuccessors(proof: DirectStructureProof, realm: string,
+  authority: Record<string, any>, beforePosition: number, endPosition: number,
+  commits: Array<Record<string, unknown>>): Promise<Array<{
+    commit: Record<string, unknown>; event_id: string; event_kind: string;
+  }>> {
+  const genesis = authority.genesis_event;
+  const fixed = genesis.payload.object;
+  expect(genesis.kind).toBe("ak.realm.create");
+  expect(fixed.purpose, "private original lookup is restricted to verified Direct Genesis").toBe("direct_conversation");
+  expect(authority.authority_transitions, "Direct has no governance transfer history").toEqual([]);
+  expect(authority.current_generation).toBe(0);
+  expect(authority.current_service_id).toBe(fixed.governance_station_id);
+  const topology = JSON.parse(await readFile(process.env.COTEST_TOPOLOGY_PATH!, "utf8"));
+  const servers = topology.servers.filter((server: { coland: { service_id: string } }) =>
+    server.coland.service_id === fixed.governance_station_id);
+  expect(servers, "verified fixed Direct governor has exactly one runner-owned lease").toHaveLength(1);
+  const directSource = { service_id: fixed.governance_station_id,
+    genesis_event_id: genesis.event_id, genesis_commit: authority.genesis_commit,
+    expected_commits: commits };
+  const script = fileURLToPath(new URL("../../scripts/realm-business-footprint.py", import.meta.url));
+  const { stdout } = await promisify(execFile)("python3", [script, "--server", servers[0].name,
+    "--realm", realm, "--stream-after-position", String(beforePosition),
+    "--stream-end-position", String(endPosition),
+    "--verified-direct-source", JSON.stringify(directSource)], { timeout: 45_000, maxBuffer: 1_048_576 });
+  const stored = JSON.parse(stdout).stream_successors;
+  expect(Array.isArray(stored)).toBe(true);
+  expect(stored).toHaveLength(commits.length);
+  return stored;
 }
 async function assertStructureBoundary(proof: DirectStructureProof, realm: string,
   before: StructureCut[], event: IngressEvent) {
@@ -291,15 +334,29 @@ async function assertStructureBoundary(proof: DirectStructureProof, realm: strin
     const successor = await scanRealmStreamApi(proof.request, viewers[index]?.token ?? proof.token, realm,
       { limit: 1000, server: viewers[index]?.server, afterPosition: before[index].position });
     expect(successor.truncated).toBe(false);
-    expect(successor.commits.length).toBe(successor.events.length);
+    expect(successor.commits.length).toBe(successor.eventSlots.length);
     const end = successor.commits.findIndex(commit => commit.commit_id === after.head
       && commit.stream_position === after.position);
     expect(end, "accepted tail reaches the exact after-Snapshot head").toBeGreaterThanOrEqual(0);
-    const interval = successor.events.slice(0, end + 1);
+    const slots = successor.eventSlots.slice(0, end + 1);
+    const commits = successor.commits.slice(0, end + 1);
+    const stored = slots.some(row => row === undefined)
+      ? await readVerifiedDirectSuccessors(proof, realm, after.authority,
+        before[index].position, after.position, commits) : [];
+    const interval = slots.filter((row): row is Record<string, unknown> => row !== undefined);
     for (const [offset, commit] of successor.commits.slice(0, end + 1).entries()) {
       expect(commit.stream_position, "structure interval is a complete continuous accepted tail")
         .toBe(before[index].position + offset + 1);
-      expect(commit.event_ref, "each interval Commit binds its actual Event").toBe(interval[offset].event_id);
+      const original = slots[offset];
+      if (original === undefined) {
+        expect(isDeepStrictEqual(stored[offset].commit, commit),
+          "hidden successor retains the entire publicly disclosed accepting Commit").toBe(true);
+        expect(stored[offset].event_id === commit.event_ref).toBe(true);
+        expect(stored[offset].event_kind, "only a verified independent franking receipt may be withheld")
+          .toBe("ak.moderation.franking_proof");
+      } else {
+        expect(commit.event_ref, "each visible interval Commit binds its actual Event").toBe(original.event_id);
+      }
     }
     expect(interval.some((row: any) => row.event_id === event.event_id)).toBe(true);
     // Ordinary encrypted messages and their receiving-service franking
@@ -314,7 +371,7 @@ async function assertStructureBoundary(proof: DirectStructureProof, realm: strin
       body: JSON.stringify({ realm_id: realm, viewer_station: viewers[index]?.server ?? "default",
         protected_rows: after.rows.length, groups: after.groups, history_floor_unchanged: true,
         member_and_mls_rows_exact: true, before_head: before[index].head, after_head: after.head,
-        actual_structure_event: event.event_id, accepted_successors: interval.length }), contentType: "application/json" });
+        actual_structure_event: event.event_id, accepted_successors: commits.length, withheld_franking_successors: slots.length - interval.length }), contentType: "application/json" });
   }
 }
 
@@ -430,8 +487,8 @@ export async function structureWrite(page: Page, action: string, kind: string, t
         // Retry the retained editor draft only while no signed request exists;
         // an emitted request still follows the exact original Event checks.
         const status = await panel.getByTestId("direct-structure-status").textContent();
-        if (!signedRequestEmitted
-          && /^MLS send gate is not ready: account checkpoint changed (?:before|during) committed read$/.test(status?.trim() ?? "")
+        if (!signedRequestEmitted && preAuthoringRetries < 3
+          && /^(?:MLS send gate is not ready: )?account checkpoint changed (?:before|during) committed read$/.test(status?.trim() ?? "")
           && await panel.getByRole("button", { name: "Save", exact: true }).isEnabled()
           && Date.now() < deadline) {
           preAuthoringRetries++;
@@ -714,13 +771,7 @@ export async function rejectDirectStructureEvent(proof: DirectStructureProof, te
   name: string, kind: string, payload: Record<string, unknown>, reason?: string,
   sender?: { token: string; server?: ColandKey; actor?: ActorId; scope?: Record<string, unknown> }) {
   const realm = template.realm_id!;
-  const snapshot = async () => {
-    const url = new URL(`${colandBaseUrl()}/_arkret/self/realm-state-snapshot/head`);
-    url.searchParams.set("realm_id", realm);
-    const response = await proof.request.get(url.toString(), { headers: authHeaders(proof.token, "GET", url.toString()) });
-    expect(response.ok(), await response.text()).toBe(true);
-    return await response.json();
-  };
+  const snapshot = () => readDirectCurrentSnapshot(proof, realm);
   const beforeHead = await readCommitStreamHeadApi(proof.request, proof.token, realm);
   expect(beforeHead, "refusal must have a real observer's accepted head").toBeDefined();
   const beforeSnapshot = await snapshot();
@@ -739,7 +790,7 @@ export async function rejectDirectStructureEvent(proof: DirectStructureProof, te
   });
   const body = await response.json() as Record<string, unknown>;
   const outcomeDiagnostic = structureOutcomeDiagnostic(body);
-  if (reason?.startsWith("direct_conversation_")) {
+  if (isDirectAdmissionOutcomeReason(reason)) {
     expect(response.status(), outcomeDiagnostic).toBe(200);
     expect(body.status, outcomeDiagnostic).toBe("rejected");
     expect(Object.keys(body).sort()).toEqual(["reason_code", "status"]);
@@ -761,7 +812,7 @@ export async function rejectDirectStructureEvent(proof: DirectStructureProof, te
   expect(unchangedRows((await snapshot()).current_state_entries)).toEqual(unchangedRows(before));
   const after = await scanRealmStreamApi(proof.request, proof.token, realm, { afterPosition: beforeHead!.stream_position });
   expect(after.truncated).toBe(false);
-  expect(after.commits.length).toBe(after.events.length);
+  expect(after.commits.length).toBe(after.eventSlots.length);
   expect(after.events.some(row => row?.event_id === event.event_id), "refused Event never enters the accepted stream").toBe(false);
   expect(after.commits.some(commit => commit.event_ref === event.event_id), "refused Event has no accepting Commit").toBe(false);
   let independentFrankingSuccessors = 0;
@@ -777,37 +828,17 @@ export async function rejectDirectStructureEvent(proof: DirectStructureProof, te
     // checks accepted kind/ID plus the same full Commit, without exposing the
     // hidden payload or treating omission as a protocol proof.
     let stored: Array<{ commit: Record<string, unknown>; event_id: string; event_kind: string }> = [];
-    if (after.events.slice(0, end + 1).some(row => row === undefined)) {
+    if (after.eventSlots.slice(0, end + 1).some(row => row === undefined)) {
       // Verify the accepted Genesis/current authority before selecting a
       // private runner lease. Direct's governor is fixed from creation; an
       // observer can legally hold only the same disclosed Withheld Commit.
       const authority = await verifyStructureSnapshotAuthority(proof.request, realm, beforeSnapshot);
-      const genesis = authority.genesis_event;
-      const fixed = genesis.payload.object;
-      expect(genesis.kind).toBe("ak.realm.create");
-      expect(fixed.purpose, "private original lookup is restricted to verified Direct Genesis").toBe("direct_conversation");
-      expect(authority.authority_transitions, "Direct has no governance transfer history").toEqual([]);
-      expect(authority.current_generation).toBe(0);
-      expect(authority.current_service_id).toBe(fixed.governance_station_id);
-      const topology = JSON.parse(await readFile(process.env.COTEST_TOPOLOGY_PATH!, "utf8"));
-      const servers = topology.servers.filter((server: { coland: { service_id: string } }) =>
-        server.coland.service_id === fixed.governance_station_id);
-      expect(servers, "verified fixed Direct governor has exactly one runner-owned lease").toHaveLength(1);
-      const directSource = { service_id: fixed.governance_station_id,
-        genesis_event_id: genesis.event_id, genesis_commit: authority.genesis_commit,
-        expected_commits: after.commits.slice(0, end + 1) };
-      const script = fileURLToPath(new URL("../../scripts/realm-business-footprint.py", import.meta.url));
-      const { stdout } = await promisify(execFile)("python3", [script, "--server", servers[0].name,
-        "--realm", realm, "--stream-after-position", String(beforeHead!.stream_position),
-        "--stream-end-position", String(afterHead!.stream_position),
-        "--verified-direct-source", JSON.stringify(directSource)], { timeout: 45_000, maxBuffer: 1_048_576 });
-      stored = JSON.parse(stdout).stream_successors;
-      expect(Array.isArray(stored)).toBe(true);
-      expect(stored).toHaveLength(end + 1);
+      stored = await readVerifiedDirectSuccessors(proof, realm, authority,
+        beforeHead!.stream_position, afterHead!.stream_position, after.commits.slice(0, end + 1));
     }
     for (const [offset, commit] of after.commits.slice(0, end + 1).entries()) {
       expect(commit.stream_position).toBe(beforeHead!.stream_position + offset + 1);
-      let original = after.events[offset];
+      const original = after.eventSlots[offset];
       if (original === undefined) {
         expect(stored[offset].commit, "the stored original has the same entire accepting Commit").toEqual(commit);
         expect(stored[offset].event_id).toBe(commit.event_ref);
@@ -1100,9 +1131,24 @@ async function runFlatTopicChats(alice: Page, bob: Page, mainMessages: string[],
   const secondRank = ((secondClassification.payload?.patch as any).topic.value as { rank: string }).rank;
   const firstRank = (patch.topic.value as { space_id: string; rank: string }).rank;
   expect(secondRank > firstRank, "new Chat receives a rank after the existing actual Chat").toBe(true);
+  expect(secondClassification.payload?.target_ref).toBe(secondChatId);
+  // The accepted receipt can precede installation in the visible current view.
+  // Reorder only after both actual Chat classifications are visible and the
+  // router has selected the intended first Chat.
+  for (const page of allPages) {
+    await expect(chatOptions(page).locator(`option[value=${JSON.stringify(secondChatId)}]`))
+      .toContainText(topicName, { timeout: 90_000 });
+  }
   await chooseAlice.selectOption(chatId);
+  await expect.poll(() => decodeURIComponent(new URL(alice.url()).pathname).split("/")[3]).toBe(chatId);
+  await expect(chooseAlice).toHaveValue(chatId);
   const reorder = await structureWrite(alice, "reorder", "ak.strand.update", undefined, topicId);
   const reordered = (reorder.payload?.patch as any).topic.value;
+  await test.info().attach("direct-reorder-target-and-ranks", {
+    body: JSON.stringify({ actual_target_ref: reorder.payload?.target_ref, expected_chat_id: chatId,
+      first_rank: firstRank, second_rank: secondRank, reordered_rank: reordered.rank }), contentType: "application/json",
+  });
+  expect(reorder.payload?.target_ref).toBe(chatId);
   expect(reordered.space_id).toBe(topicId);
   expect(reordered.rank > secondRank).toBe(true);
   for (const page of allPages) {
@@ -1134,11 +1180,7 @@ async function runFlatTopicChats(alice: Page, bob: Page, mainMessages: string[],
     await expect(option).toContainText(secondTopicName);
     await expect(option).not.toContainText("(archived)");
   }
-  const currentUrl = new URL(`${colandBaseUrl()}/_arkret/self/realm-state-snapshot/head`);
-  currentUrl.searchParams.set("realm_id", migrated.realm_id!);
-  const rawCurrent = await proof!.request.get(currentUrl.toString(), { headers: authHeaders(proof!.token, "GET", currentUrl.toString()) });
-  expect(rawCurrent.ok(), await rawCurrent.text()).toBe(true);
-  const rawEntries = (await rawCurrent.json()).current_state_entries as Array<{ selector: { kind: string; strand_id?: string }; value: unknown }>;
+  const rawEntries = (await readDirectCurrentSnapshot(proof!, migrated.realm_id!)).current_state_entries as Array<{ selector: { kind: string; strand_id?: string }; value: unknown }>;
   const exactChat = rawEntries.filter(row => row.selector.kind === "strand" && row.selector.strand_id === chatId);
   expect(exactChat).toHaveLength(1);
   await rejectDirectStructureEvent(proof!, migrated, "classify-archived-topic", "ak.strand.update", {
@@ -1202,12 +1244,37 @@ async function runFlatTopicChats(alice: Page, bob: Page, mainMessages: string[],
       await expect(navigation.getByRole("combobox", { name: "Action", exact: true })).toHaveCount(0);
       await navigation.getByRole("combobox", { name: "Chat", exact: true }).selectOption(mainId);
     }
+    const selectedPath = `/direct/${decodeURIComponent(mainPath.split("/")[2])}/${chatId}`;
+    await expect(sender).toHaveURL(url => decodeURIComponent(url.pathname) === selectedPath, { timeout: 90_000 });
+    const senderSelection = sender.getByTestId("direct-structure").getByRole("combobox", { name: "Chat", exact: true });
+    await expect(senderSelection).toHaveValue(chatId);
     await sender.getByTestId("chat-input").fill(text);
-    const sending = sender.waitForResponse(response => response.request().method() === "POST"
-      && new URL(response.url()).pathname === "/_arkret/self/events"
-      && ingressEvents(decodeEventIngressBody(response.request().postDataJSON())).some(event => event.kind === "ak.message.create"));
-    await sender.getByTestId("send-chat-button").click();
-    const sent = await sending;
+    await expect(sender.getByTestId("chat-input")).toHaveValue(text);
+    const sendButton = sender.getByTestId("send-chat-button");
+    // Start the response budget only after the real selected Chat permits a
+    // send. Navigation can precede its verified current/MLS installation.
+    try {
+      await expect(sendButton).toBeEnabled({ timeout: 90_000 });
+    } catch (error) {
+      await test.info().attach("direct-topic-chat-send-readiness", {
+        body: JSON.stringify({ side: sender === alice ? "alice" : "bob", selected_chat: chatId,
+          route_matches_selected_chat: decodeURIComponent(new URL(sender.url()).pathname) === selectedPath,
+          selector_matches_selected_chat: await senderSelection.inputValue().then(value => value === chatId).catch(() => false),
+          input_matches_marker: await sender.getByTestId("chat-input").inputValue().then(value => value === text).catch(() => false),
+          send_enabled: await sendButton.isEnabled().catch(() => false),
+          mls_binding_pending: await sendButton.getAttribute("data-mls-binding-pending").then(value => value === null ? null : value === "true").catch(() => null),
+          creator_bootstrap_pending: await sendButton.getAttribute("data-creator-bootstrap-pending").then(value => value === null ? null : value === "true").catch(() => null),
+          readiness_checking: await sendButton.getAttribute("data-readiness-checking").then(value => value === null ? null : value === "true").catch(() => null),
+          blocker_diagnostic_present: await sendButton.getAttribute("data-send-blockers").then(Boolean).catch(() => false) }), contentType: "application/json",
+      });
+      throw error;
+    }
+    const [sent] = await Promise.all([
+      sender.waitForResponse(response => response.request().method() === "POST"
+        && new URL(response.url()).pathname === "/_arkret/self/events"
+        && ingressEvents(decodeEventIngressBody(response.request().postDataJSON())).some(event => event.kind === "ak.message.create")),
+      sendButton.click(),
+    ]);
     const message = ingressEvents(decodeEventIngressBody(sent.request().postDataJSON())).find(event => event.kind === "ak.message.create")!;
     expect(message.payload?.strand_id).toBe(chatId);
     expect(message.payload?.encrypted_content).toBeTruthy();
@@ -1250,12 +1317,8 @@ async function runFlatTopicChats(alice: Page, bob: Page, mainMessages: string[],
   const realmId = decodeURIComponent(mainPath.split("/")[2]);
   const snapshot = async (viewer?: { token: string; server: ColandKey }) => {
     if (!proof) return undefined;
-    const url = new URL(`${colandBaseUrl(viewer?.server)}/_arkret/self/realm-state-snapshot/head`);
-    url.searchParams.set("realm_id", realmId);
-    const response = await proof.request.get(url.toString(), { headers: authHeaders(viewer?.token ?? proof.token, "GET", url.toString()) });
-    expect(response.ok(), await response.text()).toBeTruthy();
-    const body = await response.json() as { current_state_entries: Array<Record<string, unknown>> };
-    return body.current_state_entries;
+    const body = await readDirectCurrentSnapshot(proof, realmId, viewer);
+    return body.current_state_entries as Array<Record<string, unknown>>;
   };
   const rejectSigned = (name: string, template: IngressEvent, kind: string, payload: Record<string, unknown>, reason?: string) =>
     rejectDirectStructureEvent(proof!, template, name, kind, payload, reason);
@@ -1287,10 +1350,7 @@ async function runFlatTopicChats(alice: Page, bob: Page, mainMessages: string[],
     "direct_conversation_participant_authority_denied", { token: boundary.thirdToken, actor: boundary.thirdActor });
   const privateCurrent = new URL(`${colandBaseUrl()}/_arkret/self/realm-state-snapshot/head`);
   privateCurrent.searchParams.set("realm_id", realmId);
-  const visible = await proof!.request.get(privateCurrent.toString(), {
-    headers: authHeaders(proof!.token, "GET", privateCurrent.toString()),
-  });
-  expect(visible.status(), "the same snapshot route must be available to its participant").toBe(200);
+  await readDirectCurrentSnapshot(proof!, realmId);
   const hidden = await proof!.request.get(privateCurrent.toString(), {
     headers: authHeaders(boundary.thirdToken, "GET", privateCurrent.toString()),
   });
@@ -1338,6 +1398,7 @@ async function runFlatTopicChats(alice: Page, bob: Page, mainMessages: string[],
       .filter(event => ["ak.strand.create", "ak.strand.update", "ak.strand.archive", "ak.strand.restore",
         "ak.space.create", "ak.space.update", "ak.space.archive", "ak.space.restore", "ak.space.tombstone"].includes(String(event.kind)));
     const sharedEvents = structuralEvents(originalRead.events);
+    expect(sharedEvents.map(event => event.event_id)).toEqual(expect.arrayContaining([chat.event_id, topic.event_id]));
     let peerRead: Awaited<ReturnType<typeof scanRealmStreamApi>> | undefined;
     await expect(async () => {
       peerRead = await scanRealmStreamApi(proof.request, proof.peer!.token, realmId, { server: proof.peer!.server });
@@ -1410,6 +1471,6 @@ async function runFlatTopicChats(alice: Page, bob: Page, mainMessages: string[],
     await page.getByTestId("direct-structure").getByRole("combobox", { name: "Chat", exact: true }).selectOption(mainId);
     for (const message of mainMessages) await expect(page.getByTestId("chat-message").filter({ hasText: message })).toBeVisible({ timeout: 90_000 });
   }
-  expect(new URL(alice.url()).pathname).toBe(mainPath);
+  expect(decodeURIComponent(new URL(alice.url()).pathname)).toBe(decodeURIComponent(mainPath));
   expect(decodeURIComponent(new URL(bob.url()).pathname.split("/")[2])).toBe(decodeURIComponent(mainPath.split("/")[2]));
 }
