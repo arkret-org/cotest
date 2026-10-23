@@ -153,7 +153,7 @@ pub async fn service_migration_preserves_business_and_refreshes_peer_route() -> 
     member
         .send_message(&realm, &strand, "peer before service migration")
         .await?;
-    let before = resolution(&station).await?;
+    let before = resolution(station).await?;
     let original_core = station.service_id().to_owned();
     let old_did = station.service_did().to_owned();
     let target = station.reserve_public_base_target()?;
@@ -169,13 +169,13 @@ pub async fn service_migration_preserves_business_and_refreshes_peer_route() -> 
     );
     ensure!(station.service_id() == &original_core && station.service_did() != &old_did);
     station.start_external_process().await?;
-    let after = resolution(&station).await?;
+    let after = resolution(station).await?;
     verify_service_resolution_floor(&after, &floor(&before)?)?;
     let route = verify_current_service_resolution(
         &after,
         &after.service_id,
         "station",
-        &current_native(&station).await?,
+        &current_native(station).await?,
         chrono::Utc::now(),
     )?;
     ensure!(route.base_url == target.as_str());
@@ -261,7 +261,7 @@ pub async fn service_migration_preserves_business_and_refreshes_peer_route() -> 
     owner
         .send_message(&realm, &strand, "same Account after restart")
         .await?;
-    let restarted = resolution(&station).await?;
+    let restarted = resolution(station).await?;
     ensure!(restarted.method_history_evidence == after.method_history_evidence);
     ensure!(
         station
@@ -272,13 +272,13 @@ pub async fn service_migration_preserves_business_and_refreshes_peer_route() -> 
             .is_err(),
         "old business origin still listening"
     );
-    let alien = resolution(&peer).await?;
+    let alien = resolution(peer).await?;
     ensure!(
         verify_current_service_resolution(
             &alien,
             &after.service_id,
             "station",
-            &current_native(&peer).await?,
+            &current_native(peer).await?,
             chrono::Utc::now()
         )
         .is_err(),
