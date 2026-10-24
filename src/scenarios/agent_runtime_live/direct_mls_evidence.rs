@@ -218,7 +218,7 @@ pub(super) async fn join(
     )?;
     let uploaded = runtime.sdk().keypackages_upload(&upload).await?;
     ensure!(
-        uploaded.accepted == 1
+        uploaded.accepted_count == 1
             && uploaded.rejections.is_empty()
             && uploaded.keypackage_refs == [package.keypackage_ref.to_string()],
         "Direct Agent KeyPackage publication was not accepted exactly: {uploaded:?}"
