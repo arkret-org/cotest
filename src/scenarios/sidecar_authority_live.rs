@@ -3,10 +3,12 @@
 use anyhow::{Context, Result, anyhow, bail, ensure};
 use arkret_models_collaboration::sidecar_operations::{
     SidecarContextRef, SidecarEnsureCommitPhase, SidecarEnsureCommitRequestBody,
-    SidecarEnsureOutcome, SidecarEnsurePreparePhase, SidecarEnsurePrepareRequestBody,
-    SidecarEnsureRequestBody,
+    SidecarEnsurePreparePhase, SidecarEnsurePrepareRequestBody, SidecarEnsureRequestBody,
+    SidecarEnsureResponseBody,
 };
-use arkret_wire::{CommitStreamRef, EventKind, RealmId, StreamScanDirection, StreamScanRequest};
+use arkret_wire::{
+    CommitStreamRef, EventKind, RealmId, StreamScanDirection, StreamScanRequestBody,
+};
 use serde_json::json;
 
 use crate::harness::{CanonicalJsonBody, TestServerGroup, expect_json};
@@ -218,7 +220,7 @@ async fn run_with_options(
                 Op::SELF_KEYS_KEYPACKAGES_COMMAND_CONSUME_V1,
                 Op::SELF_MLS_READ_ROSTER_AUTHORITY_V1,
                 Op::SELF_SIGNER_KEYS_READ_RESOLVE_V1,
-                Op::SELF_CURRENT_RESULTS_READ_EXACT_V1,
+                Op::SELF_CURRENT_STATE_READ_EXACT_V1,
                 Op::SELF_EVENTS_COMMAND_SUBMIT_V1,
                 Op::SELF_DEVICE_MESSAGES_READ_LIST_V1,
                 Op::SELF_DEVICE_MESSAGES_COMMAND_ACK_V1,
@@ -253,7 +255,7 @@ async fn run_with_options(
         let page = controller
             .client
             .sdk()
-            .scan_commit_stream(&StreamScanRequest {
+            .scan_commit_stream(&StreamScanRequestBody {
                 realm_id: realm.clone(),
                 stream_ref: CommitStreamRef::Realm {
                     realm_id: realm.clone(),
@@ -321,7 +323,7 @@ async fn run_with_options(
         .sdk()
         .agent_sidecar_ensure(&controller.client.verify_publication(prepare)?)
         .await?;
-    let SidecarEnsureOutcome::PreparedNew(prepared) = prepared else {
+    let SidecarEnsureResponseBody::PreparedNew(prepared) = prepared else {
         bail!("fresh Sidecar did not prepare a new atomic unit");
     };
     let create = controller.client.sign_prepared_contact_event(
@@ -346,7 +348,7 @@ async fn run_with_options(
         .sdk()
         .agent_sidecar_ensure(&controller.client.verify_publication(request.clone())?)
         .await?;
-    let SidecarEnsureOutcome::Accepted(accepted) = accepted else {
+    let SidecarEnsureResponseBody::Accepted(accepted) = accepted else {
         bail!("signed Sidecar unit was not accepted");
     };
     ensure!(accepted.sidecar_id == arkret_wire::SidecarId::from_event_id(&create.event_id));
@@ -418,7 +420,7 @@ async fn run_with_options(
             .iter()
             .any(|entry| matches!(
                 entry,
-                arkret_wire::TypedCurrentRow::Value {
+                arkret_wire::CurrentState::Value {
                     selector: arkret_wire::CurrentSelector::Sidecar { .. }
                         | arkret_wire::CurrentSelector::SidecarContext { .. },
                     ..
@@ -426,7 +428,7 @@ async fn run_with_options(
             )),
         "another Realm member received private Sidecar typed currents"
     );
-    let parent_query = StreamScanRequest {
+    let parent_query = StreamScanRequestBody {
         realm_id: realm.clone(),
         stream_ref: CommitStreamRef::Realm {
             realm_id: realm.clone(),
@@ -462,7 +464,7 @@ async fn run_with_options(
         StreamScanDirection::After(None),
         StreamScanDirection::Before(None),
     ] {
-        let query = StreamScanRequest {
+        let query = StreamScanRequestBody {
             realm_id: realm.clone(),
             stream_ref: stream.clone(),
             direction,
@@ -632,7 +634,7 @@ async fn run_with_options(
         reqwest::StatusCode::OK,
     )
     .await?;
-    let response:arkret_models_collaboration::mls_group_state_material::MlsGroupStateMaterialOutcome=serde_json::from_value(response)?;
+    let response:arkret_models_collaboration::mls_group_state_material::MlsGroupStateMaterialResponseBody=serde_json::from_value(response)?;
     let validated = response.validate_for_request(&material.as_peer_request())?;
     ensure!(
         validated.group_info_bytes == group_info && validated.ratchet_tree_bytes == tree,
@@ -664,7 +666,7 @@ async fn run_with_options(
     );
     ensure!(
         roster_response.records.len() == 1
-            && roster_response.manifest.total_records == 1
+            && roster_response.manifest.total_record_count == 1
             && roster_response.next_cursor.is_none(),
         "native Sidecar Genesis roster is partial"
     );
@@ -746,7 +748,7 @@ async fn verify_pending_agent_reads(
     ensure!(
         !snapshot.current_state_entries.iter().any(|row| matches!(
             row,
-            arkret_wire::TypedCurrentRow::Value {
+            arkret_wire::CurrentState::Value {
                 selector: arkret_wire::CurrentSelector::Sidecar { .. }
                     | arkret_wire::CurrentSelector::SidecarContext { .. },
                 ..
@@ -754,13 +756,19 @@ async fn verify_pending_agent_reads(
         )),
         "pending Agent received private current"
     );
-    let public = snapshot.current_state_entries.iter().filter(|row| matches!(row,
-        arkret_wire::TypedCurrentRow::Value { source_stream_ref, .. } if source_stream_ref == stream)).collect::<Vec<_>>();
+    let public = snapshot
+        .current_state_entries
+        .iter()
+        .filter(|row| {
+            matches!(row,
+        arkret_wire::CurrentState::Value { source_stream_ref, .. } if source_stream_ref == stream)
+        })
+        .collect::<Vec<_>>();
     ensure!(
         public.len() == 1
             && matches!(
                 public[0],
-                arkret_wire::TypedCurrentRow::Value {
+                arkret_wire::CurrentState::Value {
                     selector: arkret_wire::CurrentSelector::MlsGroup { .. },
                     ..
                 }
@@ -779,7 +787,7 @@ async fn verify_pending_agent_reads(
         StreamScanDirection::After(None),
         StreamScanDirection::Before(None),
     ] {
-        let query = StreamScanRequest {
+        let query = StreamScanRequestBody {
             realm_id: realm.clone(),
             stream_ref: stream.clone(),
             direction,
@@ -812,7 +820,7 @@ async fn verify_pending_agent_reads(
         );
     }
     let parent = http
-        .scan_commit_stream(&StreamScanRequest {
+        .scan_commit_stream(&StreamScanRequestBody {
             realm_id: realm.clone(),
             stream_ref: CommitStreamRef::Realm {
                 realm_id: realm.clone(),

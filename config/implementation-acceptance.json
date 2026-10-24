@@ -181,18 +181,18 @@
       ]
     },
     {
-      "task": "2026-09-10-0540-client-current-result-durable-index.md",
+      "task": "2026-09-10-0540-client-current-state-durable-index.md",
       "criteria_count": 4,
       "criteria_sha256": "b7c8962e042040c44f7c4f1782184fc450d53f2509151d71503e7afdfb4c708d",
       "spec_refs": [
-        "arkret-spec/spec/v1/zh/sync/current-results.md",
+        "arkret-spec/spec/v1/zh/sync/current-state.md",
         "arkret-spec/spec/v1/zh/sync/privacy-preserving-search.md",
         "arkret-spec/spec/v1/zh/crypto-media/device-lifecycle.md",
         "arkret-spec/spec/v1/zh/models/circle.md",
         "arkret-spec/spec/v1/zh/models/strand-and-message.md",
         "arkret-spec/spec/v1/zh/models/event-and-patch.md",
-        "arkret-spec/spec/v1/artifacts/registry/current-result-registry.json",
-        "arkret-spec/spec/v1/artifacts/schemas/typed-current-result.schema.json",
+        "arkret-spec/spec/v1/artifacts/registry/current-state-registry.json",
+        "arkret-spec/spec/v1/artifacts/schemas/current-state.schema.json",
         "arkret-spec/spec/v1/zh/discovery/client-preferences.md",
         "arkret-spec/spec/v1/zh/governance/content-moderation.md",
         "arkret-spec/spec/v1/zh/sync/service-http-binding.md",
@@ -703,11 +703,11 @@
       ],
       "source_refs": [
         "inkson/src/state/projection/kanban_ops.rs",
-        "coland/crates/storage-postgres/tests/space_create_current_results.rs"
+        "coland/crates/storage-postgres/tests/space_create_current_states.rs"
       ],
       "tests": [
         {
-          "path": "coland/crates/storage-postgres/tests/space_create_current_results.rs",
+          "path": "coland/crates/storage-postgres/tests/space_create_current_states.rs",
           "symbol": "space_create_root_and_child_have_three_sibling_results_and_exact_replay",
           "kind": "live",
           "covers": "PG Space admission entrypoint only; not executed by this batch and not the full 23-case Kanban, offline placement or real restart/revocation product acceptance."

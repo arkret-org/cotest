@@ -42,9 +42,9 @@ test("@fully-implemented account owner uploads and clears the canonical profile 
     });
 
     const displayName = `Profile ${Date.now()}`;
-    const bio = `Bio ${Date.now()}`;
+    const biography = `Bio ${Date.now()}`;
     await page.page.getByTestId("settings-profile-display-name").fill(displayName);
-    await page.page.getByTestId("settings-profile-bio").fill(bio);
+    await page.page.getByTestId("settings-profile-biography").fill(biography);
     const savedTextProfile = page.page.waitForResponse(
       (response) =>
         response.url() === profileUrl &&
@@ -70,17 +70,17 @@ test("@fully-implemented account owner uploads and clears the canonical profile 
           const body = (await response.json()) as {
             profile?: {
               display_name?: string;
-              profile_fields?: { bio?: string };
+              profile_fields?: { biography?: string };
             };
           };
           return {
             displayName: body.profile?.display_name,
-            bio: body.profile?.profile_fields?.bio,
+            biography: body.profile?.profile_fields?.biography,
           };
         },
         { timeout: 60_000, intervals: [250, 500, 1_000, 2_000] },
       )
-      .toEqual({ displayName, bio });
+      .toEqual({ displayName, biography });
 
     await page.page.getByTestId("settings-avatar-input").setInputFiles({
       name: "avatar.png",
@@ -171,7 +171,7 @@ test("@fully-implemented account owner uploads and clears the canonical profile 
       displayName,
       { timeout: 60_000 },
     );
-    await expect(page.page.getByTestId("settings-profile-bio")).toHaveValue(bio);
+    await expect(page.page.getByTestId("settings-profile-biography")).toHaveValue(biography);
     await expect(page.page.getByTestId("settings-avatar-clear")).toHaveCount(0);
   } finally {
     await page.close();

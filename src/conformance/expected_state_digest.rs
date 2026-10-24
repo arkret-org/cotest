@@ -1,5 +1,5 @@
-//! `ak.vector.current_results.expected_state_digest.v1` — the one
-//! `expected_state_digest` algorithm of `zh/sync/current-results.md` §2
+//! `ak.vector.current_state.expected_state_digest.v1` — the one
+//! `expected_state_digest` algorithm of `zh/sync/current-state.md` §2
 //! (decisions 0113 and 0115).
 //!
 //! Every case recomputes its digest input `v` from the fixture inputs before
@@ -20,7 +20,7 @@ use serde_json::{Map, Value};
 use super::{canonical_json, load_fixture_value, required_str, sha256_prefixed};
 
 pub const VECTOR_ID_EXPECTED_STATE_DIGEST: &str =
-    "ak.vector.current_results.expected_state_digest.v1";
+    "ak.vector.current_state.expected_state_digest.v1";
 
 const FIXTURE: &str = "expected-state-digest-kat-fixture.json";
 
@@ -63,7 +63,7 @@ pub fn run_expected_state_digest_known_answers() -> Result<usize> {
 }
 
 fn run_case(case: &Value) -> Result<()> {
-    let family = required_str(case, "result_family")?;
+    let family = required_str(case, "state_family")?;
     let inputs = &case["inputs"];
     let (value, sdk_digest) = match family {
         "realm_authority_root" => (inputs["frozen_value"].clone(), None),

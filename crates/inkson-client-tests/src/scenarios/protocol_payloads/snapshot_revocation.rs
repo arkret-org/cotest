@@ -9,7 +9,7 @@ use cotest::scenarios::circle_poll_scope_live::{circle_create, circle_event, joi
 use cotest::scenarios::human_device_producer_live::{
     create_realm_with_join_rule, submit_and_expect_commit,
 };
-use garth::{AccountSubscribeBatch, AccountSubscribeTransport, SyncRequestBody};
+use garth::{AccountSubscribeBatch, AccountSubscribeParameters, AccountSubscribeTransport};
 use inkson::sync_engine::NativeAccountHost;
 use serde_json::json;
 
@@ -26,7 +26,7 @@ struct RevokeAfterIssuance {
 impl AccountSubscribeTransport for RevokeAfterIssuance {
     async fn subscribe(
         &self,
-        request: &SyncRequestBody,
+        request: &AccountSubscribeParameters,
     ) -> garth::Result<
         arkret_models_collaboration::sync_frames::account_subscribe::AccountSubscribeSnapshotResult,
     > {

@@ -2,9 +2,9 @@
 
 use anyhow::{Context, Result, ensure};
 use arkret_models_collaboration::authority_commit::{
-    OrdinaryRealmBootstrapUnitSubmission, SelfAuthoritySubmitRequest,
+    OrdinaryRealmBootstrapUnitSubmission, SelfAuthoritySubmitRequestBody,
 };
-use arkret_wire::{CommitStreamRef, RealmId, StreamScanOutcome};
+use arkret_wire::{CommitStreamRef, RealmId, StreamScanResponseBody};
 use serde_json::{Value, json};
 
 use crate::harness::TestActorClient;
@@ -12,7 +12,7 @@ use crate::scenarios::identity_test_support::{
     actor_did_for_service_did, spawn_with_harness_account_authority,
 };
 
-async fn scan(client: &TestActorClient, realm_id: &RealmId) -> Result<StreamScanOutcome> {
+async fn scan(client: &TestActorClient, realm_id: &RealmId) -> Result<StreamScanResponseBody> {
     let result = client
         .sdk()
         .scan_commit_stream_tail(
@@ -28,7 +28,7 @@ async fn scan(client: &TestActorClient, realm_id: &RealmId) -> Result<StreamScan
     Ok(result)
 }
 
-fn assert_chain(scan: &StreamScanOutcome, realm_id: &RealmId) -> Result<()> {
+fn assert_chain(scan: &StreamScanResponseBody, realm_id: &RealmId) -> Result<()> {
     ensure!(!scan.committed_events.is_empty(), "empty founding stream");
     for (index, item) in scan.committed_events.iter().enumerate() {
         item.validate_shape()?;
@@ -140,8 +140,9 @@ pub async fn realm_genesis_with_client(client: &TestActorClient) -> Result<()> {
     let retry = client
         .sdk()
         .submit_to_realm_authority(
-            &client
-                .verify_publication(SelfAuthoritySubmitRequest::OrdinaryRealmBootstrap(request))?,
+            &client.verify_publication(SelfAuthoritySubmitRequestBody::OrdinaryRealmBootstrap(
+                request,
+            ))?,
             &Default::default(),
         )
         .await?;

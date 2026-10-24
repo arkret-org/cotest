@@ -179,8 +179,10 @@ fn fixed_signature(
             format!("{seed:02x}").repeat(32)
         ))?,
         created_at: arkret_canonical::parse_timestamp_canonical("2026-09-26T00:00:00.000Z")?,
-        sig: arkret_wire::Base64UrlString::new(arkret_canonical::base64url_encode([seed; 64]))
-            .map_err(|error| anyhow!(error))?,
+        signature: arkret_wire::Base64UrlString::new(arkret_canonical::base64url_encode(
+            [seed; 64],
+        ))
+        .map_err(|error| anyhow!(error))?,
     })
 }
 
@@ -247,7 +249,7 @@ fn welcome_for(
             device_id: recipient.device.clone(),
         },
         keypackage_claim_ref: draft.keypackage_claim_ref.clone(),
-        ciphertext_b64: draft.ciphertext_b64.clone(),
+        ciphertext_base64url: draft.ciphertext_base64url.clone(),
         producer_proof: fixed_signature(
             arkret_wire::DetachedSignatureContext::MlsWelcomeDelivery,
             0x77,
@@ -576,7 +578,7 @@ fn peer_claim_atomic_idempotency_case(case: &Value, tally: &mut Tally) -> Result
     })?;
     let mut rebound = outcome;
     rebound["claim_receipt"]["claim_request_id"] = json!("AAAAAAAAAAAAAAAAAAAAAw");
-    let rebound: KeyPackagesClaimOutcome = serde_json::from_value(rebound)?;
+    let rebound: KeyPackagesClaimResponseBody = serde_json::from_value(rebound)?;
     tally.check(rebound.validate_shape().is_err(), || {
         "a receipt naming another claim_request_id was accepted".to_owned()
     })?;
@@ -679,7 +681,7 @@ fn peer_claim_double_authorization_privacy_case(case: &Value, tally: &mut Tally)
                 "requester_device_id": requester.device,
                 "device_authorize_event_id": "ak:event:ARELvWOpF6BRhrks3DlbQy-9XIE6aAQQumDQp7fA4Ape",
                 "signed_at": signed_at,
-                "signature": {"kid": requester.method()?, "signature_algorithm": "Ed25519", "sig": "AA"},
+                "signature": {"kid": requester.method()?, "signature_algorithm": "Ed25519", "signature": "AA"},
             },
         });
         if let Some(allowed) = last_resort_allowed {
@@ -1285,7 +1287,7 @@ fn welcome_consume_ordering_case(case: &Value, tally: &mut Tally) -> Result<()> 
                 kid: arkret_wire::NonEmptyString::new(recipient.method()?.to_string())
                     .map_err(|error| anyhow!(error))?,
                 signature_algorithm: None,
-                sig: arkret_wire::Base64UrlString::new("AA".to_owned())
+                signature: arkret_wire::Base64UrlString::new("AA".to_owned())
                     .map_err(|error| anyhow!(error))?,
             },
         };

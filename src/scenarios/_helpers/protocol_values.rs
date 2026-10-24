@@ -2,7 +2,7 @@ use serde_json::Value;
 
 /// The Event a single self submit committed or found already committed.
 ///
-/// The submit answers with the closed `AuthoritySubmitOutcome`: an accepted
+/// The submit answers with the closed `AuthoritySubmitResponseBody`: an accepted
 /// `{status: committed | duplicate, commit}` names the Event only through its
 /// RealmCommit's `event_ref`; a rejection names none.
 pub(crate) fn submitted_event_id(response: &Value) -> Option<&str> {

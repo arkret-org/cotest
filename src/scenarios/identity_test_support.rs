@@ -15,7 +15,7 @@ use arkret_models_collaboration::events_payloads::{
     FoundingDeviceKeyPurpose, SignatureMaterial, device_authorize_payload_digest,
 };
 use arkret_models_crypto::{
-    AlgorithmKeyRecords, KeyOperationSignature, KeysUploadRequestBody, KeysUploadUnsignedRequest,
+    AlgorithmKeyRecords, KeyOperationSignature, KeysUploadFields, KeysUploadRequestBody,
     keys_upload_signing_input,
 };
 use arkret_models_identity::{
@@ -502,7 +502,7 @@ async fn authorize_additional_principal_device(
     let account =
         arkret_wire::AccountId::new(founding.core_id.clone(), server.service_id().clone());
     let founding_token = dev_login(server, actor, founding.device_id.as_str()).await?;
-    let keys: arkret_models_crypto::KeysQueryOutcome = serde_json::from_value(
+    let keys: arkret_models_crypto::KeysQueryResponseBody = serde_json::from_value(
         expect_json(
             server
                 .http()
@@ -570,7 +570,7 @@ async fn authorize_additional_principal_device(
         &founding_method,
         Some(server.service_id()),
     );
-    let outcome: arkret_wire::AuthoritySubmitOutcome = serde_json::from_value(
+    let outcome: arkret_wire::AuthoritySubmitResponseBody = serde_json::from_value(
         expect_json(
             server
                 .http()
@@ -583,7 +583,7 @@ async fn authorize_additional_principal_device(
         .await?,
     )?;
     match outcome {
-        arkret_wire::AuthoritySubmitOutcome::Accepted { commit, .. }
+        arkret_wire::AuthoritySubmitResponseBody::Accepted { commit, .. }
             if commit.event_ref == event.event_id && commit.realm_id == founding.pcr_realm_id =>
         {
             Ok(event.event_id)
@@ -647,7 +647,7 @@ pub fn signed_keys_upload_body(
 ) -> Result<KeysUploadRequestBody> {
     let one_time_keys = signed_algorithm_key_records(actor, one_time_keys, false)?;
     let fallback_keys = signed_algorithm_key_records(actor, fallback_keys, true)?;
-    let unsigned = KeysUploadUnsignedRequest {
+    let unsigned = KeysUploadFields {
         device_id: DeviceId::new(device_id.to_owned()).context("invalid keys/upload device id")?,
         one_time_keys,
         fallback_keys,
@@ -657,7 +657,7 @@ pub fn signed_keys_upload_body(
     Ok(unsigned.into_signed(KeyOperationSignature {
         kid: NonEmptyString::new(format!("{actor}#{device_id}")).unwrap(),
         signature_algorithm: Some(NonEmptyString::new("Ed25519").unwrap()),
-        sig: Base64UrlString::new(URL_SAFE_NO_PAD.encode(signature.to_bytes())).unwrap(),
+        signature: Base64UrlString::new(URL_SAFE_NO_PAD.encode(signature.to_bytes())).unwrap(),
     }))
 }
 
@@ -704,7 +704,7 @@ fn signed_algorithm_key_records(
                 json!({
                     "kid": format!("{actor}#device-record-key"),
                     "signature_algorithm": "Ed25519",
-                    "sig": URL_SAFE_NO_PAD.encode(signing_key.sign(&signature_input).to_bytes()),
+                    "signature": URL_SAFE_NO_PAD.encode(signing_key.sign(&signature_input).to_bytes()),
                 }),
             );
             let record = serde_json::from_value(Value::Object(record))
@@ -959,7 +959,7 @@ async fn bootstrap_test_device_authorization(
 async fn submit_harness_pcr_genesis(
     server: &ArkretServer,
     request: &arkret_models_collaboration::principal_operations::PcrGenesisAdmissionInput,
-) -> Result<arkret_models_collaboration::principal_operations::PcrGenesisAdmissionOutcome> {
+) -> Result<arkret_models_collaboration::principal_operations::PcrGenesisAdmissionResponseBody> {
     request.validate()?;
     let value = expect_json(
         server
@@ -1019,7 +1019,7 @@ fn test_principal_inception(host: &str, local_id: &str) -> Result<PreparedPrinci
         principal_endpoint: &endpoint,
         local_id,
         also_known_as: &[],
-        version_time: chrono::DateTime::parse_from_rfc3339("2026-05-01T00:00:00.000Z")?
+        version_created_at: chrono::DateTime::parse_from_rfc3339("2026-05-01T00:00:00.000Z")?
             .with_timezone(&chrono::Utc),
         root_seed: &root_seed,
         next_root_public_key_multibase: &next_root_multibase,

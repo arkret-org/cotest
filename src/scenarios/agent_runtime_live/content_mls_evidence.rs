@@ -18,7 +18,7 @@ fn durable_group(group: &mut arkret::ArkretMlsGroup, path: &std::path::Path) -> 
     Ok(())
 }
 
-async fn current(scene: &GrantFixture, scope: &ScopeRef) -> Result<arkret_wire::MlsGroupCurrent> {
+async fn current(scene: &GrantFixture, scope: &ScopeRef) -> Result<arkret_wire::MlsGroupValue> {
     let snapshot = scene
         .deployment
         .controller
@@ -29,7 +29,7 @@ async fn current(scene: &GrantFixture, scope: &ScopeRef) -> Result<arkret_wire::
         .current_state_entries
         .iter()
         .find_map(|row| {
-            let arkret_wire::TypedCurrentRow::Value {
+            let arkret_wire::CurrentState::Value {
                 selector: arkret_wire::CurrentSelector::MlsGroup { scope_ref },
                 value,
                 ..
@@ -119,7 +119,7 @@ pub async fn run_agent_content_mls_production() -> Result<crate::conformance::Su
     let (read, claims) = scene
         .issue_for(
             &operations,
-            arkret_models_collaboration::session_grants::SessionGrantAgentScopeRequest {
+            arkret_models_collaboration::session_grants::RequestedAgentSessionGrantScope {
                 realm_ids: vec![scene.realm.clone()],
                 strand_ids: vec![],
                 track_names: vec![],
@@ -223,7 +223,7 @@ pub async fn run_agent_content_mls_production() -> Result<crate::conformance::Su
         &journal.path().join("controller-pending-update.json"),
     )?;
     let submission =
-        arkret_models_collaboration::authority_commit::SelfAuthoritySubmitRequest::MlsCommit(
+        arkret_models_collaboration::authority_commit::SelfAuthoritySubmitRequestBody::MlsCommit(
             arkret_wire::MlsCommitSubmission {
                 commit_event: event.clone(),
                 welcomes: vec![],

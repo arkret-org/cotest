@@ -37,7 +37,7 @@ pub async fn live_authority_bundle_and_scan_verify_through_garth() -> Result<()>
     };
 
     let nonce = fresh_nonce(realm)?;
-    let request = arkret_wire::AuthorityBundleRequest {
+    let request = arkret_wire::RealmAuthorityBundleRequestBody {
         realm_id: realm_id.clone(),
         nonce: nonce.clone(),
     };
@@ -101,7 +101,7 @@ pub async fn live_authority_bundle_and_scan_verify_through_garth() -> Result<()>
     let mut positions = Vec::new();
     let mut floor = None;
     loop {
-        let scan = arkret_wire::StreamScanRequest {
+        let scan = arkret_wire::StreamScanRequestBody {
             realm_id: realm_id.clone(),
             stream_ref: realm_stream.clone(),
             direction: arkret_wire::StreamScanDirection::After(after),
@@ -183,7 +183,7 @@ pub async fn live_authority_bundle_and_scan_verify_through_garth() -> Result<()>
             "ak:device:01904100-0000-7000-8000-0000000000a4",
         )
         .await?;
-    let scan = arkret_wire::StreamScanRequest {
+    let scan = arkret_wire::StreamScanRequestBody {
         realm_id: realm_id.clone(),
         stream_ref: realm_stream.clone(),
         direction: arkret_wire::StreamScanDirection::After(None),
@@ -198,7 +198,7 @@ pub async fn live_authority_bundle_and_scan_verify_through_garth() -> Result<()>
         "capability_denied",
     )
     .await?;
-    let unknown = arkret_wire::AuthorityBundleRequest {
+    let unknown = arkret_wire::RealmAuthorityBundleRequestBody {
         realm_id: arkret_wire::RealmId::from_event_id(&arkret_wire::EventId::from_digest(
             arkret_canonical::DigestSuite::Sha256,
             [0x42; 32],

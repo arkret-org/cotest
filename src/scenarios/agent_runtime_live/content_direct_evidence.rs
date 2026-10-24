@@ -1,5 +1,5 @@
 //! Actual Direct participant content ceilings through Coauth and Station.
-use arkret_models_collaboration::session_grants::SessionGrantAgentScopeRequest;
+use arkret_models_collaboration::session_grants::RequestedAgentSessionGrantScope;
 
 use super::*;
 use crate::harness::CanonicalJsonBody;
@@ -13,8 +13,8 @@ pub const REVIEWED_DIRECT_CONTENT_CASES: [&str; 6] = [
     "realm_membership_cannot_replace_direct_participant",
 ];
 
-fn selectors(realm: &RealmId) -> SessionGrantAgentScopeRequest {
-    SessionGrantAgentScopeRequest {
+fn selectors(realm: &RealmId) -> RequestedAgentSessionGrantScope {
+    RequestedAgentSessionGrantScope {
         realm_ids: vec![realm.clone()],
         strand_ids: vec![],
         track_names: vec![],
@@ -387,7 +387,7 @@ pub async fn run_agent_content_direct_production()
             realm_id: joined.realm.clone(),
         },
         selection: arkret::ParticipationBits {
-            reply_message: true,
+            message_creation_allowed: true,
             ..arkret::ParticipationBits::NONE
         },
         expected_version: 0,
@@ -448,7 +448,7 @@ pub async fn run_agent_content_direct_production()
         &agent.verification_method,
         agent.runtime_key.to_bytes(),
     )?;
-    let outcome: AuthoritySubmitOutcome = serde_json::from_value(
+    let outcome: AuthoritySubmitResponseBody = serde_json::from_value(
         expect_json(
             write_runtime
                 .post("/_arkret/self/events")
@@ -458,7 +458,7 @@ pub async fn run_agent_content_direct_production()
         .await?,
     )?;
     ensure!(
-        matches!(&outcome,AuthoritySubmitOutcome::Accepted {status:AuthorityCommitStatus::Committed,commit} if commit.event_ref==message.event_id),
+        matches!(&outcome,AuthoritySubmitResponseBody::Accepted {status:AuthorityCommitStatus::Committed,commit} if commit.event_ref==message.event_id),
         "Direct Message did not commit: {outcome:?}"
     );
     let stored = controller

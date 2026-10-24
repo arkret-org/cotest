@@ -5,8 +5,8 @@ use arkret_models_collaboration::authority_commit::{
     DirectConversationFoundingUnitKind, DirectConversationFoundingUnitSubmission,
 };
 use arkret_models_collaboration::direct_conversation::{
-    DirectConversationFoundingPlan, DirectConversationResolveOutcome,
-    DirectConversationResolveRequestBody,
+    DirectConversationFoundingPlan, DirectConversationResolveRequestBody,
+    DirectConversationResolveResponseBody,
 };
 use arkret_models_collaboration::objects::direct_conversation::*;
 
@@ -35,7 +35,7 @@ pub(super) async fn found(
         .sdk()
         .direct_conversation_resolve(&request)
         .await?;
-    let DirectConversationResolveOutcome::CreationRequired {
+    let DirectConversationResolveResponseBody::CreationRequired {
         next_founding_input,
     } = resolved
     else {
@@ -171,7 +171,7 @@ pub(super) async fn found(
         .sdk()
         .direct_conversation_resolve(&request)
         .await?;
-    let DirectConversationResolveOutcome::Provisional {
+    let DirectConversationResolveResponseBody::Provisional {
         coordinates,
         authorization_basis,
         ..

@@ -554,7 +554,7 @@ fn run_semantic_cases(file_name: &str, cases: &[SchemaValidationCase]) -> Result
         let result = claim.validate_against_contract(
             &contract,
             &claim.sdk_artifact.digest,
-            &claim.spec_revision,
+            &claim.specification_revision,
             |_, proof, signing_bytes| {
                 let Some(multibase) = proof
                     .kid

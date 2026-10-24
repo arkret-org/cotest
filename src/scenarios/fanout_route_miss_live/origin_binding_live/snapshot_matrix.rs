@@ -1,6 +1,8 @@
 //! Exact signed historical baselines across three actual Station processes.
 
-use arkret_wire::{CommitStreamRef, RealmStateSnapshot, StreamScanDirection, StreamScanRequest};
+use arkret_wire::{
+    CommitStreamRef, RealmStateSnapshot, StreamScanDirection, StreamScanRequestBody,
+};
 
 use super::*;
 use crate::harness::{CanonicalJsonBody, expect_json};
@@ -81,7 +83,7 @@ async fn private_sidecar(
         },
     });
     let request = client.verify_publication(request)?;
-    let SidecarEnsureOutcome::PreparedNew(prepared) =
+    let SidecarEnsureResponseBody::PreparedNew(prepared) =
         client.sdk().agent_sidecar_ensure(&request).await?
     else {
         bail!("fresh private Sidecar must prepare its registered atomic unit");
@@ -102,7 +104,7 @@ async fn private_sidecar(
         )?,
     });
     let request = client.verify_publication(request)?;
-    let SidecarEnsureOutcome::Accepted(accepted) =
+    let SidecarEnsureResponseBody::Accepted(accepted) =
         client.sdk().agent_sidecar_ensure(&request).await?
     else {
         bail!("private Sidecar atomic unit was not accepted");
@@ -203,7 +205,7 @@ async fn run_matrix() -> Result<()> {
     assert_hidden_private_stream(&outsider, &target)?;
     assert_hidden_private_stream(&outsider, &sidecar)?;
     let opening_join = issued.current_state_entries.iter().find_map(|row| {
-        let arkret_wire::TypedCurrentRow::Value { selector, revision, .. } = row;
+        let arkret_wire::CurrentState::Value { selector, revision, .. } = row;
         matches!(selector, arkret_wire::CurrentSelector::MemberState { actor_id } if actor_id == &actor).then(|| revision.commit_id.clone())
     }).context("original accepted opening membership")?;
     let history_request = arkret_models_collaboration::governance::realm_join_intake::PeerRealmJoinBootstrapRequestBody {
@@ -226,7 +228,7 @@ async fn run_matrix() -> Result<()> {
         "source history issuance {history_status}: {}",
         String::from_utf8_lossy(&history_body)
     );
-    let history_outcome: arkret_models_collaboration::governance::realm_join_intake::PeerRealmJoinBootstrapOutcome = serde_json::from_slice(&history_body)?;
+    let history_outcome: arkret_models_collaboration::governance::realm_join_intake::PeerRealmJoinBootstrapResponseBody = serde_json::from_slice(&history_body)?;
     ensure!(history_outcome.request_id == history_request.request_id);
     let stream_history = history_outcome.snapshot;
     stream_history.validate_purpose()?;
@@ -242,7 +244,7 @@ async fn run_matrix() -> Result<()> {
     assert_hidden_private_stream(&stream_history, &sidecar)?;
     let history_bytes = arkret_canonical::canonical_json_bytes(&stream_history)?;
     let original_bytes = arkret_canonical::canonical_json_bytes(&issued)?;
-    let hidden_request = StreamScanRequest {
+    let hidden_request = StreamScanRequestBody {
         realm_id: realm.clone(),
         stream_ref: target.clone(),
         direction: StreamScanDirection::After(None),
@@ -272,8 +274,8 @@ async fn run_matrix() -> Result<()> {
     ensure!(
         matches!(
             outcomes.as_slice(),
-            [PeerCommittedReplicationOutcomeRecord::Stored {}
-                | PeerCommittedReplicationOutcomeRecord::Duplicate {}]
+            [CommittedEventReplicationOutcome::Stored {}
+                | CommittedEventReplicationOutcome::Duplicate {}]
         ),
         "handoff replication did not settle: {outcomes:?}"
     );
@@ -310,7 +312,7 @@ async fn run_matrix() -> Result<()> {
 
     let mut nonce = [0u8; 32];
     getrandom::fill(&mut nonce).map_err(anyhow::Error::msg)?;
-    let request = AuthorityBundleRequest {
+    let request = RealmAuthorityBundleRequestBody {
         realm_id: realm.clone(),
         nonce: Base64UrlString::new(arkret_canonical::base64url_encode(nonce))
             .map_err(anyhow::Error::msg)?,
@@ -441,7 +443,7 @@ async fn run_matrix() -> Result<()> {
         !target_page.committed_events.is_empty(),
         "target stream lost its independent read authority"
     );
-    let sidecar_request = StreamScanRequest {
+    let sidecar_request = StreamScanRequestBody {
         realm_id: realm.clone(),
         stream_ref: sidecar.clone(),
         direction: StreamScanDirection::After(None),

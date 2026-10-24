@@ -166,7 +166,7 @@ pub async fn key_backup_replace_with_authorized_device_works() -> Result<()> {
 }
 
 /// A stored envelope makes the list non-empty; it must still be the closed
-/// `KeysBackupsList` over HTTP 200 with a `backup_metadata` row.
+/// `KeysBackupsPage` over HTTP 200 with a `backup_metadata` row.
 pub async fn key_backup_list_serves_stored_backup_as_closed_metadata() -> Result<()> {
     let server = spawn_with_harness_account_authority(
         "protocol-key-backup-list-metadata",
@@ -209,7 +209,7 @@ pub async fn key_backup_list_absent_at_confirmed_pcr_genesis() -> Result<()> {
         reqwest::StatusCode::OK,
     )
     .await?;
-    let listing: arkret_models_crypto::KeysBackupsList = serde_json::from_value(body)?;
+    let listing: arkret_models_crypto::KeysBackupsPage = serde_json::from_value(body)?;
     assert!(listing.backups.is_empty());
     assert!(matches!(
         listing.active_series.secret_storage,

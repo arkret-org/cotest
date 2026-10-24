@@ -4,7 +4,7 @@ use std::time::{Duration, Instant};
 
 use anyhow::{Context, Result, ensure};
 use arkret_models_collaboration::sync_frames::account_subscribe::{
-    AccountFilter, AccountSubscribeFrame, AccountSubscribeFrameKind, SyncRequestBody,
+    AccountFilter, AccountSubscribeFrame, AccountSubscribeFrameKind, AccountSubscribeParameters,
 };
 use arkret_wire::RealmId;
 use serde_json::{Value, json};
@@ -20,7 +20,7 @@ pub(crate) async fn frames(
     tokio::time::timeout(Duration::from_secs(40), async {
         let mut stream = client
             .sdk()
-            .account_subscribe_frames(&SyncRequestBody {
+            .account_subscribe_frames(&AccountSubscribeParameters {
                 after,
                 filter,
                 catchup: Some(catchup),

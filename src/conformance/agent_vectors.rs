@@ -8,7 +8,7 @@
 //!   - `ak.vector.agent.repairing_supersede.v1`
 //!   - `ak.vector.agent.longevity_no_expiry.v1`
 //!   - `ak.vector.agent.controller_lifecycle.v1`
-//!   - `ak.vector.agent.act_on_behalf.v1`
+//!   - `ak.vector.agent.acting_on_behalf_allowed.v1`
 //!   - `ak.vector.agent.session_grant.replay.v1`
 //!   - `ak.vector.agent_auth.human_approval_required.v1`
 //!   - `ak.vector.agent.session_content_authority.v1`
@@ -27,7 +27,7 @@ use arkret_models_collaboration::events_payloads::agent::AgentKeyScope;
 use arkret_models_collaboration::sync_frames::account_subscribe::{
     NotificationDelta, NotificationDeltaAction,
 };
-use arkret_wire::{AgentHumanApprovalProblem, CapabilityActionId, Problem, ProfileId};
+use arkret_wire::{AgentHumanApprovalProblemExtensions, CapabilityActionId, Problem, ProfileId};
 use serde_json::Value;
 
 pub const VECTOR_ID_AGENT_PROVISION: &str = "ak.vector.agent.provision.v1";
@@ -37,7 +37,7 @@ pub const VECTOR_ID_AGENT_PCR_SEPARATION: &str = "ak.vector.agent.pcr_separation
 pub const VECTOR_ID_AGENT_REPAIRING_SUPERSEDE: &str = "ak.vector.agent.repairing_supersede.v1";
 pub const VECTOR_ID_AGENT_LONGEVITY_NO_EXPIRY: &str = "ak.vector.agent.longevity_no_expiry.v1";
 pub const VECTOR_ID_AGENT_CONTROLLER_LIFECYCLE: &str = "ak.vector.agent.controller_lifecycle.v1";
-pub const VECTOR_ID_AGENT_ACT_ON_BEHALF: &str = "ak.vector.agent.act_on_behalf.v1";
+pub const VECTOR_ID_AGENT_ACT_ON_BEHALF: &str = "ak.vector.agent.acting_on_behalf_allowed.v1";
 pub const VECTOR_ID_AGENT_SESSION_GRANT_REPLAY: &str = "ak.vector.agent.session_grant.replay.v1";
 pub const VECTOR_ID_AGENT_HUMAN_APPROVAL_REQUIRED: &str =
     "ak.vector.agent_auth.human_approval_required.v1";
@@ -731,12 +731,12 @@ pub fn run_agent_pcr_separation_vector() -> Result<()> {
                 .find(|row| row["event_kind"] == "ak.realm.create")
         })
         .ok_or_else(|| anyhow!("ak.realm.create registry row is missing"))?;
-    let status_write = create["result_writes"]
+    let status_write = create["state_writes"]
         .as_array()
         .and_then(|writes| {
             writes
                 .iter()
-                .find(|write| write["result_family"] == "agent_status")
+                .find(|write| write["state_family"] == "agent_status")
         })
         .ok_or_else(|| anyhow!("Agent genesis status result write is missing"))?;
     if status_write["condition"]
@@ -745,7 +745,7 @@ pub fn run_agent_pcr_separation_vector() -> Result<()> {
             "field": "payload.object.purpose",
             "const": "agent_control"
         })
-        || status_write["result_projection"]
+        || status_write["state_projection"]
             != serde_json::json!({
                 "kind": "transition",
                 "from": {"const": "uninitialized"},
@@ -883,7 +883,7 @@ pub fn run_agent_longevity_no_expiry_vector() -> Result<()> {
             "payload_digest": format!("sha256:{}", "0".repeat(64)),
             "created_at": "2026-07-12T00:00:00.000Z",
             "proof_purpose": "issuer_attestation",
-            "jws": "eyJhbGciOiJFZDI1NTE5In0..sig"
+            "jws": "eyJhbGciOiJFZDI1NTE5In0..signature"
         }
     });
     let decoded: arkret_models_collaboration::governance::accountability::AccountabilityGrantPayload = serde_json::from_value(grant)
@@ -978,7 +978,7 @@ pub fn run_agent_controller_lifecycle_vector() -> Result<()> {
     Ok(())
 }
 
-// ─── VECT-AG-4 — act_on_behalf ─────────────────────────────────────────────
+// ─── VECT-AG-4 — acting_on_behalf_allowed ─────────────────────────────────────────────
 
 #[derive(Clone, Copy, Debug)]
 struct MiniActOnBehalfRequest<'a> {
@@ -1197,12 +1197,12 @@ pub fn run_agent_session_grant_replay_vector() -> Result<()> {
         );
     }
 
-    let mut verifier = MiniAgentKeyProofVerifier::new("coland.local", "sig-ok");
+    let mut verifier = MiniAgentKeyProofVerifier::new("coland.local", "signature-ok");
     verifier
         .verify(MiniAgentKeyProof {
             challenge: "challenge-1",
             audience: "coland.local",
-            signature: "sig-ok",
+            signature: "signature-ok",
         })
         .map_err(|reason| anyhow!("valid agent_key_proof rejected: {reason}"))?;
     expect_proof_denial(
@@ -1210,7 +1210,7 @@ pub fn run_agent_session_grant_replay_vector() -> Result<()> {
         MiniAgentKeyProof {
             challenge: "challenge-1",
             audience: "coland.local",
-            signature: "sig-ok",
+            signature: "signature-ok",
         },
         "agent_key_proof_replay",
     )?;
@@ -1219,7 +1219,7 @@ pub fn run_agent_session_grant_replay_vector() -> Result<()> {
         MiniAgentKeyProof {
             challenge: "challenge-2",
             audience: "other-service.local",
-            signature: "sig-ok",
+            signature: "signature-ok",
         },
         "agent_key_proof_audience_mismatch",
     )?;
@@ -1228,7 +1228,7 @@ pub fn run_agent_session_grant_replay_vector() -> Result<()> {
         MiniAgentKeyProof {
             challenge: "challenge-3",
             audience: "coland.local",
-            signature: "sig-tampered",
+            signature: "signature-tampered",
         },
         arkret_wire::ReasonCode::PROOF_INVALID,
     )?;
@@ -1237,7 +1237,7 @@ pub fn run_agent_session_grant_replay_vector() -> Result<()> {
         MiniAgentKeyProof {
             challenge: "challenge-3",
             audience: "coland.local",
-            signature: "sig-ok",
+            signature: "signature-ok",
         },
         "agent_key_proof_replay",
     )?;
@@ -1256,7 +1256,7 @@ fn validate_human_approval_details_schema(details: &Value) -> Result<()> {
         .cloned()
         .ok_or_else(|| anyhow!("agent operations schema missing opaque_local_id"))?;
     let mut schema = document
-        .pointer("/$defs/agent_human_approval_error_details")
+        .pointer("/$defs/agent_human_approval_problem_extensions")
         .cloned()
         .ok_or_else(|| anyhow!("agent operations schema missing human-approval details"))?;
     schema
@@ -1384,7 +1384,7 @@ pub fn validate_agent_human_approval_http_response(status: u16, body: &Value) ->
         "approval_request_id": body.get("approval_request_id").cloned().unwrap_or(Value::Null),
     });
     validate_human_approval_details_schema(&details)?;
-    let typed: AgentHumanApprovalProblem = serde_json::from_value(details)
+    let typed: AgentHumanApprovalProblemExtensions = serde_json::from_value(details)
         .map_err(|error| anyhow!("decode typed human-approval details: {error}"))?;
     Ok(typed.approval_request_id().to_owned())
 }
@@ -1454,7 +1454,7 @@ pub fn run_agent_human_approval_required_vector() -> Result<()> {
     let response = serde_json::to_value(
         Problem::claim_required_human_approval(
             "controller approval required",
-            AgentHumanApprovalProblem::new(approval_request_id.clone())?,
+            AgentHumanApprovalProblemExtensions::new(approval_request_id.clone())?,
         )
         .with_instance("cotest-human-approval"),
     )?;

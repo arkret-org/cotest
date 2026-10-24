@@ -8,7 +8,9 @@ use std::collections::{BTreeMap, BTreeSet};
 use anyhow::{Context as _, Result, anyhow, bail};
 use arkret_identifiers::{DeviceId, DidCoreId, RealmId};
 use arkret_models_collaboration::device_messages::RecipientDelivery;
-use arkret_models_crypto::{KeyPackagesClaimOutcome, KeyPackagesUploadOutcome, MlsKeyPackageState};
+use arkret_models_crypto::{
+    KeyPackagesClaimResponseBody, KeyPackagesUploadResponseBody, MlsKeyPackageState,
+};
 use arkret_wire::{DidUrl, MlsWelcomeDelivery, ProfileId};
 use base64::Engine as _;
 use chrono::{DateTime, Duration, Utc};
@@ -79,9 +81,9 @@ impl Tally {
 
 const KEYPACKAGE_LIFECYCLE_FIXTURE_FILE: &str = "keypackage-lifecycle-fixture.json";
 const KEY_PACKAGES_UPLOAD_OUTCOME_SCHEMA: &str =
-    "schemas/keypackage-operations.schema.json#/$defs/keypackages_upload_outcome";
+    "schemas/keypackage-operations.schema.json#/$defs/keypackages_upload_response_body";
 const KEY_PACKAGES_CLAIM_OUTCOME_SCHEMA: &str =
-    "schemas/keypackage-operations.schema.json#/$defs/keypackages_claim_outcome";
+    "schemas/keypackage-operations.schema.json#/$defs/keypackages_claim_response_body";
 const MLS_WELCOME_DELIVERY_SCHEMA: &str = "schemas/mls-welcome-delivery.schema.json";
 const LAST_RESORT_FEATURE: &str = "ak.feature.mls_last_resort_keypackage.v1";
 const EXPIRY_SECURITY_CASE_NAME: &str = "last_resort_expiry_blocks_new_claim_not_old_decryption";
@@ -337,7 +339,7 @@ fn claim_receipt_value(claims: &[Value]) -> Value {
         "signature": {
             "kid": "did:webvh:z6mkfixtureservice:service.example#key-1",
             "signature_algorithm": "Ed25519",
-            "sig": "c2ln"
+            "signature": "c2ln"
         }
     })
 }
@@ -376,7 +378,7 @@ fn assert_claim_failed(value: &Value) -> Result<()> {
     Ok(())
 }
 
-fn parse_claim_outcome(value: Value) -> Result<KeyPackagesClaimOutcome> {
+fn parse_claim_outcome(value: Value) -> Result<KeyPackagesClaimResponseBody> {
     schema_valid(KEY_PACKAGES_CLAIM_OUTCOME_SCHEMA, &value)?;
     serde_json::from_value(value).map_err(Into::into)
 }
@@ -645,12 +647,12 @@ fn exhaustion_claim_limits_case(vector: &Value, tally: &mut Tally) -> Result<()>
         "keypackage_refs": ["sha256:5555555555555555555555555555555555555555555555555555555555555555"]
     });
     schema_valid(KEY_PACKAGES_UPLOAD_OUTCOME_SCHEMA, &upload_value)?;
-    let _: KeyPackagesUploadOutcome = serde_json::from_value(upload_value)?;
+    let _: KeyPackagesUploadResponseBody = serde_json::from_value(upload_value)?;
 
     let limit = vector
-        .pointer("/claim_rate_limit/max_claims")
+        .pointer("/claim_rate_limit/max_claim_count")
         .and_then(Value::as_u64)
-        .ok_or_else(|| anyhow!("exhaustion vector missing claim_rate_limit.max_claims"))?;
+        .ok_or_else(|| anyhow!("exhaustion vector missing claim_rate_limit.max_claim_count"))?;
     let attempt = vector
         .pointer("/claim_rate_limit/attempt")
         .and_then(Value::as_u64)
@@ -1276,7 +1278,7 @@ fn welcome_keypackage_hash_case(
     }
     for invalid_ciphertext in ["AA==", "AB", "A"] {
         let mut invalid = delivery_value.clone();
-        invalid["ciphertext_b64"] = json!(invalid_ciphertext);
+        invalid["ciphertext_base64url"] = json!(invalid_ciphertext);
         if invalid_ciphertext == "AA==" {
             schema_invalid(MLS_WELCOME_DELIVERY_SCHEMA, &invalid)?;
         }
@@ -1462,7 +1464,7 @@ fn validate_unsigned_selector_transcripts(
             .get("unsigned_request")
             .cloned()
             .ok_or_else(|| anyhow!("{branch} omits unsigned_request"))?;
-        let request: arkret_models_crypto::PeerKeyPackagesClaimUnsignedRequest =
+        let request: arkret_models_crypto::PeerKeyPackagesClaimFields =
             serde_json::from_value(request_value.clone())?;
         let exact_branch = match branch {
             "device" => {

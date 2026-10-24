@@ -158,18 +158,18 @@ pub fn fixture_verified_handle_claim_at(
     core.proofs[1].payload_digest = claim_digest.clone();
 
     let maximum_fresh_until = status_as_of + chrono::Duration::seconds(300);
-    let fresh_until = expires_at
+    let cache_expires_at = expires_at
         .map(|expires| expires.min(maximum_fresh_until))
         .unwrap_or(maximum_fresh_until);
     let mut claim = HandleClaim {
         schema: HandleClaim::SCHEMA.to_owned(),
         claim: core,
         status: HandleClaimStatus::Verified,
-        as_of: status_as_of,
+        evaluated_at: status_as_of,
         verifier_id: issuer_id,
         verified_at: Some(status_as_of),
         revocation: None,
-        fresh_until,
+        cache_expires_at,
         status_proof: proof(
             PayloadProofPurpose::StatusAttestation,
             placeholder,

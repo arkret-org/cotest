@@ -268,12 +268,12 @@ pub async fn terminal_disclosure(withdraw: bool) -> Result<()> {
         )?;
         let receiver = acceptance_rows(&receiver_url).await?;
         let exact_terminal = |rows: &Value| -> Result<Value> {
-            let matches: Vec<_> = rows["realm_bootstrap_current_results"]
+            let matches: Vec<_> = rows["realm_bootstrap_current_states"]
                 .as_array()
                 .context("terminal current")?
                 .iter()
                 .filter(|row| {
-                    row["result_family"] == "realm_tombstone"
+                    row["state_family"] == "realm_tombstone"
                         && row["realm_id"] == commit.realm_id.as_str()
                         && row["current_commit_id"] == commit.commit_id.as_str()
                 })
@@ -530,13 +530,13 @@ pub async fn scope_and_policy_withdrawal() -> Result<()> {
     .await?;
     settled(&source, &control, "delivered").await?;
     let rows = acceptance_rows(&source).await?;
-    let policy = rows["realm_bootstrap_current_results"]
+    let policy = rows["realm_bootstrap_current_states"]
         .as_array()
         .context("policy currents")?
         .iter()
         .find(|row| {
             row["realm_id"] == fixture.realm
-                && row["result_family"] == "realm_plaintext_visible_services"
+                && row["state_family"] == "realm_plaintext_visible_services"
         })
         .context("accepted plaintext policy")?["value"]
         .clone();
@@ -777,7 +777,7 @@ pub async fn scope_and_policy_withdrawal() -> Result<()> {
     )?;
     ensure!(receiver_before == acceptance_rows(&receiver).await?);
     ensure!(
-        receiver_before["member_state_current_results"]
+        receiver_before["member_state_current_states"]
             .as_array()
             .context("Realm membership")?
             .iter()

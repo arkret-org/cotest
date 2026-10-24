@@ -31,15 +31,15 @@ fn agent_interaction_exact_vectors_and_identity_fences_match_sdk() {
     use arkret_models_collaboration::agent_interaction::{
         AgentInteractionMode, agent_interaction_from_verified_exact_read,
     };
-    use arkret_models_collaboration::exact_current_results::{
-        ExactCurrentResultsReadOutcome, ExactCurrentResultsReadRequestBody,
+    use arkret_models_collaboration::exact_current_state::{
+        ExactCurrentStateReadRequestBody, ExactCurrentStateReadResponseBody,
     };
     let fixture: serde_json::Value = serde_json::from_str(include_str!(
-        "../../../../arkret-spec/spec/v1/artifacts/fixtures/exact-current-results-read-fixture.json"
+        "../../../../arkret-spec/spec/v1/artifacts/fixtures/exact-current-state-read-fixture.json"
     ))
     .unwrap();
     let cases = fixture["schema_validation_cases"].as_array().unwrap();
-    let request: ExactCurrentResultsReadRequestBody = serde_json::from_value(
+    let request: ExactCurrentStateReadRequestBody = serde_json::from_value(
         cases
             .iter()
             .find(|c| c["name"] == "agent_mode_exact_request")
@@ -48,7 +48,7 @@ fn agent_interaction_exact_vectors_and_identity_fences_match_sdk() {
     )
     .unwrap();
     let agent = match &request.selector {
-        arkret_models_collaboration::exact_current_results::ExactCurrentResultSelector::AgentInteraction(selector) => selector.agent_account_id.clone(),
+        arkret_models_collaboration::exact_current_state::ExactCurrentStateSelector::AgentInteraction(selector) => selector.agent_account_id.clone(),
         _ => panic!("Agent vector changed family"),
     };
     let present_json = cases
@@ -62,11 +62,11 @@ fn agent_interaction_exact_vectors_and_identity_fences_match_sdk() {
     let mut checked = 0;
     for case in cases {
         let schema = case["schema_ref"].as_str().unwrap();
-        let valid = if schema.ends_with("exact_current_results_read_request") {
-            serde_json::from_value::<ExactCurrentResultsReadRequestBody>(case["instance"].clone())
+        let valid = if schema.ends_with("exact_current_state_read_request_body") {
+            serde_json::from_value::<ExactCurrentStateReadRequestBody>(case["instance"].clone())
                 .is_ok()
         } else {
-            serde_json::from_value::<ExactCurrentResultsReadOutcome>(case["instance"].clone())
+            serde_json::from_value::<ExactCurrentStateReadResponseBody>(case["instance"].clone())
                 .is_ok()
         };
         assert_eq!(
@@ -82,7 +82,7 @@ fn agent_interaction_exact_vectors_and_identity_fences_match_sdk() {
         ("agent_mode_present", AgentInteractionMode::Public),
         ("agent_mode_never_written", AgentInteractionMode::Private),
     ] {
-        let outcome: ExactCurrentResultsReadOutcome = serde_json::from_value(
+        let outcome: ExactCurrentStateReadResponseBody = serde_json::from_value(
             cases.iter().find(|c| c["name"] == name).unwrap()["instance"].clone(),
         )
         .unwrap();
@@ -123,7 +123,7 @@ fn agent_interaction_exact_vectors_and_identity_fences_match_sdk() {
             .is_err()
         );
     }
-    let present: ExactCurrentResultsReadOutcome = serde_json::from_value(present_json).unwrap();
+    let present: ExactCurrentStateReadResponseBody = serde_json::from_value(present_json).unwrap();
     assert!(
         agent_interaction_from_verified_exact_read(&present, &request.realm_id, &agent, &agent, 4)
             .is_err()

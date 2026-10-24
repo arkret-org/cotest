@@ -5,11 +5,11 @@ use arkret_models_collaboration::governance::circle::CircleCreateRequestBody;
 use arkret_models_collaboration::governance::membership_invite::MembershipPayloadState;
 use arkret_models_collaboration::governance::realm_join_intake::RealmJoinIntent;
 use arkret_models_collaboration::mls_group_state_material::{
-    MlsGroupStateMaterialOutcome, MlsMemberGroupStateMaterialReadRequestBody,
+    MlsGroupStateMaterialResponseBody, MlsMemberGroupStateMaterialReadRequestBody,
 };
 use arkret_models_collaboration::mls_roster_authority::{
-    MlsMemberRosterAuthorityReadRequestBody, MlsRosterAuthorityReadOutcome, MlsRosterRecord,
-    MlsSelfRosterAuthorityReadOutcome,
+    MlsMemberRosterAuthorityReadRequestBody, MlsRosterAuthorityReadResponseBody, MlsRosterRecord,
+    MlsSelfRosterAuthorityReadResponseBody,
 };
 use arkret_wire::{ActorId, CircleId, EventAdmissionSubmission, EventKind, ScopeRef};
 use reqwest::StatusCode;
@@ -90,19 +90,20 @@ async fn canonical_rows(
     let circles = circles.iter().map(ToString::to_string).collect::<Vec<_>>();
     let member = actor.to_string();
     tokio::task::spawn_blocking(move || -> Result<_> {
-        let mut client=postgres::Client::connect(&database_url,postgres::NoTls)?;
-        let mut rows=Vec::new();
+        let mut client = postgres::Client::connect(&database_url, postgres::NoTls)?;
+        let mut rows = Vec::new();
         for circle in circles {
-            let row=client.query_one(
+            let row = client.query_one(
                 "SELECT m.value::text,m.current_commit_id,(SELECT COUNT(*) FROM realm_commits c \
                  WHERE c.realm_id=m.realm_id AND c.stream_ref->>'circle_id'=m.circle_id) \
-                 FROM circle_member_state_current_results m WHERE m.circle_id=$1 AND m.member_id=$2",
-                &[&circle,&member],
+                 FROM circle_member_state_current_states m WHERE m.circle_id=$1 AND m.member_id=$2",
+                &[&circle, &member],
             )?;
-            rows.push((row.get(0),row.get(1),row.get(2)));
+            rows.push((row.get(0), row.get(1), row.get(2)));
         }
         Ok(rows)
-    }).await?
+    })
+    .await?
 }
 
 pub(crate) async fn wait_for_membership_current(
@@ -122,11 +123,11 @@ pub(crate) async fn wait_for_membership_current(
             let realm = commit.realm_id.as_str();
             let row = match &commit.stream_ref {
                 arkret_wire::CommitStreamRef::Realm { .. } => client.query_opt(
-                    "SELECT current_commit_id,current_stream_position,jsonb_build_object('kind','realm','realm_id',realm_id),membership FROM member_state_current_results WHERE realm_id=$1 AND member_id=$2",
+                    "SELECT current_commit_id,current_stream_position,jsonb_build_object('kind','realm','realm_id',realm_id),membership FROM member_state_current_states WHERE realm_id=$1 AND member_id=$2",
                     &[&realm,&member],
                 )?,
                 arkret_wire::CommitStreamRef::Circle { circle_id, .. } => client.query_opt(
-                    "SELECT current_commit_id,current_stream_position,source_stream_ref,membership FROM circle_member_state_current_results WHERE realm_id=$1 AND member_id=$2 AND circle_id=$3",
+                    "SELECT current_commit_id,current_stream_position,source_stream_ref,membership FROM circle_member_state_current_states WHERE realm_id=$1 AND member_id=$2 AND circle_id=$3",
                     &[&realm,&member,&circle_id.as_str()],
                 )?,
                 _ => anyhow::bail!("membership current has an unsupported source stream"),
@@ -256,7 +257,9 @@ async fn assert_circle_mls_reads(
     )
     .await?;
     let self_result = authorized
-        .then(|| serde_json::from_value::<MlsSelfRosterAuthorityReadOutcome>(self_roster.clone()))
+        .then(|| {
+            serde_json::from_value::<MlsSelfRosterAuthorityReadResponseBody>(self_roster.clone())
+        })
         .transpose()?;
     let peer_request = if let Some(result) = &self_result {
         arkret::verify_mls_member_roster_authority_pages(
@@ -311,8 +314,8 @@ async fn assert_circle_mls_reads(
         return Ok(());
     }
     for outcome in [
-        serde_json::from_value::<MlsGroupStateMaterialOutcome>(self_material)?,
-        serde_json::from_slice::<MlsGroupStateMaterialOutcome>(&peer_material)?,
+        serde_json::from_value::<MlsGroupStateMaterialResponseBody>(self_material)?,
+        serde_json::from_slice::<MlsGroupStateMaterialResponseBody>(&peer_material)?,
     ] {
         let validated = outcome.validate_for_request(&material.material.as_peer_request())?;
         ensure!(
@@ -324,7 +327,7 @@ async fn assert_circle_mls_reads(
     let self_page = self_result
         .context("authorized roster supplies verified own-Station keys")?
         .roster;
-    let peer_page: MlsRosterAuthorityReadOutcome = serde_json::from_slice(&peer_roster)?;
+    let peer_page: MlsRosterAuthorityReadResponseBody = serde_json::from_slice(&peer_roster)?;
     let (_, seed) = crate::harness::test_service_signing_key(&format!("{GROUP}-0"));
     let key = ed25519_dalek::SigningKey::from_bytes(&seed);
     let method = format!("{}#notary-key", governance.service_did());
@@ -340,7 +343,7 @@ async fn assert_circle_mls_reads(
             page.page_index == 0
                 && page.next_cursor.is_none()
                 && page.manifest.page_count == 1
-                && page.manifest.total_records == 1
+                && page.manifest.total_record_count == 1
                 && page.records.len() == 1,
             "Circle Genesis roster was partial or invented an Add"
         );
@@ -437,8 +440,8 @@ async fn assert_circle_stream_scan(
     realm: &str,
     circle: &CircleId,
 ) -> Result<()> {
-    use arkret_models_collaboration::authority_commit::PeerStreamScanOutcome;
-    use arkret_wire::{CommitStreamRef, StreamScanDirection, StreamScanRequest};
+    use arkret_models_collaboration::authority_commit::PeerStreamScanResponseBody;
+    use arkret_wire::{CommitStreamRef, StreamScanDirection, StreamScanRequestBody};
     let realm_id = arkret_wire::RealmId::new(realm)?;
     let stream = CommitStreamRef::Circle {
         realm_id: realm_id.clone(),
@@ -456,7 +459,7 @@ async fn assert_circle_stream_scan(
         StreamScanDirection::After(None),
         StreamScanDirection::Before(None),
     ] {
-        let request = StreamScanRequest {
+        let request = StreamScanRequestBody {
             realm_id: realm_id.clone(),
             stream_ref: stream.clone(),
             direction,
@@ -475,7 +478,7 @@ async fn assert_circle_stream_scan(
             "Circle peer scan failed: {}",
             String::from_utf8_lossy(&bytes)
         );
-        let peer: PeerStreamScanOutcome = serde_json::from_slice(&bytes)?;
+        let peer: PeerStreamScanResponseBody = serde_json::from_slice(&bytes)?;
         peer.validate_for_request(&request)?;
         let expected_positions = peer
             .committed_events
@@ -547,7 +550,7 @@ async fn assert_circle_stream_scan(
         }
     }
     let unknown_circle = CircleId::from_event_id(&realm_id.event_id());
-    let mut request = StreamScanRequest {
+    let mut request = StreamScanRequestBody {
         realm_id,
         stream_ref: stream,
         direction: StreamScanDirection::After(None),

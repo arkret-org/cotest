@@ -310,7 +310,7 @@ pub fn run_participant_binding_required_vector() -> Result<()> {
     let binding = participant_binding_test_material()?.participant_binding;
     let compact = serde_json::to_value(binding)?;
     serde_json::from_value::<ParticipantBinding>(compact.clone())?;
-    for field in ["expires_at", "issuer_kid", "sig"] {
+    for field in ["expires_at", "issuer_kid", "signature"] {
         let mut missing = compact.clone();
         missing.as_object_mut().unwrap().remove(field);
         if serde_json::from_value::<ParticipantBinding>(missing).is_ok() {
@@ -336,15 +336,15 @@ pub fn run_participant_binding_required_vector() -> Result<()> {
     }
 
     // Real Ed25519 verification (no longer a field-presence stub): reconstruct
-    // the §3 signing_input and verify `sig` against the issuer key.
+    // the §3 signing_input and verify `signature` against the issuer key.
     run_participant_binding_ed25519_vector()
 }
 
 /// Synthetic complete-identity token material for a cryptographic KAT.
 fn participant_binding_test_material()
--> Result<arkret_models_collaboration::objects::media::CallMediaTokenExchangeOutcome> {
+-> Result<arkret_models_collaboration::objects::media::CallMediaTokenExchangeResponseBody> {
     let issuer = SigningKey::from_bytes(&[11; 32]);
-    let mut outcome: arkret_models_collaboration::objects::media::CallMediaTokenExchangeOutcome =
+    let mut outcome: arkret_models_collaboration::objects::media::CallMediaTokenExchangeResponseBody =
         serde_json::from_value(json!({
             "realm_id": "ak:realm:AZAySZA7XRDeJ9cO4MqaDWrJD-rqPk6Cudk7CCzsDQz1",
             "call_id": "ak:call:AYf05kF8z4cSo8r6qmqXgu4KPuv2YtKBlsE00FOmblaz",
@@ -357,11 +357,11 @@ fn participant_binding_test_material()
             "participant_id": "ak:rtc_participant:0198c2f4-0000-7000-8000-000000000000",
             "media": {"audio":true,"video":true,"screen":false},
             "expires_at": "2026-05-27T12:34:56.000Z",
-            "participant_binding": {"expires_at":"2026-05-27T12:34:56.000Z", "issuer_kid":"did:web:media.example#media", "sig":"unsigned"},
+            "participant_binding": {"expires_at":"2026-05-27T12:34:56.000Z", "issuer_kid":"did:web:media.example#media", "signature":"unsigned"},
             "backend_kind":"livekit", "connect_url":"wss://media.example", "backend_token":"synthetic"
         }))?;
     let context = ParticipantBindingContext::from_outcome(&outcome);
-    outcome.participant_binding.sig = arkret_canonical::base64url_encode(
+    outcome.participant_binding.signature = arkret_canonical::base64url_encode(
         issuer
             .sign(&participant_binding_signing_input(&context)?)
             .to_bytes(),
@@ -376,13 +376,13 @@ fn run_participant_binding_ed25519_vector() -> Result<()> {
     let input = participant_binding_signing_input(&context)?;
     let issuer = SigningKey::from_bytes(&[11; 32]);
     let verifying = issuer.verifying_key();
-    let sig = issuer.sign(&input);
+    let signature = issuer.sign(&input);
     // Calculated independently with Python cryptography Ed25519 and ASCII JCS.
     const EXPECTED_SIG_HEX: &str = "33a0669cb2f7b55eaeed1aa295bbd8d40d7baa65887af510b882605f69d06d1fac62db85dd107aeb0cb0f9da299d7517f92066e12fceef1c2416fa9ffe1b2905";
-    if hex_lower(&sig.to_bytes()) != EXPECTED_SIG_HEX {
+    if hex_lower(&signature.to_bytes()) != EXPECTED_SIG_HEX {
         bail!("participant binding nine-field signature differs from the independent KAT");
     }
-    verifying.verify(&input, &sig)?;
+    verifying.verify(&input, &signature)?;
     let fields = serde_json::to_value(&context)?;
     if fields.as_object().map(|object| object.len()) != Some(9) {
         bail!("participant binding must sign exactly nine fields");
@@ -418,7 +418,7 @@ fn run_participant_binding_ed25519_vector() -> Result<()> {
         tampered[field] = replacement;
         let mut bytes = b"ak.media.participant_binding.v1\0".to_vec();
         bytes.extend_from_slice(&arkret_canonical::canonical_json_bytes(&tampered)?);
-        if verifying.verify(&bytes, &sig).is_ok() {
+        if verifying.verify(&bytes, &signature).is_ok() {
             bail!("tampered participant binding field {field} verified");
         }
     }
@@ -428,13 +428,13 @@ fn run_participant_binding_ed25519_vector() -> Result<()> {
     }
     let mut old_input = b"ak.media.participant_binding.v1\0".to_vec();
     old_input.extend_from_slice(&arkret_canonical::canonical_json_bytes(&retired)?);
-    if verifying.verify(&old_input, &sig).is_ok() {
+    if verifying.verify(&old_input, &signature).is_ok() {
         bail!("retired seven-field binding verified");
     }
     let mut cross_input = MEDIA_ICE_CONFIG_SIGNING_LABEL.as_bytes().to_vec();
     cross_input.push(0);
     cross_input.extend_from_slice(&arkret_canonical::canonical_json_bytes(&fields)?);
-    if verifying.verify(&cross_input, &sig).is_ok() {
+    if verifying.verify(&cross_input, &signature).is_ok() {
         bail!("participant binding verified under the ICE-config domain label");
     }
     Ok(())

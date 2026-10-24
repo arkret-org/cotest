@@ -13,7 +13,7 @@
 ## 流程与断言
 
 1. 以真实 Coauth DPoP grant 打开 Inkson，进入账户设置。
-2. 从 UI 填写非空显示名称与简介并保存，断言 Inkson 发布 `ak.profile.create` 或 `ak.profile.update`；viewer 返回相同 `display_name` 与 `profile_fields.bio`。
+2. 从 UI 填写非空显示名称与简介并保存，断言 Inkson 发布 `ak.profile.create` 或 `ak.profile.update`；viewer 返回相同 `display_name` 与 `profile_fields.biography`。
 3. 选择有效 PNG，在裁剪对话框确认上传。
 4. 断言 blob 上传后发布的是同一 profile 的 `ak.profile.update`，且返回成功。
 5. 轮询 `/_arkret/self/account/viewer`，断言 canonical `avatar_blob_ref` 为 content-addressed blob。

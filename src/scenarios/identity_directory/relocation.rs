@@ -31,7 +31,7 @@ fn resign_successor(
     let previous_version = previous["versionId"].as_str().unwrap();
     entry["versionId"] = json!(previous_version);
     let hash = arkret_signatures::webvh::webvh_entry_hash_multibase(&entry, previous_version)?;
-    entry["versionId"] = json!(format!("{}-{hash}", body.seq.unwrap()));
+    entry["versionId"] = json!(format!("{}-{hash}", body.sequence.unwrap()));
     let key = public(seed);
     let proof = arkret_signatures::build_eddsa_jcs_2022_proof(
         &entry,
@@ -83,7 +83,7 @@ async fn assert_current(
         )
         .await?;
         ensure!(
-            value["did_document"] == *current && value["seq"] == entries.len(),
+            value["did_document"] == *current && value["sequence"] == entries.len(),
             "alias did not reach the canonical head: {value}"
         );
     }
@@ -136,7 +136,7 @@ pub async fn relocation_survives_three_hosts_offline_recovery_and_restart() -> R
         principal_endpoint: &a_url,
         local_id: "portable",
         also_known_as: &[],
-        version_time: at,
+        version_created_at: at,
         root_seed: &[161; 32],
         next_root_public_key_multibase: &public(&[162; 32]),
         witness_policy: None,
@@ -150,7 +150,7 @@ pub async fn relocation_survives_three_hosts_offline_recovery_and_restart() -> R
         did: &inception.did,
         local_id: "portable",
         previous_entries: &entries,
-        version_time: at + Duration::seconds(1),
+        version_created_at: at + Duration::seconds(1),
         current_root_seed: &[162; 32],
         next_root_public_key_multibase: &public(&[163; 32]),
         state: &inception.log_entry["state"],
@@ -194,7 +194,7 @@ pub async fn relocation_survives_three_hosts_offline_recovery_and_restart() -> R
     )
     .await?;
     ensure!(
-        still_original["seq"] == 1,
+        still_original["sequence"] == 1,
         "refused relocation changed the accepted head"
     );
     // Portability may be enabled by an earlier valid same-DID successor.
@@ -203,7 +203,7 @@ pub async fn relocation_survives_three_hosts_offline_recovery_and_restart() -> R
             did: &inception.did,
             local_id: "portable",
             previous_entries: &entries,
-            version_time: at + Duration::seconds(1),
+            version_created_at: at + Duration::seconds(1),
             current_root_seed: &[162; 32],
             next_root_public_key_multibase: &public(&[163; 32]),
             state: &inception.log_entry["state"],
@@ -245,7 +245,7 @@ pub async fn relocation_survives_three_hosts_offline_recovery_and_restart() -> R
             current_did: &current,
             target_did: target,
             previous_entries: &entries,
-            version_time: at + Duration::seconds(index as i64 + 2),
+            version_created_at: at + Duration::seconds(index as i64 + 2),
             current_update_seed: &[163 + index as u8; 32],
             next_update_public_key_multibase: &public(&[164 + index as u8; 32]),
             state: &state,
@@ -310,7 +310,7 @@ pub async fn relocation_survives_three_hosts_offline_recovery_and_restart() -> R
         principal_endpoint: &a_url,
         local_id: "unwitnessed",
         also_known_as: &[],
-        version_time: at,
+        version_created_at: at,
         root_seed: &[171; 32],
         next_root_public_key_multibase: &public(&[172; 32]),
         witness_policy: Some(&witness_policy),

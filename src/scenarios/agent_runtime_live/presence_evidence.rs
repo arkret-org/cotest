@@ -89,7 +89,7 @@ pub(super) async fn positive_direct(
         state: &joined.state_ref,
         head: &head,
         public: arkret_signatures::PublicKeyMaterial::Ed25519Raw {
-            bytes: arkret_canonical::base64url_decode(authority.key.public_key_b64u.as_str())?,
+            bytes: arkret_canonical::base64url_decode(authority.key.public_key_base64url.as_str())?,
         },
         replay: Default::default(),
     };
@@ -125,7 +125,7 @@ pub(super) async fn positive_direct(
     );
     let resolved = material.controller.sdk().direct_conversation_resolve(&arkret_models_collaboration::direct_conversation::DirectConversationResolveRequestBody { peer: arkret_models_collaboration::contact_operations::ContactPeer::Agent { actor_id: ActorId::account(material.agent.agent_account.clone()), controller_account_id: material.agent.controller_account.clone() } }).await?;
     ensure!(
-        matches!(resolved, arkret_models_collaboration::direct_conversation::DirectConversationResolveOutcome::Found { coordinates, .. } if coordinates.realm_id == joined.realm)
+        matches!(resolved, arkret_models_collaboration::direct_conversation::DirectConversationResolveResponseBody::Found { coordinates, .. } if coordinates.realm_id == joined.realm)
     );
     println!(
         "[agent-presence-direct] actual_positive_ingress=1 exact_websocket_delivery=1 actual_garth_verification_decryption=1 actual_online_projection=1 real_wallclock_expiry_offline=1 lifecycle_readiness_still_active_ready=1 direct_still_found=1"

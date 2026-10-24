@@ -7,8 +7,8 @@ use arkret_models_collaboration::events_payloads::strand::{
 use arkret_models_collaboration::governance::membership_invite::MembershipPayloadState;
 use arkret_models_collaboration::governance::realm_lifecycle::ObjectLifecyclePayload;
 use arkret_wire::{
-    AccountId, ActorId, AuthorityCommitStatus, AuthoritySubmitOutcome, CurrentSelector, Event,
-    EventKind, RealmCommit, RealmId, StrandId, TypedCurrentRow,
+    AccountId, ActorId, AuthorityCommitStatus, AuthoritySubmitResponseBody, CurrentSelector,
+    CurrentState, Event, EventKind, RealmCommit, RealmId, StrandId,
 };
 use reqwest::StatusCode;
 use serde_json::{Value, json};
@@ -37,7 +37,7 @@ async fn value(
 ) -> Result<Value> {
     let snapshot = signed_snapshot(client, realm).await?;
     for entry in snapshot.current_state_entries {
-        if let TypedCurrentRow::Value {
+        if let CurrentState::Value {
             selector: CurrentSelector::Strand { strand_id },
             source_stream_ref,
             revision,
@@ -250,7 +250,7 @@ pub async fn run_strand_lifecycle_live() -> Result<()> {
         );
     }
     let replay_body = crate::publication::initial_submission(archived_event.clone(), "")?;
-    let replay: AuthoritySubmitOutcome = serde_json::from_value(
+    let replay: AuthoritySubmitResponseBody = serde_json::from_value(
         expect_json(
             alice.post("/_arkret/self/events").json(&replay_body),
             StatusCode::OK,
@@ -258,7 +258,7 @@ pub async fn run_strand_lifecycle_live() -> Result<()> {
         .await?,
     )?;
     ensure!(
-        matches!(replay,AuthoritySubmitOutcome::Accepted {status:AuthorityCommitStatus::Duplicate,commit} if commit==archived),
+        matches!(replay,AuthoritySubmitResponseBody::Accepted {status:AuthorityCommitStatus::Duplicate,commit} if commit==archived),
         "exact archive replay changed its Commit"
     );
     let restore_event = lifecycle(&alice, &realm, &strand, EventKind::StrandRestore).await?;
@@ -369,7 +369,7 @@ pub async fn run_strand_lifecycle_live() -> Result<()> {
     tokio::task::spawn_blocking(move || -> Result<()> {
         let mut pg = postgres::Client::connect(&url, postgres::NoTls)?;
         let row = pg.query_one(
-            "SELECT current_commit_id,value FROM strand_current_results WHERE strand_id=$1",
+            "SELECT current_commit_id,value FROM strand_current_states WHERE strand_id=$1",
             &[&strand_text],
         )?;
         ensure!(

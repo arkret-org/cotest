@@ -45,7 +45,7 @@ pub async fn identity_surface_and_receipts_work() -> Result<()> {
     .await?;
     assert_eq!(submitted["status"], "accepted");
     assert_eq!(submitted["did"], actor_id);
-    assert_eq!(submitted["seq"], 1);
+    assert_eq!(submitted["sequence"], 1);
 
     let resolved_after_submit = expect_json(
         server
@@ -64,7 +64,7 @@ pub async fn identity_surface_and_receipts_work() -> Result<()> {
         resolved_after_submit["key_log_head"],
         arkret_canonical::canonical_sha256(&prepared.log_entry)?
     );
-    assert_eq!(resolved_after_submit["seq"], 1);
+    assert_eq!(resolved_after_submit["sequence"], 1);
     assert_eq!(resolved_after_submit["did_document"]["id"], actor_id);
 
     let log_after_submit = expect_json(

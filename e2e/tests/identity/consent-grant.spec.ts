@@ -306,7 +306,7 @@ test.describe("MIMI complete Consent", () => {
     const openText = await open.text();
     expect(open.status(), openText).toBe(200);
     const openBody = JSON.parse(openText) as Record<string, unknown>;
-    // `mimi_request_consent_outcome` is closed over `consent_id` and an
+    // `mimi_request_consent_response_body` is closed over `consent_id` and an
     // optional `challenge`; it carries no status member.
     expect(Object.keys(openBody).filter((key) => key !== "challenge")).toEqual(["consent_id"]);
     expect(openBody.consent_id).toMatch(/^ak:consent:/);
@@ -350,7 +350,7 @@ test.describe("MIMI complete Consent", () => {
     const updateText = await update.text();
     expect(update.status(), updateText).toBe(200);
     const updateBody = JSON.parse(updateText);
-    // `mimi_update_consent_outcome` reports the decision it admitted.
+    // `mimi_update_consent_response_body` reports the decision it admitted.
     expect(updateBody.decision).toBe("accept");
     expect(updateBody.consent_id).toBe(openBody.consent_id);
     expect(updateBody.event_ref).toBe(grantEvent.event_id);

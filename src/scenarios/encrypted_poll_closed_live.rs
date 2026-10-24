@@ -2,7 +2,7 @@
 
 use anyhow::{Context as _, Result, ensure};
 use arkret_models_crypto::{EncryptedEnvelope, EncryptedEnvelopeEncryptionContext};
-use arkret_wire::{AuthoritySubmitRequest, EventAdmissionSubmission, EventKind, MessageId};
+use arkret_wire::{AuthoritySubmitRequestBody, EventAdmissionSubmission, EventKind, MessageId};
 use reqwest::StatusCode;
 use serde_json::json;
 
@@ -86,7 +86,7 @@ pub async fn run() -> Result<()> {
             json!({
                 "strand_id":strand,"track_name":"discussion",
                 "content":{"kind":"ak.content.poll","body":"Choose one",
-                    "poll":{"kind":"disclosed","max_selections":1,
+                    "poll":{"kind":"disclosed","max_selection_count":1,
                         "answers":[{"id":"a","text":{"kind":"ak.content.text","body":"A"}}]}}
             }),
         )
@@ -131,7 +131,7 @@ pub async fn run() -> Result<()> {
             }),
         )
         .await?;
-    let request = AuthoritySubmitRequest::Event(EventAdmissionSubmission::new(invalid.clone()));
+    let request = AuthoritySubmitRequestBody::Event(EventAdmissionSubmission::new(invalid.clone()));
     expect_api_error(
         alice.post("/_arkret/self/events").json(&request),
         StatusCode::UNPROCESSABLE_ENTITY,

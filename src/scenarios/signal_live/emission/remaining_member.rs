@@ -1,8 +1,8 @@
 //! Independent accepted members on one Station through real MLS repairs.
 
 use arkret::{MlsCommitPayload, MlsGovernanceBindingPayload};
-use arkret_models_collaboration::authority_commit::SelfAuthoritySubmitRequest;
-use arkret_wire::{AuthoritySubmitOutcome, MlsCommitSubmission, MlsGroupCurrent};
+use arkret_models_collaboration::authority_commit::SelfAuthoritySubmitRequestBody;
+use arkret_wire::{AuthoritySubmitResponseBody, MlsCommitSubmission, MlsGroupValue};
 
 use super::*;
 use crate::scenarios::_helpers::bridge::MockCoauthIntrospectionServer;
@@ -16,7 +16,7 @@ use crate::scenarios::mls_lifecycle_live::{
     signed_welcome,
 };
 
-async fn current(url: &str, realm: &RealmId) -> Result<MlsGroupCurrent> {
+async fn current(url: &str, realm: &RealmId) -> Result<MlsGroupValue> {
     let url = url.to_owned();
     let scope = ScopeRef::Realm {
         realm_id: realm.clone(),
@@ -31,7 +31,7 @@ async fn current(url: &str, realm: &RealmId) -> Result<MlsGroupCurrent> {
         // The governing Station owns reducer results; the member Station
         // consumes the verified source snapshot's existing typed current row.
         let rows = db.query(
-            "SELECT value FROM mls_group_current_results WHERE realm_id=$1 AND value->'effective_scope'=$2 \
+            "SELECT value FROM mls_group_current_states WHERE realm_id=$1 AND value->'effective_scope'=$2 \
              UNION ALL SELECT value FROM replica_authorization_rows WHERE realm_id=$1 AND selector=$3",
             &[&realm, &scope, &selector],
         ).context("read actual governing or verified replica MLS current")?;
@@ -166,7 +166,7 @@ async fn accept_mls(
     event: &arkret_wire::Event,
     welcomes: Vec<arkret_wire::MlsWelcomeDelivery>,
 ) -> Result<arkret_wire::CommittedEventFullView> {
-    let submission = SelfAuthoritySubmitRequest::MlsCommit(MlsCommitSubmission {
+    let submission = SelfAuthoritySubmitRequestBody::MlsCommit(MlsCommitSubmission {
         commit_event: event.clone(),
         welcomes,
         idempotency_key: arkret_wire::UuidV7::new(fresh_uuid_v7().parse()?)?,
@@ -177,7 +177,8 @@ async fn accept_mls(
         status == reqwest::StatusCode::OK,
         "actual MLS transition: {status} {submitted}"
     );
-    let AuthoritySubmitOutcome::Accepted { commit, .. } = serde_json::from_value(submitted)? else {
+    let AuthoritySubmitResponseBody::Accepted { commit, .. } = serde_json::from_value(submitted)?
+    else {
         anyhow::bail!("MLS transition was not accepted")
     };
     ensure_commit_signed_by(&commit, x)?;

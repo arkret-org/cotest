@@ -119,7 +119,7 @@ export function sdkEventDerivedIds(event: Record<string, unknown>): {
   );
 }
 
-/// The device signature `auth_data.signature` of a key-backup envelope
+/// The device signature `signature_proof.signature` of a key-backup envelope
 /// (key-management.md section 7.4.1), over the SDK transcript. `envelope` is
 /// unsigned; the same envelope comes back with the signature attached.
 export function sdkKeyBackupAuthSignature(args: {

@@ -6,7 +6,7 @@
     "signer": "arkret_signatures::Ed25519PayloadSigner",
     "verifier": "arkret_signatures::signer::verify_ed25519_payload_signature",
     "signature_algorithm": "Ed25519",
-    "wire_form": "PayloadSignature{jws: <protected-header>..<sig>, payload_digest: sha256:<hex>}",
+    "wire_form": "PayloadSignature{jws: <protected-header>..<signature>, payload_digest: sha256:<hex>}",
     "seed_source_kinds": ["configured", "ephemeral"]
   },
   "vectors": [
@@ -66,7 +66,7 @@
       "expected": {
         "outcome": "verify_ok",
         "verify_via": "verify_ed25519_payload_signature",
-        "rationale": "Round trip: signer.sign_payload(m) => PayloadSignature; verify_ed25519_payload_signature(m, sig, signer.verifying_key()) returns Ok(()). The verifying key comes from the same SigningKey, so the loop closes without a DID-resolver dependency."
+        "rationale": "Round trip: signer.sign_payload(m) => PayloadSignature; verify_ed25519_payload_signature(m, signature, signer.verifying_key()) returns Ok(()). The verifying key comes from the same SigningKey, so the loop closes without a DID-resolver dependency."
       }
     },
     {

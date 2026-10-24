@@ -1,7 +1,7 @@
 //! Signed terminal/departure fanout repairs its authorized Full/Withheld prefix.
 
-use arkret_models_collaboration::authority_commit::PeerStreamScanOutcome;
-use arkret_wire::{StreamScanDirection, StreamScanRequest};
+use arkret_models_collaboration::authority_commit::PeerStreamScanResponseBody;
+use arkret_wire::{StreamScanDirection, StreamScanRequestBody};
 
 use super::frozen_authority_live::{hold_schedule, release, settled};
 use super::terminal_restart_live::{ensure_same_intent, fanout, sql, tombstone};
@@ -61,15 +61,15 @@ async fn pending_gap(url: &str, commit: &RealmCommit, prior_attempts: i64) -> Re
             && row["state"] == "pending"
             && row["last_http_status"] == 200
         {
-            let answer: PeerAuthoritySubmitOutcome = serde_json::from_str(
+            let answer: PeerAuthoritySubmitResponseBody = serde_json::from_str(
                 row["last_response_excerpt"]
                     .as_str()
                     .context("signed peer gap response")?,
             )?;
             ensure!(
-                matches!(answer, PeerAuthoritySubmitOutcome::CommittedReplication(value)
+                matches!(answer, PeerAuthoritySubmitResponseBody::CommittedReplication(value)
                 if matches!(value.replication_outcomes.as_slice(),
-                    [PeerCommittedReplicationOutcomeRecord::Rejected { reason_code }]
+                    [CommittedEventReplicationOutcome::Rejected { reason_code }]
                         if reason_code == "dependency_missing")),
                 "missing predecessor was not rejected at the continuity boundary: {row}"
             );
@@ -86,8 +86,8 @@ async fn pending_gap(url: &str, commit: &RealmCommit, prior_attempts: i64) -> Re
 
 async fn scan(
     fixture: &CurrentOriginFixture,
-    request: &StreamScanRequest,
-) -> Result<PeerStreamScanOutcome> {
+    request: &StreamScanRequestBody,
+) -> Result<PeerStreamScanResponseBody> {
     let body = arkret_canonical::canonical_json_bytes(request)?;
     let (status, answer) = fixture
         .group
@@ -104,7 +104,7 @@ async fn scan(
         "authorized peer scan: {status} {}",
         String::from_utf8_lossy(&answer)
     );
-    let page: PeerStreamScanOutcome = serde_json::from_slice(&answer)?;
+    let page: PeerStreamScanResponseBody = serde_json::from_slice(&answer)?;
     page.validate_for_request(request)?;
     Ok(page)
 }
@@ -152,13 +152,13 @@ fn withheld_effect(before: &Value, after: &Value, commit: &RealmCommit) -> Resul
 
 fn no_terminal_label(rows: &Value, realm: &str) -> Result<()> {
     ensure!(
-        rows["realm_bootstrap_current_results"]
+        rows["realm_bootstrap_current_states"]
             .as_array()
             .context("lifecycle rows")?
             .iter()
             .all(|row| row["realm_id"] != realm
-                || (row["result_family"] != "realm_tombstone"
-                    && row["result_family"] != "realm_destroy")),
+                || (row["state_family"] != "realm_tombstone"
+                    && row["state_family"] != "realm_destroy")),
         "departure synthesized Realm terminal state"
     );
     Ok(())
@@ -199,7 +199,7 @@ async fn closure_checks(
         fixture.group.server(1).service_id().clone(),
     );
     if let Some(ban) = departure {
-        let member = installed["member_state_current_results"]
+        let member = installed["member_state_current_states"]
             .as_array()
             .context("membership rows")?
             .iter()
@@ -222,7 +222,7 @@ async fn closure_checks(
         let (terminal, terminal_commit) = tombstone(fixture).await?;
         ensure!(fanout(&source_url, &after.1).await?.is_empty());
         ensure!(fanout(&source_url, &terminal_commit).await?.is_empty());
-        let request = StreamScanRequest {
+        let request = StreamScanRequestBody {
             realm_id: commit.realm_id.clone(),
             stream_ref: commit.stream_ref.clone(),
             direction: StreamScanDirection::After(Some(commit.stream_position)),
@@ -260,7 +260,7 @@ async fn closure_checks(
                     replicate(fixture.group.server(1), fixture.group.server(0), late).await?;
                 ensure!(
                     matches!(outcome.as_slice(),
-                    [PeerCommittedReplicationOutcomeRecord::Rejected { reason_code }] if reason_code == expected),
+                    [CommittedEventReplicationOutcome::Rejected { reason_code }] if reason_code == expected),
                     "post-departure signed replica expected {expected}, received {outcome:?}"
                 );
                 ensure!(acceptance_rows(&receiver_url).await? == installed);
@@ -271,12 +271,12 @@ async fn closure_checks(
                 && commit_row(&receiver_url, &terminal_commit).await?.is_none()
         );
     } else {
-        let lifecycle = installed["realm_bootstrap_current_results"]
+        let lifecycle = installed["realm_bootstrap_current_states"]
             .as_array()
             .context("terminal rows")?
             .iter()
             .find(|row| {
-                row["realm_id"] == fixture.realm && row["result_family"] == "realm_tombstone"
+                row["realm_id"] == fixture.realm && row["state_family"] == "realm_tombstone"
             })
             .context("verified terminal fence")?;
         let payload: arkret_models_collaboration::governance::realm_lifecycle::RealmTombstonePayload =
@@ -463,7 +463,7 @@ pub async fn recover(departure: Option<bool>) -> Result<()> {
     ensure!(frozen.len() == 1 && frozen[0]["attempts"] == 0 && frozen[0]["semantic_attempts"] == 0);
     let body = replication_body(&fixture.alice, &target, &target_commit).await?;
     ensure!(frozen[0]["payload_json"].as_str().map(str::as_bytes) == Some(body.as_slice()));
-    let request = StreamScanRequest {
+    let request = StreamScanRequestBody {
         realm_id: target_commit.realm_id.clone(),
         stream_ref: target_commit.stream_ref.clone(),
         direction: StreamScanDirection::After(Some(head.stream_position)),
@@ -551,14 +551,14 @@ pub async fn recover(departure: Option<bool>) -> Result<()> {
             && delivered["semantic_attempts"] == 0
             && delivered["last_http_status"] == 200
     );
-    let answer: PeerAuthoritySubmitOutcome = serde_json::from_str(
+    let answer: PeerAuthoritySubmitResponseBody = serde_json::from_str(
         delivered["last_response_excerpt"]
             .as_str()
             .context("successful retry response")?,
     )?;
     ensure!(
-        matches!(answer, PeerAuthoritySubmitOutcome::CommittedReplication(value)
-        if matches!(value.replication_outcomes.as_slice(), [PeerCommittedReplicationOutcomeRecord::Stored {} | PeerCommittedReplicationOutcomeRecord::Duplicate {}]))
+        matches!(answer, PeerAuthoritySubmitResponseBody::CommittedReplication(value)
+        if matches!(value.replication_outcomes.as_slice(), [CommittedEventReplicationOutcome::Stored {} | CommittedEventReplicationOutcome::Duplicate {}]))
     );
     ensure!(wait_commit(&receiver_url, &target_commit).await?["event_pk"].is_number());
     let original_predecessor = fanout(&source_url, &predecessor_commit).await?.remove(0);

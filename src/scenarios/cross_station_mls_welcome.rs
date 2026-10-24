@@ -26,26 +26,27 @@ use std::time::{Duration, Instant};
 
 use anyhow::{Context, Result, bail, ensure};
 use arkret::{ArkretMlsGroup, MlsCommitPayload, MlsEndpointIdentity, MlsGovernanceBindingPayload};
-use arkret_models_collaboration::authority_commit::SelfAuthoritySubmitRequest;
-use arkret_models_collaboration::device_messages::DeviceMessagesAckRequestBody;
+use arkret_models_collaboration::authority_commit::SelfAuthoritySubmitRequestBody;
+use arkret_models_collaboration::device_messages::DeviceMessagesAcknowledgementRequestBody;
 use arkret_models_collaboration::events_payloads::MlsGenesisCreatorLeafAuthority;
 use arkret_models_collaboration::governance::membership_invite::{
     InviteAcceptPayload, InvitePreviousState,
 };
 use arkret_models_collaboration::governance::realm_join_intake::RealmJoinIntent;
 use arkret_models_collaboration::mls_roster_authority::{
-    MlsAddAuthorityAttestation, MlsAttestAddOutcome, MlsAttestAddRequestBody, MlsAttestAddStatus,
-    MlsMemberRosterAuthorityReadRequestBody, MlsRosterAuthorityReadOutcome, MlsRosterRecord,
-    MlsSelfRosterAuthorityReadOutcome,
+    MlsAddAuthorityAttestation, MlsAttestAddRequestBody, MlsAttestAddResponseBody,
+    MlsAttestAddStatus, MlsMemberRosterAuthorityReadRequestBody,
+    MlsRosterAuthorityReadResponseBody, MlsRosterRecord, MlsSelfRosterAuthorityReadResponseBody,
 };
 use arkret_models_collaboration::sync_frames::demand_sync::RealmListMembership;
 use arkret_models_crypto::{
-    KeyPackagesClaimOutcome, KeyPackagesClaimQueryRequestBody, KeyPackagesClaimRequestBody,
-    KeyPackagesUploadOutcome, PeerKeyPackagesClaimOutcome, PeerKeyPackagesClaimQueryOutcome,
-    PeerKeyPackagesClaimQueryRequestBody, PeerKeyPackagesClaimQueryState,
+    KeyPackagesClaimQueryRequestBody, KeyPackagesClaimRequestBody, KeyPackagesClaimResponseBody,
+    KeyPackagesUploadResponseBody, PeerKeyPackagesClaimQueryRequestBody,
+    PeerKeyPackagesClaimQueryResponseBody, PeerKeyPackagesClaimQueryState,
+    PeerKeyPackagesClaimResponseBody,
 };
 use arkret_wire::{
-    AuthorityCommitStatus, AuthoritySubmitOutcome, EventKind, InviteId, MlsCommitSubmission,
+    AuthorityCommitStatus, AuthoritySubmitResponseBody, EventKind, InviteId, MlsCommitSubmission,
     MlsWelcomeDelivery, MlsWelcomeRecipientEndpoint, RealmId, ScopeRef,
 };
 use chrono::{Duration as ChronoDuration, Utc};
@@ -102,7 +103,7 @@ pub fn genesis_creator_leaf_authority(
         _ => bail!("Genesis creator leaf is not the accepted device endpoint"),
     };
     let authority = MlsGenesisCreatorLeafAuthority {
-        leaf_signature_key_b64u: leaf.signature_key.clone(),
+        leaf_signature_key_base64url: leaf.signature_key.clone(),
         endpoint,
         authorization_event_ref: leaf
             .device_authorize_event_id
@@ -192,7 +193,7 @@ pub async fn publish_one(member: &Member) -> Result<arkret::ArkretMlsIdentity> {
     let identity = member.mls_identity()?;
     let record = identity.key_package_record()?;
     let upload = identity.signed_key_packages_upload_request(&[record], member.method.as_str())?;
-    let uploaded: KeyPackagesUploadOutcome = serde_json::from_value(
+    let uploaded: KeyPackagesUploadResponseBody = serde_json::from_value(
         expect_json(
             member
                 .client
@@ -223,7 +224,7 @@ pub async fn claim_for(
     group_id: &str,
     seed: u8,
 ) -> Result<(
-    KeyPackagesClaimOutcome,
+    KeyPackagesClaimResponseBody,
     Vec<u8>,
     KeyPackagesClaimRequestBody,
 )> {
@@ -243,7 +244,7 @@ pub async fn claim_for(
         loop {
             let (status, bytes) = post_claim(&requester.client, &request).await?;
             if status == StatusCode::OK {
-                let outcome: KeyPackagesClaimOutcome = serde_json::from_slice(&bytes)?;
+                let outcome: KeyPackagesClaimResponseBody = serde_json::from_slice(&bytes)?;
                 outcome
                     .validate_shape()
                     .map_err(|error| anyhow::anyhow!("claim outcome shape: {error:?}"))?;
@@ -294,7 +295,7 @@ async fn submit_mls_commit(
     commit_event: &arkret_wire::Event,
     welcome: &MlsWelcomeDelivery,
 ) -> Result<arkret_wire::RealmCommit> {
-    let submission = SelfAuthoritySubmitRequest::MlsCommit(MlsCommitSubmission {
+    let submission = SelfAuthoritySubmitRequestBody::MlsCommit(MlsCommitSubmission {
         commit_event: commit_event.clone(),
         welcomes: vec![welcome.clone()],
         idempotency_key: arkret_wire::UuidV7::new(fresh_uuid_v7().parse()?)?,
@@ -305,9 +306,9 @@ async fn submit_mls_commit(
         status == StatusCode::OK,
         "the Add Commit with its Welcome was not admitted: {status} {outcome}"
     );
-    let outcome: AuthoritySubmitOutcome = serde_json::from_value(outcome)?;
+    let outcome: AuthoritySubmitResponseBody = serde_json::from_value(outcome)?;
     match outcome {
-        AuthoritySubmitOutcome::Accepted {
+        AuthoritySubmitResponseBody::Accepted {
             status: AuthorityCommitStatus::Committed,
             commit,
         } if commit.event_ref == commit_event.event_id => Ok(commit),
@@ -333,7 +334,7 @@ async fn forwarded_add(
 ) -> Result<(
     arkret_wire::Event,
     MlsWelcomeDelivery,
-    KeyPackagesClaimOutcome,
+    KeyPackagesClaimResponseBody,
     Vec<u8>,
     arkret_wire::RealmCommit,
 )> {
@@ -437,7 +438,7 @@ pub async fn cross_station_expired_claim_recovery_run() -> Result<()> {
         );
         tokio::time::sleep(Duration::from_millis(250)).await;
     };
-    let original: KeyPackagesClaimOutcome = serde_json::from_slice(&original)?;
+    let original: KeyPackagesClaimResponseBody = serde_json::from_slice(&original)?;
     while Utc::now() <= request.expires_at {
         tokio::time::sleep(Duration::from_millis(250)).await;
     }
@@ -699,7 +700,7 @@ async fn cross_station_mls_welcome_original_run() -> Result<()> {
     .await?;
     ensure_commit_signed_by(&first_commit, x)?;
     let first_accepted = accepted_full_view(&alice.client, &first_event.event_id).await?;
-    let (queued, ack_token) = wait_for_welcome(&carol, &carol_welcome).await?;
+    let (queued, acknowledgement_token) = wait_for_welcome(&carol, &carol_welcome).await?;
     ensure!(
         queued == vec![carol_welcome.clone()],
         "Carol's queue on Y does not hold exactly the replicated Welcome: {queued:?}"
@@ -730,7 +731,9 @@ async fn cross_station_mls_welcome_original_run() -> Result<()> {
     carol
         .client
         .post("/_arkret/self/device_messages/ack")
-        .json(&DeviceMessagesAckRequestBody { ack_token })
+        .json(&DeviceMessagesAcknowledgementRequestBody {
+            acknowledgement_token,
+        })
         .send()
         .await?
         .error_for_status()?;
@@ -758,7 +761,8 @@ async fn cross_station_mls_welcome_original_run() -> Result<()> {
             kid: arkret_wire::NonEmptyString::new(carol.method.to_string())
                 .map_err(anyhow::Error::msg)?,
             signature_algorithm: None,
-            sig: arkret_wire::Base64UrlString::new("AA".to_owned()).map_err(anyhow::Error::msg)?,
+            signature: arkret_wire::Base64UrlString::new("AA".to_owned())
+                .map_err(anyhow::Error::msg)?,
         },
     };
     let signer = carol.mls_identity()?;
@@ -975,7 +979,7 @@ async fn roster_authority_http_round_trip(
         status == StatusCode::OK,
         "member roster self read failed: {status} {body}"
     );
-    let self_result: MlsSelfRosterAuthorityReadOutcome = serde_json::from_value(body)?;
+    let self_result: MlsSelfRosterAuthorityReadResponseBody = serde_json::from_value(body)?;
     let peer_request = arkret::verify_mls_member_roster_authority_pages(
         std::slice::from_ref(&self_result),
         &request,
@@ -998,7 +1002,7 @@ async fn roster_authority_http_round_trip(
         "member roster peer read failed: {status} {}",
         String::from_utf8_lossy(&bytes)
     );
-    let peer_page: MlsRosterAuthorityReadOutcome = serde_json::from_slice(&bytes)?;
+    let peer_page: MlsRosterAuthorityReadResponseBody = serde_json::from_slice(&bytes)?;
     ensure!(
         arkret_canonical::canonical_json_bytes(&self_page.records)?
             == arkret_canonical::canonical_json_bytes(&peer_page.records)?,
@@ -1013,7 +1017,7 @@ async fn roster_authority_http_round_trip(
     ensure!(
         self_page.page_index == 0
             && self_page.next_cursor.is_none()
-            && self_page.manifest.total_records == 2
+            && self_page.manifest.total_record_count == 2
             && self_page.manifest.page_count == 1
             && self_page.records.len() == 2,
         "complete Genesis+Add roster was not returned"
@@ -1041,7 +1045,7 @@ async fn roster_authority_http_round_trip(
     );
     let MlsRosterRecord::Add {
         commit_event_ref,
-        proposal_wire_b64u,
+        proposal_wire_base64url,
         attestation,
         ..
     } = &self_page.records[1]
@@ -1050,11 +1054,11 @@ async fn roster_authority_http_round_trip(
     };
     ensure!(commit_event_ref == &commit_event.event_id && attestation.actor_id == recipient.actor);
     let proposal = arkret_mls::verify_add_proposal_leaf(
-        &arkret_canonical::base64url::base64url_decode(proposal_wire_b64u.as_str())?,
+        &arkret_canonical::base64url::base64url_decode(proposal_wire_base64url.as_str())?,
     )?;
     ensure!(
         proposal.actor_id == recipient.actor
-            && proposal.leaf_signature_key == attestation.leaf_signature_key_b64u
+            && proposal.leaf_signature_key == attestation.leaf_signature_key_base64url
     );
 
     let mut wrong_caller = request.clone();
@@ -1105,15 +1109,15 @@ async fn attest_add_http_round_trip(
     commit_event: &arkret_wire::Event,
     accepted_commit: &arkret_wire::RealmCommit,
     welcome: &MlsWelcomeDelivery,
-    claim: &KeyPackagesClaimOutcome,
+    claim: &KeyPackagesClaimResponseBody,
     recipient: &Member,
 ) -> Result<()> {
-    let source_outcome = PeerKeyPackagesClaimOutcome {
+    let source_response_body = PeerKeyPackagesClaimResponseBody {
         claim_request_id: claim.claim_request_id.clone(),
         claims: claim.claims.clone(),
         claim_receipt: claim.claim_receipt.clone(),
     };
-    source_outcome
+    source_response_body
         .validate_shape()
         .map_err(|error| anyhow::anyhow!("historical claim outcome invalid: {error:?}"))?;
     let did_method = format!("{}#notary-key", recipient_station.service_did());
@@ -1133,16 +1137,16 @@ async fn attest_add_http_round_trip(
         actor_id: recipient.actor.clone(),
         endpoint: welcome.recipient_endpoint.clone(),
         authorization_event_ref: recipient.authorize_event_id.clone(),
-        leaf_signature_key_b64u: arkret_wire::Base64UrlString::new(
+        leaf_signature_key_base64url: arkret_wire::Base64UrlString::new(
             arkret_canonical::base64url_encode(recipient.key.verifying_key().as_bytes()),
         )
         .map_err(anyhow::Error::msg)?,
         claim_record_digest: arkret_wire::Hash::new(arkret_canonical::canonical_sha256(
-            &source_outcome.claims[0],
+            &source_response_body.claims[0],
         )?)?,
-        claim_receipt: source_outcome.claim_receipt.clone(),
+        claim_receipt: source_response_body.claim_receipt.clone(),
         attested_at: Utc::now(),
-        signature: source_outcome.claim_receipt.signature.clone(),
+        signature: source_response_body.claim_receipt.signature.clone(),
     };
     attestation.signature = arkret_signatures::keypackages::sign_keypackage_signing_input(
         &station_seed,
@@ -1151,7 +1155,7 @@ async fn attest_add_http_round_trip(
     )?;
     let request = MlsAttestAddRequestBody {
         attestation,
-        claim_outcome: source_outcome,
+        claim_outcome: source_response_body,
     };
     request.validate_claim_binding()?;
     // Both copies of the receipt stay byte identical, so the typed shape
@@ -1159,8 +1163,12 @@ async fn attest_add_http_round_trip(
     let mut wrong_receipt = request.clone();
     let bad_sig = arkret_wire::Base64UrlString::new(arkret_canonical::base64url_encode([7; 64]))
         .map_err(anyhow::Error::msg)?;
-    wrong_receipt.attestation.claim_receipt.signature.sig = bad_sig.clone();
-    wrong_receipt.claim_outcome.claim_receipt.signature.sig = bad_sig;
+    wrong_receipt.attestation.claim_receipt.signature.signature = bad_sig.clone();
+    wrong_receipt
+        .claim_outcome
+        .claim_receipt
+        .signature
+        .signature = bad_sig;
     wrong_receipt.attestation.signature =
         arkret_signatures::keypackages::sign_keypackage_signing_input(
             &station_seed,
@@ -1199,7 +1207,7 @@ async fn attest_add_http_round_trip(
         "signed MLS Add attestation was not installed: {status} {}",
         String::from_utf8_lossy(&body)
     );
-    let installed: MlsAttestAddOutcome = serde_json::from_slice(&body)?;
+    let installed: MlsAttestAddResponseBody = serde_json::from_slice(&body)?;
     ensure!(
         matches!(
             installed.status,
@@ -1209,7 +1217,7 @@ async fn attest_add_http_round_trip(
     );
     let (status, body) = post_attest_add(governance, recipient_station, &request).await?;
     ensure!(status == StatusCode::OK, "exact replay failed: {status}");
-    let replay: MlsAttestAddOutcome = serde_json::from_slice(&body)?;
+    let replay: MlsAttestAddResponseBody = serde_json::from_slice(&body)?;
     ensure!(
         replay.status == MlsAttestAddStatus::Duplicate
             && replay.attestation_digest == installed.attestation_digest,
@@ -1257,8 +1265,8 @@ async fn peer_post(
 }
 
 /// The peer command view `bytes` carries, with its state.
-fn peer_view(bytes: &[u8]) -> Result<PeerKeyPackagesClaimQueryOutcome> {
-    let view: PeerKeyPackagesClaimQueryOutcome = serde_json::from_slice(bytes)?;
+fn peer_view(bytes: &[u8]) -> Result<PeerKeyPackagesClaimQueryResponseBody> {
+    let view: PeerKeyPackagesClaimQueryResponseBody = serde_json::from_slice(bytes)?;
     view.validate_shape()
         .map_err(|error| anyhow::anyhow!("peer claim view shape: {error:?}"))?;
     Ok(view)
@@ -1339,7 +1347,7 @@ async fn peer_claim_at_destination(
     else {
         bail!("device requester expected");
     };
-    signature.sig = arkret_wire::Base64UrlString::new(arkret_canonical::base64url_encode(
+    signature.signature = arkret_wire::Base64UrlString::new(arkret_canonical::base64url_encode(
         ed25519_dalek::Signer::sign(&requester.key, &input).to_bytes(),
     ))
     .map_err(anyhow::Error::msg)?;

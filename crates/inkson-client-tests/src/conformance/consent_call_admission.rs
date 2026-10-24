@@ -135,7 +135,7 @@ impl CallAdmissionObserver {
                 CallMediaJoinContext::Refresh(context) => &context.participant_id,
                 _ => anyhow::bail!("recovery did not resolve the accepted participant"),
             };
-            let response: arkret_models_collaboration::objects::media::CallMediaTokenExchangeOutcome = serde_json::from_value(
+            let response: arkret_models_collaboration::objects::media::CallMediaTokenExchangeResponseBody = serde_json::from_value(
                 cotest::harness::expect_json(holder.client.post("/_arkret/self/rtc/token").json(&request), reqwest::StatusCode::OK).await?
             )?;
             media_verification::verify_actual_outcome(holder, &request, &response).await?;
@@ -654,7 +654,7 @@ fn run_call_cases<'a>(
                 .await?;
             let payload = inkson::signal::SignalPayload::CallSignal {
                 call_id: call.clone(),
-                seq: sequence,
+                sequence,
                 signal: arkret::CallSignalData::Invite(arkret::CallInviteSignalData {
                     lifetime_ms: 60_000,
                     offer: arkret::SessionDescription {
@@ -701,7 +701,7 @@ fn run_call_cases<'a>(
             };
             eprintln!("[consent-call] phase=decrypted_invitation video={video}");
             ensure!(
-                delivery.outcome.admitted
+                delivery.decision.admitted
                     && delivery.invitation.call_id == call
                     && delivery.invitation.holder_account_id == holder.account,
                 "product cut differs from exact holder/Call"
@@ -712,11 +712,11 @@ fn run_call_cases<'a>(
                 envelope: delivery.request.envelope.clone(),
             });
             let mut ordinary_payload = payload.clone();
-            let inkson::signal::SignalPayload::CallSignal { seq, .. } = &mut ordinary_payload
+            let inkson::signal::SignalPayload::CallSignal { sequence, .. } = &mut ordinary_payload
             else {
                 anyhow::bail!("ordinary control requires the actual Invite payload");
             };
-            *seq += 1000;
+            *sequence += 1000;
             let ordinary_envelope = sender_host
                 .prepare_signal_envelope(
                     ScopeRef::Realm {
@@ -776,7 +776,7 @@ fn run_call_cases<'a>(
                     join_context: join,
                 };
             let binding = media_verification::binding(holder, realm).await?;
-            let response: arkret_models_collaboration::objects::media::CallMediaTokenExchangeOutcome =
+            let response: arkret_models_collaboration::objects::media::CallMediaTokenExchangeResponseBody =
             serde_json::from_value(
                 cotest::harness::expect_json(
                     holder.client.post("/_arkret/self/rtc/token").json(&request),
@@ -788,7 +788,7 @@ fn run_call_cases<'a>(
                 response.call_id == call
                     && response.actor_id == holder.actor
                     && response.device_id == holder.device
-                    && !response.participant_binding.sig.is_empty(),
+                    && !response.participant_binding.signature.is_empty(),
                 "actual media token did not bind the holder participant"
             );
             media_verification::verify(holder, &request, &response, &binding).await?;
@@ -1057,7 +1057,7 @@ fn run_call_cases<'a>(
                 anyhow::bail!("fresh replacement control omitted its product verdict");
             };
             ensure!(
-                product.outcome.expires_at > chrono::Utc::now(),
+                product.decision.expires_at > chrono::Utc::now(),
                 "revocation control crossed its original product window"
             );
             ensure!(
@@ -1166,10 +1166,14 @@ async fn fresh_call_signal(
     garth::signal::SignalReceiveOutcome,
 )> {
     let mut payload = original.clone();
-    let inkson::signal::SignalPayload::CallSignal { seq, .. } = &mut payload else {
+    let inkson::signal::SignalPayload::CallSignal {
+        sequence: payload_sequence,
+        ..
+    } = &mut payload
+    else {
         anyhow::bail!("fresh control requires the original Invite payload");
     };
-    *seq = sequence;
+    *payload_sequence = sequence;
     let mut rail = ready_signal_rail(holder).await?;
     let request = producer
         .0
@@ -1301,10 +1305,14 @@ async fn exercise_inflight_product_revoke(
                 .catch_up_selected_realm_until_complete(realm)
                 .await?;
             let mut payload = original.clone();
-            let inkson::signal::SignalPayload::CallSignal { seq, .. } = &mut payload else {
+            let inkson::signal::SignalPayload::CallSignal {
+                sequence: payload_sequence,
+                ..
+            } = &mut payload
+            else {
                 anyhow::bail!("actual Invite payload");
             };
-            *seq = sequence;
+            *payload_sequence = sequence;
             let request = producer
                 .prepare_call_invitation(
                     holder.account.clone(),
@@ -1441,10 +1449,14 @@ async fn exercise_decrypted_relation_mismatches(
             .catch_up_selected_realm_until_complete(realm)
             .await?;
         let mut payload = original.clone();
-        let inkson::signal::SignalPayload::CallSignal { seq, .. } = &mut payload else {
+        let inkson::signal::SignalPayload::CallSignal {
+            sequence: payload_sequence,
+            ..
+        } = &mut payload
+        else {
             anyhow::bail!("real Invite payload");
         };
-        *seq = sequence;
+        *payload_sequence = sequence;
         let scope = ScopeRef::Realm {
             realm_id: realm.clone(),
         };
@@ -1719,10 +1731,10 @@ async fn exercise_independent_holder(
     // Force an actual generic encrypted delivery to exercise this holder's
     // decryptor and native product, without manufacturing delivery material.
     let mut ordinary_payload = payload.clone();
-    let inkson::signal::SignalPayload::CallSignal { seq, .. } = &mut ordinary_payload else {
+    let inkson::signal::SignalPayload::CallSignal { sequence, .. } = &mut ordinary_payload else {
         unreachable!()
     };
-    *seq += 2000;
+    *sequence += 2000;
     let ordinary = producer
         .prepare_signal_envelope(
             ScopeRef::Realm {
@@ -1766,7 +1778,7 @@ async fn read_complete_roster(
     loop {
         if let Ok(snapshot) = member.client.sdk().realm_state_snapshot_head(realm).await {
             for row in &snapshot.current_state_entries {
-                let arkret_wire::TypedCurrentRow::Value {
+                let arkret_wire::CurrentState::Value {
                     selector: arkret_wire::CurrentSelector::CallRoster { call_id },
                     source_stream_ref,
                     revision,

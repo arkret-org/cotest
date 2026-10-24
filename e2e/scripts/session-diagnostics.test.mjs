@@ -8,7 +8,7 @@ test("viewer handle diagnostics keep only allowlisted public identity and predic
     primary_handle_claim: {
       claim: { handle: "alice:example.org", subject_account_id: { principal_id: "alice" },
         expires_at: "2026-10-09T00:00:00Z", proofs: ["secret-proof"] },
-      status: "verified", revocation: null, fresh_until: "2026-10-08T00:05:00Z",
+      status: "verified", revocation: null, cache_expires_at: "2026-10-08T00:05:00Z",
     },
   };
   const at = Date.parse("2026-10-08T00:00:00Z");

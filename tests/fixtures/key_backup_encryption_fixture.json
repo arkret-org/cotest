@@ -58,7 +58,7 @@
     },
     {
       "name": "restore_path_redrives_key_and_decrypts",
-      "comment": "Client restores: GET /_arkret/self/keys/backups/{backup_id} -> re-derive master key from local passphrase + envelope salt + Argon2id params -> decrypt with XChaCha20-Poly1305 using envelope nonce/auth tag -> recover MLS history or secret-storage material. Successful decryption proves passphrase correctness and blob integrity.",
+      "comment": "Client restores: GET /_arkret/self/keys/backups/{backup_id} -> re-derive master key from local passphrase + envelope salt + Argon2id parameters -> decrypt with XChaCha20-Poly1305 using envelope nonce/auth tag -> recover MLS history or secret-storage material. Successful decryption proves passphrase correctness and blob integrity.",
       "backup_id": "ak:backup:01964137-0000-7000-8000-000000000000",
       "backup_version": "kb_1",
       "passphrase_correct": true,

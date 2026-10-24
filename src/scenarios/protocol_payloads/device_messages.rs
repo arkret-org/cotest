@@ -27,7 +27,7 @@ async fn send_application_message(
     token: &str,
     actor_id: &str,
 ) -> Result<()> {
-    let send: arkret_models_collaboration::device_messages::DeviceMessagesSendOutcome =
+    let send: arkret_models_collaboration::device_messages::DeviceMessagesSendResponseBody =
         serde_json::from_value(
             expect_json(
                 server
@@ -61,7 +61,7 @@ async fn duplicate_send_is_idempotent(
     token: &str,
     actor_id: &str,
 ) -> Result<()> {
-    let duplicate_send: arkret_models_collaboration::device_messages::DeviceMessagesSendOutcome =
+    let duplicate_send: arkret_models_collaboration::device_messages::DeviceMessagesSendResponseBody =
         serde_json::from_value(
             expect_json(
                 server
@@ -97,14 +97,15 @@ async fn list_delivered_keeps_ciphertext_only(
 ) -> Result<()> {
     use arkret_identifiers::{DeviceId, DeviceMessageId, Did, project_did_to_core_id};
     use arkret_models_collaboration::device_messages::{
-        DeviceMessageSender, DeviceMessagesAckOutcome, DeviceMessagesGetOutcome, RecipientDelivery,
+        DeviceMessageSender, DeviceMessagesAcknowledgementResponseBody,
+        DeviceMessagesGetResponseBody, RecipientDelivery,
     };
 
     let device_id = DeviceId::new(PROTOCOL_DEVICE_ID.to_owned())?;
     let core_id = project_did_to_core_id(&Did::new(actor_id.to_owned())?)?;
     // The formal list outcome is closed: decoding it through the SDK type
     // rejects any legacy or repaired queue shape.
-    let delivered: DeviceMessagesGetOutcome = serde_json::from_value(
+    let delivered: DeviceMessagesGetResponseBody = serde_json::from_value(
         expect_json(
             server
                 .http()
@@ -150,19 +151,19 @@ async fn list_delivered_keeps_ciphertext_only(
         Some(&serde_json::json!("base64url-opaque-ciphertext"))
     );
     assert!(!device_message.content.contains_key("plaintext"));
-    let ack_token = delivered
-        .ack_token
+    let acknowledgement_token = delivered
+        .acknowledgement_token
         .context("a non-empty delivery page carries an ACK token")?;
 
-    let ack: DeviceMessagesAckOutcome = serde_json::from_value(
+    let ack: DeviceMessagesAcknowledgementResponseBody = serde_json::from_value(
         expect_json(
             server
                 .http()
                 .post(server.url("/_arkret/self/device_messages/ack"))
                 .bearer_auth(token)
                 .json(
-                    &arkret_models_collaboration::device_messages::DeviceMessagesAckRequestBody {
-                        ack_token,
+                    &arkret_models_collaboration::device_messages::DeviceMessagesAcknowledgementRequestBody {
+                        acknowledgement_token,
                     },
                 ),
             StatusCode::OK,
@@ -173,7 +174,7 @@ async fn list_delivered_keeps_ciphertext_only(
         ack.pruned_count == 1,
         "ACK must cancel exactly the delivered message"
     );
-    let after_ack: DeviceMessagesGetOutcome = serde_json::from_value(
+    let after_ack: DeviceMessagesGetResponseBody = serde_json::from_value(
         expect_json(
             server
                 .http()
@@ -184,7 +185,7 @@ async fn list_delivered_keeps_ciphertext_only(
         .await?,
     )?;
     anyhow::ensure!(
-        after_ack.deliveries.is_empty() && after_ack.ack_token.is_none(),
+        after_ack.deliveries.is_empty() && after_ack.acknowledgement_token.is_none(),
         "ACKed delivery is still served"
     );
     Ok(())
@@ -199,12 +200,12 @@ fn protocol_expiry() -> Result<chrono::DateTime<chrono::Utc>> {
     chrono::DateTime::from_timestamp_millis(millis).context("expiry outside timestamp range")
 }
 
-/// `DeviceMessagesSendOutcome.delivered` is now keyed by `DeviceId` and carries a
+/// `DeviceMessagesSendResponseBody.delivered` is now keyed by `DeviceId` and carries a
 /// `DeviceMessageDeliveredRow` rather than a bare device-id string, so the check
 /// names the device it expects and reads the row's status back instead of
 /// comparing position 0 against a literal.
 fn assert_delivered_to(
-    outcome: &arkret_models_collaboration::device_messages::DeviceMessagesSendOutcome,
+    outcome: &arkret_models_collaboration::device_messages::DeviceMessagesSendResponseBody,
     actor_id: &str,
     device_id: &str,
     device_message_id: &str,
@@ -310,7 +311,7 @@ async fn unknown_device_row_carries_only_id_and_status(
         StatusCode::OK,
     )
     .await?;
-    let outcome: arkret_models_collaboration::device_messages::DeviceMessagesSendOutcome =
+    let outcome: arkret_models_collaboration::device_messages::DeviceMessagesSendResponseBody =
         serde_json::from_value(raw.clone())?;
     anyhow::ensure!(
         outcome.delivered.is_empty(),
@@ -351,7 +352,7 @@ async fn exact_retry_after_expiry_returns_original_result(
             .json(&body)
     };
     let original = expect_json(send(), StatusCode::OK).await?;
-    let typed: arkret_models_collaboration::device_messages::DeviceMessagesSendOutcome =
+    let typed: arkret_models_collaboration::device_messages::DeviceMessagesSendResponseBody =
         serde_json::from_value(original.clone())?;
     assert_delivered_to(&typed, actor_id, PROTOCOL_DEVICE_ID, device_message_id)?;
 
@@ -376,8 +377,8 @@ async fn exact_retry_after_expiry_returns_original_result(
         "exact retry enqueued a second delivery: {}",
         queue.deliveries.len()
     );
-    let ack_token = queue
-        .ack_token
+    let acknowledgement_token = queue
+        .acknowledgement_token
         .context("a non-empty delivery page carries an ACK token")?;
     expect_json(
         server
@@ -385,8 +386,8 @@ async fn exact_retry_after_expiry_returns_original_result(
             .post(server.url("/_arkret/self/device_messages/ack"))
             .bearer_auth(token)
             .json(
-                &arkret_models_collaboration::device_messages::DeviceMessagesAckRequestBody {
-                    ack_token,
+                &arkret_models_collaboration::device_messages::DeviceMessagesAcknowledgementRequestBody {
+                    acknowledgement_token,
                 },
             ),
         StatusCode::OK,
@@ -398,7 +399,7 @@ async fn exact_retry_after_expiry_returns_original_result(
 async fn device_queue(
     server: &ArkretServer,
     token: &str,
-) -> Result<arkret_models_collaboration::device_messages::DeviceMessagesGetOutcome> {
+) -> Result<arkret_models_collaboration::device_messages::DeviceMessagesGetResponseBody> {
     Ok(serde_json::from_value(
         expect_json(
             server

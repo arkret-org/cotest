@@ -43,7 +43,7 @@ import {
 import type { JointUser } from "./users";
 import { replaceConsentScopeApi } from "./consent-api";
 import type {
-  ContactPeer, ContactListRow as WireContactListRow, ContactOperationOutcome,
+  ContactPeer, ContactListRow as WireContactListRow, ContactOperationResponseBody,
   ContactRequestBody, ContactRespondRequestBody, ContactRejectRequestBody,
   ContactTombstoneRequestBody, InviteObject,
 } from "./generated/spec-wire-objects";
@@ -58,18 +58,18 @@ export type ContactListRow = Omit<WireContactListRow, "peer"> & {
   granted_by_me: ContactScope[];
   granted_to_me: ContactScope[];
 };
-type ContactRequestOutcome = {
+type ContactRequestResponseBody = {
   request_event_ref: string;
-  request_acceptance_receipt: Extract<ContactOperationOutcome, { status: "accepted"; result_kind: "request" }>["request_acceptance_receipt"];
+  request_acceptance_receipt: Extract<ContactOperationResponseBody, { status: "accepted"; operation_kind: "request" }>["request_acceptance_receipt"];
   state: ContactState;
 };
-type ContactRespondOutcome = {
+type ContactRespondResponseBody = {
   response_event_ref: string;
-  acceptance_receipt: Extract<ContactOperationOutcome, { status: "accepted"; result_kind: "response" }>["normal_response_acceptance_receipt"]
-    | Extract<ContactOperationOutcome, { status: "accepted"; result_kind: "reject" }>["reject_acceptance_receipt"];
+  acceptance_receipt: Extract<ContactOperationResponseBody, { status: "accepted"; operation_kind: "response" }>["normal_response_acceptance_receipt"]
+    | Extract<ContactOperationResponseBody, { status: "accepted"; operation_kind: "reject" }>["reject_acceptance_receipt"];
   state: ContactState;
 };
-type ContactTombstoneOutcome = { tombstone_event_ref: string; state: "tombstoned" };
+type ContactTombstoneResponseBody = { tombstone_event_ref: string; state: "tombstoned" };
 
 function contactScopes(scopes: string[]): ContactScope[] {
   const order: ContactScope[] = ["invite", "direct_message", "voice_call", "video_call", "presence"];
@@ -79,17 +79,17 @@ function contactScopes(scopes: string[]): ContactScope[] {
   return [...new Set(scopes)].sort((a, b) => order.indexOf(a as ContactScope) - order.indexOf(b as ContactScope)) as ContactScope[];
 }
 
-type PreparedContact = Extract<ContactOperationOutcome, { status: "prepared" }>;
+type PreparedContact = Extract<ContactOperationResponseBody, { status: "prepared" }>;
 function signContactDraft(
-  prepared: ContactOperationOutcome, operationId: string,
-  resultKind: PreparedContact["result_kind"], expectedKind: string,
+  prepared: ContactOperationResponseBody, operationId: string,
+  resultKind: PreparedContact["operation_kind"], expectedKind: string,
   actor: ReturnType<typeof accountActorId>, peer: ContactPeer,
 ): { prepared: PreparedContact; signedEvent: Record<string, unknown> } {
-  if (prepared.status !== "prepared" || prepared.result_kind !== resultKind || prepared.operation_id !== operationId) {
+  if (prepared.status !== "prepared" || prepared.operation_kind !== resultKind || prepared.operation_id !== operationId) {
     throw new Error(`Contact prepare did not return its exact operation and branch: ${JSON.stringify(prepared)}`);
   }
   expect(Date.parse(prepared.expires_at)).toBeGreaterThan(Date.now());
-  const bytes = Buffer.from(prepared.event_draft.unsigned_event_bytes, "base64url").toString("utf8");
+  const bytes = Buffer.from(prepared.event_draft.unsigned_event_base64url, "base64url").toString("utf8");
   const signedEvent = JSON.parse(bytes) as Record<string, unknown>;
   expect(canonicalJson(signedEvent)).toBe(bytes);
   expect(`sha256:${sha256CanonicalJson(signedEvent)}`).toBe(prepared.event_draft.event_digest);
@@ -103,7 +103,7 @@ function signContactDraft(
   return { prepared, signedEvent };
 }
 
-export type DirectConversationResolveOutcome = {
+export type DirectConversationResolveResponseBody = {
   state:
     | "creation_required"
     | "creation_blocked"
@@ -125,7 +125,7 @@ export type DirectConversationResolveOutcome = {
 // invite-addressing.md §5.1: `disclosed_outcome` is a closed two-value enum
 // (`delivered | blocked`). Quarantine MUST NOT be disclosed at all — it is
 // reported as `status="deferred"` with no `disclosed_outcome`.
-type InviteDeliveryOutcome = InviteDeliveryOutcomeView;
+type InviteDeliveryResponseBody = InviteDeliveryOutcomeView;
 type InviteConsentGrant = { eventRef: string };
 
 export async function grantInviteConsentArkret(
@@ -218,7 +218,7 @@ export async function requestContactArkret(
      */
     introductionEvidence?: ContactRequestPrepare["introduction_evidence"];
   },
-): Promise<{ outcome: ContactRequestOutcome; response: APIResponse }> {
+): Promise<{ outcome: ContactRequestResponseBody; response: APIResponse }> {
   const nonce = uuidV7();
   const operationId = `ak:operation:contact.request.${nonce}`;
   const idempotencyKey = opts.idempotencyKey ?? nonce;
@@ -243,7 +243,7 @@ export async function requestContactArkret(
   });
   const actor = accountActorId(await currentActorIdApi(request, token, opts), opts.server);
   const { prepared, signedEvent } = signContactDraft(
-    await expectJsonOk<ContactOperationOutcome>(preparedResponse, `prepare contact request -> ${target}`),
+    await expectJsonOk<ContactOperationResponseBody>(preparedResponse, `prepare contact request -> ${target}`),
     operationId, "request", "ak.contact.requested", actor, prepareBody.peer,
   );
   expect((signedEvent.payload as Record<string, unknown>).granted_to_peer_scopes).toEqual(prepareBody.granted_to_peer_scopes);
@@ -254,14 +254,14 @@ export async function requestContactArkret(
     reservation_handle: prepared.reservation_handle,
     signed_event: signedEvent,
   });
-  const accepted = await expectJsonOk<ContactOperationOutcome>(response, `contact request -> ${target}`);
-  if (accepted.status !== "accepted" || accepted.result_kind !== "request" || accepted.operation_id !== operationId) {
+  const accepted = await expectJsonOk<ContactOperationResponseBody>(response, `contact request -> ${target}`);
+  if (accepted.status !== "accepted" || accepted.operation_kind !== "request" || accepted.operation_id !== operationId) {
     throw new Error(`Contact request was not accepted for its exact operation: ${JSON.stringify(accepted)}`);
   }
   expect(accepted.request_acceptance_receipt.core.request_event_ref).toBe(signedEvent.event_id);
   expect(accepted.request_acceptance_receipt.core.holder).toEqual({ kind: "human", account_id: actor.account_id });
   expect(accepted.request_acceptance_receipt.core.peer).toEqual(prepareBody.peer);
-  const outcome: ContactRequestOutcome = {
+  const outcome: ContactRequestResponseBody = {
     request_event_ref:
       accepted.request_acceptance_receipt.core.request_event_ref,
     request_acceptance_receipt: accepted.request_acceptance_receipt,
@@ -320,7 +320,7 @@ export async function respondContactArkret(
     server?: ColandKey;
     requesterServiceId?: string;
   },
-): Promise<ContactRespondOutcome> {
+): Promise<ContactRespondResponseBody> {
   let row: ContactListRow | undefined;
   await expect
     .poll(
@@ -373,7 +373,7 @@ export async function respondContactArkret(
   const resultKind = opts.action === "accept" ? "response" : "reject";
   const actor = accountActorId(await currentActorIdApi(request, token, opts), opts.server);
   const { prepared, signedEvent } = signContactDraft(
-    await expectJsonOk<ContactOperationOutcome>(preparedResponse, `prepare contact ${opts.action} <- ${opts.requesterId}`),
+    await expectJsonOk<ContactOperationResponseBody>(preparedResponse, `prepare contact ${opts.action} <- ${opts.requesterId}`),
     operationId, resultKind, opts.action === "accept" ? "ak.contact.accepted" : "ak.contact.rejected",
     actor, row.peerIdentity,
   );
@@ -385,18 +385,18 @@ export async function respondContactArkret(
     reservation_handle: prepared.reservation_handle,
     signed_event: signedEvent,
   });
-  const accepted = await expectJsonOk<ContactOperationOutcome>(response, `contact respond ${opts.action} <- ${opts.requesterId}`);
+  const accepted = await expectJsonOk<ContactOperationResponseBody>(response, `contact respond ${opts.action} <- ${opts.requesterId}`);
   if (accepted.status !== "accepted" || accepted.operation_id !== operationId ||
-      (accepted.result_kind !== "response" && accepted.result_kind !== "reject") || accepted.result_kind !== resultKind) {
+      (accepted.operation_kind !== "response" && accepted.operation_kind !== "reject") || accepted.operation_kind !== resultKind) {
     throw new Error(`Contact response was not accepted for its exact operation and branch: ${JSON.stringify(accepted)}`);
   }
-  const receipt = accepted.result_kind === "response"
+  const receipt = accepted.operation_kind === "response"
     ? accepted.normal_response_acceptance_receipt : accepted.reject_acceptance_receipt;
-  const eventRef = accepted.result_kind === "response"
+  const eventRef = accepted.operation_kind === "response"
     ? accepted.normal_response_acceptance_receipt.response_event_ref : accepted.reject_acceptance_receipt.reject_event_ref;
   expect(eventRef).toBe(signedEvent.event_id);
   return { response_event_ref: eventRef, acceptance_receipt: receipt,
-    state: accepted.result_kind === "response" ? "accepted" : "rejected" };
+    state: accepted.operation_kind === "response" ? "accepted" : "rejected" };
 }
 
 async function listContactsArkret(
@@ -457,7 +457,7 @@ export async function tombstoneContactArkret(
     peerServiceId?: string;
     server?: ColandKey;
   } = {},
-): Promise<ContactTombstoneOutcome> {
+): Promise<ContactTombstoneResponseBody> {
   const row = await contactRow(request, token, contact, {
     server: opts.server,
   });
@@ -489,7 +489,7 @@ export async function tombstoneContactArkret(
   });
   const actor = accountActorId(await currentActorIdApi(request, token, opts), opts.server);
   const { prepared, signedEvent } = signContactDraft(
-    await expectJsonOk<ContactOperationOutcome>(preparedResponse, `prepare tombstone contact ${contact}`),
+    await expectJsonOk<ContactOperationResponseBody>(preparedResponse, `prepare tombstone contact ${contact}`),
     operationId, "tombstone", "ak.contact.tombstone", actor, row.peerIdentity,
   );
   const payload = signedEvent.payload as Record<string, unknown>;
@@ -503,8 +503,8 @@ export async function tombstoneContactArkret(
     reservation_handle: prepared.reservation_handle,
     signed_event: signedEvent,
   });
-  const accepted = await expectJsonOk<ContactOperationOutcome>(response, `tombstone contact ${contact}`);
-  if (accepted.status !== "accepted" || accepted.result_kind !== "tombstone" || accepted.operation_id !== operationId) {
+  const accepted = await expectJsonOk<ContactOperationResponseBody>(response, `tombstone contact ${contact}`);
+  if (accepted.status !== "accepted" || accepted.operation_kind !== "tombstone" || accepted.operation_id !== operationId) {
     throw new Error(`Contact tombstone was not accepted for its exact operation: ${JSON.stringify(accepted)}`);
   }
   expect(accepted.lineage.event_ref).toBe(signedEvent.event_id);
@@ -560,7 +560,7 @@ async function uploadDirectConversationKeyPackage(
   const endpointSignature = {
     kid: verificationMethod,
     signature_algorithm: "Ed25519",
-    sig: signature,
+    signature: signature,
   };
   const url = `${colandBaseUrl(opts.server)}/_arkret/self/keys/keypackages/upload`;
   const response = await request.post(url, {
@@ -678,7 +678,7 @@ async function deliverInvite(
     context: string;
   },
 ): Promise<{
-  outcome: InviteDeliveryOutcome;
+  outcome: InviteDeliveryResponseBody;
   inviteId: string;
 }> {
   const recipientServiceId = colandServiceId(args.recipientServer);
@@ -777,7 +777,7 @@ export async function deliverInviteWithConsentGrant(
     idempotencyKey?: string;
   },
 ): Promise<{
-  outcome: InviteDeliveryOutcome;
+  outcome: InviteDeliveryResponseBody;
   inviteId: string;
 }> {
   return await deliverInvite(request, {

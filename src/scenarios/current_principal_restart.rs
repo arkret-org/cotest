@@ -1,7 +1,7 @@
 //! Live current-principal continuity across index eviction and process restart.
 
 use anyhow::{Context, Result};
-use arkret_models_identity::{CurrentPrincipalOutcome, CurrentPrincipalRequestBody};
+use arkret_models_identity::{CurrentPrincipalRequestBody, CurrentPrincipalResponseBody};
 use arkret_wire::{AccountId, RequestId};
 use reqwest::StatusCode;
 
@@ -11,7 +11,7 @@ use crate::scenarios::identity_test_support::actor_did_for_service_did;
 async fn read_current(
     client: &crate::harness::TestActorClient,
     request: &CurrentPrincipalRequestBody,
-) -> Result<(serde_json::Value, CurrentPrincipalOutcome)> {
+) -> Result<(serde_json::Value, CurrentPrincipalResponseBody)> {
     let value = expect_json(
         client
             .post("/_arkret/self/account/current-principal")
@@ -34,7 +34,7 @@ async fn read_current(
         ]),
         "current-principal outcome is not the closed four-field carrier: {value}"
     );
-    let outcome: CurrentPrincipalOutcome = serde_json::from_value(value.clone())?;
+    let outcome: CurrentPrincipalResponseBody = serde_json::from_value(value.clone())?;
     outcome.validate_for_request(request)?;
     Ok((value, outcome))
 }

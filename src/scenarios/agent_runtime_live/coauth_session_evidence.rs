@@ -484,7 +484,7 @@ pub(super) async fn issue_runtime_session(
     operations: &[&str],
 ) -> Result<(
     String,
-    arkret_models_collaboration::session_grants::AgentSessionGrantRequest,
+    arkret_models_collaboration::session_grants::AgentSessionGrantRequestBody,
 )> {
     issue_runtime_session_with_scope(
         station,
@@ -495,7 +495,7 @@ pub(super) async fn issue_runtime_session(
         method,
         key,
         operations,
-        arkret_models_collaboration::session_grants::SessionGrantAgentScopeRequest {
+        arkret_models_collaboration::session_grants::RequestedAgentSessionGrantScope {
             realm_ids: Vec::new(),
             strand_ids: Vec::new(),
             track_names: Vec::new(),
@@ -513,11 +513,11 @@ pub(super) fn build_runtime_session_request(
     method: &arkret_wire::DidUrl,
     key: &ed25519_dalek::SigningKey,
     operations: &[&str],
-    scope_request: arkret_models_collaboration::session_grants::SessionGrantAgentScopeRequest,
-) -> Result<arkret_models_collaboration::session_grants::AgentSessionGrantRequest> {
+    scope_request: arkret_models_collaboration::session_grants::RequestedAgentSessionGrantScope,
+) -> Result<arkret_models_collaboration::session_grants::AgentSessionGrantRequestBody> {
     use arkret_models_collaboration::session_grants::{
-        SessionGrantDpopBindingProof, SessionGrantRequestBody, UnsignedAgentSessionGrantProof,
-        UnsignedAgentSessionGrantRequest,
+        AgentSessionGrantProofInput, AgentSessionGrantSigningInput, SessionGrantDpopBindingProof,
+        SessionGrantRequestBody,
     };
     use arkret_signatures::dpop::{DpopProofRequest, build_dpop_proof};
     use base64::Engine as _;
@@ -525,7 +525,7 @@ pub(super) fn build_runtime_session_request(
     let url = format!("{base}/_arkret/gate/account/session-grants");
     let binding = build_dpop_proof(&DpopProofRequest::new("POST", &url), key)?;
     let issued_at = arkret_canonical::normalize_timestamp_canonical(chrono::Utc::now());
-    let unsigned = UnsignedAgentSessionGrantRequest::new(
+    let unsigned = AgentSessionGrantSigningInput::new(
         agent.clone(),
         operations
             .iter()
@@ -537,7 +537,7 @@ pub(super) fn build_runtime_session_request(
         SessionGrantDpopBindingProof {
             proof_jwt: binding.proof_jwt,
         },
-        UnsignedAgentSessionGrantProof {
+        AgentSessionGrantProofInput {
             challenge: random_session_challenge()?,
             audience_id: station.service_id().clone(),
             issued_at,
@@ -573,13 +573,13 @@ pub(super) async fn issue_runtime_session_with_scope(
     method: &arkret_wire::DidUrl,
     key: &ed25519_dalek::SigningKey,
     operations: &[&str],
-    scope_request: arkret_models_collaboration::session_grants::SessionGrantAgentScopeRequest,
+    scope_request: arkret_models_collaboration::session_grants::RequestedAgentSessionGrantScope,
 ) -> Result<(
     String,
-    arkret_models_collaboration::session_grants::AgentSessionGrantRequest,
+    arkret_models_collaboration::session_grants::AgentSessionGrantRequestBody,
 )> {
     use arkret_models_collaboration::session_grants::{
-        SessionGrantOutcome, SessionGrantRequestBody,
+        SessionGrantRequestBody, SessionGrantResponseBody,
     };
     use arkret_signatures::dpop::{DpopProofRequest, build_dpop_proof};
     use base64::Engine as _;
@@ -630,7 +630,7 @@ pub(super) async fn issue_runtime_session_with_scope(
         response.bytes().await? == first,
         "real issuer replay changed the recorded outcome"
     );
-    let outcome: SessionGrantOutcome = serde_json::from_slice(&first)?;
+    let outcome: SessionGrantResponseBody = serde_json::from_slice(&first)?;
     ensure!(
         outcome.device_id.is_none(),
         "Agent grant incorrectly binds a Human Device"
@@ -967,10 +967,10 @@ fn random_session_challenge() -> Result<String> {
 }
 
 pub(super) fn fresh_session_request(
-    original: &arkret_models_collaboration::session_grants::AgentSessionGrantRequest,
+    original: &arkret_models_collaboration::session_grants::AgentSessionGrantRequestBody,
     url: &str,
     key: &ed25519_dalek::SigningKey,
-) -> Result<arkret_models_collaboration::session_grants::AgentSessionGrantRequest> {
+) -> Result<arkret_models_collaboration::session_grants::AgentSessionGrantRequestBody> {
     use arkret_signatures::dpop::{DpopProofRequest, build_dpop_proof};
     use base64::Engine as _;
     use ed25519_dalek::Signer as _;
@@ -1070,7 +1070,7 @@ pub(super) async fn set_accountability_with_source(
         &method,
         principal.device_signing_key.to_bytes(),
     )?;
-    let outcome: arkret_wire::AuthoritySubmitOutcome = serde_json::from_value(
+    let outcome: arkret_wire::AuthoritySubmitResponseBody = serde_json::from_value(
         crate::harness::expect_json(
             controller
                 .post("/_arkret/self/events")
@@ -1085,7 +1085,7 @@ pub(super) async fn set_accountability_with_source(
     ensure!(
         matches!(
             outcome,
-            arkret_wire::AuthoritySubmitOutcome::Accepted { .. }
+            arkret_wire::AuthoritySubmitResponseBody::Accepted { .. }
         ),
         "controller accountability Event was refused"
     );
@@ -1176,7 +1176,7 @@ pub(super) async fn expect_issue_refusal(
     station: &crate::harness::ArkretServer,
     database_url: &str,
     url: &str,
-    body: &arkret_models_collaboration::session_grants::AgentSessionGrantRequest,
+    body: &arkret_models_collaboration::session_grants::AgentSessionGrantRequestBody,
     key: &ed25519_dalek::SigningKey,
     retained_http_proof: Option<&str>,
     code: &str,

@@ -42,7 +42,7 @@ pub(super) async fn run(
         identity.key_package_record()?,
     ];
     let upload = identity.signed_key_packages_upload_request(&packages, target.method.as_str())?;
-    let uploaded: arkret_models_crypto::KeyPackagesUploadOutcome = serde_json::from_value(
+    let uploaded: arkret_models_crypto::KeyPackagesUploadResponseBody = serde_json::from_value(
         expect_json(
             target
                 .client
@@ -140,7 +140,8 @@ pub(super) async fn run(
         let bytes = arkret_canonical::base64url_encode(
             server.federation_signing_key()?.sign(&input).to_bytes(),
         );
-        signature.sig = arkret_wire::Base64UrlString::new(bytes).map_err(anyhow::Error::msg)?;
+        signature.signature =
+            arkret_wire::Base64UrlString::new(bytes).map_err(anyhow::Error::msg)?;
     }
     let failure = sdk
         .mimi_request_key_material(
@@ -182,7 +183,7 @@ pub(super) async fn run(
         "native replay: {status} {}",
         String::from_utf8_lossy(&body)
     );
-    let replay: arkret_models_crypto::KeyPackagesClaimOutcome = serde_json::from_slice(&body)?;
+    let replay: arkret_models_crypto::KeyPackagesClaimResponseBody = serde_json::from_slice(&body)?;
     ensure!(
         serde_json::to_value(replay)?
             == serde_json::to_value(
@@ -208,7 +209,8 @@ pub(super) async fn run(
         "native first claim: {status} {}",
         String::from_utf8_lossy(&body)
     );
-    let original: arkret_models_crypto::KeyPackagesClaimOutcome = serde_json::from_slice(&body)?;
+    let original: arkret_models_crypto::KeyPackagesClaimResponseBody =
+        serde_json::from_slice(&body)?;
     ensure!(original.claims.len() == 1, "native second material missing");
     let after = lifecycle::upload_durable_cut(database).await?;
     let recovered = sdk

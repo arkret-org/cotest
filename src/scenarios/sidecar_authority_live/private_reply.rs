@@ -16,7 +16,7 @@ pub(crate) trait JoinObserver {
         &self,
         _controller: &Member,
         _agent: &AgentRuntimeSession,
-        _submission: &arkret_models_collaboration::authority_commit::SelfAuthoritySubmitRequest,
+        _submission: &arkret_models_collaboration::authority_commit::SelfAuthoritySubmitRequestBody,
         _claim_request: &arkret_models_crypto::KeyPackagesClaimRequestBody,
     ) -> Result<()> {
         Ok(())
@@ -93,7 +93,7 @@ pub(crate) async fn join_agent_with_observer(
             "requester_authorization":{"kind":"device","verification_method":controller.method,
                 "requester_device_id":controller.device,"device_authorize_event_id":controller.authorize_event_id,
                 "signed_at":arkret_canonical::format_timestamp_canonical(now),
-                "signature":{"kid":controller.method,"signature_algorithm":"Ed25519","sig":"AA"}}
+                "signature":{"kid":controller.method,"signature_algorithm":"Ed25519","signature":"AA"}}
         }),
     )?;
     let bytes = arkret_models_crypto::keypackage_claim_authorization_signing_bytes(
@@ -106,7 +106,7 @@ pub(crate) async fn join_agent_with_observer(
     else {
         unreachable!()
     };
-    signature.sig = arkret_wire::Base64UrlString::new(
+    signature.signature = arkret_wire::Base64UrlString::new(
         base64::engine::general_purpose::URL_SAFE_NO_PAD
             .encode(controller.key.sign(&bytes).to_bytes()),
     )
@@ -126,11 +126,11 @@ pub(crate) async fn join_agent_with_observer(
         .sdk()
         .realm_state_snapshot_head(realm)
         .await?;
-    let base: arkret_wire::MlsGroupCurrent = snapshot
+    let base: arkret_wire::MlsGroupValue = snapshot
         .current_state_entries
         .iter()
         .find_map(|row| {
-            let arkret_wire::TypedCurrentRow::Value {
+            let arkret_wire::CurrentState::Value {
                 selector: arkret_wire::CurrentSelector::MlsGroup { scope_ref },
                 value,
                 ..
@@ -196,14 +196,14 @@ pub(crate) async fn join_agent_with_observer(
             verification_method: agent.verification_method.clone(),
         },
         keypackage_claim_ref: add.welcome.keypackage_claim_ref,
-        ciphertext_b64: add.welcome.ciphertext_b64,
+        ciphertext_base64url: add.welcome.ciphertext_base64url,
         producer_proof: arkret_wire::DetachedObjectSignature {
             context: arkret_wire::DetachedSignatureContext::MlsWelcomeDelivery,
             signature_algorithm: arkret_wire::DetachedSignatureAlgorithm::Ed25519,
             verification_method: controller.method.clone(),
             signed_digest: arkret_wire::Hash::new(format!("sha256:{}", "0".repeat(64)))?,
             created_at: now,
-            sig: arkret_wire::Base64UrlString::new("AA").map_err(anyhow::Error::msg)?,
+            signature: arkret_wire::Base64UrlString::new("AA").map_err(anyhow::Error::msg)?,
         },
     };
     let mut unsigned = serde_json::to_value(&welcome)?;
@@ -216,7 +216,7 @@ pub(crate) async fn join_agent_with_observer(
         &controller.key,
     )?;
     let submission =
-        arkret_models_collaboration::authority_commit::SelfAuthoritySubmitRequest::MlsCommit(
+        arkret_models_collaboration::authority_commit::SelfAuthoritySubmitRequestBody::MlsCommit(
             arkret_wire::MlsCommitSubmission {
                 commit_event: event.clone(),
                 welcomes: vec![welcome.clone()],
@@ -344,7 +344,7 @@ pub(crate) async fn join_agent_with_observer(
             kid: arkret_wire::NonEmptyString::new(agent.verification_method.to_string())
                 .map_err(anyhow::Error::msg)?,
             signature_algorithm: None,
-            sig: arkret_wire::Base64UrlString::new("AA").map_err(anyhow::Error::msg)?,
+            signature: arkret_wire::Base64UrlString::new("AA").map_err(anyhow::Error::msg)?,
         },
     };
     let receipt = agent_group
@@ -367,7 +367,7 @@ pub(crate) async fn join_agent_with_observer(
             .await?;
     }
     let signed_digest = arkret_models_crypto::keypackages_consume_request_digest(&consume)?;
-    let unsigned = arkret_models_crypto::KeyPackagesConsumeUnsignedRequest {
+    let unsigned = arkret_models_crypto::KeyPackagesConsumeFields {
         claim_id: consume.claim_id.clone(),
         recipient_durable_receipt: consume.recipient_durable_receipt.clone(),
     };
@@ -401,7 +401,7 @@ pub(crate) async fn join_agent_with_observer(
                 .current_state_entries
                 .iter()
                 .any(|row| matches!(row,
-            arkret_wire::TypedCurrentRow::Value {
+            arkret_wire::CurrentState::Value {
                 selector: arkret_wire::CurrentSelector::SidecarContext { .. }, source_stream_ref, ..
             } if source_stream_ref == &stream)),
             "consumed Agent cannot read its private current"
@@ -419,7 +419,7 @@ pub(crate) async fn join_agent_with_observer(
             arkret_wire::StreamScanDirection::After(None),
             arkret_wire::StreamScanDirection::Before(None),
         ] {
-            let request = arkret_wire::StreamScanRequest {
+            let request = arkret_wire::StreamScanRequestBody {
                 realm_id: realm.clone(),
                 stream_ref: stream.clone(),
                 direction,

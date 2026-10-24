@@ -27,7 +27,7 @@ capability、policy、retention 与 notification 状态。
 
 1. 两个旧 Event kind 不在 event-kind registry；
 2. effective-policy operation 不在 operation registry；
-3. inheritance current-result family与旧 payload／response schema 不再可达；
+3. inheritance current-state family与旧 payload／response schema 不再可达；
 4. `realm_link_payload.link_kind` 接受 `governed_by`、`join_gate_from`，拒绝 `inherits_policy_from`；
 5. link payload 没有 `inherits`、`policy_rules`、`capability_bundles` 或 `notification_defaults` carrier。
 

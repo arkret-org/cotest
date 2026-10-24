@@ -17,7 +17,7 @@ fn create_payload(token_byte: char) -> serde_json::Value {
             "token_commitment": format!("sha256:{}", token_byte.to_string().repeat(64)),
             "token_salt_id": "salt-cotest-2162",
             "token_entropy_bits": 128,
-            "max_claims": 1,
+            "max_claim_count": 1,
             "verification_id": VERIFIER,
             "verification_public_key": "did:web:verifier.example#invite-1"
         },

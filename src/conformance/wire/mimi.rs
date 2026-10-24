@@ -11,7 +11,7 @@ use crate::conformance::{required_str, validate_profile};
 /// Spec extensions/mimi-interop.md §9.1 defines the Arkret typed result family
 /// ↔ MIMI policy-component mapping; §9.2 defines the criticality ↔ MIMI
 /// unknown-handling mapping. The test cross-references each result family
-/// against the active event-kind registry's result_writes, asserts that
+/// against the active event-kind registry's state_writes, asserts that
 /// bidirectional vectors carry both legs, and asserts that
 /// `direction = arkret_only` vectors declare the private facade media-type so
 /// the facade cannot silently impersonate a standard MIMI component.
@@ -69,7 +69,7 @@ pub fn run_mimi_components_fixture_suite() -> Result<()> {
     let mut bidirectional = 0usize;
     let mut arkret_only = 0usize;
     for vector in component_vectors {
-        let component_type = required_str(vector, "arkret_result_family")?;
+        let component_type = required_str(vector, "arkret_state_family")?;
         let event_kind = required_str(vector, "arkret_kind")?;
         let descriptor = arkret_wire::EventKind::try_new(event_kind)
             .and_then(|kind| kind.descriptor())
@@ -80,10 +80,10 @@ pub fn run_mimi_components_fixture_suite() -> Result<()> {
             && registered.iter().any(|row| {
                 row["event_kind"].as_str() == Some(event_kind)
                     && row["status"].as_str() == Some("active")
-                    && row["result_writes"].as_array().is_some_and(|writes| {
+                    && row["state_writes"].as_array().is_some_and(|writes| {
                         writes
                             .iter()
-                            .any(|write| write["result_family"].as_str() == Some(component_type))
+                            .any(|write| write["state_family"].as_str() == Some(component_type))
                     })
             });
         if !writes_component {
@@ -239,7 +239,7 @@ fn scope_receipt_decision(input: &Value) -> Result<Value> {
         }
         (Some("present"), [row]) => {
             let Ok(current) = serde_json::from_value::<
-                arkret_models_collaboration::events_payloads::ScopeReadReceiptPolicyCurrent,
+                arkret_models_collaboration::events_payloads::CurrentScopeReadReceiptPolicy,
             >((*row).clone()) else {
                 return Ok(denied());
             };

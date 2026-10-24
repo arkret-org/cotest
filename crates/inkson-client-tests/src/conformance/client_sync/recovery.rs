@@ -27,7 +27,7 @@ const EFFECTS: &str = "SELECT jsonb_build_object(\
  'issuances',(SELECT COALESCE(jsonb_agg(to_jsonb(t) ORDER BY snapshot_id,account_id),'[]') FROM realm_state_snapshot_issuances t),\
  'windows',(SELECT COALESCE(jsonb_agg(to_jsonb(t) ORDER BY window_cursor,account_id,stream_key),'[]') FROM realm_state_snapshot_window_reservations t),\
  'queue',(SELECT COALESCE(jsonb_agg(to_jsonb(t) ORDER BY id),'[]') FROM device_messages t),\
- 'acks',(SELECT COALESCE(jsonb_agg(to_jsonb(t) ORDER BY ack_token),'[]') FROM device_message_ack_tokens t)\
+ 'acks',(SELECT COALESCE(jsonb_agg(to_jsonb(t) ORDER BY acknowledgement_token),'[]') FROM device_message_ack_tokens t)\
  )::text";
 
 fn business_evidence(database_url: &str) -> Result<String> {
@@ -39,7 +39,7 @@ fn business_evidence(database_url: &str) -> Result<String> {
             .read_only(true)
             .start()?;
         let core: String = transaction.query_one(EFFECTS, &[])?.get(0);
-        let tables = transaction.query("SELECT tablename FROM pg_tables WHERE schemaname='public' AND (tablename LIKE '%\\_current_results' ESCAPE '\\' OR tablename IN ('current_result_heads','current_selector_origins','governance_current_ready','account_datas','account_data_changes','device_message_txns','device_message_idempotency','mls_welcome_deliveries')) ORDER BY tablename", &[])?;
+        let tables = transaction.query("SELECT tablename FROM pg_tables WHERE schemaname='public' AND (tablename LIKE '%\\_current_states' ESCAPE '\\' OR tablename IN ('current_state_heads','current_selector_origins','governance_current_ready','account_datas','account_data_changes','device_message_txns','device_message_idempotency','mls_welcome_deliveries')) ORDER BY tablename", &[])?;
         let mut currents = std::collections::BTreeMap::new();
         for row in tables {
             let table: String = row.get(0);
@@ -147,14 +147,14 @@ struct RecoveryRail<'a> {
     member: &'a Member,
     realm: arkret_wire::RealmId,
     replay: Vec<u8>,
-    requests: Mutex<Vec<SyncRequestBody>>,
+    requests: Mutex<Vec<AccountSubscribeParameters>>,
     recovered: Mutex<Option<arkret_wire::RealmCommit>>,
 }
 
 impl AccountSubscribeTransport for RecoveryRail<'_> {
     async fn subscribe(
         &self,
-        request: &SyncRequestBody,
+        request: &AccountSubscribeParameters,
     ) -> garth::Result<AccountSubscribeSnapshotResult> {
         let call = {
             let mut requests = self.requests.lock().unwrap();
@@ -191,11 +191,11 @@ impl AccountSubscribeTransport for RecoveryRail<'_> {
                 let (status, body) = self.receiver.signed_peer_post(self.source,
                     "/_arkret/peer/events", &self.replay, self.receiver.service_id()).await?;
                 ensure!(status == reqwest::StatusCode::OK, "normal history recovery peer ingress failed: {status}");
-                let outcome: arkret_models_collaboration::authority_commit::PeerAuthoritySubmitOutcome = serde_json::from_slice(&body)?;
+                let outcome: arkret_models_collaboration::authority_commit::PeerAuthoritySubmitResponseBody = serde_json::from_slice(&body)?;
                 ensure!(matches!(outcome,
-                    arkret_models_collaboration::authority_commit::PeerAuthoritySubmitOutcome::CommittedReplication(ref value)
+                    arkret_models_collaboration::authority_commit::PeerAuthoritySubmitResponseBody::CommittedReplication(ref value)
                     if matches!(value.replication_outcomes.as_slice(),
-                        [arkret_models_collaboration::authority_commit::PeerCommittedReplicationOutcomeRecord::Stored {}])),
+                        [arkret_models_collaboration::authority_commit::CommittedEventReplicationOutcome::Stored {}])),
                     "normal backup recovery did not install the missing original");
                 let event = self.governor.client.author_event(self.realm.as_str(),
                     arkret_wire::EventKind::MessageCreate.as_str(),
@@ -382,10 +382,10 @@ impl Probe {
             !queue.deliveries.is_empty(),
             "recovery needs an unprocessed real recipient delivery"
         );
-        let ack = queue.ack_token.context("recovery ACK token")?;
+        let ack = queue.acknowledgement_token.context("recovery ACK token")?;
         let ack_before = read_database_evidence(
             database_url,
-            "SELECT row_to_json(t)::text FROM device_message_ack_tokens t WHERE ack_token=$1 AND consumed_at IS NULL",
+            "SELECT row_to_json(t)::text FROM device_message_ack_tokens t WHERE acknowledgement_token=$1 AND consumed_at IS NULL",
             &[&ack],
         )?;
         let mut args = vec![
@@ -443,7 +443,7 @@ impl Probe {
         ensure!(
             read_database_evidence(
                 database_url,
-                "SELECT row_to_json(t)::text FROM device_message_ack_tokens t WHERE ack_token=$1 AND consumed_at IS NULL",
+                "SELECT row_to_json(t)::text FROM device_message_ack_tokens t WHERE acknowledgement_token=$1 AND consumed_at IS NULL",
                 &[&ack]
             )? == ack_before,
             "normal backfill consumed or invalidated the exact ACK"

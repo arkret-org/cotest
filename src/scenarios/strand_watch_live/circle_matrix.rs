@@ -3,7 +3,7 @@ use arkret_models_collaboration::authority_commit::{
     AuditPairedEventAcceptanceOutcome, AuditPairedEventUnitKind, AuditPairedEventUnitSubmission,
 };
 use arkret_models_collaboration::strand_watch_operations::{
-    WatchAuditReadOutcome, WatchAuditReadRequest,
+    WatchAuditReadRequestBody, WatchAuditReadResponseBody,
 };
 use arkret_wire::{AccountId, EventAdmissionSubmission, SemanticRef};
 use serde_json::json;
@@ -95,7 +95,7 @@ pub(super) async fn run(
     };
     ensure!(matches!(
         read(bob, &selector).await?,
-        StrandWatchCurrentOutcome::NeverWritten { .. }
+        StrandWatchCurrentResponseBody::NeverWritten { .. }
     ));
     let own = circle_event(
         bob,
@@ -109,13 +109,13 @@ pub(super) async fn run(
     current(
         read(bob, &selector).await?,
         &own_commit,
-        StrandWatchCurrentValue::Set(StrandWatchExpectedValue {
+        StrandWatchValue::Set(StrandWatchExpectedValue {
             level: StrandWatchLevel::Participating,
             level_public: None,
         }),
     )?;
     let writer = ActorId::account(alice_account.clone());
-    let request = WatchAuditReadRequest { audit_submission: EventAdmissionSubmission::new(circle_event(alice, realm, &circle,
+    let request = WatchAuditReadRequestBody { audit_submission: EventAdmissionSubmission::new(circle_event(alice, realm, &circle,
         EventKind::AuditAccessed, json!({"access_kind":"watch_audit_read","writer_actor_id":writer,"target_actor_id":bob_actor,
             "target_ref":strand,"purpose":"Circle disclosure cut","accessed_at":arkret_canonical::format_timestamp_canonical(chrono::Utc::now())})).await?) };
     expect_api_error(
@@ -144,7 +144,7 @@ pub(super) async fn run(
         .1
         .clone();
     join(alice, realm, &circle, &writer, alice_parent.clone()).await?;
-    let observed: WatchAuditReadOutcome = serde_json::from_value(
+    let observed: WatchAuditReadResponseBody = serde_json::from_value(
         expect_json(
             alice
                 .post("/_arkret/self/strands/watch/audit-read")
@@ -178,7 +178,7 @@ pub(super) async fn run(
     )?;
     outcome.validate_for_request(&pair)?;
     ensure!(
-        matches!(read(bob, &selector).await?, StrandWatchCurrentOutcome::Current { result, .. } if matches!(result.value, StrandWatchCurrentValue::Set(StrandWatchExpectedValue {level:StrandWatchLevel::All, ..})))
+        matches!(read(bob, &selector).await?, StrandWatchCurrentResponseBody::Current { current_state: result, .. } if matches!(result.value, StrandWatchValue::Set(StrandWatchExpectedValue {level:StrandWatchLevel::All, ..})))
     );
     let leave = circle_event(alice, realm, &circle, EventKind::CircleMemberState,
         json!({"circle_id":circle,"member_id":writer,"membership":"leave","expected_membership":"join"})).await?;
@@ -196,7 +196,7 @@ pub(super) async fn run(
         "schema":"ak.schema.capability.v1","realm_id":realm,"issuer_id":owner_actor,"subject":writer,
         "actions":["ak.circle.audit"],"resources":[{"kind":"strand","realm_id":realm,"circle_id":circle,"strand_id":strand}],
         "constraints":[{"constraint_kind":"scope_limitation","effect":"allow","allowed_circle_ids":[circle]}],
-        "issuer_authority_refs":[{"kind":"realm_root","realm_id":realm,"authority_event_ref":typed_realm.event_id(),"authority_generation":0}],
+        "issuer_authority_refs":[{"kind":"realm_root","realm_id":realm,"authority_event_ref":typed_realm.event_id(),"authority_generation":"0"}],
         "issued_at":arkret_canonical::format_timestamp_canonical(chrono::Utc::now())}})).await?;
     let granted = submit_and_expect_commit(
         owner,
@@ -205,10 +205,10 @@ pub(super) async fn run(
         &grant,
     )
     .await?;
-    let explicit=WatchAuditReadRequest {audit_submission:EventAdmissionSubmission::new(circle_event(alice,realm,&circle,EventKind::AuditAccessed,
+    let explicit=WatchAuditReadRequestBody {audit_submission:EventAdmissionSubmission::new(circle_event(alice,realm,&circle,EventKind::AuditAccessed,
         json!({"access_kind":"watch_audit_read","writer_actor_id":writer,"target_actor_id":bob_actor,"target_ref":strand,
             "purpose":"Explicit nonmember Circle audit","accessed_at":arkret_canonical::format_timestamp_canonical(chrono::Utc::now())})).await?)};
-    let allowed: WatchAuditReadOutcome = serde_json::from_value(
+    let allowed: WatchAuditReadResponseBody = serde_json::from_value(
         expect_json(
             alice
                 .post("/_arkret/self/strands/watch/audit-read")
@@ -243,7 +243,7 @@ pub(super) async fn run(
             "schema":"ak.schema.capability.v1","realm_id":realm,"issuer_id":owner_actor,"subject":subject,
             "actions":[action],"resources":[{"kind":"circle","realm_id":realm,"circle_id":circle}],
             "constraints":[{"constraint_kind":"scope_limitation","effect":"allow","allowed_circle_ids":[circle]}],
-            "issuer_authority_refs":[{"kind":"realm_root","realm_id":realm,"authority_event_ref":typed_realm.event_id(),"authority_generation":0}],
+            "issuer_authority_refs":[{"kind":"realm_root","realm_id":realm,"authority_event_ref":typed_realm.event_id(),"authority_generation":"0"}],
             "issued_at":arkret_canonical::format_timestamp_canonical(chrono::Utc::now())}})).await?;
         submit_and_expect_commit(
             owner,

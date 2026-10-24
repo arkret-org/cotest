@@ -230,12 +230,12 @@ async fn garth_syncs_an_account_over_its_own_durable_store() -> Result<()> {
     struct ObservedTransport {
         client: arkret_http_client::Client,
         requests: std::sync::Mutex<
-            Vec<arkret_models_collaboration::sync_frames::account_subscribe::SyncRequestBody>,
+            Vec<arkret_models_collaboration::sync_frames::account_subscribe::AccountSubscribeParameters>,
         >,
         cursor_errors: AtomicUsize,
     }
     impl garth::AccountSubscribeTransport for ObservedTransport {
-        async fn subscribe(&self, request: &arkret_models_collaboration::sync_frames::account_subscribe::SyncRequestBody)
+        async fn subscribe(&self, request: &arkret_models_collaboration::sync_frames::account_subscribe::AccountSubscribeParameters)
         -> garth::Result<arkret_models_collaboration::sync_frames::account_subscribe::AccountSubscribeSnapshotResult>{
             self.requests.lock().unwrap().push(request.clone());
             let result = garth::AccountSubscribeTransport::subscribe(&self.client, request).await;

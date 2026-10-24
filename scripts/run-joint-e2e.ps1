@@ -123,7 +123,7 @@ param(
     # for resolver and harness witness-health checks; production clamps any
     # value back to the protocol ceiling, so this can only tighten the window.
     [int]$WebvhDegradedNoWitnessMaxSecs = 30,
-    # OAuth `client_id` coland advertises in `/_arkret/describe.auth_metadata.methods[].client_id`
+    # OAuth `client_id` coland advertises in `/_arkret/describe.authentication_metadata.methods[].client_id`
     # (coland config `oidc_client_id`). MUST match a client registered at coauth; the joint
     # coauth config (coauth/config.dev.yaml) seeds the "Inkson Dev" client under this ULID.
     # Without it coland advertises no client_id and the browser OIDC bridge gets

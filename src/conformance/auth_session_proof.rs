@@ -5,7 +5,7 @@ use arkret_canonical as canonical;
 use arkret_identifiers::{DeviceId, DidCoreId, Hash, SessionGrantId};
 use arkret_models_collaboration::session_grant_bodies::session_grant_refresh_request_digest;
 use arkret_models_collaboration::session_grants::{
-    SessionGrantOutcome, SessionGrantRefreshRequestBody, SessionGrantRequestBody,
+    SessionGrantRefreshRequestBody, SessionGrantRequestBody, SessionGrantResponseBody,
     human_session_grant_intent_digest,
 };
 use arkret_models_identity::{
@@ -46,7 +46,7 @@ const AUTH_SESSION_PROOF_FIXTURE_FILE: &str = "auth-session-proof-fixture.json";
 const SESSION_GRANT_REQUEST_SCHEMA: &str =
     "schemas/service-operation-dtos.schema.json#/$defs/SessionGrantRequestBody";
 const SESSION_GRANT_OUTCOME_SCHEMA: &str =
-    "schemas/service-operation-dtos.schema.json#/$defs/SessionGrantOutcome";
+    "schemas/service-operation-dtos.schema.json#/$defs/SessionGrantResponseBody";
 const SELF_EVENTS_SUBMIT_OPERATION: &str = "ak.self.events.command.submit.v1";
 
 #[derive(Debug, Deserialize)]
@@ -165,7 +165,7 @@ fn issue_session_grant(
     target_audience: &str,
     server_max_ttl: Duration,
     now: DateTime<Utc>,
-) -> std::result::Result<SessionGrantOutcome, &'static str> {
+) -> std::result::Result<SessionGrantResponseBody, &'static str> {
     let SessionGrantRequestBody::Human(request) = request else {
         return Err(arkret_wire::ReasonCode::PROOF_INVALID);
     };
@@ -176,7 +176,7 @@ fn issue_session_grant(
         return Err(arkret_wire::ReasonCode::PROOF_INVALID);
     }
 
-    Ok(SessionGrantOutcome {
+    Ok(SessionGrantResponseBody {
         account_id: AccountId::new(request.principal_id.clone(), request.audience_id.clone()),
         device_id: Some(request.device_id.clone()),
         session_grant: "ak.session.grant.test".to_owned(),

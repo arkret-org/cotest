@@ -130,7 +130,7 @@ pub async fn run_agent_pcr_profile_admission() -> Result<crate::conformance::Sui
         principal.pcr_realm_id != agent.agent_pcr,
         "Agent inherited controller PCR"
     );
-    let resolved: arkret_models_identity::identity::IdentityResolveOutcome =
+    let resolved: arkret_models_identity::identity::IdentityResolveResponseBody =
         serde_json::from_value(
             expect_json(
                 station
@@ -190,7 +190,7 @@ pub async fn run_agent_pcr_profile_admission() -> Result<crate::conformance::Sui
         &method,
         principal.device_signing_key.to_bytes(),
     )?;
-    let accepted: AuthoritySubmitOutcome = serde_json::from_value(
+    let accepted: AuthoritySubmitResponseBody = serde_json::from_value(
         expect_json(
             controller
                 .post("/_arkret/self/events")
@@ -200,7 +200,7 @@ pub async fn run_agent_pcr_profile_admission() -> Result<crate::conformance::Sui
         .await?,
     )?;
     ensure!(
-        matches!(accepted, AuthoritySubmitOutcome::Accepted { status: AuthorityCommitStatus::Committed, commit } if commit.realm_id == agent.agent_pcr && commit.event_ref == event.event_id),
+        matches!(accepted, AuthoritySubmitResponseBody::Accepted { status: AuthorityCommitStatus::Committed, commit } if commit.realm_id == agent.agent_pcr && commit.event_ref == event.event_id),
         "delegated profile did not commit in the Agent PCR"
     );
     let frozen =
@@ -209,7 +209,7 @@ pub async fn run_agent_pcr_profile_admission() -> Result<crate::conformance::Sui
             true,
         )
         .await?;
-    let retry: AuthoritySubmitOutcome = serde_json::from_value(
+    let retry: AuthoritySubmitResponseBody = serde_json::from_value(
         expect_json(
             controller
                 .post("/_arkret/self/events")
@@ -221,7 +221,7 @@ pub async fn run_agent_pcr_profile_admission() -> Result<crate::conformance::Sui
     ensure!(
         matches!(
             retry,
-            AuthoritySubmitOutcome::Accepted {
+            AuthoritySubmitResponseBody::Accepted {
                 status: AuthorityCommitStatus::Duplicate,
                 ..
             }
@@ -319,7 +319,7 @@ pub async fn run_agent_pcr_profile_admission() -> Result<crate::conformance::Sui
     let db_url = database.connect_url.clone();
     tokio::task::spawn_blocking(move || -> Result<()> {
         let mut db = postgres::Client::connect(&db_url, postgres::NoTls)?;
-        db.batch_execute("CREATE FUNCTION agent_profile_projection_fault() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'owned Agent profile projection fault'; END $$; CREATE TRIGGER agent_profile_projection_fault BEFORE INSERT OR UPDATE ON actor_profile_current_results FOR EACH ROW EXECUTE FUNCTION agent_profile_projection_fault()")?;
+        db.batch_execute("CREATE FUNCTION agent_profile_projection_fault() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'owned Agent profile projection fault'; END $$; CREATE TRIGGER agent_profile_projection_fault BEFORE INSERT OR UPDATE ON actor_profile_current_states FOR EACH ROW EXECUTE FUNCTION agent_profile_projection_fault()")?;
         Ok(())
     }).await??;
     let before_fault =
@@ -347,7 +347,7 @@ pub async fn run_agent_pcr_profile_admission() -> Result<crate::conformance::Sui
     let db_url = database.connect_url.clone();
     tokio::task::spawn_blocking(move || -> Result<()> {
         let mut db = postgres::Client::connect(&db_url, postgres::NoTls)?;
-        db.batch_execute("DROP TRIGGER agent_profile_projection_fault ON actor_profile_current_results; DROP FUNCTION agent_profile_projection_fault()")?;
+        db.batch_execute("DROP TRIGGER agent_profile_projection_fault ON actor_profile_current_states; DROP FUNCTION agent_profile_projection_fault()")?;
         Ok(())
     }).await??;
     ensure!(
@@ -370,7 +370,7 @@ pub async fn run_agent_pcr_profile_admission() -> Result<crate::conformance::Sui
     println!(
         "[agent-pcr] late_projection_fault_rolled_back_complete_state=1 same_signed_event_retried=1"
     );
-    let result: AuthoritySubmitOutcome = serde_json::from_value(
+    let result: AuthoritySubmitResponseBody = serde_json::from_value(
         expect_json(
             controller
                 .post("/_arkret/self/events")
@@ -380,7 +380,7 @@ pub async fn run_agent_pcr_profile_admission() -> Result<crate::conformance::Sui
         .await?,
     )?;
     ensure!(
-        matches!(result, AuthoritySubmitOutcome::Accepted { status: AuthorityCommitStatus::Committed, commit } if commit.realm_id == agent.agent_pcr && commit.event_ref == updated.event_id),
+        matches!(result, AuthoritySubmitResponseBody::Accepted { status: AuthorityCommitStatus::Committed, commit } if commit.realm_id == agent.agent_pcr && commit.event_ref == updated.event_id),
         "Agent profile update did not use its own PCR"
     );
     let db_url = database.connect_url.clone();
@@ -388,7 +388,7 @@ pub async fn run_agent_pcr_profile_admission() -> Result<crate::conformance::Sui
     let subject = agent.agent_account.principal_id.to_string();
     tokio::task::spawn_blocking(move || -> Result<()> {
         let mut db = postgres::Client::connect(&db_url, postgres::NoTls)?;
-        let value: serde_json::Value = db.query_one("SELECT value FROM actor_profile_current_results WHERE realm_id=$1 AND value->>'principal_id'=$2", &[&realm,&subject])?.get(0);
+        let value: serde_json::Value = db.query_one("SELECT value FROM actor_profile_current_states WHERE realm_id=$1 AND value->>'principal_id'=$2", &[&realm,&subject])?.get(0);
         ensure!(value["display_name"] == "Updated delegated Agent profile" && value["actor_kind"] == "agent", "Agent profile current was not atomically updated");
         Ok(())
     }).await??;
@@ -588,31 +588,31 @@ pub async fn run_agent_pcr_profile_admission() -> Result<crate::conformance::Sui
         ensure!(genesis_commit.event_ref == genesis.event_id && genesis_commit.governance_generation == 0, "genesis lacks its generation-zero covering Commit");
         ensure!(genesis.payload["object"]["governance_station_id"] == station_id.as_str(), "genesis names another generation-zero governance Station");
         ensure!(genesis.payload["object"]["purpose"] == "agent_control" && genesis.payload["object"]["initial_history_access"] == "since_join" && genesis.payload["object"].get("founding_device_descriptor").is_none(), "Agent genesis does not use the shared control Realm policy");
-        let history = db.query_one("SELECT value,current_commit_id FROM realm_bootstrap_current_results WHERE realm_id=$1 AND result_family='realm_history_access'", &[&agent_realm.as_str()])?;
+        let history = db.query_one("SELECT value,current_commit_id FROM realm_bootstrap_current_states WHERE realm_id=$1 AND state_family='realm_history_access'", &[&agent_realm.as_str()])?;
         ensure!(history.get::<_,serde_json::Value>(0) == "since_join" && history.get::<_,String>(1) == genesis_commit.commit_id.as_str(), "shared control history current is not derived from the exact Agent genesis");
         ensure!(events.iter().all(|event| event.kind != arkret_wire::EventKind::MlsGenesis), "unexpected MLS genesis before encryption assertion");
-        let groups: i64 = db.query_one("SELECT count(*) FROM mls_group_current_results WHERE realm_id=$1", &[&agent_realm.as_str()])?.get(0);
+        let groups: i64 = db.query_one("SELECT count(*) FROM mls_group_current_states WHERE realm_id=$1", &[&agent_realm.as_str()])?.get(0);
         ensure!(groups == 0, "Agent PCR acquired MLS state before ak.mls.genesis");
         let encryption = db.query("SELECT encryption_profile FROM realm_meta WHERE realm_id=$1", &[&agent_realm.as_str()])?;
         ensure!(encryption.iter().all(|row| row.get::<_,Option<String>>(0).is_none()), "Agent PCR inherited an encryption profile before ak.mls.genesis");
-        let policies = db.query("SELECT value FROM realm_bootstrap_current_results WHERE realm_id=$1", &[&agent_realm.as_str()])?;
+        let policies = db.query("SELECT value FROM realm_bootstrap_current_states WHERE realm_id=$1", &[&agent_realm.as_str()])?;
         ensure!(!policies.is_empty(), "Agent PCR bootstrap currents are absent");
         for policy in policies {
             let value: serde_json::Value = policy.get(0);
             ensure!(!value.as_object().is_some_and(|object| object.contains_key("content_scheme") || object.contains_key("content_encryption_floor") || object.contains_key("metadata_encryption_floor")), "Agent PCR inherited pre-MLS content scheme or floors");
         }
-        let profile_rows: i64 = db.query_one("SELECT count(*) FROM actor_profile_current_results WHERE realm_id=$1", &[&agent_realm.as_str()])?.get(0);
+        let profile_rows: i64 = db.query_one("SELECT count(*) FROM actor_profile_current_states WHERE realm_id=$1", &[&agent_realm.as_str()])?.get(0);
         ensure!(profile_rows == 1, "Agent profile landed outside its PCR");
         for kind in [arkret_wire::EventKind::AgentKeyAuthorize, arkret_wire::EventKind::ProfileCreate, arkret_wire::EventKind::ProfileUpdate, arkret_wire::EventKind::SelfAgentPause, arkret_wire::EventKind::SelfAgentResume] {
             let owned: Vec<_> = events.iter().filter(|event| event.kind == kind).collect();
             ensure!(!owned.is_empty() && owned.iter().all(|event| event.actor_id == agent_actor && event.executed_by.as_ref() == Some(&controller_actor) && event.authorization_ref.as_deref() == Some(delegation.as_str())), "Agent control {kind:?} lost its exact actor/executor/delegation/PCR tuple");
         }
-        let provisions = db.query("SELECT e.envelope FROM canonical_events e JOIN agent_provisioning_current_results p ON p.realm_id=e.realm_id WHERE p.agent_id=$1 AND e.kind='ak.agent.provision' AND e.envelope->'payload'->>'agent_id'=$1", &[&agent_id])?;
+        let provisions = db.query("SELECT e.envelope FROM canonical_events e JOIN agent_provisioning_current_states p ON p.realm_id=e.realm_id WHERE p.agent_id=$1 AND e.kind='ak.agent.provision' AND e.envelope->'payload'->>'agent_id'=$1", &[&agent_id])?;
         ensure!(provisions.len() == 1, "Agent has more than one accepted provision");
         let provision: serde_json::Value = provisions[0].get(0);
         let provision: Event = serde_json::from_value(provision)?;
         ensure!(provision.realm_id == controller_realm && provision.actor_id == controller_actor, "provision did not land in controller PCR");
-        for (table, predicate) in [("agent_provisioning_current_results", "agent_id=$2"), ("identity_accountability_current_results", "subject_id=$2"), ("agent_selector_claim_current_results", "value->'subject_account_id'->>'principal_id'=$2")] {
+        for (table, predicate) in [("agent_provisioning_current_states", "agent_id=$2"), ("identity_accountability_current_states", "subject_id=$2"), ("agent_selector_claim_current_states", "value->'subject_account_id'->>'principal_id'=$2")] {
             let rows = db.query(&format!("SELECT c.commit_json->>'event_ref' FROM {table} p JOIN realm_commits c ON c.commit_id=p.current_commit_id WHERE p.realm_id=$1 AND {predicate}"), &[&controller_realm.as_str(), &agent_id])?;
             ensure!(rows.len() == 1 && rows[0].get::<_,String>(0) == provision.event_id.as_str(), "{table} is not the exact provision-owned controller PCR result");
         }

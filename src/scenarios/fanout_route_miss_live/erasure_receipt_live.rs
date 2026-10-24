@@ -217,8 +217,8 @@ pub async fn run(ban: bool) -> Result<()> {
         "receipt acceptance: {status} {}",
         String::from_utf8_lossy(&first)
     );
-    let outcome: ErasureReceiptSubmitOutcome = serde_json::from_slice(&first)?;
-    let ErasureReceiptSubmitOutcome::Accepted(acceptance) = outcome else {
+    let outcome: ErasureReceiptSubmitResponseBody = serde_json::from_slice(&first)?;
+    let ErasureReceiptSubmitResponseBody::Accepted(acceptance) = outcome else {
         bail!("independent receipt rejected");
     };
     ensure!(

@@ -21,7 +21,7 @@ pub(super) fn content_refresh_request(
     credential: &str,
 ) -> Result<arkret_models_collaboration::session_grants::SessionGrantRefreshRequestBody> {
     use arkret_models_collaboration::session_grant_bodies::{
-        AgentSessionGrantRefreshRequest, AgentSessionRefreshProofContext,
+        AgentSessionGrantRefreshRequestBody, AgentSessionRefreshProofContext,
         UnsignedAgentSessionRefreshProof,
     };
     use ed25519_dalek::Signer as _;
@@ -44,7 +44,7 @@ pub(super) fn content_refresh_request(
     let signature = agent.runtime_key.sign(&unsigned.canonical_signing_bytes()?);
     Ok(
         arkret_models_collaboration::session_grants::SessionGrantRefreshRequestBody::Agent(
-            AgentSessionGrantRefreshRequest {
+            AgentSessionGrantRefreshRequestBody {
                 grant_jwt: credential.to_owned(),
                 audience_id: Some(station.service_id().clone()),
                 principal_id: agent.agent_account.principal_id.clone(),
@@ -267,7 +267,7 @@ pub async fn run_agent_session_content_production()
         deployment.coauth.base_url()
     );
     let content_scope =
-        || arkret_models_collaboration::session_grants::SessionGrantAgentScopeRequest {
+        || arkret_models_collaboration::session_grants::RequestedAgentSessionGrantScope {
             realm_ids: Vec::new(),
             strand_ids: vec![strand.clone()],
             track_names: Vec::new(),
@@ -316,7 +316,7 @@ pub async fn run_agent_session_content_production()
             realm_id: realm.clone(),
         },
         selection: arkret::ParticipationBits {
-            reply_message: true,
+            message_creation_allowed: true,
             ..arkret::ParticipationBits::NONE
         },
         expected_version: 0,
@@ -329,7 +329,7 @@ pub async fn run_agent_session_content_production()
     let entry = &selected.agent_participation_entries[0];
     ensure!(
         entry.scope == selection.target_scope
-            && entry.selection.reply_message
+            && entry.selection.message_creation_allowed
             && entry.version == 1
     );
     let with_selection = coauth_session_evidence::build_runtime_session_request(
@@ -414,7 +414,7 @@ pub async fn run_agent_session_content_production()
         &agent.verification_method,
         &agent.runtime_key,
         &actions,
-        arkret_models_collaboration::session_grants::SessionGrantAgentScopeRequest {
+        arkret_models_collaboration::session_grants::RequestedAgentSessionGrantScope {
             realm_ids: Vec::new(),
             strand_ids: vec![strand.clone()],
             track_names: Vec::new(),
@@ -492,7 +492,7 @@ pub async fn run_agent_session_content_production()
         (
             "content_selector_missing",
             actions.as_slice(),
-            arkret_models_collaboration::session_grants::SessionGrantAgentScopeRequest {
+            arkret_models_collaboration::session_grants::RequestedAgentSessionGrantScope {
                 realm_ids: Vec::new(),
                 strand_ids: Vec::new(),
                 track_names: Vec::new(),
@@ -580,7 +580,7 @@ pub async fn run_agent_session_content_production()
         status == StatusCode::OK,
         "active issue replay was refused before source withdrawal"
     );
-    let original_outcome: arkret_models_collaboration::session_grants::SessionGrantOutcome =
+    let original_outcome: arkret_models_collaboration::session_grants::SessionGrantResponseBody =
         serde_json::from_slice(&original_parallel)?;
     ensure!(original_outcome.session_grant == parallel_credential);
     let refresh_url = format!(
@@ -633,7 +633,7 @@ pub async fn run_agent_session_content_production()
         "current content refresh refused: {status} {}",
         String::from_utf8_lossy(&bytes)
     );
-    let rotated: arkret_models_collaboration::session_grants::SessionGrantOutcome =
+    let rotated: arkret_models_collaboration::session_grants::SessionGrantResponseBody =
         serde_json::from_slice(&bytes)?;
     let next = observed_issued_claims(&rotated.session_grant)?;
     ensure!(
@@ -767,7 +767,7 @@ pub async fn run_agent_session_content_production()
 }
 
 fn resign_issue(
-    request: &mut arkret_models_collaboration::session_grants::AgentSessionGrantRequest,
+    request: &mut arkret_models_collaboration::session_grants::AgentSessionGrantRequestBody,
     key: &ed25519_dalek::SigningKey,
 ) -> Result<()> {
     use ed25519_dalek::Signer as _;
@@ -783,7 +783,7 @@ fn resign_issue(
 async fn send_issue(
     station: &ArkretServer,
     url: &str,
-    request: &arkret_models_collaboration::session_grants::AgentSessionGrantRequest,
+    request: &arkret_models_collaboration::session_grants::AgentSessionGrantRequestBody,
     key: &ed25519_dalek::SigningKey,
 ) -> Result<(StatusCode, Vec<u8>)> {
     let proof = arkret_signatures::dpop::build_dpop_proof(

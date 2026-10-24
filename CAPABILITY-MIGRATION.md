@@ -478,7 +478,7 @@ found and followed:
 
 | was | is now |
 | --- | --- |
-| `session_grant_bodies::{SessionGrantOutcome, SessionGrant*RequestBody, human_session_grant_intent_digest}` | `session_grants::…` |
+| `session_grant_bodies::{SessionGrantResponseBody, SessionGrant*RequestBody, human_session_grant_intent_digest}` | `session_grants::…` |
 | `sync_frames::account_sync::{DeviceMessage*, DeviceMessages*}` | `device_messages::…` |
 | `sync_frames::account_sync::{NotificationDelta, NotificationDeltaAction}` | `sync_frames::account_subscribe::…` |
 | `sync_frames::account_sync::{MemberRosterEntry, MembershipState}` | `account_subscribe_projections::{MemberRosterEntry, MemberRosterMembership}` |
@@ -495,7 +495,7 @@ Two semantic follow-ons were required and are **not** compatibility shims:
   roster fixtures assert that an empty inline identity-event list MUST be
   omitted from the wire, so `vec![]` became `None` — the exact statement of the
   invariant, not a silencer.
-- `DeviceMessagesSendOutcome.delivered` is now keyed by `DeviceId` and carries a
+- `DeviceMessagesSendResponseBody.delivered` is now keyed by `DeviceId` and carries a
   `DeviceMessageDeliveredRow`. Three assertions had been comparing
   `delivered[&actor][0]` against a device-id literal. They are replaced by
   `assert_delivered_to()` in `scenarios/protocol_payloads/device_messages.rs`,
@@ -510,9 +510,9 @@ removed 17 and revealed 0 (559 → 542), pass 3 removed 2 and revealed 2 (542 �
 542). The count is a poor progress metric here; the composition is the real one,
 and it has shifted from "stale module path" to "capability absent".
 
-### 7. Blocked on the typed current-result family registry (handoff §4)
+### 7. Blocked on the typed current-state family registry (handoff §4)
 
-31 errors in 11 files are waiting on the same missing thing: `result_writes[]`
+31 errors in 11 files are waiting on the same missing thing: `state_writes[]`
 contracts and the `ak.component.*` identifiers that replace the Cell model.
 `CellRef`, `CellFamilyId`, `LatticeOp`, `LatticeOpType`, `EventCellValueShape`,
 `state_model`, `cell_writes`, `cell_family` and the whole

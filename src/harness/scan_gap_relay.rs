@@ -1,7 +1,7 @@
 //! Run-PKI HTTP fault boundary; accepted originals and the database stay intact.
 
 use anyhow::ensure;
-use arkret_wire::{CommitStreamRef, StreamScanOutcome, StreamScanRequest};
+use arkret_wire::{CommitStreamRef, StreamScanRequestBody, StreamScanResponseBody};
 use salvo::conn::rustls::{Keycert, RustlsConfig};
 use salvo::conn::{Listener, TcpListener as HttpListener};
 use salvo::prelude::*;
@@ -19,9 +19,9 @@ struct GapState {
     unavailable_requests: std::collections::BTreeMap<String, usize>,
     stream: Option<CommitStreamRef>,
     position: u64,
-    observations: Vec<StreamScanOutcome>,
-    scan_requests: Vec<StreamScanRequest>,
-    event_submissions: Vec<arkret_wire::EventId>,
+    observations: Vec<StreamScanResponseBody>,
+    scan_requests: Vec<StreamScanRequestBody>,
+    planned_events: Vec<arkret_wire::EventId>,
     block_audit_replication: bool,
     blocked_audit_replications: usize,
     split_audit_scan: bool,
@@ -121,7 +121,7 @@ impl ScanGapControl {
         self.0
             .lock()
             .unwrap()
-            .event_submissions
+            .planned_events
             .iter()
             .filter(|id| *id == event)
             .count()
@@ -131,7 +131,7 @@ impl ScanGapControl {
         self.0.lock().unwrap().stream = None;
     }
 
-    pub fn observations(&self) -> Vec<StreamScanOutcome> {
+    pub fn observations(&self) -> Vec<StreamScanResponseBody> {
         self.0.lock().unwrap().observations.clone()
     }
 
@@ -139,7 +139,7 @@ impl ScanGapControl {
         self.0.lock().unwrap().scan_requests.clear();
     }
 
-    pub fn scan_requests(&self) -> Vec<StreamScanRequest> {
+    pub fn scan_requests(&self) -> Vec<StreamScanRequestBody> {
         self.0.lock().unwrap().scan_requests.clone()
     }
 }
@@ -197,12 +197,12 @@ impl Relay {
         // Match the production ingress budget for complete handoff material.
         let body = req.payload_with_max_size(16 * 1024 * 1024).await?.to_vec();
         use arkret_models_collaboration::authority_commit::{
-            PeerAuthoritySubmitRequest, PeerRegisteredAtomicUnit,
+            PeerAuthoritySubmitRequestBody, PeerRegisteredAtomicUnit,
         };
         let peer_unit = (req.uri().path() == "/_arkret/peer/events")
-            .then(|| serde_json::from_slice::<PeerAuthoritySubmitRequest>(&body).ok())
+            .then(|| serde_json::from_slice::<PeerAuthoritySubmitRequestBody>(&body).ok())
             .flatten();
-        if matches!(&peer_unit, Some(PeerAuthoritySubmitRequest::RegisteredAtomicUnit(value)) if matches!(&value.unit, PeerRegisteredAtomicUnit::AuditPairedEvent(_)))
+        if matches!(&peer_unit, Some(PeerAuthoritySubmitRequestBody::RegisteredAtomicUnit(value)) if matches!(&value.unit, PeerRegisteredAtomicUnit::AuditPairedEvent(_)))
         {
             let blocked = {
                 let mut state = self.control.0.lock().unwrap();
@@ -222,18 +222,18 @@ impl Relay {
         if req.uri().path() == "/_arkret/self/events"
             && req.method() == salvo::http::Method::POST
             && let Ok(
-                arkret_models_collaboration::authority_commit::SelfAuthoritySubmitRequest::Event(
+                arkret_models_collaboration::authority_commit::SelfAuthoritySubmitRequestBody::Event(
                     submission,
                 ),
             ) = serde_json::from_slice::<
-                arkret_models_collaboration::authority_commit::SelfAuthoritySubmitRequest,
+                arkret_models_collaboration::authority_commit::SelfAuthoritySubmitRequestBody,
             >(&body)
         {
             self.control
                 .0
                 .lock()
                 .unwrap()
-                .event_submissions
+                .planned_events
                 .push(submission.event.event_id);
         }
         let mut headers = req.headers().clone();
@@ -314,7 +314,7 @@ impl Relay {
         if res.status_code == Some(StatusCode::OK)
             && matches!(
                 &peer_unit,
-                Some(PeerAuthoritySubmitRequest::AuthorityForwardAtomic(_))
+                Some(PeerAuthoritySubmitRequestBody::AuthorityForwardAtomic(_))
             )
         {
             let drop_ack = {
@@ -336,11 +336,11 @@ impl Relay {
         if req.uri().path() == "/_arkret/peer/streams/scan"
             && res.status_code == Some(StatusCode::OK)
         {
-            let request: StreamScanRequest = serde_json::from_slice(&body)?;
+            let request: StreamScanRequestBody = serde_json::from_slice(&body)?;
             let mut state = self.control.0.lock().unwrap();
             state.scan_requests.push(request.clone());
             if state.split_audit_scan && request.limit > 2 {
-                let mut page: arkret_models_collaboration::authority_commit::PeerStreamScanOutcome =
+                let mut page: arkret_models_collaboration::authority_commit::PeerStreamScanResponseBody =
                     serde_json::from_slice(&bytes)?;
                 page.validate_for_request(&request)?;
                 if let Some(index) = page.committed_events.iter().position(|item| matches!(item,
@@ -357,11 +357,11 @@ impl Relay {
         if req.uri().path() == "/_arkret/self/streams/scan"
             && res.status_code == Some(StatusCode::OK)
         {
-            let request: StreamScanRequest = serde_json::from_slice(&body)?;
+            let request: StreamScanRequestBody = serde_json::from_slice(&body)?;
             let mut state = self.control.0.lock().unwrap();
             state.scan_requests.push(request.clone());
             if state.stream.as_ref() == Some(&request.stream_ref) {
-                let mut outcome: StreamScanOutcome = serde_json::from_slice(&bytes)?;
+                let mut outcome: StreamScanResponseBody = serde_json::from_slice(&bytes)?;
                 outcome.validate_for_request(&request)?;
                 let old_len = outcome.committed_events.len();
                 outcome

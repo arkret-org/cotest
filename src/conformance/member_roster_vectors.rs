@@ -443,7 +443,7 @@ pub fn run_member_roster_handle_claims_subject_alignment_vector() -> Result<()> 
 /// VECT-COT-4c — `member_display_state_digest` is stable under issuer
 /// proof packing. Re-packing the same claim with different proof bytes MUST
 /// leave the digest unchanged, because the digest folds only
-/// `{claim_digest, status, revocation_digest, fresh_until}`.
+/// `{claim_digest, status, revocation_digest, cache_expires_at}`.
 pub fn run_member_roster_display_state_digest_stable_under_freshness_hints_vector() -> Result<()> {
     let realm = fake_realm()?;
     let actor = alice()?;
@@ -461,10 +461,10 @@ pub fn run_member_roster_display_state_digest_stable_under_freshness_hints_vecto
         claim_digest: pinned_claim_digest("33")?,
         status: HandleClaimStatus::Verified,
         revocation_digest: None,
-        fresh_until: expires,
+        cache_expires_at: expires,
     };
     // Same canonical inputs — a "refreshed" claim with the identical
-    // claim_digest / status / revocation_digest / fresh_until. Proof bytes
+    // claim_digest / status / revocation_digest / cache_expires_at. Proof bytes
     // are not part of this projection digest.
     let claim_b = claim_a.clone();
 
@@ -488,7 +488,7 @@ pub fn run_member_roster_display_state_digest_stable_under_freshness_hints_vecto
         claim_digest: pinned_claim_digest("44")?,
         status: HandleClaimStatus::Verified,
         revocation_digest: None,
-        fresh_until: expires,
+        cache_expires_at: expires,
     };
     let digest_changed = member_display_state_digest(&realm, &actor, &events, &[changed])
         .map_err(|e| anyhow!("member_display_state_digest changed: {e}"))?;

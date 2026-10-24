@@ -203,7 +203,7 @@ pub async fn run_agent_provision_grant_ceiling_boundary() -> Result<()> {
                 );
             }
             execute_owned_sql(&database.connect_url,
-                "CREATE FUNCTION agent_grant_projection_fault() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'owned Agent grant projection fault'; END $$; CREATE TRIGGER agent_grant_projection_fault BEFORE INSERT OR UPDATE ON capability_grant_current_results FOR EACH ROW EXECUTE FUNCTION agent_grant_projection_fault()").await?;
+                "CREATE FUNCTION agent_grant_projection_fault() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'owned Agent grant projection fault'; END $$; CREATE TRIGGER agent_grant_projection_fault BEFORE INSERT OR UPDATE ON capability_grant_current_states FOR EACH ROW EXECUTE FUNCTION agent_grant_projection_fault()").await?;
             let before_fault =
                 acceptance_rows_with_agent_stores(&database.connect_url, true).await?;
             let failed = controller
@@ -224,7 +224,7 @@ pub async fn run_agent_provision_grant_ceiling_boundary() -> Result<()> {
                 "late grant write fault changed accepted/Agent state"
             );
             execute_owned_sql(&database.connect_url,
-                "DROP TRIGGER agent_grant_projection_fault ON capability_grant_current_results; DROP FUNCTION agent_grant_projection_fault()").await?;
+                "DROP TRIGGER agent_grant_projection_fault ON capability_grant_current_states; DROP FUNCTION agent_grant_projection_fault()").await?;
         }
         let before = acceptance_rows_with_agent_stores(&database.connect_url, true).await?;
         let response = controller
@@ -240,8 +240,8 @@ pub async fn run_agent_provision_grant_ceiling_boundary() -> Result<()> {
                 response.status(),
                 response.text().await?
             );
-            let outcome: AuthoritySubmitOutcome = response.json().await?;
-            let AuthoritySubmitOutcome::Accepted { commit, .. } = outcome else {
+            let outcome: AuthoritySubmitResponseBody = response.json().await?;
+            let AuthoritySubmitResponseBody::Accepted { commit, .. } = outcome else {
                 bail!("narrower grant was not accepted")
             };
             ensure!(
@@ -257,7 +257,7 @@ pub async fn run_agent_provision_grant_ceiling_boundary() -> Result<()> {
                 "grant envelope bytes changed during admission"
             );
             let after = acceptance_rows_with_agent_stores(&database.connect_url, true).await?;
-            let replay: AuthoritySubmitOutcome = controller
+            let replay: AuthoritySubmitResponseBody = controller
                 .post("/_arkret/self/events")
                 .header(reqwest::header::CONTENT_TYPE, "application/json")
                 .body(bytes)
@@ -267,7 +267,7 @@ pub async fn run_agent_provision_grant_ceiling_boundary() -> Result<()> {
                 .json()
                 .await?;
             ensure!(
-                matches!(replay, AuthoritySubmitOutcome::Accepted { commit: ref original, .. }
+                matches!(replay, AuthoritySubmitResponseBody::Accepted { commit: ref original, .. }
                 if original == &commit),
                 "exact grant replay changed its Commit"
             );

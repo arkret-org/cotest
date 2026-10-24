@@ -56,7 +56,7 @@ pub(super) async fn run(
         inkson::signal::key_material_for_scope(&producer.state_store(), realm.as_str(), None)?;
     let mut payload = inkson::signal::SignalPayload::CallSignal {
         call_id: call.clone(),
-        seq: 301,
+        sequence: 301,
         signal: arkret::CallSignalData::Invite(arkret::CallInviteSignalData {
             lifetime_ms: 60_000,
             offer: arkret::SessionDescription {
@@ -113,10 +113,10 @@ pub(super) async fn run(
     control.set_path_unavailable(peer, false);
     // Invitation send is retry-unsafe/drop_unconfirmed. Recovery is a new
     // signed relation and ciphertext, never a replay of unconfirmed material.
-    let inkson::signal::SignalPayload::CallSignal { seq, .. } = &mut payload else {
+    let inkson::signal::SignalPayload::CallSignal { sequence, .. } = &mut payload else {
         unreachable!()
     };
-    *seq = 302;
+    *sequence = 302;
     let recovered = producer
         .prepare_call_invitation(holder.account.clone(), scope.clone(), &material, &payload)
         .await?;
@@ -146,10 +146,10 @@ pub(super) async fn run(
         "native consumer did not actually re-read full current"
     );
     control.set_path_unavailable(read, false);
-    let inkson::signal::SignalPayload::CallSignal { seq, .. } = &mut payload else {
+    let inkson::signal::SignalPayload::CallSignal { sequence, .. } = &mut payload else {
         unreachable!()
     };
-    *seq = 303;
+    *sequence = 303;
     let fresh = producer
         .prepare_call_invitation(holder.account.clone(), scope, &material, &payload)
         .await?;

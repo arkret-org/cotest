@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 
 use anyhow::{Context, Result, anyhow};
 use arkret_models_collaboration::device_messages::{
-    DeviceMessagesAckRequestBody, DeviceMessagesSendRequestBody,
+    DeviceMessagesAcknowledgementRequestBody, DeviceMessagesSendRequestBody,
 };
 use arkret_models_crypto::{KeysClaimRequestBody, KeysQueryRequestBody};
 use arkret_wire::{DeviceId, NonEmptyString};
@@ -176,13 +176,13 @@ pub async fn to_device_messages_are_idempotent_opaque_and_drained_once() -> Resu
     // Account bootstrap may queue actor-private updates; consume them through
     // the same explicit ACK so the queue under test starts empty.
     let bootstrap = expect_json(alice.get("/_arkret/self/device_messages"), StatusCode::OK).await?;
-    if let Some(ack_token) = bootstrap["ack_token"].as_str() {
+    if let Some(acknowledgement_token) = bootstrap["acknowledgement_token"].as_str() {
         expect_json(
-            alice
-                .post("/_arkret/self/device_messages/ack")
-                .json(&DeviceMessagesAckRequestBody {
-                    ack_token: ack_token.to_owned(),
-                }),
+            alice.post("/_arkret/self/device_messages/ack").json(
+                &DeviceMessagesAcknowledgementRequestBody {
+                    acknowledgement_token: acknowledgement_token.to_owned(),
+                },
+            ),
             StatusCode::OK,
         )
         .await?;
@@ -273,15 +273,15 @@ pub async fn to_device_messages_are_idempotent_opaque_and_drained_once() -> Resu
     );
     assert!(delivered_message["content"].get("plaintext").is_none());
 
-    let ack: arkret_models_collaboration::device_messages::DeviceMessagesAckOutcome =
+    let ack: arkret_models_collaboration::device_messages::DeviceMessagesAcknowledgementResponseBody =
         serde_json::from_value(
             expect_json(
                 server
                     .http()
                     .post(server.url("/_arkret/self/device_messages/ack"))
                     .bearer_auth(&token)
-                    .json(&DeviceMessagesAckRequestBody {
-                        ack_token: delivered["ack_token"].as_str().unwrap().to_owned(),
+                    .json(&DeviceMessagesAcknowledgementRequestBody {
+                        acknowledgement_token: delivered["acknowledgement_token"].as_str().unwrap().to_owned(),
                     }),
                 StatusCode::OK,
             )

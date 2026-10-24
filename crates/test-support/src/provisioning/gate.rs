@@ -12,9 +12,9 @@
 
 use anyhow::{Context, Result, bail, ensure};
 use arkret_models_collaboration::account_operations::{
-    AccountRegisterOutcome, AccountRegisterRequestBody,
+    AccountRegisterRequestBody, AccountRegisterResponseBody,
 };
-use arkret_models_collaboration::session_grants::SessionGrantOutcome;
+use arkret_models_collaboration::session_grants::SessionGrantResponseBody;
 use base64::Engine as _;
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
@@ -375,7 +375,7 @@ async fn exchange_account_handoff(
 
     // Validated through the same oracle the TypeScript side uses, so a change
     // in what a valid outcome looks like reaches both at once.
-    let validated = crate::wire::account_handoff_outcome(outcome)
+    let validated = crate::wire::account_handoff_response_body(outcome)
         .context("validate the account handoff outcome")?;
     let validated = json_object(&validated, "account handoff outcome")?;
     if validated.get("request_id").and_then(Value::as_str) != Some(request_id.as_str()) {
@@ -411,7 +411,7 @@ async fn exchange_account_handoff(
 
 /// A principal, founded through the canonical chain.
 ///
-/// The register response is parsed into the SDK's own `AccountRegisterOutcome`
+/// The register response is parsed into the SDK's own `AccountRegisterResponseBody`
 /// rather than kept as a `Value`. Two reasons. A caller reaching into
 /// `session_grant_outcome["account_id"]["station_id"]` writes that path again
 /// on each side of the bridge, and the copies get to drift. And the SDK type is
@@ -424,7 +424,7 @@ pub struct FoundedPrincipal {
     /// The exact SDK request whose accepted receipts must survive host recovery.
     pub accepted_request: AccountRegisterRequestBody,
     /// The register outcome, in the model's own type.
-    pub outcome: AccountRegisterOutcome,
+    pub outcome: AccountRegisterResponseBody,
     /// The resolvable DID the chain minted, from the registration checkpoint.
     pub did: String,
     /// The founding device, as asked for. The grant is checked to agree.
@@ -514,7 +514,7 @@ impl FoundedPrincipal {
     ///
     /// Not an `Option`: the chain asks for one and a founding that produced no
     /// grant did not finish, so [`found_principal`] fails before returning.
-    pub fn session_grant(&self) -> &SessionGrantOutcome {
+    pub fn session_grant(&self) -> &SessionGrantResponseBody {
         self.outcome
             .session_grant_outcome
             .as_ref()
@@ -806,10 +806,10 @@ pub async fn submit_prepared_principal_registration(
         .await
         .context("register the principal identity")?;
     // Parsed into the model's type, not read field by field. The Station's
-    // answer either is an `AccountRegisterOutcome` or it is not, and finding
+    // answer either is an `AccountRegisterResponseBody` or it is not, and finding
     // out here beats finding out in whichever assertion happens to touch the
     // missing field first.
-    let outcome: AccountRegisterOutcome = serde_json::from_value(registered.clone())
+    let outcome: AccountRegisterResponseBody = serde_json::from_value(registered.clone())
         .context("parse the identity-creation register outcome")?;
     let accepted_request: AccountRegisterRequestBody = serde_json::from_value(register_body)
         .context("parse the canonical frozen identity-creation request")?;
@@ -856,7 +856,7 @@ async fn verify_accepted_identity_material(
     coauth: &str,
     station: &str,
     request: &AccountRegisterRequestBody,
-    outcome: &AccountRegisterOutcome,
+    outcome: &AccountRegisterResponseBody,
 ) -> Result<()> {
     fn scoped_builder(
         base: &str,
@@ -879,13 +879,13 @@ async fn verify_accepted_identity_material(
         }
         Ok(builder)
     }
-    struct CompleteHistory(arkret_models_identity::IdentityLogListOutcome);
+    struct CompleteHistory(arkret_models_identity::IdentityLogListResponseBody);
     impl arkret_identity::AuthorityDidHistoryResolver for CompleteHistory {
         fn resolve_complete_history(
             &self,
             did: &arkret_wire::Did,
         ) -> std::result::Result<
-            arkret_models_identity::IdentityLogListOutcome,
+            arkret_models_identity::IdentityLogListResponseBody,
             arkret_identity::AuthorityHistoryUnavailable,
         > {
             if did != &self.0.did {
@@ -988,7 +988,7 @@ async fn verify_accepted_identity_material(
         witnesses.as_deref(),
     )?;
     let log_entries = log.log.raw_entries;
-    let history = CompleteHistory(arkret_models_identity::IdentityLogListOutcome {
+    let history = CompleteHistory(arkret_models_identity::IdentityLogListResponseBody {
         did: authority_did.clone(),
         method: arkret_models_identity::DidMethodUri::Webvh,
         native_history: Some(true),

@@ -965,7 +965,7 @@ pub fn encrypted_envelope(content_type: &str, ciphertext: &str) -> Value {
         "scheme": "mls_rfc9420",
         "version": 1,
         "group_id": "ak:mls:test",
-        "epoch": 1,
+        "epoch": "1",
         "content_type": content_type,
         "ciphertext": ciphertext,
         "authentication_tag": "opaque-tag",

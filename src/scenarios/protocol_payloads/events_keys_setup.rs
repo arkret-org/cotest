@@ -424,7 +424,7 @@ async fn upload_and_inspect_keys(
         StatusCode::OK,
     )
     .await?;
-    let query_keys: arkret_models_crypto::KeysQueryOutcome =
+    let query_keys: arkret_models_crypto::KeysQueryResponseBody =
         serde_json::from_value(query_keys_value.clone())
             .context("keys/query response is not the closed SDK outcome")?;
     // `device-lifecycle.md` §8.2 — this is the client-facing self surface. The
@@ -569,7 +569,7 @@ async fn upload_and_inspect_keys(
                 }),
             );
         assert!(
-            serde_json::from_value::<arkret_models_crypto::KeysQueryOutcome>(forged).is_err(),
+            serde_json::from_value::<arkret_models_crypto::KeysQueryResponseBody>(forged).is_err(),
             "self keys/query outcome accepted an origin proof shell member `{shell}`"
         );
     }

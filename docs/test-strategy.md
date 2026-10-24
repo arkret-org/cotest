@@ -451,7 +451,7 @@ interleaved when several tests run in parallel).
 `src/fixtures/scaffold.rs` ships `TestScaffold::fresh(label)` and
 `TestScaffold::fresh_multi(label, count)`, ergonomic wrappers over
 `ArkretServer::spawn` / `TestServerGroup::multi` that suffix the label
-with a `p<pid>-<seq>` token. The suffix guarantees that two parallel
+with a `p<pid>-<sequence>` token. The suffix guarantees that two parallel
 runs of the same scenario produce distinct service DIDs, transcript
 files, per-service log files, and on-disk blob roots without the
 scenario author having to coordinate names.

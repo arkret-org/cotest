@@ -1,7 +1,7 @@
 {
   "profile": "ak.profile.mimi_components_vectors.v1",
   "version": "2026-05-07",
-  "comment": "MIMI <-> Arkret typed current result family vectors per spec/v1/zh/extensions/mimi-interop.md §9.1 and criticality vectors per §9.2. Each event kind must write its registered result family. Arkret-only values use the private facade media type; criticality is preserved on both legs.",
+  "comment": "MIMI <-> Arkret current state family vectors per spec/v1/zh/extensions/mimi-interop.md §9.1 and criticality vectors per §9.2. Each event kind must write its registered result family. Arkret-only values use the private facade media type; criticality is preserved on both legs.",
   "criticality_mapping": {
     "comment": "Spec §9.2: Arkret criticality enum and the corresponding MIMI policy-component unknown-handling field.",
     "vectors": [
@@ -13,15 +13,15 @@
   "component_mapping": {
     "comment": "Selected registered result families from §9.1. `direction` values: bidirectional (round-trip-safe), arkret_only (facade emits private extension, no inverse).",
     "vectors": [
-      { "arkret_result_family": "realm_join_rule",                     "arkret_kind": "ak.realm.join_rule",                   "mimi_path": "participation.join_policy",     "direction": "bidirectional" },
-      { "arkret_result_family": "realm_history_access",                "arkret_kind": "ak.realm.history_access",              "direction": "arkret_only", "facade_media_type": "application/vnd.arkret.component+json" },
-      { "arkret_result_family": "realm_discovery",                     "arkret_kind": "ak.realm.discovery",                   "mimi_path": "participation.discoverability", "direction": "bidirectional" },
-      { "arkret_result_family": "realm_asset_privacy_policy",          "arkret_kind": "ak.realm.asset_privacy_policy",        "mimi_path": "asset",                         "direction": "bidirectional" },
-      { "arkret_result_family": "realm_policy_bundle",                 "arkret_kind": "ak.realm.policy_bundle",               "mimi_path": "participation",                 "direction": "bidirectional" },
-      { "arkret_result_family": "realm_alias",                         "arkret_kind": "ak.realm.alias",                       "direction": "arkret_only", "facade_media_type": "application/vnd.arkret.component+json" },
-      { "arkret_result_family": "realm_plaintext_visible_services",    "arkret_kind": "ak.realm.plaintext_visible_services", "direction": "arkret_only", "facade_media_type": "application/vnd.arkret.component+json" },
-      { "arkret_result_family": "realm_media_service",                 "arkret_kind": "ak.realm.media_service",               "direction": "arkret_only", "facade_media_type": "application/vnd.arkret.component+json" },
-      { "arkret_result_family": "realm_schema",                        "arkret_kind": "ak.realm.schema",                      "direction": "arkret_only", "facade_media_type": "application/vnd.arkret.component+json" }
+      { "arkret_state_family": "realm_join_rule",                     "arkret_kind": "ak.realm.join_rule",                   "mimi_path": "participation.join_policy",     "direction": "bidirectional" },
+      { "arkret_state_family": "realm_history_access",                "arkret_kind": "ak.realm.history_access",              "direction": "arkret_only", "facade_media_type": "application/vnd.arkret.component+json" },
+      { "arkret_state_family": "realm_discovery",                     "arkret_kind": "ak.realm.discovery",                   "mimi_path": "participation.discoverability", "direction": "bidirectional" },
+      { "arkret_state_family": "realm_asset_privacy_policy",          "arkret_kind": "ak.realm.asset_privacy_policy",        "mimi_path": "asset",                         "direction": "bidirectional" },
+      { "arkret_state_family": "realm_policy_bundle",                 "arkret_kind": "ak.realm.policy_bundle",               "mimi_path": "participation",                 "direction": "bidirectional" },
+      { "arkret_state_family": "realm_alias",                         "arkret_kind": "ak.realm.alias",                       "direction": "arkret_only", "facade_media_type": "application/vnd.arkret.component+json" },
+      { "arkret_state_family": "realm_plaintext_visible_services",    "arkret_kind": "ak.realm.plaintext_visible_services", "direction": "arkret_only", "facade_media_type": "application/vnd.arkret.component+json" },
+      { "arkret_state_family": "realm_media_service",                 "arkret_kind": "ak.realm.media_service",               "direction": "arkret_only", "facade_media_type": "application/vnd.arkret.component+json" },
+      { "arkret_state_family": "realm_schema",                        "arkret_kind": "ak.realm.schema",                      "direction": "arkret_only", "facade_media_type": "application/vnd.arkret.component+json" }
     ]
   }
 }

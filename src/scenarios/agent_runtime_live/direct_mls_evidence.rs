@@ -2,7 +2,7 @@
 
 use arkret::{ArkretMlsGroup, MlsGovernanceBindingPayload};
 use arkret_models_collaboration::direct_conversation::{
-    DirectConversationResolveOutcome, DirectConversationResolveRequestBody,
+    DirectConversationResolveRequestBody, DirectConversationResolveResponseBody,
 };
 
 use super::*;
@@ -65,7 +65,7 @@ fn authored(
 }
 
 async fn submit(controller: &TestActorClient, event: &Event) -> Result<arkret_wire::RealmCommit> {
-    let outcome: AuthoritySubmitOutcome = serde_json::from_value(
+    let outcome: AuthoritySubmitResponseBody = serde_json::from_value(
         expect_json(
             controller
                 .post("/_arkret/self/events")
@@ -78,7 +78,7 @@ async fn submit(controller: &TestActorClient, event: &Event) -> Result<arkret_wi
         .await?,
     )?;
     match outcome {
-        AuthoritySubmitOutcome::Accepted {
+        AuthoritySubmitResponseBody::Accepted {
             status: AuthorityCommitStatus::Committed,
             commit,
         } if commit.event_ref == event.event_id => Ok(commit),
@@ -120,8 +120,8 @@ async fn capture_claim_diagnostics(
             "SELECT jsonb_build_object(\
                 'packages',(SELECT COALESCE(jsonb_agg(to_jsonb(k)),'[]'::jsonb) FROM mls_key_packages k),\
                 'claims',(SELECT COALESCE(jsonb_agg(to_jsonb(c)),'[]'::jsonb) FROM peer_keypackage_claims c),\
-                'agent_status',(SELECT COALESCE(jsonb_agg(to_jsonb(s)),'[]'::jsonb) FROM agent_status_current_results s),\
-                'agent_keys',(SELECT COALESCE(jsonb_agg(to_jsonb(k)),'[]'::jsonb) FROM agent_key_current_results k),\
+                'agent_status',(SELECT COALESCE(jsonb_agg(to_jsonb(s)),'[]'::jsonb) FROM agent_status_current_states s),\
+                'agent_keys',(SELECT COALESCE(jsonb_agg(to_jsonb(k)),'[]'::jsonb) FROM agent_key_current_states k),\
                 'accounts',(SELECT COALESCE(jsonb_agg(jsonb_build_object('pk',a.pk,'principal_id',a.principal_id,'station_id',a.station_id)),'[]'::jsonb) FROM accounts a))",
             &[],
         )?.get(0);
@@ -177,7 +177,7 @@ pub(super) async fn join(
     };
     let creator_authority =
         arkret_models_collaboration::events_payloads::MlsGenesisCreatorLeafAuthority {
-            leaf_signature_key_b64u: creator.signature_key.clone(),
+            leaf_signature_key_base64url: creator.signature_key.clone(),
             endpoint: arkret_wire::MlsWelcomeRecipientEndpoint::Device {
                 device_id: principal.device_id.clone(),
             },
@@ -240,7 +240,7 @@ pub(super) async fn join(
         "requester_authorization":{"kind":"device","verification_method":method,
             "requester_device_id":principal.device_id,"device_authorize_event_id":principal.founding_authorize_event_id,
             "signed_at":arkret_canonical::format_timestamp_canonical(Utc::now()),
-            "signature":{"kid":method,"signature_algorithm":"Ed25519","sig":"AA"}}
+            "signature":{"kid":method,"signature_algorithm":"Ed25519","signature":"AA"}}
     }))?;
     let signed = arkret_models_crypto::keypackage_claim_authorization_signing_bytes(
         &request.unsigned_request(),
@@ -252,7 +252,7 @@ pub(super) async fn join(
     else {
         unreachable!()
     };
-    signature.sig = arkret_wire::Base64UrlString::new(
+    signature.signature = arkret_wire::Base64UrlString::new(
         URL_SAFE_NO_PAD.encode(principal.device_signing_key.sign(&signed).to_bytes()),
     )
     .map_err(anyhow::Error::msg)?;
@@ -272,7 +272,7 @@ pub(super) async fn join(
             captured.is_ok()
         );
     }
-    let claims: arkret_models_crypto::KeyPackagesClaimOutcome =
+    let claims: arkret_models_crypto::KeyPackagesClaimResponseBody =
         serde_json::from_value(claim_result?)?;
     let [claim] = claims.claims.as_slice() else {
         bail!("Direct claim did not select one Agent package");
@@ -314,14 +314,15 @@ pub(super) async fn join(
             verification_method: agent_session.verification_method.clone(),
         },
         keypackage_claim_ref: add.welcome.keypackage_claim_ref.clone(),
-        ciphertext_b64: add.welcome.ciphertext_b64.clone(),
+        ciphertext_base64url: add.welcome.ciphertext_base64url.clone(),
         producer_proof: arkret_wire::DetachedObjectSignature {
             context: arkret_wire::DetachedSignatureContext::MlsWelcomeDelivery,
             signature_algorithm: arkret_wire::DetachedSignatureAlgorithm::Ed25519,
             verification_method: method.clone(),
             signed_digest: arkret_wire::Hash::new(format!("sha256:{}", "0".repeat(64)))?,
             created_at: Utc::now(),
-            sig: arkret_wire::Base64UrlString::new("AA".to_owned()).map_err(anyhow::Error::msg)?,
+            signature: arkret_wire::Base64UrlString::new("AA".to_owned())
+                .map_err(anyhow::Error::msg)?,
         },
     };
     let mut unsigned = serde_json::to_value(&welcome)?;
@@ -341,7 +342,7 @@ pub(super) async fn join(
         welcomes: vec![welcome.clone()],
         idempotency_key: arkret_wire::UuidV7::new(unique_uuid7().parse()?)?,
     };
-    let outcome: AuthoritySubmitOutcome = serde_json::from_value(
+    let outcome: AuthoritySubmitResponseBody = serde_json::from_value(
         expect_json(
             controller_client
                 .post("/_arkret/self/events")
@@ -352,7 +353,7 @@ pub(super) async fn join(
         .await?,
     )?;
     ensure!(
-        matches!(&outcome, AuthoritySubmitOutcome::Accepted { status: AuthorityCommitStatus::Committed, commit: accepted } if accepted.event_ref == commit.event_id),
+        matches!(&outcome, AuthoritySubmitResponseBody::Accepted { status: AuthorityCommitStatus::Committed, commit: accepted } if accepted.event_ref == commit.event_id),
         "owned Direct MLS Add was not accepted: {outcome:?}"
     );
     let accepted = crate::scenarios::mls_lifecycle_live::accepted_full_view(
@@ -360,7 +361,7 @@ pub(super) async fn join(
         &commit.event_id,
     )
     .await?;
-    let base = arkret_wire::MlsGroupCurrent {
+    let base = arkret_wire::MlsGroupValue {
         effective_scope: scope.clone(),
         genesis_event_ref: genesis.event_id.clone(),
         cipher_suite: NonEmptyString::new("MLS_128_DHKEMX25519_AES128GCM_SHA256_Ed25519")
@@ -372,7 +373,7 @@ pub(super) async fn join(
         public_tree_ref: tree_ref,
     };
     controller.install_accepted_commit(&accepted, &base)?;
-    let (queued, ack_token) =
+    let (queued, acknowledgement_token) =
         crate::scenarios::mls_lifecycle_live::recipient_welcomes(runtime).await?;
     ensure!(queued.contains(&welcome));
     let own_claims = runtime
@@ -482,7 +483,7 @@ pub(super) async fn join(
                 kid: NonEmptyString::new(agent_session.verification_method.to_string())
                     .map_err(anyhow::Error::msg)?,
                 signature_algorithm: None,
-                sig: arkret_wire::Base64UrlString::new("AA".to_owned())
+                signature: arkret_wire::Base64UrlString::new("AA".to_owned())
                     .map_err(anyhow::Error::msg)?,
             },
         },
@@ -497,8 +498,8 @@ pub(super) async fn join(
         .post("/_arkret/self/device_messages/ack")
         .header("Content-Type", "application/json")
         .body(arkret_canonical::canonical_json_bytes(
-            &arkret_models_collaboration::device_messages::DeviceMessagesAckRequestBody {
-                ack_token,
+            &arkret_models_collaboration::device_messages::DeviceMessagesAcknowledgementRequestBody {
+                acknowledgement_token,
             },
         )?)
         .send()
@@ -557,7 +558,7 @@ pub(super) async fn join(
             .is_err(),
         "losing binding Event left a committed write"
     );
-    let retry: AuthoritySubmitOutcome = serde_json::from_value(
+    let retry: AuthoritySubmitResponseBody = serde_json::from_value(
         expect_json(
             controller_client.post("/_arkret/self/events").json(
                 &arkret_wire::EventAdmissionSubmission::new(controller_bound.clone()),
@@ -567,7 +568,7 @@ pub(super) async fn join(
         .await?,
     )?;
     ensure!(
-        matches!(&retry, AuthoritySubmitOutcome::Accepted { status: AuthorityCommitStatus::Duplicate, commit }
+        matches!(&retry, AuthoritySubmitResponseBody::Accepted { status: AuthorityCommitStatus::Duplicate, commit }
         if commit == &binding_commit && commit.event_ref == controller_bound.event_id),
         "exact controller binding retry did not replay its original Commit: {retry:?}"
     );
@@ -580,7 +581,7 @@ pub(super) async fn join(
             },
         })
         .await?;
-    let DirectConversationResolveOutcome::Found {
+    let DirectConversationResolveResponseBody::Found {
         coordinates,
         group_state_ref,
         ..

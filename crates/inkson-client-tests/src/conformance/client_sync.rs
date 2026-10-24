@@ -8,7 +8,7 @@ use arkret_models_collaboration::sync_frames::account_subscribe::AccountSubscrib
 use arkret_wire::{Event, ScopeRef};
 use cotest::scenarios::mls_lifecycle_live::Member;
 use cotest::scenarios::sidecar_authority_live::SidecarSyncObserver;
-use garth::{AccountSubscribeBatch, AccountSubscribeTransport, SyncRequestBody};
+use garth::{AccountSubscribeBatch, AccountSubscribeParameters, AccountSubscribeTransport};
 use inkson::sync_engine::NativeAccountHost;
 use serde_json::Value;
 
@@ -162,7 +162,7 @@ struct HeldBatch(Mutex<Option<AccountSubscribeBatch>>);
 impl AccountSubscribeTransport for HeldBatch {
     async fn subscribe(
         &self,
-        _request: &SyncRequestBody,
+        _request: &AccountSubscribeParameters,
     ) -> garth::Result<AccountSubscribeSnapshotResult> {
         self.0
             .lock()
@@ -176,7 +176,7 @@ impl AccountSubscribeTransport for HeldBatch {
 impl AccountSubscribeTransport for ObservedRail {
     async fn subscribe(
         &self,
-        request: &SyncRequestBody,
+        request: &AccountSubscribeParameters,
     ) -> garth::Result<AccountSubscribeSnapshotResult> {
         let mut batch = self.http.account_subscribe_batch(request).await?;
         if let Some(missing) = &self.missing {
@@ -226,7 +226,7 @@ struct RecoveryRail {
     expected_cursor: String,
     expected_error: Option<&'static str>,
     before: Value,
-    requests: Mutex<Vec<SyncRequestBody>>,
+    requests: Mutex<Vec<AccountSubscribeParameters>>,
     refusals: Mutex<Vec<String>>,
 }
 
@@ -240,9 +240,9 @@ struct StreamGapRail {
     affected_stream: arkret_wire::CommitStreamRef,
     healthy_stream: arkret_wire::CommitStreamRef,
     healthy_commit: Mutex<Option<arkret_wire::RealmCommit>>,
-    ack_token: String,
+    acknowledgement_token: String,
     ack_before: String,
-    requests: Mutex<Vec<SyncRequestBody>>,
+    requests: Mutex<Vec<AccountSubscribeParameters>>,
     retry_before: Mutex<Option<Value>>,
     retry_dependencies: Mutex<Vec<arkret_wire::CommittedEventRef>>,
 }
@@ -250,7 +250,7 @@ struct StreamGapRail {
 impl AccountSubscribeTransport for StreamGapRail {
     async fn subscribe(
         &self,
-        request: &SyncRequestBody,
+        request: &AccountSubscribeParameters,
     ) -> garth::Result<AccountSubscribeSnapshotResult> {
         let visit = {
             let mut requests = self.requests.lock().unwrap();
@@ -291,8 +291,8 @@ impl AccountSubscribeTransport for StreamGapRail {
                 ensure!(
                     read_database_evidence(
                         &self.database_url,
-                        "SELECT row_to_json(t)::text FROM device_message_ack_tokens t WHERE ack_token=$1",
-                        &[&self.ack_token]
+                        "SELECT row_to_json(t)::text FROM device_message_ack_tokens t WHERE acknowledgement_token=$1",
+                        &[&self.acknowledgement_token]
                     )? == self.ack_before,
                     "stream recovery reset the issued recipient ACK"
                 );
@@ -415,7 +415,7 @@ fn read_database_evidence(
 impl AccountSubscribeTransport for RecoveryRail {
     async fn subscribe(
         &self,
-        request: &SyncRequestBody,
+        request: &AccountSubscribeParameters,
     ) -> garth::Result<AccountSubscribeSnapshotResult> {
         let call = {
             let mut requests = self.requests.lock().unwrap();
@@ -503,7 +503,7 @@ impl Probe {
         host: &NativeAccountHost,
         database_url: &str,
     ) -> Result<()> {
-        use arkret_models_collaboration::device_messages::DeviceMessagesAckRequestBody;
+        use arkret_models_collaboration::device_messages::DeviceMessagesAcknowledgementRequestBody;
         let http = controller.client.sdk();
         ensure!(
             http.receive_device_messages(None, None)
@@ -567,7 +567,7 @@ impl Probe {
             "configured endpoint was not exactly full"
         );
         let writes = read_database_evidence(database_url, QUEUE_WRITE_EVIDENCE, &[])?;
-        let account_request = SyncRequestBody {
+        let account_request = AccountSubscribeParameters {
             catchup: Some(true),
             filter: Some(garth::AccountFilter {
                 realm_ids: Some(vec![]),
@@ -592,7 +592,7 @@ impl Probe {
             .iter()
             .filter_map(|frame| frame.to_device.as_ref())
             .rfind(|queue| !queue.deliveries.is_empty())
-            .and_then(|queue| queue.ack_token.as_deref())
+            .and_then(|queue| queue.acknowledgement_token.as_deref())
             .context("Account delivery ACK")?;
         let first = http.receive_device_messages(None, Some(1)).await?;
         ensure!(
@@ -655,14 +655,16 @@ impl Probe {
             controller,
             host,
             &backfill,
-            last.ack_token.as_deref().context("backfill prefix ACK")?,
+            last.acknowledgement_token
+                .as_deref()
+                .context("backfill prefix ACK")?,
             database_url,
             QUEUE_CASES[0],
         )
         .await?;
         let old_ack = http
-            .ack_device_messages(&DeviceMessagesAckRequestBody {
-                ack_token: main_token.into(),
+            .ack_device_messages(&DeviceMessagesAcknowledgementRequestBody {
+                acknowledgement_token: main_token.into(),
             })
             .await?;
         ensure!(
@@ -670,7 +672,7 @@ impl Probe {
             "main-path ACK did not share backfill's cumulative confirmation"
         );
         let after_ack = http
-            .account_subscribe_batch(&SyncRequestBody {
+            .account_subscribe_batch(&AccountSubscribeParameters {
                 after: Some(main.cursor),
                 catchup: Some(false),
                 ..account_request
@@ -730,7 +732,7 @@ impl Probe {
         case_id: &str,
     ) -> Result<()> {
         use arkret_models_collaboration::device_messages::{
-            DeviceMessagesAckRequestBody, RecipientDelivery,
+            DeviceMessagesAcknowledgementRequestBody, RecipientDelivery,
         };
         ensure!(
             !deliveries.is_empty(),
@@ -769,8 +771,8 @@ impl Probe {
         let ack = controller
             .client
             .sdk()
-            .ack_device_messages(&DeviceMessagesAckRequestBody {
-                ack_token: token.to_owned(),
+            .ack_device_messages(&DeviceMessagesAcknowledgementRequestBody {
+                acknowledgement_token: token.to_owned(),
             })
             .await?;
         ensure!(
@@ -790,7 +792,7 @@ impl Probe {
         ensure!(
             read_database_evidence(
                 database_url,
-                "SELECT (consumed_at IS NOT NULL)::text FROM device_message_ack_tokens WHERE ack_token=$1",
+                "SELECT (consumed_at IS NOT NULL)::text FROM device_message_ack_tokens WHERE acknowledgement_token=$1",
                 &[&token]
             )? == "true",
             "service did not consume the issued ACK token"
@@ -834,7 +836,7 @@ impl Probe {
         let batch = foreign
             .client
             .sdk()
-            .account_subscribe_batch(&SyncRequestBody {
+            .account_subscribe_batch(&AccountSubscribeParameters {
                 catchup: Some(true),
                 ..Default::default()
             })
@@ -921,11 +923,11 @@ impl Probe {
             "recovery fixture requires a nonempty recipient queue"
         );
         let token = queue
-            .ack_token
+            .acknowledgement_token
             .context("recovery fixture requires an issued ACK token")?;
         let ack_record = read_database_evidence(
             database_url,
-            "SELECT row_to_json(t)::text FROM device_message_ack_tokens t WHERE ack_token=$1 AND consumed_at IS NULL AND expires_at>now()",
+            "SELECT row_to_json(t)::text FROM device_message_ack_tokens t WHERE acknowledgement_token=$1 AND consumed_at IS NULL AND expires_at>now()",
             &[&token],
         )?;
         for (index, name) in RECOVERY_CASES.into_iter().enumerate() {
@@ -1012,7 +1014,7 @@ impl Probe {
             );
             let ack_after = read_database_evidence(
                 database_url,
-                "SELECT row_to_json(t)::text FROM device_message_ack_tokens t WHERE ack_token=$1 AND consumed_at IS NULL AND expires_at>now()",
+                "SELECT row_to_json(t)::text FROM device_message_ack_tokens t WHERE acknowledgement_token=$1 AND consumed_at IS NULL AND expires_at>now()",
                 &[&token],
             )?;
             ensure!(
@@ -1122,7 +1124,7 @@ impl Probe {
             &host,
             &fresh.deliveries,
             fresh
-                .ack_token
+                .acknowledgement_token
                 .as_deref()
                 .context("fresh delivery ACK token")?,
             database_url,
@@ -1444,7 +1446,7 @@ impl Probe {
             realm.clone(),
         )
         .await?;
-        let request = SyncRequestBody {
+        let request = AccountSubscribeParameters {
             catchup: Some(true),
             filter: Some(garth::AccountFilter {
                 realm_ids: Some(vec![realm.clone()]),
@@ -1558,7 +1560,7 @@ impl Probe {
         let incremental = controller
             .client
             .sdk()
-            .account_subscribe_batch(&SyncRequestBody {
+            .account_subscribe_batch(&AccountSubscribeParameters {
                 after: Some(old.cursor.clone()),
                 catchup: Some(false),
                 ..request
@@ -1767,7 +1769,7 @@ impl Probe {
         let scan = controller
             .client
             .sdk()
-            .scan_commit_stream(&arkret_wire::StreamScanRequest {
+            .scan_commit_stream(&arkret_wire::StreamScanRequestBody {
                 realm_id: realm.clone(),
                 stream_ref: stream.clone(),
                 direction: arkret_wire::StreamScanDirection::After(Some(old_position)),
@@ -2026,7 +2028,7 @@ impl Probe {
                 && commits[1].previous_commit_ref.as_ref() == Some(&commits[0].commit_id),
             "row gap setup has no genuine accepted continuous originals"
         );
-        let request = arkret_wire::StreamScanRequest {
+        let request = arkret_wire::StreamScanRequestBody {
             realm_id: realm.clone(),
             stream_ref: stream.clone(),
             direction: arkret_wire::StreamScanDirection::After(None),
@@ -2081,11 +2083,13 @@ impl Probe {
             arkret_models_collaboration::device_messages::RecipientDelivery::DeviceMessage { device_message }
             if device_message.device_message_id.as_str() == "ak:device_message:01964137-2000-7000-8000-000000000028")),
             "row gap lacks its real nonempty delivery");
-        let ack_token = delivery.ack_token.context("row gap issued ACK")?;
+        let acknowledgement_token = delivery
+            .acknowledgement_token
+            .context("row gap issued ACK")?;
         let ack_before = read_database_evidence(
             database_url,
-            "SELECT row_to_json(t)::text FROM device_message_ack_tokens t WHERE ack_token=$1",
-            &[&ack_token],
+            "SELECT row_to_json(t)::text FROM device_message_ack_tokens t WHERE acknowledgement_token=$1",
+            &[&acknowledgement_token],
         )?;
         let fault = self
             .scan_relay
@@ -2094,7 +2098,7 @@ impl Probe {
             .context("real HTTP scan relay")?
             .control();
         fault.omit_position_one(stream.clone());
-        let skipped: arkret_wire::StreamScanOutcome = serde_json::from_value(
+        let skipped: arkret_wire::StreamScanResponseBody = serde_json::from_value(
             cotest::harness::expect_json(
                 controller
                     .client
@@ -2131,7 +2135,7 @@ impl Probe {
                 realm_id: realm.clone(),
             },
             healthy_commit: Default::default(),
-            ack_token,
+            acknowledgement_token,
             ack_before,
             requests: Default::default(),
             retry_before: Default::default(),
@@ -2145,8 +2149,8 @@ impl Probe {
         ensure!(
             read_database_evidence(
                 database_url,
-                "SELECT row_to_json(t)::text FROM device_message_ack_tokens t WHERE ack_token=$1",
-                &[&rail.ack_token]
+                "SELECT row_to_json(t)::text FROM device_message_ack_tokens t WHERE acknowledgement_token=$1",
+                &[&rail.acknowledgement_token]
             )? == rail.ack_before,
             "repaired row gap reset the issued ACK"
         );
@@ -2588,13 +2592,13 @@ impl Probe {
                 == 1,
             "gap setup lacks its exact newly accepted recipient delivery"
         );
-        let ack_token = delivery
-            .ack_token
+        let acknowledgement_token = delivery
+            .acknowledgement_token
             .context("nonempty issued recipient ACK")?;
         let ack_before = read_database_evidence(
             database_url,
-            "SELECT row_to_json(t)::text FROM device_message_ack_tokens t WHERE ack_token=$1",
-            &[&ack_token],
+            "SELECT row_to_json(t)::text FROM device_message_ack_tokens t WHERE acknowledgement_token=$1",
+            &[&acknowledgement_token],
         )?;
         let rail = StreamGapRail {
             row_fault: None,
@@ -2608,7 +2612,7 @@ impl Probe {
                 realm_id: realm.clone(),
             },
             healthy_commit: Default::default(),
-            ack_token,
+            acknowledgement_token,
             ack_before,
             requests: Default::default(),
             retry_before: Default::default(),
@@ -2995,7 +2999,7 @@ pub async fn run_sync_production_cases(
         );
         let install = steps
             .iter()
-            .find(|step| step["action"] == "install_typed_current_result")
+            .find(|step| step["action"] == "install_current_state")
             .context("checkpoint case has no install")?;
         ensure!(
             install["durable"] == positive

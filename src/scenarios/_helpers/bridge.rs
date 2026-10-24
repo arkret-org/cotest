@@ -5,8 +5,8 @@ use std::sync::{Arc, Mutex};
 use anyhow::{Context, Result};
 use arkret_models_collaboration::device_pairing::{
     DevicePairingCode, DevicePairingNonce, DevicePairingRequestId, DevicePairingResolveRequestBody,
-    DevicePairingStageOutcome, DevicePairingStageRequestBody, DevicePairingState,
-    DevicePairingStatusOutcome, DevicePairingStatusRequestBody,
+    DevicePairingStageRequestBody, DevicePairingStageResponseBody, DevicePairingState,
+    DevicePairingStatusRequestBody, DevicePairingStatusResponseBody,
 };
 use salvo::affix_state;
 use salvo::prelude::{Depot, Json, Request, Response, Router, handler};
@@ -526,7 +526,7 @@ async fn mock_pairing_stage(req: &mut Request, depot: &mut Depot, res: &mut Resp
         .get(salvo::http::header::HOST)
         .and_then(|value| value.to_str().ok())
         .unwrap_or_default();
-    let outcome = DevicePairingStageOutcome {
+    let outcome = DevicePairingStageResponseBody {
         device_pairing_request_id: id.clone(),
         pairing_code: code.clone(),
         gate_audience_uri: format!("http://{host}"),
@@ -601,7 +601,7 @@ async fn mock_pairing_status(req: &mut Request, depot: &mut Depot, res: &mut Res
         res.status_code(salvo::http::StatusCode::NOT_FOUND);
         return;
     }
-    res.render(Json(DevicePairingStatusOutcome {
+    res.render(Json(DevicePairingStatusResponseBody {
         state: DevicePairingState::Staged,
         device_id: None,
         authorized_event_ref: None,

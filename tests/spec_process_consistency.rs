@@ -29,11 +29,11 @@ fn event_kind<'a>(registry: &'a Value, kind: &str) -> &'a Value {
 fn invite_create_claims_one_typed_live_target_slot() {
     let registry = read_json("registry/contract-registry.json");
     let create = event_kind(&registry, "ak.invite.create");
-    let families = create["result_writes"]
+    let families = create["state_writes"]
         .as_array()
         .expect("typed result writes")
         .iter()
-        .map(|write| write["result_family"].as_str().expect("result family"))
+        .map(|write| write["state_family"].as_str().expect("result family"))
         .collect::<Vec<_>>();
     assert_eq!(
         families,
@@ -43,13 +43,13 @@ fn invite_create_claims_one_typed_live_target_slot() {
             "invite_live_target"
         ]
     );
-    let slot = &create["result_writes"][2];
+    let slot = &create["state_writes"][2];
     assert_eq!(
-        slot["result_selector"]["components"][0]["field"],
+        slot["state_selector"]["components"][0]["field"],
         "payload.invitee_account_id"
     );
     assert_eq!(
-        slot["result_projection"]["value_projection"]["members"][0]["envelope_field"],
+        slot["state_projection"]["value_projection"]["members"][0]["envelope_field"],
         "event_id"
     );
 
@@ -70,11 +70,11 @@ fn directed_invite_terminal_events_release_the_typed_slot() {
     for kind in ["ak.invite.accept", "ak.invite.cancel", "ak.invite.revoke"] {
         let row = event_kind(&registry, kind);
         assert!(
-            row["result_writes"]
+            row["state_writes"]
                 .as_array()
                 .expect("typed result writes")
                 .iter()
-                .any(|write| write["result_family"] == "invite_live_target"),
+                .any(|write| write["state_family"] == "invite_live_target"),
             "{kind} omits live-target release"
         );
     }

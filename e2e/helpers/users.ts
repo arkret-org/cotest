@@ -2050,7 +2050,7 @@ export async function pairSiblingDeviceSession(
   );
   try {
     const stageRequest = {
-      new_device_pubkey: {
+      new_device_public_key: {
         kty: "OKP",
         kid: deviceId,
         algorithm: "Ed25519",

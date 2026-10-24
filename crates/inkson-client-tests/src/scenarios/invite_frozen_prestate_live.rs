@@ -41,7 +41,7 @@ async fn observe(client: &TestActorClient, realm_id: &str) -> Result<RealmObserv
     let mut committed_events: Vec<arkret_wire::CommittedEventView> = Vec::new();
     let mut after = None;
     loop {
-        let request = arkret_wire::StreamScanRequest {
+        let request = arkret_wire::StreamScanRequestBody {
             realm_id: realm.clone(),
             stream_ref: arkret_wire::CommitStreamRef::Realm {
                 realm_id: realm.clone(),
@@ -49,7 +49,7 @@ async fn observe(client: &TestActorClient, realm_id: &str) -> Result<RealmObserv
             direction: arkret_wire::StreamScanDirection::After(after),
             limit: 1000,
         };
-        let outcome: arkret_wire::StreamScanOutcome = serde_json::from_value(
+        let outcome: arkret_wire::StreamScanResponseBody = serde_json::from_value(
             crate::harness::expect_json(
                 client
                     .post("/_arkret/self/streams/scan")

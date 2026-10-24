@@ -39,7 +39,7 @@ import {
 
 test.describe.configure({ mode: "serial" });
 
-// Subset of `service-operation-dtos.schema.json#/$defs/ProjectionStrandRow`
+// Subset of `service-operation-dtos.schema.json#/$defs/StrandRow`
 // that this suite asserts on. `stage` / `stage_changed_at` are the second half
 // of the common-fields.md §3.2 lifecycle cluster and sit immediately after
 // `state_changed_at` in the DTO; both are absent until `ak.strand.stage.set`

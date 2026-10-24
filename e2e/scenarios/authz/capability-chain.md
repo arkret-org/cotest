@@ -17,7 +17,7 @@ operation）；仅存的同步读面是注册端点 `POST /_arkret/self/authz/ch
 - `authz/capabilities.md` §10 — Authority chain；§10.1 收窄不变量（actions ⊆ issuer authority、resources 收窄、`effective_expires_at` ≤ issuer authority，违反 → `failed_precondition` reason=`authority_expiry_widening`（窗口）或 `schema_violation`（actions/resources 越界））；§10.3 revoke 因果传播（`grant_revoked_upstream`）
 - `authz/capabilities.md` §12 — Revocation 必须显式事件,不是删除记录
 - `authz/event-auth-state-resolution.md` §6 — authority chain revocation 传播
-- openapi:`ak.self.authz.read.check.v1`(AuthzCheckOutcome 五值 `decision`)、`ak.self.authz.grants.read.effective.v1`(GrantList)
+- openapi:`ak.self.authz.read.check.v1`(AuthorizationCheckResponseBody 五值 `decision`)、`ak.self.authz.grants.read.effective.v1`(EffectiveGrantSnapshot)
 
 ## 拓扑
 
@@ -39,7 +39,7 @@ operation）；仅存的同步读面是注册端点 `POST /_arkret/self/authz/ch
 2. 断言:`POST /_arkret/self/authz/check {actor_id: bob, action: ak.message.create, resource: {kind: realm}}` → `decision = "hard_deny"`(grant 之前)
 3. alice 提交 `ak.capability.grant` 事件(issuer=alice、subject=bob、actions=[`ak.message.create`]、`expires_at=+1h`,grant 对象带 detached-JWS proof)
 4. 断言:同一 authz/check → `decision = "allow"`
-5. 断言:`GET /_arkret/self/authz/effective-grants?subject=<bob>&realm_id=<R>`(realm owner 可查)返回的 GrantList 含该 grant id
+5. 断言:`GET /_arkret/self/authz/effective-grants?subject=<bob>&realm_id=<R>`(realm owner 可查)返回的 EffectiveGrantSnapshot 含该 grant id
 
 ### Phase B — §10 合法收窄再授权
 

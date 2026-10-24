@@ -54,7 +54,7 @@ try {
         [pscustomobject]@{ name = "json-root-private-key.log"; line = "{`"root_private_key`":`"$hexSecret`"}"; pattern = "json_secret_field" },
         [pscustomobject]@{ name = "json-recovery-key.log"; line = "{`"recovery_key`":`"$mnemonic`"}"; pattern = "json_secret_field" },
         [pscustomobject]@{ name = "json-hkdf-prk.log"; line = "{`"hkdf_prk`":`"$hexSecret`"}"; pattern = "json_secret_field" },
-        [pscustomobject]@{ name = "json-secret-b64u.log"; line = "{`"secret_b64u`":`"$hexSecret`"}"; pattern = "json_secret_field" },
+        [pscustomobject]@{ name = "json-secret-b64u.log"; line = "{`"secret_base64url`":`"$hexSecret`"}"; pattern = "json_secret_field" },
         [pscustomobject]@{ name = "json-invite-code.log"; line = "{`"oob_code`":`"$inviteCode`"}"; pattern = "json_secret_field" },
         [pscustomobject]@{ name = "json-token-salt.log"; line = "{`"token_salt`":`"$hexSecret`"}"; pattern = "recovery_private_material_field" },
         [pscustomobject]@{ name = "json-pepper.log"; line = "{`"pepper`":`"$hexSecret`"}"; pattern = "recovery_private_material_field" },

@@ -4,7 +4,7 @@
 
 ## 范围
 
-- `PUT /_arkret/self/keys/backups/{backup_id}` 接受 `passphrase_kdf` envelope(含 §7.6 series 链字段 `series_id`/`series_seq`),且 actor 必须等于当前 session actor。
+- `PUT /_arkret/self/keys/backups/{backup_id}` 接受 `passphrase_kdf` envelope(含 §7.6 series 链字段 `series_id`/`series_sequence`),且 actor 必须等于当前 session actor。
 - `POST /_arkret/self/keys/backups/{backup_id}/unlock` 只允许 owner 携带 JSON body `proof` 解锁全密文; bearer-only 必须被拒(spec §7.7.1/§7.8)。
 - `GET /_arkret/self/keys/backups` 按 owner 过滤,不得暴露 Recovery Key 词串或 plaintext key material。
 - Argon2id floor:常规 backup 至少 `memory_kib=65536, iterations=3, parallelism>=1`;`mixed_secret_storage=true` 走更高 floor。

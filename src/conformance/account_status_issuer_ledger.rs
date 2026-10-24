@@ -4,7 +4,7 @@
 //! Account lifecycle is **not** a Realm finality domain. An `AccountStatusRecord`
 //! is not an Event: it never enters a commit stream, is never covered by a
 //! `RealmCommit`, and never waits for a Station checkpoint. Its ordering comes
-//! from its own compare-and-swap chain — `status_seq` plus
+//! from its own compare-and-swap chain — `status_sequence` plus
 //! `previous_account_status_record_id` — keyed by `(account_authority_id,
 //! account_id)`.
 //!
@@ -459,7 +459,7 @@ fn verify_record_carries_no_commit_or_stream_carrier(
         }
         // The chain link it does carry is its own predecessor record id.
         ensure!(
-            members.contains("status_seq") && members.contains("binding_version"),
+            members.contains("status_sequence") && members.contains("binding_version"),
             "{}: the record lost its own ordering fields",
             declared.name
         );
@@ -502,16 +502,16 @@ fn verify_chain_is_a_cas_successor_chain(chain: &[DeclaredRecord]) -> Result<()>
         match previous {
             None => {
                 ensure!(
-                    record.status_seq == 1
+                    record.status_sequence == 1
                         && record.previous_account_status_record_id.is_none()
                         && record.status == AccountStatus::Active,
-                    "{}: genesis must be an active record at status_seq 1 with no predecessor",
+                    "{}: genesis must be an active record at status_sequence 1 with no predecessor",
                     declared.name
                 );
             }
             Some(head) => {
                 ensure!(
-                    record.status_seq == head.status_seq + 1,
+                    record.status_sequence == head.status_sequence + 1,
                     "{}: the chain must advance by exactly one sequence",
                     declared.name
                 );
@@ -555,8 +555,8 @@ fn verify_genesis_rules(fixture: &Value, chain: &[DeclaredRecord]) -> Result<()>
         "account status genesis must be created in the binding transaction"
     );
     ensure!(
-        required_u64(rules, "status_seq")? == 1,
-        "account status genesis must be status_seq 1"
+        required_u64(rules, "status_sequence")? == 1,
+        "account status genesis must be status_sequence 1"
     );
     ensure!(
         required_str(rules, "status")? == "active",
@@ -594,10 +594,10 @@ fn verify_genesis_rules(fixture: &Value, chain: &[DeclaredRecord]) -> Result<()>
         "a genesis record that is not active was accepted"
     );
     let mut zero = genesis.record.unsigned();
-    zero.status_seq = 0;
+    zero.status_sequence = 0;
     ensure!(
         zero.validate().is_err(),
-        "a record at status_seq 0 was accepted"
+        "a record at status_sequence 0 was accepted"
     );
     Ok(())
 }
@@ -613,7 +613,7 @@ fn verify_successor_cas_contract(ledger_owner: &Value, fixture: &Value) -> Resul
         "the issuer-ledger compare-and-swap key drifted: {key:?}"
     );
     ensure!(
-        required_str(cas, "required_status_seq")? == "head.status_seq + 1",
+        required_str(cas, "required_status_sequence")? == "head.status_sequence + 1",
         "a successor must take exactly the next sequence"
     );
     ensure!(
@@ -686,7 +686,7 @@ fn verify_replica_classification(
                     .get(&head_id)
                     .ok_or_else(|| anyhow!("{name}: durable head {head_id} is not declared"))?;
                 ensure!(
-                    declared.record.status_seq == required_u64(head, "status_seq")?
+                    declared.record.status_sequence == required_u64(head, "status_sequence")?
                         && declared.record.binding_version
                             == required_u64(head, "binding_version")?,
                     "{name}: the declared durable head disagrees with the record it names"
@@ -755,13 +755,13 @@ fn compare_classification(
         (
             "dependency_missing",
             Some(AccountStatusReplicaAppend::DependencyMissing {
-                required_status_seq,
+                required_status_sequence,
                 ..
             }),
         ) => {
             ensure!(
-                *required_status_seq == required_u64(expected, "required_status_seq")?,
-                "{name}: the receiver reported required_status_seq {required_status_seq}"
+                *required_status_sequence == required_u64(expected, "required_status_sequence")?,
+                "{name}: the receiver reported required_status_sequence {required_status_sequence}"
             );
             ensure!(
                 required_bool(row, "retryable_for_exact_record")?,
@@ -849,7 +849,7 @@ fn receipt_for(record: &AccountStatusRecord) -> Result<AccountStatusReceipt> {
         record_digest: record_digest.clone(),
         account_authority_id: record.account_authority_id.clone(),
         account_id: record.account_id.clone(),
-        status_seq: record.status_seq,
+        status_sequence: record.status_sequence,
         receiver_id: record.account_id.station_id.clone(),
         accepted_at: record.issued_at,
         verification_method: verification_method.clone(),
@@ -860,7 +860,7 @@ fn receipt_for(record: &AccountStatusRecord) -> Result<AccountStatusReceipt> {
         record_digest: receipt.record_digest.clone(),
         account_authority_id: receipt.account_authority_id.clone(),
         account_id: receipt.account_id.clone(),
-        status_seq: receipt.status_seq,
+        status_sequence: receipt.status_sequence,
         receiver_id: receipt.receiver_id.clone(),
         accepted_at: receipt.accepted_at,
         proof: head_receipt_proof(&receipt, verification_method)?,

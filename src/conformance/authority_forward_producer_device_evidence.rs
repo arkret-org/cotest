@@ -10,7 +10,7 @@
 //!
 //! The protocol decisions are the SDK's: `Event::account_device_producer`, the
 //! validating `PeerAuthorityForward*Request` constructors, the untagged
-//! `PeerAuthoritySubmitRequest` wire parser and
+//! `PeerAuthoritySubmitRequestBody` wire parser and
 //! `arkret_identity::verify_forwarded_account_device_producer`. This module adds an
 //! independent model of the two Stations around them — the account Station's
 //! live gate, fresh signing and persist-before-send ledger, and the governance
@@ -27,8 +27,8 @@ use arkret_canonical::DigestSuite;
 use arkret_identity::account_device_signer_evidence::verify_forwarded_account_device_producer;
 use arkret_identity::build_authenticated_webvh_service_resolution;
 use arkret_models_collaboration::authority_commit::{
-    AuthorityForwardBranch, PeerAuthorityForwardEventRequest, PeerAuthorityForwardMlsRequest,
-    PeerAuthoritySubmitRequest,
+    AuthorityForwardBranch, PeerAuthorityForwardEventRequestBody,
+    PeerAuthorityForwardMlsRequestBody, PeerAuthoritySubmitRequestBody,
 };
 use arkret_models_collaboration::governance::membership_invite::MembershipPayload;
 use arkret_models_crypto::{
@@ -71,7 +71,7 @@ const CASE_NAME: &str = "authority_forward_producer_device_evidence";
 const EVIDENCE_MEMBER: &str = "producer_device_evidence";
 const EVIDENCE_SCHEMA_REF: &str = "schemas/account-device-signer-evidence.schema.json#/$defs/forward_account_device_signer_evidence";
 const PEER_REQUEST: &str =
-    "schemas/authority-commit-operations.schema.json#/$defs/peer_submit_request";
+    "schemas/authority-commit-operations.schema.json#/$defs/peer_submit_request_body";
 const LOCAL_PCR_RESOLUTION: &str =
     "local_pcr_device_authorization_and_device_generation_at_acceptance_cut";
 
@@ -213,7 +213,7 @@ fn assert_evidence_member_is_the_signer_evidence_root() -> Result<()> {
         "account-device signer evidence is no longer the closed two-member root"
     );
     let operations = load_artifact_json("schemas/authority-commit-operations.schema.json")?;
-    let request = &operations["$defs"]["peer_submit_request"];
+    let request = &operations["$defs"]["peer_submit_request_body"];
     ensure!(
         request
             .pointer("/properties/producer_device_evidence/$ref")
@@ -236,7 +236,7 @@ fn assert_evidence_member_is_the_signer_evidence_root() -> Result<()> {
     let mut atomic_forward_branches = 0;
     for branch in request["oneOf"]
         .as_array()
-        .context("peer_submit_request is no longer a oneOf of branches")?
+        .context("peer_submit_request_body is no longer a oneOf of branches")?
     {
         let forbids_evidence = branch
             .pointer("/not/anyOf")
@@ -392,7 +392,7 @@ impl StationKeys {
                 provider_endpoint: &"https://identity.example/".parse()?,
                 registration_key: &registration,
                 also_known_as: &[],
-                version_time: registered_at,
+                version_created_at: registered_at,
                 did_key_fragment: None,
             },
         )
@@ -605,12 +605,12 @@ impl<'a> AccountStation<'a> {
         Ok(Some(evidence))
     }
 
-    fn send(&mut self, request: PeerAuthoritySubmitRequest) -> Result<Value> {
+    fn send(&mut self, request: PeerAuthoritySubmitRequestBody) -> Result<Value> {
         let reference = match &request {
-            PeerAuthoritySubmitRequest::AuthorityForwardEvent(request) => {
+            PeerAuthoritySubmitRequestBody::AuthorityForwardEvent(request) => {
                 request.producer_device_evidence.as_ref()
             }
-            PeerAuthoritySubmitRequest::AuthorityForwardMls(request) => {
+            PeerAuthoritySubmitRequestBody::AuthorityForwardMls(request) => {
                 request.producer_device_evidence.as_ref()
             }
             _ => bail!("the account Station only sends authority_forward"),
@@ -624,12 +624,14 @@ impl<'a> AccountStation<'a> {
     fn forward_event(&mut self, event: Event, attempt_at: DateTime<Utc>) -> Result<Value> {
         let unsigned = event_forward_body(&event, None)?;
         let evidence = self.fresh_evidence(&event, attempt_at, &unsigned)?;
-        let request = PeerAuthorityForwardEventRequest::new(
+        let request = PeerAuthorityForwardEventRequestBody::new(
             EventAdmissionSubmission::new(event),
             None,
             evidence,
         )?;
-        self.send(PeerAuthoritySubmitRequest::AuthorityForwardEvent(request))
+        self.send(PeerAuthoritySubmitRequestBody::AuthorityForwardEvent(
+            request,
+        ))
     }
 
     fn forward_mls(
@@ -639,8 +641,8 @@ impl<'a> AccountStation<'a> {
     ) -> Result<Value> {
         let unsigned = json!({"branch":"authority_forward", "mls_submission": &submission});
         let evidence = self.fresh_evidence(&submission.commit_event, attempt_at, &unsigned)?;
-        let request = PeerAuthorityForwardMlsRequest::new(submission, evidence)?;
-        self.send(PeerAuthoritySubmitRequest::AuthorityForwardMls(request))
+        let request = PeerAuthorityForwardMlsRequestBody::new(submission, evidence)?;
+        self.send(PeerAuthoritySubmitRequestBody::AuthorityForwardMls(request))
     }
 }
 
@@ -747,14 +749,14 @@ impl GovernanceStation {
         source: &DidCoreId,
         now: DateTime<Utc>,
     ) -> Result<Admission> {
-        let request: PeerAuthoritySubmitRequest = serde_json::from_value(body.clone())
+        let request: PeerAuthoritySubmitRequestBody = serde_json::from_value(body.clone())
             .map_err(|_| rejected(RejectedBy::Schema, ErrorCode::SchemaViolation))?;
         let (event, evidence) = match &request {
-            PeerAuthoritySubmitRequest::AuthorityForwardEvent(request) => (
+            PeerAuthoritySubmitRequestBody::AuthorityForwardEvent(request) => (
                 &request.event_submission.event,
                 request.producer_device_evidence.as_ref(),
             ),
-            PeerAuthoritySubmitRequest::AuthorityForwardMls(request) => (
+            PeerAuthoritySubmitRequestBody::AuthorityForwardMls(request) => (
                 &request.mls_submission.commit_event,
                 request.producer_device_evidence.as_ref(),
             ),
@@ -948,7 +950,7 @@ impl World {
         let body = json!({
             "realm_id": pcr, "stream_ref": arkret_wire::CommitStreamRef::Realm { realm_id: pcr.clone() },
             "stream_position": 1, "previous_commit_ref": arkret_wire::RealmCommitId::from_digest([0x62; 32]),
-            "event_ref": event.event_id, "governance_generation": 0,
+            "event_ref": event.event_id, "governance_generation": "0",
             "authority_ref": genesis_ref, "committed_at": arkret_canonical::format_timestamp_canonical(at + Duration::seconds(1)),
         });
         let commit_id = arkret_wire::RealmCommitId::from_digest(arkret_canonical::sha256_bytes(
@@ -1055,10 +1057,10 @@ impl World {
             }),
             "ak.mls.commit" => json!({
                 "base_group_state_ref": EventId::from_digest(DigestSuite::Sha256, [0x42; 32]),
-                "previous_epoch": 1,
-                "next_epoch": 2,
-                "covers_key_access_revision": 1,
-                "commit_bytes_b64": "Y29tbWl0",
+                "previous_epoch": "1",
+                "next_epoch": "2",
+                "covers_key_access_revision": "1",
+                "commit_base64url": "Y29tbWl0",
             }),
             other => bail!("no fixture payload for {other}"),
         })
@@ -1185,13 +1187,15 @@ fn event_forward_body(
     event: &Event,
     material: Option<arkret_models_collaboration::authority_commit::MlsGenesisMaterial>,
 ) -> Result<Value> {
-    Ok(serde_json::to_value(PeerAuthorityForwardEventRequest {
-        branch: AuthorityForwardBranch::AuthorityForward,
-        event_submission: EventAdmissionSubmission::new(event.clone()),
-        mls_genesis_material: material,
-        producer_device_evidence: None,
-        producer_agent_evidence: None,
-    })?)
+    Ok(serde_json::to_value(
+        PeerAuthorityForwardEventRequestBody {
+            branch: AuthorityForwardBranch::AuthorityForward,
+            event_submission: EventAdmissionSubmission::new(event.clone()),
+            mls_genesis_material: material,
+            producer_device_evidence: None,
+            producer_agent_evidence: None,
+        },
+    )?)
 }
 
 fn evidence_digest(evidence: &ForwardAccountDeviceSignerEvidence) -> arkret_wire::Result<Hash> {
@@ -1407,7 +1411,7 @@ fn mls_forward(world: &World) -> Result<Value> {
         "idempotency_key": MLS_IDEMPOTENCY_KEY,
     }))?;
     // The Commit Event's producer decides presence for the MLS branch too.
-    let missing = PeerAuthorityForwardMlsRequest::new(submission.clone(), None)
+    let missing = PeerAuthorityForwardMlsRequestBody::new(submission.clone(), None)
         .err()
         .context("an MLS forward of a human Commit Event validated without evidence")?;
     ensure!(missing.error_code() == Some(ErrorCode::SchemaViolation));
@@ -1719,7 +1723,7 @@ fn history_lacks_method(world: &World) -> Result<Value> {
             world.station_a.method.clone(),
             &world.station_a.signing_key,
         )?;
-        let request = PeerAuthorityForwardEventRequest::new(
+        let request = PeerAuthorityForwardEventRequestBody::new(
             EventAdmissionSubmission::new(event),
             None,
             Some(ForwardAccountDeviceSignerEvidence {
@@ -1727,8 +1731,9 @@ fn history_lacks_method(world: &World) -> Result<Value> {
                 service_resolution: world.station_a.resolution()?,
             }),
         )?;
-        let body =
-            serde_json::to_value(PeerAuthoritySubmitRequest::AuthorityForwardEvent(request))?;
+        let body = serde_json::to_value(PeerAuthoritySubmitRequestBody::AuthorityForwardEvent(
+            request,
+        ))?;
         let mut governance = world.remote_governance();
         Ok(
             match decide(governance.admit_forward(&body, &world.station_a.service_id, now))? {
@@ -1751,7 +1756,7 @@ fn non_human_carries_evidence(world: &World, event: Event) -> Result<Value> {
     ensure!(event.account_device_producer()?.is_none());
     // A Service has no Human evidence. An Agent additionally requires its
     // independent Agent carrier, so absence is not a valid Agent forward.
-    let without_human = PeerAuthorityForwardEventRequest::new(
+    let without_human = PeerAuthorityForwardEventRequestBody::new(
         EventAdmissionSubmission::new(event.clone()),
         None,
         None,
@@ -1802,7 +1807,7 @@ fn human_without_evidence(world: &World) -> Result<Value> {
         EventKind::MemberState.as_str(),
         world.setup.event_created_at,
     )?;
-    let body = serde_json::to_value(PeerAuthorityForwardEventRequest {
+    let body = serde_json::to_value(PeerAuthorityForwardEventRequestBody {
         branch: AuthorityForwardBranch::AuthorityForward,
         event_submission: EventAdmissionSubmission::new(event),
         mls_genesis_material: None,
@@ -1817,7 +1822,7 @@ fn evidence_on_other_branch(world: &World, baseline: Value) -> Result<Value> {
     schema_valid(PEER_REQUEST, &baseline)?;
     // Positive control: without the member the baseline parses as the SDK
     // request; only the carried evidence makes it unrepresentable.
-    serde_json::from_value::<PeerAuthoritySubmitRequest>(baseline.clone())?;
+    serde_json::from_value::<PeerAuthoritySubmitRequestBody>(baseline.clone())?;
     let mut account = world.account_station(LiveDeviceState::Active)?;
     let honest = account.forward_event(
         world.human_event(
@@ -1918,7 +1923,7 @@ impl ForwardingWorld {
     pub(super) fn fresh_evidence(
         &self,
         event: &Event,
-        request: &PeerAuthorityForwardEventRequest,
+        request: &PeerAuthorityForwardEventRequestBody,
     ) -> Result<ForwardAccountDeviceSignerEvidence> {
         ensure!(request.event_submission.event == *event);
         let mut station = self.0.account_station(LiveDeviceState::Active)?;
@@ -1935,7 +1940,7 @@ impl ForwardingWorld {
     /// step between request validation and the Event's own admission.
     pub(super) fn verify_forwarded_producer(
         &self,
-        request: &PeerAuthorityForwardEventRequest,
+        request: &PeerAuthorityForwardEventRequestBody,
     ) -> std::result::Result<(), ErrorCode> {
         let event = &request.event_submission.event;
         let evidence = request

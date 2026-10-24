@@ -128,7 +128,7 @@ struct BackupEnvelopeState {
     actor_id: ActorId,
     backup_kind: String,
     series_id: String,
-    series_seq: u64,
+    series_sequence: u64,
     ciphertext_digest: String,
 }
 
@@ -178,10 +178,10 @@ fn backup_envelope_state(value: &Value) -> Result<BackupEnvelopeState> {
         )?,
         backup_kind: required_str(value, "backup_kind")?.to_owned(),
         series_id: required_str(value, "series_id")?.to_owned(),
-        series_seq: value
-            .get("series_seq")
+        series_sequence: value
+            .get("series_sequence")
             .and_then(Value::as_u64)
-            .ok_or_else(|| anyhow!("envelope missing series_seq"))?,
+            .ok_or_else(|| anyhow!("envelope missing series_sequence"))?,
         ciphertext_digest: required_str(value, "ciphertext_digest")?.to_owned(),
     })
 }
@@ -225,7 +225,7 @@ fn authorize_unlock(
         .requesting_device_public_key_did
         .strip_prefix("did:key:")
         .ok_or(arkret_wire::ErrorCode::SIGNATURE_INVALID)?;
-    if proof.auth_data.verification_method.as_str() != format!("did:key:{key}#{key}") {
+    if proof.signature_proof.verification_method.as_str() != format!("did:key:{key}#{key}") {
         return Err(arkret_wire::ErrorCode::SIGNATURE_INVALID);
     }
     let raw_key = arkret_canonical::multibase::decode_ed25519_multibase(key)
@@ -233,7 +233,7 @@ fn authorize_unlock(
     let verifying = ed25519_dalek::VerifyingKey::from_bytes(&raw_key)
         .map_err(|_| arkret_wire::ErrorCode::SIGNATURE_INVALID)?;
     let signature = base64::engine::general_purpose::URL_SAFE_NO_PAD
-        .decode(proof.auth_data.signature.as_str())
+        .decode(proof.signature_proof.signature.as_str())
         .map_err(|_| arkret_wire::ErrorCode::SIGNATURE_INVALID)?;
     let signature = ed25519_dalek::Signature::from_slice(&signature)
         .map_err(|_| arkret_wire::ErrorCode::SIGNATURE_INVALID)?;
@@ -378,7 +378,7 @@ pub fn run_key_backup_passphrase_kdf_kat_vector() -> Result<()> {
         let sealed = encrypt_vault_with_nonce_salt(&kek, &binding, plaintext, &nonce_salt)?;
         for (field, actual) in [
             ("nonce_b64u", sealed.nonce_b64.as_str()),
-            ("ciphertext_b64u", sealed.ciphertext_b64.as_str()),
+            ("ciphertext_b64u", sealed.ciphertext_base64url.as_str()),
             ("ciphertext_digest", sealed.digest_sha256.as_str()),
         ] {
             if actual != required_str(expected, field)? {
@@ -391,7 +391,7 @@ pub fn run_key_backup_passphrase_kdf_kat_vector() -> Result<()> {
             &binding,
             &sealed.nonce_b64,
             &sealed.nonce_salt_b64,
-            &sealed.ciphertext_b64,
+            &sealed.ciphertext_base64url,
         )?;
         if opened.as_slice() != plaintext {
             bail!("KAT open plaintext drifted");
@@ -402,14 +402,14 @@ pub fn run_key_backup_passphrase_kdf_kat_vector() -> Result<()> {
             &binding,
             &sealed.nonce_b64,
             &sealed.nonce_salt_b64,
-            &sealed.ciphertext_b64,
+            &sealed.ciphertext_base64url,
         )
         .is_ok()
         {
             bail!("KAT wrong passphrase opened");
         }
         let mut invalid = kdf.clone();
-        invalid.params.iterations = Some(if kdf.name == KeyBackupKdfName::Argon2id {
+        invalid.parameters.iterations = Some(if kdf.name == KeyBackupKdfName::Argon2id {
             2
         } else {
             599_999
@@ -425,7 +425,7 @@ pub fn run_key_backup_passphrase_kdf_kat_vector() -> Result<()> {
             &wrong_binding,
             &sealed.nonce_b64,
             &sealed.nonce_salt_b64,
-            &sealed.ciphertext_b64,
+            &sealed.ciphertext_base64url,
         )
         .is_ok()
         {
@@ -506,7 +506,7 @@ pub fn run_key_backup_unlock_proof_vector() -> Result<()> {
         bail!("wrong replacement key was accepted");
     }
     let mut bad_signature = proof.clone();
-    bad_signature.auth_data.signature = arkret_wire::Base64UrlString::new(
+    bad_signature.signature_proof.signature = arkret_wire::Base64UrlString::new(
         base64::engine::general_purpose::URL_SAFE_NO_PAD.encode([0u8; 64]),
     )
     .map_err(anyhow::Error::msg)?;
@@ -565,15 +565,17 @@ pub fn run_key_backup_unlock_proof_vector() -> Result<()> {
         && (required_str(&plaintext_value, "backup_id")? != envelope.backup_id
             || plaintext.backup_kind.as_str() != envelope.backup_kind
             || required_str(&plaintext_value, "series_id")? != envelope.series_id
-            || plaintext_value.get("series_seq").and_then(Value::as_u64)
-                != Some(envelope.series_seq))
+            || plaintext_value
+                .get("series_sequence")
+                .and_then(Value::as_u64)
+                != Some(envelope.series_sequence))
     {
         bail!("key backup plaintext metadata does not match the envelope");
     }
     if plaintext
         .items
         .iter()
-        .any(|item| item.secret_b64u.as_str().is_empty() || item.validate().is_err())
+        .any(|item| item.secret_base64url.as_str().is_empty() || item.validate().is_err())
     {
         bail!("plaintext keybag item carried an invalid or empty secret");
     }

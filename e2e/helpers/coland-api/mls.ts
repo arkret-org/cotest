@@ -35,8 +35,8 @@ export type MlsDevice = {
   server?: ColandKey;
 };
 
-/// The closed `typed-current-result.schema.json#/$defs/mls_group_value`.
-export type MlsGroupCurrent = {
+/// The closed `current-state.schema.json#/$defs/mls_group_value`.
+export type MlsGroupValue = {
   effective_scope: Record<string, unknown>;
   genesis_event_ref: string;
   current_mls_commit_event_ref: string;
@@ -245,7 +245,7 @@ export async function readScopeMlsGroupCurrentApi(
   realmId: string,
   scopeRef: Record<string, unknown> = { kind: "realm", realm_id: realmId },
   server?: ColandKey,
-): Promise<MlsGroupCurrent | undefined> {
+): Promise<MlsGroupValue | undefined> {
   const url = new URL(`${colandBaseUrl(server)}/_arkret/self/realm-state-snapshot/head`);
   url.searchParams.set("realm_id", realmId);
   const deadline = Date.now() + 30_000;
@@ -279,7 +279,7 @@ export async function readScopeMlsGroupCurrentApi(
   if (entries.length > 1) {
     throw new Error(`Realm snapshot carries ${entries.length} mls_group results for one scope`);
   }
-  return entries[0]?.value as MlsGroupCurrent | undefined;
+  return entries[0]?.value as MlsGroupValue | undefined;
 }
 
 /// Activate MLS for the Realm scope: the owner's device founds the epoch-zero
@@ -543,7 +543,7 @@ export async function joinRealmMlsWelcomeApi(
       async () => {
         const page = await expectJsonOk<{
           deliveries?: Array<Record<string, unknown>>;
-          ack_token?: string;
+          acknowledgement_token?: string;
         }>(
           await request.get(queueUrl, {
             headers: authHeaders(member.token, "GET", queueUrl),
@@ -554,7 +554,7 @@ export async function joinRealmMlsWelcomeApi(
           .filter((delivery) => delivery.delivery_kind === "mls_welcome")
           .map((delivery) => delivery.mls_welcome as Record<string, unknown>)
           .find((candidate) => candidate?.welcome_id === pending.welcomeId);
-        ackToken = page.ack_token;
+        ackToken = page.acknowledgement_token;
         return welcome !== undefined;
       },
       {
@@ -589,7 +589,7 @@ export async function joinRealmMlsWelcomeApi(
           ...authHeaders(member.token, "POST", ackUrl),
           "content-type": "application/json",
         },
-        data: canonicalJson({ ack_token: ackToken }),
+        data: canonicalJson({ acknowledgement_token: ackToken }),
       }),
       `ACK recipient queue of ${member.id}`,
     );

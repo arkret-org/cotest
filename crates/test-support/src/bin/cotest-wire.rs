@@ -48,7 +48,7 @@ fn main() -> Result<()> {
         "realm-actor-inception" => wire::realm_actor_inception(input)?,
         "applet-realm-actor-author" => wire::applet_realm_actor_author(input)?,
         "webvh-verify-log" => wire::webvh_verify_log(input)?,
-        "account-handoff-outcome" => wire::account_handoff_outcome(input)?,
+        "account-handoff-outcome" => wire::account_handoff_response_body(input)?,
         "account-handoff-request" => wire::account_handoff_request(input)?,
         "principal-registration-fixture" => wire::principal_registration_fixture(input)?,
         "identity-creation-register-request" => wire::identity_creation_register_request(input)?,

@@ -9,9 +9,9 @@ use anyhow::{Context, Result, ensure};
 use arkret_models_collaboration::events_payloads::{
     ControllerBackupTrustAnchor, UnsignedKeyBackupActiveSeries,
 };
-use arkret_models_crypto::{BackupActiveSeriesPointer, BackupKind, KeysBackupsList};
+use arkret_models_crypto::{BackupActiveSeriesPointer, BackupKind, KeysBackupsPage};
 use arkret_wire::{
-    AccountId, ActorId, AuthorityCommitStatus, AuthoritySubmitOutcome, BackupSeriesId,
+    AccountId, ActorId, AuthorityCommitStatus, AuthoritySubmitResponseBody, BackupSeriesId,
     Base64UrlString, DidCoreId, RealmCommitId,
 };
 use ed25519_dalek::{Signer, SigningKey};
@@ -28,7 +28,7 @@ use crate::scenarios::identity_test_support::{
     spawn_with_harness_account_authority,
 };
 
-async fn listing(client: &TestActorClient, server: &ArkretServer) -> Result<KeysBackupsList> {
+async fn listing(client: &TestActorClient, server: &ArkretServer) -> Result<KeysBackupsPage> {
     let body = expect_json(
         server
             .http()
@@ -179,7 +179,8 @@ pub async fn key_backup_active_pointer_is_committed_and_listed_at_its_pcr_cut() 
 
     let accepted = signer.event(&series, 1, &genesis.active_series.authority_commit_id, 1)?;
     let body = expect_json(submit(&accepted), StatusCode::OK).await?;
-    let AuthoritySubmitOutcome::Accepted { status, commit } = serde_json::from_value(body)? else {
+    let AuthoritySubmitResponseBody::Accepted { status, commit } = serde_json::from_value(body)?
+    else {
         anyhow::bail!("active-series submission was not accepted");
     };
     ensure!(status == AuthorityCommitStatus::Committed);
@@ -202,7 +203,7 @@ pub async fn key_backup_active_pointer_is_committed_and_listed_at_its_pcr_cut() 
     // The exact Event replays as a duplicate of the same Commit; a second
     // version-1 selection is a same-version fork and is refused.
     let replay = expect_json(submit(&accepted), StatusCode::OK).await?;
-    let AuthoritySubmitOutcome::Accepted {
+    let AuthoritySubmitResponseBody::Accepted {
         status,
         commit: replayed,
     } = serde_json::from_value(replay)?

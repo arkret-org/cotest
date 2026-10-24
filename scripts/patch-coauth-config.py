@@ -125,7 +125,7 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> int:
     args = parse_args()
-    src = args.raw_config.read_text(encoding="utf-8-sig")
+    src = args.raw_config.read_text(encoding="utf-8-signature")
     # Runtime key material lives in coauth's encrypted-file KeyStore rather than
     # inline config PEM (coauth 492d8ba1). The runner owns both files so each run
     # holds its own custody state and nothing is written into the coauth

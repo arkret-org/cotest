@@ -28,7 +28,7 @@ test("Message object and signed create payload have distinct field domains", () 
 test("real create object wrapper and nested KDF pointer are enforced", () => {
   const hits = scanner.scanEvent({ kind: "ak.strand.create", payload: { object: { metadata: { fields: { status: "closed" } } } } });
   assert.ok(hits.some(v => v.id === "metadata.fields.status"));
-  assert.equal(scanner.scan({ encryption: { kdf: { params: { hash: "SHA256" } } } }, "schema_instance", "key-backup.schema.json")[0].id, "hash#key_backup_kdf_params");
+  assert.equal(scanner.scan({ encryption: { kdf: { parameters: { hash: "SHA256" } } } }, "schema_instance", "key-backup.schema.json")[0].id, "hash#key_backup_kdf_params");
   assert.deepEqual(scanner.scan({ other: { hash: "SHA256" } }, "schema_instance", "key-backup.schema.json"), []);
 });
 

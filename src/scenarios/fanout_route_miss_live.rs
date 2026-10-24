@@ -6,14 +6,14 @@ use std::time::{Duration, Instant};
 
 use anyhow::{Context as _, Result, bail, ensure};
 use arkret_models_collaboration::authority_commit::{
-    CommittedEventSubmission, CommittedReplicationBranch, PeerAuthoritySubmitOutcome,
-    PeerAuthoritySubmitRequest, PeerCommittedReplicationOutcomeRecord,
-    PeerCommittedReplicationRequest,
+    CommittedEventReplicationOutcome, CommittedEventSubmission, CommittedReplicationBranch,
+    PeerAuthoritySubmitRequestBody, PeerAuthoritySubmitResponseBody,
+    PeerCommittedReplicationRequestBody,
 };
 use arkret_models_collaboration::governance::membership_invite::MembershipPayloadState;
 use arkret_models_collaboration::governance::realm_join_intake::RealmJoinIntent;
 use arkret_models_identity::{
-    CurrentSignerKeyQuerySender, SignerKeyQueryOutcome, SignerKeyQuerySelector,
+    CurrentSignerKeyQuerySender, SignerKeyQuerySelector, SignerKeyResolution,
     SignerKeysQueryRequestBody,
 };
 use arkret_wire::{
@@ -232,14 +232,14 @@ pub async fn run_federation_revoked_service_key_replay_live() -> Result<()> {
         )
         .await?;
     ensure!(baseline.status() == StatusCode::OK);
-    let baseline: PeerAuthoritySubmitOutcome = baseline.json().await?;
+    let baseline: PeerAuthoritySubmitResponseBody = baseline.json().await?;
     ensure!(
         matches!(
             &baseline,
-            PeerAuthoritySubmitOutcome::CommittedReplication(value)
+            PeerAuthoritySubmitResponseBody::CommittedReplication(value)
                 if matches!(
                     value.replication_outcomes.as_slice(),
-                    [PeerCommittedReplicationOutcomeRecord::Duplicate {}]
+                    [CommittedEventReplicationOutcome::Duplicate {}]
                 )
         ),
         "the original request did not return its accepted duplicate outcome"
@@ -256,7 +256,7 @@ pub async fn run_federation_revoked_service_key_replay_live() -> Result<()> {
         )
         .await?;
     ensure!(same_basis_response.status() == StatusCode::OK);
-    let same_basis: PeerAuthoritySubmitOutcome = same_basis_response.json().await?;
+    let same_basis: PeerAuthoritySubmitResponseBody = same_basis_response.json().await?;
     ensure!(
         same_basis == baseline,
         "an unchanged key and authorization basis did not replay the original per-item outcome: first {baseline:?}, replay {same_basis:?}"
@@ -297,8 +297,8 @@ pub async fn run_federation_revoked_service_key_replay_live() -> Result<()> {
     ensure!(
         matches!(
             successor_outcomes.as_slice(),
-            [PeerCommittedReplicationOutcomeRecord::Stored {}
-                | PeerCommittedReplicationOutcomeRecord::Duplicate {}]
+            [CommittedEventReplicationOutcome::Stored {}
+                | CommittedEventReplicationOutcome::Duplicate {}]
         ),
         "the successor service key did not authenticate and store a current peer submit: {successor_outcomes:?}"
     );
@@ -315,7 +315,7 @@ pub async fn run_federation_revoked_service_key_replay_live() -> Result<()> {
     ensure!(
         matches!(
             successor_replay.as_slice(),
-            [PeerCommittedReplicationOutcomeRecord::Duplicate {}]
+            [CommittedEventReplicationOutcome::Duplicate {}]
         ),
         "the successor service key did not authenticate a held Commit replay: {successor_replay:?}"
     );
@@ -495,7 +495,7 @@ pub async fn run_fanout_route_miss_live() -> Result<()> {
         ensure!(
             matches!(
                 outcomes.as_slice(),
-                [PeerCommittedReplicationOutcomeRecord::Duplicate {}]
+                [CommittedEventReplicationOutcome::Duplicate {}]
             ),
             "an exact replay of a stored replication is not duplicate: {outcomes:?}"
         );
@@ -566,7 +566,7 @@ pub async fn run_fanout_route_miss_live() -> Result<()> {
         ensure!(
             matches!(
                 outcomes.as_slice(),
-                [PeerCommittedReplicationOutcomeRecord::Duplicate {}]
+                [CommittedEventReplicationOutcome::Duplicate {}]
             ),
             "Y does not hold {} after Bob's removal: {outcomes:?}",
             event.event_id
@@ -579,7 +579,7 @@ pub async fn run_fanout_route_miss_live() -> Result<()> {
     ensure!(
         matches!(
             outcomes.as_slice(),
-            [PeerCommittedReplicationOutcomeRecord::Rejected { reason_code }]
+            [CommittedEventReplicationOutcome::Rejected { reason_code }]
                 if reason_code == "capability_denied"
         ),
         "a Commit after Bob's removal was not refused for want of a hosted member: {outcomes:?}"
@@ -656,7 +656,7 @@ pub async fn run_fanout_route_miss_live() -> Result<()> {
     ensure!(
         matches!(
             forged.as_slice(),
-            [PeerCommittedReplicationOutcomeRecord::Rejected { reason_code }]
+            [CommittedEventReplicationOutcome::Rejected { reason_code }]
                 if reason_code == "capability_denied"
         ),
         "Y stored a plaintext Message its Realm does not let it hold: {forged:?}"
@@ -736,14 +736,14 @@ async fn assert_held_commit_current_origin(
         )
         .await?;
     ensure!(status == StatusCode::OK, "origin replay failed: {status}");
-    let authorized = serde_json::from_slice::<PeerAuthoritySubmitOutcome>(&answer)?;
+    let authorized = serde_json::from_slice::<PeerAuthoritySubmitResponseBody>(&answer)?;
     ensure!(
         matches!(
             authorized,
-            PeerAuthoritySubmitOutcome::CommittedReplication(value)
+            PeerAuthoritySubmitResponseBody::CommittedReplication(value)
                 if matches!(
                     value.replication_outcomes.as_slice(),
-                    [PeerCommittedReplicationOutcomeRecord::Duplicate {}]
+                    [CommittedEventReplicationOutcome::Duplicate {}]
                 )
         ),
         "the active origin did not replay the held Commit"
@@ -762,14 +762,14 @@ async fn assert_held_commit_current_origin(
         status == StatusCode::OK,
         "wrong-origin replay failed: {status}"
     );
-    let denied = serde_json::from_slice::<PeerAuthoritySubmitOutcome>(&answer)?;
+    let denied = serde_json::from_slice::<PeerAuthoritySubmitResponseBody>(&answer)?;
     ensure!(
         matches!(
             &denied,
-            PeerAuthoritySubmitOutcome::CommittedReplication(value)
+            PeerAuthoritySubmitResponseBody::CommittedReplication(value)
                 if matches!(
                     value.replication_outcomes.as_slice(),
-                    [PeerCommittedReplicationOutcomeRecord::Rejected { reason_code }]
+                    [CommittedEventReplicationOutcome::Rejected { reason_code }]
                         if reason_code == "capability_denied"
                 )
         ),
@@ -849,7 +849,7 @@ pub async fn replication_body(
     )
     .await?;
     let request =
-        PeerAuthoritySubmitRequest::CommittedReplication(PeerCommittedReplicationRequest {
+        PeerAuthoritySubmitRequestBody::CommittedReplication(PeerCommittedReplicationRequestBody {
             branch: CommittedReplicationBranch::CommittedReplication,
             replications: vec![CommittedEventSubmission {
                 event_submission: EventAdmissionSubmission::new(event.clone()),
@@ -869,7 +869,7 @@ async fn replicate(
     receiver: &ArkretServer,
     source: &ArkretServer,
     body: &[u8],
-) -> Result<Vec<PeerCommittedReplicationOutcomeRecord>> {
+) -> Result<Vec<CommittedEventReplicationOutcome>> {
     let (status, answer) = receiver
         .signed_peer_post(source, PEER_EVENTS, body, receiver.service_id())
         .await?;
@@ -878,8 +878,10 @@ async fn replicate(
         "committed_replication answered {status}: {}",
         String::from_utf8_lossy(&answer)
     );
-    match serde_json::from_slice::<PeerAuthoritySubmitOutcome>(&answer)? {
-        PeerAuthoritySubmitOutcome::CommittedReplication(value) => Ok(value.replication_outcomes),
+    match serde_json::from_slice::<PeerAuthoritySubmitResponseBody>(&answer)? {
+        PeerAuthoritySubmitResponseBody::CommittedReplication(value) => {
+            Ok(value.replication_outcomes)
+        }
         other => bail!("committed_replication answered another branch: {other:?}"),
     }
 }
@@ -897,16 +899,16 @@ async fn ensure_not_stored(
     if !status.is_success() {
         return Ok(());
     }
-    let PeerAuthoritySubmitOutcome::CommittedReplication(value) =
-        serde_json::from_slice::<PeerAuthoritySubmitOutcome>(&answer)?
+    let PeerAuthoritySubmitResponseBody::CommittedReplication(value) =
+        serde_json::from_slice::<PeerAuthoritySubmitResponseBody>(&answer)?
     else {
         bail!("committed_replication answered another branch");
     };
     ensure!(
-        value.replication_outcomes.iter().all(|record| matches!(
-            record,
-            PeerCommittedReplicationOutcomeRecord::Rejected { .. }
-        )),
+        value
+            .replication_outcomes
+            .iter()
+            .all(|record| matches!(record, CommittedEventReplicationOutcome::Rejected { .. })),
         "the receiver stored a refused replication: {:?}",
         value.replication_outcomes
     );
@@ -997,15 +999,15 @@ pub async fn run_signer_keys_query_live() -> Result<()> {
     request.validate()?;
     let outcome = bob.sdk().signer_keys_query(&request).await?;
     outcome.validate_for_request(&request)?;
-    let [SignerKeyQueryOutcome::CurrentDeviceResolved { selector, key }] =
-        outcome.results.as_slice()
+    let [SignerKeyResolution::CurrentDeviceResolved { selector, key }] =
+        outcome.resolutions.as_slice()
     else {
         bail!("recipient Station did not resolve the current admitted sender");
     };
     ensure!(selector == &request.queries[0]);
     key.validate()?;
     ensure!(
-        key.public_key_b64u.as_str()
+        key.public_key_base64url.as_str()
             == arkret_canonical::base64url_encode(
                 alice_principal
                     .device_signing_key
@@ -1047,8 +1049,8 @@ pub async fn run_signer_keys_query_live() -> Result<()> {
         let unavailable = bob.sdk().signer_keys_query(&changed).await?;
         unavailable.validate_for_request(&changed)?;
         ensure!(matches!(
-            unavailable.results.as_slice(),
-            [SignerKeyQueryOutcome::Unavailable { .. }]
+            unavailable.resolutions.as_slice(),
+            [SignerKeyResolution::Unavailable { .. }]
         ));
     }
     let mut wrong_station = request.clone();
@@ -1066,17 +1068,17 @@ pub async fn run_signer_keys_query_live() -> Result<()> {
     let wrong = bob.sdk().signer_keys_query(&wrong_station).await?;
     wrong.validate_for_request(&wrong_station)?;
     ensure!(matches!(
-        wrong.results.as_slice(),
-        [SignerKeyQueryOutcome::Unavailable { .. }]
+        wrong.resolutions.as_slice(),
+        [SignerKeyResolution::Unavailable { .. }]
     ));
     let mut misbound = outcome;
-    let SignerKeyQueryOutcome::CurrentDeviceResolved {
+    let SignerKeyResolution::CurrentDeviceResolved {
         selector:
             SignerKeyQuerySelector::CurrentAdmission {
                 sender: CurrentSignerKeyQuerySender::AccountDevice { actor, .. },
             },
         ..
-    } = &mut misbound.results[0]
+    } = &mut misbound.resolutions[0]
     else {
         bail!("current signer outcome changed shape");
     };

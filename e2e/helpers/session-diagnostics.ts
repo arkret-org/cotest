@@ -18,7 +18,7 @@ export function accountViewerHandleDiagnostic(value: unknown, principal: string,
     handle: typeof core.handle === "string" ? core.handle : null,
     verified: claim.status === "verified",
     revoked: claim.revocation != null,
-    fresh: typeof claim.fresh_until === "string" && Date.parse(claim.fresh_until) > at,
+    fresh: typeof claim.cache_expires_at === "string" && Date.parse(claim.cache_expires_at) > at,
     unexpired: core.expires_at == null ||
       (typeof core.expires_at === "string" && Date.parse(core.expires_at) > at),
   };

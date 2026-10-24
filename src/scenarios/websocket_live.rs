@@ -889,7 +889,7 @@ pub async fn realm_head(
 ) -> Result<arkret_wire::CommitStreamHead> {
     Ok(client
         .sdk()
-        .realm_authority_bundle(&arkret_wire::AuthorityBundleRequest {
+        .realm_authority_bundle(&arkret_wire::RealmAuthorityBundleRequestBody {
             realm_id: arkret_wire::RealmId::new(realm)?,
             nonce: arkret_wire::Base64UrlString::new(fresh_jti()).map_err(anyhow::Error::msg)?,
         })
@@ -914,13 +914,15 @@ pub async fn advertised_websocket(
     let Some(arkret_models_discovery::TransportBinding::Websocket {
         base_url,
         max_frame_bytes,
-        max_channels,
+        max_channel_count,
     }) =
         arkret_models_discovery::websocket_binding::select_websocket_binding(&description, 262_144)
     else {
         bail!("complete canonical WS discovery required")
     };
-    ensure!(base_url == &socket_url(server)? && *max_frame_bytes == 262_144 && *max_channels == 16);
+    ensure!(
+        base_url == &socket_url(server)? && *max_frame_bytes == 262_144 && *max_channel_count == 16
+    );
     for operation in arkret_wire::WebSocketOperationId::ALL {
         let operation = arkret_wire::ServiceOperationId::from_wire(operation.as_str())
             .context("registered operation")?;

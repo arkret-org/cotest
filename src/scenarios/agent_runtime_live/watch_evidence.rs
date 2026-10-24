@@ -3,7 +3,7 @@ use arkret_models_collaboration::authority_commit::{
     AuditPairedEventAcceptanceOutcome, AuditPairedEventUnitKind, AuditPairedEventUnitSubmission,
 };
 use arkret_models_collaboration::strand_watch_operations::{
-    StrandWatchCurrentOutcome, WatchAuditReadOutcome, WatchAuditReadRequest,
+    StrandWatchCurrentResponseBody, WatchAuditReadRequestBody, WatchAuditReadResponseBody,
 };
 use arkret_wire::{EventAdmissionSubmission, EventKind, SemanticRef};
 
@@ -173,7 +173,7 @@ pub async fn run_registered_agent_watch_live() -> Result<()> {
             arkret_models_collaboration::agent_interaction::AgentInteractionMode::Public,
         expected_revision: None,
     };
-    let mode: arkret_wire::AuthoritySubmitOutcome = serde_json::from_value(
+    let mode: arkret_wire::AuthoritySubmitResponseBody = serde_json::from_value(
         controller
             .submit_event(
                 realm.as_str(),
@@ -182,7 +182,7 @@ pub async fn run_registered_agent_watch_live() -> Result<()> {
             )
             .await?,
     )?;
-    let arkret_wire::AuthoritySubmitOutcome::Accepted {
+    let arkret_wire::AuthoritySubmitResponseBody::Accepted {
         commit: public_commit,
         ..
     } = mode
@@ -195,7 +195,7 @@ pub async fn run_registered_agent_watch_live() -> Result<()> {
     let scope = ScopeRef::Realm {
         realm_id: realm.clone(),
     };
-    let observation = WatchAuditReadRequest {
+    let observation = WatchAuditReadRequestBody {
         audit_submission: EventAdmissionSubmission::new(agent.author_scoped_event(
             EventKind::AuditAccessed,
             scope.clone(),
@@ -205,7 +205,7 @@ pub async fn run_registered_agent_watch_live() -> Result<()> {
             Vec::new(),
         )?),
     };
-    let read: WatchAuditReadOutcome = serde_json::from_value(
+    let read: WatchAuditReadResponseBody = serde_json::from_value(
         expect_json(
             agent
                 .runtime
@@ -218,7 +218,7 @@ pub async fn run_registered_agent_watch_live() -> Result<()> {
     read.validate_for_request(&observation, 0)?;
     ensure!(matches!(
         read.current,
-        StrandWatchCurrentOutcome::NeverWritten { .. }
+        StrandWatchCurrentResponseBody::NeverWritten { .. }
     ));
     let business = agent.author_scoped_event(
         EventKind::StrandWatchSet,
@@ -247,7 +247,7 @@ pub async fn run_registered_agent_watch_live() -> Result<()> {
         .await?,
     )?;
     outcome.validate_for_request(&unit)?;
-    let replay: WatchAuditReadOutcome = serde_json::from_value(
+    let replay: WatchAuditReadResponseBody = serde_json::from_value(
         expect_json(
             agent
                 .runtime

@@ -577,7 +577,7 @@ async fn authz_invites(
     viewer: &crate::harness::TestActorClient,
     subject: &crate::harness::TestActorClient,
     realm_id: &str,
-) -> Result<arkret_models_collaboration::governance::authorization::AuthzInviteList> {
+) -> Result<arkret_models_collaboration::governance::authorization::AuthorizationInvitePage> {
     let account = client_account_id(subject)?;
     let response = crate::harness::expect_json(
         viewer.get("/_arkret/self/authz/invites").query(&[

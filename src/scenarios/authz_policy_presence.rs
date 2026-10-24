@@ -1,6 +1,8 @@
 use anyhow::Result;
-use arkret_models_collaboration::governance::authorization::{AuthzCheckRequestBody, GrantList};
-use arkret_models_collaboration::objects::media::{MediaIceConfigRequestBody, MediaIceMode};
+use arkret_models_collaboration::governance::authorization::{
+    AuthorizationCheckRequestBody, EffectiveGrantSnapshot,
+};
+use arkret_models_collaboration::objects::media::{MediaIceConfigurationRequestBody, MediaIceMode};
 use arkret_models_integration::{
     PushKey, PushRegisterDeviceRequestBody, PushUnregisterDeviceRequestBody,
 };
@@ -48,7 +50,7 @@ pub async fn authz_grant_lifecycle_and_audit_work() -> Result<()> {
 
     let denied_before_grant = expect_json(
         bob.post("/_arkret/self/authz/check")
-            .json(&AuthzCheckRequestBody {
+            .json(&AuthorizationCheckRequestBody {
                 actor_id: account_actor(&bob, &bob_core_id)?,
                 action: "ak.realm.admin".to_owned(),
                 resource: Some(WireResourceSelector::realm(RealmId::new(realm_id.clone())?)),
@@ -90,7 +92,7 @@ pub async fn authz_grant_lifecycle_and_audit_work() -> Result<()> {
         "constraints": [{
             "constraint_kind":"quota",
             "effect":"allow",
-            "max_operations":5,
+            "max_operation_count":5,
             "period":"PT1H",
             "constraint_scope":"per_realm"
         }],
@@ -98,7 +100,7 @@ pub async fn authz_grant_lifecycle_and_audit_work() -> Result<()> {
             "kind":"realm_root",
             "realm_id":realm_id,
             "authority_event_ref": RealmId::new(realm_id.clone())?.event_id(),
-            "authority_generation":0
+            "authority_generation":"0"
         }],
         "issued_at": issued_at.to_rfc3339_opts(chrono::SecondsFormat::Millis, true)
     });
@@ -144,7 +146,7 @@ pub async fn authz_grant_lifecycle_and_audit_work() -> Result<()> {
         StatusCode::OK,
     )
     .await?;
-    let effective_list: GrantList = serde_json::from_value(effective_grants.clone())?;
+    let effective_list: EffectiveGrantSnapshot = serde_json::from_value(effective_grants.clone())?;
     assert!(
         effective_list
             .grants
@@ -185,7 +187,7 @@ pub async fn authz_grant_lifecycle_and_audit_work() -> Result<()> {
 
     let allowed_after_grant = expect_json(
         bob.post("/_arkret/self/authz/check")
-            .json(&AuthzCheckRequestBody {
+            .json(&AuthorizationCheckRequestBody {
                 actor_id: account_actor(&bob, &bob_core_id)?,
                 action: "ak.realm.admin".to_owned(),
                 resource: Some(WireResourceSelector::realm(RealmId::new(realm_id.clone())?)),
@@ -266,7 +268,7 @@ pub async fn authz_grant_lifecycle_and_audit_work() -> Result<()> {
 
     let denied_after_revoke = expect_json(
         bob.post("/_arkret/self/authz/check")
-            .json(&AuthzCheckRequestBody {
+            .json(&AuthorizationCheckRequestBody {
                 actor_id: account_actor(&bob, &bob_core_id)?,
                 action: "ak.realm.admin".to_owned(),
                 resource: Some(WireResourceSelector::realm(RealmId::new(realm_id)?)),
@@ -291,7 +293,7 @@ async fn expect_authz_check_hard_deny(
     let denied = expect_json(
         client
             .post("/_arkret/self/authz/check")
-            .json(&AuthzCheckRequestBody {
+            .json(&AuthorizationCheckRequestBody {
                 actor_id: account_actor(client, actor_id)?,
                 action: action.to_owned(),
                 resource: Some(resource),
@@ -385,7 +387,7 @@ pub async fn push_and_ice_contracts_work() -> Result<()> {
     let ice = expect_json(
         alice
             .post("/_arkret/self/rtc/ice-config")
-            .json(&MediaIceConfigRequestBody {
+            .json(&MediaIceConfigurationRequestBody {
                 realm_id: RealmId::new(media_realm_id)?,
                 call_id: "ak:call:AbhvODyrIRCskAIoS9IXLjMfD-Zsr8lwDpiCU_zLR4it".to_owned(),
                 actor_id: account_actor(&alice, &alice_core_id)?,

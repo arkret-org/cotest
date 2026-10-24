@@ -30,14 +30,14 @@ use arkret_models_collaboration::governance::membership_invite::{
 };
 use arkret_models_collaboration::governance::realm_join_intake::{
     AuthorityLocatorSource, RealmJoinCandidate, RealmJoinCandidateServiceKind, RealmJoinIntent,
-    RealmJoinTarget, SelfRealmJoinPrepareOutcome, SelfRealmJoinPrepareRequestBody,
+    RealmJoinTarget, SelfRealmJoinPrepareRequestBody, SelfRealmJoinPrepareResponseBody,
 };
 use arkret_models_crypto::{
     EncryptedEnvelope, EncryptedEnvelopeEncryptionContext, SecurityRotationRevokeCommandDecision,
     SecurityTransaction,
 };
 use arkret_wire::{
-    AccountId, ActorId, AuthorityCommitStatus, AuthoritySubmitOutcome, CommitStreamRef,
+    AccountId, ActorId, AuthorityCommitStatus, AuthoritySubmitResponseBody, CommitStreamRef,
     CommittedEventView, DidCoreId, DidUrl, ErrorCode, Event, EventId, EventKind, RealmCommit,
     RealmId, RequestId,
 };
@@ -384,7 +384,7 @@ async fn run_cross_station_authority_forward_with_watch(watch: bool) -> Result<(
             StrandWatchLevel, StrandWatchSetPayload,
         };
         use arkret_models_collaboration::strand_watch_operations::{
-            StrandWatchCurrentOutcome, StrandWatchCurrentRequestBody,
+            StrandWatchCurrentRequestBody, StrandWatchCurrentResponseBody,
         };
         grant_realm_actions(
             &bob,
@@ -451,7 +451,7 @@ async fn run_cross_station_authority_forward_with_watch(watch: bool) -> Result<(
             !status.is_success() && !body.contains("watcher_actor_id"),
             "revoked Device received the late current: {status} {body}"
         );
-        let replacement: StrandWatchCurrentOutcome = serde_json::from_value(
+        let replacement: StrandWatchCurrentResponseBody = serde_json::from_value(
             expect_json(
                 client_b
                     .post("/_arkret/self/strands/watch/current")
@@ -461,7 +461,7 @@ async fn run_cross_station_authority_forward_with_watch(watch: bool) -> Result<(
             .await?,
         )?;
         ensure!(
-            matches!(replacement, StrandWatchCurrentOutcome::Current { .. }),
+            matches!(replacement, StrandWatchCurrentResponseBody::Current { .. }),
             "replacement device lost the Account Watch"
         );
         let mut cleared = client_b
@@ -469,7 +469,7 @@ async fn run_cross_station_authority_forward_with_watch(watch: bool) -> Result<(
                 &realm_id,
                 EventKind::StrandWatchSet.as_str(),
                 serde_json::to_value(StrandWatchSetPayload::clear(request.strand_id,request.watcher_actor_id)
-                    .with_expected_value(arkret_models_collaboration::strand_watch_operations::StrandWatchCurrentValue::Set(
+                    .with_expected_value(arkret_models_collaboration::strand_watch_operations::StrandWatchValue::Set(
                         arkret_models_collaboration::events_payloads::strand::StrandWatchExpectedValue {level:StrandWatchLevel::All,level_public:None})))?,
             )
             .await?;
@@ -635,7 +635,7 @@ pub async fn prepare_join(
         intent,
     };
     body.validate()?;
-    let outcome: SelfRealmJoinPrepareOutcome = serde_json::from_value(
+    let outcome: SelfRealmJoinPrepareResponseBody = serde_json::from_value(
         expect_json(
             client.post("/_arkret/self/realm-joins/prepare").json(&body),
             StatusCode::OK,
@@ -709,7 +709,7 @@ pub async fn grant_realm_actions(
         issued_at: chrono::Utc::now(),
     };
     let payload = arkret_models_collaboration::events_payloads::CapabilityGrantPayload { grant };
-    let outcome: AuthoritySubmitOutcome = serde_json::from_value(
+    let outcome: AuthoritySubmitResponseBody = serde_json::from_value(
         controller
             .submit_event(
                 realm_id,
@@ -719,7 +719,7 @@ pub async fn grant_realm_actions(
             .await?,
     )?;
     match outcome {
-        AuthoritySubmitOutcome::Accepted {
+        AuthoritySubmitResponseBody::Accepted {
             status: AuthorityCommitStatus::Committed,
             commit,
         } => Ok(commit),
@@ -806,14 +806,14 @@ pub async fn submit_and_expect_commit(
             .is_none(),
         "a self submission carries producer device evidence"
     );
-    let outcome: AuthoritySubmitOutcome = serde_json::from_value(
+    let outcome: AuthoritySubmitResponseBody = serde_json::from_value(
         expect_json(
             client.post("/_arkret/self/events").json(&submission),
             StatusCode::OK,
         )
         .await?,
     )?;
-    let AuthoritySubmitOutcome::Accepted { status, commit } = outcome else {
+    let AuthoritySubmitResponseBody::Accepted { status, commit } = outcome else {
         bail!("{} was not accepted: {outcome:?}", event.kind.as_str());
     };
     ensure!(
@@ -882,7 +882,7 @@ async fn submit_frozen_message_with_lost_response_and_native_reopen(
         .await?;
     frozen.mark_forwarding();
     ensure!(frozen.state() == garth::MessageSubmissionState::Forwarding);
-    let original: AuthoritySubmitOutcome = serde_json::from_value(
+    let original: AuthoritySubmitResponseBody = serde_json::from_value(
         expect_json(
             client
                 .post("/_arkret/self/events")
@@ -892,7 +892,7 @@ async fn submit_frozen_message_with_lost_response_and_native_reopen(
         )
         .await?,
     )?;
-    let AuthoritySubmitOutcome::Accepted {
+    let AuthoritySubmitResponseBody::Accepted {
         status,
         commit: original_commit,
     } = original
@@ -914,7 +914,7 @@ async fn submit_frozen_message_with_lost_response_and_native_reopen(
         arkret_canonical::canonical_json_bytes(pending.request())? == exact,
         "native reopen rewrote the signed request"
     );
-    let replay: AuthoritySubmitOutcome = serde_json::from_value(
+    let replay: AuthoritySubmitResponseBody = serde_json::from_value(
         expect_json(
             client
                 .post("/_arkret/self/events")
@@ -924,14 +924,14 @@ async fn submit_frozen_message_with_lost_response_and_native_reopen(
         )
         .await?,
     )?;
-    let AuthoritySubmitOutcome::Accepted { commit, .. } = &replay else {
+    let AuthoritySubmitResponseBody::Accepted { commit, .. } = &replay else {
         bail!("the frozen replay was refused: {replay:?}");
     };
     ensure!(
         *commit == original_commit,
         "exact replay allocated another RealmCommit"
     );
-    let arkret_models_collaboration::authority_commit::SelfAuthoritySubmitRequest::Event(
+    let arkret_models_collaboration::authority_commit::SelfAuthoritySubmitRequestBody::Event(
         submission,
     ) = pending.request()
     else {
@@ -1064,7 +1064,7 @@ async fn wait_for_accepted_revoke(
     loop {
         if let Some(outcome) = &current.revoke_command_outcome {
             ensure!(
-                outcome.result == SecurityRotationRevokeCommandDecision::Accepted,
+                outcome.outcome == SecurityRotationRevokeCommandDecision::Accepted,
                 "the device revoke was not accepted: {current:?}"
             );
             return Ok(());
@@ -1116,7 +1116,7 @@ pub async fn run_local_message_and_account_cursor_recovery_live() -> Result<()> 
         .current_state_entries
         .iter()
         .find_map(|row| match row {
-            arkret_wire::TypedCurrentRow::Value {
+            arkret_wire::CurrentState::Value {
                 selector: arkret_wire::CurrentSelector::Strand { strand_id },
                 value,
                 ..
@@ -1162,7 +1162,7 @@ pub async fn run_local_message_and_account_cursor_recovery_live() -> Result<()> 
         after.cursor != before.cursor,
         "committed message did not advance durable Account cursor"
     );
-    let replay: AuthoritySubmitOutcome = serde_json::from_value(
+    let replay: AuthoritySubmitResponseBody = serde_json::from_value(
         expect_json(
             alice
                 .post("/_arkret/self/events")
@@ -1172,7 +1172,7 @@ pub async fn run_local_message_and_account_cursor_recovery_live() -> Result<()> 
         )
         .await?,
     )?;
-    let AuthoritySubmitOutcome::Accepted {
+    let AuthoritySubmitResponseBody::Accepted {
         commit: replayed, ..
     } = replay
     else {
@@ -1205,7 +1205,7 @@ async fn run_durable_account_round(
     expected: Option<(&EventId, &RealmCommit)>,
 ) -> Result<garth::AccountCursorCheckpoint> {
     use arkret_models_collaboration::sync_frames::account_subscribe::{
-        AccountSubscribeBatch, SyncRequestBody,
+        AccountSubscribeBatch, AccountSubscribeParameters,
     };
     use garth::{
         AccountBatchProjector, AccountSubscription, CursorScope, CursorStore, FileStore,
@@ -1252,7 +1252,7 @@ async fn run_durable_account_round(
         expected: expected.map(|(event, commit)| (event.clone(), commit.clone())),
         observed: std::sync::atomic::AtomicBool::new(false),
     };
-    let request: SyncRequestBody =
+    let request: AccountSubscribeParameters =
         serde_json::from_value(json!({"filter":{"realm_ids":[realm],"window_limit":100}}))?;
     let device = arkret_wire::DeviceId::new(client.device_id.clone())?;
     tokio::time::timeout(
@@ -1318,7 +1318,7 @@ pub async fn run_plaintext_poll_revision_live() -> Result<()> {
             json!({
                 "strand_id":strand, "track_name":"discussion",
                 "content":{"kind":"ak.content.poll","body":"Choose one",
-                    "poll":{"kind":"disclosed","max_selections":1,
+                    "poll":{"kind":"disclosed","max_selection_count":1,
                         "answers":[{"id":"a","text":{"kind":"ak.content.text","body":"A"}},
                             {"id":"b","text":{"kind":"ak.content.text","body":"B"}}]}},
             }),
@@ -1364,17 +1364,17 @@ pub async fn run_plaintext_poll_revision_live() -> Result<()> {
         .await?;
     let replacement_commit =
         submit_and_expect_commit(&alice, &account, SAME_STATION_DEVICE, &replacement).await?;
-    let replay_request = arkret_wire::AuthoritySubmitRequest::Event(
+    let replay_request = arkret_wire::AuthoritySubmitRequestBody::Event(
         arkret_wire::EventAdmissionSubmission::new(replacement.clone()),
     );
-    let replay: AuthoritySubmitOutcome = serde_json::from_value(
+    let replay: AuthoritySubmitResponseBody = serde_json::from_value(
         expect_json(
             alice.post("/_arkret/self/events").json(&replay_request),
             StatusCode::OK,
         )
         .await?,
     )?;
-    let AuthoritySubmitOutcome::Accepted {
+    let AuthoritySubmitResponseBody::Accepted {
         status,
         commit: replay_commit,
     } = replay
@@ -1421,7 +1421,7 @@ pub async fn run_plaintext_poll_revision_live() -> Result<()> {
         let refused = alice
             .author_event(&realm, EventKind::MessageCreate.as_str(), payload)
             .await?;
-        let body = arkret_wire::AuthoritySubmitRequest::Event(
+        let body = arkret_wire::AuthoritySubmitRequestBody::Event(
             arkret_wire::EventAdmissionSubmission::new(refused.clone()),
         );
         expect_api_error(
@@ -1463,7 +1463,7 @@ pub async fn run_plaintext_poll_revision_live() -> Result<()> {
         .as_slice(),
     ))
     .map_err(anyhow::Error::msg)?;
-    let request = arkret_wire::AuthorityBundleRequest {
+    let request = arkret_wire::RealmAuthorityBundleRequestBody {
         realm_id: RealmId::new(realm.clone())?,
         nonce: nonce.clone(),
     };
@@ -1474,7 +1474,7 @@ pub async fn run_plaintext_poll_revision_live() -> Result<()> {
     let keys = garth::fetch_historical_station_key_directory(&http, &bundle, None, None).await?;
     let mut replica = garth::RealmReplica::new(request.realm_id.clone());
     replica.install_verified_authority(&request, bundle.clone(), &freshness, &keys)?;
-    let scan = arkret_wire::StreamScanRequest {
+    let scan = arkret_wire::StreamScanRequestBody {
         realm_id: request.realm_id.clone(),
         stream_ref: stream_ref.clone(),
         direction: arkret_wire::StreamScanDirection::After(None),
@@ -1539,7 +1539,7 @@ pub async fn run_plaintext_poll_revision_live() -> Result<()> {
                 .cloned()
                 .unwrap_or_else(|| json!([])),
         )?;
-        let response = arkret_models_collaboration::poll::VerifiedPollResponse::new(
+        let response = arkret_models_collaboration::poll::VerifiedPollVote::new(
             partition.clone(),
             accepted_ref,
             &selections,
@@ -1614,7 +1614,7 @@ pub async fn original_human_signer_fact(
 ) -> Result<arkret_models_collaboration::authority_commit::AccountDeviceHistoricalSignerFact> {
     use arkret_models_collaboration::authority_commit::AccountDeviceHistoricalSignerFact;
     use arkret_models_identity::{
-        HistoricalSignerKeyQuerySender, SignerKeyQueryOutcome, SignerKeyQuerySelector,
+        HistoricalSignerKeyQuerySender, SignerKeyQuerySelector, SignerKeyResolution,
         SignerKeysQueryRequestBody,
     };
     ensure!(
@@ -1661,12 +1661,12 @@ pub async fn original_human_signer_fact(
     let outcome = client.sdk().signer_keys_query(&request).await?;
     outcome.validate_for_request(&request)?;
     let [
-        SignerKeyQueryOutcome::HistoricalResolved {
+        SignerKeyResolution::HistoricalResolved {
             selector,
             key,
             accepted_at,
         },
-    ] = outcome.results.as_slice()
+    ] = outcome.resolutions.as_slice()
     else {
         bail!("original target's historical Human signer fact is unavailable");
     };
@@ -1692,7 +1692,7 @@ pub async fn original_human_signer_fact(
     )?;
     let bytes = arkret_signatures::EventProofBuilder::new().envelope_bytes(event)?;
     let public_key = arkret_signatures::PublicKeyMaterial::Ed25519Raw {
-        bytes: arkret_canonical::base64url_decode(fact.key.public_key_b64u.as_str())?,
+        bytes: arkret_canonical::base64url_decode(fact.key.public_key_base64url.as_str())?,
     };
     arkret_signatures::verify_ed25519_detached_jws_proof_with_digest_suite(
         proof,

@@ -145,7 +145,7 @@ struct SchemaValidationCase {
 struct FixtureLimits {
     hard_max_frame_bytes: usize,
     fixture_advertised_max_frame_bytes: u32,
-    max_channels: u32,
+    max_channel_count: u32,
     authentication_deadline_ms: u64,
     replay_ledger_retention_seconds: u64,
 }
@@ -1140,11 +1140,11 @@ fn expect_close_code(
 fn fixture_limits(limits: &FixtureLimits) -> WebSocketConnectionLimits {
     WebSocketConnectionLimits {
         max_frame_bytes: limits.fixture_advertised_max_frame_bytes,
-        max_channels: limits.max_channels,
+        max_channel_count: limits.max_channel_count,
         max_connection_pending_bytes: 65_536,
         max_channel_pending_bytes: 16_384,
-        max_connection_pending_frames: 128,
-        max_channel_pending_frames: 32,
+        max_connection_pending_frame_count: 128,
+        max_channel_pending_frame_count: 32,
         heartbeat_interval_ms: 30_000,
     }
 }
@@ -1165,7 +1165,7 @@ fn authenticated_state(limits: &FixtureLimits) -> Result<WebSocketConnectionStat
     state.observe_server(&WebSocketServerFrame::Welcome {
         connection_id: connection_id.to_owned(),
         limits: fixture_limits(limits),
-        auth_expires_at: Utc::now() + chrono::Duration::minutes(5),
+        authentication_expires_at: Utc::now() + chrono::Duration::minutes(5),
     })?;
     Ok(state)
 }
@@ -1539,7 +1539,7 @@ fn run_drain_and_close_traces(
                     payload: arkret_models_collaboration::sync_frames::websocket::WebSocketConnectionDrainPayload {
                         kind: arkret_models_collaboration::sync_frames::websocket::WebSocketDrainMarker::Drain,
                         reconnect_after_ms,
-                        deadline: Utc::now() + chrono::Duration::seconds(30),
+                        close_at: Utc::now() + chrono::Duration::seconds(30),
                         reason: Some("service_restart".to_owned()),
                     },
                 };

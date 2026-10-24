@@ -529,7 +529,7 @@ fn coauth_rejects_before_binding_state(public_key: &[u8]) -> Result<()> {
             evidence_dependencies: receipt.evidence_dependencies()?,
             policy_digest: key.policy_digest.clone(),
             verified_at: now,
-            refresh_after: Some(now + chrono::Duration::minutes(5)),
+            refresh_at: Some(now + chrono::Duration::minutes(5)),
             expires_at: Some(now + chrono::Duration::hours(1)),
             status: DidBindingStatus::Active,
         },
@@ -741,7 +741,7 @@ pub fn run_test_material_rejection_suite_with_coverage() -> Result<TestMaterialR
         None,
     )));
     let mldsa = b64u(
-        crypto["vectors"][2]["public_key_b64u"]
+        crypto["vectors"][2]["public_key_base64url"]
             .as_str()
             .context("ML-DSA key")?,
     )?;

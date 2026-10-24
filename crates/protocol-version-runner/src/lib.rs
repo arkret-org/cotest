@@ -10,7 +10,7 @@ use std::path::PathBuf;
 
 use anyhow::{Context, Result, ensure};
 use arkret_models_discovery::{ServiceDescribe, TransportBinding};
-use arkret_models_integration::AppletPingOutcome;
+use arkret_models_integration::AppletPingResponseBody;
 use arkret_wire::{Did, ErrorCode, ServiceKind, ServiceOperationId, TrustDomainId};
 use serde_json::{Value, json};
 
@@ -194,7 +194,7 @@ fn decode_and_consume(
                 Err(error) => classify_decode_error(case_id, &error.to_string()),
             }
         }
-        Carrier::AppletPing => match serde_json::from_value::<AppletPingOutcome>(value) {
+        Carrier::AppletPing => match serde_json::from_value::<AppletPingResponseBody>(value) {
             Ok(ping) => {
                 state.validated_claims.push(serde_json::to_value(&ping)?);
                 Ok("continue_typed_validation")

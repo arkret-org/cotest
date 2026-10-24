@@ -36,7 +36,7 @@ owner 从自己的获准 Realm stream 以limit5逐页读取，断言每项 full 
 - `sync/authority-commit-log.md` §3–§4：exact Event/Commit、单stream连续position、duplicate与暂不可用。
 - `sync/service-http-binding.md` §3.1：caller允许区间、readable floor、full/withheld与位置分页。
 - `conformance/scalability-constraints.md` §4.1：Snapshot容量上限。
-- `authority-commit-operations.schema.json#/$defs/peer_submit_request`与`stream_scan_request`。
+- `authority-commit-operations.schema.json#/$defs/peer_submit_request_body`与`stream_scan_request_body`。
 
 ## 历史记录
 

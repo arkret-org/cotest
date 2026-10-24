@@ -3,18 +3,18 @@
 use std::collections::BTreeMap;
 
 use anyhow::{Context as _, Result, anyhow, bail};
-use arkret_models_collaboration::session_grants::SessionGrantOutcome;
+use arkret_models_collaboration::session_grants::SessionGrantResponseBody;
 use arkret_models_crypto::{
     RecoveryAuthorityKind, RecoveryProofKind, RecoveryProofSummary, RecoveryReceipt,
-    RecoveryReceiptAuthData, RecoveryReceiptOutcome, RecoveryTerminalCommit,
+    RecoveryReceiptOutcome, RecoveryReceiptSignatureProof, RecoveryTerminalCommit,
 };
 use arkret_models_identity::{
-    ACCOUNT_HANDOFF_ALLOWED_OPERATIONS, AccountHandoffBinding, AccountHandoffOutcome,
+    ACCOUNT_HANDOFF_ALLOWED_OPERATIONS, AccountHandoffBinding, AccountHandoffResponseBody,
     CanonicalSessionPublicJwk, InitialSessionGrantIntent, standard_initial_session_grant_scope,
 };
 use arkret_wire::{
-    AccountId, CommitStreamRef, CommittedEventRef, Did, IssueRecoveryCompletionGrantOutcome,
-    IssueRecoveryCompletionGrantRequest, UnsignedRecoveryCompletionAttestation,
+    AccountId, CommitStreamRef, CommittedEventRef, Did, IssueRecoveryCompletionGrantResponseBody,
+    RecoveryCompletionGrantRequestBody, UnsignedRecoveryCompletionAttestation,
     UnsignedRecoveryCompletionAttestationBody, project_did_to_core_id,
 };
 use base64::Engine as _;
@@ -31,9 +31,9 @@ struct CompletionContext {
 
 #[derive(Clone)]
 struct CompletionVector {
-    handoff: AccountHandoffOutcome,
-    request: IssueRecoveryCompletionGrantRequest,
-    outcome: IssueRecoveryCompletionGrantOutcome,
+    handoff: AccountHandoffResponseBody,
+    request: RecoveryCompletionGrantRequestBody,
+    outcome: IssueRecoveryCompletionGrantResponseBody,
     /// The replacement device receipt that terminates the recovery unit.
     terminal_commit: RecoveryTerminalCommit,
     reanchor_event_ref: CommittedEventRef,
@@ -114,7 +114,7 @@ fn completion_vector() -> Result<CompletionVector> {
         identity_model: arkret_models_crypto::RecoveryIdentityModel::PcrPolicy,
         recovery_authority_kind: RecoveryAuthorityKind::PcrPolicy,
         previous_model_generation_ref: previous_generation,
-        result_model_generation_ref: result_generation,
+        new_model_generation_ref: result_generation,
         authorization_event_id: authorization_event_id.parse()?,
         reanchor_event_id: reanchor_event_ref.event_id.clone(),
         proof_summary: RecoveryProofSummary {
@@ -129,7 +129,7 @@ fn completion_vector() -> Result<CompletionVector> {
         outcome_reason_code: None,
         started_at,
         completed_at,
-        auth_data: RecoveryReceiptAuthData {
+        signature_proof: RecoveryReceiptSignatureProof {
             verification_method: crate::fixture_did_url(replacement_method.clone()),
             signature_algorithm: "Ed25519".to_owned(),
             signature: arkret_wire::Base64UrlString::new("A".repeat(86))
@@ -137,7 +137,7 @@ fn completion_vector() -> Result<CompletionVector> {
         },
         extra: Default::default(),
     };
-    receipt.auth_data.signature = arkret_wire::Base64UrlString::new(sign_b64url(
+    receipt.signature_proof.signature = arkret_wire::Base64UrlString::new(sign_b64url(
         &replacement_key,
         &receipt.signature_transcript_bytes()?,
     ))
@@ -160,7 +160,7 @@ fn completion_vector() -> Result<CompletionVector> {
             terminal_receipt_id: "ak:receipt:019a8400-0000-7000-8000-000000000003".parse()?,
             terminal_receipt_digest: terminal_receipt_digest.parse()?,
             replacement_device_id: device_id.parse()?,
-            result_model_generation_ref: result_generation,
+            new_model_generation_ref: result_generation,
             completed_at,
             reanchor_event_ref: reanchor_event_ref.clone(),
             device_authorization_event_ref: device_authorization_event_ref.clone(),
@@ -188,13 +188,13 @@ fn completion_vector() -> Result<CompletionVector> {
     };
     initial_session.validate()?;
 
-    let mut request = IssueRecoveryCompletionGrantRequest {
+    let mut request = RecoveryCompletionGrantRequestBody {
         transaction_id: transaction_id.parse()?,
         transaction_request_digest: transaction_request_digest.parse()?,
         terminal_receipt,
         completion_attestation: attestation,
         device_authorization_event_id: authorization_event_id.parse()?,
-        result_model_generation_ref: result_generation,
+        new_model_generation_ref: result_generation,
         initial_session: serde_json::to_value(&initial_session)?,
         canonical_request_digest: hash('0').parse()?,
     };
@@ -211,7 +211,7 @@ fn completion_vector() -> Result<CompletionVector> {
         encode_json(&json!({"alg": "EdDSA", "typ": "JWT"}))?,
         encode_json(&grant_claims)?
     );
-    let grant = SessionGrantOutcome {
+    let grant = SessionGrantResponseBody {
         account_id: AccountId::new(principal_id.parse()?, audience.parse()?),
         device_id: Some(device_id.parse()?),
         session_grant: jwt,
@@ -223,12 +223,12 @@ fn completion_vector() -> Result<CompletionVector> {
         granted_scope: standard_initial_session_grant_scope(),
         previous_session_grant_id: None,
     };
-    let outcome = IssueRecoveryCompletionGrantOutcome {
+    let outcome = IssueRecoveryCompletionGrantResponseBody {
         transaction_id: transaction_id.parse()?,
         session_grant_outcome: serde_json::to_value(grant)?,
         issued_at: completed_at,
     };
-    let handoff: AccountHandoffOutcome = serde_json::from_value(json!({
+    let handoff: AccountHandoffResponseBody = serde_json::from_value(json!({
         "request_id": "ak:request:019a8400-0000-7000-8000-000000000007",
         "account_handle": "alice:example.com",
         "account_subject": hash('a'),
@@ -277,21 +277,25 @@ fn validate_completion_vector(vector: &CompletionVector) -> Result<()> {
     verify_b64url(
         &vector.replacement_key,
         &receipt.signature_transcript_bytes()?,
-        &receipt.auth_data.signature,
+        &receipt.signature_proof.signature,
     )?;
     verify_b64url(
         &vector.coordinator_key,
         &vector.request.completion_attestation.signing_bytes()?,
-        &vector.request.completion_attestation.auth_data.signature,
+        &vector
+            .request
+            .completion_attestation
+            .signature_proof
+            .signature,
     )?;
     let attestation = &vector.request.completion_attestation;
     let receipt_digest = arkret_canonical::canonical_sha256(&vector.request.terminal_receipt)?;
     let initial: InitialSessionGrantIntent =
         serde_json::from_value(vector.request.initial_session.clone())?;
     initial.validate()?;
-    let receipt_generation = serde_json::to_value(receipt.result_model_generation_ref)?;
-    let attestation_generation = serde_json::to_value(attestation.result_model_generation_ref)?;
-    let request_generation = serde_json::to_value(vector.request.result_model_generation_ref)?;
+    let receipt_generation = serde_json::to_value(receipt.new_model_generation_ref)?;
+    let attestation_generation = serde_json::to_value(attestation.new_model_generation_ref)?;
+    let request_generation = serde_json::to_value(vector.request.new_model_generation_ref)?;
     if receipt.transaction_id != vector.request.transaction_id
         || receipt.transaction_request_digest != vector.request.transaction_request_digest
         || receipt.receipt_id != attestation.terminal_receipt_id
@@ -323,7 +327,7 @@ fn validate_completion_vector(vector: &CompletionVector) -> Result<()> {
     if vector.outcome.transaction_id != vector.request.transaction_id {
         bail!("completion outcome changed transaction binding");
     }
-    let grant: SessionGrantOutcome =
+    let grant: SessionGrantResponseBody =
         serde_json::from_value(vector.outcome.session_grant_outcome.clone())?;
     garth::SessionGrantState::from_initial_registration_outcome(
         &initial,
@@ -423,7 +427,7 @@ fn validate_mutation_matrix(vector: &CompletionVector) -> Result<()> {
     mutations.push(("device", device));
 
     let mut generation = vector.clone();
-    generation.request.result_model_generation_ref = 3;
+    generation.request.new_model_generation_ref = 3;
     generation.request.canonical_request_digest =
         generation.request.expected_canonical_request_digest()?;
     mutations.push(("generation", generation));

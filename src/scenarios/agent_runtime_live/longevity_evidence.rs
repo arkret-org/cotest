@@ -48,9 +48,9 @@ async fn refuse_without_effects(
         .send()
         .await?;
     if response.status().is_success() {
-        let outcome: AuthoritySubmitOutcome = response.json().await?;
+        let outcome: AuthoritySubmitResponseBody = response.json().await?;
         ensure!(
-            matches!(outcome, AuthoritySubmitOutcome::Rejected { .. }),
+            matches!(outcome, AuthoritySubmitResponseBody::Rejected { .. }),
             "invalid renewal accepted: {outcome:?}"
         );
     } else {
@@ -128,7 +128,7 @@ pub(super) async fn renew_with_real_issuer(
     payload.issued_at = arkret_canonical::normalize_timestamp_canonical(Utc::now());
     let event = renewal(controller, agent, &payload)?;
     let replacement_started = Instant::now();
-    let outcome: AuthoritySubmitOutcome = serde_json::from_value(
+    let outcome: AuthoritySubmitResponseBody = serde_json::from_value(
         expect_json(
             controller
                 .post("/_arkret/self/events")
@@ -140,7 +140,7 @@ pub(super) async fn renew_with_real_issuer(
         )
         .await?,
     )?;
-    let AuthoritySubmitOutcome::Accepted {
+    let AuthoritySubmitResponseBody::Accepted {
         status: AuthorityCommitStatus::Committed,
         commit,
     } = outcome
@@ -371,7 +371,7 @@ pub async fn run_agent_same_key_renewal_boundary() -> Result<()> {
     let loser = renewal(&controller, &agent, &competing)?;
     ensure!(winner.event_id != loser.event_id);
     let before = acceptance_rows_with_agent_stores(&database.connect_url, true).await?;
-    let result: AuthoritySubmitOutcome = serde_json::from_value(
+    let result: AuthoritySubmitResponseBody = serde_json::from_value(
         expect_json(
             controller
                 .post("/_arkret/self/events")
@@ -383,7 +383,7 @@ pub async fn run_agent_same_key_renewal_boundary() -> Result<()> {
         )
         .await?,
     )?;
-    let AuthoritySubmitOutcome::Accepted {
+    let AuthoritySubmitResponseBody::Accepted {
         status: AuthorityCommitStatus::Committed,
         commit,
     } = result
@@ -437,9 +437,9 @@ pub async fn run_agent_same_key_renewal_boundary() -> Result<()> {
         .send()
         .await?;
     if response.status().is_success() {
-        let result: AuthoritySubmitOutcome = response.json().await?;
+        let result: AuthoritySubmitResponseBody = response.json().await?;
         ensure!(
-            matches!(result, AuthoritySubmitOutcome::Rejected { .. }),
+            matches!(result, AuthoritySubmitResponseBody::Rejected { .. }),
             "stale same-key basis was accepted: {result:?}"
         );
     } else {
@@ -518,7 +518,7 @@ pub async fn run_agent_same_key_renewal_boundary() -> Result<()> {
         )
     };
     let profile_event = author_profile()?;
-    let accepted: AuthoritySubmitOutcome = serde_json::from_value(
+    let accepted: AuthoritySubmitResponseBody = serde_json::from_value(
         expect_json(
             controller
                 .post("/_arkret/self/events")
@@ -532,7 +532,7 @@ pub async fn run_agent_same_key_renewal_boundary() -> Result<()> {
     )?;
     ensure!(matches!(
         accepted,
-        AuthoritySubmitOutcome::Accepted {
+        AuthoritySubmitResponseBody::Accepted {
             status: AuthorityCommitStatus::Committed,
             ..
         }
@@ -589,7 +589,7 @@ pub async fn run_agent_same_key_renewal_boundary() -> Result<()> {
         principal.device_signing_key.to_bytes(),
     )?;
     let revoke_started = Instant::now();
-    let result: AuthoritySubmitOutcome = serde_json::from_value(
+    let result: AuthoritySubmitResponseBody = serde_json::from_value(
         expect_json(
             controller
                 .post("/_arkret/self/events")
@@ -603,7 +603,7 @@ pub async fn run_agent_same_key_renewal_boundary() -> Result<()> {
     )?;
     ensure!(matches!(
         result,
-        AuthoritySubmitOutcome::Accepted {
+        AuthoritySubmitResponseBody::Accepted {
             status: AuthorityCommitStatus::Committed,
             ..
         }

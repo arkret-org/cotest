@@ -341,7 +341,7 @@ fn assert_message_target_exclusive_kind() -> Result<()> {
 /// `preserve[]`; it MUST NOT drive the event-derived object into
 /// `state=redacted`, even though both spellings share one 33-octet token
 /// (`common-fields.md` §6.0). Only the object typed-id spelling drives object
-/// state. The two spellings remain distinct `object_redaction` current-result
+/// state. The two spellings remain distinct `object_redaction` current-state
 /// subjects because the registered selector uses the verbatim `target_ref`.
 fn assert_event_target_does_not_drive_object_state() -> Result<()> {
     let env = SchemaEnv::load()?;
@@ -371,7 +371,7 @@ fn assert_event_target_does_not_drive_object_state() -> Result<()> {
         }
     }
 
-    // The v1 current-result projector keys by the verbatim target_ref. It
+    // The v1 current-state projector keys by the verbatim target_ref. It
     // must not retype an Event target into its event-derived object identity.
     let event_id =
         arkret_wire::EventId::from_digest(arkret_canonical::DigestSuite::Sha256, [0x41; 32]);
@@ -384,16 +384,16 @@ fn assert_event_target_does_not_drive_object_state() -> Result<()> {
         .as_array()
         .and_then(|kinds| kinds.iter().find(|row| row["event_kind"] == "ak.redaction"))
         .ok_or_else(|| anyhow!("ak.redaction registry row is missing"))?;
-    let writes = redaction["result_writes"]
+    let writes = redaction["state_writes"]
         .as_array()
         .ok_or_else(|| anyhow!("ak.redaction result writes are missing"))?;
     let target_write = writes
         .iter()
-        .find(|write| write["result_family"] == "object_redaction")
+        .find(|write| write["state_family"] == "object_redaction")
         .ok_or_else(|| anyhow!("object_redaction result writer is missing"))?;
-    if target_write["result_selector"]
+    if target_write["state_selector"]
         != json!({"kind": "composite", "components": ["payload.target_ref"]})
-        || target_write["result_projection"]["kind"] != "keyed_set_add"
+        || target_write["state_projection"]["kind"] != "keyed_set_add"
     {
         bail!("redaction no longer keys the current result by verbatim target_ref");
     }
@@ -707,7 +707,7 @@ fn assert_erasure_receipt_operations_registered() -> Result<()> {
         (
             "ak.peer.erasure_receipt.command.submit.v1",
             "POST /_arkret/peer/erasure-receipts",
-            "schemas/erasure-receipt-operations.schema.json#/$defs/erasure_receipt_submit_outcome",
+            "schemas/erasure-receipt-operations.schema.json#/$defs/erasure_receipt_submit_response_body",
         ),
         (
             "ak.peer.erasure_receipt.resource.get.v1",

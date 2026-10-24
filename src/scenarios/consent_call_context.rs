@@ -2,7 +2,7 @@
 use anyhow::{Context, Result, ensure};
 use arkret::{ArkretMlsGroup, MlsGovernanceBindingPayload};
 use arkret_wire::{
-    AuthoritySubmitOutcome, EventId, EventKind, MlsCommitSubmission, RealmId, ScopeRef,
+    AuthoritySubmitResponseBody, EventId, EventKind, MlsCommitSubmission, RealmId, ScopeRef,
 };
 
 use super::_helpers::bridge::MockCoauthIntrospectionServer;
@@ -26,7 +26,7 @@ use crate::harness::TestServerGroup;
 pub async fn read_peer_current(
     holder: &crate::harness::TestActorClient,
     peer: &arkret_models_collaboration::events_payloads::consent::ConsentPeer,
-) -> Result<arkret_models_collaboration::consent_operations::ConsentCurrentReadOutcome> {
+) -> Result<arkret_models_collaboration::consent_operations::ConsentCurrentReadResponseBody> {
     use arkret_models_collaboration::consent_operations::ConsentCurrentReadRequestBody;
     let principal = holder
         .principal
@@ -83,7 +83,7 @@ pub async fn read_peer_current(
 pub async fn replace_peer_permissions(
     holder: &crate::harness::TestActorClient,
     peer: arkret_models_collaboration::events_payloads::consent::ConsentPeer,
-    current: &arkret_models_collaboration::consent_operations::ConsentCurrentReadOutcome,
+    current: &arkret_models_collaboration::consent_operations::ConsentCurrentReadResponseBody,
     permissions: Vec<arkret_models_collaboration::events_payloads::consent::ConsentPermission>,
 ) -> Result<(
     arkret_models_collaboration::consent_operations::ConsentView,
@@ -96,8 +96,8 @@ pub async fn replace_peer_permissions(
         current.realm_id == principal.pcr_realm_id,
         "replacement read belongs to another holder"
     );
-    if let arkret_models_collaboration::consent_operations::ConsentCurrentState::Present {
-        result: row,
+    if let arkret_models_collaboration::consent_operations::ConsentCurrentReadState::Present {
+        current_state: row,
     } = &current.current
     {
         ensure!(
@@ -294,7 +294,7 @@ impl ConsentCallContext {
             &genesis,
         )
         .await?;
-        let mut base = arkret_wire::MlsGroupCurrent {
+        let mut base = arkret_wire::MlsGroupValue {
             effective_scope: scope.clone(),
             genesis_event_ref: genesis.event_id.clone(),
             cipher_suite: arkret_wire::NonEmptyString::new(ACTIVE_SUITE)
@@ -344,15 +344,15 @@ impl ConsentCallContext {
                 )
                 .await?;
             let welcome = signed_welcome(&caller, &event, member, &add.welcome)?;
-            let request=arkret_models_collaboration::authority_commit::SelfAuthoritySubmitRequest::MlsCommit(MlsCommitSubmission {commit_event:event.clone(),welcomes:vec![welcome.clone()],idempotency_key:arkret_wire::UuidV7::new(fresh_uuid_v7().parse()?)?});
+            let request=arkret_models_collaboration::authority_commit::SelfAuthoritySubmitRequestBody::MlsCommit(MlsCommitSubmission {commit_event:event.clone(),welcomes:vec![welcome.clone()],idempotency_key:arkret_wire::UuidV7::new(fresh_uuid_v7().parse()?)?});
             let (status, outcome) = post_json(&caller.client, &request).await?;
             ensure!(
                 status == reqwest::StatusCode::OK,
                 "actual MLS add {index} failed: {status} {outcome}"
             );
             ensure!(matches!(
-                serde_json::from_value::<AuthoritySubmitOutcome>(outcome)?,
-                AuthoritySubmitOutcome::Accepted { .. }
+                serde_json::from_value::<AuthoritySubmitResponseBody>(outcome)?,
+                AuthoritySubmitResponseBody::Accepted { .. }
             ));
             let accepted = accepted_full_view(&caller.client, &event.event_id).await?;
             caller_group.install_accepted_commit(&accepted, &base)?;

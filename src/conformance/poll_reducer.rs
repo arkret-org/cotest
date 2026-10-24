@@ -9,7 +9,7 @@ use anyhow::{Result, ensure};
 use arkret_canonical::DigestSuite;
 use arkret_models_collaboration::events_payloads::message::PollResponseHead;
 use arkret_models_collaboration::poll::{
-    PollError, PollPartition, PollResponseSet, VerifiedPollResponse, validate_poll_selections,
+    PollError, PollPartition, PollResponseSet, VerifiedPollVote, validate_poll_selections,
 };
 use arkret_wire::{
     AccountId, ActorId, CommitStreamRef, CommittedEventRef, DidCoreId, EventId, MessageId,
@@ -42,9 +42,9 @@ fn response(
     position: u64,
     selections: &[&str],
     heads: Vec<PollResponseHead>,
-) -> Result<VerifiedPollResponse, PollError> {
+) -> Result<VerifiedPollVote, PollError> {
     let answers = ["a", "b", "c"].into_iter().map(str::to_owned).collect();
-    VerifiedPollResponse::new(
+    VerifiedPollVote::new(
         part.clone(),
         CommittedEventRef {
             event_id: event(byte),
@@ -130,7 +130,7 @@ pub fn run_poll_reducer_fixture_suite() -> Result<()> {
         stream_position: first.accepted_ref.stream_position,
     };
     ensure!(
-        VerifiedPollResponse::new(
+        VerifiedPollVote::new(
             part.clone(),
             CommittedEventRef {
                 event_id: event(5),

@@ -16,7 +16,7 @@ use arkret_wire::{
     AccountId, ActorId, Base64UrlString, BlobRef, CommitStreamRef, CommittedEventFullView,
     DetachedObjectSignature, DetachedSignatureAlgorithm, DetachedSignatureContext, DeviceId,
     DidCoreId, DidUrl, EncryptedPayloadScheme, EventAdmissionSubmission, EventId, Hash,
-    MlsGroupCurrent, MlsWelcomeDelivery, MlsWelcomeDeliveryId, MlsWelcomeRecipientEndpoint,
+    MlsGroupValue, MlsWelcomeDelivery, MlsWelcomeDeliveryId, MlsWelcomeRecipientEndpoint,
     RealmCommit, RealmCommitAuthorityRef, RealmCommitId, RealmId, ScopeRef, StrandId,
 };
 
@@ -35,7 +35,7 @@ fn detached(context: DetachedSignatureContext) -> DetachedObjectSignature {
         verification_method: DidUrl::new(format!("did:web:station.example#{STATION}")).unwrap(),
         signed_digest: Hash::new(format!("sha256:{}", "b".repeat(64))).unwrap(),
         created_at: "2026-09-12T00:00:00.000Z".parse().unwrap(),
-        sig: Base64UrlString::new("c2lnbmF0dXJl").unwrap(),
+        signature: Base64UrlString::new("c2lnbmF0dXJl").unwrap(),
     }
 }
 
@@ -132,7 +132,7 @@ fn authored_message_decrypts_at_the_other_mls_member_without_reencrypting() {
     // The producer installs its own transition only once the authority has
     // committed the Event that carried it, so the sender's epoch and the
     // Welcome's epoch cannot diverge.
-    let base_current = MlsGroupCurrent {
+    let base_current = MlsGroupValue {
         effective_scope: scope.clone(),
         genesis_event_ref: base_group_state_ref.clone(),
         cipher_suite: arkret_wire::NonEmptyString::new(
@@ -169,7 +169,7 @@ fn authored_message_decrypts_at_the_other_mls_member_without_reencrypting() {
             device_id: DeviceId::new("ak:device:01904100-0000-7000-8000-00000000000e").unwrap(),
         },
         keypackage_claim_ref: added.welcome.keypackage_claim_ref.clone(),
-        ciphertext_b64: added.welcome.ciphertext_b64.clone(),
+        ciphertext_base64url: added.welcome.ciphertext_base64url.clone(),
         producer_proof: detached(DetachedSignatureContext::MlsWelcomeDelivery),
     };
     let mut recipient =

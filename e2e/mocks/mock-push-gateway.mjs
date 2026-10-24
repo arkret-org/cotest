@@ -165,8 +165,8 @@ function signDeliveryReceipt({ pusher_id, payload }) {
     expires_at: now + 600,
   };
   const enc = `${b64url(JSON.stringify(header))}.${b64url(JSON.stringify(claims))}`;
-  const sig = cryptoSign(null, Buffer.from(enc), privateKey);
-  return { jwt: `${enc}.${b64url(sig)}`, claims };
+  const signature = cryptoSign(null, Buffer.from(enc), privateKey);
+  return { jwt: `${enc}.${b64url(signature)}`, claims };
 }
 
 const server = createServer(async (req, res) => {

@@ -1,6 +1,6 @@
 # `arkret-work/docs/flows` 与 joint-e2e 覆盖矩阵
 
-> as_of：2026-08-30
+> evaluated_at：2026-08-30
 > 审计范围：`arkret-work/docs/flows` 的 12 篇流程/模型文档、60 个 Mermaid 图，以及 cotest Playwright 与 Rust conformance/scenario 入口。
 > “joint smoke”专指 `scripts/run-server-conformance.ps1 -Profile joint`：启动 Coland、Inkson、Coauth，以 `joint-inkson` project 运行 `@fully-implemented` 用例。
 > “full/分层”表示证据存在于完整 Playwright、双 Coland 或 Rust conformance/scenario 中，不等于标准 joint smoke 会执行。

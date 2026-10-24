@@ -90,8 +90,8 @@ pub async fn run_agent_act_on_behalf_boundary() -> Result<()> {
             realm_id: realm.clone(),
         },
         selection: arkret::ParticipationBits {
-            act_on_behalf: true,
-            reaction_add: true,
+            acting_on_behalf_allowed: true,
+            reaction_addition_allowed: true,
             ..arkret::ParticipationBits::NONE
         },
         expected_version: 0,
@@ -145,7 +145,7 @@ pub async fn run_agent_act_on_behalf_boundary() -> Result<()> {
         .await?;
     let grant_ref = grant.event_id.clone();
     let grant_id = arkret_wire::GrantId::from_event_id(&grant_ref);
-    let outcome: AuthoritySubmitOutcome = serde_json::from_value(
+    let outcome: AuthoritySubmitResponseBody = serde_json::from_value(
         expect_json(
             controller
                 .post("/_arkret/self/events")
@@ -156,7 +156,7 @@ pub async fn run_agent_act_on_behalf_boundary() -> Result<()> {
     )?;
     ensure!(matches!(
         outcome,
-        AuthoritySubmitOutcome::Accepted {
+        AuthoritySubmitResponseBody::Accepted {
             status: AuthorityCommitStatus::Committed,
             ..
         }
@@ -191,7 +191,7 @@ pub async fn run_agent_act_on_behalf_boundary() -> Result<()> {
         &agent.verification_method,
         &agent.runtime_key,
         &operations,
-        arkret_models_collaboration::session_grants::SessionGrantAgentScopeRequest {
+        arkret_models_collaboration::session_grants::RequestedAgentSessionGrantScope {
             realm_ids: Vec::new(),
             strand_ids: vec![strand.clone()],
             track_names: vec![NonEmptyString::new("discussion").map_err(anyhow::Error::msg)?],
@@ -330,7 +330,7 @@ pub async fn run_agent_act_on_behalf_boundary() -> Result<()> {
             serde_json::to_value(&approval)?,
         )
         .await?;
-    let approved_outcome: AuthoritySubmitOutcome = serde_json::from_value(
+    let approved_outcome: AuthoritySubmitResponseBody = serde_json::from_value(
         expect_json(
             controller.post("/_arkret/self/events").canonical_json(
                 &arkret_wire::EventAdmissionSubmission::new(approved.clone()),
@@ -341,13 +341,13 @@ pub async fn run_agent_act_on_behalf_boundary() -> Result<()> {
     )?;
     ensure!(matches!(
         approved_outcome,
-        AuthoritySubmitOutcome::Accepted {
+        AuthoritySubmitResponseBody::Accepted {
             status: AuthorityCommitStatus::Committed,
             ..
         }
     ));
     let after_confirmation = acceptance_rows_with_agent_stores(database, true).await?;
-    let retried_confirmation: AuthoritySubmitOutcome = serde_json::from_value(
+    let retried_confirmation: AuthoritySubmitResponseBody = serde_json::from_value(
         expect_json(
             controller.post("/_arkret/self/events").canonical_json(
                 &arkret_wire::EventAdmissionSubmission::new(approved.clone()),
@@ -357,11 +357,11 @@ pub async fn run_agent_act_on_behalf_boundary() -> Result<()> {
         .await?,
     )?;
     let (
-        AuthoritySubmitOutcome::Accepted {
+        AuthoritySubmitResponseBody::Accepted {
             commit: original_confirmation,
             ..
         },
-        AuthoritySubmitOutcome::Accepted {
+        AuthoritySubmitResponseBody::Accepted {
             commit: confirmation_retry,
             ..
         },
@@ -432,8 +432,8 @@ pub async fn run_agent_act_on_behalf_boundary() -> Result<()> {
         "real approved publication rejected: {status} {}",
         String::from_utf8_lossy(&body)
     );
-    let published: AuthoritySubmitOutcome = serde_json::from_slice(&body)?;
-    let AuthoritySubmitOutcome::Accepted {
+    let published: AuthoritySubmitResponseBody = serde_json::from_slice(&body)?;
+    let AuthoritySubmitResponseBody::Accepted {
         status: AuthorityCommitStatus::Committed,
         commit: original_commit,
     } = published
@@ -475,8 +475,8 @@ pub async fn run_agent_act_on_behalf_boundary() -> Result<()> {
         "exact approved publication retry failed: {status} {}",
         String::from_utf8_lossy(&body)
     );
-    let retried: AuthoritySubmitOutcome = serde_json::from_slice(&body)?;
-    let AuthoritySubmitOutcome::Accepted {
+    let retried: AuthoritySubmitResponseBody = serde_json::from_slice(&body)?;
+    let AuthoritySubmitResponseBody::Accepted {
         commit: retried_commit,
         ..
     } = retried
@@ -553,7 +553,7 @@ pub async fn run_agent_act_on_behalf_boundary() -> Result<()> {
     let closed = arkret::ParticipationReplaceRequestBody {
         target_scope: selection.target_scope.clone(),
         selection: arkret::ParticipationBits {
-            act_on_behalf: false,
+            acting_on_behalf_allowed: false,
             ..selection.selection
         },
         expected_version: 1,
@@ -568,7 +568,7 @@ pub async fn run_agent_act_on_behalf_boundary() -> Result<()> {
             .iter()
             .any(|entry| entry.scope == closed.target_scope
                 && entry.version == 2
-                && !entry.selection.act_on_behalf)
+                && !entry.selection.acting_on_behalf_allowed)
     );
     let refused = refuse_target(
         &runtime,
@@ -665,7 +665,7 @@ pub async fn run_agent_act_on_behalf_boundary() -> Result<()> {
         "completed issuance replay after source revocation failed: {status} {}",
         String::from_utf8_lossy(&body)
     );
-    let original: arkret_models_collaboration::session_grants::SessionGrantOutcome =
+    let original: arkret_models_collaboration::session_grants::SessionGrantResponseBody =
         serde_json::from_slice(&body)?;
     ensure!(
         original.session_grant == credential,

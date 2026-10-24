@@ -43,13 +43,13 @@ use arkret_models_collaboration::authority_commit::{
     DirectConversationFoundingDependencyMissingProblem,
     DirectConversationFoundingFederationSubmission, DirectConversationFoundingMissingDependency,
     DirectConversationFoundingUnitKind, DirectConversationFoundingUnitSubmission,
-    PeerAuthoritySubmitRequest, PeerRegisteredAtomicUnit, PeerRegisteredAtomicUnitRequest,
-    RegisteredAtomicUnitBranch, SelfAuthoritySubmitRequest,
+    PeerAuthoritySubmitRequestBody, PeerRegisteredAtomicUnit, PeerRegisteredAtomicUnitRequestBody,
+    RegisteredAtomicUnitBranch, SelfAuthoritySubmitRequestBody,
 };
-use arkret_models_collaboration::device_messages::DeviceMessagesAckRequestBody;
+use arkret_models_collaboration::device_messages::DeviceMessagesAcknowledgementRequestBody;
 use arkret_models_collaboration::direct_conversation::{
-    DirectConversationFoundingPlan, DirectConversationResolveOutcome,
-    DirectConversationResolveRequestBody,
+    DirectConversationFoundingPlan, DirectConversationResolveRequestBody,
+    DirectConversationResolveResponseBody,
 };
 use arkret_models_collaboration::events_payloads::MlsGenesisCreatorLeafAuthority;
 use arkret_models_collaboration::events_payloads::direct_conversation::DirectConversationBoundPayload;
@@ -63,9 +63,9 @@ use arkret_models_collaboration::objects::direct_conversation::{
     direct_conversation_main_strand_create_payload, direct_conversation_member_join_payload,
     direct_conversation_peer_membership_bootstrap, direct_conversation_realm_create_payload,
 };
-use arkret_models_crypto::{KeyPackagesClaimOutcome, KeyPackagesUploadOutcome};
+use arkret_models_crypto::{KeyPackagesClaimResponseBody, KeyPackagesUploadResponseBody};
 use arkret_wire::{
-    AccountId, ActorId, AuthorityCommitStatus, AuthoritySubmitOutcome, Did, Event,
+    AccountId, ActorId, AuthorityCommitStatus, AuthoritySubmitResponseBody, Did, Event,
     EventAdmissionSubmission, EventId, GenesisSalt, MlsCommitSubmission, RealmId, ScopeRef,
     SemanticRef, StrandId,
 };
@@ -181,7 +181,7 @@ async fn upload_unbound_blob(member: &Member, bytes: &[u8]) -> Result<String> {
 }
 
 /// Submit one Event through the self events union and return its outcome.
-async fn submit(member: &Member, event: &Event) -> Result<AuthoritySubmitOutcome> {
+async fn submit(member: &Member, event: &Event) -> Result<AuthoritySubmitResponseBody> {
     let (status, body) = post_json(
         &member.client,
         &EventAdmissionSubmission::new(event.clone()),
@@ -195,9 +195,9 @@ async fn submit(member: &Member, event: &Event) -> Result<AuthoritySubmitOutcome
     Ok(serde_json::from_value(body)?)
 }
 
-fn expect_committed(outcome: &AuthoritySubmitOutcome, event: &Event) -> Result<()> {
+fn expect_committed(outcome: &AuthoritySubmitResponseBody, event: &Event) -> Result<()> {
     match outcome {
-        AuthoritySubmitOutcome::Accepted {
+        AuthoritySubmitResponseBody::Accepted {
             status: AuthorityCommitStatus::Committed,
             commit,
         } if commit.event_ref == event.event_id => Ok(()),
@@ -219,7 +219,7 @@ async fn expect_rejected(member: &Member, event: &Event, reason: &str) -> Result
         );
     } else {
         match submit(member, event).await? {
-            AuthoritySubmitOutcome::Rejected { reason_code, .. } if reason_code == reason => {}
+            AuthoritySubmitResponseBody::Rejected { reason_code, .. } if reason_code == reason => {}
             other => bail!(
                 "{} must be rejected as {reason}, got {other:?}",
                 event.kind.as_str()
@@ -260,7 +260,7 @@ async fn fixed_station_footprint(
              'authority',(SELECT to_jsonb(a) FROM realm_authorities a WHERE realm_id=$1),\
              'events',(SELECT count(*) FROM canonical_events WHERE realm_id=$1),\
              'commits',(SELECT count(*) FROM realm_commits WHERE realm_id=$1),\
-             'binding',(SELECT to_jsonb(b) FROM direct_conversation_binding_current_results b WHERE realm_id=$1),\
+             'binding',(SELECT to_jsonb(b) FROM direct_conversation_binding_current_states b WHERE realm_id=$1),\
              'submission_event',(SELECT to_jsonb(e) FROM canonical_events e WHERE e.envelope->>'event_id'=$3),\
              'forward_intents',(SELECT COALESCE(jsonb_agg(jsonb_build_object(\
                  'event_pk',f.event_pk,'status',f.status,'reason_code',f.reason_code,\
@@ -288,7 +288,7 @@ async fn fixed_station_bundle(
 ) -> Result<arkret_wire::RealmAuthorityBundle> {
     let mut entropy = [0_u8; 32];
     getrandom::fill(&mut entropy).map_err(|error| anyhow::anyhow!("authority nonce: {error}"))?;
-    let request = arkret_wire::AuthorityBundleRequest {
+    let request = arkret_wire::RealmAuthorityBundleRequestBody {
         realm_id: realm.clone(),
         nonce: arkret_wire::Base64UrlString::new(arkret_canonical::base64url_encode(entropy))
             .map_err(anyhow::Error::msg)?,
@@ -333,7 +333,7 @@ async fn reject_direct_station_change(
     let binding_row =
         |snapshot: &arkret_wire::RealmStateSnapshot| -> Result<Value> {
             let row = snapshot.current_state_entries.iter().find(|row| matches!(row,
-            arkret_wire::TypedCurrentRow::Value {
+            arkret_wire::CurrentState::Value {
                 selector: arkret_wire::CurrentSelector::DirectConversationBinding { .. }, ..
             }
         )).context("Direct Conversation binding current missing")?;
@@ -1152,10 +1152,10 @@ pub async fn cross_station_glare_founds_direct_conversation() -> Result<()> {
     let (founder, peer, founder_server, peer_database, input) =
         match (&first_resolution, &second_resolution) {
             (
-                DirectConversationResolveOutcome::CreationRequired {
+                DirectConversationResolveResponseBody::CreationRequired {
                     next_founding_input,
                 },
-                DirectConversationResolveOutcome::AwaitingFounder { .. },
+                DirectConversationResolveResponseBody::AwaitingFounder { .. },
             ) => (
                 &first,
                 &second,
@@ -1164,8 +1164,8 @@ pub async fn cross_station_glare_founds_direct_conversation() -> Result<()> {
                 next_founding_input,
             ),
             (
-                DirectConversationResolveOutcome::AwaitingFounder { .. },
-                DirectConversationResolveOutcome::CreationRequired {
+                DirectConversationResolveResponseBody::AwaitingFounder { .. },
+                DirectConversationResolveResponseBody::CreationRequired {
                     next_founding_input,
                 },
             ) => (
@@ -1373,7 +1373,7 @@ async fn run(
                 },
             })
             .await?;
-        let DirectConversationResolveOutcome::CreationRequired {
+        let DirectConversationResolveResponseBody::CreationRequired {
             next_founding_input,
         } = resolved
         else {
@@ -1502,8 +1502,8 @@ async fn run(
                 .await?,
             );
         }
-        let request =
-            PeerAuthoritySubmitRequest::RegisteredAtomicUnit(PeerRegisteredAtomicUnitRequest {
+        let request = PeerAuthoritySubmitRequestBody::RegisteredAtomicUnit(
+            PeerRegisteredAtomicUnitRequestBody {
                 branch: RegisteredAtomicUnitBranch::RegisteredAtomicUnit,
                 unit: PeerRegisteredAtomicUnit::DirectConversationFounding(
                     DirectConversationFoundingFederationSubmission {
@@ -1518,7 +1518,8 @@ async fn run(
                         founding_authority_evidence,
                     },
                 ),
-            });
+            },
+        );
         request.validate()?;
         let body = arkret_canonical::canonical_json_bytes(&request)?;
         let idempotency_key = format!("direct-conversation-founding:{}", plan.founding_unit_digest);
@@ -1604,7 +1605,7 @@ async fn run(
         })
         .await
         .context("founding provisional resolver")?;
-    let DirectConversationResolveOutcome::Provisional {
+    let DirectConversationResolveResponseBody::Provisional {
         coordinates,
         authorization_basis,
         group_state_ref,
@@ -1654,7 +1655,7 @@ async fn run(
         std::slice::from_ref(&bob_package),
         bob.method.as_str(),
     )?;
-    let uploaded: KeyPackagesUploadOutcome = serde_json::from_value(
+    let uploaded: KeyPackagesUploadResponseBody = serde_json::from_value(
         expect_json(
             bob.client
                 .post("/_arkret/self/keys/keypackages/upload")
@@ -1681,7 +1682,7 @@ async fn run(
     };
     ensure!(creator.leaf_index == 0 && creator.actor_id == alice.actor);
     let creator_leaf_authority = MlsGenesisCreatorLeafAuthority {
-        leaf_signature_key_b64u: creator.signature_key.clone(),
+        leaf_signature_key_base64url: creator.signature_key.clone(),
         endpoint: arkret_wire::MlsWelcomeRecipientEndpoint::Device {
             device_id: alice.device.clone(),
         },
@@ -1771,7 +1772,7 @@ async fn run(
         );
         tokio::time::sleep(Duration::from_millis(500)).await;
     };
-    let claimed: KeyPackagesClaimOutcome = serde_json::from_slice(&claim_bytes)?;
+    let claimed: KeyPackagesClaimResponseBody = serde_json::from_slice(&claim_bytes)?;
     let claim = claimed
         .claims
         .first()
@@ -1797,7 +1798,7 @@ async fn run(
         Cites::Bootstrap(&create_ref),
     )?;
     let welcome = signed_welcome(&alice, &add_event, &bob, &add.welcome)?;
-    let submission = SelfAuthoritySubmitRequest::MlsCommit(MlsCommitSubmission {
+    let submission = SelfAuthoritySubmitRequestBody::MlsCommit(MlsCommitSubmission {
         commit_event: add_event.clone(),
         welcomes: vec![welcome.clone()],
         idempotency_key: arkret_wire::UuidV7::new(fresh_uuid_v7().parse()?)?,
@@ -1811,7 +1812,7 @@ async fn run(
     expect_committed(&serde_json::from_value(outcome)?, &add_event)?;
     let add_ref = add_event.event_id.clone();
     let accepted_add = accepted_full_view(&alice.client, &add_ref).await?;
-    let base = arkret_wire::MlsGroupCurrent {
+    let base = arkret_wire::MlsGroupValue {
         effective_scope: scope.clone(),
         genesis_event_ref: genesis_ref.clone(),
         cipher_suite: arkret_wire::NonEmptyString::new(
@@ -1830,7 +1831,7 @@ async fn run(
     );
 
     // Bob joins from his Welcome and acknowledges it.
-    let (queued, ack_token) = if cross_station {
+    let (queued, acknowledgement_token) = if cross_station {
         let deadline = Instant::now() + Duration::from_secs(120);
         loop {
             let page = recipient_welcomes(&bob.client).await?;
@@ -1867,7 +1868,9 @@ async fn run(
     }
     bob.client
         .post("/_arkret/self/device_messages/ack")
-        .json(&DeviceMessagesAckRequestBody { ack_token })
+        .json(&DeviceMessagesAcknowledgementRequestBody {
+            acknowledgement_token,
+        })
         .send()
         .await?
         .error_for_status()?;
@@ -1883,7 +1886,7 @@ async fn run(
         .await
         .context("occupied leaf pending resolver")?;
     ensure!(
-        matches!(admission, DirectConversationResolveOutcome::Provisional {
+        matches!(admission, DirectConversationResolveResponseBody::Provisional {
         initial_exact_pair_group_state_ref: Some(ref initial),
         peer_mls_admission: arkret::direct_conversation::DirectConversationPeerMlsAdmission::Pending,
         ..
@@ -2001,7 +2004,7 @@ async fn run(
                 kid: arkret_wire::NonEmptyString::new(bob.method.to_string())
                     .map_err(anyhow::Error::msg)?,
                 signature_algorithm: None,
-                sig: arkret_wire::Base64UrlString::new("AA".to_owned())
+                signature: arkret_wire::Base64UrlString::new("AA".to_owned())
                     .map_err(anyhow::Error::msg)?,
             },
         },
@@ -2038,7 +2041,7 @@ async fn run(
             .await;
         match result {
             Ok(ref outcome) if !cross_station || matches!(outcome,
-                DirectConversationResolveOutcome::Provisional {
+                DirectConversationResolveResponseBody::Provisional {
                     peer_mls_admission: arkret::direct_conversation::DirectConversationPeerMlsAdmission::Durable,
                     ..
                 }) => break result?,
@@ -2049,7 +2052,7 @@ async fn run(
         }
     };
     ensure!(
-        matches!(admission, DirectConversationResolveOutcome::Provisional {
+        matches!(admission, DirectConversationResolveResponseBody::Provisional {
         initial_exact_pair_group_state_ref: Some(ref initial),
         peer_mls_admission: arkret::direct_conversation::DirectConversationPeerMlsAdmission::Durable,
         ..
@@ -2103,7 +2106,7 @@ async fn run(
     )?;
     expect_rejected(&alice, &alice_binding, "duplicate_conflict").await?;
     let retry = submit(&bob, &bob_binding).await?;
-    let AuthoritySubmitOutcome::Accepted {
+    let AuthoritySubmitResponseBody::Accepted {
         commit: original_commit,
         ..
     } = &winning_binding
@@ -2111,7 +2114,7 @@ async fn run(
         bail!("the original binding did not commit");
     };
     ensure!(
-        matches!(&retry, AuthoritySubmitOutcome::Accepted { status: AuthorityCommitStatus::Duplicate, commit } if commit == original_commit && commit.event_ref == bob_binding.event_id),
+        matches!(&retry, AuthoritySubmitResponseBody::Accepted { status: AuthorityCommitStatus::Duplicate, commit } if commit == original_commit && commit.event_ref == bob_binding.event_id),
         "exact binding retry allocated or substituted its original Commit"
     );
 
@@ -2124,7 +2127,7 @@ async fn run(
             },
         })
         .await?;
-    let DirectConversationResolveOutcome::Found {
+    let DirectConversationResolveResponseBody::Found {
         coordinates,
         group_state_ref,
         send_blockers,
@@ -2270,8 +2273,9 @@ async fn run(
             ensure!(
                 matches!(
                     &tombstoned,
-                    arkret::contact_operations::ContactOperationOutcome::Accepted {
-                        outcome: arkret::contact_operations::ContactAcceptedOutcome::Tombstone { .. }
+                    arkret::contact_operations::ContactOperationResponseBody::Accepted {
+                        outcome:
+                            arkret::contact_operations::ContactAcceptedResponseBody::Tombstone { .. }
                     }
                 ),
                 "case5 Contact tombstone did not commit: {tombstoned:?}"
@@ -2344,7 +2348,7 @@ async fn run(
         // Both normal Messages above still use the original Station. A late
         // exact binding retry and both private readers retain the same original.
         let late = submit(&bob, &bob_binding).await?;
-        ensure!(matches!(late, AuthoritySubmitOutcome::Accepted {
+        ensure!(matches!(late, AuthoritySubmitResponseBody::Accepted {
             status: AuthorityCommitStatus::Duplicate, ref commit
         } if commit == original_commit));
         for participant in [&alice, &bob] {
@@ -2455,7 +2459,7 @@ async fn run(
                 .current_state_entries
                 .iter()
                 .find_map(|entry| match entry {
-                    arkret_wire::TypedCurrentRow::Value {
+                    arkret_wire::CurrentState::Value {
                         selector:
                             arkret_wire::CurrentSelector::DirectConversationBinding {
                                 pair_key: subject,

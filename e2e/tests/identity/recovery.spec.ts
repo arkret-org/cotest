@@ -58,7 +58,7 @@ function uuidv7Like(): string {
  */
 type BackupDeviceSigner = {
   deviceId: string;
-  // `auth_data.verification_method` is the accepted device method: the
+  // `signature_proof.verification_method` is the accepted device method: the
   // holder's DID URL whose fragment is the device id (key-management.md
   // section 7.4.1).
   verificationMethod: string;
@@ -66,7 +66,7 @@ type BackupDeviceSigner = {
   signingSeedB64url: string;
 };
 
-// key-management.md section 7.4.1: a receiver anchors `auth_data.signature` to
+// key-management.md section 7.4.1: a receiver anchors `signature_proof.signature` to
 // the accepted `ak.device.authorize` of the signing device, so the envelope is
 // signed by the session device over the SDK transcript and names that exact
 // authorization Event.
@@ -124,7 +124,7 @@ function secretStorageEnvelope(opts: {
       kdf: {
         name: "argon2id",
         salt: randomBytes(16).toString("base64url"),
-        params: {
+        parameters: {
           memory_kib: opts.argon2.memory_kib,
           iterations: opts.argon2.iterations,
           parallelism: opts.argon2.parallelism,
@@ -153,8 +153,8 @@ function secretStorageEnvelope(opts: {
     // rejected before any KDF/domain rule is reached.
     ciphertext_digest: `sha256:${createHash("sha256").update(ciphertext).digest("hex")}`,
     series_id: seriesId,
-    series_seq: 0,
-    auth_data: {
+    series_sequence: 0,
+    signature_proof: {
       device_id: opts.signer.deviceId,
       verification_method: opts.signer.verificationMethod,
       signature_algorithm: "Ed25519",

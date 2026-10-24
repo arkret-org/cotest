@@ -2,12 +2,12 @@
 //! This bounded carrier runner does not claim all 86 canonical semantic variants.
 use anyhow::{Context, Result, bail, ensure};
 use arkret_models_collaboration::authority_commit::{
-    PeerAuthoritySubmitOutcome, PeerCommittedReplicationOutcomeRecord,
+    CommittedEventReplicationOutcome, PeerAuthoritySubmitResponseBody,
 };
 use arkret_models_collaboration::governance::membership_invite::MembershipPayloadState;
 use arkret_models_collaboration::governance::realm_join_intake::RealmJoinIntent;
 use arkret_wire::{
-    AccountId, AuthorityCommitStatus, AuthoritySubmitOutcome, Event, EventAdmissionSubmission,
+    AccountId, AuthorityCommitStatus, AuthoritySubmitResponseBody, Event, EventAdmissionSubmission,
     EventKind, RealmCommit,
 };
 use serde_json::{Value, json};
@@ -41,7 +41,7 @@ pub(crate) async fn submit_and_expect_commit(
         "Event signer does not match the original accepted Account/device"
     );
     let submission = EventAdmissionSubmission::new(event.clone());
-    let outcome: AuthoritySubmitOutcome = serde_json::from_value(
+    let outcome: AuthoritySubmitResponseBody = serde_json::from_value(
         expect_json(
             client
                 .post("/_arkret/self/events")
@@ -51,7 +51,7 @@ pub(crate) async fn submit_and_expect_commit(
         )
         .await?,
     )?;
-    let AuthoritySubmitOutcome::Accepted { status, commit } = outcome else {
+    let AuthoritySubmitResponseBody::Accepted { status, commit } = outcome else {
         bail!("authored Event was not accepted as committed");
     };
     ensure!(
@@ -70,7 +70,7 @@ pub(crate) async fn realm_business_footprint(database: &str, realm: &str) -> Res
     let realm = realm.to_owned();
     tokio::task::spawn_blocking(move || -> Result<Value> {
         let mut db = postgres::Client::connect(&database, postgres::NoTls)?;
-        let tables = db.query("SELECT table_name FROM information_schema.columns WHERE table_schema='public' AND column_name='realm_id' AND (table_name IN ('canonical_events','realm_commits','notifications','event_notification_relay','capability_quota_counters','capability_quota_buckets','capability_quota_consumptions') OR right(table_name,16)='_current_results') ORDER BY table_name", &[])?;
+        let tables = db.query("SELECT table_name FROM information_schema.columns WHERE table_schema='public' AND column_name='realm_id' AND (table_name IN ('canonical_events','realm_commits','notifications','event_notification_relay','capability_quota_counters','capability_quota_buckets','capability_quota_consumptions') OR right(table_name,16)='_current_states') ORDER BY table_name", &[])?;
         let mut result = serde_json::Map::new();
         for table in tables {
             let name: String = table.get(0);
@@ -83,7 +83,7 @@ pub(crate) async fn realm_business_footprint(database: &str, realm: &str) -> Res
         // Quota tables deliberately have no realm_id column: anchor them
         // through the target Realm's accepted grant cells instead of omitting them.
         for table in ["capability_quota_counters", "capability_quota_buckets", "capability_quota_consumptions"] {
-            let sql = format!("SELECT COALESCE(jsonb_agg(business_row ORDER BY business_row::text),'[]'::jsonb) FROM (SELECT to_jsonb(t) AS business_row FROM {table} t WHERE grant_id IN (SELECT grant_id FROM capability_grant_current_results WHERE realm_id=$1)) rows");
+            let sql = format!("SELECT COALESCE(jsonb_agg(business_row ORDER BY business_row::text),'[]'::jsonb) FROM (SELECT to_jsonb(t) AS business_row FROM {table} t WHERE grant_id IN (SELECT grant_id FROM capability_grant_current_states WHERE realm_id=$1)) rows");
             result.insert(table.to_owned(), db.query_one(&sql, &[&realm])?.get(0));
         }
         ensure!(result.contains_key("canonical_events") && result.contains_key("realm_commits"), "durable effect tables absent");
@@ -155,9 +155,9 @@ pub async fn run() -> Result<()> {
         )
         .await?;
     ensure!(status.is_success(), "exact peer replay failed: {status}");
-    let outcome: PeerAuthoritySubmitOutcome = serde_json::from_slice(&answer)?;
+    let outcome: PeerAuthoritySubmitResponseBody = serde_json::from_slice(&answer)?;
     ensure!(
-        matches!(outcome, PeerAuthoritySubmitOutcome::CommittedReplication(ref value) if matches!(value.replication_outcomes.as_slice(), [PeerCommittedReplicationOutcomeRecord::Duplicate {}])),
+        matches!(outcome, PeerAuthoritySubmitResponseBody::CommittedReplication(ref value) if matches!(value.replication_outcomes.as_slice(), [CommittedEventReplicationOutcome::Duplicate {}])),
         "peer duplicate created a new acceptance"
     );
     ensure!(

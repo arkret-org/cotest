@@ -66,7 +66,7 @@ struct PrivacyPayloadVector {
 #[derive(Debug, Deserialize)]
 struct DirectConversationVectors {
     trust_domain: String,
-    resolve_request: Value,
+    resolve_request_body: Value,
     resolve_unavailable_response: Value,
     resolve_response: Value,
     binding_event_ref: String,
@@ -88,7 +88,7 @@ struct DerivedStrandSelection {
 struct PendingContactNegative {
     name: String,
     contact_row: Value,
-    resolve_request: Value,
+    resolve_request_body: Value,
     expected_error: ExpectedError,
     observed_response: Value,
 }
@@ -338,14 +338,14 @@ fn validate_direct_conversation_artifacts() -> Result<()> {
     }
     if operation.request_schema_ref
         != Some(
-            "schemas/direct-conversation-operations.schema.json#/$defs/direct_conversation_resolve_request",
+            "schemas/direct-conversation-operations.schema.json#/$defs/direct_conversation_resolve_request_body",
         )
     {
         bail!("direct conversation request schema ref drifted");
     }
     if operation.response_schema_ref
         != Some(
-            "schemas/direct-conversation-operations.schema.json#/$defs/direct_conversation_resolve_outcome",
+            "schemas/direct-conversation-operations.schema.json#/$defs/direct_conversation_resolve_response_body",
         )
     {
         bail!("direct conversation response schema ref drifted");
@@ -472,7 +472,7 @@ fn validate_privacy_payload_vectors(vectors: &[PrivacyPayloadVector]) -> Result<
 }
 
 fn validate_direct_conversation_vectors(vectors: &DirectConversationVectors) -> Result<()> {
-    validate_resolve_request_shape(&vectors.resolve_request)?;
+    validate_resolve_request_shape(&vectors.resolve_request_body)?;
     validate_resolve_response_shape(&vectors.resolve_unavailable_response)?;
     validate_resolve_response_shape(&vectors.resolve_response)?;
     validate_binding_payload(
@@ -483,12 +483,12 @@ fn validate_direct_conversation_vectors(vectors: &DirectConversationVectors) -> 
     validate_resolver_uses_binding_main_strand(vectors)?;
     validate_contact_list_row(vectors)?;
     validate_pending_contact_negative(&vectors.pending_contact_negative)?;
-    validate_schema_negative_shapes(&vectors.resolve_request, &vectors.resolve_response)?;
+    validate_schema_negative_shapes(&vectors.resolve_request_body, &vectors.resolve_response)?;
 
     record_vector_event(
         "private_chat_privacy.direct_conversation_vectors",
         &json!({
-            "request": &vectors.resolve_request,
+            "request": &vectors.resolve_request_body,
             "unavailable_response": &vectors.resolve_unavailable_response,
             "response": &vectors.resolve_response,
             "binding_event_ref": &vectors.binding_event_ref,
@@ -511,7 +511,7 @@ fn validate_direct_conversation_vectors(vectors: &DirectConversationVectors) -> 
 fn validate_resolve_request_shape(value: &Value) -> Result<()> {
     let env = crate::conformance::schema_validation_fixture::SchemaEnv::load()?;
     let validator = env.compile(
-        "schemas/direct-conversation-operations.schema.json#/$defs/direct_conversation_resolve_request",
+        "schemas/direct-conversation-operations.schema.json#/$defs/direct_conversation_resolve_request_body",
     )?;
     if !validator.is_valid(value) {
         let detail = validator
@@ -532,7 +532,7 @@ fn validate_resolve_request_shape(value: &Value) -> Result<()> {
 fn validate_resolve_response_shape(value: &Value) -> Result<()> {
     let env = crate::conformance::schema_validation_fixture::SchemaEnv::load()?;
     let validator = env.compile(
-        "schemas/direct-conversation-operations.schema.json#/$defs/direct_conversation_resolve_outcome",
+        "schemas/direct-conversation-operations.schema.json#/$defs/direct_conversation_resolve_response_body",
     )?;
     if !validator.is_valid(value) {
         let detail = validator
@@ -545,7 +545,7 @@ fn validate_resolve_response_shape(value: &Value) -> Result<()> {
         );
     }
     serde_json::from_value::<
-        arkret_models_collaboration::direct_conversation::DirectConversationResolveOutcome,
+        arkret_models_collaboration::direct_conversation::DirectConversationResolveResponseBody,
     >(value.clone())?;
     Ok(())
 }
@@ -658,7 +658,7 @@ fn validate_contact_list_row(vectors: &DirectConversationVectors) -> Result<()> 
 }
 
 fn validate_pending_contact_negative(case: &PendingContactNegative) -> Result<()> {
-    validate_resolve_request_shape(&case.resolve_request)?;
+    validate_resolve_request_shape(&case.resolve_request_body)?;
     let contact_state = required_str(&case.contact_row, "state")?;
     if !matches!(contact_state, "pending_incoming" | "pending_outgoing") {
         bail!(

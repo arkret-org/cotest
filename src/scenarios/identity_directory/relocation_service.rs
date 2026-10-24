@@ -34,7 +34,7 @@ fn floor(value: &AuthenticatedServiceResolution) -> Result<ServiceMethodState> {
 
 async fn current_native(server: &ArkretServer) -> Result<arkret_identity::ResolvedDid> {
     use arkret_identity::{
-        DidResolver, DidWebvhDocumentOutcome, DidWebvhLogOutcome, DidWebvhResolver,
+        DidResolver, DidWebvhDocumentHttpResponse, DidWebvhLogHttpResponse, DidWebvhResolver,
     };
     let did = server.service_did().clone();
     let log_url = DidWebvhResolver::log_url(&did)?;
@@ -53,7 +53,7 @@ async fn current_native(server: &ArkretServer) -> Result<arkret_identity::Resolv
     let mut resolver = DidWebvhResolver::new();
     resolver.ingest_log(
         &did,
-        DidWebvhLogOutcome {
+        DidWebvhLogHttpResponse {
             url: log_url,
             content_type: log_type,
             body: log.bytes().await?.to_vec(),
@@ -74,7 +74,7 @@ async fn current_native(server: &ArkretServer) -> Result<arkret_identity::Resolv
         .to_owned();
     resolver.insert_from_https_response(
         &did,
-        DidWebvhDocumentOutcome {
+        DidWebvhDocumentHttpResponse {
             url: doc_url,
             content_type: doc_type,
             body: doc.bytes().await?.to_vec(),
@@ -180,15 +180,14 @@ pub async fn service_migration_preserves_business_and_refreshes_peer_route() -> 
     )?;
     ensure!(route.base_url == target.as_str());
     ensure!(verify_service_resolution_floor(&before, &floor(&after)?).is_err());
-    let target_description: arkret_models_discovery::http_bodies::ServerDescribeOutcome =
-        serde_json::from_value(
-            expect_json(
-                station.http().get(station.url("/_arkret/describe")),
-                StatusCode::OK,
-            )
-            .await?,
-        )?;
-    target_description.0.validate_route_projection(&route)?;
+    let target_description: arkret_models_discovery::ServiceDescribe = serde_json::from_value(
+        expect_json(
+            station.http().get(station.url("/_arkret/describe")),
+            StatusCode::OK,
+        )
+        .await?,
+    )?;
+    target_description.validate_route_projection(&route)?;
     let old_origin: url::Url = station_origin.parse()?;
     let historical_host = station
         .serve_historical_public_base(&old_origin, &old_did)
@@ -215,15 +214,14 @@ pub async fn service_migration_preserves_business_and_refreshes_peer_route() -> 
         historical == current,
         "historical origin lost the accepted canonical chain"
     );
-    let old_description: arkret_models_discovery::http_bodies::ServerDescribeOutcome =
-        serde_json::from_value(
-            expect_json(
-                station.http().get(old_origin.join("_arkret/describe")?),
-                StatusCode::OK,
-            )
-            .await?,
-        )?;
-    old_description.0.validate_route_projection(&route)?;
+    let old_description: arkret_models_discovery::ServiceDescribe = serde_json::from_value(
+        expect_json(
+            station.http().get(old_origin.join("_arkret/describe")?),
+            StatusCode::OK,
+        )
+        .await?,
+    )?;
+    old_description.validate_route_projection(&route)?;
     // Drift preserves service under the accepted identity. Retirement is an
     // explicit operator action, independently of method relocation.
     let historical_probe = owner

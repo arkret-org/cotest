@@ -124,11 +124,11 @@ fn base_claim() -> Value {
             ]
         },
         "status": "verified",
-        "as_of": "2026-05-20T00:01:00.000Z",
+        "evaluated_at": "2026-05-20T00:01:00.000Z",
         "verifier_id": "ak:did_core:web:directory.acme.example",
         "verified_at": "2026-05-20T00:01:00.000Z",
         "revocation": null,
-        "fresh_until": "2026-05-20T00:06:00.000Z",
+        "cache_expires_at": "2026-05-20T00:06:00.000Z",
         "status_proof": {
             "kind": "detached_jws",
             "verification_method": "did:web:directory.acme.example#key-1",

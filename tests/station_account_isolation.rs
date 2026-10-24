@@ -86,7 +86,7 @@ async fn seed(
             station_id: account.station_id.clone(),
             localpart: "alice".into(),
             display_name: Some(station.into()),
-            bio: None,
+            biography: None,
             avatar_blob_ref: None,
             created_at: now,
         })

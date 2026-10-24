@@ -5,7 +5,7 @@ use arkret_models_collaboration::call_signal::*;
 use arkret_models_collaboration::consent_operations::{ConsentReplaceRequestBody, ConsentView};
 use arkret_models_collaboration::events_payloads::consent::ConsentPermission;
 use arkret_models_collaboration::objects::media::{
-    CallMediaDesiredMedia, CallMediaTokenExchangeOutcome, CallMediaTokenExchangeRequestBody,
+    CallMediaDesiredMedia, CallMediaTokenExchangeRequestBody, CallMediaTokenExchangeResponseBody,
 };
 use arkret_wire::{CallId, ConsentScope, Event, EventAdmissionSubmission, EventKind, ScopeRef};
 use chrono::{Duration, Utc};
@@ -208,7 +208,7 @@ async fn prepare_invitation_with_plaintext(
 }
 
 async fn send(context: &ConsentCallContext, request: &CallInvitationSendRequestBody) -> Result<()> {
-    let result: CallInvitationSendOutcome = serde_json::from_value(
+    let result: CallInvitationSendResponseBody = serde_json::from_value(
         expect_json(
             context
                 .caller
@@ -268,7 +268,7 @@ async fn ready_stream(holder: &Member) -> Result<arkret_http_client::SignalSubsc
 async fn exchange(
     holder: &Member,
     request: &CallMediaTokenExchangeRequestBody,
-) -> Result<CallMediaTokenExchangeOutcome> {
+) -> Result<CallMediaTokenExchangeResponseBody> {
     Ok(serde_json::from_value(
         expect_json(
             holder.client.post("/_arkret/self/rtc/token").json(request),
@@ -313,7 +313,7 @@ async fn install_media(context: &ConsentCallContext, kind: &str, connect: &str) 
 async fn verify_token(
     context: &ConsentCallContext,
     request: &CallMediaTokenExchangeRequestBody,
-    outcome: &CallMediaTokenExchangeOutcome,
+    outcome: &CallMediaTokenExchangeResponseBody,
 ) -> Result<()> {
     let station = context.stations.server(1);
     let member = [&context.holder, &context.denied_holder, &context.caller]
@@ -484,7 +484,7 @@ async fn reject_token(
 async fn accept_roster(
     context: &ConsentCallContext,
     holder: &Member,
-    outcome: &CallMediaTokenExchangeOutcome,
+    outcome: &CallMediaTokenExchangeResponseBody,
 ) -> Result<Event> {
     let event=holder.client.author_event(context.realm.as_str(),EventKind::CallState.as_str(),serde_json::json!({
         "call_id":outcome.call_id,"roster_delta":{"op":"join","participant":{
@@ -523,7 +523,7 @@ async fn accept_roster(
 
 fn refresh(
     request: &CallMediaTokenExchangeRequestBody,
-    outcome: &CallMediaTokenExchangeOutcome,
+    outcome: &CallMediaTokenExchangeResponseBody,
 ) -> CallMediaTokenExchangeRequestBody {
     let mut request = request.clone();
     request.join_context = CallMediaJoinContext::Refresh(CallRefreshJoinContext {
@@ -950,17 +950,17 @@ fn product_attempt_after_current<'a>(
             if call.call_id == request.invitation.call_id);
             let product_live = call_invitation
                 .as_ref()
-                .is_some_and(|view| view.outcome.expires_at > Utc::now());
+                .is_some_and(|view| view.decision.expires_at > Utc::now());
             let current = inkson::conformance::retained_realm_current(
                 &native.state_store(),
                 &member.account,
                 &context.realm,
             )
             .await?;
-            let rows: Vec<arkret_wire::TypedCurrentRow> =
+            let rows: Vec<arkret_wire::CurrentState> =
                 serde_json::from_value(current["entries"].clone())?;
             let installed = rows.iter().any(|row| matches!(row,
-            arkret_wire::TypedCurrentRow::Value {selector: arkret_wire::CurrentSelector::CallState {call_id}, ..}
+            arkret_wire::CurrentState::Value {selector: arkret_wire::CurrentSelector::CallState {call_id}, ..}
                 if call_id == &request.invitation.call_id));
             eprintln!(
                 "[2141-product] received=true dedicated={dedicated} exact_call={call_matches} product={} product_live={product_live} signal_live={} call_current_installed={installed} elapsed_ms={}",
@@ -2220,9 +2220,9 @@ async fn original_roster_replication(
         .realm_state_snapshot_head(&context.realm)
         .await?;
     let row = snapshot.current_state_entries.iter().find(|row| matches!(row,
-        arkret_wire::TypedCurrentRow::Value { selector: arkret_wire::CurrentSelector::CallRoster { call_id }, .. } if call_id == call
+        arkret_wire::CurrentState::Value { selector: arkret_wire::CurrentSelector::CallRoster { call_id }, .. } if call_id == call
     )).context("accepted original roster")?;
-    let arkret_wire::TypedCurrentRow::Value { value, .. } = row;
+    let arkret_wire::CurrentState::Value { value, .. } = row;
     let roster: arkret_models_collaboration::events_payloads::call::CallRosterCurrentValue =
         serde_json::from_value(value.clone())?;
     let entry = roster.entries.iter().find(|entry| matches!(&entry.value,
@@ -2233,7 +2233,7 @@ async fn original_roster_replication(
         .participant_signing_key
         .as_ref()
         .context("original issuer key was not frozen")?
-        .public_key_b64u
+        .public_key_base64url
         .clone();
     let original = cotest::scenarios::mls_lifecycle_live::accepted_full_view(
         &context.holder.client,
@@ -2259,7 +2259,7 @@ async fn replay_roster_after_issuer_rotation(
     original: &(Vec<u8>, serde_json::Value, String),
 ) -> Result<()> {
     use arkret_models_collaboration::authority_commit::{
-        PeerAuthoritySubmitOutcome, PeerCommittedReplicationOutcomeRecord,
+        CommittedEventReplicationOutcome, PeerAuthoritySubmitResponseBody,
     };
     let issuer = context.stations.server(1);
     ensure!(
@@ -2287,10 +2287,10 @@ async fn replay_roster_after_issuer_rotation(
         "old roster replication failed: {status} {}",
         String::from_utf8_lossy(&answer)
     );
-    let response: PeerAuthoritySubmitOutcome = serde_json::from_slice(&answer)?;
+    let response: PeerAuthoritySubmitResponseBody = serde_json::from_slice(&answer)?;
     ensure!(
-        matches!(&response, PeerAuthoritySubmitOutcome::CommittedReplication(outcome) if matches!(outcome.replication_outcomes.as_slice(),
-            [PeerCommittedReplicationOutcomeRecord::Duplicate {} | PeerCommittedReplicationOutcomeRecord::Stored {}]
+        matches!(&response, PeerAuthoritySubmitResponseBody::CommittedReplication(outcome) if matches!(outcome.replication_outcomes.as_slice(),
+            [CommittedEventReplicationOutcome::Duplicate {} | CommittedEventReplicationOutcome::Stored {}]
         )),
         "old original was rejected after issuer rotation: {response:?}"
     );
@@ -2301,7 +2301,7 @@ async fn replay_roster_after_issuer_rotation(
         .realm_state_snapshot_head(&context.realm)
         .await?;
     let row = snapshot.current_state_entries.iter().find(|row| matches!(row,
-        arkret_wire::TypedCurrentRow::Value { selector: arkret_wire::CurrentSelector::CallRoster { call_id }, .. } if call_id == call
+        arkret_wire::CurrentState::Value { selector: arkret_wire::CurrentSelector::CallRoster { call_id }, .. } if call_id == call
     )).context("retained roster")?;
     ensure!(
         serde_json::to_value(row)? == original.1,
@@ -2316,8 +2316,8 @@ async fn replay_roster_after_issuer_rotation(
 async fn direct_actor_refresh_matrix(
     context: &mut ConsentCallContext,
     token: &CallMediaTokenExchangeRequestBody,
-    accepted: &CallMediaTokenExchangeOutcome,
-    issued_refresh: &CallMediaTokenExchangeOutcome,
+    accepted: &CallMediaTokenExchangeResponseBody,
+    issued_refresh: &CallMediaTokenExchangeResponseBody,
 ) -> Result<()> {
     ensure!(
         issued_refresh.actor_id == accepted.actor_id
@@ -2379,7 +2379,7 @@ async fn direct_actor_refresh_matrix(
     let rotated = exchange(&context.holder, &request).await?;
     verify_token(context, &request, &rotated).await?;
     ensure!(
-        rotated.participant_binding.sig != accepted.participant_binding.sig,
+        rotated.participant_binding.signature != accepted.participant_binding.signature,
         "rotation did not produce a fresh participant binding"
     );
     verify_token(

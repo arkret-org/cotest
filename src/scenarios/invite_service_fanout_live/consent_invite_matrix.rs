@@ -128,7 +128,7 @@ pub async fn run_current_invite_matrix() -> Result<()> {
             let started = Instant::now();
             let response = dispatch_explicit_invite(&sender.client, invite).await?;
             let elapsed = started.elapsed();
-            let outcome: arkret_models_collaboration::governance::invite_addressing::InviteDeliveryOutcome = serde_json::from_value(response.outcome)?;
+            let outcome: arkret_models_collaboration::governance::invite_addressing::InviteDeliveryResponseBody = serde_json::from_value(response.outcome)?;
             ensure!(outcome.status == arkret_models_collaboration::governance::invite_addressing::InviteDeliveryOutcomeStatus::Deferred
                 && outcome.disclosed_outcome.is_none() && outcome.retry_after_ms.is_none() && outcome.received_at.is_some(), "requester learned a private Consent decision");
             if revoked {

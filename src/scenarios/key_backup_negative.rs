@@ -2,8 +2,9 @@ use anyhow::{Context as _, Result, anyhow};
 use arkret_identifiers::{BackupId, BackupSeriesId, DeviceId, Did, project_did_to_core_id};
 use arkret_models_crypto::{
     BackupActiveSeriesPointer, BackupKind, KeyBackup, KeyBackupAead, KeyBackupAeadName,
-    KeyBackupAuthData, KeyBackupDomainSeparation, KeyBackupEncryption, KeyBackupRecipientMethod,
-    KeyBackupSignatureAlgorithm, KeysBackupsList, SecretStorageContentIndex, SecretStorageItemKind,
+    KeyBackupDomainSeparation, KeyBackupEncryption, KeyBackupRecipientMethod,
+    KeyBackupSignatureAlgorithm, KeyBackupSignatureProof, KeysBackupsPage,
+    SecretStorageContentIndex, SecretStorageItemKind,
 };
 use arkret_wire::{Base64UrlString, Hash};
 use chrono::{DateTime, Utc};
@@ -147,7 +148,7 @@ pub async fn key_backup_put_get_negative_run() -> Result<()> {
         .context("client has a provisioned principal")?
         .device_signing_key;
     let signature = ed25519_dalek::Signer::sign(signing_key, &conflicting.signing_payload_bytes()?);
-    conflicting.auth_data.signature = Base64UrlString::new(base64::Engine::encode(
+    conflicting.signature_proof.signature = Base64UrlString::new(base64::Engine::encode(
         &base64::engine::general_purpose::URL_SAFE_NO_PAD,
         signature.to_bytes(),
     ))
@@ -165,7 +166,7 @@ pub async fn key_backup_put_get_negative_run() -> Result<()> {
     // The list is served at one confirmed PCR cut of the caller's own
     // Account: Bob sees his absent pointer and an empty page, never Alice's
     // stored envelope.
-    let listed: KeysBackupsList = serde_json::from_value(
+    let listed: KeysBackupsPage = serde_json::from_value(
         expect_json(bob.get("/_arkret/self/keys/backups"), StatusCode::OK).await?,
     )?;
     let bob_principal = project_did_to_core_id(&Did::new(bob_did.clone())?)?;
@@ -284,7 +285,7 @@ fn backup_body(
             "sha256:099bf8f3386d21514c1fbd8282454fb2485018aa4cc3ede46d7f1fa6c3287d40",
         )?,
         plaintext_commitment: None,
-        auth_data: KeyBackupAuthData {
+        signature_proof: KeyBackupSignatureProof {
             device_id: DeviceId::new(device_id.to_owned())?,
             verification_method,
             signature_algorithm: KeyBackupSignatureAlgorithm::Ed25519,
@@ -293,7 +294,7 @@ fn backup_body(
         },
         retention: None,
         series_id: BackupSeriesId::new(backup_id.replacen("ak:backup:", "ak:backup_series:", 1))?,
-        series_seq: 0,
+        series_sequence: 0,
         supersedes_id: None,
         supersedes_digest: None,
         source_commit_ref: None,
@@ -302,7 +303,7 @@ fn backup_body(
     };
     let signing_key = ed25519_dalek::SigningKey::from_bytes(&signing_seed);
     let signature = ed25519_dalek::Signer::sign(&signing_key, &backup.signing_payload_bytes()?);
-    backup.auth_data.signature = Base64UrlString::new(base64::Engine::encode(
+    backup.signature_proof.signature = Base64UrlString::new(base64::Engine::encode(
         &base64::engine::general_purpose::URL_SAFE_NO_PAD,
         signature.to_bytes(),
     ))

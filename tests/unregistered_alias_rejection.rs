@@ -157,7 +157,7 @@ fn simple_mutations_reject_unregistered_success_discriminators() -> Result<()> {
         "expected broad success-object coverage, checked {checked_success_objects} operations"
     );
 
-    // The self Event submit answers with the closed AuthoritySubmitOutcome
+    // The self Event submit answers with the closed AuthoritySubmitResponseBody
     // schema resource, and the backups delete succeeds empty
     // (key-management.md 7.8/7.8.1: a byte-identical retry returns the same
     // empty body), so the typed-response half of this contract is carried by

@@ -51,8 +51,8 @@ function signBindingProof({ token_commitment, did, issuer, audience }) {
     nonce: randomUUID(),
   };
   const enc = `${b64url(JSON.stringify(header))}.${b64url(JSON.stringify(payload))}`;
-  const sig = createSign("RSA-SHA256").update(enc).sign(privateKey);
-  return `${enc}.${b64url(sig)}`;
+  const signature = createSign("RSA-SHA256").update(enc).sign(privateKey);
+  return `${enc}.${b64url(signature)}`;
 }
 
 function normalizeRecipient(raw) {

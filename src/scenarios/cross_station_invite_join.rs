@@ -36,7 +36,7 @@ use arkret_models_collaboration::governance::realm_join_intake::{
 use arkret_models_collaboration::sync_frames::demand_sync::RealmListMembership;
 use arkret_wire::{
     ActorId, CommitStreamRef, EventKind, InviteId, ReadableFloorReason, RealmId,
-    StreamScanDirection, StreamScanOutcome, StreamScanRequest,
+    StreamScanDirection, StreamScanRequestBody, StreamScanResponseBody,
 };
 use chrono::{Duration as ChronoDuration, Utc};
 use reqwest::StatusCode;
@@ -142,8 +142,8 @@ async fn wait_for_joined_row(client: &TestActorClient, realm_id: &str) -> Result
 pub(crate) async fn wait_for_member_scan(
     client: &TestActorClient,
     realm_id: &RealmId,
-) -> Result<StreamScanOutcome> {
-    let request = StreamScanRequest {
+) -> Result<StreamScanResponseBody> {
+    let request = StreamScanRequestBody {
         realm_id: realm_id.clone(),
         stream_ref: CommitStreamRef::Realm {
             realm_id: realm_id.clone(),
@@ -442,8 +442,8 @@ pub async fn cross_station_invite_join_run() -> Result<()> {
         replay_status == StatusCode::OK,
         "exact join replay failed: {replay_status} {replay_body}"
     );
-    let replayed: arkret_wire::AuthoritySubmitOutcome = serde_json::from_value(replay_body)?;
-    let arkret_wire::AuthoritySubmitOutcome::Accepted {
+    let replayed: arkret_wire::AuthoritySubmitResponseBody = serde_json::from_value(replay_body)?;
+    let arkret_wire::AuthoritySubmitResponseBody::Accepted {
         status: arkret_wire::AuthorityCommitStatus::Duplicate,
         commit: replayed_accept,
     } = replayed

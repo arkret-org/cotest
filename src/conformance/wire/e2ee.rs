@@ -322,7 +322,7 @@ pub fn run_device_message_negative_fixture_suite() -> Result<()> {
         let key_ref = required_str(envelope, "key_ref")?;
         let _ = required_str(envelope, "recipient_device_id")?;
         let _ = required_str(envelope, "hlc")?;
-        let _ = required_str(envelope, "ciphertext_b64")?;
+        let _ = required_str(envelope, "ciphertext_base64url")?;
 
         let expected = v
             .get("expected")

@@ -2,8 +2,8 @@
 
 use anyhow::{Result, ensure};
 use arkret_wire::{
-    CommitStreamRef, CommittedEventView, RealmId, StreamScanDirection, StreamScanOutcome,
-    StreamScanRequest,
+    CommitStreamRef, CommittedEventView, RealmId, StreamScanDirection, StreamScanRequestBody,
+    StreamScanResponseBody,
 };
 
 use crate::harness::{TestActorClient, TestServerGroup, submitted_event_id};
@@ -33,8 +33,8 @@ async fn scan(
     realm: &RealmId,
     direction: StreamScanDirection,
     limit: u16,
-) -> Result<StreamScanOutcome> {
-    let request = StreamScanRequest {
+) -> Result<StreamScanResponseBody> {
+    let request = StreamScanRequestBody {
         realm_id: realm.clone(),
         stream_ref: CommitStreamRef::Realm {
             realm_id: realm.clone(),

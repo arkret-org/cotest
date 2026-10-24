@@ -22,10 +22,10 @@ use std::time::{Duration, Instant};
 use anyhow::{Context as _, Result, bail, ensure};
 use arkret::{ArkretMlsIdentity, ArkretMlsSigner};
 use arkret_models_collaboration::agent_operations::{
-    AgentKeyPairOutcome, AgentPairingBootstrap, AgentProvisionCommitPhase,
-    AgentProvisionCommitRequestBody, AgentProvisionOutcome, AgentProvisionPreparePhase,
-    AgentProvisionPrepareRequestBody, AgentProvisionRequestBody, AgentRuntimeApprovalOutcome,
-    AgentRuntimeApprovalStatusOutcome, AgentRuntimeApprovalStatusRequestBody,
+    AgentKeyPairResponseBody, AgentPairingBootstrap, AgentProvisionCommitPhase,
+    AgentProvisionCommitRequestBody, AgentProvisionPreparePhase, AgentProvisionPrepareRequestBody,
+    AgentProvisionRequestBody, AgentProvisionResponseBody, AgentRuntimeApprovalResponseBody,
+    AgentRuntimeApprovalStatusRequestBody, AgentRuntimeApprovalStatusResponseBody,
     agent_key_pairing_request_binding_digest,
 };
 use arkret_models_collaboration::agent_scope::AgentRequestedScopeDisclosure;
@@ -35,10 +35,10 @@ use arkret_models_collaboration::events_payloads::agent::{
 use arkret_models_collaboration::governance::agent_membership_cascade::AgentControllerMembershipBinding;
 use arkret_models_collaboration::governance::membership_invite::MembershipPayload;
 use arkret_models_crypto::{
-    KeyPackagesClaimRequestBody, KeyPackagesUploadOutcome, MlsEndpointIdentity,
+    KeyPackagesClaimRequestBody, KeyPackagesUploadResponseBody, MlsEndpointIdentity,
 };
 use arkret_wire::{
-    AccountId, ActorId, AuthorityCommitStatus, AuthoritySubmitOutcome, Did, DidCoreId, DidUrl,
+    AccountId, ActorId, AuthorityCommitStatus, AuthoritySubmitResponseBody, Did, DidCoreId, DidUrl,
     Event, EventId, IdempotencyKey, NonEmptyString, OpaqueLocalId, ProtocolOperationId, RealmId,
     RequestId, SchemaId, ScopeRef, ServiceOperationId,
 };
@@ -235,7 +235,7 @@ async fn provision(
     controller: &TestActorClient,
     body: &AgentProvisionRequestBody,
     status: StatusCode,
-) -> Result<AgentProvisionOutcome> {
+) -> Result<AgentProvisionResponseBody> {
     Ok(serde_json::from_value(
         expect_json(controller.post("/_arkret/self/agents").json(body), status).await?,
     )?)
@@ -254,7 +254,8 @@ pub struct AgentRuntimeSession {
     pub key_authorization: EventId,
     /// The runtime's authenticated client.
     pub runtime: TestActorClient,
-    issuer_request: Option<arkret_models_collaboration::session_grants::AgentSessionGrantRequest>,
+    issuer_request:
+        Option<arkret_models_collaboration::session_grants::AgentSessionGrantRequestBody>,
 }
 
 /// A real provision, PCR genesis and controller-approved runtime key. No
@@ -408,7 +409,7 @@ impl AgentRuntimeSession {
                 controller_principal_id: &controller_account.principal_id,
                 // WebVH entries carry second-granularity versionTime and each
                 // entry must be strictly later than its predecessor.
-                version_time: Utc::now() - chrono::Duration::seconds(5),
+                version_created_at: Utc::now() - chrono::Duration::seconds(5),
                 root_seed: &root_seed,
                 next_root_public_key_multibase:
                     &arkret_canonical::ed25519_pubkey_to_did_key_multibase(
@@ -465,7 +466,7 @@ impl AgentRuntimeSession {
         if let (Some(evidence), Some(before)) = (evidence.as_deref_mut(), prepare_before) {
             evidence.prepare_zero_writes(before).await?;
         }
-        let AgentProvisionOutcome::AwaitingControllerEvent(prepared) = prepared else {
+        let AgentProvisionResponseBody::AwaitingControllerEvent(prepared) = prepared else {
             bail!("prepare must await the controller-authored provision");
         };
         ensure!(
@@ -556,7 +557,7 @@ impl AgentRuntimeSession {
         }
         let awaiting = provision(controller, &commit_body, StatusCode::OK).await?;
         ensure!(
-            matches!(awaiting, AgentProvisionOutcome::AwaitingPcrGenesis(_)),
+            matches!(awaiting, AgentProvisionResponseBody::AwaitingPcrGenesis(_)),
             "an accepted provision awaits its PCR genesis: {awaiting:?}"
         );
         if let Some(evidence) = evidence.as_deref_mut() {
@@ -574,7 +575,7 @@ impl AgentRuntimeSession {
 
         // 5. The genesis is its own submission; the Station finds the declaration by
         //    retype(event_id).
-        let founded: AuthoritySubmitOutcome = serde_json::from_value(
+        let founded: AuthoritySubmitResponseBody = serde_json::from_value(
             expect_json(
                 controller
                     .post("/_arkret/self/events")
@@ -583,7 +584,7 @@ impl AgentRuntimeSession {
             )
             .await?,
         )?;
-        let AuthoritySubmitOutcome::Accepted { status, commit } = founded else {
+        let AuthoritySubmitResponseBody::Accepted { status, commit } = founded else {
             bail!("the Agent PCR genesis was not accepted: {founded:?}");
         };
         ensure!(
@@ -594,7 +595,7 @@ impl AgentRuntimeSession {
         );
         let awaiting = provision(controller, &commit_body, StatusCode::OK).await?;
         ensure!(
-            matches!(awaiting, AgentProvisionOutcome::AwaitingDidBinding(_)),
+            matches!(awaiting, AgentProvisionResponseBody::AwaitingDidBinding(_)),
             "an accepted genesis awaits the DID binding update: {awaiting:?}"
         );
         if let Some(evidence) = evidence.as_deref_mut() {
@@ -616,7 +617,7 @@ impl AgentRuntimeSession {
                 did: agent_did.as_str(),
                 local_id: &local_id,
                 previous_entries: std::slice::from_ref(&inception.log_entry),
-                version_time: Utc::now(),
+                version_created_at: Utc::now(),
                 current_root_seed: &binding_seed,
                 next_root_public_key_multibase:
                     &arkret_canonical::ed25519_pubkey_to_did_key_multibase(
@@ -631,7 +632,7 @@ impl AgentRuntimeSession {
         )?;
         submit_did_operation(server, &update.submit_body).await?;
         let complete = provision(controller, &commit_body, StatusCode::CREATED).await?;
-        let AgentProvisionOutcome::Complete(complete) = complete else {
+        let AgentProvisionResponseBody::Complete(complete) = complete else {
             bail!("the bound Agent completes provisioning: {complete:?}");
         };
         if let Some(evidence) = evidence.as_deref_mut() {
@@ -686,7 +687,7 @@ impl AgentRuntimeSession {
                 &verification_method,
             );
         let approval_request = builder.build_approval_request()?;
-        let approval: AgentRuntimeApprovalOutcome = serde_json::from_value(
+        let approval: AgentRuntimeApprovalResponseBody = serde_json::from_value(
             expect_json(
                 server
                     .http()
@@ -787,7 +788,7 @@ impl AgentRuntimeSession {
                 format!("{base}/_arkret/gate/account/agent-key-pair")
             }
         };
-        let paired: AgentKeyPairOutcome = serde_json::from_value(
+        let paired: AgentKeyPairResponseBody = serde_json::from_value(
             expect_json(
                 controller
                     .authorize(server.http().post(pair_url))
@@ -957,7 +958,7 @@ async fn ensure_controller_recovery_policy(
 ) -> Result<()> {
     use ed25519_dalek::Signer as _;
 
-    let current: arkret_models_crypto::RecoveryPolicyActiveOutcome = serde_json::from_value(
+    let current: arkret_models_crypto::RecoveryPolicyStatusView = serde_json::from_value(
         expect_json(
             controller.get("/_arkret/root/identity/recovery-policy"),
             StatusCode::OK,
@@ -981,7 +982,7 @@ async fn ensure_controller_recovery_policy(
                 && policy.account_id == summary.account_id
                 && policy.version == summary.version
                 && policy.trust_domain == summary.trust_domain
-                && &policy.auth_data.verification_method == device_method
+                && &policy.signature_proof.verification_method == device_method
                 && policy.expires_at.is_none_or(|at| at > Utc::now())
                 && serde_json::to_value(&policy.methods)? == json!([{"kind":"did_root"}]),
             "accepted recovery policy differs from this controller fixture prerequisite"
@@ -1000,7 +1001,7 @@ async fn ensure_controller_recovery_policy(
         "issued_at": arkret_canonical::format_timestamp_canonical(
             arkret::canonical::normalize_timestamp_canonical(Utc::now())
         ),
-        "auth_data": {
+        "signature_proof": {
             "verification_method": device_method,
             "signature_algorithm": "Ed25519",
             "signature": "AA"
@@ -1008,7 +1009,7 @@ async fn ensure_controller_recovery_policy(
         "methods": [{"kind": "did_root"}]
     }))?;
     let transcript = arkret_models_crypto::recovery_policy_signature_transcript_bytes(&policy)?;
-    policy.auth_data.signature =
+    policy.signature_proof.signature =
         arkret_wire::Base64UrlString::new(arkret_canonical::base64url_encode(
             principal.device_signing_key.sign(&transcript).to_bytes(),
         ))
@@ -1111,7 +1112,7 @@ async fn wait_for_activation(
     };
     let deadline = Instant::now() + Duration::from_secs(30);
     loop {
-        let status: AgentRuntimeApprovalStatusOutcome = serde_json::from_value(
+        let status: AgentRuntimeApprovalStatusResponseBody = serde_json::from_value(
             expect_json(
                 server
                     .http()
@@ -1229,7 +1230,7 @@ pub async fn run_agent_capability_longevity_live() -> Result<()> {
             };
             let payload =
                 arkret_models_collaboration::events_payloads::CapabilityGrantPayload { grant };
-            let outcome: AuthoritySubmitOutcome = serde_json::from_value(
+            let outcome: AuthoritySubmitResponseBody = serde_json::from_value(
                 controller
                     .submit_event(
                         realm.as_str(),
@@ -1241,7 +1242,7 @@ pub async fn run_agent_capability_longevity_live() -> Result<()> {
             ensure!(
                 matches!(
                     outcome,
-                    AuthoritySubmitOutcome::Accepted {
+                    AuthoritySubmitResponseBody::Accepted {
                         status: AuthorityCommitStatus::Committed,
                         ..
                     }
@@ -1398,7 +1399,7 @@ pub async fn run_agent_runtime_session_live() -> Result<()> {
             .map_err(anyhow::Error::msg)?,
         principal.device_signing_key.to_bytes(),
     )?;
-    let revoked: AuthoritySubmitOutcome = serde_json::from_value(
+    let revoked: AuthoritySubmitResponseBody = serde_json::from_value(
         expect_json(
             controller
                 .post("/_arkret/self/events")
@@ -1410,7 +1411,7 @@ pub async fn run_agent_runtime_session_live() -> Result<()> {
     ensure!(
         matches!(
             revoked,
-            AuthoritySubmitOutcome::Accepted {
+            AuthoritySubmitResponseBody::Accepted {
                 status: AuthorityCommitStatus::Committed,
                 ..
             }
@@ -1435,7 +1436,7 @@ pub async fn run_agent_runtime_session_live() -> Result<()> {
 fn persist_and_reopen_agent_welcome(
     group: &arkret::ArkretMlsGroup,
     welcome: &arkret_wire::MlsWelcomeDelivery,
-    outcome: &arkret_models_crypto::KeyPackagesClaimOutcome,
+    outcome: &arkret_models_crypto::KeyPackagesClaimResponseBody,
     path: &std::path::Path,
 ) -> Result<arkret::ArkretMlsGroup> {
     use std::io::Write as _;
@@ -1588,7 +1589,7 @@ async fn run_agent_keypackage_journey(terminal: bool) -> Result<()> {
         &database.connect_url,
     )
     .await?;
-    let outcome: KeyPackagesUploadOutcome = serde_json::from_value(
+    let outcome: KeyPackagesUploadResponseBody = serde_json::from_value(
         expect_json(
             agent
                 .runtime
@@ -1684,7 +1685,7 @@ async fn run_agent_keypackage_journey(terminal: bool) -> Result<()> {
             "signature": {
                 "kid": agent.verification_method,
                 "signature_algorithm": "Ed25519",
-                "sig": "AA"
+                "signature": "AA"
             }
         }
     }))?;
@@ -1698,7 +1699,7 @@ async fn run_agent_keypackage_journey(terminal: bool) -> Result<()> {
     else {
         unreachable!("the fixture builds an Agent claim")
     };
-    signature.sig = arkret_wire::Base64UrlString::new(
+    signature.signature = arkret_wire::Base64UrlString::new(
         URL_SAFE_NO_PAD.encode(agent.runtime_key.sign(&signing_input).to_bytes()),
     )
     .map_err(anyhow::Error::msg)?;
@@ -1842,7 +1843,7 @@ async fn run_agent_keypackage_journey(terminal: bool) -> Result<()> {
             agent_join.to_value()?,
         )
         .await?;
-    let joined: AuthoritySubmitOutcome = serde_json::from_value(
+    let joined: AuthoritySubmitResponseBody = serde_json::from_value(
         expect_json(
             controller
                 .post("/_arkret/self/events")
@@ -1855,7 +1856,7 @@ async fn run_agent_keypackage_journey(terminal: bool) -> Result<()> {
         .await?,
     )?;
     ensure!(
-        matches!(joined, AuthoritySubmitOutcome::Accepted {
+        matches!(joined, AuthoritySubmitResponseBody::Accepted {
             status: AuthorityCommitStatus::Committed,
             commit,
         } if commit.event_ref == join_event.event_id),
@@ -1877,7 +1878,7 @@ async fn run_agent_keypackage_journey(terminal: bool) -> Result<()> {
     else {
         unreachable!("the fixture builds an Agent claim")
     };
-    signature.sig = arkret_wire::Base64UrlString::new(
+    signature.signature = arkret_wire::Base64UrlString::new(
         URL_SAFE_NO_PAD.encode(agent.runtime_key.sign(&signing_input).to_bytes()),
     )
     .map_err(anyhow::Error::msg)?;
@@ -1916,7 +1917,7 @@ async fn run_agent_keypackage_journey(terminal: bool) -> Result<()> {
         "signature": {
             "kid": controller_method,
             "signature_algorithm": "Ed25519",
-            "sig": "AA"
+            "signature": "AA"
         }
     }))?;
     let signing_input = arkret_models_crypto::keypackage_claim_authorization_signing_bytes(
@@ -1929,7 +1930,7 @@ async fn run_agent_keypackage_journey(terminal: bool) -> Result<()> {
     else {
         unreachable!("the fixture builds a Device claim")
     };
-    signature.sig = arkret_wire::Base64UrlString::new(
+    signature.signature = arkret_wire::Base64UrlString::new(
         URL_SAFE_NO_PAD.encode(
             controller_principal
                 .device_signing_key
@@ -1982,7 +1983,8 @@ async fn run_agent_keypackage_journey(terminal: bool) -> Result<()> {
         "joined controller could not claim Agent KeyPackage: {status} {}",
         String::from_utf8_lossy(&response)
     );
-    let outcome: arkret_models_crypto::KeyPackagesClaimOutcome = serde_json::from_slice(&response)?;
+    let outcome: arkret_models_crypto::KeyPackagesClaimResponseBody =
+        serde_json::from_slice(&response)?;
     ensure!(
         outcome.claims.len() == 1,
         "controller claim selected an unexpected set: {outcome:?}"
@@ -2030,7 +2032,7 @@ async fn run_agent_keypackage_journey(terminal: bool) -> Result<()> {
     );
     let creator_leaf_authority =
         arkret_models_collaboration::events_payloads::MlsGenesisCreatorLeafAuthority {
-            leaf_signature_key_b64u: creator.signature_key.clone(),
+            leaf_signature_key_base64url: creator.signature_key.clone(),
             endpoint: arkret_wire::MlsWelcomeRecipientEndpoint::Device {
                 device_id: controller_principal.device_id.clone(),
             },
@@ -2104,14 +2106,15 @@ async fn run_agent_keypackage_journey(terminal: bool) -> Result<()> {
             verification_method: agent.verification_method.clone(),
         },
         keypackage_claim_ref: add.welcome.keypackage_claim_ref.clone(),
-        ciphertext_b64: add.welcome.ciphertext_b64.clone(),
+        ciphertext_base64url: add.welcome.ciphertext_base64url.clone(),
         producer_proof: arkret_wire::DetachedObjectSignature {
             context: arkret_wire::DetachedSignatureContext::MlsWelcomeDelivery,
             signature_algorithm: arkret_wire::DetachedSignatureAlgorithm::Ed25519,
             verification_method: controller_method.clone(),
             signed_digest: arkret_wire::Hash::new(format!("sha256:{}", "0".repeat(64)))?,
             created_at: Utc::now(),
-            sig: arkret_wire::Base64UrlString::new("AA".to_owned()).map_err(anyhow::Error::msg)?,
+            signature: arkret_wire::Base64UrlString::new("AA".to_owned())
+                .map_err(anyhow::Error::msg)?,
         },
     };
     let mut unsigned = serde_json::to_value(&welcome)?;
@@ -2128,7 +2131,7 @@ async fn run_agent_keypackage_journey(terminal: bool) -> Result<()> {
     )?;
     welcome.validate_shape()?;
     let submission =
-        arkret_models_collaboration::authority_commit::SelfAuthoritySubmitRequest::MlsCommit(
+        arkret_models_collaboration::authority_commit::SelfAuthoritySubmitRequestBody::MlsCommit(
             arkret_wire::MlsCommitSubmission {
                 commit_event: commit_event.clone(),
                 welcomes: vec![welcome.clone()],
@@ -2142,9 +2145,9 @@ async fn run_agent_keypackage_journey(terminal: bool) -> Result<()> {
         status == StatusCode::OK,
         "Agent Add Commit refused: {status} {result}"
     );
-    let result: AuthoritySubmitOutcome = serde_json::from_value(result)?;
+    let result: AuthoritySubmitResponseBody = serde_json::from_value(result)?;
     ensure!(
-        matches!(result, AuthoritySubmitOutcome::Accepted { status: AuthorityCommitStatus::Committed, commit } if commit.event_ref == commit_event.event_id),
+        matches!(result, AuthoritySubmitResponseBody::Accepted { status: AuthorityCommitStatus::Committed, commit } if commit.event_ref == commit_event.event_id),
         "Agent Add Commit was not committed"
     );
     let accepted = crate::scenarios::mls_lifecycle_live::accepted_full_view(
@@ -2152,7 +2155,7 @@ async fn run_agent_keypackage_journey(terminal: bool) -> Result<()> {
         &commit_event.event_id,
     )
     .await?;
-    let base = arkret_wire::MlsGroupCurrent {
+    let base = arkret_wire::MlsGroupValue {
         effective_scope: scope,
         genesis_event_ref: genesis.event_id.clone(),
         cipher_suite: arkret_wire::NonEmptyString::new(
@@ -2169,7 +2172,7 @@ async fn run_agent_keypackage_journey(terminal: bool) -> Result<()> {
         controller_group.install_accepted_commit(&accepted, &base)? == 1,
         "controller Add Commit not installed"
     );
-    let (queued, ack_token) =
+    let (queued, acknowledgement_token) =
         crate::scenarios::mls_lifecycle_live::recipient_welcomes(&agent.runtime).await?;
     ensure!(
         queued == vec![welcome.clone()],
@@ -2254,7 +2257,7 @@ async fn run_agent_keypackage_journey(terminal: bool) -> Result<()> {
         let signing_bytes = arkret_models_crypto::peer_keypackage_claim_receipt_signing_bytes(
             &changed.claim_receipt,
         )?;
-        changed.claim_receipt.signature.sig = arkret_wire::Base64UrlString::new(
+        changed.claim_receipt.signature.signature = arkret_wire::Base64UrlString::new(
             arkret_canonical::base64url_encode(station_key.sign(&signing_bytes).to_bytes()),
         )
         .map_err(anyhow::Error::msg)?;
@@ -2324,7 +2327,7 @@ async fn run_agent_keypackage_journey(terminal: bool) -> Result<()> {
         agent_group.verified_leaf_bindings()?.len() == 2,
         "complete roster did not bind both the founder and Agent leaves"
     );
-    let scan = arkret::StreamScanRequest {
+    let scan = arkret::StreamScanRequestBody {
         realm_id: joined_realm.clone(),
         stream_ref: arkret::CommitStreamRef::from_scope(&welcome.effective_scope, None)?,
         direction: arkret::StreamScanDirection::After(None),
@@ -2393,7 +2396,8 @@ async fn run_agent_keypackage_journey(terminal: bool) -> Result<()> {
             kid: arkret_wire::NonEmptyString::new(agent.verification_method.to_string())
                 .map_err(anyhow::Error::msg)?,
             signature_algorithm: None,
-            sig: arkret_wire::Base64UrlString::new("AA".to_owned()).map_err(anyhow::Error::msg)?,
+            signature: arkret_wire::Base64UrlString::new("AA".to_owned())
+                .map_err(anyhow::Error::msg)?,
         },
     };
     let mut wrong_binding = receipt.clone();
@@ -2445,8 +2449,8 @@ async fn run_agent_keypackage_journey(terminal: bool) -> Result<()> {
         .runtime
         .post("/_arkret/self/device_messages/ack")
         .json(
-            &arkret_models_collaboration::device_messages::DeviceMessagesAckRequestBody {
-                ack_token,
+            &arkret_models_collaboration::device_messages::DeviceMessagesAcknowledgementRequestBody {
+                acknowledgement_token,
             },
         )
         .send()
@@ -2473,7 +2477,7 @@ async fn run_agent_keypackage_journey(terminal: bool) -> Result<()> {
         "Agent durable consume refused: {status} {}",
         String::from_utf8_lossy(&result)
     );
-    let consumed: arkret_models_crypto::KeyPackagesConsumeOutcome =
+    let consumed: arkret_models_crypto::KeyPackagesConsumeResponseBody =
         serde_json::from_slice(&result)?;
     consumed
         .consume_receipt
@@ -2583,7 +2587,7 @@ async fn run_agent_keypackage_journey(terminal: bool) -> Result<()> {
             realm_id: joined_realm.clone(),
         },
         selection: arkret::ParticipationBits {
-            reply_message: true,
+            message_creation_allowed: true,
             ..arkret::ParticipationBits::NONE
         },
         expected_version: 0,
@@ -2685,8 +2689,8 @@ async fn run_agent_keypackage_journey(terminal: bool) -> Result<()> {
     };
     let evidence = controller.sdk().signer_keys_query(&query).await?;
     evidence.validate_for_request(&query)?;
-    let [arkret::SignerKeyQueryOutcome::HistoricalResolved { key, .. }] =
-        evidence.results.as_slice()
+    let [arkret::SignerKeyResolution::HistoricalResolved { key, .. }] =
+        evidence.resolutions.as_slice()
     else {
         bail!(
             "the accepted ordinary Agent reply lacks exact historical signer evidence: {evidence:?}"
@@ -2698,7 +2702,7 @@ async fn run_agent_keypackage_journey(terminal: bool) -> Result<()> {
         "historical Agent evidence replaced its independent PCR authorization"
     );
     ensure!(
-        arkret::base64url_decode(key.public_key_b64u.as_str().as_bytes())?
+        arkret::base64url_decode(key.public_key_base64url.as_str().as_bytes())?
             == agent.runtime_key.verifying_key().to_bytes()
     );
     let proof = accepted
@@ -2711,7 +2715,7 @@ async fn run_agent_keypackage_journey(terminal: bool) -> Result<()> {
         &arkret_signatures::EventProofBuilder::new().envelope_bytes(&accepted.event)?,
         &accepted.event.actor_id,
         &arkret_signatures::PublicKeyMaterial::Ed25519Raw {
-            bytes: arkret::base64url_decode(key.public_key_b64u.as_str().as_bytes())?,
+            bytes: arkret::base64url_decode(key.public_key_base64url.as_str().as_bytes())?,
         },
         arkret::canonical::DigestSuite::Sha256,
     )?;
@@ -2751,8 +2755,8 @@ async fn run_agent_keypackage_journey(terminal: bool) -> Result<()> {
     unavailable.validate_for_request(&wrong_query)?;
     ensure!(
         matches!(
-            unavailable.results.as_slice(),
-            [arkret::SignerKeyQueryOutcome::Unavailable { .. }]
+            unavailable.resolutions.as_slice(),
+            [arkret::SignerKeyResolution::Unavailable { .. }]
         ),
         "historical Agent lookup accepted a substituted target coordinate"
     );
@@ -2761,8 +2765,8 @@ async fn run_agent_keypackage_journey(terminal: bool) -> Result<()> {
         .await?;
     let historical = controller.sdk().signer_keys_query(&query).await?;
     historical.validate_for_request(&query)?;
-    let [arkret::SignerKeyQueryOutcome::HistoricalResolved { key, .. }] =
-        historical.results.as_slice()
+    let [arkret::SignerKeyResolution::HistoricalResolved { key, .. }] =
+        historical.resolutions.as_slice()
     else {
         bail!("pausing a runtime erased its accepted historical proof");
     };
@@ -2903,7 +2907,7 @@ impl AgentRuntimeSession {
                 },
             )?,
         };
-        let outcome: arkret_models_collaboration::agent_operations::AgentLifecycleOutcome =
+        let outcome: arkret_models_collaboration::agent_operations::AgentOperationStatusView =
             serde_json::from_value(
                 expect_json(
                     controller

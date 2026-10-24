@@ -112,14 +112,14 @@ SELECT format('SELECT json_build_object(''table'',%L,''rows'',COALESCE(jsonb_agg
 FROM information_schema.columns
 WHERE table_schema='public' AND column_name='realm_id'
   AND (table_name IN ('canonical_events','realm_commits','notifications')
-       OR right(table_name,16)='_current_results')
+       OR right(table_name,16)='_current_states')
 ORDER BY table_name
 \\gexec
 """
     for table in ["capability_quota_counters", "capability_quota_buckets", "capability_quota_consumptions"]:
         sql += f"""SELECT json_build_object('table','{table}','rows',COALESCE(jsonb_agg(x ORDER BY x::text),'[]'::jsonb))::text
 FROM (SELECT to_jsonb(t) AS x FROM public.{table} t WHERE grant_id IN
-(SELECT grant_id FROM public.capability_grant_current_results WHERE realm_id='{realm}')) selected;
+(SELECT grant_id FROM public.capability_grant_current_states WHERE realm_id='{realm}')) selected;
 """
     # Delivery business identity/payload is included. Worker leases, attempt
     # counters, TTL relay rows and UI read receipts can change independently.
@@ -229,7 +229,7 @@ def summarize(output, direct_source=None, realm=None, stream_after=None, stream_
         canonical_rows = sorted(json.dumps(x, sort_keys=True, separators=(",", ":"), ensure_ascii=False) for x in rows)
         digest = hashlib.sha256(json.dumps(canonical_rows, separators=(",", ":"), ensure_ascii=False).encode()).hexdigest()
         tables[table] = {"count": len(rows), "sha256": digest}
-    required = {"canonical_events", "realm_commits", "notifications", "capability_grant_current_results",
+    required = {"canonical_events", "realm_commits", "notifications", "capability_grant_current_states",
                 "capability_quota_counters", "capability_quota_buckets", "capability_quota_consumptions",
                 "event_federation_outbox_business"}
     if not required.issubset(tables):

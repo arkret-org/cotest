@@ -559,7 +559,7 @@ pub async fn run_account_blocklist_case4_federated_boundary_slice() -> Result<()
         "federated Message while privately blocked",
     )
     .await?;
-    let arkret_wire::AuthoritySubmitOutcome::Accepted { commit, .. } = &blocked.outcome else {
+    let arkret_wire::AuthoritySubmitResponseBody::Accepted { commit, .. } = &blocked.outcome else {
         bail!("remote blocked submission did not commit");
     };
     let holder_view = wait_for_committed(&holder.client, &commit.event_ref).await?;
@@ -581,7 +581,8 @@ pub async fn run_account_blocklist_case4_federated_boundary_slice() -> Result<()
         "federated Message after private unblock",
     )
     .await?;
-    let arkret_wire::AuthoritySubmitOutcome::Accepted { commit, .. } = &unblocked.outcome else {
+    let arkret_wire::AuthoritySubmitResponseBody::Accepted { commit, .. } = &unblocked.outcome
+    else {
         bail!("remote unblocked submission did not commit");
     };
     let holder_view = wait_for_committed(&holder.client, &commit.event_ref).await?;
@@ -672,7 +673,8 @@ pub(crate) async fn native_account_session(
     client: &TestActorClient,
 ) -> Result<inkson::conformance::NativeAccountSession> {
     use arkret_models_collaboration::session_grants::{
-        SessionGrantValidationByJwt, SessionGrantValidationInput, SessionGrantValidationOutcome,
+        SessionGrantValidationByJwt, SessionGrantValidationInput,
+        SessionGrantValidationResponseBody,
     };
     use base64::Engine as _;
     let crate::harness::ClientSession::Canonical { grant, signing_key } = client.session() else {
@@ -680,7 +682,7 @@ pub(crate) async fn native_account_session(
     };
     let description = client.sdk().describe().await?;
     let authority = description
-        .auth_metadata
+        .authentication_metadata
         .account_authority
         .context("fixture Account Authority")?;
     let request = SessionGrantValidationInput::ByJwt(SessionGrantValidationByJwt {
@@ -690,7 +692,7 @@ pub(crate) async fn native_account_session(
     });
     // This is the deployment-private harness issuer, never a client-facing
     // authentication route or a grant reconstructed from unverified JWT claims.
-    let result: SessionGrantValidationOutcome = reqwest::Client::new()
+    let result: SessionGrantValidationResponseBody = reqwest::Client::new()
         .post(format!(
             "{}/_coauth/internal/session-grants/introspect",
             authority.origin.as_str().trim_end_matches('/')
@@ -722,7 +724,7 @@ pub(crate) async fn native_account_session(
         metadata.cnf_jkt == arkret_signatures::dpop::dpop_jwk_thumbprint(&jwk)?,
         "issuer grant is bound to another DPoP holder"
     );
-    let outcome = arkret_models_collaboration::session_grants::SessionGrantOutcome {
+    let outcome = arkret_models_collaboration::session_grants::SessionGrantResponseBody {
         session_grant: grant.clone(),
         session_grant_id: metadata.id,
         session_public_key: metadata.session_public_key,
@@ -879,7 +881,7 @@ async fn retained_shared_history(
         )),
     )
     .map_err(anyhow::Error::msg)?;
-    let request = arkret_wire::AuthorityBundleRequest {
+    let request = arkret_wire::RealmAuthorityBundleRequestBody {
         realm_id: realm_id.clone(),
         nonce: nonce.clone(),
     };
@@ -933,7 +935,7 @@ async fn retained_shared_history(
     replica.install_verified_authority(&request, bundle.clone(), &freshness, &keys)?;
     let mut after = None;
     loop {
-        let scan = arkret_wire::StreamScanRequest {
+        let scan = arkret_wire::StreamScanRequestBody {
             realm_id: realm_id.clone(),
             stream_ref: stream.clone(),
             direction: arkret_wire::StreamScanDirection::After(after),
@@ -1205,9 +1207,9 @@ pub(crate) async fn unblock_direct_peer(
 /// invitation. The holder receives its accepted row before private filtering.
 pub async fn contact_and_first_dm_pending_request_live() -> Result<()> {
     use arkret::contact_operations::{
-        ContactAcceptedOutcome, ContactCommitPhase, ContactCommitRequestBody,
-        ContactOperationOutcome, ContactOperationRequestBody, ContactPreparedOutcome, ContactScope,
-        ContactState,
+        ContactAcceptedResponseBody, ContactCommitPhase, ContactCommitRequestBody,
+        ContactOperationRequestBody, ContactOperationResponseBody, ContactPreparedResponseBody,
+        ContactScope, ContactState,
     };
 
     use crate::harness::TestServerGroup;
@@ -1309,12 +1311,12 @@ pub async fn contact_and_first_dm_pending_request_live() -> Result<()> {
             !value.to_string().contains("blocked_by_user"),
             "holder-private block leaked through Contact prepare response"
         );
-        let outcome: ContactOperationOutcome = serde_json::from_value(value.clone())?;
+        let outcome: ContactOperationResponseBody = serde_json::from_value(value.clone())?;
         ensure!(
             matches!(
                 &outcome,
-                ContactOperationOutcome::Prepared {
-                    outcome: ContactPreparedOutcome::Request { .. }
+                ContactOperationResponseBody::Prepared {
+                    outcome: ContactPreparedResponseBody::Request { .. }
                 }
             ),
             "Contact prepare did not return its registered request branch: {outcome:?}"
@@ -1336,9 +1338,9 @@ pub async fn contact_and_first_dm_pending_request_live() -> Result<()> {
     );
     block_direct_peer(&alice, &bob).await?;
     catch_up_blocklist_revision(&holder_host, read_row(&alice.client).await?.revision).await?;
-    let ContactOperationOutcome::Prepared {
+    let ContactOperationResponseBody::Prepared {
         outcome:
-            ContactPreparedOutcome::Request {
+            ContactPreparedResponseBody::Request {
                 reservation_handle,
                 event_draft,
                 ..
@@ -1380,10 +1382,10 @@ pub async fn contact_and_first_dm_pending_request_live() -> Result<()> {
         "blocked Contact commit was not accepted: {commit_status} {}",
         String::from_utf8_lossy(&commit_bytes)
     );
-    let committed: ContactOperationOutcome = serde_json::from_slice(&commit_bytes)?;
-    let ContactOperationOutcome::Accepted {
+    let committed: ContactOperationResponseBody = serde_json::from_slice(&commit_bytes)?;
+    let ContactOperationResponseBody::Accepted {
         outcome:
-            ContactAcceptedOutcome::Request {
+            ContactAcceptedResponseBody::Request {
                 request_acceptance_receipt,
                 ..
             },
@@ -1521,9 +1523,10 @@ pub async fn contact_and_first_dm_pending_request_live() -> Result<()> {
 /// row or target material to inspect.
 pub async fn contact_first_dm_cross_station_private_boundary_live() -> Result<()> {
     use arkret::contact_operations::{
-        ContactAcceptedOutcome, ContactCommitPhase, ContactCommitRequestBody,
-        ContactOperationOutcome, ContactOperationRequestBody, ContactPeer, ContactPreparePhase,
-        ContactPrepareRequestBody, ContactPreparedOutcome, ContactScope, ContactState,
+        ContactAcceptedResponseBody, ContactCommitPhase, ContactCommitRequestBody,
+        ContactOperationRequestBody, ContactOperationResponseBody, ContactPeer,
+        ContactPreparePhase, ContactPrepareRequestBody, ContactPreparedResponseBody, ContactScope,
+        ContactState,
     };
     use arkret_models_collaboration::governance::invite_addressing::{
         InviteLocatorIssueRequestBody, InviteLocatorResolveRequestBody, PrincipalLocator,
@@ -1655,9 +1658,9 @@ pub async fn contact_first_dm_cross_station_private_boundary_live() -> Result<()
     )
     .await?;
     ensure!(!prepared.to_string().contains("blocked_by_user"));
-    let ContactOperationOutcome::Prepared {
+    let ContactOperationResponseBody::Prepared {
         outcome:
-            ContactPreparedOutcome::Request {
+            ContactPreparedResponseBody::Request {
                 reservation_handle,
                 event_draft,
                 ..
@@ -1701,9 +1704,9 @@ pub async fn contact_first_dm_cross_station_private_boundary_live() -> Result<()
     );
     let accepted: Value = serde_json::from_slice(&initial_body)?;
     ensure!(!accepted.to_string().contains("blocked_by_user"));
-    let ContactOperationOutcome::Accepted {
+    let ContactOperationResponseBody::Accepted {
         outcome:
-            ContactAcceptedOutcome::Request {
+            ContactAcceptedResponseBody::Request {
                 request_acceptance_receipt,
                 ..
             },
@@ -1791,12 +1794,12 @@ pub async fn contact_first_dm_cross_station_private_boundary_live() -> Result<()
             "Contact peer replay changed sender-visible result at blocked={blocked}: {status} {}",
             String::from_utf8_lossy(&body)
         );
-        let outcome: ContactOperationOutcome = serde_json::from_slice(&body)?;
+        let outcome: ContactOperationResponseBody = serde_json::from_slice(&body)?;
         ensure!(
             matches!(
                 outcome,
-                ContactOperationOutcome::Accepted {
-                    outcome: ContactAcceptedOutcome::Request { .. }
+                ContactOperationResponseBody::Accepted {
+                    outcome: ContactAcceptedResponseBody::Request { .. }
                 }
             ),
             "Contact peer exact Commit replay changed its accepted branch"
@@ -2030,7 +2033,7 @@ async fn ingest_retained_realm(
             )),
         )
         .map_err(anyhow::Error::msg)?;
-        let request = arkret_wire::AuthorityBundleRequest {
+        let request = arkret_wire::RealmAuthorityBundleRequestBody {
             realm_id: realm.clone(),
             nonce: nonce.clone(),
         };
@@ -2054,7 +2057,7 @@ async fn ingest_retained_realm(
         let mut after = None;
         let mut newer_cut_required = false;
         loop {
-            let scan = arkret_wire::StreamScanRequest {
+            let scan = arkret_wire::StreamScanRequestBody {
                 realm_id: realm.clone(),
                 stream_ref: stream.clone(),
                 direction: arkret_wire::StreamScanDirection::After(after),
@@ -2773,7 +2776,7 @@ pub(crate) async fn observe_ordinary_call_invite(
     };
     let mut receiver = garth::signal::SignalReceiver::new();
     let mut observed = Vec::new();
-    for (seq, blocked) in [(1, true), (2, false)] {
+    for (sequence, blocked) in [(1, true), (2, false)] {
         if !blocked {
             let row = read_row(&holder.client).await?;
             let request = write_value_request(
@@ -2898,7 +2901,7 @@ pub(crate) async fn observe_ordinary_call_invite(
             .context("CallInvite fixture lacks accepted CallCreate")?;
         let payload = inkson::signal::SignalPayload::CallSignal {
             call_id: call_id.clone(),
-            seq,
+            sequence,
             signal: arkret::CallSignalData::Invite(arkret::CallInviteSignalData {
                 lifetime_ms: 30_000,
                 offer: arkret::SessionDescription {
@@ -2944,7 +2947,7 @@ pub(crate) async fn observe_ordinary_call_invite(
             bail!("another sealed profile reached the Call consumer");
         };
         ensure!(
-            call.call_id == call_id && call.seq == seq,
+            call.call_id == call_id && call.sequence == sequence,
             "Call plaintext did not name the accepted create-derived identity"
         );
         let dispatch =

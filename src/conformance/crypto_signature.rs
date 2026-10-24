@@ -185,7 +185,7 @@ fn run_positive_vector(vector: &Value) -> Result<()> {
             "{name}: unexpected raw detached algorithm"
         );
         ensure!(
-            b64u(required_str(vector, "public_key_b64u")?)?.len() == MLDSA65_PUBLIC_KEY_LEN
+            b64u(required_str(vector, "public_key_base64url")?)?.len() == MLDSA65_PUBLIC_KEY_LEN
                 && b64u(required_str(vector, "signature_b64u")?)?.len() == MLDSA65_SIGNATURE_LEN,
             "{name}: ML-DSA-65 KAT lengths drifted"
         );
@@ -244,7 +244,7 @@ fn run_negative_case(case: &Value, vectors: &[Value]) -> Result<()> {
     let expected_code = required_str(expected, "error_code")?;
 
     let verdict = if case.get("signature_b64u").is_some() {
-        let key = b64u(required_str(case, "public_key_b64u")?)?;
+        let key = b64u(required_str(case, "public_key_base64url")?)?;
         let signature = b64u(required_str(case, "signature_b64u")?)?;
         if key.len() != MLDSA65_PUBLIC_KEY_LEN || signature.len() != MLDSA65_SIGNATURE_LEN {
             Verdict::Rejected("signature_invalid")

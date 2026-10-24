@@ -8,7 +8,7 @@ pub async fn canonical_oidc_login_chain_api_migration() -> Result<()> {
     let fixture = super::_helpers::canonical_api::fixture("oidc-chain").await?;
     let client = &fixture.client;
     let describe = serde_json::to_value(client.sdk().describe().await?)?;
-    let metadata = &describe["auth_metadata"];
+    let metadata = &describe["authentication_metadata"];
     let oidc = metadata["methods"]
         .as_array()
         .context("describe auth methods")?
@@ -45,7 +45,7 @@ pub async fn canonical_oidc_login_chain_api_migration() -> Result<()> {
         "gate origin mismatch"
     );
     let path = "/_arkret/root/identity/recovery-policy";
-    let active: arkret_models_crypto::RecoveryPolicyActiveOutcome = client.sdk().get(path).await?;
+    let active: arkret_models_crypto::RecoveryPolicyStatusView = client.sdk().get(path).await?;
     ensure!(
         serde_json::to_value(active)?.get("active_policy").is_some(),
         "root recovery read omitted active_policy"

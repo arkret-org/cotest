@@ -24,7 +24,7 @@ const BOB_DEVICE: &str = "ak:device:01904100-0000-7000-8000-000000003412";
 fn policy(
     footprint: &Value,
 ) -> Result<arkret_models_collaboration::events_payloads::realm::RealmPolicyBundlePayload> {
-    serde_json::from_value(footprint["realm_policy_bundle_current_results"][0]["value"].clone())
+    serde_json::from_value(footprint["realm_policy_bundle_current_states"][0]["value"].clone())
         .context("read exact accepted local policy bundle")
 }
 
@@ -243,7 +243,7 @@ pub async fn run() -> Result<()> {
         for (table, rows) in before.as_object().context("footprint object")? {
             if !matches!(
                 table.as_str(),
-                "canonical_events" | "realm_commits" | "realm_link_current_results"
+                "canonical_events" | "realm_commits" | "realm_link_current_states"
             ) {
                 ensure!(
                     after[table] == *rows,

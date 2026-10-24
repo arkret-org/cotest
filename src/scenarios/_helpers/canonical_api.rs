@@ -35,13 +35,13 @@ impl CanonicalApiFixture {
     pub(crate) async fn issue_for_device(
         &self,
         client: &TestActorClient,
-    ) -> Result<arkret_models_collaboration::session_grants::SessionGrantOutcome> {
+    ) -> Result<arkret_models_collaboration::session_grants::SessionGrantResponseBody> {
         pairing::issue_for_device(self, client).await
     }
     pub(crate) async fn refresh_for_device(
         &self,
         client: &TestActorClient,
-    ) -> Result<arkret_models_collaboration::session_grants::SessionGrantOutcome> {
+    ) -> Result<arkret_models_collaboration::session_grants::SessionGrantResponseBody> {
         pairing::refresh_for_device(self, client).await
     }
     pub(crate) async fn prepare_pairing_request(

@@ -143,13 +143,13 @@ async fn exercise(
                     ));
                 }
                 _ => {
-                    let sig = wire["invite_commit"]["signature"]["sig"]
+                    let signature = wire["invite_commit"]["signature"]["signature"]
                         .as_str()
                         .context("commit signature")?;
-                    wire["invite_commit"]["signature"]["sig"] = json!(format!(
+                    wire["invite_commit"]["signature"]["signature"] = json!(format!(
                         "{}{}",
-                        if sig.starts_with('A') { "B" } else { "A" },
-                        &sig[1..]
+                        if signature.starts_with('A') { "B" } else { "A" },
+                        &signature[1..]
                     ));
                 }
             }

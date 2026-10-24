@@ -1,8 +1,8 @@
 //! A fixed Account Station survives independent DID hosting relocation.
 use anyhow::{Context, Result, ensure};
 use arkret_models_identity::{
-    CurrentPrincipalOutcome, CurrentPrincipalRequestBody, DidOperationSubmitRequestBody,
-    PrincipalResolutionAuditEvidence, PrincipalResolutionAuditRequest,
+    CurrentPrincipalRequestBody, CurrentPrincipalResponseBody, DidOperationSubmitRequestBody,
+    PrincipalResolutionAuditEvidence, PrincipalResolutionAuditRequestBody,
     PrincipalResolutionUpdatePayload, ResolutionCommitment,
 };
 use arkret_signatures::webvh::{
@@ -55,7 +55,7 @@ async fn audit(
     let result = expect_json(
         client
             .post("/_arkret/self/identity/resolution-audit/query")
-            .canonical_json(&PrincipalResolutionAuditRequest {
+            .canonical_json(&PrincipalResolutionAuditRequestBody {
                 account_id: account.clone(),
                 history_depth: Some(depth),
                 after_resolution_event_ref: after,
@@ -151,7 +151,7 @@ pub async fn account_business_survives_did_host_outage_and_signed_resolution_upd
             did: &member_did,
             local_id: &inception.local_id,
             previous_entries: &entries,
-            version_time: at,
+            version_created_at: at,
             current_root_seed:
                 &crate::scenarios::identity_test_support::test_principal_next_root_seed(
                     &member_did,
@@ -219,7 +219,7 @@ pub async fn account_business_survives_did_host_outage_and_signed_resolution_upd
         current_did: &member_did,
         target_did: &target,
         previous_entries: &entries,
-        version_time: at + chrono::Duration::seconds(1),
+        version_created_at: at + chrono::Duration::seconds(1),
         current_update_seed: &[171; 32],
         next_update_public_key_multibase: &public(&[172; 32]),
         state: &state,
@@ -295,7 +295,7 @@ pub async fn account_business_survives_did_host_outage_and_signed_resolution_upd
     )
     .await?;
     ensure!(current.get("method_history_evidence").is_none());
-    let current: CurrentPrincipalOutcome = serde_json::from_value(current)?;
+    let current: CurrentPrincipalResponseBody = serde_json::from_value(current)?;
     current.validate_for_request(&request)?;
     ensure!(
         current.resolution_projection.did.as_str() == target

@@ -11,7 +11,7 @@ pub async fn principal_bridge_contracts_are_discoverable() -> Result<()> {
         StatusCode::OK,
     )
     .await?;
-    let oidc = describe["auth_metadata"]["methods"]
+    let oidc = describe["authentication_metadata"]["methods"]
         .as_array()
         .and_then(|methods| methods.iter().find(|method| method["method"] == "oidc"))
         .expect("configured Station must advertise OIDC");

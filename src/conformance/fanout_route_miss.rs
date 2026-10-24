@@ -4,7 +4,7 @@ use std::collections::BTreeSet;
 
 use anyhow::{Context as _, Result, bail};
 use arkret_models_collaboration::event_query::{
-    EventDeliveryStatusOutcome, EventDeliveryStatusRequestBody, EventDeliveryTargetId,
+    EventDeliveryStatusRequestBody, EventDeliveryStatusResponseBody, EventDeliveryTargetId,
     EventDeliveryTargetState, EventDeliveryTargetStatus,
 };
 use arkret_wire::{DidCoreId, EventId};
@@ -76,7 +76,7 @@ fn validate_sdk_delivery_contract() -> Result<()> {
         status: EventDeliveryTargetState::Delivered,
         service_id: Some(DidCoreId::new("ak:did_core:web:visible.example")?),
     };
-    let outcome = EventDeliveryStatusOutcome {
+    let outcome = EventDeliveryStatusResponseBody {
         event_id,
         targets: vec![pending.clone(), delivered],
     };
@@ -96,7 +96,7 @@ fn validate_sdk_delivery_contract() -> Result<()> {
         bail!("delivery status accepted duplicate opaque target ids");
     }
 
-    let complete = EventDeliveryStatusOutcome {
+    let complete = EventDeliveryStatusResponseBody {
         event_id: request.event_id.clone(),
         targets: vec![EventDeliveryTargetStatus {
             target_id: EventDeliveryTargetId::new("opaque-target-0003")?,
@@ -111,7 +111,7 @@ fn validate_sdk_delivery_contract() -> Result<()> {
     Ok(())
 }
 
-fn pending_count(outcome: &EventDeliveryStatusOutcome) -> usize {
+fn pending_count(outcome: &EventDeliveryStatusResponseBody) -> usize {
     outcome
         .targets
         .iter()

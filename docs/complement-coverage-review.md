@@ -38,7 +38,7 @@
 | 12 | `federation_room_ban_test.go::TestUnbanViaInvite`；`csapi/room_kick_test.go` 无权限/已离开成员 kick | `spaces/moderation-ban.spec.ts` 包括重复 ban 不改变 membership | 跨站 ban→unban→重新加入及旁站隔离。**邀请不能代替 Arkret unban Control Move**；按 membership `sequenced_state` transition rule 构造 | P1；需改写 |
 | 13 | `federation_room_get_missing_events_test.go` 缺父、坏 JSON、巨大依赖、损坏 auth chain；`federation_unreject_rejected_test.go` B 先于 A | `federation/three-server-p0.spec.ts` P0.3 与 `sync/offline-conflict.spec.ts` 有 recovery；state-resolution conformance | 多父依赖中混入无签名/错误 scope 对象；补足依赖后的合法重试只生效一次。必须区分未决依赖与不可重裁定的 settled verdict；`sync/federation.md`、`event-auth-state-resolution.md` | P0；部分，R10 |
 | 14 | `federation_room_send_test.go::TestNetworkPartitionOrdering` | 三站 P0.1/P0.3/P0.5 已比较完整 Event ID 集合，并含 restart | 延伸到有效 cell/Seal frontier 与用户可见序列，不能只看最后一条消息；先复用三站用例，不新建第四套 harness | P1；已有基础 |
-| 15 | `csapi/room_typing_test.go` start/stop/leak；`federation_room_typing_test.go`、`federation_presence_test.go` | `messaging/chat-advanced.spec.ts` typing 解密与 target opacity，UI TTL；Rust signal conformance | 三站接收者/旁观者、membership 撤销后不再 fanout、旧 seq/过期 Signal 不复活；`discovery/profiles-presence.md`、Signal profile | P1；部分，R11 |
+| 15 | `csapi/room_typing_test.go` start/stop/leak；`federation_room_typing_test.go`、`federation_presence_test.go` | `messaging/chat-advanced.spec.ts` typing 解密与 target opacity，UI TTL；Rust signal conformance | 三站接收者/旁观者、membership 撤销后不再 fanout、旧 sequence/过期 Signal 不复活；`discovery/profiles-presence.md`、Signal profile | P1；部分，R11 |
 | 16 | `csapi/apidoc_room_receipts_test.go`、`thread_notifications_test.go` thread receipt | `messaging/read-receipts.spec.ts`、`models/private-read-marker.spec.ts` 已有多端内容 | Strand A read 不清 Strand B unread；倒序高水位、离线双设备合并、私有 marker 不进入公共 receipt；`discovery/read-receipts.md` | P1；部分；不移植 Matrix thread_id 枚举 |
 | 17 | `csapi/ignored_users_test.go`：被忽略 Bob 的 invite 不见，但 Chris 的 invite 可见 | `governance/personal-blocklist.spec.ts` 私有偏好、CAS/account sync；`invite-addressing.spec.ts` receive policy | exact ActorId 接收策略拒 Bob，同时 Chris 成功；含已排队邀请、解除后新邀请、另一个 Station 的同 principal 不串；`sync/invite-addressing.md`。私有密文 blocklist 不能当服务端可读 ACL | P1；需改写，R8 |
 | 18 | `csapi/account_data_test.go`、`msc3391` global/room data 与删除 | `personal-blocklist.spec.ts` 已有同 key CAS revision 与 sync latest；`tests/station_account_isolation.rs` | 两设备 expected_revision 冲突→读最新→重试、删除 tombstone→重启 initial/incremental 一致；`models/account-data.md` | P1；部分，不能复制 LWW 覆盖写 |
@@ -73,7 +73,7 @@
 
 ### R5：设备确认与持久投递，P0
 
-同账号两个已接受设备及独立发送者。发送 3 条，设备 A limit=1 分页；仅使用 after 后从头读仍有全部未 ack 消息。B 使用 A 的 ack_token 必须 invalid_ack_token，A 队列不变；A ack 第一页后只剪一条，重复旧 ack 返回 0，新消息仍在；最后累计 ack 清空。发送者/队列服务重启后重复发送相同逻辑 ID 不重新投递。跨 Station 只测试规范已登记的专用投递链（例如 Invite delivery），不得新增通用 federation-to-device 旁路。
+同账号两个已接受设备及独立发送者。发送 3 条，设备 A limit=1 分页；仅使用 after 后从头读仍有全部未 ack 消息。B 使用 A 的 acknowledgement_token 必须 invalid_ack_token，A 队列不变；A ack 第一页后只剪一条，重复旧 ack 返回 0，新消息仍在；最后累计 ack 清空。发送者/队列服务重启后重复发送相同逻辑 ID 不重新投递。跨 Station 只测试规范已登记的专用投递链（例如 Invite delivery），不得新增通用 federation-to-device 旁路。
 
 ### R6：撤销的联合收口，P0
 
@@ -97,7 +97,7 @@ Alice/Carol 在两站，Bob 为受邀者。Bob 显式拒绝 Alice，Carol 的邀
 
 ### R11：短时 Signal 的不泄露，P1
 
-三站，A/B 同 Realm，C 旁观；A→B 正常 typing/presence/receipt。给 B 发送倒序 seq、过期 Signal、重复 frame，不能复活旧状态。撤销 B 当前授权后，C 与 B 都不获新内容，无关 Realm 继续正常。断线期间 Signal 不补历史；不要用 account cursor/backfill 证明 Signal 已恢复。
+三站，A/B 同 Realm，C 旁观；A→B 正常 typing/presence/receipt。给 B 发送倒序 sequence、过期 Signal、重复 frame，不能复活旧状态。撤销 B 当前授权后，C 与 B 都不获新内容，无关 Realm 继续正常。断线期间 Signal 不补历史；不要用 account cursor/backfill 证明 Signal 已恢复。
 
 ### R12：远端媒体的授权与内容安全，P1
 

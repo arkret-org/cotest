@@ -304,7 +304,7 @@ pub fn run_signal_wire_clean_break() -> Result<SignalWireExecution> {
         rejected_zero_effects += 1;
     }
 
-    let plaintext = br#"{"kind":"ak.presence","payload_sequence":1}"#;
+    let plaintext = br#"{"kind":"ak.presence","payload_sequence":"1"}"#;
 
     // Production happy path reaches the sink exactly once.
     let mut fixture = Fixture::new()?;

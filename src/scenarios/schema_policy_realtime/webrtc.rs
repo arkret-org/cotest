@@ -1,5 +1,5 @@
 use anyhow::Result;
-use arkret_models_collaboration::objects::media::{MediaIceConfigRequestBody, MediaIceMode};
+use arkret_models_collaboration::objects::media::{MediaIceConfigurationRequestBody, MediaIceMode};
 use arkret_wire::{AccountId, ActorId, DeviceId, DidCoreId, RealmId};
 use reqwest::StatusCode;
 use serde_json::json;
@@ -33,7 +33,7 @@ pub async fn webrtc_session_signal_strand_and_guards_work() -> Result<()> {
     expect_api_error(
         carol
             .post("/_arkret/self/rtc/ice-config")
-            .json(&MediaIceConfigRequestBody {
+            .json(&MediaIceConfigurationRequestBody {
                 realm_id: RealmId::new(realm_id.clone())?,
                 call_id: call_id.to_owned(),
                 actor_id: account_actor(&carol, &carol_core)?,
@@ -63,7 +63,7 @@ pub async fn webrtc_session_signal_strand_and_guards_work() -> Result<()> {
     expect_api_error(
         alice
             .post("/_arkret/self/rtc/ice-config")
-            .json(&MediaIceConfigRequestBody {
+            .json(&MediaIceConfigurationRequestBody {
                 realm_id: RealmId::new(realm_id.clone())?,
                 call_id: call_id.to_owned(),
                 actor_id: account_actor(&carol, &carol_core)?,
@@ -78,7 +78,7 @@ pub async fn webrtc_session_signal_strand_and_guards_work() -> Result<()> {
     let ice = expect_json(
         alice
             .post("/_arkret/self/rtc/ice-config")
-            .json(&MediaIceConfigRequestBody {
+            .json(&MediaIceConfigurationRequestBody {
                 realm_id: RealmId::new(realm_id.clone())?,
                 call_id: call_id.to_owned(),
                 actor_id: account_actor(&alice, &alice_core)?,
@@ -114,7 +114,7 @@ pub async fn webrtc_session_signal_strand_and_guards_work() -> Result<()> {
             .unwrap()
             // coland signs the ICE config with the service's notary key
             // (`<service_id>#notary-key`); the spec allows any `#<key-id>`
-            // fragment (ice-config-response.schema.json `kid`).
+            // fragment (media-ice-configuration-response-body.schema.json `kid`).
             .ends_with("#notary-key")
     );
 
@@ -142,7 +142,7 @@ pub async fn webrtc_session_signal_strand_and_guards_work() -> Result<()> {
 
     // The same authenticated leg must receive independent signed credentials
     // for simultaneous requests, even before a Call has been established.
-    let repeated = MediaIceConfigRequestBody {
+    let repeated = MediaIceConfigurationRequestBody {
         realm_id: RealmId::new(realm_id.clone())?,
         call_id: call_id.to_owned(),
         actor_id: account_actor(&alice, &alice_core)?,
@@ -170,7 +170,7 @@ pub async fn webrtc_session_signal_strand_and_guards_work() -> Result<()> {
     let mut buckets = std::collections::BTreeMap::new();
     for raw in [&ice, &a, &b, &c, &d] {
         use base64::Engine as _;
-        let outcome: arkret_models_collaboration::objects::media::MediaIceConfigOutcome =
+        let outcome: arkret_models_collaboration::objects::media::MediaIceConfigurationResponseBody =
             serde_json::from_value(raw.clone())?;
         arkret_signatures::media::verify_ice_config_outcome(&outcome, &anchors)?;
         let username = outcome
@@ -230,7 +230,7 @@ pub async fn webrtc_session_signal_strand_and_guards_work() -> Result<()> {
     let turn_only = expect_json(
         alice
             .post("/_arkret/self/rtc/ice-config")
-            .json(&MediaIceConfigRequestBody {
+            .json(&MediaIceConfigurationRequestBody {
                 realm_id: RealmId::new(realm_id.clone())?,
                 call_id: "ak:call:AYVFZWhohYwHaEnPNmKhgMBK35WYy2igGfoeZIIOtwAy".to_owned(),
                 actor_id: account_actor(&alice, &alice_core)?,

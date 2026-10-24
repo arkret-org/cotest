@@ -695,7 +695,7 @@ async fn private_current_footprint(database: &str, holder: &Member) -> Result<St
         let mut db = postgres::Client::connect(&database, postgres::NoTls)?;
         Ok(db.query_one(
             "SELECT jsonb_build_object(\
-             'current',(SELECT jsonb_agg(to_jsonb(r) ORDER BY to_jsonb(r)::text) FROM consent_current_results r WHERE holder_account_id=$1::text::jsonb),\
+             'current',(SELECT jsonb_agg(to_jsonb(r) ORDER BY to_jsonb(r)::text) FROM consent_current_states r WHERE holder_account_id=$1::text::jsonb),\
              'versions',(SELECT jsonb_agg(to_jsonb(r) ORDER BY to_jsonb(r)::text) FROM consent_result_versions r JOIN realm_commits c ON c.commit_id=r.commit_id WHERE c.realm_id=$2),\
              'correlations',(SELECT jsonb_agg(to_jsonb(r) ORDER BY to_jsonb(r)::text) FROM mimi_consent_correlations r WHERE holder_account_id=$1),\
              'decisions',(SELECT jsonb_agg(to_jsonb(r) ORDER BY to_jsonb(r)::text) FROM mimi_consent_decision_attempts r JOIN mimi_consent_correlations c USING(consent_id) WHERE c.holder_account_id=$1),\

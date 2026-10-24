@@ -7,7 +7,7 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use anyhow::{Context, Result, anyhow, bail, ensure};
 use arkret_models_integration::{
-    PushRegistrationHandoffOutcome, PushRegistrationHandoffRequestBody,
+    PushRegistrationHandoffRequestBody, PushRegistrationHandoffResponseBody,
 };
 use arkret_signatures::generated::http_signature_contract::HttpSignatureScenario;
 use arkret_signatures::http_signature::{
@@ -327,7 +327,7 @@ async fn apply(
     h: &Harness,
     source: &DidCoreId,
     request: &PushRegistrationHandoffRequestBody,
-) -> Result<PushRegistrationHandoffOutcome> {
+) -> Result<PushRegistrationHandoffResponseBody> {
     let mut response = signed_http_response(
         h,
         source,
@@ -343,7 +343,7 @@ async fn apply(
         bail!("Floria registration endpoint returned {status:?}: {body}");
     }
     response
-        .take_json::<PushRegistrationHandoffOutcome>()
+        .take_json::<PushRegistrationHandoffResponseBody>()
         .await
         .context("decode Floria handoff outcome")
 }
@@ -362,7 +362,7 @@ async fn resolve(
         .await
 }
 fn must_conflict(
-    value: Result<PushRegistrationHandoffOutcome, ApplyRegistrationError>,
+    value: Result<PushRegistrationHandoffResponseBody, ApplyRegistrationError>,
     label: &str,
 ) -> Result<()> {
     match value {
@@ -372,7 +372,7 @@ fn must_conflict(
     }
 }
 fn receipt(
-    out: &PushRegistrationHandoffOutcome,
+    out: &PushRegistrationHandoffResponseBody,
     req: &PushRegistrationHandoffRequestBody,
     source: &DidCoreId,
     gateway: &DidCoreId,
@@ -646,7 +646,8 @@ fn expected() -> Vec<Case> {
 #[cfg(test)]
 mod tests {
     use arkret_models_integration::{
-        PushNotifyGatewayStatus, PushNotifyOutcome, PushNotifyReasonCode, PushNotifyRequestBody,
+        PushNotifyGatewayStatus, PushNotifyReasonCode, PushNotifyRequestBody,
+        PushNotifyResponseBody,
     };
     use salvo::test::ResponseExt;
 
@@ -673,7 +674,7 @@ mod tests {
             serde_json::from_slice(&std::fs::read(fixture_path()).unwrap()).unwrap();
         let request: PushNotifyRequestBody =
             serde_json::from_value(fixture["request_context"]["instance"].clone()).unwrap();
-        let expected: PushNotifyOutcome = serde_json::from_value(
+        let expected: PushNotifyResponseBody = serde_json::from_value(
             fixture["schema_validation_cases"]
                 .as_array()
                 .unwrap()
@@ -740,7 +741,10 @@ mod tests {
             .send(&service)
             .await;
         assert_eq!(response.status_code, Some(StatusCode::OK));
-        let actual = response.take_json::<PushNotifyOutcome>().await.unwrap();
+        let actual = response
+            .take_json::<PushNotifyResponseBody>()
+            .await
+            .unwrap();
         assert_eq!(actual, expected);
         assert_eq!(actual.outcomes.len(), request.notification.devices.len());
         for outcome in &actual.outcomes {

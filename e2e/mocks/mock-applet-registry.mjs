@@ -174,7 +174,7 @@ const jwks = {
       ...publicJwk,
       kid: "mock-applet-registry-key-1",
       alg: "Ed25519",
-      use: "sig",
+      use: "signature",
     },
   ],
 };
@@ -335,10 +335,10 @@ function registrationEpochHash(packageBase, evidence) {
       ...packageBase.endpoint_policy,
       endpoints: sortedEndpoints,
     },
-    webhook_auth: {
-      ...packageBase.webhook_auth,
+    webhook_signature_policy: {
+      ...packageBase.webhook_signature_policy,
       accepted_signature_algorithms: [
-        ...packageBase.webhook_auth.accepted_signature_algorithms,
+        ...packageBase.webhook_signature_policy.accepted_signature_algorithms,
       ].sort(),
     },
     security_policy: securityPolicy,
@@ -592,7 +592,7 @@ async function submitSignedAppletTransaction({
     `"source-service-id": ${packageInfo.serviceId}\n` +
     `"destination-service-id": ${destinationServiceId}\n` +
     `"idempotency-key": ${idempotencyKey}\n` +
-    `"@signature-params": ${signatureParams}`;
+    `"@signature-parameters": ${signatureParams}`;
   const signature = sign(
     null,
     Buffer.from(signatureBase, "utf8"),
@@ -654,7 +654,7 @@ function prepareSignedPackage(body) {
   if (!String(serviceId).startsWith("ak:did_core:")) {
     throw new Error("service_id must be a DidCoreId");
   }
-  const webhookAuth = body.webhook_auth ?? {
+  const webhookAuth = body.webhook_signature_policy ?? {
     kind: "http_message_signature",
     key_ref: `${serviceDid}#applet-service-key`,
     accepted_signature_algorithms: ["ed25519"],
@@ -682,7 +682,7 @@ function prepareSignedPackage(body) {
       (serviceDid.startsWith("did:webvh:")
         ? {
             method: "did:webvh",
-            version_time: createdAt,
+            version_created_at: createdAt,
             unversioned_refetch: false,
           }
         : {
@@ -737,12 +737,12 @@ function prepareSignedPackage(body) {
         },
       ],
     },
-    webhook_auth: webhookAuth,
+    webhook_signature_policy: webhookAuth,
     receive_events: body.receive_events ?? true,
     receive_signals: body.receive_signals ?? false,
     rate_limited: body.rate_limited ?? true,
     limits: body.limits ?? {
-      max_transaction_events: 100,
+      max_transaction_event_count: 100,
       max_payload_bytes: 65536,
       rate_limit_per_minute: 60,
     },

@@ -200,7 +200,7 @@ fn media_join_request(
     )?;
     let policy_bundle_payload = Some(serde_json::json!({
         "policy_revision": 3,
-        "media_service_decrypts": policy_authorized
+        "media_service_decryption_allowed": policy_authorized
     }));
     let media_service_id = arkret_wire::DidCoreId::new("ak:did_core:web:media.example".to_owned())?;
     let plaintext_visible_services_payload = service_allowlisted.then(|| {

@@ -1,6 +1,6 @@
 //! S5 — a Message author edits and then retracts a plaintext Message through
 //! the single Event/RealmCommit carrier (`zh/models/strand-and-message.md`
-//! §9.5, `zh/sync/current-results.md` `message_revision` / `object_redaction`).
+//! §9.5, `zh/sync/current-state.md` `message_revision` / `object_redaction`).
 //!
 //! The scenario proves, against a live Coland:
 //!

@@ -119,7 +119,7 @@ pub struct AgentRuntimeHandle {
     controller: SdkClient,
     pub authorization: EventId,
     issuer: SessionEngine<SdkClient>,
-    session_request: UnsignedAgentSessionGrantRequest,
+    session_request: AgentSessionGrantSigningInput,
     holder: Arc<SigningKey>,
     runtime_key: SigningKey,
     http: reqwest::Client,
@@ -291,7 +291,7 @@ impl AgentRuntimeHandle {
         let open = sdk(http.clone(), station_base, None)?;
         let describe = open.describe().await.context("pairing/describe")?;
         let authority = describe
-            .auth_metadata
+            .authentication_metadata
             .account_authority
             .as_ref()
             .context("Station did not declare its Account Authority")?;
@@ -332,7 +332,7 @@ impl AgentRuntimeHandle {
                 &identity.verification_method,
             );
         let approval_request = candidate.build_approval_request()?;
-        let approval: AgentRuntimeApprovalOutcome = open
+        let approval: AgentRuntimeApprovalResponseBody = open
             .request_agent_runtime_approval(&approval_request.body)
             .await
             .context("pairing/request-key")?;
@@ -429,7 +429,7 @@ impl AgentRuntimeHandle {
         );
         let deadline = std::time::Instant::now() + Duration::from_secs(30);
         let signer_commit = loop {
-            let status: AgentRuntimeApprovalStatusOutcome = open
+            let status: AgentRuntimeApprovalStatusResponseBody = open
                 .agent_runtime_approval_status(&AgentRuntimeApprovalStatusRequestBody {
                     pairing_request_id: request_id.clone(),
                     pairing_code: NonEmptyString::new(code).map_err(anyhow::Error::msg)?,
@@ -538,11 +538,11 @@ impl AgentRuntimeHandle {
             "accepted runtime scope is incomplete"
         );
         let now = arkret_canonical::normalize_timestamp_canonical(chrono::Utc::now());
-        let request = UnsignedAgentSessionGrantRequest::new(
+        let request = AgentSessionGrantSigningInput::new(
             agent_id,
             scopes.clone(),
             authorization.clone(),
-            SessionGrantAgentScopeRequest {
+            RequestedAgentSessionGrantScope {
                 realm_ids: vec![],
                 strand_ids: vec![],
                 track_names: vec![],
@@ -551,7 +551,7 @@ impl AgentRuntimeHandle {
             SessionGrantDpopBindingProof {
                 proof_jwt: binding.header_value,
             },
-            UnsignedAgentSessionGrantProof {
+            AgentSessionGrantProofInput {
                 challenge: arkret_canonical::base64url_encode(random_key()?.to_bytes()),
                 audience_id: controller_account.station_id.clone(),
                 issued_at: now,
@@ -582,7 +582,7 @@ impl AgentRuntimeHandle {
         // One exact Strand is the complete content resource. Its accepted
         // current determines the governing Realm; a second Realm selector
         // would request an unrepresentable resource union in the flat carrier.
-        session_request.agent_scope_request = SessionGrantAgentScopeRequest {
+        session_request.agent_scope_request = RequestedAgentSessionGrantScope {
             realm_ids: vec![],
             strand_ids: vec![strand],
             track_names: vec![NonEmptyString::new("discussion").map_err(anyhow::Error::msg)?],

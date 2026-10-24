@@ -595,8 +595,8 @@ export async function agentTopicChats(page: Page, receiptPath: string, proof: Di
     expect(request.target_scope).toEqual({ kind: "strand", realm_id: created.realm_id, strand_id: id });
     expect(request.expected_version).toBe(0);
     expect(request.selection).toEqual({
-      reply_message: true, reaction_add: false, reaction_remove: false,
-      accept_third_party_mention: false, act_on_behalf: false,
+      message_creation_allowed: true, reaction_addition_allowed: false, reaction_removal_allowed: false,
+      third_party_mention_delivery_allowed: false, acting_on_behalf_allowed: false,
     });
     const outcome = await replaced.json();
     expect(outcome.participation_entries).toEqual(expect.arrayContaining([

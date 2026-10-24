@@ -51,7 +51,10 @@ fn string_leaves(value: &Value) -> Vec<&str> {
     }
 }
 
-async fn scan(client: &TestActorClient, realm: &RealmId) -> Result<arkret_wire::StreamScanOutcome> {
+async fn scan(
+    client: &TestActorClient,
+    realm: &RealmId,
+) -> Result<arkret_wire::StreamScanResponseBody> {
     let outcome = client
         .sdk()
         .scan_commit_stream_tail(

@@ -6,9 +6,9 @@ use arkret_models_collaboration::agent_operations::{
     AgentProvisionPreparePhase, AgentProvisionPrepareRequestBody,
 };
 use arkret_models_collaboration::device_pairing::{
-    DevicePairingNonce, DevicePairingResolveRequestBody, DevicePairingStageOutcome,
-    DevicePairingStageRequestBody, DevicePairingState, DevicePairingStatusOutcome,
-    DevicePairingStatusRequestBody,
+    DevicePairingNonce, DevicePairingResolveRequestBody, DevicePairingStageRequestBody,
+    DevicePairingStageResponseBody, DevicePairingState, DevicePairingStatusRequestBody,
+    DevicePairingStatusResponseBody,
 };
 use arkret_models_collaboration::governance::agent_artifacts::PublicKey;
 use arkret_models_discovery::ServiceDescribe;
@@ -62,7 +62,7 @@ pub async fn applet_lifecycle_surfaces_are_advertised_when_routes_exist() -> Res
             "missing advertised applet operation {required}; advertised={advertised:#?}"
         );
     }
-    let ping: arkret_models_integration::AppletPingOutcome = serde_json::from_value(
+    let ping: arkret_models_integration::AppletPingResponseBody = serde_json::from_value(
         expect_json(
             server.http().get(server.url("/_arkret/edge/applet/ping")),
             StatusCode::OK,
@@ -140,7 +140,7 @@ pub async fn agent_lifecycle_surfaces_are_advertised_when_routes_exist() -> Resu
         );
     }
 
-    let empty_list: arkret_models_collaboration::agent_operations::AgentList =
+    let empty_list: arkret_models_collaboration::agent_operations::AgentPage =
         serde_json::from_value(
             expect_json(alice.get("/_arkret/self/agents"), StatusCode::OK).await?,
         )?;
@@ -234,13 +234,13 @@ pub async fn device_pairing_handoff_bundle_selects_all_canonical_routes() -> Res
         "Station must advertise the registered device-pairing handoff bundle"
     );
 
-    let stage: DevicePairingStageOutcome = serde_json::from_value(
+    let stage: DevicePairingStageResponseBody = serde_json::from_value(
         expect_json(
             server
                 .http()
                 .post(server.url("/_arkret/open/device-pairing/requests"))
                 .json(&DevicePairingStageRequestBody {
-                    new_device_pubkey: PublicKey {
+                    new_device_public_key: PublicKey {
                         kty: NonEmptyString::new("OKP").map_err(anyhow::Error::msg)?,
                         kid: NonEmptyString::new("ak:device:01994100-0000-7000-8000-0000000000d1")
                             .map_err(anyhow::Error::msg)?,
@@ -285,7 +285,7 @@ pub async fn device_pairing_handoff_bundle_selects_all_canonical_routes() -> Res
     // `status` is the one surface that keeps answering for a staged record: its
     // query credential is the request id plus the pairing code, which only the
     // candidate device that minted them holds.
-    let status: DevicePairingStatusOutcome = serde_json::from_value(
+    let status: DevicePairingStatusResponseBody = serde_json::from_value(
         expect_json(
             server
                 .http()

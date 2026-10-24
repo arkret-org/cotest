@@ -21,8 +21,8 @@ use arkret_models_collaboration::events_payloads::call::{
     CallCaptureFailureReasonCode, CallLifecycleState, CallStateTransition,
 };
 use arkret_models_collaboration::objects::media::{
-    CallMediaParticipantBinding, CallMediaTokenExchangeOutcome, CallMediaTokenExchangeRequestBody,
-    MediaBackendKind, MediaBackendToken,
+    CallMediaParticipantBinding, CallMediaTokenExchangeRequestBody,
+    CallMediaTokenExchangeResponseBody, MediaBackendKind, MediaBackendToken,
 };
 use arkret_wire::{
     AccountId, ActorId, Base64UrlString, CommitStreamRef, CommittedEventFullView,
@@ -281,7 +281,7 @@ fn committed_transition(from: &str, to: &str) -> CommittedEventFullView {
                 verification_method: DidUrl::new("did:web:station.example#key-1").unwrap(),
                 signed_digest: Hash::new(format!("sha256:{}", "44".repeat(32))).unwrap(),
                 created_at: Utc.timestamp_opt(1_800_000_001, 0).unwrap(),
-                sig: Base64UrlString::new("AQ").unwrap(),
+                signature: Base64UrlString::new("AQ").unwrap(),
             },
         },
         event,
@@ -324,8 +324,8 @@ fn token_outcome(
     request: &CallMediaTokenExchangeRequestBody,
     key: &SigningKey,
     expires_at: DateTime<Utc>,
-) -> Result<CallMediaTokenExchangeOutcome> {
-    let mut outcome = CallMediaTokenExchangeOutcome {
+) -> Result<CallMediaTokenExchangeResponseBody> {
+    let mut outcome = CallMediaTokenExchangeResponseBody {
         realm_id: request.realm_id.clone(),
         call_id: request.call_id.clone(),
         actor_id: request.actor_id.clone(),
@@ -336,7 +336,7 @@ fn token_outcome(
         backend_token: MediaBackendToken::Opaque("opaque-token".to_owned()),
         participant_id: "ak:rtc_participant:0198c2f4-0000-7000-8000-000000000000".to_owned(),
         participant_binding: CallMediaParticipantBinding {
-            sig: String::new(),
+            signature: String::new(),
             issuer_kid: arkret::DidUrl::new(ISSUER_KID).map_err(anyhow::Error::msg)?,
             expires_at,
         },
@@ -345,7 +345,7 @@ fn token_outcome(
     };
     let input =
         participant_binding_signing_input(&ParticipantBindingContext::from_outcome(&outcome))?;
-    outcome.participant_binding.sig = base64url_encode(key.sign(&input).to_bytes());
+    outcome.participant_binding.signature = base64url_encode(key.sign(&input).to_bytes());
     Ok(outcome)
 }
 
@@ -371,7 +371,7 @@ fn participant_case() -> Result<(usize, usize)> {
     negatives.push(tuple);
     negatives.push(token_outcome(&request, &key, now - Duration::seconds(1))?);
     let mut signature = good;
-    signature.participant_binding.sig = "AAAA".to_owned();
+    signature.participant_binding.signature = "AAAA".to_owned();
     negatives.push(signature);
     for outcome in negatives {
         let before = accepted.clone();

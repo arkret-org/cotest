@@ -13,7 +13,7 @@
 // invariants like `circle_member_must_be_realm_member` fire identically).
 //
 // Wire shapes mirror coland src/routing/circles.rs (CircleCreateRequestBody /
-// CircleMemberRequestBody / CircleView / CircleMembershipOutcome).
+// CircleMemberRequestBody / CircleView / CircleMembershipResponseBody).
 //
 // Every write body now carries the caller-signed `ak.circle.*` Event and nothing
 // else: the operations declare a durable `event_log` effect, and the spec
@@ -24,7 +24,7 @@
 
 import type { APIRequestContext, APIResponse } from "@playwright/test";
 import { type ColandKey, colandBaseUrl, colandServiceId } from "./env";
-import type { RealmObject, CircleView, CircleMembershipOutcome } from "./generated/spec-wire-objects";
+import type { RealmObject, CircleView, CircleMembershipResponseBody } from "./generated/spec-wire-objects";
 import {
   accountActorId,
   authHeaders,
@@ -40,8 +40,8 @@ import {
 } from "./coland-api";
 
 export type CircleOutcome = CircleView;
-export type { CircleMembershipOutcome } from "./generated/spec-wire-objects";
-export type CircleMembership = CircleMembershipOutcome["membership"];
+export type { CircleMembershipResponseBody } from "./generated/spec-wire-objects";
+export type CircleMembership = CircleMembershipResponseBody["membership"];
 
 // capability-grant.schema.json: a Realm-root issuer authority is the typed
 // reference to the accepted Realm genesis Event at its authority generation.
@@ -263,7 +263,7 @@ export async function getCircleArkret(
 }
 
 // The exact typed revision of `memberId`'s current parent Realm `member_state`
-// (typed-current-result.schema.json `member_state_result.revision`), read from
+// (current-state.schema.json `current_member_state.revision`), read from
 // the caller-visible Realm state snapshot. circle.md section 9.1 item 1: a
 // Circle `join` signs this `{commit_id, stream_position}` as
 // `parent_membership_revision`; it is taken from a typed current any parent
@@ -384,9 +384,9 @@ export async function addCircleMemberArkret(
     membership?: CircleMembership;
     server?: ColandKey;
   },
-): Promise<CircleMembershipOutcome> {
+): Promise<CircleMembershipResponseBody> {
   const response = await addCircleMemberRaw(request, token, circleId, args);
-  return await expectJsonOk<CircleMembershipOutcome>(
+  return await expectJsonOk<CircleMembershipResponseBody>(
     response,
     `add circle member ${args.actorId} -> ${circleId}`,
   );
@@ -402,7 +402,7 @@ export async function removeCircleMemberArkret(
     realmId: string;
     server?: ColandKey;
   },
-): Promise<CircleMembershipOutcome> {
+): Promise<CircleMembershipResponseBody> {
   const memberEvent = await prepareSignedEventSubmissionApi(
     request,
     token,
@@ -432,7 +432,7 @@ export async function removeCircleMemberArkret(
       }),
     },
   );
-  return await expectJsonOk<CircleMembershipOutcome>(
+  return await expectJsonOk<CircleMembershipResponseBody>(
     response,
     `remove circle member ${actorId} <- ${circleId}`,
   );

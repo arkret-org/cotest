@@ -149,7 +149,7 @@ impl GrantFixture {
                         realm_id: realm.clone(),
                     },
                     selection: arkret::ParticipationBits {
-                        reply_message: true,
+                        message_creation_allowed: true,
                         ..arkret::ParticipationBits::NONE
                     },
                     expected_version: 0,
@@ -166,7 +166,7 @@ impl GrantFixture {
                 }),
             )
             .await?;
-        let accepted: AuthoritySubmitOutcome = serde_json::from_value(
+        let accepted: AuthoritySubmitResponseBody = serde_json::from_value(
             expect_json(
                 controller
                     .post("/_arkret/self/events")
@@ -176,7 +176,7 @@ impl GrantFixture {
             .await?,
         )?;
         ensure!(
-            matches!(accepted, AuthoritySubmitOutcome::Accepted {status:AuthorityCommitStatus::Committed,commit} if commit.event_ref==message.event_id)
+            matches!(accepted, AuthoritySubmitResponseBody::Accepted {status:AuthorityCommitStatus::Committed,commit} if commit.event_ref==message.event_id)
         );
         Ok(Self {
             deployment,
@@ -192,8 +192,8 @@ impl GrantFixture {
 
     pub(super) fn selectors(
         &self,
-    ) -> arkret_models_collaboration::session_grants::SessionGrantAgentScopeRequest {
-        arkret_models_collaboration::session_grants::SessionGrantAgentScopeRequest {
+    ) -> arkret_models_collaboration::session_grants::RequestedAgentSessionGrantScope {
+        arkret_models_collaboration::session_grants::RequestedAgentSessionGrantScope {
             realm_ids: Vec::new(),
             strand_ids: vec![self.a.clone()],
             track_names: vec![arkret_wire::NonEmptyString::new("discussion").expect("fixed track")],
@@ -217,7 +217,7 @@ impl GrantFixture {
     pub(super) async fn issue_for(
         &self,
         operations: &[&str],
-        selectors: arkret_models_collaboration::session_grants::SessionGrantAgentScopeRequest,
+        selectors: arkret_models_collaboration::session_grants::RequestedAgentSessionGrantScope,
     ) -> Result<(
         TestActorClient,
         arkret_models_identity::SignedSessionGrantClaims,
@@ -408,9 +408,9 @@ impl GrantFixture {
 }
 
 fn committed(value: serde_json::Value) -> Result<EventId> {
-    let outcome: AuthoritySubmitOutcome = serde_json::from_value(value)?;
+    let outcome: AuthoritySubmitResponseBody = serde_json::from_value(value)?;
     match outcome {
-        AuthoritySubmitOutcome::Accepted {
+        AuthoritySubmitResponseBody::Accepted {
             status: AuthorityCommitStatus::Committed,
             commit,
         } => Ok(commit.event_ref),

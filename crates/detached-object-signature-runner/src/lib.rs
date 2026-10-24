@@ -68,9 +68,9 @@ fn fixture() -> Result<Value> {
 }
 
 fn public_key(case: &Value) -> Result<PublicKeyMaterial> {
-    let encoded = case["public_key_b64u"]
+    let encoded = case["public_key_base64url"]
         .as_str()
-        .context("detached signature case has no public_key_b64u")?;
+        .context("detached signature case has no public_key_base64url")?;
     let bytes = base64url_decode(encoded)?;
     ensure!(bytes.len() == 32, "Ed25519 fixture key is not 32 bytes");
     Ok(PublicKeyMaterial::Ed25519Raw { bytes })
@@ -196,12 +196,12 @@ pub fn run_detached_object_signature_suite() -> Result<DetachedObjectSignatureEx
                 .with_context(|| format!("{case_id} has no prefix KAT"))?,
         )?;
         ensure!(signing_bytes.starts_with(&prefix));
-        ensure!(signature.sig.as_str() == case["expected_sig"]);
+        ensure!(signature.signature.as_str() == case["expected_sig"]);
         ensure!(
             signature.verification_method.as_str()
                 == case["authority_basis"]["authorized_verification_method"]
         );
-        ensure!(case["authority_basis"]["public_key_b64u"] == case["public_key_b64u"]);
+        ensure!(case["authority_basis"]["public_key_base64url"] == case["public_key_base64url"]);
 
         let key = public_key(case)?;
         verify_detached_object_signature(&signature, &unsigned, signature.context, &key)
@@ -246,7 +246,7 @@ pub fn run_detached_object_signature_suite() -> Result<DetachedObjectSignatureEx
         ensure!(accepted_sink == accepted_state);
 
         let mut bad_signature = signature.clone();
-        bad_signature.sig =
+        bad_signature.signature =
             Base64UrlString::new(base64url_encode([0_u8; 64])).map_err(anyhow::Error::msg)?;
         let signature_error = verify_detached_object_signature(
             &bad_signature,

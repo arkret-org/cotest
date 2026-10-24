@@ -45,8 +45,8 @@ function signIdToken({ issuer, sub, email, audience, nonce }) {
     ...(nonce ? { nonce } : {}),
   };
   const enc = `${b64url(JSON.stringify(header))}.${b64url(JSON.stringify(payload))}`;
-  const sig = createSign("RSA-SHA256").update(enc).sign(privateKey);
-  return `${enc}.${b64url(sig)}`;
+  const signature = createSign("RSA-SHA256").update(enc).sign(privateKey);
+  return `${enc}.${b64url(signature)}`;
 }
 
 function verifyPkce({ code_verifier, code_challenge, code_challenge_method }) {

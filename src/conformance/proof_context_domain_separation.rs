@@ -28,7 +28,7 @@ use std::collections::BTreeSet;
 
 use anyhow::{Result, anyhow, bail};
 use arkret_models_collaboration::mimi_operations::{
-    MimiIdentifierQueryOutcome, MimiIdentifierQueryRequestBody, MimiRequestConsentRequestBody,
+    MimiIdentifierQueryRequestBody, MimiIdentifierQueryResponseBody, MimiRequestConsentRequestBody,
 };
 use arkret_signatures::proof::sign_ed25519_detached_jws;
 use arkret_signatures::{PublicKeyMaterial, verify_ed25519_detached_jws_payload_proof};
@@ -45,7 +45,7 @@ use super::load_artifact_json;
 pub const MIMI_PER_FAMILY_PROOF_CONTEXTS: &[(&str, &str)] = &[
     (
         ProofContextId::MIMI_IDENTIFIER_QUERY_OUTCOME_PROOF_V1,
-        "mimi_identifier_query_outcome",
+        "mimi_identifier_query_response_body",
     ),
     (
         ProofContextId::MIMI_IDENTIFIER_QUERY_REQUEST_PROOF_V1,
@@ -380,14 +380,15 @@ fn signed_proof(
 }
 
 fn mimi_families() -> Result<Vec<FamilyUnderTest>> {
-    let identifier_query_outcome: MimiIdentifierQueryOutcome = serde_json::from_value(json!({
-        "matches": [{
-            "identifier_commitment":
-                "sha256:1111111111111111111111111111111111111111111111111111111111111111",
-            "matched": true
-        }],
-        "has_more": false
-    }))?;
+    let identifier_query_outcome: MimiIdentifierQueryResponseBody =
+        serde_json::from_value(json!({
+            "matches": [{
+                "identifier_commitment":
+                    "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+                "matched": true
+            }],
+            "has_more": false
+        }))?;
     let identifier_query_request: MimiIdentifierQueryRequestBody = serde_json::from_value(json!({
         "identifiers": [{
             "kind": "handle",
@@ -417,7 +418,7 @@ fn mimi_families() -> Result<Vec<FamilyUnderTest>> {
 
     Ok(vec![
         family(
-            "mimi_identifier_query_outcome",
+            "mimi_identifier_query_response_body",
             ProofContextId::MIMI_IDENTIFIER_QUERY_OUTCOME_PROOF_V1,
             identifier_query_outcome.payload_digest()?,
             move |proof| Ok(identifier_query_outcome.proof_binding_bytes(proof)?),

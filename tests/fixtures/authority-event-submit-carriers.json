@@ -5,10 +5,10 @@
   "service_e2e_status": "unwired",
   "description": "Static protocol conformance for the endpoint-specific authority Event-submit carriers. This fixture does not claim Station persistence, signature verification, atomicity or federation delivery E2E.",
   "schema_refs": {
-    "self_request": "schemas/authority-commit-operations.schema.json#/$defs/self_submit_request",
-    "self_outcome": "schemas/authority-commit-operations.schema.json#/$defs/self_submit_outcome",
-    "peer_request": "schemas/authority-commit-operations.schema.json#/$defs/peer_submit_request",
-    "peer_outcome": "schemas/authority-commit-operations.schema.json#/$defs/peer_submit_outcome",
+    "self_request": "schemas/authority-commit-operations.schema.json#/$defs/self_submit_request_body",
+    "self_outcome": "schemas/authority-commit-operations.schema.json#/$defs/self_submit_response_body",
+    "peer_request": "schemas/authority-commit-operations.schema.json#/$defs/peer_submit_request_body",
+    "peer_outcome": "schemas/authority-commit-operations.schema.json#/$defs/peer_submit_response_body",
     "dependency_problem": "schemas/authority-commit-operations.schema.json#/$defs/direct_conversation_founding_dependency_missing_problem"
   },
   "required_static_cases": [

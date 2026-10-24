@@ -6,9 +6,9 @@
 //! its Account Station forwards the creator's `ak.mls.genesis` to the Realm's
 //! governance Station. The epoch-0 group is a real RFC 9420 group the SDK
 //! creates for that device, and every protocol decision is the SDK's: the
-//! validating `PeerAuthorityForwardEventRequest` (material presence by Event
+//! validating `PeerAuthorityForwardEventRequestBody` (material presence by Event
 //! kind and the canonical, bounded member shape of `MlsGenesisMaterial`), the
-//! published `peer_submit_request` schema, the forwarded producer resolution,
+//! published `peer_submit_request_body` schema, the forwarded producer resolution,
 //! the ref's own digest suite (`verify_digest`), the RFC 9420 public state
 //! (`MlsPublicGroupTracker`) and the group-state-material response binding.
 //! The two Station models below own only their stores: the forwarding
@@ -26,13 +26,13 @@ use arkret::{
 };
 use arkret_models_collaboration::authority_commit::{
     AuthorityForwardBranch, MLS_GENESIS_MATERIAL_MAX_BLOB_BYTES, MlsGenesisMaterial,
-    PeerAuthorityForwardEventRequest, PeerAuthoritySubmitRequest,
+    PeerAuthorityForwardEventRequestBody, PeerAuthoritySubmitRequestBody,
 };
 use arkret_models_collaboration::events_payloads::{
     MlsGenesisCreatorLeafAuthority, MlsGenesisPayload,
 };
 use arkret_models_collaboration::mls_group_state_material::{
-    MlsGroupStateMaterialOutcome, MlsGroupStateMaterialRequestBody,
+    MlsGroupStateMaterialRequestBody, MlsGroupStateMaterialResponseBody,
 };
 use arkret_wire::{
     ActorId, Base64UrlString, BlobRef, ErrorCode, Event, EventAdmissionSubmission, EventId,
@@ -55,7 +55,7 @@ pub const AUTHORITY_FORWARD_GENESIS_MATERIAL_ENTRYPOINT: &str =
 const FIXTURE: &str = "federation-authority-forward-genesis-material-fixture.json";
 const SUITE: &str = "federation_authority_forward_genesis_material";
 const PEER_REQUEST: &str =
-    "schemas/authority-commit-operations.schema.json#/$defs/peer_submit_request";
+    "schemas/authority-commit-operations.schema.json#/$defs/peer_submit_request_body";
 const MATERIAL_SCHEMA: &str =
     "schemas/authority-commit-operations.schema.json#/$defs/mls_genesis_material";
 const CIPHER_SUITE: &str = "MLS_128_DHKEMX25519_AES128GCM_SHA256_Ed25519";
@@ -276,7 +276,7 @@ impl World {
             _ => bail!("Genesis fixture creator leaf is not the producer device"),
         };
         let creator_leaf_authority = MlsGenesisCreatorLeafAuthority {
-            leaf_signature_key_b64u: creator.signature_key.clone(),
+            leaf_signature_key_base64url: creator.signature_key.clone(),
             endpoint,
             authorization_event_ref: creator
                 .device_authorize_event_id
@@ -541,7 +541,7 @@ impl<'a> CaseRun<'a> {
             let evidence = self.world.forwarding.fresh_evidence(event, &request)?;
             request.producer_device_evidence = Some(evidence);
             return Ok(Ok(serde_json::to_value(
-                PeerAuthoritySubmitRequest::AuthorityForwardEvent(request),
+                PeerAuthoritySubmitRequestBody::AuthorityForwardEvent(request),
             )?));
         }
         let refused = |code| Ok(Err(Refusal::forwarding(code)));
@@ -570,7 +570,7 @@ impl<'a> CaseRun<'a> {
         } else {
             None
         };
-        let unsigned_request = PeerAuthorityForwardEventRequest {
+        let unsigned_request = PeerAuthorityForwardEventRequestBody {
             branch: AuthorityForwardBranch::AuthorityForward,
             event_submission: EventAdmissionSubmission::new(event.clone()),
             mls_genesis_material: material,
@@ -581,7 +581,7 @@ impl<'a> CaseRun<'a> {
             .world
             .forwarding
             .fresh_evidence(event, &unsigned_request)?;
-        let request = match PeerAuthorityForwardEventRequest::new(
+        let request = match PeerAuthorityForwardEventRequestBody::new(
             unsigned_request.event_submission,
             unsigned_request.mls_genesis_material,
             Some(evidence),
@@ -592,7 +592,7 @@ impl<'a> CaseRun<'a> {
             }
         };
         Ok(Ok(serde_json::to_value(
-            PeerAuthoritySubmitRequest::AuthorityForwardEvent(request),
+            PeerAuthoritySubmitRequestBody::AuthorityForwardEvent(request),
         )?))
     }
 
@@ -603,7 +603,7 @@ impl<'a> CaseRun<'a> {
         variant: &Value,
         event: &Event,
         state: &GroupState,
-    ) -> Result<Option<PeerAuthorityForwardEventRequest>> {
+    ) -> Result<Option<PeerAuthorityForwardEventRequestBody>> {
         let honest = || {
             (
                 arkret_canonical::base64url_encode(&state.group_info),
@@ -650,12 +650,12 @@ impl<'a> CaseRun<'a> {
             }
             other => bail!("unsupported carried override {other:?}"),
         };
-        let request = PeerAuthorityForwardEventRequest {
+        let request = PeerAuthorityForwardEventRequestBody {
             branch: AuthorityForwardBranch::AuthorityForward,
             event_submission: EventAdmissionSubmission::new(event.clone()),
             mls_genesis_material: material.map(|(group_info, tree)| MlsGenesisMaterial {
-                group_info_bytes_b64: group_info,
-                ratchet_tree_bytes_b64: tree,
+                group_info_base64url: group_info,
+                ratchet_tree_base64url: tree,
             }),
             producer_device_evidence: None,
             producer_agent_evidence: None,
@@ -675,8 +675,8 @@ impl<'a> CaseRun<'a> {
 
     fn admit_checked(&mut self, body: &Value) -> std::result::Result<Admission, Refusal> {
         let schema_ok = self.world.peer_request.is_valid(body);
-        let Ok(PeerAuthoritySubmitRequest::AuthorityForwardEvent(request)) =
-            serde_json::from_value::<PeerAuthoritySubmitRequest>(body.clone())
+        let Ok(PeerAuthoritySubmitRequestBody::AuthorityForwardEvent(request)) =
+            serde_json::from_value::<PeerAuthoritySubmitRequestBody>(body.clone())
         else {
             return Err(Refusal::governance(ErrorCode::SchemaViolation));
         };
@@ -799,16 +799,16 @@ impl<'a> CaseRun<'a> {
             Base64UrlString::new(arkret_canonical::base64url_encode(bytes))
                 .map_err(anyhow::Error::msg)
         };
-        let outcome = MlsGroupStateMaterialOutcome {
+        let outcome = MlsGroupStateMaterialResponseBody {
             realm_id: request.realm_id.clone(),
             effective_scope: request.effective_scope.clone(),
             mls_group_id: request.mls_group_id.clone(),
             epoch: request.epoch,
             group_state_event_id: request.group_state_event_id.clone(),
             group_info_ref: request.group_info_ref.clone(),
-            group_info_bytes_b64: stored(&request.group_info_ref)?,
+            group_info_base64url: stored(&request.group_info_ref)?,
             ratchet_tree_ref: request.ratchet_tree_ref.clone(),
-            ratchet_tree_bytes_b64: stored(&request.ratchet_tree_ref)?,
+            ratchet_tree_base64url: stored(&request.ratchet_tree_ref)?,
         };
         let validated = outcome.validate_for_request(&request)?;
         let carried = self.carried.as_ref().context("nothing was carried")?;
@@ -876,8 +876,8 @@ fn material_shape(variant: &Value) -> Result<Value> {
     Ok(json!({
         "decision": "accept",
         "encoded_chars": {
-            "group_info": material.group_info_bytes_b64.len(),
-            "ratchet_tree": material.ratchet_tree_bytes_b64.len(),
+            "group_info": material.group_info_base64url.len(),
+            "ratchet_tree": material.ratchet_tree_base64url.len(),
         },
         "decoded_total": group_info.len() + tree.len(),
     }))

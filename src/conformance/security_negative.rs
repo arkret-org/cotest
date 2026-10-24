@@ -188,8 +188,8 @@ fn validate_query_auth_leakage(case: &Value) -> Result<SecurityDecision> {
                 | "auth"
                 | "authorization"
                 | "bearer"
-                | "signature"
                 | "sig"
+                | "signature"
                 | "token"
         ) && !value.is_empty()
     });

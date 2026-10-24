@@ -18,7 +18,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use anyhow::{Context as _, Result, bail, ensure};
 use arkret_models_collaboration::device_messages::{
     DeviceMessageDeliveredRow, DeviceMessageDeliveredStatus, DeviceMessageTarget,
-    DeviceMessageUnknownRow, DeviceMessageUnknownStatus, DeviceMessagesSendOutcome,
+    DeviceMessageUnknownRow, DeviceMessageUnknownStatus, DeviceMessagesSendResponseBody,
 };
 use arkret_wire::{DeviceId, DeviceMessageId, DidCoreId};
 use chrono::{DateTime, Duration, Utc};
@@ -125,12 +125,12 @@ impl Station {
             admitted.push((*target, intent.clone(), typed));
         }
 
-        let mut outcome = DeviceMessagesSendOutcome {
+        let mut outcome = DeviceMessagesSendResponseBody {
             delivered: BTreeMap::new(),
             unknown_devices: BTreeMap::new(),
         };
         for original in exact {
-            let original: DeviceMessagesSendOutcome = serde_json::from_value(original)?;
+            let original: DeviceMessagesSendResponseBody = serde_json::from_value(original)?;
             for (principal, rows) in original.delivered {
                 outcome.delivered.entry(principal).or_default().extend(rows);
             }
@@ -145,7 +145,7 @@ impl Station {
         for (target, intent, typed) in admitted {
             let principal = DidCoreId::new(target.principal_id.clone())?;
             let device = DeviceId::new(target.device_id.clone())?;
-            let mut single = DeviceMessagesSendOutcome {
+            let mut single = DeviceMessagesSendResponseBody {
                 delivered: BTreeMap::new(),
                 unknown_devices: BTreeMap::new(),
             };
@@ -357,7 +357,7 @@ fn exact_retry(variant: &Value, max_ttl: Duration, sent_at: DateTime<Utc>) -> Re
     else {
         bail!("the original send must enqueue");
     };
-    let typed: DeviceMessagesSendOutcome = serde_json::from_value(original.clone())?;
+    let typed: DeviceMessagesSendResponseBody = serde_json::from_value(original.clone())?;
     ensure!(
         typed.unknown_devices.is_empty()
             && typed
@@ -406,7 +406,7 @@ fn unknown_rows(variant: &Value, max_ttl: Duration, sent_at: DateTime<Utc>) -> R
     let SendResult::Outcome(outcome) = station.send(&targets, sent_at)? else {
         bail!("undeliverable recipients must not fail the request");
     };
-    let typed: DeviceMessagesSendOutcome = serde_json::from_value(outcome.clone())?;
+    let typed: DeviceMessagesSendResponseBody = serde_json::from_value(outcome.clone())?;
     ensure!(
         typed.delivered.is_empty(),
         "no recipient here is deliverable"

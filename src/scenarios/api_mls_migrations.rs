@@ -3,7 +3,7 @@
 use std::time::{Duration, Instant};
 
 use anyhow::{Context, Result, ensure};
-use arkret::{ArkretMlsGroup, CommitStreamRef, EventId, RealmId, ScopeRef, StreamScanOutcome};
+use arkret::{ArkretMlsGroup, CommitStreamRef, EventId, RealmId, ScopeRef, StreamScanResponseBody};
 use serde_json::json;
 
 use super::_helpers::bridge::MockCoauthIntrospectionServer;
@@ -70,7 +70,10 @@ pub(super) async fn exercise(
     Ok(ctx.receipt_policy_probe)
 }
 
-pub(crate) async fn scan(client: &TestActorClient, scope: &ScopeRef) -> Result<StreamScanOutcome> {
+pub(crate) async fn scan(
+    client: &TestActorClient,
+    scope: &ScopeRef,
+) -> Result<StreamScanResponseBody> {
     let stream = match scope {
         ScopeRef::Realm { realm_id } => CommitStreamRef::Realm {
             realm_id: realm_id.clone(),

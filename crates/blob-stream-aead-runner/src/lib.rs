@@ -197,7 +197,7 @@ fn digest_key_ref() -> EncryptedAttachmentKeyRef {
     }
 }
 
-fn params(key_ref: EncryptedAttachmentKeyRef) -> StreamEncryptParams {
+fn parameters(key_ref: EncryptedAttachmentKeyRef) -> StreamEncryptParams {
     StreamEncryptParams {
         key_ref,
         content_key_salt: arkret_models_crypto::AttachmentContentKeySalt::from_bytes([7; 32]),
@@ -267,8 +267,12 @@ fn run_roundtrip(consumer: &mut AttachmentConsumer) -> Result<CaseExecutionResul
     let before = consumer.state.clone();
     let plaintext: Vec<u8> = (0..2050_u32).map(|index| (index % 251) as u8).collect();
     let key = key();
-    let (ciphertext, envelope) =
-        encrypt_stream(&plaintext, &key, &params(event_key_ref()), &winning_epoch)?;
+    let (ciphertext, envelope) = encrypt_stream(
+        &plaintext,
+        &key,
+        &parameters(event_key_ref()),
+        &winning_epoch,
+    )?;
     ensure!(
         consumer.accept(&ciphertext, &envelope, &key, &winning_epoch)? == plaintext,
         "one-shot production decrypt changed plaintext"
@@ -278,8 +282,12 @@ fn run_roundtrip(consumer: &mut AttachmentConsumer) -> Result<CaseExecutionResul
         "incremental production decrypt changed plaintext"
     );
 
-    let (digest_ciphertext, digest_envelope) =
-        encrypt_stream(&plaintext, &key, &params(digest_key_ref()), &winning_epoch)?;
+    let (digest_ciphertext, digest_envelope) = encrypt_stream(
+        &plaintext,
+        &key,
+        &parameters(digest_key_ref()),
+        &winning_epoch,
+    )?;
     ensure!(
         consumer.accept(&digest_ciphertext, &digest_envelope, &key, &winning_epoch,)? == plaintext,
         "proof-hash reference did not resolve the same winning epoch"
@@ -333,8 +341,12 @@ fn run_roundtrip(consumer: &mut AttachmentConsumer) -> Result<CaseExecutionResul
 fn run_truncation(consumer: &mut AttachmentConsumer) -> Result<CaseExecutionResult> {
     let key = key();
     let plaintext = vec![7_u8; 2500];
-    let (ciphertext, envelope) =
-        encrypt_stream(&plaintext, &key, &params(event_key_ref()), &winning_epoch)?;
+    let (ciphertext, envelope) = encrypt_stream(
+        &plaintext,
+        &key,
+        &parameters(event_key_ref()),
+        &winning_epoch,
+    )?;
     let segments = split_segments(&ciphertext, &envelope)?;
     ensure!(
         segments.len() == 3,
@@ -362,8 +374,12 @@ fn run_truncation(consumer: &mut AttachmentConsumer) -> Result<CaseExecutionResu
 fn run_reorder(consumer: &mut AttachmentConsumer) -> Result<CaseExecutionResult> {
     let key = key();
     let plaintext = vec![11_u8; 2500];
-    let (ciphertext, envelope) =
-        encrypt_stream(&plaintext, &key, &params(event_key_ref()), &winning_epoch)?;
+    let (ciphertext, envelope) = encrypt_stream(
+        &plaintext,
+        &key,
+        &parameters(event_key_ref()),
+        &winning_epoch,
+    )?;
     let segments = split_segments(&ciphertext, &envelope)?;
     let state = consumer.state.clone();
 
@@ -394,8 +410,12 @@ fn run_reorder(consumer: &mut AttachmentConsumer) -> Result<CaseExecutionResult>
 fn run_scheme_closure(consumer: &mut AttachmentConsumer) -> Result<CaseExecutionResult> {
     let key = key();
     let plaintext = vec![13_u8; 2050];
-    let (ciphertext, envelope) =
-        encrypt_stream(&plaintext, &key, &params(event_key_ref()), &winning_epoch)?;
+    let (ciphertext, envelope) = encrypt_stream(
+        &plaintext,
+        &key,
+        &parameters(event_key_ref()),
+        &winning_epoch,
+    )?;
     let before = consumer.state.clone();
     ensure!(
         consumer.accept(&ciphertext, &envelope, &key, &winning_epoch)? == plaintext,

@@ -31,7 +31,7 @@ async fn snapshot(url: &str, realm: &str) -> Result<Value> {
     let realm = realm.to_owned();
     tokio::task::spawn_blocking(move || -> Result<_> {
         let mut db=postgres::Client::connect(&url,postgres::NoTls)?;
-        Ok(db.query_one("SELECT jsonb_build_object('events',(SELECT count(*) FROM canonical_events WHERE realm_id=$1),'commits',(SELECT count(*) FROM realm_commits WHERE realm_id=$1),'outbox',(SELECT count(*) FROM federation_outbox),'event_outbox',(SELECT count(*) FROM event_federation_outbox),'reports',(SELECT COALESCE(jsonb_agg(to_jsonb(r) ORDER BY report_event_id),'[]'::jsonb) FROM moderation_report_current_results r WHERE realm_id=$1),'idempotency',(SELECT COALESCE(jsonb_agg(to_jsonb(k) ORDER BY actor_key,idempotency_key),'[]'::jsonb) FROM idempotency_keys k WHERE operation_id='ak.open.mimi.command.report_abuse.v1'))",&[&realm])?.get(0))
+        Ok(db.query_one("SELECT jsonb_build_object('events',(SELECT count(*) FROM canonical_events WHERE realm_id=$1),'commits',(SELECT count(*) FROM realm_commits WHERE realm_id=$1),'outbox',(SELECT count(*) FROM federation_outbox),'event_outbox',(SELECT count(*) FROM event_federation_outbox),'reports',(SELECT COALESCE(jsonb_agg(to_jsonb(r) ORDER BY report_event_id),'[]'::jsonb) FROM moderation_report_current_states r WHERE realm_id=$1),'idempotency',(SELECT COALESCE(jsonb_agg(to_jsonb(k) ORDER BY actor_key,idempotency_key),'[]'::jsonb) FROM idempotency_keys k WHERE operation_id='ak.open.mimi.command.report_abuse.v1'))",&[&realm])?.get(0))
     }).await?
 }
 
@@ -45,7 +45,7 @@ async fn verify_reports(
     let realm = realm.to_owned();
     let rows = tokio::task::spawn_blocking(move || -> Result<Vec<(Value, Value, Value)>> {
         let mut db = postgres::Client::connect(&database, postgres::NoTls)?;
-        Ok(db.query("SELECT e.envelope,c.commit_json,to_jsonb(r) FROM canonical_events e JOIN realm_commits c ON c.event_pk=e.pk JOIN moderation_report_current_results r ON r.current_commit_id=c.commit_id AND r.report_event_id=(c.commit_json->>'event_ref') WHERE e.realm_id=$1 AND e.kind=$2 ORDER BY c.stream_position", &[&realm,&EventKind::SelfModerationReport.as_str()])?.into_iter().map(|r|(r.get(0),r.get(1),r.get(2))).collect())
+        Ok(db.query("SELECT e.envelope,c.commit_json,to_jsonb(r) FROM canonical_events e JOIN realm_commits c ON c.event_pk=e.pk JOIN moderation_report_current_states r ON r.current_commit_id=c.commit_id AND r.report_event_id=(c.commit_json->>'event_ref') WHERE e.realm_id=$1 AND e.kind=$2 ORDER BY c.stream_position", &[&realm,&EventKind::SelfModerationReport.as_str()])?.into_iter().map(|r|(r.get(0),r.get(1),r.get(2))).collect())
     }).await??;
     ensure!(
         !rows.is_empty()

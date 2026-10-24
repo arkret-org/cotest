@@ -9,9 +9,9 @@ use anyhow::{Result, anyhow, bail, ensure};
 use arkret_identifiers::{DidCoreId, RealmId};
 use arkret_models_collaboration::events_payloads::mention::{Mention, MentionNode, MentionTarget};
 use arkret_models_collaboration::governance::agent_participation::{
-    AgentParticipationEntry, AgentParticipationError, AgentParticipationOutcome, ParticipationBits,
-    ParticipationNextReplaceInput, ParticipationScope, effective_participation, fold_ceiling_chain,
-    validate_agent_participation_tightens,
+    AgentParticipationEntry, AgentParticipationError, AgentParticipationResponseBody,
+    ParticipationBits, ParticipationNextReplaceInput, ParticipationScope, effective_participation,
+    fold_ceiling_chain, validate_agent_participation_tightens,
 };
 use arkret_models_collaboration::mention_composer::{
     AgentMentionComposerScope, AgentMentionLabels, AgentMentionRoute, MentionDraftBinding,
@@ -873,9 +873,9 @@ pub fn run_agent_participation_effective_intersection_vector() -> Result<()> {
     }
 
     let tightened = ParticipationBits {
-        reply_message: false,
-        reaction_add: false,
-        reaction_remove: false,
+        message_creation_allowed: false,
+        reaction_addition_allowed: false,
+        reaction_removal_allowed: false,
         ..ceiling
     };
     let after_tighten = effective_participation(tightened, selection);
@@ -905,7 +905,7 @@ pub fn run_agent_participation_selection_cas_vector() -> Result<()> {
         bail!("selection action-time intersection drifted");
     }
     let capped_bits = super::string_array_field(&vector["expected"], "capped_bits")?;
-    if capped_bits != ["accept_third_party_mention"] {
+    if capped_bits != ["third_party_mention_delivery_allowed"] {
         bail!("selection CAS capped bits drifted: {capped_bits:?}");
     }
     if vector
@@ -929,11 +929,11 @@ pub fn run_agent_participation_session_overlay_vector() -> Result<()> {
         scope: scope.clone(),
         selection,
         version,
-        next_replace_input: ParticipationNextReplaceInput {
+        next_replace_input: (version < i64::MAX as u64).then_some(ParticipationNextReplaceInput {
             expected_version: version,
-        },
+        }),
     };
-    let outcome = AgentParticipationOutcome {
+    let outcome = AgentParticipationResponseBody {
         agent_id: "ak:did_core:web:agents.acme.example:alice-summary".to_owned(),
         agent_participation_entries: vec![entry.clone()],
     };
@@ -1042,7 +1042,7 @@ fn mention_delivery(
     controller: &DidCoreId,
     effective: ParticipationBits,
 ) -> DeliveryArtifacts {
-    if author == controller || effective.accept_third_party_mention {
+    if author == controller || effective.third_party_mention_delivery_allowed {
         DeliveryArtifacts::ALL
     } else {
         DeliveryArtifacts::NONE
@@ -1062,7 +1062,7 @@ pub fn run_agent_participation_third_party_mention_gate_vector() -> Result<()> {
 
     let third_party_before = mention_delivery(&third_party, &controller, before);
     if third_party_before != artifacts_from_expected(vector, "/expected/third_party_before")? {
-        bail!("third-party mention delivered while accept_third_party_mention=false");
+        bail!("third-party mention delivered while third_party_mention_delivery_allowed=false");
     }
     let controller_before = mention_delivery(&controller, &controller, before);
     if controller_before != artifacts_from_expected(vector, "/expected/controller_before")? {
@@ -1085,9 +1085,9 @@ pub fn run_agent_participation_third_party_mention_gate_vector() -> Result<()> {
 
 pub fn run_agent_interaction_mode_vector() -> Result<()> {
     use arkret_models_collaboration::agent_interaction::agent_interaction_from_verified_exact_read;
-    use arkret_models_collaboration::exact_current_results::{
-        ExactCurrentResultSelector, ExactCurrentResultsReadOutcome,
-        ExactCurrentResultsReadRequestBody,
+    use arkret_models_collaboration::exact_current_state::{
+        ExactCurrentStateReadRequestBody, ExactCurrentStateReadResponseBody,
+        ExactCurrentStateSelector,
     };
     let participation = participation_fixture()?;
     let contract = &participation.interaction_contract;
@@ -1099,7 +1099,7 @@ pub fn run_agent_interaction_mode_vector() -> Result<()> {
     {
         bail!("mode vector metadata missing");
     }
-    let exact = super::load_fixture_value("exact-current-results-read-fixture.json")?;
+    let exact = super::load_fixture_value("exact-current-state-read-fixture.json")?;
     let cases = exact["schema_validation_cases"]
         .as_array()
         .ok_or_else(|| anyhow!("exact cases missing"))?;
@@ -1110,9 +1110,9 @@ pub fn run_agent_interaction_mode_vector() -> Result<()> {
             .ok_or_else(|| anyhow!("missing {name}"))?["instance"]
             .clone())
     };
-    let request: ExactCurrentResultsReadRequestBody =
+    let request: ExactCurrentStateReadRequestBody =
         serde_json::from_value(instance("agent_mode_exact_request")?)?;
-    let ExactCurrentResultSelector::AgentInteraction(selector) = &request.selector else {
+    let ExactCurrentStateSelector::AgentInteraction(selector) = &request.selector else {
         bail!("wrong mode selector");
     };
     let base = instance("agent_mode_present")?;
@@ -1137,7 +1137,7 @@ pub fn run_agent_interaction_mode_vector() -> Result<()> {
             if status == "present" {
                 value["entry"]["value"]["interaction_mode"] = row["mode"].clone();
             }
-            let outcome: ExactCurrentResultsReadOutcome = serde_json::from_value(value)?;
+            let outcome: ExactCurrentStateReadResponseBody = serde_json::from_value(value)?;
             let owner = if row["binding_valid"] == false {
                 &selector.agent_account_id
             } else {

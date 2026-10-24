@@ -122,11 +122,11 @@ struct Runner {
 #[derive(Debug, Deserialize)]
 struct SpecificationDefaults {
     window_seconds: u64,
-    default_new_sources_per_window: u64,
-    max_new_sources_per_window: u64,
+    default_source_count_per_window: u64,
+    max_source_count_per_window: u64,
     retention_seconds: u64,
-    default_new_sources_per_retention: u64,
-    max_new_sources_per_retention: u64,
+    default_source_count_per_retention: u64,
+    max_source_count_per_retention: u64,
 }
 
 #[derive(Debug, Deserialize)]
@@ -163,9 +163,9 @@ struct EffectiveBoundsExpectation {
 #[derive(Debug, Deserialize, PartialEq, Eq)]
 struct ExpectedEffective {
     window_seconds: u64,
-    new_sources_per_window: u64,
+    source_count_per_window: u64,
     retention_seconds: u64,
-    new_sources_per_retention: u64,
+    source_count_per_retention: u64,
 }
 
 #[derive(Debug, Deserialize)]
@@ -359,13 +359,13 @@ impl CanonicalAdmissionCase {
             (
                 "COLAND_RECEIVE_POLICY_NEW_SOURCE_DEFAULT_PER_WINDOW",
                 constraints
-                    .default_new_sources_per_window
+                    .default_source_count_per_window
                     .unwrap_or(NewSourceQuotaConstraints::DEFAULT_NEW_SOURCES_PER_WINDOW),
             ),
             (
                 "COLAND_RECEIVE_POLICY_NEW_SOURCE_MAX_PER_WINDOW",
                 constraints
-                    .max_new_sources_per_window
+                    .max_source_count_per_window
                     .unwrap_or(NewSourceQuotaConstraints::MAX_NEW_SOURCES_PER_WINDOW),
             ),
             (
@@ -377,13 +377,13 @@ impl CanonicalAdmissionCase {
             (
                 "COLAND_RECEIVE_POLICY_NEW_SOURCE_DEFAULT_PER_RETENTION",
                 constraints
-                    .default_new_sources_per_retention
+                    .default_source_count_per_retention
                     .unwrap_or(NewSourceQuotaConstraints::DEFAULT_NEW_SOURCES_PER_RETENTION),
             ),
             (
                 "COLAND_RECEIVE_POLICY_NEW_SOURCE_MAX_PER_RETENTION",
                 constraints
-                    .max_new_sources_per_retention
+                    .max_source_count_per_retention
                     .unwrap_or(NewSourceQuotaConstraints::MAX_NEW_SOURCES_PER_RETENTION),
             ),
         ]
@@ -483,14 +483,14 @@ pub fn run_invite_new_source_quota_suite() -> Result<()> {
 fn check_specification_defaults(defaults: &SpecificationDefaults) -> Result<()> {
     ensure!(
         defaults.window_seconds == NewSourceQuotaConstraints::DEFAULT_WINDOW_SECONDS
-            && defaults.default_new_sources_per_window
+            && defaults.default_source_count_per_window
                 == NewSourceQuotaConstraints::DEFAULT_NEW_SOURCES_PER_WINDOW
-            && defaults.max_new_sources_per_window
+            && defaults.max_source_count_per_window
                 == NewSourceQuotaConstraints::MAX_NEW_SOURCES_PER_WINDOW
             && defaults.retention_seconds == NewSourceQuotaConstraints::DEFAULT_RETENTION_SECONDS
-            && defaults.default_new_sources_per_retention
+            && defaults.default_source_count_per_retention
                 == NewSourceQuotaConstraints::DEFAULT_NEW_SOURCES_PER_RETENTION
-            && defaults.max_new_sources_per_retention
+            && defaults.max_source_count_per_retention
                 == NewSourceQuotaConstraints::MAX_NEW_SOURCES_PER_RETENTION,
         "fixture specification_defaults drifted from the shared receive-policy carrier"
     );
@@ -562,9 +562,9 @@ fn run_effective_bounds_cases(fixture: &Fixture) -> Result<()> {
 fn observed_effective(effective: &EffectiveNewSourceQuota) -> ExpectedEffective {
     ExpectedEffective {
         window_seconds: effective.window_seconds,
-        new_sources_per_window: effective.new_sources_per_window,
+        source_count_per_window: effective.source_count_per_window,
         retention_seconds: effective.retention_seconds,
-        new_sources_per_retention: effective.new_sources_per_retention,
+        source_count_per_retention: effective.source_count_per_retention,
     }
 }
 
@@ -767,7 +767,7 @@ fn run_concurrency_cases(fixture: &Fixture) -> Result<()> {
                 case.expected.final_ledger_size
             );
             ensure!(
-                admitted as u64 <= quota.new_sources_per_window,
+                admitted as u64 <= quota.source_count_per_window,
                 "{}: interleaving {order:?} admitted more new sources than the effective short-window ceiling",
                 case.name
             );
@@ -823,7 +823,7 @@ fn evaluate_admission(
         .filter(|first_admitted_at| **first_admitted_at > window_floor)
         .count() as u64;
     let total = ledger.len() as u64;
-    if rate >= quota.new_sources_per_window || total >= quota.new_sources_per_retention {
+    if rate >= quota.source_count_per_window || total >= quota.source_count_per_retention {
         // Step 4: a denied source is never written, so the next window cannot
         // misread it as seen.
         return Decision::Denied;

@@ -9,7 +9,7 @@ use arkret::contact_operations::{
 };
 use arkret_models_collaboration::contact_operations::RequestAcceptanceReceipt;
 use arkret_models_collaboration::direct_conversation::{
-    DirectConversationResolveOutcome, DirectConversationResolveRequestBody,
+    DirectConversationResolveRequestBody, DirectConversationResolveResponseBody,
 };
 use arkret_models_collaboration::governance::invite_addressing::{
     InviteLocatorIssueRequestBody, InviteLocatorResolveRequestBody, PrincipalLocator,
@@ -144,8 +144,8 @@ async fn tombstone_contact(
     row: &arkret::contact_operations::ContactListRow,
 ) -> Result<()> {
     use arkret::contact_operations::{
-        ContactCommitPhase, ContactCommitRequestBody, ContactOperationOutcome,
-        ContactPreparedOutcome,
+        ContactCommitPhase, ContactCommitRequestBody, ContactOperationResponseBody,
+        ContactPreparedResponseBody,
     };
     let next = row
         .next_prepare_input
@@ -156,7 +156,7 @@ async fn tombstone_contact(
     let idempotency_key = arkret::IdempotencyKey::new(crate::harness::next_typed_id("idempotency"))
         .map_err(anyhow::Error::msg)?;
     let path = "/_arkret/self/contacts/tombstone";
-    let prepared: ContactOperationOutcome = serde_json::from_value(
+    let prepared: ContactOperationResponseBody = serde_json::from_value(
         expect_json(
             holder.post(path).json(&ContactTombstonePrepareRequestBody {
                 phase: ContactPreparePhase::Prepare,
@@ -172,9 +172,9 @@ async fn tombstone_contact(
         )
         .await?,
     )?;
-    let ContactOperationOutcome::Prepared {
+    let ContactOperationResponseBody::Prepared {
         outcome:
-            ContactPreparedOutcome::Tombstone {
+            ContactPreparedResponseBody::Tombstone {
                 reservation_handle,
                 event_draft,
                 ..
@@ -183,7 +183,7 @@ async fn tombstone_contact(
     else {
         bail!("cross-Station tombstone did not prepare: {prepared:?}");
     };
-    let committed: ContactOperationOutcome = serde_json::from_value(
+    let committed: ContactOperationResponseBody = serde_json::from_value(
         expect_json(
             holder.post(path).json(&ContactCommitRequestBody {
                 phase: ContactCommitPhase::Commit,
@@ -200,7 +200,7 @@ async fn tombstone_contact(
         .await?,
     )?;
     ensure!(
-        matches!(committed, ContactOperationOutcome::Accepted { .. }),
+        matches!(committed, ContactOperationResponseBody::Accepted { .. }),
         "cross-Station tombstone was not accepted: {committed:?}"
     );
     Ok(())
@@ -210,7 +210,7 @@ async fn scope_update_contact(
     holder: &TestActorClient,
     row: &arkret::contact_operations::ContactListRow,
     scopes: Vec<arkret::contact_operations::ContactScope>,
-) -> Result<arkret::contact_operations::ContactAcceptedOutcome> {
+) -> Result<arkret::contact_operations::ContactAcceptedResponseBody> {
     use arkret::contact_operations::*;
     let next = row
         .next_prepare_input
@@ -221,7 +221,7 @@ async fn scope_update_contact(
     let idempotency_key = arkret::IdempotencyKey::new(crate::harness::next_typed_id("idempotency"))
         .map_err(anyhow::Error::msg)?;
     let path = "/_arkret/self/contacts/scope-update";
-    let prepared: ContactOperationOutcome = serde_json::from_value(
+    let prepared: ContactOperationResponseBody = serde_json::from_value(
         expect_json(
             holder
                 .post(path)
@@ -239,9 +239,9 @@ async fn scope_update_contact(
         )
         .await?,
     )?;
-    let ContactOperationOutcome::Prepared {
+    let ContactOperationResponseBody::Prepared {
         outcome:
-            ContactPreparedOutcome::ScopeUpdate {
+            ContactPreparedResponseBody::ScopeUpdate {
                 reservation_handle,
                 event_draft,
                 ..
@@ -260,27 +260,27 @@ async fn scope_update_contact(
             arkret_wire::event_kind_str::CONTACT_SCOPE_UPDATE,
         )?,
     };
-    let outcome: ContactOperationOutcome =
+    let outcome: ContactOperationResponseBody =
         serde_json::from_value(expect_json(holder.post(path).json(&body), StatusCode::OK).await?)?;
-    let replay: ContactOperationOutcome =
+    let replay: ContactOperationResponseBody =
         serde_json::from_value(expect_json(holder.post(path).json(&body), StatusCode::OK).await?)?;
     ensure!(
         serde_json::to_value(&outcome)? == serde_json::to_value(&replay)?,
         "scope commit retry changed its frozen source result"
     );
-    let ContactOperationOutcome::Accepted { outcome } = outcome else {
+    let ContactOperationResponseBody::Accepted { outcome } = outcome else {
         bail!("scope update did not commit: {outcome:?}");
     };
     Ok(outcome)
 }
 
-struct NativeContactHistory(Vec<arkret_models_identity::IdentityLogListOutcome>);
+struct NativeContactHistory(Vec<arkret_models_identity::IdentityLogListResponseBody>);
 impl arkret_identity::AuthorityDidHistoryResolver for NativeContactHistory {
     fn resolve_complete_history(
         &self,
         did: &Did,
     ) -> std::result::Result<
-        arkret_models_identity::IdentityLogListOutcome,
+        arkret_models_identity::IdentityLogListResponseBody,
         arkret_identity::AuthorityHistoryUnavailable,
     > {
         self.0
@@ -296,7 +296,7 @@ async fn native_contact_history(group: &TestServerGroup) -> Result<NativeContact
     let mut histories = Vec::new();
     for index in [0, 1] {
         let server = group.server(index);
-        histories.push(arkret_models_identity::IdentityLogListOutcome {
+        histories.push(arkret_models_identity::IdentityLogListResponseBody {
             did: server.service_did().clone(),
             method: arkret_models_identity::DidMethodUri::Webvh,
             native_history: Some(true),
@@ -310,7 +310,7 @@ async fn native_contact_history(group: &TestServerGroup) -> Result<NativeContact
 async fn submit_current_control(
     group: &TestServerGroup,
     request: &arkret::contact_operations::PeerContactSubmitRequestBody,
-) -> Result<arkret::contact_operations::PeerContactSubmitOutcome> {
+) -> Result<arkret::contact_operations::PeerContactSubmitResponseBody> {
     let (status, body) = group
         .server(1)
         .signed_peer_post(
@@ -351,7 +351,7 @@ async fn exercise_native_scope_aba_and_frozen_current(
         .clone();
     let row = wait_contact(bob, alice_actor, ContactState::Accepted).await?;
     let removed = scope_update_contact(bob, &row, vec![]).await?;
-    let ContactAcceptedOutcome::ScopeUpdate {
+    let ContactAcceptedResponseBody::ScopeUpdate {
         lineage: removed_lineage,
         current_proof: removed_proof,
         ..
@@ -405,10 +405,9 @@ async fn exercise_native_scope_aba_and_frozen_current(
         chrono::Utc::now(),
         &histories,
     )?;
-    let PeerContactSubmitOutcome::Control(PeerContactControlSubmitOutcome::CurrentRefresh {
-        material,
-        ..
-    }) = &frozen
+    let PeerContactSubmitResponseBody::Control(
+        PeerContactControlSubmitResponseBody::CurrentRefresh { material, .. },
+    ) = &frozen
     else {
         bail!("current returned no material");
     };
@@ -436,7 +435,7 @@ async fn exercise_native_scope_aba_and_frozen_current(
     );
     let row = wait_contact(bob, alice_actor, ContactState::Accepted).await?;
     let added = scope_update_contact(bob, &row, vec![ContactScope::DirectMessage]).await?;
-    let ContactAcceptedOutcome::ScopeUpdate {
+    let ContactAcceptedResponseBody::ScopeUpdate {
         lineage: added_lineage,
         current_proof: added_proof,
         ..
@@ -459,10 +458,9 @@ async fn exercise_native_scope_aba_and_frozen_current(
         "same current key renewed or reselected its source cut"
     );
     let mut tampered = frozen.clone();
-    if let PeerContactSubmitOutcome::Control(PeerContactControlSubmitOutcome::CurrentRefresh {
-        material,
-        ..
-    }) = &mut tampered
+    if let PeerContactSubmitResponseBody::Control(
+        PeerContactControlSubmitResponseBody::CurrentRefresh { material, .. },
+    ) = &mut tampered
     {
         material
             .historical_intervals
@@ -623,14 +621,14 @@ pub async fn normal_round_crosses_two_stations() -> Result<()> {
         .await?;
     let founder_material = match (&alice_resolve, &bob_resolve) {
         (
-            DirectConversationResolveOutcome::CreationRequired {
+            DirectConversationResolveResponseBody::CreationRequired {
                 next_founding_input,
             },
-            DirectConversationResolveOutcome::AwaitingFounder { .. },
+            DirectConversationResolveResponseBody::AwaitingFounder { .. },
         )
         | (
-            DirectConversationResolveOutcome::AwaitingFounder { .. },
-            DirectConversationResolveOutcome::CreationRequired {
+            DirectConversationResolveResponseBody::AwaitingFounder { .. },
+            DirectConversationResolveResponseBody::CreationRequired {
                 next_founding_input,
             },
         ) => next_founding_input,
@@ -725,7 +723,7 @@ pub async fn old_and_new_contact_signatures_survive_cold_peer_restart() -> Resul
         history.len() == 2,
         "signer rotation must add exactly one WebVH successor"
     );
-    let version_time = history[1]["versionTime"]
+    let version_created_at = history[1]["versionTime"]
         .as_str()
         .context("rotation omitted versionTime")?
         .parse::<chrono::DateTime<chrono::Utc>>()?;
@@ -745,7 +743,7 @@ pub async fn old_and_new_contact_signatures_survive_cold_peer_restart() -> Resul
         )
         .await?;
     ensure!(
-        new_receipt.core.accepted_at >= version_time,
+        new_receipt.core.accepted_at >= version_created_at,
         "new Contact evidence precedes the signer successor's effective time"
     );
     wait_contact(&carol, &alice_actor, ContactState::PendingIncoming)
@@ -923,14 +921,14 @@ pub async fn concurrent_requests_complete_glare_round() -> Result<()> {
         .await?;
     let founder_material = match (&alice_resolve, &bob_resolve) {
         (
-            DirectConversationResolveOutcome::CreationRequired {
+            DirectConversationResolveResponseBody::CreationRequired {
                 next_founding_input,
             },
-            DirectConversationResolveOutcome::AwaitingFounder { .. },
+            DirectConversationResolveResponseBody::AwaitingFounder { .. },
         )
         | (
-            DirectConversationResolveOutcome::AwaitingFounder { .. },
-            DirectConversationResolveOutcome::CreationRequired {
+            DirectConversationResolveResponseBody::AwaitingFounder { .. },
+            DirectConversationResolveResponseBody::CreationRequired {
                 next_founding_input,
             },
         ) => next_founding_input,
@@ -1074,7 +1072,7 @@ pub async fn current_recovery_and_long_history(cross_station: bool) -> Result<()
         ensure!(
             matches!(
                 prepared,
-                arkret::contact_operations::ContactOperationOutcome::Prepared { .. }
+                arkret::contact_operations::ContactOperationResponseBody::Prepared { .. }
             ),
             "initial replay fixture did not prepare"
         );
@@ -1216,8 +1214,8 @@ pub async fn current_recovery_and_long_history(cross_station: bool) -> Result<()
                     .await;
                 if matches!(
                     result,
-                    Ok(DirectConversationResolveOutcome::CreationRequired { .. })
-                        | Ok(DirectConversationResolveOutcome::AwaitingFounder { .. })
+                    Ok(DirectConversationResolveResponseBody::CreationRequired { .. })
+                        | Ok(DirectConversationResolveResponseBody::AwaitingFounder { .. })
                 ) {
                     break;
                 }

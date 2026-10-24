@@ -267,7 +267,7 @@ async fn deny_peer(
     for url in urls {
         before.push(counts(url, &signal.realm_id).await?);
     }
-    let request = arkret_wire::SignalRelayRequest {
+    let request = arkret_wire::SignalRelayRequestBody {
         realm_id: signal.realm_id.clone(),
         signals: vec![signal.clone()],
     };
@@ -281,7 +281,7 @@ async fn deny_peer(
         )
         .await?;
     ensure!(status == reqwest::StatusCode::OK);
-    ensure!(serde_json::from_slice::<arkret_wire::SignalRelayOutcome>(&bytes)?.accepted);
+    ensure!(serde_json::from_slice::<arkret_wire::SignalRelayResponseBody>(&bytes)?.accepted);
     for (index, url) in urls.iter().enumerate() {
         let after = counts(url, &signal.realm_id).await?;
         ensure!(
@@ -464,8 +464,8 @@ pub(crate) async fn circle_mls_fixture(
     realm: &RealmId,
 ) -> Result<CircleMlsFixture> {
     use arkret::{MlsCommitPayload, MlsGovernanceBindingPayload};
-    use arkret_models_collaboration::authority_commit::SelfAuthoritySubmitRequest;
-    use arkret_wire::{AuthoritySubmitOutcome, EventKind, MlsCommitSubmission};
+    use arkret_models_collaboration::authority_commit::SelfAuthoritySubmitRequestBody;
+    use arkret_wire::{AuthoritySubmitResponseBody, EventKind, MlsCommitSubmission};
 
     use super::cross_station_mls_welcome::{
         claim_for, genesis_creator_leaf_authority, publish_one, wait_for_welcome,
@@ -536,7 +536,7 @@ pub(crate) async fn circle_mls_fixture(
     )
     .await?;
     let welcome = signed_welcome(alice, &commit_event, bob, &add.welcome)?;
-    let submission = SelfAuthoritySubmitRequest::MlsCommit(MlsCommitSubmission {
+    let submission = SelfAuthoritySubmitRequestBody::MlsCommit(MlsCommitSubmission {
         commit_event: commit_event.clone(),
         welcomes: vec![welcome.clone()],
         idempotency_key: arkret_wire::UuidV7::new(fresh_uuid_v7().parse()?)?,
@@ -547,11 +547,12 @@ pub(crate) async fn circle_mls_fixture(
         status == reqwest::StatusCode::OK,
         "Circle MLS Add accepted: {status} {outcome}"
     );
-    let AuthoritySubmitOutcome::Accepted { commit, .. } = serde_json::from_value(outcome)? else {
+    let AuthoritySubmitResponseBody::Accepted { commit, .. } = serde_json::from_value(outcome)?
+    else {
         anyhow::bail!("Circle MLS Add refused")
     };
     let accepted = accepted_full_view(&alice.client, &commit_event.event_id).await?;
-    let base = arkret_wire::MlsGroupCurrent {
+    let base = arkret_wire::MlsGroupValue {
         effective_scope: scope.clone(),
         genesis_event_ref: genesis.event_id.clone(),
         cipher_suite: arkret_wire::NonEmptyString::new(ACTIVE_SUITE.to_owned())
@@ -570,7 +571,8 @@ pub(crate) async fn circle_mls_fixture(
         ArkretMlsGroup::join_from_verified_welcome_delivery(bob_identity, &welcome, &remote)?;
     install_bindings(&mut alice_group, &[alice, bob]).await?;
     install_bindings(&mut bob_group, &[alice, bob]).await?;
-    let (queued, ack_token) = super::mls_lifecycle_live::recipient_welcomes(&bob.client).await?;
+    let (queued, acknowledgement_token) =
+        super::mls_lifecycle_live::recipient_welcomes(&bob.client).await?;
     ensure!(
         queued.contains(&welcome),
         "Circle recipient queue omitted the exact installed Welcome"
@@ -579,8 +581,8 @@ pub(crate) async fn circle_mls_fixture(
         .client
         .sdk()
         .ack_device_messages(
-            &arkret_models_collaboration::device_messages::DeviceMessagesAckRequestBody {
-                ack_token,
+            &arkret_models_collaboration::device_messages::DeviceMessagesAcknowledgementRequestBody {
+                acknowledgement_token,
             },
         )
         .await?;
@@ -791,7 +793,7 @@ async fn deliver(
             && received.1.key.authorization_ref == sender.authorize_event_id
     );
     let public = arkret_signatures::PublicKeyMaterial::Ed25519Raw {
-        bytes: arkret_canonical::base64url_decode(received.1.key.public_key_b64u.as_str())?,
+        bytes: arkret_canonical::base64url_decode(received.1.key.public_key_base64url.as_str())?,
     };
     let mut replay = arkret::AeadNonceReplayTracker::default();
     let plaintext = receiver_group.open_signal_envelope(
@@ -974,7 +976,7 @@ pub(crate) async fn exercise_two_station_signal(
         Some((product_frame(8)?, false)),
     )
     .await?;
-    let initial_revoke: arkret_wire::AuthoritySubmitOutcome = serde_json::from_value(
+    let initial_revoke: arkret_wire::AuthoritySubmitResponseBody = serde_json::from_value(
         alice
             .client
             .revoke_realm_grant(
@@ -983,7 +985,7 @@ pub(crate) async fn exercise_two_station_signal(
             )
             .await?,
     )?;
-    let arkret_wire::AuthoritySubmitOutcome::Accepted {
+    let arkret_wire::AuthoritySubmitResponseBody::Accepted {
         commit: initial_revoked,
         ..
     } = initial_revoke
@@ -1053,7 +1055,7 @@ pub(crate) async fn exercise_two_station_signal(
         Some((product_frame(10)?, true)),
     )
     .await?;
-    let revoke_product: arkret_wire::AuthoritySubmitOutcome = serde_json::from_value(
+    let revoke_product: arkret_wire::AuthoritySubmitResponseBody = serde_json::from_value(
         alice
             .client
             .revoke_realm_grant(
@@ -1062,7 +1064,7 @@ pub(crate) async fn exercise_two_station_signal(
             )
             .await?,
     )?;
-    let arkret_wire::AuthoritySubmitOutcome::Accepted {
+    let arkret_wire::AuthoritySubmitResponseBody::Accepted {
         commit: product_revoked,
         ..
     } = revoke_product
@@ -1090,9 +1092,9 @@ pub(crate) async fn exercise_two_station_signal(
         Some((product_frame(11)?, false)),
     )
     .await?;
-    let typing_frame = |sequence| -> Result<Vec<u8>> {
+    let typing_frame = |sequence: u64| -> Result<Vec<u8>> {
         Ok(arkret_canonical::canonical_json_bytes(&json!({
-            "kind":"ak.typing", "payload_sequence":sequence, "strand_id":strand, "typing":true
+            "kind":"ak.typing", "payload_sequence":(sequence).to_string(), "strand_id":strand, "typing":true
         }))?)
     };
     deliver(
@@ -1159,7 +1161,7 @@ pub(crate) async fn exercise_two_station_signal(
             json!({"policy_id":policy_id,"value":policy}),
         )?)
     };
-    let outcome: arkret_wire::AuthoritySubmitOutcome = serde_json::from_value(
+    let outcome: arkret_wire::AuthoritySubmitResponseBody = serde_json::from_value(
         alice
             .client
             .submit_event(
@@ -1169,7 +1171,7 @@ pub(crate) async fn exercise_two_station_signal(
             )
             .await?,
     )?;
-    let arkret_wire::AuthoritySubmitOutcome::Accepted {
+    let arkret_wire::AuthoritySubmitResponseBody::Accepted {
         commit: policy_denied,
         ..
     } = outcome
@@ -1199,7 +1201,7 @@ pub(crate) async fn exercise_two_station_signal(
     )
     .await?;
     policy.rules[0].effect = arkret_wire::PolicyEffect::Allow;
-    let outcome: arkret_wire::AuthoritySubmitOutcome = serde_json::from_value(
+    let outcome: arkret_wire::AuthoritySubmitResponseBody = serde_json::from_value(
         alice
             .client
             .submit_event(
@@ -1209,7 +1211,7 @@ pub(crate) async fn exercise_two_station_signal(
             )
             .await?,
     )?;
-    let arkret_wire::AuthoritySubmitOutcome::Accepted {
+    let arkret_wire::AuthoritySubmitResponseBody::Accepted {
         commit: policy_allowed,
         ..
     } = outcome
@@ -1237,7 +1239,7 @@ pub(crate) async fn exercise_two_station_signal(
         Some((typing_frame(15)?, true)),
     )
     .await?;
-    let typing_revoke: arkret_wire::AuthoritySubmitOutcome = serde_json::from_value(
+    let typing_revoke: arkret_wire::AuthoritySubmitResponseBody = serde_json::from_value(
         alice
             .client
             .revoke_realm_grant(
@@ -1246,7 +1248,7 @@ pub(crate) async fn exercise_two_station_signal(
             )
             .await?,
     )?;
-    let arkret_wire::AuthoritySubmitOutcome::Accepted {
+    let arkret_wire::AuthoritySubmitResponseBody::Accepted {
         commit: typing_revoked,
         ..
     } = typing_revoke
@@ -1342,7 +1344,7 @@ pub(crate) async fn exercise_two_station_signal(
         None,
     )
     .await?;
-    let revoke: arkret_wire::AuthoritySubmitOutcome = serde_json::from_value(
+    let revoke: arkret_wire::AuthoritySubmitResponseBody = serde_json::from_value(
         alice
             .client
             .revoke_realm_grant(
@@ -1351,7 +1353,7 @@ pub(crate) async fn exercise_two_station_signal(
             )
             .await?,
     )?;
-    let arkret_wire::AuthoritySubmitOutcome::Accepted {
+    let arkret_wire::AuthoritySubmitResponseBody::Accepted {
         commit: revoked, ..
     } = revoke
     else {

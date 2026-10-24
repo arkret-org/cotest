@@ -65,7 +65,7 @@ async fn reject(client: &TestActorClient, event: arkret_wire::Event) -> Result<(
 fn next_policy(footprint: &Value, source: &str) -> Result<Value> {
     let current: arkret_models_collaboration::events_payloads::realm::RealmPolicyBundlePayload =
         serde_json::from_value(
-            footprint["realm_policy_bundle_current_results"][0]["value"].clone(),
+            footprint["realm_policy_bundle_current_states"][0]["value"].clone(),
         )?;
     let mut next = current.restate(current.policy_revision + 1);
     next.join_policy = Some(serde_json::from_value(
@@ -154,7 +154,7 @@ pub async fn run() -> Result<()> {
         source_draft.context("select canonical target-first offline bootstrap order")?;
     for (id, events) in [(&target, target_events), (&source, source_events)] {
         let request = ordinary_realm_bootstrap_submission(events)?;
-        let result: arkret_models_collaboration::authority_commit::SelfAuthoritySubmitOutcome =
+        let result: arkret_models_collaboration::authority_commit::SelfAuthoritySubmitResponseBody =
             serde_json::from_value(
                 expect_json(
                     owner
@@ -165,9 +165,9 @@ pub async fn run() -> Result<()> {
                 )
                 .await?,
             )?;
-        result.validate_for_request(&arkret_models_collaboration::authority_commit::SelfAuthoritySubmitRequest::OrdinaryRealmBootstrap(request))?;
+        result.validate_for_request(&arkret_models_collaboration::authority_commit::SelfAuthoritySubmitRequestBody::OrdinaryRealmBootstrap(request))?;
         ensure!(
-            matches!(result, arkret_models_collaboration::authority_commit::SelfAuthoritySubmitOutcome::OrdinaryRealmBootstrap(ref accepted)
+            matches!(result, arkret_models_collaboration::authority_commit::SelfAuthoritySubmitResponseBody::OrdinaryRealmBootstrap(ref accepted)
                 if accepted.status == arkret_models_collaboration::authority_commit::AggregateAcceptanceStatus::Committed),
             "bootstrap was not committed"
         );

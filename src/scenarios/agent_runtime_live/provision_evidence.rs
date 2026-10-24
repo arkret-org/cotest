@@ -1,7 +1,7 @@
 //! Production observations for the Agent PCR forward-declaration boundary.
 
 use arkret_models_collaboration::agent_operations::{
-    AgentList, AgentProvisionAwaitingControllerEvent, AgentProvisionComplete,
+    AgentPage, AgentProvisionAwaitingControllerEvent, AgentProvisionComplete,
 };
 use arkret_wire::RealmCommit;
 use serde_json::Value;
@@ -309,7 +309,7 @@ impl ProvisionEvidence {
     ) -> Result<()> {
         let bytes = arkret_canonical::canonical_json_bytes(body)?;
         let before = self.snapshot().await?;
-        self.execute_owned_sql("CREATE FUNCTION agent_provision_projection_fault() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'owned Agent provision final projection fault'; END $$; CREATE TRIGGER agent_provision_projection_fault BEFORE INSERT OR UPDATE ON agent_pcr_genesis_declaration_current_results FOR EACH ROW EXECUTE FUNCTION agent_provision_projection_fault()").await?;
+        self.execute_owned_sql("CREATE FUNCTION agent_provision_projection_fault() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'owned Agent provision final projection fault'; END $$; CREATE TRIGGER agent_provision_projection_fault BEFORE INSERT OR UPDATE ON agent_pcr_genesis_declaration_current_states FOR EACH ROW EXECUTE FUNCTION agent_provision_projection_fault()").await?;
         let failed = controller
             .post("/_arkret/self/agents")
             .header(reqwest::header::CONTENT_TYPE, "application/json")
@@ -318,7 +318,7 @@ impl ProvisionEvidence {
             .await;
         // Remove the owned fault even when transport fails; the next call uses
         // the same frozen SDK request and must reach the original transaction.
-        self.execute_owned_sql("DROP TRIGGER agent_provision_projection_fault ON agent_pcr_genesis_declaration_current_results; DROP FUNCTION agent_provision_projection_fault()").await?;
+        self.execute_owned_sql("DROP TRIGGER agent_provision_projection_fault ON agent_pcr_genesis_declaration_current_states; DROP FUNCTION agent_provision_projection_fault()").await?;
         let failed = failed?;
         ensure!(
             failed.status() == StatusCode::INTERNAL_SERVER_ERROR,
@@ -334,7 +334,7 @@ impl ProvisionEvidence {
     }
 
     async fn public_document(server: &ArkretServer, did: &Did) -> Result<Value> {
-        let resolved: arkret_models_identity::identity::IdentityResolveOutcome =
+        let resolved: arkret_models_identity::identity::IdentityResolveResponseBody =
             serde_json::from_value(
                 expect_json(
                     server
@@ -354,7 +354,7 @@ impl ProvisionEvidence {
     }
 
     async fn invisible(&mut self, controller: &TestActorClient, agent: &DidCoreId) -> Result<()> {
-        let list: AgentList = serde_json::from_value(
+        let list: AgentPage = serde_json::from_value(
             expect_json(controller.get("/_arkret/self/agents"), StatusCode::OK).await?,
         )?;
         ensure!(
@@ -379,7 +379,7 @@ impl ProvisionEvidence {
         let agent = agent.to_string();
         tokio::task::spawn_blocking(move || -> Result<_> {
             let mut db = postgres::Client::connect(&url, postgres::NoTls)?;
-            Ok(db.query_opt("SELECT value FROM agent_status_current_results WHERE realm_id=$1 AND agent_id=$2",
+            Ok(db.query_opt("SELECT value FROM agent_status_current_states WHERE realm_id=$1 AND agent_id=$2",
                 &[&realm, &agent])?.map(|row| row.get(0)))
         }).await?
     }
@@ -389,7 +389,7 @@ impl ProvisionEvidence {
         let realm = realm.to_string();
         tokio::task::spawn_blocking(move || -> Result<_> {
             let mut db = postgres::Client::connect(&url, postgres::NoTls)?;
-            Ok(db.query_one("SELECT jsonb_build_object('status', (SELECT coalesce(jsonb_agg(to_jsonb(s) ORDER BY s.current_key),'[]'::jsonb) FROM agent_status_current_results s WHERE realm_id=$1), 'events', (SELECT coalesce(jsonb_agg(to_jsonb(e) ORDER BY e.id),'[]'::jsonb) FROM canonical_events e WHERE realm_id=$1), 'commits', (SELECT coalesce(jsonb_agg(to_jsonb(c) ORDER BY c.stream_position),'[]'::jsonb) FROM realm_commits c WHERE realm_id=$1))", &[&realm])?.get(0))
+            Ok(db.query_one("SELECT jsonb_build_object('status', (SELECT coalesce(jsonb_agg(to_jsonb(s) ORDER BY s.current_key),'[]'::jsonb) FROM agent_status_current_states s WHERE realm_id=$1), 'events', (SELECT coalesce(jsonb_agg(to_jsonb(e) ORDER BY e.id),'[]'::jsonb) FROM canonical_events e WHERE realm_id=$1), 'commits', (SELECT coalesce(jsonb_agg(to_jsonb(c) ORDER BY c.stream_position),'[]'::jsonb) FROM realm_commits c WHERE realm_id=$1))", &[&realm])?.get(0))
         }).await?
     }
 
@@ -461,11 +461,11 @@ impl ProvisionEvidence {
         server: &ArkretServer,
         controller: &TestActorClient,
         body: &AgentProvisionRequestBody,
-        outcome: &AgentProvisionOutcome,
+        outcome: &AgentProvisionResponseBody,
         genesis: &Event,
         provision_event: &Event,
     ) -> Result<()> {
-        let AgentProvisionOutcome::AwaitingPcrGenesis(waiting) = outcome else {
+        let AgentProvisionResponseBody::AwaitingPcrGenesis(waiting) = outcome else {
             bail!("provision did not remain at the genesis boundary");
         };
         ensure!(
@@ -495,7 +495,7 @@ impl ProvisionEvidence {
         let realm = genesis.realm_id.to_string();
         let (agent_id, event_ref): (String, String) = tokio::task::spawn_blocking(move || -> Result<_> {
             let mut db = postgres::Client::connect(&url, postgres::NoTls)?;
-            let row = db.query_one("SELECT d.value->>'agent_id',c.commit_json->>'event_ref' FROM agent_pcr_genesis_declaration_current_results d JOIN realm_commits c ON c.commit_id=d.current_commit_id WHERE d.principal_control_realm_id=$1", &[&realm])?;
+            let row = db.query_one("SELECT d.value->>'agent_id',c.commit_json->>'event_ref' FROM agent_pcr_genesis_declaration_current_states d JOIN realm_commits c ON c.commit_id=d.current_commit_id WHERE d.principal_control_realm_id=$1", &[&realm])?;
             Ok((row.get(0), row.get(1)))
         }).await??;
         ensure!(
@@ -524,7 +524,7 @@ impl ProvisionEvidence {
         let url = self.database_url.clone();
         let projections: bool = tokio::task::spawn_blocking(move || -> Result<_> {
             let mut db = postgres::Client::connect(&url,postgres::NoTls)?;
-            Ok(db.query_one("SELECT EXISTS(SELECT 1 FROM agent_provisioning_current_results p JOIN identity_accountability_current_results a ON a.realm_id=p.realm_id AND a.subject_id=p.agent_id AND a.current_commit_id=p.current_commit_id JOIN agent_selector_claim_current_results s ON s.realm_id=p.realm_id AND s.current_commit_id=p.current_commit_id JOIN agent_pcr_genesis_declaration_current_results d ON d.realm_id=p.realm_id AND d.current_commit_id=p.current_commit_id JOIN realm_commits c ON c.commit_id=p.current_commit_id WHERE p.realm_id=$1 AND p.agent_id=$2 AND c.commit_json->>'event_ref'=$3)",&[&controller_realm,&agent,&event_id])?.get(0))
+            Ok(db.query_one("SELECT EXISTS(SELECT 1 FROM agent_provisioning_current_states p JOIN identity_accountability_current_states a ON a.realm_id=p.realm_id AND a.subject_id=p.agent_id AND a.current_commit_id=p.current_commit_id JOIN agent_selector_claim_current_states s ON s.realm_id=p.realm_id AND s.current_commit_id=p.current_commit_id JOIN agent_pcr_genesis_declaration_current_states d ON d.realm_id=p.realm_id AND d.current_commit_id=p.current_commit_id JOIN realm_commits c ON c.commit_id=p.current_commit_id WHERE p.realm_id=$1 AND p.agent_id=$2 AND c.commit_json->>'event_ref'=$3)",&[&controller_realm,&agent,&event_id])?.get(0))
         }).await??;
         ensure!(
             projections,
@@ -646,7 +646,7 @@ impl ProvisionEvidence {
                 principal_endpoint: &endpoint,
                 local_id: &local_id,
                 controller_principal_id: &account_id.principal_id,
-                version_time: Utc::now() - chrono::Duration::seconds(5),
+                version_created_at: Utc::now() - chrono::Duration::seconds(5),
                 root_seed: &root_seed,
                 next_root_public_key_multibase: &next_key,
             },
@@ -672,7 +672,7 @@ impl ProvisionEvidence {
             StatusCode::OK,
         )
         .await?;
-        let AgentProvisionOutcome::AwaitingControllerEvent(prepared) = prepared else {
+        let AgentProvisionResponseBody::AwaitingControllerEvent(prepared) = prepared else {
             bail!("second Agent prepare did not await its controller Event");
         };
         ensure!(
@@ -754,11 +754,11 @@ impl ProvisionEvidence {
         server: &ArkretServer,
         controller: &TestActorClient,
         body: &AgentProvisionRequestBody,
-        outcome: &AgentProvisionOutcome,
+        outcome: &AgentProvisionResponseBody,
         genesis: &Event,
         commit: &RealmCommit,
     ) -> Result<()> {
-        let AgentProvisionOutcome::AwaitingDidBinding(waiting) = outcome else {
+        let AgentProvisionResponseBody::AwaitingDidBinding(waiting) = outcome else {
             bail!("genesis did not stop before the continuous DID binding");
         };
         self.invisible(controller, &waiting.agent_id).await?;
@@ -786,7 +786,7 @@ impl ProvisionEvidence {
             serde_json::from_slice(&std::fs::read(journal.path())?)?;
         ensure!(arkret_canonical::canonical_json_bytes(&recovered)? == frozen);
         let before = self.snapshot().await?;
-        let replay: AuthoritySubmitOutcome = serde_json::from_value(
+        let replay: AuthoritySubmitResponseBody = serde_json::from_value(
             expect_json(
                 controller.post("/_arkret/self/events").json(&recovered),
                 StatusCode::OK,
@@ -794,7 +794,7 @@ impl ProvisionEvidence {
             .await?,
         )?;
         ensure!(
-            matches!(replay, AuthoritySubmitOutcome::Accepted {
+            matches!(replay, AuthoritySubmitResponseBody::Accepted {
             status: AuthorityCommitStatus::Duplicate, commit: ref original
         } if original == commit),
             "genesis replay lost the original accepted Commit"
@@ -822,7 +822,7 @@ impl ProvisionEvidence {
         let url = self.database_url.clone();
         let declarations: i64 = tokio::task::spawn_blocking(move || -> Result<_> {
             let mut db = postgres::Client::connect(&url, postgres::NoTls)?;
-            Ok(db.query_one("SELECT count(*) FROM agent_pcr_genesis_declaration_current_results WHERE principal_control_realm_id=$1",
+            Ok(db.query_one("SELECT count(*) FROM agent_pcr_genesis_declaration_current_states WHERE principal_control_realm_id=$1",
                 &[&ordinary])?.get(0))
         }).await??;
         ensure!(
@@ -889,7 +889,7 @@ impl ProvisionEvidence {
         let url = self.database_url.clone();
         let counts: (i64, i64, i64) = tokio::task::spawn_blocking(move || -> Result<_> {
             let mut db = postgres::Client::connect(&url, postgres::NoTls)?;
-            let row = db.query_one("SELECT (SELECT count(*) FROM actor_profile_current_results WHERE realm_id=$1), (SELECT count(*) FROM agent_key_current_results WHERE realm_id=$1), (SELECT count(*) FROM key_backup_active_series_current_results WHERE realm_id=$1)", &[&realm])?;
+            let row = db.query_one("SELECT (SELECT count(*) FROM actor_profile_current_states WHERE realm_id=$1), (SELECT count(*) FROM agent_key_current_states WHERE realm_id=$1), (SELECT count(*) FROM key_backup_active_series_current_states WHERE realm_id=$1)", &[&realm])?;
             Ok((row.get(0),row.get(1),row.get(2)))
         }).await??;
         ensure!(
@@ -941,7 +941,7 @@ impl ProvisionEvidence {
         let replay = provision(controller, body, StatusCode::CREATED).await?;
         ensure!(
             serde_json::to_value(replay)?
-                == serde_json::to_value(AgentProvisionOutcome::Complete(outcome.clone()))?
+                == serde_json::to_value(AgentProvisionResponseBody::Complete(outcome.clone()))?
                 && self.snapshot().await? == before,
             "complete replay changed original outcome or accepted state"
         );

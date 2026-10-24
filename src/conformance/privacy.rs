@@ -1257,7 +1257,7 @@ fn is_fail_closed_search_state_change(state_change: &str) -> bool {
 /// checked to carry none of the projection material a successful row would.
 fn validate_peer_device_directory_failure_blinding(case: &super::NamedCase) -> Result<()> {
     use arkret_models_crypto::{
-        PeerKeysQueryOutcome, PeerKeysQueryRequestBody, QueryFailure, QueryFailureReason,
+        PeerKeysQueryRequestBody, PeerKeysQueryResponseBody, QueryFailure, QueryFailureReason,
     };
 
     if case.operation_id.as_deref() != Some("ak.peer.keys.read.lookup.v1")
@@ -1414,7 +1414,7 @@ fn validate_peer_device_directory_failure_blinding(case: &super::NamedCase) -> R
         .device_keys
         .first()
         .ok_or_else(|| anyhow!("blinded request selects no target"))?;
-    let failure_row = PeerKeysQueryOutcome {
+    let failure_row = PeerKeysQueryResponseBody {
         requester_actor_id: None,
         request_id: request.request_id.clone(),
         requester_account_id: request.requester_account_id.clone(),
@@ -1427,7 +1427,7 @@ fn validate_peer_device_directory_failure_blinding(case: &super::NamedCase) -> R
             retry_after_ms: None,
         }],
     };
-    let row_omission = PeerKeysQueryOutcome {
+    let row_omission = PeerKeysQueryResponseBody {
         failures: Vec::new(),
         ..failure_row.clone()
     };
@@ -1497,7 +1497,7 @@ fn validate_peer_device_directory_failure_blinding(case: &super::NamedCase) -> R
 /// omitted row, a stale cache hit or a bare cached public key -- any of which a
 /// client would read as "that device is gone" and act on by downgrading.
 fn validate_remote_directory_unavailable_is_distinguishable(case: &super::NamedCase) -> Result<()> {
-    use arkret_models_crypto::{KeysQueryOutcome, QueryFailure, QueryFailureReason};
+    use arkret_models_crypto::{KeysQueryResponseBody, QueryFailure, QueryFailureReason};
 
     if case.operation_id.as_deref() != Some("ak.self.keys.read.lookup.v1")
         || case.vector_id.as_deref() != Some("ak.vector.device.directory_unavailable_not_empty.v1")
@@ -1583,7 +1583,7 @@ fn validate_remote_directory_unavailable_is_distinguishable(case: &super::NamedC
     // The observable difference, built from the SDK self types: the
     // unavailable answer carries a `failures` row, the empty answer does not,
     // and the two never serialize to the same bytes.
-    let unavailable = KeysQueryOutcome {
+    let unavailable = KeysQueryResponseBody {
         device_keys: Vec::new(),
         failures: vec![QueryFailure {
             account_id: None,
@@ -1596,7 +1596,7 @@ fn validate_remote_directory_unavailable_is_distinguishable(case: &super::NamedC
         device_generations: Vec::new(),
     };
     unavailable.validate()?;
-    let empty_success = KeysQueryOutcome {
+    let empty_success = KeysQueryResponseBody {
         device_keys: Vec::new(),
         failures: Vec::new(),
         device_generations: Vec::new(),

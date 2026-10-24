@@ -58,7 +58,7 @@ async fn fingerprint(response: Response) -> Result<(StatusCode, String, Value)> 
 fn verify(
     station: &ArkretServer,
     holder: &TestActorClient,
-    issue: &InviteLocatorIssueOutcome,
+    issue: &InviteLocatorIssueResponseBody,
     locator: &PrincipalLocator,
 ) -> Result<()> {
     locator.validate_minimal()?;
@@ -113,7 +113,7 @@ pub(super) async fn exercise(station: &ArkretServer, holder: &TestActorClient) -
         avatar_blob_ref: None,
     };
     let started = chrono::Utc::now();
-    let issued: InviteLocatorIssueOutcome = private_json(
+    let issued: InviteLocatorIssueResponseBody = private_json(
         command(
             holder,
             issue_path,
@@ -178,7 +178,7 @@ pub(super) async fn exercise(station: &ArkretServer, holder: &TestActorClient) -
         locator.display_hint == Some(hint.clone()),
         "issued display hint lost"
     );
-    let rotated: InviteLocatorIssueOutcome = private_json(
+    let rotated: InviteLocatorIssueResponseBody = private_json(
         command(
             holder,
             rotate_path,
@@ -218,12 +218,12 @@ pub(super) async fn exercise(station: &ArkretServer, holder: &TestActorClient) -
     let revoke = InviteLocatorRevokeRequestBody {
         locator_id: rotated.locator_id,
     };
-    let first: InviteLocatorRevokeOutcome = command(holder, revoke_path, &revoke)
+    let first: InviteLocatorRevokeResponseBody = command(holder, revoke_path, &revoke)
         .await?
         .error_for_status()?
         .json()
         .await?;
-    let retry: InviteLocatorRevokeOutcome = command(holder, revoke_path, &revoke)
+    let retry: InviteLocatorRevokeResponseBody = command(holder, revoke_path, &revoke)
         .await?
         .error_for_status()?
         .json()
@@ -248,7 +248,7 @@ pub(super) async fn exercise(station: &ArkretServer, holder: &TestActorClient) -
             "out-of-range locator TTL accepted"
         );
     }
-    let fresh: InviteLocatorIssueOutcome = private_json(
+    let fresh: InviteLocatorIssueResponseBody = private_json(
         command(
             holder,
             issue_path,
@@ -264,7 +264,7 @@ pub(super) async fn exercise(station: &ArkretServer, holder: &TestActorClient) -
         .await?,
     )
     .await?;
-    let one: InviteLocatorIssueOutcome = private_json(
+    let one: InviteLocatorIssueResponseBody = private_json(
         command(
             holder,
             rotate_path,

@@ -162,7 +162,7 @@ fn run_sidecar_checkpoint_consumers(fixture: &Value) -> Result<()> {
             .context("missing incremental")?;
         let install = steps
             .iter()
-            .find(|step| step["action"] == "install_typed_current_result")
+            .find(|step| step["action"] == "install_current_state")
             .context("missing installation")?;
         ensure!(
             required_u64(&value, "candidate_position")?
@@ -686,7 +686,7 @@ fn authority_signature() -> Result<DetachedObjectSignature> {
             .map_err(anyhow::Error::msg)?,
         signed_digest: Hash::new(format!("sha256:{}", "11".repeat(32)))?,
         created_at: fixed_time(0),
-        sig: Base64UrlString::new("AQ").map_err(anyhow::Error::msg)?,
+        signature: Base64UrlString::new("AQ").map_err(anyhow::Error::msg)?,
     })
 }
 
@@ -773,7 +773,7 @@ fn verify_checkpoint_never_outruns_projection(fixture: &Value) -> Result<()> {
                 .position(|step| step.get("action").and_then(Value::as_str) == Some(action))
         };
 
-        if let Some(install) = action_at("install_typed_current_result")
+        if let Some(install) = action_at("install_current_state")
             && !required_bool(&steps[install], "durable")?
         {
             ensure!(
@@ -796,7 +796,7 @@ fn verify_checkpoint_never_outruns_projection(fixture: &Value) -> Result<()> {
         }
 
         if let (Some(install), Some(advance)) = (
-            action_at("install_typed_current_result"),
+            action_at("install_current_state"),
             action_at("advance_durable_cursor"),
         ) {
             ordering_cases += 1;
@@ -899,7 +899,7 @@ fn replay_loses_delta_on_crash(steps: &[Value]) -> Result<bool> {
                     );
                     required_u64(step, "stream_position")?;
                 }
-                "install_typed_current_result" => {
+                "install_current_state" => {
                     ensure!(
                         required_bool(step, "durable")?,
                         "a projection install that is not durable cannot support a checkpoint"

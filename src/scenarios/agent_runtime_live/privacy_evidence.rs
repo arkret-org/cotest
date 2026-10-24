@@ -363,7 +363,7 @@ pub async fn run_agent_requested_scope_privacy_production()
         pairing_expiry_evidence::replacement_material(station, &controller, &account, &agent)
             .await?;
     let body = &material.body;
-    let paired: AgentKeyPairOutcome = serde_json::from_value(
+    let paired: AgentKeyPairResponseBody = serde_json::from_value(
         expect_json(
             controller
                 .post("/_arkret/gate/account/agent-key-pair")
@@ -386,7 +386,7 @@ pub async fn run_agent_requested_scope_privacy_production()
     )
     .await?;
     let before_retry = acceptance_rows_with_agent_stores(&database.connect_url, true).await?;
-    let replay: AgentKeyPairOutcome = serde_json::from_value(
+    let replay: AgentKeyPairResponseBody = serde_json::from_value(
         expect_json(
             controller
                 .post("/_arkret/gate/account/agent-key-pair")

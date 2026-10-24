@@ -51,10 +51,10 @@ pub(super) async fn frozen_duplicate_request(
         )
         .await?;
     ensure!(response.status() == StatusCode::OK);
-    let outcome: PeerAuthoritySubmitOutcome = response.json().await?;
+    let outcome: PeerAuthoritySubmitResponseBody = response.json().await?;
     ensure!(
-        matches!(&outcome, PeerAuthoritySubmitOutcome::CommittedReplication(value)
-            if matches!(value.replication_outcomes.as_slice(), [PeerCommittedReplicationOutcomeRecord::Duplicate {}])),
+        matches!(&outcome, PeerAuthoritySubmitResponseBody::CommittedReplication(value)
+            if matches!(value.replication_outcomes.as_slice(), [CommittedEventReplicationOutcome::Duplicate {}])),
         "distinct transport for installed replica did not yield Duplicate: {outcome:?}"
     );
     Ok(request)
@@ -73,10 +73,10 @@ pub(super) async fn replay_frozen_duplicate(
         )
         .await?;
     ensure!(response.status() == StatusCode::OK);
-    let outcome: PeerAuthoritySubmitOutcome = response.json().await?;
+    let outcome: PeerAuthoritySubmitResponseBody = response.json().await?;
     ensure!(
-        matches!(&outcome, PeerAuthoritySubmitOutcome::CommittedReplication(value)
-            if matches!(value.replication_outcomes.as_slice(), [PeerCommittedReplicationOutcomeRecord::Duplicate {}])),
+        matches!(&outcome, PeerAuthoritySubmitResponseBody::CommittedReplication(value)
+            if matches!(value.replication_outcomes.as_slice(), [CommittedEventReplicationOutcome::Duplicate {}])),
         "exact transport replay changed its original Duplicate outcome: {outcome:?}"
     );
     Ok(())
@@ -374,10 +374,10 @@ pub async fn pending_terminal_survives_restart(route_miss: bool) -> Result<()> {
         .send()
         .await?;
     let status = response.status();
-    let replay: arkret_wire::AuthoritySubmitOutcome = response.json().await?;
+    let replay: arkret_wire::AuthoritySubmitResponseBody = response.json().await?;
     ensure!(
         status == StatusCode::OK
-            && matches!(replay, arkret_wire::AuthoritySubmitOutcome::Accepted { commit, .. } if commit == control_commit),
+            && matches!(replay, arkret_wire::AuthoritySubmitResponseBody::Accepted { commit, .. } if commit == control_commit),
         "accepted ordinary original lost its exact outcome after terminal restart"
     );
     ensure!(acceptance_rows(receiver_url).await? == installed);
@@ -482,7 +482,7 @@ pub async fn departure_survives_restart(ban: bool) -> Result<()> {
     wait_not_listed(&fixture.bob, &fixture.realm, HELD_WINDOW).await?;
     let receiver_url = &fixture._member_database.connect_url;
     let departed = acceptance_rows(receiver_url).await?;
-    let member = departed["member_state_current_results"]
+    let member = departed["member_state_current_states"]
         .as_array()
         .context("member current rows")?
         .iter()
@@ -494,14 +494,14 @@ pub async fn departure_survives_restart(ban: bool) -> Result<()> {
     ensure!(member["membership"] == if ban { "ban" } else { "leave" });
     ensure!(member["current_commit_id"] == removal_commit.commit_id.as_str());
     ensure!(
-        departed["realm_bootstrap_current_results"]
+        departed["realm_bootstrap_current_states"]
             .as_array()
             .context("Realm lifecycle rows")?
             .iter()
             .all(|row| {
                 row["realm_id"] != fixture.realm
-                    || (row["result_family"] != "realm_tombstone"
-                        && row["result_family"] != "realm_destroy")
+                    || (row["state_family"] != "realm_tombstone"
+                        && row["state_family"] != "realm_destroy")
             }),
         "departure forged a Realm terminal projection"
     );
@@ -525,7 +525,7 @@ pub async fn departure_survives_restart(ban: bool) -> Result<()> {
     let terminal_body = replication_body(&fixture.alice, &terminal, &terminal_commit).await?;
     for _ in 0..2 {
         ensure!(
-            matches!(replicate(fixture.group.server(1), fixture.group.server(0), &terminal_body).await?.as_slice(), [PeerCommittedReplicationOutcomeRecord::Rejected { reason_code }] if reason_code == "capability_denied"),
+            matches!(replicate(fixture.group.server(1), fixture.group.server(0), &terminal_body).await?.as_slice(), [CommittedEventReplicationOutcome::Rejected { reason_code }] if reason_code == "capability_denied"),
             "restarted departure holder accepted late terminal"
         );
         ensure!(

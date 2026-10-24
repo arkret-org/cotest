@@ -211,7 +211,7 @@ pub fn run_key_backup_encryption_fixture_suite() -> Result<()> {
                     .get("kdf")
                     .ok_or_else(|| anyhow!("negative {name} missing kdf"))?;
                 if argon2id_kdf_meets_floor(kdf)? {
-                    bail!("negative {name} declares weak Argon2id params but meets the floor");
+                    bail!("negative {name} declares weak Argon2id parameters but meets the floor");
                 }
                 saw_low_iter = true;
             }
@@ -292,7 +292,7 @@ fn assert_passphrase_kdf_envelope_valid_via_sdk(
         .get("parallelism")
         .and_then(Value::as_u64)
         .ok_or_else(|| anyhow!("vector {name} kdf missing parallelism"))?;
-    // key-management.md 7.5.1: root key from Argon2id over the wire params,
+    // key-management.md 7.5.1: root key from Argon2id over the wire parameters,
     // commitment_key = HKDF-SHA256(root, info=".../commitment/v1"), and
     // key_commitment = sha256 of the raw commitment_key bytes.
     let key_commitment = passphrase_kdf_key_commitment(
@@ -309,7 +309,7 @@ fn assert_passphrase_kdf_envelope_valid_via_sdk(
         "kdf": {
             "name": "argon2id",
             "salt": salt_b64,
-            "params": {
+            "parameters": {
                 "memory_kib": memory_kib,
                 "iterations": iterations,
                 "parallelism": parallelism,
@@ -352,7 +352,7 @@ fn assert_sdk_rejects_malformed_passphrase_kdf_envelopes() -> Result<()> {
     let control = json!({
         "recipient_method": "passphrase_kdf",
         "kdf": {"name": "argon2id", "salt": "AAAAAAAAAAAAAAAAAAAAAA",
-                "params": {"memory_kib": 65536, "iterations": 3, "parallelism": 1}},
+                "parameters": {"memory_kib": 65536, "iterations": 3, "parallelism": 1}},
         "aead": {"name": "xchacha20_poly1305", "nonce": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
                  "nonce_salt": "AAAAAAAAAAAAAAAAAAAAAA"},
         "key_commitment": format!("sha256:{}", "0".repeat(64)),
@@ -363,7 +363,7 @@ fn assert_sdk_rejects_malformed_passphrase_kdf_envelopes() -> Result<()> {
     let missing_nonce_salt = json!({
         "recipient_method": "passphrase_kdf",
         "kdf": {"name": "argon2id", "salt": "AAAAAAAAAAAAAAAAAAAAAA",
-                "params": {"memory_kib": 65536, "iterations": 3, "parallelism": 1}},
+                "parameters": {"memory_kib": 65536, "iterations": 3, "parallelism": 1}},
         "aead": {"name": "xchacha20_poly1305", "nonce": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"},
         // Every other member is well formed, so only the missing nonce_salt
         // can reject it.
@@ -375,7 +375,7 @@ fn assert_sdk_rejects_malformed_passphrase_kdf_envelopes() -> Result<()> {
     let stray_hpke_suite = json!({
         "recipient_method": "passphrase_kdf",
         "kdf": {"name": "argon2id", "salt": "AAAAAAAAAAAAAAAAAAAAAA",
-                "params": {"memory_kib": 65536, "iterations": 3, "parallelism": 1}},
+                "parameters": {"memory_kib": 65536, "iterations": 3, "parallelism": 1}},
         "aead": {"name": "xchacha20_poly1305", "nonce": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
                  "nonce_salt": "AAAAAAAAAAAAAAAAAAAAAA"},
         "hpke_suite": "ak.hpke_x25519_aead_chacha20poly1305.v1",
@@ -404,10 +404,10 @@ fn passphrase_kdf_key_commitment(
     use argon2::{Algorithm, Argon2, Params, Version};
     use sha2::{Digest as _, Sha256};
 
-    let params = Params::new(memory_kib, iterations, parallelism, Some(32))
-        .map_err(|e| anyhow!("Argon2id params: {e}"))?;
+    let parameters = Params::new(memory_kib, iterations, parallelism, Some(32))
+        .map_err(|e| anyhow!("Argon2id parameters: {e}"))?;
     let mut root = [0u8; 32];
-    Argon2::new(Algorithm::Argon2id, Version::V0x13, params)
+    Argon2::new(Algorithm::Argon2id, Version::V0x13, parameters)
         .hash_password_into(passphrase, salt, &mut root)
         .map_err(|e| anyhow!("Argon2id derive: {e}"))?;
     let mut commitment_key = [0u8; 32];
@@ -426,14 +426,14 @@ fn passphrase_kdf_key_commitment(
 fn derive_argon2id_key(passphrase: &[u8], salt: &[u8]) -> Result<[u8; 32]> {
     use argon2::{Algorithm, Argon2, Params, Version};
 
-    let params = Params::new(
+    let parameters = Params::new(
         ARGON2ID_MEMORY_KIB,
         ARGON2ID_ITERATIONS,
         ARGON2ID_PARALLELISM,
         Some(32),
     )
-    .map_err(|e| anyhow!("Argon2id params: {e}"))?;
-    let argon2 = Argon2::new(Algorithm::Argon2id, Version::V0x13, params);
+    .map_err(|e| anyhow!("Argon2id parameters: {e}"))?;
+    let argon2 = Argon2::new(Algorithm::Argon2id, Version::V0x13, parameters);
     let mut key = [0u8; 32];
     argon2
         .hash_password_into(passphrase, salt, &mut key)
@@ -448,7 +448,7 @@ fn validate_argon2id_kdf_floor(label: &str, kdf: &Value) -> Result<()> {
     }
     if !argon2id_kdf_meets_floor(kdf)? {
         bail!(
-            "{label} Argon2id params must be at least memory_kib={}, iterations={}, parallelism={}",
+            "{label} Argon2id parameters must be at least memory_kib={}, iterations={}, parallelism={}",
             ARGON2ID_MEMORY_KIB,
             ARGON2ID_ITERATIONS,
             ARGON2ID_PARALLELISM
@@ -713,12 +713,12 @@ pub fn run_restore_full_workflows_fixture_suite() -> Result<()> {
                 if req < 2 {
                     bail!("vector {name} multi-admin approval requires >= 2");
                 }
-                let seq = v
+                let sequence = v
                     .get("approval_sequence")
                     .and_then(Value::as_array)
                     .ok_or_else(|| anyhow!("vector {name} missing approval_sequence"))?;
                 let mut distinct = std::collections::BTreeSet::<&str>::new();
-                for a in seq {
+                for a in sequence {
                     distinct.insert(required_str(a, "admin_did")?);
                 }
                 if (distinct.len() as u64) < req {

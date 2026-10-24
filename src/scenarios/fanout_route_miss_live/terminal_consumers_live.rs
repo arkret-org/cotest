@@ -105,10 +105,10 @@ pub async fn run() -> Result<()> {
         ensure_ordinary_refusal_rows(&before, acceptance_rows(&source).await?, client)?;
         if client.actor == fixture.bob.actor {
             use arkret_models_collaboration::authority_commit::{
-                AuthorityForwardBranch, PeerAuthorityForwardEventRequest,
+                AuthorityForwardBranch, PeerAuthorityForwardEventRequestBody,
             };
-            let mut peer_request = PeerAuthoritySubmitRequest::AuthorityForwardEvent(
-                PeerAuthorityForwardEventRequest {
+            let mut peer_request = PeerAuthoritySubmitRequestBody::AuthorityForwardEvent(
+                PeerAuthorityForwardEventRequestBody {
                     branch: AuthorityForwardBranch::AuthorityForward,
                     event_submission: submission,
                     producer_device_evidence: Some(forward_evidence.clone()),
@@ -120,7 +120,9 @@ pub async fn run() -> Result<()> {
                 arkret_models_collaboration::authority_commit::authority_forward_body_digest(
                     &peer_request,
                 )?;
-            if let PeerAuthoritySubmitRequest::AuthorityForwardEvent(request) = &mut peer_request {
+            if let PeerAuthoritySubmitRequestBody::AuthorityForwardEvent(request) =
+                &mut peer_request
+            {
                 let evidence = request
                     .producer_device_evidence
                     .as_mut()
@@ -257,11 +259,11 @@ pub async fn run() -> Result<()> {
     release_outbox_progress(source_outbox).await?;
     let after = acceptance_rows(&source).await?;
     for table in [
-        "circle_current_results",
-        "circle_member_state_current_results",
-        "space_current_results",
-        "space_parent_current_results",
-        "strand_position_current_results",
+        "circle_current_states",
+        "circle_member_state_current_states",
+        "space_current_states",
+        "space_parent_current_states",
+        "strand_position_current_states",
     ] {
         ensure!(
             canonical[table] == after[table],

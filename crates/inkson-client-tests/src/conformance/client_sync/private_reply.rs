@@ -38,8 +38,8 @@ struct HealingRail {
     ack: String,
     ack_before: String,
     business_before: String,
-    requests: Mutex<Vec<SyncRequestBody>>,
-    initial_scans: Mutex<Vec<arkret_wire::StreamScanRequest>>,
+    requests: Mutex<Vec<AccountSubscribeParameters>>,
+    initial_scans: Mutex<Vec<arkret_wire::StreamScanRequestBody>>,
     dependencies: Mutex<Vec<Vec<arkret_wire::CommittedEventRef>>>,
 }
 
@@ -51,7 +51,8 @@ const BUSINESS: &str = "SELECT jsonb_build_object(\
  'requests',(SELECT COALESCE(jsonb_agg(to_jsonb(t) ORDER BY key),'[]') FROM device_message_txns t),\
  'messages',(SELECT COALESCE(jsonb_agg(to_jsonb(t) ORDER BY message_key),'[]') FROM device_message_idempotency t)\
  )::text";
-const ACK: &str = "SELECT row_to_json(t)::text FROM device_message_ack_tokens t WHERE ack_token=$1";
+const ACK: &str =
+    "SELECT row_to_json(t)::text FROM device_message_ack_tokens t WHERE acknowledgement_token=$1";
 
 fn business_evidence(database_url: &str) -> Result<String> {
     tokio::task::block_in_place(|| {
@@ -62,7 +63,7 @@ fn business_evidence(database_url: &str) -> Result<String> {
             .read_only(true)
             .start()?;
         let core: String = transaction.query_one(BUSINESS, &[])?.get(0);
-        let tables=transaction.query("SELECT tablename FROM pg_tables WHERE schemaname='public' AND (tablename LIKE '%\\_current_results' ESCAPE '\\' OR tablename IN ('current_result_heads','current_selector_origins','governance_current_ready','realm_authorities','replica_stream_anchors','replica_authorization_cuts','replica_authorization_rows','account_datas','account_data_changes')) ORDER BY tablename",&[])?;
+        let tables=transaction.query("SELECT tablename FROM pg_tables WHERE schemaname='public' AND (tablename LIKE '%\\_current_states' ESCAPE '\\' OR tablename IN ('current_state_heads','current_selector_origins','governance_current_ready','realm_authorities','replica_stream_anchors','replica_authorization_cuts','replica_authorization_rows','account_datas','account_data_changes')) ORDER BY tablename",&[])?;
         let mut currents = std::collections::BTreeMap::new();
         for row in tables {
             let table: String = row.get(0);
@@ -115,7 +116,7 @@ async fn await_franking(
         // its private proof body to be disclosed on an ordinary Realm scan.
         let carrier = read_database_evidence(
             database_url,
-            "SELECT COALESCE((SELECT jsonb_build_object('event',e.envelope,'commit',c.commit_json)::text FROM moderation_franking_proof_current_results r JOIN realm_commits c ON c.commit_id=r.current_commit_id AND c.realm_id=r.realm_id AND c.stream_position=r.current_stream_position JOIN canonical_events e ON e.pk=c.event_pk WHERE r.realm_id=$1 AND r.target_event_id=$2),'null')",
+            "SELECT COALESCE((SELECT jsonb_build_object('event',e.envelope,'commit',c.commit_json)::text FROM moderation_franking_proof_current_states r JOIN realm_commits c ON c.commit_id=r.current_commit_id AND c.realm_id=r.realm_id AND c.stream_position=r.current_stream_position JOIN canonical_events e ON e.pk=c.event_pk WHERE r.realm_id=$1 AND r.target_event_id=$2),'null')",
             &[&realm.as_str(), &event.as_str()],
         )?;
         let pending = read_database_evidence(
@@ -144,7 +145,7 @@ async fn await_franking(
 impl AccountSubscribeTransport for HealingRail {
     async fn subscribe(
         &self,
-        request: &SyncRequestBody,
+        request: &AccountSubscribeParameters,
     ) -> garth::Result<AccountSubscribeSnapshotResult> {
         let attempt = {
             let mut requests = self.requests.lock().unwrap();
@@ -301,7 +302,7 @@ impl SidecarSyncObserver for PrivateReplyProbe {
                 realm_id: realm.clone(),
             },
             selection: arkret::ParticipationBits {
-                reply_message: true,
+                message_creation_allowed: true,
                 ..arkret::ParticipationBits::NONE
             },
             expected_version: 0,
@@ -431,7 +432,7 @@ impl SidecarSyncObserver for PrivateReplyProbe {
         let mut agent_executions = 0usize;
         let (status, outcome) = post_json(
             &controller.client,
-            &arkret_models_collaboration::authority_commit::SelfAuthoritySubmitRequest::Event(
+            &arkret_models_collaboration::authority_commit::SelfAuthoritySubmitRequestBody::Event(
                 arkret_wire::EventAdmissionSubmission::new(request.clone()),
             ),
         )
@@ -530,7 +531,7 @@ impl SidecarSyncObserver for PrivateReplyProbe {
         let page = replica
             .apply_bound_scan(
                 &own,
-                own.scan_commit_stream(&arkret_wire::StreamScanRequest {
+                own.scan_commit_stream(&arkret_wire::StreamScanRequestBody {
                     realm_id: realm.clone(),
                     stream_ref: accepted.commit.stream_ref.clone(),
                     direction: arkret_wire::StreamScanDirection::After(Some(
@@ -584,7 +585,7 @@ impl SidecarSyncObserver for PrivateReplyProbe {
         }),vec![arkret_wire::SemanticRef::new(request.event_id.to_string(),"after")])?;
         let (status, outcome) = post_json(
             &agent.runtime,
-            &arkret_models_collaboration::authority_commit::SelfAuthoritySubmitRequest::Event(
+            &arkret_models_collaboration::authority_commit::SelfAuthoritySubmitRequestBody::Event(
                 arkret_wire::EventAdmissionSubmission::new(reply.clone()),
             ),
         )
@@ -621,7 +622,9 @@ impl SidecarSyncObserver for PrivateReplyProbe {
             !queued.deliveries.is_empty(),
             "private recovery needs a nonempty unprocessed queue"
         );
-        let ack = queued.ack_token.context("issued private recovery ACK")?;
+        let ack = queued
+            .acknowledgement_token
+            .context("issued private recovery ACK")?;
         let ack_before = read_database_evidence(database_url, ACK, &[&ack])?;
         ensure!(
             serde_json::from_str::<Value>(&ack_before)?["consumed_at"].is_null(),

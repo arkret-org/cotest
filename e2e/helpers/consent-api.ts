@@ -8,18 +8,18 @@ import {
   sha256CanonicalJson, signedEventEnvelope,
 } from "./coland-api";
 import type {
-  ConsentCurrentReadOutcome, ConsentCurrentReadRequestBody, ConsentPeer,
+  ConsentCurrentReadResponseBody, ConsentCurrentReadRequestBody, ConsentPeer,
   ConsentPermission, ConsentReplacePayload, ConsentView,
 } from "./generated/spec-wire-objects";
 
 export type { ConsentPeer, ConsentPermission, ConsentReplacePayload, ConsentView };
 
-export function consentPermissions(current: ConsentCurrentReadOutcome): ConsentPermission[] {
+export function consentPermissions(current: ConsentCurrentReadResponseBody): ConsentPermission[] {
   return current.current.state === "present"
     ? structuredClone(current.current.result.value.permissions) : [];
 }
 
-export function consentExpectedCurrent(current: ConsentCurrentReadOutcome): ConsentReplacePayload["expected_current"] {
+export function consentExpectedCurrent(current: ConsentCurrentReadResponseBody): ConsentReplacePayload["expected_current"] {
   return current.current.state === "present"
     ? { state: "present", revision: structuredClone(current.current.result.revision) }
     : { state: "never_written" };
@@ -28,7 +28,7 @@ export function consentExpectedCurrent(current: ConsentCurrentReadOutcome): Cons
 export async function readConsentCurrentApi(
   request: APIRequestContext, token: string, holderId: string, peer: ConsentPeer,
   opts: { server?: ColandKey } = {},
-): Promise<ConsentCurrentReadOutcome> {
+): Promise<ConsentCurrentReadResponseBody> {
   const input: ConsentCurrentReadRequestBody = {
     holder_account_id: accountActorId(holderId, opts.server).account_id,
     peer,
@@ -36,7 +36,7 @@ export async function readConsentCurrentApi(
     nonce: randomBytes(32).toString("base64url"),
   };
   const url = `${colandBaseUrl(opts.server)}/_arkret/self/consent/current`;
-  const current = await expectJsonOk<ConsentCurrentReadOutcome>(await request.post(url, {
+  const current = await expectJsonOk<ConsentCurrentReadResponseBody>(await request.post(url, {
     headers: { ...authHeaders(token, "POST", url), "content-type": "application/json" },
     data: canonicalJson(input),
   }), "complete exact-peer Consent current");

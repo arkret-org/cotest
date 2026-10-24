@@ -15,10 +15,15 @@ pub(super) async fn run(
     let path = signal_probe.with_file_name("media-token-release.pause");
     for (sequence, deny) in [(401, false), (402, true)] {
         let mut payload = original.clone();
-        let inkson::signal::SignalPayload::CallSignal { seq, call_id, .. } = &mut payload else {
+        let inkson::signal::SignalPayload::CallSignal {
+            sequence: payload_sequence,
+            call_id,
+            ..
+        } = &mut payload
+        else {
             anyhow::bail!("real Invite payload")
         };
-        *seq = sequence;
+        *payload_sequence = sequence;
         let call = call_id.clone();
         let prepared = producer
             .prepare_call_invitation(
@@ -93,7 +98,7 @@ pub(super) async fn run(
                 "token race hit another rejection"
             );
         } else {
-            let outcome: arkret_models_collaboration::objects::media::CallMediaTokenExchangeOutcome = serde_json::from_value(response)?;
+            let outcome: arkret_models_collaboration::objects::media::CallMediaTokenExchangeResponseBody = serde_json::from_value(response)?;
             media_verification::verify_actual_outcome(holder, &request, &outcome).await?;
         }
         std::fs::remove_file(reached)?;

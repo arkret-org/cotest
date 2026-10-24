@@ -1,9 +1,9 @@
 use anyhow::{Context, Result, anyhow};
 use arkret::contact_operations::{
     ContactAcceptAction, ContactAcceptPrepareRequestBody, ContactAcceptRequestBody,
-    ContactAcceptedOutcome, ContactCommitPhase, ContactCommitRequestBody, ContactOperationOutcome,
-    ContactOperationRequestBody, ContactPeer, ContactPreparePhase, ContactPrepareRequestBody,
-    ContactPreparedOutcome, ContactScope, RequestAcceptanceReceipt,
+    ContactAcceptedResponseBody, ContactCommitPhase, ContactCommitRequestBody,
+    ContactOperationRequestBody, ContactOperationResponseBody, ContactPeer, ContactPreparePhase,
+    ContactPrepareRequestBody, ContactPreparedResponseBody, ContactScope, RequestAcceptanceReceipt,
 };
 use arkret::{
     ContactIntroductionEvidence, IdempotencyKey, PreparedEventDraft, ProtocolOperationId,
@@ -94,7 +94,7 @@ impl TestActorClient {
     pub fn verify_consent_current_read(
         &self,
         request: &arkret_models_collaboration::call_invitation::ConsentCurrentReadRequestBody,
-        outcome: &arkret_models_collaboration::call_invitation::ConsentCurrentReadOutcome,
+        outcome: &arkret_models_collaboration::call_invitation::ConsentCurrentReadResponseBody,
     ) -> Result<()> {
         let principal = self
             .principal
@@ -221,16 +221,16 @@ impl TestActorClient {
             ));
         }
         let (prepared_operation_id, reservation_handle, event_draft) = match prepared {
-            ContactOperationOutcome::Prepared {
+            ContactOperationResponseBody::Prepared {
                 outcome:
-                    ContactPreparedOutcome::Request {
+                    ContactPreparedResponseBody::Request {
                         operation_id,
                         reservation_handle,
                         event_draft,
                         ..
                     },
             } => (operation_id, reservation_handle, event_draft),
-            ContactOperationOutcome::Failed { outcome } => {
+            ContactOperationResponseBody::Failed { outcome } => {
                 return Err(anyhow!(
                     "Contact request prepare failed: {:?}",
                     outcome.reason
@@ -267,14 +267,14 @@ impl TestActorClient {
             return Err(anyhow!("Contact request commit replay changed its outcome"));
         }
         match accepted {
-            ContactOperationOutcome::Accepted {
+            ContactOperationResponseBody::Accepted {
                 outcome:
-                    ContactAcceptedOutcome::Request {
+                    ContactAcceptedResponseBody::Request {
                         request_acceptance_receipt,
                         ..
                     },
             } => Ok(request_acceptance_receipt),
-            ContactOperationOutcome::Failed { outcome } => Err(anyhow!(
+            ContactOperationResponseBody::Failed { outcome } => Err(anyhow!(
                 "Contact request commit failed: {:?}",
                 outcome.reason
             )),
@@ -321,16 +321,16 @@ impl TestActorClient {
             .contacts_respond(&self.verify_publication(request.clone())?)
             .await?;
         let (prepared_operation_id, reservation_handle, event_draft) = match prepared {
-            ContactOperationOutcome::Prepared {
+            ContactOperationResponseBody::Prepared {
                 outcome:
-                    ContactPreparedOutcome::Response {
+                    ContactPreparedResponseBody::Response {
                         operation_id,
                         reservation_handle,
                         event_draft,
                         ..
                     },
             } => (operation_id, reservation_handle, event_draft),
-            ContactOperationOutcome::Failed { outcome } => {
+            ContactOperationResponseBody::Failed { outcome } => {
                 return Err(anyhow!(
                     "Contact accept prepare failed: {:?}",
                     outcome.reason
@@ -360,10 +360,10 @@ impl TestActorClient {
             .contacts_respond(&self.verify_publication(commit.clone())?)
             .await?
         {
-            ContactOperationOutcome::Accepted {
-                outcome: ContactAcceptedOutcome::Response { .. },
+            ContactOperationResponseBody::Accepted {
+                outcome: ContactAcceptedResponseBody::Response { .. },
             } => Ok(()),
-            ContactOperationOutcome::Failed { outcome } => Err(anyhow!(
+            ContactOperationResponseBody::Failed { outcome } => Err(anyhow!(
                 "Contact accept commit failed: {:?}",
                 outcome.reason
             )),
@@ -761,10 +761,10 @@ impl TestActorClient {
             StatusCode::OK,
         )
         .await?;
-        let typed_outcome: arkret_models_collaboration::authority_commit::SelfAuthoritySubmitOutcome =
+        let typed_outcome: arkret_models_collaboration::authority_commit::SelfAuthoritySubmitResponseBody =
             serde_json::from_value(event_response.clone())
                 .context("Realm bootstrap response is not the closed SDK outcome")?;
-        typed_outcome.validate_for_request(&arkret_models_collaboration::authority_commit::SelfAuthoritySubmitRequest::OrdinaryRealmBootstrap(request.clone()))?;
+        typed_outcome.validate_for_request(&arkret_models_collaboration::authority_commit::SelfAuthoritySubmitRequestBody::OrdinaryRealmBootstrap(request.clone()))?;
         let realm_id = arkret_identifiers::RealmId::new(realm_id.clone())?;
         Ok(json!({
             "realm_id": realm_id,

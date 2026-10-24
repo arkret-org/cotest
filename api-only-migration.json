@@ -380,7 +380,7 @@
       ]
     },
     {
-      "source": "cotest/e2e/tests/calls/webrtc-seq-monotonic.spec.ts",
+      "source": "cotest/e2e/tests/calls/webrtc-sequence-monotonic.spec.ts",
       "disposition": "duplicate_removed",
       "replacements": [
         {

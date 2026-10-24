@@ -232,7 +232,7 @@ mod tests {
                 },
                 "purpose": "ak.signal.v1",
                 "aead_profile": "MLS_128_DHKEMX25519_AES128GCM_SHA256_Ed25519",
-                "epoch": 7,
+                "epoch": "7",
                 "nonce": "AAAAAAAAAAAAAAAA",
                 "ciphertext": "Q2lwaGVydGV4dFBsYWNlaG9sZGVy"
             },

@@ -3,7 +3,7 @@
 use std::path::PathBuf;
 
 use arkret_models_collaboration::agent_operations::{
-    AgentRenewPairingOutcome, AgentRenewPairingRequestBody, AgentView,
+    AgentRenewPairingRequestBody, AgentRenewPairingResponseBody, AgentView,
 };
 use arkret_models_collaboration::agent_scope::{
     AgentKeyPairRequestBody, AgentRuntimeApprovalRequestBody,
@@ -89,7 +89,7 @@ async fn renew(
     controller: &TestActorClient,
     agent: &AgentRuntimeSession,
 ) -> Result<AgentPairingBootstrap> {
-    let renewed: AgentRenewPairingOutcome = serde_json::from_value(
+    let renewed: AgentRenewPairingResponseBody = serde_json::from_value(
         expect_json(
             controller
                 .post(&format!(
@@ -113,7 +113,7 @@ async fn renew(
 async fn candidate(
     station: &ArkretServer,
     body: &AgentRuntimeApprovalRequestBody,
-) -> Result<AgentRuntimeApprovalOutcome> {
+) -> Result<AgentRuntimeApprovalResponseBody> {
     Ok(serde_json::from_value(
         expect_json(
             station
@@ -263,7 +263,7 @@ async fn approval_body(
     agent: &AgentRuntimeSession,
     bootstrap: &AgentPairingBootstrap,
     runtime: &AgentRuntimeApprovalRequestBody,
-    approval: &AgentRuntimeApprovalOutcome,
+    approval: &AgentRuntimeApprovalResponseBody,
 ) -> Result<AgentKeyPairRequestBody> {
     let accepted = controller
         .sdk()
@@ -641,7 +641,7 @@ pub async fn run_agent_runtime_binding_admission()
         refresh.approval_request_id == new_approval.approval_request_id,
         "proof refresh invalidated frozen controller approval"
     );
-    let paired: AgentKeyPairOutcome = serde_json::from_value(
+    let paired: AgentKeyPairResponseBody = serde_json::from_value(
         expect_json(
             controller
                 .post("/_arkret/gate/account/agent-key-pair")

@@ -1,7 +1,7 @@
 //! Real full-value Consent fixture writes; no display summary supplies a CAS basis.
 use anyhow::{Context, Result, ensure};
 use arkret_models_collaboration::call_invitation::{
-    ConsentCurrentReadOutcome, ConsentCurrentReadRequestBody,
+    ConsentCurrentReadRequestBody, ConsentCurrentReadResponseBody,
 };
 use arkret_models_collaboration::consent_operations::{ConsentReplaceRequestBody, ConsentView};
 use arkret_models_collaboration::events_payloads::consent::{
@@ -22,7 +22,10 @@ impl std::ops::Deref for PermissionWrite {
     }
 }
 
-pub(super) async fn read(holder: &Member, peer: &ConsentPeer) -> Result<ConsentCurrentReadOutcome> {
+pub(super) async fn read(
+    holder: &Member,
+    peer: &ConsentPeer,
+) -> Result<ConsentCurrentReadResponseBody> {
     let request = ConsentCurrentReadRequestBody {
         holder_account_id: holder.account.clone(),
         peer: peer.clone(),

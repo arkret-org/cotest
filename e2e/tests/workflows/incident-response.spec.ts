@@ -19,7 +19,7 @@ import {
   submitSignedEventApi,
   retypeEventDerivedId,
   typedId,
-  type StreamScanOutcome,
+  type StreamScanResponseBody,
 } from "../../helpers/coland-api";
 import {
   assertJointStackNotRequired,
@@ -356,7 +356,7 @@ async function scanRealmEventsWithDpop(
   });
   const text = await response.text();
   expect(response.status(), `incident authorized stream scan returned ${text}`).toBe(200);
-  const scan = JSON.parse(text) as StreamScanOutcome;
+  const scan = JSON.parse(text) as StreamScanResponseBody;
   expect(Array.isArray(scan.committed_events)).toBe(true);
   expect(scan.truncated, "privacy readback must cover the complete authorized interval").toBe(false);
   const events = scan.committed_events.map((row) => {

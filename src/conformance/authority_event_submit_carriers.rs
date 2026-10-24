@@ -9,8 +9,8 @@ use std::path::Path;
 
 use anyhow::{Context, Result, anyhow, ensure};
 use arkret_models_collaboration::authority_commit::{
-    DirectConversationFoundingDependencyMissingProblem, PeerAuthoritySubmitOutcome,
-    PeerAuthoritySubmitRequest, SelfAuthoritySubmitRequest,
+    DirectConversationFoundingDependencyMissingProblem, PeerAuthoritySubmitRequestBody,
+    PeerAuthoritySubmitResponseBody, SelfAuthoritySubmitRequestBody,
 };
 use arkret_wire::EventAdmissionSubmission;
 use serde::de::DeserializeOwned;
@@ -24,11 +24,11 @@ const CANONICAL_FIXTURE: &str = "peer-event-submit-semantic-union-fixture.json";
 const CANONICAL_ENTRYPOINT: &str = "ak.suite.peer.event_submit.semantic_union.v1";
 
 const SELF_REQUEST: &str =
-    "schemas/authority-commit-operations.schema.json#/$defs/self_submit_request";
+    "schemas/authority-commit-operations.schema.json#/$defs/self_submit_request_body";
 const PEER_REQUEST: &str =
-    "schemas/authority-commit-operations.schema.json#/$defs/peer_submit_request";
+    "schemas/authority-commit-operations.schema.json#/$defs/peer_submit_request_body";
 const PEER_OUTCOME: &str =
-    "schemas/authority-commit-operations.schema.json#/$defs/peer_submit_outcome";
+    "schemas/authority-commit-operations.schema.json#/$defs/peer_submit_response_body";
 const DEPENDENCY_PROBLEM: &str = "schemas/authority-commit-operations.schema.json#/$defs/direct_conversation_founding_dependency_missing_problem";
 
 const EVENT_ID: &str = "ak:event:ASo6zC5lXw3GKOieKXlXJYfKoQKng4sYXtvdUAaE9WRB";
@@ -140,7 +140,7 @@ fn assert_canonical_semantic_ledger(fixture: &Value) -> Result<()> {
 fn assert_endpoint_unions_and_approval(approved: &Value) -> Result<usize> {
     schema_valid(SELF_REQUEST, approved)?;
     assert_roundtrip::<EventAdmissionSubmission>(approved)?;
-    assert_roundtrip::<SelfAuthoritySubmitRequest>(approved)?;
+    assert_roundtrip::<SelfAuthoritySubmitRequestBody>(approved)?;
     ensure!(
         approved["approval_signatures"]
             .as_array()
@@ -157,11 +157,11 @@ fn assert_endpoint_unions_and_approval(approved: &Value) -> Result<usize> {
 
     let peer = json!({"branch": "authority_forward", "event_submission": approved});
     schema_valid(PEER_REQUEST, &peer)?;
-    assert_roundtrip::<PeerAuthoritySubmitRequest>(&peer)?;
+    assert_roundtrip::<PeerAuthoritySubmitRequestBody>(&peer)?;
     // This KAT has an Account principal method rather than a human device.
     // Carrier roundtrip is valid, but formal forwarding independently requires
     // the Agent evidence sibling; the approval signature cannot replace it.
-    let missing_agent = serde_json::from_value::<PeerAuthoritySubmitRequest>(peer.clone())?
+    let missing_agent = serde_json::from_value::<PeerAuthoritySubmitRequestBody>(peer.clone())?
         .validate()
         .err()
         .ok_or_else(|| anyhow!("Account principal forward must require Agent evidence"))?;
@@ -219,7 +219,7 @@ fn assert_replication_carrier(approved: &Value) -> Result<usize> {
     let item = replication_item(approved.clone());
     let request = replication_request(vec![item.clone()]);
     schema_valid(PEER_REQUEST, &request)?;
-    assert_roundtrip::<PeerAuthoritySubmitRequest>(&request)?;
+    assert_roundtrip::<PeerAuthoritySubmitRequestBody>(&request)?;
 
     let hundred = replication_request((0..100).map(|_| item.clone()).collect());
     schema_valid(PEER_REQUEST, &hundred)?;
@@ -240,11 +240,11 @@ fn assert_replication_carrier(approved: &Value) -> Result<usize> {
     let mut stray_witness = request.clone();
     stray_witness["replications"][0]["recipient_witnesses"] = json!([]);
     schema_invalid(PEER_REQUEST, &stray_witness)?;
-    ensure!(serde_json::from_value::<PeerAuthoritySubmitRequest>(stray_witness).is_err());
+    ensure!(serde_json::from_value::<PeerAuthoritySubmitRequestBody>(stray_witness).is_err());
     let mut stray_processing = request.clone();
     stray_processing["processing"] = json!("per_item");
     schema_invalid(PEER_REQUEST, &stray_processing)?;
-    ensure!(serde_json::from_value::<PeerAuthoritySubmitRequest>(stray_processing).is_err());
+    ensure!(serde_json::from_value::<PeerAuthoritySubmitRequestBody>(stray_processing).is_err());
 
     // Outcomes are same-order rows with no index or committed_ref echo.
     let outcome = json!({
@@ -252,16 +252,16 @@ fn assert_replication_carrier(approved: &Value) -> Result<usize> {
         "replication_outcomes": [{"status": "stored"}]
     });
     schema_valid(PEER_OUTCOME, &outcome)?;
-    assert_roundtrip::<PeerAuthoritySubmitOutcome>(&outcome)?;
-    let parsed_request: PeerAuthoritySubmitRequest = serde_json::from_value(request)?;
-    serde_json::from_value::<PeerAuthoritySubmitOutcome>(outcome)?
+    assert_roundtrip::<PeerAuthoritySubmitResponseBody>(&outcome)?;
+    let parsed_request: PeerAuthoritySubmitRequestBody = serde_json::from_value(request)?;
+    serde_json::from_value::<PeerAuthoritySubmitResponseBody>(outcome)?
         .validate_for_request(&parsed_request)?;
     let echoed = json!({
         "branch": "committed_replication",
         "replication_outcomes": [{"status": "stored", "index": 0}]
     });
     schema_invalid(PEER_OUTCOME, &echoed)?;
-    ensure!(serde_json::from_value::<PeerAuthoritySubmitOutcome>(echoed).is_err());
+    ensure!(serde_json::from_value::<PeerAuthoritySubmitResponseBody>(echoed).is_err());
     Ok(15)
 }
 
@@ -273,7 +273,7 @@ fn assert_direct_conversation_carriers(approved: &Value) -> Result<usize> {
         "events": events
     });
     schema_valid(SELF_REQUEST, &self_request)?;
-    assert_roundtrip::<SelfAuthoritySubmitRequest>(&self_request)?;
+    assert_roundtrip::<SelfAuthoritySubmitRequestBody>(&self_request)?;
 
     let mut wrong_order = self_request.clone();
     wrong_order["events"].as_array_mut().unwrap().swap(2, 3);
@@ -302,7 +302,7 @@ fn assert_direct_conversation_carriers(approved: &Value) -> Result<usize> {
         }
     });
     schema_valid(PEER_REQUEST, &peer_request)?;
-    assert_roundtrip::<PeerAuthoritySubmitRequest>(&peer_request)?;
+    assert_roundtrip::<PeerAuthoritySubmitRequestBody>(&peer_request)?;
 
     let mut missing_evidence = peer_request.clone();
     missing_evidence["unit"]
@@ -325,11 +325,11 @@ fn assert_membership_compensation_carriers(approved: &Value) -> Result<usize> {
         "membership_compensation_evidence": evidence
     });
     schema_valid(SELF_REQUEST, &self_request)?;
-    assert_roundtrip::<SelfAuthoritySubmitRequest>(&self_request)?;
+    assert_roundtrip::<SelfAuthoritySubmitRequestBody>(&self_request)?;
 
     let peer_request = membership_compensation_peer_request(approved);
     schema_valid(PEER_REQUEST, &peer_request)?;
-    assert_roundtrip::<PeerAuthoritySubmitRequest>(&peer_request)?;
+    assert_roundtrip::<PeerAuthoritySubmitRequestBody>(&peer_request)?;
 
     for path in ["terminal_certificate", "single_use_binding"] {
         let mut missing = self_request.clone();
@@ -487,7 +487,7 @@ fn realm_commit(position: u64) -> Value {
         "stream_position": position,
         "previous_commit_ref": if position == 0 { Value::Null } else { json!(COMMIT_ID) },
         "event_ref": EVENT_ID,
-        "governance_generation": 0,
+        "governance_generation": "0",
         "authority_ref": EVENT_ID,
         "committed_at": "2026-09-20T00:00:00.000Z",
         "signature": {
@@ -497,7 +497,7 @@ fn realm_commit(position: u64) -> Value {
             "signed_digest": format!("sha256:{}", "4".repeat(64)),
             "created_at": "2026-09-20T00:00:00.000Z",
             // Shape only: a raw 64-byte Ed25519 signature is 86 base64url chars.
-            "sig": "A".repeat(86)
+            "signature": "A".repeat(86)
         }
     })
 }

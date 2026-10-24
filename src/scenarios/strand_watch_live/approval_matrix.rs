@@ -47,7 +47,7 @@ pub(super) async fn run(
         "constraints":[{"constraint_kind":"claim_based","constraint_subkind":"approval","effect":"require_review",
             "approval_required":true,"approval_mode":"before_commit","approval_actor_ids":[bob_account.principal_id],
             "approval_threshold":"unanimous","timeout":"PT60S"}],
-        "issuer_authority_refs":[{"kind":"realm_root","realm_id":realm,"authority_event_ref":typed_realm.event_id(),"authority_generation":0}],
+        "issuer_authority_refs":[{"kind":"realm_root","realm_id":realm,"authority_event_ref":typed_realm.event_id(),"authority_generation":"0"}],
         "issued_at":arkret_canonical::format_timestamp_canonical(chrono::Utc::now())}})).await?;
     let grant_id = GrantId::from_event_id(&grant.event_id);
     let grant_commit = submit_and_expect_commit(
@@ -66,7 +66,7 @@ pub(super) async fn run(
             StrandWatchLevel::Participating,
             None,
         )
-        .with_expected_value(StrandWatchCurrentValue::Cleared(())),
+        .with_expected_value(StrandWatchValue::Cleared(())),
     )
     .await?;
     let mut audit = alice.author_event(realm, EventKind::AuditAccessed.as_str(),json!({"access_kind":"watch_set_others",

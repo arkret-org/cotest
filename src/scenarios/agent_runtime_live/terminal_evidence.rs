@@ -52,13 +52,13 @@ fn claim_request(
         .as_ref()
         .context("accepted controller")?
         .device_signing_key;
-    signature.sig =
+    signature.signature =
         arkret_wire::Base64UrlString::new(URL_SAFE_NO_PAD.encode(key.sign(&bytes).to_bytes()))
             .map_err(anyhow::Error::msg)?;
     Ok(request)
 }
 
-async fn current_key(material: &Materials<'_>) -> Result<arkret::SignerKeysQueryOutcome> {
+async fn current_key(material: &Materials<'_>) -> Result<arkret::SignerKeyQueryResponseBody> {
     let request = arkret::SignerKeysQueryRequestBody {
         request_id: RequestId::new(format!("ak:request:{}", unique_uuid7()))?,
         realm_id: material.realm.clone(),
@@ -157,8 +157,8 @@ pub(super) async fn exercise(mut material: Materials<'_>) -> Result<()> {
     );
     let keys = current_key(&material).await?;
     ensure!(matches!(
-        keys.results.as_slice(),
-        [arkret::SignerKeyQueryOutcome::CurrentResolved { .. }]
+        keys.resolutions.as_slice(),
+        [arkret::SignerKeyResolution::CurrentResolved { .. }]
     ));
     let direct =
         direct_evidence::found(material.controller, material.agent, material.station).await?;
@@ -198,7 +198,7 @@ pub(super) async fn exercise(mut material: Materials<'_>) -> Result<()> {
         &[first.clone(), second.clone()],
         material.agent.verification_method.as_str(),
     )?;
-    let uploaded: KeyPackagesUploadOutcome = serde_json::from_value(
+    let uploaded: KeyPackagesUploadResponseBody = serde_json::from_value(
         expect_json(
             runtime
                 .post("/_arkret/self/keys/keypackages/upload")
@@ -215,7 +215,7 @@ pub(super) async fn exercise(mut material: Materials<'_>) -> Result<()> {
                 .contains(&second.keypackage_ref.to_string())
     );
     let control_claim = claim_request(&material, &first.keypackage_ref)?;
-    let control: arkret_models_crypto::KeyPackagesClaimOutcome = serde_json::from_value(
+    let control: arkret_models_crypto::KeyPackagesClaimResponseBody = serde_json::from_value(
         expect_json(
             material
                 .controller
@@ -372,8 +372,8 @@ pub(super) async fn exercise(mut material: Materials<'_>) -> Result<()> {
     let keys = current_key(&material).await?;
     ensure!(
         matches!(
-            keys.results.as_slice(),
-            [arkret::SignerKeyQueryOutcome::Unavailable { .. }]
+            keys.resolutions.as_slice(),
+            [arkret::SignerKeyResolution::Unavailable { .. }]
         ),
         "terminal Agent still supplied a current signer"
     );

@@ -64,7 +64,7 @@
 
 ### Phase E — Poll
 
-18. Alice 显式创建未激活 MLS 的明文 Realm，并创建投票：标准 `ak.message.create` 的 Content Block 为 `ak.content.poll`，使用 `poll.answers[{id,text}]` 和 `poll.max_selections=1`；题目位于 fallback `body`。
+18. Alice 显式创建未激活 MLS 的明文 Realm，并创建投票：标准 `ak.message.create` 的 Content Block 为 `ak.content.poll`，使用 `poll.answers[{id,text}]` 和 `poll.max_selection_count=1`；题目位于 fallback `body`。
 19. Bob、Carol 加入后，由 Alice 分别授予 `ak.message.create`。成员身份本身不授予发送或投票权限。
 20. Bob 发送标准 Message，Content Block 为 `ak.content.poll.response`，其中 `poll_response.poll_ref` 是原投票的 Message ID，`selections` 是 answer ID 数组。
 21. Bob 从选项 A 改选 B，Carol 选 B；精确断言 `poll-vote-count` 的 A=0、B=2，不匹配包含时间戳的选项整行。
@@ -101,7 +101,7 @@
 - **E14.1 reaction 并发竞态**:alice 和 bob 同时对 `M1` 加 + 撤 → OR-Set 仍正确(spec §8.5)
 - **E14.2 E2EE mention 隐私**:真实 MLS mention 只保留在密文内，Bob 本地解密可读；服务端 Event 不含 Bob 主体或正文明文，不携带专用 mention 路由字段。携带旧 mention sidecar 字段的请求必须 schema reject 且不发布 Event（push-notifications.md §4.5）。
 - **E14.3 poll closed**:本地关闭后隐藏该客户端的选项按钮；v1 不存在关闭 carrier，不能据此断言 reducer 拒绝合法迟到 vote
-- **E14.4 max_selections > 1**:多选 poll;一个 actor 可选 2 个 option;断言计数正确
+- **E14.4 max_selection_count > 1**:多选 poll;一个 actor 可选 2 个 option;断言计数正确
 - **E14.5 typing 在 redact 后**:bob 发了消息后 redact;typing 指示不应"复活"
 - **E14.6 presence 隐私**:carol 在 client preferences 关 presence broadcast → 即使她在线,alice 看到的是 unknown / offline
 

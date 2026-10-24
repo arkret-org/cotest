@@ -178,7 +178,7 @@ export function embeddedWebvhRegistrationBearer(): string | undefined {
 }
 
 // The OAuth `client_id` coland is configured to advertise in
-// `/_arkret/describe.auth_metadata.methods[].client_id` (coland config
+// `/_arkret/describe.authentication_metadata.methods[].client_id` (coland config
 // `oidc_client_id`). The joint harness sets this to the coauth-seeded
 // "Inkson Dev" client ULID; tests assert describe surfaces it verbatim.
 export function coauthOidcClientId(): string | undefined {

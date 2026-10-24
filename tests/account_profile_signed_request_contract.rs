@@ -148,7 +148,7 @@ fn sdk_keeps_profile_event_closed_and_returns_the_covering_commit() {
     let outcome = read("arkret-rust-sdk/crates/models-identity/src/account.rs");
     let outcome = source_between(
         &outcome,
-        "pub struct AccountUpdateProfileOutcome",
+        "pub struct AccountUpdateProfileResponseBody",
         "pub enum CursorRevokeScope",
     );
     assert!(outcome.contains("AccountMaterializedProfile"));
@@ -296,8 +296,8 @@ fn service_admits_the_signed_event_through_the_pcr_unit_and_product_authors_the_
     assert!(unit.contains("commit.committed_at"));
     assert!(unit.contains("FOR SHARE"));
     let schema = read("coland/crates/storage-postgres/migrations/00000000000000_initial/up.sql");
-    assert!(schema.contains("CREATE TABLE actor_profile_current_results ("));
-    assert!(schema.contains("CREATE TABLE identity_accountability_current_results ("));
+    assert!(schema.contains("CREATE TABLE actor_profile_current_states ("));
+    assert!(schema.contains("CREATE TABLE identity_accountability_current_states ("));
 
     let product = read("inkson/src/transport/account.rs");
     let authoring = source_between(

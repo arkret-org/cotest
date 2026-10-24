@@ -39,8 +39,8 @@ function signProof(proof) {
     kid: "mock-challenge-provider-key-1",
   };
   const enc = `${b64url(JSON.stringify(header))}.${b64url(JSON.stringify(proof))}`;
-  const sig = cryptoSign(null, Buffer.from(enc), privateKey);
-  return `${enc}.${b64url(sig)}`;
+  const signature = cryptoSign(null, Buffer.from(enc), privateKey);
+  return `${enc}.${b64url(signature)}`;
 }
 
 const server = createServer(async (req, res) => {

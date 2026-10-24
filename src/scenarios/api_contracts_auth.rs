@@ -9,7 +9,7 @@ use crate::scenarios::identity_test_support::{
 
 pub async fn framework_errors_and_invalid_json_use_arkret_envelopes() -> Result<()> {
     use arkret_models_collaboration::account_operations::AccountView;
-    use arkret_models_collaboration::authority_commit::SelfAuthoritySubmitRequest;
+    use arkret_models_collaboration::authority_commit::SelfAuthoritySubmitRequestBody;
 
     const EVENTS: &str = "/_arkret/self/events";
     let station = spawn_with_standard_grant_authority("api-errors", &[]).await?;
@@ -43,7 +43,7 @@ pub async fn framework_errors_and_invalid_json_use_arkret_envelopes() -> Result<
     .await?;
 
     // The registered handler distinguishes JSON syntax from the SDK's closed
-    // SelfAuthoritySubmitRequest union after authenticating the actual holder.
+    // SelfAuthoritySubmitRequestBody union after authenticating the actual holder.
     expect_api_error(
         client
             .post(EVENTS)
@@ -82,7 +82,7 @@ pub async fn framework_errors_and_invalid_json_use_arkret_envelopes() -> Result<
     ] {
         let body = serde_json::to_vec(&"x".repeat(length - 2))?;
         assert_eq!(body.len(), length);
-        assert!(serde_json::from_slice::<SelfAuthoritySubmitRequest>(&body).is_err());
+        assert!(serde_json::from_slice::<SelfAuthoritySubmitRequestBody>(&body).is_err());
         expect_api_error(
             client
                 .post(EVENTS)
@@ -313,10 +313,10 @@ pub(crate) async fn contact_command(
     path: &str,
     prepare: serde_json::Value,
     kind: &str,
-) -> Result<arkret::contact_operations::ContactOperationOutcome> {
+) -> Result<arkret::contact_operations::ContactOperationResponseBody> {
     use arkret::contact_operations::{
-        ContactCommitPhase, ContactCommitRequestBody, ContactOperationOutcome,
-        ContactPreparedOutcome,
+        ContactCommitPhase, ContactCommitRequestBody, ContactOperationResponseBody,
+        ContactPreparedResponseBody,
     };
     let operation_id = arkret::ProtocolOperationId::new(crate::harness::next_typed_id("operation"))
         .map_err(anyhow::Error::msg)?;
@@ -326,31 +326,31 @@ pub(crate) async fn contact_command(
     body["phase"] = json!("prepare");
     body["operation_id"] = json!(operation_id);
     body["idempotency_key"] = json!(idempotency_key);
-    let prepared: ContactOperationOutcome =
+    let prepared: ContactOperationResponseBody =
         serde_json::from_value(expect_json(client.post(path).json(&body), StatusCode::OK).await?)?;
     let (reservation_handle, event_draft) = match prepared {
-        ContactOperationOutcome::Prepared { outcome } => match outcome {
-            ContactPreparedOutcome::Request {
+        ContactOperationResponseBody::Prepared { outcome } => match outcome {
+            ContactPreparedResponseBody::Request {
                 reservation_handle,
                 event_draft,
                 ..
             }
-            | ContactPreparedOutcome::Response {
+            | ContactPreparedResponseBody::Response {
                 reservation_handle,
                 event_draft,
                 ..
             }
-            | ContactPreparedOutcome::Reject {
+            | ContactPreparedResponseBody::Reject {
                 reservation_handle,
                 event_draft,
                 ..
             }
-            | ContactPreparedOutcome::ScopeUpdate {
+            | ContactPreparedResponseBody::ScopeUpdate {
                 reservation_handle,
                 event_draft,
                 ..
             }
-            | ContactPreparedOutcome::Tombstone {
+            | ContactPreparedResponseBody::Tombstone {
                 reservation_handle,
                 event_draft,
                 ..
@@ -387,7 +387,7 @@ async fn contact_row(
 }
 
 pub async fn contact_reject_scope_update_and_tombstone_commit_atomically() -> Result<()> {
-    use arkret::contact_operations::{ContactAcceptedOutcome, ContactOperationOutcome};
+    use arkret::contact_operations::{ContactAcceptedResponseBody, ContactOperationResponseBody};
     let station = spawn_with_standard_grant_authority("contact-successors", &[]).await?;
     let server = &station.server;
     let client = |label: &'static str, device: &'static str| {
@@ -430,8 +430,8 @@ pub async fn contact_reject_scope_update_and_tombstone_commit_atomically() -> Re
     .await?;
     assert!(matches!(
         rejected,
-        ContactOperationOutcome::Accepted {
-            outcome: ContactAcceptedOutcome::Reject { .. }
+        ContactOperationResponseBody::Accepted {
+            outcome: ContactAcceptedResponseBody::Reject { .. }
         }
     ));
     assert_eq!(
@@ -465,8 +465,8 @@ pub async fn contact_reject_scope_update_and_tombstone_commit_atomically() -> Re
         .await?;
         assert!(matches!(
             updated,
-            ContactOperationOutcome::Accepted {
-                outcome: ContactAcceptedOutcome::ScopeUpdate { .. }
+            ContactOperationResponseBody::Accepted {
+                outcome: ContactAcceptedResponseBody::ScopeUpdate { .. }
             }
         ));
         let row = contact_row(holder, &peer.actor).await?;
@@ -500,8 +500,8 @@ pub async fn contact_reject_scope_update_and_tombstone_commit_atomically() -> Re
     .await?;
     assert!(matches!(
         tombstoned,
-        ContactOperationOutcome::Accepted {
-            outcome: ContactAcceptedOutcome::Tombstone { .. }
+        ContactOperationResponseBody::Accepted {
+            outcome: ContactAcceptedResponseBody::Tombstone { .. }
         }
     ));
     for (holder, peer) in [(&carol, &erin), (&erin, &carol)] {

@@ -1,10 +1,11 @@
 //! An unchanged active key cannot replay after a verified origin handoff.
 use arkret_models_collaboration::authority_commit::{
-    AuthorityHandoffRequest, HistoricalProducerSignerFactEntry, historical_signer_facts_digest,
+    AuthorityRealmAuthorityHandoffRequestBody, HistoricalProducerSignerFactEntry,
+    historical_signer_facts_digest,
 };
 use arkret_wire::{
-    AuthorityBundleRequest, Base64UrlString, DetachedSignatureContext, Hash, RealmAuthorityHandoff,
-    RealmAuthorityHandoffId, RealmAuthorityTransition,
+    Base64UrlString, DetachedSignatureContext, Hash, RealmAuthorityBundleRequestBody,
+    RealmAuthorityHandoff, RealmAuthorityHandoffId, RealmAuthorityTransition,
 };
 use coland_storage::AuthorityCommitStore;
 use coland_storage_postgres::{Db, PgAuthorityCommitStore, PoolTuning};
@@ -45,7 +46,7 @@ pub async fn run_removed_origin_binding_replay_live() -> Result<()> {
     ensure!(
         matches!(
             replicated.as_slice(),
-            [PeerCommittedReplicationOutcomeRecord::Stored {}]
+            [CommittedEventReplicationOutcome::Stored {}]
         ),
         "verified handoff change was not replicated: {replicated:?}"
     );
@@ -97,10 +98,10 @@ pub async fn run_removed_origin_binding_replay_live() -> Result<()> {
         response.status() == StatusCode::OK,
         "current unchanged key must pass transport authentication"
     );
-    let denied: PeerAuthoritySubmitOutcome = response.json().await?;
+    let denied: PeerAuthoritySubmitResponseBody = response.json().await?;
     ensure!(
-        matches!(&denied, PeerAuthoritySubmitOutcome::CommittedReplication(value)
-        if matches!(value.replication_outcomes.as_slice(), [PeerCommittedReplicationOutcomeRecord::Rejected {reason_code}] if reason_code == "capability_denied")),
+        matches!(&denied, PeerAuthoritySubmitResponseBody::CommittedReplication(value)
+        if matches!(value.replication_outcomes.as_slice(), [CommittedEventReplicationOutcome::Rejected {reason_code}] if reason_code == "capability_denied")),
         "removed origin reused cached success: {denied:?}"
     );
     ensure!(
@@ -146,7 +147,7 @@ pub(crate) async fn activate_realm_successor(
     let typed_realm: RealmId = realm.parse()?;
     let mut nonce_bytes = [0u8; 32];
     getrandom::fill(&mut nonce_bytes).map_err(anyhow::Error::msg)?;
-    let request = AuthorityBundleRequest {
+    let request = RealmAuthorityBundleRequestBody {
         realm_id: typed_realm.clone(),
         nonce: Base64UrlString::new(arkret_canonical::base64url_encode(nonce_bytes))
             .map_err(anyhow::Error::msg)?,
@@ -156,7 +157,7 @@ pub(crate) async fn activate_realm_successor(
         .realm_authority_bundle(&request)
         .await?
         .realm_stream_head;
-    let change = owner.author_event(realm, EventKind::RealmGovernanceStationChange.as_str(), json!({"expected_governance_generation":0,"expected_realm_stream_commit_id":head.commit_id,"new_governance_station_id":new.service_id()})).await?;
+    let change = owner.author_event(realm, EventKind::RealmGovernanceStationChange.as_str(), json!({"expected_governance_generation":"0","expected_realm_stream_commit_id":head.commit_id,"new_governance_station_id":new.service_id()})).await?;
     let changed = submit_and_expect_commit(owner, owner_account, &owner.device_id, &change).await?;
     let db = Db::connect(Some(old_url), PoolTuning::default()).await?;
     let store = PgAuthorityCommitStore {
@@ -279,7 +280,7 @@ pub(crate) async fn activate_realm_successor(
         new_method,
         &new_key,
     )?;
-    let activation = AuthorityHandoffRequest {
+    let activation = AuthorityRealmAuthorityHandoffRequestBody {
         management_private_state: Some(management.clone()),
         pcr_private_state: None,
         handoff,

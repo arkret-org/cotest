@@ -54,14 +54,14 @@ async fn other_controller_content(
         ActorId::account(account.clone()),
         "Independent Sidecar controller",
     );
-    let joined: AuthoritySubmitOutcome = serde_json::from_value(
+    let joined: AuthoritySubmitResponseBody = serde_json::from_value(
         client
             .submit_event(realm.as_str(), "ak.member.state", join.to_value()?)
             .await?,
     )?;
     ensure!(matches!(
         joined,
-        AuthoritySubmitOutcome::Accepted {
+        AuthoritySubmitResponseBody::Accepted {
             status: AuthorityCommitStatus::Committed,
             ..
         }
@@ -97,7 +97,7 @@ async fn other_controller_content(
             strand_id: strand.clone(),
         },
     });
-    let SidecarEnsureOutcome::PreparedNew(prepared) = client
+    let SidecarEnsureResponseBody::PreparedNew(prepared) = client
         .sdk()
         .agent_sidecar_ensure(&client.verify_publication(prepare)?)
         .await?
@@ -121,7 +121,7 @@ async fn other_controller_content(
         create_event: create,
         context_attach_event: attach,
     });
-    let SidecarEnsureOutcome::Accepted(accepted) = client
+    let SidecarEnsureResponseBody::Accepted(accepted) = client
         .sdk()
         .agent_sidecar_ensure(&client.verify_publication(request.clone())?)
         .await?
@@ -258,14 +258,14 @@ async fn other_controller_content(
         controller.actor.clone(),
         "Recheck ordinary controller qualification after departure",
     );
-    let left: AuthoritySubmitOutcome = serde_json::from_value(
+    let left: AuthoritySubmitResponseBody = serde_json::from_value(
         client
             .submit_event(realm.as_str(), "ak.member.state", leave.to_value()?)
             .await?,
     )?;
     ensure!(matches!(
         left,
-        AuthoritySubmitOutcome::Accepted {
+        AuthoritySubmitResponseBody::Accepted {
             status: AuthorityCommitStatus::Committed,
             ..
         }
@@ -323,11 +323,11 @@ async fn advance_epoch_material(
         .sdk()
         .realm_state_snapshot_head(realm_id)
         .await?;
-    let base: arkret_wire::MlsGroupCurrent = snapshot
+    let base: arkret_wire::MlsGroupValue = snapshot
         .current_state_entries
         .iter()
         .find_map(|row| {
-            let arkret_wire::TypedCurrentRow::Value {
+            let arkret_wire::CurrentState::Value {
                 selector: arkret_wire::CurrentSelector::MlsGroup { scope_ref },
                 value,
                 ..
@@ -387,7 +387,7 @@ async fn advance_epoch_material(
     let pending: arkret::MlsGroupStateRecord = serde_json::from_slice(&std::fs::read(&path)?)?;
     *group = arkret::ArkretMlsGroup::restore_from_state_record(&pending)?;
     let submission =
-        arkret_models_collaboration::authority_commit::SelfAuthoritySubmitRequest::MlsCommit(
+        arkret_models_collaboration::authority_commit::SelfAuthoritySubmitRequestBody::MlsCommit(
             arkret_wire::MlsCommitSubmission {
                 commit_event: event.clone(),
                 welcomes: vec![],
@@ -594,13 +594,13 @@ impl JoinObserver for PendingPayload<'_> {
         &self,
         controller: &Member,
         agent: &AgentRuntimeSession,
-        submission: &arkret_models_collaboration::authority_commit::SelfAuthoritySubmitRequest,
+        submission: &arkret_models_collaboration::authority_commit::SelfAuthoritySubmitRequestBody,
         claim_request: &arkret_models_crypto::KeyPackagesClaimRequestBody,
     ) -> Result<()> {
-        use arkret_models_collaboration::authority_commit::SelfAuthoritySubmitRequest;
+        use arkret_models_collaboration::authority_commit::SelfAuthoritySubmitRequestBody;
 
         use crate::scenarios::_helpers::acceptance_footprint::acceptance_rows_with_agent_stores;
-        let SelfAuthoritySubmitRequest::MlsCommit(original) = submission else {
+        let SelfAuthoritySubmitRequestBody::MlsCommit(original) = submission else {
             bail!("actual Add/Welcome submission required")
         };
         ensure!(original.welcomes.len() == 1);
@@ -660,7 +660,7 @@ impl JoinObserver for PendingPayload<'_> {
                 else {
                     bail!("normal controller device claim required")
                 };
-                signature.sig = arkret_wire::Base64UrlString::new(
+                signature.signature = arkret_wire::Base64UrlString::new(
                     URL_SAFE_NO_PAD.encode(controller.key.sign(&bytes).to_bytes()),
                 )
                 .map_err(anyhow::Error::msg)?;
@@ -705,7 +705,7 @@ impl JoinObserver for PendingPayload<'_> {
                 controller
                     .client
                     .post("/_arkret/self/events")
-                    .canonical_json(&SelfAuthoritySubmitRequest::MlsCommit(invalid))?,
+                    .canonical_json(&SelfAuthoritySubmitRequestBody::MlsCommit(invalid))?,
                 status,
                 code,
             )
@@ -1132,7 +1132,7 @@ pub async fn run_agent_content_sidecar_production()
                     realm_id: realm.clone(),
                 },
                 selection: arkret::ParticipationBits {
-                    reply_message: true,
+                    message_creation_allowed: true,
                     ..arkret::ParticipationBits::NONE
                 },
                 expected_version: 0,
@@ -1147,7 +1147,7 @@ pub async fn run_agent_content_sidecar_production()
                 == arkret::ParticipationScope::Realm {
                     realm_id: realm.clone()
                 }
-                && row.selection.reply_message
+                && row.selection.message_creation_allowed
                 && row.version == 1)
     );
     let operation = ProtocolOperationId::new(format!("ak:operation:{}", unique_uuid7()))
@@ -1163,7 +1163,7 @@ pub async fn run_agent_content_sidecar_production()
             strand_id: strand.clone(),
         },
     });
-    let SidecarEnsureOutcome::PreparedNew(prepared) = client
+    let SidecarEnsureResponseBody::PreparedNew(prepared) = client
         .sdk()
         .agent_sidecar_ensure(&client.verify_publication(prepare)?)
         .await?
@@ -1187,7 +1187,7 @@ pub async fn run_agent_content_sidecar_production()
         create_event: create.clone(),
         context_attach_event: attach,
     });
-    let SidecarEnsureOutcome::Accepted(accepted) = client
+    let SidecarEnsureResponseBody::Accepted(accepted) = client
         .sdk()
         .agent_sidecar_ensure(&client.verify_publication(request.clone())?)
         .await?
@@ -1369,7 +1369,7 @@ pub async fn run_agent_content_sidecar_production()
     );
     let (reply, reply_plaintext) =
         agent_message(&agent, &mut agent_group, &state, &strand, &grant)?;
-    let outcome: AuthoritySubmitOutcome = serde_json::from_value(
+    let outcome: AuthoritySubmitResponseBody = serde_json::from_value(
         expect_json(
             write
                 .post("/_arkret/self/events")
@@ -1379,7 +1379,7 @@ pub async fn run_agent_content_sidecar_production()
         .await?,
     )?;
     ensure!(
-        matches!(&outcome, AuthoritySubmitOutcome::Accepted {status:AuthorityCommitStatus::Committed,commit}
+        matches!(&outcome, AuthoritySubmitResponseBody::Accepted {status:AuthorityCommitStatus::Committed,commit}
         if commit.event_ref == reply.event_id && commit.stream_ref == state.commit.stream_ref),
         "Sidecar granted write did not commit: {outcome:?}"
     );

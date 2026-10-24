@@ -1,7 +1,7 @@
 //! Actual account cursor revocation through a durable TLS Station and PostgreSQL.
 
 use anyhow::{Context, Result, ensure};
-use arkret_models_collaboration::sync_frames::account_subscribe::SyncRequestBody;
+use arkret_models_collaboration::sync_frames::account_subscribe::AccountSubscribeParameters;
 use arkret_models_identity::account::{AccountCursorRevokeRequestBody, CursorRevokeScope};
 use arkret_wire::{ErrorCode, ReasonCode};
 use base64::Engine;
@@ -15,7 +15,7 @@ use crate::scenarios::identity_test_support::HARNESS_INTERNAL_AUTHORITY_SECRET;
 async fn cursor(client: &TestActorClient) -> Result<String> {
     Ok(client
         .sdk()
-        .account_subscribe_batch(&SyncRequestBody {
+        .account_subscribe_batch(&AccountSubscribeParameters {
             catchup: Some(true),
             ..Default::default()
         })
@@ -52,7 +52,7 @@ async fn revoked(client: &TestActorClient, token: &str, url: &str) -> Result<()>
     let before = footprint(url).await?;
     let error = client
         .sdk()
-        .account_subscribe_batch(&SyncRequestBody {
+        .account_subscribe_batch(&AccountSubscribeParameters {
             after: Some(token.to_owned()),
             catchup: Some(true),
             ..Default::default()
@@ -152,7 +152,7 @@ pub async fn same_device_distinct_session_cursor_revocation_live() -> Result<()>
     revoked(&first, &first_cursor, &database.connect_url).await?;
     second
         .sdk()
-        .account_subscribe_batch(&SyncRequestBody {
+        .account_subscribe_batch(&AccountSubscribeParameters {
             after: Some(second_cursor.clone()),
             catchup: Some(true),
             ..Default::default()
@@ -164,7 +164,7 @@ pub async fn same_device_distinct_session_cursor_revocation_live() -> Result<()>
     revoked(&first, &first_cursor, &database.connect_url).await?;
     second
         .sdk()
-        .account_subscribe_batch(&SyncRequestBody {
+        .account_subscribe_batch(&AccountSubscribeParameters {
             after: Some(second_cursor),
             catchup: Some(true),
             ..Default::default()
@@ -197,7 +197,7 @@ pub async fn waiting_http_cursor_revocation_live() -> Result<()> {
     let original = cursor(&client).await?;
     let mut body = client
         .sdk()
-        .account_subscribe_frames(&SyncRequestBody {
+        .account_subscribe_frames(&AccountSubscribeParameters {
             after: Some(original.clone()),
             catchup: Some(true),
             ..Default::default()
@@ -579,7 +579,7 @@ async fn issuance_racing_revocation(repeatable_read: bool, realm_list: bool) -> 
     )
     .await?;
     let original = if realm_list {
-        use arkret_models_collaboration::sync_frames::account_subscribe::RealmListRequest;
+        use arkret_models_collaboration::sync_frames::account_subscribe::RealmListParameters;
         for title in [
             "Issuance page alpha",
             "Issuance page beta",
@@ -589,9 +589,9 @@ async fn issuance_racing_revocation(repeatable_read: bool, realm_list: bool) -> 
         }
         let response = client
             .sdk()
-            .account_subscribe_batch(&SyncRequestBody {
+            .account_subscribe_batch(&AccountSubscribeParameters {
                 catchup: Some(true),
-                realm_list: Some(RealmListRequest {
+                realm_list_parameters: Some(RealmListParameters {
                     after: None,
                     limit: Some(1),
                 }),
@@ -671,9 +671,9 @@ async fn issuance_racing_revocation(repeatable_read: bool, realm_list: bool) -> 
         reader
             .sdk()
             .account_subscribe_batch(&if realm_list {
-                use arkret_models_collaboration::sync_frames::account_subscribe::RealmListRequest;
-                SyncRequestBody {
-                    realm_list: Some(RealmListRequest {
+                use arkret_models_collaboration::sync_frames::account_subscribe::RealmListParameters;
+                AccountSubscribeParameters {
+                    realm_list_parameters: Some(RealmListParameters {
                         after: Some(
                             arkret_wire::Cursor::new(after).expect("validated original page token"),
                         ),
@@ -683,7 +683,7 @@ async fn issuance_racing_revocation(repeatable_read: bool, realm_list: bool) -> 
                     ..Default::default()
                 }
             } else {
-                SyncRequestBody {
+                AccountSubscribeParameters {
                     after: Some(after),
                     catchup: Some(true),
                     ..Default::default()
@@ -750,7 +750,7 @@ async fn issuance_racing_revocation(repeatable_read: bool, realm_list: bool) -> 
 }
 
 pub async fn immutable_realm_pages_remain_isolated_live() -> Result<()> {
-    use arkret_models_collaboration::sync_frames::account_subscribe::RealmListRequest;
+    use arkret_models_collaboration::sync_frames::account_subscribe::RealmListParameters;
     let database = database("cursor-old-page-isolation")?.context("real PostgreSQL required")?;
     let issuer = MockCoauthIntrospectionServer::spawn_with_internal_secret(
         HARNESS_INTERNAL_AUTHORITY_SECRET,
@@ -774,9 +774,9 @@ pub async fn immutable_realm_pages_remain_isolated_live() -> Result<()> {
     }
     let first = client
         .sdk()
-        .account_subscribe_batch(&SyncRequestBody {
+        .account_subscribe_batch(&AccountSubscribeParameters {
             catchup: Some(true),
-            realm_list: Some(RealmListRequest {
+            realm_list_parameters: Some(RealmListParameters {
                 after: None,
                 limit: Some(1),
             }),
@@ -794,9 +794,9 @@ pub async fn immutable_realm_pages_remain_isolated_live() -> Result<()> {
         .next_cursor
         .clone()
         .context("actual continuation from at least three Realm rows")?;
-    let request = SyncRequestBody {
+    let request = AccountSubscribeParameters {
         catchup: Some(true),
-        realm_list: Some(RealmListRequest {
+        realm_list_parameters: Some(RealmListParameters {
             after: Some(arkret_wire::Cursor::new(page_cursor.clone())?),
             limit: Some(1),
         }),
@@ -864,9 +864,9 @@ pub async fn immutable_realm_pages_remain_isolated_live() -> Result<()> {
     );
     client
         .sdk()
-        .account_subscribe_batch(&SyncRequestBody {
+        .account_subscribe_batch(&AccountSubscribeParameters {
             catchup: Some(true),
-            realm_list: Some(RealmListRequest {
+            realm_list_parameters: Some(RealmListParameters {
                 after: Some(arkret_wire::Cursor::new(later)?),
                 limit: Some(1),
             }),
@@ -917,7 +917,7 @@ pub async fn legal_expired_wire_precedes_binding_and_revocation_live() -> Result
     let before = footprint(&database.connect_url).await?;
     let error = bob
         .sdk()
-        .account_subscribe_batch(&SyncRequestBody {
+        .account_subscribe_batch(&AccountSubscribeParameters {
             after: Some(original.clone()),
             catchup: Some(true),
             ..Default::default()
@@ -950,7 +950,7 @@ pub async fn legal_expired_wire_precedes_binding_and_revocation_live() -> Result
             let before = footprint(&database.connect_url).await?;
             let error = client
                 .sdk()
-                .account_subscribe_batch(&SyncRequestBody {
+                .account_subscribe_batch(&AccountSubscribeParameters {
                     after: Some(token.clone()),
                     catchup: Some(true),
                     ..Default::default()
@@ -986,7 +986,7 @@ pub async fn legal_expired_wire_precedes_binding_and_revocation_live() -> Result
 pub async fn immutable_cursor_cost_live() -> Result<()> {
     use std::time::Instant;
 
-    use arkret_models_collaboration::sync_frames::account_subscribe::RealmListRequest;
+    use arkret_models_collaboration::sync_frames::account_subscribe::RealmListParameters;
     use coland_storage::SyncCursorStore;
     fn latency(mut values: Vec<f64>) -> Value {
         values.sort_by(f64::total_cmp);
@@ -1016,9 +1016,9 @@ pub async fn immutable_cursor_cost_live() -> Result<()> {
     }
     let first = client
         .sdk()
-        .account_subscribe_batch(&SyncRequestBody {
+        .account_subscribe_batch(&AccountSubscribeParameters {
             catchup: Some(true),
-            realm_list: Some(RealmListRequest {
+            realm_list_parameters: Some(RealmListParameters {
                 after: None,
                 limit: Some(1),
             }),
@@ -1031,9 +1031,9 @@ pub async fn immutable_cursor_cost_live() -> Result<()> {
         .find_map(|frame| frame.realm_list.as_ref())
         .and_then(|page| page.next_cursor.clone())
         .context("actual page handle")?;
-    let request = SyncRequestBody {
+    let request = AccountSubscribeParameters {
         catchup: Some(true),
-        realm_list: Some(RealmListRequest {
+        realm_list_parameters: Some(RealmListParameters {
             after: Some(arkret_wire::Cursor::new(original.clone())?),
             limit: Some(1),
         }),

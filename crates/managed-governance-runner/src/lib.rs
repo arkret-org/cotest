@@ -35,7 +35,7 @@ fn sdk_device_signature_kat(fixture: &Value) -> Result<()> {
     let encoded = metadata.to_header_value()?;
     ensure!(encoded == text(&case["components"], "arkret-managed-device")?);
     ensure!(AppletManagedDeviceMetadata::from_header_value(&encoded)? == metadata);
-    let key = public_key_from_bytes(&base64url_decode(text(case, "public_key_b64u")?)?)?;
+    let key = public_key_from_bytes(&base64url_decode(text(case, "public_key_base64url")?)?)?;
     let mut headers: Vec<(String, String)> = case["components"]
         .as_object()
         .context("covered components")?

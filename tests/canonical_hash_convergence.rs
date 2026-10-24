@@ -325,7 +325,7 @@ fn pinned_r3_2_inputs() -> (
         .unwrap(),
         status: HandleClaimStatus::Verified,
         revocation_digest: None,
-        fresh_until: chrono::TimeZone::with_ymd_and_hms(&chrono::Utc, 2026, 6, 20, 0, 0, 0)
+        cache_expires_at: chrono::TimeZone::with_ymd_and_hms(&chrono::Utc, 2026, 6, 20, 0, 0, 0)
             .single()
             .unwrap(),
     }];

@@ -34,7 +34,7 @@ use arkret_models_crypto::{
 };
 use arkret_wire::{
     AccountId, ActorId, Base64UrlString, CommittedEventFullView, DetachedSignatureContext,
-    DeviceId, DidCoreId, DidUrl, Event, EventId, EventKind, KeypackageClaimId, MlsGroupCurrent,
+    DeviceId, DidCoreId, DidUrl, Event, EventId, EventKind, KeypackageClaimId, MlsGroupValue,
     MlsWelcomeDelivery, MlsWelcomeDeliveryId, MlsWelcomeRecipientEndpoint, RealmId, ScopeRef,
 };
 use base64::Engine as _;
@@ -159,7 +159,7 @@ pub fn mls_genesis(input: Value) -> Result<Value> {
         "MLS Genesis creator leaf does not belong to the creating device"
     );
     let creator_leaf_authority = MlsGenesisCreatorLeafAuthority {
-        leaf_signature_key_b64u: creator.signature_key.clone(),
+        leaf_signature_key_base64url: creator.signature_key.clone(),
         endpoint: MlsWelcomeRecipientEndpoint::Device {
             device_id: device_id.clone(),
         },
@@ -247,7 +247,7 @@ pub fn mls_keypackage_claim_request(input: Value) -> Result<Value> {
             "signature": {
                 "kid": requester.verification_method,
                 "signature_algorithm": "Ed25519",
-                "sig": "AA",
+                "signature": "AA",
             },
         },
     }))
@@ -262,7 +262,7 @@ pub fn mls_keypackage_claim_request(input: Value) -> Result<Value> {
     else {
         bail!("the claim request was built with the device branch");
     };
-    signature.sig = Base64UrlString::new(encode_b64(
+    signature.signature = Base64UrlString::new(encode_b64(
         &signing_key(&requester.signing_seed_b64url)?
             .sign(&bytes)
             .to_bytes(),
@@ -328,7 +328,7 @@ pub fn mls_add_member(input: Value) -> Result<Value> {
         "commit_payload": payload,
         "welcome": {
             "keypackage_claim_ref": add.welcome.keypackage_claim_ref,
-            "ciphertext_b64": add.welcome.ciphertext_b64,
+            "ciphertext_base64url": add.welcome.ciphertext_base64url,
         },
         "group_state": encode_group(&group)?,
     }))
@@ -338,7 +338,7 @@ pub fn mls_add_member(input: Value) -> Result<Value> {
 #[serde(deny_unknown_fields)]
 struct WelcomeDraftInput {
     keypackage_claim_ref: KeypackageClaimId,
-    ciphertext_b64: Base64UrlString,
+    ciphertext_base64url: Base64UrlString,
 }
 
 #[derive(Deserialize)]
@@ -379,7 +379,7 @@ pub fn mls_welcome_delivery(input: Value) -> Result<Value> {
             device_id: input.recipient_device_id,
         },
         keypackage_claim_ref: input.welcome.keypackage_claim_ref,
-        ciphertext_b64: input.welcome.ciphertext_b64,
+        ciphertext_base64url: input.welcome.ciphertext_base64url,
         // Replaced below: the proof signs the projection without itself.
         producer_proof: arkret_wire::DetachedObjectSignature {
             context: DetachedSignatureContext::MlsWelcomeDelivery,
@@ -387,7 +387,7 @@ pub fn mls_welcome_delivery(input: Value) -> Result<Value> {
             verification_method: method.clone(),
             signed_digest: arkret_wire::Hash::new(format!("sha256:{}", "0".repeat(64)))?,
             created_at: chrono::Utc::now(),
-            sig: Base64UrlString::new("AA".to_owned()).map_err(anyhow::Error::msg)?,
+            signature: Base64UrlString::new("AA".to_owned()).map_err(anyhow::Error::msg)?,
         },
     };
     delivery.producer_proof = arkret_signatures::detached_object::sign_detached_object(
@@ -406,7 +406,7 @@ pub fn mls_welcome_delivery(input: Value) -> Result<Value> {
 struct InstallCommitInput {
     group_state: String,
     accepted_commit: CommittedEventFullView,
-    base: MlsGroupCurrent,
+    base: MlsGroupValue,
     members: Vec<LeafMemberInput>,
 }
 
@@ -579,7 +579,7 @@ pub fn mls_open_signals(input: Value) -> Result<Value> {
             envelope.parent_realm_authority_commit_id == input.parent_realm_authority_commit_id,
             "Signal parent cut mismatch"
         );
-        let raw: [u8; 32] = decode_b64(delivery_authority.key.public_key_b64u.as_str())?
+        let raw: [u8; 32] = decode_b64(delivery_authority.key.public_key_base64url.as_str())?
             .try_into()
             .map_err(|_| anyhow::anyhow!("invalid Signal public key"))?;
         let public_key = arkret_signatures::PublicKeyMaterial::Ed25519Raw {
@@ -836,9 +836,10 @@ mod scope_tests {
         else {
             panic!("expected signed device claim");
         };
-        let signature =
-            ed25519_dalek::Signature::from_slice(&decode_b64(signature.sig.as_str()).unwrap())
-                .unwrap();
+        let signature = ed25519_dalek::Signature::from_slice(
+            &decode_b64(signature.signature.as_str()).unwrap(),
+        )
+        .unwrap();
         SigningKey::from_bytes(&[7; 32])
             .verifying_key()
             .verify(&bytes, &signature)
@@ -870,12 +871,12 @@ mod scope_tests {
             "encrypted_payload": {
                 "scheme": "ak.signal_exporter_aead.v1", "key_ref": {"group_state_ref": state_ref},
                 "purpose": "ak.signal.v1", "aead_profile": genesis["cipher_suite"],
-                "epoch": 0, "nonce": encode_b64(&[0; 12]), "ciphertext": encode_b64(&[0; 16]),
+                "epoch": "0", "nonce": encode_b64(&[0; 12]), "ciphertext": encode_b64(&[0; 16]),
             },
             "proof": {"kind": "detached_jws", "verification_method": format!("did:web:alice.example#{}", endpoint["device_id"].as_str().unwrap()),
                 "envelope_digest": format!("sha256:{}", "0".repeat(64)), "jws": ""},
         })).unwrap();
-        let plaintext = json!({"kind": "ak.receipt.read", "payload_sequence": 1,
+        let plaintext = json!({"kind": "ak.receipt.read", "payload_sequence": "1",
             "actor_id": endpoint["actor_id"], "event_id": state_ref, "read_scope": {"kind": "realm"}});
         let sealed = mls_encrypt_signal(json!({"group_state": genesis["group_state"],
             "envelope": envelope, "plaintext": plaintext}))
@@ -893,8 +894,8 @@ mod scope_tests {
                 "{header}.{}",
                 encode_b64(&envelope.proof_binding_bytes().unwrap())
             );
-            let sig = SigningKey::from_bytes(&[7; 32]).sign(input.as_bytes());
-            envelope.proof.jws = format!("{header}..{}", encode_b64(&sig.to_bytes()));
+            let signature = SigningKey::from_bytes(&[7; 32]).sign(input.as_bytes());
+            envelope.proof.jws = format!("{header}..{}", encode_b64(&signature.to_bytes()));
         };
         sign(&mut envelope);
         let recipient: AccountId =
@@ -903,7 +904,7 @@ mod scope_tests {
             json!({"kind":"signal", "envelope": envelope,
             "delivery_authority": {"recipient_account_id": recipient, "key": {
                 "actor": endpoint["actor_id"], "verification_method": envelope.proof.verification_method,
-                "public_key_b64u": encode_b64(SigningKey::from_bytes(&[7;32]).verifying_key().as_bytes()),
+                "public_key_base64url": encode_b64(SigningKey::from_bytes(&[7;32]).verifying_key().as_bytes()),
                 "authorization_ref": authorization}}})
         };
         let mut input = json!({"group_state": genesis["group_state"], "recipient_account_id": recipient,

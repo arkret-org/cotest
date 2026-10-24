@@ -15,7 +15,7 @@ use crate::scenarios::mls_lifecycle_live::Member;
 
 pub(crate) struct ScopePolicyRestartProbe {
     realm: RealmId,
-    rows: Vec<arkret_wire::TypedCurrentRow>,
+    rows: Vec<arkret_wire::CurrentState>,
 }
 
 impl ScopePolicyRestartProbe {
@@ -36,11 +36,11 @@ async fn verified_policy_rows(
     source: &Member,
     holder: &Member,
     realm: &RealmId,
-) -> Result<Vec<arkret_wire::TypedCurrentRow>> {
+) -> Result<Vec<arkret_wire::CurrentState>> {
     let http = holder.client.sdk();
     let snapshot = http.realm_state_snapshot_head(realm).await?;
     use sha2::Digest as _;
-    let request = arkret_wire::AuthorityBundleRequest {
+    let request = arkret_wire::RealmAuthorityBundleRequestBody {
         realm_id: realm.clone(),
         nonce: arkret_wire::Base64UrlString::new(arkret_canonical::base64url_encode(
             sha2::Sha256::digest(arkret_identifiers::new_prefixed_uuid7("ak:request:")),
@@ -64,7 +64,7 @@ async fn verified_policy_rows(
         .filter(|row| {
             matches!(
                 row,
-                arkret_wire::TypedCurrentRow::Value {
+                arkret_wire::CurrentState::Value {
                     selector: arkret_wire::CurrentSelector::ScopeReadReceiptPolicy { .. },
                     ..
                 }
@@ -73,7 +73,7 @@ async fn verified_policy_rows(
         .collect::<Vec<_>>();
     rows.sort_by_key(|row| arkret_canonical::canonical_json_bytes(row).unwrap());
     for row in &rows {
-        let current: arkret_models_collaboration::events_payloads::ScopeReadReceiptPolicyCurrent =
+        let current: arkret_models_collaboration::events_payloads::CurrentScopeReadReceiptPolicy =
             serde_json::from_value(serde_json::to_value(row)?)?;
         current.validate()?;
     }
@@ -132,7 +132,7 @@ pub(super) async fn scope_policy_acceptance(
             "scope policy created, hid or merged another scope row"
         );
         for row in rows {
-            let arkret_wire::TypedCurrentRow::Value {
+            let arkret_wire::CurrentState::Value {
                 selector,
                 source_stream_ref,
                 revision,
@@ -159,7 +159,7 @@ pub(super) async fn scope_policy_acceptance(
         outside.len() == 1
             && matches!(
                 &outside[0],
-                arkret_wire::TypedCurrentRow::Value {
+                arkret_wire::CurrentState::Value {
                     selector: arkret_wire::CurrentSelector::ScopeReadReceiptPolicy {
                         scope_ref: ScopeRef::Realm { .. }
                     },
@@ -289,7 +289,7 @@ pub(super) async fn deliver(
         "receipt relay changed its exact bytes or original accepted Device authority"
     );
     let public = arkret_signatures::PublicKeyMaterial::Ed25519Raw {
-        bytes: arkret_canonical::base64url_decode(authority.key.public_key_b64u.as_str())?,
+        bytes: arkret_canonical::base64url_decode(authority.key.public_key_base64url.as_str())?,
     };
     let mut replay = arkret::AeadNonceReplayTracker::default();
     let bytes = receiver_group.open_signal_envelope(
@@ -509,7 +509,7 @@ pub(super) async fn run(ctx: &mut MlsApiContext<'_>) -> Result<()> {
             .realm_state_snapshot_head(ctx.realm)
             .await?;
         use sha2::Digest as _;
-        let request = arkret_wire::AuthorityBundleRequest {
+        let request = arkret_wire::RealmAuthorityBundleRequestBody {
             realm_id: ctx.realm.clone(),
             nonce: arkret_wire::Base64UrlString::new(arkret_canonical::base64url_encode(
                 sha2::Sha256::digest(arkret_identifiers::new_prefixed_uuid7("ak:request:")),

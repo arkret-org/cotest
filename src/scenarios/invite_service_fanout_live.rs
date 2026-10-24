@@ -23,8 +23,8 @@ use anyhow::{Context, Result, anyhow, bail, ensure};
 use arkret_identifiers::{DidCoreId, InviteId};
 use arkret_models_collaboration::consent_operations::{ConsentReplaceRequestBody, ConsentView};
 use arkret_models_collaboration::device_messages::{
-    DeviceMessageEnvelope, DeviceMessageSender, DeviceMessagesAckRequestBody,
-    DeviceMessagesGetOutcome, RecipientDelivery,
+    DeviceMessageEnvelope, DeviceMessageSender, DeviceMessagesAcknowledgementRequestBody,
+    DeviceMessagesGetResponseBody, RecipientDelivery,
 };
 use arkret_models_collaboration::events_payloads::consent::{
     ConsentExpectedCurrent, ConsentPeer, ConsentPermission, ConsentReplacePayload,
@@ -263,7 +263,7 @@ async fn receive_verified_fanout_batch(
     tracker: &mut FanoutTracker,
 ) -> Result<Vec<DeviceMessageEnvelope>> {
     let polled = expect_json(holder.get("/_arkret/self/device_messages"), StatusCode::OK).await?;
-    let outcome: DeviceMessagesGetOutcome = serde_json::from_value(polled.clone())
+    let outcome: DeviceMessagesGetResponseBody = serde_json::from_value(polled.clone())
         .with_context(|| format!("to-device response is not closed SDK wire data: {polled}"))?;
     ensure!(
         outcome.lost != Some(true),
@@ -323,10 +323,12 @@ async fn receive_verified_fanout_batch(
         );
         return Ok(messages);
     }
-    let ack_token = outcome
-        .ack_token
-        .context("non-empty to-device response omitted ack_token")?;
-    let ack_request = DeviceMessagesAckRequestBody { ack_token };
+    let acknowledgement_token = outcome
+        .acknowledgement_token
+        .context("non-empty to-device response omitted acknowledgement_token")?;
+    let ack_request = DeviceMessagesAcknowledgementRequestBody {
+        acknowledgement_token,
+    };
     let ack_raw = expect_json(
         holder
             .post("/_arkret/self/device_messages/ack")
@@ -334,13 +336,13 @@ async fn receive_verified_fanout_batch(
         StatusCode::OK,
     )
     .await?;
-    let ack: arkret_models_collaboration::device_messages::DeviceMessagesAckOutcome =
+    let ack: arkret_models_collaboration::device_messages::DeviceMessagesAcknowledgementResponseBody =
         serde_json::from_value(ack_raw)?;
     ensure!(
         ack.pruned_count == messages.len() as u64,
         "to-device ACK did not prune exactly the fully verified batch"
     );
-    let repeated: arkret_models_collaboration::device_messages::DeviceMessagesAckOutcome =
+    let repeated: arkret_models_collaboration::device_messages::DeviceMessagesAcknowledgementResponseBody =
         serde_json::from_value(
             expect_json(
                 holder
@@ -428,7 +430,7 @@ pub(crate) async fn read_consent_set(
     peer: &ConsentPeer,
 ) -> Result<(ConsentExpectedCurrent, Vec<ConsentPermission>)> {
     use arkret_models_collaboration::call_invitation::{
-        ConsentCurrentReadRequestBody, ConsentCurrentState,
+        ConsentCurrentReadRequestBody, ConsentCurrentReadState,
     };
     let principal = holder.principal.as_ref().context("holder has no PCR")?;
     let account = AccountId::new(
@@ -456,8 +458,10 @@ pub(crate) async fn read_consent_set(
         "a malformed Consent current proof supplied an editing prestate"
     );
     match outcome.current {
-        ConsentCurrentState::NeverWritten => Ok((ConsentExpectedCurrent::NeverWritten, vec![])),
-        ConsentCurrentState::Present { result } => Ok((
+        ConsentCurrentReadState::NeverWritten => Ok((ConsentExpectedCurrent::NeverWritten, vec![])),
+        ConsentCurrentReadState::Present {
+            current_state: result,
+        } => Ok((
             ConsentExpectedCurrent::Present {
                 revision: result.revision,
             },
@@ -862,7 +866,7 @@ pub async fn invite_service_fanout_live_run() -> Result<()> {
             StatusCode::OK,
         )
         .await?;
-        let drained: DeviceMessagesGetOutcome = serde_json::from_value(drained)?;
+        let drained: DeviceMessagesGetResponseBody = serde_json::from_value(drained)?;
         ensure!(
             drained.lost != Some(true) && !drained.has_more,
             "final fanout poll lost or omitted deliveries"
@@ -1331,7 +1335,7 @@ async fn generic_consent_opaque_timings(
             requests[class].idempotency_key = format!("consent-opaque-{class}-{sample}");
             let started = Instant::now();
             let client = if class == 0 { revoked } else { &never };
-            let response:arkret_models_collaboration::governance::invite_addressing::InviteDeliveryOutcome=serde_json::from_value(expect_json(client.post("/_arkret/self/invites/dispatch").json(&requests[class]),StatusCode::OK).await?)?;
+            let response:arkret_models_collaboration::governance::invite_addressing::InviteDeliveryResponseBody=serde_json::from_value(expect_json(client.post("/_arkret/self/invites/dispatch").json(&requests[class]),StatusCode::OK).await?)?;
             let elapsed = started.elapsed().as_secs_f64();
             ensure!(response.status==arkret_models_collaboration::governance::invite_addressing::InviteDeliveryOutcomeStatus::Deferred && response.disclosed_outcome.is_none() && response.retry_after_ms.is_none(),"generic Invite disclosed Consent history");
             if sample >= 2 {

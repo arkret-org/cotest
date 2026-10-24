@@ -354,7 +354,7 @@ impl ServiceRouteSigner {
                     .try_into()
                     .context("fixture update seed length")?,
                 next_update_public_key_multibase: &following,
-                version_time: at,
+                version_created_at: at,
             },
         )?;
         Ok(self

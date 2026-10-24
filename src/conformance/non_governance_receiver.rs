@@ -15,7 +15,7 @@
 //! `arkret_identity::verify_realm_authority_bundle` and
 //! `VerifiedRealmAuthority::verify_commit`, over a real two-generation chain
 //! (genesis under Station A, a doubly signed handoff to Station B) with real
-//! Ed25519 keys, the `PeerAuthoritySubmitRequest` wire parser and the
+//! Ed25519 keys, the `PeerAuthoritySubmitRequestBody` wire parser and the
 //! `CommittedEventSubmission` binding check. This module models the receiver
 //! around them — its replica stream head, its local PCR and its write ledger —
 //! and compares the rendered outcome of every registered variant with the
@@ -31,7 +31,7 @@ use arkret_identity::{
     VerifiedRealmAuthority, build_authenticated_did_web_service_resolution,
     verify_realm_authority_bundle,
 };
-use arkret_models_collaboration::authority_commit::PeerAuthoritySubmitRequest;
+use arkret_models_collaboration::authority_commit::PeerAuthoritySubmitRequestBody;
 use arkret_models_collaboration::events_payloads::{
     RealmCreatePayload, RealmGenesis, RealmGovernanceStationChangePayload, RealmPurpose,
 };
@@ -300,12 +300,12 @@ impl Receiver {
     /// Receive the exact `committed_replication` bytes the governance Station
     /// sent.
     fn replicate(&mut self, body: &Value) -> Result<Vec<KeySource>> {
-        let request: PeerAuthoritySubmitRequest = serde_json::from_value(body.clone())
+        let request: PeerAuthoritySubmitRequestBody = serde_json::from_value(body.clone())
             .context("committed_replication body does not parse")?;
-        let PeerAuthoritySubmitRequest::CommittedReplication(request) = &request else {
+        let PeerAuthoritySubmitRequestBody::CommittedReplication(request) = &request else {
             bail!("the member Station model receives committed_replication only");
         };
-        PeerAuthoritySubmitRequest::CommittedReplication(request.clone())
+        PeerAuthoritySubmitRequestBody::CommittedReplication(request.clone())
             .validate()
             .context("committed_replication request is not valid")?;
         let mut sources = Vec::new();
@@ -761,7 +761,7 @@ fn execute_variant(world: &World, name: &str) -> Result<Value> {
         "governance_commit_signature_invalid" => {
             let event = world.foreign_message()?;
             let mut commit = world.governance_commit(&event)?;
-            commit.signature.sig = flip_first_char(&commit.signature.sig)?;
+            commit.signature.signature = flip_first_char(&commit.signature.signature)?;
             replicate(world, &event, &commit)
         }
         "commit_signed_by_non_current_governance_station" => {
@@ -875,7 +875,7 @@ fn placeholder_signature(context: DetachedSignatureContext) -> Result<DetachedOb
         verification_method: method(STATION_A)?,
         signed_digest: hash('1')?,
         created_at: DateTime::parse_from_rfc3339(CHAIN_START)?.to_utc(),
-        sig: b64u("A".repeat(86))?,
+        signature: b64u("A".repeat(86))?,
     })
 }
 

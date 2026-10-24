@@ -74,9 +74,9 @@ pub(super) async fn add_other(
     let url = database_url.to_owned();
     let realm_text = realm.to_string();
     let scope_value = serde_json::to_value(&scope)?;
-    let base: arkret_wire::MlsGroupCurrent = tokio::task::spawn_blocking(move || -> Result<_> {
+    let base: arkret_wire::MlsGroupValue = tokio::task::spawn_blocking(move || -> Result<_> {
         let mut db = postgres::Client::connect(&url, postgres::NoTls)?;
-        let rows = db.query("SELECT value FROM mls_group_current_results WHERE realm_id=$1 AND value->'effective_scope'=$2", &[&realm_text, &scope_value])?;
+        let rows = db.query("SELECT value FROM mls_group_current_states WHERE realm_id=$1 AND value->'effective_scope'=$2", &[&realm_text, &scope_value])?;
         ensure!(rows.len() == 1, "actual governing MLS current must be unique");
         Ok(serde_json::from_value(rows[0].get(0))?)
     }).await??;
@@ -110,7 +110,7 @@ pub(super) async fn add_other(
         )
         .await?;
     let welcome = signed_welcome(sender, &event, other, &add.welcome)?;
-    let submission = SelfAuthoritySubmitRequest::MlsCommit(MlsCommitSubmission {
+    let submission = SelfAuthoritySubmitRequestBody::MlsCommit(MlsCommitSubmission {
         commit_event: event.clone(),
         welcomes: vec![welcome.clone()],
         idempotency_key: arkret_wire::UuidV7::new(fresh_uuid_v7().parse()?)?,

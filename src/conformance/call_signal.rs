@@ -2,7 +2,7 @@
 //! (`crypto-media/webrtc-signaling.md` §5).
 //!
 //! Call signaling rides the encrypted-only Signal rail. The outer envelope
-//! exposes nothing but `signal_class`; `call_id`, `signal_kind`, `seq`, SDP
+//! exposes nothing but `signal_class`; `call_id`, `signal_kind`, `sequence`, SDP
 //! and ICE candidates all live inside `encrypted_payload`, and the service
 //! must neither see nor route on them. Every receiver check therefore happens
 //! after decryption — except the ones the outer envelope itself carries
@@ -111,11 +111,11 @@ pub fn run_signal_kind_enum_vector() -> Result<()> {
 }
 
 /// The decrypted call plaintext is a closed SDK-owned schema. In particular,
-/// `payload_sequence` and the per-call `seq` are independent required axes.
+/// `payload_sequence` and the per-call `sequence` are independent required axes.
 pub fn run_plaintext_closed_schema_vector() -> Result<()> {
     let valid = call_signal_plaintext("candidate", 3);
     let decoded = decode_call_signal_plaintext(&valid)?;
-    if decoded.payload_sequence != 11 || decoded.seq != 3 {
+    if decoded.payload_sequence != 11 || decoded.sequence != 3 {
         bail!("call signal sequence axes did not survive SDK decoding");
     }
 
@@ -140,7 +140,7 @@ pub fn run_plaintext_closed_schema_vector() -> Result<()> {
 
 // ─── VECT-CS-2 — seq_monotonic (receiver-side rollback rejection) ──────────
 
-/// `seq` is strictly increasing per `(realm_id, call_id, actor_id, device_id)`
+/// `sequence` is strictly increasing per `(realm_id, call_id, actor_id, device_id)`
 /// (§5). The receiver MUST accept an ascending stream and MUST drop a rollback
 /// or a repeat. The frontier is not advanced by a dropped frame.
 pub fn run_seq_monotonic_vector() -> Result<()> {
@@ -156,16 +156,16 @@ pub fn run_seq_monotonic_vector() -> Result<()> {
         .map_err(|err| anyhow!("first observation must accept: {err}"))?;
     observe_seq(&mut frontier, &key, 2).map_err(|err| anyhow!("ascending must accept: {err}"))?;
     if observe_seq(&mut frontier, &key, 2).is_ok() {
-        bail!("repeat seq (2 after 2) must be rejected as a rollback");
+        bail!("repeat sequence (2 after 2) must be rejected as a rollback");
     }
     if observe_seq(&mut frontier, &key, 1).is_ok() {
-        bail!("rollback seq (1 after 2) must be rejected");
+        bail!("rollback sequence (1 after 2) must be rejected");
     }
     // The dropped frames must not have moved the frontier: a fresh 3 advances.
     observe_seq(&mut frontier, &key, 3)
-        .map_err(|err| anyhow!("seq 3 after dropped rollbacks must accept: {err}"))?;
+        .map_err(|err| anyhow!("sequence 3 after dropped rollbacks must accept: {err}"))?;
 
-    // The key is a four-tuple: the same seq on a different device is a
+    // The key is a four-tuple: the same sequence on a different device is a
     // different stream and must not be suppressed by the first device's
     // frontier.
     let sibling = CallSignalSeqKey {
@@ -394,19 +394,19 @@ struct CallSignalSeqKey {
 fn observe_seq(
     frontier: &mut BTreeMap<CallSignalSeqKey, u64>,
     key: &CallSignalSeqKey,
-    seq: u64,
+    sequence: u64,
 ) -> Result<()> {
     if let Some(previous) = frontier.get(key)
-        && seq <= *previous
+        && sequence <= *previous
     {
-        bail!("call signal seq {seq} does not advance the frontier {previous}");
+        bail!("call signal sequence {sequence} does not advance the frontier {previous}");
     }
-    frontier.insert(key.clone(), seq);
+    frontier.insert(key.clone(), sequence);
     Ok(())
 }
 
 /// The closed decrypted plaintext object of §5.
-fn call_signal_plaintext(signal_kind: &str, seq: u64) -> Value {
+fn call_signal_plaintext(signal_kind: &str, sequence: u64) -> Value {
     let data = match signal_kind {
         "invite" => json!({
             "lifetime_ms": 60_000,
@@ -424,10 +424,10 @@ fn call_signal_plaintext(signal_kind: &str, seq: u64) -> Value {
     };
     json!({
         "kind": "ak.call.signal",
-        "payload_sequence": 11,
+        "payload_sequence": "11",
         "call_id": "ak:call:AYf05kF8z4cSo8r6qmqXgu4KPuv2YtKBlsE00FOmblaz",
         "signal_kind": signal_kind,
-        "seq": seq,
+        "sequence": sequence,
         "data": data
     })
 }

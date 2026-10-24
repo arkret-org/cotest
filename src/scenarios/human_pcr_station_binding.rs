@@ -3,7 +3,9 @@
 mod recovery;
 
 use anyhow::{Context, Result, ensure};
-use arkret_wire::{AuthorityBundleRequest, Base64UrlString, EventAdmissionSubmission, EventKind};
+use arkret_wire::{
+    Base64UrlString, EventAdmissionSubmission, EventKind, RealmAuthorityBundleRequestBody,
+};
 use coland_storage::AuthorityCommitStore;
 use coland_storage_postgres::{Db, PgAuthorityCommitStore, PoolTuning};
 
@@ -53,7 +55,7 @@ pub async fn assert_station_binding(
                 }
         })
         .context("PCR Realm head")?;
-    let change=holder.client.author_event(realm.as_str(),EventKind::RealmGovernanceStationChange.as_str(),serde_json::json!({"expected_governance_generation":0,"expected_realm_stream_commit_id":head.commit_id,"new_governance_station_id":context.stations.server(to).service_id()})).await?;
+    let change=holder.client.author_event(realm.as_str(),EventKind::RealmGovernanceStationChange.as_str(),serde_json::json!({"expected_governance_generation":"0","expected_realm_stream_commit_id":head.commit_id,"new_governance_station_id":context.stations.server(to).service_id()})).await?;
     crate::harness::expect_api_error(
         holder
             .client
@@ -82,7 +84,7 @@ pub async fn assert_station_binding(
         store.current_authority(realm).await?.as_ref() == Some(&authority),
         "rejected transfer changed its authority"
     );
-    let request = AuthorityBundleRequest {
+    let request = RealmAuthorityBundleRequestBody {
         realm_id: realm.clone(),
         nonce: Base64UrlString::new(arkret_canonical::base64url_encode([4u8; 32]))
             .map_err(anyhow::Error::msg)?,
@@ -95,7 +97,7 @@ pub async fn assert_station_binding(
         .await?;
     let hidden_status = hidden.status();
     let mut hidden_body: serde_json::Value = hidden.json().await?;
-    let unknown = AuthorityBundleRequest {
+    let unknown = RealmAuthorityBundleRequestBody {
         realm_id: arkret_wire::RealmId::from_event_id(&arkret_wire::EventId::from_digest(
             arkret_canonical::DigestSuite::Sha256,
             [99; 32],
@@ -307,7 +309,7 @@ pub async fn run_coauth_device_boundary_live() -> Result<()> {
         transaction.accepted_steps.len() == 4,
         "native rotation aborted: {transaction:?}"
     );
-    let arkret_models_crypto::SecurityTransactionCreateRequest::SecurityRotation(rotation) =
+    let arkret_models_crypto::SecurityTransactionCreateRequestBody::SecurityRotation(rotation) =
         &request
     else {
         anyhow::bail!("not a rotation");

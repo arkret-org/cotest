@@ -45,7 +45,7 @@ alice 触发 GDPR 数据导出 → 拿到完整个人数据 JSON;触发 erasure 
 9. 确认对话框 → 走 spec 定义的 Account Authority 入口 `ak.gate.account.command.request_erasure.v1`（`identity/account-lifecycle.md` §8.1），即 `POST /_arkret/gate/account/erasure-requests`（fresh high-risk authentication + durable 记录意图）。**已移除的私有轨 `/_coland/self/account/erase` 不再存在，不得引用**
 10. Account Authority 签发 `erasure_pending` AccountStatusRecord → `ak.peer.account_status.command.submit.v1` → 异步 durable execution → `ak.peer.erasure_receipt.command.submit.v1` 验收，coland 返回 `ak.schema.erasure_receipt.v1`
 11. coland 后台任务执行:
-    - 删除 alice 的 PII(display_name、bio、avatar → pseudonymize)
+    - 删除 alice 的 PII(display_name、biography、avatar → pseudonymize)
     - 删除 alice 的 E2EE secret material（device keys 与 MLS backup keys 安全销毁，后续无法解密）
     - 把 alice 的消息 redact 成 tombstone(content 删除,event_id 保留以维持因果链)
     - 把 alice 的 devices 全 revoke

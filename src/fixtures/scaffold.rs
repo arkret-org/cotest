@@ -29,8 +29,8 @@
 //! `TestScaffold::fresh(label)` is the recommended entry point for new
 //! scenarios. It:
 //!
-//! 1. derives a per-call unique scenario name (`label-<seq>`) so transcript and per-service log
-//!    files do not collide when several tests run in parallel,
+//! 1. derives a per-call unique scenario name (`label-<sequence>`) so transcript and per-service
+//!    log files do not collide when several tests run in parallel,
 //! 2. spawns a fresh `ArkretServer` (single-node) — already isolated as described above,
 //! 3. returns the server inside a guard that the scenario can keep on the stack; when the scenario
 //!    returns, the `Drop` impl on `ArkretServer` tears the process and blob root down.
@@ -132,9 +132,9 @@ impl MultiScaffold {
 }
 
 fn unique_label(label: &str) -> String {
-    let seq = SCAFFOLD_SEQ.fetch_add(1, Ordering::Relaxed);
+    let sequence = SCAFFOLD_SEQ.fetch_add(1, Ordering::Relaxed);
     let pid = std::process::id();
-    format!("{label}-p{pid}-{seq:06}")
+    format!("{label}-p{pid}-{sequence:06}")
 }
 
 #[cfg(test)]

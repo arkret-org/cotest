@@ -24,14 +24,14 @@ use arkret_state::{
     AppendOutcome, AuthorityCommitStore, CommitLogError, MemoryAuthorityCommitStore,
 };
 use arkret_wire::{
-    ActorId, AuthorityBundleRequest, AuthoritySubmitOutcome, AuthoritySubmitRequest,
-    Base64UrlString, CommitStreamHead, CommitStreamRef, CommittedEventRef, DetachedObjectSignature,
+    ActorId, AuthoritySubmitRequestBody, AuthoritySubmitResponseBody, Base64UrlString,
+    CommitStreamHead, CommitStreamRef, CommittedEventRef, DetachedObjectSignature,
     DetachedSignatureAlgorithm, DetachedSignatureContext, DidUrl, Event, EventAdmissionSubmission,
     EventKind, Hash, HistoryAccess, MlsCommitSubmission, MlsWelcomeDelivery,
-    MlsWelcomeRecipientEndpoint, RealmAuthorityBundle, RealmAuthorityCurrentAssertion,
-    RealmAuthorityHandoff, RealmAuthorityTransition, RealmCommit, RealmCommitAuthorityRef,
-    RealmStateSnapshot, ReasonCode, RetentionAndHistoryFloor, ScopeRef, StreamScanRequest, UuidV7,
-    project_did_to_core_id,
+    MlsWelcomeRecipientEndpoint, RealmAuthorityBundle, RealmAuthorityBundleRequestBody,
+    RealmAuthorityCurrentAssertion, RealmAuthorityHandoff, RealmAuthorityTransition, RealmCommit,
+    RealmCommitAuthorityRef, RealmStateSnapshot, ReasonCode, RetentionAndHistoryFloor, ScopeRef,
+    StreamScanRequestBody, UuidV7, project_did_to_core_id,
 };
 use chrono::{DateTime, TimeZone, Utc};
 use serde_json::{Value, json};
@@ -301,7 +301,7 @@ fn authority_signature(
         verification_method: DidUrl::new(format!("{did}#key-1")).map_err(anyhow::Error::msg)?,
         signed_digest: Hash::new(format!("sha256:{}", "11".repeat(32)))?,
         created_at: fixed_time(0),
-        sig: Base64UrlString::new("AQ").map_err(anyhow::Error::msg)?,
+        signature: Base64UrlString::new("AQ").map_err(anyhow::Error::msg)?,
     })
 }
 
@@ -556,7 +556,7 @@ fn verify_scan_walks_one_stream_only(streams: &[DeclaredStream]) -> Result<()> {
     }
 
     for stream in streams {
-        let request = StreamScanRequest {
+        let request = StreamScanRequestBody {
             realm_id: stream.realm_id.clone(),
             stream_ref: stream.stream_ref.clone(),
             direction: arkret_wire::StreamScanDirection::After(None),
@@ -720,7 +720,7 @@ fn verify_event_commit_submission_is_the_only_event_dto() -> Result<()> {
         );
     }
 
-    let request = AuthoritySubmitRequest::Event(submission);
+    let request = AuthoritySubmitRequestBody::Event(submission);
     request
         .validate()
         .map_err(|error| anyhow!("a well-formed Event submission must validate: {error}"))?;
@@ -1038,7 +1038,7 @@ fn verify_join_bootstrap(fixture: &Value) -> Result<()> {
     let streams = parse_independent_streams(fixture)?;
     let authority = build_authority_fixture(&streams)?;
 
-    let request = AuthorityBundleRequest {
+    let request = RealmAuthorityBundleRequestBody {
         realm_id: authority.realm_id.clone(),
         nonce: Base64UrlString::new(NONCE).map_err(anyhow::Error::msg)?,
     };
@@ -1055,7 +1055,7 @@ fn verify_join_bootstrap(fixture: &Value) -> Result<()> {
             .is_err(),
         "an expired current assertion must fail closed"
     );
-    let replayed = AuthorityBundleRequest {
+    let replayed = RealmAuthorityBundleRequestBody {
         realm_id: authority.realm_id.clone(),
         nonce: Base64UrlString::new("Y290ZXN0LWF1dGhvcml0eS1ub25jZS0y")
             .map_err(anyhow::Error::msg)?,
@@ -1113,7 +1113,7 @@ fn verify_snapshot_and_tails_are_complete(authority: &AuthorityFixture) -> Resul
         let head = store
             .stream_head(&stream.stream_ref)
             .ok_or_else(|| anyhow!("seeded stream has no head"))?;
-        let request = StreamScanRequest {
+        let request = StreamScanRequestBody {
             realm_id: stream.realm_id.clone(),
             stream_ref: stream.stream_ref.clone(),
             direction: arkret_wire::StreamScanDirection::After(None),
@@ -1160,15 +1160,16 @@ fn verify_handoff(fixture: &Value) -> Result<()> {
         "the private manifest must carry exactly the declared head count"
     );
 
-    let request = arkret_models_collaboration::authority_commit::AuthorityHandoffRequest {
-        management_private_state: None,
-        pcr_private_state: None,
-        handoff: authority.handoff.clone(),
-        final_stream_heads: authority.final_stream_heads.clone(),
-        snapshot: authority.snapshot.clone(),
-        authority_bundle: authority.bundle.clone(),
-        historical_signer_facts: Some(Vec::new()),
-    };
+    let request =
+        arkret_models_collaboration::authority_commit::AuthorityRealmAuthorityHandoffRequestBody {
+            management_private_state: None,
+            pcr_private_state: None,
+            handoff: authority.handoff.clone(),
+            final_stream_heads: authority.final_stream_heads.clone(),
+            snapshot: authority.snapshot.clone(),
+            authority_bundle: authority.bundle.clone(),
+            historical_signer_facts: Some(Vec::new()),
+        };
     request
         .validate_shape()
         .map_err(|error| anyhow!("a planned handoff must validate: {error}"))?;
@@ -1436,7 +1437,7 @@ fn welcome_delivery(
             "ak:keypackage_claim:019a8400-0000-7000-8000-00000000020{ordinal}"
         ))
         .map_err(|error| anyhow!("keypackage claim id is not typed: {error}"))?,
-        ciphertext_b64: Base64UrlString::new("d2VsY29tZQ").map_err(anyhow::Error::msg)?,
+        ciphertext_base64url: Base64UrlString::new("d2VsY29tZQ").map_err(anyhow::Error::msg)?,
         producer_proof: authority_signature(
             DetachedSignatureContext::MlsWelcomeDelivery,
             PRODUCER_DID,
@@ -1488,7 +1489,7 @@ fn submit_mls_commit(
     submission: &MlsCommitSubmission,
     position: u64,
 ) -> Result<()> {
-    let request = AuthoritySubmitRequest::MlsCommit(submission.clone());
+    let request = AuthoritySubmitRequestBody::MlsCommit(submission.clone());
     request
         .validate()
         .map_err(|error| anyhow!("MLS submission rejected before any write: {error}"))?;
@@ -1507,7 +1508,7 @@ fn submit_mls_commit(
         producer_signer_fact_digest: None,
         signature: authority_signature(DetachedSignatureContext::RealmCommit, OLD_AUTHORITY_DID)?,
     };
-    let outcome = AuthoritySubmitOutcome::Accepted {
+    let outcome = AuthoritySubmitResponseBody::Accepted {
         status: arkret_wire::AuthorityCommitStatus::Committed,
         commit: commit.clone(),
     };
@@ -1708,7 +1709,7 @@ fn recovery_attestation(
         .map_err(anyhow::Error::msg)?,
         reanchor_event_ref: reanchor_ref.clone(),
         device_authorization_event_ref: device_authorization_ref.clone(),
-        result_model_generation_ref: 1,
+        new_model_generation_ref: 1,
         completed_at: fixed_time(90),
     };
     arkret_wire::UnsignedRecoveryCompletionAttestation::new(

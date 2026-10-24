@@ -9,7 +9,7 @@
 //! producer proof, each recipient's routing service, and the committed
 //! replication item (`CommittedEventSubmission`, whose `welcomes` exists only
 //! for an `ak.mls.commit` and is never empty) under both the SDK DTO and the
-//! published `peer_submit_request` schema. The two Station models own only
+//! published `peer_submit_request_body` schema. The two Station models own only
 //! their durable state: the governance Station's acceptance transaction
 //! (joined members, its own claim ledger, the recipient queues and one
 //! replication intent per remote target) and Station Y's replica transaction
@@ -22,8 +22,8 @@ use std::collections::{BTreeMap, BTreeSet};
 use anyhow::{Context as _, Result, anyhow, bail, ensure};
 use arkret_canonical::DigestSuite;
 use arkret_models_collaboration::authority_commit::{
-    CommittedEventSubmission, CommittedReplicationBranch, PeerAuthoritySubmitRequest,
-    PeerCommittedReplicationRequest,
+    CommittedEventSubmission, CommittedReplicationBranch, PeerAuthoritySubmitRequestBody,
+    PeerCommittedReplicationRequestBody,
 };
 use arkret_models_collaboration::governance::membership_invite::MembershipPayload;
 use arkret_signatures::PublicKeyMaterial;
@@ -53,7 +53,7 @@ pub const MLS_CROSS_STATION_WELCOME_REPLICATION_ENTRYPOINT: &str =
 const FIXTURE: &str = "mls-cross-station-welcome-replication-fixture.json";
 const SUITE: &str = "mls_cross_station_welcome_replication";
 const PEER_REQUEST: &str =
-    "schemas/authority-commit-operations.schema.json#/$defs/peer_submit_request";
+    "schemas/authority-commit-operations.schema.json#/$defs/peer_submit_request_body";
 const ALICE_SEED: [u8; 32] = [0x91; 32];
 const COMMITTED_AT: &str = "2026-09-26T02:00:00.000Z";
 
@@ -379,18 +379,18 @@ impl World {
         let base = EventId::from_digest(DigestSuite::Sha256, [0x92; 32]);
         let payload = json!({
             "base_group_state_ref": base,
-            "previous_epoch": previous_epoch,
-            "next_epoch": previous_epoch + 1,
-            "covers_key_access_revision": previous_epoch,
-            "commit_bytes_b64": arkret_canonical::base64url_encode(
+            "previous_epoch": (previous_epoch).to_string(),
+            "next_epoch": (previous_epoch + 1).to_string(),
+            "covers_key_access_revision": (previous_epoch).to_string(),
+            "commit_base64url": arkret_canonical::base64url_encode(
                 format!("commit adding {}", adds.join(",")).as_bytes()
             ),
             "governance_binding": {
                 "effective_scope": self.scope,
                 "base_group_state_ref": base,
-                "previous_epoch": previous_epoch,
-                "next_epoch": previous_epoch + 1,
-                "key_access_revision": previous_epoch,
+                "previous_epoch": (previous_epoch).to_string(),
+                "next_epoch": (previous_epoch + 1).to_string(),
+                "key_access_revision": (previous_epoch).to_string(),
             },
         });
         self.signed_event(EventKind::MlsCommit, payload)
@@ -436,7 +436,7 @@ impl World {
             keypackage_claim_ref: KeypackageClaimId::new(
                 member.claim_id.clone().context("recipient claim id")?,
             )?,
-            ciphertext_b64: Base64UrlString::new(arkret_canonical::base64url_encode(
+            ciphertext_base64url: Base64UrlString::new(arkret_canonical::base64url_encode(
                 format!("welcome for {name}").as_bytes(),
             ))
             .map_err(anyhow::Error::msg)?,
@@ -446,7 +446,7 @@ impl World {
                 verification_method: self.alice_method.clone(),
                 signed_digest: Hash::new(format!("sha256:{}", "0".repeat(64)))?,
                 created_at: self.created_at()?,
-                sig: Base64UrlString::new("AA").map_err(anyhow::Error::msg)?,
+                signature: Base64UrlString::new("AA").map_err(anyhow::Error::msg)?,
             },
         };
         delivery.producer_proof = sign_detached_object(
@@ -484,7 +484,7 @@ impl World {
             "stream_position": 7,
             "previous_commit_ref": "ak:realm_commit:ARNRmzDi2r78zveOLmoHOb6AephFMwVuGE1fwXmCoeo4",
             "event_ref": event.event_id,
-            "governance_generation": 0,
+            "governance_generation": "0",
             "authority_ref": event.event_id,
             "committed_at": COMMITTED_AT,
             "signature": {
@@ -493,7 +493,7 @@ impl World {
                 "verification_method": "did:web:governance-x.example#authority",
                 "signed_digest": format!("sha256:{}", "4".repeat(64)),
                 "created_at": COMMITTED_AT,
-                "sig": "A".repeat(86),
+                "signature": "A".repeat(86),
             },
         }))?)
     }
@@ -773,8 +773,8 @@ fn governance_submit(world: &World, variant: &Value) -> Result<Value> {
     let mut intents = Map::new();
     for target in &targets {
         let carried = routed.remove(target);
-        let request =
-            PeerAuthoritySubmitRequest::CommittedReplication(PeerCommittedReplicationRequest {
+        let request = PeerAuthoritySubmitRequestBody::CommittedReplication(
+            PeerCommittedReplicationRequestBody {
                 branch: CommittedReplicationBranch::CommittedReplication,
                 replications: vec![CommittedEventSubmission {
                     event_submission: EventAdmissionSubmission::new(event.clone()),
@@ -783,12 +783,13 @@ fn governance_submit(world: &World, variant: &Value) -> Result<Value> {
                     genesis_event_ref: Some(world.genesis_event_ref()),
                     welcomes: carried.clone(),
                 }],
-            });
+            },
+        );
         request.validate()?;
         let body = serde_json::to_value(&request)?;
         ensure!(
             world.peer_request.is_valid(&body),
-            "the replication intent to {target} is not a valid peer_submit_request"
+            "the replication intent to {target} is not a valid peer_submit_request_body"
         );
         intents.insert(
             world.station_name(target)?.to_owned(),
@@ -987,8 +988,8 @@ impl MemberStation {
                 .map(|names| world.welcomes(&event, names))
                 .transpose()?,
         };
-        let body = serde_json::to_value(PeerAuthoritySubmitRequest::CommittedReplication(
-            PeerCommittedReplicationRequest {
+        let body = serde_json::to_value(PeerAuthoritySubmitRequestBody::CommittedReplication(
+            PeerCommittedReplicationRequestBody {
                 branch: CommittedReplicationBranch::CommittedReplication,
                 replications: vec![item],
             },
@@ -997,7 +998,7 @@ impl MemberStation {
 
         // The request: the published schema and the SDK DTO both decide.
         let schema_ok = world.peer_request.is_valid(&body);
-        let parsed = serde_json::from_value::<PeerAuthoritySubmitRequest>(body)
+        let parsed = serde_json::from_value::<PeerAuthoritySubmitRequestBody>(body)
             .map_err(anyhow::Error::from)
             .and_then(|request| request.validate().map(|()| request).map_err(Into::into));
         let request = match parsed {
@@ -1015,7 +1016,7 @@ impl MemberStation {
                 }));
             }
         };
-        let PeerAuthoritySubmitRequest::CommittedReplication(request) = request else {
+        let PeerAuthoritySubmitRequestBody::CommittedReplication(request) = request else {
             bail!("not a committed_replication request");
         };
         let item = request

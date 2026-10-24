@@ -22,18 +22,19 @@ use arkret_models_collaboration::events_payloads::{
 use arkret_models_crypto::{
     BackupActiveSeriesPointer, BackupKind, BackupObjectRef, BackupRotationBinding,
     BackupRotationKind, BackupRotationPlan, ClientStepAttestation, ClientStepAttestationArtifact,
-    ClientStepAttestationAuthData, KeyBackup, KeyBackupAead, KeyBackupAeadName, KeyBackupAuthData,
+    ClientStepAttestationSignatureProof, KeyBackup, KeyBackupAead, KeyBackupAeadName,
     KeyBackupDomainSeparation, KeyBackupEncryption, KeyBackupRecipientMethod,
-    KeyBackupSignatureAlgorithm, KeysBackupsList, PreparedEventUnit, SecretStorageContentIndex,
-    SecretStorageItemKind, SecurityRotationLocalCommit, SecurityRotationRevokeCommandDecision,
-    SecurityRotationTransactionCreateRequest, SecurityTransaction,
-    SecurityTransactionContinueRequest, SecurityTransactionCreateRequest, SecurityTransactionStep,
+    KeyBackupSignatureAlgorithm, KeyBackupSignatureProof, KeysBackupsPage, PreparedEventUnit,
+    SecretStorageContentIndex, SecretStorageItemKind, SecurityRotationLocalCommit,
+    SecurityRotationRevokeCommandDecision, SecurityRotationTransactionCreateRequestBody,
+    SecurityTransaction, SecurityTransactionContinueRequestBody,
+    SecurityTransactionCreateRequestBody, SecurityTransactionStep,
     SecurityTransactionTerminalOutcome,
 };
 use arkret_wire::{
-    AccountId, ActorId, AuthorityCommitStatus, AuthoritySubmitOutcome, BackupId, BackupSeriesId,
-    Base64UrlString, DeviceId, DidCoreId, DidUrl, Event, EventId, Hash, NonEmptyString,
-    RealmCommit, RealmCommitId, TransactionId,
+    AccountId, ActorId, AuthorityCommitStatus, AuthoritySubmitResponseBody, BackupId,
+    BackupSeriesId, Base64UrlString, DeviceId, DidCoreId, DidUrl, Event, EventId, Hash,
+    NonEmptyString, RealmCommit, RealmCommitId, TransactionId,
 };
 use chrono::{DateTime, Utc};
 use ed25519_dalek::{Signer, SigningKey};
@@ -135,8 +136,8 @@ impl RotationAuthor {
     pub(crate) fn local_commit(
         &self,
         current: &SecurityTransaction,
-        rotation: &SecurityRotationTransactionCreateRequest,
-    ) -> Result<SecurityTransactionContinueRequest> {
+        rotation: &SecurityRotationTransactionCreateRequestBody,
+    ) -> Result<SecurityTransactionContinueRequestBody> {
         let artifact = SecurityRotationLocalCommit {
             schema: arkret_wire::SchemaId::SECURITY_ROTATION_LOCAL_COMMIT_V1.to_owned(),
             transaction_id: current.transaction_id.clone(),
@@ -153,19 +154,20 @@ impl RotationAuthor {
             transaction_request_digest: current.request_digest.clone(),
             prepared_plan_digest: current.prepared_plan_digest.clone(),
             artifact: ClientStepAttestationArtifact::SecurityRotation(artifact),
-            auth_data: ClientStepAttestationAuthData {
+            signature_proof: ClientStepAttestationSignatureProof {
                 verification_method: self.method.clone(),
                 signature_algorithm: "Ed25519".into(),
                 signature: Base64UrlString::new("AA").map_err(anyhow::Error::msg)?,
             },
         };
-        attestation.auth_data.signature = Base64UrlString::new(arkret_canonical::base64url_encode(
-            SigningKey::from_bytes(&self.seed)
-                .sign(&attestation.signing_bytes()?)
-                .to_bytes(),
-        ))
-        .map_err(anyhow::Error::msg)?;
-        Ok(SecurityTransactionContinueRequest {
+        attestation.signature_proof.signature =
+            Base64UrlString::new(arkret_canonical::base64url_encode(
+                SigningKey::from_bytes(&self.seed)
+                    .sign(&attestation.signing_bytes()?)
+                    .to_bytes(),
+            ))
+            .map_err(anyhow::Error::msg)?;
+        Ok(SecurityTransactionContinueRequestBody {
             request_digest: current.request_digest.clone(),
             prepared_plan_digest: current.prepared_plan_digest.clone(),
             expected_accepted_step_count: current.accepted_steps.len().try_into()?,
@@ -219,7 +221,7 @@ impl RotationAuthor {
                 .map_err(anyhow::Error::msg)?,
             ciphertext_digest: Hash::new(arkret_canonical::sha256_digest(ciphertext))?,
             plaintext_commitment: None,
-            auth_data: KeyBackupAuthData {
+            signature_proof: KeyBackupSignatureProof {
                 device_id: self.principal.device_id.clone(),
                 verification_method: self.method.clone(),
                 signature_algorithm: KeyBackupSignatureAlgorithm::Ed25519,
@@ -228,7 +230,7 @@ impl RotationAuthor {
             },
             retention: None,
             series_id: series.clone(),
-            series_seq: 0,
+            series_sequence: 0,
             supersedes_id: None,
             supersedes_digest: None,
             source_commit_ref: None,
@@ -236,7 +238,7 @@ impl RotationAuthor {
             extra: Default::default(),
         };
         let signature = SigningKey::from_bytes(&seed).sign(&envelope.signing_payload_bytes()?);
-        envelope.auth_data.signature =
+        envelope.signature_proof.signature =
             Base64UrlString::new(arkret_canonical::base64url_encode(signature.to_bytes()))
                 .map_err(anyhow::Error::msg)?;
         Ok(envelope)
@@ -252,13 +254,13 @@ impl RotationAuthor {
         seed: [u8; 32],
     ) -> Result<KeyBackup> {
         let mut envelope = self.backup(backup_id, &previous.series_id, ciphertext, seed)?;
-        envelope.series_seq = previous.series_seq + 1;
+        envelope.series_sequence = previous.series_sequence + 1;
         envelope.supersedes_id = Some(previous.backup_id.clone());
         envelope.supersedes_digest = Some(Hash::new(arkret_canonical::sha256_digest(
             previous.signing_payload_bytes()?,
         ))?);
         let signature = SigningKey::from_bytes(&seed).sign(&envelope.signing_payload_bytes()?);
-        envelope.auth_data.signature =
+        envelope.signature_proof.signature =
             Base64UrlString::new(arkret_canonical::base64url_encode(signature.to_bytes()))
                 .map_err(anyhow::Error::msg)?;
         Ok(envelope)
@@ -328,7 +330,7 @@ impl RotationAuthor {
                 "issued_at": arkret_canonical::format_timestamp_canonical(
                     arkret::canonical::normalize_timestamp_canonical(Utc::now())
                 ),
-                "auth_data": {
+                "signature_proof": {
                     "verification_method": method,
                     "signature_algorithm": "Ed25519",
                     "signature": "AA"
@@ -336,10 +338,11 @@ impl RotationAuthor {
                 "methods": [{"kind": "device_quorum", "k": k, "member_ids": members}]
             }))?;
         let transcript = arkret_models_crypto::recovery_policy_signature_transcript_bytes(&policy)?;
-        policy.auth_data.signature = Base64UrlString::new(arkret_canonical::base64url_encode(
-            SigningKey::from_bytes(&seed).sign(&transcript).to_bytes(),
-        ))
-        .map_err(anyhow::Error::msg)?;
+        policy.signature_proof.signature =
+            Base64UrlString::new(arkret_canonical::base64url_encode(
+                SigningKey::from_bytes(&seed).sign(&transcript).to_bytes(),
+            ))
+            .map_err(anyhow::Error::msg)?;
         Ok(event_envelope_for_device(
             &self.actor,
             self.principal.device_id.as_str(),
@@ -372,7 +375,7 @@ impl RotationAuthor {
                 "supersedes_id": null,
                 "trust_domain": "ak:trust_domain:cotest.example",
                 "issued_at": arkret_canonical::format_timestamp_canonical(now),
-                "auth_data": {
+                "signature_proof": {
                     "verification_method": self.method,
                     "signature_algorithm": "Ed25519",
                     "signature": "AA"
@@ -406,12 +409,13 @@ impl RotationAuthor {
                 }]
             }))?;
         let transcript = arkret_models_crypto::recovery_policy_signature_transcript_bytes(&policy)?;
-        policy.auth_data.signature = Base64UrlString::new(arkret_canonical::base64url_encode(
-            SigningKey::from_bytes(&self.seed)
-                .sign(&transcript)
-                .to_bytes(),
-        ))
-        .map_err(anyhow::Error::msg)?;
+        policy.signature_proof.signature =
+            Base64UrlString::new(arkret_canonical::base64url_encode(
+                SigningKey::from_bytes(&self.seed)
+                    .sign(&transcript)
+                    .to_bytes(),
+            ))
+            .map_err(anyhow::Error::msg)?;
         Ok(event_envelope_for_device(
             &self.actor,
             self.principal.device_id.as_str(),
@@ -433,7 +437,7 @@ impl RotationAuthor {
         backup_seed: [u8; 32],
         old: &KeyBackup,
         source: &RealmCommitId,
-    ) -> Result<(SecurityTransactionCreateRequest, BackupRotationBinding)> {
+    ) -> Result<(SecurityTransactionCreateRequestBody, BackupRotationBinding)> {
         self.rotation_until(
             suffix,
             target,
@@ -457,7 +461,7 @@ impl RotationAuthor {
         old: &[KeyBackup],
         source: &RealmCommitId,
         lifetime: chrono::Duration,
-    ) -> Result<(SecurityTransactionCreateRequest, BackupRotationBinding)> {
+    ) -> Result<(SecurityTransactionCreateRequestBody, BackupRotationBinding)> {
         let now = arkret::canonical::normalize_timestamp_canonical(Utc::now());
         let revoke = crate::harness::event_envelope_with_signing_identity(
             &self.actor,
@@ -511,8 +515,8 @@ impl RotationAuthor {
                 },
             )
         };
-        let request = SecurityTransactionCreateRequest::SecurityRotation(
-            SecurityRotationTransactionCreateRequest::from_prepared_rotations(
+        let request = SecurityTransactionCreateRequestBody::SecurityRotation(
+            SecurityRotationTransactionCreateRequestBody::from_prepared_rotations(
                 TransactionId::new(format!(
                     "ak:transaction:01904100-0000-7000-8000-{suffix}00000000"
                 ))?,
@@ -548,7 +552,7 @@ struct LiveRotation {
     seed_a: [u8; 32],
     old: KeyBackup,
     commit: RealmCommit,
-    selected: KeysBackupsList,
+    selected: KeysBackupsPage,
 }
 
 async fn live_rotation(server_name: &str, extra_env: &[(&str, &str)]) -> Result<LiveRotation> {
@@ -609,7 +613,7 @@ pub(crate) struct RotationFixture {
     pub(crate) seed_a: [u8; 32],
     pub(crate) old: KeyBackup,
     pub(crate) commit: RealmCommit,
-    pub(crate) selected: KeysBackupsList,
+    pub(crate) selected: KeysBackupsPage,
 }
 
 /// The environment a Station needs so that `rotation_fixture` can run on it:
@@ -723,7 +727,7 @@ pub(crate) async fn rotation_fixture(
         Vec::new(),
         &installed.active_series.authority_commit_id,
     )?;
-    let AuthoritySubmitOutcome::Accepted { status, commit } = serde_json::from_value(
+    let AuthoritySubmitResponseBody::Accepted { status, commit } = serde_json::from_value(
         expect_json(
             events_a
                 .post("/_arkret/self/events")
@@ -881,7 +885,7 @@ pub async fn security_rotation_runs_worker_steps_to_local_commit() -> Result<()>
     ensure!(
         stopped.accepted_steps.len() == 1
             && stopped.revoke_command_outcome.as_ref().is_some_and(
-                |outcome| outcome.result == SecurityRotationRevokeCommandDecision::Accepted
+                |outcome| outcome.outcome == SecurityRotationRevokeCommandDecision::Accepted
             )
             && aborted_with(&stopped, "proof_invalid"),
         "a forged replacement was not refused after the accepted revoke: {stopped:?}"
@@ -909,7 +913,7 @@ pub async fn security_rotation_runs_worker_steps_to_local_commit() -> Result<()>
         "the accepted revoke of C did not stop its session"
     );
     // The stopped rotation's reserved pointer cannot switch outside it.
-    let SecurityTransactionCreateRequest::SecurityRotation(bad_rotation) = &bad_material else {
+    let SecurityTransactionCreateRequestBody::SecurityRotation(bad_rotation) = &bad_material else {
         unreachable!("rotation request")
     };
     let reserved = events_a
@@ -947,12 +951,12 @@ pub async fn security_rotation_runs_worker_steps_to_local_commit() -> Result<()>
         .clone()
         .context("the worker did not decide the revoke proposal")?;
     ensure!(
-        outcome.result == SecurityRotationRevokeCommandDecision::Accepted
+        outcome.outcome == SecurityRotationRevokeCommandDecision::Accepted
             && erased.accepted_steps.len() == 4
             && erased.terminal_outcome.is_none(),
         "the worker did not reach the local commit: {erased:?}"
     );
-    let SecurityTransactionCreateRequest::SecurityRotation(rotation) = &request else {
+    let SecurityTransactionCreateRequestBody::SecurityRotation(rotation) = &request else {
         unreachable!("rotation request")
     };
     let after_erase = listing(&client_a).await?;
@@ -1013,7 +1017,7 @@ pub async fn security_rotation_runs_worker_steps_to_local_commit() -> Result<()>
     // 5. local_commit: A attests the terminal step with its authorized device key under its account
     //    DID URL. A forged signature is refused and writes nothing; the genuine one completes the
     //    rotation.
-    let local_commit = |seed: [u8; 32]| -> Result<SecurityTransactionContinueRequest> {
+    let local_commit = |seed: [u8; 32]| -> Result<SecurityTransactionContinueRequestBody> {
         let artifact = SecurityRotationLocalCommit {
             schema: arkret_wire::SchemaId::SECURITY_ROTATION_LOCAL_COMMIT_V1.to_owned(),
             transaction_id: erased.transaction_id.clone(),
@@ -1030,17 +1034,17 @@ pub async fn security_rotation_runs_worker_steps_to_local_commit() -> Result<()>
             transaction_request_digest: erased.request_digest.clone(),
             prepared_plan_digest: erased.prepared_plan_digest.clone(),
             artifact: ClientStepAttestationArtifact::SecurityRotation(artifact),
-            auth_data: ClientStepAttestationAuthData {
+            signature_proof: ClientStepAttestationSignatureProof {
                 verification_method: signer.method.clone(),
                 signature_algorithm: "Ed25519".to_owned(),
                 signature: Base64UrlString::new("AA").map_err(anyhow::Error::msg)?,
             },
         };
         let signature = SigningKey::from_bytes(&seed).sign(&attestation.signing_bytes()?);
-        attestation.auth_data.signature =
+        attestation.signature_proof.signature =
             Base64UrlString::new(arkret_canonical::base64url_encode(signature.to_bytes()))
                 .map_err(anyhow::Error::msg)?;
-        Ok(SecurityTransactionContinueRequest {
+        Ok(SecurityTransactionContinueRequestBody {
             request_digest: erased.request_digest.clone(),
             prepared_plan_digest: erased.prepared_plan_digest.clone(),
             expected_accepted_step_count: 4,
@@ -1196,7 +1200,7 @@ pub async fn security_rotation_rejected_revoke_restores_the_target_device() -> R
             && expired
                 .revoke_command_outcome
                 .as_ref()
-                .is_some_and(|outcome| outcome.result
+                .is_some_and(|outcome| outcome.outcome
                     == SecurityRotationRevokeCommandDecision::Rejected
                     && Some(&outcome.proposal_event_id)
                         == pending
@@ -1454,7 +1458,7 @@ async fn erase_resume_across(between: BetweenAttempts, name: &str) -> Result<()>
                 vec![binding.new_series_id.clone()],
                 &after_partial.active_series.authority_commit_id,
             )?;
-            let AuthoritySubmitOutcome::Accepted { status, .. } = serde_json::from_value(
+            let AuthoritySubmitResponseBody::Accepted { status, .. } = serde_json::from_value(
                 expect_json(
                     events_a
                         .post("/_arkret/self/events")
@@ -1553,7 +1557,7 @@ async fn unlock(
     seed: [u8; 32],
 ) -> Result<reqwest::Response> {
     use arkret_models_crypto::{
-        KeyBackupUnlockAuthority, KeyBackupUnlockProof, KeyBackupUnlockProofAuthData,
+        KeyBackupUnlockAuthority, KeyBackupUnlockProof, KeyBackupUnlockSignatureProof,
         KeysBackupsIssueUnlockChallengeRequestBody, KeysBackupsUnlockChallenge,
         KeysBackupsUnlockRequestBody,
     };
@@ -1588,14 +1592,14 @@ async fn unlock(
         audience: challenge.audience,
         issued_at: challenge.issued_at,
         expires_at: challenge.expires_at,
-        auth_data: KeyBackupUnlockProofAuthData {
+        signature_proof: KeyBackupUnlockSignatureProof {
             verification_method: method.clone(),
             signature_algorithm: KeyBackupSignatureAlgorithm::Ed25519,
             signature: Base64UrlString::new("AA").map_err(anyhow::Error::msg)?,
         },
     };
     let signature = SigningKey::from_bytes(&seed).sign(&proof.signing_payload_bytes()?);
-    proof.auth_data.signature =
+    proof.signature_proof.signature =
         Base64UrlString::new(arkret_canonical::base64url_encode(signature.to_bytes()))
             .map_err(anyhow::Error::msg)?;
     Ok(canonical_post(
@@ -1618,7 +1622,7 @@ async fn recovery_session_unlock(
     recovery_seed: [u8; 32],
 ) -> Result<reqwest::Response> {
     use arkret_models_crypto::{
-        KeyBackupUnlockAuthority, KeyBackupUnlockProof, KeyBackupUnlockProofAuthData,
+        KeyBackupUnlockAuthority, KeyBackupUnlockProof, KeyBackupUnlockSignatureProof,
         KeysBackupsUnlockRequestBody,
     };
 
@@ -1643,14 +1647,14 @@ async fn recovery_session_unlock(
         .map_err(anyhow::Error::msg)?,
         issued_at: session.created_at,
         expires_at: session.expires_at,
-        auth_data: KeyBackupUnlockProofAuthData {
+        signature_proof: KeyBackupUnlockSignatureProof {
             verification_method: recovery_method.clone(),
             signature_algorithm: KeyBackupSignatureAlgorithm::Ed25519,
             signature: Base64UrlString::new("AA").map_err(anyhow::Error::msg)?,
         },
     };
     let signature = SigningKey::from_bytes(&recovery_seed).sign(&proof.signing_payload_bytes()?);
-    proof.auth_data.signature =
+    proof.signature_proof.signature =
         Base64UrlString::new(arkret_canonical::base64url_encode(signature.to_bytes()))
             .map_err(anyhow::Error::msg)?;
     canonical_post(
@@ -1705,7 +1709,7 @@ pub async fn security_rotation_refuses_ineligible_approval_sidecars_before_write
     );
     for active_series in [false, true] {
         let mut with_evidence = request.clone();
-        let SecurityTransactionCreateRequest::SecurityRotation(rotation) = &mut with_evidence
+        let SecurityTransactionCreateRequestBody::SecurityRotation(rotation) = &mut with_evidence
         else {
             unreachable!()
         };
@@ -1802,7 +1806,7 @@ pub async fn security_rotation_refuses_ineligible_approval_sidecars_before_write
 
 pub(crate) async fn create(
     client: &TestActorClient,
-    request: &SecurityTransactionCreateRequest,
+    request: &SecurityTransactionCreateRequestBody,
 ) -> Result<SecurityTransaction> {
     Ok(serde_json::from_value(
         expect_json(
@@ -1823,7 +1827,7 @@ fn aborted_with(transaction: &SecurityTransaction, reason: &str) -> bool {
     )
 }
 
-fn pointer_is(list: &KeysBackupsList, series: &str, version: u64) -> bool {
+fn pointer_is(list: &KeysBackupsPage, series: &str, version: u64) -> bool {
     matches!(
         &list.active_series.secret_storage,
         BackupActiveSeriesPointer::Active { active_series_id, series_pointer_version }
@@ -1831,7 +1835,7 @@ fn pointer_is(list: &KeysBackupsList, series: &str, version: u64) -> bool {
     )
 }
 
-fn lists(list: &KeysBackupsList, backup_id: &str) -> bool {
+fn lists(list: &KeysBackupsPage, backup_id: &str) -> bool {
     list.backups
         .iter()
         .any(|row| row.backup_id.as_str() == backup_id)
@@ -1846,7 +1850,7 @@ pub(crate) async fn refused(client: &TestActorClient) -> Result<bool> {
         == StatusCode::UNAUTHORIZED)
 }
 
-async fn listing(client: &TestActorClient) -> Result<KeysBackupsList> {
+async fn listing(client: &TestActorClient) -> Result<KeysBackupsPage> {
     let body = expect_json(client.get("/_arkret/self/keys/backups"), StatusCode::OK).await?;
     Ok(serde_json::from_value(body)?)
 }
@@ -1929,7 +1933,7 @@ async fn admit_accepted_device(
         arkret_wire::EventKind::DeviceAuthorize.as_str(),
         serde_json::to_value(&payload)?,
     );
-    let AuthoritySubmitOutcome::Accepted { status, commit } = serde_json::from_value(
+    let AuthoritySubmitResponseBody::Accepted { status, commit } = serde_json::from_value(
         expect_json(
             server
                 .http()
@@ -2079,9 +2083,9 @@ pub async fn key_backup_device_quorum_delete_removes_an_envelope() -> Result<()>
         first.status(),
         first.text().await.unwrap_or_default()
     );
-    let first: arkret_models_crypto::RecoveryPolicyPublishOutcome = first.json().await?;
+    let first: arkret_models_crypto::RecoveryPolicyPublishResponseBody = first.json().await?;
     ensure!(first.version == 1 && first.policy_id.as_str() == genesis);
-    let replay: arkret_models_crypto::RecoveryPolicyPublishOutcome =
+    let replay: arkret_models_crypto::RecoveryPolicyPublishResponseBody =
         publish_recovery_policy(&events_a, &v1)
             .await?
             .json()
@@ -2090,7 +2094,7 @@ pub async fn key_backup_device_quorum_delete_removes_an_envelope() -> Result<()>
         replay.acceptance_basis_ref == first.acceptance_basis_ref,
         "an exact retry accepted the policy at another Commit"
     );
-    let active: arkret_models_crypto::RecoveryPolicyActiveOutcome = serde_json::from_value(
+    let active: arkret_models_crypto::RecoveryPolicyStatusView = serde_json::from_value(
         expect_json(
             client_b.get("/_arkret/root/identity/recovery-policy"),
             StatusCode::OK,
@@ -2152,7 +2156,7 @@ pub async fn key_backup_device_quorum_delete_removes_an_envelope() -> Result<()>
         deleted.status(),
         deleted.text().await.unwrap_or_default()
     );
-    let deleted: arkret_models_crypto::KeysBackupsDeleteOutcome = deleted.json().await?;
+    let deleted: arkret_models_crypto::KeysBackupsDeleteResponseBody = deleted.json().await?;
     ensure!(deleted.deleted);
     ensure!(
         !lists(&listing(&client_a).await?, INACTIVE_BACKUP),
@@ -2305,18 +2309,19 @@ pub(crate) async fn create_verified_recovery_unlock_session_bound(
             .map_err(anyhow::Error::msg)?,
         }),
     };
-    let outcome: arkret_models_crypto::RecoverySessionProofSubmitOutcome = serde_json::from_value(
-        expect_json(
-            client
-                .post(&format!(
-                    "/_arkret/root/identity/recovery-sessions/{}/proofs",
-                    session.recovery_session_id
-                ))
-                .json(&submit),
-            StatusCode::OK,
-        )
-        .await?,
-    )?;
+    let outcome: arkret_models_crypto::RecoverySessionProofSubmitResponseBody =
+        serde_json::from_value(
+            expect_json(
+                client
+                    .post(&format!(
+                        "/_arkret/root/identity/recovery-sessions/{}/proofs",
+                        session.recovery_session_id
+                    ))
+                    .json(&submit),
+                StatusCode::OK,
+            )
+            .await?,
+        )?;
     ensure!(
         outcome.proof_summary.as_ref().is_some_and(|summary| {
             summary.kind == arkret_models_crypto::RecoveryProofKind::RecoveryUnlock

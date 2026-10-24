@@ -7,12 +7,12 @@ use std::sync::{Arc, Mutex};
 
 use anyhow::{Context, Result, bail, ensure};
 use arkret_http_client::own_station_results::{
-    OwnStationResultClient, OwnStationSessionSnapshot, OwnStationSessionSource,
+    OwnStationSessionSnapshot, OwnStationSessionSource, OwnStationStateClient,
 };
 use arkret_models_collaboration::events_payloads::call::*;
 use arkret_wire::{
-    CurrentRevision, CurrentSelector, RealmCommit, RealmSnapshotId, RealmStateSnapshot,
-    TypedCurrentRow,
+    CurrentRevision, CurrentSelector, CurrentState, RealmCommit, RealmSnapshotId,
+    RealmStateSnapshot,
 };
 use serde_json::{Value, json};
 
@@ -89,7 +89,7 @@ fn verify_candidate(fixture: &Value, snapshot: &Value) -> Result<RealmStateSnaps
         )?;
     }
     for row in &snapshot.current_state_entries {
-        if let TypedCurrentRow::Value {
+        if let CurrentState::Value {
             selector: CurrentSelector::CallRoster { call_id },
             value,
             ..
@@ -145,7 +145,7 @@ fn project_checkpoints(fixture: &Value) -> Result<()> {
             let payload: CallStatePayload =
                 serde_json::from_value(original["event"]["payload"].clone())?;
             if let Some(value) = payload.roster_delta {
-                let key=matches!(&value,CallRosterDelta::Join {participant} if participant.participant_binding.is_some()).then(||CallParticipantSigningKey {public_key_b64u:fixture["test_keys"]["issuer_public_key_b64u"].as_str().unwrap().into()});
+                let key=matches!(&value,CallRosterDelta::Join {participant} if participant.participant_binding.is_some()).then(||CallParticipantSigningKey {public_key_base64url:fixture["test_keys"]["issuer_public_key_b64u"].as_str().unwrap().into()});
                 roster = Some(CallRosterCurrentValue::apply_delta(
                     roster.as_ref(),
                     CallRosterSource {
@@ -225,7 +225,7 @@ fn session(
     .map(|s| s.with_provider_identity(Default::default()))
 }
 type CurrentCallFixture = (
-    OwnStationResultClient,
+    OwnStationStateClient,
     Arc<Mutex<Option<OwnStationSessionSnapshot>>>,
     arkret_models_discovery::StationConnectionBinding,
     std::thread::JoinHandle<Result<()>>,
@@ -239,7 +239,7 @@ fn client(bodies: Vec<Value>) -> Result<CurrentCallFixture> {
         service_id: station,
         base_url: base.clone(),
         trust_domain: "ak:trust_domain:station.example".parse()?,
-        auth_metadata: arkret_models_discovery::AuthMetadata::minimal(),
+        authentication_metadata: arkret_models_discovery::AuthenticationMetadata::minimal(),
     };
     let account = arkret_wire::AccountId::new(
         "ak:did_core:web:alice.example".parse()?,
@@ -251,7 +251,7 @@ fn client(bodies: Vec<Value>) -> Result<CurrentCallFixture> {
         .auth(arkret_http_client::Auth::Bearer("current-fixture".into()))
         .build()?;
     let result =
-        OwnStationResultClient::new(raw, binding.clone(), Arc::new(Session(control.clone())))?;
+        OwnStationStateClient::new(raw, binding.clone(), Arc::new(Session(control.clone())))?;
     let server = std::thread::spawn(move || -> Result<()> {
         for body in bodies {
             let (mut stream, _) = listener.accept()?;
@@ -480,7 +480,7 @@ async fn run_case(fixture: &Value, case: &Value) -> Result<&'static str> {
         }
         "exact_history_below_floor" => {
             let (event, commit) = source(&fixture["original_rows"][0])?;
-            let request = arkret_wire::StreamScanRequest {
+            let request = arkret_wire::StreamScanRequestBody {
                 realm_id: commit.realm_id.clone(),
                 stream_ref: commit.stream_ref.clone(),
                 direction: arkret_wire::StreamScanDirection::Before(None),
@@ -491,7 +491,7 @@ async fn run_case(fixture: &Value, case: &Value) -> Result<&'static str> {
                     commit: commit.clone(),
                     event,
                 });
-            let outcome: arkret_wire::StreamScanOutcome = serde_json::from_value(
+            let outcome: arkret_wire::StreamScanResponseBody = serde_json::from_value(
                 json!({"committed_events":[original],"readable_floor":{"oldest_position":3,"floor_commit_id":fixture["original_rows"][2]["commit"]["commit_id"],"floor_reason":"membership_join"},"truncated":false}),
             )?;
             ensure!(outcome.validate_for_request(&request).is_err());
@@ -567,7 +567,8 @@ async fn run_case(fixture: &Value, case: &Value) -> Result<&'static str> {
         }
         "wrong_historical_issuer_key" => {
             axis_mut(&mut snapshot, "call_roster")["value"]["entries"][0]["participant_signing_key"]
-                ["public_key_b64u"] = fixture["test_keys"]["governance_public_key_b64u"].clone()
+                ["public_key_base64url"] =
+                fixture["test_keys"]["governance_public_key_b64u"].clone()
         }
         "wrong_binding_actor_station" => {
             axis_mut(&mut snapshot, "call_roster")["value"]["entries"][0]["value"]["participant"]
@@ -681,10 +682,10 @@ async fn run_case(fixture: &Value, case: &Value) -> Result<&'static str> {
         }
         "commit_signature_tampered" => {
             axis_mut(&mut snapshot, "call_roster")["value"]["entries"][0]["source_commit"]["signature"]
-                ["sig"] = json!("A".repeat(86))
+                ["signature"] = json!("A".repeat(86))
         }
         "snapshot_signature_tampered" => {
-            snapshot["signature"]["sig"] = json!("A".repeat(86));
+            snapshot["signature"]["signature"] = json!("A".repeat(86));
             resign = false;
         }
         "omission_unsigned"

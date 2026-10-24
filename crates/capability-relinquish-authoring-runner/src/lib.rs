@@ -1,6 +1,6 @@
 //! Executable capability relinquishment authoring conformance runner.
 //!
-//! The runner consumes the production `GrantList` active-row carrier and
+//! The runner consumes the production `EffectiveGrantSnapshot` active-row carrier and
 //! copies its typed `CurrentRevision` into the production relinquish payload.
 //! A separate CAS model covers stale and concurrent writes without turning a
 //! list digest or historical evaluation into an authoring basis.
@@ -9,7 +9,7 @@ use std::path::PathBuf;
 
 use anyhow::{Context, Result, bail, ensure};
 use arkret_models_collaboration::events_payloads::CapabilityRelinquishPayload;
-use arkret_models_collaboration::governance::authorization::GrantList;
+use arkret_models_collaboration::governance::authorization::EffectiveGrantSnapshot;
 use arkret_wire::{CurrentRevision, ErrorCode};
 use serde::Deserialize;
 use serde_json::{Value, json};
@@ -112,7 +112,7 @@ fn active_grant() -> Value {
             "kind": "realm_root",
             "realm_id": "ak:realm:Ac1aCK8aQdnkYImvdH3DFjq4jDCP198pXYWCGzGuVyj5",
             "authority_event_ref": "ak:event:AR9qVnHK4a0914zPmH5CRZLTjSSV_8ghJKuGGivDaExf",
-            "authority_generation": 0
+            "authority_generation": "0"
         }],
         "issued_at": "2026-09-21T00:00:00.000Z",
         "status": "active"
@@ -200,7 +200,7 @@ fn run_case(case: &Value) -> Result<(CaseExecutionResult, usize, usize, usize)> 
         "active_row_supplies_exact_atomic_revision" => {
             ensure!(bool_at(
                 case,
-                "/list_result/grant_and_revision_same_current_result"
+                "/list_result/grant_and_revision_same_current_state"
             )?);
             ensure!(bool_at(case, "/authoring/copied_row_revision_verbatim")?);
             ensure!(bool_at(case, "/authoring/user_confirmed")?);
@@ -208,7 +208,7 @@ fn run_case(case: &Value) -> Result<(CaseExecutionResult, usize, usize, usize)> 
                 at(case, "/list_result/revision")?.clone(),
                 str_at(case, "/list_result/state_digest")?,
             );
-            let list: GrantList = serde_json::from_value(list_wire)?;
+            let list: EffectiveGrantSnapshot = serde_json::from_value(list_wire)?;
             ensure!(list.grants.len() == 1);
             let row = &list.grants[0];
             let payload = CapabilityRelinquishPayload {
@@ -243,7 +243,7 @@ fn run_case(case: &Value) -> Result<(CaseExecutionResult, usize, usize, usize)> 
                 Value::String(str_at(case, "/list_result/state_digest")?.to_owned()),
                 str_at(case, "/list_result/state_digest")?,
             );
-            ensure!(serde_json::from_value::<GrantList>(wire).is_err());
+            ensure!(serde_json::from_value::<EffectiveGrantSnapshot>(wire).is_err());
             ensure!(
                 serde_json::from_value::<CurrentRevision>(
                     at(case, "/list_result/state_digest")?.clone()
@@ -331,7 +331,7 @@ fn run_case(case: &Value) -> Result<(CaseExecutionResult, usize, usize, usize)> 
                     "sha256:7777777777777777777777777777777777777777777777777777777777777777",
                 );
                 wire["grants"][0]["grant"]["status"] = Value::String(terminal.to_owned());
-                ensure!(serde_json::from_value::<GrantList>(wire).is_err());
+                ensure!(serde_json::from_value::<EffectiveGrantSnapshot>(wire).is_err());
             }
             ensure!(u64_at(case, "/expected/rows_returned")? == 0);
             ensure!(u64_at(case, "/expected/distinguishable_outcomes")? == 1);
@@ -434,7 +434,7 @@ mod tests {
             "sha256:7777777777777777777777777777777777777777777777777777777777777777",
         );
         wire["grants"][0]["grant"]["status"] = json!("relinquished");
-        assert!(serde_json::from_value::<GrantList>(wire).is_err());
+        assert!(serde_json::from_value::<EffectiveGrantSnapshot>(wire).is_err());
     }
 
     #[test]

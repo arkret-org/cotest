@@ -46,7 +46,7 @@ try {
             -BaseUrl "http://127.0.0.1:18001" -Port 18001 -Token "probe-test-token" `
             -ModelBaseUrl "http://127.0.0.1:18002" -ModelPort 18002 -ManagedServices $services
         $configPath = Join-Path $probe.Home "config.toml"
-        $json = & python -X utf8 -c 'import json,sys,tomllib; print(json.dumps(tomllib.loads(open(sys.argv[1],encoding="utf-8-sig").read())))' $configPath
+        $json = & python -X utf8 -c 'import json,sys,tomllib; print(json.dumps(tomllib.loads(open(sys.argv[1],encoding="utf-8-signature").read())))' $configPath
         if ($LASTEXITCODE -ne 0) { throw "Generated probe TOML is invalid" }
         $config = $json | ConvertFrom-Json
         Assert-Equal $false $config.gateway.response_footer.enabled "$name reply decoration"

@@ -80,11 +80,11 @@ pub fn actor_core_id(actor: &str) -> Result<String> {
 /// First admission and exact replay both bind the Event through the accepted
 /// RealmCommit. The retired accepted/duplicate Event arrays are not recognized.
 pub fn submitted_event_id(outcome: &Value) -> Result<arkret_identifiers::EventId> {
-    let parsed: arkret_wire::AuthoritySubmitOutcome = serde_json::from_value(outcome.clone())?;
+    let parsed: arkret_wire::AuthoritySubmitResponseBody = serde_json::from_value(outcome.clone())?;
     parsed.validate_shape()?;
     match parsed {
-        arkret_wire::AuthoritySubmitOutcome::Accepted { commit, .. } => Ok(commit.event_ref),
-        arkret_wire::AuthoritySubmitOutcome::Rejected { reason_code, .. } => {
+        arkret_wire::AuthoritySubmitResponseBody::Accepted { commit, .. } => Ok(commit.event_ref),
+        arkret_wire::AuthoritySubmitResponseBody::Rejected { reason_code, .. } => {
             anyhow::bail!("single-Event submit was rejected: {reason_code}")
         }
     }
@@ -152,8 +152,8 @@ pub(crate) fn member_join_payload(realm_id: &str, actor_id: &str) -> Value {
 }
 
 pub fn next_typed_id(kind: &str) -> String {
-    let seq = NEXT_EVENT_SEQ.fetch_add(1, Ordering::Relaxed);
-    format!("ak:{kind}:01999999-0000-7000-8000-{seq:012x}")
+    let sequence = NEXT_EVENT_SEQ.fetch_add(1, Ordering::Relaxed);
+    format!("ak:{kind}:01999999-0000-7000-8000-{sequence:012x}")
 }
 
 /// Normalise a single `plaintext_visible_services` entry into the spec-typed

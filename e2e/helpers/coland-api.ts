@@ -928,7 +928,7 @@ export async function joinRealmMemberByInviteApi(
 // The current `realm_policy_bundle` typed result of a Realm.
 //
 // event-kind-registry.json projects every accepted `ak.realm.policy_bundle`
-// with `result_projection: {kind: "set", value: {field: "payload"}}`, and
+// with `state_projection: {kind: "set", value: {field: "payload"}}`, and
 // authz/event-auth-state-resolution.md section 6 makes the last accepted write
 // on the Realm stream the current value. The committed stream scan
 // (`ak.self.realm.read.streams.v1` / `/_arkret/self/streams/scan`) is therefore
@@ -2329,7 +2329,7 @@ export async function prepareSignedEventSubmissionApi(
 /// Prepare several independent `EventAdmissionSubmission` bodies.
 ///
 /// This helper returns separate requests. Registered atomic units use the
-/// closed branches of `self_submit_request` and must be constructed explicitly.
+/// closed branches of `self_submit_request_body` and must be constructed explicitly.
 export async function prepareSignedEventBatchSubmissionsApi(
   _request: APIRequestContext,
   _token: string,
@@ -2713,18 +2713,18 @@ export function makeFederationEvent(args: {
   });
 }
 
-// `authority-commit-operations.schema.json#/$defs/peer_committed_replication_outcome_record`.
-export type PeerCommittedReplicationOutcomeRecord =
+// `authority-commit-operations.schema.json#/$defs/committed_event_replication_outcome`.
+export type CommittedEventReplicationOutcome =
   | { status: "stored" | "duplicate" }
   | { status: "rejected"; reason_code: string };
 
-// `authority-commit-operations.schema.json#/$defs/peer_committed_replication_outcome`:
+// `authority-commit-operations.schema.json#/$defs/peer_committed_replication_response_body`:
 // `replication_outcomes` has exactly the length and order of the request's
 // `replications`, so a row is identified by its position alone. There is no
 // top-level `accepted[]` / `duplicate[]` (api-conventions.md, Event submit).
-export type PeerCommittedReplicationOutcome = {
+export type PeerCommittedReplicationResponseBody = {
   branch: "committed_replication";
-  replication_outcomes: PeerCommittedReplicationOutcomeRecord[];
+  replication_outcomes: CommittedEventReplicationOutcome[];
 };
 
 /// Push exact source-committed `(Event, RealmCommit)` pairs to a peer through
@@ -2739,9 +2739,9 @@ export async function pushFederationEvents(
     realmId: string;
     server?: ColandKey;
   },
-): Promise<PeerCommittedReplicationOutcome> {
+): Promise<PeerCommittedReplicationResponseBody> {
   const response = await rawPushFederationEvents(request, events, opts);
-  const outcome = await expectJsonOk<PeerCommittedReplicationOutcome>(
+  const outcome = await expectJsonOk<PeerCommittedReplicationResponseBody>(
     response,
     "push federation events",
   );
@@ -2754,9 +2754,9 @@ export async function pushFederationEvents(
 /// Event they judged, for readable assertion messages.
 export function replicationOutcomesOutside(
   events: Array<Record<string, unknown>>,
-  outcome: PeerCommittedReplicationOutcome,
-  allowed: ReadonlyArray<PeerCommittedReplicationOutcomeRecord["status"]>,
-): Array<{ event_id: unknown; kind: unknown } & PeerCommittedReplicationOutcomeRecord> {
+  outcome: PeerCommittedReplicationResponseBody,
+  allowed: ReadonlyArray<CommittedEventReplicationOutcome["status"]>,
+): Array<{ event_id: unknown; kind: unknown } & CommittedEventReplicationOutcome> {
   return outcome.replication_outcomes.flatMap((record, index) =>
     allowed.includes(record.status)
       ? []
@@ -2802,13 +2802,13 @@ export async function pushCommittedRowsApi(
   request: APIRequestContext,
   rows: CommittedEventFullView[],
   opts: PeerPushOpts,
-): Promise<PeerCommittedReplicationOutcome> {
+): Promise<PeerCommittedReplicationResponseBody> {
   const response = await rawPushCommittedReplication(
     request,
     rows.map(committedRowForReplication),
     opts,
   );
-  const outcome = await expectJsonOk<PeerCommittedReplicationOutcome>(
+  const outcome = await expectJsonOk<PeerCommittedReplicationResponseBody>(
     response,
     "push committed rows",
   );
@@ -2850,8 +2850,8 @@ async function rawPushCommittedReplication(
 // the schema actually requires.
 export type InviteDeliveryRequestBodyBodyBody = InviteDeliveryRequestBody;
 export type { SelfInviteDispatchRequestBody };
-// The closed `invite_delivery_outcome`
-// (`invite-delivery-request.schema.json#/$defs/invite_delivery_outcome`).
+// The closed `invite_delivery_response_body`
+// (`invite-delivery-request.schema.json#/$defs/invite_delivery_response_body`).
 // `disclosed_outcome` is closed to `delivered | blocked` and, per
 // invite-addressing.md §5.1, MUST be absent whenever `status` is `deferred`.
 export type InviteDeliveryOutcomeView = {
@@ -3043,8 +3043,8 @@ export type CommittedEventFullView = {
   event: Record<string, unknown>;
 };
 
-// `authority-commit-operations.schema.json#/$defs/stream_scan_outcome`.
-export type StreamScanOutcome = {
+// `authority-commit-operations.schema.json#/$defs/stream_scan_response_body`.
+export type StreamScanResponseBody = {
   committed_events: Array<CommittedEventFullView | {
     commit: Record<string, unknown>;
     event_disclosure: Record<string, unknown>;
@@ -3070,7 +3070,7 @@ export async function scanPeerRealmStreamApi(
     afterPosition?: number | null;
     limit?: number;
   },
-): Promise<StreamScanOutcome> {
+): Promise<StreamScanResponseBody> {
   const body = {
     realm_id: opts.realmId,
     stream_ref: { kind: "realm", realm_id: opts.realmId },
@@ -3087,7 +3087,7 @@ export async function scanPeerRealmStreamApi(
       body,
     ),
   });
-  return await expectJsonOk<StreamScanOutcome>(response, "scan peer Realm stream");
+  return await expectJsonOk<StreamScanResponseBody>(response, "scan peer Realm stream");
 }
 
 /// The full rows of a scan page, in stream order. A withheld row carries no
@@ -3125,8 +3125,8 @@ function committedRowForReplication(row: CommittedEventFullView): CommittedEvent
   };
 }
 
-export function fullCommittedRows(page: StreamScanOutcome): CommittedEventFullView[] {
-  // Match the SDK PeerStreamScanOutcome ordered exact-target association.
+export function fullCommittedRows(page: StreamScanResponseBody): CommittedEventFullView[] {
+  // Match the SDK PeerStreamScanResponseBody ordered exact-target association.
   const facts = (page as unknown as Record<string, unknown>).producer_signer_facts;
   if (!Array.isArray(facts)) {
     throw new Error("authorized peer scan lacks its registered original signer fact inventory");
@@ -3261,7 +3261,7 @@ const E2E_FIXTURES_ROOT = resolve(
   "fixtures",
 );
 
-// `authority-commit-operations.schema.json#/$defs/peer_submit_request`,
+// `authority-commit-operations.schema.json#/$defs/peer_submit_request_body`,
 // `committed_replication` branch. Routing basis, membership witnesses and
 // destination echoes are absent: the receiver derives authorization from the
 // verified committed history alone (federation.md §4.1.1).
@@ -3317,7 +3317,7 @@ function signedFederationPushHeaders(
   const nowSeconds = Math.floor(Date.now() / 1000);
   // When asked, push created/expires fully behind the accepted freshness
   // window (federation.md §3.2): expires < now and created beyond the ±30s
-  // skew bound. The signature still covers these params, so it verifies — the
+  // skew bound. The signature still covers these parameters, so it verifies — the
   // request is rejected on the freshness check, not on a bad signature.
   const created = opts.expireSignature ? nowSeconds - 600 : nowSeconds;
   const expires = opts.expireSignature ? nowSeconds - 300 : created + 300;

@@ -109,7 +109,7 @@ pub async fn ordinary_bootstrap_admits_a_restricted_join_policy_and_refuses_unpr
 pub async fn ordinary_bootstrap_retry_preserves_the_exact_commits_and_conflict_writes_nothing()
 -> Result<()> {
     use arkret_models_collaboration::authority_commit::{
-        SelfAuthoritySubmitOutcome, SelfAuthoritySubmitRequest,
+        SelfAuthoritySubmitRequestBody, SelfAuthoritySubmitResponseBody,
     };
     use arkret_wire::{CommitStreamRef, CommittedEventView, RealmId};
 
@@ -142,8 +142,8 @@ pub async fn ordinary_bootstrap_retry_preserves_the_exact_commits_and_conflict_w
         StatusCode::OK,
     )
     .await?;
-    let first_typed: SelfAuthoritySubmitOutcome = serde_json::from_value(first.clone())?;
-    first_typed.validate_for_request(&SelfAuthoritySubmitRequest::OrdinaryRealmBootstrap(
+    let first_typed: SelfAuthoritySubmitResponseBody = serde_json::from_value(first.clone())?;
+    first_typed.validate_for_request(&SelfAuthoritySubmitRequestBody::OrdinaryRealmBootstrap(
         request.clone(),
     ))?;
     ensure!(first["status"] == "committed", "{first}");
@@ -152,8 +152,8 @@ pub async fn ordinary_bootstrap_retry_preserves_the_exact_commits_and_conflict_w
         StatusCode::OK,
     )
     .await?;
-    let replay_typed: SelfAuthoritySubmitOutcome = serde_json::from_value(replay.clone())?;
-    replay_typed.validate_for_request(&SelfAuthoritySubmitRequest::OrdinaryRealmBootstrap(
+    let replay_typed: SelfAuthoritySubmitResponseBody = serde_json::from_value(replay.clone())?;
+    replay_typed.validate_for_request(&SelfAuthoritySubmitRequestBody::OrdinaryRealmBootstrap(
         request.clone(),
     ))?;
     ensure!(

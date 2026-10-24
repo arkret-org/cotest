@@ -139,7 +139,7 @@ pub async fn run() -> Result<()> {
         "verified organization did not reach typed reader"
     );
     let snapshot = realm_business_footprint(&db.connect_url, &realm).await?;
-    let projection = &snapshot["realm_organization_current_results"][0];
+    let projection = &snapshot["realm_organization_current_states"][0];
     ensure!(
         projection["current_commit_id"] == accepted.commit_id.as_str()
             && projection["value"] == serde_json::to_value(&signed)?,

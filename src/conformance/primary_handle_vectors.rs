@@ -449,7 +449,7 @@ pub fn run_holder_primary_null_skips_layer_vector() -> Result<()> {
     Ok(())
 }
 
-// ── VECT-COT-1.10 — as_of replay vs realtime ────────────────────────────────
+// ── VECT-COT-1.10 — evaluated_at replay vs realtime ────────────────────────────────
 
 pub fn run_as_of_replay_vs_realtime_vector() -> Result<()> {
     let s = subject()?;
@@ -463,7 +463,7 @@ pub fn run_as_of_replay_vs_realtime_vector() -> Result<()> {
     )?;
     let snapshot = vec![later_claim];
 
-    // Historical replay at as_of=2026-05-10: claim not yet issued → Step 0
+    // Historical replay at evaluated_at=2026-05-10: claim not yet issued → Step 0
     // drops it → no selection.
     let replay = PrimaryHandleSelectInput {
         account_id: &s,
@@ -474,10 +474,12 @@ pub fn run_as_of_replay_vs_realtime_vector() -> Result<()> {
         resolution_as_of: at(2026, 5, 10),
     };
     if select_primary_handle(&replay).is_some() {
-        bail!("as_of replay before issuance MUST drop the claim (created_at > as_of)");
+        bail!(
+            "evaluated_at replay before issuance MUST drop the claim (created_at > evaluated_at)"
+        );
     }
 
-    // Realtime at as_of=2026-05-27: claim is live → selected.
+    // Realtime at evaluated_at=2026-05-27: claim is live → selected.
     let realtime = PrimaryHandleSelectInput {
         resolution_as_of: now_anchor(),
         ..replay
@@ -537,7 +539,7 @@ pub fn run_claim_digest_stable_under_hint_vector() -> Result<()> {
     Ok(())
 }
 
-// ── VECT-COT-1.12 — policy snapshot as_of replay ────────────────────────────
+// ── VECT-COT-1.12 — policy snapshot evaluated_at replay ────────────────────────────
 
 pub fn run_policy_snapshot_as_of_replay_vector() -> Result<()> {
     let s = subject()?;

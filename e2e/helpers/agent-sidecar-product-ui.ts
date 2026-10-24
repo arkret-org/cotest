@@ -2,7 +2,7 @@
 import { expect, type Page, type Route, type Request, type TestInfo, type Locator } from './arkret-test';
 import { assertAuthoritySubmitOutcome, wireErrCode } from './coland-api';
 import { decodeIngressEvents, type IngressEvent as SubmittedEvent } from './event-ingress';
-import type { SidecarEnsureAcceptedOutcome, AccountId, ActorId } from './generated/spec-wire-objects';
+import type { SidecarEnsureAcceptedResponseBody, AccountId, ActorId } from './generated/spec-wire-objects';
 export type PairingHandle={agentId:string;pairingRequestId:string;pairingCode:string};
 const AGENT_LIST_PATH='/_arkret/self/agents';
 const EVENTS_SUBMIT_PATH='/_arkret/self/events';
@@ -248,7 +248,7 @@ export async function addAgentToRealm(
 export async function waitForSidecarEnsureAcceptance(
   page: Page,
   testInfo: TestInfo,
-): Promise<SidecarEnsureAcceptedOutcome> {
+): Promise<SidecarEnsureAcceptedResponseBody> {
   let frozenSubmission: string | undefined;
   const response = await page.waitForResponse(
     async (candidate) => {
@@ -291,7 +291,7 @@ export async function waitForSidecarEnsureAcceptance(
     });
   }
   expect(response.status(), text).toBe(200);
-  const accepted = JSON.parse(text) as SidecarEnsureAcceptedOutcome;
+  const accepted = JSON.parse(text) as SidecarEnsureAcceptedResponseBody;
   expect(accepted.status).toBe("accepted");
   expect(accepted.accepted_phase).toBe(submitted.phase);
   expect(accepted.operation_id).toBe(submitted.operation_id);

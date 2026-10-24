@@ -639,7 +639,7 @@ Authorization: Bearer [redacted]                            # post-redaction pla
 
 The closed allowlist of secret-shaped field names is: `authorization`,
 `access_token`, `token`, `push_key`, `invite_token`, `signed_link`, `jws`,
-`sig`, `password`, `secret`, `secret_b64u`, `private_key`, `seed`,
+`signature`, `password`, `secret`, `secret_base64url`, `private_key`, `seed`,
 `mnemonic`, `recovery_key`, `recovery_phrase`, `recovery_secret`,
 `root_seed`, `root_private_key`, `hkdf_prk`, `prk`, `credential`,
 `plaintext_keybag`, `keybag_secret`, `mls_secret`, `epoch_secret`,

@@ -66,7 +66,7 @@ import {
   type BuiltWebvhGenesis,
 } from "../../helpers/webvh-api";
 
-import type { ActorId, AppletInstallOutcome, AppletAuthorityMaterialRequestBody, AppletAuthorityMaterialOutcome, CapabilityGrantObject } from "../../helpers/generated/spec-wire-objects";
+import type { ActorId, AppletInstallResponseBody, AppletAuthorityMaterialRequestBody, AppletAuthorityMaterialResponseBody, CapabilityGrantObject } from "../../helpers/generated/spec-wire-objects";
 
 // Each case provisions its own identities and Realm; a failed case must not
 // skip the remaining independent admission and replay checks.
@@ -100,7 +100,7 @@ type AppletRegistration = {
   portal_realm_id: string;
   namespace: string;
   status: string;
-  /// `applet_install_outcome.registration_event_ref`: the bare EventId of the
+  /// `applet_install_response_body.registration_event_ref`: the bare EventId of the
   /// accepted registration (applet-install-operations.schema.json).
   registration_event_ref: string;
   capability_grants: Array<{
@@ -298,7 +298,7 @@ function buildRealmActorIdentity(baseUrl: string, localId: string): RealmActorId
       base_url: baseUrl, local_id: localId,
       root_seed_b64url: ed25519PrivateKeySeedB64url(root.privateKey),
       next_root_public_key_multibase: next.multibase,
-      control_seed_b64url: controlSeed, version_time: canonicalTimestamp(),
+      control_seed_b64url: controlSeed, version_created_at: canonicalTimestamp(),
     }),
     control_seed_b64url: controlSeed,
   };
@@ -345,7 +345,7 @@ async function grantManagedActorActions(request: APIRequestContext, token: strin
     data: canonicalJson(materialRequest),
   });
   expect(materialResponse.status(), await materialResponse.text()).toBe(200);
-  const material = await materialResponse.json() as AppletAuthorityMaterialOutcome;
+  const material = await materialResponse.json() as AppletAuthorityMaterialResponseBody;
   // SDK carrier validation includes the original producer's required Device
   // evidence. Shape/cut validation does not claim signer crypto verification.
   expect(cotestWire("validate-applet-authority-material",material)).toEqual({valid:true});
@@ -353,8 +353,8 @@ async function grantManagedActorActions(request: APIRequestContext, token: strin
   expect(material.effective_scope).toEqual(effectiveScope);
   expect(material.registration.event.scope_ref).toEqual(effectiveScope);
   expect(material.grant_events).toHaveLength(parentIds.length);
-  expect(material.current_results).toHaveLength(parentIds.length);
-  for (const current of material.current_results) {
+  expect(material.current_states).toHaveLength(parentIds.length);
+  for (const current of material.current_states) {
     expect(current.status).toBe("present");
     expect(current.realm_id).toBe(realmId);
     expect(current.governance_generation).toBeGreaterThanOrEqual(0);
@@ -425,7 +425,7 @@ function serviceProxyManagedActorEvent(args: {
 
 function appletProducerKeyRef(signed: SignedPackage): string {
   return String(
-    (signed.applet_package.webhook_auth as Record<string, unknown>).key_ref,
+    (signed.applet_package.webhook_signature_policy as Record<string, unknown>).key_ref,
   );
 }
 
@@ -1576,7 +1576,7 @@ test.describe("applet inbound transaction push — per-delivery source signature
       package_id: `package:bridge:inbound-${stamp}`,
       namespace: `bridge.inbound.${stamp}`,
       capabilities: ["ak.message.create", "ak.applet.bridge_error"],
-      webhook_auth: {
+      webhook_signature_policy: {
         kind: "http_message_signature",
         accepted_signature_algorithms: ["ed25519"],
       },
@@ -1606,7 +1606,7 @@ test.describe("applet inbound transaction push — per-delivery source signature
       appletId: registration.applet_id,
       authorizationRef: capabilityGrantRefForAction(registration, "ak.applet.bridge_error"),
       verificationMethod: String(
-        (signed.applet_package.webhook_auth as Record<string, unknown>).key_ref,
+        (signed.applet_package.webhook_signature_policy as Record<string, unknown>).key_ref,
       ),
       signingKey: signed.service_signing_private_key,
     });
@@ -1619,7 +1619,7 @@ test.describe("applet inbound transaction push — per-delivery source signature
           targetUri,
           sourceServiceId,
           keyId: String(
-            (signed.applet_package.webhook_auth as Record<string, unknown>)
+            (signed.applet_package.webhook_signature_policy as Record<string, unknown>)
               .key_ref,
           ),
           destinationServiceId: colandServiceId(),
@@ -1639,7 +1639,7 @@ test.describe("applet inbound transaction push — per-delivery source signature
     };
     expect(outcome.status, JSON.stringify(outcome.rejections ?? [])).toBe("accepted");
     expect(outcome.rejections ?? []).toEqual([]);
-    // applet-integration.md §11.1 / applet_transaction_outcome: an accepted
+    // applet-integration.md §11.1 / applet_transaction_response_body: an accepted
     // Applet→Station submission names the exact Commit of every admitted Event.
     expect(outcome.committed_event_refs?.map((ref) => ref.event_id)).toEqual([
       body.events[0].event_id,
@@ -1662,7 +1662,7 @@ test.describe("applet inbound transaction push — per-delivery source signature
     const deliver = async (payload: Record<string, unknown>, key: string) => request.post(targetUri, {
       headers: signedAppletTransactionHeaders({
         body: payload, targetUri, sourceServiceId,
-        keyId: String((signed.applet_package.webhook_auth as Record<string, unknown>).key_ref),
+        keyId: String((signed.applet_package.webhook_signature_policy as Record<string, unknown>).key_ref),
         destinationServiceId: colandServiceId(), idempotencyKey: key,
         created: key === idempotencyKey ? deliveryCreated : undefined,
         signingKey: signed.service_signing_private_key,
@@ -1914,7 +1914,7 @@ test.describe("applet inbound transaction push — per-delivery source signature
       package_id: `package:bridge:inbound-forged-${stamp}`,
       namespace: `bridge.inbound.forged.${stamp}`,
       capabilities: ["ak.message.create"],
-      webhook_auth: {
+      webhook_signature_policy: {
         kind: "http_message_signature",
         accepted_signature_algorithms: ["ed25519"],
       },
@@ -1929,7 +1929,7 @@ test.describe("applet inbound transaction push — per-delivery source signature
     );
     const sourceServiceId = signed.applet_package.service_id;
     const verificationMethod = String(
-      (signed.applet_package.webhook_auth as Record<string, unknown>).key_ref,
+      (signed.applet_package.webhook_signature_policy as Record<string, unknown>).key_ref,
     );
 
     // Establish the exact active install and current webhook key first. The
@@ -2111,8 +2111,8 @@ async function signPackage(
   });
   const botBuilt = buildRealmActorIdentity(colandBaseUrl(),`applet-bot-${typedId("operation").split(":").at(-1)}`);
   const requestedWebhookAuth =
-    data.webhook_auth && typeof data.webhook_auth === "object"
-      ? (data.webhook_auth as Record<string, unknown>)
+    data.webhook_signature_policy && typeof data.webhook_signature_policy === "object"
+      ? (data.webhook_signature_policy as Record<string, unknown>)
       : {};
   const requestOptions = {
     // Only this durable, keyed fixture operation can safely retry a reset.
@@ -2131,14 +2131,14 @@ async function signPackage(
       service_id_method_version_evidence: {
         method: "did:webvh",
         version_id: built.versionId,
-        version_time: versionTime,
+        version_created_at: versionTime,
         unversioned_refetch: false,
       },
       service_signing_public_jwk: servicePublicJwk,
       service_signing_private_jwk: serviceSigningKey.privateKey.export({
         format: "jwk",
       }),
-      webhook_auth: {
+      webhook_signature_policy: {
         kind: "http_message_signature",
         accepted_signature_algorithms: ["ed25519"],
         ...requestedWebhookAuth,
@@ -2203,7 +2203,7 @@ async function installApplet(
   const response = result.response;
   const responseText = await response.text();
   expect(response.status(), responseText).toBe(201);
-  const installed = JSON.parse(responseText) as AppletInstallOutcome;
+  const installed = JSON.parse(responseText) as AppletInstallResponseBody;
   expect(installed).not.toHaveProperty("bot_actor_id");
   const bot = await provisionAppletBot(request,signed,realmId,idempotencyKey,options);
   // The registration is local fixture bookkeeping, not a provision wire DTO.
@@ -2685,7 +2685,7 @@ function appletRegistrationPayload(
   if (typeof versionTime !== "string") {
     throw new Error("Applet service DID document has no version timestamp");
   }
-  const webhookAuth = pkg.webhook_auth as Record<string, unknown> | undefined;
+  const webhookAuth = pkg.webhook_signature_policy as Record<string, unknown> | undefined;
   const verificationMethod = webhookAuth?.key_ref;
   if (typeof verificationMethod !== "string") {
     throw new Error("Applet package webhook auth has no verification method");
@@ -2707,7 +2707,7 @@ function appletRegistrationPayload(
       method_version_evidence: {
         method: "did:webvh",
         version_id: operation.versionId,
-        version_time: versionTime,
+        version_created_at: versionTime,
         unversioned_refetch: false,
       },
       accepted_signing_keys: [
@@ -2733,7 +2733,7 @@ function appletRegistrationPayload(
     rate_limited: pkg.rate_limited,
     requested_scopes: pkg.requested_scopes,
     registration_epoch: pkg.registration_epoch,
-    webhook_auth: pkg.webhook_auth,
+    webhook_signature_policy: pkg.webhook_signature_policy,
     manifest,
     proof: pkg.proof,
     created_at: pkg.created_at,
@@ -2854,7 +2854,7 @@ async function publishAppletServiceIdDocument(
 function installRegistrationFromResponse(
   signed: SignedPackage,
   realmId: string,
-  response: AppletInstallOutcome,
+  response: AppletInstallResponseBody,
   acceptedBotActorId: ActorId,
   grantActionsById: Map<string, string[]>,
 ): AppletRegistration {
@@ -2868,7 +2868,7 @@ function installRegistrationFromResponse(
   expect(new Set(capabilityGrantRefs)).toEqual(
     new Set(grantActionsById.keys()),
   );
-  // applet-install-operations.schema.json#/$defs/applet_install_outcome:
+  // applet-install-operations.schema.json#/$defs/applet_install_response_body:
   // `registration_event_ref` is a bare EventId, not a CommittedEventRef.
   expect(
     response.registration_event_ref,

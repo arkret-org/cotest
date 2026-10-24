@@ -65,7 +65,7 @@ async fn refused_message(
 async fn quota_exhaustion(scene: &GrantFixture) -> Result<()> {
     let quota = serde_json::from_value(
         json!({"constraint_kind":"quota","constraint_subkind":"rate",
-        "effect":"allow","max_operations":1,"period":"P1D","constraint_scope":"per_realm"}),
+        "effect":"allow","max_operation_count":1,"period":"P1D","constraint_scope":"per_realm"}),
     )?;
     let grant = scene
         .grant_with_constraints(&scene.a, &["ak.message.create"], vec![quota])
@@ -113,7 +113,7 @@ async fn quota_exhaustion(scene: &GrantFixture) -> Result<()> {
         .owned_database_url()
         .context("owned Station database")?;
     let before_retry = acceptance_rows_with_agent_stores(database, true).await?;
-    let retry: AuthoritySubmitOutcome = serde_json::from_value(
+    let retry: AuthoritySubmitResponseBody = serde_json::from_value(
         expect_json(
             runtime
                 .post("/_arkret/self/events")
@@ -123,7 +123,7 @@ async fn quota_exhaustion(scene: &GrantFixture) -> Result<()> {
         .await?,
     )?;
     ensure!(
-        matches!(retry, AuthoritySubmitOutcome::Accepted { status: AuthorityCommitStatus::Duplicate, commit }
+        matches!(retry, AuthoritySubmitResponseBody::Accepted { status: AuthorityCommitStatus::Duplicate, commit }
         if &commit == original.commit())
     );
     ensure!(

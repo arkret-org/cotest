@@ -157,7 +157,7 @@ fn actor(principal_id: &str) -> Result<ActorId> {
 fn carrier(case: &FixtureCase) -> Result<MlsWelcomeEnvelope, AdmissionRejection> {
     let mut value = json!({
         "group_id": GROUP_ID,
-        "epoch": 4,
+        "epoch": "4",
         "recipient_principal_id": case.claim_principal_id,
         "recipient_agent_id": case.claim_principal_id,
         "recipient_agent_verification_method": case.current_verification_method,

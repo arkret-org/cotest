@@ -26,12 +26,11 @@
 use anyhow::{Result, bail};
 use arkret_identifiers::{BlobRef, CallId, DidCoreId, EventId, GrantId, Hash, PolicyId, RealmId};
 use arkret_models_collaboration::events_payloads::call::{
-    CallRecordingArtifact, CallRecordingDeletionAudit, CallRecordingDeletionOutcome,
+    CallRecordingArtifact, CallRecordingDeletionAudit, CallRecordingDeletionStatus,
     CallRecordingDeletionTrigger, CallRecordingEncryption, CallRecordingEncryptionAlgorithm,
-    CallRecordingEncryptionContext, CallRecordingId, CallRecordingRetention,
+    CallRecordingEncryptionContext, CallRecordingId, CallRecordingMetadata, CallRecordingRetention,
     CallRecordingStartPayload, CallRecordingState, CallRecordingTransition, CallStatePayload,
-    CallStatePayloadRecordingResult, CallStatePayloadTranscriptResult, CallTranscriptState,
-    CallTranscriptTransition,
+    CallTranscriptMetadata, CallTranscriptState, CallTranscriptTransition,
 };
 use arkret_wire::{ExporterLabelId, ProfileId};
 use chrono::{DateTime, Utc};
@@ -256,7 +255,7 @@ fn valid_recording_artifact() -> CallRecordingArtifact {
         created_at: ts("2026-06-19T00:00:00.000Z"),
         deletion_audit: Some(CallRecordingDeletionAudit {
             trigger: CallRecordingDeletionTrigger::RetentionExpiry,
-            outcome: CallRecordingDeletionOutcome::Completed,
+            status: CallRecordingDeletionStatus::Completed,
             requested_by: None,
             trigger_event_id: None,
             requested_at: ts("2026-06-20T00:00:00.000Z"),
@@ -281,7 +280,7 @@ fn ready_call_state_payload(artifact: Option<CallRecordingArtifact>) -> CallStat
             .unwrap(),
             from: CallRecordingState::Stopped,
             to: CallRecordingState::Ready,
-            result: Some(CallStatePayloadRecordingResult {
+            capture_metadata: Some(CallRecordingMetadata {
                 content_digest: artifact_ref.and_then(|artifact| {
                     artifact
                         .blob_ref
@@ -344,7 +343,7 @@ fn evaluate_recording_result_artifact_shape(
     let artifact = payload
         .recording_transition
         .as_ref()
-        .and_then(|transition| transition.result.as_ref())
+        .and_then(|transition| transition.capture_metadata.as_ref())
         .and_then(|result| result.artifact.as_ref())
         .ok_or(arkret_wire::ErrorCode::SCHEMA_VIOLATION)?;
     if deletion_completed {
@@ -352,7 +351,7 @@ fn evaluate_recording_result_artifact_shape(
             .deletion_audit
             .as_ref()
             .ok_or(arkret_wire::ErrorCode::SCHEMA_VIOLATION)?;
-        if audit.outcome != CallRecordingDeletionOutcome::Completed
+        if audit.status != CallRecordingDeletionStatus::Completed
             || audit
                 .erasure_receipt_ref
                 .as_deref()
@@ -544,7 +543,7 @@ pub fn run_transcribe_lifecycle_vector() -> Result<()> {
                 .unwrap(),
             from: CallTranscriptState::Stopped,
             to: CallTranscriptState::Ready,
-            result: Some(CallStatePayloadTranscriptResult {
+            capture_metadata: Some(CallTranscriptMetadata {
                 content_digest: Some(hash('c')),
                 media_type: Some("text/vtt".to_owned()),
                 language: Some("en-US".to_owned()),

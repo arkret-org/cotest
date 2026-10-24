@@ -17,7 +17,7 @@ pub struct SharedSubmissionObservation {
     content_type: String,
     transport_protocol: String,
     response_shape: Value,
-    pub outcome: arkret_wire::AuthoritySubmitOutcome,
+    pub outcome: arkret_wire::AuthoritySubmitResponseBody,
     elapsed: std::time::Duration,
     attempts: Vec<(StatusCode, Option<String>)>,
 }
@@ -59,9 +59,9 @@ pub async fn observed_authored_shared_message(
     event: arkret_wire::Event,
 ) -> Result<SharedSubmissionObservation> {
     use arkret_models_collaboration::authority_commit::{
-        SelfAuthoritySubmitOutcome, SelfAuthoritySubmitRequest,
+        SelfAuthoritySubmitRequestBody, SelfAuthoritySubmitResponseBody,
     };
-    let request = SelfAuthoritySubmitRequest::Event(crate::publication::initial_submission(
+    let request = SelfAuthoritySubmitRequestBody::Event(crate::publication::initial_submission(
         event.clone(),
         "",
     )?);
@@ -123,12 +123,12 @@ pub async fn observed_authored_shared_message(
         "private block leaked through the sender result"
     );
     let response_shape = json_shape(&serde_json::from_slice::<Value>(&bytes)?);
-    let outcome: SelfAuthoritySubmitOutcome = serde_json::from_slice(&bytes)?;
+    let outcome: SelfAuthoritySubmitResponseBody = serde_json::from_slice(&bytes)?;
     outcome.validate_for_request(&request)?;
-    let SelfAuthoritySubmitOutcome::Ordinary(outcome) = outcome else {
+    let SelfAuthoritySubmitResponseBody::Ordinary(outcome) = outcome else {
         bail!("shared Message returned an unrelated authoring branch");
     };
-    let arkret_wire::AuthoritySubmitOutcome::Accepted {
+    let arkret_wire::AuthoritySubmitResponseBody::Accepted {
         status: accepted_status,
         commit,
     } = &outcome
@@ -184,14 +184,14 @@ pub fn compare_shared_sender_observations(
             && blocked.response_shape == unblocked.response_shape,
         "paired submissions changed sender, scope, authority, operation, protocol or response shape"
     );
-    let arkret_wire::AuthoritySubmitOutcome::Accepted {
+    let arkret_wire::AuthoritySubmitResponseBody::Accepted {
         status: blocked_status,
         commit: blocked_commit,
     } = &blocked.outcome
     else {
         bail!("blocked peer was not accepted");
     };
-    let arkret_wire::AuthoritySubmitOutcome::Accepted {
+    let arkret_wire::AuthoritySubmitResponseBody::Accepted {
         status: unblocked_status,
         commit: unblocked_commit,
     } = &unblocked.outcome

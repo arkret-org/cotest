@@ -47,13 +47,13 @@ fn rejects_automatic_realm_inheritance_without_current_v1_carrier() {
         "retired automatic effective-policy read operation is registered"
     );
 
-    let current_registry = artifact("registry/current-result-registry.json");
+    let current_registry = artifact("registry/current-state-registry.json");
     assert!(
-        current_registry["result_kinds"]
+        current_registry["state_kinds"]
             .as_array()
-            .expect("result_kinds array")
+            .expect("state_kinds array")
             .iter()
-            .all(|row| row["result_kind"] != "realm_inheritance_policy"),
+            .all(|row| row["operation_kind"] != "realm_inheritance_policy"),
         "retired inheritance typed-current family is registered"
     );
 

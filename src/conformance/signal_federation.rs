@@ -3,8 +3,8 @@ use arkret_signatures::{PublicKeyMaterial, verify_ed25519_signal_proof};
 use arkret_wire::{
     AccountId, ActorId, DeviceId, Did, DidCoreId, Hash, MAX_SIGNAL_RELAY_CANONICAL_BODY_BYTES,
     MAX_SIGNAL_RELAY_ITEMS, ProfileId, RealmCommitId, RealmId, ScopeRef, SignalClass,
-    SignalEncryptedPayload, SignalEnvelope, SignalKeyRef, SignalProof, SignalRelayOutcome,
-    SignalRelayRequest, project_did_to_core_id,
+    SignalEncryptedPayload, SignalEnvelope, SignalKeyRef, SignalProof, SignalRelayRequestBody,
+    SignalRelayResponseBody, project_did_to_core_id,
 };
 use chrono::{Duration, TimeZone, Utc};
 use ed25519_dalek::SigningKey;
@@ -227,13 +227,14 @@ pub fn run_signal_federation_fixture_suite() -> Result<()> {
         bail!("Signal federation fixture runner metadata drifted");
     }
     let signal = envelope()?;
-    let request = SignalRelayRequest {
+    let request = SignalRelayRequestBody {
         realm_id: signal.realm_id.clone(),
         signals: vec![signal.clone()],
     };
     request.validate()?;
-    SignalRelayOutcome::ACCEPTED.validate()?;
-    if serde_json::to_value(SignalRelayOutcome::ACCEPTED)? != serde_json::json!({"accepted": true})
+    SignalRelayResponseBody::ACCEPTED.validate()?;
+    if serde_json::to_value(SignalRelayResponseBody::ACCEPTED)?
+        != serde_json::json!({"accepted": true})
     {
         bail!("Signal relay outcome is not opaque");
     }
@@ -307,7 +308,7 @@ pub fn run_signal_federation_fixture_suite() -> Result<()> {
                         bail!("Signal relay limit {field} drifted");
                     }
                 }
-                let oversized = SignalRelayRequest {
+                let oversized = SignalRelayRequestBody {
                     realm_id: signal.realm_id.clone(),
                     signals: vec![signal.clone(); MAX_SIGNAL_RELAY_ITEMS + 1],
                 };
@@ -315,7 +316,7 @@ pub fn run_signal_federation_fixture_suite() -> Result<()> {
                     bail!("Signal relay accepted an oversized batch");
                 }
                 for count in [MAX_SIGNAL_RELAY_ITEMS - 1, MAX_SIGNAL_RELAY_ITEMS] {
-                    SignalRelayRequest {
+                    SignalRelayRequestBody {
                         realm_id: signal.realm_id.clone(),
                         signals: vec![signal.clone(); count],
                     }
@@ -328,7 +329,7 @@ pub fn run_signal_federation_fixture_suite() -> Result<()> {
                     &SigningKey::from_bytes(&SIGNING_SEED),
                 );
                 large_item.validate_wire_shape()?;
-                let oversized_body = SignalRelayRequest {
+                let oversized_body = SignalRelayRequestBody {
                     realm_id: signal.realm_id.clone(),
                     signals: vec![large_item; 20],
                 };
@@ -345,7 +346,7 @@ pub fn run_signal_federation_fixture_suite() -> Result<()> {
                 if generator["same_realm"].as_bool() == Some(false) {
                     let other =
                         RealmId::new("ak:realm:Aa2wBBPOONHiiqIv1IKaV84axlqDTBPpa3Yw_hNef_Zl")?;
-                    let cross_realm = SignalRelayRequest {
+                    let cross_realm = SignalRelayRequestBody {
                         realm_id: other,
                         signals: vec![signal.clone()],
                     };
@@ -355,7 +356,7 @@ pub fn run_signal_federation_fixture_suite() -> Result<()> {
                 } else if generator["hop_count"] == 2 {
                     if case["expected"]["decision"] != "silently_drop_item"
                         || case["expected"]["response"]
-                            != serde_json::to_value(SignalRelayOutcome::ACCEPTED)?
+                            != serde_json::to_value(SignalRelayResponseBody::ACCEPTED)?
                     {
                         bail!("second-hop failure must not reveal a per-item response");
                     }
@@ -367,7 +368,7 @@ pub fn run_signal_federation_fixture_suite() -> Result<()> {
             }
             "signal_peer_relay_equivalence_pair" => {
                 let expected = &case["expected"];
-                let opaque = serde_json::to_value(SignalRelayOutcome::ACCEPTED)?;
+                let opaque = serde_json::to_value(SignalRelayResponseBody::ACCEPTED)?;
                 if expected["response"] != opaque || expected["responses_byte_identical"] != true {
                     bail!("peer outcome equivalence contract drifted");
                 }
@@ -380,7 +381,7 @@ pub fn run_signal_federation_fixture_suite() -> Result<()> {
                         .ok_or_else(|| anyhow!("invalid forbidden field"))?;
                     let mut disclosed = opaque.clone();
                     disclosed[field] = serde_json::json!(1);
-                    if serde_json::from_value::<SignalRelayOutcome>(disclosed).is_ok() {
+                    if serde_json::from_value::<SignalRelayResponseBody>(disclosed).is_ok() {
                         bail!("peer response schema admits {field}");
                     }
                 }
@@ -480,7 +481,7 @@ fn validate_role_case_contract(case: &Value) -> Result<()> {
         "destination_without_remote_directory_relays" => {
             if expected["remote_directory_queries"] != 0
                 || expected["producer_signature_verifications"] != 0
-                || expected["response"] != serde_json::to_value(SignalRelayOutcome::ACCEPTED)?
+                || expected["response"] != serde_json::to_value(SignalRelayResponseBody::ACCEPTED)?
             {
                 bail!("destination must not authenticate remote device authority");
             }
@@ -517,7 +518,7 @@ fn validate_role_case_contract(case: &Value) -> Result<()> {
             }
             let mut mismatch = envelope()?;
             mismatch.proof.envelope_digest = Hash::new(format!("sha256:{}", "0".repeat(64)))?;
-            SignalRelayRequest {
+            SignalRelayRequestBody {
                 realm_id: mismatch.realm_id.clone(),
                 signals: vec![mismatch.clone()],
             }

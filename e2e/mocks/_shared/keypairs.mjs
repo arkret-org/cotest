@@ -21,7 +21,7 @@ export function createRsaKeyPair(kid, { modulusLength = 2048, alg = "RS256" } = 
         ...publicJwk,
         kid,
         alg,
-        use: "sig",
+        use: "signature",
       },
     ],
   };
@@ -37,7 +37,7 @@ export function createEd25519KeyPair(kid, { alg = "Ed25519" } = {}) {
         ...publicJwk,
         kid,
         alg,
-        use: "sig",
+        use: "signature",
       },
     ],
   };

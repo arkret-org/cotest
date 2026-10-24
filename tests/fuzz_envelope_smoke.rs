@@ -65,7 +65,7 @@ fn fuzz_envelope_smoke() {
     );
     run_fuzz_loop("realm_commit", fuzz_realm_commit, &mut findings);
     run_fuzz_loop(
-        "stream_scan_outcome",
+        "stream_scan_response_body",
         fuzz_stream_scan_outcome,
         &mut findings,
     );

@@ -5,7 +5,7 @@ use std::time::{Duration, Instant};
 use anyhow::{Context, Result, ensure};
 use arkret_models_collaboration::device_messages::RecipientDelivery;
 use arkret_models_collaboration::objects::read_receipts::{
-    ReadCursorAdvanceRequestBody, ReadCursorList, ReadCursorPosition, ReadMarkerOutcome,
+    ReadCursorAdvanceRequestBody, ReadCursorList, ReadCursorPosition, ReadMarkerResponseBody,
 };
 use arkret_wire::{ActorId, EventAdmissionSubmission, EventId, ReadCursorScope, RealmId};
 use serde_json::json;
@@ -27,7 +27,7 @@ pub(crate) async fn advance(
     realm: &RealmId,
     scope: &ReadCursorScope,
     position: &ReadCursorPosition,
-) -> Result<ReadMarkerOutcome> {
+) -> Result<ReadMarkerResponseBody> {
     let principal = client
         .principal
         .as_ref()
@@ -36,7 +36,7 @@ pub(crate) async fn advance(
         "schema":"ak.schema.read_cursor.v1","actor_id":ActorId::account(arkret_wire::AccountId::new(principal.core_id.clone(), client.service_id().parse()?)),
         "device_id":principal.device_id,"realm_id":realm,"read_scope":scope,"position":position
     })).await?;
-    let outcome: ReadMarkerOutcome = client
+    let outcome: ReadMarkerResponseBody = client
         .sdk()
         .advance_read_cursor(&client.verify_publication(ReadCursorAdvanceRequestBody {
             advance_event: EventAdmissionSubmission::new(event.clone()),

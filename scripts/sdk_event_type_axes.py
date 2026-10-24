@@ -16,7 +16,7 @@ def digest(path):
 
 
 def read(path):
-    return json.loads(Path(path).read_text(encoding="utf-8-sig"))
+    return json.loads(Path(path).read_text(encoding="utf-8-signature"))
 
 
 def write(path, data):
@@ -192,13 +192,13 @@ def run(args):
         ("raw_generic_delete_body", 'client.delete_with_body("/_arkret/self/events", &body)'),
     ]:
         supplements.append(compile_run(name, f'''async fn invalid(client: &arkret::Client, body: EventAdmissionSubmission) {{
-            let _: arkret::http_client::Result<AuthoritySubmitOutcome> = {expression}.await;
+            let _: arkret::http_client::Result<AuthoritySubmitResponseBody> = {expression}.await;
         }}\nfn main() {{}}''', False))
     supplements.append(compile_run("raw_peer_watch", """async fn invalid(client: &arkret::Client, bytes: &[u8]) {
-        let request: PeerWatchAuditReadRequest = serde_json::from_slice(bytes).unwrap();
+        let request: PeerWatchAuditReadRequestBody = serde_json::from_slice(bytes).unwrap();
         let _ = client.peer_strand_watch_audit_read(&request, 0).await;
     }\nfn main() {}""", False))
-    supplements.append(compile_run("raw_security_create", """async fn invalid(client: &Client, request: &SecurityTransactionCreateRequest) {
+    supplements.append(compile_run("raw_security_create", """async fn invalid(client: &Client, request: &SecurityTransactionCreateRequestBody) {
         let _ = client.create_security_transaction(request).await;
     }\nfn main() {}""", False))
     controls = [compile_run("prepared_batch_canonical_preserves_approval", "fn main() { assert_deferred_batch(); }", True)]

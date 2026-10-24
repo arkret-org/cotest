@@ -79,7 +79,7 @@
           "title": "Engineering",
           "summary": "Team workspace",
           "discoverability": "listed",
-          "as_of": "2026-06-06T00:00:00.000Z",
+          "evaluated_at": "2026-06-06T00:00:00.000Z",
           "source_refs": [
             "ak:event:AVAXPtjUq_7NKI-aYtOned0cm20tOwEMG0onUjNTTJ-N"
           ],
@@ -154,7 +154,7 @@
   ],
   "direct_conversation_vectors": {
     "trust_domain": "ak:trust_domain:example.test",
-    "resolve_request": {
+    "resolve_request_body": {
       "peer": {
         "kind": "human",
         "account_id": {
@@ -252,7 +252,7 @@
         ],
         "bidirectional_scopes": []
       },
-      "resolve_request": {
+      "resolve_request_body": {
         "peer": {
           "kind": "human",
           "account_id": {

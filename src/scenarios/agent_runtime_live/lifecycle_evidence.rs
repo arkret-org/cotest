@@ -1,8 +1,9 @@
 //! Actual controller transitions and the terminal runtime-session barrier.
 
 use arkret_models_collaboration::agent_operations::{
-    AgentDeactivateRequestBody, AgentLifecycleOutcome, AgentLifecycleState, AgentPauseRequestBody,
-    AgentReadinessBlocker, AgentReadinessState, AgentResumeRequestBody, AgentView,
+    AgentDeactivateRequestBody, AgentLifecycleState, AgentOperationStatusView,
+    AgentPauseRequestBody, AgentReadinessBlocker, AgentReadinessState, AgentResumeRequestBody,
+    AgentView,
 };
 
 use super::*;
@@ -96,7 +97,7 @@ async fn accepted(
 ) -> Result<Vec<u8>> {
     let before = acceptance_rows_with_agent_stores(url, true).await?;
     let (event, bytes) = request(controller, agent, action)?;
-    let outcome: AgentLifecycleOutcome = serde_json::from_value(
+    let outcome: AgentOperationStatusView = serde_json::from_value(
         expect_json(
             controller
                 .post(&format!(
@@ -158,7 +159,7 @@ async fn accepted(
                 AgentReadinessBlocker::RuntimeKeyMissing | AgentReadinessBlocker::PairingOpen
             ))
     );
-    ensure!(current.agent.presence.refresh_after <= current.agent.presence.expires_at);
+    ensure!(current.agent.presence.refresh_at <= current.agent.presence.expires_at);
     println!(
         "[agent-lifecycle] transition={action} exact_original_event_commit=1 single_accepted_event=1 orthogonal_projection=1"
     );
@@ -175,7 +176,7 @@ async fn replay_lifecycle(
     original: AgentLifecycleState,
 ) -> Result<()> {
     let before = acceptance_rows_with_agent_stores(url, true).await?;
-    let outcome: AgentLifecycleOutcome = serde_json::from_value(
+    let outcome: AgentOperationStatusView = serde_json::from_value(
         expect_json(
             controller
                 .post(&format!(

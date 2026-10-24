@@ -89,7 +89,7 @@ class DirectOriginalOracleTests(unittest.TestCase):
         self.assertIn("e.kind='ak.realm.create'", direct)
 
     def test_summarize_validates_binding_before_exporting_public_metadata(self):
-        tables = ["canonical_events", "realm_commits", "notifications", "capability_grant_current_results",
+        tables = ["canonical_events", "realm_commits", "notifications", "capability_grant_current_states",
                   "capability_quota_counters", "capability_quota_buckets", "capability_quota_consumptions",
                   "event_federation_outbox_business"]
         lines = [{"table": t, "rows": []} for t in tables]

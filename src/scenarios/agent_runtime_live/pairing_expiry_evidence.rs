@@ -1,6 +1,6 @@
 //! Real Agent pairing failure classifications on accepted controller authority.
 use arkret_models_collaboration::agent_operations::{
-    AgentRenewPairingOutcome, AgentRenewPairingRequestBody,
+    AgentRenewPairingRequestBody, AgentRenewPairingResponseBody,
 };
 use arkret_models_collaboration::agent_scope::AgentKeyPairRequestBody;
 
@@ -50,7 +50,7 @@ pub(super) async fn replacement_material_with_scope(
     pairing_ttl_ms: u64,
     scope: Option<AgentKeyScope>,
 ) -> Result<ReplacementMaterial> {
-    let renewed: AgentRenewPairingOutcome = serde_json::from_value(
+    let renewed: AgentRenewPairingResponseBody = serde_json::from_value(
         expect_json(
             controller
                 .post(&format!(
@@ -83,7 +83,7 @@ pub(super) async fn replacement_material_with_scope(
         &method,
     );
     let candidate = builder.build_approval_request()?;
-    let approval: AgentRuntimeApprovalOutcome = serde_json::from_value(
+    let approval: AgentRuntimeApprovalResponseBody = serde_json::from_value(
         expect_json(
             station
                 .http()

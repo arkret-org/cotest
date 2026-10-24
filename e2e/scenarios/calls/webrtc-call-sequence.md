@@ -10,7 +10,7 @@ Verifies the `ak.call.signal` ordering contract against a live coland instance.
 
 Expected:
 
-- The server assigns a strictly monotonic dense `seq` (1, 2, 3, 4).
+- The server assigns a strictly monotonic dense `sequence` (1, 2, 3, 4).
 - Call Morph: `invite` -> connecting, `answer` -> active, `candidate` leaves
   the lifecycle untouched (ephemeral status), `hangup` -> ended.
 - Read-back attributes each frame to the correct sender DID.
@@ -22,7 +22,7 @@ Expected:
 
 Expected:
 
-- `focus_join` frames are logged in seq order (alice, bob, carol).
+- `focus_join` frames are logged in sequence order (alice, bob, carol).
 - Each frame carries the shared `focus_id`.
 
 Spec: crypto-media/webrtc-signaling.md §5-§6, crypto-media/call-state.md §4.2,

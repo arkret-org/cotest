@@ -192,7 +192,7 @@ fn verify_candidate_plaintext(
 ) -> Result<()> {
     key.validate()?;
     ensure!(key.actor == sender.actor && key.authorization_ref == sender.authorize_event_id);
-    let bytes = arkret_canonical::base64url_decode(key.public_key_b64u.as_str())?;
+    let bytes = arkret_canonical::base64url_decode(key.public_key_base64url.as_str())?;
     ensure!(bytes == sender.key.verifying_key().to_bytes());
     let public = arkret_signatures::PublicKeyMaterial::Ed25519Raw { bytes };
     let plaintext = group.open_signal_envelope(

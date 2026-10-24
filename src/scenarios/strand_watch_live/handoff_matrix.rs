@@ -1,11 +1,12 @@
 //! Operational private import and native signed peer handoff activation.
 use arkret_models_collaboration::authority_commit::{
-    AuditPairedEventAcceptanceOutcome, AuditPairedEventUnitSubmission, AuthorityHandoffRequest,
-    HistoricalProducerSignerFactEntry, historical_signer_facts_digest,
+    AuditPairedEventAcceptanceOutcome, AuditPairedEventUnitSubmission,
+    AuthorityRealmAuthorityHandoffRequestBody, HistoricalProducerSignerFactEntry,
+    historical_signer_facts_digest,
 };
-use arkret_models_collaboration::strand_watch_operations::WatchAuditReadRequest;
+use arkret_models_collaboration::strand_watch_operations::WatchAuditReadRequestBody;
 use arkret_wire::{
-    AuthorityBundleRequest, Base64UrlString, DetachedSignatureContext, DidUrl, Hash,
+    Base64UrlString, DetachedSignatureContext, DidUrl, Hash, RealmAuthorityBundleRequestBody,
     RealmAuthorityHandoff, RealmAuthorityHandoffId, RealmAuthorityTransition,
 };
 use coland_storage::AuthorityCommitStore;
@@ -31,7 +32,7 @@ pub(super) async fn run(
     strand: &StrandId,
     original: &AuditPairedEventUnitSubmission,
     original_outcome: &AuditPairedEventAcceptanceOutcome,
-    frozen: &WatchAuditReadRequest,
+    frozen: &WatchAuditReadRequestBody,
 ) -> Result<()> {
     ensure!(old_url != new_url, "handoff uses one database");
     let old = group.server(1);
@@ -68,7 +69,7 @@ pub(super) async fn run(
     getrandom::fill(&mut nonce_bytes).map_err(anyhow::Error::msg)?;
     let nonce = Base64UrlString::new(arkret_canonical::base64url_encode(nonce_bytes))
         .map_err(anyhow::Error::msg)?;
-    let request = AuthorityBundleRequest {
+    let request = RealmAuthorityBundleRequestBody {
         realm_id: typed_realm.clone(),
         nonce,
     };
@@ -103,7 +104,7 @@ pub(super) async fn run(
             realm,
             EventKind::RealmGovernanceStationChange.as_str(),
             json!({
-        "expected_governance_generation":0,"expected_realm_stream_commit_id":head.commit_id,
+        "expected_governance_generation":"0","expected_realm_stream_commit_id":head.commit_id,
         "new_governance_station_id":new.service_id()}),
         )
         .await?;
@@ -229,7 +230,7 @@ pub(super) async fn run(
         new_method,
         &new_key,
     )?;
-    let activation = AuthorityHandoffRequest {
+    let activation = AuthorityRealmAuthorityHandoffRequestBody {
         management_private_state: None,
         pcr_private_state: None,
         handoff,
@@ -281,7 +282,7 @@ pub(super) async fn run(
     ensure!(
         matches!(
             read(bob, &selector).await?,
-            StrandWatchCurrentOutcome::Current {
+            StrandWatchCurrentResponseBody::Current {
                 governance_generation: 1,
                 ..
             }
@@ -327,7 +328,7 @@ pub(super) async fn run(
     ensure!(
         matches!(
             read(bob, &selector).await?,
-            StrandWatchCurrentOutcome::Current { .. }
+            StrandWatchCurrentResponseBody::Current { .. }
         ),
         "complete import lost a written selector"
     );
@@ -338,7 +339,7 @@ pub(super) async fn run(
     ensure!(
         matches!(
             read(bob, &absence).await?,
-            StrandWatchCurrentOutcome::NeverWritten {
+            StrandWatchCurrentResponseBody::NeverWritten {
                 governance_generation: 1,
                 ..
             }
@@ -354,7 +355,7 @@ pub(super) async fn run(
             StrandWatchLevel::All,
             None,
         )
-        .with_expected_value(StrandWatchCurrentValue::Set(StrandWatchExpectedValue {
+        .with_expected_value(StrandWatchValue::Set(StrandWatchExpectedValue {
             level: StrandWatchLevel::Participating,
             level_public: None,
         })),
@@ -373,7 +374,7 @@ pub(super) async fn run(
     current(
         read(bob, &selector).await?,
         &next,
-        StrandWatchCurrentValue::Set(StrandWatchExpectedValue {
+        StrandWatchValue::Set(StrandWatchExpectedValue {
             level: StrandWatchLevel::All,
             level_public: None,
         }),

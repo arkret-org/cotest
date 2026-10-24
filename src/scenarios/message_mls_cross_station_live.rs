@@ -4,10 +4,10 @@
 
 use anyhow::{Context, Result, ensure};
 use arkret::{ArkretMlsGroup, MlsCommitPayload, MlsGovernanceBindingPayload};
-use arkret_models_collaboration::authority_commit::SelfAuthoritySubmitRequest;
+use arkret_models_collaboration::authority_commit::SelfAuthoritySubmitRequestBody;
 use arkret_models_collaboration::events_payloads::message::MessageCreatePayload;
 use arkret_wire::{
-    AuthoritySubmitOutcome, EventId, EventKind, MlsCommitSubmission, RealmId, ScopeRef,
+    AuthoritySubmitResponseBody, EventId, EventKind, MlsCommitSubmission, RealmId, ScopeRef,
 };
 use base64::Engine as _;
 use reqwest::StatusCode;
@@ -232,8 +232,8 @@ pub(crate) async fn submit_and_open_content(
         "encrypted Message submission: {}",
         outcome.status()
     );
-    let outcome: AuthoritySubmitOutcome = outcome.json().await?;
-    let AuthoritySubmitOutcome::Accepted { commit, .. } = outcome else {
+    let outcome: AuthoritySubmitResponseBody = outcome.json().await?;
+    let AuthoritySubmitResponseBody::Accepted { commit, .. } = outcome else {
         anyhow::bail!("encrypted Message was not accepted: {outcome:?}")
     };
     drop(frozen);
@@ -249,9 +249,9 @@ pub(crate) async fn submit_and_open_content(
         .send()
         .await?;
     ensure!(replay.status() == StatusCode::OK);
-    let replay: AuthoritySubmitOutcome = replay.json().await?;
+    let replay: AuthoritySubmitResponseBody = replay.json().await?;
     ensure!(
-        matches!(&replay, AuthoritySubmitOutcome::Accepted { commit: original, .. } if original == &commit),
+        matches!(&replay, AuthoritySubmitResponseBody::Accepted { commit: original, .. } if original == &commit),
         "encrypted exact replay allocated another Commit"
     );
     reopened.apply_outcome(replay)?;
@@ -395,7 +395,7 @@ async fn run_at_two_stations(
     let before_bob_join = alice
         .client
         .sdk()
-        .realm_authority_bundle(&arkret_wire::AuthorityBundleRequest {
+        .realm_authority_bundle(&arkret_wire::RealmAuthorityBundleRequestBody {
             realm_id: realm_id.clone(),
             nonce: arkret_wire::Base64UrlString::new(format!(
                 "{}{}",
@@ -518,7 +518,7 @@ async fn run_at_two_stations(
         )
         .await?;
     let welcome = signed_welcome(&alice, &commit_event, &bob, &add.welcome)?;
-    let submission = SelfAuthoritySubmitRequest::MlsCommit(MlsCommitSubmission {
+    let submission = SelfAuthoritySubmitRequestBody::MlsCommit(MlsCommitSubmission {
         commit_event: commit_event.clone(),
         welcomes: vec![welcome.clone()],
         idempotency_key: arkret_wire::UuidV7::new(fresh_uuid_v7().parse()?)?,
@@ -529,13 +529,13 @@ async fn run_at_two_stations(
         status == StatusCode::OK,
         "local controller Add failed: {status} {outcome}"
     );
-    let outcome: AuthoritySubmitOutcome = serde_json::from_value(outcome)?;
-    let AuthoritySubmitOutcome::Accepted { commit, .. } = outcome else {
+    let outcome: AuthoritySubmitResponseBody = serde_json::from_value(outcome)?;
+    let AuthoritySubmitResponseBody::Accepted { commit, .. } = outcome else {
         anyhow::bail!("Add was refused: {outcome:?}")
     };
     ensure_commit_signed_by(&commit, x)?;
     let accepted = accepted_full_view(&alice.client, &commit_event.event_id).await?;
-    let base = arkret_wire::MlsGroupCurrent {
+    let base = arkret_wire::MlsGroupValue {
         effective_scope: scope,
         genesis_event_ref: genesis.event_id.clone(),
         cipher_suite: arkret_wire::NonEmptyString::new(
@@ -671,7 +671,7 @@ async fn run_at_two_stations(
     let before_refusal = alice_group.export_state_record()?.serialized_state;
     let (status, refusal) = post_json(
         &alice.client,
-        &SelfAuthoritySubmitRequest::Event(stale.request().submission.clone()),
+        &SelfAuthoritySubmitRequestBody::Event(stale.request().submission.clone()),
     )
     .await?;
     ensure!(

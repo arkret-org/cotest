@@ -59,7 +59,7 @@
 1. `GET ${colandBaseUrl()}/_arkret/describe`(无认证)
 2. 断言:
    - HTTP 200,`Content-Type: application/json`
-   - body 含 spec §3 必填字段：`service_id`、`trust_domain`、`service_kind`、`protocol_version`、`supported_profiles`、`supported_operation_bundles`、`transport_bindings`、`supported_features`、`auth_metadata`、`limits`、`plaintext_visibility`、`development_mode`
+   - body 含 spec §3 必填字段：`service_id`、`trust_domain`、`service_kind`、`protocol_version`、`supported_profiles`、`supported_operation_bundles`、`transport_bindings`、`supported_features`、`authentication_metadata`、`limits`、`plaintext_visibility`、`development_mode`
    - `service_kind === "station"`(coland 是 Station,见 `service-surface.md` §2.5)
    - `protocol_version === "1.0"`
    - `transport_bindings[0].kind === "http_json"`、`transport_bindings[0].base_url` 是 `${colandBaseUrl()}/_arkret` 或等价
@@ -69,7 +69,7 @@
    - `supported_operation_bundles` 至少含 principal `describe.v1` 与 `http_core.v1` bundle，本地注册表展开后覆盖 Describe 与 events submit
 3. `GET ${coauthBaseUrl()}/_arkret/describe`(仅当 `coauthBaseUrl()` 已配置)
 4. 断言请求失败（4xx）：私有认证进程不得拥有公共 `service_kind`、profile、registration 或 federation identity。
-5. 断言 Station describe 中 `auth_metadata.account_authority.gate_account_base_url` 是绝对 URI，且 `auth_metadata.methods[]` 非空。
+5. 断言 Station describe 中 `authentication_metadata.account_authority.gate_account_base_url` 是绝对 URI，且 `authentication_metadata.methods[]` 非空。
 
 ### Phase B — Standard error envelope(§5 / §5.2)
 

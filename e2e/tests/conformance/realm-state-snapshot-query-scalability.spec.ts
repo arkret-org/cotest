@@ -171,8 +171,8 @@ test.describe("conformance snapshot/query/scalability vectors @fully-implemented
       changedBody.governance_generation += 1;
       expect(verify({ ...evidence, snapshot: changedBody })).toBe(false);
       const changedSignature = structuredClone(snapshot);
-      const sig = changedSignature.signature.sig as string;
-      changedSignature.signature.sig = `${sig[0] === "A" ? "B" : "A"}${sig.slice(1)}`;
+      const signature = changedSignature.signature.signature as string;
+      changedSignature.signature.signature = `${signature[0] === "A" ? "B" : "A"}${signature.slice(1)}`;
       expect(verify({ ...evidence, snapshot: changedSignature })).toBe(false);
       const unknownMethod = structuredClone(snapshot);
       unknownMethod.signature.verification_method = `${snapshot.signature.verification_method.split("#")[0]}#unavailable-snapshot-key`;

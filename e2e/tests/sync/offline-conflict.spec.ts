@@ -170,7 +170,7 @@ test.describe("offline sync + conflict repair", () => {
     // by the governance Station's stream_position; concurrent writes serialize
     // into positions and never produce a multi-head that needs repair.
     // models/realm-and-space.md section 2.3.A and event-kind-registry.json
-    // (ak.realm.profile result_projection "set") make every accepted profile
+    // (ak.realm.profile state_projection "set") make every accepted profile
     // Event a wholesale replacement of the realm_profile singleton.
     const fixture = await createRealmProfileSuccessionFixture(browser, request);
     try {

@@ -57,7 +57,7 @@ fn delivery_authority(
         key: StationSigningKey {
             actor: signal.sender_actor_id.clone(),
             verification_method: signal.proof.verification_method.clone(),
-            public_key_b64u: Base64UrlString::new(arkret_canonical::base64url_encode(
+            public_key_base64url: Base64UrlString::new(arkret_canonical::base64url_encode(
                 SigningKey::from_bytes(&seed).verifying_key().as_bytes(),
             ))
             .unwrap(),
@@ -244,7 +244,7 @@ async fn signal_peer_uncertain_http_outcome_is_not_retried() {
             }
         });
         let signal = envelope().unwrap();
-        let request = arkret_wire::SignalRelayRequest {
+        let request = arkret_wire::SignalRelayRequestBody {
             realm_id: signal.realm_id.clone(),
             signals: vec![signal],
         };
@@ -260,7 +260,7 @@ async fn signal_peer_uncertain_http_outcome_is_not_retried() {
         })
         .build()
         .unwrap();
-        let result: arkret_http_client::Result<arkret_wire::SignalRelayOutcome> =
+        let result: arkret_http_client::Result<arkret_wire::SignalRelayResponseBody> =
             client.relay_signals(&request).await;
         assert!(result.is_err());
         finished.send(()).unwrap();
@@ -270,7 +270,7 @@ async fn signal_peer_uncertain_http_outcome_is_not_retried() {
         assert!(!raw.to_ascii_lowercase().contains("idempotency-key:"));
         let (_, body) = raw.split_once("\r\n\r\n").unwrap();
         assert_eq!(
-            serde_json::from_str::<arkret_wire::SignalRelayRequest>(body).unwrap(),
+            serde_json::from_str::<arkret_wire::SignalRelayRequestBody>(body).unwrap(),
             request
         );
     }
@@ -398,8 +398,8 @@ async fn signal_recipient_consumes_formal_dual_action_fixture_without_body_on_re
         "actions":[CapabilityActionId::MESSAGE_STREAM_SEND,CapabilityActionId::MESSAGE_CREATE],
         "resources":[{"kind":"strand","realm_id":signal.realm_id,"strand_id":strand}],
         "status":"active", "issued_at":"2026-07-01T00:00:00.000Z",
-        "issuer_authority_refs":[{"kind":"realm_root","realm_id":signal.realm_id,"authority_event_ref":crate::fixture_event_id("signal-product-root"),"authority_generation":0}],
-        "authority_root_refs":[{"kind":"realm_root","realm_id":signal.realm_id,"authority_event_ref":crate::fixture_event_id("signal-product-root"),"authority_generation":0}], "authority_depth":1
+        "issuer_authority_refs":[{"kind":"realm_root","realm_id":signal.realm_id,"authority_event_ref":crate::fixture_event_id("signal-product-root"),"authority_generation":"0"}],
+        "authority_root_refs":[{"kind":"realm_root","realm_id":signal.realm_id,"authority_event_ref":crate::fixture_event_id("signal-product-root"),"authority_generation":"0"}], "authority_depth":1
     }))?;
     let head = CommitStreamHead {
         stream_ref: CommitStreamRef::Realm {

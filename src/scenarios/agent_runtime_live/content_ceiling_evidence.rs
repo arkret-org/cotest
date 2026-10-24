@@ -83,7 +83,7 @@ pub async fn run_agent_content_ceiling_production()
         Some(service_scope.clone()),
     )
     .await?;
-    let paired: AgentKeyPairOutcome = serde_json::from_value(
+    let paired: AgentKeyPairResponseBody = serde_json::from_value(
         expect_json(
             controller
                 .authorize(station.http().post(format!(
@@ -266,14 +266,14 @@ pub async fn run_agent_content_ceiling_production()
         controller_membership_generation_ref: scene.generation.clone(),
         controller_terminal_event_ref: None,
     });
-    let joined: AuthoritySubmitOutcome = serde_json::from_value(
+    let joined: AuthoritySubmitResponseBody = serde_json::from_value(
         controller
             .submit_event(scene.realm.as_str(), "ak.member.state", join.to_value()?)
             .await?,
     )?;
     ensure!(matches!(
         joined,
-        AuthoritySubmitOutcome::Accepted {
+        AuthoritySubmitResponseBody::Accepted {
             status: AuthorityCommitStatus::Committed,
             ..
         }

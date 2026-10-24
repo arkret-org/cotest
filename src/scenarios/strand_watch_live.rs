@@ -6,11 +6,11 @@ use arkret_models_collaboration::events_payloads::strand::{
 };
 use arkret_models_collaboration::governance::membership_invite::MembershipPayloadState;
 use arkret_models_collaboration::strand_watch_operations::{
-    StrandWatchCurrentOutcome, StrandWatchCurrentRequestBody, StrandWatchCurrentValue,
+    StrandWatchCurrentRequestBody, StrandWatchCurrentResponseBody, StrandWatchValue,
 };
 use arkret_wire::{
-    ActorId, AuthorityCommitStatus, AuthoritySubmitOutcome, CommitStreamRef, CommittedEventView,
-    Event, EventKind, RealmCommit, RealmId, StrandId,
+    ActorId, AuthorityCommitStatus, AuthoritySubmitResponseBody, CommitStreamRef,
+    CommittedEventView, Event, EventKind, RealmCommit, RealmId, StrandId,
 };
 use reqwest::StatusCode;
 
@@ -35,8 +35,8 @@ const BOB_DEVICE: &str = "ak:device:01904100-0000-7000-8000-000000002362";
 async fn read(
     client: &TestActorClient,
     request: &StrandWatchCurrentRequestBody,
-) -> Result<StrandWatchCurrentOutcome> {
-    let outcome: StrandWatchCurrentOutcome = serde_json::from_value(
+) -> Result<StrandWatchCurrentResponseBody> {
+    let outcome: StrandWatchCurrentResponseBody = serde_json::from_value(
         expect_json(
             client
                 .post("/_arkret/self/strands/watch/current")
@@ -93,12 +93,12 @@ pub async fn signed_snapshot(
 }
 
 fn current(
-    outcome: StrandWatchCurrentOutcome,
+    outcome: StrandWatchCurrentResponseBody,
     commit: &RealmCommit,
-    value: StrandWatchCurrentValue,
+    value: StrandWatchValue,
 ) -> Result<()> {
-    let StrandWatchCurrentOutcome::Current {
-        result,
+    let StrandWatchCurrentResponseBody::Current {
+        current_state: result,
         stream_head,
         ..
     } = outcome
@@ -184,7 +184,7 @@ pub async fn run_strand_watch_current_live() -> Result<()> {
     ensure!(
         matches!(
             read(&alice, &request).await?,
-            StrandWatchCurrentOutcome::NeverWritten { .. }
+            StrandWatchCurrentResponseBody::NeverWritten { .. }
         ),
         "fresh selector is not explicitly never_written"
     );
@@ -194,7 +194,7 @@ pub async fn run_strand_watch_current_live() -> Result<()> {
         StrandWatchLevel::All,
         None,
     )
-    .with_expected_value(StrandWatchCurrentValue::Cleared(()));
+    .with_expected_value(StrandWatchValue::Cleared(()));
     refused(
         &alice,
         &event(&alice, &realm, &premature_null).await?,
@@ -205,7 +205,7 @@ pub async fn run_strand_watch_current_live() -> Result<()> {
     ensure!(
         matches!(
             read(&alice, &request).await?,
-            StrandWatchCurrentOutcome::NeverWritten { .. }
+            StrandWatchCurrentResponseBody::NeverWritten { .. }
         ),
         "failed explicit-null CAS materialized a never-written cell"
     );
@@ -295,14 +295,14 @@ pub async fn run_strand_watch_current_live() -> Result<()> {
     let first_event = event(&alice, &realm, &initial).await?;
     let first =
         submit_and_expect_commit(&alice, &alice_account, ALICE_DEVICE, &first_event).await?;
-    let first_value = StrandWatchCurrentValue::Set(StrandWatchExpectedValue {
+    let first_value = StrandWatchValue::Set(StrandWatchExpectedValue {
         level: StrandWatchLevel::All,
         level_public: Some(true),
     });
     current(read(&alice, &request).await?, &first, first_value)?;
     let first_snapshot = signed_snapshot(&alice, &request.realm_id).await?;
     ensure!(first_snapshot.current_state_entries.iter().any(|entry| matches!(entry,
-        arkret_wire::TypedCurrentRow::Value { selector: arkret_wire::CurrentSelector::StrandWatch { strand_id, watcher_actor_id }, source_stream_ref, revision, value }
+        arkret_wire::CurrentState::Value { selector: arkret_wire::CurrentSelector::StrandWatch { strand_id, watcher_actor_id }, source_stream_ref, revision, value }
         if strand_id == &request.strand_id && watcher_actor_id == &request.watcher_actor_id
             && source_stream_ref == &first.stream_ref && revision.commit_id == first.commit_id
             && revision.stream_position == first.stream_position && value == &serde_json::json!({"level":"all","level_public":true})
@@ -312,13 +312,13 @@ pub async fn run_strand_watch_current_live() -> Result<()> {
         initial.clone(),
         initial
             .clone()
-            .with_expected_value(StrandWatchCurrentValue::Set(StrandWatchExpectedValue {
+            .with_expected_value(StrandWatchValue::Set(StrandWatchExpectedValue {
                 level: StrandWatchLevel::All,
                 level_public: None,
             })),
         initial
             .clone()
-            .with_expected_value(StrandWatchCurrentValue::Cleared(())),
+            .with_expected_value(StrandWatchValue::Cleared(())),
     ] {
         refused(
             &alice,
@@ -341,10 +341,10 @@ pub async fn run_strand_watch_current_live() -> Result<()> {
     current(
         read(&alice, &request).await?,
         &cleared,
-        StrandWatchCurrentValue::Cleared(()),
+        StrandWatchValue::Cleared(()),
     )?;
     let body = crate::publication::initial_submission(clear_event.clone(), "")?;
-    let replay: AuthoritySubmitOutcome = serde_json::from_value(
+    let replay: AuthoritySubmitResponseBody = serde_json::from_value(
         expect_json(
             alice.post("/_arkret/self/events").json(&body),
             StatusCode::OK,
@@ -352,7 +352,7 @@ pub async fn run_strand_watch_current_live() -> Result<()> {
         .await?,
     )?;
     ensure!(
-        matches!(replay, AuthoritySubmitOutcome::Accepted { status: AuthorityCommitStatus::Duplicate, commit } if commit == cleared),
+        matches!(replay, AuthoritySubmitResponseBody::Accepted { status: AuthorityCommitStatus::Duplicate, commit } if commit == cleared),
         "exact replay changed watch Commit"
     );
     refused(
@@ -368,7 +368,7 @@ pub async fn run_strand_watch_current_live() -> Result<()> {
         StrandWatchLevel::Muted,
         None,
     )
-    .with_expected_value(StrandWatchCurrentValue::Cleared(()));
+    .with_expected_value(StrandWatchValue::Cleared(()));
     let restored_event = event(&alice, &realm, &restored_payload).await?;
     let restored =
         submit_and_expect_commit(&alice, &alice_account, ALICE_DEVICE, &restored_event).await?;
@@ -379,7 +379,7 @@ pub async fn run_strand_watch_current_live() -> Result<()> {
     current(
         read(&alice, &request).await?,
         &restored,
-        StrandWatchCurrentValue::Set(StrandWatchExpectedValue {
+        StrandWatchValue::Set(StrandWatchExpectedValue {
             level: StrandWatchLevel::Muted,
             level_public: None,
         }),
@@ -407,7 +407,7 @@ pub async fn run_strand_watch_current_live() -> Result<()> {
     );
     let private_snapshot = signed_snapshot(&bob, &request.realm_id).await?;
     ensure!(!private_snapshot.current_state_entries.iter().any(|entry| matches!(entry,
-        arkret_wire::TypedCurrentRow::Value { selector: arkret_wire::CurrentSelector::StrandWatch { strand_id, watcher_actor_id }, .. }
+        arkret_wire::CurrentState::Value { selector: arkret_wire::CurrentSelector::StrandWatch { strand_id, watcher_actor_id }, .. }
         if strand_id == &request.strand_id && watcher_actor_id == &request.watcher_actor_id
     )), "ordinary member signed snapshot disclosed Alice's private muted watch cell");
 
@@ -417,7 +417,7 @@ pub async fn run_strand_watch_current_live() -> Result<()> {
         StrandWatchLevel::All,
         Some(true),
     )
-    .with_expected_value(StrandWatchCurrentValue::Set(StrandWatchExpectedValue {
+    .with_expected_value(StrandWatchValue::Set(StrandWatchExpectedValue {
         level: StrandWatchLevel::Muted,
         level_public: None,
     }));
@@ -443,7 +443,7 @@ pub async fn run_strand_watch_current_live() -> Result<()> {
     );
     let public_snapshot = signed_snapshot(&bob, &request.realm_id).await?;
     ensure!(public_snapshot.current_state_entries.iter().any(|entry| matches!(entry,
-        arkret_wire::TypedCurrentRow::Value { selector: arkret_wire::CurrentSelector::StrandWatch { strand_id, watcher_actor_id }, value, .. }
+        arkret_wire::CurrentState::Value { selector: arkret_wire::CurrentSelector::StrandWatch { strand_id, watcher_actor_id }, value, .. }
         if strand_id == &request.strand_id && watcher_actor_id == &request.watcher_actor_id
             && value == &serde_json::json!({"level":"all","level_public":true})
     )), "explicit public opt-in was absent from the member snapshot");
@@ -453,7 +453,7 @@ pub async fn run_strand_watch_current_live() -> Result<()> {
         StrandWatchLevel::Participating,
         Some(true),
     )
-    .with_expected_value(StrandWatchCurrentValue::Set(StrandWatchExpectedValue {
+    .with_expected_value(StrandWatchValue::Set(StrandWatchExpectedValue {
         level: StrandWatchLevel::All,
         level_public: Some(true),
     }));
@@ -499,7 +499,7 @@ pub async fn run_strand_watch_current_live() -> Result<()> {
     current(
         read(&bob, &bob_request).await?,
         &bob_commit,
-        StrandWatchCurrentValue::Set(StrandWatchExpectedValue {
+        StrandWatchValue::Set(StrandWatchExpectedValue {
             level: StrandWatchLevel::Participating,
             level_public: None,
         }),
@@ -525,7 +525,7 @@ pub async fn run_strand_watch_current_live() -> Result<()> {
     )
     .await?;
     let revoked_payload =
-        bob_payload.with_expected_value(StrandWatchCurrentValue::Set(StrandWatchExpectedValue {
+        bob_payload.with_expected_value(StrandWatchValue::Set(StrandWatchExpectedValue {
             level: StrandWatchLevel::Participating,
             level_public: None,
         }));
@@ -539,7 +539,7 @@ pub async fn run_strand_watch_current_live() -> Result<()> {
     .await?;
     let final_payload =
         StrandWatchSetPayload::clear(request.strand_id.clone(), request.watcher_actor_id.clone())
-            .with_expected_value(StrandWatchCurrentValue::Set(StrandWatchExpectedValue {
+            .with_expected_value(StrandWatchValue::Set(StrandWatchExpectedValue {
                 level: StrandWatchLevel::Participating,
                 level_public: Some(true),
             }));
@@ -553,7 +553,7 @@ pub async fn run_strand_watch_current_live() -> Result<()> {
     current(
         read(&alice, &request).await?,
         &final_commit,
-        StrandWatchCurrentValue::Cleared(()),
+        StrandWatchValue::Cleared(()),
     )?;
     let visible = alice
         .sdk()
@@ -586,7 +586,7 @@ pub async fn run_strand_watch_current_live() -> Result<()> {
                     level,
                     None,
                 )
-                .with_expected_value(StrandWatchCurrentValue::Cleared(())),
+                .with_expected_value(StrandWatchValue::Cleared(())),
             )
             .await?,
         );
@@ -604,8 +604,8 @@ pub async fn run_strand_watch_current_live() -> Result<()> {
     for (index, reply) in replies.into_iter().enumerate() {
         match reply.status() {
             StatusCode::OK => {
-                let outcome: AuthoritySubmitOutcome = reply.json().await?;
-                let AuthoritySubmitOutcome::Accepted { commit, .. } = outcome else {
+                let outcome: AuthoritySubmitResponseBody = reply.json().await?;
+                let AuthoritySubmitResponseBody::Accepted { commit, .. } = outcome else {
                     bail!("CAS race was not committed");
                 };
                 ensure!(
@@ -662,7 +662,7 @@ pub async fn run_strand_watch_current_live() -> Result<()> {
     current(
         read(&alice, &request).await?,
         &commit,
-        StrandWatchCurrentValue::Set(StrandWatchExpectedValue {
+        StrandWatchValue::Set(StrandWatchExpectedValue {
             level: race[index],
             level_public: None,
         }),
@@ -705,11 +705,11 @@ async fn run_registered_watch_audit(
     handoff: bool,
 ) -> Result<()> {
     use arkret_models_collaboration::authority_commit::{
-        AuditPairedEventUnitKind, AuditPairedEventUnitSubmission, SelfAuthoritySubmitOutcome,
-        SelfAuthoritySubmitRequest,
+        AuditPairedEventUnitKind, AuditPairedEventUnitSubmission, SelfAuthoritySubmitRequestBody,
+        SelfAuthoritySubmitResponseBody,
     };
     use arkret_models_collaboration::strand_watch_operations::{
-        WatchAuditReadOutcome, WatchAuditReadRequest,
+        WatchAuditReadRequestBody, WatchAuditReadResponseBody,
     };
     use arkret_wire::{EventAdmissionSubmission, SemanticRef};
     let scenario = if handoff {
@@ -855,7 +855,7 @@ async fn run_registered_watch_audit(
         &["ak.strand.watch.set"],
     )
     .await?;
-    let make_read = |audit| WatchAuditReadRequest {
+    let make_read = |audit| WatchAuditReadRequestBody {
         audit_submission: EventAdmissionSubmission::new(audit),
     };
     let audit = alice.author_event(&realm,EventKind::AuditAccessed.as_str(),serde_json::json!({
@@ -863,7 +863,7 @@ async fn run_registered_watch_audit(
         "target_ref":strand,"purpose":"authorized frozen observation","accessed_at":arkret_canonical::format_timestamp_canonical(chrono::Utc::now())
     })).await?;
     let request = make_read(audit.clone());
-    let original: WatchAuditReadOutcome = serde_json::from_value(
+    let original: WatchAuditReadResponseBody = serde_json::from_value(
         expect_json(
             alice
                 .post("/_arkret/self/strands/watch/audit-read")
@@ -878,7 +878,7 @@ async fn run_registered_watch_audit(
     ensure!(
         matches!(
             original.current,
-            StrandWatchCurrentOutcome::NeverWritten { .. }
+            StrandWatchCurrentResponseBody::NeverWritten { .. }
         ),
         "audit read did not freeze absence"
     );
@@ -911,7 +911,7 @@ async fn run_registered_watch_audit(
         ],
     };
     unit.validate().map_err(anyhow::Error::msg)?;
-    let body = SelfAuthoritySubmitRequest::AuditPairedEvent(unit.clone());
+    let body = SelfAuthoritySubmitRequestBody::AuditPairedEvent(unit.clone());
     if faults {
         relay_origin
             .as_ref()
@@ -948,14 +948,14 @@ async fn run_registered_watch_audit(
         );
         group.server_mut(0).restart_external_process().await?;
     }
-    let accepted: SelfAuthoritySubmitOutcome = serde_json::from_value(
+    let accepted: SelfAuthoritySubmitResponseBody = serde_json::from_value(
         expect_json(
             alice.post("/_arkret/self/events").json(&body),
             StatusCode::OK,
         )
         .await?,
     )?;
-    let SelfAuthoritySubmitOutcome::AuditPairedEvent(accepted) = accepted else {
+    let SelfAuthoritySubmitResponseBody::AuditPairedEvent(accepted) = accepted else {
         anyhow::bail!("paired HTTP outcome expected")
     };
     accepted
@@ -1017,21 +1017,21 @@ async fn run_registered_watch_audit(
         group.server_mut(0).restart_external_process().await?;
         group.server_mut(1).restart_external_process().await?;
     }
-    let replay: SelfAuthoritySubmitOutcome = serde_json::from_value(
+    let replay: SelfAuthoritySubmitResponseBody = serde_json::from_value(
         expect_json(
             alice.post("/_arkret/self/events").json(&body),
             StatusCode::OK,
         )
         .await?,
     )?;
-    let SelfAuthoritySubmitOutcome::AuditPairedEvent(replay) = replay else {
+    let SelfAuthoritySubmitResponseBody::AuditPairedEvent(replay) = replay else {
         anyhow::bail!("paired HTTP replay expected")
     };
     ensure!(
         replay.commits == accepted.commits,
         "paired replay changed original Commits"
     );
-    let frozen: WatchAuditReadOutcome = serde_json::from_value(
+    let frozen: WatchAuditReadResponseBody = serde_json::from_value(
         expect_json(
             alice
                 .post("/_arkret/self/strands/watch/audit-read")
@@ -1069,7 +1069,7 @@ async fn run_registered_watch_audit(
     current(
         read(&bob, &own).await?,
         &accepted.commits[0],
-        StrandWatchCurrentValue::Set(StrandWatchExpectedValue {
+        StrandWatchValue::Set(StrandWatchExpectedValue {
             level: StrandWatchLevel::All,
             level_public: None,
         }),
@@ -1078,7 +1078,7 @@ async fn run_registered_watch_audit(
         &bob,
         &realm,
         &StrandWatchSetPayload::clear(strand.clone(), watcher.clone()).with_expected_value(
-            StrandWatchCurrentValue::Set(StrandWatchExpectedValue {
+            StrandWatchValue::Set(StrandWatchExpectedValue {
                 level: StrandWatchLevel::All,
                 level_public: None,
             }),
@@ -1091,7 +1091,7 @@ async fn run_registered_watch_audit(
         "target_ref":strand,"purpose":"authorized cleared observation","accessed_at":arkret_canonical::format_timestamp_canonical(chrono::Utc::now())
     })).await?;
     let cleared_request = make_read(audit);
-    let cleared: WatchAuditReadOutcome = serde_json::from_value(
+    let cleared: WatchAuditReadResponseBody = serde_json::from_value(
         expect_json(
             alice
                 .post("/_arkret/self/strands/watch/audit-read")
@@ -1101,7 +1101,7 @@ async fn run_registered_watch_audit(
         .await?,
     )?;
     ensure!(
-        matches!(cleared.current,StrandWatchCurrentOutcome::Current { result, .. } if result.value==StrandWatchCurrentValue::Cleared(())),
+        matches!(cleared.current,StrandWatchCurrentResponseBody::Current { current_state: result, .. } if result.value==StrandWatchValue::Cleared(())),
         "audit erased written null into absence"
     );
     if cross_station && !faults {

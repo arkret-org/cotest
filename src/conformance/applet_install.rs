@@ -284,7 +284,7 @@ pub fn run_applet_registration_epoch_kat_suite() -> Result<()> {
     }
 
     let mut optional_null = transcript_value.clone();
-    optional_null["service_did_document"]["method_version"]["version_time"] = Value::Null;
+    optional_null["service_did_document"]["method_version"]["version_created_at"] = Value::Null;
     if transcript_schema.is_valid(&optional_null) {
         bail!("authoritative schema accepted an explicit optional null");
     }

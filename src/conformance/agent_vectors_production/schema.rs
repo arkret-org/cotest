@@ -40,8 +40,8 @@ fn consume(schema_ref: &str, instance: &Value) -> Result<Result<(), String>> {
         "schemas/agent-operations.schema.json#/$defs/agent_runtime_approval_controller_projection" => {
             decode::<AgentRuntimeApprovalControllerProjection>(instance)
         }
-        "schemas/agent-operations.schema.json#/$defs/agent_provision_outcome" => {
-            let union = decode::<AgentProvisionOutcome>(instance);
+        "schemas/agent-operations.schema.json#/$defs/agent_provision_response_body" => {
+            let union = decode::<AgentProvisionResponseBody>(instance);
             // Preserve the concrete branch's refusal diagnostic. The normal
             // untagged wire union also has to reach the same accept/reject.
             let branch = match instance["status"].as_str() {
@@ -80,9 +80,9 @@ fn consume(schema_ref: &str, instance: &Value) -> Result<Result<(), String>> {
             decode::<AgentProjection>(instance)
         }
         "schemas/agent-operations.schema.json#/$defs/key_state" => decode::<KeyState>(instance),
-        "schemas/agent-operations.schema.json#/$defs/agent_runtime_approval_status_outcome" => {
-            decode::<AgentRuntimeApprovalStatusOutcome>(instance).and_then(|()| {
-                serde_json::from_value::<AgentRuntimeApprovalStatusOutcome>(instance.clone())
+        "schemas/agent-operations.schema.json#/$defs/agent_runtime_approval_status_response_body" => {
+            decode::<AgentRuntimeApprovalStatusResponseBody>(instance).and_then(|()| {
+                serde_json::from_value::<AgentRuntimeApprovalStatusResponseBody>(instance.clone())
                     .map_err(|error| error.to_string())?
                     .validate_signer_evidence_delivery()
                     .map_err(|error| error.to_string())

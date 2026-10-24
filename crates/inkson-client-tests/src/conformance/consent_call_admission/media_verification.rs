@@ -8,8 +8,8 @@ use super::*;
 pub(super) fn verify<'a>(
     holder: &'a Member,
     request: &'a arkret_models_collaboration::objects::media::CallMediaTokenExchangeRequestBody,
-    outcome: &'a arkret_models_collaboration::objects::media::CallMediaTokenExchangeOutcome,
-    binding: &'a arkret_models_identity::MediaServiceBindingOutcome,
+    outcome: &'a arkret_models_collaboration::objects::media::CallMediaTokenExchangeResponseBody,
+    binding: &'a arkret_models_identity::MediaServiceBindingResponseBody,
 ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<()>> + Send + 'a>> {
     Box::pin(verify_inner(holder, request, outcome, binding))
 }
@@ -17,7 +17,7 @@ pub(super) fn verify<'a>(
 pub(super) async fn binding(
     holder: &Member,
     realm: &arkret_wire::RealmId,
-) -> Result<arkret_models_identity::MediaServiceBindingOutcome> {
+) -> Result<arkret_models_identity::MediaServiceBindingResponseBody> {
     // This fixture's accepted ak.realm.media_service explicitly names the
     // holder Station as media service; never take this anchor from the token.
     let query = arkret_models_identity::MediaServiceBindingRequestBody {
@@ -43,8 +43,8 @@ pub(super) async fn binding(
 async fn verify_inner(
     holder: &Member,
     request: &arkret_models_collaboration::objects::media::CallMediaTokenExchangeRequestBody,
-    outcome: &arkret_models_collaboration::objects::media::CallMediaTokenExchangeOutcome,
-    binding: &arkret_models_identity::MediaServiceBindingOutcome,
+    outcome: &arkret_models_collaboration::objects::media::CallMediaTokenExchangeResponseBody,
+    binding: &arkret_models_identity::MediaServiceBindingResponseBody,
 ) -> Result<()> {
     ensure!(
         binding.realm_id == request.realm_id && binding.is_reusable_at(chrono::Utc::now()),
@@ -55,7 +55,7 @@ async fn verify_inner(
         binding.route.did.clone(),
     )])?;
     for key in &binding.signing_keys {
-        let bytes: [u8; 32] = arkret_canonical::base64url_decode(&key.public_key_b64u)?
+        let bytes: [u8; 32] = arkret_canonical::base64url_decode(&key.public_key_base64url)?
             .try_into()
             .map_err(|_| anyhow::anyhow!("accepted media signing key must be Ed25519"))?;
         anchors.insert_key(
@@ -70,7 +70,7 @@ async fn verify_inner(
         chrono::Utc::now(),
     )?;
     let mut public = outcome.clone();
-    public.participant_binding.sig = arkret_canonical::base64url_encode([0u8; 64]);
+    public.participant_binding.signature = arkret_canonical::base64url_encode([0u8; 64]);
     ensure!(
         arkret_signatures::media::verify_call_media_token_outcome(
             request,
@@ -138,7 +138,7 @@ pub(super) fn reject_changed_admission_requests<'a>(
 pub(super) async fn verify_actual_outcome(
     holder: &Member,
     request: &arkret_models_collaboration::objects::media::CallMediaTokenExchangeRequestBody,
-    outcome: &arkret_models_collaboration::objects::media::CallMediaTokenExchangeOutcome,
+    outcome: &arkret_models_collaboration::objects::media::CallMediaTokenExchangeResponseBody,
 ) -> Result<()> {
     let accepted = binding(holder, &request.realm_id).await?;
     verify(holder, request, outcome, &accepted).await

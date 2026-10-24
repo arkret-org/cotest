@@ -76,7 +76,7 @@ pub(super) async fn bind_standard_host(
         "selected Station identity differs from discovery"
     );
     let authority = binding
-        .auth_metadata
+        .authentication_metadata
         .account_authority
         .as_ref()
         .context("selected Station does not advertise its Account Authority")?;
@@ -152,7 +152,7 @@ mod tests {
             base_url: http.base_url().to_string(),
             service_id: station,
             trust_domain: arkret_wire::TrustDomainId::new("ak:trust_domain:station.example")?,
-            auth_metadata: arkret::AuthMetadata::minimal(),
+            authentication_metadata: arkret::AuthenticationMetadata::minimal(),
         };
         let engine = SessionEngine::with_state(http.clone(), state.clone());
         let factory = HostFactory {

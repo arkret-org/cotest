@@ -16,9 +16,9 @@ async fn authority_facts(url: &str) -> Result<Value> {
     for table in [
         "canonical_events",
         "realm_commits",
-        "agent_status_current_results",
-        "agent_key_current_results",
-        "capability_grant_current_results",
+        "agent_status_current_states",
+        "agent_key_current_states",
+        "capability_grant_current_states",
     ] {
         facts.insert(
             table.to_owned(),
@@ -360,7 +360,7 @@ pub async fn run_agent_repairing_production() -> Result<crate::conformance::Suit
         let invalid = supersedes_request(&replacement, &controller, &agent, set)?;
         refused_supersedes(&controller, &database.connect_url, &invalid, label).await?;
     }
-    let paired: AgentKeyPairOutcome = serde_json::from_value(
+    let paired: AgentKeyPairResponseBody = serde_json::from_value(
         expect_json(
             controller
                 .post("/_arkret/gate/account/agent-key-pair")
@@ -382,7 +382,7 @@ pub async fn run_agent_repairing_production() -> Result<crate::conformance::Suit
         &paired.authorize_event_ref,
     )
     .await?;
-    let replay: AgentKeyPairOutcome = serde_json::from_value(
+    let replay: AgentKeyPairResponseBody = serde_json::from_value(
         expect_json(
             controller
                 .post("/_arkret/gate/account/agent-key-pair")

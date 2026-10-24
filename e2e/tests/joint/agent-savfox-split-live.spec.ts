@@ -23,7 +23,7 @@ import type {
   AccountId,
   AgentSidecarExchangeProjection,
   AgentSidecarView,
-  SidecarEnsureAcceptedOutcome,
+  SidecarEnsureAcceptedResponseBody,
 } from "../../helpers/generated/spec-wire-objects";
 import { coauthBaseUrl, colandBaseUrl } from "../../helpers/env";
 import {
@@ -798,7 +798,7 @@ jointTest.describe("Agent Savfox split live @fully-implemented", () => {
           await route.continue();
         };
         await inkson.route("**/_arkret/self/agent-sidecars:ensure", ensureCutFault);
-        let ensured: SidecarEnsureAcceptedOutcome;
+        let ensured: SidecarEnsureAcceptedResponseBody;
         try {
           const ensureResponsePromise = waitForSidecarEnsureAcceptance(inkson, testInfo);
           [ensured] = await Promise.all([
@@ -1555,7 +1555,7 @@ nativePublicReplyTest.describe("Native public fixed reply @native-public-reply",
           expect(canonicalJson(mode.actor_id) === canonicalJson({ kind: "account", account_id: jointUsers.aliceSession.accountId })).toBe(true);
           expect(mode.payload?.interaction_mode).toBe("public");
           const agentAccount = { principal_id: pairing.agentId, station_id: jointUsers.aliceSession.accountId.station_id };
-          const currentUrl = `${colandBaseUrl()}/_arkret/self/current-results/exact`;
+          const currentUrl = `${colandBaseUrl()}/_arkret/self/current-state/exact`;
           const current = await request.post(currentUrl, {
             headers: selfPathHeadersForDpopSession(jointUsers.aliceSession, "POST", currentUrl),
             data: canonicalJson({ realm_id: realm, selector: { kind: "agent_interaction", agent_account_id: agentAccount } }),

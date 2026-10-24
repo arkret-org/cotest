@@ -196,7 +196,7 @@ impl FuzzSignalInput {
                 },
                 "purpose": self.purpose,
                 "aead_profile": self.aead_profile,
-                "epoch": self.epoch,
+                "epoch": (self.epoch).to_string(),
                 "nonce": self.nonce,
                 "ciphertext": self.ciphertext,
             },

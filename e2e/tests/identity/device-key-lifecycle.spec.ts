@@ -173,26 +173,26 @@ test.describe("holder device key lifecycle separation @fully-implemented", () =>
           );
           expect(resolve.status(), await resolve.text()).toBe(200);
           const bootstrap = (await resolve.json()) as {
-            new_device_pubkey?: {
+            new_device_public_key?: {
               kty?: string;
               key?: string;
               kid?: string;
               algorithm?: string;
             };
           };
-          const pairingPublicKey = bootstrap.new_device_pubkey?.key;
+          const pairingPublicKey = bootstrap.new_device_public_key?.key;
           expect(
             pairingPublicKey,
             "pairing request must publish the device identity signing public key",
           ).toBeTruthy();
-          expect(bootstrap.new_device_pubkey?.kty).toBe("OKP");
-          expect(bootstrap.new_device_pubkey?.algorithm).toBe("Ed25519");
+          expect(bootstrap.new_device_public_key?.kty).toBe("OKP");
+          expect(bootstrap.new_device_public_key?.algorithm).toBe("Ed25519");
           expect(
             Buffer.from(pairingPublicKey as string, "base64url"),
             "pairing request must publish a canonical raw Ed25519 public key",
           ).toHaveLength(32);
           expect(
-            bootstrap.new_device_pubkey?.key,
+            bootstrap.new_device_public_key?.key,
             "pairing request must not publish the grant-binding cnf.jkt",
           ).not.toBe(activeGrant.jkt);
         } finally {

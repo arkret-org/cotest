@@ -30,11 +30,11 @@ use arkret_models_collaboration::governance::membership_invite::{
 };
 use arkret_models_collaboration::governance::realm_join_intake::RealmJoinIntent;
 use arkret_models_collaboration::mls_group_state_material::{
-    MlsGroupStateMaterialOutcome, MlsGroupStateMaterialRequestBody,
+    MlsGroupStateMaterialRequestBody, MlsGroupStateMaterialResponseBody,
     MlsMemberGroupStateMaterialReadRequestBody,
 };
 use arkret_wire::{
-    ActorId, AuthorityCommitStatus, AuthoritySubmitOutcome, EventId, EventKind, InviteId,
+    ActorId, AuthorityCommitStatus, AuthoritySubmitResponseBody, EventId, EventKind, InviteId,
     MlsWelcomeRecipientEndpoint, RealmId, ScopeRef,
 };
 use chrono::{Duration as ChronoDuration, Utc};
@@ -303,7 +303,7 @@ pub async fn cross_station_mls_genesis_run() -> Result<()> {
         }
     };
     let creator_leaf_authority = MlsGenesisCreatorLeafAuthority {
-        leaf_signature_key_b64u: creator.signature_key.clone(),
+        leaf_signature_key_base64url: creator.signature_key.clone(),
         endpoint,
         authorization_event_ref: creator
             .device_authorize_event_id
@@ -405,7 +405,7 @@ pub async fn cross_station_mls_genesis_run() -> Result<()> {
         "X did not serve the Genesis material: {status} {}",
         String::from_utf8_lossy(&served)
     );
-    let served: MlsGroupStateMaterialOutcome = serde_json::from_slice(&served)?;
+    let served: MlsGroupStateMaterialResponseBody = serde_json::from_slice(&served)?;
     let validated = served.validate_for_request(&request)?;
     ensure!(
         validated.group_info_bytes == group_info && validated.ratchet_tree_bytes == tree,
@@ -443,7 +443,7 @@ pub async fn cross_station_mls_genesis_run() -> Result<()> {
             "joined member self material read failed: {status} {}",
             String::from_utf8_lossy(&body),
         );
-        let outcome: MlsGroupStateMaterialOutcome = serde_json::from_slice(&body)?;
+        let outcome: MlsGroupStateMaterialResponseBody = serde_json::from_slice(&body)?;
         let validated = outcome.validate_for_request(&exact.as_peer_request())?;
         ensure!(
             validated.group_info_bytes == group_info && validated.ratchet_tree_bytes == tree,
@@ -482,11 +482,11 @@ pub async fn cross_station_mls_genesis_run() -> Result<()> {
         status == StatusCode::OK,
         "the exact Genesis replay was refused: {status} {replay}"
     );
-    let replay: AuthoritySubmitOutcome = serde_json::from_value(replay)?;
+    let replay: AuthoritySubmitResponseBody = serde_json::from_value(replay)?;
     ensure!(
         matches!(
             &replay,
-            AuthoritySubmitOutcome::Accepted {
+            AuthoritySubmitResponseBody::Accepted {
                 status: AuthorityCommitStatus::Duplicate,
                 commit,
             } if *commit == genesis_commit
@@ -607,7 +607,7 @@ pub async fn cross_station_member_group_state_material_run() -> Result<()> {
         _ => return Err(anyhow!("Alice's Genesis creator leaf is not her device")),
     };
     let creator_leaf_authority = MlsGenesisCreatorLeafAuthority {
-        leaf_signature_key_b64u: creator.signature_key.clone(),
+        leaf_signature_key_base64url: creator.signature_key.clone(),
         endpoint,
         authorization_event_ref: creator
             .device_authorize_event_id
@@ -666,7 +666,7 @@ pub async fn cross_station_member_group_state_material_run() -> Result<()> {
             "joined member MLS material read failed: {status} {}",
             String::from_utf8_lossy(&body),
         );
-        let outcome: MlsGroupStateMaterialOutcome = serde_json::from_slice(&body)?;
+        let outcome: MlsGroupStateMaterialResponseBody = serde_json::from_slice(&body)?;
         let validated = outcome.validate_for_request(&exact.as_peer_request())?;
         ensure!(validated.group_info_bytes == group_info && validated.ratchet_tree_bytes == tree);
     }

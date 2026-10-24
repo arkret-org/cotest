@@ -43,7 +43,7 @@ struct RealmActorInceptionFixture {
     root_seed_b64url: String,
     next_root_public_key_multibase: String,
     control_seed_b64url: String,
-    version_time: chrono::DateTime<Utc>,
+    version_created_at: chrono::DateTime<Utc>,
 }
 
 pub fn realm_actor_inception(input: Value) -> Result<Value> {
@@ -55,7 +55,7 @@ pub fn realm_actor_inception(input: Value) -> Result<Value> {
         &arkret_signatures::webvh::RealmActorInceptionInput {
             principal_endpoint: &endpoint,
             local_id: &input.local_id,
-            version_time: input.version_time,
+            version_created_at: input.version_created_at,
             root_seed: &root.to_bytes(),
             next_root_public_key_multibase: &input.next_root_public_key_multibase,
             controller_public_key: &control.verifying_key().to_bytes(),
@@ -123,7 +123,8 @@ pub fn applet_realm_actor_author(input: Value) -> Result<Value> {
     let basis = &input.authoring_request["basis"];
     if basis["applet_id"] != json!(input.applet_package.applet_id)
         || basis["package_digest"] != json!(input.applet_package.package_digest)
-        || input.service_verification_method != input.applet_package.webhook_auth.key_ref
+        || input.service_verification_method
+            != input.applet_package.webhook_signature_policy.key_ref
     {
         return Ok(failure(400, "authoring_request_coordinate_mismatch"));
     }
@@ -206,7 +207,7 @@ mod realm_actor_fixture_tests {
             "next_root_public_key_multibase":canonical::ed25519_pubkey_to_did_key_multibase(
                 SigningKey::from_bytes(&[seed+1;32]).verifying_key().as_bytes()),
             "control_seed_b64url":canonical::base64url_encode([control;32]),
-            "version_time":canonical::format_timestamp_canonical(Utc::now()),
+            "version_created_at":canonical::format_timestamp_canonical(Utc::now()),
         }))
         .unwrap()
     }
@@ -227,7 +228,7 @@ mod realm_actor_fixture_tests {
             vec!["bridge".into()],
             arkret::AppletWireNamespaces::default(),
         );
-        package.webhook_auth.key_ref = service_method.clone();
+        package.webhook_signature_policy.key_ref = service_method.clone();
         package.endpoint_policy = serde_json::from_value(json!({
             "endpoints":[{"method":"POST","path":"/_arkret/edge/applet/transactions","auth":"webhook_signature"}]
         }))
@@ -359,7 +360,7 @@ struct HistoricalHumanFactInput {
     event: Event,
     commit: arkret_wire::RealmCommit,
     query: arkret_models_identity::SignerKeysQueryRequestBody,
-    outcome: arkret_models_identity::SignerKeysQueryOutcome,
+    outcome: arkret_models_identity::SignerKeyQueryResponseBody,
 }
 
 fn historical_human_selector(
@@ -417,7 +418,7 @@ pub fn historical_human_signer_query(input: Value) -> Result<Value> {
 /// exact Commit binding and producer signature. Never use current admission.
 pub fn historical_human_signer_fact(input: Value) -> Result<Value> {
     use arkret_models_collaboration::authority_commit::AccountDeviceHistoricalSignerFact;
-    use arkret_models_identity::SignerKeyQueryOutcome;
+    use arkret_models_identity::SignerKeyResolution;
     let input: HistoricalHumanFactInput = serde_json::from_value(input)?;
     let selector = historical_human_selector(&input.event, &input.commit)?;
     ensure!(
@@ -426,10 +427,10 @@ pub fn historical_human_signer_fact(input: Value) -> Result<Value> {
     );
     input.outcome.validate_for_request(&input.query)?;
     let [
-        SignerKeyQueryOutcome::HistoricalResolved {
+        SignerKeyResolution::HistoricalResolved {
             key, accepted_at, ..
         },
-    ] = input.outcome.results.as_slice()
+    ] = input.outcome.resolutions.as_slice()
     else {
         bail!("original Human historical signer source is unavailable");
     };
@@ -472,7 +473,7 @@ pub fn historical_human_signer_fact(input: Value) -> Result<Value> {
 struct SnapshotVerificationInput {
     snapshot: arkret_wire::RealmStateSnapshot,
     expected_snapshot_id: arkret_wire::RealmSnapshotId,
-    authority_request: arkret_wire::AuthorityBundleRequest,
+    authority_request: arkret_wire::RealmAuthorityBundleRequestBody,
     authority_bundle: arkret_wire::RealmAuthorityBundle,
     trusted_service_id: DidCoreId,
     service_resolution: arkret_models_identity::AuthenticatedServiceResolution,
@@ -578,7 +579,7 @@ pub fn verify_realm_state_snapshot(input: Value) -> Result<Value> {
 #[serde(deny_unknown_fields)]
 struct ConsentCurrentVerificationInput {
     request: arkret_models_collaboration::call_invitation::ConsentCurrentReadRequestBody,
-    outcome: arkret_models_collaboration::call_invitation::ConsentCurrentReadOutcome,
+    outcome: arkret_models_collaboration::call_invitation::ConsentCurrentReadResponseBody,
     expected_realm_id: arkret_wire::RealmId,
     expected_generation: u64,
     expected_verification_method: DidUrl,
@@ -601,7 +602,7 @@ enum ConsentCurrentVerificationAuthority {
 /// material. None of these anchors are learned from the outcome being checked.
 pub fn verify_consent_current_read_material(
     request: &arkret_models_collaboration::call_invitation::ConsentCurrentReadRequestBody,
-    outcome: &arkret_models_collaboration::call_invitation::ConsentCurrentReadOutcome,
+    outcome: &arkret_models_collaboration::call_invitation::ConsentCurrentReadResponseBody,
     expected_realm_id: &arkret_wire::RealmId,
     expected_generation: u64,
     expected_verification_method: &DidUrl,
@@ -746,7 +747,7 @@ struct WebvhGenesisInput {
     local_id: String,
     root_seed_b64url: String,
     next_root_public_key_multibase: String,
-    version_time: Option<String>,
+    version_created_at: Option<String>,
     /// The preliminary DID document, authored against the DID that
     /// `webvh-placeholder-did` returns.
     document: Value,
@@ -868,7 +869,7 @@ pub fn invite_subject_proof(input: Value) -> Result<Value> {
 }
 
 pub fn validate_applet_authority_material(input: Value) -> Result<Value> {
-    let material: arkret_models_collaboration::applet_installation_authority::AppletAuthorityMaterialOutcome =
+    let material: arkret_models_collaboration::applet_installation_authority::AppletAuthorityMaterialResponseBody =
         serde_json::from_value(input).context("parse Applet authority material")?;
     material.validate_structural()?;
     for view in std::iter::once(&material.registration).chain(&material.grant_events) {
@@ -906,8 +907,8 @@ pub fn project_committed_stream_scan(input: Value) -> Result<Value> {
     #[derive(Deserialize)]
     #[serde(deny_unknown_fields)]
     struct Input {
-        request: arkret_wire::StreamScanRequest,
-        outcome: arkret_wire::StreamScanOutcome,
+        request: arkret_wire::StreamScanRequestBody,
+        outcome: arkret_wire::StreamScanResponseBody,
     }
     let input: Input =
         serde_json::from_value(input).context("parse SDK stream projection input")?;
@@ -996,7 +997,7 @@ pub fn principal_registration_fixture(input: Value) -> Result<Value> {
                 .trim_start_matches("ak:request:")
                 .to_ascii_lowercase(),
             also_known_as: &[],
-            version_time: created_at,
+            version_created_at: created_at,
             root_seed: &key_material.root_seed,
             next_root_public_key_multibase: &key_material.next_root_public_key_multikey,
             witness_policy: None,
@@ -1333,13 +1334,13 @@ pub fn webvh_genesis(input: Value) -> Result<Value> {
     if root_public_key_multibase == input.next_root_public_key_multibase {
         bail!("active and next WebVH root keys must be distinct");
     }
-    let version_time = match input.version_time {
-        Some(version_time) => version_time,
+    let version_created_at = match input.version_created_at {
+        Some(version_created_at) => version_created_at,
         None => arkret_canonical::format_timestamp_canonical(Utc::now()),
     };
     let next_root_key_hash = webvh_next_key_hash_value(&input.next_root_public_key_multibase);
     let skeleton = build_webvh_inception_skeleton(&WebvhInceptionSkeletonInput {
-        version_time: &version_time,
+        version_created_at: &version_created_at,
         update_keys: std::slice::from_ref(&root_public_key_multibase),
         next_key_hashes: std::slice::from_ref(&next_root_key_hash),
         portable: None,
@@ -1406,8 +1407,8 @@ pub fn account_handoff_request(input: Value) -> Result<Value> {
     serde_json::to_value(request).context("serialize account-handoff request")
 }
 
-pub fn account_handoff_outcome(input: Value) -> Result<Value> {
-    let outcome: arkret_models_identity::AccountHandoffOutcome =
+pub fn account_handoff_response_body(input: Value) -> Result<Value> {
+    let outcome: arkret_models_identity::AccountHandoffResponseBody =
         serde_json::from_value(input).context("parse typed account-handoff outcome")?;
     outcome
         .validate()
@@ -1418,7 +1419,7 @@ pub fn account_handoff_outcome(input: Value) -> Result<Value> {
 pub fn identity_creation_register_request(input: Value) -> Result<Value> {
     let input: IdentityCreationRegisterFixtureInput =
         serde_json::from_value(input).context("parse identity-creation register input")?;
-    let challenge: arkret::IdentityBindingChallengeOutcome =
+    let challenge: arkret::IdentityBindingChallengeResponseBody =
         serde_json::from_value(input.challenge).context("parse identity-binding challenge")?;
     let key_material = arkret::identity_root::derive_identity_recovery_key_material_from_bip39(
         &input.recovery_key,
@@ -1455,9 +1456,9 @@ struct KeyBackupAuthSignatureInput {
     signing_seed_b64url: String,
 }
 
-/// Sign a key-backup envelope's `auth_data` with its device key.
+/// Sign a key-backup envelope's `signature_proof` with its device key.
 ///
-/// key-management.md section 7.4.1 anchors `auth_data.signature` to the
+/// key-management.md section 7.4.1 anchors `signature_proof.signature` to the
 /// accepted device authorization; the transcript is the SDK
 /// `KeyBackup::signing_payload_bytes`, which is the canonical envelope without
 /// the signature member. The caller sends the envelope without a signature and
@@ -1467,17 +1468,17 @@ pub fn key_backup_auth_signature(input: Value) -> Result<Value> {
         serde_json::from_value(input).context("parse key-backup signature input")?;
     let unsigned = input.envelope;
     let mut envelope = unsigned.clone();
-    let auth_data = envelope
-        .get_mut("auth_data")
+    let signature_proof = envelope
+        .get_mut("signature_proof")
         .and_then(Value::as_object_mut)
-        .context("key-backup envelope has no auth_data object")?;
+        .context("key-backup envelope has no signature_proof object")?;
     ensure!(
-        !auth_data.contains_key("signature"),
+        !signature_proof.contains_key("signature"),
         "key-backup envelope must arrive unsigned"
     );
     // The typed envelope requires the member, and the transcript removes it,
     // so a placeholder never reaches the signed bytes.
-    auth_data.insert(
+    signature_proof.insert(
         "signature".to_owned(),
         Value::String(base64::engine::general_purpose::URL_SAFE_NO_PAD.encode([0_u8; 64])),
     );
@@ -1494,9 +1495,9 @@ pub fn key_backup_auth_signature(input: Value) -> Result<Value> {
     // caller's wire members are returned unchanged with the signature added.
     let mut signed = unsigned;
     signed
-        .get_mut("auth_data")
+        .get_mut("signature_proof")
         .and_then(Value::as_object_mut)
-        .context("key-backup envelope has no auth_data object")?
+        .context("key-backup envelope has no signature_proof object")?
         .insert("signature".to_owned(), Value::String(signature));
     Ok(signed)
 }
@@ -1506,7 +1507,7 @@ pub fn key_backup_auth_signature(input: Value) -> Result<Value> {
 struct DevicePairingTargetProofInput {
     account_id: AccountId,
     stage_request: arkret_models_collaboration::device_pairing::DevicePairingStageRequestBody,
-    stage_outcome: arkret_models_collaboration::device_pairing::DevicePairingStageOutcome,
+    stage_outcome: arkret_models_collaboration::device_pairing::DevicePairingStageResponseBody,
     device_signing_seed_b64url: String,
     hpke_public_key_b64url: String,
 }
@@ -1528,27 +1529,27 @@ pub fn device_pairing_target_proof(input: Value) -> Result<Value> {
         .context("parse candidate device signing seed")?;
     let public_key = signing_key.verifying_key().to_bytes();
     let staged_key = base64::engine::general_purpose::URL_SAFE_NO_PAD
-        .decode(input.stage_request.new_device_pubkey.key.as_str())
-        .context("decode staged new_device_pubkey")?;
+        .decode(input.stage_request.new_device_public_key.key.as_str())
+        .context("decode staged new_device_public_key")?;
     ensure!(
         staged_key.as_slice() == public_key.as_slice(),
-        "staged new_device_pubkey is not the candidate signing key"
+        "staged new_device_public_key is not the candidate signing key"
     );
     let device_id = DeviceId::new(
         input
             .stage_request
-            .new_device_pubkey
+            .new_device_public_key
             .kid
             .as_str()
             .to_owned(),
     )
-    .context("staged new_device_pubkey.kid is not a device id")?;
+    .context("staged new_device_public_key.kid is not a device id")?;
     let challenge = pairing::ServerDevicePairingChallenge::from_stage(
         &input.stage_request,
         &input.stage_outcome,
     );
     let (_, transcript_digest) = pairing::server_device_pairing_transcript(
-        &input.stage_request.new_device_pubkey,
+        &input.stage_request.new_device_public_key,
         &challenge,
     )?;
     let hpke_public_key = base64::engine::general_purpose::URL_SAFE_NO_PAD
@@ -1574,7 +1575,7 @@ pub fn device_pairing_target_proof(input: Value) -> Result<Value> {
     )?;
     let proof = pairing::sign_device_pairing_target_proof(unsigned, &signing_key)?;
     pairing::verify_server_device_pairing_target_proof(
-        &input.stage_request.new_device_pubkey,
+        &input.stage_request.new_device_public_key,
         &challenge,
         &input.account_id,
         &proof,
@@ -1614,7 +1615,7 @@ pub fn device_pairing_approval(input: Value) -> Result<Value> {
     let input: DevicePairingApprovalInput =
         serde_json::from_value(input).context("parse device-pairing approval input")?;
     pairing::verify_server_device_pairing_target_proof(
-        &input.bootstrap.new_device_pubkey,
+        &input.bootstrap.new_device_public_key,
         &pairing::ServerDevicePairingChallenge::from_bootstrap(&input.bootstrap),
         &input.approving_account_id,
         &input.target_proof,
@@ -1695,7 +1696,7 @@ pub fn device_pairing_approval(input: Value) -> Result<Value> {
     .context("sign the accepted-device authorize Event")?;
     let request = AccountDevicePairRequestBody {
         pairing_code: input.bootstrap.pairing_code.clone(),
-        new_device_pubkey: input.bootstrap.new_device_pubkey.clone(),
+        new_device_public_key: input.bootstrap.new_device_public_key.clone(),
         authorize_event: EventAdmissionSubmission::new(authorize.into_event()),
         display_name: input
             .bootstrap
@@ -2306,7 +2307,7 @@ mod tests {
     #[test]
     fn consent_current_oracle_requires_independent_anchors_and_a_real_proof() {
         use arkret_models_collaboration::call_invitation::{
-            ConsentCurrentReadOutcome, ConsentCurrentReadRequestBody,
+            ConsentCurrentReadRequestBody, ConsentCurrentReadResponseBody,
         };
         let account = AccountId::new(
             DidCoreId::new("ak:did_core:web:holder.example").unwrap(),
@@ -2326,10 +2327,10 @@ mod tests {
         let method = DidUrl::new("did:web:station.example#federation-fanout-key").unwrap();
         let now = Utc::now().with_nanosecond(0).unwrap();
         let signer = SigningKey::from_bytes(&[41; 32]);
-        let mut outcome: ConsentCurrentReadOutcome = serde_json::from_value(json!({
+        let mut outcome: ConsentCurrentReadResponseBody = serde_json::from_value(json!({
             "request_digest":arkret_models_collaboration::call_invitation::canonical_request_digest(&request).unwrap(),
             "realm_id":realm,
-            "governance_generation":0,
+            "governance_generation":"0",
             "effective_stream_head":{"stream_ref":{"kind":"realm","realm_id":realm},
                 "stream_position":2,"commit_id":arkret_wire::RealmCommitId::from_digest([47;32])},
             "current":{"state":"never_written"},
@@ -2726,7 +2727,7 @@ mod tests {
         let candidate = SigningKey::from_bytes(&candidate_seed);
         let device_id = "ak:device:01904100-0000-7000-8000-000000000002";
         let stage_request = json!({
-            "new_device_pubkey": {
+            "new_device_public_key": {
                 "kty": "OKP",
                 "kid": device_id,
                 "algorithm": "Ed25519",
@@ -2754,7 +2755,7 @@ mod tests {
 
         let mut bootstrap = stage_outcome;
         bootstrap["arkret_base_url"] = json!("https://station.example");
-        bootstrap["new_device_pubkey"] = stage_request["new_device_pubkey"].clone();
+        bootstrap["new_device_public_key"] = stage_request["new_device_public_key"].clone();
         bootstrap["client_nonce"] = stage_request["client_nonce"].clone();
         let approving_device = "ak:device:01904100-0000-7000-8000-000000000001";
         let approve = |approving_account: &AccountId| {

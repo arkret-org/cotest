@@ -594,7 +594,7 @@ fn placeholder_signature(context: DetachedSignatureContext) -> Result<DetachedOb
         verification_method: method(STATION_A)?,
         signed_digest: hash('1')?,
         created_at: issued_at(),
-        sig: Base64UrlString::new("A".repeat(86)).map_err(anyhow::Error::msg)?,
+        signature: Base64UrlString::new("A".repeat(86)).map_err(anyhow::Error::msg)?,
     })
 }
 

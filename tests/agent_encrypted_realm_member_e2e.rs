@@ -11,9 +11,8 @@
 
 use anyhow::{Context, Result, bail};
 use arkret::{
-    Hash, KeyPackageConsumeReceipt, KeyPackagesConsumeUnsignedRequest,
-    KeyPackagesRevokeUnsignedRequest, KeyPackagesUploadUnsignedRequest,
-    keypackages_consume_signing_input, keypackages_revoke_signing_input,
+    Hash, KeyPackageConsumeReceipt, KeyPackagesConsumeFields, KeyPackagesRevokeFields,
+    KeyPackagesUploadFields, keypackages_consume_signing_input, keypackages_revoke_signing_input,
     keypackages_upload_signing_input, late_device_join_steps, sign_keypackages_consume_request,
     sign_keypackages_revoke_request, sign_keypackages_upload_request,
     verify_keypackage_signing_input,
@@ -64,7 +63,7 @@ fn keypackage_write_transcripts_match_the_embedded_spec_fixture() -> Result<()> 
             | "upload_batch_device"
             | "upload_batch_agent"
             | "upload_batch_minimal_metadata_pairwise" => {
-                let unsigned: KeyPackagesUploadUnsignedRequest = serde_json::from_value(
+                let unsigned: KeyPackagesUploadFields = serde_json::from_value(
                     case.get("unsigned_request")
                         .cloned()
                         .context("upload case missing unsigned_request")?,
@@ -75,7 +74,7 @@ fn keypackage_write_transcripts_match_the_embedded_spec_fixture() -> Result<()> 
                 )
             }
             "consume_single_claim" => {
-                let unsigned: KeyPackagesConsumeUnsignedRequest = serde_json::from_value(
+                let unsigned: KeyPackagesConsumeFields = serde_json::from_value(
                     case.get("unsigned_request")
                         .cloned()
                         .context("consume case missing unsigned_request")?,
@@ -95,7 +94,7 @@ fn keypackage_write_transcripts_match_the_embedded_spec_fixture() -> Result<()> 
                 (receipt.canonical_signing_bytes()?, receipt.signature)
             }
             "revoke_with_reason" => {
-                let unsigned: KeyPackagesRevokeUnsignedRequest = serde_json::from_value(
+                let unsigned: KeyPackagesRevokeFields = serde_json::from_value(
                     case.get("unsigned_request")
                         .cloned()
                         .context("revoke case missing unsigned_request")?,
@@ -112,11 +111,11 @@ fn keypackage_write_transcripts_match_the_embedded_spec_fixture() -> Result<()> 
             bail!(
                 "case {name} signing input drifted: actual_base64url={}, actual_signature={}",
                 URL_SAFE_NO_PAD.encode(&actual_input),
-                signature.sig
+                signature.signature
             );
         }
         assert_eq!(
-            signature.sig.as_str(),
+            signature.signature.as_str(),
             case.get("signature")
                 .and_then(Value::as_str)
                 .context("KeyPackage transcript case missing signature")?,
@@ -126,7 +125,7 @@ fn keypackage_write_transcripts_match_the_embedded_spec_fixture() -> Result<()> 
     }
 
     let upload_case = &fixture["cases"][0];
-    let upload: KeyPackagesUploadUnsignedRequest =
+    let upload: KeyPackagesUploadFields =
         serde_json::from_value(upload_case["unsigned_request"].clone())?;
     let signature = sign_keypackages_upload_request(&upload, kid, &seed)?;
     let unregistered_domain_input = [

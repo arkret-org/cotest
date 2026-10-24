@@ -24,7 +24,7 @@ pub(super) async fn assert_hidden_scans(
         for peer in [false, true] {
             let mut failures = Vec::new();
             for requested in [stream.clone(), missing.clone()] {
-                let request = StreamScanRequest {
+                let request = StreamScanRequestBody {
                     realm_id: requested.realm_id().clone(),
                     stream_ref: requested,
                     direction: StreamScanDirection::After(None),

@@ -138,16 +138,20 @@ pub fn run_unlock_proof_crypto_kat() -> Result<()> {
     verify_signature(
         &verifying,
         &envelope_bytes,
-        envelope.auth_data.signature.as_str(),
+        envelope.signature_proof.signature.as_str(),
     )?;
-    verify_signature(&verifying, &proof_bytes, proof.auth_data.signature.as_str())?;
+    verify_signature(
+        &verifying,
+        &proof_bytes,
+        proof.signature_proof.signature.as_str(),
+    )?;
     let mut changed_proof = proof_bytes.clone();
     changed_proof.push(b' ');
     ensure!(
         verify_signature(
             &verifying,
             &changed_proof,
-            proof.auth_data.signature.as_str()
+            proof.signature_proof.signature.as_str()
         )
         .is_err(),
         "mutated proof transcript retained a valid signature"

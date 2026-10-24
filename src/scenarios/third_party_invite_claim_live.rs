@@ -227,7 +227,7 @@ async fn observation(url: &str, realm: &str) -> Result<(i64, i64, i64, i64)> {
     let realm = realm.to_owned();
     tokio::task::spawn_blocking(move||->Result<_>{
         let mut db=postgres::Client::connect(&url,postgres::NoTls)?;
-        let row=db.query_one("SELECT (SELECT COUNT(*) FROM canonical_events WHERE realm_id=$1),(SELECT COUNT(*) FROM realm_commits WHERE realm_id=$1),(SELECT COUNT(*) FROM invite_lifecycle_current_results WHERE realm_id=$1 AND value='\"claimed\"'::jsonb),(SELECT COUNT(*) FROM member_state_current_results WHERE realm_id=$1 AND membership='join')",&[&realm])?;
+        let row=db.query_one("SELECT (SELECT COUNT(*) FROM canonical_events WHERE realm_id=$1),(SELECT COUNT(*) FROM realm_commits WHERE realm_id=$1),(SELECT COUNT(*) FROM invite_lifecycle_current_states WHERE realm_id=$1 AND value='\"claimed\"'::jsonb),(SELECT COUNT(*) FROM member_state_current_states WHERE realm_id=$1 AND membership='join')",&[&realm])?;
         Ok((row.get(0),row.get(1),row.get(2),row.get(3)))
     }).await?
 }
@@ -237,7 +237,7 @@ async fn replica_observation(url: &str, realm: &str) -> Result<(i64, i64, i64, i
     let realm = realm.to_owned();
     tokio::task::spawn_blocking(move || -> Result<_> {
         let mut db = postgres::Client::connect(&url, postgres::NoTls)?;
-        let row = db.query_one("SELECT (SELECT COUNT(*) FROM canonical_events WHERE realm_id=$1 AND state='accepted'),(SELECT COUNT(*) FROM realm_commits WHERE realm_id=$1),(SELECT COUNT(*) FROM invite_lifecycle_current_results WHERE realm_id=$1 AND value='\"claimed\"'::jsonb),(SELECT COUNT(*) FROM member_state_current_results WHERE realm_id=$1 AND membership='join'),(SELECT COUNT(*) FROM replica_stream_anchors WHERE realm_id=$1),(SELECT COUNT(*) FROM replica_authorization_cuts WHERE realm_id=$1)", &[&realm])?;
+        let row = db.query_one("SELECT (SELECT COUNT(*) FROM canonical_events WHERE realm_id=$1 AND state='accepted'),(SELECT COUNT(*) FROM realm_commits WHERE realm_id=$1),(SELECT COUNT(*) FROM invite_lifecycle_current_states WHERE realm_id=$1 AND value='\"claimed\"'::jsonb),(SELECT COUNT(*) FROM member_state_current_states WHERE realm_id=$1 AND membership='join'),(SELECT COUNT(*) FROM replica_stream_anchors WHERE realm_id=$1),(SELECT COUNT(*) FROM replica_authorization_cuts WHERE realm_id=$1)", &[&realm])?;
         Ok((row.get(0), row.get(1), row.get(2), row.get(3), row.get(4), row.get(5)))
     }).await?
 }
@@ -363,7 +363,7 @@ async fn run(api_migration: bool) -> Result<()> {
     let expires_at = arkret_canonical::format_timestamp_canonical(
         chrono::Utc::now() + chrono::TimeDelta::hours(1),
     );
-    let material = json!({"oob_code_kind":"offline_token","token_commitment":format!("sha256:{}","a".repeat(64)),"token_salt_id":"cotest-2162-salt","token_entropy_bits":128,"max_claims":1,"verification_id":verifier_id,"verification_public_key":multibase});
+    let material = json!({"oob_code_kind":"offline_token","token_commitment":format!("sha256:{}","a".repeat(64)),"token_salt_id":"cotest-2162-salt","token_entropy_bits":128,"max_claim_count":1,"verification_id":verifier_id,"verification_public_key":multibase});
     let create = alice
         .author_event(
             realm,
@@ -526,7 +526,7 @@ async fn run(api_migration: bool) -> Result<()> {
             did: &bob.actor,
             local_id: &inception.local_id,
             previous_entries: std::slice::from_ref(&inception.log_entry),
-            version_time: chrono::Utc::now(),
+            version_created_at: chrono::Utc::now(),
             current_root_seed: &next_root_seed,
             next_root_public_key_multibase: &third_root_key,
             state: &inception.log_entry["state"],
@@ -683,7 +683,7 @@ async fn run(api_migration: bool) -> Result<()> {
             did: &bob.actor,
             local_id: &inception.local_id,
             previous_entries: &[inception.log_entry, rotation.log_entry],
-            version_time: chrono::Utc::now(),
+            version_created_at: chrono::Utc::now(),
             current_root_seed: &third_root_seed,
             next_root_public_key_multibase: &fourth_root_key,
             state: &inception.submit_body.operation["state"],
@@ -730,9 +730,9 @@ async fn run(api_migration: bool) -> Result<()> {
         replay_status == reqwest::StatusCode::OK,
         "exact claim replay refused: {replay_body}"
     );
-    let replay: arkret_wire::AuthoritySubmitOutcome = serde_json::from_value(replay_body)?;
+    let replay: arkret_wire::AuthoritySubmitResponseBody = serde_json::from_value(replay_body)?;
     ensure!(
-        matches!(replay, arkret_wire::AuthoritySubmitOutcome::Accepted {
+        matches!(replay, arkret_wire::AuthoritySubmitResponseBody::Accepted {
             status: arkret_wire::AuthorityCommitStatus::Duplicate, commit
         } if commit == claim_commit),
         "exact claim replay must return duplicate with the original complete signed Commit"
@@ -751,9 +751,9 @@ async fn run(api_migration: bool) -> Result<()> {
             status == reqwest::StatusCode::OK,
             "concurrent exact Claim replay refused: {status} {body}"
         );
-        let outcome: arkret_wire::AuthoritySubmitOutcome = serde_json::from_value(body)?;
+        let outcome: arkret_wire::AuthoritySubmitResponseBody = serde_json::from_value(body)?;
         ensure!(
-            matches!(outcome, arkret_wire::AuthoritySubmitOutcome::Accepted {
+            matches!(outcome, arkret_wire::AuthoritySubmitResponseBody::Accepted {
             status: arkret_wire::AuthorityCommitStatus::Duplicate, commit
         } if commit == claim_commit),
             "concurrent Claim replay changed its original Commit"
@@ -790,11 +790,11 @@ async fn run(api_migration: bool) -> Result<()> {
     );
     let accepted_state = observation(&governance_db.connect_url, realm).await?;
     let (status, body) = submit_raw(&bob, &claim).await?;
-    let outcome: arkret_wire::AuthoritySubmitOutcome = serde_json::from_value(body)?;
+    let outcome: arkret_wire::AuthoritySubmitResponseBody = serde_json::from_value(body)?;
     ensure!(
         status == reqwest::StatusCode::OK
             && matches!(outcome,
-        arkret_wire::AuthoritySubmitOutcome::Accepted {
+        arkret_wire::AuthoritySubmitResponseBody::Accepted {
             status: arkret_wire::AuthorityCommitStatus::Duplicate, commit
         } if commit == claim_commit),
         "post-accept Claim replay lost its original outcome"

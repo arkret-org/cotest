@@ -50,7 +50,7 @@ fn signature(context: DetachedSignatureContext) -> DetachedObjectSignature {
         verification_method: DidUrl::new("did:web:station.example#authority").unwrap(),
         signed_digest: Hash::new(format!("sha256:{}", "3".repeat(64))).unwrap(),
         created_at: chrono::Utc::now(),
-        sig: arkret_wire::Base64UrlString::new("c2lnbmF0dXJl".to_owned()).unwrap(),
+        signature: arkret_wire::Base64UrlString::new("c2lnbmF0dXJl".to_owned()).unwrap(),
     }
 }
 
@@ -128,7 +128,7 @@ fn delivery(
             device_id: endpoint.clone(),
         },
         keypackage_claim_ref: add.welcome.keypackage_claim_ref.clone(),
-        ciphertext_b64: add.welcome.ciphertext_b64.clone(),
+        ciphertext_base64url: add.welcome.ciphertext_base64url.clone(),
         producer_proof: signature(DetachedSignatureContext::MlsWelcomeDelivery),
     }
 }

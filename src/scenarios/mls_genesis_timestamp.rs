@@ -87,7 +87,7 @@ async fn durable_cut(database_url: &str) -> Result<Value> {
     tokio::task::spawn_blocking(move || -> Result<Value> {
         let mut db = postgres::Client::connect(&database_url, postgres::NoTls)?;
         let mut result = serde_json::Map::new();
-        for table in ["canonical_events", "realm_commits", "mls_group_current_results",
+        for table in ["canonical_events", "realm_commits", "mls_group_current_states",
             "mls_consumed_proposal_provenance", "mls_welcome_provenance",
             "mls_welcome_deliveries", "mls_add_authority_attestations",
             "mls_add_authority_attestation_outbox", "mls_replica_genesis_provenance", "blobs",
@@ -168,7 +168,7 @@ impl Probe {
             .current_state_entries
             .iter()
             .find_map(|row| match row {
-                arkret_wire::TypedCurrentRow::Value {
+                arkret_wire::CurrentState::Value {
                     selector: arkret_wire::CurrentSelector::MlsGroup { scope_ref },
                     value,
                     ..
@@ -176,7 +176,7 @@ impl Probe {
                 _ => None,
             })
             .context("accepted winner has no current MLS group")?;
-        let current: arkret_wire::MlsGroupCurrent = serde_json::from_value(current.clone())?;
+        let current: arkret_wire::MlsGroupValue = serde_json::from_value(current.clone())?;
         ensure!(
             current.genesis_event_ref == event.event_id
                 && current.effective_scope == event.scope_ref,

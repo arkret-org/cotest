@@ -5,8 +5,8 @@ use arkret_models_collaboration::governance::circle::{
     CircleCreateRequestBody, CircleMemberRequestBody,
 };
 use arkret_wire::{
-    ActorId, AuthoritySubmitRequest, CircleId, CommittedEventView, Event, EventAdmissionSubmission,
-    EventKind, MessageId, ScopeRef, StrandId,
+    ActorId, AuthoritySubmitRequestBody, CircleId, CommittedEventView, Event,
+    EventAdmissionSubmission, EventKind, MessageId, ScopeRef, StrandId,
 };
 use reqwest::StatusCode;
 use serde_json::{Value, json};
@@ -229,7 +229,7 @@ pub async fn run() -> Result<()> {
 
     let poll = circle_event(&alice, &realm, &circle_a, EventKind::MessageCreate,
         json!({"strand_id":strand_a_id,"track_name":"discussion","content":{
-            "kind":"ak.content.poll","body":"Choose one","poll":{"kind":"disclosed","max_selections":1,
+            "kind":"ak.content.poll","body":"Choose one","poll":{"kind":"disclosed","max_selection_count":1,
                 "answers":[{"id":"a","text":{"kind":"ak.content.text","body":"A"}},
                     {"id":"b","text":{"kind":"ak.content.text","body":"B"}}]}}}),
     ).await?;
@@ -301,7 +301,8 @@ pub async fn run() -> Result<()> {
     )
     .await?;
     let baseline = durable_state(&database.connect_url, &realm, poll.event_id.as_str()).await?;
-    let request = AuthoritySubmitRequest::Event(EventAdmissionSubmission::new(cross_vote.clone()));
+    let request =
+        AuthoritySubmitRequestBody::Event(EventAdmissionSubmission::new(cross_vote.clone()));
     expect_api_error(
         alice.post("/_arkret/self/events").json(&request),
         StatusCode::CONFLICT,

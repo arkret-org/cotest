@@ -36,7 +36,7 @@ pub async fn run_agent_direct_content_session_boundary() -> Result<()> {
     let realm = founded.coordinates.realm_id.clone();
     let page = controller
         .sdk()
-        .scan_commit_stream(&arkret_wire::StreamScanRequest {
+        .scan_commit_stream(&arkret_wire::StreamScanRequestBody {
             realm_id: realm.clone(),
             stream_ref: arkret_wire::CommitStreamRef::Realm {
                 realm_id: realm.clone(),
@@ -67,7 +67,7 @@ pub async fn run_agent_direct_content_session_boundary() -> Result<()> {
         &agent.verification_method,
         &agent.runtime_key,
         &actions,
-        arkret_models_collaboration::session_grants::SessionGrantAgentScopeRequest {
+        arkret_models_collaboration::session_grants::RequestedAgentSessionGrantScope {
             realm_ids: vec![realm],
             strand_ids: Vec::new(),
             track_names: Vec::new(),
@@ -122,7 +122,7 @@ pub async fn run_agent_direct_content_session_boundary() -> Result<()> {
         .send()
         .await?;
     ensure!(refreshed.status().is_success());
-    let refreshed: arkret_models_collaboration::session_grants::SessionGrantOutcome =
+    let refreshed: arkret_models_collaboration::session_grants::SessionGrantResponseBody =
         refreshed.json().await?;
     let claims = content_session_evidence::observed_issued_claims(&refreshed.session_grant)?;
     ensure!(

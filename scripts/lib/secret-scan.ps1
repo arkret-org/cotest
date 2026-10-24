@@ -8,7 +8,7 @@
 # is enforced by the synthetic-secret regression test, which run-server-conformance.ps1
 # executes before every scan.
 #
-# `secret_b64u` is the exact field name key-management.md section 7.7.1
+# `secret_base64url` is the exact field name key-management.md section 7.7.1
 # forbids in logs, crash dumps, and telemetry. `credential` is listed so the
 # JSON redaction also covers every field the did_in_token_field detector can
 # match (token | push_key | credential).
@@ -38,8 +38,8 @@
 # Callers declare the class per scan root. The default is `log_or_telemetry`,
 # the strict side, so a root added without thought fails closed.
 
-$script:JsonSecretFieldNames = "authorization|access_token|token|push_key|invite_token|oob_code|token_salt|code_salt|pepper|signing_seed|signed_link|jws|sig|password|secret|secret_b64u|private_key|seed|mnemonic|recovery_key|recovery_phrase|recovery_secret|root_seed|root_private_key|hkdf_prk|prk|credential|plaintext_keybag|keybag_secret|mls_secret|epoch_secret|application_secret|confirmation_key|membership_key|init_secret|joiner_secret|welcome_secret|private_state"
-$script:QuerySecretFieldNames = "access_token|token|push_key|invite_token|oob_code|token_salt|code_salt|pepper|signing_seed|signed_link|jws|sig|password|secret|secret_b64u|private_key|seed|mnemonic|recovery_key|recovery_phrase|recovery_secret|root_seed|root_private_key|hkdf_prk|prk|credential|plaintext_keybag|keybag_secret|mls_secret|epoch_secret|application_secret|confirmation_key|membership_key|init_secret|joiner_secret|welcome_secret|private_state"
+$script:JsonSecretFieldNames = "authorization|access_token|token|push_key|invite_token|oob_code|token_salt|code_salt|pepper|signing_seed|signed_link|jws|signature|password|secret|secret_base64url|private_key|seed|mnemonic|recovery_key|recovery_phrase|recovery_secret|root_seed|root_private_key|hkdf_prk|prk|credential|plaintext_keybag|keybag_secret|mls_secret|epoch_secret|application_secret|confirmation_key|membership_key|init_secret|joiner_secret|welcome_secret|private_state"
+$script:QuerySecretFieldNames = "access_token|token|push_key|invite_token|oob_code|token_salt|code_salt|pepper|signing_seed|signed_link|jws|signature|password|secret|secret_base64url|private_key|seed|mnemonic|recovery_key|recovery_phrase|recovery_secret|root_seed|root_private_key|hkdf_prk|prk|credential|plaintext_keybag|keybag_secret|mls_secret|epoch_secret|application_secret|confirmation_key|membership_key|init_secret|joiner_secret|welcome_secret|private_state"
 $script:RecoveryPrivateMaterialFieldNames = "private_key|seed|signing_seed|token_salt|code_salt|pepper|mnemonic|recovery_key|recovery_phrase|recovery_secret|root_seed|root_private_key|hkdf_prk|prk|plaintext_keybag|keybag_secret|mls_secret|epoch_secret|application_secret|confirmation_key|membership_key|init_secret|joiner_secret|welcome_secret|private_state"
 # Provider custody uses byte arrays as well as encoded strings. IDs such as
 # pepper_id and token_salt_id are public metadata and never match exact fields.

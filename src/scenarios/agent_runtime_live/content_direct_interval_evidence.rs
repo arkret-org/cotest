@@ -61,7 +61,7 @@ async fn capture_contact_diagnostics(
             let mut connection = postgres::Client::connect(&url, postgres::NoTls)?;
             let mut transaction = connection.transaction()?;
             transaction.batch_execute("SET TRANSACTION READ ONLY")?;
-            let value = transaction.query_one("SELECT jsonb_build_object('contacts',(SELECT COALESCE(jsonb_agg(to_jsonb(t)),'[]'::jsonb) FROM contacts t),'mirrors',(SELECT COALESCE(jsonb_agg(to_jsonb(t)),'[]'::jsonb) FROM contact_verified_mirrors t),'completions',(SELECT COALESCE(jsonb_agg(to_jsonb(t)),'[]'::jsonb) FROM contact_completion_intents t),'outbox',(SELECT COALESCE(jsonb_agg(to_jsonb(t)),'[]'::jsonb) FROM federation_outbox t),'dead_letters',(SELECT COALESCE(jsonb_agg(to_jsonb(t)),'[]'::jsonb) FROM federation_outbox_dead_letter t),'accounts',(SELECT COALESCE(jsonb_agg(jsonb_build_object('pk',a.pk,'principal_id',a.principal_id,'station_id',a.station_id)),'[]'::jsonb) FROM accounts a),'quota_keys',(SELECT COALESCE(jsonb_agg(jsonb_build_object('account_pk',k.account_pk,'key_length',octet_length(k.key_bytes))),'[]'::jsonb) FROM invite_new_source_hmac_keys k),'principal_resolutions',(SELECT COALESCE(jsonb_agg(to_jsonb(p)),'[]'::jsonb) FROM principal_resolutions p),'pcr_genesis_units',(SELECT COALESCE(jsonb_agg(jsonb_build_object('realm_id',p.realm_id,'principal_id',p.principal_id,'station_id',p.station_id)),'[]'::jsonb) FROM pcr_genesis_units p),'roots',(SELECT COALESCE(jsonb_agg(to_jsonb(r)),'[]'::jsonb) FROM realm_authority_root_current_results r))", &[])?.get(0);
+            let value = transaction.query_one("SELECT jsonb_build_object('contacts',(SELECT COALESCE(jsonb_agg(to_jsonb(t)),'[]'::jsonb) FROM contacts t),'mirrors',(SELECT COALESCE(jsonb_agg(to_jsonb(t)),'[]'::jsonb) FROM contact_verified_mirrors t),'completions',(SELECT COALESCE(jsonb_agg(to_jsonb(t)),'[]'::jsonb) FROM contact_completion_intents t),'outbox',(SELECT COALESCE(jsonb_agg(to_jsonb(t)),'[]'::jsonb) FROM federation_outbox t),'dead_letters',(SELECT COALESCE(jsonb_agg(to_jsonb(t)),'[]'::jsonb) FROM federation_outbox_dead_letter t),'accounts',(SELECT COALESCE(jsonb_agg(jsonb_build_object('pk',a.pk,'principal_id',a.principal_id,'station_id',a.station_id)),'[]'::jsonb) FROM accounts a),'quota_keys',(SELECT COALESCE(jsonb_agg(jsonb_build_object('account_pk',k.account_pk,'key_length',octet_length(k.key_bytes))),'[]'::jsonb) FROM invite_new_source_hmac_keys k),'principal_resolutions',(SELECT COALESCE(jsonb_agg(to_jsonb(p)),'[]'::jsonb) FROM principal_resolutions p),'pcr_genesis_units',(SELECT COALESCE(jsonb_agg(jsonb_build_object('realm_id',p.realm_id,'principal_id',p.principal_id,'station_id',p.station_id)),'[]'::jsonb) FROM pcr_genesis_units p),'roots',(SELECT COALESCE(jsonb_agg(to_jsonb(r)),'[]'::jsonb) FROM realm_authority_root_current_states r))", &[])?.get(0);
             transaction.rollback()?;
             Ok(value)
         }).await??;
@@ -138,9 +138,9 @@ async fn accept(
             agent,
         )?)
         .await?;
-    let ContactOperationOutcome::Prepared {
+    let ContactOperationResponseBody::Prepared {
         outcome:
-            ContactPreparedOutcome::Response {
+            ContactPreparedResponseBody::Response {
                 operation_id: actual,
                 reservation_handle,
                 event_draft,
@@ -167,8 +167,8 @@ async fn accept(
     ensure!(
         matches!(
             outcome,
-            ContactOperationOutcome::Accepted {
-                outcome: ContactAcceptedOutcome::Response { .. }
+            ContactOperationResponseBody::Accepted {
+                outcome: ContactAcceptedResponseBody::Response { .. }
             }
         ),
         "Agent response was not accepted: {outcome:?}"
@@ -321,7 +321,7 @@ pub async fn run_agent_content_direct_interval_production()
             },
         })
         .await?;
-    let DirectConversationResolveOutcome::CreationRequired {
+    let DirectConversationResolveResponseBody::CreationRequired {
         next_founding_input,
     } = resolved
     else {
@@ -342,7 +342,7 @@ pub async fn run_agent_content_direct_interval_production()
         .current_proofs
         .iter()
         .filter(|proof| proof.issuer_id == *foreign.station.service_id())
-        .map(|proof| proof.fresh_until)
+        .map(|proof| proof.cache_expires_at)
         .max()
         .context("real foreign source proof")?;
     let at = arkret_canonical::normalize_timestamp_canonical(Utc::now());

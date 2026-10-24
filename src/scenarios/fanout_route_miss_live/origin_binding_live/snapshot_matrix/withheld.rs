@@ -78,7 +78,7 @@ pub(super) async fn run(fixture: &CurrentOriginFixture, successor_url: &str) -> 
             let mut cursor = None;
             let mut rows = Vec::new();
             loop {
-                let request = StreamScanRequest {
+                let request = StreamScanRequestBody {
                     realm_id: realm.clone(),
                     stream_ref: stream.clone(),
                     limit: 2,
@@ -104,7 +104,7 @@ pub(super) async fn run(fixture: &CurrentOriginFixture, successor_url: &str) -> 
                         "actual peer scan {status}: {}",
                         String::from_utf8_lossy(&bytes)
                     );
-                    let page: arkret_models_collaboration::authority_commit::PeerStreamScanOutcome =
+                    let page: arkret_models_collaboration::authority_commit::PeerStreamScanResponseBody =
                         serde_json::from_slice(&bytes)?;
                     page.validate_for_request(&request)?;
                     (page.committed_events, page.truncated)

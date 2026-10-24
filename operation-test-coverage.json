@@ -541,7 +541,7 @@
             "input_preview": [
               "let state = coland_test_support::app_state(test_config());",
               "let app = service(state);",
-              "let ping: arkret_models_integration::AppletPingOutcome =",
+              "let ping: arkret_models_integration::AppletPingResponseBody =",
               "TestClient::get(\"http:"
             ],
             "assertion_preview": [
@@ -874,7 +874,7 @@
             "input_preview": [
               "let state = coland_test_support::app_state(test_config());",
               "let app = service(state);",
-              "let ping: arkret_models_integration::AppletPingOutcome =",
+              "let ping: arkret_models_integration::AppletPingResponseBody =",
               "TestClient::get(\"http:"
             ],
             "assertion_preview": [
@@ -1019,7 +1019,7 @@
             "input_preview": [
               "let state = coland_test_support::app_state(test_config());",
               "let app = service(state);",
-              "let ping: arkret_models_integration::AppletPingOutcome =",
+              "let ping: arkret_models_integration::AppletPingResponseBody =",
               "TestClient::get(\"http:"
             ],
             "assertion_preview": [
@@ -5659,7 +5659,7 @@
             "input_sha256": "9eec6bd82291aa155be93bdb9c6109a45e296cb508272cf2ca44a8185f73a966",
             "assertion_sha256": null,
             "input_preview": [
-              "Ok(db.query_one(\"SELECT jsonb_build_object('events',(SELECT count(*) FROM canonical_events WHERE realm_id=$1),'commits',(SELECT count(*) FROM realm_commits WHERE realm_id=$1),'outbox',(SELECT count(*) FROM federation_outbox),'event_outbox',(SELECT count(*) FROM event_federation_outbox),'reports',(SELECT COALESCE(jsonb_agg(to_jsonb(r) ORDER BY report_event_id),'[]'::jsonb) FROM moderation_report_current_results r WHERE realm_id=$1),'idempotency',(SELECT COALESCE(jsonb_agg(to_jsonb(k) ORDER BY actor_key,idempotency_key),'[]'::jsonb) FROM idempotency_keys k WHERE operation_id='ak.open.mimi.command.report_abuse.v1'))\",&[&realm])?.get(0))"
+              "Ok(db.query_one(\"SELECT jsonb_build_object('events',(SELECT count(*) FROM canonical_events WHERE realm_id=$1),'commits',(SELECT count(*) FROM realm_commits WHERE realm_id=$1),'outbox',(SELECT count(*) FROM federation_outbox),'event_outbox',(SELECT count(*) FROM event_federation_outbox),'reports',(SELECT COALESCE(jsonb_agg(to_jsonb(r) ORDER BY report_event_id),'[]'::jsonb) FROM moderation_report_current_states r WHERE realm_id=$1),'idempotency',(SELECT COALESCE(jsonb_agg(to_jsonb(k) ORDER BY actor_key,idempotency_key),'[]'::jsonb) FROM idempotency_keys k WHERE operation_id='ak.open.mimi.command.report_abuse.v1'))\",&[&realm])?.get(0))"
             ],
             "assertion_preview": []
           },
@@ -17323,7 +17323,7 @@
             "input_preview": [
               "let state = coland_test_support::app_state(test_config());",
               "let app = service(state);",
-              "let ping: arkret_models_integration::AppletPingOutcome =",
+              "let ping: arkret_models_integration::AppletPingResponseBody =",
               "TestClient::get(\"http:"
             ],
             "assertion_preview": [
@@ -23867,8 +23867,8 @@
       }
     },
     {
-      "operation_id": "ak.self.current_results.read.exact.v1",
-      "http": "POST /_arkret/self/current-results/exact",
+      "operation_id": "ak.self.current_state.read.exact.v1",
+      "http": "POST /_arkret/self/current-state/exact",
       "test_layer": "coland_unit",
       "responsibilities": {
         "protocol_kat": [
@@ -23885,7 +23885,7 @@
             "input_sha256": "2413128b04c73d2c7d512cf2666960326bd576f6f2cf9b00de1bc68de4fbcc99",
             "assertion_sha256": null,
             "input_preview": [
-              "Some(ServiceOperationId::SELF_CURRENT_RESULTS_READ_EXACT_V1)"
+              "Some(ServiceOperationId::SELF_CURRENT_STATES_READ_EXACT_V1)"
             ],
             "assertion_preview": []
           },
@@ -23950,7 +23950,7 @@
             "input_sha256": "fd74007428e9757d812d912840ea1c590fdd75aa3fd70f67c90af5edcaa0be6f",
             "assertion_sha256": null,
             "input_preview": [
-              "ak.self.current_results.read.exact.v1"
+              "ak.self.current_state.read.exact.v1"
             ],
             "assertion_preview": []
           },
@@ -23967,7 +23967,7 @@
             "input_sha256": "fd74007428e9757d812d912840ea1c590fdd75aa3fd70f67c90af5edcaa0be6f",
             "assertion_sha256": null,
             "input_preview": [
-              "ak.self.current_results.read.exact.v1"
+              "ak.self.current_state.read.exact.v1"
             ],
             "assertion_preview": []
           },
@@ -23984,7 +23984,7 @@
             "input_sha256": "fd74007428e9757d812d912840ea1c590fdd75aa3fd70f67c90af5edcaa0be6f",
             "assertion_sha256": null,
             "input_preview": [
-              "ak.self.current_results.read.exact.v1"
+              "ak.self.current_state.read.exact.v1"
             ],
             "assertion_preview": []
           }
@@ -24003,7 +24003,7 @@
             "input_sha256": "3a0edb34fd3ace2f8aab7784ad6aa2942853ba500eb2a96e80b66d1249e70627",
             "assertion_sha256": null,
             "input_preview": [
-              "arkret_wire::ServiceOperationId::SELF_CURRENT_RESULTS_READ_EXACT_V1,"
+              "arkret_wire::ServiceOperationId::SELF_CURRENT_STATES_READ_EXACT_V1,"
             ],
             "assertion_preview": []
           },
@@ -24020,7 +24020,7 @@
             "input_sha256": "2d039a5ffce9dde1a802c1421bbc837bcd7d62689dd65d1d2e877b079975c91a",
             "assertion_sha256": null,
             "input_preview": [
-              "ServiceOperationId::SelfCurrentResultsReadExactV1,"
+              "ServiceOperationId::SelfCurrentStateReadExactV1,"
             ],
             "assertion_preview": []
           },
@@ -24037,7 +24037,7 @@
             "input_sha256": "2d039a5ffce9dde1a802c1421bbc837bcd7d62689dd65d1d2e877b079975c91a",
             "assertion_sha256": null,
             "input_preview": [
-              "ServiceOperationId::SelfCurrentResultsReadExactV1,"
+              "ServiceOperationId::SelfCurrentStateReadExactV1,"
             ],
             "assertion_preview": []
           },
@@ -24054,7 +24054,7 @@
             "input_sha256": "2d039a5ffce9dde1a802c1421bbc837bcd7d62689dd65d1d2e877b079975c91a",
             "assertion_sha256": null,
             "input_preview": [
-              "ServiceOperationId::SelfCurrentResultsReadExactV1,"
+              "ServiceOperationId::SelfCurrentStateReadExactV1,"
             ],
             "assertion_preview": []
           },
@@ -24071,7 +24071,7 @@
             "input_sha256": "2d039a5ffce9dde1a802c1421bbc837bcd7d62689dd65d1d2e877b079975c91a",
             "assertion_sha256": null,
             "input_preview": [
-              "ServiceOperationId::SelfCurrentResultsReadExactV1,"
+              "ServiceOperationId::SelfCurrentStateReadExactV1,"
             ],
             "assertion_preview": []
           },
@@ -24088,7 +24088,7 @@
             "input_sha256": "2d039a5ffce9dde1a802c1421bbc837bcd7d62689dd65d1d2e877b079975c91a",
             "assertion_sha256": null,
             "input_preview": [
-              "ServiceOperationId::SelfCurrentResultsReadExactV1,"
+              "ServiceOperationId::SelfCurrentStateReadExactV1,"
             ],
             "assertion_preview": []
           }
@@ -24100,8 +24100,8 @@
       }
     },
     {
-      "operation_id": "ak.self.current_results.read.exact.v1",
-      "http": "POST /_arkret/self/current-results/exact",
+      "operation_id": "ak.self.current_state.read.exact.v1",
+      "http": "POST /_arkret/self/current-state/exact",
       "test_layer": "coland_http",
       "responsibilities": {
         "protocol_kat": [],
@@ -24113,8 +24113,8 @@
       }
     },
     {
-      "operation_id": "ak.self.current_results.read.exact.v1",
-      "http": "POST /_arkret/self/current-results/exact",
+      "operation_id": "ak.self.current_state.read.exact.v1",
+      "http": "POST /_arkret/self/current-state/exact",
       "test_layer": "cotest_rust",
       "responsibilities": {
         "protocol_kat": [],
@@ -24126,8 +24126,8 @@
       }
     },
     {
-      "operation_id": "ak.self.current_results.read.exact.v1",
-      "http": "POST /_arkret/self/current-results/exact",
+      "operation_id": "ak.self.current_state.read.exact.v1",
+      "http": "POST /_arkret/self/current-state/exact",
       "test_layer": "cotest_e2e",
       "responsibilities": {
         "protocol_kat": [],
@@ -24139,8 +24139,8 @@
       }
     },
     {
-      "operation_id": "ak.self.current_results.read.exact.v1",
-      "http": "POST /_arkret/self/current-results/exact",
+      "operation_id": "ak.self.current_state.read.exact.v1",
+      "http": "POST /_arkret/self/current-state/exact",
       "test_layer": "inkson_e2e",
       "responsibilities": {
         "protocol_kat": [],
@@ -25675,7 +25675,7 @@
             "assertion_preview": []
           },
           {
-            "file": "coland/crates/storage-postgres/src/capability_grant_current_results.rs",
+            "file": "coland/crates/storage-postgres/src/capability_grant_current_states.rs",
             "line": 1854,
             "scope": "owned_materializer_rejects_admin_service_unknown_and_mixed_sources",
             "scope_kind": "rust_test",
@@ -27740,7 +27740,7 @@
             "assertion_preview": [
               "assert!(",
               "assert!(",
-              "matches!(outcome,AuthoritySubmitOutcome::Accepted {status:AuthorityCommitStatus::Duplicate,commit:ref original} if original==commit)",
+              "matches!(outcome,AuthoritySubmitResponseBody::Accepted {status:AuthorityCommitStatus::Duplicate,commit:ref original} if original==commit)",
               "assert_eq!("
             ]
           }

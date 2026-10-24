@@ -35,18 +35,18 @@ use arkret::{
     ArkretMlsGroup, ArkretMlsIdentity, ArkretMlsSigner, MlsCommitPayload, MlsEndpointIdentity,
     MlsGovernanceBindingPayload, MlsKeyPackageRecord,
 };
-use arkret_models_collaboration::authority_commit::SelfAuthoritySubmitRequest;
+use arkret_models_collaboration::authority_commit::SelfAuthoritySubmitRequestBody;
 use arkret_models_collaboration::device_messages::{
-    DeviceMessagesAckRequestBody, DeviceMessagesGetOutcome, RecipientDelivery,
+    DeviceMessagesAcknowledgementRequestBody, DeviceMessagesGetResponseBody, RecipientDelivery,
 };
 use arkret_models_collaboration::events_payloads::MlsGenesisCreatorLeafAuthority;
 use arkret_models_collaboration::governance::membership_invite::MembershipPayloadState;
 use arkret_models_crypto::{
-    KeyPackagesClaimOutcome, KeyPackagesClaimQueryRequestBody, KeyPackagesClaimRequestBody,
-    KeyPackagesUploadOutcome, mls_key_package_record_upload_entry,
+    KeyPackagesClaimQueryRequestBody, KeyPackagesClaimRequestBody, KeyPackagesClaimResponseBody,
+    KeyPackagesUploadResponseBody, mls_key_package_record_upload_entry,
 };
 use arkret_wire::{
-    AccountId, ActorId, AuthorityCommitStatus, AuthoritySubmitOutcome, CommittedEventFullView,
+    AccountId, ActorId, AuthorityCommitStatus, AuthoritySubmitResponseBody, CommittedEventFullView,
     CommittedEventView, DeviceId, DidUrl, Event, EventId, EventKind, MlsCommitSubmission,
     MlsWelcomeDelivery, MlsWelcomeRecipientEndpoint, RealmId, ScopeRef,
 };
@@ -300,7 +300,7 @@ async fn run_lifecycle(
             bob.method.as_str(),
             &bob.key.to_bytes(),
         )?;
-        let response: KeyPackagesUploadOutcome = serde_json::from_value(
+        let response: KeyPackagesUploadResponseBody = serde_json::from_value(
             expect_json(
                 bob.client
                     .post("/_arkret/self/keys/keypackages/upload")
@@ -333,7 +333,7 @@ async fn run_lifecycle(
         &bob.key.to_bytes(),
     )?;
     let upload = unsigned.into_signed(signature);
-    let uploaded: KeyPackagesUploadOutcome = serde_json::from_value(
+    let uploaded: KeyPackagesUploadResponseBody = serde_json::from_value(
         expect_json(
             bob.client
                 .post("/_arkret/self/keys/keypackages/upload")
@@ -388,7 +388,7 @@ async fn run_lifecycle(
         "the self claim was not admitted: {status} {}",
         String::from_utf8_lossy(&first_bytes)
     );
-    let claimed: KeyPackagesClaimOutcome = serde_json::from_slice(&first_bytes)?;
+    let claimed: KeyPackagesClaimResponseBody = serde_json::from_slice(&first_bytes)?;
     claimed
         .validate_shape()
         .map_err(|error| anyhow!("claim outcome shape: {error:?}"))?;
@@ -481,7 +481,7 @@ async fn run_lifecycle(
         "a new claim attempt found no KeyPackage after the refused conflict: {status} {}",
         String::from_utf8_lossy(&fresh_bytes)
     );
-    let fresh_claim: KeyPackagesClaimOutcome = serde_json::from_slice(&fresh_bytes)?;
+    let fresh_claim: KeyPackagesClaimResponseBody = serde_json::from_slice(&fresh_bytes)?;
     ensure!(
         fresh_claim.claims.len() == 1
             && fresh_claim.claims[0].keypackage_ref != claim.keypackage_ref
@@ -516,7 +516,7 @@ async fn run_lifecycle(
         _ => bail!("Genesis creator leaf is not Alice's device"),
     };
     let creator_leaf_authority = MlsGenesisCreatorLeafAuthority {
-        leaf_signature_key_b64u: creator.signature_key.clone(),
+        leaf_signature_key_base64url: creator.signature_key.clone(),
         endpoint,
         authorization_event_ref: creator
             .device_authorize_event_id
@@ -604,7 +604,7 @@ async fn run_lifecycle(
         )
         .await?;
     let welcome = signed_welcome(&alice, &commit_event, &bob, &add.welcome)?;
-    let submission = SelfAuthoritySubmitRequest::MlsCommit(MlsCommitSubmission {
+    let submission = SelfAuthoritySubmitRequestBody::MlsCommit(MlsCommitSubmission {
         commit_event: commit_event.clone(),
         welcomes: vec![welcome.clone()],
         idempotency_key: arkret_wire::UuidV7::new(fresh_uuid_v7().parse()?)?,
@@ -615,11 +615,11 @@ async fn run_lifecycle(
         status == StatusCode::OK,
         "the Add Commit with its Welcome was not admitted: {status} {outcome}"
     );
-    let outcome: AuthoritySubmitOutcome = serde_json::from_value(outcome)?;
+    let outcome: AuthoritySubmitResponseBody = serde_json::from_value(outcome)?;
     ensure!(
         matches!(
             &outcome,
-            AuthoritySubmitOutcome::Accepted {
+            AuthoritySubmitResponseBody::Accepted {
                 status: AuthorityCommitStatus::Committed | AuthorityCommitStatus::Duplicate,
                 commit,
             } if commit.event_ref == commit_event.event_id
@@ -627,7 +627,7 @@ async fn run_lifecycle(
         "the Add Commit was not committed: {outcome:?}"
     );
     let accepted_commit = accepted_full_view(&alice.client, &commit_event.event_id).await?;
-    let base = arkret_wire::MlsGroupCurrent {
+    let base = arkret_wire::MlsGroupValue {
         effective_scope: scope.clone(),
         genesis_event_ref: genesis.event_id.clone(),
         cipher_suite: arkret_wire::NonEmptyString::new(
@@ -646,7 +646,7 @@ async fn run_lifecycle(
     );
 
     // Bob reads the Welcome from his own recipient queue and joins from it.
-    let (queued, ack_token) = recipient_welcomes(&bob.client).await?;
+    let (queued, acknowledgement_token) = recipient_welcomes(&bob.client).await?;
     ensure!(
         queued == vec![welcome.clone()],
         "Bob's recipient queue does not hold exactly the admitted Welcome: {queued:?}"
@@ -670,7 +670,9 @@ async fn run_lifecycle(
 
     bob.client
         .post("/_arkret/self/device_messages/ack")
-        .json(&DeviceMessagesAckRequestBody { ack_token })
+        .json(&DeviceMessagesAcknowledgementRequestBody {
+            acknowledgement_token,
+        })
         .send()
         .await?
         .error_for_status()?;
@@ -705,7 +707,7 @@ async fn run_lifecycle(
                 kid: arkret_wire::NonEmptyString::new(bob.method.to_string())
                     .map_err(anyhow::Error::msg)?,
                 signature_algorithm: None,
-                sig: arkret_wire::Base64UrlString::new("AA".to_owned())
+                signature: arkret_wire::Base64UrlString::new("AA".to_owned())
                     .map_err(anyhow::Error::msg)?,
             },
         };
@@ -752,7 +754,7 @@ async fn run_lifecycle(
         "the exact consume was not admitted: {status} {}",
         String::from_utf8_lossy(&consumed)
     );
-    let outcome: arkret_models_crypto::KeyPackagesConsumeOutcome =
+    let outcome: arkret_models_crypto::KeyPackagesConsumeResponseBody =
         serde_json::from_slice(&consumed)?;
     ensure!(
         outcome.consume_receipt.claim_id.as_str() == claim.claim_id,
@@ -948,7 +950,7 @@ pub(crate) async fn assert_closed_upload_boundary(
         .remove("signature_algorithm");
     negatives.push(("missing_signature_algorithm".to_owned(), candidate));
     let mut candidate = original.clone();
-    candidate["endpoint_signature"]["sig"] = json!("AA");
+    candidate["endpoint_signature"]["signature"] = json!("AA");
     negatives.push(("invalid_signature_bytes".to_owned(), candidate));
     let mut signed_optional = upload.unsigned();
     signed_optional.expires_at = Some(arkret_canonical::normalize_timestamp_canonical(
@@ -1084,8 +1086,8 @@ async fn expired_claim_recovery_matrix(
         "initial revoked claim: {status} {}",
         String::from_utf8_lossy(&revoked_bytes)
     );
-    let revoked: KeyPackagesClaimOutcome = serde_json::from_slice(&revoked_bytes)?;
-    let unsigned = arkret_models_crypto::KeyPackagesRevokeUnsignedRequest {
+    let revoked: KeyPackagesClaimResponseBody = serde_json::from_slice(&revoked_bytes)?;
+    let unsigned = arkret_models_crypto::KeyPackagesRevokeFields {
         key_package_refs: vec![revoked.claims[0].keypackage_ref.clone()],
         device_id: target.device.clone(),
         reason: None,
@@ -1101,7 +1103,7 @@ async fn expired_claim_recovery_matrix(
         &unsigned.into_signed(signature),
     )
     .await?;
-    let revoked_result: arkret_models_crypto::KeyPackagesRevokeOutcome =
+    let revoked_result: arkret_models_crypto::KeyPackagesRevokeResponseBody =
         serde_json::from_slice(&bytes)?;
     ensure!(
         status == StatusCode::OK && revoked_result.revoked == unsigned_refs(&revoked),
@@ -1128,7 +1130,7 @@ async fn expired_claim_recovery_matrix(
         "real last-resort claim: {status} {}",
         String::from_utf8_lossy(&last_resort_bytes)
     );
-    let last_resort: KeyPackagesClaimOutcome = serde_json::from_slice(&last_resort_bytes)?;
+    let last_resort: KeyPackagesClaimResponseBody = serde_json::from_slice(&last_resort_bytes)?;
     ensure!(
         last_resort.claims.len() == 1 && last_resort.claims[0].last_resort == Some(true),
         "last-resort claim selected ordinary inventory"
@@ -1327,7 +1329,7 @@ async fn expired_claim_recovery_matrix(
     Ok(())
 }
 
-fn unsigned_refs(outcome: &KeyPackagesClaimOutcome) -> Vec<String> {
+fn unsigned_refs(outcome: &KeyPackagesClaimResponseBody) -> Vec<String> {
     outcome
         .claims
         .iter()
@@ -1349,7 +1351,7 @@ pub(crate) fn resign_claim(
     else {
         bail!("device fixture required");
     };
-    signature.sig = arkret_wire::Base64UrlString::new(
+    signature.signature = arkret_wire::Base64UrlString::new(
         base64::engine::general_purpose::URL_SAFE_NO_PAD
             .encode(requester.key.sign(&bytes).to_bytes()),
     )
@@ -1461,7 +1463,7 @@ pub fn claim_request_to(
             "signature": {
                 "kid": requester.method,
                 "signature_algorithm": "Ed25519",
-                "sig": "AA",
+                "signature": "AA",
             },
         },
     }))?;
@@ -1475,7 +1477,7 @@ pub fn claim_request_to(
     else {
         unreachable!("the scenario builds the device branch");
     };
-    signature.sig = arkret_wire::Base64UrlString::new(
+    signature.signature = arkret_wire::Base64UrlString::new(
         base64::engine::general_purpose::URL_SAFE_NO_PAD
             .encode(requester.key.sign(&bytes).to_bytes()),
     )
@@ -1526,7 +1528,7 @@ async fn activation_durable_cut(database_url: &str, realm: &RealmId) -> Result<V
             'events',(SELECT count(*) FROM canonical_events WHERE realm_id=$1),\
             'commits',(SELECT count(*) FROM realm_commits WHERE realm_id=$1),\
             'groups',COALESCE((SELECT jsonb_agg(to_jsonb(g) ORDER BY scope_key) \
-                FROM mls_group_current_results g WHERE realm_id=$1),'[]'::jsonb))",
+                FROM mls_group_current_states g WHERE realm_id=$1),'[]'::jsonb))",
                 &[&realm],
             )?
             .get(0))
@@ -1736,10 +1738,10 @@ async fn verify_circle_activation_independence(
         status == StatusCode::OK,
         "the exact Circle replay was not accepted: {status} {replay}"
     );
-    let replay: AuthoritySubmitOutcome = serde_json::from_value(replay)?;
-    replay.validate_for_request(&arkret_wire::AuthoritySubmitRequest::Event(submission))?;
+    let replay: AuthoritySubmitResponseBody = serde_json::from_value(replay)?;
+    replay.validate_for_request(&arkret_wire::AuthoritySubmitRequestBody::Event(submission))?;
     ensure!(
-        matches!(&replay, AuthoritySubmitOutcome::Accepted { status: AuthorityCommitStatus::Duplicate, commit } if commit == &committed),
+        matches!(&replay, AuthoritySubmitResponseBody::Accepted { status: AuthorityCommitStatus::Duplicate, commit } if commit == &committed),
         "the encrypted Circle replay did not preserve the duplicate outcome and original Commit: {replay:?}"
     );
     Ok(())
@@ -1756,7 +1758,7 @@ pub async fn post_json(
 /// producer proof, Welcomes and retry identity (authority-commit-log section 2).
 async fn post_mls_with_exact_retry(
     client: &TestActorClient,
-    submission: &SelfAuthoritySubmitRequest,
+    submission: &SelfAuthoritySubmitRequestBody,
 ) -> Result<(StatusCode, Value)> {
     let frozen = arkret_canonical::canonical_json_bytes(submission)?;
     for attempt in 0..4 {
@@ -1889,14 +1891,15 @@ pub fn signed_welcome(
             device_id: recipient.device.clone(),
         },
         keypackage_claim_ref: draft.keypackage_claim_ref.clone(),
-        ciphertext_b64: draft.ciphertext_b64.clone(),
+        ciphertext_base64url: draft.ciphertext_base64url.clone(),
         producer_proof: arkret_wire::DetachedObjectSignature {
             context: arkret_wire::DetachedSignatureContext::MlsWelcomeDelivery,
             signature_algorithm: arkret_wire::DetachedSignatureAlgorithm::Ed25519,
             verification_method: method.clone(),
             signed_digest: arkret_wire::Hash::new(format!("sha256:{}", "0".repeat(64)))?,
             created_at: chrono::Utc::now(),
-            sig: arkret_wire::Base64UrlString::new("AA".to_owned()).map_err(anyhow::Error::msg)?,
+            signature: arkret_wire::Base64UrlString::new("AA".to_owned())
+                .map_err(anyhow::Error::msg)?,
         },
     };
     let mut unsigned = serde_json::to_value(&delivery)?;
@@ -1944,7 +1947,7 @@ pub async fn recipient_welcomes(
     client: &TestActorClient,
 ) -> Result<(Vec<MlsWelcomeDelivery>, String)> {
     let polled = expect_json(client.get("/_arkret/self/device_messages"), StatusCode::OK).await?;
-    let outcome: DeviceMessagesGetOutcome = serde_json::from_value(polled.clone())
+    let outcome: DeviceMessagesGetResponseBody = serde_json::from_value(polled.clone())
         .with_context(|| format!("recipient queue page is not closed SDK wire data: {polled}"))?;
     let welcomes = outcome
         .deliveries
@@ -1954,10 +1957,10 @@ pub async fn recipient_welcomes(
             _ => None,
         })
         .collect::<Vec<_>>();
-    let token = match (&outcome.ack_token, welcomes.is_empty()) {
+    let token = match (&outcome.acknowledgement_token, welcomes.is_empty()) {
         (Some(token), _) => token.clone(),
         (None, true) => String::new(),
-        (None, false) => bail!("a non-empty recipient page omitted its ack_token"),
+        (None, false) => bail!("a non-empty recipient page omitted its acknowledgement_token"),
     };
     Ok((welcomes, token))
 }

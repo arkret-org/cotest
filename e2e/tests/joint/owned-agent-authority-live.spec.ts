@@ -323,7 +323,7 @@ async function chooseManagementOperations(rule: Locator, operations: readonly st
 }
 
 async function exactPolicy(request: APIRequestContext, session: DpopUserSession, realm: string, id: string) {
-  const url = `${colandBaseUrl()}/_arkret/self/current-results/exact`;
+  const url = `${colandBaseUrl()}/_arkret/self/current-state/exact`;
   const response = await request.post(url, {
     headers: { ...selfPathHeadersForDpopSession(session, "POST", url), "content-type": "application/json" },
     data: canonicalJson({ realm_id: realm, selector: { kind: "policy", policy_id: id } }),
@@ -491,7 +491,7 @@ test("administrator Policy stale CAS and ordinary member edits refuse without ef
   const memberEditor = await policyEditor(jointRealm.bobPage, realm);
   await memberEditor.getByLabel("Exact Policy id", { exact: true }).fill(id);
   const read = jointRealm.bobPage.page.waitForResponse(response => response.request().method() === "POST"
-    && new URL(response.url()).pathname === "/_arkret/self/current-results/exact"
+    && new URL(response.url()).pathname === "/_arkret/self/current-state/exact"
     && response.request().postDataJSON()?.selector?.policy_id === id);
   await memberEditor.getByTestId("agent-policy-read-current").click();
   expect((await read).status()).toBe(404);
@@ -965,7 +965,7 @@ test("normal controller requests join and public review, distinct administrator 
     expect(consumed.status()).toBe(200);
     expect((await consumed.json()).status).toBe("consumed");
     if (operation === "publish") {
-      const url = `${colandBaseUrl()}/_arkret/self/current-results/exact`;
+      const url = `${colandBaseUrl()}/_arkret/self/current-state/exact`;
       const current = await request.post(url, { headers: selfPathHeadersForDpopSession(jointRealm.bobSession, "POST", url),
         data: canonicalJson({ realm_id: realm, selector: { kind: "agent_interaction", agent_account_id: {
           principal_id: agent, station_id: station } } }) });

@@ -59,7 +59,7 @@ impl FuzzRealmStateSnapshotInput {
         json!({
             "snapshot_id": self.snapshot_id,
             "realm_id": self.realm_id,
-            "authority_generation": self.authority_generation,
+            "authority_generation": (self.authority_generation).to_string(),
             "visible_stream_heads": [{
                 "stream_ref": {
                     "kind": self.head_stream_kind,
@@ -136,7 +136,7 @@ impl FuzzRealmCommitInput {
             "stream_position": self.stream_position,
             "previous_commit_ref": self.previous_commit_ref,
             "event_ref": self.event_ref,
-            "authority_generation": self.authority_generation,
+            "authority_generation": (self.authority_generation).to_string(),
             "authority_ref": self.authority_ref,
             "committed_at": self.committed_at,
             "signature": self.signature.0,
@@ -201,7 +201,7 @@ impl FuzzStreamScanOutcomeInput {
 /// Fuzz a stream tail against its own request, exercising the contiguity walk.
 pub fn fuzz_stream_scan_outcome(data: &[u8]) -> Result<(), String> {
     catch(|| {
-        let _ = serde_json::from_slice::<arkret_wire::StreamScanOutcome>(data);
+        let _ = serde_json::from_slice::<arkret_wire::StreamScanResponseBody>(data);
     })?;
     let mut unstructured = Unstructured::new(data);
     let Ok(input) = FuzzStreamScanOutcomeInput::arbitrary(&mut unstructured) else {
@@ -210,8 +210,8 @@ pub fn fuzz_stream_scan_outcome(data: &[u8]) -> Result<(), String> {
     let outcome_value = input.outcome_json();
     let request_value = input.request_json();
     catch(|| {
-        let outcome = serde_json::from_value::<arkret_wire::StreamScanOutcome>(outcome_value);
-        let request = serde_json::from_value::<arkret_wire::StreamScanRequest>(request_value);
+        let outcome = serde_json::from_value::<arkret_wire::StreamScanResponseBody>(outcome_value);
+        let request = serde_json::from_value::<arkret_wire::StreamScanRequestBody>(request_value);
         if let (Ok(outcome), Ok(request)) = (outcome, request) {
             let _ = outcome.validate_for_request(&request);
         }

@@ -80,8 +80,8 @@ pub(super) async fn manual_current_origin_fixture_with_successor(
     let outcomes = replicate(group.server(1), group.server(0), &joined_body).await?;
     ensure!(matches!(
         outcomes.as_slice(),
-        [PeerCommittedReplicationOutcomeRecord::Stored {}
-            | PeerCommittedReplicationOutcomeRecord::Duplicate {}]
+        [CommittedEventReplicationOutcome::Stored {}
+            | CommittedEventReplicationOutcome::Duplicate {}]
     ));
     ensure_same_commit(
         &joined,
@@ -137,10 +137,10 @@ async fn first_stored_outcome_replay(with_header: bool) -> Result<()> {
         .execute(request.try_clone().context("clone frozen request")?)
         .await?;
     ensure!(original.status() == StatusCode::OK);
-    let original: PeerAuthoritySubmitOutcome = original.json().await?;
+    let original: PeerAuthoritySubmitResponseBody = original.json().await?;
     ensure!(
-        matches!(&original,PeerAuthoritySubmitOutcome::CommittedReplication(value)
-        if matches!(value.replication_outcomes.as_slice(),[PeerCommittedReplicationOutcomeRecord::Stored {}])),
+        matches!(&original,PeerAuthoritySubmitResponseBody::CommittedReplication(value)
+        if matches!(value.replication_outcomes.as_slice(),[CommittedEventReplicationOutcome::Stored {}])),
         "first actual ingress was not Stored: {original:?}"
     );
     let before =
@@ -156,7 +156,7 @@ async fn first_stored_outcome_replay(with_header: bool) -> Result<()> {
         .execute(request.try_clone().context("replay frozen request")?)
         .await?;
     ensure!(response.status() == StatusCode::OK);
-    let replay: PeerAuthoritySubmitOutcome = response.json().await?;
+    let replay: PeerAuthoritySubmitResponseBody = response.json().await?;
     ensure!(
         replay == original,
         "exact unchanged-basis replay changed first Stored into another outcome: original {original:?}, replay {replay:?}"
@@ -187,7 +187,7 @@ async fn first_stored_outcome_replay(with_header: bool) -> Result<()> {
         .execute(request.try_clone().context("clone request after restart")?)
         .await?;
     ensure!(restarted.status() == StatusCode::OK);
-    let restarted: PeerAuthoritySubmitOutcome = restarted.json().await?;
+    let restarted: PeerAuthoritySubmitResponseBody = restarted.json().await?;
     ensure!(
         restarted == original,
         "durable first Stored receipt was lost on restart"
@@ -253,17 +253,18 @@ pub async fn run_federation_ordered_items_replay_live() -> Result<()> {
     let mut replications = Vec::new();
     for (event, commit) in [(&event, &commit), (&policy_event, &policy_commit)] {
         let body = replication_body(&fixture.alice, event, commit).await?;
-        match serde_json::from_slice::<PeerAuthoritySubmitRequest>(&body)? {
-            PeerAuthoritySubmitRequest::CommittedReplication(value) => {
+        match serde_json::from_slice::<PeerAuthoritySubmitRequestBody>(&body)? {
+            PeerAuthoritySubmitRequestBody::CommittedReplication(value) => {
                 replications.extend(value.replications)
             }
             _ => bail!("typed replication helper changed branch"),
         }
     }
-    let body = PeerAuthoritySubmitRequest::CommittedReplication(PeerCommittedReplicationRequest {
-        branch: CommittedReplicationBranch::CommittedReplication,
-        replications,
-    });
+    let body =
+        PeerAuthoritySubmitRequestBody::CommittedReplication(PeerCommittedReplicationRequestBody {
+            branch: CommittedReplicationBranch::CommittedReplication,
+            replications,
+        });
     body.validate()?;
     let body = arkret_canonical::canonical_json_bytes(&body)?;
     let request = fixture
@@ -283,17 +284,17 @@ pub async fn run_federation_ordered_items_replay_live() -> Result<()> {
         .execute(request.try_clone().context("freeze ordered request")?)
         .await?;
     ensure!(response.status() == StatusCode::OK);
-    let first: PeerAuthoritySubmitOutcome = response.json().await?;
+    let first: PeerAuthoritySubmitResponseBody = response.json().await?;
     ensure!(
-        matches!(&first, PeerAuthoritySubmitOutcome::CommittedReplication(value)
+        matches!(&first, PeerAuthoritySubmitResponseBody::CommittedReplication(value)
         if matches!(value.replication_outcomes.as_slice(),
-            [PeerCommittedReplicationOutcomeRecord::Stored {}, PeerCommittedReplicationOutcomeRecord::Stored {}])),
+            [CommittedEventReplicationOutcome::Stored {}, CommittedEventReplicationOutcome::Stored {}])),
         "ordered first ingress did not store both actual items: {first:?}"
     );
     let before = snapshot(&fixture).await?;
     let response = fixture.group.server(1).http().execute(request).await?;
     ensure!(response.status() == StatusCode::OK);
-    let replay: PeerAuthoritySubmitOutcome = response.json().await?;
+    let replay: PeerAuthoritySubmitResponseBody = response.json().await?;
     ensure!(
         replay == first,
         "post-request basis lost an earlier Stored: {first:?} vs {replay:?}"
@@ -362,10 +363,10 @@ pub async fn run_federation_concurrent_first_stored_live() -> Result<()> {
     );
     for response in [first?, second?, third?] {
         ensure!(response.status() == StatusCode::OK);
-        let answer: PeerAuthoritySubmitOutcome = response.json().await?;
+        let answer: PeerAuthoritySubmitResponseBody = response.json().await?;
         ensure!(
-            matches!(&answer, PeerAuthoritySubmitOutcome::CommittedReplication(value)
-            if matches!(value.replication_outcomes.as_slice(), [PeerCommittedReplicationOutcomeRecord::Stored {}])),
+            matches!(&answer, PeerAuthoritySubmitResponseBody::CommittedReplication(value)
+            if matches!(value.replication_outcomes.as_slice(), [CommittedEventReplicationOutcome::Stored {}])),
             "concurrent exact request lost first Stored outcome: {answer:?}"
         );
     }
@@ -441,10 +442,10 @@ pub async fn run_federation_receipt_rollback_live() -> Result<()> {
     tokio::task::spawn_blocking(move || drop(connection)).await?;
     let response = fixture.group.server(1).http().execute(request).await?;
     ensure!(response.status() == StatusCode::OK);
-    let answer: PeerAuthoritySubmitOutcome = response.json().await?;
+    let answer: PeerAuthoritySubmitResponseBody = response.json().await?;
     ensure!(
-        matches!(&answer, PeerAuthoritySubmitOutcome::CommittedReplication(value)
-        if matches!(value.replication_outcomes.as_slice(), [PeerCommittedReplicationOutcomeRecord::Stored {}])),
+        matches!(&answer, PeerAuthoritySubmitResponseBody::CommittedReplication(value)
+        if matches!(value.replication_outcomes.as_slice(), [CommittedEventReplicationOutcome::Stored {}])),
         "exact retry after rollback lost actual first Stored: {answer:?}"
     );
     ensure_same_commit(
@@ -485,11 +486,11 @@ pub(super) async fn first_stored_request(
         .execute(request.try_clone().context("freeze first Stored request")?)
         .await?;
     ensure!(response.status() == StatusCode::OK);
-    let outcome: PeerAuthoritySubmitOutcome = response.json().await?;
+    let outcome: PeerAuthoritySubmitResponseBody = response.json().await?;
     ensure!(
-        matches!(&outcome, PeerAuthoritySubmitOutcome::CommittedReplication(value)
+        matches!(&outcome, PeerAuthoritySubmitResponseBody::CommittedReplication(value)
         if matches!(value.replication_outcomes.as_slice(),
-            [PeerCommittedReplicationOutcomeRecord::Stored {}])),
+            [CommittedEventReplicationOutcome::Stored {}])),
         "expected actual first Stored: {outcome:?}"
     );
     ensure_same_commit(
@@ -536,7 +537,7 @@ pub async fn run_federation_changed_basis_replay_live() -> Result<()> {
     ensure!(
         matches!(
             outcome.as_slice(),
-            [PeerCommittedReplicationOutcomeRecord::Stored {}]
+            [CommittedEventReplicationOutcome::Stored {}]
         ),
         "real basis-changing policy was not stored: {outcome:?}"
     );
@@ -550,11 +551,11 @@ pub async fn run_federation_changed_basis_replay_live() -> Result<()> {
         response.status() == StatusCode::OK,
         "transport must still authenticate"
     );
-    let denied: PeerAuthoritySubmitOutcome = response.json().await?;
+    let denied: PeerAuthoritySubmitResponseBody = response.json().await?;
     ensure!(
-        matches!(&denied, PeerAuthoritySubmitOutcome::CommittedReplication(value)
+        matches!(&denied, PeerAuthoritySubmitResponseBody::CommittedReplication(value)
         if matches!(value.replication_outcomes.as_slice(),
-            [PeerCommittedReplicationOutcomeRecord::Rejected { reason_code }]
+            [CommittedEventReplicationOutcome::Rejected { reason_code }]
             if reason_code == "capability_denied")),
         "changed basis replay bypassed full authorization: {denied:?}"
     );
@@ -603,7 +604,7 @@ pub async fn run_federation_revoked_key_before_cache_live() -> Result<()> {
     ensure!(
         matches!(
             outcome.as_slice(),
-            [PeerCommittedReplicationOutcomeRecord::Stored {}]
+            [CommittedEventReplicationOutcome::Stored {}]
         ),
         "current successor failed actual transport and storage: {outcome:?}"
     );

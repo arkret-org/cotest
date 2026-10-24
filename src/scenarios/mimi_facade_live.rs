@@ -223,7 +223,7 @@ async fn counts(url: &str, realm: &str) -> Result<Vec<i64>> {
     let realm = realm.to_owned();
     tokio::task::spawn_blocking(move || -> Result<_>{
         let mut db=postgres::Client::connect(&url,postgres::NoTls)?;
-        let row=db.query_one("SELECT (SELECT count(*) FROM canonical_events WHERE realm_id=$1),(SELECT count(*) FROM realm_commits WHERE realm_id=$1),(SELECT count(*) FROM message_revision_current_results WHERE realm_id=$1),(SELECT count(*) FROM federation_outbox),(SELECT count(*) FROM event_federation_outbox),(SELECT count(*) FROM idempotency_keys),(SELECT count(*) FROM audit_logs WHERE action='mimi.content_mapping'),(SELECT count(*) FROM mimi_room_binding_current_results WHERE realm_id=$1)",&[&realm])?;
+        let row=db.query_one("SELECT (SELECT count(*) FROM canonical_events WHERE realm_id=$1),(SELECT count(*) FROM realm_commits WHERE realm_id=$1),(SELECT count(*) FROM message_revision_current_states WHERE realm_id=$1),(SELECT count(*) FROM federation_outbox),(SELECT count(*) FROM event_federation_outbox),(SELECT count(*) FROM idempotency_keys),(SELECT count(*) FROM audit_logs WHERE action='mimi.content_mapping'),(SELECT count(*) FROM mimi_room_binding_current_states WHERE realm_id=$1)",&[&realm])?;
         Ok((0..8).map(|i|row.get(i)).collect())
     }).await?
 }
@@ -366,8 +366,8 @@ pub async fn run_evidence() -> Result<Option<(Vec<CaseExecutionResult>, Vec<Case
     let room_copy = room.clone();
     let (membership,binding)=tokio::task::spawn_blocking(move || -> Result<_> {
         let mut db=postgres::Client::connect(&db_url,postgres::NoTls)?;
-        let member=db.query_one("SELECT c.commit_json FROM member_state_current_results m JOIN realm_commits c ON c.commit_id=m.current_commit_id WHERE m.realm_id=$1 AND m.member_id=$2 AND m.membership='join'",&[&realm_copy,&actor])?;
-        let binding=db.query_one("SELECT c.commit_json FROM mimi_room_binding_current_results m JOIN realm_commits c ON c.commit_id=m.current_commit_id WHERE m.mimi_room_uri=$1",&[&room_copy])?;
+        let member=db.query_one("SELECT c.commit_json FROM member_state_current_states m JOIN realm_commits c ON c.commit_id=m.current_commit_id WHERE m.realm_id=$1 AND m.member_id=$2 AND m.membership='join'",&[&realm_copy,&actor])?;
+        let binding=db.query_one("SELECT c.commit_json FROM mimi_room_binding_current_states m JOIN realm_commits c ON c.commit_id=m.current_commit_id WHERE m.mimi_room_uri=$1",&[&room_copy])?;
         Ok((member.get::<_,Value>(0),binding.get::<_,Value>(0)))
     }).await??;
     let committed_ref = |value: Value| -> Result<Value> {
@@ -560,18 +560,35 @@ pub async fn run_evidence() -> Result<Option<(Vec<CaseExecutionResult>, Vec<Case
                 realm_id: scope.realm_id().clone(),
                 circle_id: arkret_wire::CircleId::from_event_id(&genesis.event_id),
             })?;
-            Some(tokio::task::spawn_blocking(move || -> Result<(Value,Vec<u8>)> {
-                let mut db = postgres::Client::connect(&url,postgres::NoTls)?;
-                let row = db.query_one("SELECT value,public_state FROM mls_group_current_results WHERE realm_id=$1", &[&realm_copy])?;
-                let value:Value=row.get(0);let public_state:Vec<u8>=row.get(1);
-                if mutation == "verified_group_info" {
-                    db.execute("UPDATE mls_group_current_results SET public_state=$2 WHERE realm_id=$1", &[&realm_copy,&replacement_state.context("replacement public state")?])?;
-                } else {
-                    let mut replacement=value.clone();replacement["effective_scope"]=replacement_scope;
-                    db.execute("UPDATE mls_group_current_results SET value=$2 WHERE realm_id=$1", &[&realm_copy,&replacement])?;
-                }
-                Ok((value,public_state))
-            }).await??)
+            Some(
+                tokio::task::spawn_blocking(move || -> Result<(Value, Vec<u8>)> {
+                    let mut db = postgres::Client::connect(&url, postgres::NoTls)?;
+                    let row = db.query_one(
+                        "SELECT value,public_state FROM mls_group_current_states WHERE realm_id=$1",
+                        &[&realm_copy],
+                    )?;
+                    let value: Value = row.get(0);
+                    let public_state: Vec<u8> = row.get(1);
+                    if mutation == "verified_group_info" {
+                        db.execute(
+                            "UPDATE mls_group_current_states SET public_state=$2 WHERE realm_id=$1",
+                            &[
+                                &realm_copy,
+                                &replacement_state.context("replacement public state")?,
+                            ],
+                        )?;
+                    } else {
+                        let mut replacement = value.clone();
+                        replacement["effective_scope"] = replacement_scope;
+                        db.execute(
+                            "UPDATE mls_group_current_states SET value=$2 WHERE realm_id=$1",
+                            &[&realm_copy, &replacement],
+                        )?;
+                    }
+                    Ok((value, public_state))
+                })
+                .await??,
+            )
         } else {
             None
         };
@@ -588,7 +605,7 @@ pub async fn run_evidence() -> Result<Option<(Vec<CaseExecutionResult>, Vec<Case
             submit_and_expect_commit(&member.client, &member.account, DEVICE, &wrong).await?;
         }
         let encoded = arkret_canonical::canonical_json_bytes(&message)?;
-        let rejected = json!({"sender_actor_id":member.actor,"device_id":member.device,"mls_group_id":claimed_group,"epoch":0,
+        let rejected = json!({"sender_actor_id":member.actor,"device_id":member.device,"mls_group_id":claimed_group,"epoch":"0",
             "ciphertext":{"content_type":"application/mimi-content","payload":arkret_canonical::base64url_encode(&encoded),"ciphertext_digest":arkret_canonical::sha256_digest(&encoded)}});
         let before = counts(&db.connect_url, &realm).await?;
         let (status, result) = signed_post(
@@ -612,7 +629,7 @@ pub async fn run_evidence() -> Result<Option<(Vec<CaseExecutionResult>, Vec<Case
             let realm_copy = realm.clone();
             tokio::task::spawn_blocking(move || -> Result<()> {
                 let mut db=postgres::Client::connect(&url,postgres::NoTls)?;
-                db.execute("UPDATE mls_group_current_results SET value=$2,public_state=$3 WHERE realm_id=$1", &[&realm_copy,&value,&public_state])?;
+                db.execute("UPDATE mls_group_current_states SET value=$2,public_state=$3 WHERE realm_id=$1", &[&realm_copy,&value,&public_state])?;
                 Ok(())
             }).await??;
         }
@@ -920,7 +937,7 @@ pub async fn verify_consent_identifier_exclusions(
         ConsentPeer, ConsentPermission, ConsentReplacePayload,
     };
     use arkret_models_collaboration::mimi_operations::{
-        MimiIdentifierQueryOutcome, MimiIdentifierQueryRequestBody,
+        MimiIdentifierQueryRequestBody, MimiIdentifierQueryResponseBody,
     };
     use arkret_models_collaboration::objects::mimi::{MimiIdentifier, MimiIdentifierKind};
 
@@ -983,7 +1000,7 @@ pub async fn verify_consent_identifier_exclusions(
             privacy_profile: None,
             proofs: vec![],
         };
-        let response: MimiIdentifierQueryOutcome = provider_sdk(server, provider)?
+        let response: MimiIdentifierQueryResponseBody = provider_sdk(server, provider)?
             .mimi_identifier_query(&request)
             .await?;
         ensure!(response.matches.len() == request.identifiers.len() && !response.has_more);

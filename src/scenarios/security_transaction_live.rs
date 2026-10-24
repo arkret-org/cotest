@@ -1,10 +1,10 @@
 use anyhow::Result;
 use arkret_models_crypto::{
     BackupKind, BackupObjectRef, BackupRotationBinding, BackupRotationKind, BackupRotationPlan,
-    KeyBackup, KeyBackupAead, KeyBackupAeadName, KeyBackupAuthData, KeyBackupDomainSeparation,
-    KeyBackupEncryption, KeyBackupRecipientMethod, KeyBackupSignatureAlgorithm, PreparedEventUnit,
-    SecretStorageContentIndex, SecretStorageItemKind, SecurityRotationTransactionCreateRequest,
-    SecurityTransactionCreateRequest,
+    KeyBackup, KeyBackupAead, KeyBackupAeadName, KeyBackupDomainSeparation, KeyBackupEncryption,
+    KeyBackupRecipientMethod, KeyBackupSignatureAlgorithm, KeyBackupSignatureProof,
+    PreparedEventUnit, SecretStorageContentIndex, SecretStorageItemKind,
+    SecurityRotationTransactionCreateRequestBody, SecurityTransactionCreateRequestBody,
 };
 use arkret_wire::{
     AccountId, ActorId, BackupId, BackupSeriesId, Base64UrlString, DeviceId, Did, DidCoreId,
@@ -71,7 +71,7 @@ pub async fn security_transaction_create_is_durable_on_live_coland() -> Result<(
     assert_eq!(first["transaction_id"], TRANSACTION);
 
     let mut conflicting = request.clone();
-    let SecurityTransactionCreateRequest::SecurityRotation(rotation) = &mut conflicting else {
+    let SecurityTransactionCreateRequestBody::SecurityRotation(rotation) = &mut conflicting else {
         unreachable!("rotation request")
     };
     rotation.expires_at += chrono::Duration::seconds(1);
@@ -106,7 +106,7 @@ fn rotation_create_request(
     device_id: &str,
     signing_seed: [u8; 32],
     device_authorize_event_id: &EventId,
-) -> Result<SecurityTransactionCreateRequest> {
+) -> Result<SecurityTransactionCreateRequestBody> {
     let principal = Did::new(actor.to_owned())?;
     let principal_id = arkret_wire::project_did_to_core_id(&principal)?;
     let transaction_id = arkret_wire::TransactionId::new(TRANSACTION.to_owned())?;
@@ -134,8 +134,8 @@ fn rotation_create_request(
             )
         })
         .collect::<Result<Vec<_>>>()?;
-    Ok(SecurityTransactionCreateRequest::SecurityRotation(
-        SecurityRotationTransactionCreateRequest::from_prepared_rotations(
+    Ok(SecurityTransactionCreateRequestBody::SecurityRotation(
+        SecurityRotationTransactionCreateRequestBody::from_prepared_rotations(
             transaction_id,
             arkret_wire::AccountId::new(principal_id, DidCoreId::new(station_id.to_owned())?),
             arkret_wire::DeviceId::new(device_id.to_owned())?,
@@ -236,7 +236,7 @@ fn rotation_plan(
             .map_err(anyhow::Error::msg)?,
         ciphertext_digest: Hash::new(arkret_canonical::sha256_digest(ciphertext))?,
         plaintext_commitment: None,
-        auth_data: KeyBackupAuthData {
+        signature_proof: KeyBackupSignatureProof {
             device_id: device_id.clone(),
             verification_method: DidUrl::new(format!("{principal}#{device_id}"))
                 .map_err(anyhow::Error::msg)?,
@@ -246,7 +246,7 @@ fn rotation_plan(
         },
         retention: None,
         series_id: binding.new_series_id.clone(),
-        series_seq: 0,
+        series_sequence: 0,
         supersedes_id: None,
         supersedes_digest: None,
         source_commit_ref: None,
@@ -254,7 +254,7 @@ fn rotation_plan(
         extra: Default::default(),
     };
     let signature = SigningKey::from_bytes(&signing_seed).sign(&envelope.signing_payload_bytes()?);
-    envelope.auth_data.signature =
+    envelope.signature_proof.signature =
         Base64UrlString::new(arkret_canonical::base64url_encode(signature.to_bytes()))
             .map_err(anyhow::Error::msg)?;
     binding.new_backups[0].ciphertext_digest = envelope.ciphertext_digest.clone();

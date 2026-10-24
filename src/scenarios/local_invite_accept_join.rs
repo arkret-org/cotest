@@ -24,7 +24,7 @@ use arkret_models_collaboration::governance::membership_invite::{
     InviteAcceptPayload, InvitePreviousState, MembershipPayload, MembershipPayloadState,
 };
 use arkret_wire::{
-    AccountId, ActorId, AuthoritySubmitOutcome, CommitStreamRef, DidCoreId, InviteId, RealmId,
+    AccountId, ActorId, AuthoritySubmitResponseBody, CommitStreamRef, DidCoreId, InviteId, RealmId,
 };
 use chrono::{Duration as ChronoDuration, Utc};
 use reqwest::StatusCode;
@@ -68,11 +68,11 @@ async fn submit(
 }
 
 fn committed(body: &Value) -> Result<arkret_wire::RealmCommit> {
-    match serde_json::from_value::<AuthoritySubmitOutcome>(body.clone())
+    match serde_json::from_value::<AuthoritySubmitResponseBody>(body.clone())
         .with_context(|| format!("submit outcome is not closed SDK wire data: {body}"))?
     {
-        AuthoritySubmitOutcome::Accepted { commit, .. } => Ok(commit),
-        AuthoritySubmitOutcome::Rejected { reason_code, .. } => {
+        AuthoritySubmitResponseBody::Accepted { commit, .. } => Ok(commit),
+        AuthoritySubmitResponseBody::Rejected { reason_code, .. } => {
             Err(anyhow!("submit was rejected: {reason_code}"))
         }
     }
@@ -324,7 +324,7 @@ pub async fn local_invite_accept_join_run() -> Result<()> {
         .current_state_entries
         .iter()
         .map(|entry| match entry {
-            arkret_wire::TypedCurrentRow::Value { selector, .. } => selector.clone(),
+            arkret_wire::CurrentState::Value { selector, .. } => selector.clone(),
         })
         .collect::<Vec<_>>();
     ensure!(

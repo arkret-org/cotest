@@ -213,7 +213,7 @@ test.describe("describes coland surface @fully-implemented", () => {
     expect(body.transport_bindings.length, "≥1 binding").toBeGreaterThanOrEqual(1);
     expect(body.transport_bindings[0].kind, "http_json binding").toBe("http_json");
     expect(Array.isArray(body.supported_features), "supported_features is array").toBe(true);
-    expect(body.auth_metadata, "auth_metadata present").toBeTruthy();
+    expect(body.authentication_metadata, "authentication_metadata present").toBeTruthy();
     expect(body.limits, "limits present").toBeTruthy();
     expect(body.plaintext_visibility, "plaintext_visibility present").toBeTruthy();
     expect(typeof body.development_mode, "development_mode boolean").toBe("boolean");

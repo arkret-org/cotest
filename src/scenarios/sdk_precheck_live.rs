@@ -1,7 +1,7 @@
 //! Complete SDK Event admission consumed by the real Station and PG reducer.
 
 use anyhow::{Context, Result, ensure};
-use arkret_wire::{EventKind, StreamScanDirection, StreamScanRequest};
+use arkret_wire::{EventKind, StreamScanDirection, StreamScanRequestBody};
 use garth::{DurableInboxStore as _, OutboundQueueStore as _};
 use reqwest::StatusCode;
 use serde_json::{Value, json};
@@ -53,7 +53,7 @@ async fn rejected_locally(
             "refused Event changed the real client projection"
         );
         ensure!(
-            garth::QueuedSubmission::new(arkret_wire::AuthoritySubmitRequest::Event(
+            garth::QueuedSubmission::new(arkret_wire::AuthoritySubmitRequestBody::Event(
                 arkret_wire::EventAdmissionSubmission::new(event.clone())
             ))
             .is_err(),
@@ -61,7 +61,7 @@ async fn rejected_locally(
         );
         let forged = garth::QueuedSubmission {
             request:
-                arkret_models_collaboration::authority_commit::SelfAuthoritySubmitRequest::Event(
+                arkret_models_collaboration::authority_commit::SelfAuthoritySubmitRequestBody::Event(
                     arkret_wire::EventAdmissionSubmission::new(event.clone()),
                 ),
             event_id: event.event_id.clone(),
@@ -101,7 +101,7 @@ async fn rejected_locally(
 }
 
 async fn scan(client: &TestActorClient, realm: &str) -> Result<Value> {
-    let request = StreamScanRequest {
+    let request = StreamScanRequestBody {
         realm_id: arkret_wire::RealmId::new(realm)?,
         stream_ref: arkret_wire::CommitStreamRef::Realm {
             realm_id: arkret_wire::RealmId::new(realm)?,
@@ -199,7 +199,7 @@ pub async fn run_sdk_precheck_production() -> Result<SuiteExecutionResult> {
         service_id: Some(account.station_id.clone()),
         stream_ref: positive.stream_ref.clone(),
     };
-    let queued = garth::QueuedSubmission::new(arkret_wire::AuthoritySubmitRequest::Event(
+    let queued = garth::QueuedSubmission::new(arkret_wire::AuthoritySubmitRequestBody::Event(
         arkret_wire::EventAdmissionSubmission::new(base.clone()),
     ))?;
     store

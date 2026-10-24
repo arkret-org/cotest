@@ -12,7 +12,7 @@
 //! source read from `actor_private_contracts.event_writes`, the push-route
 //! `decide_server_revision_cas`, the wire-scope classification that makes the
 //! shared self submit refuse actor-private kinds, and the closed
-//! `ActorPrivateEventSubmitOutcome`. The observed outcome of each variant is
+//! `ActorPrivateEventSubmitResponseBody`. The observed outcome of each variant is
 //! rendered and compared with the fixture's `expected` object, and every
 //! refusal or replay is checked to leave the whole Station byte-for-byte
 //! unchanged.
@@ -30,7 +30,7 @@ use arkret_models_identity::device_push_route::{
 use arkret_wire::events::kinds::{EventWireScope, event_wire_scope};
 use arkret_wire::generated::ServiceOperationId;
 use arkret_wire::{
-    AccountId, ActorId, ActorPrivateEventSubmitOutcome, ActorPrivateEventSubmitRequestBody,
+    AccountId, ActorId, ActorPrivateEventSubmitRequestBody, ActorPrivateEventSubmitResponseBody,
     DidCoreId, ErrorCode, Event, EventKind, RealmId, ScopeRef,
 };
 use chrono::{DateTime, Duration, Utc};
@@ -52,7 +52,7 @@ const SUITE: &str = "actor_private_events_submit";
 const REQUEST_SCHEMA: &str =
     "schemas/service-operation-dtos.schema.json#/$defs/ActorPrivateEventSubmitRequestBody";
 const OUTCOME_SCHEMA: &str =
-    "schemas/service-operation-dtos.schema.json#/$defs/ActorPrivateEventSubmitOutcome";
+    "schemas/service-operation-dtos.schema.json#/$defs/ActorPrivateEventSubmitResponseBody";
 
 /// The executed script: every case and variant the fixture must carry, in
 /// order. A renamed, added or dropped variant fails instead of being skipped.
@@ -270,7 +270,9 @@ fn sdk_accepts(schema_ref: &str, instance: &Value) -> Option<bool> {
         "account_data_set_payload" => decodes::<
             arkret_models_collaboration::events_payloads::account_data::AccountDataSetPayload,
         >(instance),
-        "ActorPrivateEventSubmitOutcome" => decodes::<ActorPrivateEventSubmitOutcome>(instance),
+        "ActorPrivateEventSubmitResponseBody" => {
+            decodes::<ActorPrivateEventSubmitResponseBody>(instance)
+        }
         _ => return None,
     })
 }
@@ -565,7 +567,7 @@ fn canonical_digest(event: &Event) -> Result<[u8; 32]> {
 #[derive(Clone, Debug, Eq, PartialEq)]
 struct LedgerRow {
     canonical_digest: [u8; 32],
-    outcome: ActorPrivateEventSubmitOutcome,
+    outcome: ActorPrivateEventSubmitResponseBody,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -611,8 +613,8 @@ struct Station {
 
 #[derive(Debug)]
 enum Observed {
-    Accepted(ActorPrivateEventSubmitOutcome),
-    Replayed(ActorPrivateEventSubmitOutcome),
+    Accepted(ActorPrivateEventSubmitResponseBody),
+    Replayed(ActorPrivateEventSubmitResponseBody),
 }
 
 enum Decoded {
@@ -750,7 +752,7 @@ impl Station {
                         accepted_event_id: event_id.clone(),
                     },
                 );
-                ActorPrivateEventSubmitOutcome::DevicePushRoute {
+                ActorPrivateEventSubmitResponseBody::DevicePushRoute {
                     accepted_event_id: event.event_id.clone(),
                     revision: next_revision,
                 }
@@ -776,7 +778,7 @@ impl Station {
                         rejection_id: None,
                     },
                 );
-                ActorPrivateEventSubmitOutcome::AgentActionRequest {
+                ActorPrivateEventSubmitResponseBody::AgentActionRequest {
                     accepted_event_id: event.event_id.clone(),
                 }
             }
@@ -801,7 +803,7 @@ impl Station {
                 target.rejection_id = Some(payload.rejection_id.clone());
                 self.rejections
                     .insert(rejection_key, payload.request_id.clone());
-                ActorPrivateEventSubmitOutcome::AgentActionReject {
+                ActorPrivateEventSubmitResponseBody::AgentActionReject {
                     accepted_event_id: event.event_id.clone(),
                 }
             }
@@ -825,7 +827,7 @@ impl Station {
                         state: "available",
                     },
                 );
-                ActorPrivateEventSubmitOutcome::AgentDraftPropose {
+                ActorPrivateEventSubmitResponseBody::AgentDraftPropose {
                     accepted_event_id: event.event_id.clone(),
                 }
             }
@@ -985,7 +987,7 @@ fn run_case(world: &World, case_name: &str, variants: &[Value]) -> Result<usize>
 }
 
 /// The first accepted outcome per `event_id`, with the accepting variant.
-type FirstOutcomes = BTreeMap<String, (String, ActorPrivateEventSubmitOutcome)>;
+type FirstOutcomes = BTreeMap<String, (String, ActorPrivateEventSubmitResponseBody)>;
 
 /// Render one observation in the fixture's `expected` vocabulary after
 /// checking the invariants the vocabulary does not spell out.

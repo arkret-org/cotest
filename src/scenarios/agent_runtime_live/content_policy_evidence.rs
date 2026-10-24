@@ -39,7 +39,7 @@ async fn unavailable_policy_source(
         let mut connection = postgres::Client::connect(&lock_database, postgres::NoTls)?;
         let backend: i32 = connection.query_one("SELECT pg_backend_pid()", &[])?.get(0);
         let mut transaction = connection.transaction()?;
-        transaction.batch_execute("SET LOCAL lock_timeout='5s'; LOCK TABLE policy_current_results IN ACCESS EXCLUSIVE MODE")?;
+        transaction.batch_execute("SET LOCAL lock_timeout='5s'; LOCK TABLE policy_current_states IN ACCESS EXCLUSIVE MODE")?;
         let _ = ready_tx.send(backend);
         let _ = release_rx.recv_timeout(Duration::from_secs(30));
         transaction.rollback()?;
@@ -54,7 +54,7 @@ async fn unavailable_policy_source(
         let deadline = std::time::Instant::now() + Duration::from_secs(8);
         loop {
             let waiting: bool = connection.query_one(
-                "SELECT EXISTS(SELECT 1 FROM pg_locks l WHERE NOT l.granted AND l.relation='policy_current_results'::regclass AND $1=ANY(pg_blocking_pids(l.pid)))",
+                "SELECT EXISTS(SELECT 1 FROM pg_locks l WHERE NOT l.granted AND l.relation='policy_current_states'::regclass AND $1=ANY(pg_blocking_pids(l.pid)))",
                 &[&blocker_pid],
             )?.get(0);
             if waiting {
@@ -190,7 +190,7 @@ async fn current_reply_selection(
             &arkret::ParticipationReplaceRequestBody {
                 target_scope: selection.target_scope,
                 selection: arkret::ParticipationBits {
-                    reply_message: true,
+                    message_creation_allowed: true,
                     ..arkret::ParticipationBits::NONE
                 },
                 expected_version: 2,
@@ -202,9 +202,9 @@ async fn current_reply_selection(
             && restored.agent_participation_entries[0].version == 3
             && restored.agent_participation_entries[0]
                 .selection
-                .reply_message
+                .message_creation_allowed
     );
-    let accepted: AuthoritySubmitOutcome = serde_json::from_value(
+    let accepted: AuthoritySubmitResponseBody = serde_json::from_value(
         expect_json(
             runtime
                 .post("/_arkret/self/events")
@@ -213,7 +213,7 @@ async fn current_reply_selection(
         )
         .await?,
     )?;
-    ensure!(matches!(accepted, AuthoritySubmitOutcome::Accepted {
+    ensure!(matches!(accepted, AuthoritySubmitResponseBody::Accepted {
         status: AuthorityCommitStatus::Committed, commit,
     } if commit.event_ref == message.event_id));
     ensure!(
@@ -283,7 +283,7 @@ fn read_policy(scene: &GrantFixture, effect: arkret_wire::PolicyEffect) -> Resul
 async fn refused_issue(
     scene: &GrantFixture,
     operations: &[&str],
-    selectors: arkret_models_collaboration::session_grants::SessionGrantAgentScopeRequest,
+    selectors: arkret_models_collaboration::session_grants::RequestedAgentSessionGrantScope,
     code: &str,
 ) -> Result<()> {
     let request = coauth_session_evidence::build_runtime_session_request(

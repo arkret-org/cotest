@@ -316,7 +316,7 @@ async fn observe_follower(
             let response = alice
                 .send_message(realm, &strand, "Live missing-tail evidence")
                 .await?;
-            let outcome: arkret_models_collaboration::authority_commit::SelfAuthoritySubmitOutcome =
+            let outcome: arkret_models_collaboration::authority_commit::SelfAuthoritySubmitResponseBody =
                 serde_json::from_value(response)?;
             outcome.validate()?;
             let tail_head = realm_head(alice, realm).await?;
@@ -492,8 +492,8 @@ pub async fn run_bounded_drain() -> Result<()> {
     };
     ensure!(
         payload.reconnect_after_ms > 0
-            && payload.deadline > Utc::now()
-            && payload.deadline - Utc::now() <= chrono::Duration::seconds(2)
+            && payload.close_at > Utc::now()
+            && payload.close_at - Utc::now() <= chrono::Duration::seconds(2)
     );
     send(
         &mut socket,

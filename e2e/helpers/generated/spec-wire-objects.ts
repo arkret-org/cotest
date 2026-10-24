@@ -37,7 +37,7 @@ export type AppletPackage = {
       "description"?: string;
     }>;
   };
-  "webhook_auth": {
+  "webhook_signature_policy": {
     "key_ref": string;
     "accepted_signature_algorithms": Array<"ed25519" | "ecdsa-p256-sha256">;
     "signature_header"?: string;
@@ -47,7 +47,7 @@ export type AppletPackage = {
   "receive_signals": boolean;
   "rate_limited": boolean;
   "limits": {
-    "max_transaction_events"?: number;
+    "max_transaction_event_count"?: number;
     "max_payload_bytes"?: number;
     "rate_limit_per_minute"?: number;
   };
@@ -156,7 +156,7 @@ export type AppletInstallRequestBody = {
         "description"?: string;
       }>;
     };
-    "webhook_auth": {
+    "webhook_signature_policy": {
       "key_ref": string;
       "accepted_signature_algorithms": Array<"ed25519" | "ecdsa-p256-sha256">;
       "signature_header"?: string;
@@ -166,7 +166,7 @@ export type AppletInstallRequestBody = {
     "receive_signals": boolean;
     "rate_limited": boolean;
     "limits": {
-      "max_transaction_events"?: number;
+      "max_transaction_event_count"?: number;
       "max_payload_bytes"?: number;
       "rate_limit_per_minute"?: number;
     };
@@ -502,8 +502,8 @@ export type AppletInstallRequestBody = {
   "plan_digest": string;
 };
 
-/** `applet-install-operations.schema.json#/$defs/applet_install_outcome` — closed object schema. */
-export type AppletInstallOutcome = {
+/** `applet-install-operations.schema.json#/$defs/applet_install_response_body` — closed object schema. */
+export type AppletInstallResponseBody = {
   "install_id": string;
   "applet_id": string;
   "service_id": string;
@@ -534,7 +534,7 @@ export type AppletBotPreviewRequestBody = {
   "display_name"?: string;
 };
 
-/** `applet-authority-material.schema.json#/$defs/request` — closed object schema. */
+/** `applet-authority-material.schema.json#/$defs/applet_authority_material_request_body` — closed object schema. */
 export type AppletAuthorityMaterialRequestBody = {
   "effective_scope": {
     "kind": "realm";
@@ -547,8 +547,8 @@ export type AppletAuthorityMaterialRequestBody = {
   "grant_ids": string[];
 };
 
-/** `applet-authority-material.schema.json#/$defs/outcome` — closed object schema. */
-export type AppletAuthorityMaterialOutcome = {
+/** `applet-authority-material.schema.json#/$defs/response_body` — closed object schema. */
+export type AppletAuthorityMaterialResponseBody = {
   "applet_id": string;
   "service_id": string;
   "effective_scope": {
@@ -591,7 +591,7 @@ export type AppletAuthorityMaterialOutcome = {
         "verification_method": string;
         "signed_digest": string;
         "created_at": string;
-        "sig": string;
+        "signature": string;
       };
     };
     "event": {
@@ -838,7 +838,7 @@ export type AppletAuthorityMaterialOutcome = {
         [key: string]: unknown;
       };
       "verification_method": string;
-      "public_key_b64u": string;
+      "public_key_base64url": string;
       "accepted_at": string;
       "device_id": string;
       "authorization_event_id": string;
@@ -877,7 +877,7 @@ export type AppletAuthorityMaterialOutcome = {
         "verification_method": string;
         "signed_digest": string;
         "created_at": string;
-        "sig": string;
+        "signature": string;
       };
     };
     "event": {
@@ -1124,14 +1124,14 @@ export type AppletAuthorityMaterialOutcome = {
         [key: string]: unknown;
       };
       "verification_method": string;
-      "public_key_b64u": string;
+      "public_key_base64url": string;
       "accepted_at": string;
       "device_id": string;
       "authorization_event_id": string;
       "authorized_generation_ref": number;
     };
   }>;
-  "current_results": Array<{
+  "current_states": Array<{
     "status": "present";
     "realm_id": string;
     "governance_generation": number;
@@ -1540,7 +1540,7 @@ export type AppletAuthorityMaterialOutcome = {
           "allowed_relation_kinds"?: string[];
           "allowed_from_container_refs"?: string[];
           "allowed_to_container_refs"?: string[];
-          "wip_limit_override"?: boolean;
+          "wip_limit_override_allowed"?: boolean;
           "allowed_tracks"?: string[];
           "denied_tracks"?: string[];
           "blob_presign_scope"?: {
@@ -1576,11 +1576,11 @@ export type AppletAuthorityMaterialOutcome = {
           "blob_presign_max_ttl_seconds"?: number;
           "max_total_blob_bytes"?: number;
           "max_artifact_bytes"?: number;
-          "max_operations"?: number;
+          "max_operation_count"?: number;
           "period"?: string;
           "burst"?: number;
           "constraint_scope"?: "per_actor" | "per_space" | "per_realm" | "global";
-          "max_resources"?: number;
+          "max_resource_count"?: number;
           "resource_kind"?: string;
           "approval_required"?: boolean;
           "approval_mode"?: "before_commit";
@@ -1836,7 +1836,7 @@ export type AppletAuthorityMaterialOutcome = {
           "conditions"?: Record<string, unknown>;
           "schema_ref"?: string;
           "profile_ref"?: string;
-          "params"?: Record<string, unknown>;
+          "parameters"?: Record<string, unknown>;
           "agent_target"?: {
             "kind": "all";
           } | {
@@ -1990,7 +1990,7 @@ export type AppletAuthorityMaterialOutcome = {
         "issued_at": string;
         "not_before"?: string;
         "expires_at"?: null | string;
-        "auth_data": {
+        "signature_proof": {
           "verification_method": string;
           "signature_algorithm": "Ed25519";
           "signature": string;
@@ -2631,8 +2631,8 @@ export type ConsentCurrentReadRequestBody = {
   "nonce": string;
 };
 
-/** `consent-operations.schema.json#/$defs/consent_current_read_outcome` — closed object schema. */
-export type ConsentCurrentReadOutcome = {
+/** `consent-operations.schema.json#/$defs/consent_current_read_response_body` — closed object schema. */
+export type ConsentCurrentReadResponseBody = {
   "request_digest": string;
   "realm_id": string;
   "governance_generation": number;
@@ -2895,8 +2895,8 @@ export type CircleView = {
   "updated_at"?: string;
 };
 
-/** `circle-operations.schema.json#/$defs/circle_membership_outcome` — closed object schema. */
-export type CircleMembershipOutcome = {
+/** `circle-operations.schema.json#/$defs/circle_membership_response_body` — closed object schema. */
+export type CircleMembershipResponseBody = {
   "circle_id": string;
   "member_id": {
     "kind": "account";
@@ -3036,7 +3036,7 @@ export type ContactListRow = {
   };
 };
 
-/** `contact-operations.schema.json#/$defs/contact_operation_request` — closed object schema. */
+/** `contact-operations.schema.json#/$defs/contact_request_request_body` — closed object schema. */
 export type ContactRequestBody = {
   "phase": "prepare";
   "operation_id": string;
@@ -3386,7 +3386,7 @@ export type ContactRequestBody = {
         "proofs": unknown[];
       };
       "status": "pending" | "verified" | "revoked";
-      "as_of": string;
+      "evaluated_at": string;
       "verifier_id": string;
       "verified_at": string | null;
       "revocation": {
@@ -3418,7 +3418,7 @@ export type ContactRequestBody = {
           [key: string]: unknown;
         };
       } | null;
-      "fresh_until": string;
+      "cache_expires_at": string;
       "status_proof": {
         "kind": "detached_jws";
         "verification_method": string;
@@ -3541,7 +3541,7 @@ export type ContactRequestBody = {
   };
 };
 
-/** `contact-operations.schema.json#/$defs/contact_accept_request` — closed object schema. */
+/** `contact-operations.schema.json#/$defs/contact_accept_request_body` — closed object schema. */
 export type ContactRespondRequestBody = {
   "phase": "prepare";
   "operation_id": string;
@@ -3677,7 +3677,7 @@ export type ContactRespondRequestBody = {
   };
 };
 
-/** `contact-operations.schema.json#/$defs/contact_reject_request` — closed object schema. */
+/** `contact-operations.schema.json#/$defs/contact_reject_request_body` — closed object schema. */
 export type ContactRejectRequestBody = {
   "phase": "prepare";
   "operation_id": string;
@@ -3812,7 +3812,7 @@ export type ContactRejectRequestBody = {
   };
 };
 
-/** `contact-operations.schema.json#/$defs/contact_tombstone_request` — closed object schema. */
+/** `contact-operations.schema.json#/$defs/contact_tombstone_request_body` — closed object schema. */
 export type ContactTombstoneRequestBody = {
   "phase": "prepare";
   "operation_id": string;
@@ -3949,60 +3949,60 @@ export type ContactTombstoneRequestBody = {
   };
 };
 
-/** `contact-operations.schema.json#/$defs/contact_operation_outcome` — closed object schema. */
-export type ContactOperationOutcome = {
+/** `contact-operations.schema.json#/$defs/contact_operation_response_body` — closed object schema. */
+export type ContactOperationResponseBody = {
   "status": "prepared";
-  "result_kind": "request";
+  "operation_kind": "request";
   "operation_id": string;
   "reservation_handle": string;
   "expires_at": string;
   "event_draft": {
-    "unsigned_event_bytes": string;
+    "unsigned_event_base64url": string;
     "event_digest": string;
   };
 } | {
   "status": "prepared";
-  "result_kind": "response";
+  "operation_kind": "response";
   "operation_id": string;
   "reservation_handle": string;
   "expires_at": string;
   "event_draft": {
-    "unsigned_event_bytes": string;
+    "unsigned_event_base64url": string;
     "event_digest": string;
   };
 } | {
   "status": "prepared";
-  "result_kind": "reject";
+  "operation_kind": "reject";
   "operation_id": string;
   "reservation_handle": string;
   "expires_at": string;
   "event_draft": {
-    "unsigned_event_bytes": string;
+    "unsigned_event_base64url": string;
     "event_digest": string;
   };
 } | {
   "status": "prepared";
-  "result_kind": "scope_update";
+  "operation_kind": "scope_update";
   "operation_id": string;
   "reservation_handle": string;
   "expires_at": string;
   "event_draft": {
-    "unsigned_event_bytes": string;
+    "unsigned_event_base64url": string;
     "event_digest": string;
   };
 } | {
   "status": "prepared";
-  "result_kind": "tombstone";
+  "operation_kind": "tombstone";
   "operation_id": string;
   "reservation_handle": string;
   "expires_at": string;
   "event_draft": {
-    "unsigned_event_bytes": string;
+    "unsigned_event_base64url": string;
     "event_digest": string;
   };
 } | {
   "status": "accepted";
-  "result_kind": "request";
+  "operation_kind": "request";
   "operation_id": string;
   "request_acceptance_receipt": {
     "core": {
@@ -4071,10 +4071,10 @@ export type ContactOperationOutcome = {
       "request_event_ref": string;
       "producer_signer": {
         "verification_method": string;
-        "public_key_b64u": string;
+        "public_key_base64url": string;
       } | {
         "verification_method": string;
-        "public_key_b64u": string;
+        "public_key_base64url": string;
         "delegated_actor_did": string;
       };
       "source_checkpoint": string;
@@ -4090,7 +4090,7 @@ export type ContactOperationOutcome = {
   };
 } | {
   "status": "accepted";
-  "result_kind": "response";
+  "operation_kind": "response";
   "operation_id": string;
   "normal_response_acceptance_receipt": {
     "trust_domain_id": string;
@@ -4165,10 +4165,10 @@ export type ContactOperationOutcome = {
         "request_event_ref": string;
         "producer_signer": {
           "verification_method": string;
-          "public_key_b64u": string;
+          "public_key_base64url": string;
         } | {
           "verification_method": string;
-          "public_key_b64u": string;
+          "public_key_base64url": string;
           "delegated_actor_did": string;
         };
         "source_checkpoint": string;
@@ -4185,10 +4185,10 @@ export type ContactOperationOutcome = {
     "response_event_ref": string;
     "producer_signer": {
       "verification_method": string;
-      "public_key_b64u": string;
+      "public_key_base64url": string;
     } | {
       "verification_method": string;
-      "public_key_b64u": string;
+      "public_key_base64url": string;
       "delegated_actor_did": string;
     };
     "outgoing_slot_absence_digest": string;
@@ -4267,10 +4267,10 @@ export type ContactOperationOutcome = {
     "event_ref": string;
     "producer_signer": {
       "verification_method": string;
-      "public_key_b64u": string;
+      "public_key_base64url": string;
     } | {
       "verification_method": string;
-      "public_key_b64u": string;
+      "public_key_base64url": string;
       "delegated_actor_did": string;
     };
     "granted_to_peer_scopes": Array<"invite" | "direct_message" | "voice_call" | "video_call" | "presence">;
@@ -4513,10 +4513,10 @@ export type ContactOperationOutcome = {
           "event_ref": string;
           "producer_signer": {
             "verification_method": string;
-            "public_key_b64u": string;
+            "public_key_base64url": string;
           } | {
             "verification_method": string;
-            "public_key_b64u": string;
+            "public_key_base64url": string;
             "delegated_actor_did": string;
           };
           "granted_to_peer_scopes": Array<"invite" | "direct_message" | "voice_call" | "video_call" | "presence">;
@@ -4530,7 +4530,7 @@ export type ContactOperationOutcome = {
       };
     };
     "issued_at": string;
-    "fresh_until": string;
+    "cache_expires_at": string;
     "signature": {
       "verification_method": string;
       "created_at": string;
@@ -4539,7 +4539,7 @@ export type ContactOperationOutcome = {
   };
 } | {
   "status": "accepted";
-  "result_kind": "reject";
+  "operation_kind": "reject";
   "operation_id": string;
   "reject_acceptance_receipt": {
     "trust_domain_id": string;
@@ -4613,10 +4613,10 @@ export type ContactOperationOutcome = {
         "request_event_ref": string;
         "producer_signer": {
           "verification_method": string;
-          "public_key_b64u": string;
+          "public_key_base64url": string;
         } | {
           "verification_method": string;
-          "public_key_b64u": string;
+          "public_key_base64url": string;
           "delegated_actor_did": string;
         };
         "source_checkpoint": string;
@@ -4633,10 +4633,10 @@ export type ContactOperationOutcome = {
     "reject_event_ref": string;
     "producer_signer": {
       "verification_method": string;
-      "public_key_b64u": string;
+      "public_key_base64url": string;
     } | {
       "verification_method": string;
-      "public_key_b64u": string;
+      "public_key_base64url": string;
       "delegated_actor_did": string;
     };
     "accepted_at": string;
@@ -4649,7 +4649,7 @@ export type ContactOperationOutcome = {
   };
 } | {
   "status": "accepted";
-  "result_kind": "scope_update";
+  "operation_kind": "scope_update";
   "operation_id": string;
   "lineage": {
     "trust_domain_id": string;
@@ -4718,10 +4718,10 @@ export type ContactOperationOutcome = {
     "event_ref": string;
     "producer_signer": {
       "verification_method": string;
-      "public_key_b64u": string;
+      "public_key_base64url": string;
     } | {
       "verification_method": string;
-      "public_key_b64u": string;
+      "public_key_base64url": string;
       "delegated_actor_did": string;
     };
     "granted_to_peer_scopes": Array<"invite" | "direct_message" | "voice_call" | "video_call" | "presence">;
@@ -4964,10 +4964,10 @@ export type ContactOperationOutcome = {
           "event_ref": string;
           "producer_signer": {
             "verification_method": string;
-            "public_key_b64u": string;
+            "public_key_base64url": string;
           } | {
             "verification_method": string;
-            "public_key_b64u": string;
+            "public_key_base64url": string;
             "delegated_actor_did": string;
           };
           "granted_to_peer_scopes": Array<"invite" | "direct_message" | "voice_call" | "video_call" | "presence">;
@@ -4981,7 +4981,7 @@ export type ContactOperationOutcome = {
       };
     };
     "issued_at": string;
-    "fresh_until": string;
+    "cache_expires_at": string;
     "signature": {
       "verification_method": string;
       "created_at": string;
@@ -4990,7 +4990,7 @@ export type ContactOperationOutcome = {
   };
 } | {
   "status": "accepted";
-  "result_kind": "tombstone";
+  "operation_kind": "tombstone";
   "operation_id": string;
   "lineage": {
     "trust_domain_id": string;
@@ -5059,10 +5059,10 @@ export type ContactOperationOutcome = {
     "event_ref": string;
     "producer_signer": {
       "verification_method": string;
-      "public_key_b64u": string;
+      "public_key_base64url": string;
     } | {
       "verification_method": string;
-      "public_key_b64u": string;
+      "public_key_base64url": string;
       "delegated_actor_did": string;
     };
     "granted_to_peer_scopes": Array<"invite" | "direct_message" | "voice_call" | "video_call" | "presence">;
@@ -5305,10 +5305,10 @@ export type ContactOperationOutcome = {
           "event_ref": string;
           "producer_signer": {
             "verification_method": string;
-            "public_key_b64u": string;
+            "public_key_base64url": string;
           } | {
             "verification_method": string;
-            "public_key_b64u": string;
+            "public_key_base64url": string;
             "delegated_actor_did": string;
           };
           "granted_to_peer_scopes": Array<"invite" | "direct_message" | "voice_call" | "video_call" | "presence">;
@@ -5322,7 +5322,7 @@ export type ContactOperationOutcome = {
       };
     };
     "issued_at": string;
-    "fresh_until": string;
+    "cache_expires_at": string;
     "signature": {
       "verification_method": string;
       "created_at": string;
@@ -5331,7 +5331,7 @@ export type ContactOperationOutcome = {
   };
 } | {
   "status": "failed";
-  "result_kind": "request" | "response" | "reject" | "scope_update" | "tombstone";
+  "operation_kind": "request" | "response" | "reject" | "scope_update" | "tombstone";
   "operation_id": string;
   "reason": "contact_idempotency_conflict" | "contact_round_conflict" | "contact_lineage_conflict" | "contact_terminal" | "contact_scope_stale";
 };
@@ -5360,8 +5360,8 @@ export type AccountId = {
   "station_id": string;
 };
 
-/** `principal-operations.schema.json#/$defs/sidecar_ensure_outcome/oneOf/2` — closed object schema. */
-export type SidecarEnsureAcceptedOutcome = {
+/** `principal-operations.schema.json#/$defs/sidecar_ensure_response_body/oneOf/2` — closed object schema. */
+export type SidecarEnsureAcceptedResponseBody = {
   "status": "accepted";
   "operation_id": string;
   "accepted_phase": "commit" | "attach";
@@ -5469,7 +5469,7 @@ export type InviteObject = {
     "token_entropy_bits"?: number;
     "verification_id": string;
     "verification_public_key": string;
-    "max_claims"?: number;
+    "max_claim_count"?: number;
   };
   "capability_grant_refs"?: string[];
   "state": "pending" | "accepted" | "rejected" | "revoked" | "expired" | "claimed";
@@ -5589,11 +5589,11 @@ export type RealmObject = {
   "governance_station_id": string;
   "agent_participation"?: {
     "agent": {
-      "reply_message": boolean;
-      "reaction_add": boolean;
-      "reaction_remove": boolean;
-      "accept_third_party_mention": boolean;
-      "act_on_behalf": boolean;
+      "message_creation_allowed": boolean;
+      "reaction_addition_allowed": boolean;
+      "reaction_removal_allowed": boolean;
+      "third_party_mention_delivery_allowed": boolean;
+      "acting_on_behalf_allowed": boolean;
     };
   };
   "federation_policy"?: "open" | "restricted" | "closed" | "quarantine";
@@ -5874,7 +5874,7 @@ export type CapabilityGrantObject = {
     "allowed_relation_kinds"?: string[];
     "allowed_from_container_refs"?: string[];
     "allowed_to_container_refs"?: string[];
-    "wip_limit_override"?: boolean;
+    "wip_limit_override_allowed"?: boolean;
     "allowed_tracks"?: string[];
     "denied_tracks"?: string[];
     "blob_presign_scope"?: {
@@ -5910,11 +5910,11 @@ export type CapabilityGrantObject = {
     "blob_presign_max_ttl_seconds"?: number;
     "max_total_blob_bytes"?: number;
     "max_artifact_bytes"?: number;
-    "max_operations"?: number;
+    "max_operation_count"?: number;
     "period"?: string;
     "burst"?: number;
     "constraint_scope"?: "per_actor" | "per_space" | "per_realm" | "global";
-    "max_resources"?: number;
+    "max_resource_count"?: number;
     "resource_kind"?: string;
     "approval_required"?: boolean;
     "approval_mode"?: "before_commit";
@@ -6149,7 +6149,7 @@ export type CapabilityGrantPayload = {
       "allowed_relation_kinds"?: string[];
       "allowed_from_container_refs"?: string[];
       "allowed_to_container_refs"?: string[];
-      "wip_limit_override"?: boolean;
+      "wip_limit_override_allowed"?: boolean;
       "allowed_tracks"?: string[];
       "denied_tracks"?: string[];
       "blob_presign_scope"?: {
@@ -6185,11 +6185,11 @@ export type CapabilityGrantPayload = {
       "blob_presign_max_ttl_seconds"?: number;
       "max_total_blob_bytes"?: number;
       "max_artifact_bytes"?: number;
-      "max_operations"?: number;
+      "max_operation_count"?: number;
       "period"?: string;
       "burst"?: number;
       "constraint_scope"?: "per_actor" | "per_space" | "per_realm" | "global";
-      "max_resources"?: number;
+      "max_resource_count"?: number;
       "resource_kind"?: string;
       "approval_required"?: boolean;
       "approval_mode"?: "before_commit";
@@ -6362,7 +6362,7 @@ export type InviteDeliveryRequestBody = {
       "verification_method": string;
       "signed_digest": string;
       "created_at": string;
-      "sig": string;
+      "signature": string;
     };
   };
   "producer_signer_fact"?: {
@@ -6377,7 +6377,7 @@ export type InviteDeliveryRequestBody = {
     "device_id": string;
     "verification_method": string;
     "key": {
-      "public_key_b64u": string;
+      "public_key_base64url": string;
       "authorization_ref": {
         "event_id": string;
         "commit_id": string;
@@ -6989,7 +6989,7 @@ export type InviteDeliveryRequestBody = {
         "proofs": unknown[];
       };
       "status": "pending" | "verified" | "revoked";
-      "as_of": string;
+      "evaluated_at": string;
       "verifier_id": string;
       "verified_at": string | null;
       "revocation": {
@@ -7021,7 +7021,7 @@ export type InviteDeliveryRequestBody = {
           [key: string]: unknown;
         };
       } | null;
-      "fresh_until": string;
+      "cache_expires_at": string;
       "status_proof": {
         "kind": "detached_jws";
         "verification_method": string;
@@ -7626,7 +7626,7 @@ export type SelfInviteDispatchRequestBody = {
         "proofs": unknown[];
       };
       "status": "pending" | "verified" | "revoked";
-      "as_of": string;
+      "evaluated_at": string;
       "verifier_id": string;
       "verified_at": string | null;
       "revocation": {
@@ -7658,7 +7658,7 @@ export type SelfInviteDispatchRequestBody = {
           [key: string]: unknown;
         };
       } | null;
-      "fresh_until": string;
+      "cache_expires_at": string;
       "status_proof": {
         "kind": "detached_jws";
         "verification_method": string;

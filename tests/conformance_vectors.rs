@@ -355,7 +355,7 @@ fn registered_canonical_json_digest_constructions_match_known_answers() -> Resul
 fn expected_state_digest_known_answers_recompute_every_fold() -> Result<()> {
     assert_eq!(
         cotest::conformance::VECTOR_ID_EXPECTED_STATE_DIGEST,
-        "ak.vector.current_results.expected_state_digest.v1"
+        "ak.vector.current_state.expected_state_digest.v1"
     );
     assert_eq!(
         cotest::conformance::run_expected_state_digest_known_answers()?,
@@ -621,7 +621,7 @@ fn media_binding_vector_suite_runs_clean() -> Result<()> {
 // ─── webrtc-signaling.md §5 — ak.call.signal receiver vectors ──────────────
 //
 // signal_kind enum on the decrypted plaintext (rejects retired
-// offer/ice/device_change) + per-(realm, call, actor, device) seq monotonicity
+// offer/ice/device_change) + per-(realm, call, actor, device) sequence monotonicity
 // + a REAL ed25519 round-trip under the `ak.signal_proof.v1` transcript +
 // outer-header metadata minimisation, the class TTL ceiling, and SDK-backed
 // closed plaintext schema rejection.
@@ -650,7 +650,7 @@ fn read_receipt_signal_vector_suite_runs_clean() {
 }
 
 /// 2026-08-17 — account lifecycle is an Account Authority issuer ledger, not a
-/// Principal Control Realm finality domain. Genesis/CAS, exact replay, same-seq
+/// Principal Control Realm finality domain. Genesis/CAS, exact replay, same-sequence
 /// fork, bounded gap recovery, binding rollback, service-key rotation, the
 /// offline/hostile-holder deny invariant and the closed erasure trigger are
 /// cross-object rules no JSON Schema can express.

@@ -490,7 +490,7 @@ fn is_secret_field(name: &str) -> bool {
             | "auth"
             | "password"
             | "secret"
-            | "secret_b64u"
+            | "secret_base64url"
             | "pcr_private_state"
             | "key_bytes"
             | "backend_token"
@@ -500,7 +500,7 @@ fn is_secret_field(name: &str) -> bool {
             | "invite_token"
             | "signed_link"
             | "jws"
-            | "sig"
+            | "signature"
             | "private_key"
             | "seed"
             | "mnemonic"
@@ -561,7 +561,7 @@ mod tests {
         for field in [
             "DPoP",
             "credential",
-            "secret_b64u",
+            "secret_base64url",
             "private_key",
             "recovery_key",
             "root_seed",
@@ -581,14 +581,14 @@ mod tests {
             },
             "recovery_key": "word list",
             "backend_token":"opaque bearer",
-            "participant_binding":{"sig":"public signature"}
+            "participant_binding":{"signature":"public signature"}
         }));
         assert_eq!(sanitized["ice"]["credential"], "[redacted]");
         assert_eq!(sanitized["headers"]["DPoP"], "[redacted]");
         assert_eq!(sanitized["ice"]["username"], "public-routing-user");
         assert_eq!(sanitized["recovery_key"], "[redacted]");
         assert_eq!(sanitized["backend_token"], "[redacted]");
-        assert_eq!(sanitized["participant_binding"]["sig"], "[redacted]");
+        assert_eq!(sanitized["participant_binding"]["signature"], "[redacted]");
     }
 
     #[test]

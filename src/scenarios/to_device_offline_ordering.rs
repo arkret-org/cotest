@@ -30,7 +30,7 @@
 
 use anyhow::{Result, anyhow, bail};
 use arkret_models_collaboration::device_messages::{
-    DeviceMessagesAckRequestBody, DeviceMessagesSendRequestBody,
+    DeviceMessagesAcknowledgementRequestBody, DeviceMessagesSendRequestBody,
 };
 use reqwest::StatusCode;
 use serde_json::Value;
@@ -135,11 +135,11 @@ pub async fn to_device_offline_ordering_run() -> Result<()> {
     }
 
     // ── Step 8: ack the latest delivery token → next poll empty.
-    let ack_token = reconnect["ack_token"]
+    let acknowledgement_token = reconnect["acknowledgement_token"]
         .as_str()
-        .ok_or_else(|| anyhow!("reconnect poll missing ack_token: {reconnect}"))?
+        .ok_or_else(|| anyhow!("reconnect poll missing acknowledgement_token: {reconnect}"))?
         .to_owned();
-    ack_to_device(&server, &bob_token, &ack_token).await?;
+    ack_to_device(&server, &bob_token, &acknowledgement_token).await?;
     let drained = poll_to_device(&server, &bob_token, None).await?;
     let drained_events = application_messages(&drained)?;
     if !drained_events.is_empty() {
@@ -245,17 +245,17 @@ async fn send_to_device(
 async fn ack_to_device(
     server: &ArkretServer,
     recipient_token: &str,
-    ack_token: &str,
+    acknowledgement_token: &str,
 ) -> Result<()> {
-    let ack: arkret_models_collaboration::device_messages::DeviceMessagesAckOutcome =
+    let ack: arkret_models_collaboration::device_messages::DeviceMessagesAcknowledgementResponseBody =
         serde_json::from_value(expect_json(
         server
             .http()
             .post(server.url("/_arkret/self/device_messages/ack"))
             .bearer_auth(recipient_token)
             .json(
-                &arkret_models_collaboration::device_messages::DeviceMessagesAckRequestBody {
-                    ack_token: ack_token.to_owned(),
+                &arkret_models_collaboration::device_messages::DeviceMessagesAcknowledgementRequestBody {
+                    acknowledgement_token: acknowledgement_token.to_owned(),
                 },
             ),
         StatusCode::OK,
@@ -425,11 +425,11 @@ pub async fn device_ack_rejects_cross_binding_without_pruning(same_account: bool
     assert_eq!(queue_ids(&other_page)?, vec![other_id]);
     let first_ack = delivery_token(&first_page)?;
     let denied = expect_json(
-        other
-            .post("/_arkret/self/device_messages/ack")
-            .json(&DeviceMessagesAckRequestBody {
-                ack_token: first_ack.clone(),
-            }),
+        other.post("/_arkret/self/device_messages/ack").json(
+            &DeviceMessagesAcknowledgementRequestBody {
+                acknowledgement_token: first_ack.clone(),
+            },
+        ),
         StatusCode::BAD_REQUEST,
     )
     .await?;
@@ -754,19 +754,19 @@ fn queue_ids(page: &Value) -> Result<Vec<String>> {
 }
 
 fn delivery_token(page: &Value) -> Result<String> {
-    page["ack_token"]
+    page["acknowledgement_token"]
         .as_str()
         .map(ToOwned::to_owned)
-        .ok_or_else(|| anyhow!("nonempty queue omitted ack_token"))
+        .ok_or_else(|| anyhow!("nonempty queue omitted acknowledgement_token"))
 }
 
 async fn ack_count(client: &crate::harness::TestActorClient, token: &str) -> Result<u64> {
     let outcome = expect_json(
-        client
-            .post("/_arkret/self/device_messages/ack")
-            .json(&DeviceMessagesAckRequestBody {
-                ack_token: token.to_owned(),
-            }),
+        client.post("/_arkret/self/device_messages/ack").json(
+            &DeviceMessagesAcknowledgementRequestBody {
+                acknowledgement_token: token.to_owned(),
+            },
+        ),
         StatusCode::OK,
     )
     .await?;
@@ -899,7 +899,7 @@ async fn restart_send(
         StatusCode::OK,
     )
     .await?;
-    let typed: arkret_models_collaboration::device_messages::DeviceMessagesSendOutcome =
+    let typed: arkret_models_collaboration::device_messages::DeviceMessagesSendResponseBody =
         serde_json::from_value(outcome.clone())?;
     anyhow::ensure!(
         typed.unknown_devices.is_empty(),
@@ -924,7 +924,7 @@ async fn restart_send(
 async fn restart_application_messages(
     client: &crate::harness::TestActorClient,
 ) -> Result<Vec<Value>> {
-    let page: arkret_models_collaboration::device_messages::DeviceMessagesGetOutcome =
+    let page: arkret_models_collaboration::device_messages::DeviceMessagesGetResponseBody =
         serde_json::from_value(
             expect_json(client.get("/_arkret/self/device_messages"), StatusCode::OK).await?,
         )?;

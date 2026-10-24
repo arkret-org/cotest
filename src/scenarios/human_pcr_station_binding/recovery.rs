@@ -36,7 +36,7 @@ fn unique(prefix: &str) -> String {
 struct CompletedCandidate {
     candidate: TestActorClient,
     gate: arkret_http_client::Client,
-    request: IssueRecoveryCompletionGrantRequest,
+    request: RecoveryCompletionGrantRequestBody,
 }
 
 async fn complete_native(
@@ -166,7 +166,7 @@ async fn complete_native(
         recovery_session_id: session.recovery_session_id.clone(),
         replacement_device_id: custody.device_id.clone(),
         previous_model_generation_ref: session.current_device_generation_ref,
-        result_model_generation_ref: next,
+        new_model_generation_ref: next,
         terminal_receipt_id: unique("ak:receipt:").parse()?,
         reanchor_commit_intent: RecoveryCommitIntent {
             realm_id: custody.pcr_realm_id.clone(),
@@ -192,7 +192,7 @@ async fn complete_native(
             },
         )?,
     };
-    let request = RecoveryTransactionCreateRequest::new(
+    let request = RecoveryTransactionCreateRequestBody::new(
         unique("ak:transaction:").parse()?,
         session.account_id.clone(),
         session.expires_at,
@@ -200,7 +200,7 @@ async fn complete_native(
     )?;
     let mut transaction = crate::scenarios::security_rotation_live::create(
         &candidate,
-        &SecurityTransactionCreateRequest::Recovery(request),
+        &SecurityTransactionCreateRequestBody::Recovery(request),
     )
     .await?;
     let SecurityTransactionPreparedPlan::Recovery(plan) = &transaction.prepared_plan else {
@@ -222,7 +222,7 @@ async fn complete_native(
         identity_model: RecoveryIdentityModel::PcrPolicy,
         recovery_authority_kind: RecoveryAuthorityKind::PcrPolicy,
         previous_model_generation_ref: plan.previous_model_generation_ref,
-        result_model_generation_ref: plan.result_model_generation_ref,
+        new_model_generation_ref: plan.new_model_generation_ref,
         authorization_event_id: plan.binding.authorize_event_id.clone(),
         reanchor_event_id: plan.binding.reanchor_event_id.clone(),
         proof_summary: RecoveryProofSummary {
@@ -237,14 +237,14 @@ async fn complete_native(
         outcome_reason_code: None,
         started_at: session.created_at,
         completed_at: arkret_canonical::normalize_timestamp_canonical(Utc::now()),
-        auth_data: RecoveryReceiptAuthData {
+        signature_proof: RecoveryReceiptSignatureProof {
             verification_method: method.clone(),
             signature_algorithm: "Ed25519".into(),
             signature: base64url("AA")?,
         },
         extra: Default::default(),
     };
-    receipt.auth_data.signature = sign(
+    receipt.signature_proof.signature = sign(
         &custody.device_signing_key,
         &receipt.signature_transcript_bytes()?,
     )?;
@@ -257,15 +257,15 @@ async fn complete_native(
         artifact: ClientStepAttestationArtifact::Recovery(RecoveryTerminalCommit {
             recovery_receipt: receipt.clone(),
         }),
-        auth_data: ClientStepAttestationAuthData {
+        signature_proof: ClientStepAttestationSignatureProof {
             verification_method: method,
             signature_algorithm: "Ed25519".into(),
             signature: base64url("AA")?,
         },
     };
-    attestation.auth_data.signature =
+    attestation.signature_proof.signature =
         sign(&custody.device_signing_key, &attestation.signing_bytes()?)?;
-    let continued = SecurityTransactionContinueRequest {
+    let continued = SecurityTransactionContinueRequestBody {
         request_digest: transaction.request_digest.clone(),
         prepared_plan_digest: transaction.prepared_plan_digest.clone(),
         expected_accepted_step_count: 0,
@@ -290,13 +290,13 @@ async fn complete_native(
     else {
         anyhow::bail!("recovery did not complete: {transaction:?}")
     };
-    let mut request = IssueRecoveryCompletionGrantRequest {
+    let mut request = RecoveryCompletionGrantRequestBody {
         transaction_id: transaction.transaction_id,
         transaction_request_digest: transaction.request_digest,
         terminal_receipt: serde_json::to_value(receipt)?,
         completion_attestation: completion.clone(),
         device_authorization_event_id: completion.device_authorization_event_ref.event_id.clone(),
-        result_model_generation_ref: completion.result_model_generation_ref,
+        new_model_generation_ref: completion.new_model_generation_ref,
         initial_session: serde_json::to_value(initial)?,
         canonical_request_digest: Hash::new(format!("sha256:{}", "0".repeat(64)))?,
     };
@@ -330,7 +330,7 @@ pub(super) async fn prepare_recovery_authority(
         anyhow::bail!("missing recovery key")
     };
     keys[0].backup_hpke.public_key_multibase = backup.backup_hpke_public_key_multikey.clone();
-    policy.auth_data.signature = sign(
+    policy.signature_proof.signature = sign(
         &custody.device_signing_key,
         &recovery_policy_signature_transcript_bytes(&policy)?,
     )?;
@@ -367,8 +367,8 @@ pub(super) async fn verify_recovery_generation_boundary(
     let stale = complete_native(fixture, &authority.method, authority.seed).await?;
     let current = complete_native(fixture, &authority.method, authority.seed).await?;
     ensure!(
-        stale.request.result_model_generation_ref.checked_add(1)
-            == Some(current.request.result_model_generation_ref)
+        stale.request.new_model_generation_ref.checked_add(1)
+            == Some(current.request.new_model_generation_ref)
             && stale.request.device_authorization_event_id
                 != current.request.device_authorization_event_id,
         "two native recoveries did not accept distinct consecutive generations"
@@ -392,7 +392,7 @@ pub(super) async fn verify_recovery_generation_boundary(
         .gate
         .issue_recovery_completion_grant(&current.request)
         .await?;
-    let grant: arkret_models_collaboration::session_grants::SessionGrantOutcome =
+    let grant: arkret_models_collaboration::session_grants::SessionGrantResponseBody =
         serde_json::from_value(accepted.session_grant_outcome)?;
     ensure!(
         grant.account_id == current.request.completion_attestation.account_id
@@ -414,7 +414,7 @@ pub(super) async fn verify_recovery_generation_boundary(
                 .as_ref()
                 .is_some_and(|binding| binding.authorization_event_id
                     == current.request.device_authorization_event_id
-                    && binding.model_generation_ref == current.request.result_model_generation_ref),
+                    && binding.model_generation_ref == current.request.new_model_generation_ref),
         "completion grant did not bind the actual accepted authorization and generation"
     );
     let mut accepted_principal = current

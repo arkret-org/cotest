@@ -58,7 +58,7 @@ fn encrypted() -> MlsEncryptedPayload<ContentBlock> {
     MlsEncryptedPayload::new(
         serde_json::from_value(json!({
             "version":"1.0", "content_type":"application/vnd.arkret.message+json",
-            "encryption_context":{"epoch":1,"group_state_ref":id(143)},
+            "encryption_context":{"epoch":"1","group_state_ref":id(143)},
             "ciphertext":"c2RrMDIzLW9wYXF1ZS1jb250ZW50"
         }))
         .unwrap(),
@@ -108,7 +108,7 @@ fn placeholder(context: DetachedSignatureContext) -> DetachedObjectSignature {
         verification_method: station_method(),
         signed_digest: Hash::new(format!("sha256:{}", "0".repeat(64))).unwrap(),
         created_at: now(),
-        sig: Base64UrlString::new("A".repeat(86)).unwrap(),
+        signature: Base64UrlString::new("A".repeat(86)).unwrap(),
     }
 }
 fn seal<T: serde::Serialize>(
@@ -247,7 +247,7 @@ fn assert_event(wire: Event) {
 // Positive API control: the peer first-admission endpoint exists and accepts verification.
 async fn verified_peer_watch(
     client: &Client,
-    request: &VerifiedSubmission<PeerWatchAuditReadRequest>,
+    request: &VerifiedSubmission<PeerWatchAuditReadRequestBody>,
 ) {
     let _ = client.peer_strand_watch_audit_read(request, 0).await;
 }
@@ -263,7 +263,7 @@ async fn verified_event_submit(
 // Positive control for the deferred-publication create endpoint.
 async fn verified_security_create(
     client: &Client,
-    request: &VerifiedSubmission<SecurityTransactionCreateRequest>,
+    request: &VerifiedSubmission<SecurityTransactionCreateRequestBody>,
 ) {
     let _ = client.create_security_transaction(request).await;
 }

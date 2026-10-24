@@ -66,7 +66,7 @@ export type SessionGrant = {
  * A principal the canonical chain founded.
  *
  * Named fields rather than the raw register response: the Rust side parses that
- * into the SDK's own `AccountRegisterOutcome`, and re-deriving the same paths
+ * into the SDK's own `AccountRegisterResponseBody`, and re-deriving the same paths
  * here would be a second reader of the same shape, free to drift from it.
  *
  * What is deliberately absent is key material. The founding device key, the

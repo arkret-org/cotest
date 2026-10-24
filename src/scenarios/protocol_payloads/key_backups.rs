@@ -21,10 +21,10 @@ use arkret_identifiers::{
     BackupId, BackupSeriesId, DeviceId, Did, DidCoreId, project_did_to_core_id,
 };
 use arkret_models_crypto::{
-    BackupKind, KeyBackup, KeyBackupAead, KeyBackupAeadName, KeyBackupAuthData,
-    KeyBackupDomainSeparation, KeyBackupEncryption, KeyBackupRecipientMethod, KeyBackupRetention,
-    KeyBackupSignatureAlgorithm, KeyBackupUnlockAuthority, KeyBackupUnlockProof,
-    KeyBackupUnlockProofAuthData, KeysBackupsIssueUnlockChallengeRequestBody, KeysBackupsList,
+    BackupKind, KeyBackup, KeyBackupAead, KeyBackupAeadName, KeyBackupDomainSeparation,
+    KeyBackupEncryption, KeyBackupRecipientMethod, KeyBackupRetention, KeyBackupSignatureAlgorithm,
+    KeyBackupSignatureProof, KeyBackupUnlockAuthority, KeyBackupUnlockProof,
+    KeyBackupUnlockSignatureProof, KeysBackupsIssueUnlockChallengeRequestBody, KeysBackupsPage,
     KeysBackupsUnlockChallenge, KeysBackupsUnlockRequestBody, SecretStorageContentIndex,
     SecretStorageItemKind,
 };
@@ -96,7 +96,7 @@ pub(super) async fn put_backup(
 }
 
 /// Build the `ak.schema.key_backup.v1` envelope including the §7.4.1
-/// `auth_data` device-signature block. The device authorization Event is the
+/// `signature_proof` device-signature block. The device authorization Event is the
 /// trust anchor for this signature.
 fn signed_backup_envelope(
     actor_id: &str,
@@ -150,7 +150,7 @@ fn signed_backup_envelope(
         ciphertext: Base64UrlString::new("Y2lwaGVydGV4dA").map_err(|error| anyhow!(error))?,
         ciphertext_digest: Hash::new(CIPHERTEXT_DIGEST)?,
         plaintext_commitment: None,
-        auth_data: KeyBackupAuthData {
+        signature_proof: KeyBackupSignatureProof {
             device_id: principal.device_id.clone(),
             verification_method: DidUrl::new(verification_method)
                 .map_err(|error| anyhow!(error))?,
@@ -159,12 +159,12 @@ fn signed_backup_envelope(
             device_authorize_event_id: principal.founding_authorize_event_id.clone(),
         },
         retention: Some(KeyBackupRetention {
-            delete_after: Some(ts("2020-01-01T00:00:00.000Z")?),
+            deletion_eligible_at: Some(ts("2020-01-01T00:00:00.000Z")?),
             legal_hold: Some(false),
             extra: BTreeMap::new(),
         }),
         series_id: backup_series_id(SERIES_ID)?,
-        series_seq: 0,
+        series_sequence: 0,
         supersedes_id: None,
         supersedes_digest: None,
         source_commit_ref: None,
@@ -172,7 +172,7 @@ fn signed_backup_envelope(
         extra: Default::default(),
     };
     let signature = signing_key.sign(&envelope.signing_payload_bytes()?);
-    envelope.auth_data.signature =
+    envelope.signature_proof.signature =
         Base64UrlString::new(URL_SAFE_NO_PAD.encode(signature.to_bytes()))
             .map_err(|error| anyhow!(error))?;
     Ok(envelope)
@@ -186,7 +186,7 @@ const BACKUP_METADATA_MEMBERS: &[&str] = &[
     "backup_kind",
     "backup_version",
     "series_id",
-    "series_seq",
+    "series_sequence",
     "supersedes_id",
     "supersedes_digest",
     "expires_at",
@@ -197,9 +197,9 @@ const BACKUP_METADATA_MEMBERS: &[&str] = &[
     "retention",
 ];
 
-/// A non-empty list is the closed `KeysBackupsList` over HTTP 200: the stored
+/// A non-empty list is the closed `KeysBackupsPage` over HTTP 200: the stored
 /// envelope appears as its `backup_metadata` projection and decodes as the SDK
-/// DTO, with no envelope-only member (`auth_data`, `contents`, ...) leaking.
+/// DTO, with no envelope-only member (`signature_proof`, `contents`, ...) leaking.
 pub(super) async fn list_backups(server: &ArkretServer, token: &str) -> Result<()> {
     let body = expect_json(
         server
@@ -230,15 +230,15 @@ pub(super) async fn list_backups(server: &ArkretServer, token: &str) -> Result<(
             }),
         "list row encryption is not the recipient summary: {row}"
     );
-    let listing: KeysBackupsList = serde_json::from_value(body.clone())
-        .with_context(|| format!("list decodes as the SDK KeysBackupsList: {body}"))?;
+    let listing: KeysBackupsPage = serde_json::from_value(body.clone())
+        .with_context(|| format!("list decodes as the SDK KeysBackupsPage: {body}"))?;
     let summary = listing
         .backups
         .iter()
         .find(|summary| summary.backup_id.as_str() == BACKUP_ID)
         .context("decoded list names the stored backup")?;
     anyhow::ensure!(summary.backup_kind == BackupKind::SecretStorage);
-    anyhow::ensure!(summary.series_id.as_str() == SERIES_ID && summary.series_seq == 0);
+    anyhow::ensure!(summary.series_id.as_str() == SERIES_ID && summary.series_sequence == 0);
     anyhow::ensure!(summary.backup_version.as_str() == "kb_1");
     anyhow::ensure!(summary.ciphertext_digest.as_str() == CIPHERTEXT_DIGEST);
     anyhow::ensure!(summary.created_at == ts("2026-04-26T00:00:00.000Z")?);
@@ -393,7 +393,7 @@ async fn unlock_proof(
         audience: challenge.audience,
         issued_at: challenge.issued_at,
         expires_at: challenge.expires_at,
-        auth_data: KeyBackupUnlockProofAuthData {
+        signature_proof: KeyBackupUnlockSignatureProof {
             verification_method: DidUrl::new(verification_method)
                 .map_err(|error| anyhow!(error))?,
             signature_algorithm: KeyBackupSignatureAlgorithm::Ed25519,
@@ -401,8 +401,9 @@ async fn unlock_proof(
         },
     };
     let signature = signing_key.sign(&proof.signing_payload_bytes()?);
-    proof.auth_data.signature = Base64UrlString::new(URL_SAFE_NO_PAD.encode(signature.to_bytes()))
-        .map_err(|error| anyhow!(error))?;
+    proof.signature_proof.signature =
+        Base64UrlString::new(URL_SAFE_NO_PAD.encode(signature.to_bytes()))
+            .map_err(|error| anyhow!(error))?;
     Ok(proof)
 }
 

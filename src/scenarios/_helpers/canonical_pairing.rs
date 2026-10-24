@@ -71,7 +71,7 @@ pub(super) async fn handoff(
 
 struct PreparedPairing {
     public: Client,
-    staged: DevicePairingStageOutcome,
+    staged: DevicePairingStageResponseBody,
     target: DevicePairingTargetProof,
     approval: AccountDevicePairRequestBody,
     account: arkret_wire::AccountId,
@@ -106,7 +106,7 @@ async fn prepare_pairing(fixture: &CanonicalApiFixture) -> Result<PreparedPairin
         .http_client(fixture.http.clone())
         .build()?;
     let stage_request: DevicePairingStageRequestBody = serde_json::from_value(json!({
-        "new_device_pubkey":{"kty":"OKP","kid":device_id,"algorithm":"Ed25519","key":arkret_canonical::base64url_encode(identity_key.signing_key().verifying_key().to_bytes())},
+        "new_device_public_key":{"kty":"OKP","kid":device_id,"algorithm":"Ed25519","key":arkret_canonical::base64url_encode(identity_key.signing_key().verifying_key().to_bytes())},
         "client_nonce":arkret_canonical::base64url_encode(&Sha256::digest(device_id.as_str().as_bytes())[..16])
     }))?;
     let staged = public.device_pairing_stage(&stage_request).await?;
@@ -310,7 +310,7 @@ pub async fn pair(fixture: &CanonicalApiFixture) -> Result<TestActorClient> {
 pub(super) async fn issue_for_device(
     fixture: &CanonicalApiFixture,
     client: &TestActorClient,
-) -> Result<arkret_models_collaboration::session_grants::SessionGrantOutcome> {
+) -> Result<arkret_models_collaboration::session_grants::SessionGrantResponseBody> {
     let original = client
         .principal
         .as_ref()
@@ -332,7 +332,7 @@ pub(super) async fn issue_for_device(
 pub(super) async fn refresh_for_device(
     fixture: &CanonicalApiFixture,
     client: &TestActorClient,
-) -> Result<arkret_models_collaboration::session_grants::SessionGrantOutcome> {
+) -> Result<arkret_models_collaboration::session_grants::SessionGrantResponseBody> {
     use ed25519_dalek::Signer as _;
     let original = client
         .principal
@@ -411,7 +411,7 @@ pub(super) async fn recovery_candidate(
         .as_ref()
         .context("account custody")?;
     let request = arkret_models_collaboration::session_grants::SessionGrantRequestBody::Recovery(
-        arkret_models_collaboration::session_grant_bodies::RecoverySessionGrantRequest {
+        arkret_models_collaboration::session_grant_bodies::RecoverySessionGrantRequestBody {
             credential_class: arkret_models_identity::SessionGrantCredentialClass::RecoverySession,
             request_id: arkret_identifiers::new_prefixed_uuid7("ak:request:").parse()?,
             principal_id: original.core_id.clone(),

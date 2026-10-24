@@ -1,6 +1,8 @@
 //! Accepted controller grants remediate a real Agent issuer approval refusal.
 
-use arkret_models_collaboration::session_grants::{AgentSessionGrantRequest, SessionGrantOutcome};
+use arkret_models_collaboration::session_grants::{
+    AgentSessionGrantRequestBody, SessionGrantResponseBody,
+};
 
 use super::coauth_session_evidence::issuer_state;
 use super::*;
@@ -10,7 +12,7 @@ use crate::scenarios::_helpers::acceptance_footprint::acceptance_rows_with_agent
 async fn send(
     station: &ArkretServer,
     url: &str,
-    body: &AgentSessionGrantRequest,
+    body: &AgentSessionGrantRequestBody,
     key: &SigningKey,
 ) -> Result<reqwest::Response> {
     let proof = arkret_signatures::dpop::build_dpop_proof(
@@ -157,7 +159,7 @@ pub async fn run_agent_human_approval_production()
                     realm_id: realm.clone(),
                 },
                 selection: arkret::ParticipationBits {
-                    reply_message: true,
+                    message_creation_allowed: true,
                     ..arkret::ParticipationBits::NONE
                 },
                 expected_version: 1,
@@ -327,7 +329,7 @@ pub async fn run_agent_human_approval_production()
         "accepted approval retry failed: {status} {}",
         String::from_utf8_lossy(&bytes)
     );
-    let issued: SessionGrantOutcome = serde_json::from_slice(&bytes)?;
+    let issued: SessionGrantResponseBody = serde_json::from_slice(&bytes)?;
     ensure!(
         issued.device_id.is_none()
             && issued
@@ -364,7 +366,7 @@ pub async fn run_agent_human_approval_production()
         &agent.verification_method,
         agent.runtime_key.to_bytes(),
     )?;
-    let outcome: AuthoritySubmitOutcome = serde_json::from_value(
+    let outcome: AuthoritySubmitResponseBody = serde_json::from_value(
         expect_json(
             runtime
                 .post("/_arkret/self/events")
@@ -374,7 +376,7 @@ pub async fn run_agent_human_approval_production()
         .await?,
     )?;
     ensure!(
-        matches!(outcome,AuthoritySubmitOutcome::Accepted {status:AuthorityCommitStatus::Committed,commit} if commit.event_ref==message.event_id)
+        matches!(outcome,AuthoritySubmitResponseBody::Accepted {status:AuthorityCommitStatus::Committed,commit} if commit.event_ref==message.event_id)
     );
     controller
         .revoke_realm_grant(realm.as_str(), grant_id.as_str())
@@ -431,7 +433,7 @@ pub async fn run_agent_human_approval_production()
     ensure!(
         assertions
             == [
-                "RFC 9457 extension members validate against agent_human_approval_error_details",
+                "RFC 9457 extension members validate against agent_human_approval_problem_extensions",
                 "approval_request_id is opaque and is the only runtime-visible correlation handle",
                 "controller approval completes out of band",
                 "agent retry references accepted approval evidence",

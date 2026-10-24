@@ -323,9 +323,9 @@ impl GarthClientHandle {
 
     async fn submit_event(&self, event: Event) -> Result<garth::SendQueueItem> {
         self.submit(QueuedSubmission::new(
-            arkret_wire::AuthoritySubmitRequest::Event(arkret_wire::EventAdmissionSubmission::new(
-                event,
-            )),
+            arkret_wire::AuthoritySubmitRequestBody::Event(
+                arkret_wire::EventAdmissionSubmission::new(event),
+            ),
         )?)
         .await
     }
@@ -498,7 +498,7 @@ impl GarthClientHandle {
         let strand_id = StrandId::from_event_id(&strand.event_id);
         Ok((
             strand_id,
-            QueuedSubmission::new(arkret_wire::AuthoritySubmitRequest::Event(
+            QueuedSubmission::new(arkret_wire::AuthoritySubmitRequestBody::Event(
                 arkret_wire::EventAdmissionSubmission::new(strand),
             ))?,
         ))
@@ -511,14 +511,16 @@ impl GarthClientHandle {
         strand_id: &StrandId,
     ) -> Result<QueuedSubmission> {
         Ok(QueuedSubmission::new(
-            arkret_wire::AuthoritySubmitRequest::Event(arkret_wire::EventAdmissionSubmission::new(
-                self.signed::<event_spec::RealmSetDefaultStrand>(
-                    ScopeRef::Realm {
-                        realm_id: realm_id.clone(),
-                    },
-                    json!({"realm_id":realm_id,"strand_id":strand_id}),
-                )?,
-            )),
+            arkret_wire::AuthoritySubmitRequestBody::Event(
+                arkret_wire::EventAdmissionSubmission::new(
+                    self.signed::<event_spec::RealmSetDefaultStrand>(
+                        ScopeRef::Realm {
+                            realm_id: realm_id.clone(),
+                        },
+                        json!({"realm_id":realm_id,"strand_id":strand_id}),
+                    )?,
+                ),
+            ),
         )?)
     }
 
@@ -545,7 +547,7 @@ impl GarthClientHandle {
                 "schema":"ak.schema.capability.v1","realm_id":realm_id,"issuer_id":self.actor_id,
                 "subject":ActorId::account(subject),"actions":["ak.message.create"],
                 "resources":[{"kind":"realm","realm_id":realm_id}],
-                "issuer_authority_refs":[{"kind":"realm_root","realm_id":realm_id,"authority_event_ref":genesis,"authority_generation":0}],
+                "issuer_authority_refs":[{"kind":"realm_root","realm_id":realm_id,"authority_event_ref":genesis,"authority_generation":"0"}],
                 "issued_at":arkret_canonical::format_timestamp_canonical(chrono::Utc::now())
             }}))?).await?;
         Ok(serde_json::to_value(item.commit())?)
@@ -585,7 +587,7 @@ impl GarthClientHandle {
             )),
         ))
         .map_err(anyhow::Error::msg)?;
-        let request = arkret_wire::AuthorityBundleRequest {
+        let request = arkret_wire::RealmAuthorityBundleRequestBody {
             realm_id: realm_id.clone(),
             nonce: nonce.clone(),
         };
@@ -602,7 +604,7 @@ impl GarthClientHandle {
         let mut after = None;
         let mut messages = Vec::new();
         loop {
-            let scan = arkret_wire::StreamScanRequest {
+            let scan = arkret_wire::StreamScanRequestBody {
                 realm_id: realm_id.clone(),
                 stream_ref: stream.clone(),
                 direction: arkret_wire::StreamScanDirection::After(after),
@@ -693,11 +695,14 @@ impl TransportProvider for BoundedProvider {
         Ok(self.sdk.clone())
     }
 
-    fn account_request(&self, after: Option<String>) -> garth::Result<garth::SyncRequestBody> {
+    fn account_request(
+        &self,
+        after: Option<String>,
+    ) -> garth::Result<garth::AccountSubscribeParameters> {
         // Account-global catchup does not request Realm stream details. The
         // host's exact demand must be repeated when resuming its durable
         // cursor; it cannot be inferred from a previous historical read.
-        Ok(garth::SyncRequestBody {
+        Ok(garth::AccountSubscribeParameters {
             catchup: Some(after.is_none()),
             after,
             filter: self.realm_id.as_ref().map(|realm_id| garth::AccountFilter {
@@ -708,7 +713,7 @@ impl TransportProvider for BoundedProvider {
                 window_limit: Some(100),
                 ..garth::AccountFilter::default()
             }),
-            ..garth::SyncRequestBody::default()
+            ..garth::AccountSubscribeParameters::default()
         })
     }
 }

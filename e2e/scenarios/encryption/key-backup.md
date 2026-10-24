@@ -60,7 +60,7 @@ identity/recovery(账户恢复)的姊妹篇,但 encryption/key-backup 聚焦在*
 > **§7.10 持续备份时序(inkson 实现语义)**:RK 已配置的账号上,任一加密写引发的
 > `ak.mls.commit` 被接受后约 **1.5s(debounce)** 内,该 Realm 的 `mls_history`
 > successor envelope PUT 上行;同 Realm 后续 commit 受 **5min min-interval** 合并补传。
-> 服务端可断言:同一 Realm 的连续上传 `series_id` 不变、`series_seq` 严格 +1、带
+> 服务端可断言:同一 Realm 的连续上传 `series_id` 不变、`series_sequence` 严格 +1、带
 > `supersedes`/`supersedes_digest`(每 Realm 单系列,不再堆平行 genesis)。
 > RK 未配置时 commit 路径不产生任何 `mls_history` 上传。
 > `/settings/security` 状态位:`key-backup-history-pending`(未传完最新 epoch 的

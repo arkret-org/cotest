@@ -17,7 +17,7 @@ fn dependency_path(reference: &arkret_wire::CommittedEventRef) -> String {
 impl AccountSubscribeTransport for DependencyReadFaultRail {
     async fn subscribe(
         &self,
-        request: &SyncRequestBody,
+        request: &AccountSubscribeParameters,
     ) -> garth::Result<AccountSubscribeSnapshotResult> {
         let batch = self.http.account_subscribe_batch(request).await?;
         let dependency = batch
@@ -158,7 +158,7 @@ pub(super) fn assert_issued_dependencies(
 }
 
 pub(super) fn assert_only_tail_and_dependency_scans(
-    scans: &[arkret_wire::StreamScanRequest],
+    scans: &[arkret_wire::StreamScanRequestBody],
     stream: &arkret_wire::CommitStreamRef,
     dependencies: &[arkret_wire::CommittedEventRef],
 ) -> Result<()> {
@@ -177,7 +177,7 @@ pub(super) fn assert_only_tail_and_dependency_scans(
 }
 
 pub(super) fn is_exact_dependency_scan(
-    scan: &arkret_wire::StreamScanRequest,
+    scan: &arkret_wire::StreamScanRequestBody,
     reference: &arkret_wire::CommittedEventRef,
 ) -> bool {
     scan.realm_id == *reference.stream_ref.realm_id()

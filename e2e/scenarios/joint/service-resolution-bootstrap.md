@@ -20,7 +20,7 @@ recovery coverage.
    canonical base URL, and the registered Describe projection digest.
 4. Confirm the record proof names an assertion method in the returned
    normalized DID document and the time window is ordered.
-5. Fetch the same URL again inside `refresh_after` and require the complete
+5. Fetch the same URL again inside `refresh_at` and require the complete
    authenticated response to remain byte-equivalent as parsed JSON.
 6. Query the same endpoint with another service core and require an opaque
    not-found response.

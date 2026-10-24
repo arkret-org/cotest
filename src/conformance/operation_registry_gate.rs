@@ -671,7 +671,7 @@ fn validate_durable_effect(
                     return;
                 };
                 if contract
-                    .get("result_family")
+                    .get("state_family")
                     .and_then(Value::as_str)
                     .is_none_or(|family| !family.starts_with("ak.private."))
                 {

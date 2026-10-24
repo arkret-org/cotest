@@ -10,7 +10,7 @@ use std::path::PathBuf;
 use anyhow::{Context, Result, bail, ensure};
 use arkret_models_collaboration::events_payloads::{StrandWatchExpectedValue, StrandWatchLevel};
 use arkret_models_collaboration::strand_watch_operations::{
-    StrandWatchCurrentOutcome, StrandWatchCurrentRequestBody, StrandWatchCurrentValue,
+    StrandWatchCurrentRequestBody, StrandWatchCurrentResponseBody, StrandWatchValue,
 };
 use serde::Deserialize;
 use serde_json::{Value, json};
@@ -69,7 +69,10 @@ impl StationReadModel {
             .sort_unstable_by_key(|write| write.stream_position);
     }
 
-    fn read(&self, request: &StrandWatchCurrentRequestBody) -> Result<StrandWatchCurrentOutcome> {
+    fn read(
+        &self,
+        request: &StrandWatchCurrentRequestBody,
+    ) -> Result<StrandWatchCurrentResponseBody> {
         let wire = if let Some(write) = self.accepted_writes.last() {
             current_wire(
                 write.stream_position,
@@ -80,7 +83,7 @@ impl StationReadModel {
         } else {
             never_written_wire()
         };
-        let outcome: StrandWatchCurrentOutcome = serde_json::from_value(wire)?;
+        let outcome: StrandWatchCurrentResponseBody = serde_json::from_value(wire)?;
         outcome
             .validate_for_request(request)
             .map_err(anyhow::Error::msg)?;
@@ -167,7 +170,7 @@ fn never_written_wire() -> Value {
     json!({
         "status": "never_written",
         "realm_id": REALM,
-        "governance_generation": 2,
+        "governance_generation": "2",
         "stream_head": head_wire(12),
         "selector": selector_wire()
     })
@@ -177,7 +180,7 @@ fn current_wire(stream_position: u64, value: Value) -> Value {
     json!({
         "status": "current",
         "realm_id": REALM,
-        "governance_generation": 2,
+        "governance_generation": "2",
         "stream_head": head_wire(12),
         "result": {
             "selector": selector_wire(),
@@ -259,7 +262,7 @@ fn run_case(
                 let outcome = StationReadModel::default().read(request)?;
                 ensure!(matches!(
                     outcome,
-                    StrandWatchCurrentOutcome::NeverWritten { .. }
+                    StrandWatchCurrentResponseBody::NeverWritten { .. }
                 ));
                 let wire = serde_json::to_value(&outcome)?;
                 ensure!(wire["status"] == at(case, "/expected/status")?.clone());
@@ -285,10 +288,14 @@ fn run_case(
                 );
                 station.append(12, None);
                 let outcome = station.read(request)?;
-                let StrandWatchCurrentOutcome::Current { result, .. } = &outcome else {
+                let StrandWatchCurrentResponseBody::Current {
+                    current_state: result,
+                    ..
+                } = &outcome
+                else {
                     bail!("written clear was downgraded to never_written");
                 };
-                ensure!(result.value == StrandWatchCurrentValue::Cleared(()));
+                ensure!(result.value == StrandWatchValue::Cleared(()));
                 ensure!(result.value.as_option().is_none());
                 let wire = serde_json::to_value(outcome)?;
                 ensure!(wire["status"] == at(case, "/expected/status")?.clone());
@@ -330,7 +337,11 @@ fn run_case(
                     }),
                 );
                 let outcome = station.read(request)?;
-                let StrandWatchCurrentOutcome::Current { result, .. } = outcome else {
+                let StrandWatchCurrentResponseBody::Current {
+                    current_state: result,
+                    ..
+                } = outcome
+                else {
                     bail!("accepted writes did not produce a current row");
                 };
                 ensure!(
@@ -514,7 +525,7 @@ mod tests {
     fn closed_outcome_rejects_an_omitted_written_value() {
         let mut wire = current_wire(12, Value::Null);
         wire["result"].as_object_mut().unwrap().remove("value");
-        assert!(serde_json::from_value::<StrandWatchCurrentOutcome>(wire).is_err());
+        assert!(serde_json::from_value::<StrandWatchCurrentResponseBody>(wire).is_err());
     }
 
     #[test]
@@ -524,7 +535,7 @@ mod tests {
             .as_object_mut()
             .unwrap()
             .remove("source_stream_ref");
-        assert!(serde_json::from_value::<StrandWatchCurrentOutcome>(wire).is_err());
+        assert!(serde_json::from_value::<StrandWatchCurrentResponseBody>(wire).is_err());
     }
 
     #[test]
@@ -537,7 +548,7 @@ mod tests {
             "realm_id": REALM,
             "circle_id": "ak:circle:AT3ARBdH1FM6GjXK9ulTx-YMvQOXys39dlUzZV6KyID9"
         });
-        let outcome: StrandWatchCurrentOutcome = serde_json::from_value(wire).unwrap();
+        let outcome: StrandWatchCurrentResponseBody = serde_json::from_value(wire).unwrap();
         assert!(outcome.validate_for_request(&request).is_err());
     }
 
@@ -545,7 +556,7 @@ mod tests {
     fn consumer_guard_rejects_a_revision_ahead_of_the_confirmed_head() {
         let request: StrandWatchCurrentRequestBody =
             serde_json::from_value(request_wire()).unwrap();
-        let outcome: StrandWatchCurrentOutcome =
+        let outcome: StrandWatchCurrentResponseBody =
             serde_json::from_value(current_wire(13, Value::Null)).unwrap();
         assert!(outcome.validate_for_request(&request).is_err());
     }

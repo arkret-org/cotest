@@ -35,7 +35,7 @@ import {
   createRealmApi,
   grantCapabilityEventApi,
   resolveDefaultStrandId,
-  type StreamScanOutcome,
+  type StreamScanResponseBody,
   type CommittedEventFullView,
   pushCommittedRowsApi,
   rawPushFederationEvents,
@@ -969,7 +969,7 @@ test.describe("local authoring and join", () => {
             data: canonicalJson({ realm_id: realmId, stream_ref: streamRef, after_position: afterPosition, limit: 5 }),
           });
           expect(response.status(), response.ok() ? "accepted historical stream scan" : await response.text()).toBe(200);
-          const scan = await response.json() as StreamScanOutcome;
+          const scan = await response.json() as StreamScanResponseBody;
           expect(scan.committed_events.length).toBeGreaterThan(0);
           expect(scan.committed_events.length).toBeLessThanOrEqual(5);
           for (const row of scan.committed_events) {

@@ -73,7 +73,7 @@ export function buildWebvhGenesisEntry(
     local_id: input.localId,
     root_seed_b64url: ed25519PrivateKeySeedB64url(input.rootKey.privateKey),
     next_root_public_key_multibase: input.nextRootKey.multibase,
-    version_time: input.versionTime,
+    version_created_at: input.versionTime,
     document: input.document(placeholderId),
   });
 }
@@ -90,7 +90,7 @@ export async function submitPrincipalGenesisEntry(
       data: canonicalJson({
         did: built.did,
         did_method: "webvh",
-        seq: 1,
+        sequence: 1,
         operation: built.entry,
       }),
     },
