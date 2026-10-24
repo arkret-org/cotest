@@ -343,9 +343,18 @@ const HEADER = `// GENERATED FILE — DO NOT EDIT BY HAND.
 `;
 
 export function validateTargetNames(targets) {
-  for (const { typeName } of targets) {
-    if (typeName.endsWith("Row")) {
-      throw new Error(`public schema mirror ${typeName} cannot use a generic Row suffix`);
+  const references = new Set();
+  for (const { file, pointer, typeName } of targets) {
+    const generic = typeName.match(/(Rows?|Results?)$/);
+    if (generic) {
+      throw new Error(`public schema mirror ${typeName} cannot use a generic ${generic[1]} suffix`);
+    }
+    if (file) {
+      const reference = `${resolve(SCHEMAS_ROOT, file)}#${(pointer ?? "").replace(/^#/, "")}`;
+      if (references.has(reference)) {
+        throw new Error(`duplicate canonical schema mirror: ${reference}`);
+      }
+      references.add(reference);
     }
   }
 }

@@ -7,9 +7,18 @@ import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { validateTargetNames } from "./generate-wire-types.mjs";
 
-test("public mirrors cannot restore generic Row names", () => {
-  assert.throws(() => validateTargetNames([{ typeName: "ContactRow" }]), /generic Row/);
+test("public mirrors cannot restore generic Row or Result names", () => {
+  for (const suffix of ["Row", "Rows", "Result", "Results"]) {
+    assert.throws(() => validateTargetNames([{ typeName: `Contact${suffix}` }]), /generic/);
+  }
   assert.doesNotThrow(() => validateTargetNames([{ typeName: "ContactView" }, { typeName: "CurrentMimiRoomBinding" }]));
+});
+
+test("one canonical schema cannot gain another mirror alias", () => {
+  assert.throws(() => validateTargetNames([
+    { file: "example.schema.json", pointer: "#/$defs/shared", typeName: "Shared" },
+    { file: "./example.schema.json", pointer: "/$defs/shared", typeName: "SharedResponseBody" },
+  ]), /duplicate canonical/);
 });
 
 test("required normative schemas cannot be silently skipped", () => {
