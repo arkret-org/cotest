@@ -2,7 +2,7 @@ import { expect, type APIRequestContext } from "../../helpers/arkret-test";
 import {
   requestContactArkret,
   respondContactArkret,
-  type ContactListRow,
+  type ContactView,
 } from "../../helpers/contact-api";
 import { colandBaseUrl } from "../../helpers/env";
 import { test as jointTest } from "../../helpers/joint-fixture";
@@ -436,13 +436,13 @@ async function establishDirectMessageContact(
 async function listContacts(
   request: APIRequestContext,
   session: DpopUserSession,
-): Promise<ContactListRow[]> {
+): Promise<ContactView[]> {
   const url = `${colandBaseUrl()}/_arkret/self/contacts`;
   const response = await request.get(url, {
     headers: selfPathHeadersForDpopSession(session, "GET", url),
   });
   const text = await response.text();
   expect(response.status(), text).toBe(200);
-  const body = JSON.parse(text) as { contacts?: ContactListRow[] };
+  const body = JSON.parse(text) as { contacts?: ContactView[] };
   return body.contacts ?? [];
 }

@@ -71,7 +71,7 @@ struct DirectConversationVectors {
     resolve_response: Value,
     binding_event_ref: String,
     binding_payload: Value,
-    contact_list_row: Value,
+    contact_view: Value,
     derived_strand_selection: DerivedStrandSelection,
     pending_contact_negative: PendingContactNegative,
 }
@@ -622,7 +622,7 @@ fn validate_resolver_uses_binding_main_strand(vectors: &DirectConversationVector
 }
 
 fn validate_contact_list_row(vectors: &DirectConversationVectors) -> Result<()> {
-    let row = &vectors.contact_list_row;
+    let row = &vectors.contact_view;
     if required_str(row, "state")? != "accepted" {
         bail!("contact row with direct_conversation summary must be accepted");
     }

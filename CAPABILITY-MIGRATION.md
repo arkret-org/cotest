@@ -496,7 +496,7 @@ Two semantic follow-ons were required and are **not** compatibility shims:
   omitted from the wire, so `vec![]` became `None` — the exact statement of the
   invariant, not a silencer.
 - `DeviceMessagesSendResponseBody.delivered` is now keyed by `DeviceId` and carries a
-  `DeviceMessageDeliveredRow`. Three assertions had been comparing
+  `DeviceMessageDeliveredEntry`. Three assertions had been comparing
   `delivered[&actor][0]` against a device-id literal. They are replaced by
   `assert_delivered_to()` in `scenarios/protocol_payloads/device_messages.rs`,
   which names the device it expects, reads back the row's

@@ -24,7 +24,7 @@ import {
   queryRealmEventsApi,
   resolveDefaultStrandId,
   replicationOutcomesOutside,
-  scanPeerRealmStreamRowsApi,
+  scanPeerRealmStreamViewsApi,
   sendMessageApi,
   signedEventEnvelope,
   submitSignedEventApi,
@@ -357,7 +357,7 @@ test.describe("three-server federation P0 @three-server-p0", () => {
     // Idempotent replay: server3 reads the Realm stream from its governance
     // Station and every exact pair it holds (its own join onward) replays as
     // `duplicate`, and an exact replay of the same body answers the same.
-    const rows = await scanPeerRealmStreamRowsApi(request, {
+    const rows = await scanPeerRealmStreamViewsApi(request, {
       server: "server1",
       sourceServiceId: colandServiceId("server3"),
       realmId: realm.realmId,
@@ -454,7 +454,7 @@ test.describe("three-server federation P0 @three-server-p0", () => {
     // Station (ak.peer.committed_event.read.scan.v1) and replicates the
     // missing exact pairs in stream order: each is a direct successor of what
     // server2 holds, or already held.
-    const rows = await scanPeerRealmStreamRowsApi(request, {
+    const rows = await scanPeerRealmStreamViewsApi(request, {
       server: "server1",
       sourceServiceId: colandServiceId("server2"),
       realmId: realm.realmId,
@@ -503,7 +503,7 @@ test.describe("three-server federation P0 @three-server-p0", () => {
       failures.push({ source: "unregistered.local.host", reason: error instanceof Error ? error.name : "transport_failure" });
     }
     expect(failures[0].reason).not.toBe("unexpectedly_reachable");
-    const rows = await scanPeerRealmStreamRowsApi(request, {
+    const rows = await scanPeerRealmStreamViewsApi(request, {
       server: "server1",
       sourceServiceId: colandServiceId("server3"),
       realmId: realm.realmId,

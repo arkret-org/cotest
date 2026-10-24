@@ -17,8 +17,8 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use anyhow::{Context as _, Result, bail, ensure};
 use arkret_models_collaboration::device_messages::{
-    DeviceMessageDeliveredRow, DeviceMessageDeliveredStatus, DeviceMessageTarget,
-    DeviceMessageUnknownRow, DeviceMessageUnknownStatus, DeviceMessagesSendResponseBody,
+    DeviceMessageDeliveredEntry, DeviceMessageDeliveredStatus, DeviceMessageTarget,
+    DeviceMessageUnknownEntry, DeviceMessageUnknownStatus, DeviceMessagesSendResponseBody,
 };
 use arkret_wire::{DeviceId, DeviceMessageId, DidCoreId};
 use chrono::{DateTime, Duration, Utc};
@@ -159,7 +159,7 @@ impl Station {
                     self.queue.push(target.device_message_id.clone());
                     single.delivered.entry(principal).or_default().insert(
                         device,
-                        DeviceMessageDeliveredRow {
+                        DeviceMessageDeliveredEntry {
                             device_message_id: typed.device_message_id,
                             status: DeviceMessageDeliveredStatus::Delivered,
                         },
@@ -168,7 +168,7 @@ impl Station {
                 Recipient::NeverAuthorized | Recipient::Revoked => {
                     single.unknown_devices.entry(principal).or_default().insert(
                         device,
-                        DeviceMessageUnknownRow {
+                        DeviceMessageUnknownEntry {
                             device_message_id: typed.device_message_id,
                             status: DeviceMessageUnknownStatus::Unknown,
                         },
@@ -267,7 +267,7 @@ pub fn run_device_message_send_admission_vector() -> Result<()> {
         "reason_code": "device_result_unavailable"
     });
     ensure!(
-        serde_json::from_value::<DeviceMessageUnknownRow>(retired).is_err(),
+        serde_json::from_value::<DeviceMessageUnknownEntry>(retired).is_err(),
         "the SDK still admits the removed unknown-row reason_code"
     );
     Ok(())

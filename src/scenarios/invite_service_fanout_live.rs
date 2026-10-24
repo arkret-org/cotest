@@ -33,7 +33,7 @@ use arkret_models_collaboration::governance::invite_addressing::{
     IntroductionEvidence, InviteAddress, InviteReceivePolicy, SelfInviteDispatchRequestBody,
 };
 use arkret_models_identity::ServiceResolutionCarrier;
-use arkret_models_identity::account::{AccountDataList, AccountDataRow};
+use arkret_models_identity::account::{AccountDataEntry, AccountDataList};
 use arkret_wire::{
     AccountDataKey, AccountId, ActorId, ConsentScope, EventAdmissionSubmission, InviteReceiveAction,
 };
@@ -52,7 +52,7 @@ mod consent_invite_matrix;
 pub(crate) use consent_delivery_race::verify_consent_delivery_race;
 pub use consent_invite_matrix::run_current_invite_matrix;
 
-fn account_data_update_matches(envelope: &DeviceMessageEnvelope, row: &AccountDataRow) -> bool {
+fn account_data_update_matches(envelope: &DeviceMessageEnvelope, row: &AccountDataEntry) -> bool {
     envelope.kind.as_str() == "ak.account_data.update"
         && serde_json::to_value(&envelope.content).expect("JSON content map is serializable")
             == json!({
@@ -208,7 +208,7 @@ pub(crate) async fn create_and_dispatch_explicit_invite(
 pub(crate) async fn account_data_row(
     holder: &TestActorClient,
     key: &str,
-) -> Result<AccountDataRow> {
+) -> Result<AccountDataEntry> {
     // Service-written invite cells are registered plaintext account data. The
     // holder-readable list is their canonical read surface; the single-key
     // resource route deliberately accepts only encrypted private-key patterns.
@@ -227,7 +227,7 @@ async fn account_data_row_on_both_devices(
     primary: &TestActorClient,
     secondary: &TestActorClient,
     key: &str,
-) -> Result<AccountDataRow> {
+) -> Result<AccountDataEntry> {
     let primary_row = account_data_row(primary, key).await?;
     let secondary_row = account_data_row(secondary, key).await?;
     ensure!(
@@ -253,7 +253,7 @@ fn contains_retired_server_device(value: &Value) -> bool {
 
 #[derive(Default)]
 struct FanoutTracker {
-    rows: Vec<AccountDataRow>,
+    rows: Vec<AccountDataEntry>,
     acknowledged_ids: HashSet<String>,
 }
 
@@ -369,7 +369,7 @@ async fn receive_verified_fanout_batch(
 async fn assert_service_account_data_fanout(
     holder: &TestActorClient,
     expected_service_id: &str,
-    expected_row: &AccountDataRow,
+    expected_row: &AccountDataEntry,
     tracker: &mut FanoutTracker,
 ) -> Result<()> {
     // Only independently read CAS originals authorize a notification, including
@@ -573,7 +573,7 @@ async fn assert_notify_invite_wakes_account_subscribe(
     expected_service_id: &str,
     label: &str,
     tracker: &mut FanoutTracker,
-) -> Result<AccountDataRow> {
+) -> Result<AccountDataEntry> {
     set_explicit_address_behavior(holder, InviteReceiveAction::Notify)
         .await
         .context("set notify receive policy")?;

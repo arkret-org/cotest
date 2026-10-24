@@ -593,7 +593,7 @@ async function blocklistStoredOpaque(
   target: string,
   subscribeOpts?: () => AccountSubscribeOpts,
 ): Promise<boolean> {
-  const blocklist = await blocklistAccountDataRow(
+  const blocklist = await blocklistAccountDataEntry(
     request,
     token,
     subscribeOpts,
@@ -636,7 +636,7 @@ async function blocklistClearedOrTombstoned(
   target: string,
   subscribeOpts?: () => AccountSubscribeOpts,
 ): Promise<boolean> {
-  const blocklist = await blocklistAccountDataRow(
+  const blocklist = await blocklistAccountDataEntry(
     request,
     token,
     subscribeOpts,
@@ -651,7 +651,7 @@ async function blocklistClearedOrTombstoned(
   return content.tombstone === true || isEncryptedAccountDataCarrier(content);
 }
 
-async function blocklistAccountDataRow(
+async function blocklistAccountDataEntry(
   request: APIRequestContext,
   token: string,
   subscribeOpts?: () => AccountSubscribeOpts,

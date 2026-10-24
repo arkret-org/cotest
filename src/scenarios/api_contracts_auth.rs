@@ -374,7 +374,7 @@ pub(crate) async fn contact_command(
 async fn contact_row(
     client: &crate::harness::TestActorClient,
     peer: &str,
-) -> Result<arkret::contact_operations::ContactListRow> {
+) -> Result<arkret::contact_operations::ContactView> {
     let peer = actor_core_id(peer)?;
     client
         .sdk()

@@ -201,7 +201,7 @@ fn protocol_expiry() -> Result<chrono::DateTime<chrono::Utc>> {
 }
 
 /// `DeviceMessagesSendResponseBody.delivered` is now keyed by `DeviceId` and carries a
-/// `DeviceMessageDeliveredRow` rather than a bare device-id string, so the check
+/// `DeviceMessageDeliveredEntry` rather than a bare device-id string, so the check
 /// names the device it expects and reads the row's status back instead of
 /// comparing position 0 against a literal.
 fn assert_delivered_to(

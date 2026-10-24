@@ -18,7 +18,7 @@ async fn contact(
     peer: &ActorId,
     state: ContactState,
     phase: &str,
-) -> Result<ContactListRow> {
+) -> Result<ContactView> {
     let deadline = Instant::now() + Duration::from_secs(45);
     loop {
         let observed = client
@@ -117,7 +117,7 @@ fn verify_contact(
 async fn accept(
     runtime: &TestActorClient,
     agent: &AgentRuntimeSession,
-    row: ContactListRow,
+    row: ContactView,
 ) -> Result<()> {
     let operation_id = ProtocolOperationId::new(format!("ak:operation:{}", unique_uuid7()))
         .map_err(anyhow::Error::msg)?;

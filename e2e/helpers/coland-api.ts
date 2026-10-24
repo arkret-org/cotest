@@ -1051,7 +1051,7 @@ export async function grantServiceCapabilityApi(
         kind: "realm_root",
         realm_id: args.realmId,
         authority_event_ref: requireRealmAuthorityRootRef(args.server, args.realmId),
-        authority_generation: 0,
+        authority_generation: "0",
       },
     ],
   };
@@ -1144,7 +1144,7 @@ export function buildCapabilityGrantEnvelope(args: CapabilityGrantEventArgs): {
         kind: "realm_root",
         realm_id: args.realmId,
         authority_event_ref: requireRealmAuthorityRootRef(args.server, args.realmId),
-        authority_generation: 0,
+        authority_generation: "0",
       },
     ],
   };
@@ -3166,7 +3166,7 @@ export function fullCommittedRows(page: StreamScanResponseBody): CommittedEventF
 /// Every full row of the Realm stream that `sourceServiceId` may read from
 /// `server`, in stream order. Continuation is the largest `stream_position`
 /// of the previous page; the scan stops when a page is not truncated.
-export async function scanPeerRealmStreamRowsApi(
+export async function scanPeerRealmStreamViewsApi(
   request: APIRequestContext,
   opts: { server: ColandKey; sourceServiceId: string; realmId: string },
 ): Promise<CommittedEventFullView[]> {

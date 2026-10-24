@@ -580,7 +580,7 @@ test("complete peer Consent lost outcome replays the original after cold reload 
     const accepted = await readConsentCurrentApi(request, flow.session.grantJwt, flow.user.id, peer);
     expect(accepted.current.state).toBe("present");
     if (accepted.current.state !== "present") throw new Error("real original acceptance is missing");
-    expect(accepted.current.result.revision.commit_id).toBe(originalCommit);
+    expect(accepted.current.current_state.revision.commit_id).toBe(originalCommit);
     const target: ConsentPermission[] = [...consentPermissions(accepted), {
       consent_scope: "voice_call", expires_at: "2020-01-01T00:00:00.000Z", constraints: [], reason: "",
     }];
@@ -608,7 +608,7 @@ test("complete peer Consent lost outcome replays the original after cold reload 
     const current = await readConsentCurrentApi(request, flow.session.grantJwt, flow.user.id, peer);
     expect(current.current.state).toBe("present");
     if (current.current.state !== "present") throw new Error("later current disappeared");
-    expect(current.current.result.revision).toEqual(later.view.revision);
+    expect(current.current.current_state.revision).toEqual(later.view.revision);
     expect(consentPermissions(current)).toEqual(target);
     await actor.clickWithPassivePromptRetry(actor.page.getByTestId("consent-read-complete-button"));
     await expect(input).toBeVisible({ timeout: 30_000 });

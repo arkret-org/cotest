@@ -112,7 +112,7 @@ async fn wait_contact(
     holder: &TestActorClient,
     peer: &ActorId,
     state: ContactState,
-) -> Result<arkret::contact_operations::ContactListRow> {
+) -> Result<arkret::contact_operations::ContactView> {
     let deadline = Instant::now() + Duration::from_secs(30);
     let mut last_row = None;
     loop {
@@ -141,7 +141,7 @@ async fn wait_contact(
 
 async fn tombstone_contact(
     holder: &TestActorClient,
-    row: &arkret::contact_operations::ContactListRow,
+    row: &arkret::contact_operations::ContactView,
 ) -> Result<()> {
     use arkret::contact_operations::{
         ContactCommitPhase, ContactCommitRequestBody, ContactOperationResponseBody,
@@ -208,7 +208,7 @@ async fn tombstone_contact(
 
 async fn scope_update_contact(
     holder: &TestActorClient,
-    row: &arkret::contact_operations::ContactListRow,
+    row: &arkret::contact_operations::ContactView,
     scopes: Vec<arkret::contact_operations::ContactScope>,
 ) -> Result<arkret::contact_operations::ContactAcceptedResponseBody> {
     use arkret::contact_operations::*;

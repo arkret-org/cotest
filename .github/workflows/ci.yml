@@ -315,7 +315,9 @@ jobs:
         # Regenerates the committed mirrors of the closed arkret-spec object
         # schemas and fails when they are stale. The normative spec is checked
         # out as a sibling so this job executes the complete drift check.
-        run: npm run check:wire-types
+        run: |
+          npm run check:wire-types
+          npm run check:wire-type-gate
       - name: fixme quality gate
         working-directory: cotest/e2e
         # Enforces docs/fixme-promotion-checklist.md: no empty `test.fixme`

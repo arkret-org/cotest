@@ -42,7 +42,7 @@ import {
   replicationOutcomesOutside,
   queryRealmEventsApi,
   readCommitStreamHeadApi,
-  scanPeerRealmStreamRowsApi,
+  scanPeerRealmStreamViewsApi,
   sendMessageApi,
   sendLocalAuthoredMessageApi,
   signedEventEnvelope,
@@ -390,7 +390,7 @@ test.describe("cross-server federation", () => {
     // refused item by item and nothing is stored.
     // Read through the source Station's own actual joined creator interval.
     // The intended receiver is deliberately not authorized to scan yet.
-    const sourceRows = await scanPeerRealmStreamRowsApi(request, {
+    const sourceRows = await scanPeerRealmStreamViewsApi(request, {
       server: "server1",
       sourceServiceId: colandServiceId("server1"),
       realmId,
@@ -425,7 +425,7 @@ test.describe("cross-server federation", () => {
 
     // server2 now reads the Realm stream from its governance Station and the
     // exact pair it already holds replays as `duplicate`, twice.
-    const rows = await scanPeerRealmStreamRowsApi(request, {
+    const rows = await scanPeerRealmStreamViewsApi(request, {
       server: "server1",
       sourceServiceId: colandServiceId("server2"),
       realmId,
@@ -562,7 +562,7 @@ test.describe("cross-server federation", () => {
     // Recovery reads the one authorized stream from its governance Station
     // (federation.md §3) and replicates the exact pair; whether the durable
     // outbox got there first only decides stored versus duplicate.
-    const rows = await scanPeerRealmStreamRowsApi(request, {
+    const rows = await scanPeerRealmStreamViewsApi(request, {
       server: "server1",
       sourceServiceId: colandServiceId("server2"),
       realmId,

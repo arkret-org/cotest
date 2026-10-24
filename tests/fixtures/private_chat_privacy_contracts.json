@@ -210,7 +210,7 @@
       "created_at": "2026-06-06T00:00:00.000Z",
       "founding_unit_digest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
     },
-    "contact_list_row": {
+    "contact_view": {
       "peer": "ak:did_core:web:bob.example",
       "state": "accepted",
       "request_event_ref": "ak:event:AZbAR-UJKJB9XAMVWWroEIv43WmrHqCfW6GJV3MnzF9J",

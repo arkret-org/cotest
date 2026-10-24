@@ -33,7 +33,7 @@ export type AppletPackage = {
     "endpoints": Array<{
       "method": "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
       "path": string;
-      "auth"?: "none" | "webhook_signature" | "bearer" | "mtls";
+      "authentication_kind"?: "none" | "webhook_signature" | "bearer" | "mtls";
       "description"?: string;
     }>;
   };
@@ -152,7 +152,7 @@ export type AppletInstallRequestBody = {
       "endpoints": Array<{
         "method": "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
         "path": string;
-        "auth"?: "none" | "webhook_signature" | "bearer" | "mtls";
+        "authentication_kind"?: "none" | "webhook_signature" | "bearer" | "mtls";
         "description"?: string;
       }>;
     };
@@ -581,7 +581,7 @@ export type AppletAuthorityMaterialResponseBody = {
       "stream_position": number;
       "previous_commit_ref": string | null;
       "event_ref": string;
-      "governance_generation": number;
+      "governance_generation": string;
       "authority_ref": string;
       "committed_at": string;
       "producer_signer_fact_digest"?: string;
@@ -867,7 +867,7 @@ export type AppletAuthorityMaterialResponseBody = {
       "stream_position": number;
       "previous_commit_ref": string | null;
       "event_ref": string;
-      "governance_generation": number;
+      "governance_generation": string;
       "authority_ref": string;
       "committed_at": string;
       "producer_signer_fact_digest"?: string;
@@ -1134,7 +1134,7 @@ export type AppletAuthorityMaterialResponseBody = {
   "current_states": Array<{
     "status": "present";
     "realm_id": string;
-    "governance_generation": number;
+    "governance_generation": string;
     "effective_stream_head": {
       "stream_ref": {
         "kind": "realm";
@@ -1651,7 +1651,7 @@ export type AppletAuthorityMaterialResponseBody = {
           "kind": "realm_root";
           "realm_id": string;
           "authority_event_ref": string;
-          "authority_generation": number;
+          "authority_generation": string;
         } | {
           "kind": "owned_agent";
           "realm_id": string;
@@ -1667,7 +1667,7 @@ export type AppletAuthorityMaterialResponseBody = {
           "kind": "realm_root";
           "realm_id": string;
           "authority_event_ref": string;
-          "authority_generation": number;
+          "authority_generation": string;
         } | {
           "kind": "owned_agent";
           "realm_id": string;
@@ -2439,7 +2439,7 @@ export type MessageAuthoringIntent = {
       "version": "1.0";
       "content_type": string;
       "encryption_context": {
-        "epoch": number;
+        "epoch": string;
         "group_state_ref": string;
         "routing_context"?: {
           "target_ref": string;
@@ -2452,7 +2452,7 @@ export type MessageAuthoringIntent = {
       "version": "1.0";
       "content_type": string;
       "encryption_context": {
-        "epoch": number;
+        "epoch": string;
         "group_state_ref": string;
         "routing_context"?: {
           "target_ref": string;
@@ -2635,7 +2635,7 @@ export type ConsentCurrentReadRequestBody = {
 export type ConsentCurrentReadResponseBody = {
   "request_digest": string;
   "realm_id": string;
-  "governance_generation": number;
+  "governance_generation": string;
   "effective_stream_head": {
     "stream_ref": {
       "kind": "realm";
@@ -2657,7 +2657,7 @@ export type ConsentCurrentReadResponseBody = {
   };
   "current": {
     "state": "present";
-    "result": {
+    "current_state": {
       "selector": {
         "kind": "consent";
         "peer_id": {
@@ -2948,8 +2948,8 @@ export type ContactPeer = {
   };
 };
 
-/** `contact-operations.schema.json#/$defs/contact_list_row` — closed object schema. */
-export type ContactListRow = {
+/** `contact-operations.schema.json#/$defs/contact_view` — closed object schema. */
+export type ContactView = {
   "peer": {
     "kind": "human";
     "account_id": {
@@ -5401,7 +5401,7 @@ export type AgentSidecarView = {
     "participant_authority_digest": string;
     "authority_stream_head": string[];
     "mls_group_id"?: string;
-    "epoch"?: number;
+    "epoch"?: string;
     "genesis_event_ref"?: string;
     "current_controller_device_ready": boolean;
   };
@@ -5692,7 +5692,7 @@ export type SpaceObject = {
     "version": "1.0";
     "content_type": string;
     "encryption_context": {
-      "epoch": number;
+      "epoch": string;
       "group_state_ref": string;
       "routing_context"?: {
         "target_ref": string;
@@ -5985,7 +5985,7 @@ export type CapabilityGrantObject = {
     "kind": "realm_root";
     "realm_id": string;
     "authority_event_ref": string;
-    "authority_generation": number;
+    "authority_generation": string;
   } | {
     "kind": "owned_agent";
     "realm_id": string;
@@ -6001,7 +6001,7 @@ export type CapabilityGrantObject = {
     "kind": "realm_root";
     "realm_id": string;
     "authority_event_ref": string;
-    "authority_generation": number;
+    "authority_generation": string;
   } | {
     "kind": "owned_agent";
     "realm_id": string;
@@ -6225,7 +6225,7 @@ export type CapabilityGrantPayload = {
       "kind": "realm_root";
       "realm_id": string;
       "authority_event_ref": string;
-      "authority_generation": number;
+      "authority_generation": string;
     } | {
       "kind": "owned_agent";
       "realm_id": string;
@@ -6352,7 +6352,7 @@ export type InviteDeliveryRequestBody = {
     "stream_position": number;
     "previous_commit_ref": string | null;
     "event_ref": string;
-    "governance_generation": number;
+    "governance_generation": string;
     "authority_ref": string;
     "committed_at": string;
     "producer_signer_fact_digest"?: string;
@@ -6402,7 +6402,7 @@ export type InviteDeliveryRequestBody = {
         "commit_id": string;
         "stream_position": number;
       };
-      "governance_generation": number;
+      "governance_generation": string;
     };
     "accepted_at": string;
   };

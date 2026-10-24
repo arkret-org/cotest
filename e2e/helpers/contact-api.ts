@@ -43,16 +43,16 @@ import {
 import type { JointUser } from "./users";
 import { replaceConsentScopeApi } from "./consent-api";
 import type {
-  ContactPeer, ContactListRow as WireContactListRow, ContactOperationResponseBody,
+  ContactPeer, ContactView as WireContactView, ContactOperationResponseBody,
   ContactRequestBody, ContactRespondRequestBody, ContactRejectRequestBody,
   ContactTombstoneRequestBody, InviteObject,
 } from "./generated/spec-wire-objects";
 
 // The extra names below are harness projections, derived from formal wire DTOs.
-type ContactState = WireContactListRow["state"];
+type ContactState = WireContactView["state"];
 type ContactRequestPrepare = Extract<ContactRequestBody, { phase: "prepare" }>;
-type ContactScope = WireContactListRow["granted_to_peer_scopes"][number];
-export type ContactListRow = Omit<WireContactListRow, "peer"> & {
+type ContactScope = WireContactView["granted_to_peer_scopes"][number];
+export type ContactView = Omit<WireContactView, "peer"> & {
   peer: string;
   peerIdentity: ContactPeer;
   granted_by_me: ContactScope[];
@@ -321,7 +321,7 @@ export async function respondContactArkret(
     requesterServiceId?: string;
   },
 ): Promise<ContactRespondResponseBody> {
-  let row: ContactListRow | undefined;
+  let row: ContactView | undefined;
   await expect
     .poll(
       async () => {
@@ -403,12 +403,12 @@ async function listContactsArkret(
   request: APIRequestContext,
   token: string,
   opts: { server?: ColandKey } = {},
-): Promise<ContactListRow[]> {
+): Promise<ContactView[]> {
   const url = `${colandBaseUrl(opts.server)}/_arkret/self/contacts`;
   const response = await request.get(url, {
     headers: authHeaders(token, "GET", url),
   });
-  const body = await expectJsonOk<{ contacts: WireContactListRow[] }>(
+  const body = await expectJsonOk<{ contacts: WireContactView[] }>(
     response,
     "list contacts",
   );
@@ -438,7 +438,7 @@ export async function contactRow(
   token: string,
   peer: string,
   opts: { server?: ColandKey } = {},
-): Promise<ContactListRow | undefined> {
+): Promise<ContactView | undefined> {
   const rows = await listContactsArkret(request, token, opts);
   const matches = rows.filter((row) => row.peer === peer);
   if (matches.length > 1) throw new Error("contact principal maps to multiple Station accounts; select a complete peer identity");

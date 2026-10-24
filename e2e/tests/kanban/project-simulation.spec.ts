@@ -39,7 +39,7 @@ import {
 
 test.describe.configure({ mode: "serial" });
 
-// Subset of `service-operation-dtos.schema.json#/$defs/StrandRow`
+// Subset of `service-operation-dtos.schema.json#/$defs/StrandView`
 // that this suite asserts on. `stage` / `stage_changed_at` are the second half
 // of the common-fields.md §3.2 lifecycle cluster and sit immediately after
 // `state_changed_at` in the DTO; both are absent until `ak.strand.stage.set`
@@ -90,7 +90,7 @@ async function addCardThroughColumn(
 // Read a single Strand row from the canonical strand projection. Pass
 // includeTerminal=true to surface archived (read-only) Cards, which are
 // filtered out of the default active view.
-async function readStrandRow(
+async function readStrandView(
   request: APIRequestContext,
   token: string,
   realmId: string,
@@ -118,7 +118,7 @@ async function readStrandRow(
   );
 }
 
-async function readSpaceRow(
+async function readSpaceView(
   request: APIRequestContext,
   token: string,
   realmId: string,
@@ -358,7 +358,7 @@ test.describe("project simulation", () => {
     const relationId = sdkEventDerivedObjectId(assignment);
 
     // bob reads the Realm's strands and finds himself on Card 1.
-    const row = await readStrandRow(request, bobToken, realmId, cardId);
+    const row = await readStrandView(request, bobToken, realmId, cardId);
     expect(row, "Card 1 visible to bob").toBeTruthy();
     expect(row?.assigned_actor_ids ?? []).toContainEqual(
       accountActorId(bob.id),
@@ -447,7 +447,7 @@ test.describe("project simulation", () => {
       }),
       { context: "advance card directly from planned to done" },
     );
-    const task = await readStrandRow(request, aliceToken, realmId, taskStrandId);
+    const task = await readStrandView(request, aliceToken, realmId, taskStrandId);
     expect(task?.stage).toBe("done");
     // common-fields.md §5.3.1, now machine-readable on the DTO as
     // `if stage_changed_at is a string then stage is a string`: the reducer
@@ -659,7 +659,7 @@ test.describe("project simulation", () => {
       context: "assign Card to bob",
     });
 
-    const row = await readStrandRow(request, aliceToken, realmId, cardId);
+    const row = await readStrandView(request, aliceToken, realmId, cardId);
     expect(row, "Card visible").toBeTruthy();
     expect((row?.assigned_actor_ids ?? []).map(canonicalJson).sort()).toEqual(
       [accountActorId(alice.id), accountActorId(bob.id)].map(canonicalJson).sort(),
@@ -721,7 +721,7 @@ test.describe("project simulation", () => {
       stream_position: number;
     };
 
-    const assigned = await readStrandRow(request, aliceToken, realmId, cardId);
+    const assigned = await readStrandView(request, aliceToken, realmId, cardId);
     expect(assigned?.assigned_actor_ids ?? []).toContainEqual(
       accountActorId(bob.id),
     );
@@ -748,7 +748,7 @@ test.describe("project simulation", () => {
       { context: "unassign bob (ak.relation.tombstone)" },
     );
 
-    const unassigned = await readStrandRow(
+    const unassigned = await readStrandView(
       request,
       aliceToken,
       realmId,
@@ -792,7 +792,7 @@ test.describe("project simulation", () => {
     );
 
     // Pre-archive sanity: the Card is active.
-    const before = await readStrandRow(request, aliceToken, realmId, cardId);
+    const before = await readStrandView(request, aliceToken, realmId, cardId);
     expect(before?.state).toBe("active");
 
     // Archive the whole board.
@@ -809,12 +809,12 @@ test.describe("project simulation", () => {
     );
 
     // Only the board is archived in the spaces projection.
-    const boardRow = await readSpaceRow(request, aliceToken, realmId, boardId);
+    const boardRow = await readSpaceView(request, aliceToken, realmId, boardId);
     expect(boardRow?.state).toBe("archived");
-    const listRow = await readSpaceRow(request, aliceToken, realmId, listId);
+    const listRow = await readSpaceView(request, aliceToken, realmId, listId);
     expect(listRow?.state).toBe("active");
 
-    const cardAfterArchive = await readStrandRow(
+    const cardAfterArchive = await readStrandView(
       request,
       aliceToken,
       realmId,

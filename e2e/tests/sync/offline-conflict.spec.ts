@@ -17,7 +17,7 @@ import {
   pushCommittedRowsApi,
   queryRealmEventsApi,
   resolveDefaultStrandId,
-  scanPeerRealmStreamRowsApi,
+  scanPeerRealmStreamViewsApi,
   sendMessageApi,
   signedEventEnvelope,
   submitSignedEventApi,
@@ -283,7 +283,7 @@ test.describe("offline sync + conflict repair", () => {
         : []
       ).map((event) => String(event.event_id)),
     );
-    const rows = await scanPeerRealmStreamRowsApi(request, {
+    const rows = await scanPeerRealmStreamViewsApi(request, {
       server: "server1",
       sourceServiceId: colandServiceId("server2"),
       realmId,

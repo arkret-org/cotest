@@ -7,7 +7,9 @@
 
 use anyhow::{Context, Result, ensure};
 use arkret_models_collaboration::sync_frames::account_subscribe::AccountSubscribeFrame;
-use arkret_models_collaboration::sync_frames::demand_sync::{RealmListMembership, RealmListRow};
+use arkret_models_collaboration::sync_frames::demand_sync::{
+    AccountRealmView, RealmListMembership,
+};
 use reqwest::StatusCode;
 use serde_json::json;
 
@@ -55,7 +57,10 @@ pub(crate) fn last_cursor(frames: &[AccountSubscribeFrame]) -> Result<String> {
 }
 
 /// The Realm's row in the initial realm-list page.
-pub(crate) fn listed_row(frames: &[AccountSubscribeFrame], realm_id: &str) -> Result<RealmListRow> {
+pub(crate) fn listed_row(
+    frames: &[AccountSubscribeFrame],
+    realm_id: &str,
+) -> Result<AccountRealmView> {
     frames
         .iter()
         .filter_map(|frame| frame.realm_list.as_ref())
@@ -66,7 +71,7 @@ pub(crate) fn listed_row(frames: &[AccountSubscribeFrame], realm_id: &str) -> Re
 }
 
 /// The Realm's upsert in the realm-list changes after a cursor.
-fn changed_row(frames: &[AccountSubscribeFrame], realm_id: &str) -> Result<RealmListRow> {
+fn changed_row(frames: &[AccountSubscribeFrame], realm_id: &str) -> Result<AccountRealmView> {
     frames
         .iter()
         .filter_map(|frame| frame.realm_list_changes.as_ref())

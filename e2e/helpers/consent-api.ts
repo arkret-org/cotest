@@ -16,12 +16,12 @@ export type { ConsentPeer, ConsentPermission, ConsentReplacePayload, ConsentView
 
 export function consentPermissions(current: ConsentCurrentReadResponseBody): ConsentPermission[] {
   return current.current.state === "present"
-    ? structuredClone(current.current.result.value.permissions) : [];
+    ? structuredClone(current.current.current_state.value.permissions) : [];
 }
 
 export function consentExpectedCurrent(current: ConsentCurrentReadResponseBody): ConsentReplacePayload["expected_current"] {
   return current.current.state === "present"
-    ? { state: "present", revision: structuredClone(current.current.result.revision) }
+    ? { state: "present", revision: structuredClone(current.current.current_state.revision) }
     : { state: "never_written" };
 }
 
@@ -47,9 +47,9 @@ export async function readConsentCurrentApi(
   expect(Date.parse(current.expires_at)).toBeGreaterThan(Date.now());
   expect(Date.parse(current.expires_at) - Date.parse(current.evaluated_at)).toBeLessThanOrEqual(30_000);
   if (current.current.state === "present") {
-    expect(current.current.result.selector).toEqual({ kind: "consent", peer_id: peer.actor_id });
-    expect(current.current.result.source_stream_ref).toEqual(current.effective_stream_head.stream_ref);
-    expect(current.current.result.revision.stream_position).toBeLessThanOrEqual(current.effective_stream_head.stream_position);
+    expect(current.current.current_state.selector).toEqual({ kind: "consent", peer_id: peer.actor_id });
+    expect(current.current.current_state.source_stream_ref).toEqual(current.effective_stream_head.stream_ref);
+    expect(current.current.current_state.revision.stream_position).toBeLessThanOrEqual(current.effective_stream_head.stream_position);
   }
   // These fixture accounts are initial Human PCRs and never change governance.
   // Generation zero and the hosting Station key are independent of the reply.

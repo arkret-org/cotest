@@ -53,8 +53,8 @@ const TARGETS = [
   { file: "applet-install-operations.schema.json", pointer: "#/$defs/applet_install_request_body", typeName: "AppletInstallRequestBody" },
   { file: "applet-install-operations.schema.json", pointer: "#/$defs/applet_install_response_body", typeName: "AppletInstallResponseBody" },
   { file: "applet-bot-operations.schema.json", pointer: "#/$defs/bot_preview_request_body", typeName: "AppletBotPreviewRequestBody" },
-  { file: "applet-authority-material.schema.json", pointer: "#/$defs/request", typeName: "AppletAuthorityMaterialRequestBody" },
-  { file: "applet-authority-material.schema.json", pointer: "#/$defs/outcome", typeName: "AppletAuthorityMaterialResponseBody" },
+  { file: "applet-authority-material.schema.json", pointer: "#/$defs/applet_authority_material_request_body", typeName: "AppletAuthorityMaterialRequestBody" },
+  { file: "applet-authority-material.schema.json", pointer: "#/$defs/response_body", typeName: "AppletAuthorityMaterialResponseBody" },
   { file: "applet-device-authentication.schema.json", typeName: "AppletManagedDeviceMetadata" },
   { file: "realm-join-intake.schema.json", pointer: "#/$defs/self_prepare_request_body", typeName: "RealmJoinPrepareRequestBody" },
   { file: "message-authoring.schema.json", pointer: "#/$defs/message_authoring_intent", typeName: "MessageAuthoringIntent" },
@@ -68,7 +68,7 @@ const TARGETS = [
   { file: "circle-operations.schema.json", pointer: "#/$defs/circle_view", typeName: "CircleView" },
   { file: "circle-operations.schema.json", pointer: "#/$defs/circle_membership_response_body", typeName: "CircleMembershipResponseBody" },
   { file: "contact-operations.schema.json", pointer: "#/$defs/contact_peer", typeName: "ContactPeer" },
-  { file: "contact-operations.schema.json", pointer: "#/$defs/contact_list_row", typeName: "ContactListRow" },
+  { file: "contact-operations.schema.json", pointer: "#/$defs/contact_view", typeName: "ContactView" },
   { file: "contact-operations.schema.json", pointer: "#/$defs/contact_request_request_body", typeName: "ContactRequestBody" },
   { file: "contact-operations.schema.json", pointer: "#/$defs/contact_accept_request_body", typeName: "ContactRespondRequestBody" },
   { file: "contact-operations.schema.json", pointer: "#/$defs/contact_reject_request_body", typeName: "ContactRejectRequestBody" },
@@ -341,7 +341,16 @@ const HEADER = `// GENERATED FILE — DO NOT EDIT BY HAND.
 // than a live-server rejection.
 `;
 
+export function validateTargetNames(targets) {
+  for (const { typeName } of targets) {
+    if (typeName.endsWith("Row")) {
+      throw new Error(`public schema mirror ${typeName} cannot use a generic Row suffix`);
+    }
+  }
+}
+
 export function renderModule() {
+  validateTargetNames(TARGETS);
   const blocks = TARGETS.map(({ file, pointer, typeName }) => {
     const root = loadSchema(file);
     const node = pointer ? resolvePointer(root, pointer.replace(/^#/, "")) : root;
@@ -363,6 +372,10 @@ if (invokedDirectly) {
   // itself never needs the spec repo. Regenerating does. A checkout that has
   // only `cotest` says so instead of silently reporting success.
   if (!existsSync(SCHEMAS_ROOT)) {
+    if (process.argv.includes("--require-spec")) {
+      process.stderr.write(`ERROR spec wire types: ${SCHEMAS_ROOT} is absent (required normative schemas)\n`);
+      process.exit(1);
+    }
     process.stdout.write(
       `SKIP spec wire types: ${SCHEMAS_ROOT} is absent (sibling arkret-spec checkout required)\n`,
     );

@@ -2621,7 +2621,7 @@ async function prepareAppletInstallAuthoringBasis(
           kind: "realm_root",
           realm_id: realmId,
           authority_event_ref: realmAuthorityRootRef(undefined, realmId)!,
-          authority_generation: 0,
+          authority_generation: "0",
         },
       ],
     };

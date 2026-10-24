@@ -10,7 +10,7 @@ use arkret_models_collaboration::events_payloads::account_data::{
     AccountDataBody, AccountDataSetPayload,
 };
 use arkret_models_collaboration::objects::productivity::AccountBlocklistValue;
-use arkret_models_identity::account::{AccountDataReplaceRequestBody, AccountDataRow};
+use arkret_models_identity::account::{AccountDataEntry, AccountDataReplaceRequestBody};
 use arkret_wire::{AccountId, ActorId, DidCoreId};
 use reqwest::StatusCode;
 use serde_json::{Value, json};
@@ -192,7 +192,7 @@ pub async fn run_account_blocklist_production_cases() -> Result<super::SuiteExec
     // Reach revision 7 exclusively through signed, accepted HTTP writes.
     for expected in 0..7 {
         let request = write_request(&holder, &owner, expected, "alice:example.test").await?;
-        let row: AccountDataRow = serde_json::from_value(
+        let row: AccountDataEntry = serde_json::from_value(
             expect_json(
                 holder.put(PATH).json(&request),
                 if expected == 0 {
@@ -272,7 +272,7 @@ pub async fn run_account_blocklist_production_cases() -> Result<super::SuiteExec
         loser["type"] == "https://arkret.org/problems/cas_conflict",
         "losing write reason drifted: {loser}"
     );
-    let winner: AccountDataRow = serde_json::from_value(winner)?;
+    let winner: AccountDataEntry = serde_json::from_value(winner)?;
     ensure!(
         winner.revision == 8 && plaintext(&owner, &winner)? == blocklist(handle)?,
         "CAS merged or rewrote the winning whole value"
@@ -296,7 +296,7 @@ pub async fn run_account_blocklist_production_cases() -> Result<super::SuiteExec
         persisted_snapshot(&database.connect_url).await? == accepted,
         "losing retry changed durable state"
     );
-    let exact: AccountDataRow = serde_json::from_value(
+    let exact: AccountDataEntry = serde_json::from_value(
         expect_json(
             winning_client.put(PATH).json(winning_request),
             StatusCode::OK,
@@ -322,7 +322,7 @@ pub async fn run_account_blocklist_production_cases() -> Result<super::SuiteExec
         reauthored.set_event.event.event_id != losing_request.set_event.event.event_id,
         "CAS recovery reused the rejected Event"
     );
-    let recovered: AccountDataRow = serde_json::from_value(
+    let recovered: AccountDataEntry = serde_json::from_value(
         expect_json(losing_client.put(PATH).json(&reauthored), StatusCode::OK).await?,
     )?;
     ensure!(
@@ -400,7 +400,7 @@ pub async fn run_account_blocklist_production_cases() -> Result<super::SuiteExec
     );
     let independent =
         write_request(&other_holder, &other_owner, 0, "independent:example.test").await?;
-    let independent: AccountDataRow = serde_json::from_value(
+    let independent: AccountDataEntry = serde_json::from_value(
         expect_json(
             other_holder.put(PATH).json(&independent),
             StatusCode::CREATED,
@@ -1161,7 +1161,7 @@ pub(crate) async fn block_direct_peer(
     .map_err(anyhow::Error::msg)?;
     let response = holder.client.get(PATH).send().await?;
     let revision = match response.status() {
-        StatusCode::OK => response.json::<AccountDataRow>().await?.revision,
+        StatusCode::OK => response.json::<AccountDataEntry>().await?.revision,
         StatusCode::NOT_FOUND => 0,
         status => bail!("actual blocklist read failed before DM fixture: {status}"),
     };
@@ -2159,13 +2159,13 @@ async fn write_value_request(
     })
 }
 
-async fn read_row(holder: &TestActorClient) -> Result<AccountDataRow> {
+async fn read_row(holder: &TestActorClient) -> Result<AccountDataEntry> {
     Ok(serde_json::from_value(
         expect_json(holder.get(PATH), StatusCode::OK).await?,
     )?)
 }
 
-fn plaintext(owner: &ActorId, row: &AccountDataRow) -> Result<Value> {
+fn plaintext(owner: &ActorId, row: &AccountDataEntry) -> Result<Value> {
     Ok(arkret_crypto::account_data_crypto::open_account_data_value(
         &SECRET,
         owner,
