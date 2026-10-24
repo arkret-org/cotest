@@ -637,7 +637,7 @@ impl JoinObserver for PendingPayload<'_> {
                         .sdk()
                         .keypackages_upload(&upload)
                         .await?
-                        .accepted
+                        .accepted_count
                         == 1
                 );
                 let mut candidate = serde_json::to_value(claim_request)?;

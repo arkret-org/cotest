@@ -8,6 +8,18 @@
 // literals with these types so an unregistered member is a `tsc` error rather
 // than a live-server rejection.
 
+/** `keypackage-operations.schema.json#/$defs/keypackages_upload_response_body` — closed object schema. */
+export type KeyPackagesUploadResponseBody = {
+  "accepted_count": number;
+  "rejections"?: Array<{
+    "keypackage_ref"?: string;
+    "device_id"?: string;
+    "reason_code": string;
+    "retry_after_ms"?: number;
+  }>;
+  "keypackage_refs"?: string[];
+};
+
 /** `applet-package.schema.json` — closed object schema. */
 export type AppletPackage = {
   "schema": "ak.schema.applet_package.v1";

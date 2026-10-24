@@ -49,6 +49,7 @@ export const OUTPUT_PATH = resolve(
  * CLI-command DTOs, the local signer bookkeeping) stay hand-written.
  */
 const TARGETS = [
+  { file: "keypackage-operations.schema.json", pointer: "#/$defs/keypackages_upload_response_body", typeName: "KeyPackagesUploadResponseBody" },
   { file: "applet-package.schema.json", typeName: "AppletPackage" },
   { file: "applet-install-operations.schema.json", pointer: "#/$defs/applet_install_request_body", typeName: "AppletInstallRequestBody" },
   { file: "applet-install-operations.schema.json", pointer: "#/$defs/applet_install_response_body", typeName: "AppletInstallResponseBody" },

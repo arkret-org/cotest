@@ -184,7 +184,7 @@ test.describe("identity.recovery-key-to-encrypted-realm @fully-implemented", () 
         for (const entry of entries as Array<Record<string, unknown>>) {
           expect(entry).not.toHaveProperty("endpoint_signature");
         }
-        expect(upload.responseBody?.accepted).toBeGreaterThan(0);
+        expect(upload.responseBody?.accepted_count).toBeGreaterThan(0);
         expect(upload.responseBody?.rejections ?? []).toEqual([]);
         expect(upload.responseBody).not.toHaveProperty("available_count");
       });

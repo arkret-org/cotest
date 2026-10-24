@@ -45,7 +45,7 @@ import { replaceConsentScopeApi } from "./consent-api";
 import type {
   ContactPeer, ContactView as WireContactView, ContactOperationResponseBody,
   ContactRequestBody, ContactRespondRequestBody, ContactRejectRequestBody,
-  ContactTombstoneRequestBody, InviteObject,
+  ContactTombstoneRequestBody, InviteObject, KeyPackagesUploadResponseBody,
 } from "./generated/spec-wire-objects";
 
 // The extra names below are harness projections, derived from formal wire DTOs.
@@ -573,11 +573,8 @@ async function uploadDirectConversationKeyPackage(
       endpoint_signature: endpointSignature,
     }),
   });
-  const body = await expectJsonOk<{
-    accepted: number;
-    rejections?: Array<Record<string, unknown>>;
-  }>(response, `upload direct-conversation KeyPackage ${user.id}`);
-  expect(body.accepted).toBe(1);
+  const body = await expectJsonOk<KeyPackagesUploadResponseBody>(response, `upload direct-conversation KeyPackage ${user.id}`);
+  expect(body.accepted_count).toBe(1);
   expect(body.rejections ?? []).toEqual([]);
 }
 

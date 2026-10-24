@@ -74,7 +74,7 @@ pub(crate) async fn join_agent_with_observer(
             .keypackages_upload(&upload)
             .await
             .context("private runtime KeyPackage upload")?
-            .accepted
+            .accepted_count
             == 1
     );
     let now = arkret_canonical::normalize_timestamp_canonical(chrono::Utc::now());

@@ -16,6 +16,7 @@ import { expect, type APIRequestContext } from "@playwright/test";
 import { type ColandKey, colandBaseUrl, colandServiceId } from "../env";
 import { authHeaders, expectJsonOk, wireErrCode } from "./request";
 import { canonicalJson, cotestWire } from "./wire-client";
+import type { KeyPackagesUploadResponseBody } from "../generated/spec-wire-objects";
 import {
   accountActorId,
   assertAuthoritySubmitOutcome,
@@ -378,10 +379,7 @@ export async function addRealmMlsMemberApi(
     identity_state: string;
   }>("mls-keypackages", { endpoint: endpointInput(member), count: 1 });
   const uploadUrl = `${colandBaseUrl(member.server)}/_arkret/self/keys/keypackages/upload`;
-  const uploaded = await expectJsonOk<{
-    accepted?: number;
-    rejections?: unknown[];
-  }>(
+  const uploaded = await expectJsonOk<KeyPackagesUploadResponseBody>(
     await request.post(uploadUrl, {
       headers: {
         ...authHeaders(member.token, "POST", uploadUrl),
@@ -391,7 +389,7 @@ export async function addRealmMlsMemberApi(
     }),
     `publish MLS KeyPackage for ${member.id}`,
   );
-  expect(uploaded.accepted, `KeyPackage of ${member.id} was not published`).toBe(1);
+  expect(uploaded.accepted_count, `KeyPackage of ${member.id} was not published`).toBe(1);
   expect(uploaded.rejections ?? []).toEqual([]);
 
   const ownerAccount = accountActorId(owner.id, owner.server).account_id;
