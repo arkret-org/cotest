@@ -91,7 +91,7 @@ fn package(
                 subject_ref: message.event_id.to_string(),
             },
             scope,
-            outcome: ErasureOutcome::PartiallyCompleted,
+            outcome: ErasureAttemptOutcome::PartiallyCompleted,
             erased_classes: Vec::new(),
             retained_stub_digest: arkret_wire::Hash::new(arkret_canonical::sha256_digest(
                 b"replaced before signing",
@@ -197,9 +197,7 @@ pub async fn run(ban: bool) -> Result<()> {
             .any(|row| row["commit_id"] == terminal_commit.commit_id.as_str())
     );
     let package = package(fixture.group.server(0), &message, &redaction)?;
-    let body = arkret_canonical::canonical_json_bytes(&ErasureReceiptSubmitRequestBody {
-        package: package.clone(),
-    })?;
+    let body = arkret_canonical::canonical_json_bytes(&package.clone())?;
     let key = format!("ak:outbox:erasure-receipt:{}", package.receipt.receipt_id);
     let (status, first) = fixture
         .group
@@ -280,9 +278,7 @@ pub async fn run(ban: bool) -> Result<()> {
     different.receipt.scope.service_scope = Some("different erasure boundary".into());
     different.retained_stub.scope.service_scope = different.receipt.scope.service_scope.clone();
     sign(fixture.group.server(0), &mut different)?;
-    let different = arkret_canonical::canonical_json_bytes(&ErasureReceiptSubmitRequestBody {
-        package: different,
-    })?;
+    let different = arkret_canonical::canonical_json_bytes(&different)?;
     let (status, answer) = fixture
         .group
         .server(1)
@@ -302,9 +298,7 @@ pub async fn run(ban: bool) -> Result<()> {
     ensure!(rows(&receiver_url).await? == accepted);
     let mut invalid = package.clone();
     invalid.receipt.proofs[0].signature = "forged receipt proof".into();
-    let invalid = arkret_canonical::canonical_json_bytes(&ErasureReceiptSubmitRequestBody {
-        package: invalid,
-    })?;
+    let invalid = arkret_canonical::canonical_json_bytes(&invalid)?;
     let (status, answer) = fixture
         .group
         .server(1)

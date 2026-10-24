@@ -18,7 +18,7 @@ impl AccountSubscribeTransport for DependencyReadFaultRail {
     async fn subscribe(
         &self,
         request: &AccountSubscribeParameters,
-    ) -> garth::Result<AccountSubscribeSnapshotResult> {
+    ) -> garth::Result<AccountSubscribeReadAction> {
         let batch = self.http.account_subscribe_batch(request).await?;
         let dependency = batch
             .frames
@@ -68,7 +68,7 @@ impl AccountSubscribeTransport for DependencyReadFaultRail {
             previous
         };
         *injected = Some((dependency, previous));
-        Ok(AccountSubscribeSnapshotResult::Batch(batch))
+        Ok(AccountSubscribeReadAction::Batch(batch))
     }
 }
 

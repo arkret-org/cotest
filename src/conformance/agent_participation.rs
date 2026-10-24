@@ -9,7 +9,7 @@ use anyhow::{Result, anyhow, bail, ensure};
 use arkret_identifiers::{DidCoreId, RealmId};
 use arkret_models_collaboration::events_payloads::mention::{Mention, MentionNode, MentionTarget};
 use arkret_models_collaboration::governance::agent_participation::{
-    AgentParticipationEntry, AgentParticipationError, AgentParticipationResponseBody,
+    AgentParticipationError, AgentParticipationResponseBody, AgentParticipationView,
     ParticipationBits, ParticipationNextReplaceInput, ParticipationScope, effective_participation,
     fold_ceiling_chain, validate_agent_participation_tightens,
 };
@@ -53,7 +53,7 @@ pub const ALL_AGENT_PARTICIPATION_VECTOR_IDS: &[&str] = &[
 
 const AGENT_PARTICIPATION_FIXTURE_FILE: &str = "agent-participation-fixture.json";
 const AGENT_PARTICIPATION_ENTRY_SCHEMA: &str =
-    "schemas/agent-operations.schema.json#/$defs/agent_participation_entry";
+    "schemas/agent-operations.schema.json#/$defs/agent_participation_view";
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -925,8 +925,8 @@ pub fn run_agent_participation_session_overlay_vector() -> Result<()> {
     let selection = participation_field(vector, "selection")?;
     let version = required_u64(vector, "version")?;
 
-    let entry = AgentParticipationEntry {
-        scope: scope.clone(),
+    let entry = AgentParticipationView {
+        target_scope: scope.clone(),
         selection,
         version,
         next_replace_input: (version < i64::MAX as u64).then_some(ParticipationNextReplaceInput {
@@ -935,9 +935,9 @@ pub fn run_agent_participation_session_overlay_vector() -> Result<()> {
     };
     let outcome = AgentParticipationResponseBody {
         agent_id: "ak:did_core:web:agents.acme.example:alice-summary".to_owned(),
-        agent_participation_entries: vec![entry.clone()],
+        participation_entries: vec![entry.clone()],
     };
-    if outcome.agent_participation_entries.len() != 1 {
+    if outcome.participation_entries.len() != 1 {
         bail!("agent participation outcome shape drifted");
     }
 
@@ -1117,7 +1117,7 @@ pub fn run_agent_interaction_mode_vector() -> Result<()> {
     };
     let base = instance("agent_mode_present")?;
     let controller: AccountId =
-        serde_json::from_value(base["entry"]["value"]["controller_account_id"].clone())?;
+        serde_json::from_value(base["current_state"]["value"]["controller_account_id"].clone())?;
     let rows = contract["mode_cases"]
         .as_array()
         .ok_or_else(|| anyhow!("mode cases missing"))?;
@@ -1135,7 +1135,7 @@ pub fn run_agent_interaction_mode_vector() -> Result<()> {
                 base.clone()
             };
             if status == "present" {
-                value["entry"]["value"]["interaction_mode"] = row["mode"].clone();
+                value["current_state"]["value"]["interaction_mode"] = row["mode"].clone();
             }
             let outcome: ExactCurrentStateReadResponseBody = serde_json::from_value(value)?;
             let owner = if row["binding_valid"] == false {

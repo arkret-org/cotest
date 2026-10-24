@@ -225,7 +225,7 @@ fn completion_vector() -> Result<CompletionVector> {
     };
     let outcome = IssueRecoveryCompletionGrantResponseBody {
         transaction_id: transaction_id.parse()?,
-        session_grant_outcome: serde_json::to_value(grant)?,
+        issued_session: serde_json::to_value(grant)?,
         issued_at: completed_at,
     };
     let handoff: AccountHandoffResponseBody = serde_json::from_value(json!({
@@ -328,7 +328,7 @@ fn validate_completion_vector(vector: &CompletionVector) -> Result<()> {
         bail!("completion outcome changed transaction binding");
     }
     let grant: SessionGrantResponseBody =
-        serde_json::from_value(vector.outcome.session_grant_outcome.clone())?;
+        serde_json::from_value(vector.outcome.issued_session.clone())?;
     garth::SessionGrantState::from_initial_registration_outcome(
         &initial,
         grant.clone(),

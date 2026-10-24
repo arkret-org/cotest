@@ -211,7 +211,7 @@ pub(super) async fn exercise(mut material: Materials<'_>) -> Result<()> {
     ensure!(
         uploaded.accepted == 2
             && uploaded
-                .key_package_refs
+                .keypackage_refs
                 .contains(&second.keypackage_ref.to_string())
     );
     let control_claim = claim_request(&material, &first.keypackage_ref)?;

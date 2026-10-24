@@ -56,9 +56,10 @@ fn agent_interaction_exact_vectors_and_identity_fences_match_sdk() {
         .find(|c| c["name"] == "agent_mode_present")
         .unwrap()["instance"]
         .clone();
-    let controller: arkret_wire::AccountId =
-        serde_json::from_value(present_json["entry"]["value"]["controller_account_id"].clone())
-            .unwrap();
+    let controller: arkret_wire::AccountId = serde_json::from_value(
+        present_json["current_state"]["value"]["controller_account_id"].clone(),
+    )
+    .unwrap();
     let mut checked = 0;
     for case in cases {
         let schema = case["schema_ref"].as_str().unwrap();

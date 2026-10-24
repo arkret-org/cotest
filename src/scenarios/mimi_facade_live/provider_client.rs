@@ -525,7 +525,7 @@ pub(super) async fn run(
         vec![arkret_wire::NonEmptyString::new("mimi.content.v1").map_err(anyhow::Error::msg)?];
     native.strand_id = Some(StrandId::new(strand.to_owned())?);
     crate::scenarios::mls_lifecycle_live::resign_claim(&requester, &mut native)?;
-    let key_request = arkret_models_crypto::PeerKeyPackagesClaimRequestBody::from(&native);
+    let key_request = native.clone();
     let failure = room_sdk
         .mimi_request_key_material(&key_request, server.trust_domain(), server.trust_domain())
         .await?;

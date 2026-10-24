@@ -1141,14 +1141,14 @@ pub async fn run_agent_content_sidecar_production()
         .await?;
     ensure!(
         selected
-            .agent_participation_entries
+            .participation_entries
             .iter()
-            .any(|row| row.scope
+            .any(|participation| participation.target_scope
                 == arkret::ParticipationScope::Realm {
                     realm_id: realm.clone()
                 }
-                && row.selection.message_creation_allowed
-                && row.version == 1)
+                && participation.selection.message_creation_allowed
+                && participation.version == 1)
     );
     let operation = ProtocolOperationId::new(format!("ak:operation:{}", unique_uuid7()))
         .map_err(anyhow::Error::msg)?;

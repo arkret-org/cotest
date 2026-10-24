@@ -360,8 +360,9 @@ fn coauth_websocket_rejects_before_state(websocket: &Value) -> Result<()> {
 fn coauth_rejects_before_binding_state(public_key: &[u8]) -> Result<()> {
     use arkret_identifiers::{Did, Hash, TrustDomainId};
     use arkret_identity::{
-        AcceptedDidBinding, DidBindingPurpose, DidBindingStatus, EvidenceReceipt, LimitedTrust,
-        MethodEvidence, VerifiedDidBinding, VerifiedDidBindingDocumentInput, VerifiedDidBindingKey,
+        AcceptedDidBinding, DidBindingEvidenceReceipt, DidBindingPurpose, DidBindingStatus,
+        LimitedTrust, MethodEvidence, VerifiedDidBinding, VerifiedDidBindingDocumentInput,
+        VerifiedDidBindingKey,
     };
     use coauth_backend::handlers::arkret::{DidDocument, VerificationMethod};
     use coauth_backend::services::did_binding::{
@@ -515,7 +516,7 @@ fn coauth_rejects_before_binding_state(public_key: &[u8]) -> Result<()> {
     let shared_document = to_shared_document(&legacy_document)?;
     let document_digest = arkret_identity::document_canonical_digest(&shared_document)?;
     let evidence = MethodEvidence::none();
-    let receipt = EvidenceReceipt::new("web", document_digest, &evidence);
+    let receipt = DidBindingEvidenceReceipt::new("web", document_digest, &evidence);
     let legacy_binding = VerifiedDidBinding::from_verified_document(
         &shared_document,
         VerifiedDidBindingDocumentInput {
@@ -1076,3 +1077,5 @@ mod tests {
         Ok(())
     }
 }
+
+use arkret_identity::DidBindingEvidenceReceiptExt;

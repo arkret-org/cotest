@@ -2,7 +2,7 @@
 //! This verifies no native DID, device delegation, capability or Station admission.
 
 use anyhow::{Result, ensure};
-use arkret_mls::{ArkretMlsGroup, ArkretMlsIdentity, MlsAddMemberResult};
+use arkret_mls::{ArkretMlsGroup, ArkretMlsIdentity, MlsMemberAdditionArtifacts};
 use arkret_models_crypto::{MlsCommitPayload, MlsGovernanceBindingPayload, MlsKeyPackageState};
 use arkret_wire::{
     AccountId, ActorId, CommitStreamRef, CommittedEventFullView, DetachedObjectSignature,
@@ -58,7 +58,7 @@ fn signature(context: DetachedSignatureContext) -> DetachedObjectSignature {
 fn accepted(
     committer: &ActorId,
     base: &EventId,
-    add: &MlsAddMemberResult,
+    add: &MlsMemberAdditionArtifacts,
     binding: MlsGovernanceBindingPayload,
     position: u64,
 ) -> CommittedEventFullView {
@@ -113,7 +113,7 @@ fn delivery(
     view: &CommittedEventFullView,
     recipient: &ActorId,
     endpoint: &DeviceId,
-    add: &MlsAddMemberResult,
+    add: &MlsMemberAdditionArtifacts,
 ) -> MlsWelcomeDelivery {
     MlsWelcomeDelivery {
         welcome_id: MlsWelcomeDeliveryId::new(

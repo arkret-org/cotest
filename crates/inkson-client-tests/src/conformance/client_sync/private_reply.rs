@@ -146,7 +146,7 @@ impl AccountSubscribeTransport for HealingRail {
     async fn subscribe(
         &self,
         request: &AccountSubscribeParameters,
-    ) -> garth::Result<AccountSubscribeSnapshotResult> {
+    ) -> garth::Result<AccountSubscribeReadAction> {
         let attempt = {
             let mut requests = self.requests.lock().unwrap();
             if let Some(first) = requests.first()
@@ -227,7 +227,7 @@ impl AccountSubscribeTransport for HealingRail {
                 .flat_map(|basis| basis.accepted_dependency_refs.iter().flatten().cloned())
                 .collect(),
         );
-        Ok(AccountSubscribeSnapshotResult::Batch(batch))
+        Ok(AccountSubscribeReadAction::Batch(batch))
     }
 }
 
@@ -314,9 +314,9 @@ impl SidecarSyncObserver for PrivateReplyProbe {
             .await?;
         ensure!(
             selected
-                .agent_participation_entries
+                .participation_entries
                 .iter()
-                .any(|entry| entry.scope == selection.target_scope
+                .any(|entry| entry.target_scope == selection.target_scope
                     && entry.selection == selection.selection
                     && entry.version == 1),
             "controller private reply selection was not installed"

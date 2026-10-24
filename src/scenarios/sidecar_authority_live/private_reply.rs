@@ -326,7 +326,7 @@ pub(crate) async fn join_agent_with_observer(
         )
         .map_err(anyhow::Error::msg)?,
         claim_request_id: claim.claim_request_id,
-        key_package_ref: arkret_wire::NonEmptyString::new(selected.keypackage_ref.clone())
+        keypackage_ref: arkret_wire::NonEmptyString::new(selected.keypackage_ref.clone())
             .map_err(anyhow::Error::msg)?,
         recipient: arkret_models_crypto::RecipientMlsDurableSigner::Agent {
             recipient_agent_id: agent.agent_account.principal_id.clone(),

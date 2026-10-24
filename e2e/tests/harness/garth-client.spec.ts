@@ -137,7 +137,7 @@ test("Garth commits a two-member Realm, exchanges messages and resumes a rebuilt
     for (const corruptedKey of ["missing-grant", "session", "event"] as const) {
       const snapshot = JSON.parse(snapshotBytes.toString("utf8"));
       const wrongSeed = Buffer.alloc(32).toString("base64url");
-      if (corruptedKey === "missing-grant") snapshot.principal.outcome.session_grant_outcome = null;
+      if (corruptedKey === "missing-grant") snapshot.principal.outcome.issued_session = null;
       else if (corruptedKey === "session") snapshot.session_signing_seed_b64url = wrongSeed;
       else snapshot.principal.checkpoint.device_signing_seed_b64url = wrongSeed;
       const queueBefore = await readFile(queuePath);

@@ -22,7 +22,7 @@ operation→Rust test 与原选择数量见 `api-only-migration.json.native_live
 
 ## 规范映射
 
-- `governance/content-moderation.md` §3.1 — 举报请求 `{report_event}`、`routed_to` 对普通 reporter 省略
+- `governance/content-moderation.md` §3.1 — 举报请求 `{report_event}`、`routed_to_ids` 对普通 reporter 省略
 - `governance/content-moderation.md` §3.3、§3.4、§3.4.1 — scoped moderation 路由、E2EE evidence/franking 可选、
   不存在治理密钥释放
 - `crypto-media/encryption-and-audit.md` §2.4.1、§2.5.2、§2.6、§2.6.1 — membership 推进 key-access revision、
@@ -49,7 +49,7 @@ operation→Rust test 与原选择数量见 `api-only-migration.json.native_live
 4. bob 用 SDK MLS 状态加密消息，以 current epoch 与 `group_state_ref` 提交 `ak.message.create`。
 5. 等待 receiving service 为该密文发布独立的 `ak.moderation.franking_proof`，将其 accepted Commit 纳入举报前基线；后台发布不属于举报副作用。reporter 对该消息调用 `POST /_arkret/self/moderation/report`，不携带 franking proof（普通 reporter 只能看到
    不可验签的最小化投影，§3.4）。
-6. 响应为 `{report_id,status:"submitted"}`，不含 `routed_to`。
+6. 响应为 `{report_id,status:"submitted"}`，不含 `routed_to_ids`。
 7. reporter 从部署本地审计查询面看到自己的 `ak.self.moderation.report` 留痕。
 8. 该 Realm 的审计查询中不存在 `ak.audit.accessed`。
 

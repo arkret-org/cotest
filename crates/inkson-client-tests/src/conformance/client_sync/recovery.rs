@@ -155,7 +155,7 @@ impl AccountSubscribeTransport for RecoveryRail<'_> {
     async fn subscribe(
         &self,
         request: &AccountSubscribeParameters,
-    ) -> garth::Result<AccountSubscribeSnapshotResult> {
+    ) -> garth::Result<AccountSubscribeReadAction> {
         let call = {
             let mut requests = self.requests.lock().unwrap();
             requests.push(request.clone());
@@ -248,7 +248,7 @@ impl AccountSubscribeTransport for RecoveryRail<'_> {
                 )));
             }
         }
-        Ok(AccountSubscribeSnapshotResult::Batch(result?))
+        Ok(AccountSubscribeReadAction::Batch(result?))
     }
 }
 

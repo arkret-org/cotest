@@ -2,10 +2,10 @@
 
 use anyhow::{Result, bail};
 use arkret_wire::{
-    AccountId, DeviceId, DeviceRevocationAdmissionAssessment, DeviceRevocationAdmissionDecision,
-    DeviceRevocationAdmissionInput, DeviceRevocationAdmissionRecord, DeviceRevocationDeniedAction,
-    DidCoreId, EventId, Hash, RealmCommitId, SessionGrantAdmission,
-    SessionGrantAdmissionBlockReason,
+    AccountDeviceRevocationAdmissionAssessment, AccountDeviceRevocationAdmissionDecision,
+    AccountDeviceRevocationAdmissionInput, AccountDeviceRevocationAdmissionRecord, AccountId,
+    DeviceId, DeviceRevocationDeniedAction, DidCoreId, EventId, Hash, RealmCommitId,
+    SessionGrantAdmission, SessionGrantAdmissionBlockReason,
 };
 use chrono::{DateTime, Duration, TimeZone as _, Utc};
 
@@ -13,41 +13,41 @@ pub fn run_device_revocation_pending_suite() -> Result<()> {
     let request = request()?;
     request.validate()?;
     for decision in [
-        DeviceRevocationAdmissionDecision::Allow,
-        DeviceRevocationAdmissionDecision::RevocationPending,
-        DeviceRevocationAdmissionDecision::Revoked,
-        DeviceRevocationAdmissionDecision::AuthorityMismatch,
-        DeviceRevocationAdmissionDecision::GenerationMismatch,
+        AccountDeviceRevocationAdmissionDecision::Allow,
+        AccountDeviceRevocationAdmissionDecision::RevocationPending,
+        AccountDeviceRevocationAdmissionDecision::Revoked,
+        AccountDeviceRevocationAdmissionDecision::AuthorityMismatch,
+        AccountDeviceRevocationAdmissionDecision::GenerationMismatch,
     ] {
         let result = result(&request, decision)?;
         result.validate_for_request(&request)?;
         let admitted = result.session_grant_admission(&request, at(1)?)?;
         match (decision, admitted) {
             (
-                DeviceRevocationAdmissionDecision::Allow,
+                AccountDeviceRevocationAdmissionDecision::Allow,
                 SessionGrantAdmission::Authorized {
                     device_generation_ref: 7,
                     ..
                 },
             )
             | (
-                DeviceRevocationAdmissionDecision::AuthorityMismatch,
+                AccountDeviceRevocationAdmissionDecision::AuthorityMismatch,
                 SessionGrantAdmission::DeviceSetupRequired,
             )
             | (
-                DeviceRevocationAdmissionDecision::RevocationPending,
+                AccountDeviceRevocationAdmissionDecision::RevocationPending,
                 SessionGrantAdmission::Blocked {
                     reason: SessionGrantAdmissionBlockReason::RevocationPending,
                 },
             )
             | (
-                DeviceRevocationAdmissionDecision::Revoked,
+                AccountDeviceRevocationAdmissionDecision::Revoked,
                 SessionGrantAdmission::Blocked {
                     reason: SessionGrantAdmissionBlockReason::Revoked,
                 },
             )
             | (
-                DeviceRevocationAdmissionDecision::GenerationMismatch,
+                AccountDeviceRevocationAdmissionDecision::GenerationMismatch,
                 SessionGrantAdmission::Blocked {
                     reason: SessionGrantAdmissionBlockReason::GenerationMismatch,
                 },
@@ -59,7 +59,7 @@ pub fn run_device_revocation_pending_suite() -> Result<()> {
         }
     }
 
-    let allow = result(&request, DeviceRevocationAdmissionDecision::Allow)?;
+    let allow = result(&request, AccountDeviceRevocationAdmissionDecision::Allow)?;
     let mut wrong_intent = request.clone();
     wrong_intent.intent_digest = hash('b')?;
     if allow.validate_for_request(&wrong_intent).is_ok() {
@@ -82,14 +82,14 @@ pub fn run_device_revocation_pending_suite() -> Result<()> {
     }
     let mut forged = serde_json::to_value(&allow.admission_record)?;
     forged["proof"] = serde_json::json!({});
-    if serde_json::from_value::<DeviceRevocationAdmissionRecord>(forged).is_ok() {
+    if serde_json::from_value::<AccountDeviceRevocationAdmissionRecord>(forged).is_ok() {
         bail!("Station-local admission record accepted an unknown proof member");
     }
     Ok(())
 }
 
-fn request() -> Result<DeviceRevocationAdmissionInput> {
-    Ok(DeviceRevocationAdmissionInput {
+fn request() -> Result<AccountDeviceRevocationAdmissionInput> {
+    Ok(AccountDeviceRevocationAdmissionInput {
         account_id: AccountId::new(
             DidCoreId::new("ak:did_core:webvh:z6mkfixture")?,
             DidCoreId::new("ak:did_core:web:ps.example")?,
@@ -105,13 +105,13 @@ fn request() -> Result<DeviceRevocationAdmissionInput> {
 }
 
 fn result(
-    request: &DeviceRevocationAdmissionInput,
-    decision: DeviceRevocationAdmissionDecision,
-) -> Result<DeviceRevocationAdmissionAssessment> {
-    let allowed = decision == DeviceRevocationAdmissionDecision::Allow;
-    let revoked = decision == DeviceRevocationAdmissionDecision::Revoked;
-    Ok(DeviceRevocationAdmissionAssessment {
-        admission_record: DeviceRevocationAdmissionRecord {
+    request: &AccountDeviceRevocationAdmissionInput,
+    decision: AccountDeviceRevocationAdmissionDecision,
+) -> Result<AccountDeviceRevocationAdmissionAssessment> {
+    let allowed = decision == AccountDeviceRevocationAdmissionDecision::Allow;
+    let revoked = decision == AccountDeviceRevocationAdmissionDecision::Revoked;
+    Ok(AccountDeviceRevocationAdmissionAssessment {
+        admission_record: AccountDeviceRevocationAdmissionRecord {
             account_id: request.account_id.clone(),
             device_id: request.device_id.clone(),
             target_device_authorize_event_id: allowed.then(event_id).transpose()?,

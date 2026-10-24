@@ -413,7 +413,7 @@ async fn exchange_account_handoff(
 ///
 /// The register response is parsed into the SDK's own `AccountRegisterResponseBody`
 /// rather than kept as a `Value`. Two reasons. A caller reaching into
-/// `session_grant_outcome["account_id"]["station_id"]` writes that path again
+/// `issued_session["account_id"]["station_id"]` writes that path again
 /// on each side of the bridge, and the copies get to drift. And the SDK type is
 /// `deny_unknown_fields`, so a Station answering with a shape the model does
 /// not declare fails here, loudly, instead of being read past — which is the
@@ -453,11 +453,7 @@ impl FoundedPrincipal {
         session_key: &FoundingDeviceKey,
     ) -> Result<()> {
         garth::validate_identity_creation_outcome(&self.outcome, &self.accepted_request)?;
-        let grant = self
-            .outcome
-            .session_grant_outcome
-            .as_ref()
-            .context("stored initial grant absent")?;
+        let grant = &self.outcome.issued_session;
         ensure!(
             self.did == self.accepted_request.did.as_str()
                 && grant.account_id.principal_id == self.accepted_request.principal_id
@@ -512,13 +508,9 @@ impl FoundedPrincipal {
 
     /// The initial DPoP-bound session grant.
     ///
-    /// Not an `Option`: the chain asks for one and a founding that produced no
-    /// grant did not finish, so [`found_principal`] fails before returning.
+    /// Required by the accepted registration response contract.
     pub fn session_grant(&self) -> &SessionGrantResponseBody {
-        self.outcome
-            .session_grant_outcome
-            .as_ref()
-            .expect("found_principal rejects an outcome without a session grant")
+        &self.outcome.issued_session
     }
 
     /// The closed `AccountId`: this principal at this Station.
@@ -815,10 +807,7 @@ pub async fn submit_prepared_principal_registration(
         .context("parse the canonical frozen identity-creation request")?;
     garth::validate_identity_creation_outcome(&outcome, &accepted_request)
         .context("bind registration outcome to its canonical request")?;
-    let grant = outcome
-        .session_grant_outcome
-        .as_ref()
-        .context("register outcome carried no session grant")?;
+    let grant = &outcome.issued_session;
     ensure!(
         grant.account_id.principal_id == accepted_request.principal_id
             && grant.account_id.station_id.as_str() == audience_id
@@ -904,14 +893,8 @@ async fn verify_accepted_identity_material(
         .identity_creation
         .as_ref()
         .context("identity creation request absent")?;
-    let grant = outcome
-        .session_grant_outcome
-        .as_ref()
-        .context("initial grant absent")?;
-    let commits = outcome
-        .pcr_genesis_commits
-        .as_ref()
-        .context("accepted PCR genesis receipts absent")?;
+    let grant = &outcome.issued_session;
+    let commits = &outcome.pcr_genesis_commits;
     let founding_station_did = arkret_identity::verification_method_did(
         commits[0].signature.verification_method.as_str(),
     )?;

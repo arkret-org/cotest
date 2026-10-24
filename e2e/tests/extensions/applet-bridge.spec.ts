@@ -359,9 +359,9 @@ async function grantManagedActorActions(request: APIRequestContext, token: strin
     expect(current.realm_id).toBe(realmId);
     expect(current.governance_generation).toBeGreaterThanOrEqual(0);
     expect(current.effective_stream_head.stream_ref).toEqual(effectiveScope);
-    expect(current.entry.source_stream_ref).toEqual(effectiveScope);
-    expect(current.entry.selector.kind).toBe("capability_grant");
-    expect(current.entry.revision.stream_position).toBeLessThanOrEqual(current.effective_stream_head.stream_position);
+    expect(current.current_state.source_stream_ref).toEqual(effectiveScope);
+    expect(current.current_state.selector.kind).toBe("capability_grant");
+    expect(current.current_state.revision.stream_position).toBeLessThanOrEqual(current.effective_stream_head.stream_position);
   }
   const parents = material.grant_events.map(({event,commit})=> {
     expect(event.scope_ref).toEqual(effectiveScope);

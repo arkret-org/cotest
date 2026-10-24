@@ -4,7 +4,7 @@ use std::cell::RefCell;
 use std::sync::Mutex;
 
 use anyhow::{Context, Result, ensure};
-use arkret_models_collaboration::sync_frames::account_subscribe::AccountSubscribeSnapshotResult;
+use arkret_models_collaboration::sync_frames::account_subscribe::AccountSubscribeReadAction;
 use arkret_wire::{Event, ScopeRef};
 use cotest::scenarios::mls_lifecycle_live::Member;
 use cotest::scenarios::sidecar_authority_live::SidecarSyncObserver;
@@ -163,12 +163,12 @@ impl AccountSubscribeTransport for HeldBatch {
     async fn subscribe(
         &self,
         _request: &AccountSubscribeParameters,
-    ) -> garth::Result<AccountSubscribeSnapshotResult> {
+    ) -> garth::Result<AccountSubscribeReadAction> {
         self.0
             .lock()
             .unwrap()
             .take()
-            .map(AccountSubscribeSnapshotResult::Batch)
+            .map(AccountSubscribeReadAction::Batch)
             .ok_or_else(|| garth::Error::Protocol("held Account window consumed twice".into()))
     }
 }
@@ -177,7 +177,7 @@ impl AccountSubscribeTransport for ObservedRail {
     async fn subscribe(
         &self,
         request: &AccountSubscribeParameters,
-    ) -> garth::Result<AccountSubscribeSnapshotResult> {
+    ) -> garth::Result<AccountSubscribeReadAction> {
         let mut batch = self.http.account_subscribe_batch(request).await?;
         if let Some(missing) = &self.missing {
             let mut removed = 0;
@@ -211,7 +211,7 @@ impl AccountSubscribeTransport for ObservedRail {
             }
         }
         self.observed.lock().unwrap().push(batch.clone());
-        Ok(AccountSubscribeSnapshotResult::Batch(batch))
+        Ok(AccountSubscribeReadAction::Batch(batch))
     }
 }
 
@@ -251,7 +251,7 @@ impl AccountSubscribeTransport for StreamGapRail {
     async fn subscribe(
         &self,
         request: &AccountSubscribeParameters,
-    ) -> garth::Result<AccountSubscribeSnapshotResult> {
+    ) -> garth::Result<AccountSubscribeReadAction> {
         let visit = {
             let mut requests = self.requests.lock().unwrap();
             requests.push(request.clone());
@@ -397,7 +397,7 @@ impl AccountSubscribeTransport for StreamGapRail {
                 ));
             }
         }
-        Ok(AccountSubscribeSnapshotResult::Batch(batch))
+        Ok(AccountSubscribeReadAction::Batch(batch))
     }
 }
 
@@ -416,7 +416,7 @@ impl AccountSubscribeTransport for RecoveryRail {
     async fn subscribe(
         &self,
         request: &AccountSubscribeParameters,
-    ) -> garth::Result<AccountSubscribeSnapshotResult> {
+    ) -> garth::Result<AccountSubscribeReadAction> {
         let call = {
             let mut requests = self.requests.lock().unwrap();
             requests.push(request.clone());
@@ -467,7 +467,7 @@ impl AccountSubscribeTransport for RecoveryRail {
                         "an invalid cursor was accepted by the real Station".into(),
                     ));
                 }
-                Ok(AccountSubscribeSnapshotResult::Batch(batch))
+                Ok(AccountSubscribeReadAction::Batch(batch))
             }
             Err(error) => {
                 let failure: garth::Error = error.into();

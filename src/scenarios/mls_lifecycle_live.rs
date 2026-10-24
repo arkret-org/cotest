@@ -358,11 +358,11 @@ async fn run_lifecycle(
     ];
     ensure!(
         uploaded
-            .key_package_refs
+            .keypackage_refs
             .iter()
             .all(|reference| published.contains(reference))
             && !uploaded
-                .key_package_refs
+                .keypackage_refs
                 .contains(&mislabeled.keypackage_ref.to_string()),
         "the Station stored a KeyPackage outside the active-suite pair: {uploaded:?}"
     );
@@ -689,7 +689,7 @@ async fn run_lifecycle(
             )
             .map_err(anyhow::Error::msg)?,
             claim_request_id: first_request.claim_request_id.clone(),
-            key_package_ref: arkret_wire::NonEmptyString::new(claim.keypackage_ref.clone())
+            keypackage_ref: arkret_wire::NonEmptyString::new(claim.keypackage_ref.clone())
                 .map_err(anyhow::Error::msg)?,
             recipient: arkret_models_crypto::RecipientMlsDurableSigner::Device {
                 recipient_account_id: bob.account.clone(),
@@ -1088,7 +1088,7 @@ async fn expired_claim_recovery_matrix(
     );
     let revoked: KeyPackagesClaimResponseBody = serde_json::from_slice(&revoked_bytes)?;
     let unsigned = arkret_models_crypto::KeyPackagesRevokeFields {
-        key_package_refs: vec![revoked.claims[0].keypackage_ref.clone()],
+        keypackage_refs: vec![revoked.claims[0].keypackage_ref.clone()],
         device_id: target.device.clone(),
         reason: None,
     };

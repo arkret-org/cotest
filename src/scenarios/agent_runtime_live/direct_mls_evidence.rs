@@ -220,7 +220,7 @@ pub(super) async fn join(
     ensure!(
         uploaded.accepted == 1
             && uploaded.rejections.is_empty()
-            && uploaded.key_package_refs == [package.keypackage_ref.to_string()],
+            && uploaded.keypackage_refs == [package.keypackage_ref.to_string()],
         "Direct Agent KeyPackage publication was not accepted exactly: {uploaded:?}"
     );
     let mut claim_entropy = [0_u8; 16];
@@ -465,7 +465,7 @@ pub(super) async fn join(
             )
             .map_err(anyhow::Error::msg)?,
             claim_request_id: request.claim_request_id.clone(),
-            key_package_ref: NonEmptyString::new(claim.keypackage_ref.clone())
+            keypackage_ref: NonEmptyString::new(claim.keypackage_ref.clone())
                 .map_err(anyhow::Error::msg)?,
             recipient: arkret_models_crypto::RecipientMlsDurableSigner::Agent {
                 recipient_agent_id: agent_session.agent_account.principal_id.clone(),

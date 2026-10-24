@@ -78,7 +78,7 @@ pub(super) async fn run(
         vec![NonEmptyString::new("mimi.content.v1").map_err(anyhow::Error::msg)?];
     native.strand_id = Some(StrandId::new(strand.to_owned())?);
     lifecycle::resign_claim(requester, &mut native)?;
-    let request = arkret_models_crypto::PeerKeyPackagesClaimRequestBody::from(&native);
+    let request = native.clone();
     let before = lifecycle::upload_durable_cut(database).await?;
     let wrong_room = provider_sdk(server, provider)?.with_mimi_room(
         MimiRoomUri::new(format!("{provider}/rooms/unknown")).map_err(anyhow::Error::msg)?,
@@ -144,11 +144,7 @@ pub(super) async fn run(
             arkret_wire::Base64UrlString::new(bytes).map_err(anyhow::Error::msg)?;
     }
     let failure = sdk
-        .mimi_request_key_material(
-            &(&provider_only).into(),
-            server.trust_domain(),
-            server.trust_domain(),
-        )
+        .mimi_request_key_material(&provider_only, server.trust_domain(), server.trust_domain())
         .await
         .unwrap_err();
     ensure!(
@@ -202,7 +198,7 @@ pub(super) async fn run(
         arkret_wire::Base64UrlString::new(arkret_canonical::base64url_encode([220_u8; 16]))
             .map_err(anyhow::Error::msg)?;
     lifecycle::resign_claim(requester, &mut native)?;
-    let request = arkret_models_crypto::PeerKeyPackagesClaimRequestBody::from(&native);
+    let request = native.clone();
     let (status, body) = lifecycle::post_claim(&requester.client, &native).await?;
     ensure!(
         status == StatusCode::OK,
@@ -242,7 +238,7 @@ pub(super) async fn run(
     expiring.required_capabilities = native.required_capabilities.clone();
     expiring.strand_id = native.strand_id.clone();
     lifecycle::resign_claim(requester, &mut expiring)?;
-    let expiring = arkret_models_crypto::PeerKeyPackagesClaimRequestBody::from(&expiring);
+    let expiring = expiring.clone();
     let allocated = sdk
         .mimi_request_key_material(&expiring, server.trust_domain(), server.trust_domain())
         .await?;
@@ -300,11 +296,7 @@ pub(super) async fn run(
             .map_err(anyhow::Error::msg)?;
     lifecycle::resign_claim(requester, &mut native)?;
     let failure = sdk
-        .mimi_request_key_material(
-            &(&native).into(),
-            server.trust_domain(),
-            server.trust_domain(),
-        )
+        .mimi_request_key_material(&native, server.trust_domain(), server.trust_domain())
         .await
         .unwrap_err();
     ensure!(

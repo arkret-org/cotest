@@ -167,7 +167,7 @@ pub async fn account_business_survives_did_host_outage_and_signed_resolution_upd
     entries.push(enabled.log_entry);
     let first = resolution_submission(
         &member,
-        revision(&initial.current_resolution_commit),
+        revision(&initial.accepted_commit),
         entries.last().unwrap(),
     )?;
     expect_json(
@@ -230,7 +230,7 @@ pub async fn account_business_survives_did_host_outage_and_signed_resolution_upd
     entries.push(moved.log_entry);
     let stale = resolution_submission(
         &member,
-        revision(&initial.current_resolution_commit),
+        revision(&initial.accepted_commit),
         entries.last().unwrap(),
     )?;
     expect_api_error(
@@ -247,7 +247,7 @@ pub async fn account_business_survives_did_host_outage_and_signed_resolution_upd
     );
     let second = resolution_submission(
         &member,
-        revision(&first_audit.current_resolution_commit),
+        revision(&first_audit.accepted_commit),
         entries.last().unwrap(),
     )?;
     expect_json(

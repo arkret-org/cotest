@@ -527,7 +527,7 @@ export async function registerCoauthPasswordAccount(
         (commit): commit is Record<string, unknown> => objectRecord(commit) !== undefined,
       )
     : [];
-  const sessionOutcome = objectRecord(registered.session_grant_outcome);
+  const sessionOutcome = objectRecord(registered.issued_session);
   const registeredPrincipalId = stringValue(registered.principal_id);
   const grantId = stringValue(sessionOutcome?.session_grant_id);
   const grantJwt = stringValue(sessionOutcome?.session_grant);

@@ -102,9 +102,9 @@ pub async fn run_agent_act_on_behalf_boundary() -> Result<()> {
         .await?;
     ensure!(
         selected
-            .agent_participation_entries
+            .participation_entries
             .iter()
-            .any(|entry| entry.scope == selection.target_scope
+            .any(|entry| entry.target_scope == selection.target_scope
                 && entry.selection == selection.selection
                 && entry.version == 1)
     );
@@ -564,9 +564,9 @@ pub async fn run_agent_act_on_behalf_boundary() -> Result<()> {
         .await?;
     ensure!(
         changed
-            .agent_participation_entries
+            .participation_entries
             .iter()
-            .any(|entry| entry.scope == closed.target_scope
+            .any(|entry| entry.target_scope == closed.target_scope
                 && entry.version == 2
                 && !entry.selection.acting_on_behalf_allowed)
     );

@@ -152,7 +152,7 @@ async fn audited_report(ctx: &mut MlsApiContext<'_>) -> Result<()> {
         .await?;
     let report = serde_json::to_value(report)?;
     ensure!(
-        report["status"] == "submitted" && report.get("routed_to").is_none(),
+        report["status"] == "submitted" && report.get("routed_to_ids").is_none(),
         "ordinary report escaped its scoped workflow"
     );
     let after = scan(&ctx.source.client, &scope).await?;

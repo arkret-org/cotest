@@ -128,10 +128,10 @@ async fn current_reply_selection(
         .sdk()
         .agent_participation_replace(scene.agent.agent_account.principal_id.as_str(), &selection)
         .await?;
-    ensure!(changed.agent_participation_entries.len() == 1);
-    let entry = &changed.agent_participation_entries[0];
+    ensure!(changed.participation_entries.len() == 1);
+    let entry = &changed.participation_entries[0];
     ensure!(
-        entry.scope == selection.target_scope
+        entry.target_scope == selection.target_scope
             && entry.version == 2
             && entry.selection == arkret::ParticipationBits::NONE
     );
@@ -198,9 +198,9 @@ async fn current_reply_selection(
         )
         .await?;
     ensure!(
-        restored.agent_participation_entries.len() == 1
-            && restored.agent_participation_entries[0].version == 3
-            && restored.agent_participation_entries[0]
+        restored.participation_entries.len() == 1
+            && restored.participation_entries[0].version == 3
+            && restored.participation_entries[0]
                 .selection
                 .message_creation_allowed
     );

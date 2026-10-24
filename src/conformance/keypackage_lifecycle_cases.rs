@@ -1262,7 +1262,7 @@ fn welcome_consume_ordering_case(case: &Value, tally: &mut Tally) -> Result<()> 
                 required_str(case, "claim_request_id")?.to_owned(),
             )
             .map_err(|error| anyhow!(error))?,
-            key_package_ref: arkret_wire::NonEmptyString::new(
+            keypackage_ref: arkret_wire::NonEmptyString::new(
                 "sha256:1111111111111111111111111111111111111111111111111111111111111111"
                     .to_owned(),
             )

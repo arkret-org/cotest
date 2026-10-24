@@ -325,10 +325,10 @@ pub async fn run_agent_session_content_production()
         .sdk()
         .agent_participation_replace(agent.agent_account.principal_id.as_str(), &selection)
         .await?;
-    ensure!(selected.agent_participation_entries.len() == 1);
-    let entry = &selected.agent_participation_entries[0];
+    ensure!(selected.participation_entries.len() == 1);
+    let entry = &selected.participation_entries[0];
     ensure!(
-        entry.scope == selection.target_scope
+        entry.target_scope == selection.target_scope
             && entry.selection.message_creation_allowed
             && entry.version == 1
     );

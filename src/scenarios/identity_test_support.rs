@@ -15,7 +15,7 @@ use arkret_models_collaboration::events_payloads::{
     FoundingDeviceKeyPurpose, SignatureMaterial, device_authorize_payload_digest,
 };
 use arkret_models_crypto::{
-    AlgorithmKeyRecords, KeyOperationSignature, KeysUploadFields, KeysUploadRequestBody,
+    AlgorithmPrekeys, KeyOperationSignature, KeysUploadFields, KeysUploadRequestBody,
     keys_upload_signing_input,
 };
 use arkret_models_identity::{
@@ -665,7 +665,7 @@ fn signed_algorithm_key_records(
     actor: &str,
     records: Value,
     fallback: bool,
-) -> Result<AlgorithmKeyRecords> {
+) -> Result<AlgorithmPrekeys> {
     let Value::Object(records) = records else {
         anyhow::bail!("keys/upload key records must be an object");
     };

@@ -133,7 +133,7 @@ async fn signed_post_with_mutation(
         covered.push(Component::Header("mimi-room-uri".into()));
     }
     if path == "/_arkret/open/mimi/key-material" {
-        let claim: arkret_models_crypto::PeerKeyPackagesClaimRequestBody =
+        let claim: arkret_models_crypto::KeyPackagesClaimRequestBody =
             serde_json::from_slice(&body)?;
         for (name, value) in [
             ("idempotency-key", claim.claim_request_id.to_string()),

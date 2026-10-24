@@ -235,8 +235,12 @@ async fn garth_syncs_an_account_over_its_own_durable_store() -> Result<()> {
         cursor_errors: AtomicUsize,
     }
     impl garth::AccountSubscribeTransport for ObservedTransport {
-        async fn subscribe(&self, request: &arkret_models_collaboration::sync_frames::account_subscribe::AccountSubscribeParameters)
-        -> garth::Result<arkret_models_collaboration::sync_frames::account_subscribe::AccountSubscribeSnapshotResult>{
+        async fn subscribe(
+            &self,
+            request: &arkret_models_collaboration::sync_frames::account_subscribe::AccountSubscribeParameters,
+        ) -> garth::Result<
+            arkret_models_collaboration::sync_frames::account_subscribe::AccountSubscribeReadAction,
+        > {
             self.requests.lock().unwrap().push(request.clone());
             let result = garth::AccountSubscribeTransport::subscribe(&self.client, request).await;
             if result

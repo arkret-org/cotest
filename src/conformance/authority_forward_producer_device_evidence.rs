@@ -45,8 +45,8 @@ use arkret_signatures::{
     Ed25519DetachedJwsSigner, EventProofBuilder, PublicKeyMaterial, SignEventOptions, sign_event,
 };
 use arkret_wire::{
-    AccountDeviceProducer, AccountId, ActorId, AuthoredEvent, DeviceId,
-    DeviceRevocationAdmissionDecision, Did, DidCoreId, DidKey, DidUrl, ErrorCode, Event,
+    AccountDeviceProducer, AccountDeviceRevocationAdmissionDecision, AccountId, ActorId,
+    AuthoredEvent, DeviceId, Did, DidCoreId, DidKey, DidUrl, ErrorCode, Event,
     EventAdmissionSubmission, EventId, EventKind, Hash, MlsCommitSubmission, NonEmptyString,
     RealmId, ScopeRef, ServiceKind,
 };
@@ -448,12 +448,16 @@ impl LiveDeviceState {
 
     /// The current-device admission decision this state yields at one durable
     /// cut, or `None` when the Station cannot read its gate at all.
-    const fn admission_decision(self) -> Option<DeviceRevocationAdmissionDecision> {
+    const fn admission_decision(self) -> Option<AccountDeviceRevocationAdmissionDecision> {
         match self {
-            Self::Active => Some(DeviceRevocationAdmissionDecision::Allow),
-            Self::Revoked => Some(DeviceRevocationAdmissionDecision::Revoked),
-            Self::RevocationPending => Some(DeviceRevocationAdmissionDecision::RevocationPending),
-            Self::GenerationFenced => Some(DeviceRevocationAdmissionDecision::GenerationMismatch),
+            Self::Active => Some(AccountDeviceRevocationAdmissionDecision::Allow),
+            Self::Revoked => Some(AccountDeviceRevocationAdmissionDecision::Revoked),
+            Self::RevocationPending => {
+                Some(AccountDeviceRevocationAdmissionDecision::RevocationPending)
+            }
+            Self::GenerationFenced => {
+                Some(AccountDeviceRevocationAdmissionDecision::GenerationMismatch)
+            }
             Self::MaterialUnavailable => None,
         }
     }
@@ -463,7 +467,7 @@ impl LiveDeviceState {
 /// record at every instant the admission must cover.
 ///
 /// The decision is the model's; the protocol code it surfaces is the SDK's
-/// single mapping (`DeviceRevocationAdmissionDecision::error_code`). A missing
+/// single mapping (`AccountDeviceRevocationAdmissionDecision::error_code`). A missing
 /// or foreign record and an instant outside the authorization window are the
 /// "no complete current accepted authorization" decision. A Station that cannot
 /// read its own gate is `temporarily_unavailable` (decision 0107 section 4).
@@ -473,13 +477,13 @@ fn device_gate(
     instants: &[DateTime<Utc>],
 ) -> std::result::Result<(), ErrorCode> {
     let decision = match record.filter(|record| record.is(producer)) {
-        None => DeviceRevocationAdmissionDecision::AuthorityMismatch,
+        None => AccountDeviceRevocationAdmissionDecision::AuthorityMismatch,
         Some(record) => match record.state.admission_decision() {
             None => return Err(ErrorCode::TemporarilyUnavailable),
-            Some(DeviceRevocationAdmissionDecision::Allow)
+            Some(AccountDeviceRevocationAdmissionDecision::Allow)
                 if !instants.iter().all(|at| record.covers(*at)) =>
             {
-                DeviceRevocationAdmissionDecision::AuthorityMismatch
+                AccountDeviceRevocationAdmissionDecision::AuthorityMismatch
             }
             Some(decision) => decision,
         },

@@ -398,9 +398,9 @@ pub async fn run_agent_content_direct_production()
         .await?;
     ensure!(
         selected
-            .agent_participation_entries
+            .participation_entries
             .iter()
-            .any(|entry| entry.scope == selection.target_scope
+            .any(|entry| entry.target_scope == selection.target_scope
                 && entry.selection == selection.selection
                 && entry.version == 1)
     );

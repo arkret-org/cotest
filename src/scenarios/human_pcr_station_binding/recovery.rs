@@ -393,7 +393,7 @@ pub(super) async fn verify_recovery_generation_boundary(
         .issue_recovery_completion_grant(&current.request)
         .await?;
     let grant: arkret_models_collaboration::session_grants::SessionGrantResponseBody =
-        serde_json::from_value(accepted.session_grant_outcome)?;
+        serde_json::from_value(accepted.issued_session)?;
     ensure!(
         grant.account_id == current.request.completion_attestation.account_id
             && grant.device_id.as_ref()

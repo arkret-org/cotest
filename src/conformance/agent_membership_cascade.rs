@@ -4,7 +4,7 @@ use std::collections::BTreeSet;
 
 use anyhow::{Context as _, Result, bail};
 use arkret_models_collaboration::governance::agent_membership_cascade::{
-    AgentCleanupRecord, AgentCleanupStatusView, AgentControllerMembershipBinding,
+    AgentCleanupRecord, AgentCleanupStatus, AgentControllerMembershipBinding,
     AgentMembershipCascadeSchema,
 };
 use arkret_models_collaboration::governance::membership_invite::MembershipPayload;
@@ -194,9 +194,8 @@ fn validate_cleanup_intent_digest_and_states(
         "same intent digest must not name changed canonical content"
     );
 
-    if record.cleanup_status(accepted_at + Duration::minutes(30)) != AgentCleanupStatusView::Pending
-        || record.cleanup_status(accepted_at + Duration::hours(2))
-            != AgentCleanupStatusView::Overdue
+    if record.cleanup_status(accepted_at + Duration::minutes(30)) != AgentCleanupStatus::Pending
+        || record.cleanup_status(accepted_at + Duration::hours(2)) != AgentCleanupStatus::Overdue
     {
         bail!("Agent cleanup status is not derived from its deadline");
     }

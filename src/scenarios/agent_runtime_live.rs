@@ -1603,10 +1603,10 @@ async fn run_agent_keypackage_journey(terminal: bool) -> Result<()> {
     ensure!(
         outcome.accepted == 2
             && outcome
-                .key_package_refs
+                .keypackage_refs
                 .contains(&keypackage.keypackage_ref.to_string())
             && outcome
-                .key_package_refs
+                .keypackage_refs
                 .contains(&add_keypackage.keypackage_ref.to_string()),
         "Agent KeyPackage was not published: {outcome:?}"
     );
@@ -2378,7 +2378,7 @@ async fn run_agent_keypackage_journey(terminal: bool) -> Result<()> {
         )
         .map_err(anyhow::Error::msg)?,
         claim_request_id: controller_claim.claim_request_id.clone(),
-        key_package_ref: arkret_wire::NonEmptyString::new(add_claim.keypackage_ref.clone())
+        keypackage_ref: arkret_wire::NonEmptyString::new(add_claim.keypackage_ref.clone())
             .map_err(anyhow::Error::msg)?,
         recipient: arkret_models_crypto::RecipientMlsDurableSigner::Agent {
             recipient_agent_id: agent.agent_account.principal_id.clone(),
@@ -2598,9 +2598,9 @@ async fn run_agent_keypackage_journey(terminal: bool) -> Result<()> {
         .await?;
     ensure!(
         selected
-            .agent_participation_entries
+            .participation_entries
             .iter()
-            .any(|entry| entry.scope == selection.target_scope
+            .any(|entry| entry.target_scope == selection.target_scope
                 && entry.selection == selection.selection
                 && entry.version == 1),
         "controller current reply selection was not installed"

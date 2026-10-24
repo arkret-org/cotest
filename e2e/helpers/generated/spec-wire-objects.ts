@@ -1154,7 +1154,7 @@ export type AppletAuthorityMaterialResponseBody = {
       "stream_position": number;
       "commit_id": string;
     };
-    "entry": {
+    "current_state": {
       "selector": {
         "kind": "relation";
         "primary_conflict_domain": {

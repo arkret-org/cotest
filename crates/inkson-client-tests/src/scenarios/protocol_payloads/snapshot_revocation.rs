@@ -28,7 +28,7 @@ impl AccountSubscribeTransport for RevokeAfterIssuance {
         &self,
         request: &AccountSubscribeParameters,
     ) -> garth::Result<
-        arkret_models_collaboration::sync_frames::account_subscribe::AccountSubscribeSnapshotResult,
+        arkret_models_collaboration::sync_frames::account_subscribe::AccountSubscribeReadAction,
     > {
         let batch = self.http.account_subscribe_batch(request).await?;
         let basis = batch
@@ -58,7 +58,7 @@ impl AccountSubscribeTransport for RevokeAfterIssuance {
         .await
         .map_err(|error| garth::Error::Protocol(error.to_string()))?;
         *self.held.lock().unwrap() = Some(batch.clone());
-        Ok(arkret_models_collaboration::sync_frames::account_subscribe::AccountSubscribeSnapshotResult::Batch(batch))
+        Ok(arkret_models_collaboration::sync_frames::account_subscribe::AccountSubscribeReadAction::Batch(batch))
     }
 }
 

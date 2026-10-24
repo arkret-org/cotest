@@ -43,7 +43,6 @@ use arkret_models_crypto::{
     KeyPackagesClaimQueryRequestBody, KeyPackagesClaimRequestBody, KeyPackagesClaimResponseBody,
     KeyPackagesUploadResponseBody, PeerKeyPackagesClaimQueryRequestBody,
     PeerKeyPackagesClaimQueryResponseBody, PeerKeyPackagesClaimQueryState,
-    PeerKeyPackagesClaimResponseBody,
 };
 use arkret_wire::{
     AuthorityCommitStatus, AuthoritySubmitResponseBody, EventKind, InviteId, MlsCommitSubmission,
@@ -743,7 +742,7 @@ async fn cross_station_mls_welcome_original_run() -> Result<()> {
         )
         .map_err(anyhow::Error::msg)?,
         claim_request_id: carol_claim.claim_request_id.clone(),
-        key_package_ref: arkret_wire::NonEmptyString::new(claim.keypackage_ref.clone())
+        keypackage_ref: arkret_wire::NonEmptyString::new(claim.keypackage_ref.clone())
             .map_err(anyhow::Error::msg)?,
         recipient: arkret_models_crypto::RecipientMlsDurableSigner::Device {
             recipient_account_id: carol.account.clone(),
@@ -1112,7 +1111,7 @@ async fn attest_add_http_round_trip(
     claim: &KeyPackagesClaimResponseBody,
     recipient: &Member,
 ) -> Result<()> {
-    let source_response_body = PeerKeyPackagesClaimResponseBody {
+    let source_response_body = KeyPackagesClaimResponseBody {
         claim_request_id: claim.claim_request_id.clone(),
         claims: claim.claims.clone(),
         claim_receipt: claim.claim_receipt.clone(),

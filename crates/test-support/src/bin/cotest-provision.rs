@@ -755,11 +755,7 @@ impl Session {
                 let body: Body = serde_json::from_value(request.body).context("parse request")?;
                 let identity = self.read_identity(&body.handoff_id)?;
                 let principal = &identity.principal;
-                let accepted_grant = principal
-                    .outcome
-                    .session_grant_outcome
-                    .as_ref()
-                    .context("durable accepted initial session grant unavailable")?;
+                let accepted_grant = &principal.outcome.issued_session;
                 anyhow::ensure!(
                     accepted_grant.account_id == body.account_id
                         && principal.device_id == body.device_id,
@@ -1029,11 +1025,7 @@ impl Session {
                 drop(self.garth_clients.remove(&body.handoff_id));
                 let identity = self.read_identity(&body.handoff_id)?;
                 let principal = identity.principal;
-                let accepted_grant = principal
-                    .outcome
-                    .session_grant_outcome
-                    .as_ref()
-                    .context("durable accepted initial session grant unavailable")?;
+                let accepted_grant = &principal.outcome.issued_session;
                 let origin = identity.station_base;
                 self.dispatch(Request {
                     id: request.id,

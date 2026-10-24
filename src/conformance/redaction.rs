@@ -634,7 +634,7 @@ fn assert_hard_erasure_receipt() -> Result<()> {
         "receipt": receipt.clone(),
         "retained_stub": stub.clone(),
     });
-    let carrier_request = json!({"package": package});
+    let carrier_request = package.clone();
     if !carrier_validator.is_valid(&carrier_request) {
         let detail = carrier_validator
             .iter_errors(&carrier_request)
@@ -644,10 +644,10 @@ fn assert_hard_erasure_receipt() -> Result<()> {
         bail!("hard_erasure_receipt: standard carrier rejected by schema: {detail}");
     }
     let typed_package = serde_json::from_value::<
-        arkret_models_collaboration::governance::erasure::ErasureReceiptSubmitRequestBody,
+        arkret_models_collaboration::governance::erasure::ErasureReceiptPackage,
     >(carrier_request.clone())?;
-    typed_package.package.validate_bindings()?;
-    let mut duplicated_stub_package = typed_package.package.clone();
+    typed_package.validate_bindings()?;
+    let mut duplicated_stub_package = typed_package.clone();
     duplicated_stub_package.receipt.retained_stub =
         Some(duplicated_stub_package.retained_stub.clone());
     if duplicated_stub_package.validate_bindings().is_ok() {

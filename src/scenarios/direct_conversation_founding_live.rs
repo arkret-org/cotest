@@ -400,8 +400,7 @@ async fn reject_direct_station_change(
         let peer = peer_before
             .as_ref()
             .context("pending Direct needs its destination ledger")?;
-        let peer_request =
-            arkret_models_crypto::PeerKeyPackagesClaimRequestBody::from(claim_request);
+        let peer_request = claim_request.clone();
         let original = serde_json::to_value(&peer_request)?;
         let digest = arkret_canonical::canonical_sha256(&peer_request)?;
         // Account targets retain their signed original at the destination;
@@ -1986,7 +1985,7 @@ async fn run(
             )
             .map_err(anyhow::Error::msg)?,
             claim_request_id: claim_request.claim_request_id.clone(),
-            key_package_ref: arkret_wire::NonEmptyString::new(claim.keypackage_ref.clone())
+            keypackage_ref: arkret_wire::NonEmptyString::new(claim.keypackage_ref.clone())
                 .map_err(anyhow::Error::msg)?,
             recipient: arkret_models_crypto::RecipientMlsDurableSigner::Device {
                 recipient_account_id: bob.account.clone(),
