@@ -209,7 +209,7 @@ pub(super) async fn exercise(mut material: Materials<'_>) -> Result<()> {
         .await?,
     )?;
     ensure!(
-        uploaded.accepted == 2
+        uploaded.accepted_count == 2
             && uploaded
                 .keypackage_refs
                 .contains(&second.keypackage_ref.to_string())

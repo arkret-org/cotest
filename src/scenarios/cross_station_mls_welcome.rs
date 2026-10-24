@@ -204,7 +204,7 @@ pub async fn publish_one(member: &Member) -> Result<arkret::ArkretMlsIdentity> {
         .await?,
     )?;
     ensure!(
-        uploaded.accepted == 1,
+        uploaded.accepted_count == 1,
         "the KeyPackage was not published: {uploaded:?}"
     );
     Ok(identity)

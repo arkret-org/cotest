@@ -53,7 +53,7 @@ pub(super) async fn run(
         .await?,
     )?;
     ensure!(
-        uploaded.accepted == 4,
+        uploaded.accepted_count == 4,
         "MIMI packages were not published: {uploaded:?}"
     );
     let realm_id = RealmId::new(realm.to_owned())?;

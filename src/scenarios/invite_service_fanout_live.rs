@@ -837,7 +837,7 @@ pub async fn invite_service_fanout_live_run() -> Result<()> {
             && invalidated_row.content["last_invalidation"]["reason"] == "consent_revoke"
             && invalidated_row.content["last_invalidation"]["peer_actor_id"]
                 == serde_json::to_value(&source_actor)?
-            && invalidated_row.content["last_invalidation"]["removed_entries"] == json!(1),
+            && invalidated_row.content["last_invalidation"]["removed_entry_count"] == json!(1),
         "consent revoke did not persist the closed quarantine invalidation: {}",
         invalidated_row.content
     );

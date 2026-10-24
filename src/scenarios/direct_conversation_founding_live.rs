@@ -1664,7 +1664,10 @@ async fn run(
         )
         .await?,
     )?;
-    ensure!(uploaded.accepted == 1, "Bob's KeyPackage was not published");
+    ensure!(
+        uploaded.accepted_count == 1,
+        "Bob's KeyPackage was not published"
+    );
 
     // The root's materialization mask admits the scope's one Genesis.
     let alice_identity = alice.mls_identity()?;

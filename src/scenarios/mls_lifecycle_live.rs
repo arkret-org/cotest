@@ -313,7 +313,7 @@ async fn run_lifecycle(
             .await?,
         )?;
         ensure!(
-            response.accepted == 0
+            response.accepted_count == 0
                 && response.rejections.len() == 1
                 && response.rejections[0].reason_code.as_str() == "claim_generation_mismatch",
             "{label} was accepted: {response:?}"
@@ -344,7 +344,7 @@ async fn run_lifecycle(
         .await?,
     )?;
     ensure!(
-        uploaded.accepted == 2,
+        uploaded.accepted_count == 2,
         "the two active-suite KeyPackages were not both published: {uploaded:?}"
     );
     ensure!(
@@ -1052,9 +1052,10 @@ async fn expired_claim_recovery_matrix(
         StatusCode::OK,
     )
     .await?;
+    let response: KeyPackagesUploadResponseBody = serde_json::from_value(response)?;
     ensure!(
-        response["accepted"] == 3,
-        "recovery packages were not published: {response}"
+        response.accepted_count == 3,
+        "recovery packages were not published: {response:?}"
     );
     let expired_request = claim_request(
         requester,

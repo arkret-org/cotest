@@ -643,7 +643,7 @@ fn exhaustion_claim_limits_case(vector: &Value, tally: &mut Tally) -> Result<()>
     )?;
 
     let upload_value = json!({
-        "accepted": refill_count,
+        "accepted_count": refill_count,
         "keypackage_refs": ["sha256:5555555555555555555555555555555555555555555555555555555555555555"]
     });
     schema_valid(KEY_PACKAGES_UPLOAD_OUTCOME_SCHEMA, &upload_value)?;

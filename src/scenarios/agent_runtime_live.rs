@@ -1601,7 +1601,7 @@ async fn run_agent_keypackage_journey(terminal: bool) -> Result<()> {
         .await?,
     )?;
     ensure!(
-        outcome.accepted == 2
+        outcome.accepted_count == 2
             && outcome
                 .keypackage_refs
                 .contains(&keypackage.keypackage_ref.to_string())
