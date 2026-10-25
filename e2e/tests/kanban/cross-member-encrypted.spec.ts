@@ -3,6 +3,7 @@ import { proveKanbanHistoryTail, seedKanbanHistory } from "../../helpers/kanban-
 import { observeRequestCost } from "../../helpers/request-cost";
 import { installSubscriptionCut } from "../../helpers/subscription-cut";
 import os from "node:os";
+import { readFileSync } from "node:fs";
 import path from "node:path";
 import { rm } from "node:fs/promises";
 import { installCardPlacementFault } from "../../helpers/card-placement-fault";
@@ -839,8 +840,13 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
     let closedRejection: Record<string, any> | undefined;
     await creator.page.route(/\/_arkret\/self\/streams\/scan(?:\?.*)?$/, async (route) => {
       if (genesisCutActive && acceptedGenesisAtCut) {
-        await route.fulfill({ status: 503, contentType: "application/json", body: JSON.stringify({
-          error: { code: "temporarily_unavailable", message: "creator exact query cut" },
+        const descriptor = JSON.parse(readFileSync(new URL(
+          "../../../../arkret-spec/spec/v1/artifacts/registry/error-code-registry.json", import.meta.url,
+        ), "utf8")).codes.find((entry: { code: string; status: string }) =>
+          entry.code === "temporarily_unavailable" && entry.status === "active");
+        if (!descriptor) throw new Error("missing temporarily_unavailable descriptor");
+        await route.fulfill({ status: descriptor.http_status, contentType: "application/problem+json", body: JSON.stringify({
+          type: descriptor.type_uri, title: descriptor.title, status: descriptor.http_status, detail: "creator exact query cut",
         }) });
         return;
       }

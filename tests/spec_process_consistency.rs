@@ -56,7 +56,7 @@ fn invite_create_claims_one_typed_live_target_slot() {
     let event_id =
         arkret_identifiers::EventId::new("ak:event:AUf4Nwr-Lqj1RlqDi4awPbskicm37buT2CswWBfZbgLe")
             .expect("fixture create Event id");
-    let details = arkret_wire::InviteLiveTargetOccupiedProblem::new(event_id.clone());
+    let details = arkret_wire::InviteLiveTargetOccupiedProblemExtensions::new(event_id.clone());
     assert_eq!(details.create_event_id(), &event_id);
     assert_eq!(
         details.invite_id().as_str(),
