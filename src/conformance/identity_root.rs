@@ -6,8 +6,7 @@ use arkret::identity_root::{
     derive_identity_recovery_key_material_from_bip39,
 };
 use arkret_bootstrap::{
-    DID_INCEPTION_REF_ROLE, SelfPrincipalPcrCreateInput, build_pcr_genesis_unit,
-    build_self_principal_pcr_create,
+    SelfPrincipalPcrCreateInput, build_pcr_genesis_unit, build_self_principal_pcr_create,
 };
 use arkret_event_draft::EventPayloadExt;
 use arkret_identifiers::{DeviceId, Did, DidCoreId, TrustDomainId, project_did_to_core_id};
@@ -21,7 +20,7 @@ use arkret_models_collaboration::events_payloads::{
 };
 use arkret_wire::{
     AccountId, Audience, AuthoredEvent, DidUrl, Discoverability, Event, HistoryAccess, JoinRule,
-    NonEmptyString, RecoverySessionId, SemanticRef,
+    NonEmptyString, RecoverySessionId,
 };
 use base64::Engine as _;
 use ed25519_dalek::{Signer as _, SigningKey};
@@ -281,10 +280,7 @@ fn validate_pcr_genesis_helpers() -> Result<()> {
         },
         genesis_salt: arkret_wire::GenesisSalt::generate()?,
         trust_domain: TrustDomainId::new("ak:trust_domain:example.net")?,
-        did_inception_ref: SemanticRef::new(
-            "did:webvh:z6mkfixture:alice.example#entry-0",
-            DID_INCEPTION_REF_ROLE,
-        ),
+
         founding_device_descriptor: descriptor,
         initial_join_rule: JoinRule::Invite,
         initial_history_access: HistoryAccess::SinceJoin,

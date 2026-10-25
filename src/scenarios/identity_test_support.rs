@@ -3,8 +3,7 @@ use std::sync::{LazyLock, Mutex};
 
 use anyhow::{Context, Result};
 use arkret_bootstrap::{
-    DID_INCEPTION_REF_ROLE, SelfPrincipalPcrCreateInput, build_pcr_genesis_unit,
-    build_self_principal_pcr_create,
+    SelfPrincipalPcrCreateInput, build_pcr_genesis_unit, build_self_principal_pcr_create,
 };
 use arkret_canonical::multibase::ed25519_pubkey_to_did_key_multibase;
 use arkret_canonical::{canonical_json_bytes, canonical_sha256};
@@ -27,7 +26,7 @@ use arkret_signatures::webvh::{
     PreparedPrincipalInception, PrincipalInceptionInput, prepare_principal_inception,
     sign_identity_creation_control_proof, sign_registration_did_evidence_draft,
 };
-use arkret_wire::{Base64UrlString, Hash, IdempotencyKey, NonEmptyString, SemanticRef};
+use arkret_wire::{Base64UrlString, Hash, IdempotencyKey, NonEmptyString};
 use base64::Engine;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use ed25519_dalek::{Signer, SigningKey};
@@ -816,7 +815,7 @@ async fn bootstrap_test_device_authorization(
         },
         genesis_salt: test_principal_genesis_salt(&host, local_id, device_id.as_str())?,
         trust_domain: server.trust_domain().clone(),
-        did_inception_ref: SemanticRef::new(prepared.version_id.clone(), DID_INCEPTION_REF_ROLE),
+
         founding_device_descriptor: descriptor,
         initial_join_rule: arkret_wire::JoinRule::Closed,
         initial_history_access: arkret_wire::HistoryAccess::SinceJoin,

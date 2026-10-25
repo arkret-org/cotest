@@ -1199,10 +1199,6 @@ fn build_pcr_genesis_unit(
             genesis_salt,
             trust_domain: arkret::TrustDomainId::new(trust_domain.to_owned())
                 .context("parse trust domain")?,
-            did_inception_ref: arkret::SemanticRef::new(
-                version_id.to_owned(),
-                arkret_bootstrap::DID_INCEPTION_REF_ROLE,
-            ),
             founding_device_descriptor: descriptor,
             initial_join_rule: arkret::JoinRule::Closed,
             initial_history_access: arkret::HistoryAccess::SinceJoin,
