@@ -147,7 +147,7 @@ test.describe("conformance snapshot/query/scalability vectors @fully-implemented
       };
       const authorityBundle = await expectJsonOk(await request.post(
         `${colandBaseUrl()}/_arkret/open/realm-authority/bundle`, {
-          headers: { "content-type": "application/json" },
+          headers: { "content-type": "application/json", "arkret-operation": "ak.open.realm_authority.read.bundle.v1" },
           data: canonicalJson(authorityRequest),
         },
       ), "read nonce-bound Realm authority");

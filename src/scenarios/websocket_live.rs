@@ -887,11 +887,16 @@ pub async fn realm_head(
     client: &TestActorClient,
     realm: &str,
 ) -> Result<arkret_wire::CommitStreamHead> {
+    let mut authority_nonce = [0u8; 32];
+    getrandom::fill(&mut authority_nonce).map_err(anyhow::Error::msg)?;
     Ok(client
         .sdk()
         .realm_authority_bundle(&arkret_wire::RealmAuthorityBundleRequestBody {
             realm_id: arkret_wire::RealmId::new(realm)?,
-            nonce: arkret_wire::Base64UrlString::new(fresh_jti()).map_err(anyhow::Error::msg)?,
+            nonce: arkret_wire::Base64UrlString::new(arkret_canonical::base64url_encode(
+                authority_nonce,
+            ))
+            .map_err(anyhow::Error::msg)?,
         })
         .await?
         .realm_stream_head)

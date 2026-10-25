@@ -207,7 +207,7 @@ async function verifyStructureSnapshotAuthority(request: APIRequestContext, real
   const candidate = candidates[0]!;
   const authorityRequest = { realm_id: realm, nonce: randomBytes(32).toString("base64url") };
   const authority = await request.post(`${colandBaseUrl(candidate)}/_arkret/open/realm-authority/bundle`, {
-    headers: { "content-type": "application/json" }, data: canonicalJson(authorityRequest) });
+    headers: { "content-type": "application/json", "arkret-operation": "ak.open.realm_authority.read.bundle.v1" }, data: canonicalJson(authorityRequest) });
   expect(authority.status(), "candidate must supply the actual nonce-bound authority bundle").toBe(200);
   const resolution = await request.get(colandServiceResolution(candidate).resolution_url);
   expect(resolution.status(), "candidate's method-native service history is available").toBe(200);

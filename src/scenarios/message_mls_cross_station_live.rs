@@ -392,15 +392,15 @@ async fn run_at_two_stations(
             .await?;
     let realm_id = RealmId::new(realm.clone())?;
     let strand = alice.client.default_strand_id(&realm)?;
+    let mut authority_nonce = [0u8; 32];
+    getrandom::fill(&mut authority_nonce).map_err(anyhow::Error::msg)?;
     let before_bob_join = alice
         .client
         .sdk()
         .realm_authority_bundle(&arkret_wire::RealmAuthorityBundleRequestBody {
             realm_id: realm_id.clone(),
-            nonce: arkret_wire::Base64UrlString::new(format!(
-                "{}{}",
-                fresh_uuid_v7(),
-                fresh_uuid_v7()
+            nonce: arkret_wire::Base64UrlString::new(arkret_canonical::base64url_encode(
+                authority_nonce,
             ))
             .map_err(anyhow::Error::msg)?,
         })

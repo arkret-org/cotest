@@ -50,7 +50,7 @@ const FIXTURE_SCHEMA: &str = "arkret.authority-commit-fixture.v1";
 const OLD_AUTHORITY_DID: &str = "did:web:old-authority.example";
 const NEW_AUTHORITY_DID: &str = "did:web:new-authority.example";
 const PRODUCER_DID: &str = "did:web:alice.example";
-const NONCE: &str = "Y290ZXN0LWF1dGhvcml0eS1ub25jZS0x";
+const NONCE: &str = "CAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAg";
 
 /// Run every section of the authority commit-log fixture.
 pub fn run_authority_commit_suite() -> Result<()> {
@@ -1057,7 +1057,7 @@ fn verify_join_bootstrap(fixture: &Value) -> Result<()> {
     );
     let replayed = RealmAuthorityBundleRequestBody {
         realm_id: authority.realm_id.clone(),
-        nonce: Base64UrlString::new("Y290ZXN0LWF1dGhvcml0eS1ub25jZS0y")
+        nonce: Base64UrlString::new("CQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQk")
             .map_err(anyhow::Error::msg)?,
     };
     ensure!(
