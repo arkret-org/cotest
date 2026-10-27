@@ -1174,54 +1174,33 @@ def peer_keypackage_claims(evidence):
     mls_attest_add(evidence["mls_add"], evidence)
 
 
-PROOFS = {"peer_contacts": peer_contacts, "peer_keypackage_claims": peer_keypackage_claims,"third_party_invites": third_party_invites,"account_erasure_status": account_erasure_status,"account_identity_creation": account_identity_creation, "account_device_sessions": account_device_sessions,
+PROOFS = {"peer_contacts": peer_contacts, "peer_keypackage_claims": peer_keypackage_claims,"third_party_invites": third_party_invites,"account_identity_creation": account_identity_creation, "account_device_sessions": account_device_sessions,
           "account_device_pairing": account_device_pairing, "account_policy_recovery": account_policy_recovery,
           "account_private_storage": account_private_storage, "mls_interop": mls_interop,
           "account_consent": account_consent,"identity_reservations":identity_reservations,
           "service_registrations":service_registrations,"organization_registrations":organization_registrations,"blob_presign":blob_presign}
 
 
-def native_interface_foundation(source_fence):
-    # The deployment may use an in-process TCB capability; a successful private
-    # HTTP adapter does not qualify the public operation's native foundation.
-    relative = "coland/crates/http/src/config.rs"
-    require(relative in source_fence, "native authority interface configuration provenance absent")
-    sources = {relative} | {path for path in source_fence
-        if path.startswith(("coland/crates/http/src/", "coland/crates/services/src/", "coland/crates/server/src/"))
-        and path.endswith(".rs")}
-    forbidden = []
-    for path in sorted(sources):
-        source = (ROOT / path).read_text(encoding="utf-8")
-        # Retired adapter constants are forbidden throughout these source files.
-        # A test-only item can precede production items; it is not an EOF marker.
-        forbidden.extend((path, target) for _, target in re.findall(
-            r'const\s+([A-Z_]*(?:PATH|URL))\s*:\s*&str\s*=\s*"(/_(?:coauth|coland)/[^"\n]*)"', source))
-    require(not forbidden,
-            "native authority foundation uses prohibited private HTTP interfaces: "
-            + ", ".join(f"{path}: {target}" for path, target in forbidden))
-
-
-def native_issuer_binding_foundation(source_fence):
-    # Structural drift guards supplement actual issuer/native tests. Merely
-    # matching these names cannot establish an authority or operation proof.
-    issuer = "coauth/crates/backend/src/services/station_authority/mod.rs"
-    pinned = "coauth/crates/backend/src/services/station_authority/pinned_repository.rs"
-    binding = "coauth/crates/backend/src/services/station_trust/native_delegation.rs"
-    storage = "coauth/crates/storage-postgres/src/station_trust.rs"
-    required = {
-        issuer: ("bind_native_station_identity(", "PinnedIssuerRepositoryFactory::new("),
-        pinned: ("find_by_name_for_share(", "self.create().await"),
-        binding: ("verify_service_resolution_floor(", "record_verification(", "repo.save().await?"),
-        storage: ("async fn find_by_name_for_share(", ".for_share()"),
-    }
-    require(required.keys() <= source_fence.keys(), "original issuer binding provenance absent")
-    for path, operations in required.items():
-        source = (ROOT / path).read_text(encoding="utf-8")
-        require(all(operation in source for operation in operations),
-                f"original issuer binding or transactional pin guard absent: {path}")
-        if path == issuer:
-            require(not re.search(r'\bpub(?:\s*\([^)]*\))?\s+fn\s+from_parts\b', source),
-                    "raw issuer construction bypasses the original binding")
+def deployment_boundary_guard(source_fence):
+    # This is a deployment regression guard, never evidence of issuer authority.
+    # The user's deferred private-HTTP replacement must not force embedded custody.
+    import tomllib
+    manifest = "coland/crates/server/Cargo.toml"
+    require(manifest in source_fence, "deployment manifest provenance absent")
+    for relative in source_fence:
+        if not relative.startswith("coland/") or not relative.endswith("Cargo.toml"):
+            continue
+        document = tomllib.loads((ROOT / relative).read_text(encoding="utf-8"))
+        def inspect(table):
+            for name, value in table.items():
+                if name in {"dependencies", "build-dependencies", "dev-dependencies"}:
+                    require(not any(key.replace("_", "-") == "coauth-backend" or
+                                    isinstance(item, dict) and item.get("package") == "coauth-backend"
+                                    for key, item in value.items()),
+                            "Coland must not load the Coauth backend")
+                elif isinstance(value, dict):
+                    inspect(value)
+        inspect(document)
 
 
 def evidence_coverage(document, directory: Path, execution: Path):
@@ -1231,19 +1210,17 @@ def evidence_coverage(document, directory: Path, execution: Path):
     log = (execution.parent / result["log"]).read_text(encoding="utf-8")
     source_fence = read(execution.parent / result["source_fence"])
     required_sources = {
-        "coland/crates/contracts/src/account_authority.rs",
+        "coland/crates/server/Cargo.toml",
         "coland/crates/http/src/routing/identity/account_authority_client.rs",
         "coland/crates/http/src/routing/identity/auth_grant_dpop.rs",
         "coland/crates/http/src/state/authority_forward.rs",
         "coland/crates/http/src/state/account_authority_device_pairing.rs",
         "coland/crates/server/src/main.rs",
-        "coauth/crates/backend/src/services/station_authority/mod.rs",
-        "coauth/crates/backend/src/services/station_authority/introspection.rs",
-        "coauth/crates/backend/src/services/station_authority/controller_gate.rs",
-        "coauth/crates/backend/src/services/station_authority/session_termination.rs",
-        "coauth/crates/backend/src/services/station_authority/device_pairing.rs",
-        "coauth/crates/backend/src/services/station_authority/pinned_repository.rs",
-        "coauth/crates/backend/src/services/station_trust/native_delegation.rs",
+        "coauth/crates/backend/src/handlers/arkret/session_grant/introspection.rs",
+        "coauth/crates/backend/src/handlers/arkret/controller_gate.rs",
+        "coauth/crates/backend/src/handlers/arkret/session_grant/session_logout.rs",
+        "coauth/crates/backend/src/handlers/arkret/device_pairing.rs",
+        "coauth/crates/backend/src/services/station_trust.rs",
         "coauth/crates/storage-postgres/src/station_trust.rs",
         "cotest/src/scenarios/agent_runtime_live/coauth_session_evidence.rs",
         "cotest/src/scenarios/_helpers/native_issuer_binding.rs",
@@ -1337,8 +1314,7 @@ def evidence_coverage(document, directory: Path, execution: Path):
         except (KeyError, IndexError, TypeError, ValueError) as error:
             raise ValueError(f"native domain proof invalid for {identifier}: {type(error).__name__}: {error}") from error
         covered.update(scope)
-    native_interface_foundation(source_fence)
-    native_issuer_binding_foundation(source_fence)
+    deployment_boundary_guard(source_fence)
     return covered
 
 

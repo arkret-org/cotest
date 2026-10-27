@@ -1,5 +1,7 @@
 //! Actual Station process receipt acceptance stays independent of Realm lifetime.
-use arkret_models_collaboration::events_payloads::event_wire::{ErasureTrigger, VerificationStub};
+use arkret_models_collaboration::events_payloads::event_wire::{
+    ErasureTrigger, VerificationStub, VerificationStubScope, VerificationStubSubject,
+};
 use arkret_models_collaboration::governance::erasure::*;
 
 use super::frozen_authority_live::settled;
@@ -51,21 +53,27 @@ fn package(
     let scope = ErasureScope {
         storage_boundary: ErasureStorageBoundary::ServiceDefined,
         realm_id: Some(message.realm_id.clone()),
-        target_refs: Some(vec![message.event_id.to_string()]),
+        target_refs: vec![message.event_id.to_string()],
         retention_policy_id: None,
         service_scope: Some("receipt rail process verification".into()),
     };
     let stub = VerificationStub {
         stub_schema: arkret_wire::SchemaId::ERASURE_VERIFICATION_STUB_V1.into(),
         trigger: trigger.clone(),
-        subject: ErasureSubject {
-            kind: ErasureSubjectKind::Event,
+        subject: VerificationStubSubject {
+            kind: "event".into(),
             subject_ref: message.event_id.to_string(),
         },
-        scope: scope.clone(),
+        scope: VerificationStubScope {
+            storage_boundary: "service_defined".into(),
+            realm_id: scope.realm_id.clone(),
+            target_refs: Some(scope.target_refs.clone()),
+            retention_policy_id: None,
+            service_scope: scope.service_scope.clone(),
+        },
         event_digest: None,
         retained_digests: None,
-        committed_event_ref: None,
+        commit_ref: None,
         redaction_authorization_ref: Some(redaction.event_id.to_string()),
         legal_hold_ref: None,
         receipt_id: id.clone(),
@@ -94,7 +102,7 @@ fn package(
             issued_at: Some(at),
             proofs: Vec::new(),
             fanout_status: None,
-            peer_receipts: None,
+            peer_receipts: Vec::new(),
         },
     };
     sign(source, &mut package)?;

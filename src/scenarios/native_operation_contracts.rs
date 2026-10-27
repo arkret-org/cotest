@@ -3,8 +3,6 @@ use anyhow::{Context as _, Result, ensure};
 use cotest_test_support::operation_observation::{NativeOperationObservations, observe};
 use serde_json::{Value, json};
 
-mod account_erasure_receipts;
-mod account_erasure_status;
 mod account_logout;
 mod actor_private;
 mod media_token;
@@ -25,11 +23,6 @@ pub async fn peer_contacts() -> Result<()> {
 pub async fn peer_keypackage_claims() -> Result<()> {
     validate_registered_schema_bindings()?;
     crate::harness::heap_future(peer_keypackage_claims::run).await
-}
-
-pub async fn account_erasure_status() -> Result<()> {
-    validate_registered_schema_bindings()?;
-    crate::harness::heap_future(account_erasure_status::run).await
 }
 
 mod third_party_invites;

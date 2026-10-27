@@ -189,32 +189,17 @@ Start-Sleep -Seconds 60
         $bootstrapConfig -notmatch 'COLAND_INTERNAL_AUTHORITY_SHARED_SECRET="test-introspection-server1"') {
         throw "Process identity bootstrap must emit the minimal internal authority peer binding"
     }
-    if ($bootstrapConfig -match 'COLAND_LOCAL_ACCOUNT_AUTHORITY_CONFIG=|COLAND_SESSION_GRANT_INTROSPECTION_URL=|COLAND_AUTH_SESSION_LOGOUT_URL=') {
-        throw "Identity bootstrap must not open an unbound issuer or emit retired RPC settings"
-    }
-    $issuerConfig = Join-Path $testDirectory "coauth.yaml"
-    [IO.File]::WriteAllText($issuerConfig, "database:`n  uri: postgresql://localhost/actual_issuer`n")
-    $processArguments.AccountAuthorityConfigPath = $issuerConfig
-    # Enable the same migrated issuer only after the Station identity bootstrap.
+    # Filling the managed command must preserve the Account Authority origin and
+    # its bearer-protected operation URLs without restoring a runner-side key pin.
     $CoauthCommand = "generated-managed-coauth-command"
     Build-ColandCommand @processArguments | Out-Null
     $generatedConfig = Get-Content -LiteralPath $configPath -Raw
-    $issuerLines = @($generatedConfig -split '\r?\n' | Where-Object { $_.StartsWith('COLAND_LOCAL_ACCOUNT_AUTHORITY_CONFIG=') })
-    if ($issuerLines.Count -ne 1) { throw "Managed Coland must receive one explicit issuer configuration" }
-    $decodedIssuerPath = $issuerLines[0].Split('=', 2)[1] | ConvertFrom-Json
     if ($generatedConfig -notmatch 'COLAND_ACCOUNT_AUTHORITY_URL="https://coauth.joint.example"' -or
-        $decodedIssuerPath -ne (Resolve-Path $issuerConfig).Path -or
-        $generatedConfig -match 'COLAND_SESSION_GRANT_INTROSPECTION_URL=|COLAND_AUTH_SESSION_LOGOUT_URL=' -or
+        $generatedConfig -notmatch 'COLAND_SESSION_GRANT_INTROSPECTION_URL="https://coauth.joint.example/_coauth/internal/session-grants/introspect"' -or
+        $generatedConfig -notmatch 'COLAND_AUTH_SESSION_LOGOUT_URL="https://coauth.joint.example/_coauth/internal/auth-sessions/logout"' -or
         $generatedConfig -match 'COLAND_ACCOUNT_AUTHORITY_PUBLIC_KEY_MULTIBASE=') {
-        throw "Managed Coland must open its exact issuer configuration without retired RPC settings or a key pin"
+        throw "Generated CoauthCommand must preserve the bound Account Authority origin and operation URLs without a key pin"
     }
-    $missingIssuerRejected = $false
-    try {
-        $missingArguments = $processArguments.Clone()
-        $missingArguments.AccountAuthorityConfigPath = Join-Path $testDirectory "missing-issuer.yaml"
-        Build-ColandCommand @missingArguments | Out-Null
-    } catch { $missingIssuerRejected = $_.Exception.Message -like 'Local Account Authority configuration does not exist:*' }
-    if (-not $missingIssuerRejected) { throw "Missing local issuer configuration must fail closed" }
     $script:UseManagedCoauthAssertionKey = $false
     Build-ColandCommand @processArguments | Out-Null
     $callerOwnedConfig = Get-Content -LiteralPath $configPath -Raw
@@ -238,9 +223,9 @@ Start-Sleep -Seconds 60
     $loopbackDocker = Build-ColandDockerEnvironment @dockerArguments -AccountAuthorityBaseUrl $loopbackAuthority
     $containerAuthority = "http://192.0.2.1:4455"
     if ($loopbackDocker.COLAND_ACCOUNT_AUTHORITY_URL -ne $containerAuthority -or
-        $loopbackDocker.Contains("COLAND_SESSION_GRANT_INTROSPECTION_URL") -or
-        $loopbackDocker.Contains("COLAND_AUTH_SESSION_LOGOUT_URL")) {
-        throw "Docker bootstrap must retain the reachable public origin without retired RPC settings"
+        $loopbackDocker.COLAND_SESSION_GRANT_INTROSPECTION_URL -ne "$containerAuthority/_coauth/internal/session-grants/introspect" -or
+        $loopbackDocker.COLAND_AUTH_SESSION_LOGOUT_URL -ne "$containerAuthority/_coauth/internal/auth-sessions/logout") {
+        throw "Docker internal bearer endpoints must share the container-reachable Account Authority origin"
     }
 
     $CoauthServiceId = "ak:did_core:web:station.joint.example"

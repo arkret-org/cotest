@@ -58,11 +58,6 @@
       "test": "blob_presign_retains_classified_native_object_and_live_policy",
       "artifact": "blob-presign.json"
     },
-    "account_erasure_status": {
-      "target": "native_operation_contracts",
-      "test": "account_erasure_status_retains_native_intent_issuer_chain_and_replica",
-      "artifact": "account-erasure-status.json"
-    },
     "third_party_invites": {
       "target": "native_operation_contracts",
       "test": "third_party_invites_retain_native_custody_accepted_original_and_oob_delivery",
@@ -244,8 +239,8 @@
       "response_schema_ref": "schemas/account-operations.schema.json#/$defs/account_request_erasure_response_body",
       "spec_operation_sha256": "31639b75d5aedec81409e9b29597c57e1da3ef9af27a7422192d33b8f76ab192",
       "error_mapping_sha256": "75e8ffd56f41ab325c944a41280a8e8b2dbe31b23a1878b9b5edbb5a91408b3e",
-      "authority_requirement": "Requires the Account Authority's authenticated holder/DPoP context and its actual issuer/onboarding/session/device/revocation ledger. OIDC exchange, leases/fences, accepted device possession, ordered PCR admission and terminal replay cannot be established by a client-created response. The exact operation obligations are retained verbatim in normative_notes.",
-      "native_case": "account_erasure_status",
+      "authority_requirement": "The native erasure implementation and its direct database receipt discovery were reverted at the user's request. A new native contract requires the original issuer ledger, accepted status history and actual physical-erasure receipt; prior evidence does not cover the restored implementation.",
+      "native_case": null,
       "success_shape_kind": "schema_resource"
     },
     {
@@ -448,8 +443,8 @@
       "response_schema_ref": "schemas/account-operations.schema.json#/$defs/account_status_publication_response_body",
       "spec_operation_sha256": "04888c5d7c77bafaa1a3ea8dc806a19b8abe57fe49419e701063eb52bae168a2",
       "error_mapping_sha256": "d46128fa1093123c9f0df41a727d0e36e9696f725deb9e6daf739ef9ee78ef15",
-      "authority_requirement": "Requires the Account Authority issuer's original contiguous signed sequence and exact existing receiver/account relationship. Submit needs atomic monotonic replica and physical-erasure-intent acceptance; resolve needs original authorized ledger range. Current fixture has neither issuer history nor receiver replica, so no valid original request/response is claimed.",
-      "native_case": "account_erasure_status",
+      "authority_requirement": "The native erasure implementation and its direct database receipt discovery were reverted at the user's request. A new native contract requires the original issuer ledger, accepted status history and actual physical-erasure receipt; prior evidence does not cover the restored implementation.",
+      "native_case": null,
       "success_shape_kind": "typed_response"
     },
     {
@@ -460,8 +455,8 @@
       "response_schema_ref": "schemas/account-operations.schema.json#/$defs/account_status_resolve_response_body",
       "spec_operation_sha256": "535a29ebc71b8297dfffa19950895b6fb85e31b2d9aefa169cc5f3f02e1aea67",
       "error_mapping_sha256": "2725792dc644bc38316c1ab89f7227f8b6ba46db9e2b70d9cf09bd4df3b2c03b",
-      "authority_requirement": "Requires the Account Authority issuer's original contiguous signed sequence and exact existing receiver/account relationship. Submit needs atomic monotonic replica and physical-erasure-intent acceptance; resolve needs original authorized ledger range. Current fixture has neither issuer history nor receiver replica, so no valid original request/response is claimed.",
-      "native_case": "account_erasure_status",
+      "authority_requirement": "The native erasure implementation and its direct database receipt discovery were reverted at the user's request. A new native contract requires the original issuer ledger, accepted status history and actual physical-erasure receipt; prior evidence does not cover the restored implementation.",
+      "native_case": null,
       "success_shape_kind": "typed_response"
     },
     {
@@ -484,8 +479,8 @@
       "response_schema_ref": "schemas/erasure-receipt-operations.schema.json#/$defs/erasure_receipt_submit_response_body",
       "spec_operation_sha256": "cc934cd841612de9f8ba997f047e1ec3b7301a1c08a1d05c1b890a0262f76b45",
       "error_mapping_sha256": "25e1025ffe83e64f63c3eaf834e43cfd5c3b619f0cd3afb574167158820ad60a",
-      "authority_requirement": "Requires an actually completed native deletion and original signed receipt plus retained stub bound to its exact accepted Event or AccountStatusRecord trigger. Submit must replay the same acceptance without triggering deletion; get needs original retained bytes and auditor authority. None can be reconstructed from current fixture values.",
-      "native_case": "account_erasure_status",
+      "authority_requirement": "The native erasure implementation and its direct database receipt discovery were reverted at the user's request. A new native contract requires the original issuer ledger, accepted status history and actual physical-erasure receipt; prior evidence does not cover the restored implementation.",
+      "native_case": null,
       "success_shape_kind": "typed_response"
     },
     {
@@ -496,8 +491,8 @@
       "response_schema_ref": "schemas/erasure-receipt-operations.schema.json#/$defs/erasure_receipt_package",
       "spec_operation_sha256": "57427c99a4673e3018e33553ea56e3bd9d1a9554a5fcb3ff17c76a081fc112b3",
       "error_mapping_sha256": "d64b7437864f1b94fd3eb4bc09c7d4cd94e36d6ff179afe717fab21831842815",
-      "authority_requirement": "Requires an actually completed native deletion and original signed receipt plus retained stub bound to its exact accepted Event or AccountStatusRecord trigger. Submit must replay the same acceptance without triggering deletion; get needs original retained bytes and auditor authority. None can be reconstructed from current fixture values.",
-      "native_case": "account_erasure_status",
+      "authority_requirement": "The native erasure implementation and its direct database receipt discovery were reverted at the user's request. A new native contract requires the original issuer ledger, accepted status history and actual physical-erasure receipt; prior evidence does not cover the restored implementation.",
+      "native_case": null,
       "success_shape_kind": "typed_response"
     },
     {

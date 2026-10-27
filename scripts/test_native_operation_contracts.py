@@ -128,77 +128,38 @@ class NativeOperationContractGates(unittest.TestCase):
         with self.assertRaises(KeyError):
             gate.account_erasure_status({"accepted": True, "replay": True})
 
-    def test_original_issuer_pin_and_transactional_guard_cannot_be_omitted(self):
-        # Source-only negatives; these strings carry no authority or native credit.
-        issuer = "coauth/crates/backend/src/services/station_authority/mod.rs"
-        pinned = "coauth/crates/backend/src/services/station_authority/pinned_repository.rs"
-        binding = "coauth/crates/backend/src/services/station_trust/native_delegation.rs"
-        storage = "coauth/crates/storage-postgres/src/station_trust.rs"
-        sources = {
-            issuer: "bind_native_station_identity(); PinnedIssuerRepositoryFactory::new(); fn from_parts() {}",
-            pinned: "find_by_name_for_share(); self.create().await",
-            binding: "verify_service_resolution_floor(); record_verification(); repo.save().await?",
-            storage: "async fn find_by_name_for_share() { query.for_share(); }",
-        }
-        with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary)
-            for path, source in sources.items():
-                target = root / path
-                target.parent.mkdir(parents=True, exist_ok=True)
-                target.write_text(source, encoding="utf-8")
-            fence = {path: "component-only" for path in sources}
-            with patch.object(gate, "ROOT", root):
-                gate.native_issuer_binding_foundation(fence)
-                with self.assertRaisesRegex(ValueError, "binding provenance absent"):
-                    gate.native_issuer_binding_foundation({})
-                (root / pinned).write_text("query_scoped_read_without_pin_lock", encoding="utf-8")
-                with self.assertRaisesRegex(ValueError, "transactional pin guard absent"):
-                    gate.native_issuer_binding_foundation(fence)
-                (root / pinned).write_text(sources[pinned], encoding="utf-8")
-                (root / issuer).write_text(sources[issuer].replace("fn from_parts", "pub fn from_parts"), encoding="utf-8")
-                with self.assertRaisesRegex(ValueError, "raw issuer construction"):
-                    gate.native_issuer_binding_foundation(fence)
 
-    def test_private_http_authority_adapter_never_earns_native_foundation_credit(self):
-        # Source-contract regression only; neither branch supplies native evidence.
-        relative = "coland/crates/http/src/config.rs"
-        with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary)
-            path = root / relative
-            path.parent.mkdir(parents=True)
-            with patch.object(gate, "ROOT", root):
-                path.write_text('const INTERNAL_GRANT_PATH: &str = "/_coauth/internal/session-grants/introspect";', encoding="utf-8")
-                with self.assertRaisesRegex(ValueError, "prohibited private HTTP"):
-                    gate.native_interface_foundation({relative: "structural-component-only"})
-                path.write_text('pub struct InProcessIssuerCapability;', encoding="utf-8")
-                gate.native_interface_foundation({relative: "structural-component-only"})
-                with self.assertRaisesRegex(ValueError, "configuration provenance absent"):
-                    gate.native_interface_foundation({})
 
-    def test_test_only_items_do_not_hide_later_private_adapter_constants(self):
-        relative = "coland/crates/http/src/config.rs"
-        with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary)
-            path = root / relative
-            path.parent.mkdir(parents=True)
-            for prefix in ("#[cfg(test)] use super::fixture;\n",
-                           "#[cfg(test)] mod tests { fn component() {} }\n"):
-                path.write_text(prefix + 'const INTERNAL_PATH: &str = "/_coauth/internal/forbidden";', encoding="utf-8")
-                with patch.object(gate, "ROOT", root), self.assertRaisesRegex(ValueError, "prohibited private HTTP"):
-                    gate.native_interface_foundation({relative: "component-only"})
 
-    def test_private_pairing_adapter_outside_configuration_is_also_rejected(self):
-        relative = "coland/crates/http/src/config.rs"
-        adapter = "coland/crates/http/src/state/account_authority_device_pairing.rs"
+
+    def test_authenticated_private_transport_is_allowed_without_native_credit(self):
+        manifest = "coland/crates/server/Cargo.toml"
+        adapter = "coland/crates/http/src/config.rs"
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
-            for name, source in ((relative, "pub struct Config;"),
-                (adapter, 'const STAGE_PATH: &str = "/_coauth/internal/device-pairing/stages";')):
-                path = root / name
+            for relative, content in {
+                manifest: '[package]\nname="coland"\n[dependencies]\nreqwest="0.12"\n',
+                adapter: 'const INTERNAL_GRANT_PATH: &str = "/_coauth/internal/session-grants/introspect";',
+            }.items():
+                path = root / relative
                 path.parent.mkdir(parents=True, exist_ok=True)
-                path.write_text(source, encoding="utf-8")
-            with patch.object(gate, "ROOT", root), self.assertRaisesRegex(ValueError, "device-pairing/stages"):
-                gate.native_interface_foundation({relative: "component-only", adapter: "component-only"})
+                path.write_text(content, encoding="utf-8")
+            with patch.object(gate, "ROOT", root):
+                gate.deployment_boundary_guard({manifest: "component-only", adapter: "component-only"})
+                with self.assertRaisesRegex(ValueError, "manifest provenance absent"):
+                    gate.deployment_boundary_guard({})
+
+    def test_embedded_backend_dependency_is_rejected_under_any_dependency_name(self):
+        manifest = "coland/crates/server/Cargo.toml"
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            target = root / manifest
+            target.parent.mkdir(parents=True)
+            for dependency in ('coauth-backend={path="../coauth"}',
+                               'issuer={package="coauth-backend",path="../coauth"}'):
+                target.write_text('[package]\nname="coland"\n[dependencies]\n'+dependency+'\n', encoding="utf-8")
+                with patch.object(gate, "ROOT", root), self.assertRaisesRegex(ValueError, "must not load"):
+                    gate.deployment_boundary_guard({manifest: "component-only"})
 
     def test_receipt_without_real_preexisting_private_state_is_not_native_coverage(self):
         # Structural negative only: these unsigned markers are not an accepted

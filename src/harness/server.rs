@@ -1494,30 +1494,6 @@ impl ArkretServer {
         self.start_external_process().await
     }
 
-    /// Load the real issuer capability after both deployment identities are bound.
-    pub(crate) async fn attach_local_account_authority_config(
-        &mut self,
-        path: &Path,
-    ) -> Result<()> {
-        let path = path
-            .canonicalize()
-            .context("resolve actual issuer deployment configuration")?;
-        let config = self
-            .external_restart
-            .as_mut()
-            .context("owned external Station")?;
-        config
-            .extra_env
-            .retain(|(key, _)| key != "COLAND_LOCAL_ACCOUNT_AUTHORITY_CONFIG");
-        config.extra_env.push((
-            "COLAND_LOCAL_ACCOUNT_AUTHORITY_CONFIG".to_owned(),
-            path.to_str()
-                .context("issuer configuration path is not UTF-8")?
-                .to_owned(),
-        ));
-        self.restart_external_process().await
-    }
-
     /// Apply the normal deployment administrator allowlist to this owned process.
     pub(crate) async fn restart_with_registry_administrators(
         &mut self,

@@ -28,9 +28,6 @@ pub async fn run_agent_longevity_session_boundary() -> Result<()> {
 }
 
 pub(crate) struct ActualAgentDeployment {
-    // Every historical Station also holds the real issuer ledger capability.
-    // Stop it before releasing the Account Authority's database lease/config.
-    _issuer_historical_host: Option<crate::harness::HistoricalOriginHost>,
     pub http: reqwest::Client,
     pub oidc_client_id: String,
     pub station: ArkretServer,
@@ -39,32 +36,24 @@ pub(crate) struct ActualAgentDeployment {
     pub account: arkret_wire::AccountId,
     pub(crate) endpoints: DeploymentEndpoints,
     pub(crate) webvh_registration_bearer: String,
-    pub(crate) issuer_continuity: Option<serde_json::Value>,
     _email: SpawnedExternalProcess,
 }
 
 pub(crate) fn actual_agent_deployment(
     label: &str,
 ) -> impl std::future::Future<Output = Result<ActualAgentDeployment>> + '_ {
-    crate::harness::heap_future(|| actual_agent_deployment_configured(label, false, false))
+    crate::harness::heap_future(|| actual_agent_deployment_configured(label, false))
 }
 
 pub(crate) fn actual_agent_deployment_with_third_party_invites(
     label: &str,
 ) -> impl std::future::Future<Output = Result<ActualAgentDeployment>> + '_ {
-    crate::harness::heap_future(|| actual_agent_deployment_configured(label, true, false))
-}
-
-pub(crate) fn actual_agent_deployment_with_erasure_requests(
-    label: &str,
-) -> impl std::future::Future<Output = Result<ActualAgentDeployment>> + '_ {
-    crate::harness::heap_future(|| actual_agent_deployment_configured(label, false, true))
+    crate::harness::heap_future(|| actual_agent_deployment_configured(label, true))
 }
 
 async fn actual_agent_deployment_configured(
     label: &str,
     third_party_invites: bool,
-    erasure_requests: bool,
 ) -> Result<ActualAgentDeployment> {
     let mut port = reserve_port()?;
     let email_base = format!("http://127.0.0.1:{}", port.port());
@@ -132,12 +121,26 @@ async fn actual_agent_deployment_configured(
         .try_into()
         .map_err(|_| anyhow::anyhow!("Coauth issuer public key is not 32 bytes"))?;
     let public_key = arkret_canonical::ed25519_pubkey_to_did_key_multibase(&key_bytes);
-    let mut station = ArkretServer::spawn_with_env(
+    let station = ArkretServer::spawn_with_env(
         label,
         &[
             ("COLAND_SEED_DEMO_DATA", "0"),
             ("COLAND_TRUST_DOMAIN", JOINT_TRUST_DOMAIN),
             ("COLAND_ACCOUNT_AUTHORITY_URL", coauth.base_url()),
+            (
+                "COLAND_SESSION_GRANT_INTROSPECTION_URL",
+                &format!(
+                    "{}/_coauth/internal/session-grants/introspect",
+                    coauth.base_url().trim_end_matches('/')
+                ),
+            ),
+            (
+                "COLAND_AUTH_SESSION_LOGOUT_URL",
+                &format!(
+                    "{}/_coauth/internal/auth-sessions/logout",
+                    coauth.base_url().trim_end_matches('/')
+                ),
+            ),
             ("COLAND_ACCOUNT_AUTHORITY_PUBLIC_KEY_MULTIBASE", &public_key),
             ("COLAND_INTERNAL_AUTHORITY_SHARED_SECRET", secret),
             ("COLAND_ACCOUNT_AUTHORITY_TRUST_DOMAIN", JOINT_TRUST_DOMAIN),
@@ -153,14 +156,6 @@ async fn actual_agent_deployment_configured(
     let client_id = "01GFWR28C4KNE04WG3HKXB7C9R";
     coauth.config.as_file_mut().seek(SeekFrom::Start(0))?;
     let mut config: serde_json::Value = serde_saphyr::from_reader(coauth.config.as_file_mut())?;
-    if erasure_requests {
-        // A configured five-minute freshness bound does not replace actual
-        // password authentication in the Account Authority's native ledger.
-        config["arkret"]["erasure_request_max_auth_age"] = json!(300);
-        config["arkret"]["account_private_erasure_completions"] = json!({
-            "database_url": station.owned_database_url().context("owned Account erasure completion database")?
-        });
-    }
     if third_party_invites {
         config["arkret"]["third_party_invite_provider"] = json!({
             "governance_database_url": station.owned_database_url().context("owned IVS governance database")?
@@ -198,35 +193,6 @@ async fn actual_agent_deployment_configured(
         .context("synchronize the normal OAuth client deployment configuration")?;
     ensure!(synced.success(), "Coauth config sync failed: {synced}");
     coauth.restart_same_config().await?;
-    station
-        .attach_local_account_authority_config(coauth.config.path())
-        .await?;
-    // Exercise the real migration producer before onboarding so every later
-    // Account uses the accepted current endpoint and unchanged Station core.
-    let (issuer_continuity, issuer_historical_host) = if erasure_requests {
-        use crate::scenarios::_helpers::native_issuer_binding as binding;
-        let before = binding::capture(&coauth, &station).await?;
-        let old_origin = station.base_url();
-        let old_did = station.service_did().clone();
-        let target = station.reserve_public_base_target()?;
-        station.stop_external_process().await?;
-        let preflight = station.migrate_public_base(&target, true).await?;
-        let applied = station.migrate_public_base(&target, false).await?;
-        coauth.bind_station(&station, secret, registration).await?;
-        station.start_external_process().await?;
-        let historical_host = station
-            .serve_historical_public_base(&old_origin, &old_did)
-            .await?;
-        let after = binding::capture(&coauth, &station).await?;
-        station.restart_external_process().await?;
-        let restarted = binding::capture(&coauth, &station).await?;
-        let evidence = json!({"before":before,"preflight":preflight,"applied":applied,
-            "after":after,"restarted":restarted});
-        binding::verify_continuity(&evidence)?;
-        (Some(evidence), Some(historical_host))
-    } else {
-        (None, None)
-    };
     let mut builder = reqwest::Client::builder()
         .cookie_store(true)
         .redirect(reqwest::redirect::Policy::none())
@@ -314,8 +280,6 @@ async fn actual_agent_deployment_configured(
         account,
         endpoints,
         webvh_registration_bearer: registration.to_owned(),
-        issuer_continuity,
-        _issuer_historical_host: issuer_historical_host,
         _email,
     })
 }
