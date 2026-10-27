@@ -11,19 +11,25 @@ use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use ed25519_dalek::{Signer as _, SigningKey};
 use serde_json::{Value, json};
 
-use crate::harness::{CanonicalJsonBody, TestActorClient, TestServerGroup};
-use crate::scenarios::_helpers::bridge::MockCoauthIntrospectionServer;
-use crate::scenarios::_helpers::live_gate::skip_or_fail;
+use crate::harness::{CanonicalJsonBody, TestActorClient};
+use crate::scenarios::_helpers::native_account::NativeAccountProvisioner;
+use crate::scenarios::agent_runtime_live::coauth_session_evidence::actual_agent_deployment;
 use crate::scenarios::human_device_producer_live::{
-    database, ensure_same_commit, prepare_join, standard_client, station_env,
-    submit_and_expect_commit, wait_for_committed,
-};
-use crate::scenarios::identity_test_support::{
-    HARNESS_INTERNAL_AUTHORITY_SECRET, prepared_test_principal_inception,
-    test_principal_next_root_seed, test_principal_root_signing_authority,
+    ensure_same_commit, prepare_join, submit_and_expect_commit, wait_for_committed,
 };
 
-const GROUP: &str = "third-party-invite-claim";
+fn native_root_authority(client: &TestActorClient) -> Result<(arkret_wire::DidUrl, [u8; 32])> {
+    let principal = client
+        .principal
+        .as_ref()
+        .context("actual subject root custody absent")?;
+    let root = SigningKey::from_bytes(&principal.root_key_seed);
+    let multibase =
+        arkret_canonical::ed25519_pubkey_to_did_key_multibase(root.verifying_key().as_bytes());
+    let method = arkret_wire::DidUrl::new(format!("did:key:{multibase}#{multibase}"))
+        .map_err(anyhow::Error::msg)?;
+    Ok((method, principal.root_key_seed))
+}
 
 fn migrated_claim(
     template: &InviteClaimPayload,
@@ -73,14 +79,14 @@ async fn migrated_preclaim_negatives(
     bob: &TestActorClient,
     governance: &crate::harness::ArkretServer,
     subject_station: &crate::harness::ArkretServer,
-    issuer: &MockCoauthIntrospectionServer,
+    issuer: &NativeAccountProvisioner,
     template: &InviteClaimPayload,
     material: &Value,
     verifier: &SigningKey,
     database_url: &str,
 ) -> Result<()> {
     let realm = template.binding_proof.realm_id.as_str();
-    let (root_method, root_seed) = test_principal_root_signing_authority(&bob.actor)?;
+    let (root_method, root_seed) = native_root_authority(bob)?;
     let mut private_material = material.clone();
     private_material["token_commitment"] = json!(format!("sha256:{}", "b".repeat(64)));
     let expires = arkret_canonical::format_timestamp_canonical(
@@ -148,13 +154,13 @@ async fn migrated_preclaim_negatives(
         observation(database_url, realm).await? == before,
         "expired claim changed durable Events, Commits or lifecycle rows"
     );
-    let (mallory, mallory_account) = standard_client(
-        subject_station,
-        issuer,
-        "migration-wrong-claim-subject",
-        &arkret_identifiers::new_prefixed_uuid7("ak:device:"),
-    )
-    .await?;
+    let (mallory, mallory_account) = issuer
+        .provision(
+            subject_station,
+            "migration-wrong-claim-subject",
+            &arkret_identifiers::new_prefixed_uuid7("ak:device:"),
+        )
+        .await?;
     prepare_join(
         &mallory,
         realm,
@@ -165,7 +171,7 @@ async fn migrated_preclaim_negatives(
         },
     )
     .await?;
-    let (method, seed) = test_principal_root_signing_authority(&mallory.actor)?;
+    let (method, seed) = native_root_authority(&mallory)?;
     let mut mismatch = template.clone();
     mismatch.subject_account_id = mallory_account;
     let digest = arkret_canonical::canonical_sha256(
@@ -298,57 +304,45 @@ pub async fn third_party_invite_api_migration() -> Result<()> {
 }
 
 async fn run(api_migration: bool) -> Result<()> {
-    let Some(governance_db) = database(GROUP)? else {
-        ensure!(
-            !api_migration,
-            "3PID API migration requires an isolated governance PostgreSQL database"
-        );
-        return Ok(());
-    };
-    let Some(subject_db) = database(GROUP)? else {
-        ensure!(
-            !api_migration,
-            "3PID API migration requires an isolated subject PostgreSQL database"
-        );
-        return Ok(());
-    };
+    let mut governance = actual_agent_deployment("third-party-invite-governance").await?;
+    let mut subject = actual_agent_deployment("third-party-invite-subject").await?;
+    let governance_database = governance
+        .station
+        .owned_database_url()
+        .context("owned governance database")?
+        .to_owned();
+    let subject_database = subject
+        .station
+        .owned_database_url()
+        .context("owned subject database")?
+        .to_owned();
     ensure!(
-        governance_db.connect_url != subject_db.connect_url,
+        governance_database != subject_database,
         "claim requires independent Station databases"
     );
-    let coauth = MockCoauthIntrospectionServer::spawn_with_internal_secret(
-        HARNESS_INTERNAL_AUTHORITY_SECRET,
-    )
-    .await?;
-    let Some(mut group) = TestServerGroup::try_multi_external_with_node_envs(
-        GROUP,
-        &[
-            station_env(&governance_db.connect_url, &coauth),
-            station_env(&subject_db.connect_url, &coauth),
-        ],
-    )
-    .await?
-    else {
-        ensure!(
-            !api_migration,
-            "3PID API migration requires the prebuilt real Station"
-        );
-        return skip_or_fail(GROUP, "prebuilt Coland unavailable");
-    };
-    let (alice, _) = standard_client(
-        group.server(0),
-        &coauth,
-        "claim-alice",
-        "ak:device:01904100-0000-7000-8000-000000002161",
-    )
-    .await?;
-    let (bob, account) = standard_client(
-        group.server(1),
-        &coauth,
-        "claim-bob",
-        "ak:device:01904100-0000-7000-8000-000000002162",
-    )
-    .await?;
+    governance
+        .station
+        .restart_with_federation_mesh(&[subject.station.base_url().to_string()])
+        .await?;
+    subject
+        .station
+        .restart_with_federation_mesh(&[governance.station.base_url().to_string()])
+        .await?;
+    let coauth = NativeAccountProvisioner::new(&subject);
+    let (alice, _) = NativeAccountProvisioner::new(&governance)
+        .provision(
+            &governance.station,
+            "claim-alice",
+            "ak:device:01904100-0000-7000-8000-000000002161",
+        )
+        .await?;
+    let (bob, account) = coauth
+        .provision(
+            &subject.station,
+            "claim-bob",
+            "ak:device:01904100-0000-7000-8000-000000002162",
+        )
+        .await?;
     let verifier = SigningKey::from_bytes(&[0x62; 32]);
     let multibase =
         arkret_canonical::ed25519_pubkey_to_did_key_multibase(verifier.verifying_key().as_bytes());
@@ -356,7 +350,7 @@ async fn run(api_migration: bool) -> Result<()> {
     let verifier_id = arkret_wire::project_did_to_core_id(&verifier_did)?;
     let verifier_method = arkret_wire::DidUrl::new(format!("{verifier_did}#{multibase}"))
         .map_err(|error| anyhow::anyhow!(error))?;
-    let created=alice.create_realm_with(json!({"title":"3PID claim admission","public":false,"join_rule":"invite","allowed_third_party_invite_verification_ids":[verifier_id],"plaintext_visible_services":[group.server(0).service_id(),group.server(1).service_id()]})).await?;
+    let created=alice.create_realm_with(json!({"title":"3PID claim admission","public":false,"join_rule":"invite","allowed_third_party_invite_verification_ids":[verifier_id],"plaintext_visible_services":[governance.station.service_id(),subject.station.service_id()]})).await?;
     let realm = created["realm_id"]
         .as_str()
         .context("Realm create outcome lacks realm_id")?;
@@ -380,7 +374,7 @@ async fn run(api_migration: bool) -> Result<()> {
     prepare_join(
         &bob,
         realm,
-        group.server(0),
+        &governance.station,
         "ak:request:019b0000-0000-7000-8000-000000002162",
         RealmJoinIntent::InviteAccept {
             invite_id: invite_id.clone(),
@@ -420,9 +414,9 @@ async fn run(api_migration: bool) -> Result<()> {
         binding.verification_id.as_str(),
         binding.canonical_digest()?.as_str(),
     )?;
-    let (root_method, root_seed) = test_principal_root_signing_authority(&bob.actor)?;
+    let (root_method, root_seed) = native_root_authority(&bob)?;
     let root = SigningKey::from_bytes(&root_seed);
-    let subject = InviteSubjectProof::new(
+    let subject_proof = InviteSubjectProof::new(
         root_method,
         subject_body.transcript_digest()?,
         URL_SAFE_NO_PAD.encode(root.sign(&subject_body.canonical_bytes()?).to_bytes()),
@@ -433,20 +427,20 @@ async fn run(api_migration: bool) -> Result<()> {
         token_commitment: token,
         claim_nonce: nonce.to_owned(),
         binding_proof: binding,
-        subject_proof: subject,
+        subject_proof,
         extensions: Default::default(),
     };
     if api_migration {
         migrated_preclaim_negatives(
             &alice,
             &bob,
-            group.server(0),
-            group.server(1),
+            &governance.station,
+            &subject.station,
             &coauth,
             &payload,
             &material,
             &verifier,
-            &governance_db.connect_url,
+            &governance_database,
         )
         .await?;
         let wire = serde_json::to_string(&create)?;
@@ -463,7 +457,7 @@ async fn run(api_migration: bool) -> Result<()> {
             );
         }
     }
-    let before = observation(&governance_db.connect_url, realm).await?;
+    let before = observation(&governance_database, realm).await?;
     let mut rejection_shape = None;
     for case in ["binding_signature", "subject_signature", "pcr_device"] {
         let mut bad = serde_json::to_value(&payload)?;
@@ -509,12 +503,24 @@ async fn run(api_migration: bool) -> Result<()> {
             rejection_shape = Some(shape);
         }
         ensure!(
-            observation(&governance_db.connect_url, realm).await? == before,
+            observation(&governance_database, realm).await? == before,
             "invalid {case} wrote canonical/current state"
         );
     }
-    let inception = prepared_test_principal_inception(&bob.actor)?;
-    let next_root_seed = test_principal_next_root_seed(&bob.actor)?;
+    let custody = bob
+        .principal
+        .as_ref()
+        .context("subject custody absent")?
+        .native_root_rotation
+        .as_ref()
+        .context("actual pre-rotation custody absent")?;
+    let inception_log_entry = serde_json::to_value(&custody.registration.operation)?;
+    let local_id = bob
+        .actor
+        .rsplit(":webvh:")
+        .next()
+        .context("native WebVH local id absent")?;
+    let next_root_seed = *custody.next_root_seed;
     let next_root = SigningKey::from_bytes(&next_root_seed);
     let third_root_seed = [0x73; 32];
     let third_root = SigningKey::from_bytes(&third_root_seed);
@@ -524,23 +530,24 @@ async fn run(api_migration: bool) -> Result<()> {
     let rotation = arkret_signatures::webvh::prepare_principal_rotation(
         &arkret_signatures::webvh::PrincipalRotationInput {
             did: &bob.actor,
-            local_id: &inception.local_id,
-            previous_entries: std::slice::from_ref(&inception.log_entry),
+            local_id,
+            previous_entries: std::slice::from_ref(&inception_log_entry),
             version_created_at: chrono::Utc::now(),
             current_root_seed: &next_root_seed,
             next_root_public_key_multibase: &third_root_key,
-            state: &inception.log_entry["state"],
+            state: &inception_log_entry["state"],
         },
     )?;
     let rotated = crate::harness::expect_json(
-        group
-            .server(1)
+        subject
+            .station
             .http()
             .post(
-                group
-                    .server(1)
+                subject
+                    .station
                     .url("/_arkret/root/identity/submit-did-operation"),
             )
+            .bearer_auth(&subject.webvh_registration_bearer)
             .canonical_json(&rotation.submit_body)?,
         reqwest::StatusCode::OK,
     )
@@ -580,7 +587,7 @@ async fn run(api_migration: bool) -> Result<()> {
             "{case} disclosed a distinct refusal: {status} {body}"
         );
         ensure!(
-            observation(&governance_db.connect_url, realm).await? == before,
+            observation(&governance_database, realm).await? == before,
             "{case} wrote canonical/current state"
         );
     }
@@ -597,10 +604,10 @@ async fn run(api_migration: bool) -> Result<()> {
             serde_json::to_value(&payload)?,
         )
         .await?;
-    let before_replica = replica_observation(&subject_db.connect_url, realm).await?;
+    let before_replica = replica_observation(&subject_database, realm).await?;
     let claim_result = submit_and_expect_commit(&bob, &account, &bob.device_id, &claim).await;
     if claim_result.is_err() {
-        match observation(&governance_db.connect_url, realm).await {
+        match observation(&governance_database, realm).await {
             Ok(after) => eprintln!(
                 "2162 failed claim submission: governance (events, commits, claimed, joined) before={before:?} after={after:?}"
             ),
@@ -608,7 +615,7 @@ async fn run(api_migration: bool) -> Result<()> {
         }
     }
     let claim_commit = claim_result?;
-    let claimed = observation(&governance_db.connect_url, realm).await?;
+    let claimed = observation(&governance_database, realm).await?;
     if api_migration {
         let late = migrated_claim(
             &payload,
@@ -633,7 +640,7 @@ async fn run(api_migration: bool) -> Result<()> {
             "different second claim disclosed a non-uniform refusal"
         );
         ensure!(
-            observation(&governance_db.connect_url, realm).await? == claimed,
+            observation(&governance_database, realm).await? == claimed,
             "different second claim changed durable lifecycle state"
         );
     }
@@ -646,7 +653,7 @@ async fn run(api_migration: bool) -> Result<()> {
         claim_commit.event_ref
     );
     ensure!(
-        replica_observation(&subject_db.connect_url, realm).await? == before_replica,
+        replica_observation(&subject_database, realm).await? == before_replica,
         "bound Claim result installed a replica, stream anchor, or committed local Event"
     );
     ensure!(
@@ -681,23 +688,24 @@ async fn run(api_migration: bool) -> Result<()> {
     let after_claim = arkret_signatures::webvh::prepare_principal_rotation(
         &arkret_signatures::webvh::PrincipalRotationInput {
             did: &bob.actor,
-            local_id: &inception.local_id,
-            previous_entries: &[inception.log_entry, rotation.log_entry],
+            local_id,
+            previous_entries: &[inception_log_entry.clone(), rotation.log_entry],
             version_created_at: chrono::Utc::now(),
             current_root_seed: &third_root_seed,
             next_root_public_key_multibase: &fourth_root_key,
-            state: &inception.submit_body.operation["state"],
+            state: &inception_log_entry["state"],
         },
     )?;
     let rotated_again = crate::harness::expect_json(
-        group
-            .server(1)
+        subject
+            .station
             .http()
             .post(
-                group
-                    .server(1)
+                subject
+                    .station
                     .url("/_arkret/root/identity/submit-did-operation"),
             )
+            .bearer_auth(&subject.webvh_registration_bearer)
             .canonical_json(&after_claim.submit_body)?,
         reqwest::StatusCode::OK,
     )
@@ -706,11 +714,11 @@ async fn run(api_migration: bool) -> Result<()> {
         rotated_again["status"] == "accepted",
         "post-claim root rotation was not accepted: {rotated_again}"
     );
-    group.server_mut(1).restart_external_process().await?;
+    subject.station.restart_external_process().await?;
     for fault in ["missing", "signature"] {
-        let root = fault_origin_source(&subject_db.connect_url, &claim, fault).await?;
+        let root = fault_origin_source(&subject_database, &claim, fault).await?;
         let response = submit_raw(&bob, &claim).await;
-        restore_origin_source(&subject_db.connect_url, root).await?;
+        restore_origin_source(&subject_database, root).await?;
         let (status, body) = response?;
         ensure!(
             status == reqwest::StatusCode::SERVICE_UNAVAILABLE
@@ -720,8 +728,8 @@ async fn run(api_migration: bool) -> Result<()> {
             "{fault} original proof returned an unverified Claim result: {status} {body}"
         );
         ensure!(
-            observation(&governance_db.connect_url, realm).await? == claimed
-                && replica_observation(&subject_db.connect_url, realm).await? == before_replica,
+            observation(&governance_database, realm).await? == claimed
+                && replica_observation(&subject_database, realm).await? == before_replica,
             "{fault} original proof changed governance state or installed a replica"
         );
     }
@@ -738,11 +746,11 @@ async fn run(api_migration: bool) -> Result<()> {
         "exact claim replay must return duplicate with the original complete signed Commit"
     );
     ensure!(
-        observation(&governance_db.connect_url, realm).await? == claimed,
+        observation(&governance_database, realm).await? == claimed,
         "exact claim replay changed canonical/current state"
     );
     ensure!(
-        replica_observation(&subject_db.connect_url, realm).await? == before_replica,
+        replica_observation(&subject_database, realm).await? == before_replica,
         "exact Claim replay opened a member stream"
     );
     let (first, second) = tokio::try_join!(submit_raw(&bob, &claim), submit_raw(&bob, &claim))?;
@@ -760,8 +768,8 @@ async fn run(api_migration: bool) -> Result<()> {
         );
     }
     ensure!(
-        observation(&governance_db.connect_url, realm).await? == claimed
-            && replica_observation(&subject_db.connect_url, realm).await? == before_replica,
+        observation(&governance_database, realm).await? == claimed
+            && replica_observation(&subject_database, realm).await? == before_replica,
         "concurrent Claim replay changed canonical/current state or installed a replica"
     );
     let accept = bob
@@ -788,7 +796,7 @@ async fn run(api_migration: bool) -> Result<()> {
             == arkret_models_collaboration::sync_frames::demand_sync::RealmListMembership::Join,
         "accepted claimant was not listed as joined"
     );
-    let accepted_state = observation(&governance_db.connect_url, realm).await?;
+    let accepted_state = observation(&governance_database, realm).await?;
     let (status, body) = submit_raw(&bob, &claim).await?;
     let outcome: arkret_wire::AuthoritySubmitResponseBody = serde_json::from_value(body)?;
     ensure!(
@@ -800,7 +808,7 @@ async fn run(api_migration: bool) -> Result<()> {
         "post-accept Claim replay lost its original outcome"
     );
     ensure!(
-        observation(&governance_db.connect_url, realm).await? == accepted_state,
+        observation(&governance_database, realm).await? == accepted_state,
         "post-accept Claim replay changed the final lifecycle or membership"
     );
     Ok(())

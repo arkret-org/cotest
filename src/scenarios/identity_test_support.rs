@@ -439,6 +439,7 @@ pub async fn bootstrap_registered_actor(
         device_id: DeviceId::new(device_id)?,
         device_signing_key: device_key,
         root_key_seed: test_principal_root_key_seed(actor)?,
+        native_root_rotation: None,
         pcr_realm_id: bootstrap.pcr_realm_id,
         founding_authorize_event_id: bootstrap.authorize_event_id,
     };

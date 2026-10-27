@@ -1986,6 +1986,10 @@ impl ArkretServer {
                 0,
             )
             .context("restore the actual registered principal custody")?;
+        let arkret_models_identity::PrincipalRegistrationAnchor::WebvhRegistration {
+            registration_did_operation,
+            ..
+        } = &creation.principal_registration_anchor;
         let principal = ProvisionedTestPrincipal {
             did: Did::new(founded.did.clone())?,
             core_id: founded.account_id().principal_id.clone(),
@@ -1996,6 +2000,10 @@ impl ArkretServer {
                 founded.device_hpke_private_key()?,
             )),
             root_key_seed: root_material.root_seed,
+            native_root_rotation: Some(super::principal::NativeRootRotationCustody {
+                next_root_seed: zeroize::Zeroizing::new(root_material.next_root_seed),
+                registration: (**registration_did_operation).clone(),
+            }),
             pcr_realm_id: creation.pcr_genesis_unit.create().realm_id.clone(),
             founding_authorize_event_id: founding_authorization.event_id.clone(),
         };

@@ -8,15 +8,11 @@ use arkret_models_collaboration::governance::realm_join_intake::{
 use reqwest::StatusCode;
 use serde_json::{Value, json};
 
-use super::_helpers::bridge::MockCoauthIntrospectionServer;
-use super::human_device_producer_live::{
-    database, original_human_signer_fact, standard_client, station_env,
-};
-use super::identity_test_support::HARNESS_INTERNAL_AUTHORITY_SECRET;
+use super::_helpers::native_account::NativeAccountProvisioner;
+use super::agent_runtime_live::coauth_session_evidence::actual_agent_deployment;
+use super::human_device_producer_live::original_human_signer_fact;
 use super::invite_service_fanout_live::prepare_explicit_invite;
-use crate::harness::{
-    ArkretServer, CanonicalJsonBody, TestActorClient, TestServerGroup, expect_json,
-};
+use crate::harness::{ArkretServer, CanonicalJsonBody, TestActorClient, expect_json};
 
 mod locators;
 
@@ -215,52 +211,35 @@ async fn exercise(
 }
 
 pub async fn invite_addressing_api_migration() -> Result<()> {
-    let first = database("api-invite-source")?.context("invite addressing requires PostgreSQL")?;
-    let second = database("api-invite-recipient")?
-        .context("invite addressing requires a second PostgreSQL database")?;
+    let mut first = actual_agent_deployment("api-invite-source").await?;
+    let mut second = actual_agent_deployment("api-invite-recipient").await?;
     ensure!(
-        first.connect_url != second.connect_url,
+        first.station.owned_database_url() != second.station.owned_database_url(),
         "invite Stations shared a database"
     );
-    let issuer = MockCoauthIntrospectionServer::spawn_with_internal_secret(
-        HARNESS_INTERNAL_AUTHORITY_SECRET,
-    )
-    .await?;
-    let group = TestServerGroup::try_multi_external_with_node_envs(
-        "api-invite-addressing",
-        &[
-            station_env(&first.connect_url, &issuer),
-            station_env(&second.connect_url, &issuer),
-        ],
-    )
-    .await?
-    .context("invite addressing requires the real Station binary")?;
-    let source = group.server(0);
-    let receiver = group.server(1);
-    let (alice, _) = standard_client(
-        source,
-        &issuer,
-        "invite-source",
-        "ak:device:01904100-0000-7000-8000-00000000a891",
-    )
-    .await?;
-    let (local, _) = standard_client(
-        source,
-        &issuer,
-        "invite-local",
-        "ak:device:01904100-0000-7000-8000-00000000a892",
-    )
-    .await?;
-    let (foreign, _) = standard_client(
-        receiver,
-        &issuer,
-        "invite-foreign",
-        "ak:device:01904100-0000-7000-8000-00000000a893",
-    )
-    .await?;
-    locators::exercise(source, &alice).await?;
-    exercise(source, source, &alice, &local, false).await?;
-    exercise(source, receiver, &alice, &foreign, true).await?;
+    first
+        .station
+        .restart_with_federation_mesh(&[second.station.base_url().to_string()])
+        .await?;
+    second
+        .station
+        .restart_with_federation_mesh(&[first.station.base_url().to_string()])
+        .await?;
+    let issuer = NativeAccountProvisioner::new(&first);
+    let source = &first.station;
+    let receiver = &second.station;
+    let alice = &first.controller;
+    let (local, _) = issuer
+        .provision(
+            source,
+            "invite-local",
+            "ak:device:01904100-0000-7000-8000-00000000a892",
+        )
+        .await?;
+    let foreign = &second.controller;
+    locators::exercise(source, alice).await?;
+    exercise(source, source, alice, &local, false).await?;
+    exercise(source, receiver, alice, foreign, true).await?;
     println!(
         "invite addressing: real locator lifecycle, opaque retries, dispatch preconditions, first-contact proof admission and zero holder-private writes verified"
     );

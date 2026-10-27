@@ -30,8 +30,17 @@ pub struct ProvisionedTestPrincipal {
     pub device_hpke_private_key: Option<zeroize::Zeroizing<Vec<u8>>>,
     /// Registration-time WebVH root (control) key seed.
     pub root_key_seed: [u8; 32],
+    /// Actual registration original and client-held pre-rotation key. Absent
+    /// on legacy metadata fixtures, which cannot prove native root rotation.
+    pub native_root_rotation: Option<NativeRootRotationCustody>,
     /// Event-derived Principal Control Realm id.
     pub pcr_realm_id: RealmId,
     /// Accepted founding `ak.device.authorize` Event id.
     pub founding_authorize_event_id: EventId,
+}
+
+#[derive(Clone)]
+pub struct NativeRootRotationCustody {
+    pub next_root_seed: zeroize::Zeroizing<[u8; 32]>,
+    pub registration: arkret_models_identity::identity::DidOperationSubmitRequestBody,
 }

@@ -58,6 +58,10 @@ use serde_json::{Value, json};
 use crate::harness::{ArkretServer, TestActorClient, TestServerGroup, expect_json};
 use crate::scenarios::_helpers::bridge::MockCoauthIntrospectionServer;
 use crate::scenarios::_helpers::live_gate::skip_or_fail;
+use crate::scenarios::_helpers::native_account::NativeAccountProvisioner;
+use crate::scenarios::agent_runtime_live::coauth_session_evidence::{
+    ActualAgentDeployment, actual_agent_deployment,
+};
 use crate::scenarios::delivery_media::blob_upload_form;
 use crate::scenarios::human_device_producer_live::{
     create_realm_with_join_rule, database, membership_payload, standard_client, station_env,
@@ -92,6 +96,20 @@ impl Member {
         device: &str,
     ) -> Result<Self> {
         let (client, account) = standard_client(station, coauth, label, device).await?;
+        Self::from_client(client, account)
+    }
+
+    pub(crate) async fn provision_native(
+        station: &ArkretServer,
+        provisioner: &NativeAccountProvisioner,
+        label: &str,
+        device: &str,
+    ) -> Result<Self> {
+        let (client, account) = provisioner.provision(station, label, device).await?;
+        Self::from_client(client, account)
+    }
+
+    fn from_client(client: TestActorClient, account: AccountId) -> Result<Self> {
         let principal = client
             .principal
             .clone()
@@ -192,6 +210,34 @@ pub async fn run_expired_claim_recovery_live() -> Result<()> {
     run_lifecycle(None, false, None, None, true).await
 }
 
+// The API migration owns a real issuer; older observers retain their existing fixture.
+enum LifecycleStations {
+    Legacy(TestServerGroup),
+    Native(Box<ActualAgentDeployment>),
+}
+
+impl LifecycleStations {
+    fn server(&self, index: usize) -> &ArkretServer {
+        match self {
+            Self::Legacy(group) => group.server(index),
+            Self::Native(deployment) => {
+                assert_eq!(index, 0);
+                &deployment.station
+            }
+        }
+    }
+
+    fn server_mut(&mut self, index: usize) -> &mut ArkretServer {
+        match self {
+            Self::Legacy(group) => group.server_mut(index),
+            Self::Native(deployment) => {
+                assert_eq!(index, 0);
+                &mut deployment.station
+            }
+        }
+    }
+}
+
 async fn run_lifecycle(
     observer: Option<&dyn MlsClientObserver>,
     observe_receipt: bool,
@@ -199,42 +245,93 @@ async fn run_lifecycle(
     api_case: Option<super::api_mls_migrations::MlsApiCase>,
     recovery_matrix: bool,
 ) -> Result<()> {
-    let Some(database) = database(GROUP)? else {
-        if observer.is_some() || genesis_observer.is_some() || api_case.is_some() || recovery_matrix
-        {
-            bail!("live MLS evidence requires an isolated PostgreSQL database");
-        }
-        return Ok(());
-    };
-    let coauth = MockCoauthIntrospectionServer::spawn_with_internal_secret(
-        HARNESS_INTERNAL_AUTHORITY_SECRET,
-    )
-    .await?;
-    let mut environment = station_env(&database.connect_url, &coauth);
-    if let Some(ttl) = observer.and_then(|observer| observer.media_token_ttl_seconds()) {
-        environment.push(("COLAND_MEDIA_TOKEN_TTL_SECONDS".into(), ttl.to_string()));
-    }
     let invite_probe = observer
         .is_some_and(|observer| observer.verify_invite_delivery_race())
         .then(|| std::env::temp_dir().join(format!("cotest-invite-{}.pause", fresh_uuid_v7())));
-    if let Some(path) = &invite_probe {
-        environment.push((
-            "COLAND_CONFORMANCE_INVITE_DELIVERY_PAUSE_FILE".into(),
-            path.to_string_lossy().into_owned(),
-        ));
-    }
-    let Some(mut group) =
-        TestServerGroup::try_multi_external_with_node_envs(GROUP, &[environment]).await?
-    else {
-        if observer.is_some() || genesis_observer.is_some() || api_case.is_some() || recovery_matrix
-        {
-            bail!("live MLS evidence requires a prebuilt real Coland binary");
+    // Stop the Station before releasing its issuer and database leases, including
+    // on early assertion failure (bindings are dropped in reverse order).
+    let (_database, coauth, native, mut group) = if api_case.is_some() {
+        use super::api_mls_migrations::MlsApiCase;
+        let label = match api_case.context("native MLS case absent")? {
+            MlsApiCase::AuditedReport => "api-mls-audited-report",
+            MlsApiCase::MarkerPrivacy => "api-mls-marker-privacy",
+            MlsApiCase::CircleMarkers => "api-mls-circle-markers",
+            MlsApiCase::Discussion => "api-mls-discussion",
+            MlsApiCase::ReceiptSignals => "api-mls-receipt-signals",
+        };
+        let deployment = actual_agent_deployment(label).await?;
+        let provisioner = NativeAccountProvisioner::new(&deployment);
+        (
+            None,
+            None,
+            Some(provisioner),
+            LifecycleStations::Native(Box::new(deployment)),
+        )
+    } else {
+        let Some(database) = database(GROUP)? else {
+            if observer.is_some()
+                || genesis_observer.is_some()
+                || api_case.is_some()
+                || recovery_matrix
+            {
+                bail!("live MLS evidence requires an isolated PostgreSQL database");
+            }
+            return Ok(());
+        };
+        let coauth = MockCoauthIntrospectionServer::spawn_with_internal_secret(
+            HARNESS_INTERNAL_AUTHORITY_SECRET,
+        )
+        .await?;
+        let mut environment = station_env(&database.connect_url, &coauth);
+        if let Some(ttl) = observer.and_then(|observer| observer.media_token_ttl_seconds()) {
+            environment.push(("COLAND_MEDIA_TOKEN_TTL_SECONDS".into(), ttl.to_string()));
         }
-        return skip_or_fail(GROUP, "prebuilt Coland unavailable");
+        if let Some(path) = &invite_probe {
+            environment.push((
+                "COLAND_CONFORMANCE_INVITE_DELIVERY_PAUSE_FILE".into(),
+                path.to_string_lossy().into_owned(),
+            ));
+        }
+        let Some(group) =
+            TestServerGroup::try_multi_external_with_node_envs(GROUP, &[environment]).await?
+        else {
+            if observer.is_some()
+                || genesis_observer.is_some()
+                || api_case.is_some()
+                || recovery_matrix
+            {
+                bail!("live MLS evidence requires a prebuilt real Coland binary");
+            }
+            return skip_or_fail(GROUP, "prebuilt Coland unavailable");
+        };
+        (
+            Some(database),
+            Some(coauth),
+            None,
+            LifecycleStations::Legacy(group),
+        )
     };
+    let database_url = group
+        .server(0)
+        .configured_database_url()
+        .context("MLS lifecycle requires its owned PostgreSQL database")?
+        .to_owned();
     let station = group.server(0);
-    let alice = Member::provision(station, &coauth, "mls-alice", ALICE_DEVICE).await?;
-    let bob = Member::provision(station, &coauth, "mls-bob", BOB_DEVICE).await?;
+    let (alice, bob) = if let Some(native) = &native {
+        let LifecycleStations::Native(deployment) = &group else {
+            bail!("native MLS provisioner requires its owned deployment");
+        };
+        (
+            Member::from_client(deployment.controller.clone(), deployment.account.clone())?,
+            Member::provision_native(station, native, "mls-bob", BOB_DEVICE).await?,
+        )
+    } else {
+        let coauth = coauth.as_ref().context("legacy issuer absent")?;
+        (
+            Member::provision(station, coauth, "mls-alice", ALICE_DEVICE).await?,
+            Member::provision(station, coauth, "mls-bob", BOB_DEVICE).await?,
+        )
+    };
     let realm_id = RealmId::new(
         create_realm_with_join_rule(&alice.client, "MLS lifecycle", "public", &[station]).await?,
     )?;
@@ -266,8 +363,7 @@ async fn run_lifecycle(
         bob.method.as_str(),
     )?;
     let valid_upload =
-        assert_closed_upload_boundary(&bob.client, &valid_upload, &bob.key, &database.connect_url)
-            .await?;
+        assert_closed_upload_boundary(&bob.client, &valid_upload, &bob.key, &database_url).await?;
     for (label, identity) in [
         (
             "wrong_leaf_station",
@@ -289,7 +385,7 @@ async fn run_lifecycle(
             )?,
         ),
     ] {
-        let before = upload_durable_cut(&database.connect_url).await?;
+        let before = upload_durable_cut(&database_url).await?;
         let mut unsigned = valid_upload.unsigned();
         unsigned.keypackages = vec![
             mls_key_package_record_upload_entry(&identity.key_package_record()?)
@@ -319,7 +415,7 @@ async fn run_lifecycle(
             "{label} was accepted: {response:?}"
         );
         ensure!(
-            upload_durable_cut(&database.connect_url).await? == before,
+            upload_durable_cut(&database_url).await? == before,
             "{label} wrote durable state"
         );
     }
@@ -543,19 +639,23 @@ async fn run_lifecycle(
         )
         .await?;
     if let Some(probe) = genesis_observer {
-        probe
-            .before(&alice, &mut genesis, &database.connect_url)
-            .await?;
+        probe.before(&alice, &mut genesis, &database_url).await?;
     }
-    submit_and_expect_commit(&alice.client, &alice.account, ALICE_DEVICE, &genesis).await?;
+    submit_and_expect_commit(
+        &alice.client,
+        &alice.account,
+        alice.device.as_str(),
+        &genesis,
+    )
+    .await?;
     if let Some(probe) = genesis_observer {
-        probe.after(&alice, &genesis, &database.connect_url).await?;
+        probe.after(&alice, &genesis, &database_url).await?;
     }
     crate::scenarios::message_mls_cross_station_live::install_bindings(&mut alice_group, &[&alice])
         .await?;
 
     // Plaintext into the activated scope is refused by the shared send gate.
-    let before_refusal = activation_durable_cut(&database.connect_url, &realm_id).await?;
+    let before_refusal = activation_durable_cut(&database_url, &realm_id).await?;
     let plaintext = alice
         .client
         .author_event(
@@ -576,17 +676,12 @@ async fn run_lifecycle(
         refused
     );
     ensure!(
-        activation_durable_cut(&database.connect_url, &realm_id).await? == before_refusal,
+        activation_durable_cut(&database_url, &realm_id).await? == before_refusal,
         "plaintext after Realm Genesis changed accepted durable state"
     );
-    assert_second_genesis_refused(&alice, &genesis, &database.connect_url).await?;
-    verify_circle_activation_independence(
-        &alice,
-        &realm_id,
-        &database.connect_url,
-        genesis_observer,
-    )
-    .await?;
+    assert_second_genesis_refused(&alice, &genesis, &database_url).await?;
+    verify_circle_activation_independence(&alice, &realm_id, &database_url, genesis_observer)
+        .await?;
 
     // Add Bob: one inline Add Commit carrying the Welcome that names the claim.
     let add_binding =
@@ -800,7 +895,9 @@ async fn run_lifecycle(
             &alice,
             &bob,
             station,
-            &coauth,
+            native
+                .as_ref()
+                .context("API migration requires the actual issuer")?,
             &realm_id,
             &strand_id,
             &commit_event.event_id,
@@ -885,11 +982,10 @@ async fn run_lifecycle(
             group_id.as_str(),
             &first_request,
             &first_bytes,
-            &database.connect_url,
+            &database_url,
         )
         .await?;
     }
-    drop(coauth);
     Ok(())
 }
 
@@ -1027,7 +1123,7 @@ pub(crate) async fn assert_closed_upload_boundary(
 
 #[allow(clippy::too_many_arguments)]
 async fn expired_claim_recovery_matrix(
-    group: &mut TestServerGroup,
+    group: &mut LifecycleStations,
     requester: &Member,
     target: &Member,
     realm: &RealmId,

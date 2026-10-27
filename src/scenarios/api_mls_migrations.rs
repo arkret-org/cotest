@@ -6,7 +6,7 @@ use anyhow::{Context, Result, ensure};
 use arkret::{ArkretMlsGroup, CommitStreamRef, EventId, RealmId, ScopeRef, StreamScanResponseBody};
 use serde_json::json;
 
-use super::_helpers::bridge::MockCoauthIntrospectionServer;
+use super::_helpers::native_account::NativeAccountProvisioner;
 use super::mls_lifecycle_live::Member;
 use crate::harness::{ArkretServer, TestActorClient};
 
@@ -26,7 +26,7 @@ pub(super) struct MlsApiContext<'a> {
     source: &'a Member,
     holder: &'a Member,
     station: &'a ArkretServer,
-    issuer: &'a MockCoauthIntrospectionServer,
+    issuer: &'a NativeAccountProvisioner,
     realm: &'a RealmId,
     strand: &'a str,
     state: &'a EventId,
@@ -41,7 +41,7 @@ pub(super) async fn exercise(
     source: &Member,
     holder: &Member,
     station: &ArkretServer,
-    issuer: &MockCoauthIntrospectionServer,
+    issuer: &NativeAccountProvisioner,
     realm: &RealmId,
     strand: &str,
     state: &EventId,

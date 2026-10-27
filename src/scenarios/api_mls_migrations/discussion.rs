@@ -206,7 +206,7 @@ pub(super) async fn run(ctx: &mut MlsApiContext<'_>) -> Result<()> {
             && relation_event.payload["relation"]["to_ref"] == public_strand,
         "promotion changed its confidential relation endpoints"
     );
-    let outsider = Member::provision(
+    let outsider = Member::provision_native(
         ctx.station,
         ctx.issuer,
         "discussion-outsider",
@@ -479,7 +479,7 @@ pub(super) async fn markers(ctx: &MlsApiContext<'_>) -> Result<()> {
                 .any(|m| m.read_scope == circle_scope && m.position == private_position),
         "Circle and Realm private markers did not remain independent"
     );
-    let outsider = Member::provision(
+    let outsider = Member::provision_native(
         ctx.station,
         ctx.issuer,
         "circle-marker-outsider",

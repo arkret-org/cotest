@@ -4,9 +4,7 @@ use reqwest::StatusCode;
 use serde_json::json;
 
 use crate::harness::expect_response;
-use crate::scenarios::identity_test_support::{
-    actor_did_for_service_did, spawn_with_harness_account_authority,
-};
+use crate::scenarios::agent_runtime_live::coauth_session_evidence::actual_agent_deployment;
 
 const VERIFIER: &str = "ak:did_core:web:verifier.example";
 
@@ -26,11 +24,9 @@ fn create_payload(token_byte: char) -> serde_json::Value {
 }
 
 pub async fn third_party_invite_create_requires_current_allowlist() -> Result<()> {
-    let server = spawn_with_harness_account_authority("third-party-invite-create", &[]).await?;
-    let alice_did = actor_did_for_service_did(server.service_did(), "third-party-create-alice")?;
-    let alice = server
-        .standard_client(&alice_did, "ak:device:01904100-0000-7000-8000-00000000c621")
-        .await?;
+    let deployment = actual_agent_deployment("third-party-invite-create").await?;
+    let server = &deployment.station;
+    let alice = &deployment.controller;
 
     let denied_realm = alice.create_realm("3PID deny-all").await?;
     let denied_event = alice

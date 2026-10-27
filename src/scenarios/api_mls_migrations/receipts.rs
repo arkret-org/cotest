@@ -440,7 +440,7 @@ pub(super) async fn run(ctx: &mut MlsApiContext<'_>) -> Result<()> {
         "capability_denied",
     )
     .await?;
-    let outsider = Member::provision(
+    let outsider = Member::provision_native(
         ctx.station,
         ctx.issuer,
         "receipt-outsider",
