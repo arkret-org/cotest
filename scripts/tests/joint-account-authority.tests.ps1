@@ -2,6 +2,7 @@ $ErrorActionPreference = "Stop"
 Set-StrictMode -Version Latest
 
 $runnerPath = Join-Path $PSScriptRoot "../run-joint-e2e.ps1"
+. (Join-Path $PSScriptRoot "../lib/process-ownership.ps1")
 $tokens = $null
 $parseErrors = $null
 $ast = [System.Management.Automation.Language.Parser]::ParseFile(
@@ -14,7 +15,7 @@ if ($ast.Extent.Text -match 'Get-DescribedServiceId -BaseUrl \$CoauthBaseUrl') {
 $requiredFunctions = @(
     "Quote-PsLiteral", "Write-DotEnvFile", "Get-ContainerHostGatewayIpv4", "Convert-ToContainerReachableUrl",
     "New-StationInternalChannelBindings", "Build-ColandCommand",
-    "Build-ColandDockerEnvironment", "Test-JointLoopbackUrl", "Wait-HttpReady", "Stop-ProcessTree", "Resolve-ManagedCoauthEmailMockRequirement"
+    "Build-ColandDockerEnvironment", "Test-JointLoopbackUrl", "Wait-HttpReady", "Resolve-ManagedCoauthEmailMockRequirement"
 )
 foreach ($name in $requiredFunctions) {
     $definition = $ast.FindAll({
@@ -30,6 +31,8 @@ $testDirectory = Join-Path ([System.IO.Path]::GetTempPath()) ("cotest-authority-
 $configPath = Join-Path $testDirectory "coland.env"
 $CoauthBaseUrl = "https://coauth.joint.example"
 $StartCoauth = $true
+$StartNativeArkretPublicReply = $false
+$EnableThirdPartyInviteProvider = $false
 $CoauthCommand = $null
 $script:UseManagedCoauthAssertionKey = $true
 $CoauthServiceId = $null
@@ -61,26 +64,31 @@ try {
     $childPidPath = Join-Path $testDirectory "cleanup-child.pid"
     $childCode = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes("Start-Sleep -Seconds 60"))
     $shellPath = (Get-Process -Id $PID).Path
+    $hiddenWindowArgument = if ($IsWindows) { '-WindowStyle Hidden' } else { '' }
     $parentCode = @"
-`$child = Start-Process -FilePath $(Quote-PsLiteral $shellPath) -ArgumentList @('-NoProfile', '-EncodedCommand', '$childCode') -PassThru
+`$child = Start-Process -FilePath $(Quote-PsLiteral $shellPath) -ArgumentList @('-NoProfile', '-EncodedCommand', '$childCode') $hiddenWindowArgument -PassThru
 [IO.File]::WriteAllText($(Quote-PsLiteral $childPidPath), `$child.Id.ToString())
 Start-Sleep -Seconds 60
 "@
     $parentCode = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($parentCode))
-    $parent = Start-Process -FilePath $shellPath -ArgumentList @("-NoProfile", "-EncodedCommand", $parentCode) -PassThru
+    $parentWindow = if ($IsWindows) { @{ WindowStyle = 'Hidden' } } else { @{} }
+    $parent = Start-Process -FilePath $shellPath -ArgumentList @("-NoProfile", "-EncodedCommand", $parentCode) @parentWindow -PassThru
+    $parentIdentity = Get-CotestProcessIdentity -Process $parent
     $childId = $null
+    $childIdentity = $null
     try {
         $deadline = (Get-Date).AddSeconds(10)
         while (-not (Test-Path $childPidPath) -and (Get-Date) -lt $deadline) { Start-Sleep -Milliseconds 100 }
         if (-not (Test-Path $childPidPath)) { throw "Cleanup fixture did not start its child service" }
         $childId = [int](Get-Content -Raw $childPidPath)
-        Stop-ProcessTree -ProcessId $parent.Id
+        $childIdentity = Get-CotestProcessIdentity -Process (Get-Process -Id $childId)
+        Stop-CotestOwnedProcessTree -RootIdentity $parentIdentity
         foreach ($id in @($parent.Id, $childId)) {
             if (Get-Process -Id $id -ErrorAction SilentlyContinue) { throw "Failed-run cleanup left process $id alive" }
         }
     } finally {
-        Stop-ProcessTree -ProcessId $parent.Id
-        if ($childId) { Stop-Process -Id $childId -Force -ErrorAction SilentlyContinue }
+        Stop-CotestOwnedProcessTree -RootIdentity $parentIdentity
+        if ($childIdentity) { Stop-CotestOwnedProcessTree -RootIdentity $childIdentity }
         Remove-Item -LiteralPath $childPidPath -ErrorAction SilentlyContinue
     }
     foreach ($url in @("http://127.0.0.1:1234/health", "http://[::1]/", "https://server1.localhost/", "https://server1.local.host/")) {
@@ -181,17 +189,32 @@ Start-Sleep -Seconds 60
         $bootstrapConfig -notmatch 'COLAND_INTERNAL_AUTHORITY_SHARED_SECRET="test-introspection-server1"') {
         throw "Process identity bootstrap must emit the minimal internal authority peer binding"
     }
-    # Filling the managed command must preserve the Account Authority origin and
-    # its bearer-protected operation URLs without restoring a runner-side key pin.
+    if ($bootstrapConfig -match 'COLAND_LOCAL_ACCOUNT_AUTHORITY_CONFIG=|COLAND_SESSION_GRANT_INTROSPECTION_URL=|COLAND_AUTH_SESSION_LOGOUT_URL=') {
+        throw "Identity bootstrap must not open an unbound issuer or emit retired RPC settings"
+    }
+    $issuerConfig = Join-Path $testDirectory "coauth.yaml"
+    [IO.File]::WriteAllText($issuerConfig, "database:`n  uri: postgresql://localhost/actual_issuer`n")
+    $processArguments.AccountAuthorityConfigPath = $issuerConfig
+    # Enable the same migrated issuer only after the Station identity bootstrap.
     $CoauthCommand = "generated-managed-coauth-command"
     Build-ColandCommand @processArguments | Out-Null
     $generatedConfig = Get-Content -LiteralPath $configPath -Raw
+    $issuerLines = @($generatedConfig -split '\r?\n' | Where-Object { $_.StartsWith('COLAND_LOCAL_ACCOUNT_AUTHORITY_CONFIG=') })
+    if ($issuerLines.Count -ne 1) { throw "Managed Coland must receive one explicit issuer configuration" }
+    $decodedIssuerPath = $issuerLines[0].Split('=', 2)[1] | ConvertFrom-Json
     if ($generatedConfig -notmatch 'COLAND_ACCOUNT_AUTHORITY_URL="https://coauth.joint.example"' -or
-        $generatedConfig -notmatch 'COLAND_SESSION_GRANT_INTROSPECTION_URL="https://coauth.joint.example/_coauth/internal/session-grants/introspect"' -or
-        $generatedConfig -notmatch 'COLAND_AUTH_SESSION_LOGOUT_URL="https://coauth.joint.example/_coauth/internal/auth-sessions/logout"' -or
+        $decodedIssuerPath -ne (Resolve-Path $issuerConfig).Path -or
+        $generatedConfig -match 'COLAND_SESSION_GRANT_INTROSPECTION_URL=|COLAND_AUTH_SESSION_LOGOUT_URL=' -or
         $generatedConfig -match 'COLAND_ACCOUNT_AUTHORITY_PUBLIC_KEY_MULTIBASE=') {
-        throw "Generated CoauthCommand must preserve the bound Account Authority origin and operation URLs without a key pin"
+        throw "Managed Coland must open its exact issuer configuration without retired RPC settings or a key pin"
     }
+    $missingIssuerRejected = $false
+    try {
+        $missingArguments = $processArguments.Clone()
+        $missingArguments.AccountAuthorityConfigPath = Join-Path $testDirectory "missing-issuer.yaml"
+        Build-ColandCommand @missingArguments | Out-Null
+    } catch { $missingIssuerRejected = $_.Exception.Message -like 'Local Account Authority configuration does not exist:*' }
+    if (-not $missingIssuerRejected) { throw "Missing local issuer configuration must fail closed" }
     $script:UseManagedCoauthAssertionKey = $false
     Build-ColandCommand @processArguments | Out-Null
     $callerOwnedConfig = Get-Content -LiteralPath $configPath -Raw
@@ -215,9 +238,9 @@ Start-Sleep -Seconds 60
     $loopbackDocker = Build-ColandDockerEnvironment @dockerArguments -AccountAuthorityBaseUrl $loopbackAuthority
     $containerAuthority = "http://192.0.2.1:4455"
     if ($loopbackDocker.COLAND_ACCOUNT_AUTHORITY_URL -ne $containerAuthority -or
-        $loopbackDocker.COLAND_SESSION_GRANT_INTROSPECTION_URL -ne "$containerAuthority/_coauth/internal/session-grants/introspect" -or
-        $loopbackDocker.COLAND_AUTH_SESSION_LOGOUT_URL -ne "$containerAuthority/_coauth/internal/auth-sessions/logout") {
-        throw "Docker internal bearer endpoints must share the container-reachable Account Authority origin"
+        $loopbackDocker.Contains("COLAND_SESSION_GRANT_INTROSPECTION_URL") -or
+        $loopbackDocker.Contains("COLAND_AUTH_SESSION_LOGOUT_URL")) {
+        throw "Docker bootstrap must retain the reachable public origin without retired RPC settings"
     }
 
     $CoauthServiceId = "ak:did_core:web:station.joint.example"
@@ -263,5 +286,7 @@ Start-Sleep -Seconds 60
     Write-Output "Joint Account Authority config and early-exit assertions passed."
 } finally {
     if (Test-Path -LiteralPath $configPath) { Remove-Item -LiteralPath $configPath }
+    $issuerPath = Join-Path $testDirectory "coauth.yaml"
+    if (Test-Path -LiteralPath $issuerPath) { Remove-Item -LiteralPath $issuerPath }
     Remove-Item -LiteralPath $testDirectory
 }

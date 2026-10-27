@@ -4784,13 +4784,8 @@ try {
         if ($AccountAuthorityBaseUrl) {
             $coauthPublic = $AccountAuthorityBaseUrl.TrimEnd("/")
             $coauthContainer = (Convert-ToContainerReachableUrl $coauthPublic).TrimEnd("/")
-            # The bearer-protected targets are bound to the canonical Account
-            # Authority origin at Coland startup. In Docker the loopback host
-            # must therefore be rewritten for all three values, not only the
-            # operation URLs, or the origin check correctly fails closed.
+            # The identity bootstrap needs the container-reachable public origin.
             $map.COLAND_ACCOUNT_AUTHORITY_URL = $coauthContainer
-            $map.COLAND_SESSION_GRANT_INTROSPECTION_URL = "$coauthContainer/_coauth/internal/session-grants/introspect"
-            $map.COLAND_AUTH_SESSION_LOGOUT_URL = "$coauthContainer/_coauth/internal/auth-sessions/logout"
             $map.COLAND_INTERNAL_AUTHORITY_SHARED_SECRET = $InternalAuthoritySharedSecret
             $map.COLAND_ACCOUNT_AUTHORITY_TRUST_DOMAIN = "ak:trust_domain:local.host"
             $map.COLAND_OAUTH_CLIENT_ID = $CoauthOAuthClientId
@@ -4808,6 +4803,7 @@ try {
     function Build-ColandCommand {
         param(
             [string]$AccountAuthorityBaseUrl = $CoauthBaseUrl,
+            [string]$AccountAuthorityConfigPath,
             [Parameter(Mandatory = $true)][string]$BinaryPath,
             [Parameter(Mandatory = $true)][string]$ConfigPath,
             [Parameter(Mandatory = $true)][string]$BaseUrl,
@@ -4857,11 +4853,16 @@ try {
         if ($AccountAuthorityBaseUrl) {
             $coauthTrimmed = $AccountAuthorityBaseUrl.TrimEnd("/")
             $values.COLAND_ACCOUNT_AUTHORITY_URL = $coauthTrimmed
-            $values.COLAND_SESSION_GRANT_INTROSPECTION_URL = "$coauthTrimmed/_coauth/internal/session-grants/introspect"
-            $values.COLAND_AUTH_SESSION_LOGOUT_URL = "$coauthTrimmed/_coauth/internal/auth-sessions/logout"
             $values.COLAND_INTERNAL_AUTHORITY_SHARED_SECRET = $InternalAuthoritySharedSecret
             $values.COLAND_ACCOUNT_AUTHORITY_TRUST_DOMAIN = "ak:trust_domain:local.host"
             $values.COLAND_OAUTH_CLIENT_ID = $CoauthOAuthClientId
+        }
+        if ($AccountAuthorityConfigPath) {
+            if (-not $AccountAuthorityBaseUrl) { throw "Local Account Authority configuration requires its public endpoint" }
+            if (-not (Test-Path -LiteralPath $AccountAuthorityConfigPath -PathType Leaf)) {
+                throw "Local Account Authority configuration does not exist: $AccountAuthorityConfigPath"
+            }
+            $values.COLAND_LOCAL_ACCOUNT_AUTHORITY_CONFIG = (Resolve-Path -LiteralPath $AccountAuthorityConfigPath).Path
         }
         if ($FederationPeers) {
             $values.COLAND_FEDERATION_PEERS = $FederationPeers
@@ -5166,12 +5167,15 @@ try {
             if ($StartCoauth) {
                 if ($plan.BaseUrl -eq $ColandBaseUrl) {
                     $configArguments.AccountAuthorityBaseUrl = $CoauthBaseUrl
+                    if ($plan.Service.Kind -ne "docker") { $configArguments.AccountAuthorityConfigPath = $coauthConfigPath }
                 } elseif ($plan.BaseUrl -eq $colandServer2BaseUrl) {
                     $configArguments.AccountAuthorityBaseUrl = $coauthServer2BaseUrl
+                    if ($plan.Service.Kind -ne "docker") { $configArguments.AccountAuthorityConfigPath = $coauthServer2ConfigPath }
                 } else {
                     $matchedServer = $additionalServers | Where-Object { $_.ColandBaseUrl -eq $plan.BaseUrl } | Select-Object -First 1
                     if (-not $matchedServer) { throw "No Account Authority mapping exists for $($plan.Name)" }
                     $configArguments.AccountAuthorityBaseUrl = $matchedServer.CoauthBaseUrl
+                    if ($plan.Service.Kind -ne "docker") { $configArguments.AccountAuthorityConfigPath = $matchedServer.CoauthConfigPath }
                 }
             }
             if ($plan.Service.Kind -eq "docker") {
