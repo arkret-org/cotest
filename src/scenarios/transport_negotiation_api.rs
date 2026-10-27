@@ -8,12 +8,9 @@ use arkret_signatures::http_signature::{
 use reqwest::{Request, StatusCode};
 use serde_json::json;
 
-use super::_helpers::bridge::MockCoauthIntrospectionServer;
-use super::human_device_producer_live::{
-    database, standard_client, station_env, submit_and_expect_commit,
-};
-use super::identity_test_support::HARNESS_INTERNAL_AUTHORITY_SECRET;
-use crate::harness::{ArkretServer, TestServerGroup};
+use super::agent_runtime_live::coauth_session_evidence::actual_agent_deployment;
+use super::human_device_producer_live::submit_and_expect_commit;
+use crate::harness::ArkretServer;
 
 fn resign(
     request: &mut Request,
@@ -58,29 +55,23 @@ fn resign(
 }
 
 pub async fn transport_negotiation_api_migration() -> Result<()> {
-    let first =
-        database("api-transport-source")?.context("transport migration requires PostgreSQL")?;
-    let second = database("api-transport-recipient")?
-        .context("transport migration requires a second isolated PostgreSQL database")?;
+    let mut source_deployment = actual_agent_deployment("api-transport-source").await?;
+    let mut recipient_deployment = actual_agent_deployment("api-transport-recipient").await?;
     ensure!(
-        first.connect_url != second.connect_url,
+        source_deployment.station.owned_database_url()
+            != recipient_deployment.station.owned_database_url(),
         "transport Stations shared a database"
     );
-    let issuer = MockCoauthIntrospectionServer::spawn_with_internal_secret(
-        HARNESS_INTERNAL_AUTHORITY_SECRET,
-    )
-    .await?;
-    let group = TestServerGroup::try_multi_external_with_node_envs(
-        "api-transport",
-        &[
-            station_env(&first.connect_url, &issuer),
-            station_env(&second.connect_url, &issuer),
-        ],
-    )
-    .await?
-    .context("transport migration requires the prebuilt real Station")?;
-    let source = group.server(0);
-    let recipient = group.server(1);
+    source_deployment
+        .station
+        .restart_with_federation_mesh(&[recipient_deployment.station.url("")])
+        .await?;
+    recipient_deployment
+        .station
+        .restart_with_federation_mesh(&[source_deployment.station.url("")])
+        .await?;
+    let source = &source_deployment.station;
+    let recipient = &recipient_deployment.station;
     for station in [source, recipient] {
         let describe: arkret_models_discovery::ServiceDescribe = station
             .http()
@@ -111,13 +102,8 @@ pub async fn transport_negotiation_api_migration() -> Result<()> {
         unsigned.status().is_client_error() && unsigned.status() != StatusCode::NOT_FOUND,
         "peer submit route did not reject unsigned input"
     );
-    let (alice, account) = standard_client(
-        source,
-        &issuer,
-        "api-transport-owner",
-        "ak:device:01904100-0000-7000-8000-00000000a880",
-    )
-    .await?;
+    let alice = &source_deployment.controller;
+    let account = &source_deployment.account;
     let realm = alice.create_realm("transport accepted source").await?;
     let strand = alice.default_strand_id(&realm)?;
     let event = alice
@@ -127,8 +113,8 @@ pub async fn transport_negotiation_api_migration() -> Result<()> {
             crate::harness::message_create_text_payload(&strand, "transport source")?,
         )
         .await?;
-    let commit = submit_and_expect_commit(&alice, &account, &alice.device_id, &event).await?;
-    let body = super::fanout_route_miss_live::replication_body(&alice, &event, &commit).await?;
+    let commit = submit_and_expect_commit(alice, account, &alice.device_id, &event).await?;
+    let body = super::fanout_route_miss_live::replication_body(alice, &event, &commit).await?;
     let mut errors = Vec::new();
     for (expired, wrong_key, code) in [
         (true, false, "signature_window_invalid"),

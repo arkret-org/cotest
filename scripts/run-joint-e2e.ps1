@@ -2194,6 +2194,20 @@ function New-StationInternalChannelBindings {
     }
 }
 
+function Resolve-NativeApiDatabaseAllocators {
+    param([string]$AdministrativeUrl, [string]$ExplicitColandUrl)
+    $values = [ordered]@{}
+    # Rust's allocator only uses these connections to CREATE separate owned
+    # databases; neither URL becomes a spawned service's application store.
+    if (-not [string]::IsNullOrWhiteSpace($AdministrativeUrl)) {
+        $values.COTEST_COLAND_DATABASE_URL = $AdministrativeUrl
+        $values.COTEST_COAUTH_DATABASE_URL = $AdministrativeUrl
+    } elseif (-not [string]::IsNullOrWhiteSpace($ExplicitColandUrl)) {
+        $values.COTEST_COLAND_DATABASE_URL = $ExplicitColandUrl
+    }
+    return $values
+}
+
 function New-CoauthJointConfig {
     param(
         [Parameter(Mandatory = $true)][string]$CoauthBinary,
@@ -5749,7 +5763,11 @@ try {
     if ($runNativeApiMigrations) {
         Write-Host "=== Migrated native API coverage (canonical deployment and isolated Stations) ==="
         $env:COLAND_BIN = Resolve-ColandBinary -ExplicitPath $ColandBin -WorkspaceRoot $workspaceRoot
-        if ($ColandDatabaseUrl) { $env:COTEST_COLAND_DATABASE_URL = $ColandDatabaseUrl }
+        $nativeDatabaseAllocators = Resolve-NativeApiDatabaseAllocators `
+            -AdministrativeUrl $PostgresAdminUrl -ExplicitColandUrl $ColandDatabaseUrl
+        foreach ($binding in $nativeDatabaseAllocators.GetEnumerator()) {
+            Set-Item -Path "Env:$($binding.Key)" -Value $binding.Value
+        }
         $apiMigrationCommand = "python {0} --output-dir {1}" -f `
             (Quote-PsLiteral (Join-Path $repoRoot "scripts/run-api-only-native-migrations.py")), `
             (Quote-PsLiteral (Join-Path $jointDir "native-api-migrations"))
