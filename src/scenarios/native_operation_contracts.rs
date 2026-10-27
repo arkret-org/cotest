@@ -25,13 +25,6 @@ pub async fn peer_keypackage_claims() -> Result<()> {
     crate::harness::heap_future(peer_keypackage_claims::run).await
 }
 
-mod third_party_invites;
-
-pub async fn third_party_invites() -> Result<()> {
-    validate_registered_schema_bindings()?;
-    crate::harness::heap_future(third_party_invites::run).await
-}
-
 mod blob_presign;
 mod consent;
 mod device_pairing;

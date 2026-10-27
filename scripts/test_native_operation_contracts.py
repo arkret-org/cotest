@@ -133,33 +133,42 @@ class NativeOperationContractGates(unittest.TestCase):
 
 
     def test_authenticated_private_transport_is_allowed_without_native_credit(self):
-        manifest = "coland/crates/server/Cargo.toml"
-        adapter = "coland/crates/http/src/config.rs"
+        from check_service_isolation import source_errors
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
-            for relative, content in {
-                manifest: '[package]\nname="coland"\n[dependencies]\nreqwest="0.12"\n',
-                adapter: 'const INTERNAL_GRANT_PATH: &str = "/_coauth/internal/session-grants/introspect";',
+            sources = {}
+            for name, content in {
+                "coland/crates/server/Cargo.toml": '[package]\nname="coland"\n[dependencies]\nreqwest="0.12"\n',
+                "coauth/crates/backend/Cargo.toml": '[package]\nname="coauth-backend"\n[dependencies]\nreqwest="0.12"\n',
+                "coland/crates/http/src/config.rs": 'const PATH: &str = "/_coauth/internal/session-grants/introspect";',
             }.items():
-                path = root / relative
+                path = root / name
                 path.parent.mkdir(parents=True, exist_ok=True)
                 path.write_text(content, encoding="utf-8")
+                sources[name] = "component-only"
+            self.assertEqual(source_errors(root, sources), [])
             with patch.object(gate, "ROOT", root):
-                gate.deployment_boundary_guard({manifest: "component-only", adapter: "component-only"})
+                gate.deployment_boundary_guard(sources)
                 with self.assertRaisesRegex(ValueError, "manifest provenance absent"):
                     gate.deployment_boundary_guard({})
 
-    def test_embedded_backend_dependency_is_rejected_under_any_dependency_name(self):
-        manifest = "coland/crates/server/Cargo.toml"
-        with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary)
-            target = root / manifest
-            target.parent.mkdir(parents=True)
-            for dependency in ('coauth-backend={path="../coauth"}',
-                               'issuer={package="coauth-backend",path="../coauth"}'):
-                target.write_text('[package]\nname="coland"\n[dependencies]\n'+dependency+'\n', encoding="utf-8")
-                with patch.object(gate, "ROOT", root), self.assertRaisesRegex(ValueError, "must not load"):
-                    gate.deployment_boundary_guard({manifest: "component-only"})
+    def test_foreign_implementation_dependency_is_rejected_in_both_directions(self):
+        from check_service_isolation import source_errors
+        for owner, other in (("coland", "coauth"), ("coauth", "coland")):
+            for section in ("dependencies", "build-dependencies", "target.'cfg(windows)'.dependencies"):
+                for dependency in (f'{other}-backend={{path="../../../{other}/crates/backend"}}',
+                                   f'authority={{package="{other}-storage",version="0.3"}}',
+                                   f'innocent={{path="../../../{other}/crates/backend"}}'):
+                    with self.subTest(owner=owner, section=section, dependency=dependency), tempfile.TemporaryDirectory() as temporary:
+                        root = Path(temporary)
+                        sources = {}
+                        for relative in ("coland/crates/server/Cargo.toml", "coauth/crates/backend/Cargo.toml"):
+                            path = root / relative
+                            path.parent.mkdir(parents=True, exist_ok=True)
+                            is_owner = relative.startswith(owner + "/")
+                            path.write_text('[package]\nname="fixture"\n' + (f'[{section}]\n{dependency}\n' if is_owner else ''), encoding="utf-8")
+                            sources[relative] = "component-only"
+                        self.assertTrue(any("must not load" in error for error in source_errors(root, sources)))
 
     def test_receipt_without_real_preexisting_private_state_is_not_native_coverage(self):
         # Structural negative only: these unsigned markers are not an accepted

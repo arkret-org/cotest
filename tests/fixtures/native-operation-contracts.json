@@ -58,11 +58,6 @@
       "test": "blob_presign_retains_classified_native_object_and_live_policy",
       "artifact": "blob-presign.json"
     },
-    "third_party_invites": {
-      "target": "native_operation_contracts",
-      "test": "third_party_invites_retain_native_custody_accepted_original_and_oob_delivery",
-      "artifact": "third-party-invites.json"
-    },
     "peer_keypackage_claims": {
       "target": "native_operation_contracts",
       "test": "peer_keypackage_claims_retain_two_native_authorities_and_original_cas",
@@ -396,8 +391,8 @@
       "spec_operation_sha256": "24edd995a818926f837dd52c0646b75460eea3e0179f9593f9d97f1e43a45c2c",
       "error_mapping_sha256": "f7ed12e859485fde1bd8d85878b3bb9ebffc9175cc80b49352e843dfb701c7a1",
       "authority_requirement": "Requires the verification Service's private token/salt/OOB delivery record and exact accepted Invite/Station acceptance attestation. Provision, activate, presentation and status share immutable back-binding and one-use/replay state; neither a client-computed digest nor an unrelated Event signature authorizes it.",
-      "native_case": "third_party_invites",
-      "success_shape_kind": "typed_response"
+      "success_shape_kind": "typed_response",
+      "native_case": null
     },
     {
       "operation_id": "ak.open.third_party_invite.command.present_token.v1",
@@ -408,8 +403,8 @@
       "spec_operation_sha256": "31ab188fae71f0787db5b5ed0fbffeba1fe2f59117e83a6c6ff35d1017b6ca7f",
       "error_mapping_sha256": "06ac25e1dcf2e24524ef399f775c47b14b2e968f93a0c5d575cd452488a7b84b",
       "authority_requirement": "Requires the verification Service's private token/salt/OOB delivery record and exact accepted Invite/Station acceptance attestation. Provision, activate, presentation and status share immutable back-binding and one-use/replay state; neither a client-computed digest nor an unrelated Event signature authorizes it.",
-      "native_case": "third_party_invites",
-      "success_shape_kind": "typed_response"
+      "success_shape_kind": "typed_response",
+      "native_case": null
     },
     {
       "operation_id": "ak.open.third_party_invite.command.provision.v1",
@@ -420,8 +415,8 @@
       "spec_operation_sha256": "150da1c1044ca37e68aa535ddd5784fd67a7202bc163d69bec46760dfeddd068",
       "error_mapping_sha256": "35677942baa84b32a45632475c894a1043807f4386d6dafefeadd566ff7a2184",
       "authority_requirement": "Requires the verification Service's private token/salt/OOB delivery record and exact accepted Invite/Station acceptance attestation. Provision, activate, presentation and status share immutable back-binding and one-use/replay state; neither a client-computed digest nor an unrelated Event signature authorizes it.",
-      "native_case": "third_party_invites",
-      "success_shape_kind": "typed_response"
+      "success_shape_kind": "typed_response",
+      "native_case": null
     },
     {
       "operation_id": "ak.open.third_party_invite.read.provisioning_status.v1",
@@ -432,8 +427,8 @@
       "spec_operation_sha256": "a5761518fd72bc6653f60f81e7e405227e7fe7ac0a37b1670e4b31799129d327",
       "error_mapping_sha256": "c9d8f305b2ffd2d3348e7dac94bd33daaacd59f88ab95ab0e0f3d0684ab8441c",
       "authority_requirement": "Requires the verification Service's private token/salt/OOB delivery record and exact accepted Invite/Station acceptance attestation. Provision, activate, presentation and status share immutable back-binding and one-use/replay state; neither a client-computed digest nor an unrelated Event signature authorizes it.",
-      "native_case": "third_party_invites",
-      "success_shape_kind": "typed_response"
+      "success_shape_kind": "typed_response",
+      "native_case": null
     },
     {
       "operation_id": "ak.peer.account_status.command.submit.v1",
@@ -1032,8 +1027,8 @@
       "spec_operation_sha256": "ca54b6eabee56b7358e3e023e02287adf91511b6c6278f34301415ed183b157b",
       "error_mapping_sha256": "b039f9a8e293c466634242bdc85152072aace92006e4cfdc0063247ec33c273d",
       "authority_requirement": "Requires the verification Service's private token/salt/OOB delivery record and exact accepted Invite/Station acceptance attestation. Provision, activate, presentation and status share immutable back-binding and one-use/replay state; neither a client-computed digest nor an unrelated Event signature authorizes it.",
-      "native_case": "third_party_invites",
-      "success_shape_kind": "typed_response"
+      "success_shape_kind": "typed_response",
+      "native_case": null
     },
     {
       "operation_id": "ak.self.applet.bot.command.preview.v1",

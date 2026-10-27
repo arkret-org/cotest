@@ -42,19 +42,10 @@ pub(crate) struct ActualAgentDeployment {
 pub(crate) fn actual_agent_deployment(
     label: &str,
 ) -> impl std::future::Future<Output = Result<ActualAgentDeployment>> + '_ {
-    crate::harness::heap_future(|| actual_agent_deployment_configured(label, false))
+    crate::harness::heap_future(|| actual_agent_deployment_configured(label))
 }
 
-pub(crate) fn actual_agent_deployment_with_third_party_invites(
-    label: &str,
-) -> impl std::future::Future<Output = Result<ActualAgentDeployment>> + '_ {
-    crate::harness::heap_future(|| actual_agent_deployment_configured(label, true))
-}
-
-async fn actual_agent_deployment_configured(
-    label: &str,
-    third_party_invites: bool,
-) -> Result<ActualAgentDeployment> {
+async fn actual_agent_deployment_configured(label: &str) -> Result<ActualAgentDeployment> {
     let mut port = reserve_port()?;
     let email_base = format!("http://127.0.0.1:{}", port.port());
     port.release();
@@ -145,10 +136,7 @@ async fn actual_agent_deployment_configured(
             ("COLAND_INTERNAL_AUTHORITY_SHARED_SECRET", secret),
             ("COLAND_ACCOUNT_AUTHORITY_TRUST_DOMAIN", JOINT_TRUST_DOMAIN),
             ("COLAND_EMBEDDED_WEBVH_REGISTRATION_BEARER", registration),
-            (
-                "COLAND_THIRD_PARTY_INVITE_PROVIDER_ENABLED",
-                if third_party_invites { "1" } else { "0" },
-            ),
+            ("COLAND_THIRD_PARTY_INVITE_PROVIDER_ENABLED", "0"),
         ],
     )
     .await?;
@@ -156,11 +144,6 @@ async fn actual_agent_deployment_configured(
     let client_id = "01GFWR28C4KNE04WG3HKXB7C9R";
     coauth.config.as_file_mut().seek(SeekFrom::Start(0))?;
     let mut config: serde_json::Value = serde_saphyr::from_reader(coauth.config.as_file_mut())?;
-    if third_party_invites {
-        config["arkret"]["third_party_invite_provider"] = json!({
-            "governance_database_url": station.owned_database_url().context("owned IVS governance database")?
-        });
-    }
     config["clients"] = serde_json::to_value(json!([{
         "client_id": client_id,
         "client_auth_method": "none",

@@ -332,6 +332,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "arkret-deployment-contracts"
+version = "0.3.0"
+dependencies = [
+ "arkret-canonical",
+ "arkret-identifiers",
+ "arkret-models-collaboration",
+ "arkret-wire",
+ "chrono",
+ "serde",
+ "url",
+]
+
+[[package]]
 name = "arkret-egress-policy"
 version = "0.3.0"
 dependencies = [
@@ -1742,6 +1755,7 @@ dependencies = [
  "argon2 0.5.3",
  "arkret-auth",
  "arkret-canonical",
+ "arkret-deployment-contracts",
  "arkret-egress-reqwest",
  "arkret-http-client",
  "arkret-identifiers",
@@ -1777,9 +1791,6 @@ dependencies = [
  "coauth-storage-postgres",
  "coauth-tasks",
  "coauth-templates",
- "coland-contracts",
- "coland-storage",
- "coland-storage-postgres",
  "cookie",
  "deadpool",
  "der 0.7.10",
@@ -2200,21 +2211,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "coland-contracts"
-version = "0.3.0"
-dependencies = [
- "arkret-canonical",
- "arkret-identifiers",
- "arkret-models-collaboration",
- "arkret-models-crypto",
- "arkret-wire",
- "chrono",
- "serde",
- "serde_json",
- "url",
-]
-
-[[package]]
 name = "coland-domain"
 version = "0.3.0"
 dependencies = [
@@ -2281,6 +2277,7 @@ version = "0.3.0"
 dependencies = [
  "arkret",
  "arkret-canonical",
+ "arkret-deployment-contracts",
  "arkret-event-draft",
  "arkret-identifiers",
  "arkret-identity",
@@ -2297,7 +2294,6 @@ dependencies = [
  "base64 0.23.1",
  "chrono",
  "chrono-tz",
- "coland-contracts",
  "coland-domain",
  "serde",
  "serde_json",

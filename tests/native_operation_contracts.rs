@@ -76,12 +76,6 @@ async fn blob_presign_retains_classified_native_object_and_live_policy() -> anyh
 }
 
 #[tokio::test(flavor = "multi_thread")]
-async fn third_party_invites_retain_native_custody_accepted_original_and_oob_delivery()
--> anyhow::Result<()> {
-    cotest::scenarios::native_operation_contracts::third_party_invites().await
-}
-
-#[tokio::test(flavor = "multi_thread")]
 async fn peer_keypackage_claims_retain_two_native_authorities_and_original_cas()
 -> anyhow::Result<()> {
     cotest::scenarios::native_operation_contracts::peer_keypackage_claims().await

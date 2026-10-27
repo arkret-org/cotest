@@ -119,7 +119,6 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--admin-audience")
     parser.add_argument("--embedded-webvh-registration-bearer", required=True)
     parser.add_argument("--mock-email-base-url")
-    parser.add_argument("--third-party-invite-governance-database-url")
     return parser.parse_args()
 
 
@@ -290,14 +289,6 @@ def main() -> int:
         "  trust_domain: ak:trust_domain:local.host\n"
         f"  admin_audience: {yaml_string(admin_audience)}\n"
     )
-    if args.third_party_invite_governance_database_url is not None:
-        governance = args.third_party_invite_governance_database_url.strip()
-        if not governance or governance == args.postgres_url:
-            raise SystemExit("FATAL: IVS requires an explicit owning-Station governance store, distinct from the private Account store")
-        arkret += (
-            "  third_party_invite_provider:\n"
-            f"    governance_database_url: {yaml_string(governance)}\n"
-        )
     src = replace_top_level_section(src, "arkret", arkret)
 
     args.output_config.parent.mkdir(parents=True, exist_ok=True)

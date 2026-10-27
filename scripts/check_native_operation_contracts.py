@@ -1174,7 +1174,7 @@ def peer_keypackage_claims(evidence):
     mls_attest_add(evidence["mls_add"], evidence)
 
 
-PROOFS = {"peer_contacts": peer_contacts, "peer_keypackage_claims": peer_keypackage_claims,"third_party_invites": third_party_invites,"account_identity_creation": account_identity_creation, "account_device_sessions": account_device_sessions,
+PROOFS = {"peer_contacts": peer_contacts, "peer_keypackage_claims": peer_keypackage_claims,"account_identity_creation": account_identity_creation, "account_device_sessions": account_device_sessions,
           "account_device_pairing": account_device_pairing, "account_policy_recovery": account_policy_recovery,
           "account_private_storage": account_private_storage, "mls_interop": mls_interop,
           "account_consent": account_consent,"identity_reservations":identity_reservations,
@@ -1182,25 +1182,10 @@ PROOFS = {"peer_contacts": peer_contacts, "peer_keypackage_claims": peer_keypack
 
 
 def deployment_boundary_guard(source_fence):
-    # This is a deployment regression guard, never evidence of issuer authority.
-    # The user's deferred private-HTTP replacement must not force embedded custody.
-    import tomllib
-    manifest = "coland/crates/server/Cargo.toml"
-    require(manifest in source_fence, "deployment manifest provenance absent")
-    for relative in source_fence:
-        if not relative.startswith("coland/") or not relative.endswith("Cargo.toml"):
-            continue
-        document = tomllib.loads((ROOT / relative).read_text(encoding="utf-8"))
-        def inspect(table):
-            for name, value in table.items():
-                if name in {"dependencies", "build-dependencies", "dev-dependencies"}:
-                    require(not any(key.replace("_", "-") == "coauth-backend" or
-                                    isinstance(item, dict) and item.get("package") == "coauth-backend"
-                                    for key, item in value.items()),
-                            "Coland must not load the Coauth backend")
-                elif isinstance(value, dict):
-                    inspect(value)
-        inspect(document)
+    # A deployment guard is never evidence of issuer authority or operation effects.
+    from check_service_isolation import source_errors
+    failures = source_errors(ROOT, source_fence)
+    require(not failures, "; ".join(failures))
 
 
 def evidence_coverage(document, directory: Path, execution: Path):
@@ -1210,7 +1195,13 @@ def evidence_coverage(document, directory: Path, execution: Path):
     log = (execution.parent / result["log"]).read_text(encoding="utf-8")
     source_fence = read(execution.parent / result["source_fence"])
     required_sources = {
+        "coland/Cargo.toml",
         "coland/crates/server/Cargo.toml",
+        "coauth/Cargo.toml",
+        "coauth/crates/backend/Cargo.toml",
+        "arkret-rust-sdk/crates/deployment-contracts/Cargo.toml",
+        "arkret-rust-sdk/crates/deployment-contracts/src/account_projection.rs",
+        "arkret-rust-sdk/crates/deployment-contracts/src/agent_session_authority.rs",
         "coland/crates/http/src/routing/identity/account_authority_client.rs",
         "coland/crates/http/src/routing/identity/auth_grant_dpop.rs",
         "coland/crates/http/src/state/authority_forward.rs",
@@ -1315,6 +1306,9 @@ def evidence_coverage(document, directory: Path, execution: Path):
             raise ValueError(f"native domain proof invalid for {identifier}: {type(error).__name__}: {error}") from error
         covered.update(scope)
     deployment_boundary_guard(source_fence)
+    from check_service_isolation import live_graph_errors
+    isolation_failures, _ = live_graph_errors(ROOT)
+    require(not isolation_failures, "; ".join(isolation_failures))
     return covered
 
 

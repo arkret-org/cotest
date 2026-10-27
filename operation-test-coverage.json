@@ -8,9 +8,9 @@
     "operation_constants_sha256": "0a5c51a8e6e4a3fc489c263b49535111e12cf63cd27b87a333aa627e01a4c05a",
     "test_layers": {
       "coland_unit": {
-        "source_file_count": 483,
-        "source_sha256": "67fa43ed1808d9e3258cd5b2e75d4744447759761899031f5a2ce19465035452",
-        "evidence_count": 861,
+        "source_file_count": 482,
+        "source_sha256": "93573bb800faa1cb4aa504d4de1741113d9c6884414786923d610dd45e037770",
+        "evidence_count": 860,
         "covered_operation_count": 172
       },
       "coland_http": {
@@ -20,10 +20,10 @@
         "covered_operation_count": 48
       },
       "cotest_rust": {
-        "source_file_count": 636,
-        "source_sha256": "fe6d0a56cd9d39d15bfde992683dd15fab10804d05e930bf4eddbdef842f213d",
-        "evidence_count": 401,
-        "covered_operation_count": 135
+        "source_file_count": 635,
+        "source_sha256": "215ace468cdb138df6cd5eb587aefdb5ca02296ad45cc1db6eb632290440c143",
+        "evidence_count": 395,
+        "covered_operation_count": 130
       },
       "cotest_e2e": {
         "source_file_count": 132,
@@ -2980,11 +2980,11 @@
           },
           {
             "file": "cotest/src/scenarios/native_operation_contracts.rs",
-            "line": 133,
+            "line": 126,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              133
+              126
             ],
             "protected_oracle": false,
             "scope_sha256": "ffab0a0247a732b183b288ebaa5df7b3cf05ceea8abc6aad18578f5e9b384112",
@@ -3215,11 +3215,11 @@
           },
           {
             "file": "cotest/src/scenarios/agent_runtime_live/coauth_session_evidence.rs",
-            "line": 1166,
+            "line": 1149,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              1166
+              1149
             ],
             "protected_oracle": false,
             "scope_sha256": "0043a5a667390e6fd74d9f307778adcae07b49fe6f6c83f4c3ae84b44884a770",
@@ -4227,23 +4227,6 @@
       "responsibilities": {
         "protocol_kat": [
           {
-            "file": "coland/crates/contracts/src/account_projection.rs",
-            "line": 6,
-            "scope": "<module_helper>",
-            "scope_kind": "module_helper",
-            "occurrence_lines": [
-              6
-            ],
-            "protected_oracle": false,
-            "scope_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-            "input_sha256": "b7faf76b80c6fe0280f489a8772091bcd5accaa1386596bee0a7cf26e8d1616a",
-            "assertion_sha256": null,
-            "input_preview": [
-              "ak.gate.account.command.register.v1"
-            ],
-            "assertion_preview": []
-          },
-          {
             "file": "coland/crates/http/src/routing/identity/account.rs",
             "line": 161,
             "scope": "<module_helper>",
@@ -4366,11 +4349,11 @@
           },
           {
             "file": "cotest/src/scenarios/native_operation_contracts.rs",
-            "line": 134,
+            "line": 127,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              134
+              127
             ],
             "protected_oracle": false,
             "scope_sha256": "6e0824501552b583dcd6b3ab0bc257d599b4f08c1551d1781abc8bce139704b1",
@@ -4674,11 +4657,11 @@
           },
           {
             "file": "cotest/src/scenarios/native_operation_contracts.rs",
-            "line": 132,
+            "line": 125,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              132
+              125
             ],
             "protected_oracle": false,
             "scope_sha256": "72f857dbd2e8add3013310ff9a3fd46325eff77c9450707edccc1689a7df8d4b",
@@ -4944,11 +4927,11 @@
           },
           {
             "file": "cotest/src/scenarios/native_operation_contracts.rs",
-            "line": 135,
+            "line": 128,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              135
+              128
             ],
             "protected_oracle": false,
             "scope_sha256": "fa6ce5817ab23007faf30418fd87a86990de3d52f973196f1114ae2cc76bedec",
@@ -7907,25 +7890,7 @@
       "http": "POST /_arkret/open/third-party-invites/activate",
       "test_layer": "cotest_rust",
       "responsibilities": {
-        "protocol_kat": [
-          {
-            "file": "cotest/src/scenarios/native_operation_contracts/third_party_invites.rs",
-            "line": 8,
-            "scope": "<module_helper>",
-            "scope_kind": "module_helper",
-            "occurrence_lines": [
-              8
-            ],
-            "protected_oracle": false,
-            "scope_sha256": "ca526a2c1bc3953b6e0d2082fc32c2cfe47a1238329862ab432bc322a0aa7078",
-            "input_sha256": "ca526a2c1bc3953b6e0d2082fc32c2cfe47a1238329862ab432bc322a0aa7078",
-            "assertion_sha256": null,
-            "input_preview": [
-              "\"ak.open.third_party_invite.command.activate.v1\","
-            ],
-            "assertion_preview": []
-          }
-        ],
+        "protocol_kat": [],
         "storage_parity": [],
         "http_binding": [],
         "product_flow": [],
@@ -8092,25 +8057,7 @@
       "http": "POST /_arkret/open/third-party-invites/present",
       "test_layer": "cotest_rust",
       "responsibilities": {
-        "protocol_kat": [
-          {
-            "file": "cotest/src/scenarios/native_operation_contracts/third_party_invites.rs",
-            "line": 10,
-            "scope": "<module_helper>",
-            "scope_kind": "module_helper",
-            "occurrence_lines": [
-              10
-            ],
-            "protected_oracle": false,
-            "scope_sha256": "b3aaf81cc4b4f276c94f93dd2976da4111ba54c709d949919f2ba77e3f5658b7",
-            "input_sha256": "b3aaf81cc4b4f276c94f93dd2976da4111ba54c709d949919f2ba77e3f5658b7",
-            "assertion_sha256": null,
-            "input_preview": [
-              "\"ak.open.third_party_invite.command.present_token.v1\","
-            ],
-            "assertion_preview": []
-          }
-        ],
+        "protocol_kat": [],
         "storage_parity": [],
         "http_binding": [],
         "product_flow": [],
@@ -8210,42 +8157,7 @@
       "http": "POST /_arkret/open/third-party-invites/provision",
       "test_layer": "cotest_rust",
       "responsibilities": {
-        "protocol_kat": [
-          {
-            "file": "cotest/src/scenarios/native_operation_contracts/third_party_invites.rs",
-            "line": 7,
-            "scope": "<module_helper>",
-            "scope_kind": "module_helper",
-            "occurrence_lines": [
-              7
-            ],
-            "protected_oracle": false,
-            "scope_sha256": "da701d84790e3154affaffc012e2972f9e9810509d895c68a77e5250d3b70bd2",
-            "input_sha256": "da701d84790e3154affaffc012e2972f9e9810509d895c68a77e5250d3b70bd2",
-            "assertion_sha256": null,
-            "input_preview": [
-              "\"ak.open.third_party_invite.command.provision.v1\","
-            ],
-            "assertion_preview": []
-          },
-          {
-            "file": "cotest/src/scenarios/native_operation_contracts/third_party_invites.rs",
-            "line": 62,
-            "scope": "<module_helper>",
-            "scope_kind": "module_helper",
-            "occurrence_lines": [
-              62
-            ],
-            "protected_oracle": false,
-            "scope_sha256": "28f3de0c74827b71df59ed52a59da534105378fad91eb51ccd3f90376da7d83f",
-            "input_sha256": "28f3de0c74827b71df59ed52a59da534105378fad91eb51ccd3f90376da7d83f",
-            "assertion_sha256": null,
-            "input_preview": [
-              "let bytes=arkret_wire::service_operation_proof_binding_bytes(arkret_wire::ProofContextId::THIRD_PARTY_INVITE_PROVISION_REQUEST_PROOF_V1,arkret_wire::ServiceOperationId::OPEN_THIRD_PARTY_INVITE_COMMAND_PROVISION_V1,Some(json!(deployment.account)),Vec::new(),&digest,&proof)?;"
-            ],
-            "assertion_preview": []
-          }
-        ],
+        "protocol_kat": [],
         "storage_parity": [],
         "http_binding": [],
         "product_flow": [],
@@ -8345,25 +8257,7 @@
       "http": "POST /_arkret/open/third-party-invites/status",
       "test_layer": "cotest_rust",
       "responsibilities": {
-        "protocol_kat": [
-          {
-            "file": "cotest/src/scenarios/native_operation_contracts/third_party_invites.rs",
-            "line": 9,
-            "scope": "<module_helper>",
-            "scope_kind": "module_helper",
-            "occurrence_lines": [
-              9
-            ],
-            "protected_oracle": false,
-            "scope_sha256": "748303ff755cfd8d5c0d706339374dd739ac63d95d4d638ccf24aae74e493961",
-            "input_sha256": "748303ff755cfd8d5c0d706339374dd739ac63d95d4d638ccf24aae74e493961",
-            "assertion_sha256": null,
-            "input_preview": [
-              "\"ak.open.third_party_invite.read.provisioning_status.v1\","
-            ],
-            "assertion_preview": []
-          }
-        ],
+        "protocol_kat": [],
         "storage_parity": [],
         "http_binding": [],
         "product_flow": [],
@@ -15545,11 +15439,11 @@
           },
           {
             "file": "cotest/src/scenarios/agent_runtime_live/coauth_session_evidence.rs",
-            "line": 721,
+            "line": 704,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              721
+              704
             ],
             "protected_oracle": false,
             "scope_sha256": "fe41611ff2932d10fa5babebd7ffa7d2a4f6a9234ea35b8bd2675a9b646b0959",
@@ -41058,25 +40952,7 @@
       "http": "POST /_arkret/self/third-party-invites/acceptance-attestation",
       "test_layer": "cotest_rust",
       "responsibilities": {
-        "protocol_kat": [
-          {
-            "file": "cotest/src/scenarios/native_operation_contracts/third_party_invites.rs",
-            "line": 11,
-            "scope": "<module_helper>",
-            "scope_kind": "module_helper",
-            "occurrence_lines": [
-              11
-            ],
-            "protected_oracle": false,
-            "scope_sha256": "db7c178e8d24b702e9ef62a6bd09c731c9b60a2fc18db599364cbd6e203b0bab",
-            "input_sha256": "db7c178e8d24b702e9ef62a6bd09c731c9b60a2fc18db599364cbd6e203b0bab",
-            "assertion_sha256": null,
-            "input_preview": [
-              "\"ak.self.third_party_invite.read.acceptance_attestation.v1\","
-            ],
-            "assertion_preview": []
-          }
-        ],
+        "protocol_kat": [],
         "storage_parity": [],
         "http_binding": [],
         "product_flow": [],

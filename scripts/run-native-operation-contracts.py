@@ -37,7 +37,7 @@ def source_fence():
                                cwd=root, check=True, capture_output=True).stdout.decode("utf-8").split("\0")
         for relative in paths:
             path = root / relative
-            if relative and path.is_file() and path.suffix in {".rs", ".toml", ".lock", ".json", ".sql", ".md", ".py", ".ps1", ".ts", ".mjs", ".yml", ".yaml", ".sh"}:
+            if relative and path.is_file() and (path.suffix in {".rs", ".toml", ".lock", ".json", ".sql", ".md", ".py", ".ps1", ".ts", ".mjs", ".yml", ".yaml", ".sh", ".txt"} or path.name == "Dockerfile" or path.name.endswith(".dockerignore")):
                 result[f"{name}/{relative}"] = digest(path)
     return result
 
@@ -108,6 +108,8 @@ def main():
     environment["COTEST_NATIVE_OPERATION_EVIDENCE_DIR"] = str(observations)
     environment["COTEST_SERVICE_LOG_DIR"] = str(output / "services")
     environment["COTEST_TRANSCRIPT_PATH"] = str(output / "transcript.ndjson")
+    execute(output, "service-isolation", gate.REPO,
+            [sys.executable, "-B", str(gate.REPO / "scripts/check_service_isolation.py")], environment)
     products = []
     for name in ("coland", "coauth"):
         print(f"Building native {name}", flush=True)
