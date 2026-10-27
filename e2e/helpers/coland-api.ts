@@ -34,6 +34,7 @@ import type {
   CommitStreamHead,
   EventAdmissionSubmission,
   InviteDeliveryRequestBody,
+  InviteDeliveryResponseBody,
   RealmGenesisObject,
   RealmObject,
   SelfInviteDispatchRequestBody,
@@ -2848,18 +2849,12 @@ async function rawPushCommittedReplication(
 // generated. The hand-written version modelled `invite_event` and
 // `introduction_evidence` as opaque records and omitted the address members
 // the schema actually requires.
-export type InviteDeliveryRequestBodyBodyBody = InviteDeliveryRequestBody;
-export type { SelfInviteDispatchRequestBody };
+export type { InviteDeliveryRequestBody, InviteDeliveryResponseBody, SelfInviteDispatchRequestBody };
 // The closed `invite_delivery_response_body`
 // (`invite-delivery-request.schema.json#/$defs/invite_delivery_response_body`).
 // `disclosed_outcome` is closed to `delivered | blocked` and, per
 // invite-addressing.md §5.1, MUST be absent whenever `status` is `deferred`.
-export type InviteDeliveryOutcomeView = {
-  status: "accepted" | "duplicate" | "deferred";
-  disclosed_outcome?: "delivered" | "blocked";
-  received_at?: string;
-  retry_after_ms?: number;
-};
+
 
 // Build the §7 dispatch body from the accepted Event id. The Station
 // resolves its own stored canonical Event bytes; clients never echo them.
@@ -2868,8 +2863,8 @@ export type InviteDeliveryOutcomeView = {
 // §7 requires.
 export function selfInviteDispatchBody(args: {
   eventId: string;
-  inviteAddress: InviteDeliveryRequestBodyBodyBody["invite_address"];
-  evidence: InviteDeliveryRequestBodyBodyBody["introduction_evidence"];
+  inviteAddress: InviteDeliveryRequestBody["invite_address"];
+  evidence: InviteDeliveryRequestBody["introduction_evidence"];
   idempotencyKey?: string;
 }): SelfInviteDispatchRequestBody {
   return {
@@ -2886,9 +2881,9 @@ export async function dispatchSelfInviteApi(
   token: string,
   body: SelfInviteDispatchRequestBody,
   opts: { server?: ColandKey } = {},
-): Promise<InviteDeliveryOutcomeView> {
+): Promise<InviteDeliveryResponseBody> {
   const response = await rawDispatchSelfInviteApi(request, token, body, opts);
-  return await expectJsonOk<InviteDeliveryOutcomeView>(
+  return await expectJsonOk<InviteDeliveryResponseBody>(
     response,
     "dispatch self invite delivery",
   );
@@ -2923,7 +2918,7 @@ export async function rawDispatchSelfInviteApi(
 // session.
 export async function submitPeerInviteDeliveryApi(
   request: APIRequestContext,
-  body: InviteDeliveryRequestBodyBodyBody,
+  body: InviteDeliveryRequestBody,
   opts: {
     origin: string;
     destination?: string;
@@ -2931,7 +2926,7 @@ export async function submitPeerInviteDeliveryApi(
   },
 ) {
   const response = await rawSubmitPeerInviteDeliveryApi(request, body, opts);
-  return await expectJsonOk<InviteDeliveryOutcomeView>(
+  return await expectJsonOk<InviteDeliveryResponseBody>(
     response,
     "submit peer invite delivery",
   );
@@ -2940,7 +2935,7 @@ export async function submitPeerInviteDeliveryApi(
 // can be read as a status plus a registered wire code.
 export async function rawSubmitPeerInviteDeliveryApi(
   request: APIRequestContext,
-  body: InviteDeliveryRequestBodyBodyBody,
+  body: InviteDeliveryRequestBody,
   opts: {
     origin: string;
     destination?: string;

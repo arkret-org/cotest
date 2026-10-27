@@ -121,7 +121,7 @@ jobs:
         with:
           python-version: "3.12"
       - name: Install canonical Spec evaluator dependencies
-        run: python -m pip install cryptography jsonschema pyyaml
+        run: python -m pip install cryptography 'jsonschema>=4.18,<5' pyyaml
 
       - name: Install nightly rustfmt
         uses: dtolnay/rust-toolchain@nightly
@@ -180,6 +180,12 @@ jobs:
         # Mandatory process scenarios use the freshly built sibling services.
         # Explicit opt-in ignored probes remain in integration.yml.
         run: bash ../inkson/scripts/with-native-keystore.sh python scripts/run-native-rust-tests.py cargo test --workspace --locked
+      - name: Verify complete native operation authority contracts
+        working-directory: cotest
+        run: >-
+          bash ../inkson/scripts/with-native-keystore.sh
+          python scripts/run-native-operation-contracts.py
+          --output artifacts/native-operation-contracts-ci
       - name: check_ignore_comments hygiene
         working-directory: cotest
         # Every `#[ignore]` attribute must carry a `/// Issue:` or
@@ -254,6 +260,13 @@ jobs:
           inventory="$RUNNER_TEMP/operation-test-coverage.json"
           python scripts/check_operation_test_coverage.py --output "$inventory"
           python scripts/check_operation_test_coverage.py --check --output "$inventory"
+      - name: Native obligation bindings and false-coverage regressions
+        working-directory: cotest
+        # Declaration checks intentionally certify no native execution coverage.
+        run: |
+          python -m pip install 'jsonschema>=4.18,<5'
+          python -B scripts/check_native_operation_contracts.py --declarations-only
+          python -B -m unittest discover -s scripts -p test_native_operation_contracts.py -v
 
   typecheck:
     name: typecheck (tsc --noEmit)
@@ -318,6 +331,7 @@ jobs:
         run: |
           npm run check:wire-types
           npm run check:wire-type-gate
+          npm run check:wire-type-ownership
       - name: fixme quality gate
         working-directory: cotest/e2e
         # Enforces docs/fixme-promotion-checklist.md: no empty `test.fixme`

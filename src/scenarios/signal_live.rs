@@ -280,8 +280,10 @@ async fn deny_peer(
             destination.service_id(),
         )
         .await?;
-    ensure!(status == reqwest::StatusCode::OK);
-    ensure!(serde_json::from_slice::<arkret_wire::SignalRelayResponseBody>(&bytes)?.accepted);
+    ensure!(
+        status == reqwest::StatusCode::NO_CONTENT && bytes.is_empty(),
+        "peer Signal must return HTTP 204 without an entity body"
+    );
     for (index, url) in urls.iter().enumerate() {
         let after = counts(url, &signal.realm_id).await?;
         ensure!(

@@ -67,9 +67,9 @@ pub async fn authorize_with_current_account(
         .and_then(Value::as_str)
         .context("OIDC discovery omitted authorization_endpoint")?;
 
-    let state = random_b64url("state");
-    let nonce = random_b64url("nonce");
-    let code_verifier = random_b64url("verifier");
+    let state = random_b64url("state")?;
+    let nonce = random_b64url("nonce")?;
+    let code_verifier = random_b64url("verifier")?;
     let code_challenge = base64::engine::general_purpose::URL_SAFE_NO_PAD
         .encode(Sha256::digest(code_verifier.as_bytes()));
 
@@ -161,32 +161,17 @@ pub async fn authorize_with_current_account(
     })
 }
 
-/// Test-scoped entropy, derived rather than drawn from an RNG.
-///
-/// This is a `state`/`nonce`/`code_verifier` for one provisioning run in one
-/// test process; it never protects anything outside it. Deriving from the clock
-/// and a label keeps the crate free of an RNG dependency, and the values are
-/// still unique per call because the nanosecond clock advances between them.
-/// Production PKCE material is CSPRNG-backed in the real clients.
-fn random_b64url(label: &str) -> String {
-    let nanos = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .expect("system clock before Unix epoch")
-        .as_nanos();
-    let mut hasher = Sha256::new();
-    hasher.update(b"cotest-provisioning-v1");
-    hasher.update(label.as_bytes());
-    hasher.update(nanos.to_le_bytes());
-    hasher.update(std::process::id().to_le_bytes());
-    base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(hasher.finalize())
+/// Real protocol requests use OS entropy even in an isolated test deployment.
+fn random_b64url(label: &str) -> Result<String> {
+    let mut bytes = [0u8; 32];
+    getrandom::fill(&mut bytes).with_context(|| format!("obtain {label} OS entropy"))?;
+    Ok(base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(bytes))
 }
 
 /// The founding device's DPoP key, and the seed the wire oracle needs to sign
 /// with it.
 ///
-/// Derived, not drawn from an RNG, for the same reason the PKCE material is:
-/// this key exists for one provisioning run in one test process. The real
-/// clients generate device keys from the OS CSPRNG.
+/// Generated from the OS CSPRNG and retained with the original host checkpoint.
 #[derive(Clone, Debug)]
 pub struct FoundingDeviceKey {
     pub seed_b64url: String,
@@ -194,23 +179,14 @@ pub struct FoundingDeviceKey {
 }
 
 impl FoundingDeviceKey {
-    pub fn derive(label: &str) -> Self {
-        let seed: [u8; 32] = {
-            let nanos = std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .expect("system clock before Unix epoch")
-                .as_nanos();
-            let mut hasher = Sha256::new();
-            hasher.update(b"cotest-provisioning-device-v1");
-            hasher.update(label.as_bytes());
-            hasher.update(nanos.to_le_bytes());
-            hasher.update(std::process::id().to_le_bytes());
-            hasher.finalize().into()
-        };
-        Self {
+    pub fn generate(label: &str) -> Result<Self> {
+        let mut seed = [0u8; 32];
+        getrandom::fill(&mut seed)
+            .with_context(|| format!("obtain {label} device key OS entropy"))?;
+        Ok(Self {
             seed_b64url: base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(seed),
             signing_key: ed25519_dalek::SigningKey::from_bytes(&seed),
-        }
+        })
     }
 
     /// The canonical JSON of this key's public JWK.
@@ -357,11 +333,13 @@ async fn exchange_account_handoff(
         "{}/_arkret/gate/account/authentication-handoffs",
         coauth_base.trim_end_matches('/')
     );
-    let response = http
+    let request = http
         .post(&url)
         .header("Arkret-Operation", CREATE_HANDOFF_OPERATION_ID)
         .header("DPoP", device_key.dpop_header("POST", &url)?)
-        .json(&body)
+        .json(&body);
+    let observed_request = crate::operation_observation::freeze_request(&request)?;
+    let response = request
         .send()
         .await
         .with_context(|| format!("POST {url}"))?;
@@ -385,6 +363,13 @@ async fn exchange_account_handoff(
         .get("binding")
         .cloned()
         .context("account handoff outcome carried no binding")?;
+
+    crate::operation_observation::record_json_exchange(
+        CREATE_HANDOFF_OPERATION_ID,
+        observed_request.as_ref(),
+        status.as_u16(),
+        &text,
+    )?;
 
     Ok(AccountHandoff {
         request_id,
@@ -1065,6 +1050,16 @@ async fn verify_accepted_identity_material(
             &key,
         )?;
     }
+    crate::operation_observation::record_verified_identity_material(|| {
+        json!({
+            "register_request":request,
+            "register_response":outcome,
+            "account_authority_history":history.0,
+            "station_resolution":station_resolution,
+            "native_history_base64url":arkret_canonical::base64url_encode(&log_bytes),
+            "native_witness_base64url":witnesses.as_deref().map(arkret_canonical::base64url_encode),
+        })
+    });
     Ok(())
 }
 
@@ -1086,7 +1081,7 @@ impl AccountHandoff {
         let proof =
             garth::session::dpop::build_http_dpop_proof(request, &self.device_key.signing_key)
                 .map_err(|error| anyhow::anyhow!("build DPoP proof for POST {url}: {error}"))?;
-        let response = http
+        let request = http
             .post(url)
             .header("Arkret-Operation", operation_id)
             .header(
@@ -1094,7 +1089,9 @@ impl AccountHandoff {
                 format!("DPoP {}", self.account_handoff_grant),
             )
             .header("DPoP", proof)
-            .json(body)
+            .json(body);
+        let observed_request = crate::operation_observation::freeze_request(&request)?;
+        let response = request
             .send()
             .await
             .with_context(|| format!("POST {url}"))?;
@@ -1103,6 +1100,12 @@ impl AccountHandoff {
         if !status.is_success() {
             bail!("{url} returned {status}: {text}");
         }
+        crate::operation_observation::record_json_exchange(
+            operation_id,
+            observed_request.as_ref(),
+            status.as_u16(),
+            &text,
+        )?;
         serde_json::from_str(&text).with_context(|| format!("parse response of {url}: {text}"))
     }
 }
@@ -1110,8 +1113,34 @@ impl AccountHandoff {
 #[cfg(test)]
 mod hpke_custody_tests {
     use arkret::crypto::hpke;
+    use ed25519_dalek::Signer as _;
 
     use super::*;
+
+    #[test]
+    fn generated_holder_custody_reopens_the_exact_key_and_rejects_another_holder() {
+        let holder = FoundingDeviceKey::generate("durable holder").unwrap();
+        let restored = FoundingDeviceKey::restore(&holder.seed_b64url).unwrap();
+        assert_eq!(
+            holder.canonical_public_jwk().unwrap(),
+            restored.canonical_public_jwk().unwrap()
+        );
+        let proof = holder.signing_key().sign(b"same exact restored holder");
+        restored
+            .signing_key()
+            .verifying_key()
+            .verify_strict(b"same exact restored holder", &proof)
+            .unwrap();
+        let other = FoundingDeviceKey::generate("another holder").unwrap();
+        assert!(
+            other
+                .signing_key()
+                .verifying_key()
+                .verify_strict(b"same exact restored holder", &proof)
+                .is_err()
+        );
+        assert!(FoundingDeviceKey::restore("not a stored seed=").is_err());
+    }
 
     fn checkpoint(key: &hpke::X25519HpkeKeyPair) -> Value {
         json!({

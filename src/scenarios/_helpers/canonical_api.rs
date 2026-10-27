@@ -60,6 +60,7 @@ impl CanonicalApiFixture {
         TestActorClient,
         arkret_http_client::Client,
         arkret_models_identity::InitialSessionGrantIntent,
+        cotest_test_support::provisioning::AccountHandoff,
     )> {
         pairing::recovery_candidate(self).await
     }

@@ -24,7 +24,7 @@
 
 import type { APIRequestContext, APIResponse } from "@playwright/test";
 import { type ColandKey, colandBaseUrl, colandServiceId } from "./env";
-import type { RealmObject, CircleView, CircleMembershipResponseBody } from "./generated/spec-wire-objects";
+import type { CapabilityGrantPayload, RealmObject, CircleView, CircleMembershipResponseBody } from "./generated/spec-wire-objects";
 import {
   accountActorId,
   authHeaders,
@@ -39,13 +39,15 @@ import {
   wireErrCode,
 } from "./coland-api";
 
-export type CircleOutcome = CircleView;
-export type { CircleMembershipResponseBody } from "./generated/spec-wire-objects";
+export type { CircleView, CircleMembershipResponseBody } from "./generated/spec-wire-objects";
 export type CircleMembership = CircleMembershipResponseBody["membership"];
 
 // capability-grant.schema.json: a Realm-root issuer authority is the typed
 // reference to the accepted Realm genesis Event at its authority generation.
-function circleGrantRealmRootRef(realmId: string, server?: ColandKey) {
+function circleGrantRealmRootRef(
+  realmId: string,
+  server?: ColandKey,
+): Extract<CapabilityGrantPayload["grant"]["issuer_authority_refs"][number], { kind: "realm_root" }> {
   const authorityEventRef = realmAuthorityRootRef(server, realmId);
   if (!authorityEventRef) {
     throw new Error(`Circle grant in ${realmId} has no accepted Realm genesis reference`);
@@ -54,7 +56,7 @@ function circleGrantRealmRootRef(realmId: string, server?: ColandKey) {
     kind: "realm_root",
     realm_id: realmId,
     authority_event_ref: authorityEventRef,
-    authority_generation: 0,
+    authority_generation: "0",
   };
 }
 
@@ -75,7 +77,7 @@ async function grantCircleActionCapability(
   args: CircleGrantArgs,
 ): Promise<string> {
   const issuedAt = canonicalTimestamp();
-  const unsignedGrant: Record<string, unknown> = {
+  const unsignedGrant: CapabilityGrantPayload["grant"] = {
     schema: "ak.schema.capability.v1",
     realm_id: args.realmId,
     issuer_id: accountActorId(args.ownerId, args.server),
@@ -147,7 +149,7 @@ export async function grantCircleMemberAddCapability(
 // is the caller now that the service no longer builds that payload.
 export function circleDisplayFromTitle(
   title: string,
-): CircleOutcome["display"] {
+): CircleView["display"] {
   let shortName = Array.from(title)
     .filter((ch) => /[A-Za-z0-9 _-]/.test(ch))
     .join("")
@@ -217,7 +219,7 @@ export async function createCircleArkret(
     summary?: string;
     server?: ColandKey;
   },
-): Promise<CircleOutcome> {
+): Promise<CircleView> {
   const createdAt = canonicalTimestamp();
   const createEvent = await prepareSignedEventSubmissionApi(
     request,
@@ -243,7 +245,7 @@ export async function createCircleArkret(
       }),
     },
   );
-  return await expectJsonOk<CircleOutcome>(
+  return await expectJsonOk<CircleView>(
     response,
     `create circle ${args.title}`,
   );
@@ -254,12 +256,12 @@ export async function getCircleArkret(
   token: string,
   circleId: string,
   opts: { server?: ColandKey } = {},
-): Promise<CircleOutcome> {
+): Promise<CircleView> {
   const response = await request.get(
     `${colandBaseUrl(opts.server)}/_arkret/self/circles/${encodeURIComponent(circleId)}`,
     { headers: authHeaders(token, "GET", `${colandBaseUrl(opts.server)}/_arkret/self/circles/${encodeURIComponent(circleId)}`) },
   );
-  return await expectJsonOk<CircleOutcome>(response, `get circle ${circleId}`);
+  return await expectJsonOk<CircleView>(response, `get circle ${circleId}`);
 }
 
 // The exact typed revision of `memberId`'s current parent Realm `member_state`
@@ -455,7 +457,7 @@ async function submitCircleLifecycleArkret(
   circleId: string,
   action: "archive" | "restore",
   args: CircleLifecycleArgs,
-): Promise<CircleOutcome> {
+): Promise<CircleView> {
   await submitSignedEventApi(
     request,
     token,
@@ -480,7 +482,7 @@ export async function archiveCircleArkret(
   token: string,
   circleId: string,
   args: CircleLifecycleArgs,
-): Promise<CircleOutcome> {
+): Promise<CircleView> {
   return await submitCircleLifecycleArkret(
     request,
     token,
@@ -495,7 +497,7 @@ export async function restoreCircleArkret(
   token: string,
   circleId: string,
   args: CircleLifecycleArgs,
-): Promise<CircleOutcome> {
+): Promise<CircleView> {
   return await submitCircleLifecycleArkret(
     request,
     token,

@@ -69,6 +69,7 @@ pub mod strand_watch_live;
 pub mod to_device_offline_ordering;
 
 pub mod mimi_facade_live;
+pub mod native_operation_contracts;
 
 pub mod third_party_invite_claim_live;
 

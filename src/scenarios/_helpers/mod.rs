@@ -15,5 +15,6 @@ pub mod http;
 pub mod joint_service_bootstrap;
 pub mod live_gate;
 pub mod mock_http;
+pub(crate) mod native_issuer_binding;
 pub mod protocol_values;
 pub mod service_metrics;

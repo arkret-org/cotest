@@ -33,18 +33,19 @@ fn unique(prefix: &str) -> String {
     arkret_identifiers::new_prefixed_uuid7(prefix)
 }
 
-struct CompletedCandidate {
-    candidate: TestActorClient,
+pub(crate) struct CompletedCandidate {
+    pub(crate) candidate: TestActorClient,
     gate: arkret_http_client::Client,
-    request: RecoveryCompletionGrantRequestBody,
+    pub(crate) request: RecoveryCompletionGrantRequestBody,
+    pub(crate) handoff: cotest_test_support::provisioning::AccountHandoff,
 }
 
-async fn complete_native(
+pub(crate) async fn complete_native(
     fixture: &CanonicalApiFixture,
     recovery_method: &DidUrl,
     recovery_seed: [u8; 32],
 ) -> Result<CompletedCandidate> {
-    let (candidate, gate, initial) = fixture.recovery_candidate().await?;
+    let (candidate, gate, initial, handoff) = fixture.recovery_candidate().await?;
     let custody = candidate.principal.as_ref().context("candidate custody")?;
     let encoded = candidate
         .session()
@@ -306,21 +307,31 @@ async fn complete_native(
         candidate,
         gate,
         request,
+        handoff,
     })
 }
 
-pub(super) struct RecoveryAuthority {
-    method: DidUrl,
-    seed: [u8; 32],
+pub(crate) struct RecoveryAuthority {
+    pub(crate) method: DidUrl,
+    pub(crate) seed: [u8; 32],
+    pub(crate) policy_event: Event,
 }
 
-pub(super) async fn prepare_recovery_authority(
+pub(crate) async fn prepare_recovery_authority(
     founding: &TestActorClient,
+) -> Result<RecoveryAuthority> {
+    prepare_recovery_authority_with_trusted_service(founding, None).await
+}
+
+pub(crate) async fn prepare_recovery_authority_with_trusted_service(
+    founding: &TestActorClient,
+    service: Option<TrustedRecoveryServiceEntry>,
 ) -> Result<RecoveryAuthority> {
     let author = RotationAuthor::from_client(founding)?;
     let custody = founding.principal.as_ref().context("founding custody")?;
     let method = verification_method(format!("{}#offline-recovery", custody.did))?;
-    let seed = [0x43; 32];
+    let mut seed = [0u8; 32];
+    getrandom::fill(&mut seed).context("obtain recovery authority OS entropy")?;
     let event = author.recovery_unlock_policy(&unique("ak:policy:"), &method, seed)?;
     let mut policy: RecoveryPolicy = serde_json::from_value(event.payload["value"].clone())?;
     policy.trust_domain =
@@ -330,6 +341,11 @@ pub(super) async fn prepare_recovery_authority(
         anyhow::bail!("missing recovery key")
     };
     keys[0].backup_hpke.public_key_multibase = backup.backup_hpke_public_key_multikey.clone();
+    if let Some(service) = service {
+        policy.methods.push(RecoveryMethod::TrustedRecoveryService {
+            services: vec![service],
+        });
+    }
     policy.signature_proof.signature = sign(
         &custody.device_signing_key,
         &recovery_policy_signature_transcript_bytes(&policy)?,
@@ -349,7 +365,11 @@ pub(super) async fn prepare_recovery_authority(
         response.status(),
         response.text().await?
     );
-    Ok(RecoveryAuthority { method, seed })
+    Ok(RecoveryAuthority {
+        method,
+        seed,
+        policy_event: event,
+    })
 }
 
 pub(super) async fn verify_recovery_generation_boundary(

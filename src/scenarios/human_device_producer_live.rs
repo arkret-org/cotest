@@ -677,7 +677,7 @@ pub async fn grant_realm_actions(
     actions: &[&str],
 ) -> Result<RealmCommit> {
     let realm = RealmId::new(realm_id.to_owned())?;
-    let issuer = ActorId::account(AccountId::new(
+    let controller_account = AccountId::new(
         controller
             .principal
             .as_ref()
@@ -685,7 +685,8 @@ pub async fn grant_realm_actions(
             .core_id
             .clone(),
         controller_station.service_id().clone(),
-    ));
+    );
+    let issuer = ActorId::account(controller_account.clone());
     let grant = arkret_models_collaboration::events_payloads::CapabilityGrantCreateBody {
         schema: "ak.schema.capability.v1".to_owned(),
         realm_id: Some(realm.clone()),
@@ -709,22 +710,20 @@ pub async fn grant_realm_actions(
         issued_at: chrono::Utc::now(),
     };
     let payload = arkret_models_collaboration::events_payloads::CapabilityGrantPayload { grant };
-    let outcome: AuthoritySubmitResponseBody = serde_json::from_value(
-        controller
-            .submit_event(
-                realm_id,
-                EventKind::CapabilityGrant.as_str(),
-                serde_json::to_value(payload)?,
-            )
-            .await?,
-    )?;
-    match outcome {
-        AuthoritySubmitResponseBody::Accepted {
-            status: AuthorityCommitStatus::Committed,
-            commit,
-        } => Ok(commit),
-        other => bail!("the grant of {actions:?} was not committed: {other:?}"),
-    }
+    let event = controller
+        .author_event(
+            realm_id,
+            EventKind::CapabilityGrant.as_str(),
+            serde_json::to_value(payload)?,
+        )
+        .await?;
+    submit_and_expect_commit(
+        controller,
+        &controller_account,
+        &controller.device_id,
+        &event,
+    )
+    .await
 }
 
 /// A discussion Message carrying only an RFC 9420 ciphertext envelope.
@@ -806,13 +805,26 @@ pub async fn submit_and_expect_commit(
             .is_none(),
         "a self submission carries producer device evidence"
     );
-    let outcome: AuthoritySubmitResponseBody = serde_json::from_value(
-        expect_json(
-            client.post("/_arkret/self/events").json(&submission),
-            StatusCode::OK,
-        )
-        .await?,
-    )?;
+    let deadline = Instant::now() + Duration::from_secs(15);
+    let outcome: AuthoritySubmitResponseBody = loop {
+        let response =
+            crate::harness::send_recorded(client.post("/_arkret/self/events").json(&submission))
+                .await?;
+        if response.status == StatusCode::OK {
+            break serde_json::from_value(response.json()?)?;
+        }
+        let problem: arkret_wire::Problem = serde_json::from_value(response.json()?)?;
+        ensure!(
+            response.status == StatusCode::SERVICE_UNAVAILABLE
+                && problem.error_code() == Some(ErrorCode::TemporarilyUnavailable)
+                && Instant::now() < deadline,
+            "exact native Event submission could not recover: {}",
+            response.context()
+        );
+        // The Station may lose a stream-head race. Recover only this frozen
+        // signed Event; authoring a replacement could duplicate its effect.
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    };
     let AuthoritySubmitResponseBody::Accepted { status, commit } = outcome else {
         bail!("{} was not accepted: {outcome:?}", event.kind.as_str());
     };

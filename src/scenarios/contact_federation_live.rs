@@ -77,7 +77,7 @@ fn receipt_key_at(
     )?)
 }
 
-async fn issued_locator(holder: &TestActorClient) -> Result<PrincipalLocator> {
+pub(crate) async fn issued_locator(holder: &TestActorClient) -> Result<PrincipalLocator> {
     issued_locator_with_ttl(holder, 900).await
 }
 
@@ -108,7 +108,7 @@ async fn issued_locator_with_ttl(
     Ok(serde_json::from_value(resolved)?)
 }
 
-async fn wait_contact(
+pub(crate) async fn wait_contact(
     holder: &TestActorClient,
     peer: &ActorId,
     state: ContactState,

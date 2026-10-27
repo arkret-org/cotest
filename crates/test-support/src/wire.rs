@@ -12,7 +12,6 @@
 //! same breath as moving the code.
 
 use std::io::{self, Read};
-use std::time::{SystemTime, UNIX_EPOCH};
 
 use anyhow::{Context, Result, bail, ensure};
 use arkret_canonical as canonical;
@@ -230,7 +229,7 @@ mod realm_actor_fixture_tests {
         );
         package.webhook_signature_policy.key_ref = service_method.clone();
         package.endpoint_policy = serde_json::from_value(json!({
-            "endpoints":[{"method":"POST","path":"/_arkret/edge/applet/transactions","auth":"webhook_signature"}]
+            "endpoints":[{"method":"POST","path":"/_arkret/edge/applet/transactions","authentication_kind":"webhook_signature"}]
         }))
         .unwrap();
         let evidence = arkret::AppletRegistrationEpochEvidence::from_did_document(
@@ -966,19 +965,8 @@ pub fn principal_registration_fixture(input: Value) -> Result<Value> {
     let endpoint = url::Url::parse(&input.station_url).context("parse Station URL")?;
     let created_at = Utc::now().with_nanosecond(0).unwrap_or_else(Utc::now);
 
-    // Cotest fixture entropy is unique to this registration and never leaves
-    // the local test process except as the user-facing mnemonic. Production
-    // recovery-key generation remains OS-CSPRNG backed in Inkson.
-    let nonce = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .context("system clock is before Unix epoch")?
-        .as_nanos();
-    let mut entropy_hasher = Sha256::new();
-    entropy_hasher.update(b"cotest-principal-registration-v1");
-    entropy_hasher.update(input.handoff_request_id.as_bytes());
-    entropy_hasher.update(input.device_id.as_bytes());
-    entropy_hasher.update(nonce.to_le_bytes());
-    let entropy: [u8; 32] = entropy_hasher.finalize().into();
+    let mut entropy = [0u8; 32];
+    getrandom::fill(&mut entropy).context("obtain native principal recovery entropy")?;
     let mnemonic = bip39::Mnemonic::from_entropy(&entropy)
         .context("build 24-word principal recovery mnemonic")?;
     let recovery_key = mnemonic.words().collect::<Vec<_>>().join(" ");

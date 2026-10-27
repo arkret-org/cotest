@@ -1,6 +1,6 @@
 //! A complete SecurityRotation of one Account over live HTTP against a fresh
 //! Coland binary and PostgreSQL: the Station's durable worker drives
-//! `revoke → upload_new_material → switch_authoritative_pointer →
+//! `revoke â†’ upload_new_material â†’ switch_authoritative_pointer â†’
 //! erase_old_material`, and the authorizing device then completes the
 //! rotation with its client-attested `local_commit`.
 //!
@@ -267,7 +267,7 @@ impl RotationAuthor {
     }
 
     /// A's `ak.key_backup.active_series` Event selecting `series`.
-    fn pointer(
+    pub(crate) fn pointer(
         &self,
         series: &BackupSeriesId,
         version: u64,
@@ -1981,7 +1981,7 @@ async fn quorum_delete(
     signers: &[(&str, [u8; 32])],
 ) -> Result<reqwest::Response> {
     use arkret_models_crypto::{
-        KeyBackupDeleteProof, KeyBackupDeleteQuorumSignature, KeysBackupsDeleteChallenge,
+        HighRiskAuthorityProof, HighRiskDeviceQuorumSignature, KeysBackupsDeleteChallenge,
         KeysBackupsDeleteRequestBody, KeysBackupsIssueDeleteChallengeRequestBody,
     };
     use arkret_wire::{AuditReasonText, PayloadProof, PayloadProofPurpose, proof_kind};
@@ -2007,8 +2007,8 @@ async fn quorum_delete(
     let digest = challenge.delete_intent_digest(Some(reason.as_str()))?;
     let signatures = signers
         .iter()
-        .map(|(device, seed)| -> Result<KeyBackupDeleteQuorumSignature> {
-            Ok(KeyBackupDeleteQuorumSignature {
+        .map(|(device, seed)| -> Result<HighRiskDeviceQuorumSignature> {
+            Ok(HighRiskDeviceQuorumSignature {
                 device_id: DeviceId::new((*device).to_owned())?,
                 proof: PayloadProof {
                     kind: proof_kind::DETACHED_JWS.to_owned(),
@@ -2030,10 +2030,13 @@ async fn quorum_delete(
     let body = KeysBackupsDeleteRequestBody {
         request_id,
         challenge_id: challenge.challenge_id,
-        proof: KeyBackupDeleteProof::DeviceQuorum {
-            threshold: 2,
-            signatures,
-        },
+        proof: HighRiskAuthorityProof::DeviceQuorum(
+            arkret_models_crypto::HighRiskDeviceQuorumProofBody {
+                kind: arkret_models_crypto::DeviceQuorumProofKind::DeviceQuorum,
+                threshold: 2,
+                signatures,
+            },
+        ),
         reason: Some(reason),
     };
     Ok(client
@@ -2156,8 +2159,10 @@ pub async fn key_backup_device_quorum_delete_removes_an_envelope() -> Result<()>
         deleted.status(),
         deleted.text().await.unwrap_or_default()
     );
-    let deleted: arkret_models_crypto::KeysBackupsDeleteResponseBody = deleted.json().await?;
-    ensure!(deleted.deleted);
+    ensure!(
+        deleted.bytes().await?.is_empty(),
+        "backup delete returned an unregistered response body"
+    );
     ensure!(
         !lists(&listing(&client_a).await?, INACTIVE_BACKUP),
         "the deleted envelope is still listed"
@@ -2329,7 +2334,41 @@ pub(crate) async fn create_verified_recovery_unlock_session_bound(
         }),
         "the recovery session did not record the recovery_unlock proof"
     );
-    Ok(session)
+    let verified: RecoverySession = serde_json::from_value(
+        expect_json(
+            client.get(&format!(
+                "/_arkret/root/identity/recovery-sessions/{}",
+                session.recovery_session_id
+            )),
+            StatusCode::OK,
+        )
+        .await?,
+    )?;
+    ensure!(
+        verified.state == arkret_models_crypto::RecoverySessionState::Verified
+            && serde_json::to_value(&verified.proof_summary)?
+                == serde_json::to_value(&outcome.proof_summary)?,
+        "recovery proof response differs from its actual verified resource"
+    );
+    let mut original = serde_json::to_value(&session)?;
+    let mut current = serde_json::to_value(&verified)?;
+    for value in [&mut original, &mut current] {
+        let object = value
+            .as_object_mut()
+            .context("recovery resource is not an object")?;
+        object.remove("state");
+        object.remove("proof_summary");
+        object.remove("updated_at");
+    }
+    ensure!(
+        verified.updated_at >= session.updated_at,
+        "recovery verification moved its update clock backwards"
+    );
+    ensure!(
+        original == current,
+        "proof verification changed the session's frozen authority or request coordinates"
+    );
+    Ok(verified)
 }
 
 async fn recovery_unlock_delete(
@@ -2341,7 +2380,7 @@ async fn recovery_unlock_delete(
     recovery_seed: [u8; 32],
 ) -> Result<(reqwest::Response, String)> {
     use arkret_models_crypto::{
-        KeyBackupDeleteProof, KeysBackupsDeleteChallenge, KeysBackupsDeleteRequestBody,
+        HighRiskAuthorityProof, KeysBackupsDeleteChallenge, KeysBackupsDeleteRequestBody,
         KeysBackupsIssueDeleteChallengeRequestBody,
     };
     use arkret_wire::{AuditReasonText, PayloadProof, PayloadProofPurpose, proof_kind};
@@ -2381,10 +2420,13 @@ async fn recovery_unlock_delete(
     let body = KeysBackupsDeleteRequestBody {
         request_id,
         challenge_id: challenge.challenge_id,
-        proof: KeyBackupDeleteProof::RecoverySession {
-            recovery_session_id,
-            proof,
-        },
+        proof: HighRiskAuthorityProof::RecoveryUnlock(
+            arkret_models_crypto::HighRiskRecoveryUnlockProofBody {
+                kind: arkret_models_crypto::RecoveryUnlockProofKind::RecoveryUnlock,
+                recovery_session_id,
+                proof,
+            },
+        ),
         reason: Some(reason),
     };
     let response = client

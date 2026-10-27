@@ -195,6 +195,67 @@ async fn signal_recipient_accepts_agent_without_synthetic_device() {
 /// Exercise the actual HTTP client's retry policy with a consumed request and
 /// either a lost response or a retryable status.
 #[tokio::test]
+async fn signal_peer_client_requires_registered_empty_http_204() {
+    use std::io::{Read, Write};
+    for (status, body, valid) in [
+        ("204 No Content", "", true),
+        ("200 OK", "", false),
+        ("200 OK", "{}", false),
+        ("200 OK", "null", false),
+    ] {
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = std::thread::spawn(move || {
+            let (mut socket, _) = listener.accept().unwrap();
+            socket
+                .set_read_timeout(Some(std::time::Duration::from_secs(10)))
+                .unwrap();
+            let mut raw = Vec::new();
+            let mut chunk = [0; 4096];
+            loop {
+                let count = socket.read(&mut chunk).unwrap();
+                assert!(count > 0);
+                raw.extend_from_slice(&chunk[..count]);
+                if let Some(boundary) = raw.windows(4).position(|part| part == b"\r\n\r\n") {
+                    let head = String::from_utf8_lossy(&raw[..boundary]).to_ascii_lowercase();
+                    let length: usize = head
+                        .lines()
+                        .find_map(|line| line.strip_prefix("content-length: "))
+                        .unwrap()
+                        .trim()
+                        .parse()
+                        .unwrap();
+                    if raw.len() >= boundary + 4 + length {
+                        break;
+                    }
+                }
+            }
+            socket.write_all(format!("HTTP/1.1 {status}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len()).as_bytes()).unwrap();
+            raw
+        });
+        let signal = envelope().unwrap();
+        let request = arkret_wire::SignalRelayRequestBody {
+            realm_id: signal.realm_id.clone(),
+            signals: vec![signal],
+        };
+        let client = arkret_http_client::Client::builder(
+            url::Url::parse(&format!("http://{address}/")).unwrap(),
+        )
+        .allow_insecure_localhost()
+        .build()
+        .unwrap();
+        let result = client.relay_signals(&request).await;
+        assert_eq!(result.is_ok(), valid, "HTTP {status} {body:?}: {result:?}");
+        let raw = server.join().unwrap();
+        let head = String::from_utf8_lossy(&raw).to_ascii_lowercase();
+        assert!(head.starts_with("post /_arkret/peer/signal http/1.1"));
+        assert!(head.contains("arkret-operation: ak.peer.signal.command.relay.v1"));
+        assert!(!head.contains("idempotency-key:"));
+    }
+}
+
+/// A lost response or retryable status cannot create a second Signal attempt.
+#[tokio::test]
 async fn signal_peer_uncertain_http_outcome_is_not_retried() {
     use std::time::Duration;
 
@@ -260,8 +321,7 @@ async fn signal_peer_uncertain_http_outcome_is_not_retried() {
         })
         .build()
         .unwrap();
-        let result: arkret_http_client::Result<arkret_wire::SignalRelayResponseBody> =
-            client.relay_signals(&request).await;
+        let result: arkret_http_client::Result<()> = client.relay_signals(&request).await;
         assert!(result.is_err());
         finished.send(()).unwrap();
         let requests = server.await.unwrap();

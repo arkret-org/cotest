@@ -7057,6 +7057,14 @@ export type InviteDeliveryRequestBody = {
   "idempotency_key": string;
 };
 
+/** `invite-delivery-request.schema.json#/$defs/invite_delivery_response_body` — closed object schema. */
+export type InviteDeliveryResponseBody = {
+  "status": "accepted" | "duplicate" | "deferred";
+  "disclosed_outcome"?: "delivered" | "blocked";
+  "received_at"?: string;
+  "retry_after_ms"?: number;
+};
+
 /** `invite-delivery-request.schema.json#/$defs/self_invite_dispatch_request_body` — closed object schema. */
 export type SelfInviteDispatchRequestBody = {
   "schema": "ak.schema.invite_delivery_request.v1";

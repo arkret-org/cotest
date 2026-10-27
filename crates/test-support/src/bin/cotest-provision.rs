@@ -622,7 +622,7 @@ impl Session {
                     &body.coauth_base_url,
                     &body.audience_id,
                     &authorization,
-                    FoundingDeviceKey::derive(&body.device_label),
+                    FoundingDeviceKey::generate(&body.device_label)?,
                 )
                 .await?;
                 let response = json!({

@@ -23,6 +23,7 @@ mod proof;
 mod server;
 mod wire_body;
 
+pub(crate) use assertions::send_recorded;
 pub use assertions::{
     RecordedResponse, account_subscribe_delta_from_text, eventually,
     expect_account_subscribe_delta, expect_account_subscribe_realm_delta, expect_api_error,
@@ -58,8 +59,8 @@ pub use proof::{
     refresh_typed_event_proof_with_signing_seed,
 };
 pub use server::{
-    ArkretServer, CanonicalClientRequest, ScanGapControl, ScanGapRelay, ServiceRouteControl,
-    ServiceRouteRelay, ServiceRouteSigner, TestServerGroup,
+    ArkretServer, CanonicalClientRequest, HistoricalOriginHost, ScanGapControl, ScanGapRelay,
+    ServiceRouteControl, ServiceRouteRelay, ServiceRouteSigner, TestServerGroup,
 };
 pub(crate) use server::{ReservedPort, reserve_port, test_service_signing_key};
 pub use wire_body::{CanonicalJsonBody, NonProtocolTestBody};

@@ -4,7 +4,7 @@ use arkret_wire::{
     AccountId, ActorId, DeviceId, Did, DidCoreId, Hash, MAX_SIGNAL_RELAY_CANONICAL_BODY_BYTES,
     MAX_SIGNAL_RELAY_ITEMS, ProfileId, RealmCommitId, RealmId, ScopeRef, SignalClass,
     SignalEncryptedPayload, SignalEnvelope, SignalKeyRef, SignalProof, SignalRelayRequestBody,
-    SignalRelayResponseBody, project_did_to_core_id,
+    project_did_to_core_id,
 };
 use chrono::{Duration, TimeZone, Utc};
 use ed25519_dalek::SigningKey;
@@ -232,12 +232,6 @@ pub fn run_signal_federation_fixture_suite() -> Result<()> {
         signals: vec![signal.clone()],
     };
     request.validate()?;
-    SignalRelayResponseBody::ACCEPTED.validate()?;
-    if serde_json::to_value(SignalRelayResponseBody::ACCEPTED)?
-        != serde_json::json!({"accepted": true})
-    {
-        bail!("Signal relay outcome is not opaque");
-    }
     run_signal_device_authorization_domain_vector()?;
 
     let cases = fixture
@@ -355,8 +349,7 @@ pub fn run_signal_federation_fixture_suite() -> Result<()> {
                     }
                 } else if generator["hop_count"] == 2 {
                     if case["expected"]["decision"] != "silently_drop_item"
-                        || case["expected"]["response"]
-                            != serde_json::to_value(SignalRelayResponseBody::ACCEPTED)?
+                        || !has_empty_relay_response(&case["expected"])
                     {
                         bail!("second-hop failure must not reveal a per-item response");
                     }
@@ -368,23 +361,19 @@ pub fn run_signal_federation_fixture_suite() -> Result<()> {
             }
             "signal_peer_relay_equivalence_pair" => {
                 let expected = &case["expected"];
-                let opaque = serde_json::to_value(SignalRelayResponseBody::ACCEPTED)?;
-                if expected["response"] != opaque || expected["responses_byte_identical"] != true {
+                if !has_empty_relay_response(expected)
+                    || expected["responses_byte_identical"] != true
+                {
                     bail!("peer outcome equivalence contract drifted");
                 }
-                for forbidden in expected["forbidden_response_fields"]
+                let forbidden = expected["forbidden_response_fields"]
                     .as_array()
-                    .ok_or_else(|| anyhow!("missing forbidden response fields"))?
-                {
-                    let field = forbidden
-                        .as_str()
-                        .ok_or_else(|| anyhow!("invalid forbidden field"))?;
-                    let mut disclosed = opaque.clone();
-                    disclosed[field] = serde_json::json!(1);
-                    if serde_json::from_value::<SignalRelayResponseBody>(disclosed).is_ok() {
-                        bail!("peer response schema admits {field}");
-                    }
-                }
+                    .context("missing forbidden response fields")?;
+                ensure!(
+                    forbidden.contains(&serde_json::json!("accepted"))
+                        && forbidden.contains(&serde_json::json!("recipient_count")),
+                    "empty response must not disclose acceptance or recipient existence"
+                );
             }
             "signal_peer_relay_uncertain_outcome" => {
                 // This is a fixture-contract check, not evidence of live HTTP retry behavior.
@@ -481,7 +470,7 @@ fn validate_role_case_contract(case: &Value) -> Result<()> {
         "destination_without_remote_directory_relays" => {
             if expected["remote_directory_queries"] != 0
                 || expected["producer_signature_verifications"] != 0
-                || expected["response"] != serde_json::to_value(SignalRelayResponseBody::ACCEPTED)?
+                || !has_empty_relay_response(expected)
             {
                 bail!("destination must not authenticate remote device authority");
             }
@@ -540,4 +529,9 @@ mod tests {
     fn signal_federation_fixture_preserves_full_actor_authorization() {
         super::run_signal_federation_fixture_suite().unwrap();
     }
+}
+
+// Fixture metadata describes HTTP transport; it is not a protocol response DTO.
+fn has_empty_relay_response(expected: &Value) -> bool {
+    expected["response_status"] == 204 && expected["response_body"] == ""
 }

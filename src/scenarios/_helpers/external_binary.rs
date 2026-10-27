@@ -85,6 +85,18 @@ pub struct SpawnedExternalProcess {
 }
 
 impl SpawnedExternalProcess {
+    pub(crate) fn native_process_identity(&self) -> Result<serde_json::Value> {
+        let child = self
+            .child
+            .as_ref()
+            .context("native contract requires an owned live process")?;
+        Ok(serde_json::json!({
+            "pid":child.id(), "origin":self.base_url,
+            "executable":self.bin_path,
+            "sha256":arkret_canonical::sha256_digest(std::fs::read(&self.bin_path)?),
+        }))
+    }
+
     pub fn url(&self, path: &str) -> String {
         if path.starts_with('/') {
             format!("{}{path}", self.base_url)

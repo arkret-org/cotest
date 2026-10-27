@@ -1,6 +1,6 @@
 //! Accepted Human PCRs retain their account Station through rejected transfers.
 #[path = "human_pcr_station_binding/recovery.rs"]
-mod recovery;
+pub(crate) mod recovery;
 
 use anyhow::{Context, Result, ensure};
 use arkret_wire::{

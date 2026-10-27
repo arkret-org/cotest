@@ -20,6 +20,7 @@ use arkret_http_client::{Auth, Client as SdkClient};
 use base64::Engine as _;
 use base64::engine::general_purpose::{STANDARD as BASE64_STANDARD, URL_SAFE_NO_PAD};
 use chrono::Utc;
+pub use public_base::HistoricalOriginHost;
 use reqwest::{Client as HttpClient, IntoUrl, Method, RequestBuilder, StatusCode};
 pub use scan_gap_relay::{ScanGapControl, ScanGapRelay};
 use serde_json::Value;
@@ -140,6 +141,24 @@ impl OperationSelectingHttpClient {
         U: IntoUrl,
     {
         self.request_with_selector(Method::PUT, url)
+    }
+}
+
+impl ArkretServer {
+    /// Identify the actual owned executable; an attached or mock endpoint is insufficient.
+    pub(crate) fn native_process_identity(&self) -> Result<Value> {
+        let SutHandle::Local(child) = &self.handle else {
+            anyhow::bail!("native contract requires an owned Station process");
+        };
+        let config = self
+            .external_restart
+            .as_ref()
+            .context("owned Station executable metadata absent")?;
+        Ok(serde_json::json!({
+            "pid":child.id(), "origin":self.base_url.as_str(),
+            "executable":config.bin_path,
+            "sha256":arkret_canonical::sha256_digest(std::fs::read(&config.bin_path)?),
+        }))
     }
 }
 
@@ -1221,6 +1240,27 @@ impl ArkretServer {
         destination: &DidCoreId,
         idempotency_key: Option<&str>,
     ) -> Result<reqwest::Request> {
+        self.signed_peer_request("POST", source, path, body, destination, idempotency_key)
+    }
+
+    pub fn signed_peer_get_request(
+        &self,
+        source: &ArkretServer,
+        path: &str,
+        destination: &DidCoreId,
+    ) -> Result<reqwest::Request> {
+        self.signed_peer_request("GET", source, path, &[], destination, None)
+    }
+
+    fn signed_peer_request(
+        &self,
+        method: &str,
+        source: &ArkretServer,
+        path: &str,
+        body: &[u8],
+        destination: &DidCoreId,
+        idempotency_key: Option<&str>,
+    ) -> Result<reqwest::Request> {
         use arkret_signatures::http_signature::{
             Component, ContentDigest, ContentDigestAlgorithm, SignedRequestParts,
             canonical_message, format_signature_input_component_list, parse_signature_input,
@@ -1261,7 +1301,7 @@ impl ArkretServer {
             Component::Header("source-trust-domain".to_owned()),
             Component::Header("destination-trust-domain".to_owned()),
         ];
-        if let Some(operation) = arkret_wire::ServiceOperationId::from_http_request("POST", path) {
+        if let Some(operation) = arkret_wire::ServiceOperationId::from_http_request(method, path) {
             headers.push(("arkret-operation".to_owned(), operation.as_str().to_owned()));
             covered.push(Component::Header("arkret-operation".to_owned()));
         }
@@ -1285,7 +1325,7 @@ impl ArkretServer {
         let parsed = parse_signature_input(&signature_input).map_err(|error| anyhow!("{error}"))?;
         let base = canonical_message(
             &SignedRequestParts {
-                method: "POST".to_owned(),
+                method: method.to_owned(),
                 target_uri: target.clone(),
                 authority,
                 path: String::new(),
@@ -1296,7 +1336,10 @@ impl ArkretServer {
         )
         .map_err(|error| anyhow!("{error}"))?;
         let signature = sign_message(&base, &source.federation_signing_key()?);
-        let mut request = self.http_client.post(&target).body(body.to_vec());
+        let mut request = self
+            .http_client
+            .request(reqwest::Method::from_bytes(method.as_bytes())?, &target)
+            .body(body.to_vec());
         for (name, value) in headers {
             request = request.header(name, value);
         }
@@ -1304,7 +1347,7 @@ impl ArkretServer {
             .header("signature-input", signature_input)
             .header("signature", format!("sig1=:{signature}:"))
             .build()
-            .with_context(|| format!("build signed peer POST {path}"))
+            .with_context(|| format!("build signed peer {method} {path}"))
     }
 
     /// Build a request for Coland's deployment-local account projection fixture.
@@ -1449,6 +1492,53 @@ impl ArkretServer {
     pub async fn restart_external_process(&mut self) -> Result<()> {
         self.stop_external_process().await?;
         self.start_external_process().await
+    }
+
+    /// Load the real issuer capability after both deployment identities are bound.
+    pub(crate) async fn attach_local_account_authority_config(
+        &mut self,
+        path: &Path,
+    ) -> Result<()> {
+        let path = path
+            .canonicalize()
+            .context("resolve actual issuer deployment configuration")?;
+        let config = self
+            .external_restart
+            .as_mut()
+            .context("owned external Station")?;
+        config
+            .extra_env
+            .retain(|(key, _)| key != "COLAND_LOCAL_ACCOUNT_AUTHORITY_CONFIG");
+        config.extra_env.push((
+            "COLAND_LOCAL_ACCOUNT_AUTHORITY_CONFIG".to_owned(),
+            path.to_str()
+                .context("issuer configuration path is not UTF-8")?
+                .to_owned(),
+        ));
+        self.restart_external_process().await
+    }
+
+    /// Apply the normal deployment administrator allowlist to this owned process.
+    pub(crate) async fn restart_with_registry_administrators(
+        &mut self,
+        principals: &[DidCoreId],
+    ) -> Result<()> {
+        let config = self
+            .external_restart
+            .as_mut()
+            .context("owned external Station")?;
+        config
+            .extra_env
+            .retain(|(key, _)| key != "COLAND_ADMIN_PRINCIPAL_IDS");
+        config.extra_env.push((
+            "COLAND_ADMIN_PRINCIPAL_IDS".to_owned(),
+            principals
+                .iter()
+                .map(DidCoreId::as_str)
+                .collect::<Vec<_>>()
+                .join(","),
+        ));
+        self.restart_external_process().await
     }
 
     /// Change only normal deployment peer discovery, retaining custody and data.
@@ -1804,7 +1894,7 @@ impl ArkretServer {
         )
         .await
         .context("complete the authorization-code flow")?;
-        let device_key = provisioning::FoundingDeviceKey::derive(handle);
+        let device_key = provisioning::FoundingDeviceKey::generate(handle)?;
         let handoff = provisioning::create_account_handoff(
             http,
             &endpoints.coauth_base_url,
@@ -1909,7 +1999,10 @@ impl ArkretServer {
             pcr_realm_id: creation.pcr_genesis_unit.create().realm_id.clone(),
             founding_authorize_event_id: founding_authorization.event_id.clone(),
         };
-        self.actor_client(&founded.did, &device_id, session, Some(principal))
+        let control_realm = principal.pcr_realm_id.clone();
+        let client = self.actor_client(&founded.did, &device_id, session, Some(principal))?;
+        client.track_controlled_realm(&control_realm);
+        Ok(client)
     }
 
     /// Register account-first, then publish a primary localpart through the

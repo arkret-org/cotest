@@ -62,7 +62,7 @@ pub(super) fn provider_sdk(
         .map_err(Into::into)
 }
 
-async fn signed_post_inner(
+pub(crate) async fn signed_post_inner(
     server: &ArkretServer,
     path: &str,
     room: Option<&str>,
@@ -214,9 +214,16 @@ async fn signed_post_with_mutation(
     if let Some(name) = tamper.and_then(|value| value.strip_prefix("missing-header:")) {
         request.headers_mut().remove(name);
     }
+    let frozen = request.try_clone();
     let response = server.http().execute(request).await?;
     let status = response.status();
-    Ok((status, response.json().await?))
+    let bytes = response.bytes().await?;
+    cotest_test_support::operation_observation::record_response(
+        frozen.as_ref(),
+        status.as_u16(),
+        &bytes,
+    )?;
+    Ok((status, serde_json::from_slice(&bytes)?))
 }
 async fn counts(url: &str, realm: &str) -> Result<Vec<i64>> {
     let url = url.to_owned();

@@ -166,7 +166,9 @@ impl ArkretServer {
                 "127.0.0.1:{}",
                 origin.port().context("historical origin port")?
             ))
-            .env("COLAND_PUBLIC_BASE_URL", origin.as_str())
+            // The historical listener serves the same current identity and
+            // issuer configuration; its bind address is only transport.
+            .env("COLAND_PUBLIC_BASE_URL", self.base_url.as_str())
             .env(
                 "COLAND_METRICS_BIND",
                 format!("127.0.0.1:{}", metrics.port()),

@@ -1,8 +1,8 @@
+import type { ContactView } from "../../helpers/generated/spec-wire-objects";
 import { expect, type APIRequestContext } from "../../helpers/arkret-test";
 import {
   requestContactArkret,
   respondContactArkret,
-  type ContactView,
 } from "../../helpers/contact-api";
 import { colandBaseUrl } from "../../helpers/env";
 import { test as jointTest } from "../../helpers/joint-fixture";

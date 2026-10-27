@@ -93,6 +93,7 @@ const TARGETS = [
     file: "invite-delivery-request.schema.json",
     typeName: "InviteDeliveryRequestBody",
   },
+  { file: "invite-delivery-request.schema.json", pointer: "#/$defs/invite_delivery_response_body", typeName: "InviteDeliveryResponseBody" },
   // The client-facing dispatch body is its own closed `$def`, not a projection
   // of the peer body: it carries `invite_event_id` instead of `invite_event`
   // and refers to a previously accepted Event (the inviter-side Station

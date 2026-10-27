@@ -19,6 +19,7 @@
 pub mod agent_runtime;
 pub mod garth_client;
 pub mod mls_wire;
+pub mod operation_observation;
 pub mod provisioning;
 pub mod session;
 pub mod wire;

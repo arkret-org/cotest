@@ -338,13 +338,11 @@ pub async fn spawn_coauth_with_station_and_chaos(
 ) -> Result<(SpawnedCoauth, crate::harness::ArkretServer)> {
     let prepared = prepare_coauth_with_db_required()?;
     let base = prepared.base_url();
-    let introspection = format!("{base}/_coauth/internal/session-grants/introspect");
-    let station = crate::harness::ArkretServer::spawn_with_env(
+    let mut station = crate::harness::ArkretServer::spawn_with_env(
         "coauth-ledger-chaos",
         &[
             ("COLAND_TRUST_DOMAIN", JOINT_TRUST_DOMAIN),
             ("COLAND_ACCOUNT_AUTHORITY_URL", &base),
-            ("COLAND_SESSION_GRANT_INTROSPECTION_URL", &introspection),
             (
                 "COLAND_INTERNAL_AUTHORITY_SHARED_SECRET",
                 "cotest-ledger-chaos",
@@ -365,6 +363,9 @@ pub async fn spawn_coauth_with_station_and_chaos(
             station.tls_ca_path(),
             Some(chaos),
         )
+        .await?;
+    station
+        .attach_local_account_authority_config(coauth.config.path())
         .await?;
     Ok((coauth, station))
 }

@@ -1,6 +1,6 @@
 import { accountActorId } from "../../helpers/coland-api";
 import { expect, type APIRequestContext } from "../../helpers/arkret-test";
-import type { CircleOutcome } from "../../helpers/circle-api";
+import type { CircleView } from "../../helpers/circle-api";
 import { colandBaseUrl } from "../../helpers/env";
 import { test as jointTest } from "../../helpers/joint-fixture";
 import {
@@ -61,12 +61,12 @@ async function getCircle(
   request: APIRequestContext,
   session: DpopUserSession,
   circleId: string,
-): Promise<CircleOutcome> {
+): Promise<CircleView> {
   const url = `${colandBaseUrl()}/_arkret/self/circles/${encodeURIComponent(circleId)}`;
   const response = await request.get(url, {
     headers: selfPathHeadersForDpopSession(session, "GET", url),
   });
   const text = await response.text();
   expect(response.status(), text).toBe(200);
-  return JSON.parse(text) as CircleOutcome;
+  return JSON.parse(text) as CircleView;
 }

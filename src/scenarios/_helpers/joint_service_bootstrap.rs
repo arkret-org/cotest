@@ -5,7 +5,7 @@
 //!      the pre-built sibling binary fast path).
 //!   2. Optionally spawns `coauth` via [`coauth_bootstrap::spawn_coauth_with_db`] (docker-postgres
 //!      + generated config). Wires coland -> coauth session-grant introspection via
-//!      `COLAND_SESSION_GRANT_INTROSPECTION_URL`.
+//!      `COLAND_LOCAL_ACCOUNT_AUTHORITY_CONFIG`.
 //!   3. Optionally spawns `flagon` via [`external_binary::FLAGON_SPEC`] — requires `DATABASE_URL`
 //!      in the caller's env (see `FLAGON_SPEC.required_env_vars`).
 //!
@@ -182,14 +182,6 @@ pub async fn try_bootstrap(config: JointServiceConfig) -> Result<JointServiceSta
         let base = coauth.base_url();
         let base = base.trim_end_matches('/');
         coland_env.push((
-            "COLAND_SESSION_GRANT_INTROSPECTION_URL".to_owned(),
-            format!("{base}/_coauth/internal/session-grants/introspect"),
-        ));
-        coland_env.push((
-            "COLAND_AUTH_SESSION_LOGOUT_URL".to_owned(),
-            format!("{base}/_coauth/internal/auth-sessions/logout"),
-        ));
-        coland_env.push((
             "COLAND_INTERNAL_AUTHORITY_SHARED_SECRET".to_owned(),
             config.internal_authority_shared_secret.clone(),
         ));
@@ -209,7 +201,7 @@ pub async fn try_bootstrap(config: JointServiceConfig) -> Result<JointServiceSta
         .iter()
         .map(|(k, v)| (k.as_str(), v.as_str()))
         .collect();
-    let coland = if let (Some(_), Some(coland_bin)) = (
+    let mut coland = if let (Some(_), Some(coland_bin)) = (
         prepared_coauth.as_ref(),
         locate_external_binary(&COLAND_SPEC),
     ) {
@@ -243,6 +235,11 @@ pub async fn try_bootstrap(config: JointServiceConfig) -> Result<JointServiceSta
         None => None,
     };
 
+    if let Some(authority) = &coauth {
+        coland
+            .attach_local_account_authority_config(authority.config.path())
+            .await?;
+    }
     Ok(JointServiceStack {
         flagon,
         coauth,

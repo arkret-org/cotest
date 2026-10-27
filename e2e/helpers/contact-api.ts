@@ -35,41 +35,41 @@ import {
   submitPeerInviteDeliveryApi,
   submitSignedEventApi,
   cotestWire,
-  type InviteDeliveryOutcomeView,
-  type InviteDeliveryRequestBodyBodyBody,
+  type InviteDeliveryResponseBody,
+  type InviteDeliveryRequestBody,
   uuidV7,
   wireErrCode,
 } from "./coland-api";
 import type { JointUser } from "./users";
 import { replaceConsentScopeApi } from "./consent-api";
 import type {
-  ContactPeer, ContactView as WireContactView, ContactOperationResponseBody,
+  ContactPeer, ContactView, ContactOperationResponseBody,
   ContactRequestBody, ContactRespondRequestBody, ContactRejectRequestBody,
   ContactTombstoneRequestBody, InviteObject, KeyPackagesUploadResponseBody,
 } from "./generated/spec-wire-objects";
 
 // The extra names below are harness projections, derived from formal wire DTOs.
-type ContactState = WireContactView["state"];
+type ContactState = ContactView["state"];
 type ContactRequestPrepare = Extract<ContactRequestBody, { phase: "prepare" }>;
-type ContactScope = WireContactView["granted_to_peer_scopes"][number];
-export type ContactView = Omit<WireContactView, "peer"> & {
+type ContactScope = ContactView["granted_to_peer_scopes"][number];
+type ContactTestProjection = Omit<ContactView, "peer"> & {
   peer: string;
   peerIdentity: ContactPeer;
   granted_by_me: ContactScope[];
   granted_to_me: ContactScope[];
 };
-type ContactRequestResponseBody = {
+type ContactRequestSummary = {
   request_event_ref: string;
   request_acceptance_receipt: Extract<ContactOperationResponseBody, { status: "accepted"; operation_kind: "request" }>["request_acceptance_receipt"];
   state: ContactState;
 };
-type ContactRespondResponseBody = {
+type ContactResponseSummary = {
   response_event_ref: string;
   acceptance_receipt: Extract<ContactOperationResponseBody, { status: "accepted"; operation_kind: "response" }>["normal_response_acceptance_receipt"]
     | Extract<ContactOperationResponseBody, { status: "accepted"; operation_kind: "reject" }>["reject_acceptance_receipt"];
   state: ContactState;
 };
-type ContactTombstoneResponseBody = { tombstone_event_ref: string; state: "tombstoned" };
+type ContactTombstoneSummary = { tombstone_event_ref: string; state: "tombstoned" };
 
 function contactScopes(scopes: string[]): ContactScope[] {
   const order: ContactScope[] = ["invite", "direct_message", "voice_call", "video_call", "presence"];
@@ -103,29 +103,11 @@ function signContactDraft(
   return { prepared, signedEvent };
 }
 
-export type DirectConversationResolveResponseBody = {
-  state:
-    | "creation_required"
-    | "creation_blocked"
-    | "awaiting_founder"
-    | "provisional"
-    | "found"
-    | "suspended"
-    | "temporarily_unavailable";
-  next_founding_input?: {
-    founding_authority_evidence: Record<string, unknown>;
-  };
-  coordinates?: Record<string, unknown>;
-  blockers?: Array<Record<string, unknown>>;
-  send_blockers?: Array<Record<string, unknown>>;
-  group_state_ref?: string;
-  retry_after_ms?: number;
-};
+
 
 // invite-addressing.md §5.1: `disclosed_outcome` is a closed two-value enum
 // (`delivered | blocked`). Quarantine MUST NOT be disclosed at all — it is
 // reported as `status="deferred"` with no `disclosed_outcome`.
-type InviteDeliveryResponseBody = InviteDeliveryOutcomeView;
 type InviteConsentGrant = { eventRef: string };
 
 export async function grantInviteConsentArkret(
@@ -218,7 +200,7 @@ export async function requestContactArkret(
      */
     introductionEvidence?: ContactRequestPrepare["introduction_evidence"];
   },
-): Promise<{ outcome: ContactRequestResponseBody; response: APIResponse }> {
+): Promise<{ outcome: ContactRequestSummary; response: APIResponse }> {
   const nonce = uuidV7();
   const operationId = `ak:operation:contact.request.${nonce}`;
   const idempotencyKey = opts.idempotencyKey ?? nonce;
@@ -261,7 +243,7 @@ export async function requestContactArkret(
   expect(accepted.request_acceptance_receipt.core.request_event_ref).toBe(signedEvent.event_id);
   expect(accepted.request_acceptance_receipt.core.holder).toEqual({ kind: "human", account_id: actor.account_id });
   expect(accepted.request_acceptance_receipt.core.peer).toEqual(prepareBody.peer);
-  const outcome: ContactRequestResponseBody = {
+  const outcome: ContactRequestSummary = {
     request_event_ref:
       accepted.request_acceptance_receipt.core.request_event_ref,
     request_acceptance_receipt: accepted.request_acceptance_receipt,
@@ -320,8 +302,8 @@ export async function respondContactArkret(
     server?: ColandKey;
     requesterServiceId?: string;
   },
-): Promise<ContactRespondResponseBody> {
-  let row: ContactView | undefined;
+): Promise<ContactResponseSummary> {
+  let row: ContactTestProjection | undefined;
   await expect
     .poll(
       async () => {
@@ -403,12 +385,12 @@ async function listContactsArkret(
   request: APIRequestContext,
   token: string,
   opts: { server?: ColandKey } = {},
-): Promise<ContactView[]> {
+): Promise<ContactTestProjection[]> {
   const url = `${colandBaseUrl(opts.server)}/_arkret/self/contacts`;
   const response = await request.get(url, {
     headers: authHeaders(token, "GET", url),
   });
-  const body = await expectJsonOk<{ contacts: WireContactView[] }>(
+  const body = await expectJsonOk<{ contacts: ContactView[] }>(
     response,
     "list contacts",
   );
@@ -438,7 +420,7 @@ export async function contactRow(
   token: string,
   peer: string,
   opts: { server?: ColandKey } = {},
-): Promise<ContactView | undefined> {
+): Promise<ContactTestProjection | undefined> {
   const rows = await listContactsArkret(request, token, opts);
   const matches = rows.filter((row) => row.peer === peer);
   if (matches.length > 1) throw new Error("contact principal maps to multiple Station accounts; select a complete peer identity");
@@ -457,7 +439,7 @@ export async function tombstoneContactArkret(
     peerServiceId?: string;
     server?: ColandKey;
   } = {},
-): Promise<ContactTombstoneResponseBody> {
+): Promise<ContactTombstoneSummary> {
   const row = await contactRow(request, token, contact, {
     server: opts.server,
   });
@@ -578,29 +560,13 @@ async function uploadDirectConversationKeyPackage(
   expect(body.rejections ?? []).toEqual([]);
 }
 
-// ── Invite-receive policy (graded disclosure / blocked subjects). ──
-
-export type InviteReceivePolicy = {
-  schema: string;
-  account_id: ReturnType<typeof accountActorId>["account_id"];
-  holder_allowed_introduction_kinds: string[];
-  explicit_address_behavior: "drop" | "quarantine" | "notify";
-  unknown_invites: "drop" | "quarantine";
-  trusted_realm_ids?: string[];
-  trusted_source_ids?: string[];
-  denied_source_ids?: string[];
-  denied_actor_ids?: Array<ReturnType<typeof accountActorId>>;
-  disclosure?: {
-    high_trust?: "opaque" | "outcome";
-    low_trust?: "opaque" | "outcome";
-  };
-};
 
 // ── Realm-pull (consent_grant evidence) invite delivery. ──
 
-export type IntroductionEvidence =
-  | { kind: "consent_grant"; consent_grant_ref: string }
-  | { kind: "explicit_address" };
+export type IntroductionEvidence = Extract<
+  InviteDeliveryRequestBody["introduction_evidence"],
+  { kind: "consent_grant" | "explicit_address" }
+>;
 
 // Build a `ak.invite.create` invite event whose payload satisfies coland's
 // invite-delivery consistency checks (src/routing/invites.rs
@@ -696,7 +662,7 @@ async function deliverInvite(
     context: args.context,
   });
   const inviteCommit = (submitOutcome as Record<string, unknown>).commit as
-    InviteDeliveryRequestBodyBodyBody["invite_commit"];
+    InviteDeliveryRequestBody["invite_commit"];
   const acceptedEventId = String(event.event_id);
   const inviteId = retypeEventDerivedId(acceptedEventId, "invite");
   const inviteAddress = {
@@ -724,18 +690,18 @@ async function deliverInvite(
     };
   }
 
-  const body: InviteDeliveryRequestBodyBodyBody = {
+  const body: InviteDeliveryRequestBody = {
     schema: "ak.schema.invite_delivery_request.v1",
     // `signedEventEnvelope` still returns an untyped record — wiring the Event
     // envelope itself to the generated type is the remaining B3 item.
-    invite_event: event as InviteDeliveryRequestBodyBodyBody["invite_event"],
+    invite_event: event as InviteDeliveryRequestBody["invite_event"],
     // §7 step 4: the receiver cannot resolve the invite Realm's authority
     // itself, so the covering RealmCommit and the locator hints that reach the
     // inviter's Station travel with the request.
     invite_commit: inviteCommit,
     producer_signer_fact: await originalHumanSignerFactApi(
       request, args.inviterToken,
-      event as InviteDeliveryRequestBodyBodyBody["invite_event"], inviteCommit,
+      event as InviteDeliveryRequestBody["invite_event"], inviteCommit,
       { server: args.originServer },
     ),
     authority_locator_hints: [
@@ -791,13 +757,12 @@ export async function deliverInviteWithConsentGrant(
 // List the authenticated actor's pending invites with the canonical wire
 // shape. The authz endpoint serializes the SDK `Invite` whose id field is
 // `id` (NOT `invite_id`).
-type AuthzInvite = InviteObject;
 
 export async function listAuthzInvitesArkret(
   request: APIRequestContext,
   token: string,
   opts: { server?: ColandKey } = {},
-): Promise<AuthzInvite[]> {
+): Promise<InviteObject[]> {
   const url = new URL(
     "/_arkret/self/authz/invites",
     colandBaseUrl(opts.server),
@@ -808,7 +773,7 @@ export async function listAuthzInvitesArkret(
       "Arkret-Operation": "ak.self.authz.invites.read.list.v1",
     },
   });
-  const body = await expectJsonOk<{ invites?: AuthzInvite[] }>(
+  const body = await expectJsonOk<{ invites?: InviteObject[] }>(
     response,
     "list authz invites",
   );
@@ -826,7 +791,7 @@ export async function listAuthzInvitesArkret(
 // number, and the label carries the diagnosis. Use `expectInviteFields` when a
 // test genuinely needs to inspect an invite.
 export function countInvitesFor(
-  invites: AuthzInvite[],
+  invites: InviteObject[],
   realmId: string,
   inviteeId: string,
 ): number {

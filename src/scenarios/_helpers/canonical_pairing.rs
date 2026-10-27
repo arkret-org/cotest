@@ -78,6 +78,7 @@ struct PreparedPairing {
     device_id: arkret_wire::DeviceId,
     identity_key: FoundingDeviceKey,
     holder_key: FoundingDeviceKey,
+    hpke_private_key: zeroize::Zeroizing<Vec<u8>>,
 }
 async fn prepare_pairing(fixture: &CanonicalApiFixture) -> Result<PreparedPairing> {
     let original = fixture
@@ -91,13 +92,13 @@ async fn prepare_pairing(fixture: &CanonicalApiFixture) -> Result<PreparedPairin
     );
     let device_id =
         arkret_wire::DeviceId::new(arkret_identifiers::new_prefixed_uuid7("ak:device:"))?;
-    let identity_key = FoundingDeviceKey::derive(&format!("{device_id}-identity"));
-    let holder_key = FoundingDeviceKey::derive(&format!("{device_id}-holder"));
+    let identity_key = FoundingDeviceKey::generate(&format!("{device_id}-identity"))?;
+    let holder_key = FoundingDeviceKey::generate(&format!("{device_id}-holder"))?;
     ensure!(
         identity_key.signing_key().verifying_key() != holder_key.signing_key().verifying_key(),
         "Device and Standard holder keys must be independent"
     );
-    let hpke_entropy = FoundingDeviceKey::derive(&format!("{device_id}-hpke"));
+    let hpke_entropy = FoundingDeviceKey::generate(&format!("{device_id}-hpke"))?;
     let hpke = arkret_crypto::identity_root::derive_identity_recovery_key_material(
         &hpke_entropy.signing_key().to_bytes(),
         0,
@@ -105,9 +106,11 @@ async fn prepare_pairing(fixture: &CanonicalApiFixture) -> Result<PreparedPairin
     let public = Client::builder(fixture.endpoints.coland_base_url.parse()?)
         .http_client(fixture.http.clone())
         .build()?;
+    let mut client_nonce = [0u8; 32];
+    getrandom::fill(&mut client_nonce).context("obtain pairing stage nonce OS entropy")?;
     let stage_request: DevicePairingStageRequestBody = serde_json::from_value(json!({
         "new_device_public_key":{"kty":"OKP","kid":device_id,"algorithm":"Ed25519","key":arkret_canonical::base64url_encode(identity_key.signing_key().verifying_key().to_bytes())},
-        "client_nonce":arkret_canonical::base64url_encode(&Sha256::digest(device_id.as_str().as_bytes())[..16])
+        "client_nonce":arkret_canonical::base64url_encode(client_nonce)
     }))?;
     let staged = public.device_pairing_stage(&stage_request).await?;
     let pending = handoff(fixture, holder_key.clone()).await?;
@@ -171,6 +174,7 @@ async fn prepare_pairing(fixture: &CanonicalApiFixture) -> Result<PreparedPairin
         device_id,
         identity_key,
         holder_key,
+        hpke_private_key: zeroize::Zeroizing::new(hpke.backup_hpke_serialized_private_key.to_vec()),
     })
 }
 pub(super) async fn prepare_pairing_request(
@@ -198,6 +202,7 @@ pub async fn pair(fixture: &CanonicalApiFixture) -> Result<TestActorClient> {
         device_id,
         identity_key,
         holder_key,
+        hpke_private_key,
     } = prepare_pairing(fixture).await?;
     let original = fixture
         .client
@@ -261,6 +266,7 @@ pub async fn pair(fixture: &CanonicalApiFixture) -> Result<TestActorClient> {
     let mut principal = original.clone();
     principal.device_id = device_id.clone();
     principal.device_signing_key = identity_key.signing_key();
+    principal.device_hpke_private_key = Some(hpke_private_key);
     principal.founding_authorize_event_id = event_id.clone();
     crate::harness::register_event_signing_identity(
         original.did.as_str(),
@@ -315,7 +321,8 @@ pub(super) async fn issue_for_device(
         .principal
         .as_ref()
         .context("accepted Device custody")?;
-    let holder_key = FoundingDeviceKey::derive(&arkret_identifiers::new_prefixed_uuid7("holder-"));
+    let holder_key =
+        FoundingDeviceKey::generate(&arkret_identifiers::new_prefixed_uuid7("holder-"))?;
     let pending = handoff(fixture, holder_key.clone()).await?;
     let jkt = arkret_canonical::base64url_encode(Sha256::digest(
         holder_key.canonical_public_jwk()?.as_bytes(),
@@ -398,11 +405,12 @@ pub(super) async fn recovery_candidate(
     TestActorClient,
     Client,
     arkret_models_identity::InitialSessionGrantIntent,
+    provisioning::AccountHandoff,
 )> {
     let device_id =
         arkret_wire::DeviceId::new(arkret_identifiers::new_prefixed_uuid7("ak:device:"))?;
-    let identity_key = FoundingDeviceKey::derive(device_id.as_str());
-    let holder_key = FoundingDeviceKey::derive(&format!("{device_id}-holder"));
+    let identity_key = FoundingDeviceKey::generate(device_id.as_str())?;
+    let holder_key = FoundingDeviceKey::generate(&format!("{device_id}-holder"))?;
     let pending = handoff(fixture, holder_key.clone()).await?;
     let gate = handoff_client(fixture, &pending)?;
     let original = fixture
@@ -423,6 +431,13 @@ pub(super) async fn recovery_candidate(
     let mut principal = original.clone();
     principal.device_id = device_id.clone();
     principal.device_signing_key = identity_key.signing_key();
+    let hpke = arkret_crypto::identity_root::derive_identity_recovery_key_material(
+        &identity_key.signing_key().to_bytes(),
+        0,
+    )?;
+    principal.device_hpke_private_key = Some(zeroize::Zeroizing::new(
+        hpke.backup_hpke_serialized_private_key.to_vec(),
+    ));
     crate::harness::register_event_signing_identity(
         original.did.as_str(),
         identity_key.signing_key().to_bytes(),
@@ -443,5 +458,5 @@ pub(super) async fn recovery_candidate(
         session_public_key: grant.session_public_key,
         audience_id: grant.audience_id,
     };
-    Ok((candidate, gate, initial))
+    Ok((candidate, gate, initial, pending))
 }

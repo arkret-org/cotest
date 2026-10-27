@@ -281,8 +281,9 @@ fn append_transcript_entry_to(path: &PathBuf, entry: &Value) -> Result<()> {
     Ok(())
 }
 
-async fn send_recorded(builder: RequestBuilder) -> Result<RecordedResponse> {
+pub(crate) async fn send_recorded(builder: RequestBuilder) -> Result<RecordedResponse> {
     let builder = canonicalize_protocol_json_body(builder)?;
+    let native_request = cotest_test_support::operation_observation::freeze_request(&builder)?;
     let request = snapshot_request_builder(&builder);
     let started = Instant::now();
     let response = match builder.timeout(HTTP_REQUEST_DEADLINE).send().await {
@@ -307,6 +308,25 @@ async fn send_recorded(builder: RequestBuilder) -> Result<RecordedResponse> {
     let status = response.status();
     let headers = response.headers().clone();
     let body = response.bytes().await?.to_vec();
+    let registered_empty = native_request
+        .as_ref()
+        .and_then(|request| request.headers().get("arkret-operation"))
+        .and_then(|value| value.to_str().ok())
+        .and_then(arkret_wire::ServiceOperationId::from_wire)
+        .is_some_and(|operation| operation.descriptor().success_shape_kind == "empty_response");
+    if registered_empty
+        || headers
+            .get(CONTENT_TYPE)
+            .and_then(|value| value.to_str().ok())
+            .and_then(|value| value.split(';').next())
+            .is_some_and(|value| value.trim().eq_ignore_ascii_case("application/json"))
+    {
+        cotest_test_support::operation_observation::record_response(
+            native_request.as_ref(),
+            status.as_u16(),
+            &body,
+        )?;
+    }
     let response_snapshot = snapshot_response(status, &headers, &body);
     let context = format_exchange_context(&request, &response_snapshot);
     let _ = append_transcript_entry(&json!({

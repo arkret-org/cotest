@@ -210,7 +210,7 @@ async fn a_fresh_account_receives_an_identity_creation_lease() {
         &endpoints.coauth_base_url,
         &facts.service_id,
         &authorization,
-        FoundingDeviceKey::derive(&slug),
+        FoundingDeviceKey::generate(&slug).expect("OS CSPRNG for live fixture key"),
     )
     .await
     .expect("exchange the authorization for an account handoff");
@@ -268,7 +268,7 @@ async fn the_canonical_chain_founds_a_principal_end_to_end() {
         &endpoints.coauth_base_url,
         &facts.service_id,
         &authorization,
-        FoundingDeviceKey::derive(&slug),
+        FoundingDeviceKey::generate(&slug).expect("OS CSPRNG for live fixture key"),
     )
     .await
     .expect("exchange the authorization for an account handoff");
@@ -451,7 +451,7 @@ async fn a_canonical_session_authorizes_a_caller_built_request() {
         &endpoints.coauth_base_url,
         &facts.service_id,
         &authorization,
-        FoundingDeviceKey::derive(&slug),
+        FoundingDeviceKey::generate(&slug).expect("OS CSPRNG for live fixture key"),
     )
     .await
     .expect("exchange the authorization for an account handoff");
@@ -521,7 +521,11 @@ async fn a_canonical_session_authorizes_a_caller_built_request() {
     // binding it advertises is not being checked.
     let impostor = ClientSession::Canonical {
         grant: principal.session_grant().session_grant.clone(),
-        signing_key: std::sync::Arc::new(FoundingDeviceKey::derive("impostor").signing_key()),
+        signing_key: std::sync::Arc::new(
+            FoundingDeviceKey::generate("impostor")
+                .expect("OS CSPRNG for live fixture key")
+                .signing_key(),
+        ),
     };
     let refused = impostor
         .authorize(
