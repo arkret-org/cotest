@@ -54,6 +54,10 @@ class PatchCoauthConfigTests(unittest.TestCase):
             with patch("sys.argv", arguments):
                 self.assertEqual(MODULE.main(), 0)
             result = output.read_text(encoding="utf-8")
+            raw.write_text(raw.read_text(encoding="utf-8"), encoding="utf-8-sig")
+            with patch("sys.argv", arguments):
+                self.assertEqual(MODULE.main(), 0)
+            self.assertEqual(output.read_text(encoding="utf-8"), result)
             # The runner owns key custody: no config-inline key material, and both
             # KeyStore files are repointed out of the coauth checkout.
             self.assertIn("backend: encrypted_file", result)

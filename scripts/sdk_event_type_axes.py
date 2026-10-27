@@ -16,7 +16,7 @@ def digest(path):
 
 
 def read(path):
-    return json.loads(Path(path).read_text(encoding="utf-8-signature"))
+    return json.loads(Path(path).read_text(encoding="utf-8-sig"))
 
 
 def write(path, data):
