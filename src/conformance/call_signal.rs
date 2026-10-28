@@ -249,7 +249,7 @@ pub fn run_proof_detached_jws_vector() -> Result<()> {
             "/encrypted_payload/aead_profile",
             json!("MLS_128_DHKEMX25519_CHACHA20POLY1305_SHA256_Ed25519"),
         ),
-        ("/encrypted_payload/epoch", json!(8)),
+        ("/encrypted_payload/epoch", json!("8")),
         ("/encrypted_payload/nonce", json!("AAAAAAAAAAAAAAAB")),
     ];
     for (pointer, replacement) in aad_field_mutations {
