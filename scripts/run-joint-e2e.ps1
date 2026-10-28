@@ -3477,13 +3477,13 @@ for ($serverIndex = 1; $serverIndex -le $ServerCount; $serverIndex++) {
 $colandChaosControlFile = $serverArtifactLayouts["server1"].ColandChaosControlPath
 
 # 0530-C: decide the public-identity topology before any base URL is minted.
-# Runner-owned process-mode services keep plain loopback listeners but publish
-# stable HTTPS names fronted by the managed TLS proxy; caller-owned or
-# docker-runtime lanes keep their existing URLs unchanged.
-$jointTlsProcessColand = (-not $ColandCommand -and -not $ColandBaseUrl -and $ColandRuntime -eq "process")
+# Runner-owned services keep internal HTTP listeners but publish stable HTTPS
+# names through the managed TLS proxy, including release Docker images.
+# Caller-owned services retain their explicitly supplied public URLs.
+$jointTlsManagedColand = (-not $ColandCommand -and -not $ColandBaseUrl)
 $jointTlsCoauth = ($StartCoauth -and -not $CoauthBaseUrl)
 $jointTlsFlagon = ($StartFlagon -and -not $FlagonBaseUrl)
-$jointTlsEnabled = $jointTlsProcessColand -or $jointTlsCoauth -or $jointTlsFlagon
+$jointTlsEnabled = $jointTlsManagedColand -or $jointTlsCoauth -or $jointTlsFlagon
 $jointTlsPort = $null
 $colandPublicHost = $null
 $colandServer2PublicHost = $null
@@ -3497,7 +3497,7 @@ $jointTlsUnregisteredProbeHost = "unregistered.$DnsSuffix"
 if ($jointTlsEnabled) {
     $jointTlsPort = Get-FreeTcpPort
     if ($jointTlsFlagon) { $flagonPublicHost = "flagon.$DnsSuffix" }
-    if ($jointTlsProcessColand) {
+    if ($jointTlsManagedColand) {
         $colandPublicHost = "coland-server1.$DnsSuffix"
         if ($multiServer) {
             $colandServer2PublicHost = "coland-server2.$DnsSuffix"
@@ -3625,7 +3625,7 @@ for ($serverIndex = 3; $serverIndex -le $ServerCount; $serverIndex++) {
         throw "-ServerCount $ServerCount is incompatible with -ColandCommand; use indexed caller-owned topology input instead"
     }
     $additionalColandPort = Get-FreeTcpPort
-    $additionalColandHost = if ($jointTlsProcessColand) { "coland-server$serverIndex.$DnsSuffix" } else { $null }
+    $additionalColandHost = if ($jointTlsManagedColand) { "coland-server$serverIndex.$DnsSuffix" } else { $null }
     $additionalColandBaseUrl = if ($additionalColandHost) { "https://${additionalColandHost}:$jointTlsPort" } else { "http://127.0.0.1:$additionalColandPort" }
     $additionalCoauthPort = if ($StartCoauth) { Get-FreeTcpPort } else { $null }
     $additionalCoauthHost = if ($jointTlsCoauth) { "coauth-server$serverIndex.$DnsSuffix" } else { $null }
