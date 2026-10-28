@@ -63,7 +63,10 @@ class ScenarioEvidenceTests(unittest.TestCase):
                 self.assertEqual(entry["identity_establishment"], [
                     "coauth_registration_ui", "inkson_identity_onboarding_ui", "oauth_authorization_ui",
                 ])
-                self.assertEqual(entry["protocol_object_producers"], ["inkson_product_client"])
+                producers = ["inkson_product_client"]
+                if key == "discovery/contact-request-ui":
+                    producers.insert(0, "cotest_wire_oracle")
+                self.assertEqual(entry["protocol_object_producers"], producers)
                 if key != "joint/realm-invite-link-sync":
                     self.assertEqual(entry["declared_test_bypasses"], [])
 

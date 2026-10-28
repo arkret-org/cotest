@@ -79,6 +79,7 @@
         "oauth_authorization_ui"
       ],
       "protocol_object_producers": [
+        "cotest_wire_oracle",
         "inkson_product_client"
       ],
       "declared_test_bypasses": [],
