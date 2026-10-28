@@ -33,7 +33,8 @@ test("cold requester signs a real locator Contact request through the UI @fully-
     expect(requested.status(), "the original signed Contact commit is accepted").toBe(200);
     expect((await requested.json()).status).toBe("accepted");
     await expect(alice.page.page.getByTestId("add-contact-modal")).toBeHidden({ timeout: 60_000 });
-    await bob.page.page.goto("/contacts");
+    // Keep the recipient's established session; the requester above is the cold subject.
+    await bob.page.page.getByRole("tab", { name: "Contacts", exact: true }).click();
     await expect(bob.page.page.getByTestId("status-label")).toHaveText(/^Online(?:$|:)/, { timeout: 90_000 });
     const incoming = bob.page.page.locator('[data-testid^="contact-accept-"]');
     await expect(incoming).toHaveCount(1, { timeout: 90_000 });
