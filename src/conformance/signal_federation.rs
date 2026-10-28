@@ -521,15 +521,15 @@ fn validate_role_case_contract(case: &Value) -> Result<()> {
     Ok(())
 }
 
+// Fixture metadata describes HTTP transport; it is not a protocol response DTO.
+fn has_empty_relay_response(expected: &Value) -> bool {
+    expected["response_status"] == 204 && expected["response_body"] == ""
+}
+
 #[cfg(test)]
 mod tests {
     #[test]
     fn signal_federation_fixture_preserves_full_actor_authorization() {
         super::run_signal_federation_fixture_suite().unwrap();
     }
-}
-
-// Fixture metadata describes HTTP transport; it is not a protocol response DTO.
-fn has_empty_relay_response(expected: &Value) -> bool {
-    expected["response_status"] == 204 && expected["response_body"] == ""
 }
