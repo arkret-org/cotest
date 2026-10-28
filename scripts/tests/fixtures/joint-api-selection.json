@@ -1,0 +1,32 @@
+{
+  "project": "joint-api",
+  "selector": null,
+  "minimum_tests": 71,
+  "required_files": [
+    "extensions/platform-live.spec.ts",
+    "harness/garth-client.spec.ts",
+    "harness/mocks-selftest.spec.ts",
+    "harness/provisioning-bridge.spec.ts",
+    "harness/provisioning-dual-run.spec.ts"
+  ],
+  "required_native_migrations": [
+    "cotest/e2e/tests/conformance/registry-drift.spec.ts",
+    "cotest/e2e/tests/identity/oidc-login-chain.spec.ts",
+    "cotest/e2e/tests/events/realm-genesis-commit-stream.spec.ts",
+    "cotest/e2e/tests/sync/account-stream-device-message.spec.ts",
+    "cotest/e2e/tests/sync/transport-negotiation.spec.ts",
+    "cotest/e2e/tests/encryption/audited-e2ee.spec.ts",
+    "cotest/e2e/tests/invites/invite-addressing.spec.ts",
+    "cotest/e2e/tests/messaging/discussion-upgrade.spec.ts",
+    "cotest/e2e/tests/messaging/read-receipts.spec.ts",
+    "cotest/e2e/tests/models/private-read-marker.spec.ts"
+  ],
+  "scope": "Browserless Playwright selection plus retained mandatory native migrations. Collection credits never claim that native tests actually executed. The test floor remains unchanged; exact required sources prevent unrelated growth from hiding a missing active scenario.",
+  "retirements": {
+    "9f032523747d8e919822e989acd2631a4c9056e7": {
+      "source": "cotest/e2e/tests/invites/third-party.spec.ts",
+      "legacy_case_count": 6,
+      "reason": "The user withdrew third-party invitation verification from formal v1. Its single retired native source must not continue contributing a file credit. Formal withdrawal: arkret-spec dea9930ce12900f02acc7b2ce9698afb2aad190c."
+    }
+  }
+}

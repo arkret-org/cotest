@@ -140,18 +140,31 @@ foreach ($project in $browserProjects) {
 # was re-baselined on 2026-10-10 after the recorded bootstrap replacement and
 # unsupported file-transfer UI removal. Its fixture records the still-open
 # file-transfer owner; this selection is not a full protocol coverage claim.
+# The API baseline records the formal third-party invitation withdrawal while
+# retaining the test floor and requiring all remaining named source selections.
 $uiSmokeBaseline = Get-Content -LiteralPath (Join-Path $PSScriptRoot "fixtures/ui-smoke-selection.json") -Raw | ConvertFrom-Json
+$apiBaseline = Get-Content -LiteralPath (Join-Path $PSScriptRoot "fixtures/joint-api-selection.json") -Raw | ConvertFrom-Json
+$selectionBaselines = @($uiSmokeBaseline, $apiBaseline)
 $apiMigrations = Get-Content -LiteralPath (Join-Path $repoRoot "api-only-migration.json") -Raw | ConvertFrom-Json
 $nativeMigrations = @($apiMigrations.native_live_migrations)
-foreach ($source in $uiSmokeBaseline.required_native_migrations) {
-    Assert-True (@($nativeMigrations | Where-Object source -eq $source).Count -eq 1) "UI smoke lost the native executor for $source"
+foreach ($baseline in $selectionBaselines) {
+    foreach ($source in $baseline.required_native_migrations) {
+        $requiredMigration = @($nativeMigrations | Where-Object source -eq $source)
+        Assert-True ($requiredMigration.Count -eq 1) "$($baseline.project) lost the native executor for $source"
+        Assert-True ($baseline.project -in $requiredMigration[0].legacy_projects) "$($baseline.project) lost the native source selection for $source"
+        if ($baseline.selector -eq "@fully-implemented") {
+            Assert-True $requiredMigration[0].legacy_fully_implemented "$($baseline.project) lost the supported native source selection for $source"
+        }
+    }
 }
 $floors = @(
     @{ project = "chrome"; grep = $null; tests = 279; files = 67; label = "joint-full default lane" },
     @{ project = "chromium"; grep = $null; tests = 279; files = 67; label = "chromium lane" },
     @{ project = "chrome"; grep = "@fully-implemented"; tests = $uiSmokeBaseline.minimum_tests; files = ($uiSmokeBaseline.required_files.Count + $uiSmokeBaseline.required_native_migrations.Count); label = "supported UI smoke gate" },
     @{ project = "joint-inkson"; grep = $null; tests = 38; files = 17; label = "joint-inkson identity lane" },
-    @{ project = "joint-api"; grep = $null; tests = 71; files = 16; label = "joint-api browserless lane" }
+    # The withdrawn third-party invitation source no longer earns a file credit.
+    # Keep the existing test floor and require every remaining named scenario.
+    @{ project = "joint-api"; grep = $null; tests = $apiBaseline.minimum_tests; files = ($apiBaseline.required_files.Count + $apiBaseline.required_native_migrations.Count); label = "joint-api browserless lane" }
 )
 
 foreach ($floor in $floors) {
@@ -167,11 +180,13 @@ foreach ($floor in $floors) {
         "$($floor.label) shrank: project '$($floor.project)'" +
         $(if ($floor.grep) { " --grep $($floor.grep)" } else { "" }) +
         " collects $($listing.files) files, floor is $($floor.files).")
-    if ($floor.project -eq $uiSmokeBaseline.project -and $floor.grep -eq $uiSmokeBaseline.selector) {
-        $normalizedListing = $listing.text.Replace('\', '/')
-        foreach ($requiredFile in $uiSmokeBaseline.required_files) {
-            Assert-True ($normalizedListing.Contains(" › ${requiredFile}:")) (
-                "supported UI smoke gate lost required scenario file '$requiredFile'")
+    foreach ($baseline in $selectionBaselines) {
+        if ($floor.project -eq $baseline.project -and $floor.grep -eq $baseline.selector) {
+            $normalizedListing = $listing.text.Replace('\', '/')
+            foreach ($requiredFile in $baseline.required_files) {
+                Assert-True ($normalizedListing.Contains(" › ${requiredFile}:")) (
+                    "$($baseline.project) gate lost required scenario file '$requiredFile'")
+            }
         }
     }
     Write-Host ("  {0,-22} {1,-18} {2,3} tests / {3,2} files (floor {4}/{5})" -f
