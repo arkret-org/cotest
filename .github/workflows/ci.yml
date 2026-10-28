@@ -315,6 +315,7 @@ jobs:
         run: |
           ./scripts/generate-e2e-coverage.ps1 -Check
           ./scripts/generate-scenario-evidence.ps1 -Check
+          python -B -m unittest scripts.tests.test_scenario_evidence -v
       - name: provisioning cache isolation
         working-directory: cotest/e2e
         # The memo behind `ensureRegistered` is load-bearing: the Coauth handle

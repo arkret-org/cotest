@@ -65,17 +65,21 @@
     {
       "scenario_key": "discovery/contact-request-ui",
       "suite_kind": "joint-e2e",
-      "realism_level": "fixture-only",
-      "evidence_class": "fixture-only",
+      "realism_level": "live-product",
+      "evidence_class": "live-product",
       "real_services": [
-        "coland"
+        "coauth",
+        "coland",
+        "inkson"
       ],
       "mocks": [],
       "identity_establishment": [
-        "fixture_or_not_applicable"
+        "coauth_registration_ui",
+        "inkson_identity_onboarding_ui",
+        "oauth_authorization_ui"
       ],
       "protocol_object_producers": [
-        "fixture_or_not_applicable"
+        "inkson_product_client"
       ],
       "declared_test_bypasses": [],
       "claims_excluded": []
@@ -437,17 +441,21 @@
     {
       "scenario_key": "identity/account-profile-ui",
       "suite_kind": "joint-e2e",
-      "realism_level": "fixture-only",
-      "evidence_class": "fixture-only",
+      "realism_level": "live-product",
+      "evidence_class": "live-product",
       "real_services": [
-        "coland"
+        "coauth",
+        "coland",
+        "inkson"
       ],
       "mocks": [],
       "identity_establishment": [
-        "fixture_or_not_applicable"
+        "coauth_registration_ui",
+        "inkson_identity_onboarding_ui",
+        "oauth_authorization_ui"
       ],
       "protocol_object_producers": [
-        "fixture_or_not_applicable"
+        "inkson_product_client"
       ],
       "declared_test_bypasses": [],
       "claims_excluded": []
@@ -670,18 +678,19 @@
     {
       "scenario_key": "identity/registration-contact-validation",
       "suite_kind": "joint-e2e",
-      "realism_level": "fixture-only",
-      "evidence_class": "fixture-only",
+      "realism_level": "live-product",
+      "evidence_class": "live-product",
       "real_services": [
         "coauth",
-        "coland"
+        "coland",
+        "inkson"
       ],
       "mocks": [],
       "identity_establishment": [
         "fixture_or_not_applicable"
       ],
       "protocol_object_producers": [
-        "fixture_or_not_applicable"
+        "inkson_product_client"
       ],
       "declared_test_bypasses": [],
       "claims_excluded": []
@@ -1149,11 +1158,15 @@
       "realism_level": "fixture-only",
       "evidence_class": "fixture-only",
       "real_services": [
+        "coauth",
+        "coland",
         "inkson"
       ],
       "mocks": [],
       "identity_establishment": [
-        "fixture_or_not_applicable"
+        "coauth_registration_ui",
+        "inkson_identity_onboarding_ui",
+        "oauth_authorization_ui"
       ],
       "protocol_object_producers": [
         "inkson_product_client"

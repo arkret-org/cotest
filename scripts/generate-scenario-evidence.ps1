@@ -22,7 +22,12 @@ foreach ($file in Get-ChildItem -LiteralPath $testsRoot -Recurse -File -Filter "
     foreach ($clientName in $garthClientNames) {
         $uiSource = [regex]::Replace($uiSource, '\b' + [regex]::Escape($clientName) + '\.createRealm\s*\(', '.createGarthRealm(')
     }
-    $usesProductUi = $uiSource -match 'open(?:Dpop)?UserPage|openUserPage|\.goto(?:Home|Login|Setup|Timeline)|\.createRealm\(|\.sendTimelineMessage\('
+    # This helper executes registration, OAuth, recovery-key confirmation and
+    # principal founding through the ordinary product UI. An import is not a call.
+    $usesRegisteredUi = $uiSource -match '\bopenRegisteredUserPage\s*\('
+    # Opening the registration form is UI coverage, but does not establish an identity.
+    $usesRegistrationFormUi = $uiSource -match 'getByTestId\(\s*["'']register-open-account-authority["'']\s*\)'
+    $usesProductUi = ($uiSource -match 'open(?:Dpop)?UserPage|openUserPage|\.goto(?:Home|Login|Setup|Timeline)|\.createRealm\(|\.sendTimelineMessage\(') -or $usesRegisteredUi -or $usesRegistrationFormUi
     $usesRawHttp = $source -match '\brequest\.(?:get|post|put|patch|delete|fetch)\('
     # Agent pairing consumes an existing accepted fixture; the bridge class
     # alone does not mean that this spec executes principal founding itself.
@@ -40,8 +45,8 @@ foreach ($file in Get-ChildItem -LiteralPath $testsRoot -Recurse -File -Filter "
     if ($usesRawHttp) { $bypasses.Add("raw_http_fixture_or_oracle") }
 
     $identity = New-Object System.Collections.Generic.List[string]
-    $usesRegistrationUi = $source -match 'choose-new-identity' -and
-        $source -match 'onboarding-bind-identity' -and $source -match 'coauth-oauth-approve'
+    $usesRegistrationUi = $usesRegisteredUi -or ($source -match 'choose-new-identity' -and
+        $source -match 'onboarding-bind-identity' -and $source -match 'coauth-oauth-approve')
     if ($usesRegistrationUi) {
         $identity.Add("coauth_registration_ui")
         $identity.Add("oauth_authorization_ui")
@@ -63,6 +68,10 @@ foreach ($file in Get-ChildItem -LiteralPath $testsRoot -Recurse -File -Filter "
     if ($usesProductUi) { $services.Add("inkson") }
     if ($source -match 'colandBaseUrl|/_arkret/|\brequest\.') { $services.Add("coland") }
     if ($source -match 'coauthBaseUrl|serverLoginViaCoauth|Coauth') { $services.Add("coauth") }
+    if ($usesRegisteredUi) {
+        $services.Add("coland")
+        $services.Add("coauth")
+    }
     foreach ($service in @("flagon", "floria", "savfox", "codmin")) {
         if ($source -match $service) { $services.Add($service) }
     }
