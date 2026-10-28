@@ -4,9 +4,12 @@ import { openRegisteredUserPage } from "../../helpers/users";
 test("cold requester signs a real locator Contact request through the UI @fully-implemented", async ({ browser, request }) => {
   test.setTimeout(600_000);
   const stamp = Date.now();
-  const alice = await openRegisteredUserPage(browser, request, `contact-ui-alice-${stamp}`);
-  const bob = await openRegisteredUserPage(browser, request, `contact-ui-bob-${stamp}`);
+  const flows: Array<Awaited<ReturnType<typeof openRegisteredUserPage>>> = [];
   try {
+    const alice = await openRegisteredUserPage(browser, request, `contact-ui-alice-${stamp}`);
+    flows.push(alice);
+    const bob = await openRegisteredUserPage(browser, request, `contact-ui-bob-${stamp}`);
+    flows.push(bob);
     await bob.page.page.goto("/settings/account");
     await bob.page.page.getByTestId("settings-invite-locator-refresh").click();
     const locator = bob.page.page.getByTestId("settings-invite-locator-url");
@@ -35,8 +38,7 @@ test("cold requester signs a real locator Contact request through the UI @fully-
     await alice.page.page.reload({ waitUntil: "domcontentloaded" });
     await expect(alice.page.page.locator('[data-testid^="contact-message-"]')).toHaveCount(1, { timeout: 90_000 });
   } finally {
-    await alice.page.close();
-    await bob.page.close();
+    await Promise.all(flows.map(flow => flow.page.close()));
   }
 });
 

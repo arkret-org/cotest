@@ -5,13 +5,12 @@ for (const encrypted of [false, true]) {
   test(`share-link members keep synchronizing messages and leave after reload; MLS=${encrypted} @fully-implemented`, async ({ browser, request }) => {
     test.setTimeout(1_200_000);
     const stamp = Date.now();
-    const flows = [];
-    for (const actor of ["alice", "bob", "carol"]) {
-      const flow = await openRegisteredUserPage(browser, request, `link-sync-${actor}-${stamp}`);
-      flows.push(flow);
-    }
-    const [alice, bob, carol] = flows;
+    const flows: Array<Awaited<ReturnType<typeof openRegisteredUserPage>>> = [];
     try {
+      for (const actor of ["alice", "bob", "carol"]) {
+        flows.push(await openRegisteredUserPage(browser, request, `link-sync-${actor}-${stamp}`));
+      }
+      const [alice, bob, carol] = flows;
       const realm = await alice.page.createRealm({ title: `Link collaboration ${stamp}`, mlsActivated: encrypted });
       await alice.page.gotoRealmAdminSection(realm, "access");
       const panel = alice.page.page.getByTestId("realm-invite-links");
