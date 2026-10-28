@@ -183,7 +183,7 @@ jobs:
         working-directory: cotest
         # Mandatory process scenarios use the freshly built sibling services.
         # Explicit opt-in ignored probes remain in integration.yml.
-        run: bash ../inkson/scripts/with-native-keystore.sh python scripts/run-native-rust-tests.py cargo test --workspace --locked
+        run: bash ../inkson/scripts/with-native-keystore.sh python scripts/run-native-rust-tests.py cargo test --workspace --locked --no-fail-fast
       - name: Verify complete native operation authority contracts
         working-directory: cotest
         run: >-

@@ -121,7 +121,8 @@ fn sdk_keeps_profile_event_closed_and_returns_the_covering_commit() {
     assert!(validate.contains("EventKind::ProfileCreate"));
     assert!(validate.contains("EventKind::ProfileUpdate"));
     assert!(validate.contains("validate_for_account_self_service"));
-    assert!(validate.contains("object.principal_id != account.principal_id"));
+    assert!(validate.contains("object.principal_id.as_ref() != Some(&account.principal_id)"));
+    assert!(validate.contains("object.actor_id.is_some()"));
 
     // The create author region is the closed actor_profile_definition, not the
     // materialized object: schema, realm, times and id are reducer outputs.
@@ -206,7 +207,7 @@ fn actor_profile_resolve_carries_the_event_without_a_seal_and_one_failure_value(
         .iter()
         .find(|row| row["operation_id"] == "ak.self.actor_profile.read.resolve.v1")
         .expect("resolve operation error mapping");
-    assert_eq!(entry["operation_specific"], json!([]));
+    assert_eq!(entry["operation_specific"], json!(["not_found"]));
     assert!(
         entry["description"]
             .as_str()
