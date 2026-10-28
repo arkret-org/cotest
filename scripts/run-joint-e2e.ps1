@@ -4434,7 +4434,7 @@ try {
     if ($StartMockEmail) {
         $mockEmailCmd = "`$env:MOCK_EMAIL_PORT='$mockEmailPort'; node " + (Quote-PsLiteral (Join-Path $mocksRoot "mock-email.mjs"))
         $managedServices.Add((Start-ManagedCommand -Name "mock-email" -Command $mockEmailCmd -WorkingDirectory $mocksRoot -LogDirectory $serviceLogDir))
-        Wait-HttpReady -Url "$mockEmailBaseUrl/jwks" -TimeoutSeconds 30
+        Wait-HttpReady -Url "$mockEmailBaseUrl/inspect" -TimeoutSeconds 30
     }
     if ($StartMockWitness) {
         $mockWitnessCmd = (
