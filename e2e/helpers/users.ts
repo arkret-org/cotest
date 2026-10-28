@@ -2047,6 +2047,10 @@ export async function openRegisteredUserPage(
     await expect(page.getByTestId("onboarding-complete")).toBeVisible({ timeout: 120_000 });
     await page.getByTestId("onboarding-complete").getByRole("link", { name: "Continue", exact: true }).click();
     await expect(page.getByTestId("client-shell")).toBeVisible({ timeout: 90_000 });
+    // The restored shell can precede connect and signer activation. A fresh
+    // account's first accepted stream cursor proves that bootstrap has ended.
+    await expect(page.getByTestId("status-label")).toHaveText("Online", { timeout: 90_000 });
+    await expect(page.getByTestId("sync-cursor")).toContainText("ak:cursor:", { timeout: 90_000 });
     return { user, page: joint };
   } catch (error) {
     await joint.close();
