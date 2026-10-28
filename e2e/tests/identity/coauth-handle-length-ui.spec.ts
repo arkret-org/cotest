@@ -39,10 +39,13 @@ async function fillRegistration(page: Page, handle: string, email: string): Prom
 async function signedInAccount(page: Page, handle: string): Promise<string> {
   const viewerResponse = page.waitForResponse(response =>
     new URL(response.url()).pathname === "/_coauth/self/viewer"
-    && response.request().method() === "GET" && response.status() === 200);
+    && response.request().method() === "GET");
   await page.goto(`${authority()}/`);
-  const body = await (await viewerResponse).json();
+  const response = await viewerResponse;
+  expect(response.status(), "an unbound account can read its own Coauth viewer").toBe(200);
+  const body = await response.json();
   expect(body.viewer).toMatchObject({ __typename: "User", username: handle, has_password: true });
+  expect(body.viewer.principal_id ?? null, "account registration must not invent a published principal").toBeNull();
   await expect(page.getByRole("link", { name: "Settings", exact: true })).toBeVisible();
   expect(typeof body.viewer.id).toBe("string");
   return body.viewer.id;
