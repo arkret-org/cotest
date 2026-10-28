@@ -2022,7 +2022,7 @@ export async function openRegisteredUserPage(
     await (await downloaded).path();
     await page.getByTestId("onboarding-recovery-key-confirm").fill(recoveryKey);
     const registration = page.waitForResponse(response =>
-      new URL(response.url()).pathname.endsWith("/_arkret/gate/account/identity-creation-registrations")
+      new URL(response.url()).pathname.endsWith("/_arkret/gate/account/register")
       && response.request().method() === "POST", { timeout: 120_000 });
     await page.getByTestId("onboarding-bind-identity").click();
     const accepted = await registration;
