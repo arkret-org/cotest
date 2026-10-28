@@ -105,7 +105,7 @@ pub(super) async fn run() -> Result<()> {
         let peer_watch=crate::harness::heap_future(||super::peer_watch::exercise(&source.station,&destination.station,&alice,&bob,&realm)).await?;
         let bob_identity=bob.mls_identity()?;
         let material=bob_identity.key_package_record()?;
-        let upload=bob_identity.signed_key_packages_upload_request(&[material.clone()],bob.method.as_str())?;
+        let upload=bob_identity.signed_key_packages_upload_request(std::slice::from_ref(&material),bob.method.as_str())?;
         let uploaded:KeyPackagesUploadResponseBody=serde_json::from_value(expect_json(bob.client.post("/_arkret/self/keys/keypackages/upload").json(&upload),reqwest::StatusCode::OK).await?)?;
         ensure!(uploaded.accepted_count==1 && uploaded.rejections.is_empty(),"native target did not accept its actual single-use original");
         let group=arkret_wire::ScopeRef::Realm {realm_id:realm.clone()}.canonical_mls_group_id()?;

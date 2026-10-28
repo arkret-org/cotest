@@ -175,7 +175,7 @@ pub(super) fn verify(observations: &NativeOperationObservations, evidence: &Valu
     registry.validate_value(&identifier, &evidence["mapping_receipt"])?;
     let view: arkret_wire::CommittedEventFullView =
         serde_json::from_value(evidence["committed"].clone())?;
-    verify_native_station_commits(observations, &[view.clone()])?;
+    verify_native_station_commits(observations, std::slice::from_ref(&view))?;
     view.event
         .verify_producer_proof_self_consistency(arkret_canonical::DigestSuite::Sha256)?;
     let proof = view

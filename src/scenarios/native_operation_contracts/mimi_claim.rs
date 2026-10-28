@@ -16,8 +16,8 @@ pub(super) async fn exercise(
 ) -> Result<Value> {
     let identity = bob.mls_identity()?;
     let material = identity.key_package_record()?;
-    let upload =
-        identity.signed_key_packages_upload_request(&[material.clone()], bob.method.as_str())?;
+    let upload = identity
+        .signed_key_packages_upload_request(std::slice::from_ref(&material), bob.method.as_str())?;
     let uploaded = expect_json(
         bob.client
             .post("/_arkret/self/keys/keypackages/upload")
@@ -61,7 +61,7 @@ pub(super) async fn exercise(
         anyhow::bail!("native participant must retain its exact device authorization")
     };
     signature.signature = arkret_wire::Base64UrlString::new(arkret_canonical::base64url_encode(
-        &alice.key.sign(&bytes).to_bytes(),
+        alice.key.sign(&bytes).to_bytes(),
     ))
     .map_err(anyhow::Error::msg)?;
     let request_wire = json!(request);

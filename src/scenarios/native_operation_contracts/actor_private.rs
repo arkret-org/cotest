@@ -99,7 +99,7 @@ pub(super) fn verify(observations: &NativeOperationObservations, evidence: &Valu
     response.validate_for_request(&request)?;
     let authorization: arkret_wire::CommittedEventFullView =
         serde_json::from_value(evidence["device_authorization"].clone())?;
-    verify_native_pcr_commits(observations, &[authorization.clone()])?;
+    verify_native_pcr_commits(observations, std::slice::from_ref(&authorization))?;
     let device:arkret_models_collaboration::events_payloads::device_identity::DeviceAuthorizePayload=serde_json::from_value(json!(authorization.event.payload))?;
     let proof = request
         .event

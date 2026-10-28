@@ -182,8 +182,8 @@ pub fn run_realm_invite_link_proof_suite() -> Result<SuiteExecutionResult> {
         "private seed leaked through Debug"
     );
     Ok(SuiteExecutionResult {
-        entrypoint: ENTRYPOINT.into(),
-        fixture: FIXTURE.into(),
+        entrypoint: ENTRYPOINT,
+        fixture: FIXTURE,
         cases,
     })
 }
