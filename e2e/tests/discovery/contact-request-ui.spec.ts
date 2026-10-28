@@ -28,12 +28,20 @@ test("cold requester signs a real locator Contact request through the UI @fully-
       return response.request().postDataJSON()?.phase === "commit";
     }, { timeout: 90_000 });
     await form.getByTestId("send-contact-request-button").click();
-    expect((await committed).status(), "the original signed Contact commit is accepted").toBe(200);
+    const requested = await committed;
+    expect(requested.status(), "the original signed Contact commit is accepted").toBe(200);
+    expect((await requested.json()).status).toBe("accepted");
     await expect(alice.page.page.getByTestId("add-contact-modal")).toBeHidden({ timeout: 60_000 });
     await bob.page.page.goto("/contacts");
     const incoming = bob.page.page.locator('[data-testid^="contact-accept-"]');
     await expect(incoming).toHaveCount(1, { timeout: 90_000 });
+    const preparedResponse = bob.page.page.waitForResponse(response =>
+      new URL(response.url()).pathname.endsWith("/_arkret/self/contacts/respond")
+      && response.request().method() === "POST", { timeout: 60_000 });
     await incoming.click();
+    const prepared = await preparedResponse;
+    expect(prepared.status()).toBe(200);
+    expect(await prepared.json()).toMatchObject({ status: "prepared", operation_kind: "response" });
     await expect(bob.page.page.locator('[data-testid^="contact-message-"]')).toHaveCount(1, { timeout: 90_000 });
     await alice.page.page.reload({ waitUntil: "domcontentloaded" });
     await expect(alice.page.page.locator('[data-testid^="contact-message-"]')).toHaveCount(1, { timeout: 90_000 });
