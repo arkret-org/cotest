@@ -38,10 +38,7 @@ fn openapi_operation_id_drift_fails() -> Result<()> {
         )],
         &[("GET", "/_arkret/describe", "ak.server.read.wrong")],
     )?;
-    write_json(
-        &product_private_path,
-        &json!({"schema": "cotest.operation-product-private-paths.v1", "allowed": []}),
-    )?;
+    write_json(&product_private_path, &json!({"allowed": []}))?;
     write_source(
         &source_dir,
         "src/api.rs",
@@ -78,10 +75,7 @@ fn unregistered_source_path_without_product_private_classification_fails() -> Re
         )],
         &[("GET", "/_arkret/describe", "ak.server.read.describe.v1")],
     )?;
-    write_json(
-        &product_private_path,
-        &json!({"schema": "cotest.operation-product-private-paths.v1", "allowed": []}),
-    )?;
+    write_json(&product_private_path, &json!({"allowed": []}))?;
     write_source(
         &source_dir,
         "src/api.rs",
@@ -122,7 +116,6 @@ fn product_private_source_path_is_explicitly_allowed() -> Result<()> {
     write_json(
         &product_private_path,
         &json!({
-            "schema": "cotest.operation-product-private-paths.v1",
             "allowed": [{
                 "source": "coland",
                 "method": "POST",
@@ -179,10 +172,7 @@ fn cotest_spec_files_are_scanned() -> Result<()> {
         )],
         &[("GET", "/_arkret/describe", "ak.server.read.describe.v1")],
     )?;
-    write_json(
-        &product_private_path,
-        &json!({"schema": "cotest.operation-product-private-paths.v1", "allowed": []}),
-    )?;
+    write_json(&product_private_path, &json!({"allowed": []}))?;
     write_source(
         &source_dir,
         "e2e/tests/self-gate.spec.ts",
@@ -230,10 +220,7 @@ fn rust_cfg_test_items_are_not_treated_as_production_operations() -> Result<()> 
             ("GET", "/_arkret/health", "ak.server.read.health.v1"),
         ],
     )?;
-    write_json(
-        &product_private_path,
-        &json!({"schema": "cotest.operation-product-private-paths.v1", "allowed": []}),
-    )?;
+    write_json(&product_private_path, &json!({"allowed": []}))?;
     write_source(
         &source_dir,
         "src/api.rs",

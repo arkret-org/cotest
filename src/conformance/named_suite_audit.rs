@@ -94,7 +94,7 @@ pub fn missing_sync_production_cases(
 /// total number of unwired suites happened to stay constant.
 // Content-key KATs run in arkret-mls; complete authorized-checkpoint
 // remains owned by 0805. Terminal live scenarios execute below.
-const KNOWN_UNWIRED_ENTRYPOINTS: [&str; 33] = [
+const KNOWN_UNWIRED_ENTRYPOINTS: [&str; 32] = [
     "ak.suite.agent.draft_pending_intent.v1",
     "ak.suite.agent.participation.v1",
     "ak.suite.applet.managed_actor_authority.v1",
@@ -115,7 +115,6 @@ const KNOWN_UNWIRED_ENTRYPOINTS: [&str; 33] = [
     "ak.suite.events.redaction.v1",
     "ak.suite.identity.independent_admission.v1",
     "ak.suite.identity.pcr_genesis.v1",
-    "ak.suite.invite.claim_security.v1",
     "ak.suite.mls.rfc9420_kat.v1",
     "ak.suite.mls.roster_authority.v1",
     "ak.suite.mls.roster_client_roles.v1",
@@ -171,7 +170,11 @@ const REVIEWED_APPLET_DEVICE_SCOPE_CASES: [&str; 15] = [
     "sidecar",
 ];
 
-const RUNNERS: [(&str, Runner); 59] = [
+const RUNNERS: [(&str, Runner); 60] = [
+    (
+        "ak.suite.realm_invite_link.proofs.v1",
+        Runner::Cases(super::run_realm_invite_link_proof_suite),
+    ),
     (
         super::PROTOCOL_SIMPLIFICATION_ENTRYPOINT,
         Runner::CasesAt {
@@ -982,7 +985,7 @@ mod tests {
             .collect::<BTreeSet<_>>();
         ensure!(registered.len() == RUNNERS.len() + CLIENT_ENTRYPOINTS.len());
         let unwired = assert_named_gap_inventory(&fixtures, &registered)?;
-        ensure!(unwired.len() == 33);
+        ensure!(unwired.len() == 32);
         let mut added = fixtures.clone();
         added.insert("unregistered_test_entrypoint".to_owned(), Vec::new());
         ensure!(assert_named_gap_inventory(&added, &registered).is_err());
@@ -990,7 +993,7 @@ mod tests {
         ensure!(removed.remove(KNOWN_UNWIRED_ENTRYPOINTS[0]).is_some());
         ensure!(assert_named_gap_inventory(&removed, &registered).is_err());
         println!(
-            "[named-preflight] acknowledged_unwired=33 added_rejected=1 removed_rejected=1 runtime_credit=0"
+            "[named-preflight] acknowledged_unwired=32 added_rejected=1 removed_rejected=1 runtime_credit=0"
         );
         Ok(())
     }

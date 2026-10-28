@@ -49,7 +49,6 @@ use super::{
 pub const VECTOR_ID_CLIENT_ACCOUNT_STREAM: &str = "ak.vector.sync.client_account_stream.v1";
 
 const FIXTURE: &str = "client-sync-fixture.json";
-const SUITE: &str = "client_sync";
 const RUNNER_ENTRYPOINT: &str = "ak.suite.sync.client_account_stream.v1";
 const SUBSCRIBE_OPERATION_ID: &str = "ak.self.account.stream.subscribe.v1";
 
@@ -196,10 +195,6 @@ fn run_sidecar_checkpoint_consumers(fixture: &Value) -> Result<()> {
 // ── Fixture identity ────────────────────────────────────────────────────────
 
 fn verify_fixture_identity(fixture: &Value) -> Result<()> {
-    ensure!(
-        required_str(fixture, "suite")? == SUITE,
-        "client-sync fixture suite drifted"
-    );
     ensure!(
         fixture_runner_entrypoint(fixture)? == RUNNER_ENTRYPOINT,
         "client-sync fixture runner entrypoint drifted"

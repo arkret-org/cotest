@@ -8,9 +8,7 @@ use crate::conformance::{load_artifact_json, schema_validation_fixture};
 
 pub fn run_event_kind_payload_coverage_fixture_suite() -> Result<()> {
     let fixture = load_artifact_json("fixtures/event-kind-payload-coverage-fixture.json")?;
-    if fixture["suite"] != "event_kind_payload_coverage_fixture"
-        || fixture["runner"]["kind"] != "registry_coverage"
-    {
+    if fixture["runner"]["kind"] != "registry_coverage" {
         bail!("event-kind payload coverage fixture identity drifted");
     }
     let cases: schema_validation_fixture::SchemaValidationFixture =

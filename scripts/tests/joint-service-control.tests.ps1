@@ -35,7 +35,7 @@ try {
     $originalIdentity = Get-CotestProcessIdentity -Process $original
     Start-Sleep -Milliseconds 750
     $topology = [pscustomobject]@{
-        schema = 'cotest.joint-topology.v1'
+
         server_count = 1
         servers = @([pscustomobject]@{
             name = 'server2'

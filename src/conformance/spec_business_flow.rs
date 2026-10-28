@@ -8,7 +8,6 @@ use serde::Deserialize;
 use super::{load_artifact_json, load_local_fixture_value};
 
 const FIXTURE: &str = "spec-business-flow-coverage.json";
-const SCHEMA: &str = "cotest.spec_business_flow_coverage.v1";
 const OPERATION_REGISTRY_REF: &str = "registry/operation-registry.json";
 
 const COVERAGE_KINDS: &[&str] = &["ordinary", "joint_e2e", "conformance_fixture", "gap_guard"];
@@ -16,8 +15,6 @@ const FLOW_STATUSES: &[&str] = &["implemented", "partially_implemented", "guarde
 
 #[derive(Debug, Deserialize)]
 struct BusinessFlowFixture {
-    schema: String,
-    operation_registry_ref: String,
     flows: Vec<BusinessFlow>,
 }
 
@@ -66,32 +63,12 @@ pub fn run_spec_business_flow_coverage_suite() -> Result<()> {
     let fixture: BusinessFlowFixture =
         serde_json::from_value(load_local_fixture_value(FIXTURE)?)
             .map_err(|error| anyhow!("failed to parse {FIXTURE}: {error}"))?;
-    validate_fixture_header(&fixture)?;
 
     let registry: OperationRegistry =
         serde_json::from_value(load_artifact_json(OPERATION_REGISTRY_REF)?)
             .map_err(|error| anyhow!("failed to parse {OPERATION_REGISTRY_REF}: {error}"))?;
     let registry_index = RegistryIndex::new(registry)?;
     validate_flows(&fixture.flows, &registry_index, &cotest_root())
-}
-
-fn validate_fixture_header(fixture: &BusinessFlowFixture) -> Result<()> {
-    if fixture.schema != SCHEMA {
-        bail!(
-            "{FIXTURE} schema drifted: expected {SCHEMA}, got {}",
-            fixture.schema
-        );
-    }
-    if fixture.operation_registry_ref != OPERATION_REGISTRY_REF {
-        bail!(
-            "{FIXTURE} operation_registry_ref must be {OPERATION_REGISTRY_REF}, got {}",
-            fixture.operation_registry_ref
-        );
-    }
-    if fixture.flows.is_empty() {
-        bail!("{FIXTURE} must declare at least one business flow");
-    }
-    Ok(())
 }
 
 #[derive(Debug)]

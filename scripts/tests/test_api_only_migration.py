@@ -46,8 +46,6 @@ class ApiOnlyMigrationTests(unittest.TestCase):
             for index in range(30)
         ]
         self.manifest = {
-            "schema": "arkret.api-only-rust-migration.v1",
-            "expected_candidate_count": 30,
             "specialized_api_lanes": [specialized],
             "candidates": candidates,
         }
@@ -66,6 +64,14 @@ class ApiOnlyMigrationTests(unittest.TestCase):
 
     def test_accepts_closed_migration_and_uses_workspace_manifest(self) -> None:
         migration.validate_repository(self.root)
+
+    def test_migration_uses_actual_entries_without_a_copied_counter(self) -> None:
+        self.manifest["candidates"].pop()
+        self.write("cotest/api-only-migration.json", json.dumps(self.manifest))
+        migration.validate_repository(self.root)
+        self.manifest["expected_candidate_count"] = 29
+        self.write("cotest/api-only-migration.json", json.dumps(self.manifest))
+        self.assertTrue(any("redundant or unknown fields" in error for error in migration.validation_errors(self.root)))
 
     def test_live_migration_cannot_drop_its_joint_executor(self) -> None:
         self.manifest["candidates"][0]["coverage_status"] = "live_native"

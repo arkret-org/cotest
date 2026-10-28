@@ -31,11 +31,9 @@ pub const ALL_FILE_TRANSFER_STREAM_AEAD_VECTOR_IDS: &[&str] = &[
 ];
 
 const FIXTURE_FILE: &str = "file-transfer-stream-aead-fixture.json";
-const SUITE: &str = "file_transfer_stream_aead";
 
 #[derive(Debug, Deserialize)]
 struct Fixture {
-    suite: String,
     covers_vectors: Vec<String>,
     vectors: Vec<FixtureVector>,
     kat: Kat,
@@ -91,9 +89,7 @@ fn load_fixture() -> Result<Fixture> {
     let raw = super::load_fixture_value(FIXTURE_FILE)?;
     super::validate_profile(&raw, ProfileId::FILE_TRANSFER_V1)?;
     let fixture: Fixture = super::parse_fixture_value(FIXTURE_FILE, raw)?;
-    if fixture.suite != SUITE {
-        bail!("file-transfer stream AEAD suite name drifted");
-    }
+
     for vector_id in ALL_FILE_TRANSFER_STREAM_AEAD_VECTOR_IDS {
         if !fixture
             .covers_vectors

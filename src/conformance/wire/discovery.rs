@@ -18,9 +18,7 @@ pub fn run_discovery_profile_fixture_suite() -> Result<()> {
     use arkret_wire::generated::profile_requirements::PROFILE_REQUIREMENTS;
 
     let fixture = crate::conformance::load_fixture_value("discovery-profile-fixture.json")?;
-    if fixture["suite"] != "discovery_profile_fixture"
-        || fixture["runner"]["kind"] != "profile_discovery_coverage"
-    {
+    if fixture["runner"]["kind"] != "profile_discovery_coverage" {
         bail!("discovery profile fixture identity drifted");
     }
     let cases = fixture["cases"]

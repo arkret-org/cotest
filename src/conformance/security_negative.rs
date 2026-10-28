@@ -11,13 +11,9 @@ use super::{
 use crate::transcripts::record_vector_event;
 
 const FIXTURE: &str = "security-negative-profile-fixture.json";
-const SUITE: &str = "security_negative_profile";
 
 pub fn run_security_negative_profile_suite() -> Result<()> {
     let fixture = load_local_fixture_value(FIXTURE)?;
-    if required_str(&fixture, "suite")? != SUITE {
-        bail!("{FIXTURE} suite must be {SUITE}");
-    }
     validate_profile(
         &fixture,
         crate::conformance::helpers::PRIVACY_SECURITY_VECTOR_GROUP_PROFILE,

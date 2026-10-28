@@ -24,8 +24,7 @@ const VECTOR_ID: &str = "ak.vector.view.terminal_state_patch.v1";
 #[serde(deny_unknown_fields)]
 struct FixtureRoot {
     profile: String,
-    version: String,
-    suite: String,
+
     runner: FixtureRunner,
     covers_vectors: Vec<String>,
     description: String,
@@ -169,8 +168,7 @@ pub fn run_view_write_contract_suite() -> Result<ViewWriteContractExecution> {
     let artifacts = spec_artifacts_root();
     let fixture = load_fixture(&artifacts)?;
     ensure!(fixture.profile == "ak.profile.core_event_store.v1");
-    ensure!(!fixture.version.trim().is_empty());
-    ensure!(fixture.suite == "view_write_contract");
+
     ensure!(fixture.runner.kind == "named_suite");
     ensure!(fixture.runner.entrypoint == VIEW_WRITE_CONTRACT_ENTRYPOINT);
     ensure!(fixture.covers_vectors == [VECTOR_ID]);

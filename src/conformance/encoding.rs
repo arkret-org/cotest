@@ -9,7 +9,7 @@ use super::{RANK_MAX_LENGTH, load_fixture_value, value_field_str};
 struct EncodingArtifactFixture {
     runner: Value,
     profile: String,
-    version: String,
+
     description: String,
     generator_semantics: String,
     covers_vectors: Vec<String>,
@@ -36,7 +36,6 @@ pub fn run_encoding_fixture_suite() -> Result<()> {
 
 fn run_encoding_artifact_suite(fixture: &EncodingArtifactFixture) -> Result<()> {
     if fixture.profile != "ak.vector_group.encoding.v1"
-        || fixture.version.trim().is_empty()
         || fixture.description.trim().is_empty()
         || fixture.generator_semantics.trim().is_empty()
         || fixture.runner.is_null()

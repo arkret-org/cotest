@@ -1,7 +1,8 @@
 {
   "profile": "ak.profile.composite_state_subject_vectors.v1",
-  "version": "2026-05-09",
-  "inherits": ["_shared/_canonical_dids.json"],
+  "inherits": [
+    "_shared/_canonical_dids.json"
+  ],
   "comment": "B4 composite state subject encoding round-trip vectors. Per spec/v1/zh/conformance/encoding.md §9.5: state_subject = base64url_nopad(sha256(canonical_json(components_array))). The pipe-separated form (`a|b|c`) is informational only; canonical wire form, signature input, state map index MUST use the hash form. components_array order is fixed per kind (§9.5.2). Every vector — positive and negative — carries a current v1 `ak.*` kind; there are no historical encodings to pin because the project ships no released wire format.",
   "encoder": {
     "canonical_json": "RFC 8785 / spec encoding.md §1: sorted object keys, no whitespace, exact JSON string representation",
@@ -12,7 +13,10 @@
     {
       "name": "device_authorized_alice",
       "kind": "ak.device.authorize",
-      "components_array": ["ak:did_core:web:alice.example", "dev_alice_01"],
+      "components_array": [
+        "ak:did_core:web:alice.example",
+        "dev_alice_01"
+      ],
       "components_order_source": "[principal_id, device_id]",
       "expected_canonical_json": "[\"ak:did_core:web:alice.example\",\"dev_alice_01\"]",
       "expected_state_subject": "NRN9PBlwGpkP3RkmrEGxrhRwy36CoO2ObofqpTx443Y"
@@ -20,7 +24,10 @@
     {
       "name": "device_revoked_same_subject_as_authorized_supersede",
       "kind": "ak.device.revoke",
-      "components_array": ["ak:did_core:web:alice.example", "dev_alice_01"],
+      "components_array": [
+        "ak:did_core:web:alice.example",
+        "dev_alice_01"
+      ],
       "components_order_source": "[principal_id, device_id]",
       "expected_canonical_json": "[\"ak:did_core:web:alice.example\",\"dev_alice_01\"]",
       "expected_state_subject": "NRN9PBlwGpkP3RkmrEGxrhRwy36CoO2ObofqpTx443Y",
@@ -31,7 +38,10 @@
     {
       "name": "wrong_component_order_collides_into_different_subject",
       "kind": "ak.device.authorize",
-      "components_array": ["dev_alice_01", "ak:did_core:web:alice.example"],
+      "components_array": [
+        "dev_alice_01",
+        "ak:did_core:web:alice.example"
+      ],
       "comment": "If a buggy implementation reorders components_array (e.g. device_id before principal_id) it MUST produce a different hash from the canonical order — proving the order matters. Cotest computes the resulting hash and asserts it differs from the canonical device_authorized_alice subject.",
       "must_differ_from": "NRN9PBlwGpkP3RkmrEGxrhRwy36CoO2ObofqpTx443Y"
     },

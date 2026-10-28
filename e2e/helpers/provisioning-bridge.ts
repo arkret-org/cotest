@@ -205,28 +205,9 @@ export class ProvisioningBridge {
     });
   }
 
-  /** Registered claim-subject transcript using original accepted native control custody. */
-  async signInviteSubject(args: { handoffId: string; inviteId: string; realmId: string;
-    tokenCommitment: string; claimNonce: string; verificationId: string;
-    bindingProof: Record<string, unknown> }): Promise<Record<string, unknown>> {
-    return this.#call("sign_invite_subject", { handoff_id: args.handoffId, invite_id: args.inviteId,
-      realm_id: args.realmId, token_commitment: args.tokenCommitment, claim_nonce: args.claimNonce,
-      verification_id: args.verificationId, binding_proof: args.bindingProof });
-  }
 
-  /** SDK provision transcript signed by the accepted PCR Device; no key bytes leave Rust. */
-  async signThirdPartyInviteProvision(args: {
-    handoffId: string; requestId: string; realmId: string; verificationId: string;
-    oobCodeKind: string; deliveryTargetUri: string; expiresAt: string;
-    createdAt?: string; domain: string;
-  }): Promise<Record<string, unknown>> {
-    return this.#call("sign_third_party_invite_provision", {
-      handoff_id: args.handoffId, request_id: args.requestId, realm_id: args.realmId,
-      verification_id: args.verificationId, oob_code_kind: args.oobCodeKind,
-      delivery_target_uri: args.deliveryTargetUri, expires_at: args.expiresAt,
-      created_at: args.createdAt ?? null, domain: args.domain,
-    });
-  }
+
+
 
   /** Rust dispatches only recognized SDK EventSpecs, then persists and submits through Garth. */
   async submitTypedEvent(args: { handoffId: string; realmId: string; kind: string; payload: Record<string, unknown>; semanticRefs?: Array<Record<string, unknown>> }): Promise<Record<string, unknown>> {
@@ -234,15 +215,7 @@ export class ProvisioningBridge {
       kind: args.kind, payload: args.payload, semantic_refs: args.semanticRefs ?? [] });
   }
 
-  /** Closed SDK attestation reader over the original accepted holder's DPoP session. */
-  async thirdPartyInviteAcceptanceAttestation(args: {
-    handoffId: string; realmId: string; inviteId: string; verificationId: string; provisioningId: string;
-  }): Promise<Record<string, unknown>> {
-    return this.#call("third_party_invite_acceptance_attestation", {
-      handoff_id: args.handoffId, request: { realm_id: args.realmId, invite_id: args.inviteId,
-        verification_id: args.verificationId, provisioning_id: args.provisioningId },
-    });
-  }
+
 
   async registrationCustody(handoffId: string): Promise<{ requestDigest: string; acceptedPersisted: boolean }> {
     const result = await this.#call("registration_custody", { handoff_id: handoffId });

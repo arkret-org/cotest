@@ -87,12 +87,11 @@ fn vectors() -> Vec<CanonicalVector> {
                     "strand_id": "ak:strand:AT3ARBdH1FM6GjXK9ulTx-YMvQOXys39dlUzZV6KyID9",
                     "track_name": "discussion",
                 },
-                "schema_version": 1,
             }),
             // Regenerated after the Realm id in this payload moved to its
             // Event-derived complete digest token: the Realm id sits inside
             // this Event's preimage, so editing it necessarily moves the digest.
-            expected_digest: "sha256:55d6eae483299a0a39625377a63f7d4416374d9544c9974632a007d725f8454c",
+            expected_digest: "sha256:51cb96f097b2ae752e9bd35a7784014dcfabd82de2b0cf1bf6c86869acf47eb2",
         },
         CanonicalVector {
             vector_id: "ak.cotest_vector.canonical_hash.webvh_log_update.v1",
@@ -148,7 +147,6 @@ fn vectors() -> Vec<CanonicalVector> {
 
 fn canonical_fixture_suite() -> CanonicalFixtureSuite {
     let mut builder = CanonicalFixtureBuilder::new("ak.profile.cotest.canonical_hash.v1")
-        .version("2026-06-19")
         .description("Canonical hash convergence vectors shared through the SDK fixture builder.");
     for vector in vectors() {
         builder
@@ -348,11 +346,12 @@ fn r3_2_identity_digests_match_pinned_baseline() {
         "member_identity_effective_set_digest of the empty set drifted"
     );
 
-    // roster `member_display_state_digest` — folds visible handle claims.
+    // Roster projection binds the complete tagged Account actor and canonical
+    // UTC milliseconds. Pin the JCS digest of that exact current projection.
     let display_state =
         member_display_state_digest(&realm, &actor, &events, &claims).expect("display digest");
     assert_eq!(
-        display_state, "sha256:9985c51228e3efef3178d1c419fef9d2e52360d14c9531b5ff7c67543a5bc698",
+        display_state, "sha256:21f43db8df102ff41543c13ebe686d025700e6e998d06c3ea25cc0aa6e39990a",
         "member_display_state_digest baseline drifted (R3.2 VECT-COT-5)"
     );
 

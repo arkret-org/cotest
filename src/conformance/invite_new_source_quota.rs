@@ -22,7 +22,6 @@ use super::load_fixture;
 
 pub const INVITE_NEW_SOURCE_QUOTA_FIXTURE: &str = "invite-new-source-quota-fixture.json";
 
-const SUITE: &str = "invite_new_source_quota";
 const ENTRYPOINT: &str = "ak.suite.invite.new_source_quota.v1";
 pub const VECTOR_ID_NEW_SOURCE_QUOTA_HOLDER_ADMISSION: &str =
     "ak.vector.invite.new_source_quota_holder_admission.v1";
@@ -97,7 +96,6 @@ const CONVERGING_SURFACE_OPERATION_IDS: [&str; 3] = [
 
 #[derive(Debug, Deserialize)]
 struct Fixture {
-    suite: String,
     runner: Runner,
     covers_vectors: Vec<String>,
     specification_defaults: SpecificationDefaults,
@@ -449,9 +447,7 @@ pub fn run_invite_new_source_quota_suite() -> Result<()> {
     let fixture: Fixture = load_fixture(INVITE_NEW_SOURCE_QUOTA_FIXTURE)?;
 
     ensure!(
-        fixture.suite == SUITE
-            && fixture.runner.kind == "named_suite"
-            && fixture.runner.entrypoint == ENTRYPOINT,
+        fixture.runner.kind == "named_suite" && fixture.runner.entrypoint == ENTRYPOINT,
         "invite new-source quota fixture identity drifted"
     );
     ensure!(

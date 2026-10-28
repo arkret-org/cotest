@@ -136,7 +136,6 @@ async fn actual_agent_deployment_configured(label: &str) -> Result<ActualAgentDe
             ("COLAND_INTERNAL_AUTHORITY_SHARED_SECRET", secret),
             ("COLAND_ACCOUNT_AUTHORITY_TRUST_DOMAIN", JOINT_TRUST_DOMAIN),
             ("COLAND_EMBEDDED_WEBVH_REGISTRATION_BEARER", registration),
-            ("COLAND_THIRD_PARTY_INVITE_PROVIDER_ENABLED", "0"),
         ],
     )
     .await?;
@@ -267,7 +266,7 @@ async fn actual_agent_deployment_configured(label: &str) -> Result<ActualAgentDe
     })
 }
 
-pub(super) async fn additional_controller(
+pub(crate) async fn additional_controller(
     deployment: &ActualAgentDeployment,
     handle: &str,
     device_id: &str,

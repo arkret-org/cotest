@@ -1,5 +1,4 @@
 {
-  "suite": "inkson_client_profile_conformance",
   "profile": "ak.profile.inkson_client_blackbox_manifest.v1",
   "service": "inkson",
   "target_profiles": [

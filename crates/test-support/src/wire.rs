@@ -16,9 +16,6 @@ use std::io::{self, Read};
 use anyhow::{Context, Result, bail, ensure};
 use arkret_canonical as canonical;
 use arkret_identifiers::{ConsentId, DeviceId, Did, DidCoreId, Hash, project_did_to_core_id};
-use arkret_models_collaboration::governance::membership_invite::{
-    InviteClaimBindingProof, InviteSubjectProof, InviteSubjectProofBody,
-};
 use arkret_models_collaboration::mimi_operations::{
     MimiConsentDecision, MimiRequestConsentRequestBody, MimiUpdateConsentRequestBody,
 };
@@ -711,24 +708,6 @@ struct MlsKeyPackageUploadEntryInput {
     signing_seed_b64url: String,
 }
 
-#[derive(Deserialize)]
-#[serde(deny_unknown_fields)]
-struct InviteSubjectProofInput {
-    subject_account_id: AccountId,
-    invite_id: String,
-    realm_id: String,
-    token_commitment: String,
-    claim_nonce: String,
-    verification_id: String,
-    binding_proof: InviteClaimBindingProof,
-    verification_method: DidUrl,
-    subject_did: Did,
-    root_public_key_multibase: String,
-    recovery_key: String,
-    #[serde(default)]
-    negative_device_signing_seed_b64url: Option<String>,
-}
-
 #[derive(Debug, Deserialize)]
 struct PrincipalControlRealmInput {
     principal_id: DidCoreId,
@@ -803,68 +782,6 @@ struct WebvhVerifyLogInput {
     /// `service` selects the generic chain profile that admits service
     /// authority keys; anything else keeps the human-principal profile.
     profile: Option<String>,
-}
-
-pub fn invite_subject_proof(input: Value) -> Result<Value> {
-    let input: InviteSubjectProofInput =
-        serde_json::from_value(input).context("parse invite subject proof input")?;
-    let binding_digest = input
-        .binding_proof
-        .canonical_digest()
-        .context("digest invite binding proof")?;
-    let transcript = InviteSubjectProofBody::from_wire_parts(
-        input.subject_account_id,
-        input.invite_id,
-        input.realm_id,
-        input.token_commitment,
-        input.claim_nonce,
-        input.verification_id,
-        binding_digest.as_str(),
-    )?;
-    let transcript_digest = transcript.transcript_digest()?;
-    ensure!(
-        project_did_to_core_id(&input.subject_did)? == transcript.subject_account_id.principal_id,
-        "native subject DID differs from the signed Account"
-    );
-    let material = arkret::identity_root::derive_identity_recovery_key_material_from_bip39(
-        &input.recovery_key,
-        "",
-        0,
-    )?;
-    ensure!(
-        material.root_public_key_multikey == input.root_public_key_multibase,
-        "native control key differs from the accepted registration checkpoint"
-    );
-    let root_method = format!(
-        "did:key:{}#{}",
-        material.root_public_key_multikey, material.root_public_key_multikey
-    );
-    let signing_key = match input.negative_device_signing_seed_b64url {
-        Some(seed) => {
-            // Deliberately valid device signatures exercise the server's
-            // native-control rejection; ordinary proofs use the root below.
-            ensure!(
-                input.verification_method.as_str() != root_method,
-                "device rejection fixture must not name the native root method"
-            );
-            signing_key_from_seed(&seed)?
-        }
-        None => {
-            ensure!(
-                input.verification_method.as_str() == root_method,
-                "subject proof requires the accepted native update-key method"
-            );
-            SigningKey::from_bytes(&material.root_seed)
-        }
-    };
-    let signature = signing_key.sign(&transcript.canonical_bytes()?).to_bytes();
-    let proof = InviteSubjectProof::new(
-        input.verification_method,
-        transcript_digest,
-        base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(signature),
-    );
-    proof.validate()?;
-    serde_json::to_value(proof).context("serialize invite subject proof")
 }
 
 pub fn validate_applet_authority_material(input: Value) -> Result<Value> {
@@ -2387,89 +2304,6 @@ mod tests {
             arkret::crypto::hpke::x25519_public_key(hpke.private_key()).unwrap(),
             *hpke.public_key()
         );
-    }
-
-    #[test]
-    fn invite_subject_oracle_signs_native_control_and_rejects_device_or_mismatched_custody() {
-        let mnemonic = bip39::Mnemonic::from_entropy(&[37; 32]).unwrap();
-        let recovery_key = mnemonic.words().collect::<Vec<_>>().join(" ");
-        let material = arkret::identity_root::derive_identity_recovery_key_material_from_bip39(
-            &recovery_key,
-            "",
-            0,
-        )
-        .unwrap();
-        let (did, principal_id) = actor_ids(
-            "did:webvh:zQmV5MGgUvFGbi15ajBaMzdXR5KQzL3TVDxM7VFQCv5nCwH5C:01kwxhre7cexz894j3nmsvmqh5",
-        );
-        let subject_account_id = AccountId::new(
-            principal_id,
-            DidCoreId::new("ak:did_core:web:station.example").unwrap(),
-        );
-        let root_method = format!(
-            "did:key:{}#{}",
-            material.root_public_key_multikey, material.root_public_key_multikey
-        );
-        let input = json!({
-            "subject_account_id": subject_account_id,
-            "invite_id": "ak:invite:AY6DJbBwavsGTQuBZZiqqw9MVcqPZ8QX8invQ3i2kpi7",
-            "realm_id": "ak:realm:AV0aa7N4-6SpEMTq2vRgjNbMjn0vCIqfM5PxnJ-qQpPP",
-            "token_commitment": format!("sha256:{}", "ab".repeat(32)),
-            "claim_nonce": "native-control-claim-nonce",
-            "verification_id": "ak:did_core:web:verifier.example",
-            "binding_proof": {
-                "verification_id": "ak:did_core:web:verifier.example",
-                "verification_method": "did:web:verifier.example#verification-1",
-                "subject_account_id": subject_account_id,
-                "realm_id": "ak:realm:AV0aa7N4-6SpEMTq2vRgjNbMjn0vCIqfM5PxnJ-qQpPP",
-                "audience": "arkret.invite.claim",
-                "claim_nonce": "native-control-claim-nonce",
-                "expires_at": "2026-10-02T12:00:00.000Z",
-                "signature": canonical::base64url_encode([19; 64])
-            },
-            "verification_method": root_method,
-            "subject_did": did,
-            "root_public_key_multibase": material.root_public_key_multikey,
-            "recovery_key": recovery_key
-        });
-        let proof: InviteSubjectProof =
-            serde_json::from_value(invite_subject_proof(input.clone()).unwrap()).unwrap();
-        let parsed: InviteSubjectProofInput = serde_json::from_value(input.clone()).unwrap();
-        let transcript = InviteSubjectProofBody::from_wire_parts(
-            parsed.subject_account_id,
-            parsed.invite_id,
-            parsed.realm_id,
-            parsed.token_commitment,
-            parsed.claim_nonce,
-            parsed.verification_id,
-            parsed.binding_proof.canonical_digest().unwrap().as_str(),
-        )
-        .unwrap();
-        assert_eq!(
-            proof.transcript_digest,
-            transcript.transcript_digest().unwrap()
-        );
-        let signature = ed25519_dalek::Signature::from_slice(
-            &canonical::base64url_decode(&proof.signature).unwrap(),
-        )
-        .unwrap();
-        SigningKey::from_bytes(&material.root_seed)
-            .verifying_key()
-            .verify_strict(&transcript.canonical_bytes().unwrap(), &signature)
-            .unwrap();
-
-        let mut device = input.clone();
-        device["verification_method"] = json!(format!("{}#ak:device:fixture", did));
-        assert!(invite_subject_proof(device).is_err());
-        let mut wrong_subject = input.clone();
-        wrong_subject["subject_did"] = json!("did:web:other.example");
-        assert!(invite_subject_proof(wrong_subject).is_err());
-        let mut wrong_key = input.clone();
-        wrong_key["root_public_key_multibase"] = json!("unaccepted-key");
-        assert!(invite_subject_proof(wrong_key).is_err());
-        let mut retired_seed = input;
-        retired_seed["signing_seed_b64url"] = json!(canonical::base64url_encode([37; 32]));
-        assert!(invite_subject_proof(retired_seed).is_err());
     }
 
     #[test]

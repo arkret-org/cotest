@@ -32,8 +32,7 @@ const LEAF_TRANSCRIPT: &[u8] = b"arkret/cotest/agent-mls-leaf/v1";
 #[serde(deny_unknown_fields)]
 struct FixtureRoot {
     profile: String,
-    version: String,
-    suite: String,
+
     runner: FixtureRunner,
     covers_vectors: Vec<String>,
     cases: Vec<FixtureCase>,
@@ -271,8 +270,7 @@ pub fn run_agent_mls_keypackage_authorization_suite()
 -> Result<AgentMlsKeypackageAuthorizationExecution> {
     let fixture = load_fixture()?;
     ensure!(fixture.profile == "ak.profile.agent_runtime.v1");
-    ensure!(!fixture.version.trim().is_empty());
-    ensure!(fixture.suite == "agent_mls_keypackage_authorization");
+
     ensure!(fixture.runner.kind == "named_suite");
     ensure!(fixture.runner.entrypoint == AGENT_MLS_KEYPACKAGE_AUTHORIZATION_ENTRYPOINT);
     ensure!(fixture.covers_vectors == [VECTOR_ID]);

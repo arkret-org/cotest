@@ -82,6 +82,9 @@ pub(super) async fn exercise(
         realm_id: realm.clone(),
         requester_account_id: bob.account.clone(),
         invite_id: None,
+
+        realm_invite_link_id: None,
+        link_proof: None,
     };
     let preview = peer(
         station,

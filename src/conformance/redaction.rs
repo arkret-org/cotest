@@ -11,9 +11,7 @@ const DIGEST64: &str = "0123456789abcdef0123456789abcdef0123456789abcdef01234567
 
 pub fn run_redaction_fixture_suite() -> Result<()> {
     let fixture = load_fixture::<RedactionFixture>("redaction-fixture.json")?;
-    if fixture.suite != "redaction" {
-        bail!("unexpected fixture suite {}", fixture.suite);
-    }
+
     let target = sample_event();
 
     for case in fixture.cases {
@@ -555,9 +553,8 @@ fn project_policy_scope_timeline(timeline: &Value) -> Result<Value> {
 fn assert_hard_erasure_receipt() -> Result<()> {
     let env = SchemaEnv::load()?;
     let receipt_validator = env.compile("schemas/erasure-receipt.schema.json")?;
-    let carrier_validator = env.compile(
-        "schemas/erasure-receipt-operations.schema.json#/$defs/erasure_receipt_submit_request_body",
-    )?;
+    let carrier_validator = env
+        .compile("schemas/erasure-receipt-operations.schema.json#/$defs/erasure_receipt_package")?;
     let stub_validator = env.compile("schemas/erasure-verification-stub.schema.json")?;
 
     let original_event_id = "ak:event:AagGd6PB1SqZp__DzubMh3BTpUU-oWosY3NoR_k38pxq";
@@ -712,7 +709,7 @@ fn assert_erasure_receipt_operations_registered() -> Result<()> {
         (
             "ak.peer.erasure_receipt.resource.get.v1",
             "GET /_arkret/peer/erasure-receipts/{receipt_id}",
-            "schemas/erasure-receipt-operations.schema.json#/$defs/erasure_receipt_resource",
+            "schemas/erasure-receipt-operations.schema.json#/$defs/erasure_receipt_package",
         ),
     ] {
         let operation = operations

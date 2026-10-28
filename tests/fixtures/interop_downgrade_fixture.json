@@ -1,7 +1,5 @@
 {
-  "suite": "interop_downgrade_fixture",
   "profile": "ak.profile.mimi_interop_vectors.v1",
-  "version": 1,
   "source_refs": [
     "arkret-spec/spec/v1/zh/extensions/mimi-interop.md#10-identifiers-and-consent",
     "arkret-spec/spec/v1/zh/extensions/mimi-interop.md#12-conformance",

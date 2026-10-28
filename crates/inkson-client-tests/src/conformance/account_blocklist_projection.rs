@@ -28,7 +28,6 @@ pub const VECTOR_ID_ACCOUNT_BLOCKLIST_PROJECTION: &str =
 pub const ACCOUNT_BLOCKLIST_PROJECTION_ENTRYPOINT: &str =
     "ak.suite.account.blocklist_projection.v1";
 const FIXTURE: &str = "account-blocklist-projection-fixture.json";
-const SUITE: &str = "account_blocklist_projection";
 const BLOCKLIST_KEY: &str = "ak.account.blocklist";
 const PATH: &str = "/_arkret/self/account_data/ak.account.blocklist";
 const SECRET: [u8; 32] = [7; 32];
@@ -2277,10 +2276,6 @@ fn target_closure(case: &Value) -> Result<()> {
 }
 
 fn verify_fixture_identity(fixture: &Value) -> Result<()> {
-    ensure!(
-        required_str(fixture, "suite")? == SUITE,
-        "fixture suite drifted"
-    );
     ensure!(
         fixture_runner_entrypoint(fixture)? == ACCOUNT_BLOCKLIST_PROJECTION_ENTRYPOINT,
         "fixture entrypoint drifted"

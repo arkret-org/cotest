@@ -357,8 +357,9 @@ impl GarthClientHandle {
         }
         let event = match kind {
             "ak.invite.create" => author!(event_spec::InviteCreate),
-            "ak.invite.third_party" => author!(event_spec::InviteThirdParty),
-            "ak.invite.claim" => author!(event_spec::InviteClaim),
+            "ak.realm_invite_link.create" => author!(event_spec::RealmInviteLinkCreate),
+            "ak.realm_invite_link.revoke" => author!(event_spec::RealmInviteLinkRevoke),
+            "ak.realm_invite_link.accept" => author!(event_spec::RealmInviteLinkAccept),
             "ak.invite.accept" => author!(event_spec::InviteAccept),
             "ak.invite.revoke" => author!(event_spec::InviteRevoke),
             "ak.realm.join_rule" => author!(event_spec::RealmJoinRule),
@@ -371,20 +372,6 @@ impl GarthClientHandle {
         let signed = event.clone();
         let item = self.submit_event(event).await?;
         Ok(json!({"event":signed,"commit":item.commit(),"event_id":item.event_id()}))
-    }
-
-    /// Registered SDK reader over the original DPoP-bound Garth transport.
-    pub async fn third_party_invite_acceptance_attestation(
-        &self,
-        request: &arkret_models_collaboration::governance::third_party_invite::ThirdPartyInviteAcceptanceAttestationRequestBody,
-    ) -> Result<Value> {
-        let outcome = self
-            .runtime
-            .authority()
-            .transport()
-            .third_party_invite_acceptance_attestation(request)
-            .await?;
-        Ok(serde_json::to_value(outcome)?)
     }
 
     /// Found a normal plaintext collaboration Realm through Garth's durable queue.

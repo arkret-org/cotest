@@ -26,7 +26,7 @@ $null = New-Item -ItemType Directory -Force -Path $stateDirectory
 
 function Write-ControlState {
     param([hashtable]$Value)
-    $Value.schema = 'cotest.joint-service-control.v1'
+
     $Value.server = $ServerName
     $Value.service = $ServiceName
     $Value.updated_at = (Get-Date).ToUniversalTime().ToString('o')

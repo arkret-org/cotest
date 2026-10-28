@@ -221,9 +221,7 @@ pub fn run_signal_device_authorization_domain_vector() -> Result<()> {
 pub fn run_signal_federation_fixture_suite() -> Result<()> {
     let fixture = load_fixture_value(FIXTURE)?;
     validate_profile(&fixture, ProfileId::SIGNAL_PEER_RELAY_V1)?;
-    if fixture.get("suite").and_then(Value::as_str) != Some("signal_peer_relay")
-        || fixture.pointer("/runner/kind").and_then(Value::as_str) != Some("generated_limit_cases")
-    {
+    if fixture.pointer("/runner/kind").and_then(Value::as_str) != Some("generated_limit_cases") {
         bail!("Signal federation fixture runner metadata drifted");
     }
     let signal = envelope()?;

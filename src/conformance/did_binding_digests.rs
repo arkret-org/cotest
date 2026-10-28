@@ -21,9 +21,7 @@ const FIXTURE: &str = "did-binding-digest-fixture.json";
 
 fn run_vector(vector_id: &str) -> Result<()> {
     let fixture = load_fixture_value(FIXTURE)?;
-    if fixture.get("suite").and_then(Value::as_str) != Some("did_binding_digests") {
-        bail!("DID binding digest fixture suite drifted");
-    }
+
     let cases = fixture
         .get("cases")
         .and_then(Value::as_array)

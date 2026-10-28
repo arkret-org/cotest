@@ -1,13 +1,15 @@
 {
   "profile": "ak.profile.production_signing_vectors.v1",
-  "version": "2026-08-13",
   "comment": "Notary payload-signing vectors exercised through the live SDK signer: arkret-rust-sdk/crates/signatures/src/signer.rs::Ed25519PayloadSigner + verify_ed25519_payload_signature. Validates the deterministic-vs-ephemeral seed contract: (a) a configured 32-byte seed is byte-deterministic (same seed + same canonical body => same detached-JWS signature segment) so notary signatures replay across restart; (b) an ephemeral seed is non-deterministic because the seed is fresh randomness; (c) different seeds produce different signatures for the same canonical body (key binding); (d) the signature round-trips through verify_ed25519_payload_signature with the signer-derived verifying key; (e) PayloadSignature.payload_digest equals sha256 of the canonical body bytes. Unlike the earlier structural-only revision, cotest now runs real ed25519 operations against the SDK types for every vector, so the suite fails loudly if the SDK signer contract moves.",
   "encoder": {
     "signer": "arkret_signatures::Ed25519PayloadSigner",
     "verifier": "arkret_signatures::signer::verify_ed25519_payload_signature",
     "signature_algorithm": "Ed25519",
     "wire_form": "PayloadSignature{jws: <protected-header>..<signature>, payload_digest: sha256:<hex>}",
-    "seed_source_kinds": ["configured", "ephemeral"]
+    "seed_source_kinds": [
+      "configured",
+      "ephemeral"
+    ]
   },
   "vectors": [
     {

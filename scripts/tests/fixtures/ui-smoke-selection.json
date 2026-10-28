@@ -1,5 +1,4 @@
 {
-  "baseline_date": "2026-10-10",
   "project": "chrome",
   "selector": "@fully-implemented",
   "minimum_tests": 90,
@@ -31,7 +30,10 @@
     "spaces/realm-profile.spec.ts",
     "sync/service-surface-contract.spec.ts"
   ],
-  "required_native_migrations": ["cotest/e2e/tests/conformance/registry-drift.spec.ts", "cotest/e2e/tests/events/realm-genesis-commit-stream.spec.ts"],
+  "required_native_migrations": [
+    "cotest/e2e/tests/conformance/registry-drift.spec.ts",
+    "cotest/e2e/tests/events/realm-genesis-commit-stream.spec.ts"
+  ],
   "scope": "Supported UI smoke plus explicitly mapped native API migrations. Collection credits preserve the old selection floor and never claim that native tests actually ran.",
   "file_transfer_owner": "arkret-work/tasks/impl-done/2026-09-30-0805-blob-upload-encryption-classification.md",
   "retirements": {

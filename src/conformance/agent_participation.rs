@@ -10,8 +10,8 @@ use arkret_identifiers::{DidCoreId, RealmId};
 use arkret_models_collaboration::events_payloads::mention::{Mention, MentionNode, MentionTarget};
 use arkret_models_collaboration::governance::agent_participation::{
     AgentParticipationError, AgentParticipationResponseBody, AgentParticipationView,
-    ParticipationBits, ParticipationNextReplaceInput, ParticipationScope, effective_participation,
-    fold_ceiling_chain, validate_agent_participation_tightens,
+    ParticipationBits, ParticipationScope, effective_participation, fold_ceiling_chain,
+    validate_agent_participation_tightens,
 };
 use arkret_models_collaboration::mention_composer::{
     AgentMentionComposerScope, AgentMentionLabels, AgentMentionRoute, MentionDraftBinding,
@@ -59,8 +59,7 @@ const AGENT_PARTICIPATION_ENTRY_SCHEMA: &str =
 #[serde(deny_unknown_fields)]
 struct AgentParticipationFixture {
     profile: String,
-    version: String,
-    suite: String,
+
     runner: Value,
     covers_vectors: Vec<String>,
     cases: Vec<Value>,
@@ -80,11 +79,7 @@ fn participation_fixture() -> Result<AgentParticipationFixture> {
 fn validate_agent_participation_fixture_metadata(
     fixture: &AgentParticipationFixture,
 ) -> Result<()> {
-    if fixture.profile != ProfileId::AGENT_PARTICIPATION_POLICY_V1
-        || fixture.suite != "agent_participation"
-        || fixture.version.trim().is_empty()
-        || fixture.runner.is_null()
-    {
+    if fixture.profile != ProfileId::AGENT_PARTICIPATION_POLICY_V1 || fixture.runner.is_null() {
         bail!("agent participation fixture suite drifted");
     }
 
@@ -923,16 +918,12 @@ pub fn run_agent_participation_session_overlay_vector() -> Result<()> {
     let vector = case(&fixture, VECTOR_ID_AGENT_PARTICIPATION_SESSION_OVERLAY)?;
     let scope = scope_field(vector, "target_scope")?;
     let selection = participation_field(vector, "selection")?;
-    let version = required_u64(vector, "version")?;
-
-    let entry = AgentParticipationView {
-        target_scope: scope.clone(),
-        selection,
-        version,
-        next_replace_input: (version < i64::MAX as u64).then_some(ParticipationNextReplaceInput {
-            expected_version: version,
-        }),
-    };
+    let entry: AgentParticipationView = serde_json::from_value(serde_json::json!({
+        "target_scope": scope,
+        "selection": selection,
+        "version": vector["version"],
+        "next_replace_input": vector["next_replace_input"],
+    }))?;
     let outcome = AgentParticipationResponseBody {
         agent_id: "ak:did_core:web:agents.acme.example:alice-summary".to_owned(),
         participation_entries: vec![entry.clone()],

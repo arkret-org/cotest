@@ -453,7 +453,6 @@ class AcceptanceTraceabilityTests(unittest.TestCase):
         source.write_text(rust_test("expiry_probe", OP_ONE, "assert_eq!(actual, expected);"), encoding="utf-8")
         count, digest = inventory.acceptance_digest(self.task.read_text(encoding="utf-8"))
         self.manifest = {
-            "format_version": 1, "source_of_truth": False, "complete_claim": False,
             "tasks": [{
                 "task": "owner.md", "criteria_count": count, "criteria_sha256": digest,
                 "spec_refs": [], "source_refs": ["cotest/tests/probe.rs"],
@@ -469,7 +468,7 @@ class AcceptanceTraceabilityTests(unittest.TestCase):
         self.assertEqual(result, {"owners": 1, "criteria": 1, "test_references": 1})
         self.assertNotIn("passed", result)
         self.manifest["complete_claim"] = True
-        with self.assertRaisesRegex(ValueError, "complete claim"):
+        with self.assertRaisesRegex(ValueError, "unknown or missing fields"):
             inventory.validate_acceptance_manifest(self.root, self.manifest)
 
     def test_same_count_scope_edit_and_continuation_edit_invalidate_mapping(self) -> None:

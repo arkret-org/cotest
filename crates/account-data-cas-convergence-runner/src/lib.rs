@@ -25,8 +25,7 @@ const PAYLOAD_SCHEMA_REF: &str =
 #[serde(deny_unknown_fields)]
 struct FixtureRoot {
     profile: String,
-    version: String,
-    suite: String,
+
     runner: Runner,
     covers_vectors: Vec<String>,
     account_data_key: String,
@@ -595,14 +594,7 @@ pub fn run_account_data_cas_convergence_suite() -> Result<AccountDataCasExecutio
         fixture.profile == "ak.profile.full_client.v1",
         "fixture profile drifted"
     );
-    ensure!(
-        !fixture.version.trim().is_empty(),
-        "fixture version is empty"
-    );
-    ensure!(
-        fixture.suite == "account_data_cas_convergence",
-        "fixture suite drifted"
-    );
+
     ensure!(fixture.runner.kind == "named_suite", "runner kind drifted");
     ensure!(
         fixture.runner.entrypoint == ACCOUNT_DATA_CAS_CONVERGENCE_ENTRYPOINT,

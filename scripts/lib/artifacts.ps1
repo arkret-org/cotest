@@ -178,11 +178,7 @@ function Assert-ArtifactReportIdentity {
     catch {
         throw "Artifact summary is not valid JSON: $summaryPath"
     }
-    $reportSchema = if ($summary.PSObject.Properties.Name -contains "report_schema") { $summary.report_schema } else { $null }
     $suiteKind = if ($summary.PSObject.Properties.Name -contains "suite_kind") { $summary.suite_kind } else { $null }
-    if ($reportSchema -ne "arkret.test-report.v1") {
-        throw "Artifact summary uses an unsupported report_schema for '$Channel': $reportSchema"
-    }
     if ($suiteKind -ne $Channel) {
         throw "Artifact summary suite_kind '$suiteKind' does not match channel '$Channel'"
     }

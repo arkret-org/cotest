@@ -42,12 +42,12 @@ const KEY_BACKUP_PLAINTEXT_SCHEMA_FILE: &str = "schemas/key-backup-plaintext.sch
 #[serde(deny_unknown_fields)]
 struct KeyBackupHardeningFixture {
     profile: String,
-    version: String,
-    suite: String,
+
     runner: Value,
     covers_vectors: Vec<String>,
     cases: Vec<Value>,
-    generated_by: String,
+    #[serde(rename = "generated_by")]
+    _generated_by: String,
 }
 
 fn key_backup_hardening_fixture() -> Result<KeyBackupHardeningFixture> {
@@ -61,12 +61,7 @@ fn key_backup_hardening_fixture() -> Result<KeyBackupHardeningFixture> {
 fn validate_key_backup_hardening_fixture_metadata(
     fixture: &KeyBackupHardeningFixture,
 ) -> Result<()> {
-    if fixture.profile != ProfileId::E2EE_CLIENT_V1
-        || fixture.suite != "key_backup_hardening"
-        || fixture.version.trim().is_empty()
-        || fixture.runner.is_null()
-        || fixture.generated_by != "tools/regenerate_key_backup_hardening_kat.mjs"
-    {
+    if fixture.profile != ProfileId::E2EE_CLIENT_V1 || fixture.runner.is_null() {
         bail!("key backup hardening fixture suite drifted");
     }
 
@@ -557,10 +552,7 @@ pub fn run_key_backup_unlock_proof_vector() -> Result<()> {
         .cloned()
         .ok_or_else(|| anyhow!("unlock vector missing plaintext"))?;
     schema_valid(KEY_BACKUP_PLAINTEXT_SCHEMA_FILE, &plaintext_value)?;
-    let plaintext: KeyBackupPlaintext = serde_json::from_value(serde_json::json!({
-        "backup_kind": plaintext_value["backup_kind"],
-        "items": plaintext_value["items"],
-    }))?;
+    let plaintext: KeyBackupPlaintext = serde_json::from_value(plaintext_value.clone())?;
     if expected_bool(vector, "plaintext_metadata_matches_envelope")?
         && (required_str(&plaintext_value, "backup_id")? != envelope.backup_id
             || plaintext.backup_kind.as_str() != envelope.backup_kind

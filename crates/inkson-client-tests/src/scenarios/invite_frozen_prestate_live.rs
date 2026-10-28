@@ -332,8 +332,8 @@ pub async fn invite_frozen_prestate_is_enforced_before_acceptance() -> Result<()
     // A revoke of the re-invite releases the slot again.
     let revoke = arkret_models_collaboration::governance::membership_invite::InviteRevokePayload::new(
         reinvite_id,
-        arkret_models_collaboration::governance::membership_invite::InviteRevokePreviousState::Pending,
-        Some(bob_account.clone()),
+        arkret_models_collaboration::governance::membership_invite::InvitePreviousState::Pending,
+        bob_account.clone(),
         arkret_models_collaboration::governance::membership_invite::InviteRevokeTargetState::Revoked,
     )
     .with_reason_code(arkret_wire::ReasonCode::from_wire("admin_revoke"))

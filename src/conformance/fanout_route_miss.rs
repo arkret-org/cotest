@@ -29,8 +29,7 @@ const REQUIRED_CASES: [&str; 11] = [
 
 pub fn run_fanout_route_miss_suite() -> Result<()> {
     let fixture = load_fixture_value(FIXTURE)?;
-    if fixture["suite"] != "fanout_route_miss"
-        || fixture["runner"]["kind"] != "named_suite"
+    if fixture["runner"]["kind"] != "named_suite"
         || fixture["runner"]["entrypoint"] != "ak.suite.fanout.route_miss.v1"
         || fixture["covers_vectors"] != serde_json::json!([VECTOR])
     {

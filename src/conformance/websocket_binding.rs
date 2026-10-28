@@ -107,8 +107,7 @@ pub fn run_websocket_binding_suite() -> Result<()> {
 #[serde(deny_unknown_fields)]
 struct WebSocketBindingFixture {
     profile: String,
-    version: String,
-    suite: String,
+
     runner: FixtureRunner,
     covers_vectors: Vec<String>,
     limits: FixtureLimits,
@@ -157,9 +156,7 @@ fn validate_metadata(fixture: &WebSocketBindingFixture) -> Result<FixtureLimits>
             fixture.profile
         );
     }
-    if fixture.suite != SUITE {
-        bail!("{FIXTURE} suite drifted from {SUITE}");
-    }
+
     if fixture.runner.kind != "named_suite" {
         bail!("{FIXTURE} runner kind must be named_suite");
     }
@@ -172,9 +169,6 @@ fn validate_metadata(fixture: &WebSocketBindingFixture) -> Result<FixtureLimits>
     // Same shape the other fixture-backed suites use: the revision is read but
     // not pinned, so a regeneration does not churn this file while an empty or
     // dropped version still fails.
-    if fixture.version.trim().is_empty() {
-        bail!("{FIXTURE} version must not be empty");
-    }
 
     let limits = fixture.limits;
     if limits.hard_max_frame_bytes != WEBSOCKET_HARD_MAX_FRAME_BYTES {

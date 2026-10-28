@@ -618,7 +618,9 @@ pub async fn prepare_join(
 ) -> Result<()> {
     let invite_id = match &intent {
         RealmJoinIntent::InviteAccept { invite_id } => Some(invite_id.clone()),
-        RealmJoinIntent::MemberJoin | RealmJoinIntent::Knock => None,
+        RealmJoinIntent::InviteLinkAccept { .. }
+        | RealmJoinIntent::MemberJoin
+        | RealmJoinIntent::Knock => None,
     };
     let body = SelfRealmJoinPrepareRequestBody {
         request_id: RequestId::new(request_id.to_owned())?,
@@ -631,6 +633,14 @@ pub async fn prepare_join(
                 endpoint_url: None,
                 source: AuthorityLocatorSource::Directory,
             }],
+
+            realm_invite_link_id: match &intent {
+                RealmJoinIntent::InviteLinkAccept {
+                    realm_invite_link_id,
+                    ..
+                } => Some(realm_invite_link_id.clone()),
+                _ => None,
+            },
         },
         intent,
     };

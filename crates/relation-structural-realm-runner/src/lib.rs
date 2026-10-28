@@ -21,8 +21,7 @@ pub const FIXTURE: &str = "relation-structural-realm-fixture.json";
 #[serde(deny_unknown_fields)]
 struct FixtureRoot {
     profile: String,
-    version: String,
-    suite: String,
+
     runner: Runner,
     covers_vectors: Vec<String>,
     authority: String,
@@ -123,14 +122,7 @@ fn validate_fixture_metadata(fixture: &FixtureRoot) -> Result<()> {
         fixture.profile == "ak.profile.core_event_store.v1",
         "fixture profile drifted"
     );
-    ensure!(
-        !fixture.version.trim().is_empty(),
-        "fixture version is empty"
-    );
-    ensure!(
-        fixture.suite == "relation_structural_realm",
-        "fixture suite drifted"
-    );
+
     ensure!(fixture.runner.kind == "named_suite", "runner kind drifted");
     ensure!(
         fixture.runner.entrypoint == RELATION_STRUCTURAL_REALM_ENTRYPOINT,

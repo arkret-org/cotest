@@ -22,8 +22,6 @@ const REALM_REMARK_KEY_PREFIX: &str = "ak.contacts.realm.";
 
 #[derive(Debug, Deserialize)]
 struct PrivateChatPrivacyFixture {
-    suite: String,
-    version: u32,
     account_data_cases: AccountDataCases,
     privacy_payload_vectors: Vec<PrivacyPayloadVector>,
     founding_transcript_vector: FoundingTranscriptVector,
@@ -107,13 +105,6 @@ pub fn run_private_chat_privacy_contract_suite() -> Result<()> {
     let value = load_local_fixture_value(FIXTURE_FILE)?;
     let fixture: PrivateChatPrivacyFixture = serde_json::from_value(value)
         .map_err(|err| anyhow!("failed to parse {FIXTURE_FILE}: {err}"))?;
-
-    if fixture.suite != "private_chat_privacy_contracts" {
-        bail!("unexpected fixture suite `{}`", fixture.suite);
-    }
-    if fixture.version != 2 {
-        bail!("unexpected fixture version `{}`", fixture.version);
-    }
 
     validate_account_data_case(&fixture.account_data_cases.positive)?;
     validate_account_data_case(&fixture.account_data_cases.negative)?;

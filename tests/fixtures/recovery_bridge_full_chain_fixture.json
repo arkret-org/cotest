@@ -1,6 +1,5 @@
 {
   "profile": "ak.profile.recovery_bridge_full_chain_vectors.v1",
-  "version": "2026-05-17",
   "vectors": [
     {
       "name": "principal_cache_lookup_resolves_principal_realm",
@@ -34,7 +33,11 @@
     {
       "name": "restore_execute_consumes_ticket_to_executed",
       "step": "restore_execute",
-      "ticket_state_transitions": ["issued", "executing", "executed"],
+      "ticket_state_transitions": [
+        "issued",
+        "executing",
+        "executed"
+      ],
       "expected": {
         "outcome": "accept",
         "ticket_state_after": "executed"

@@ -48,7 +48,6 @@ pub const VECTOR_ID_ACTOR_PRIVATE_EVENTS_SUBMIT: &str = "ak.vector.actor_private
 pub const ACTOR_PRIVATE_EVENTS_SUBMIT_ENTRYPOINT: &str = "ak.suite.actor_private_events.submit.v1";
 
 const FIXTURE: &str = "actor-private-events-submit-fixture.json";
-const SUITE: &str = "actor_private_events_submit";
 const REQUEST_SCHEMA: &str =
     "schemas/service-operation-dtos.schema.json#/$defs/ActorPrivateEventSubmitRequestBody";
 const OUTCOME_SCHEMA: &str =
@@ -191,10 +190,6 @@ pub fn run_actor_private_events_submit_vector() -> Result<()> {
 // ---------------------------------------------------------------------------
 
 fn verify_fixture_identity(fixture: &Value) -> Result<()> {
-    ensure!(
-        required_str(fixture, "suite")? == SUITE,
-        "fixture suite drifted"
-    );
     ensure!(
         fixture_runner_entrypoint(fixture)? == ACTOR_PRIVATE_EVENTS_SUBMIT_ENTRYPOINT,
         "fixture entrypoint drifted"

@@ -21,8 +21,7 @@ const RECEIVER_STATE_KEY: [&str; 4] = ["key_ref", "purpose", "aead_profile", "co
 #[serde(deny_unknown_fields)]
 struct FixtureRoot {
     profile: String,
-    version: String,
-    suite: String,
+
     runner: Runner,
     covers_vectors: Vec<String>,
     receiver_state_key: Vec<String>,
@@ -148,14 +147,7 @@ fn validate_fixture_metadata(fixture: &FixtureRoot) -> Result<()> {
         fixture.profile == "ak.profile.blob_node.v1",
         "fixture profile drifted"
     );
-    ensure!(
-        !fixture.version.trim().is_empty(),
-        "fixture version is empty"
-    );
-    ensure!(
-        fixture.suite == "aead_nonce_replay",
-        "fixture suite drifted"
-    );
+
     ensure!(fixture.runner.kind == "named_suite", "runner kind drifted");
     ensure!(
         fixture.runner.entrypoint == AEAD_NONCE_REPLAY_ENTRYPOINT,

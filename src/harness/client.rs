@@ -834,6 +834,8 @@ impl TestActorClient {
                             endpoint_url: None,
                             source: AuthorityLocatorSource::Invite,
                         }],
+
+                        realm_invite_link_id: None,
                     },
                     intent: RealmJoinIntent::InviteAccept {
                         invite_id: invite_id.clone(),

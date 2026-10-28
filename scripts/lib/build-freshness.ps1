@@ -356,7 +356,7 @@ function Write-ArtifactBuildStamp {
     $stampPath = Get-ArtifactBuildStampPath -ArtifactPath $ArtifactPath
     $identity = Get-ArtifactContentIdentity -ArtifactPath $ArtifactPath -ArtifactRoot $ArtifactRoot -RequiredArtifactPaths $RequiredArtifactPaths
     [pscustomobject]@{
-        schema = "cotest.build_input_stamp.v1"
+
         artifact = Resolve-BuildInputPath -Path $ArtifactPath
         artifact_sha256 = (Get-FileHash -LiteralPath $ArtifactPath -Algorithm SHA256).Hash.ToLowerInvariant()
         artifact_root = $identity.Root
@@ -427,9 +427,6 @@ function Test-ArtifactBuildStamp {
     }
     try {
         $stamp = Get-Content -Raw -LiteralPath $stampPath | ConvertFrom-Json
-        if ($stamp.schema -ne "cotest.build_input_stamp.v1") {
-            return [pscustomobject]@{ Matches = $false; Detail = "build-input stamp schema is invalid: $stampPath" }
-        }
         if ($stamp.artifact -ne (Resolve-BuildInputPath -Path $ArtifactPath) -or
             -not $stamp.PSObject.Properties["artifact_sha256"]) {
             return [pscustomobject]@{ Matches = $false; Detail = "build-input stamp has no matching artifact identity: $stampPath" }

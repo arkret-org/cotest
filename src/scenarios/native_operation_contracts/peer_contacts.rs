@@ -58,7 +58,7 @@ pub(super) async fn run() -> Result<()> {
     validate_exchange_schemas(&observations, &[OP])?;
     verify(&observations, &artifact)?;
     artifact["case"] = json!("peer_contacts");
-    artifact["format_version"] = json!(1);
+
     artifact["scope"] = json!([OP]);
     artifact["observations"] = json!(observations);
     if let Some(directory) = std::env::var_os("COTEST_NATIVE_OPERATION_EVIDENCE_DIR") {

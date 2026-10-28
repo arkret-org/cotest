@@ -33,8 +33,6 @@ const KDF_FIXTURE: &str = "identity-recovery-kdf-fixture.json";
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct IdentityRecoveryKdfFixture {
-    suite: String,
-    version: String,
     runner: Value,
     covers_vectors: Vec<String>,
     contract: Value,
@@ -50,9 +48,7 @@ pub fn run_identity_recovery_kdf_fixture_suite() -> Result<()> {
         &fixture.covers_vectors,
         "ak.vector.identity.recovery_kdf.v1",
     )?;
-    if fixture.suite.trim().is_empty()
-        || fixture.version.trim().is_empty()
-        || fixture.runner.is_null()
+    if fixture.runner.is_null()
         || fixture.contract.is_null()
         || fixture.negative_mutations.is_empty()
         || fixture.expected_negative_decision.trim().is_empty()

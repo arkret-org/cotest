@@ -15,8 +15,7 @@ use sha2::{Digest, Sha256};
 #[serde(deny_unknown_fields)]
 pub(crate) struct SecurityTransactionResilienceFixture {
     profile: String,
-    version: String,
-    suite: String,
+
     runner: FixtureRunner,
     covers_vectors: Vec<String>,
     /// Free-form instances validated by their referenced JSON Schemas.
@@ -273,8 +272,7 @@ fn validate_schema_cases(fixture: &SecurityTransactionResilienceFixture) -> Resu
 }
 
 fn validate_fixture(fixture: &SecurityTransactionResilienceFixture) -> Result<(), String> {
-    if fixture.suite != "security_transaction_resilience"
-        || fixture.runner.kind != "named_suite"
+    if fixture.runner.kind != "named_suite"
         || fixture.runner.entrypoint != "ak.suite.security_transaction.resilience.v1"
         || fixture
             .equivalence_output
@@ -282,7 +280,6 @@ fn validate_fixture(fixture: &SecurityTransactionResilienceFixture) -> Result<()
             .and_then(Value::as_u64)
             != Some(2)
         || fixture.profile.trim().is_empty()
-        || fixture.version.trim().is_empty()
         || fixture.covers_vectors.is_empty()
         || fixture.fault_matrix.is_null()
         || fixture.assertions.is_empty()

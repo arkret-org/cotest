@@ -15,7 +15,7 @@ pub fn run_protocol_simplification_shape_suite() -> Result<SuiteExecutionResult>
     let value = load_fixture_value(FIXTURE)?;
     ensure!(value["runner"]["entrypoint"] == PROTOCOL_SIMPLIFICATION_ENTRYPOINT);
     let fixture: SchemaValidationFixture = serde_json::from_value(value)?;
-    ensure!(fixture.suite == "protocol_simplification");
+
     run_cases(&fixture.schema_validation_cases)?;
     let mut cases = Vec::with_capacity(fixture.schema_validation_cases.len());
     for case in fixture.schema_validation_cases {

@@ -1058,7 +1058,6 @@ function New-JUnitXml {
 <testsuites>
   <testsuite name="Arkret Server Conformance" tests="$($Tests.Count)" failures="$($Summary.failed)" skipped="$($Summary.ignored)" time="$($Summary.duration_seconds)">
     <properties>
-      <property name="report_schema" value="arkret.test-report.v1" />
       <property name="suite_kind" value="server-conformance" />
       <property name="profile" value="$([System.Security.SecurityElement]::Escape($Summary.profile))" />
     </properties>
@@ -2231,7 +2230,7 @@ if ($Profile -eq "joint") {
         -DockerNoCache ([bool]$DockerNoCache)
 
     $summary = [pscustomobject]@{
-        report_schema          = "arkret.test-report.v1"
+
         suite_kind             = "joint-e2e"
         suite_name             = "Arkret Joint Product E2E"
         generated_at           = (Get-Date).ToString("o")
@@ -2292,7 +2291,7 @@ if ($Profile -eq "multi-server") {
         -DockerNoCache ([bool]$DockerNoCache)
 
     $summary = [pscustomobject]@{
-        report_schema          = "arkret.test-report.v1"
+
         suite_kind             = "joint-e2e"
         suite_name             = "Arkret Joint Product E2E"
         generated_at           = (Get-Date).ToString("o")
@@ -2602,7 +2601,7 @@ if ($specSyncGate.status -eq "failed") {
 $sutMetadata = Get-SutMetadata -Runtime $Runtime -SutManifest $SutManifest -SutImage $SutImage
 $specMetadata = Get-SpecMetadata -RepoRoot $repoRoot
 $metadata = [pscustomobject]@{
-    report_schema = "arkret.test-report.v1"
+
     suite_kind    = "server-conformance"
     suite_name    = "Arkret Server Conformance"
     generated_at = $finishedAt.ToString("o")
@@ -2701,7 +2700,7 @@ if ($Profile -eq "release-gate" -and $releaseGate.status -eq "failed") {
 }
 
 $summary = [pscustomobject]@{
-    report_schema        = "arkret.test-report.v1"
+
     suite_kind           = "server-conformance"
     suite_name           = "Arkret Server Conformance"
     status               = if ($exitCode -eq 0) { "success" } else { "failure" }

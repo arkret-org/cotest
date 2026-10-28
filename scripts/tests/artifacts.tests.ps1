@@ -42,7 +42,7 @@ try {
         -Label "all" `
         -Timestamp "20260730-120000"
     Set-Content -LiteralPath (Join-Path $first "summary.md") -Value "first" -Encoding UTF8
-    Set-Content -LiteralPath (Join-Path $first "summary.json") -Value '{"report_schema":"arkret.test-report.v1","suite_kind":"server-conformance"}' -Encoding UTF8
+    Set-Content -LiteralPath (Join-Path $first "summary.json") -Value '{"suite_kind":"server-conformance"}' -Encoding UTF8
     Publish-ArtifactMirror -SourceDirectory $first -OutputRoot $testRoot -Channel "server-conformance"
 
     $target = Join-Path $testRoot "latest\server-conformance"
@@ -67,7 +67,7 @@ try {
         -Label "all" `
         -Timestamp "20260730-120001"
     Set-Content -LiteralPath (Join-Path $second "summary.md") -Value "second" -Encoding UTF8
-    Set-Content -LiteralPath (Join-Path $second "summary.json") -Value '{"report_schema":"arkret.test-report.v1","suite_kind":"server-conformance"}' -Encoding UTF8
+    Set-Content -LiteralPath (Join-Path $second "summary.json") -Value '{"suite_kind":"server-conformance"}' -Encoding UTF8
     Publish-ArtifactMirror -SourceDirectory $second -OutputRoot $testRoot -Channel "server-conformance"
     Assert-True (-not (Test-Path -LiteralPath (Join-Path $target "stale.txt"))) "publishing retained a stale file"
 
@@ -97,7 +97,7 @@ try {
         Publish-ArtifactMirror -SourceDirectory $untypedReport -OutputRoot $testRoot -Channel "server-conformance"
     }
     catch {
-        $untypedPublishRejected = $_.Exception.Message.Contains("unsupported report_schema")
+        $untypedPublishRejected = $_.Exception.Message.Contains("suite_kind")
     }
     Assert-True $untypedPublishRejected "an untyped report was accepted as server-conformance"
     Write-LatestArtifactIndex -OutputRoot $testRoot

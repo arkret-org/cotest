@@ -45,7 +45,6 @@ pub const VECTOR_ID_AUTHORITY_COMMIT_INDEPENDENT_STREAMS: &str =
 
 const FIXTURE: &str = "authority-commit-fixture.json";
 const RUNNER_ENTRYPOINT: &str = "ak.suite.authority_commit.v1";
-const FIXTURE_SCHEMA: &str = "arkret.authority-commit-fixture.v1";
 
 const OLD_AUTHORITY_DID: &str = "did:web:old-authority.example";
 const NEW_AUTHORITY_DID: &str = "did:web:new-authority.example";
@@ -80,10 +79,6 @@ pub fn run_authority_commit_suite() -> Result<()> {
 // ── Fixture projection ──────────────────────────────────────────────────────
 
 fn verify_fixture_identity(fixture: &Value) -> Result<()> {
-    ensure!(
-        required_str(fixture, "schema")? == FIXTURE_SCHEMA,
-        "authority-commit fixture schema drifted"
-    );
     ensure!(
         required_str(fixture, "vector_id")? == VECTOR_ID_AUTHORITY_COMMIT_INDEPENDENT_STREAMS,
         "authority-commit fixture vector id drifted"

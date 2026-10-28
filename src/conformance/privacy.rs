@@ -14,9 +14,6 @@ pub fn run_privacy_security_fixture_suite() -> Result<()> {
     let raw_cases = value["cases"].clone();
     let fixture: PrivacySecurityFixture =
         parse_fixture_value("privacy-security-fixture.json", value)?;
-    if fixture.suite != "privacy_security" {
-        bail!("unexpected fixture suite {}", fixture.suite);
-    }
 
     for case in fixture.cases {
         match case.name.as_str() {

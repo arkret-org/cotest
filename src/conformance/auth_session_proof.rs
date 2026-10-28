@@ -53,8 +53,7 @@ const SELF_EVENTS_SUBMIT_OPERATION: &str = "ak.self.events.command.submit.v1";
 #[serde(deny_unknown_fields)]
 struct AuthSessionProofFixture {
     profile: String,
-    version: String,
-    suite: String,
+
     runner: Value,
     covers_vectors: Vec<String>,
     security_evidence: Vec<super::SecurityEvidenceRow>,
@@ -75,11 +74,7 @@ fn auth_session_proof_fixture() -> Result<AuthSessionProofFixture> {
 }
 
 fn validate_auth_session_proof_fixture_metadata(fixture: &AuthSessionProofFixture) -> Result<()> {
-    if fixture.profile != ProfileId::STATION_V1
-        || fixture.suite != "auth_session_proof"
-        || fixture.version.trim().is_empty()
-        || fixture.runner.is_null()
-    {
+    if fixture.profile != ProfileId::STATION_V1 || fixture.runner.is_null() {
         bail!("auth session proof fixture suite drifted");
     }
 

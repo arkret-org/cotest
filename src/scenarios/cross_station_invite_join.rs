@@ -285,7 +285,11 @@ pub async fn cross_station_invite_join_run() -> Result<()> {
                 endpoint_url: None,
                 source: AuthorityLocatorSource::Directory,
             }],
+
+            realm_invite_link_id: None,
         },
+
+        link_proof: None,
     };
     let mut local_preview_request = preview_request.clone();
     local_preview_request.target.invite_id = None;

@@ -1,59 +1,20 @@
-// Mock email + 3PID verification service — supports S3 (third-party invite)
-// and S7 (email onboarding).
-//
-// Endpoints:
-//   POST /mock/email/verification/send   { to, token, subject?, body?, body_html?, ttl_seconds? }
-//     Captures the message in-memory. Returns 200 + message_id.
-//   GET  /mock/email/verification/inbox?to=email   -> list of received messages
-//   POST /mock/email/verification/claim  { token, did }
-//     If token exists and not expired, marks consumed and returns a
-//     binding_proof (signed with the service's RSA key) attesting
-//     "token holder = did".
-//   GET  /jwks   → service public key for verifying binding_proof
-//   GET  /inspect → all sent emails + all token state (global dump)
-//   POST /inspect { delivery_failure: { to, enabled } }
-//     Configure 503 for exactly one recipient, through the local mock facade.
-//   DELETE /inspect → clear log
-//
-// In-memory only. State resets per harness run.
+// Mock delivery capture for ordinary account registration and recovery email.
 
 import { createServer } from "node:http";
-import { createSign, randomUUID } from "node:crypto";
-import { createRsaKeyPair, b64url } from "./_shared/keypairs.mjs";
+import { randomUUID } from "node:crypto";
 import { InspectLog, handleInspect } from "./_shared/inspect.mjs";
 import { readJson } from "./_shared/http.mjs";
 
 const port = parseInt(process.env.MOCK_EMAIL_PORT ?? "0", 10);
 const defaultTtlSeconds = parseInt(process.env.MOCK_EMAIL_TOKEN_TTL_SECONDS ?? "900", 10);
 
-const { privateKey, jwks } = createRsaKeyPair("mock-email-key-1");
 
 // to -> [{ message_id, token, subject, body, body_html, received_at, expires_at }]
 const inbox = new Map();
-// token -> { to, consumed, did?, consumed_at?, expires_at, body_html? }
-const tokens = new Map();
 const sendLog = new InspectLog("sent");
-const claimLog = new InspectLog("claims");
 const failedRecipients = new Set();
 
-function signBindingProof({ token_commitment, did, issuer, audience }) {
-  const header = { alg: "RS256", typ: "JWT", kid: "mock-email-key-1" };
-  const now = Math.floor(Date.now() / 1000);
-  const payload = {
-    iss: issuer,
-    sub: did,
-    aud: audience ?? "coland",
-    iat: now,
-    exp: now + 600,
-    nbf: now,
-    token_commitment,
-    purpose: "third_party_invite_binding",
-    nonce: randomUUID(),
-  };
-  const enc = `${b64url(JSON.stringify(header))}.${b64url(JSON.stringify(payload))}`;
-  const signature = createSign("RSA-SHA256").update(enc).sign(privateKey);
-  return `${enc}.${b64url(signature)}`;
-}
+
 
 function normalizeRecipient(raw) {
   const value = Array.isArray(raw) ? raw[0] : raw;
@@ -128,25 +89,15 @@ const server = createServer(async (req, res) => {
     if (req.method === "DELETE") failedRecipients.clear();
     const handled = handleInspect(req, res, {
       service: "mock-email",
-      logs: [sendLog, claimLog],
+      logs: [sendLog],
       extra: {
-        token_count: tokens.size,
         inbox_count: inbox.size,
-        // Snapshot of all tokens with their state, useful when the test
-        // does not know which email the user picked.
-        tokens: Array.from(tokens.entries()).map(([token, entry]) => ({
-          token,
-          ...entry,
-        })),
       },
     });
     if (handled) return;
   }
 
-  if (url.pathname === "/jwks") {
-    res.end(JSON.stringify(jwks));
-    return;
-  }
+
 
   if (url.pathname === "/mock/email/verification/send" && req.method === "POST") {
     const body = await readJson(req);
@@ -178,12 +129,6 @@ const server = createServer(async (req, res) => {
     const list = inbox.get(payload.to) ?? [];
     list.push(message);
     inbox.set(payload.to, list);
-    if (!failed) tokens.set(payload.token, {
-      to: payload.to,
-      consumed: false,
-      expires_at: message.expires_at,
-      body_html: message.body_html,
-    });
     if (failed) {
       // The transport actually fails; only the private in-memory inbox keeps
       // attempted bodies so tests can distinguish attempts from delivery.
@@ -214,58 +159,7 @@ const server = createServer(async (req, res) => {
     return;
   }
 
-  if (url.pathname === "/mock/email/verification/claim" && req.method === "POST") {
-    const body = await readJson(req);
-    if (!body || !body.token || !body.did) {
-      res.statusCode = 400;
-      res.end(JSON.stringify({ error: "missing_token_or_did" }));
-      return;
-    }
-    const entry = tokens.get(body.token);
-    if (!entry) {
-      claimLog.record({ token: body.token, did: body.did, error: "token_unknown" });
-      res.statusCode = 404;
-      res.end(JSON.stringify({ error: "token_unknown" }));
-      return;
-    }
-    if (entry.consumed) {
-      claimLog.record({ token: body.token, did: body.did, error: "token_already_consumed" });
-      res.statusCode = 409;
-      res.end(JSON.stringify({ error: "token_already_consumed" }));
-      return;
-    }
-    if (entry.expires_at && Date.parse(entry.expires_at) < Date.now()) {
-      claimLog.record({ token: body.token, did: body.did, error: "token_expired" });
-      res.statusCode = 410;
-      res.end(JSON.stringify({ error: "token_expired", expires_at: entry.expires_at }));
-      return;
-    }
-    entry.consumed = true;
-    entry.did = body.did;
-    entry.consumed_at = new Date().toISOString();
-    // Derive a deterministic token_commitment from the token bytes for the
-    // binding_proof claim. Coland is expected to compute the same.
-    const token_commitment = `sha256:${Buffer.from(body.token).toString("hex")}`;
-    const binding_proof = signBindingProof({
-      token_commitment,
-      did: body.did,
-      issuer,
-    });
-    claimLog.record({
-      token: body.token,
-      did: body.did,
-      consumed_at: entry.consumed_at,
-      token_commitment,
-    });
-    res.end(
-      JSON.stringify({
-        binding_proof,
-        token_commitment,
-        consumed_at: entry.consumed_at,
-      }),
-    );
-    return;
-  }
+
 
   res.statusCode = 404;
   res.end(JSON.stringify({ error: "not_found" }));

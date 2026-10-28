@@ -33,11 +33,17 @@ def require(condition, message):
 def declarations(document=None):
     document = read(CONTRACTS) if document is None else document
     rows = document["operations"]
-    require(document["format_version"] == 1 and document["scope"] == len(rows) == 97,
-            "native obligation scope must remain exactly 97")
+    require(set(document) == {"cases", "operations"}, "native inventory has redundant or unknown root fields")
     identifiers = [row["operation_id"] for row in rows]
-    require(len(set(identifiers)) == 97, "duplicate native obligation")
+    require(len(set(identifiers)) == len(rows), "duplicate native obligation")
+    import sys
+    sys.path.insert(0, str(ROOT / "inkson/tools"))
+    from check_mock_operation_review import verify_contract_bindings
     review = read(ROOT / "inkson/tests/contract/mock-operation-review.json")
+    try:
+        verify_contract_bindings(review)
+    except AssertionError as error:
+        raise ValueError(str(error)) from error
     required = {row["operation_id"] for row in review["operations"]
                 if row["verification_need"] in {"native_authority", "native_evidence_fixture"}}
     require(set(identifiers) == required, "native obligation inventory omits a current authority requirement")
@@ -59,22 +65,19 @@ def declarations(document=None):
     for row in rows:
         identifier = row["operation_id"]
         require(identifier in registry and identifier in errors, f"unregistered operation: {identifier}")
-        operation = registry[identifier]
-        require(operation["http"] == row["method"] + " " + row["path"],
-                f"native HTTP binding drifts: {identifier}")
-        require(row["success_shape_kind"]==operation["success_shape_kind"], f"native success shape drifts: {identifier}")
-        require((operation["success_shape_kind"] == "empty_response") == (row["response_schema_ref"] is None),
-                f"native response schema or registered empty shape is absent: {identifier}")
-        for member in ("request_schema_ref", "response_schema_ref"):
-            require(row[member] == operation.get(member), f"native obligation drifts: {identifier}.{member}")
-        require(row["spec_operation_sha256"] == canonical_digest(operation),
-                f"native operation contract changed: {identifier}")
-        require(row["error_mapping_sha256"] == canonical_digest(errors[identifier]),
-                f"native operation errors changed: {identifier}")
-        require(bool(row["authority_requirement"].strip()), f"authority obligation absent: {identifier}")
+        require(set(row) == {"operation_id", "native_case"}, f"native inventory repeats canonical contract fields: {identifier}")
         require(row["native_case"] is None or row["native_case"] in cases,
                 f"native obligation has no implemented case: {identifier}")
-    return document
+    # Runtime validation derives bindings from the one canonical registry.
+    enriched = []
+    for row in rows:
+        operation = registry[row["operation_id"]]
+        method, path = operation["http"].split(" ", 1)
+        enriched.append({**row, "method": method, "path": path,
+                         "request_schema_ref": operation.get("request_schema_ref"),
+                         "response_schema_ref": operation.get("response_schema_ref"),
+                         "success_shape_kind": operation["success_shape_kind"]})
+    return {**document, "operations": enriched}
 
 
 def decoded_json(value):
@@ -830,37 +833,8 @@ def mimi_claim(evidence):
             package["claimed_by_mls_group_id"]==request["mls_group_id"],
             "MIMI returned substituted bytes, capabilities, endpoint or group binding")
 
-def native_invite_consumed_custody(rows, request_id):
-    require(len(rows) == 1 and rows[0]["request_id"] == request_id and
-            rows[0]["state"] == "consumed" and rows[0]["token_selector"] is None and
-            rows[0]["deliver_after"] is None and bool(rows[0]["encrypted_record"]),
-            "IVS presentation did not consume its exact native custody and exhaust its token selector")
 
 
-def third_party_invites(evidence):
-    provision=evidence["provisioned"]
-    require(provision==evidence["provision_replay"] and evidence["activated"]==evidence["activation_replay"],
-            "native IVS did not preserve exact provisioning and activation originals")
-    original=evidence["original"]
-    event=original["event"]
-    require(event["kind"]=="ak.invite.third_party" and event["payload"]["third_party_invite"]==provision["third_party_invite"] and
-            original["commit"]["event_ref"]==event["event_id"] and event["realm_id"]==provision["realm_id"]==native_genesis_realm(evidence["genesis"]),
-            "IVS used an unaccepted invitation or substituted provisioned material")
-    attestation=evidence["attested"]["acceptance_attestation"]
-    require(evidence["activation_request"]["acceptance_attestation"]==attestation and
-            evidence["activation_request"]["provisioning_id"]==provision["provisioning_id"]==evidence["activated"]["provisioning_id"]==
-            evidence["status"]["provisioning_id"] and evidence["status"]["provisioning_state"]=="activated" and
-            evidence["status"]["invite_id"]==evidence["activated"]["invite_id"]==evidence["presented"]["invite_id"],
-            "IVS activation/status did not close over the actual accepted attestation")
-    presented=evidence["presented"]
-    request=evidence["present_request"]
-    require(presented["binding_proof"]["subject_account_id"]==request["subject_account_id"] and
-            presented["binding_proof"]["realm_id"]==request["realm_id"]==provision["realm_id"] and
-            presented["binding_proof"]["claim_nonce"]==request["claim_nonce"] and
-            presented["token_commitment"]==provision["third_party_invite"]["token_commitment"] and
-            "Your invitation code is "+request["invite_token"]+"." in evidence["delivery"]["body"],
-            "IVS presentation lacks the actual delivered native token or retained private custody")
-    native_invite_consumed_custody(evidence["custody"], evidence["request"]["request_id"])
 
 def account_logout(evidence, session):
     require(evidence["accepted"] == {"revoked": True} and evidence["replay"] == {"revoked": False},
@@ -1325,7 +1299,7 @@ def main():
     require(not args.declarations_only or not args.evidence_dir, "declarations cannot certify native evidence")
     covered = evidence_coverage(document, args.evidence_dir, args.execution) if args.evidence_dir else set()
     missing = sorted(row["operation_id"] for row in document["operations"] if row["operation_id"] not in covered)
-    print(json.dumps({"scope": 97, "native_covered": len(covered), "remaining": len(missing),
+    print(json.dumps({"scope": len(document["operations"]), "native_covered": len(covered), "remaining": len(missing),
                       "uncovered_operations": missing}, indent=2))
     require(args.declarations_only or not missing, "native operation authority contracts are incomplete")
 

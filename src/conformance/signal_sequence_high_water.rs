@@ -9,11 +9,10 @@ const FIXTURE: &str = "signal-sequence-high-water-fixture.json";
 
 pub fn run_signal_sequence_high_water_suite() -> Result<()> {
     let fixture = load_fixture_value(FIXTURE)?;
-    if fixture["suite"].as_str() != Some("signal_sequence_high_water")
-        || fixture
-            .pointer("/runner/entrypoint")
-            .and_then(Value::as_str)
-            != Some("ak.suite.signal.sequence_high_water.v1")
+    if fixture
+        .pointer("/runner/entrypoint")
+        .and_then(Value::as_str)
+        != Some("ak.suite.signal.sequence_high_water.v1")
     {
         bail!("{FIXTURE} suite or runner entrypoint drifted");
     }

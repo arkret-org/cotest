@@ -296,7 +296,7 @@ function New-CotestServerTopology {
         })
     }
     return [pscustomobject]@{
-        schema = "cotest.joint-topology.v1"
+
         network_shape = $NetworkShape
         server_count = $ServerCount
         loopback_address = "127.0.0.1"

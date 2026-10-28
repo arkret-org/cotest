@@ -793,8 +793,6 @@ def generate(workspace_root: Path = WORKSPACE_ROOT) -> dict[str, Any]:
         covered_operations = {item["operation_id"] for item in all_evidence}
         candidates = duplicate_candidates(all_evidence)
         return {
-            "format_version": 1,
-            "source_of_truth": False,
             "generated_from": {
                 "operation_registry": relative_path(REGISTRY_PATH),
                 "operation_registry_sha256": sha256_bytes(registry_bytes),
@@ -867,10 +865,8 @@ def acceptance_digest(text: str) -> tuple[int, str]:
 def validate_acceptance_manifest(workspace_root: Path, manifest: dict[str, Any]) -> dict[str, int]:
     """Check engineering traceability only; never infer execution or a protocol claim."""
     root = workspace_root.resolve()
-    if set(manifest) != {"format_version", "source_of_truth", "complete_claim", "tasks"}:
+    if set(manifest) != {"tasks"}:
         raise ValueError("acceptance manifest has unknown or missing fields")
-    if manifest["format_version"] != 1 or manifest["source_of_truth"] is not False or manifest["complete_claim"] is not False:
-        raise ValueError("acceptance inventory must not assert authority or a complete claim")
     active = root / "arkret-work/tasks/impl-active"
     if not active.is_dir():
         raise ValueError("acceptance inventory requires the coordination checkout")

@@ -19,8 +19,6 @@ const FIXTURE_FILE: &str = "blind_payload_vectors.json";
 
 #[derive(Debug, Deserialize)]
 struct BlindPayloadFixture {
-    suite: String,
-    version: u32,
     #[serde(default)]
     description: Option<String>,
     positive_cases: Vec<PositiveCase>,
@@ -72,12 +70,6 @@ pub fn run_blind_payload_sanitizer_suite_counts() -> Result<(usize, usize)> {
     let fixture: BlindPayloadFixture = serde_json::from_value(value)
         .map_err(|err| anyhow!("failed to parse {FIXTURE_FILE}: {err}"))?;
 
-    if fixture.suite != "blind_payload_sanitizer" {
-        bail!("unexpected fixture suite `{}`", fixture.suite);
-    }
-    if fixture.version != 1 {
-        bail!("unexpected fixture version `{}`", fixture.version);
-    }
     let _ = fixture.description; // suppress unused warning while keeping the field.
 
     let mut positive_count = 0_usize;

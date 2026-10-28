@@ -44,11 +44,8 @@ const NONCE: &str = "AAAAAAAAAAAAAAAAAAAAAA";
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct FixtureRoot {
-    suite: String,
     fixture_kind: String,
     runner: Runner,
-    version: String,
-    schema: String,
     vector_id: String,
     accepted_candidate: Value,
     locator_array_contract: LocatorArrayContract,
@@ -181,15 +178,9 @@ fn load_fixture() -> Result<FixtureRoot> {
 }
 
 fn validate_fixture_metadata(fixture: &FixtureRoot) -> Result<()> {
-    ensure!(
-        fixture.suite == "realm_join_candidate_untrusted_locator",
-        "fixture suite drifted"
-    );
     ensure!(fixture.fixture_kind == "schema_and_semantic");
     ensure!(fixture.runner.kind == "named_suite");
     ensure!(fixture.runner.entrypoint == REALM_JOIN_CANDIDATE_ENTRYPOINT);
-    ensure!(!fixture.version.trim().is_empty());
-    ensure!(fixture.schema == "arkret.realm-join-candidate-locator-fixture.v1");
     ensure!(fixture.vector_id == "ak.vector.realm_join_candidate.untrusted_locator.v1");
 
     let contract = &fixture.locator_array_contract;
@@ -517,6 +508,8 @@ fn target(authority_locator_hints: Vec<RealmJoinCandidate>) -> RealmJoinTarget {
         realm_id: realm_id(),
         invite_id: None,
         authority_locator_hints,
+
+        realm_invite_link_id: None,
     }
 }
 

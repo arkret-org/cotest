@@ -203,7 +203,7 @@ pub(super) async fn run() -> Result<()> {
     let mut artifact = result?;
     validate_exchange_schemas(&observations, &SCOPE)?;
     artifact["case"] = json!("identity_reservations");
-    artifact["format_version"] = json!(1);
+
     artifact["scope"] = json!(SCOPE);
     artifact["observations"] = serde_json::to_value(observations)?;
     if let Some(directory) = std::env::var_os("COTEST_NATIVE_OPERATION_EVIDENCE_DIR") {

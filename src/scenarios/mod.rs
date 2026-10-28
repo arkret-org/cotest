@@ -71,8 +71,6 @@ pub mod to_device_offline_ordering;
 pub mod mimi_facade_live;
 pub mod native_operation_contracts;
 
-pub mod third_party_invite_claim_live;
-
 pub mod approval_admission_live;
 pub mod signal_live;
 pub mod websocket_live;
@@ -87,5 +85,4 @@ pub mod private_read_marker_api;
 pub mod realm_links_live;
 pub mod realm_organization_account_live;
 pub mod realm_parent_membership_live;
-pub mod third_party_invite_create_live;
 pub mod transport_negotiation_api;

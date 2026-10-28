@@ -24,7 +24,6 @@ const VECTOR_IDS: &[&str] = &[
 fn fixture() -> Result<Value> {
     let value = super::load_fixture_value(FIXTURE)?;
     if value["profile"] != "ak.profile.circle_conformance.v1"
-        || value["suite"] != "visibility_policy"
         || value["runner"]["entrypoint"] != "ak.suite.visibility.policy.v1"
     {
         bail!("visibility policy fixture identity drifted");

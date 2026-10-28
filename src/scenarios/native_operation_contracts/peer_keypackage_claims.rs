@@ -177,7 +177,7 @@ pub(super) async fn run() -> Result<()> {
     super::peer_watch::verify(&observations, &artifact["peer_watch"])?;
     super::mls_attest_add::verify(&observations, &artifact["mls_add"])?;
     artifact["case"] = json!("peer_keypackage_claims");
-    artifact["format_version"] = json!(1);
+
     artifact["scope"] = json!(SCOPE);
     artifact["observations"] = json!(observations);
     if let Some(directory) = std::env::var_os("COTEST_NATIVE_OPERATION_EVIDENCE_DIR") {

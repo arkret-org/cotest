@@ -84,6 +84,8 @@ mod mls_creator_bootstrap_recovery;
 mod mls_cross_station_welcome_replication;
 mod mls_governance_binding;
 mod named_suite_audit;
+mod realm_invite_links;
+pub use realm_invite_links::run_realm_invite_link_proof_suite;
 mod sdk_event_type_axes;
 pub use sdk_event_type_axes::{SDK_EVENT_TYPE_AXES_ENTRYPOINT, run_sdk_event_type_axes_suite};
 mod non_governance_receiver;
@@ -544,7 +546,6 @@ pub use wire::{
 
 #[derive(Debug, Deserialize)]
 pub(crate) struct RedactionFixture {
-    pub(crate) suite: String,
     pub(crate) cases: Vec<RedactionCase>,
 }
 
@@ -556,7 +557,6 @@ pub(crate) struct RedactionCase {
 
 #[derive(Debug, Deserialize)]
 pub(crate) struct PrivacySecurityFixture {
-    pub(crate) suite: String,
     pub(crate) cases: Vec<NamedCase>,
 }
 

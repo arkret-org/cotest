@@ -30,9 +30,8 @@ const OBJECT_IDENTITY_VECTOR_ID: &str = "ak.vector.object_identity.producer_allo
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct FixtureRoot {
-    version: String,
     runner: Runner,
-    suite: String,
+
     vector_id: String,
     driver: Driver,
     parameters: Parameters,
@@ -97,9 +96,7 @@ struct Case {
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct ObjectIdentityFixture {
-    suite: String,
     profile: String,
-    version: String,
     runner: Runner,
     covers_vectors: Vec<String>,
     parameter_source: ParameterSource,
@@ -423,10 +420,9 @@ fn producer_id_kinds() -> Vec<&'static str> {
 
 pub fn run_producer_identity_suite() -> Result<ProducerIdentityExecution> {
     let fixture = load_fixture()?;
-    ensure!(fixture.version == "2026-09-22.1");
     ensure!(fixture.runner.kind == "named_suite");
     ensure!(fixture.runner.entrypoint == PRODUCER_IDENTITY_ENTRYPOINT);
-    ensure!(fixture.suite == "producer_allocated_identity");
+
     ensure!(fixture.vector_id == VECTOR_ID);
     validate_driver(&fixture)?;
 
@@ -546,9 +542,8 @@ fn run_object_case_for_kind(
 
 pub fn run_object_identity_collision_suite() -> Result<ProducerIdentityExecution> {
     let fixture = load_object_identity_fixture()?;
-    ensure!(fixture.suite == "producer_allocated_identity_collision");
+
     ensure!(fixture.profile == "ak.vector_group.object_identity.producer_allocated.v1");
-    ensure!(fixture.version == "2026-08-08");
     ensure!(fixture.runner.kind == "named_suite");
     ensure!(fixture.runner.entrypoint == OBJECT_IDENTITY_COLLISION_ENTRYPOINT);
     ensure!(fixture.covers_vectors == [OBJECT_IDENTITY_VECTOR_ID]);

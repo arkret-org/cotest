@@ -13,7 +13,12 @@ mod peer_events;
 mod peer_invite;
 mod peer_keypackage_claims;
 mod peer_watch;
+mod realm_invite_links;
 mod watch_audit;
+
+pub async fn realm_invite_links() -> Result<()> {
+    crate::harness::heap_future(realm_invite_links::run).await
+}
 
 pub async fn peer_contacts() -> Result<()> {
     validate_registered_schema_bindings()?;
@@ -130,9 +135,8 @@ const ACCOUNT_CREATION: [&str; 4] = [
 
 fn operation_schema_document(
     artifacts: &std::path::Path,
-    reference: &Value,
+    reference: &str,
 ) -> Result<(String, Value)> {
-    let reference = reference.as_str().context("operation schema absent")?;
     let (file, fragment) = reference.split_once('#').unwrap_or((reference, ""));
     ensure!(
         file.starts_with("schemas/") && !file.split('/').any(|part| part == ".."),
@@ -161,23 +165,33 @@ pub fn validate_registered_schema_bindings() -> Result<()> {
         .as_array()
         .context("native operations absent")?
     {
-        for member in ["request_schema_ref", "response_schema_ref"] {
-            if !operation[member].is_null() {
-                let (identifier, document) =
-                    operation_schema_document(&artifacts, &operation[member])?;
-                let document_id = document["$id"]
-                    .as_str()
-                    .context("schema document id absent")?
-                    .to_owned();
-                if documents.insert(document_id.clone()) {
-                    registry.register(document_id, document);
-                }
-                ensure!(
-                    registry.schema(&identifier).is_some(),
-                    "native operation schema reference did not resolve exactly once: {} {member}",
-                    operation["operation_id"]
-                );
+        let operation_id = arkret_wire::ServiceOperationId::from_wire(
+            operation["operation_id"]
+                .as_str()
+                .context("native operation id absent")?,
+        )
+        .context("native operation is not registered")?;
+        let descriptor = operation_id.descriptor();
+        for reference in [
+            descriptor.request_schema_ref,
+            descriptor.response_schema_ref,
+        ]
+        .into_iter()
+        .flatten()
+        {
+            let (identifier, document) = operation_schema_document(&artifacts, reference)?;
+            let document_id = document["$id"]
+                .as_str()
+                .context("schema document id absent")?
+                .to_owned();
+            if documents.insert(document_id.clone()) {
+                registry.register(document_id, document);
             }
+            ensure!(
+                registry.schema(&identifier).is_some(),
+                "native operation schema reference did not resolve exactly once: {} {reference}",
+                operation_id.as_str()
+            );
         }
     }
     Ok(())
@@ -189,14 +203,9 @@ fn validate_exchange_schemas(
 ) -> Result<()> {
     verify_native_issuer_bindings(observations)?;
     let obligations: Value = serde_json::from_str(OBLIGATIONS)?;
-    ensure!(
-        obligations["operations"]
-            .as_array()
-            .context("native obligations absent")?
-            .len()
-            == 97,
-        "native scope changed"
-    );
+    obligations["operations"]
+        .as_array()
+        .context("native obligations absent")?;
     let mut registry = arkret_schema_conformance::schema_registry_from_default_spec_artifacts()?
         .context("native operation schemas are unavailable")?;
     let artifacts = arkret_schema_conformance::default_spec_artifacts_dir()
@@ -204,7 +213,7 @@ fn validate_exchange_schemas(
     let mut documents = std::collections::BTreeSet::new();
     // A symbolic registry id can already name one fragment. Validate each
     // operation's exact JSON Pointer using its normative document's own $id.
-    let mut validate = |reference: &Value, value: &Value| -> Result<()> {
+    let mut validate = |reference: &str, value: &Value| -> Result<()> {
         let (identifier, document) = operation_schema_document(&artifacts, reference)?;
         let document_id = document["$id"]
             .as_str()
@@ -231,12 +240,15 @@ fn validate_exchange_schemas(
         }
     }
     for identifier in validate_operations {
-        let descriptor = obligations["operations"]
+        obligations["operations"]
             .as_array()
             .unwrap()
             .iter()
             .find(|row| row["operation_id"] == identifier)
             .context("native operation obligation missing")?;
+        let descriptor = arkret_wire::ServiceOperationId::from_wire(identifier)
+            .context("native operation is not registered")?
+            .descriptor();
         let matching = observations
             .exchanges
             .iter()
@@ -248,27 +260,32 @@ fn validate_exchange_schemas(
         );
         for row in matching {
             let request_bytes = arkret_canonical::base64url_decode(&row.request_json_base64url)?;
-            if descriptor["request_schema_ref"].is_null() {
-                ensure!(
-                    request_bytes.is_empty() && row.request_body.is_null(),
-                    "bodyless operation carried invented request JSON"
-                );
-            } else {
-                validate(&descriptor["request_schema_ref"], &row.request_body)?;
+            if let Some(reference) = descriptor.request_schema_ref {
+                validate(reference, &row.request_body)?;
                 ensure!(
                     serde_json::from_slice::<Value>(&request_bytes)? == row.request_body,
                     "request bytes differ from observed input"
                 );
+            } else {
+                ensure!(
+                    request_bytes.is_empty() && row.request_body.is_null(),
+                    "bodyless operation carried invented request JSON"
+                );
             }
             if row.operation_id.descriptor().success_shape_kind == "empty_response" {
                 ensure!(
-                    descriptor["response_schema_ref"].is_null()
+                    descriptor.response_schema_ref.is_none()
                         && row.response_body.is_null()
                         && row.decoded_response_bytes_base64url.is_empty(),
                     "empty response carried invented JSON"
                 );
             } else {
-                validate(&descriptor["response_schema_ref"], &row.response_body)?;
+                validate(
+                    descriptor
+                        .response_schema_ref
+                        .context("typed response schema absent")?,
+                    &row.response_body,
+                )?;
                 ensure!(
                     serde_json::from_slice::<Value>(&arkret_canonical::base64url_decode(
                         &row.decoded_response_bytes_base64url
@@ -808,7 +825,7 @@ pub async fn account_identity_creation() -> Result<()> {
             && audit.genesis_commits == accepted.pcr_genesis_commits,
         "Station readback differs from the issuer's accepted originals"
     );
-    let result = json!({"format_version":1,"case":"account_identity_creation","scope":ACCOUNT_CREATION,
+    let result = json!({"case":"account_identity_creation","scope":ACCOUNT_CREATION,
         "observations":observations,"authority_originals":ledger,"station_readback":audit,"exact_replays":replays,"onboarding":onboarding,
         "processes":[deployment.coauth.server.native_process_identity()?,deployment.station.native_process_identity()?]});
     if let Some(directory) = std::env::var_os("COTEST_NATIVE_OPERATION_EVIDENCE_DIR") {

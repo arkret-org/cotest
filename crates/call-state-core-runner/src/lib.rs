@@ -86,8 +86,7 @@ const EDGES: &[(&str, &str)] = &[
 #[serde(deny_unknown_fields)]
 struct FixtureRoot {
     profile: String,
-    version: String,
-    suite: String,
+
     runner: Runner,
     covers_vectors: Vec<String>,
     cases: Vec<FixtureCase>,
@@ -530,16 +529,17 @@ fn axis_case() -> Result<(usize, usize)> {
         "actor_id": {"kind":"account","account_id":{"principal_id":"ak:did_core:web:participant.example","station_id":"ak:did_core:web:station.example"}},
         "device_id": "ak:device:01904100-0000-7000-8000-d00000000001"
     });
-    let combined = operation(
-        EventKind::CallState,
-        json!({
-            "call_id": CALL,
-            "state_transition": {"from": "scheduled", "to": "ringing"},
-            "focus": {"mode": "sfu", "session_focus": "fra-1"},
-            "roster_delta": {"op": "join", "participant": participant}
-        }),
-        600,
-    );
+    let combined_payload = json!({
+        "call_id": CALL,
+        "state_transition": {"from": "scheduled", "to": "ringing"},
+        "focus": {"mode": "sfu", "session_focus": "fra-1"},
+        "roster_delta": {"op": "join", "participant": participant}
+    });
+    serde_json::from_value::<arkret_models_collaboration::events_payloads::call::CallStatePayload>(
+        combined_payload.clone(),
+    )
+    .context("axis split positive CallState payload")?;
+    let combined = operation(EventKind::CallState, combined_payload, 600);
     expect_projected(apply(&mut state, &combined, &hlc), CALL)?;
     ensure!(facet_value(&state, facet::CALL_STATE, CALL) == Some(json!("ringing")));
     ensure!(
@@ -604,7 +604,7 @@ fn axis_case() -> Result<(usize, usize)> {
             "capture_kind": "recording",
             "mode": "audio_video",
             "visible_notice": true,
-            "result": {"retention": {"consent_confirmed": consent_confirmed}}
+            "capture_metadata": {"retention": {"consent_confirmed": consent_confirmed}}
         })
     };
     let unconsented = operation(EventKind::CallRecordingStart, capture_payload(false), 604);
@@ -629,8 +629,7 @@ fn axis_case() -> Result<(usize, usize)> {
 pub fn run_call_state_core_suite() -> Result<CallStateCoreExecution> {
     let fixture = load_fixture()?;
     ensure!(fixture.profile == ProfileId::MEDIA_SERVICE_BINDING_V1);
-    ensure!(!fixture.version.trim().is_empty());
-    ensure!(fixture.suite == "call_state_core");
+
     ensure!(fixture.runner.kind == "named_suite");
     ensure!(fixture.runner.entrypoint == CALL_STATE_CORE_ENTRYPOINT);
     ensure!(fixture.covers_vectors == VECTOR_IDS);

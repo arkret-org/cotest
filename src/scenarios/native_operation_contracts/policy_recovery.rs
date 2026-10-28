@@ -105,7 +105,7 @@ pub(super) async fn run() -> Result<()> {
     verify_native_pcr_commits(&observations, &views)?;
     views[2].commit.validate_successor_of(&views[1].commit)?;
     let mut artifact = result;
-    artifact["format_version"] = json!(1);
+
     artifact["case"] = json!("account_policy_recovery");
     artifact["scope"] = json!(SCOPE);
     artifact["observations"] = serde_json::to_value(observations)?;

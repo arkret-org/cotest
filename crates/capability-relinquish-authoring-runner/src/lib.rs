@@ -26,8 +26,7 @@ const NEXT_COMMIT: &str = "ak:realm_commit:AQPhm6Di_JMyu-JM932ww_EvyQU0dIIEO2ykF
 #[serde(deny_unknown_fields)]
 struct FixtureRoot {
     profile: String,
-    version: String,
-    suite: String,
+
     runner: Runner,
     covers_vectors: Vec<String>,
     security_evidence: Vec<Value>,
@@ -358,14 +357,7 @@ pub fn run_capability_relinquish_authoring_suite() -> Result<CapabilityRelinquis
         fixture.profile == "ak.vector_group.capability.v1",
         "fixture profile drifted"
     );
-    ensure!(
-        !fixture.version.trim().is_empty(),
-        "fixture version is empty"
-    );
-    ensure!(
-        fixture.suite == "capability_relinquish_authoring",
-        "fixture suite drifted"
-    );
+
     ensure!(fixture.runner.kind == "named_suite", "runner kind drifted");
     ensure!(
         fixture.runner.entrypoint == CAPABILITY_RELINQUISH_AUTHORING_ENTRYPOINT,

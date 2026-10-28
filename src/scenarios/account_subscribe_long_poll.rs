@@ -703,7 +703,7 @@ async fn accept_invite_join_now(
                 // Directed accept: the stored account is the only signed source
                 // the ak.component.invite.live_target.v1 release write can
                 // derive its subject from (governance-objects.md section 5.3).
-                invitee_account_id: Some(client_account_id(invitee)?),
+                invitee_account_id: client_account_id(invitee)?,
                 extensions: Default::default(),
             },
         )?,

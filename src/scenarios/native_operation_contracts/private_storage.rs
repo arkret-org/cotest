@@ -210,7 +210,7 @@ pub(super) async fn run() -> Result<()> {
         ],
     )?;
     artifact["case"] = json!("account_private_storage");
-    artifact["format_version"] = json!(1);
+
     artifact["scope"] = json!(SCOPE);
     artifact["observations"] = serde_json::to_value(observations)?;
     if let Some(directory) = std::env::var_os("COTEST_NATIVE_OPERATION_EVIDENCE_DIR") {

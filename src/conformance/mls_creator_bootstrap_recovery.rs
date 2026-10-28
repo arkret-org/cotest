@@ -115,9 +115,7 @@ pub fn run_mls_creator_bootstrap_recovery_suite() -> Result<()> {
 
 fn validate_identity(fixture: &Value) -> Result<()> {
     ensure!(
-        value_field_str(fixture, "suite")? == "mls_creator_bootstrap_recovery"
-            && value_field_str(fixture, "fixture_kind")? == "semantic"
-            && value_field_str(&fixture["runner"], "kind")? == "named_suite"
+        value_field_str(&fixture["runner"], "kind")? == "named_suite"
             && value_field_str(&fixture["runner"], "entrypoint")? == ENTRYPOINT
             && value_field_str(fixture, "registry_under_test")?
                 == format!("spec/v1/artifacts/{REGISTRY}"),

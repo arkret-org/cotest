@@ -47,7 +47,6 @@ pub const KEYPACKAGE_RECIPIENT_CLAIM_READ_ENTRYPOINT: &str =
     "ak.suite.keypackage.recipient_claim_read.v1";
 
 const FIXTURE: &str = "keypackage-recipient-claim-read-fixture.json";
-const SUITE: &str = "keypackage_recipient_claim_read";
 
 const EXECUTED_CASES: [(&str, &[&str]); 3] = [
     (
@@ -146,10 +145,6 @@ pub fn run_keypackage_recipient_claim_read_vector() -> Result<()> {
 }
 
 fn verify_fixture_identity(fixture: &Value) -> Result<()> {
-    ensure!(
-        required_str(fixture, "suite")? == SUITE,
-        "fixture suite drifted"
-    );
     ensure!(
         fixture_runner_entrypoint(fixture)? == KEYPACKAGE_RECIPIENT_CLAIM_READ_ENTRYPOINT,
         "fixture entrypoint drifted"

@@ -1,6 +1,4 @@
 {
-  "schema": "cotest.spec_business_flow_coverage.v1",
-  "operation_registry_ref": "registry/operation-registry.json",
   "flows": [
     {
       "id": "service_identity_recovery",
@@ -88,7 +86,7 @@
           "kind": "ordinary",
           "path": "../coland/crates/http/src/routing/system/principal_resolution.rs",
           "markers": [
-          "ak.open.identity.read.resolution",
+            "ak.open.identity.read.resolution",
             "principals/{principal_id}/resolution"
           ]
         },
@@ -1059,15 +1057,21 @@
       "id": "realm_join_intake",
       "title": "Realm join target and authority candidate verification before intake",
       "status": "partially_implemented",
-      "surfaces": ["realm_join_intake"],
+      "surfaces": [
+        "realm_join_intake"
+      ],
       "operation_spine": [
         {
           "operation_id": "ak.self.realm_join.command.prepare.v1",
-          "surfaces": ["realm_join_intake"]
+          "surfaces": [
+            "realm_join_intake"
+          ]
         },
         {
           "operation_id": "ak.peer.realm_join.read.bootstrap.v1",
-          "surfaces": ["realm_join_intake"]
+          "surfaces": [
+            "realm_join_intake"
+          ]
         }
       ],
       "coverage": [
@@ -1083,32 +1087,8 @@
         {
           "kind": "conformance_fixture",
           "path": "tests/conformance_vectors.rs",
-          "markers": ["realm_join_candidate_named_suite_executes_all_current_cases"]
-        }
-      ]
-    },
-    {
-      "id": "third_party_invite_handoff",
-      "title": "Third-party invite token presentation and account binding",
-      "status": "partially_implemented",
-      "surfaces": ["third_party_invite_handoff"],
-      "operation_spine": [
-        {
-          "operation_id": "ak.open.third_party_invite.command.present_token.v1",
-          "surfaces": ["third_party_invite_handoff"]
-        },
-        {
-          "operation_id": "ak.self.third_party_invite.read.acceptance_attestation.v1",
-          "surfaces": ["third_party_invite_handoff"]
-        }
-      ],
-      "coverage": [
-        {
-          "kind": "conformance_fixture",
-          "path": "tests/spec_business_flows.rs",
           "markers": [
-            "third_party_invite_present_body_matches_canonical_schema",
-            "validate_present_request_schema"
+            "realm_join_candidate_named_suite_executes_all_current_cases"
           ]
         }
       ]
@@ -1117,15 +1097,21 @@
       "id": "realm_authority_bundle_and_handoff",
       "title": "Nonce-bound Realm authority bundle and planned governance Station handoff",
       "status": "partially_implemented",
-      "surfaces": ["authority_commit"],
+      "surfaces": [
+        "authority_commit"
+      ],
       "operation_spine": [
         {
           "operation_id": "ak.open.realm_authority.read.bundle.v1",
-          "surfaces": ["authority_commit"]
+          "surfaces": [
+            "authority_commit"
+          ]
         },
         {
           "operation_id": "ak.peer.realm_authority.command.handoff.v1",
-          "surfaces": ["authority_commit"]
+          "surfaces": [
+            "authority_commit"
+          ]
         }
       ],
       "coverage": [
@@ -1148,7 +1134,9 @@
         {
           "kind": "conformance_fixture",
           "path": "crates/realm-join-candidate-runner/src/lib.rs",
-          "markers": ["verify_realm_authority_bundle"]
+          "markers": [
+            "verify_realm_authority_bundle"
+          ]
         }
       ]
     },
@@ -1156,19 +1144,27 @@
       "id": "controller_management_review",
       "title": "Controller management review request, decision and status; live Station acceptance pending",
       "status": "partially_implemented",
-      "surfaces": ["management_review"],
+      "surfaces": [
+        "management_review"
+      ],
       "operation_spine": [
         {
           "operation_id": "ak.self.management_review.command.request.v1",
-          "surfaces": ["management_review"]
+          "surfaces": [
+            "management_review"
+          ]
         },
         {
           "operation_id": "ak.self.management_review.command.decide.v1",
-          "surfaces": ["management_review"]
+          "surfaces": [
+            "management_review"
+          ]
         },
         {
           "operation_id": "ak.self.management_review.read.status.v1",
-          "surfaces": ["management_review"]
+          "surfaces": [
+            "management_review"
+          ]
         }
       ],
       "coverage": [
@@ -1184,12 +1180,16 @@
         {
           "kind": "conformance_fixture",
           "path": "src/conformance/managed_governance.rs",
-          "markers": ["pub fn run_managed_governance_suite"]
+          "markers": [
+            "pub fn run_managed_governance_suite"
+          ]
         },
         {
           "kind": "gap_guard",
           "path": "src/conformance/managed_governance.rs",
-          "markers": ["Live management review and managed Device delivery remain separate acceptance."]
+          "markers": [
+            "Live management review and managed Device delivery remain separate acceptance."
+          ]
         }
       ]
     },

@@ -50,7 +50,6 @@ pub const VECTOR_ID_ACCOUNT_STATUS_ISSUER_LEDGER: &str =
     "ak.vector.account_status.issuer_ledger.v1";
 
 const FIXTURE: &str = "account-status-issuer-ledger-fixture.json";
-const SUITE: &str = "account_status_issuer_ledger";
 const RUNNER_ENTRYPOINT: &str = "ak.suite.account_status.issuer_ledger.v1";
 const REPLICA_DECISION_TABLE_REF: &str = "registry/account-status-replica-decision-table.json";
 
@@ -207,10 +206,6 @@ fn verify_security_evidence_mapping(fixture: &Value) -> Result<()> {
 // ── Fixture identity ────────────────────────────────────────────────────────
 
 fn verify_fixture_identity(fixture: &Value) -> Result<()> {
-    ensure!(
-        required_str(fixture, "suite")? == SUITE,
-        "issuer-ledger fixture suite drifted"
-    );
     ensure!(
         fixture_runner_entrypoint(fixture)? == RUNNER_ENTRYPOINT,
         "issuer-ledger fixture runner entrypoint drifted"

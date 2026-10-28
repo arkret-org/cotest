@@ -75,19 +75,11 @@ def validation_errors(
         manifest_path = workspace_root / "cotest" / "api-only-migration.json"
     manifest = _load_manifest(manifest_path)
     errors: list[str] = []
-    if manifest.get("schema") != "arkret.api-only-rust-migration.v1":
-        errors.append("unsupported migration manifest schema")
-
+    if set(manifest) - {"native_live_migrations", "specialized_api_lanes", "candidates", "native_execution_note", "pending_migration"}:
+        errors.append("migration manifest contains redundant or unknown fields")
     candidates = manifest.get("candidates")
-    expected = manifest.get("expected_candidate_count")
     if not isinstance(candidates, list):
         return errors + ["migration manifest candidates must be an array"]
-    if not isinstance(expected, int) or expected < 1:
-        errors.append("expected_candidate_count must be a positive integer")
-    elif len(candidates) != expected:
-        errors.append(
-            f"expected exactly {expected} migration candidates, found {len(candidates)}"
-        )
 
     seen_sources: set[str] = set()
     for index, candidate in enumerate(candidates):

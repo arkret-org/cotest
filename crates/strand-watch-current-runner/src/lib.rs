@@ -27,8 +27,7 @@ const COMMIT: &str = "ak:realm_commit:AT33EWBTXdTx5CjY-ogbIIF2T4vh-v7jCMCQ80Fss2
 #[serde(deny_unknown_fields)]
 struct FixtureRoot {
     profile: String,
-    version: String,
-    suite: String,
+
     runner: Runner,
     covers_vectors: Vec<String>,
     cases: Vec<Value>,
@@ -414,14 +413,7 @@ pub fn run_strand_watch_current_suite() -> Result<StrandWatchCurrentExecution> {
         fixture.profile == "ak.vector_group.state.v1",
         "fixture profile drifted"
     );
-    ensure!(
-        !fixture.version.trim().is_empty(),
-        "fixture version is empty"
-    );
-    ensure!(
-        fixture.suite == "strand_watch_current_read",
-        "fixture suite drifted"
-    );
+
     ensure!(fixture.runner.kind == "named_suite", "runner kind drifted");
     ensure!(
         fixture.runner.entrypoint == STRAND_WATCH_CURRENT_ENTRYPOINT,

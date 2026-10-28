@@ -16,13 +16,11 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
 
-const MANIFEST_SCHEMA = "arkret.api-only-rust-migration.v1";
 // Every entry is workspace-relative, and every entry the Playwright projects
 // care about lives under the suite's own test root.
 const TESTS_PREFIX = "cotest/e2e/tests/";
 
 type ApiOnlyManifest = {
-  schema?: unknown;
   specialized_api_lanes?: unknown;
   pending_migration?: unknown;
 };
@@ -73,9 +71,6 @@ export function apiOnlyTestMatch(e2eRoot: string): string[] {
     manifest = JSON.parse(readFileSync(manifestPath, "utf8")) as ApiOnlyManifest;
   } catch (error) {
     fail(`${manifestPath} is unreadable (${String(error)})`);
-  }
-  if (manifest.schema !== MANIFEST_SCHEMA) {
-    fail(`unsupported schema ${String(manifest.schema)}`);
   }
 
   const sources = [

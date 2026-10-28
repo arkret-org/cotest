@@ -1,14 +1,17 @@
 {
   "profile": "ak.profile.restore_full_workflows_vectors.v1",
-  "version": "2026-05-17",
   "vectors": [
     {
       "name": "two_of_two_multi_admin_approval_unblocks_restore",
       "ticket_id": "ak:request:01964200-0000-7000-8000-000000000001",
       "required_approvals": 2,
       "approval_sequence": [
-        { "admin_did": "did:web:admin-a.example" },
-        { "admin_did": "did:web:admin-b.example" }
+        {
+          "admin_did": "did:web:admin-a.example"
+        },
+        {
+          "admin_did": "did:web:admin-b.example"
+        }
       ],
       "expected": {
         "outcome": "accept",
@@ -43,10 +46,18 @@
       "name": "artifact_upload_verify_then_download_round_trip",
       "ticket_id": "ak:request:01964200-0000-7000-8000-000000000004",
       "lifecycle_events": [
-        { "event": "upload_complete" },
-        { "event": "integrity_verified" },
-        { "event": "download_initiated" },
-        { "event": "download_complete" }
+        {
+          "event": "upload_complete"
+        },
+        {
+          "event": "integrity_verified"
+        },
+        {
+          "event": "download_initiated"
+        },
+        {
+          "event": "download_complete"
+        }
       ],
       "expected": {
         "outcome": "accept",

@@ -31,8 +31,7 @@ const DEFAULT_DEVICE: &str = "ak:device:0196419b-0000-7000-8000-000000000001";
 #[serde(deny_unknown_fields)]
 struct FixtureRoot {
     profile: String,
-    version: String,
-    suite: String,
+
     runner: Runner,
     covers_vectors: Vec<String>,
     cases: Vec<Value>,
@@ -528,8 +527,7 @@ fn run_case(case: &Value, cases: &[Value]) -> Result<CaseExecutionResult> {
 pub fn run_private_view_inbox_suite() -> Result<PrivateViewInboxExecution> {
     let fixture = load_fixture()?;
     ensure!(fixture.profile == "ak.profile.full_client.v1");
-    ensure!(fixture.version == "2026-08-01");
-    ensure!(fixture.suite == "private_view_inbox_account_data");
+
     ensure!(fixture.runner.kind == "named_suite");
     ensure!(fixture.runner.entrypoint == PRIVATE_VIEW_INBOX_ENTRYPOINT);
     ensure!(fixture.covers_vectors == [VECTOR_ID]);

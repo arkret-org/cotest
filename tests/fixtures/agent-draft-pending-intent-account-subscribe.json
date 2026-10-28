@@ -1,5 +1,4 @@
 {
-  "suite": "agent_draft_pending_intent_account_subscribe_protocol",
   "canonical_fixture": "agent-draft-pending-intent-fixture.json",
   "schema_ref": "schemas/account-subscribe-frame.schema.json",
   "contract_expectations": {

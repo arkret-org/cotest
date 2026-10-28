@@ -53,7 +53,6 @@ pub const AUTHORITY_FORWARD_GENESIS_MATERIAL_ENTRYPOINT: &str =
     "ak.suite.federation.authority_forward_genesis_material.v1";
 
 const FIXTURE: &str = "federation-authority-forward-genesis-material-fixture.json";
-const SUITE: &str = "federation_authority_forward_genesis_material";
 const PEER_REQUEST: &str =
     "schemas/authority-commit-operations.schema.json#/$defs/peer_submit_request_body";
 const MATERIAL_SCHEMA: &str =
@@ -165,10 +164,6 @@ pub fn run_authority_forward_genesis_material_vector() -> Result<()> {
 }
 
 fn verify_fixture_identity(fixture: &Value) -> Result<()> {
-    ensure!(
-        required_str(fixture, "suite")? == SUITE,
-        "fixture suite drifted"
-    );
     ensure!(
         fixture_runner_entrypoint(fixture)? == AUTHORITY_FORWARD_GENESIS_MATERIAL_ENTRYPOINT,
         "fixture entrypoint drifted"

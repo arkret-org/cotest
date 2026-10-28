@@ -131,11 +131,11 @@ foreach ($file in Get-ChildItem -LiteralPath $testsRoot -Recurse -File -Filter "
 }
 
 $manifest = [ordered]@{
-    schema = "arkret.scenario-evidence.v1"
+
     suite_kind = "joint-e2e"
     scenarios = $scenarios.ToArray()
 }
-$content = ($manifest | ConvertTo-Json -Depth 8) + [Environment]::NewLine
+$content = (($manifest | ConvertTo-Json -Depth 8) -replace "`r`n", "`n") + "`n"
 if ($Check) {
     if (-not (Test-Path -LiteralPath $outputPath)) {
         throw "scenario evidence manifest is missing: $outputPath"
@@ -146,6 +146,6 @@ if ($Check) {
     }
     Write-Host "scenario evidence manifest is current"
 } else {
-    $content | Set-Content -NoNewline -Encoding UTF8 -LiteralPath $outputPath
+    [System.IO.File]::WriteAllText($outputPath, $content, [System.Text.UTF8Encoding]::new($false))
     Write-Host "updated $outputPath"
 }

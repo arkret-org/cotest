@@ -1,6 +1,5 @@
 {
   "profile": "ak.profile.canonical_uuids.v1",
-  "version": "2026-05-10",
   "comment": "Compatibility-named shared identity baseline. Event-derived Realm and Event references are full suite-tagged digest tokens; producer-allocated families retain their registered UUID forms. Fixtures SHOULD keep the existing inherits path for discoverability.",
   "demo_space": {
     "id": "ak:realm:AaRfbi5sqNgNzzcqaDDsD5tsVkRS_qMFGKFnTcnsjmVG",

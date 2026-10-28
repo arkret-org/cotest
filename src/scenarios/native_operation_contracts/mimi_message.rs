@@ -161,7 +161,7 @@ pub(super) fn verify(observations: &NativeOperationObservations, evidence: &Valu
         .context("native mapping receipt schemas")?;
     let (identifier, document) = operation_schema_document(
         &artifacts,
-        &json!("schemas/mimi-interop.schema.json#/$defs/content_mapping_receipt"),
+        "schemas/mimi-interop.schema.json#/$defs/content_mapping_receipt",
     )?;
     let mut registry = arkret_schema_conformance::schema_registry_from_default_spec_artifacts()?
         .context("native mapping receipt registry")?;

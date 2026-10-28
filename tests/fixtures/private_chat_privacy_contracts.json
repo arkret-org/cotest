@@ -1,6 +1,4 @@
 {
-  "suite": "private_chat_privacy_contracts",
-  "version": 2,
   "source_refs": [
     "arkret-spec/spec/v1/zh/discovery/client-preferences.md",
     "arkret-spec/spec/v1/zh/identity/contact-and-direct-conversation.md",

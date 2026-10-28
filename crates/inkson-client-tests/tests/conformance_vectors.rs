@@ -140,7 +140,6 @@ fn named_suite_audit_executes_registered_runners_and_exposes_every_gap() -> Resu
         "ak.suite.direct_conversation.admission_producers.v1",
         "ak.suite.direct_conversation.signal_admission.v1",
         "ak.suite.reaction.authority_order.v1",
-        "ak.suite.invite.claim_security.v1",
         "ak.suite.peer.event_submit.semantic_union.v1",
         "ak.suite.signer_key.historical_commit_coordinate.v1",
     ] {

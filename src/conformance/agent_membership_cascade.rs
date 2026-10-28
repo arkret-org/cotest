@@ -35,8 +35,7 @@ pub fn run_agent_membership_cascade_suite() -> Result<()> {
 }
 
 fn validate_fixture_identity(fixture: &serde_json::Value) -> Result<()> {
-    if fixture["suite"] != "agent_membership_cascade"
-        || fixture["runner"]["kind"] != "named_suite"
+    if fixture["runner"]["kind"] != "named_suite"
         || fixture["runner"]["entrypoint"] != "ak.suite.agent.membership_cascade.v1"
     {
         bail!("Agent membership cascade fixture runner identity drifted");

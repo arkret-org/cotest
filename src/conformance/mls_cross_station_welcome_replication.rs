@@ -51,7 +51,6 @@ pub const MLS_CROSS_STATION_WELCOME_REPLICATION_ENTRYPOINT: &str =
     "ak.suite.mls.cross_station_welcome_replication.v1";
 
 const FIXTURE: &str = "mls-cross-station-welcome-replication-fixture.json";
-const SUITE: &str = "mls_cross_station_welcome_replication";
 const PEER_REQUEST: &str =
     "schemas/authority-commit-operations.schema.json#/$defs/peer_submit_request_body";
 const ALICE_SEED: [u8; 32] = [0x91; 32];
@@ -163,10 +162,6 @@ pub fn run_mls_cross_station_welcome_replication_vector() -> Result<()> {
 }
 
 fn verify_fixture_identity(fixture: &Value) -> Result<()> {
-    ensure!(
-        required_str(fixture, "suite")? == SUITE,
-        "fixture suite drifted"
-    );
     ensure!(
         fixture_runner_entrypoint(fixture)? == MLS_CROSS_STATION_WELCOME_REPLICATION_ENTRYPOINT,
         "fixture entrypoint drifted"

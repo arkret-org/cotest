@@ -1,6 +1,4 @@
 {
-  "schema": "arkret.api-only-rust-migration.v1",
-  "expected_candidate_count": 41,
   "native_live_migrations": [
     {
       "source": "cotest/e2e/tests/conformance/registry-drift.spec.ts",
@@ -124,23 +122,6 @@
         "ak.self.invite_locator.command.issue.v1",
         "ak.self.invite_locator.command.rotate.v1",
         "ak.self.invite_locator.command.revoke.v1"
-      ]
-    },
-    {
-      "source": "cotest/e2e/tests/invites/third-party.spec.ts",
-      "target": "third_party_invite_api",
-      "symbol": "third_party_invite_api_migration",
-      "environment": "isolated_station",
-      "legacy_case_count": 6,
-      "legacy_projects": [
-        "chrome",
-        "chromium",
-        "joint-api"
-      ],
-      "legacy_fully_implemented": false,
-      "operation_ids": [
-        "ak.self.events.command.submit.v1",
-        "ak.self.committed_event.read.scan.v1"
       ]
     },
     {
@@ -792,18 +773,6 @@
           "symbol": "invite_addressing_api_migration"
         }
       ]
-    },
-    {
-      "source": "cotest/e2e/tests/invites/third-party.spec.ts",
-      "disposition": "migrated",
-      "coverage_status": "live_native",
-      "replacements": [
-        {
-          "file": "cotest/tests/third_party_invite_api.rs",
-          "symbol": "third_party_invite_api_migration"
-        }
-      ],
-      "retained_specialized_coverage": "mock-email inbox, atomic consumption and retry refusal remain in e2e/tests/harness/mocks-selftest.spec.ts; no protocol service claim is inferred from the mock."
     },
     {
       "source": "cotest/e2e/tests/messaging/discussion-upgrade.spec.ts",

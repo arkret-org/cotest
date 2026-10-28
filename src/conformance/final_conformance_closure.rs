@@ -50,8 +50,7 @@ const APPLET_TRANSACTION_DEFAULT_DIRECTION: &str = "applet_to_arkret_inbound";
 #[serde(deny_unknown_fields)]
 struct FinalConformanceClosureFixture {
     profile: String,
-    version: String,
-    suite: String,
+
     runner: Value,
     covers_vectors: Vec<String>,
     security_evidence: Vec<super::SecurityEvidenceRow>,
@@ -177,10 +176,7 @@ fn final_conformance_closure_fixture() -> Result<FinalConformanceClosureFixture>
 fn validate_final_conformance_closure_fixture_metadata(
     fixture: &FinalConformanceClosureFixture,
 ) -> Result<()> {
-    if fixture.profile != crate::conformance::helpers::PRIVACY_SECURITY_VECTOR_GROUP_PROFILE
-        || fixture.suite != "final_conformance_closure"
-        || fixture.version.trim().is_empty()
-    {
+    if fixture.profile != crate::conformance::helpers::PRIVACY_SECURITY_VECTOR_GROUP_PROFILE {
         bail!("final conformance closure fixture suite drifted");
     }
     if fixture.runner.get("entrypoint").and_then(Value::as_str)
@@ -231,7 +227,7 @@ fn run_applet_transaction_delivery_authentication_record_digest_case(case: &Valu
             "source_destination_and_content_digest_bound",
             "idempotent_replay_returns_cached_outcome",
             "idempotency_identity_body_drift_rejected",
-            "active_install_and_actor_namespace_required",
+            "active_exact_service_install_and_accepted_manager_required",
         ],
     )?;
     let mut cache = BTreeMap::new();
@@ -264,7 +260,7 @@ fn run_applet_transaction_delivery_authentication_record_digest_case(case: &Valu
         "exact_replay",
         "idempotency_body_drift",
         "no_active_install",
-        "actor_namespace_mismatch",
+        "accepted_manager_mismatch",
     ] {
         if !seen.contains(required) {
             bail!("applet transaction vector missing transaction {required}");
@@ -371,13 +367,22 @@ fn evaluate_applet_transaction(
         }));
     }
 
-    if required_str(transaction, "actor_namespace")?
-        != required_str_obj(active_install, "actor_namespace")?
+    let actor: arkret_wire::ActorId = serde_json::from_value(transaction["actor_id"].clone())?;
+    let installed_actor: arkret_wire::ActorId = serde_json::from_value(
+        active_install
+            .get("actor_id")
+            .cloned()
+            .ok_or_else(|| anyhow!("installed Realm actor missing"))?,
+    )?;
+    if actor != installed_actor
+        || required_str(transaction, "manager_service_id")?
+            != required_str_obj(active_install, "manager_service_id")?
+        || required_str_obj(active_install, "manager_service_id")? != install_source
         || required_str(transaction, "authorization_ref_owner")? != install_source
     {
         return Ok(json!({
             "decision": "reject",
-            "reason": "applet_namespace_mismatch",
+            "reason": "applet_registration_unauthorized",
         }));
     }
 

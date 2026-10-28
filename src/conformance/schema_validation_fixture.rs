@@ -62,60 +62,50 @@ enum FixtureIdentity<'a> {
 /// Every spec fixture whose `schema_validation_cases` this runner executes.
 /// Extend this manifest when the spec ships a new schema-validation-shaped
 /// fixture instead of adding a parallel schema runner.
-const SCHEMA_VALIDATION_FIXTURE_FILES: &[(&str, FixtureIdentity<'static>, &str)] = &[
+const SCHEMA_VALIDATION_FIXTURE_FILES: &[(&str, FixtureIdentity<'static>)] = &[
     (
         "protocol-simplification-fixture.json",
         FixtureIdentity::Profile("ak.profile.station.v1"),
-        "protocol_simplification",
     ),
     (
         SCHEMA_VALIDATION_FIXTURE,
         FixtureIdentity::Profile(
             crate::conformance::helpers::PRIVACY_SECURITY_VECTOR_GROUP_PROFILE,
         ),
-        "schema_validation",
     ),
     (
         KEY_BACKUP_FIXTURE,
         FixtureIdentity::Profile("ak.profile.key_backup.memory_hard.v1"),
-        "key_backup_schema_validation",
     ),
     (
         REALM_ORGANIZATION_FIXTURE,
         FixtureIdentity::Profile(
             crate::conformance::helpers::PRIVACY_SECURITY_VECTOR_GROUP_PROFILE,
         ),
-        "realm_organization_conformance",
     ),
     (
         SDK_CONFORMANCE_CLAIM_FIXTURE,
         FixtureIdentity::Profile("ak.vector_group.schema_validation.v1"),
-        "sdk_conformance_claim",
     ),
     (
         KEY_TRANSPARENCY_FIXTURE,
         FixtureIdentity::Profile("ak.profile.key_transparency.v1"),
-        "key_transparency",
     ),
     (
         CALENDAR_RSVP_FIXTURE,
         FixtureIdentity::Profile("ak.profile.calendar_event.v1"),
-        "calendar_rsvp_conformance",
     ),
     (
         CALENDAR_NOTIFICATION_FIXTURE,
         FixtureIdentity::Profile("ak.profile.calendar_notification_dispatch.v1"),
-        "calendar_notification_dispatch_conformance",
     ),
     (
         EVENT_PAYLOAD_VALUE_CLOSURE_FIXTURE,
         FixtureIdentity::RunnerKind("json_schema_and_semantic_cases"),
-        "event_payload_value_closure",
     ),
     (
         PUSH_NOTIFY_OUTCOME_FIXTURE,
         FixtureIdentity::Profile("ak.vector_group.discovery.v1"),
-        "push_notify_outcome_conformance",
     ),
 ];
 
@@ -125,8 +115,6 @@ const OPENAPI_FILE: &str = "openapi/arkret-service-api.openapi.yaml";
 
 #[derive(Clone, Debug, Deserialize)]
 pub struct SchemaValidationFixture {
-    pub suite: String,
-    pub version: String,
     #[serde(default)]
     pub description: String,
     pub schema_validation_cases: Vec<SchemaValidationCase>,
@@ -229,8 +217,8 @@ pub(crate) fn schema_rejects(schema_ref: &str, value: &Value) -> Result<bool> {
 /// Public entry point: load every fixture in
 /// [`SCHEMA_VALIDATION_FIXTURE_FILES`] and run all of their cases.
 pub fn run_schema_validation_fixture_suite() -> Result<()> {
-    for (file_name, identity, expected_suite) in SCHEMA_VALIDATION_FIXTURE_FILES {
-        run_schema_validation_fixture_file_with_identity(file_name, *identity, expected_suite)
+    for (file_name, identity) in SCHEMA_VALIDATION_FIXTURE_FILES {
+        run_schema_validation_fixture_file_with_identity(file_name, *identity)
             .with_context(|| format!("schema-validation fixture {file_name}"))?;
     }
     run_schema_definition_validator_kat()
@@ -280,17 +268,12 @@ pub fn run_schema_definition_validator_kat() -> Result<()> {
     Ok(())
 }
 
-/// Load one schema-validation-shaped fixture, pin its profile/suite, and run
+/// Load one schema-validation-shaped fixture, validate its profile, and run
 /// every `schema_validation_cases` entry.
-pub fn run_schema_validation_fixture_file(
-    file_name: &str,
-    expected_profile: &str,
-    expected_suite: &str,
-) -> Result<()> {
+pub fn run_schema_validation_fixture_file(file_name: &str, expected_profile: &str) -> Result<()> {
     run_schema_validation_fixture_file_with_identity(
         file_name,
         FixtureIdentity::Profile(expected_profile),
-        expected_suite,
     )
 }
 
@@ -298,14 +281,12 @@ pub fn run_event_payload_value_closure_fixture() -> Result<()> {
     run_schema_validation_fixture_file_with_identity(
         EVENT_PAYLOAD_VALUE_CLOSURE_FIXTURE,
         FixtureIdentity::RunnerKind("json_schema_and_semantic_cases"),
-        "event_payload_value_closure",
     )
 }
 
 fn run_schema_validation_fixture_file_with_identity(
     file_name: &str,
     identity: FixtureIdentity<'_>,
-    expected_suite: &str,
 ) -> Result<()> {
     let path = fixture_path(file_name);
     let raw = fs::read_to_string(&path)
@@ -327,12 +308,7 @@ fn run_schema_validation_fixture_file_with_identity(
     resolve_derived_case_instances(&mut value)?;
     let fixture: SchemaValidationFixture = serde_json::from_value(value.clone())
         .with_context(|| format!("decode schema-validation fixture {}", path.display()))?;
-    if fixture.suite != expected_suite {
-        bail!(
-            "fixture {file_name} suite drifted: expected `{expected_suite}`, got `{}`",
-            fixture.suite
-        );
-    }
+
     if file_name == EVENT_PAYLOAD_VALUE_CLOSURE_FIXTURE {
         validate_event_payload_value_closure_coverage(&fixture.schema_validation_cases)?;
     }

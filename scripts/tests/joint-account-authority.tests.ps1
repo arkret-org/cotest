@@ -32,7 +32,6 @@ $configPath = Join-Path $testDirectory "coland.env"
 $CoauthBaseUrl = "https://coauth.joint.example"
 $StartCoauth = $true
 $StartNativeArkretPublicReply = $false
-$EnableThirdPartyInviteProvider = $false
 $CoauthCommand = $null
 $script:UseManagedCoauthAssertionKey = $true
 $CoauthServiceId = $null

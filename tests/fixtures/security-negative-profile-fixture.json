@@ -1,12 +1,11 @@
 {
-  "suite": "security_negative_profile",
   "profile": "ak.vector_group.privacy_security.v1",
   "cases": [
     {
       "name": "bad_signature_correct_digest_forged_jws_rejects",
       "category": "bad_signature",
       "operation_id": "ak.self.events.command.submit.v1",
-      "comment": "event_digest binds the canonical Event bytes correctly, but the detached JWS signature is forged. A real Ed25519 verification MUST reject it \u2014 a bare digest comparison would not. signing_public_key_hex is the verifying key resolved from proof.verification_method.",
+      "comment": "event_digest binds the canonical Event bytes correctly, but the detached JWS signature is forged. A real Ed25519 verification MUST reject it — a bare digest comparison would not. signing_public_key_hex is the verifying key resolved from proof.verification_method.",
       "input": {
         "signing_public_key_hex": "ea4a6c63e29c520abef5507b132ec5f9954776aebebe7b92421eea691446d22c",
         "event": {

@@ -96,7 +96,7 @@ pub(super) async fn run() -> Result<()> {
     }
     let (deployment, originals, before_claim, view, claim, approval) = result?;
     validate_exchange_schemas(&observations, &SCOPE)?;
-    let proof = json!({"format_version":1,"case":"account_device_pairing","scope":SCOPE,"observations":observations,
+    let proof = json!({"case":"account_device_pairing","scope":SCOPE,"observations":observations,
         "authority_originals":originals,"before_claim":before_claim,"claimed":claim,"approval_request":approval,"station_readback":view,
         "processes":[deployment.coauth.server.native_process_identity()?,deployment.station.native_process_identity()?]});
     if let Some(directory) = std::env::var_os("COTEST_NATIVE_OPERATION_EVIDENCE_DIR") {

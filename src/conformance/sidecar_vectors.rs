@@ -217,7 +217,6 @@ fn validate_registry() -> Result<()> {
 
 fn run_sidecar_view_state_fixture() -> Result<()> {
     let fixture = super::load_fixture_value("sidecar-view-state-schema-fixture.json")?;
-    ensure!(fixture["fixture_kind"] == "schema_only");
     ensure!(fixture["covers_vectors"] == json!(["ak.vector.sidecar.view_state_closed.v1"]));
     let cases = fixture["schema_validation_cases"]
         .as_array()

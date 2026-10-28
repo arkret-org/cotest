@@ -83,7 +83,6 @@ param(
     [string]$CoauthHealthUrl,
     [switch]$StartCoauth,
     # Explicit same-Station IVS delegation; no provider advertisement by default.
-    [switch]$EnableThirdPartyInviteProvider,
     # Start a second Coauth process with the same public origin, secrets, and
     # PostgreSQL database but a separate listener. Passkey E2E uses it to prove
     # that a ceremony started on one process can finish on another.
@@ -2227,8 +2226,7 @@ function New-CoauthJointConfig {
         [Parameter(Mandatory = $true)][object[]]$StationChannelBindings,
         [string]$OwningStation = "server1",
         [Parameter(Mandatory = $true)][string]$EmbeddedWebvhRegistrationBearer,
-        [string]$MockEmailBaseUrl,
-        [string]$ThirdPartyInviteGovernanceDatabaseUrl
+        [string]$MockEmailBaseUrl
     )
 
     $rawConfig = Join-Path $JointDir "coauth.raw.yaml"
@@ -2277,9 +2275,6 @@ function New-CoauthJointConfig {
     )
     if ($MockEmailBaseUrl) {
         $patchArgs += @("--mock-email-base-url", $MockEmailBaseUrl)
-    }
-    if ($ThirdPartyInviteGovernanceDatabaseUrl) {
-        $patchArgs += @("--third-party-invite-governance-database-url", $ThirdPartyInviteGovernanceDatabaseUrl)
     }
     # Filter before counting: a browserless lane passes an empty
     # `-InksonBaseUrls`, which PowerShell delivers as `$null` rather than an
@@ -3850,9 +3845,6 @@ $startedAt = Get-Date
 $generatedColandCommand = $false
 $generatedInksonCommand = $false
 $willStartDefaultColand = (-not $ColandCommand -and $null -ne $colandPort)
-if ($EnableThirdPartyInviteProvider -and (-not $StartCoauth -or -not $willStartDefaultColand)) {
-    throw "-EnableThirdPartyInviteProvider requires managed Coauth and managed Coland with explicit owning-Station database custody."
-}
 $willStartDefaultInkson = ($requiresInkson -and -not $InksonCommand -and $null -ne $inksonPort)
 $willStartDockerColand = ($ColandRuntime -eq "docker" -and ($willStartDefaultColand -or ($multiServer -and $null -ne $colandServer2Port)))
 $startedColandRuntime = if ($willStartDockerColand) { "docker" } elseif ($willStartDefaultColand) { "process" } elseif ($ColandCommand) { "process-command" } else { "attached" }
@@ -4588,8 +4580,7 @@ try {
             -OAuthClientId $CoauthOAuthClientId `
             -StationChannelBindings $stationInternalChannelBindings `
             -EmbeddedWebvhRegistrationBearer $CoauthEmbeddedWebvhRegistrationBearer `
-            -MockEmailBaseUrl $mockEmailBaseUrl `
-            -ThirdPartyInviteGovernanceDatabaseUrl $(if ($EnableThirdPartyInviteProvider) { $colandDatabaseDsn } else { $null })
+            -MockEmailBaseUrl $mockEmailBaseUrl
         if ($multiServer) {
             # Each Station owns a separate Account Authority and durable account
             # store. DualCoauth remains a replica of Server1, not Server2's authority.
@@ -4603,8 +4594,7 @@ try {
                 -InksonBaseUrls $allInksonBaseUrls `
                 -OAuthClientId $CoauthOAuthClientId -StationChannelBindings $stationInternalChannelBindings `
                 -OwningStation "server2" `
-                -EmbeddedWebvhRegistrationBearer $CoauthEmbeddedWebvhRegistrationBearer -MockEmailBaseUrl $mockEmailBaseUrl `
-                -ThirdPartyInviteGovernanceDatabaseUrl $(if ($EnableThirdPartyInviteProvider) { $colandServer2DatabaseDsn } else { $null })
+                -EmbeddedWebvhRegistrationBearer $CoauthEmbeddedWebvhRegistrationBearer -MockEmailBaseUrl $mockEmailBaseUrl
             Invoke-CoauthMigrations -CoauthBinary $coauthBinary -ConfigPath $coauthServer2ConfigPath -LogDirectory $coauthServer2Dir -TimeoutSeconds $StartupTimeoutSeconds
         }
         foreach ($server in $additionalServers) {
@@ -4619,8 +4609,7 @@ try {
                 -OAuthClientId $CoauthOAuthClientId -StationChannelBindings $stationInternalChannelBindings `
                 -OwningStation $server.Name `
                 -EmbeddedWebvhRegistrationBearer $CoauthEmbeddedWebvhRegistrationBearer `
-                -MockEmailBaseUrl $mockEmailBaseUrl `
-                -ThirdPartyInviteGovernanceDatabaseUrl $(if ($EnableThirdPartyInviteProvider) { $server.ColandDatabaseDsn } else { $null })
+                -MockEmailBaseUrl $mockEmailBaseUrl
             Invoke-CoauthMigrations -CoauthBinary $coauthBinary -ConfigPath $server.CoauthConfigPath -LogDirectory $coauthServerDir -TimeoutSeconds $StartupTimeoutSeconds
         }
         if ($DualCoauth) {
@@ -4777,7 +4766,6 @@ try {
             COLAND_KEYSTORE_MASTER_KEY = $KeyStoreMasterKey
             COLAND_SERVICE_IDENTITY_BUNDLE_DIR = "/tmp/coland-state/identity-bundle"
             COLAND_EMBEDDED_WEBVH_PROVIDER_ENABLED = "true"
-            COLAND_THIRD_PARTY_INVITE_PROVIDER_ENABLED = $(if ($EnableThirdPartyInviteProvider) { "true" } else { "false" })
             COLAND_EGRESS_ALLOW_PRIVATE_NETWORKS = "true"
             COLAND_CORS_ALLOW_ORIGIN = $CorsAllowOrigin
             COLAND_METRICS_BIND = "0.0.0.0:$MetricsPort"
@@ -4851,7 +4839,6 @@ try {
             COLAND_KEYSTORE_MASTER_KEY = $KeyStoreMasterKey
             COLAND_SERVICE_IDENTITY_BUNDLE_DIR = (Join-Path $StateRoot "identity-bundle")
             COLAND_EMBEDDED_WEBVH_PROVIDER_ENABLED = "true"
-            COLAND_THIRD_PARTY_INVITE_PROVIDER_ENABLED = $(if ($EnableThirdPartyInviteProvider) { "true" } else { "false" })
             COLAND_EGRESS_ALLOW_PRIVATE_NETWORKS = "true"
             COLAND_CORS_ALLOW_ORIGIN = $CorsAllowOrigin
             COLAND_METRICS_BIND = "127.0.0.1:$MetricsPort"
@@ -5491,7 +5478,7 @@ try {
         }
     }
     $topology = [pscustomobject]@{
-        schema = "cotest.joint-topology.v1"
+
         generated_at = (Get-Date).ToUniversalTime().ToString("o")
         lifecycle = "running"
         network_shape = $NetworkShape
@@ -6271,9 +6258,8 @@ if (-not (Test-Path -LiteralPath $scenarioEvidenceManifestPath -PathType Leaf)) 
     throw "scenario evidence manifest is missing: $scenarioEvidenceManifestPath"
 }
 $scenarioEvidenceManifest = Get-Content -Raw -LiteralPath $scenarioEvidenceManifestPath | ConvertFrom-Json
-if ($scenarioEvidenceManifest.schema -ne "arkret.scenario-evidence.v1" -or
-    $scenarioEvidenceManifest.suite_kind -ne "joint-e2e") {
-    throw "scenario evidence manifest has an unsupported schema or suite_kind"
+if ($scenarioEvidenceManifest.suite_kind -ne "joint-e2e") {
+    throw "scenario evidence manifest has an unsupported suite_kind"
 }
 foreach ($entry in @($scenarioEvidenceManifest.scenarios)) {
     $scenarioEvidenceKey = [string]$entry.scenario_key
@@ -6849,7 +6835,7 @@ if ($secretScan.counts.findings -eq 0) {
 $secretScanLines | Set-Content -LiteralPath $secretScanMd -Encoding UTF8
 
 $summary = [pscustomobject]@{
-    report_schema = "arkret.test-report.v1"
+
     suite_kind = "joint-e2e"
     suite_name = "Arkret Joint Product E2E"
     status = if ($exitCode -eq 0) { "success" } else { "failure" }
@@ -6936,7 +6922,6 @@ $summary | ConvertTo-Json -Depth 6 | Set-Content -Path $summaryJson -Encoding UT
 @"
 # Arkret Joint Product E2E summary
 
-- report_schema: $($summary.report_schema)
 - suite_kind: $($summary.suite_kind)
 - suite_name: $($summary.suite_name)
 - status: $($summary.status)

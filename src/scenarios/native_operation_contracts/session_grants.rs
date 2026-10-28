@@ -244,7 +244,7 @@ pub(super) async fn run() -> Result<()> {
         !observations.accepted_identity_material.is_empty(),
         "session proof lacks the accepted PCR/DID prerequisite"
     );
-    let evidence = json!({"format_version":1,"case":"account_device_sessions","scope":SCOPE,
+    let evidence = json!({"case":"account_device_sessions","scope":SCOPE,
         "observations":observations,"authority_originals":originals,"issued_verification":issued,"refreshed_verification":refreshed,
         "station_readback":audit,"logout":logout,"processes":[deployment.coauth.server.native_process_identity()?,deployment.station.native_process_identity()?]});
     if let Some(directory) = std::env::var_os("COTEST_NATIVE_OPERATION_EVIDENCE_DIR") {

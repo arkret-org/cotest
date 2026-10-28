@@ -1,5 +1,4 @@
 {
-  "schema": "arkret.scenario-evidence.v1",
   "suite_kind": "joint-e2e",
   "scenarios": [
     {

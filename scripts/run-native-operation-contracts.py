@@ -140,14 +140,14 @@ def main():
         # Preserve a machine-readable zero-credit result for an invalid
         # authority foundation or proof, even when the Rust scenarios succeeded.
         write(output / "coverage.json", {
-            "scope": 97, "native_covered": 0, "remaining": 97,
+            "scope": len(document["operations"]), "native_covered": 0, "remaining": len(document["operations"]),
             "uncovered_operations": sorted(row["operation_id"] for row in document["operations"]),
             "acceptance": False, "blocker": str(error),
         })
         raise
 
     missing = sorted(row["operation_id"] for row in document["operations"] if row["operation_id"] not in covered)
-    summary = {"scope": 97, "native_covered": len(covered), "remaining": len(missing),
+    summary = {"scope": len(document["operations"]), "native_covered": len(covered), "remaining": len(missing),
                "uncovered_operations": missing, "acceptance": not missing and args.case is None}
     write(output / "coverage.json", summary)
     print(json.dumps(summary, indent=2), flush=True)

@@ -10,8 +10,6 @@ pub const CANONICAL_FIXTURE_DEFAULT_KIND: &str = "canonical_json_digest";
 pub struct CanonicalFixtureSuite {
     pub profile: String,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub version: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
     pub vectors: Vec<CanonicalFixtureVector>,
 }
@@ -73,7 +71,7 @@ impl CanonicalFixtureVector {
 #[derive(Clone, Debug, PartialEq)]
 pub struct CanonicalFixtureBuilder {
     profile: String,
-    version: Option<String>,
+
     description: Option<String>,
     vectors: Vec<CanonicalFixtureVector>,
 }
@@ -82,15 +80,9 @@ impl CanonicalFixtureBuilder {
     pub fn new(profile: impl Into<String>) -> Self {
         Self {
             profile: profile.into(),
-            version: None,
             description: None,
             vectors: Vec::new(),
         }
-    }
-
-    pub fn version(mut self, version: impl Into<String>) -> Self {
-        self.version = Some(version.into());
-        self
     }
 
     pub fn description(mut self, description: impl Into<String>) -> Self {
@@ -134,7 +126,6 @@ impl CanonicalFixtureBuilder {
     pub fn finish(self) -> CanonicalFixtureSuite {
         CanonicalFixtureSuite {
             profile: self.profile,
-            version: self.version,
             description: self.description,
             vectors: self.vectors,
         }
@@ -149,8 +140,7 @@ mod tests {
 
     #[test]
     fn fixture_builder_emits_spec_fixture_fields() {
-        let mut builder =
-            CanonicalFixtureBuilder::new("ak.vector_group.encoding.v1").version("2026-06-19");
+        let mut builder = CanonicalFixtureBuilder::new("ak.vector_group.encoding.v1");
         builder
             .push_with_rules(
                 "ak.vector.encoding.canonical_json.basic.v1",
@@ -161,7 +151,6 @@ mod tests {
             .unwrap();
         let suite = builder.finish();
         assert_eq!(suite.profile, "ak.vector_group.encoding.v1");
-        assert_eq!(suite.version.as_deref(), Some("2026-06-19"));
         assert_eq!(suite.vectors.len(), 1);
         let vector = &suite.vectors[0];
         assert_eq!(vector.expected_canonical_bytes_utf8, "{\"a\":1,\"b\":2}");

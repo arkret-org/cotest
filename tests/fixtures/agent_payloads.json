@@ -1,5 +1,4 @@
 {
-  "suite": "agent_payloads",
   "profile": "ak.profile.agent_payload_vectors.v1",
   "schema_ref": "ak.schema.event_payload.v1",
   "spec_anchor": "spec/v1/artifacts/schemas/event-payload.schema.json",

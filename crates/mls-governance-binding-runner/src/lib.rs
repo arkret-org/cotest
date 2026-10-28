@@ -390,7 +390,7 @@ fn run_proposal(case: &Value) -> Result<CaseExecutionResult> {
 
 pub fn run_mls_governance_binding_suite() -> Result<MlsGovernanceBindingExecution> {
     let fixture = load_fixture()?;
-    ensure!(fixture["suite"] == "mls_governance_binding_closure");
+
     ensure!(fixture["runner"]["kind"] == "named_suite");
     ensure!(fixture["runner"]["entrypoint"] == MLS_GOVERNANCE_BINDING_ENTRYPOINT);
     let cases = fixture["cases"].as_array().context("cases[] missing")?;

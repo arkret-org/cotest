@@ -546,7 +546,7 @@ fn compensation_evidence() -> Value {
                 "executor_service_id": "ak:did_core:web:station.example",
                 "verification_method": "did:web:station.example#authority",
                 "resource_realm_id": REALM_ID,
-                "deadline": "2026-09-20T00:10:00.000Z",
+                "expires_at": "2026-09-20T00:10:00.000Z",
                 "action": "ak.member.compensate.leave"
             },
             "proof": operation_signature()

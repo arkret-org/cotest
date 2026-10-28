@@ -16,6 +16,17 @@ import audit_native_operation_schemas as schema_audit
 
 
 class NativeOperationContractGates(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        # Compute the actual recursive closure once. Individual gate mutations
+        # do not need to rehash every unchanged schema in the workspace.
+        gate.declarations()
+        import check_operation_closure_locks as closure
+        reference = gate.read(closure.OPERATION_LOCK)["closures"]
+        guard = patch.object(closure, "operation_closures", return_value=reference)
+        guard.start()
+        cls.addClassCleanup(guard.stop)
+
     def test_mls_add_ack_cannot_replace_recipient_producer_or_governance_original(self):
         for evidence in ({"replay": {"status": "duplicate"}},
                          {"request": {"component": True}, "producer_original": {"request_json": {"component": True}},
@@ -189,18 +200,6 @@ class NativeOperationContractGates(unittest.TestCase):
         with self.assertRaisesRegex(ValueError,"no real pre-existing data"):
             gate.native_erasure_receipts(evidence,terminal,{"exchanges":[]})
 
-    def test_invite_presentation_requires_consumed_custody_not_activated_material(self):
-        row = {"request_id": "component-only", "state": "consumed", "token_selector": None,
-               "deliver_after": None, "encrypted_record": "encrypted-component-audit"}
-        # Structural checks only; this object is not native custody evidence.
-        gate.native_invite_consumed_custody([row], "component-only")
-        for member, value in (("state", "activated"), ("token_selector", "still-live"),
-                              ("deliver_after", "queued"), ("request_id", "another"),
-                              ("encrypted_record", "")):
-            changed = dict(row, **{member: value})
-            with self.subTest(member=member), self.assertRaisesRegex(ValueError, "consume its exact native custody"):
-                gate.native_invite_consumed_custody([changed], "component-only")
-
     def test_genesis_realm_comes_from_its_content_address_and_exact_commit(self):
         original = {"event": {"event_id": "ak:event:structural-component", "scope_ref": {"kind": "realm_genesis"}},
                     "commit": {"realm_id": "ak:realm:structural-component"}}
@@ -281,6 +280,23 @@ class NativeOperationContractGates(unittest.TestCase):
         document["operations"][1] = copy.deepcopy(document["operations"][0])
         with self.assertRaisesRegex(ValueError, "duplicate"):
             gate.declarations(document)
+
+    def test_missing_obligation_is_detected_without_a_copied_scope_counter(self):
+        document = copy.deepcopy(gate.read(gate.CONTRACTS))
+        document["operations"].pop()
+        with self.assertRaisesRegex(ValueError, "omits a current authority requirement"):
+            gate.declarations(document)
+
+    def test_changed_recursive_contract_requires_review(self):
+        gate.declarations()
+        import check_operation_closure_locks as closure
+        import check_mock_operation_review as review
+        rows = copy.deepcopy(gate.read(closure.OPERATION_LOCK)["closures"])
+        identifier = review.read(review.REVIEW)["operations"][0]["operation_id"]
+        next(row for row in rows if row["operation_id"] == identifier)["sha256"] = "sha256:" + "0" * 64
+        with patch.object(closure, "operation_closures", return_value=rows):
+            with self.assertRaisesRegex(ValueError, "reviewed operation contract changed"):
+                gate.declarations()
 
     def test_changed_operation_binding_and_unimplemented_case_are_rejected(self):
         for member, replacement in (("path", "/_arkret/wrong"),

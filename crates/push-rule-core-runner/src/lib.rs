@@ -26,9 +26,8 @@ const VECTOR_IDS: &[&str] = &[
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct Fixture {
-    version: String,
     runner: Runner,
-    suite: String,
+
     profile: String,
     description: String,
     covers_vectors: Vec<String>,
@@ -290,9 +289,8 @@ pub fn run_push_rule_core_suite() -> Result<PushRuleCoreExecution> {
     let fixture = load_fixture()?;
     ensure!(fixture.runner.kind == "named_suite");
     ensure!(fixture.runner.entrypoint == PUSH_RULE_CORE_ENTRYPOINT);
-    ensure!(fixture.suite == "push_rule_core_consistency");
+
     ensure!(fixture.profile == ProfileId::PUSH_GATEWAY_BLIND_WAKEUP_V1);
-    ensure!(!fixture.version.trim().is_empty());
     ensure!(!fixture.description.trim().is_empty());
     for vector_id in VECTOR_IDS {
         ensure!(

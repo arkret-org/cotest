@@ -68,7 +68,6 @@ The current harness tracks the sibling `arkret-spec` checkout and includes:
   (`EventsSubscribeFrame`, `SnapshotBootstrap`, the three
   `EventsFrontier*Response` variants,
   `FederationServiceBindingRef`, `EventsSubmit{Batch,Federation}Request`,
-  and the `third_party_invite` / `space_state_transition_payload` /
   `space_object_tombstone_payload` payloads).
 
 See [docs/test-strategy.md](./docs/test-strategy.md) and

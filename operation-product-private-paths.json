@@ -1,5 +1,4 @@
 {
-  "schema": "cotest.operation-product-private-paths.v1",
   "comment": "Explicit product-private classifications and exact Cotest negative route tests. Unregistered production paths still fail; negative tests require a reviewed reason, exact test source file, HTTP method and path, with no wildcard.",
   "allowed": [
     {

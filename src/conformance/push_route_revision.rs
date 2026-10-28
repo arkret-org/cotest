@@ -17,11 +17,9 @@ use super::load_artifact_json;
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct PushNotifyOutcomeFixture {
-    suite: String,
-    fixture_kind: String,
     profile: String,
     covers_vectors: Vec<Value>,
-    version: String,
+
     spec_anchor: String,
     source_refs: Vec<Value>,
     description: String,
@@ -39,11 +37,8 @@ pub fn run_push_route_revision_suite() -> Result<()> {
     let fixture: PushNotifyOutcomeFixture = serde_json::from_value(load_artifact_json(
         "fixtures/push-notify-outcome-fixture.json",
     )?)?;
-    if fixture.suite.trim().is_empty()
-        || fixture.fixture_kind.trim().is_empty()
-        || fixture.profile.trim().is_empty()
+    if fixture.profile.trim().is_empty()
         || fixture.covers_vectors.is_empty()
-        || fixture.version.trim().is_empty()
         || fixture.spec_anchor.trim().is_empty()
         || fixture.source_refs.is_empty()
         || fixture.description.trim().is_empty()

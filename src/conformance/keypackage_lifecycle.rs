@@ -99,8 +99,7 @@ const X25519_PRIVATE_KEY_LEN: usize = 32;
 #[serde(deny_unknown_fields)]
 struct KeypackageLifecycleFixture {
     profile: String,
-    version: String,
-    suite: String,
+
     runner: Value,
     /// Free-form protocol instances validated by their referenced JSON Schemas.
     schema_validation_cases: Vec<Value>,
@@ -163,11 +162,7 @@ fn keypackage_fixture() -> Result<KeypackageLifecycleFixture> {
 fn validate_keypackage_lifecycle_fixture_metadata(
     fixture: &KeypackageLifecycleFixture,
 ) -> Result<()> {
-    if fixture.profile != ProfileId::E2EE_CLIENT_V1
-        || fixture.suite != "keypackage_lifecycle"
-        || fixture.version.trim().is_empty()
-        || fixture.runner.is_null()
-    {
+    if fixture.profile != ProfileId::E2EE_CLIENT_V1 || fixture.runner.is_null() {
         bail!("keypackage lifecycle fixture suite drifted");
     }
 

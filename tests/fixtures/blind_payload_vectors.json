@@ -1,6 +1,4 @@
 {
-  "suite": "blind_payload_sanitizer",
-  "version": 1,
   "description": "T1.1 conformance vectors for the unified push blind-payload sanitizer (arkret-rust-sdk / chime / floria). Positive cases must pass `sanitize_blind_payload`; negative cases must fail with the documented `reason_code` and (where given) `field_path`.",
   "positive_cases": [
     {
@@ -49,7 +47,9 @@
         "notification": {
           "push_target_id": "ak:pseudonym:push:kosc9iQ4gVct1OB-b6X364WIFIsJFVbVzn7BMBs1sm8",
           "wakeup_kind": "message",
-          "counts": { "unread": 4 }
+          "counts": {
+            "unread": 4
+          }
         }
       }
     }
@@ -231,7 +231,9 @@
         "notification": {
           "push_target_id": "ak:pseudonym:push:kosc9iQ4gVct1OB-b6X364WIFIsJFVbVzn7BMBs1sm8",
           "wakeup_kind": "message",
-          "content": { "body": "..." }
+          "content": {
+            "body": "..."
+          }
         }
       }
     },
@@ -279,7 +281,9 @@
         "notification": {
           "push_target_id": "ak:pseudonym:push:kosc9iQ4gVct1OB-b6X364WIFIsJFVbVzn7BMBs1sm8",
           "wakeup_kind": "message",
-          "provider_payload": { "aps": {} }
+          "provider_payload": {
+            "aps": {}
+          }
         }
       }
     },
@@ -376,7 +380,9 @@
           "push_target_id": "ak:pseudonym:push:kosc9iQ4gVct1OB-b6X364WIFIsJFVbVzn7BMBs1sm8",
           "wakeup_kind": "message"
         },
-        "trace": { "parent": "did:web:alice.example" }
+        "trace": {
+          "parent": "did:web:alice.example"
+        }
       }
     },
     {

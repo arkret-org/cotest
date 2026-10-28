@@ -1,5 +1,4 @@
 {
-  "suite": "scaffold_profile_gate",
   "profile": "ak.vector_group.privacy_security.v1",
   "cases": [
     {
@@ -7,7 +6,9 @@
       "expect": "reject",
       "describe": {
         "service": "coauth",
-        "supported_profiles": ["ak.profile.station.v1"],
+        "supported_profiles": [
+          "ak.profile.station.v1"
+        ],
         "admin_surfaces": [
           {
             "path": "/api/admin/v1/devices",
@@ -39,7 +40,9 @@
       "expect": "reject",
       "describe": {
         "service": "coland",
-        "supported_profiles": ["ak.profile.station.v1"],
+        "supported_profiles": [
+          "ak.profile.station.v1"
+        ],
         "limits": {
           "profile_status": {
             "limitations": [
@@ -58,7 +61,9 @@
       "expect": "pass",
       "describe": {
         "service": "coland",
-        "supported_profiles": ["ak.profile.mimi_interop.v1"],
+        "supported_profiles": [
+          "ak.profile.mimi_interop.v1"
+        ],
         "unsupported_profiles": [
           {
             "profile": "ak.profile.station.v1",

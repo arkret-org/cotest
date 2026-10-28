@@ -1,5 +1,4 @@
 {
-  "suite": "station_certification_gate",
   "profile": "ak.profile.station_certification_gate.v1",
   "cases": [
     {
@@ -73,10 +72,18 @@
           }
         },
         "station_minimum": {
-          "admin": {"status": "supported"},
-          "agent": {"status": "supported"},
-          "applet": {"status": "supported"},
-          "media": {"status": "supported"}
+          "admin": {
+            "status": "supported"
+          },
+          "agent": {
+            "status": "supported"
+          },
+          "applet": {
+            "status": "supported"
+          },
+          "media": {
+            "status": "supported"
+          }
         }
       }
     },
@@ -122,10 +129,18 @@
           }
         },
         "station_minimum": {
-          "admin": {"status": "supported"},
-          "agent": {"status": "supported"},
-          "applet": {"status": "supported"},
-          "media": {"status": "supported"}
+          "admin": {
+            "status": "supported"
+          },
+          "agent": {
+            "status": "supported"
+          },
+          "applet": {
+            "status": "supported"
+          },
+          "media": {
+            "status": "supported"
+          }
         }
       }
     }

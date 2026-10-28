@@ -107,7 +107,7 @@ jobs:
         with:
           python-version: "3.12"
       - name: Install canonical Spec evaluator dependencies
-        run: python -m pip install cryptography jsonschema pyyaml
+        run: python -m pip install -r arkret-spec/tools/requirements.txt
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: "1.98"

@@ -1,5 +1,4 @@
 {
-  "suite": "coauth_account_lifecycle",
   "profile": "ak.profile.coauth_account_lifecycle_vectors.v1",
   "service": "coauth",
   "cases": [

@@ -1,16 +1,26 @@
 {
-  "suite": "live_describe_profile_gate",
   "profile": "ak.profile.live_describe_profile_gate_vectors.v1",
   "cases": [
     {
       "name": "coland_station_claim_with_unimplemented_operation_is_rejected",
       "expect": "reject",
-      "source": {"mode":"fixture", "path":"/_arkret/describe"},
+      "source": {
+        "mode": "fixture",
+        "path": "/_arkret/describe"
+      },
       "describe": {
-        "service":"coland",
-        "service_kind":"station",
-        "supported_profiles":["ak.profile.station.v1"],
-        "limitations":[{"feature":"fixture.operation", "status":"501", "detail":"not implemented"}]
+        "service": "coland",
+        "service_kind": "station",
+        "supported_profiles": [
+          "ak.profile.station.v1"
+        ],
+        "limitations": [
+          {
+            "feature": "fixture.operation",
+            "status": "501",
+            "detail": "not implemented"
+          }
+        ]
       }
     },
     {

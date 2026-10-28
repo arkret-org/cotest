@@ -253,7 +253,7 @@ function Initialize-CotestWindowsHostsAccess {
             throw "hosts setup probe marker cleanup failed"
         }
         $manifest = [pscustomobject]@{
-            schema = "cotest.joint-hosts-setup.v1"
+
             created_at = (Get-Date).ToUniversalTime().ToString("o")
             hosts_path = $resolvedHostsPath
             test_user = $targetUser
@@ -490,7 +490,7 @@ if ($RequireDocker) {
 }
 
 $report = [pscustomobject]@{
-    schema = "cotest.joint-environment.v1"
+
     generated_at = (Get-Date).ToUniversalTime().ToString("o")
     mode = "install-and-check"
     administrator = $isAdministrator
