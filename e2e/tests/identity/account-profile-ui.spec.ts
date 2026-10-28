@@ -56,6 +56,7 @@ test("@fully-implemented account owner uploads, cold-loads and clears the canoni
     expect(avatarBlobRef).toMatch(/^ak:blob:sha256:[a-f0-9]{64}$/);
     const restoredAvatar = page.page.getByTestId("settings-avatar-preview").locator("img");
     await expect(restoredAvatar).toBeVisible({ timeout: 90_000 });
+    await restoredAvatar.scrollIntoViewIfNeeded();
     await expect.poll(() => restoredAvatar.evaluate((image: HTMLImageElement) =>
       image.complete && image.naturalWidth > 0), { timeout: 60_000 }).toBe(true);
     await expect(page.page.getByTestId("settings-avatar-preview").getByTestId("content-block-blob-error")).toHaveCount(0);
