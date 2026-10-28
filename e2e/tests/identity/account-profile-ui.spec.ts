@@ -67,6 +67,8 @@ test("@fully-implemented account owner uploads, cold-loads and clears the canoni
     expect(cleared.status()).toBe(200);
     expect(cleared.request().postData() ?? "").toContain("ak.profile.update");
     expect(cleared.request().postData() ?? "").not.toContain(avatarBlobRef);
+    // Let the UI finish its accepted write and local tombstone before navigation.
+    await expect(page.page.getByTestId("settings-avatar-clear")).toHaveCount(0);
     const emptyProfile = await coldViewer();
     expect(emptyProfile.avatar_blob_ref ?? "").toBe("");
     await expect(page.page.getByTestId("settings-avatar-card")).toBeVisible({ timeout: 60_000 });
