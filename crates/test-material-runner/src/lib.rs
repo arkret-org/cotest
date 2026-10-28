@@ -8,11 +8,11 @@
 use std::path::PathBuf;
 
 use anyhow::{Context, Result, ensure};
-use arkret_identity::VerifiedDidBindingStore as _;
 use arkret_identity::test_material::{
     FormalTestMaterialPolicyError, PublicKeyFingerprintInput, enforce_formal_test_material_policy,
     reserved_identifier_matches,
 };
+use arkret_identity::{DidBindingEvidenceReceiptExt, VerifiedDidBindingStore as _};
 use arkret_signatures::proof::{PublicKeyMaterial, verify_detached_ed25519_signature};
 use base64::Engine as _;
 use ed25519_dalek::Signer as _;
@@ -1077,5 +1077,3 @@ mod tests {
         Ok(())
     }
 }
-
-use arkret_identity::DidBindingEvidenceReceiptExt;
