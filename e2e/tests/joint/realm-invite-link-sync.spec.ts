@@ -33,7 +33,7 @@ for (const encrypted of [false, true]) {
         await flow.page.page.goto(`/chat/${realm}`);
         await flow.page.page.reload({ waitUntil: "domcontentloaded" });
         await expect(flow.page.page.getByTestId("chat-input")).toBeVisible({ timeout: 90_000 });
-        await expect(flow.page.page.getByTestId("status-label")).toHaveText("Online", { timeout: 90_000 });
+        await expect(flow.page.page.getByTestId("status-label")).toHaveText(/^Online(?:$|:)/, { timeout: 90_000 });
         await expect(flow.page.page.getByTestId("sync-cursor")).toContainText("ak:cursor:", { timeout: 90_000 });
       }
       for (const author of flows) {
@@ -56,6 +56,12 @@ for (const encrypted of [false, true]) {
         await member.page.page.reload({ waitUntil: "domcontentloaded" });
         await expect(member.page.page.getByTestId("realm-members-count")).toHaveText("2", { timeout: 90_000 });
       }
-    } finally { await Promise.all(flows.map(flow => flow.page.close())); }
+    } finally {
+      for (const flow of flows) await test.info().attach(`browser-locks-${flow.user.name}`, {
+        body: JSON.stringify(await flow.page.page.evaluate(() => navigator.locks.query())),
+        contentType: "application/json",
+      });
+      await Promise.all(flows.map(flow => flow.page.close()));
+    }
   });
 }

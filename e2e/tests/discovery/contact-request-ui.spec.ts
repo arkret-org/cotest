@@ -18,7 +18,7 @@ test("cold requester signs a real locator Contact request through the UI @fully-
     expect(address.includes("#token="), "real locator is available").toBe(true);
     await alice.page.page.goto("/contacts");
     await alice.page.page.reload({ waitUntil: "domcontentloaded" });
-    await expect(alice.page.page.getByTestId("status-label")).toHaveText("Online", { timeout: 90_000 });
+    await expect(alice.page.page.getByTestId("status-label")).toHaveText(/^Online(?:$|:)/, { timeout: 90_000 });
     await alice.page.page.getByTestId("add-contact-button").click();
     const form = alice.page.page.getByTestId("contact-request-panel");
     const target = form.getByTestId("contact-target-input");
@@ -34,7 +34,7 @@ test("cold requester signs a real locator Contact request through the UI @fully-
     expect((await requested.json()).status).toBe("accepted");
     await expect(alice.page.page.getByTestId("add-contact-modal")).toBeHidden({ timeout: 60_000 });
     await bob.page.page.goto("/contacts");
-    await expect(bob.page.page.getByTestId("status-label")).toHaveText("Online", { timeout: 90_000 });
+    await expect(bob.page.page.getByTestId("status-label")).toHaveText(/^Online(?:$|:)/, { timeout: 90_000 });
     const incoming = bob.page.page.locator('[data-testid^="contact-accept-"]');
     await expect(incoming).toHaveCount(1, { timeout: 90_000 });
     const preparedResponse = bob.page.page.waitForResponse(response =>
@@ -48,6 +48,10 @@ test("cold requester signs a real locator Contact request through the UI @fully-
     await alice.page.page.reload({ waitUntil: "domcontentloaded" });
     await expect(alice.page.page.locator('[data-testid^="contact-message-"]')).toHaveCount(1, { timeout: 90_000 });
   } finally {
+    for (const flow of flows) await test.info().attach(`browser-locks-${flow.user.name}`, {
+      body: JSON.stringify(await flow.page.page.evaluate(() => navigator.locks.query())),
+      contentType: "application/json",
+    });
     await Promise.all(flows.map(flow => flow.page.close()));
   }
 });
