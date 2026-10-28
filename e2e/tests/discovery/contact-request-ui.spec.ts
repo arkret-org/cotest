@@ -1,7 +1,8 @@
 import { expect, test } from "../../helpers/arkret-test";
 import { openRegisteredUserPage } from "../../helpers/users";
 
-test("cold requester signs a real locator Contact request through the UI @fully-implemented", async ({ browser, request }) => {
+for (const coldRecipient of [false, true]) {
+test(`cold requester signs a real locator Contact request; recipient=${coldRecipient ? "cold" : "established"} @fully-implemented`, async ({ browser, request }) => {
   test.setTimeout(600_000);
   const stamp = Date.now();
   const flows: Array<Awaited<ReturnType<typeof openRegisteredUserPage>>> = [];
@@ -33,9 +34,13 @@ test("cold requester signs a real locator Contact request through the UI @fully-
     expect(requested.status(), "the original signed Contact commit is accepted").toBe(200);
     expect((await requested.json()).status).toBe("accepted");
     await expect(alice.page.page.getByTestId("add-contact-modal")).toBeHidden({ timeout: 60_000 });
-    // Keep the recipient's established session; the requester above is the cold subject.
-    await bob.page.page.getByRole("tab", { name: "Contacts", exact: true }).click();
-    await bob.page.page.getByTestId("sidebar-new-contact-cta").click();
+    if (coldRecipient) {
+      // Inkson #32: an incoming row must not lose its action during connect.
+      await bob.page.page.goto("/contacts");
+    } else {
+      await bob.page.page.getByRole("tab", { name: "Contacts", exact: true }).click();
+      await bob.page.page.getByTestId("sidebar-new-contact-cta").click();
+    }
     await expect(bob.page.page.getByTestId("status-label")).toHaveText(/^Online(?:$|:)/, { timeout: 90_000 });
     const incoming = bob.page.page.locator('[data-testid^="contact-accept-"]');
     await expect(incoming).toHaveCount(1, { timeout: 90_000 });
@@ -57,6 +62,7 @@ test("cold requester signs a real locator Contact request through the UI @fully-
     await Promise.all(flows.map(flow => flow.page.close()));
   }
 });
+}
 
 test("Contact address instructions advertise only supported inputs @fully-implemented", async ({ browser, request }) => {
   test.setTimeout(300_000);
