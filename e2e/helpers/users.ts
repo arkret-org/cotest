@@ -1985,6 +1985,8 @@ export async function openRegisteredUserPage(
     autoCompleteRecoveryKeySetup: false,
   });
   const page = joint.page;
+  page.setDefaultTimeout(30_000);
+  page.setDefaultNavigationTimeout(60_000);
   const email = `ui-${randomUUID()}@example.test`;
   try {
     await page.goto("/register");

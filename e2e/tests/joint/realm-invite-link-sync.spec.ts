@@ -38,6 +38,7 @@ for (const encrypted of [false, true]) {
         await alice.page.page.getByTestId("cap-grant-subject-input").fill(JSON.stringify({
           principal_id: member.user.id, station_id: colandServiceId(),
         }));
+        await expect(alice.page.page.getByTestId("cap-grant-submit-button")).toBeEnabled({ timeout: 60_000 });
         await alice.page.page.getByTestId("cap-grant-submit-button").click();
         await expect(alice.page.page.getByTestId("realm-admin-status")).toContainText("Permission granted. Grant ID:", { timeout: 120_000 });
       }
