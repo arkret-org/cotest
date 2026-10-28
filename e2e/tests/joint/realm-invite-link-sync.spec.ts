@@ -33,6 +33,8 @@ for (const encrypted of [false, true]) {
         await flow.page.page.goto(`/chat/${realm}`);
         await flow.page.page.reload({ waitUntil: "domcontentloaded" });
         await expect(flow.page.page.getByTestId("chat-input")).toBeVisible({ timeout: 90_000 });
+        await expect(flow.page.page.getByTestId("status-label")).toHaveText("Online", { timeout: 90_000 });
+        await expect(flow.page.page.getByTestId("sync-cursor")).toContainText("ak:cursor:", { timeout: 90_000 });
       }
       for (const author of flows) {
         const body = `Accepted shared message ${author.user.name} ${stamp}`;

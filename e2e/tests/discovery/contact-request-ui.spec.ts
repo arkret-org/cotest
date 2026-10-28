@@ -18,6 +18,7 @@ test("cold requester signs a real locator Contact request through the UI @fully-
     expect(address.includes("#token="), "real locator is available").toBe(true);
     await alice.page.page.goto("/contacts");
     await alice.page.page.reload({ waitUntil: "domcontentloaded" });
+    await expect(alice.page.page.getByTestId("status-label")).toHaveText("Online", { timeout: 90_000 });
     await alice.page.page.getByTestId("add-contact-button").click();
     const form = alice.page.page.getByTestId("contact-request-panel");
     const target = form.getByTestId("contact-target-input");
@@ -33,6 +34,7 @@ test("cold requester signs a real locator Contact request through the UI @fully-
     expect((await requested.json()).status).toBe("accepted");
     await expect(alice.page.page.getByTestId("add-contact-modal")).toBeHidden({ timeout: 60_000 });
     await bob.page.page.goto("/contacts");
+    await expect(bob.page.page.getByTestId("status-label")).toHaveText("Online", { timeout: 90_000 });
     const incoming = bob.page.page.locator('[data-testid^="contact-accept-"]');
     await expect(incoming).toHaveCount(1, { timeout: 90_000 });
     const preparedResponse = bob.page.page.waitForResponse(response =>
