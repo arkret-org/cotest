@@ -8,6 +8,10 @@ on:
   push:
   pull_request:
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 env:
   CARGO_TERM_COLOR: always
   RUSTFLAGS: -D warnings
@@ -794,6 +798,7 @@ jobs:
         shell: pwsh
         run: |
           ./scripts/tests/joint-docker-filesystem.tests.ps1
+          ./scripts/tests/joint-docker-postgres.tests.ps1
           ./scripts/tests/publish-joint-failure.tests.ps1
       - name: Expose the locked Dioxus JavaScript bundler
         working-directory: cotest/e2e

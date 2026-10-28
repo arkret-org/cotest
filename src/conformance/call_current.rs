@@ -654,7 +654,7 @@ async fn run_case(fixture: &Value, case: &Value) -> Result<&'static str> {
         }
         "old_tenure_as_current" | "historical_exact_basis" | "wrong_historical_ref" => {
             let mut current = snapshot.clone();
-            current["governance_generation"] = json!(2);
+            current["governance_generation"] = json!("2");
             sign_snapshot(&mut current)?;
             prior = Some(current);
             if name != "old_tenure_as_current" {

@@ -1617,7 +1617,8 @@ function Write-JointCaddyConfig {
         [Parameter(Mandatory = $true)][int]$TlsPort,
         [Parameter(Mandatory = $true)][object[]]$Routes,
         [Parameter(Mandatory = $true)][string]$CertificatePath,
-        [Parameter(Mandatory = $true)][string]$KeyPath
+        [Parameter(Mandatory = $true)][string]$KeyPath,
+        [string[]]$BindAddresses = @("127.0.0.1")
     )
 
     $certificate = $CertificatePath -replace '\\', '/'
@@ -1631,7 +1632,7 @@ function Write-JointCaddyConfig {
     )
     foreach ($route in $Routes) {
         $lines += "https://$($route.Host):$TlsPort {"
-        $lines += "`tbind 127.0.0.1"
+        $lines += "`tbind $($BindAddresses -join ' ')"
         $lines += "`ttls $certificate $key"
         $logoutBackend = $route.PSObject.Properties['LogoutBackendPort']
         $didRoot = $route.PSObject.Properties['DidRoot']
@@ -1856,6 +1857,7 @@ function Assert-JointTlsTopology {
 }
 
 $script:ContainerHostGatewayIpv4 = $null
+$script:ContainerPostgresUrls = [System.Collections.Generic.Dictionary[string, string]]::new([StringComparer]::Ordinal)
 
 function Get-ContainerHostGatewayIpv4 {
     if ($script:ContainerHostGatewayIpv4) {
@@ -1881,6 +1883,9 @@ function Convert-ToContainerReachableUrl {
 
     if (-not $Url) {
         return $Url
+    }
+    if ($script:ContainerPostgresUrls.ContainsKey($Url)) {
+        return $script:ContainerPostgresUrls[$Url]
     }
     try {
         $uri = [System.Uri]$Url
@@ -2063,10 +2068,26 @@ function Start-EphemeralPostgres {
             if ($hostReady) {
                 $stableReadyChecks += 1
                 if ($stableReadyChecks -ge 2) {
+                    # Containers on the bridge cannot reach a host-loopback publication.
+                    # Keep the host URL private and route only this owned database directly.
+                    $containerIp = (Invoke-NativeCapture -FilePath "docker" -Arguments @(
+                        "inspect", "--format", '{{(index .NetworkSettings.Networks "bridge").IPAddress}}', $containerName
+                    ) | Out-String).Trim()
+                    $address = $null
+                    if ($LASTEXITCODE -ne 0 -or
+                        -not [System.Net.IPAddress]::TryParse($containerIp, [ref]$address) -or
+                        $address.AddressFamily -ne [System.Net.Sockets.AddressFamily]::InterNetwork -or
+                        [System.Net.IPAddress]::IsLoopback($address) -or
+                        $address.Equals([System.Net.IPAddress]::Any)) {
+                        & docker rm -f $containerName | Out-Null
+                        throw "Cannot resolve the owned PostgreSQL bridge address"
+                    }
+                    $hostUrl = "postgresql://arkret:arkret@127.0.0.1:$port/arkret"
+                    $script:ContainerPostgresUrls.Add($hostUrl, "postgresql://arkret:arkret@${containerIp}:5432/arkret")
                     return [pscustomobject]@{
                         ContainerName = $containerName
                         HostPort = $port
-                        Url = "postgresql://arkret:arkret@127.0.0.1:$port/arkret"
+                        Url = $hostUrl
                     }
                 }
             } else {
@@ -2784,6 +2805,17 @@ function Start-ManagedDockerColand {
         "-v", ("{0}:/cotest-logs" -f $LogDirectory)
     )
     $runArgs += $identityArguments
+    if ($jointTlsAssets) {
+        $gateway = Get-ContainerHostGatewayIpv4
+        if (-not $gateway) { throw "Cannot resolve the managed TLS container gateway" }
+        foreach ($hostName in $jointTlsHostNames) {
+            $runArgs += @("--add-host", "${hostName}:$gateway")
+        }
+        $runArgs += @(
+            "-v", ("{0}:/cotest-ca/ca.pem:ro" -f $jointTlsAssets.CaPemPath),
+            "-e", "SSL_CERT_FILE=/cotest-ca/ca.pem"
+        )
+    }
     foreach ($key in $Environment.Keys) {
         $value = [string]$Environment[$key]
         $runArgs += @("-e", "$key=$value")
@@ -4378,12 +4410,19 @@ try {
             }
         }
         $caddyfilePath = Join-Path $jointTlsDir "Caddyfile"
+        $jointTlsBindAddresses = @("127.0.0.1")
+        if ($ColandRuntime -eq "docker" -and $IsLinux) {
+            $gateway = Get-ContainerHostGatewayIpv4
+            if (-not $gateway) { throw "Cannot resolve the managed TLS bridge interface" }
+            $jointTlsBindAddresses += $gateway
+        }
         Write-JointCaddyConfig `
             -Path $caddyfilePath `
             -TlsPort $jointTlsPort `
             -Routes $jointTlsRoutes `
             -CertificatePath $jointTlsAssets.ServerPemPath `
-            -KeyPath $jointTlsAssets.ServerKeyPath
+            -KeyPath $jointTlsAssets.ServerKeyPath `
+            -BindAddresses $jointTlsBindAddresses
         $caddyBinary = Find-CommandPath @("caddy.exe", "caddy")
         if (-not $caddyBinary) {
             throw "caddy is required for the joint TLS identity topology"

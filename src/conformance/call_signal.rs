@@ -249,7 +249,7 @@ pub fn run_proof_detached_jws_vector() -> Result<()> {
             "/encrypted_payload/aead_profile",
             json!("MLS_128_DHKEMX25519_CHACHA20POLY1305_SHA256_Ed25519"),
         ),
-        ("/encrypted_payload/epoch", json!(8)),
+        ("/encrypted_payload/epoch", json!("8")),
         ("/encrypted_payload/nonce", json!("AAAAAAAAAAAAAAAB")),
     ];
     for (pointer, replacement) in aad_field_mutations {
@@ -427,7 +427,7 @@ fn call_signal_plaintext(signal_kind: &str, sequence: u64) -> Value {
         "payload_sequence": "11",
         "call_id": "ak:call:AYf05kF8z4cSo8r6qmqXgu4KPuv2YtKBlsE00FOmblaz",
         "signal_kind": signal_kind,
-        "sequence": sequence,
+        "sequence": sequence.to_string(),
         "data": data
     })
 }

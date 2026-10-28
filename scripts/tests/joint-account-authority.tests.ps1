@@ -41,6 +41,7 @@ $FlagonBaseUrl = $null
 $WebvhDegradedNoWitnessMaxSecs = 60
 $ColandContainerPort = 8008
 $script:ContainerHostGatewayIpv4 = "192.0.2.1"
+$script:ContainerPostgresUrls = [System.Collections.Generic.Dictionary[string, string]]::new([StringComparer]::Ordinal)
 $colandChaosControlFile = Join-Path $testDirectory "chaos.json"
 $processArguments = @{
     BinaryPath = "coland.exe"; ConfigPath = $configPath

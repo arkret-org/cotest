@@ -49,7 +49,7 @@ fn accepted_presence(
     let mut body = serde_json::Map::new();
     body.insert("kind".to_owned(), json!("ak.presence"));
     body.insert("actor_id".to_owned(), json!(actor()));
-    body.insert("payload_sequence".to_owned(), json!(sequence));
+    body.insert("payload_sequence".to_owned(), json!(sequence.to_string()));
     body.insert("ttl_ms".to_owned(), json!(30_000));
     if let Some(extra) = fields.as_object() {
         body.extend(extra.clone());

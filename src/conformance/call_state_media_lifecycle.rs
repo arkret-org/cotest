@@ -388,7 +388,7 @@ pub fn run_recording_result_artifact_shape_vector() -> Result<()> {
 
     let mut direct_result =
         serde_json::to_value(ready_call_state_payload(Some(valid_recording_artifact()))).unwrap();
-    direct_result["recording_transition"]["result"]["recording_url"] =
+    direct_result["recording_transition"]["capture_metadata"]["recording_url"] =
         json!("https://s3.amazonaws.com/bucket/recording.mp4");
     match evaluate_recording_result_artifact_shape(direct_result, false) {
         Err(code) if code == arkret_wire::ReasonCode::RECORDING_ARTIFACT_PIPELINE_BYPASSED => {}
@@ -397,7 +397,7 @@ pub fn run_recording_result_artifact_shape_vector() -> Result<()> {
 
     let mut direct_artifact =
         serde_json::to_value(ready_call_state_payload(Some(valid_recording_artifact()))).unwrap();
-    direct_artifact["recording_transition"]["result"]["artifact"]["destination"] =
+    direct_artifact["recording_transition"]["capture_metadata"]["artifact"]["destination"] =
         json!("livekit://egress/recording-1");
     match evaluate_recording_result_artifact_shape(direct_artifact, false) {
         Err(code) if code == arkret_wire::ReasonCode::RECORDING_ARTIFACT_PIPELINE_BYPASSED => {}
@@ -475,7 +475,7 @@ pub fn run_transcribe_lifecycle_vector() -> Result<()> {
         "capture_kind": "transcript",
         "mode": "audio",
         "visible_notice": true,
-        "result": {
+        "capture_metadata": {
             "retention": {
                 "consent_confirmed": true
             }
@@ -574,7 +574,7 @@ pub fn run_transcribe_lifecycle_vector() -> Result<()> {
             "recording_id": "transcript-019a7360-0000-7000-8000-000000000002",
             "from": "stopped",
             "to": "ready",
-            "result": {
+            "capture_metadata": {
                 "transcript_artifact_url": "https://backend.example/transcript.vtt"
             }
         }
@@ -589,7 +589,7 @@ pub fn run_transcribe_lifecycle_vector() -> Result<()> {
             "recording_id": "transcript-019a7360-0000-7000-8000-000000000002",
             "from": "transcribing",
             "to": "failed",
-            "result": {
+            "capture_metadata": {
                 "transcript_start_event_id": start_event_id().to_string(),
                 "failure_reason_code": "storage_failed"
             }
@@ -601,7 +601,7 @@ pub fn run_transcribe_lifecycle_vector() -> Result<()> {
         .validate_transcript_result_storage()
         .map_err(|code| anyhow::anyhow!("registered transcript failure invalid: {code}"))?;
     let mut unknown_failure = failed;
-    unknown_failure["transcript_transition"]["result"]["failure_reason_code"] =
+    unknown_failure["transcript_transition"]["capture_metadata"]["failure_reason_code"] =
         json!("vendor_timeout");
     if serde_json::from_value::<CallStatePayload>(unknown_failure).is_ok() {
         bail!("unregistered transcript failure reason must be schema_violation");

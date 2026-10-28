@@ -181,7 +181,7 @@ fn current_wire(stream_position: u64, value: Value) -> Value {
         "realm_id": REALM,
         "governance_generation": "2",
         "stream_head": head_wire(12),
-        "result": {
+        "current_state": {
             "selector": selector_wire(),
             "source_stream_ref": {"kind": "realm", "realm_id": REALM},
             "revision": {"commit_id": COMMIT, "stream_position": stream_position},
@@ -265,7 +265,7 @@ fn run_case(
                 ));
                 let wire = serde_json::to_value(&outcome)?;
                 ensure!(wire["status"] == at(case, "/expected/status")?.clone());
-                ensure!(wire.get("result").is_none());
+                ensure!(wire.get("current_state").is_none());
                 ensure!(!bool_at(case, "/expected/revision_present")?);
                 ensure!(!bool_at(case, "/expected/value_present")?);
                 ensure!(bool_at(
@@ -298,7 +298,7 @@ fn run_case(
                 ensure!(result.value.as_option().is_none());
                 let wire = serde_json::to_value(outcome)?;
                 ensure!(wire["status"] == at(case, "/expected/status")?.clone());
-                ensure!(wire["result"]["value"].is_null());
+                ensure!(wire["current_state"]["value"].is_null());
                 ensure!(bool_at(case, "/expected/revision_present")?);
                 ensure!(at(case, "/expected/next_write_expected_value")?.is_null());
                 (8, 1, 0, 0)
@@ -516,14 +516,17 @@ mod tests {
     #[test]
     fn closed_outcome_rejects_an_omitted_written_value() {
         let mut wire = current_wire(12, Value::Null);
-        wire["result"].as_object_mut().unwrap().remove("value");
+        wire["current_state"]
+            .as_object_mut()
+            .unwrap()
+            .remove("value");
         assert!(serde_json::from_value::<StrandWatchCurrentResponseBody>(wire).is_err());
     }
 
     #[test]
     fn closed_outcome_rejects_an_omitted_source_stream() {
         let mut wire = current_wire(12, Value::Null);
-        wire["result"]
+        wire["current_state"]
             .as_object_mut()
             .unwrap()
             .remove("source_stream_ref");
@@ -535,7 +538,7 @@ mod tests {
         let request: StrandWatchCurrentRequestBody =
             serde_json::from_value(request_wire()).unwrap();
         let mut wire = current_wire(12, Value::Null);
-        wire["result"]["source_stream_ref"] = json!({
+        wire["current_state"]["source_stream_ref"] = json!({
             "kind": "circle",
             "realm_id": REALM,
             "circle_id": "ak:circle:AT3ARBdH1FM6GjXK9ulTx-YMvQOXys39dlUzZV6KyID9"
