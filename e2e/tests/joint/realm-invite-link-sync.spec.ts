@@ -1,19 +1,13 @@
 import { expect, test } from "../../helpers/arkret-test";
-import { assertJointStackNotRequired, openDpopUserPage } from "../../helpers/users";
+import { openRegisteredUserPage } from "../../helpers/users";
 
 for (const encrypted of [false, true]) {
   test(`share-link members keep synchronizing messages and leave after reload; MLS=${encrypted} @fully-implemented`, async ({ browser, request }) => {
-    test.setTimeout(600_000);
+    test.setTimeout(1_200_000);
     const stamp = Date.now();
     const flows = [];
     for (const actor of ["alice", "bob", "carol"]) {
-      const flow = await openDpopUserPage(browser, request, `link-sync-${actor}-${stamp}`);
-      if (!flow) {
-        await Promise.all(flows.map(value => value.page.close()));
-        assertJointStackNotRequired("share-link client current installation");
-        test.skip(true, "three real DPoP accounts are required");
-        return;
-      }
+      const flow = await openRegisteredUserPage(browser, request, `link-sync-${actor}-${stamp}`);
       flows.push(flow);
     }
     const [alice, bob, carol] = flows;

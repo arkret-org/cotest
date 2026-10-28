@@ -1,16 +1,11 @@
 import { expect, test } from "../../helpers/arkret-test";
-import { assertJointStackNotRequired, openDpopUserPage } from "../../helpers/users";
+import { openRegisteredUserPage } from "../../helpers/users";
 
 test("cold requester signs a real locator Contact request through the UI @fully-implemented", async ({ browser, request }) => {
-  test.setTimeout(300_000);
+  test.setTimeout(600_000);
   const stamp = Date.now();
-  const alice = await openDpopUserPage(browser, request, `contact-ui-alice-${stamp}`);
-  const bob = await openDpopUserPage(browser, request, `contact-ui-bob-${stamp}`);
-  if (!alice || !bob) {
-    assertJointStackNotRequired("cold Contact UI request");
-    test.skip(true, "real DPoP accounts are required");
-    return;
-  }
+  const alice = await openRegisteredUserPage(browser, request, `contact-ui-alice-${stamp}`);
+  const bob = await openRegisteredUserPage(browser, request, `contact-ui-bob-${stamp}`);
   try {
     await bob.page.page.goto("/settings/account");
     await bob.page.page.getByTestId("settings-invite-locator-refresh").click();
@@ -46,12 +41,8 @@ test("cold requester signs a real locator Contact request through the UI @fully-
 });
 
 test("Contact address instructions advertise only supported inputs @fully-implemented", async ({ browser, request }) => {
-  const flow = await openDpopUserPage(browser, request, `contact-address-hint-${Date.now()}`);
-  if (!flow) {
-    assertJointStackNotRequired("Contact address instructions");
-    test.skip(true, "real DPoP account is required");
-    return;
-  }
+  test.setTimeout(300_000);
+  const flow = await openRegisteredUserPage(browser, request, `contact-address-hint-${Date.now()}`);
   try {
     await flow.page.page.goto("/contacts");
     await flow.page.page.getByTestId("add-contact-button").click();
