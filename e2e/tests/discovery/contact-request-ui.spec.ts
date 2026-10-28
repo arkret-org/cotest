@@ -86,8 +86,10 @@ test(`cold requester signs a real locator Contact request; recipient=${coldRecip
     } else {
       await bob.page.page.getByRole("tab", { name: "Contacts", exact: true }).click();
       await bob.page.page.getByTestId("sidebar-new-contact-cta").click();
+      await expect(bob.page.page.getByTestId("status-label")).toHaveText(/^Online(?:$|:)/, { timeout: 90_000 });
     }
-    await expect(bob.page.page.getByTestId("status-label")).toHaveText(/^Online(?:$|:)/, { timeout: 90_000 });
+    // The cold path acts as soon as the incoming row is available. Waiting
+    // for Online here would hide the bootstrap transition reported in #32.
     const incoming = bob.page.page.locator('[data-testid^="contact-accept-"]');
     await expect(incoming).toHaveCount(1, { timeout: 90_000 });
     const preparedResponse = bob.page.page.waitForResponse(response => isContactPhase(response, "respond", "prepare"), { timeout: 60_000 });
@@ -101,6 +103,7 @@ test(`cold requester signs a real locator Contact request; recipient=${coldRecip
     if ("error" in completion) throw completion.error;
     const receipt = await expectFrozenResponse(prepared, completion.response, bob.user);
     expect(receipt.request_receipt.core).toEqual((await requested.json()).request_acceptance_receipt.core);
+    await expect(bob.page.page.getByTestId("status-label")).toHaveText(/^Online(?:$|:)/, { timeout: 90_000 });
     await expect(bob.page.page.locator('[data-testid^="contact-message-"]')).toHaveCount(1, { timeout: 90_000 });
     await alice.page.page.reload({ waitUntil: "domcontentloaded" });
     await expect(alice.page.page.locator('[data-testid^="contact-message-"]')).toHaveCount(1, { timeout: 90_000 });
