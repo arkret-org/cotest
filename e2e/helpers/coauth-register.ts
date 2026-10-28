@@ -296,10 +296,14 @@ async function authorizeWithCurrentAccount(
       `coauth authorize returned an unexpected location: ${approvalUrl}`,
     );
   }
+  const consentUrl = `${coauthBase}/_coauth/self/oauth/authorization-grants/${grantId}/decision`;
+  const consent = await responseJsonRecord(await request.get(consentUrl), "coauth OAuth consent context");
+  const csrfToken = stringValue(consent.csrf_token);
+  if (!csrfToken) throw new Error("coauth OAuth consent omitted its CSRF binding");
   const approved = await responseJsonRecord(
     await request.post(
-      `${coauthBase}/_coauth/self/oauth/authorization-grants/${grantId}/decision`,
-      { data: { action: "approve" } },
+      consentUrl,
+      { headers: { Origin: new URL(coauthBase).origin }, data: { action: "approve", csrf_token: csrfToken } },
     ),
     "coauth OAuth approval",
   );

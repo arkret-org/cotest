@@ -19,7 +19,7 @@ use base64::Engine as _;
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 
-use super::http::{json_object, post_json};
+use super::http::json_object;
 
 /// A completed OAuth authorization, ready to be exchanged for a handoff.
 #[derive(Clone, Debug)]
@@ -117,13 +117,31 @@ pub async fn authorize_with_current_account(
         .context("approval location carried no grant id")?
         .to_owned();
 
-    let approved = post_json(
-        http,
-        &format!("{base}/_coauth/self/oauth/authorization-grants/{grant_id}/decision"),
-        &json!({ "action": "approve" }),
-    )
-    .await
-    .context("approve the OAuth authorization grant")?;
+    let consent_url = format!("{base}/_coauth/self/oauth/authorization-grants/{grant_id}/decision");
+    let consent: Value = http
+        .get(&consent_url)
+        .send()
+        .await?
+        .error_for_status()?
+        .json()
+        .await?;
+    let csrf = consent
+        .get("csrf_token")
+        .and_then(Value::as_str)
+        .context("OAuth consent omitted its CSRF binding")?;
+    let approved: Value = http
+        .post(&consent_url)
+        .header(
+            reqwest::header::ORIGIN,
+            url::Url::parse(base)?.origin().ascii_serialization(),
+        )
+        .json(&json!({ "action": "approve", "csrf_token": csrf }))
+        .send()
+        .await?
+        .error_for_status()?
+        .json()
+        .await
+        .context("approve the OAuth authorization grant")?;
     let approved = json_object(&approved, "OAuth approval")?;
     if approved.get("status").and_then(Value::as_str) != Some("success") {
         bail!("Coauth OAuth approval did not succeed: {approved:?}");
