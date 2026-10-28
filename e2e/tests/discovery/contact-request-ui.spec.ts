@@ -35,6 +35,7 @@ test("cold requester signs a real locator Contact request through the UI @fully-
     await expect(alice.page.page.getByTestId("add-contact-modal")).toBeHidden({ timeout: 60_000 });
     // Keep the recipient's established session; the requester above is the cold subject.
     await bob.page.page.getByRole("tab", { name: "Contacts", exact: true }).click();
+    await bob.page.page.getByTestId("sidebar-new-contact-cta").click();
     await expect(bob.page.page.getByTestId("status-label")).toHaveText(/^Online(?:$|:)/, { timeout: 90_000 });
     const incoming = bob.page.page.locator('[data-testid^="contact-accept-"]');
     await expect(incoming).toHaveCount(1, { timeout: 90_000 });

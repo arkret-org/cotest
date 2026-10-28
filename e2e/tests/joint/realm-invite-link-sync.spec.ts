@@ -1,5 +1,6 @@
 import { expect, test } from "../../helpers/arkret-test";
 import { openRegisteredUserPage } from "../../helpers/users";
+import { colandServiceId } from "../../helpers/env";
 
 for (const encrypted of [false, true]) {
   test(`share-link members keep synchronizing messages and leave after reload; MLS=${encrypted} @fully-implemented`, async ({ browser, request }) => {
@@ -28,6 +29,17 @@ for (const encrypted of [false, true]) {
         await join.getByTestId("realm-invite-link-input").fill(link);
         await join.getByTestId("realm-invite-link-confirm").click();
         await expect(join.getByRole("status")).toContainText("Joined. Membership is accepted", { timeout: 120_000 });
+      }
+      // realm-invite-links.md: joining grants no message-writing capability.
+      for (const member of [bob, carol]) {
+        await alice.page.gotoRealmAdminSection(realm, "security");
+        await alice.page.page.getByTestId("advanced-access-toggle").click();
+        await alice.page.page.getByTestId("cap-grant-tag-input").fill("ak.message.create");
+        await alice.page.page.getByTestId("cap-grant-subject-input").fill(JSON.stringify({
+          principal_id: member.user.id, station_id: colandServiceId(),
+        }));
+        await alice.page.page.getByTestId("cap-grant-submit-button").click();
+        await expect(alice.page.page.getByTestId("realm-admin-status")).toContainText("Permission granted. Grant ID:", { timeout: 120_000 });
       }
       for (const flow of flows) {
         await flow.page.page.goto(`/chat/${realm}`);
