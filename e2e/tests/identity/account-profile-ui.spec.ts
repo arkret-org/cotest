@@ -7,7 +7,6 @@ import { colandBaseUrl } from "../../helpers/env";
 import {
   assertJointStackNotRequired,
   openDpopUserPage,
-  selfPathHeadersForDpopSession,
 } from "../../helpers/users";
 
 const ONE_PIXEL_PNG = Buffer.from(
@@ -31,7 +30,7 @@ test("@fully-implemented account owner uploads and clears the canonical profile 
     return;
   }
 
-  const { page, session } = flow;
+  const { page } = flow;
   const profileUrl = `${colandBaseUrl()}/_arkret/self/account/profile`;
   const viewerUrl = `${colandBaseUrl()}/_arkret/self/account/viewer`;
 
@@ -64,7 +63,7 @@ test("@fully-implemented account owner uploads and clears the canonical profile 
       .poll(
         async () => {
           const response = await request.get(viewerUrl, {
-            headers: selfPathHeadersForDpopSession(session, "GET", viewerUrl),
+            headers: page.selfPathHeaders("GET", viewerUrl),
           });
           if (!response.ok()) return {};
           const body = (await response.json()) as {
@@ -109,11 +108,7 @@ test("@fully-implemented account owner uploads and clears the canonical profile 
       .poll(
         async () => {
           const response = await request.get(viewerUrl, {
-            headers: selfPathHeadersForDpopSession(
-              session,
-              "GET",
-              viewerUrl,
-            ),
+            headers: page.selfPathHeaders("GET", viewerUrl),
           });
           if (!response.ok()) return "";
           const body = (await response.json()) as {
@@ -156,11 +151,7 @@ test("@fully-implemented account owner uploads and clears the canonical profile 
       .poll(
         async () => {
           const response = await request.get(viewerUrl, {
-            headers: selfPathHeadersForDpopSession(
-              session,
-              "GET",
-              viewerUrl,
-            ),
+            headers: page.selfPathHeaders("GET", viewerUrl),
           });
           if (!response.ok()) return avatarBlobRef;
           const body = (await response.json()) as {

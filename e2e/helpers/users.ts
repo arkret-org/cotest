@@ -1222,7 +1222,7 @@ export class JointUserPage {
   // Build the Authorization + DPoP headers for a direct (non-browser)
   // `/_arkret/self/*` call. Under the ②(A+②) model the credential is the
   // ak.session.grant and coland requires a per-request DPoP proof.
-  private selfPathHeaders(method: string, url: string): Record<string, string> {
+  selfPathHeaders(method: string, url: string): Record<string, string> {
     const grant = this.session.grant;
     if (grant) {
       return selfPathGrantHeaders({
