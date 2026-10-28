@@ -1978,7 +1978,7 @@ export async function openRegisteredUserPage(
   prefix: string,
 ): Promise<{ user: JointUser; page: JointUserPage }> {
   if (!coauthBaseUrl()) throw new Error("UI registration requires Coauth");
-  const user = uniqueUser(prefix);
+  const user = uniqueUser(prefix.slice(0, 20));
   const joint = await openUserPage(browser, user, {
     neutralLoginConfig: true,
     keepDeviceAuthorizationModal: true,
