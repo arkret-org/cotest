@@ -1985,7 +1985,7 @@ export async function openRegisteredUserPage(
     autoCompleteRecoveryKeySetup: false,
   });
   const page = joint.page;
-  const email = `${user.name}@example.test`;
+  const email = `ui-${randomUUID()}@example.test`;
   try {
     await page.goto("/register");
     await page.getByTestId("register-server").fill(colandBaseUrl());
@@ -1996,6 +1996,9 @@ export async function openRegisteredUserPage(
     await page.locator("#confirm-new-password").fill("1amTester!");
     await page.getByRole("button", { name: /^create account$/i }).click();
     const codeInput = page.locator('input[autocomplete="one-time-code"]');
+    const registrationError = page.getByRole("alert");
+    await expect(codeInput.or(registrationError)).toBeVisible({ timeout: 60_000 });
+    await expect(registrationError).toHaveCount(0);
     await expect(codeInput).toBeVisible({ timeout: 60_000 });
     const code = await registrationEmailCode(request, email);
     await expect.poll(async () => {
