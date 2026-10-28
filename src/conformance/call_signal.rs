@@ -427,7 +427,7 @@ fn call_signal_plaintext(signal_kind: &str, sequence: u64) -> Value {
         "payload_sequence": "11",
         "call_id": "ak:call:AYf05kF8z4cSo8r6qmqXgu4KPuv2YtKBlsE00FOmblaz",
         "signal_kind": signal_kind,
-        "sequence": sequence,
+        "sequence": sequence.to_string(),
         "data": data
     })
 }
