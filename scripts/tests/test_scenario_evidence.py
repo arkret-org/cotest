@@ -26,6 +26,7 @@ class ScenarioEvidenceTests(unittest.TestCase):
             "identity/account-profile-ui.spec.ts",
             "joint/realm-invite-link-sync.spec.ts",
             "identity/registration-contact-validation.spec.ts",
+            "identity/coauth-handle-length-ui.spec.ts",
         ):
             target = root / "e2e/tests" / relative
             target.parent.mkdir(parents=True, exist_ok=True)
@@ -77,6 +78,17 @@ class ScenarioEvidenceTests(unittest.TestCase):
         self.assertEqual(entry["evidence_class"], "live-product")
         self.assertEqual(entry["real_services"], ["coauth", "coland", "inkson"])
         self.assertEqual(entry["identity_establishment"], ["fixture_or_not_applicable"])
+
+    def test_coauth_account_ui_does_not_claim_inkson_or_principal_authoring(self) -> None:
+        entry = self.scenarios["identity/coauth-handle-length-ui"]
+        self.assertEqual(entry["evidence_class"], "live-product")
+        self.assertEqual(entry["real_services"], ["coauth"])
+        self.assertEqual(entry["identity_establishment"], ["coauth_registration_ui"])
+        self.assertEqual(entry["protocol_object_producers"], ["coauth_product_client"])
+        self.assertEqual(entry["claims_excluded"], [
+            "coland_business_operations", "oauth_authorization",
+            "principal_registration_and_recovery_custody",
+        ])
 
     def test_imports_do_not_claim_a_registration_journey(self) -> None:
         entry = self.scenarios["import-only"]

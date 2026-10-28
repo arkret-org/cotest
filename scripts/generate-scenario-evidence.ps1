@@ -27,7 +27,11 @@ foreach ($file in Get-ChildItem -LiteralPath $testsRoot -Recurse -File -Filter "
     $usesRegisteredUi = $uiSource -match '\bopenRegisteredUserPage\s*\('
     # Opening the registration form is UI coverage, but does not establish an identity.
     $usesRegistrationFormUi = $uiSource -match 'getByTestId\(\s*["'']register-open-account-authority["'']\s*\)'
-    $usesProductUi = ($uiSource -match 'open(?:Dpop)?UserPage|openUserPage|\.goto(?:Home|Login|Setup|Timeline)|\.createRealm\(|\.sendTimelineMessage\(') -or $usesRegisteredUi -or $usesRegistrationFormUi
+    $usesInksonUi = ($uiSource -match 'open(?:Dpop)?UserPage|openUserPage|\.goto(?:Home|Login|Setup|Timeline)|\.createRealm\(|\.sendTimelineMessage\(') -or $usesRegisteredUi -or $usesRegistrationFormUi
+    $usesCoauthAccountUi = $source -match '\bcoauthBaseUrl\b' -and
+        $source -match '["'']/_coauth/account/auth/register["'']' -and
+        $source -match '\bsubmitCoauthPasswordCredentials\s*\(' -and $source -match '\.goto\('
+    $usesProductUi = $usesInksonUi -or $usesCoauthAccountUi
     $usesRawHttp = $source -match '\brequest\.(?:get|post|put|patch|delete|fetch)\('
     # Agent pairing consumes an existing accepted fixture; the bridge class
     # alone does not mean that this spec executes principal founding itself.
@@ -51,6 +55,8 @@ foreach ($file in Get-ChildItem -LiteralPath $testsRoot -Recurse -File -Filter "
         $identity.Add("coauth_registration_ui")
         $identity.Add("oauth_authorization_ui")
         $identity.Add("inkson_identity_onboarding_ui")
+    } elseif ($usesCoauthAccountUi -and -not $usesInksonUi) {
+        $identity.Add("coauth_registration_ui")
     } elseif ($source -match 'serverLoginViaCoauth|submitCoauthPasswordCredentials') {
         $identity.Add("oauth_authorization_ui")
     }
@@ -65,7 +71,7 @@ foreach ($file in Get-ChildItem -LiteralPath $testsRoot -Recurse -File -Filter "
     if ($identity.Count -eq 0) { $identity.Add("fixture_or_not_applicable") }
 
     $services = New-Object System.Collections.Generic.List[string]
-    if ($usesProductUi) { $services.Add("inkson") }
+    if ($usesInksonUi) { $services.Add("inkson") }
     if ($source -match 'colandBaseUrl|/_arkret/|\brequest\.') { $services.Add("coland") }
     if ($source -match 'coauthBaseUrl|serverLoginViaCoauth|Coauth') { $services.Add("coauth") }
     if ($usesRegisteredUi) {
@@ -93,7 +99,8 @@ foreach ($file in Get-ChildItem -LiteralPath $testsRoot -Recurse -File -Filter "
     if ($usesCanonicalProvisioning) { $mocks.Add("email") }
 
     $producers = New-Object System.Collections.Generic.List[string]
-    if ($usesProductUi) { $producers.Add("inkson_product_client") }
+    if ($usesInksonUi) { $producers.Add("inkson_product_client") }
+    if ($usesCoauthAccountUi) { $producers.Add("coauth_product_client") }
     if ($usesGarthRuntime) { $producers.Add("garth_runtime") }
     if ($source -match 'cotestWire|signedEventEnvelope|canonicalJson') { $producers.Add("cotest_wire_oracle") }
     if ($usesRawHttp) { $producers.Add("raw_http_fixture") }
@@ -118,6 +125,11 @@ foreach ($file in Get-ChildItem -LiteralPath $testsRoot -Recurse -File -Filter "
     }
 
     $excludedClaims = New-Object System.Collections.Generic.List[string]
+    if ($usesCoauthAccountUi -and -not $usesInksonUi) {
+        $excludedClaims.Add("oauth_authorization")
+        $excludedClaims.Add("principal_registration_and_recovery_custody")
+        $excludedClaims.Add("coland_business_operations")
+    }
     if ($bypasses -contains "session_injection") { $excludedClaims.Add("registration_login_authorization") }
     if ($bypasses -contains "prepare_mls_device_false") { $excludedClaims.Add("mls_device_and_keypackage_readiness") }
     if ($bypasses -contains "recovery_override") { $excludedClaims.Add("recovery_configured_encrypted_realm_creation") }
