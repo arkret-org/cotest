@@ -129,6 +129,15 @@ test("@fully-implemented account owner uploads and clears the canonical profile 
       page.page.getByTestId("settings-avatar-preview").locator("img"),
     ).toHaveAttribute("src", /^data:image\//);
 
+    // A warm upload preview does not exercise cold authenticated Blob reads.
+    await page.page.reload({ waitUntil: "domcontentloaded" });
+    const restoredAvatar = page.page.getByTestId("settings-avatar-preview").locator("img");
+    await expect(restoredAvatar).toBeVisible({ timeout: 90_000 });
+    await expect.poll(() => restoredAvatar.evaluate((image: HTMLImageElement) =>
+      image.complete && image.naturalWidth > 0), { timeout: 60_000 }).toBe(true);
+    await expect(page.page.getByTestId("settings-avatar-preview")
+      .getByTestId("content-block-blob-error")).toHaveCount(0);
+
     const clearedProfile = page.page.waitForResponse(
       (response) =>
         response.url() === profileUrl &&
