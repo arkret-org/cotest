@@ -144,8 +144,8 @@ async fn tombstone_contact(
     row: &arkret::contact_operations::ContactView,
 ) -> Result<()> {
     use arkret::contact_operations::{
-        ContactCommitPhase, ContactCommitRequestBody, ContactOperationResponseBody,
-        ContactPreparedResponseBody,
+        ContactAcceptedResponseBody, ContactCommitPhase, ContactCommitRequestBody,
+        ContactOperationResponseBody, ContactPreparedResponseBody,
     };
     let next = row
         .next_prepare_input
@@ -183,25 +183,63 @@ async fn tombstone_contact(
     else {
         bail!("cross-Station tombstone did not prepare: {prepared:?}");
     };
-    let committed: ContactOperationResponseBody = serde_json::from_value(
-        expect_json(
-            holder.post(path).json(&ContactCommitRequestBody {
-                phase: ContactCommitPhase::Commit,
-                operation_id,
-                idempotency_key,
-                reservation_handle,
-                signed_event: holder.sign_prepared_contact_event(
-                    &event_draft,
-                    arkret_wire::event_kind_str::CONTACT_TOMBSTONE,
-                )?,
-            }),
-            StatusCode::OK,
+    let commit = ContactCommitRequestBody {
+        phase: ContactCommitPhase::Commit,
+        operation_id,
+        idempotency_key,
+        reservation_handle,
+        signed_event: holder.sign_prepared_contact_event(
+            &event_draft,
+            arkret_wire::event_kind_str::CONTACT_TOMBSTONE,
+        )?,
+    };
+    let frozen = arkret_canonical::canonical_json_bytes(&commit)?;
+    let deadline = Instant::now() + Duration::from_secs(15);
+    let committed: ContactOperationResponseBody = loop {
+        let response = crate::harness::send_recorded(
+            holder
+                .post(path)
+                .header("content-type", "application/json")
+                .body(frozen.clone()),
         )
-        .await?,
-    )?;
+        .await?;
+        if response.status == StatusCode::OK {
+            break serde_json::from_value(response.json()?)?;
+        }
+        let problem: arkret_wire::Problem = serde_json::from_value(response.json()?)?;
+        ensure!(
+            response.status == StatusCode::SERVICE_UNAVAILABLE
+                && problem.error_code() == Some(arkret_wire::ErrorCode::TemporarilyUnavailable)
+                && Instant::now() < deadline,
+            "frozen Contact tombstone commit did not recover: {}",
+            response.context()
+        );
+        // Retry only the original canonical commit body, including the signed
+        // Event, reservation and both keys. A lineage conflict is never retried.
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    };
+    let ContactOperationResponseBody::Accepted {
+        outcome:
+            ContactAcceptedResponseBody::Tombstone {
+                operation_id,
+                lineage,
+                current_proof,
+            },
+    } = &committed
+    else {
+        bail!("cross-Station tombstone was not accepted: {committed:?}");
+    };
     ensure!(
-        matches!(committed, ContactOperationResponseBody::Accepted { .. }),
-        "cross-Station tombstone was not accepted: {committed:?}"
+        operation_id == &commit.operation_id
+            && lineage.event_ref == commit.signed_event.event_id
+            && lineage.issuer.contact_actor_id() == commit.signed_event.actor_id
+            && lineage.peer == row.peer
+            && lineage.contact_round_id.as_ref() == Some(&next.contact_round_id)
+            && lineage.version == next.version
+            && lineage.predecessor_event_ref.as_ref() == Some(&next.predecessor_event_ref)
+            && current_proof.head_event_ref == commit.signed_event.event_id
+            && current_proof.version == next.version,
+        "tombstone response changed its frozen operation, Event, holder or lineage"
     );
     Ok(())
 }
