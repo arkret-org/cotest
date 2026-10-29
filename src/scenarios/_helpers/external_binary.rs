@@ -262,7 +262,55 @@ fn describe_external_binary_candidates(spec: &ExternalBinarySpec) -> String {
 /// Determine whether the spec is currently spawnable; if not, return a
 /// machine-readable `SkipReason` so the caller can log + decide.
 pub fn skip_reason(spec: &ExternalBinarySpec) -> Option<SkipReason> {
-    skip_reason_with_extra_env(spec, &[])
+    // Invalid explicit configuration is not an optional missing prerequisite.
+    // Let the following spawn report it as an error instead of skipping it.
+    let Ok(environment) = child_environment(spec, &[]) else {
+        return None;
+    };
+    let overrides = environment
+        .iter()
+        .map(|(key, value)| (key.as_str(), value.as_str()))
+        .collect::<Vec<_>>();
+    skip_reason_with_extra_env(spec, &overrides)
+}
+
+fn database_environment(
+    setting: &str,
+    scoped_database: Option<&str>,
+    extra_env: &[(&str, &str)],
+) -> Result<Vec<(String, String)>> {
+    let mut environment = Vec::new();
+    if let Some(value) = scoped_database {
+        if value.trim().is_empty() || value.parse::<postgres::Config>().is_err() {
+            bail!("invalid service database setting: {setting}");
+        }
+        environment.push(("DATABASE_URL".to_owned(), value.to_owned()));
+    }
+    environment.extend(
+        extra_env
+            .iter()
+            .map(|(key, value)| ((*key).to_owned(), (*value).to_owned())),
+    );
+    Ok(environment)
+}
+
+fn child_environment(
+    spec: &ExternalBinarySpec,
+    extra_env: &[(&str, &str)],
+) -> Result<Vec<(String, String)>> {
+    let prefix = spec
+        .bin_env
+        .strip_suffix("_BIN")
+        .context("service binary setting requires a _BIN suffix")?;
+    let setting = format!("{prefix}_DATABASE_URL");
+    let scoped_database = match std::env::var(&setting) {
+        Ok(value) => Some(value),
+        Err(std::env::VarError::NotPresent) => None,
+        Err(std::env::VarError::NotUnicode(_)) => {
+            bail!("invalid service database setting: {setting}");
+        }
+    };
+    database_environment(&setting, scoped_database.as_deref(), extra_env)
 }
 
 fn skip_reason_with_extra_env(
@@ -309,7 +357,12 @@ pub async fn try_spawn_with_extra_env(
     spec: &ExternalBinarySpec,
     extra_env: &[(&str, &str)],
 ) -> Result<Option<SpawnedExternalProcess>> {
-    if skip_reason_with_extra_env(spec, extra_env).is_some() {
+    let environment = child_environment(spec, extra_env)?;
+    let overrides = environment
+        .iter()
+        .map(|(key, value)| (key.as_str(), value.as_str()))
+        .collect::<Vec<_>>();
+    if skip_reason_with_extra_env(spec, &overrides).is_some() {
         return Ok(None);
     }
     let bin_path = locate_external_binary(spec)
@@ -336,7 +389,7 @@ pub async fn try_spawn_with_extra_env(
     for &(key, value) in spec.extra_env {
         command.env(key, value);
     }
-    for &(key, value) in extra_env {
+    for (key, value) in &environment {
         command.env(key, value);
     }
 
@@ -464,6 +517,67 @@ pub const FLAGON_SPEC: ExternalBinarySpec = ExternalBinarySpec {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn service_database_overrides_inheritance_but_preserves_explicit_child_database() {
+        let scoped = "postgresql://localhost/scoped_directory";
+        let explicit = "postgresql://localhost/consent_owned_directory";
+        for (extra, expected) in [
+            (Vec::new(), scoped),
+            (vec![("DATABASE_URL", explicit)], explicit),
+        ] {
+            let environment =
+                database_environment("FLAGON_DATABASE_URL", Some(scoped), &extra).unwrap();
+            let mut command = Command::new("not-executed");
+            command.env("DATABASE_URL", "postgresql://localhost/unrelated_authority");
+            command.envs(environment);
+            assert_eq!(
+                command
+                    .get_envs()
+                    .find(|(key, _)| *key == "DATABASE_URL")
+                    .unwrap()
+                    .1,
+                Some(std::ffi::OsStr::new(expected))
+            );
+        }
+    }
+
+    #[test]
+    fn invalid_scoped_database_is_an_error_even_with_an_explicit_child_override() {
+        for scoped in ["", "  ", "PRIVATE_DSN_MARKER_invalid"] {
+            let error = database_environment(
+                "FLAGON_DATABASE_URL",
+                Some(scoped),
+                &[("DATABASE_URL", "postgresql://localhost/valid_directory")],
+            )
+            .unwrap_err();
+            assert_eq!(
+                error.to_string(),
+                "invalid service database setting: FLAGON_DATABASE_URL"
+            );
+        }
+    }
+
+    #[test]
+    fn absent_service_database_preserves_existing_child_environment() {
+        assert!(
+            database_environment("FLAGON_DATABASE_URL", None, &[])
+                .unwrap()
+                .is_empty()
+        );
+        assert_eq!(
+            database_environment(
+                "FLAGON_DATABASE_URL",
+                None,
+                &[("DATABASE_URL", "postgresql://localhost/caller_directory")],
+            )
+            .unwrap(),
+            [(
+                "DATABASE_URL".to_owned(),
+                "postgresql://localhost/caller_directory".to_owned()
+            )]
+        );
+    }
 
     fn exe_name(service: &str) -> String {
         if cfg!(windows) {
