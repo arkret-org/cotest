@@ -3,6 +3,7 @@ import { expect, test, type Response } from "../../helpers/arkret-test";
 import { canonicalJson, accountActorId, sdkEventDerivedIds } from "../../helpers/coland-api";
 import type { ContactOperationResponseBody, ContactRespondRequestBody } from "../../helpers/generated/spec-wire-objects";
 import { openRegisteredUserPage, type JointUser } from "../../helpers/users";
+import { observeRequestCost } from "../../helpers/request-cost";
 
 function isContactPhase(response: Response, endpoint: string, phase: string): boolean {
   return new URL(response.url()).pathname.endsWith(`/_arkret/self/contacts/${endpoint}`)
@@ -52,11 +53,14 @@ test(`cold requester signs a real locator Contact request; recipient=${coldRecip
   test.setTimeout(600_000);
   const stamp = Date.now();
   const flows: Array<Awaited<ReturnType<typeof openRegisteredUserPage>>> = [];
+  const transports: Array<{ name: string; cost: ReturnType<typeof observeRequestCost> }> = [];
   try {
     const alice = await openRegisteredUserPage(browser, request, `contact-ui-alice-${stamp}`);
     flows.push(alice);
+    transports.push({ name: alice.user.name, cost: observeRequestCost(alice.page.page) });
     const bob = await openRegisteredUserPage(browser, request, `contact-ui-bob-${stamp}`);
     flows.push(bob);
+    transports.push({ name: bob.user.name, cost: observeRequestCost(bob.page.page) });
     await bob.page.page.goto("/settings/account");
     await bob.page.page.getByTestId("settings-invite-locator-refresh").click();
     const locator = bob.page.page.getByTestId("settings-invite-locator-url");
@@ -108,6 +112,12 @@ test(`cold requester signs a real locator Contact request; recipient=${coldRecip
     await alice.page.page.reload({ waitUntil: "domcontentloaded" });
     await expect(alice.page.page.locator('[data-testid^="contact-message-"]')).toHaveCount(1, { timeout: 90_000 });
   } finally {
+    for (const transport of transports) {
+      await test.info().attach(`browser-transport-${transport.name}`, {
+        body: JSON.stringify(await transport.cost.snapshot()), contentType: "application/json",
+      });
+      transport.cost.dispose();
+    }
     for (const flow of flows) await test.info().attach(`browser-locks-${flow.user.name}`, {
       body: JSON.stringify(await flow.page.page.evaluate(() => navigator.locks.query())),
       contentType: "application/json",
