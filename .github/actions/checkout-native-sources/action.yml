@@ -48,6 +48,12 @@ runs:
         token: ${{ inputs.token }}
     - uses: actions/checkout@v4
       with:
+        repository: ${{ github.repository_owner }}/flagon
+        path: flagon
+        ref: ${{ fromJSON(inputs.refs).flagon }}
+        token: ${{ inputs.token }}
+    - uses: actions/checkout@v4
+      with:
         repository: ${{ github.repository_owner }}/chime
         path: chime
         ref: ${{ fromJSON(inputs.refs).chime }}
@@ -89,7 +95,7 @@ runs:
         import subprocess
         refs = json.loads(os.environ['NATIVE_SOURCE_REFS'])
         required = {'cotest', 'arkret-spec', 'arkret-rust-sdk', 'inkson', 'coland',
-                    'coauth', 'floria', 'chime', 'garth', 'bridges', 'savfox'}
+                    'coauth', 'floria', 'flagon', 'chime', 'garth', 'bridges', 'savfox'}
         if set(refs) != required:
             raise SystemExit('incomplete native source set')
         workspace = Path(os.environ['GITHUB_WORKSPACE'])

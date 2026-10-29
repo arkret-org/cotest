@@ -32,7 +32,7 @@ jobs:
           script: |
             const refs = {cotest: context.sha};
             const siblings = ['arkret-spec', 'arkret-rust-sdk', 'inkson', 'coland',
-              'coauth', 'floria', 'chime', 'garth', 'bridges'];
+              'coauth', 'floria', 'flagon', 'chime', 'garth', 'bridges'];
             await Promise.all(siblings.map(async repo => {
               const {data} = await github.rest.repos.getCommit({owner: context.repo.owner, repo, ref: 'main'});
               refs[repo] = data.sha;
@@ -58,280 +58,152 @@ jobs:
           POSTGRES_USER: cotest
           POSTGRES_PASSWORD: cotest-ci
         ports:
-          - 5432:5432
-        options: >-
-          --health-cmd "pg_isready -U cotest -d cotest_test_coauth_evidence"
-          --health-interval 5s
-          --health-timeout 5s
+        - 5432:5432
+        options: --health-cmd "pg_isready -U cotest -d cotest_test_coauth_evidence" --health-interval 5s --health-timeout 5s
           --health-retries 12
     env:
       DATABASE_URL: postgresql://cotest:cotest-ci@127.0.0.1:5432/cotest_test_coauth_evidence
-      # Process scenarios create independent database leases from this real
-      # PostgreSQL service. Missing live prerequisites must fail this lane.
       COTEST_COLAND_DATABASE_URL: postgresql://cotest:cotest-ci@127.0.0.1:5432/cotest_test_coauth_evidence
       COLAND_TEST_DATABASE_URL: postgresql://cotest:cotest-ci@127.0.0.1:5432/cotest_test_coauth_evidence
       COTEST_COAUTH_DATABASE_URL: postgresql://cotest:cotest-ci@127.0.0.1:5432/cotest_test_coauth_evidence
-      COTEST_REQUIRE_LIVE_SERVICES: "1"
-      # The workspace links many complete process-test executables. Keep
-      # assertions enabled while avoiding parallel linker and debug-data pressure.
-      CARGO_BUILD_JOBS: "1"
-      CARGO_INCREMENTAL: "0"
-      CARGO_PROFILE_DEV_DEBUG: "0"
-      CARGO_PROFILE_TEST_DEBUG: "0"
+      COTEST_REQUIRE_LIVE_SERVICES: '1'
+      CARGO_BUILD_JOBS: '1'
+      CARGO_INCREMENTAL: '0'
+      CARGO_PROFILE_DEV_DEBUG: '0'
+      CARGO_PROFILE_TEST_DEBUG: '0'
     strategy:
       fail-fast: false
       matrix:
-        # The crate uses edition 2024 and the current SDK requires the
-        # release pipeline toolchain.
-        toolchain: ["1.98"]
-        # Independent gates use the same source set. The complete workspace
-        # test and authority commands each retain their original full scope.
-        lane: [checks, workspace, authority, contact]
+        toolchain:
+        - '1.98'
+        lane:
+        - checks
+        - authority
+        - contact
     steps:
-      - uses: actions/checkout@v4
-        with:
-          path: cotest
-      - uses: ./cotest/.github/actions/checkout-native-sources
-        with:
-          refs: ${{ needs.native-sources.outputs.refs }}
-          token: ${{ secrets.CI_REPO_TOKEN || github.token }}
-      - name: Install Linux desktop dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev libxdo-dev dbus-x11 gnome-keyring libsecret-tools openssl curl ca-certificates
-
-      - name: Select PostgreSQL 18 backup tools
-        shell: bash
-        run: |
-          set -euo pipefail
-          pg_bin=/usr/lib/postgresql/18/bin
-          if [ ! -x "$pg_bin/pg_dump" ]; then
-            if ! apt-cache show postgresql-client-18 >/dev/null 2>&1; then
-              sudo install -d /usr/share/postgresql-common/pgdg
-              sudo curl --fail --silent --show-error \
-                https://www.postgresql.org/media/keys/ACCC4CF8.asc \
-                --output /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc
-              . /etc/os-release
-              printf 'Types: deb\nURIs: https://apt.postgresql.org/pub/repos/apt\nSuites: %s-pgdg\nArchitectures: %s\nComponents: main\nSigned-By: /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc\n' \
-                "$VERSION_CODENAME" "$(dpkg --print-architecture)" \
-                | sudo tee /etc/apt/sources.list.d/cotest-pgdg.sources >/dev/null
-            fi
-            sudo apt-get update
-            sudo apt-get install -y postgresql-client-18
+    - uses: actions/checkout@v4
+      with:
+        path: cotest
+    - uses: ./cotest/.github/actions/checkout-native-sources
+      with:
+        refs: ${{ needs.native-sources.outputs.refs }}
+        token: ${{ secrets.CI_REPO_TOKEN || github.token }}
+    - name: Install Linux desktop dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev libxdo-dev dbus-x11 gnome-keyring libsecret-tools openssl curl ca-certificates
+    - name: Select PostgreSQL 18 backup tools
+      shell: bash
+      run: |
+        set -euo pipefail
+        pg_bin=/usr/lib/postgresql/18/bin
+        if [ ! -x "$pg_bin/pg_dump" ]; then
+          if ! apt-cache show postgresql-client-18 >/dev/null 2>&1; then
+            sudo install -d /usr/share/postgresql-common/pgdg
+            sudo curl --fail --silent --show-error \
+              https://www.postgresql.org/media/keys/ACCC4CF8.asc \
+              --output /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc
+            . /etc/os-release
+            printf 'Types: deb\nURIs: https://apt.postgresql.org/pub/repos/apt\nSuites: %s-pgdg\nArchitectures: %s\nComponents: main\nSigned-By: /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc\n' \
+              "$VERSION_CODENAME" "$(dpkg --print-architecture)" \
+              | sudo tee /etc/apt/sources.list.d/cotest-pgdg.sources >/dev/null
           fi
-          "$pg_bin/pg_dump" --version | grep -E '^pg_dump \(PostgreSQL\) 18\.'
-          "$pg_bin/pg_restore" --version | grep -E '^pg_restore \(PostgreSQL\) 18\.'
-          server_version=$("$pg_bin/psql" "$DATABASE_URL" -Atc 'SHOW server_version_num')
-          test "$((server_version / 10000))" -eq 18
-          printf 'PostgreSQL server_version_num=%s\n' "$server_version"
-          printf '%s\n' "$pg_bin" >> "$GITHUB_PATH"
-          printf 'COTEST_PG_DUMP=%s/pg_dump\nCOTEST_PSQL=%s/psql\n' "$pg_bin" "$pg_bin" >> "$GITHUB_ENV"
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client-18
+        fi
+        "$pg_bin/pg_dump" --version | grep -E '^pg_dump \(PostgreSQL\) 18\.'
+        "$pg_bin/pg_restore" --version | grep -E '^pg_restore \(PostgreSQL\) 18\.'
+        server_version=$("$pg_bin/psql" "$DATABASE_URL" -Atc 'SHOW server_version_num')
+        test "$((server_version / 10000))" -eq 18
+        printf 'PostgreSQL server_version_num=%s\n' "$server_version"
+        printf '%s\n' "$pg_bin" >> "$GITHUB_PATH"
+        printf 'COTEST_PG_DUMP=%s/pg_dump\nCOTEST_PSQL=%s/psql\n' "$pg_bin" "$pg_bin" >> "$GITHUB_ENV"
+    - uses: actions/setup-python@v5
+      with:
+        python-version: '3.12'
+    - name: Install canonical Spec evaluator dependencies
+      run: python -m pip install -r arkret-spec/tools/requirements.txt
+    - name: Native runner isolation and public evidence regressions
+      working-directory: cotest
+      run: python -B -m unittest scripts.tests.test_run_native_rust_tests scripts.tests.test_publish_native_rust_evidence scripts.tests.test_run_native_operation_contracts
+        scripts.tests.test_publish_native_operation_status scripts.tests.test_native_workspace_scope scripts.tests.test_native_workspace_execution
+        scripts.tests.test_run_native_workspace
+    - name: Native preparation tool handoff regressions
+      working-directory: cotest
+      shell: pwsh
+      run: ./scripts/tests/native-tool-environment.tests.ps1
+    - name: Install nightly rustfmt
+      uses: dtolnay/rust-toolchain@nightly
+      with:
+        components: rustfmt
+    - uses: dtolnay/rust-toolchain@master
+      with:
+        toolchain: ${{ matrix.toolchain }}
+        components: rustfmt, clippy
+    - uses: Swatinem/rust-cache@v2
+      with:
+        workspaces: cotest
+    - name: Migrate isolated Coauth route-evidence database
+      run: psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f coauth/crates/storage-postgres/migrations/00000000000000_initial/up.sql
+    - name: fmt
+      if: matrix.lane == 'checks'
+      working-directory: cotest
+      run: cargo +nightly fmt --all -- --check
+    - name: clippy
+      if: matrix.lane == 'checks'
+      working-directory: cotest
+      run: cargo clippy --workspace --all-targets -- -D warnings
+    - name: build (no-default-features)
+      if: matrix.lane == 'checks'
+      working-directory: cotest
+      run: cargo build --workspace --no-default-features --locked
+    - name: Build fresh Contact federation service
+      if: matrix.lane == 'contact'
+      shell: bash
+      run: |
+        set -euo pipefail
+        cargo build --manifest-path coland/Cargo.toml --locked --bin coland --features conformance-harness
+        target=$(cargo metadata --manifest-path coland/Cargo.toml --locked --format-version 1 --no-deps | jq -er '.target_directory')
+        test -x "$target/debug/coland"
+        printf 'COLAND_BIN=%s/debug/coland\n' "$target" >> "$GITHUB_ENV"
+    - name: Diagnose the complete Contact federation target
+      if: matrix.lane == 'contact'
+      working-directory: cotest
+      run: bash ../inkson/scripts/with-native-keystore.sh python scripts/run-native-rust-tests.py cargo test --locked -p cotest
+        --test contact_federation_live -- --nocapture
+    - name: Verify complete native operation authority contracts
+      if: matrix.lane == 'authority'
+      working-directory: cotest
+      run: bash ../inkson/scripts/with-native-keystore.sh python scripts/run-native-operation-contracts.py --output artifacts/native-operation-contracts-ci
+    - name: check_ignore_comments hygiene
+      if: ${{ !cancelled() && matrix.lane == 'checks' }}
+      working-directory: cotest
+      run: bash scripts/check_ignore_comments.sh
+    - name: Publish bounded native authority status
+      if: always() && matrix.lane == 'authority'
+      working-directory: cotest
+      run: python -B scripts/publish-native-operation-status.py --run-root artifacts/native-operation-contracts-ci --output-dir
+        "${{ runner.temp }}/native-operation-public"
+    - name: Preserve public authority status
+      if: always() && matrix.lane == 'authority'
+      uses: actions/upload-artifact@v4
+      with:
+        name: native-operation-status-${{ github.sha }}
+        if-no-files-found: error
+        path: ${{ runner.temp }}/native-operation-public/summary.json
+    - name: Record native runner resources
+      if: always()
+      run: |
+        df -h .
+        free -h
 
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-      - name: Install canonical Spec evaluator dependencies
-        run: python -m pip install -r arkret-spec/tools/requirements.txt
-      - name: Native runner isolation and public evidence regressions
-        working-directory: cotest
-        run: python -B -m unittest scripts.tests.test_run_native_rust_tests scripts.tests.test_publish_native_rust_evidence scripts.tests.test_run_native_operation_contracts scripts.tests.test_publish_native_operation_status
-      - name: Native preparation tool handoff regressions
-        working-directory: cotest
-        shell: pwsh
-        run: ./scripts/tests/native-tool-environment.tests.ps1
-
-      - name: Install nightly rustfmt
-        uses: dtolnay/rust-toolchain@nightly
-        with:
-          components: rustfmt
-      - uses: dtolnay/rust-toolchain@master
-        with:
-          toolchain: ${{ matrix.toolchain }}
-          components: rustfmt, clippy
-      - uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: cotest
-      - name: Migrate isolated Coauth route-evidence database
-        run: psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f coauth/crates/storage-postgres/migrations/00000000000000_initial/up.sql
-      - name: fmt
-        if: matrix.lane == 'checks'
-        working-directory: cotest
-        run: cargo +nightly fmt --all -- --check
-      - name: clippy
-        if: matrix.lane == 'checks'
-        working-directory: cotest
-        # cotest carries TODO scaffolding for in-flight coverage; treat
-        # warnings as errors so drift surfaces before merge.
-        run: cargo clippy --workspace --all-targets -- -D warnings
-      - name: build (all-features)
-        if: matrix.lane == 'workspace'
-        working-directory: cotest
-        run: |
-          mkdir -p artifacts/sdk-artifact-build
-          cargo metadata --all-features --locked --format-version 1 > artifacts/sdk-artifact-build/metadata.json
-          cargo build --workspace --all-features --locked --message-format=json > artifacts/sdk-artifact-build/build.jsonl
-          python scripts/capture_sdk_artifact.py \
-            --cargo-messages artifacts/sdk-artifact-build/build.jsonl \
-            --cargo-metadata artifacts/sdk-artifact-build/metadata.json \
-            --sdk-manifest ../arkret-rust-sdk/crates/sdk/Cargo.toml \
-            --output "$RUNNER_TEMP/cotest-sdk-artifact"
-          echo "COTEST_SDK_ARTIFACT_MANIFEST=$RUNNER_TEMP/cotest-sdk-artifact/artifact.json" >> "$GITHUB_ENV"
-      - name: build (no-default-features)
-        if: matrix.lane == 'checks'
-        working-directory: cotest
-        run: cargo build --workspace --no-default-features --locked
-      - name: Build fresh process-mode test services
-        if: matrix.lane == 'workspace'
-        shell: bash
-        run: |
-          set -euo pipefail
-          for svc in coland coauth floria; do
-            features=()
-            if [ "$svc" = "coland" ]; then
-              features=(--features conformance-harness)
-            elif [ "$svc" = "coauth" ]; then
-              features=(--features cedar)
-            fi
-            cargo build --manifest-path "$svc/Cargo.toml" --locked --bin "$svc" "${features[@]}"
-            target=$(cargo metadata --manifest-path "$svc/Cargo.toml" --locked --format-version 1 --no-deps | jq -er '.target_directory')
-            key=$(printf '%s_BIN' "$svc" | tr '[:lower:]' '[:upper:]')
-            echo "$key=$target/debug/$svc" >> "$GITHUB_ENV"
-          done
-      - name: Build real Savfox native binding worker
-        if: matrix.lane == 'workspace'
-        shell: bash
-        run: |
-          set -euo pipefail
-          manifest="$(dirname -- "$GITHUB_WORKSPACE")/savfox-ai/savfox/Cargo.toml"
-          test -f "$manifest"
-          git -C "$(dirname -- "$manifest")" log -1 --format=%H
-          output="$GITHUB_WORKSPACE/cotest/artifacts/savfox-binding-worker-build"
-          mkdir -p "$output"
-          cargo metadata --manifest-path "$manifest" --locked --format-version 1 --no-deps > "$output/metadata.json"
-          cargo build --manifest-path "$manifest" --locked -p savfox-channels \
-            --no-default-features --features arkret --example arkret_binding_worker \
-            --message-format=json-render-diagnostics > "$output/build.jsonl"
-          target=$(jq -er '.target_directory' "$output/metadata.json")
-          worker=$(jq -ser 'map(select(.reason == "compiler-artifact" and .target.name == "arkret_binding_worker" and ((.target.kind // [] | index("example")) != null) and .executable != null)) | if length == 1 then .[0].executable else error("expected exactly one actual binding worker") end' "$output/build.jsonl")
-          case "$worker" in
-            "$target/"*) ;;
-            *) echo "binding worker is outside Cargo target directory" >&2; exit 1 ;;
-          esac
-          test -x "$worker"
-          printf 'COTEST_SAVFOX_BINDING_WORKER=%s\n' "$worker" >> "$GITHUB_ENV"
-      - name: Build fresh Contact federation service
-        if: matrix.lane == 'contact'
-        shell: bash
-        run: |
-          set -euo pipefail
-          cargo build --manifest-path coland/Cargo.toml --locked --bin coland --features conformance-harness
-          target=$(cargo metadata --manifest-path coland/Cargo.toml --locked --format-version 1 --no-deps | jq -er '.target_directory')
-          test -x "$target/debug/coland"
-          printf 'COLAND_BIN=%s/debug/coland\n' "$target" >> "$GITHUB_ENV"
-      - name: Diagnose the complete Contact federation target
-        if: matrix.lane == 'contact'
-        working-directory: cotest
-        # The prior workspace timed out after a real failure in this target,
-        # before libtest could publish its captured error. Run all five cases
-        # independently while the full workspace retains every original target.
-        # This diagnostic's default feature graph is not workspace acceptance.
-        run: >-
-          bash ../inkson/scripts/with-native-keystore.sh
-          python scripts/run-native-rust-tests.py
-          cargo test --locked -p cotest --test contact_federation_live -- --nocapture
-      - name: Prepare locked joint browser tooling
-        if: matrix.lane == 'workspace'
-        uses: ./cotest/.github/actions/setup-joint-browser
-      - name: Prepare Linux joint prerequisites
-        if: matrix.lane == 'workspace'
-        id: rust_joint_prerequisites
-        run: bash cotest/scripts/prepare-linux-joint-e2e.sh setup
-      - name: Prepare current browser conjunction artifacts
-        if: matrix.lane == 'workspace'
-        id: rust_browser_artifacts
-        working-directory: cotest
-        shell: pwsh
-        run: >-
-          ./scripts/run-joint-e2e.ps1
-          -PreflightOnly
-          -NativeToolsEnvironmentFile $env:GITHUB_ENV
-          -JointDir artifacts/native-browser-preparation
-          -ColandBin $env:COLAND_BIN
-          -StartCoauth
-          -StartMockEmail
-          -RunProfile joint-full
-          -PlaywrightProject joint-inkson
-          -Grep "@agent-provision-(recovery-prerequisite|durable-recovery)"
-          -RequireScenario "joint/agent-provision-recovery-prerequisite"
-          -ForbidSkippedTests
-      - name: test
-        if: matrix.lane == 'workspace'
-        id: rust_tests
-        working-directory: cotest
-        # Mandatory process scenarios use the freshly built sibling services.
-        # Explicit opt-in ignored probes remain in integration.yml.
-        run: bash ../inkson/scripts/with-native-keystore.sh python scripts/run-native-rust-tests.py cargo test --workspace --locked --no-fail-fast
-      - name: Verify complete native operation authority contracts
-        if: matrix.lane == 'authority'
-        working-directory: cotest
-        run: >-
-          bash ../inkson/scripts/with-native-keystore.sh
-          python scripts/run-native-operation-contracts.py
-          --output artifacts/native-operation-contracts-ci
-      - name: check_ignore_comments hygiene
-        if: ${{ !cancelled() && matrix.lane == 'checks' }}
-        working-directory: cotest
-        # Every `#[ignore]` attribute must carry a `/// Issue:` or
-        # `/// Gating:` justification and a valid `/// Tier:` declaration.
-        run: bash scripts/check_ignore_comments.sh
-      - name: Publish bounded native browser status
-        if: always() && matrix.lane == 'workspace'
-        run: >-
-          python -B cotest/scripts/publish-native-rust-evidence.py
-          --run-root cotest/artifacts/native-rust/${{ github.run_id }}-${{ github.run_attempt }}
-          --output-dir "${{ runner.temp }}/native-rust-public"
-      - name: Sanitize native startup diagnostics
-        if: always() && matrix.lane == 'workspace'
-        shell: pwsh
-        run: |
-          ./cotest/scripts/publish-joint-failure.ps1 `
-            -RunRoot cotest/artifacts/native-rust/${{ github.run_id }}-${{ github.run_attempt }} `
-            -OutputDirectory "$env:RUNNER_TEMP/native-rust-startup-public"
-          ./cotest/scripts/publish-joint-failure.ps1 `
-            -RunRoot cotest/artifacts/native-browser-preparation `
-            -OutputDirectory "$env:RUNNER_TEMP/native-rust-preparation-public"
-      - name: Preserve public native diagnostics
-        if: always() && matrix.lane == 'workspace'
-        uses: actions/upload-artifact@v4
-        with:
-          name: native-rust-public-${{ github.sha }}
-          if-no-files-found: error
-          path: |
-            ${{ runner.temp }}/native-rust-public/summary.json
-            ${{ runner.temp }}/native-rust-startup-public/
-            ${{ runner.temp }}/native-rust-preparation-public/
-      - name: Publish bounded native authority status
-        if: always() && matrix.lane == 'authority'
-        working-directory: cotest
-        run: >-
-          python -B scripts/publish-native-operation-status.py
-          --run-root artifacts/native-operation-contracts-ci
-          --output-dir "${{ runner.temp }}/native-operation-public"
-      - name: Preserve public authority status
-        if: always() && matrix.lane == 'authority'
-        uses: actions/upload-artifact@v4
-        with:
-          name: native-operation-status-${{ github.sha }}
-          if-no-files-found: error
-          path: ${{ runner.temp }}/native-operation-public/summary.json
-      - name: Restore Linux hosts permissions
-        if: always() && steps.rust_joint_prerequisites.outcome != 'skipped' && steps.rust_joint_prerequisites.outcome != ''
-        run: bash cotest/scripts/prepare-linux-joint-e2e.sh restore
-      - name: Record native runner resources
-        if: always()
-        run: |
-          df -h .
-          free -h
+  workspace:
+    name: complete native workspace
+    needs: native-sources
+    uses: ./.github/workflows/native-workspace.yml
+    with:
+      source_refs: ${{ needs.native-sources.outputs.refs }}
+    secrets: inherit
 
   operation-coverage:
     name: operation test coverage inventory
