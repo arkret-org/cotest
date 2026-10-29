@@ -1429,12 +1429,36 @@ pub async fn run_agent_content_sidecar_production()
             && queued_before_loss[0].effective_scope == state.event.scope_ref,
         "the accepted Welcome must still be queued without ACK after consume"
     );
+    use arkret_models_collaboration::agent_interaction::{
+        AgentInteractionExactCurrentSelector, AgentInteractionMode,
+        agent_interaction_from_verified_exact_read,
+    };
+    use arkret_models_collaboration::exact_current_state::{
+        ExactCurrentStateReadRequestBody, ExactCurrentStateSelector,
+    };
+    let mode_request = ExactCurrentStateReadRequestBody {
+        realm_id: realm.clone(),
+        selector: ExactCurrentStateSelector::AgentInteraction(
+            AgentInteractionExactCurrentSelector::new(agent.agent_account.clone()),
+        ),
+    };
+    // This Realm was created here and has never changed governance tenure.
+    // Snapshot omission does not prove the default mode or its CAS basis.
+    let mode_before = client.sdk().exact_current_state(&mode_request, 0).await?;
+    let (prior_mode, expected_revision) = agent_interaction_from_verified_exact_read(
+        &mode_before,
+        &realm,
+        &agent.agent_account,
+        &deployment.account,
+        0,
+    )?;
+    ensure!(prior_mode == AgentInteractionMode::Private && expected_revision.is_none());
     let set = arkret_models_collaboration::agent_interaction::AgentInteractionSetPayload {
         agent_account_id: agent.agent_account.clone(),
         controller_account_id: deployment.account.clone(),
         interaction_mode:
             arkret_models_collaboration::agent_interaction::AgentInteractionMode::Public,
-        expected_revision: None,
+        expected_revision,
     };
     let change = client
         .author_event(
@@ -1443,13 +1467,29 @@ pub async fn run_agent_content_sidecar_production()
             serde_json::to_value(set)?,
         )
         .await?;
-    crate::scenarios::human_device_producer_live::submit_and_expect_commit(
+    let mode_commit = crate::scenarios::human_device_producer_live::submit_and_expect_commit(
         client,
         &deployment.account,
         &client.device_id,
         &change,
     )
     .await?;
+    let mode_after = client.sdk().exact_current_state(&mode_request, 0).await?;
+    let (current_mode, revision) = agent_interaction_from_verified_exact_read(
+        &mode_after,
+        &realm,
+        &agent.agent_account,
+        &deployment.account,
+        0,
+    )?;
+    ensure!(
+        current_mode == AgentInteractionMode::Public
+            && revision
+                == Some(arkret_wire::CurrentRevision {
+                    commit_id: mode_commit.commit_id,
+                    stream_position: mode_commit.stream_position,
+                })
+    );
     let retained = client.sdk().agent_sidecar_get(&sidecar).await?;
     ensure!(
         retained.desired_agent_ids == vec![agent.agent_account.principal_id.clone()]

@@ -309,15 +309,9 @@ impl HarnessTls {
     }
 
     fn http_client(&self) -> Result<HttpClient> {
-        self.http_client_builder()?
-            .build()
-            .context("build Cotest TLS client")
-    }
-
-    fn http_client_builder(&self) -> Result<reqwest::ClientBuilder> {
         let certificates =
             reqwest::Certificate::from_pem_bundle(&self.ca_pem).context("parse Cotest TLS CA")?;
-        Ok(HttpClient::builder()
+        HttpClient::builder()
             // This is a run-scoped test PKI, so validate it with rustls/webpki
             // directly instead of routing the extra root through the platform
             // verifier.  On Windows the latter delegates the chain signature
@@ -328,7 +322,9 @@ impl HarnessTls {
             .tls_certs_only(certificates)
             .connect_timeout(HARNESS_CONNECT_TIMEOUT)
             .timeout(HARNESS_HTTP_TIMEOUT)
-            .no_proxy())
+            .no_proxy()
+            .build()
+            .context("build Cotest TLS client")
     }
 
     fn apply_to_command(&self, command: &mut Command) {
@@ -1147,52 +1143,6 @@ impl ArkretServer {
         OperationSelectingHttpClient {
             inner: self.http_client.clone(),
         }
-    }
-
-    /// Route a private worker through its explicitly configured public Station
-    /// endpoint. Discovery must confirm the same identity and exact public base.
-    pub(crate) async fn select_public_worker_endpoint(&mut self, endpoint: Url) -> Result<()> {
-        let config = self
-            .external_restart
-            .as_ref()
-            .context("owned process worker required")?;
-        anyhow::ensure!(
-            config.extra_env.iter().any(|(key, value)| {
-                key == "COLAND_PUBLIC_BASE_URL" && value == endpoint.as_str()
-            }),
-            "public worker endpoint was not independently configured"
-        );
-        let description: arkret::ServiceDescribe = self
-            .http_client
-            .get(self.base_url.join("/_arkret/describe")?)
-            .query(&[("service_kind", "station")])
-            .header(
-                "arkret-operation",
-                arkret_wire::ServiceOperationId::ServerReadDescribeV1.as_str(),
-            )
-            .send()
-            .await?
-            .error_for_status()?
-            .json()
-            .await?;
-        let binding =
-            arkret::StationConnectionBinding::from_description(&endpoint, &description, true)?;
-        anyhow::ensure!(
-            binding.service_id == self.service_id && binding.trust_domain == self.trust_domain,
-            "public endpoint changed the worker's Station identity"
-        );
-        self.http_client = self
-            ._tls
-            .as_ref()
-            .context("TLS worker required")?
-            .http_client_builder()?
-            // Each awaited request must use the selected worker, without an
-            // existing HTTP/2 connection retaining the previous route.
-            .http1_only()
-            .pool_max_idle_per_host(0)
-            .build()?;
-        self.base_url = endpoint;
-        Ok(())
     }
 
     /// The Ed25519 key this harness configured as the Station's notary and
