@@ -431,6 +431,73 @@ class ExecutionTests(unittest.TestCase):
         return ["cargo", "test", "--workspace", "--locked", "--no-fail-fast",
                 "--no-run", "--message-format=json"]
 
+    def mock_source_repositories(self):
+        refs = {name: "a" * 40 for name in execution.REPOSITORIES}
+        roots, files, heads, indexes = {}, {}, refs.copy(), {}
+        for name in refs:
+            root = (self.root / "savfox-ai" / "savfox" if name == "savfox"
+                    else self.workspace.parent / name)
+            root.mkdir(parents=True, exist_ok=True)
+            tracked = root / "tracked.rs"
+            tracked.write_bytes(b"original tracked input")
+            roots[root.resolve()] = name
+            files[name] = tracked
+            indexes[name] = b"100644 " + b"0" * 40 + b" 0\ttracked.rs\0"
+        def inspect(command, *, cwd, text=False):
+            name = roots[Path(cwd).resolve()]
+            if command == ["git", "rev-parse", "HEAD"]:
+                self.assertTrue(text)
+                return heads[name] + "\n"
+            self.assertEqual(command, ["git", "ls-files", "--stage", "-z"])
+            self.assertFalse(text)
+            return indexes[name]
+        checked = mock.patch.object(execution.subprocess, "check_output", side_effect=inspect)
+        process = checked.start()
+        self.addCleanup(checked.stop)
+        return refs, files, heads, indexes, process
+
+    def test_source_fence_detects_tracked_byte_change_without_head_change(self):
+        refs, files, _, _, checked = self.mock_source_repositories()
+        before = execution.source_snapshot(self.workspace, refs)
+        files["coland"].write_bytes(b"changed tracked input at the same HEAD")
+        self.assertNotEqual(execution.source_snapshot(self.workspace, refs), before)
+        files["coland"].write_bytes(b"original tracked input")
+        self.assertEqual(execution.source_snapshot(self.workspace, refs), before)
+        self.assertEqual(checked.call_count, 12 * 2 * 3)
+
+    def test_source_fence_rejects_mismatched_head_and_incomplete_or_unknown_repository_sets(self):
+        refs, _, heads, _, checked = self.mock_source_repositories()
+        missing = refs.copy()
+        del missing["flagon"]
+        for invalid in (missing, {**refs, "unknown-repository": "b" * 40}):
+            with self.subTest(repositories=sorted(invalid)), self.assertRaises(RuntimeError):
+                execution.source_snapshot(self.workspace, invalid)
+        checked.assert_not_called()
+        heads["coland"] = "b" * 40
+        with self.assertRaisesRegex(RuntimeError, "workspace source commit changed"):
+            execution.source_snapshot(self.workspace, refs)
+
+    def test_source_fence_ignores_files_outside_the_declared_tracked_inventory(self):
+        refs, files, _, _, _ = self.mock_source_repositories()
+        before = execution.source_snapshot(self.workspace, refs)
+        untracked = files["cotest"].parent / "untracked.sql"
+        ignored = files["cotest"].parent / "ignored-artifact.json"
+        untracked.write_bytes(b"new untracked diagnostic")
+        ignored.write_bytes(b"ignored artifact one")
+        self.assertEqual(execution.source_snapshot(self.workspace, refs), before)
+        untracked.write_bytes(b"updated untracked diagnostic")
+        ignored.write_bytes(b"ignored artifact two")
+        self.assertEqual(execution.source_snapshot(self.workspace, refs), before)
+
+    def test_source_fence_keeps_deleted_tracked_entries_distinct_from_omitted_entries(self):
+        refs, files, _, indexes, _ = self.mock_source_repositories()
+        before = execution.source_snapshot(self.workspace, refs)
+        files["flagon"].unlink()
+        deleted = execution.source_snapshot(self.workspace, refs)
+        self.assertNotEqual(deleted, before)
+        indexes["flagon"] = b""
+        self.assertNotEqual(execution.source_snapshot(self.workspace, refs), deleted)
+
     def test_cargo_capture_excludes_outer_lease_stdout_and_preserves_native_failure(self):
         messages = [{"reason": "compiler-message", "message": {"rendered": "synthetic compiler error\n"}},
                     {"reason": "build-finished", "success": False}]
