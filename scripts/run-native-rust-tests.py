@@ -6,17 +6,96 @@ from __future__ import annotations
 import json
 import os
 from pathlib import Path
+import re
 import shutil
 import subprocess
 import sys
 import tempfile
 import tomllib
+import uuid
 
 
 CLIENT_CONFIG_SCOPE = "COTEST_NATIVE_CLIENT_CONFIG_ROOT"
+PROVISION_EVIDENCE = "COTEST_AGENT_PROVISION_JOINT_DIR"
+SERVICE_LOGS = "COTEST_SERVICE_LOG_DIR"
+EVIDENCE_ROOT = Path(__file__).resolve().parents[1] / "artifacts" / "native-rust"
+PROVISION_BINARIES = ("agent_provision_production", "agent_vectors_production")
 
 
-def native_child(command: list[str]) -> int:
+def provision_binary(executable: str) -> str | None:
+    name = Path(executable).name
+    for binary in PROVISION_BINARIES:
+        if re.fullmatch(re.escape(binary) + r"(?:-[0-9a-f]+)?(?:\.exe)?", name):
+            return binary
+    return None
+
+
+def evidence_scope(command: list[str], environment: dict[str, str],
+                   artifact_root: Path) -> Path | None:
+    if PROVISION_EVIDENCE in environment:
+        value = environment[PROVISION_EVIDENCE]
+        path = Path(value)
+        existing = os.path.lexists(path)
+        consumes_provision = provision_binary(command[0]) is not None
+        if (not value or not path.is_absolute()
+                or (existing and (consumes_provision or not path.is_dir()))):
+            raise RuntimeError("explicit provision evidence requires an absolute fresh directory")
+    if SERVICE_LOGS in environment:
+        value = environment[SERVICE_LOGS]
+        path = Path(value)
+        if (not value or not path.is_absolute()
+                or (os.path.lexists(path) and not path.is_dir())):
+            raise RuntimeError("explicit service logs require an absolute directory")
+    if PROVISION_EVIDENCE in environment and SERVICE_LOGS in environment:
+        return None
+    base = artifact_root.absolute()
+    if base.resolve() != base:
+        raise RuntimeError("native evidence root cannot traverse a linked directory")
+    run_id = environment.get("GITHUB_RUN_ID", "local")
+    attempt = environment.get("GITHUB_RUN_ATTEMPT", "0")
+    run_id = run_id if re.fullmatch(r"[0-9]+", run_id) else "local"
+    attempt = attempt if re.fullmatch(r"[0-9]+", attempt) else "0"
+    label = re.sub(r"[^A-Za-z0-9_.-]", "_", Path(command[0]).name)[:80].strip("._-")
+    scope = base / f"{run_id}-{attempt}" / f"{label or 'native'}-{uuid.uuid4().hex}"
+    scope.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+    if scope.parent.resolve() != scope.parent:
+        raise RuntimeError("native evidence scope cannot traverse a linked directory")
+    scope.mkdir(mode=0o700)
+    if os.name != "nt":
+        scope.chmod(0o700)
+    environment.setdefault(PROVISION_EVIDENCE, str(scope / "agent-provision"))
+    if SERVICE_LOGS not in environment:
+        services = scope / "services"
+        services.mkdir(mode=0o700)
+        environment[SERVICE_LOGS] = str(services)
+    return scope
+
+
+def invoke_native_child(command: list[str], environment: dict[str, str],
+                        artifact_root: Path) -> int:
+    scope = evidence_scope(command, environment, artifact_root)
+    record = {"binary": provision_binary(command[0]), "status": "started", "exit_code": None}
+
+    def save() -> None:
+        if scope is not None:
+            path = scope / "native-child.json"
+            path.write_text(json.dumps(record) + "\n", encoding="utf-8")
+            if os.name != "nt":
+                path.chmod(0o600)
+
+    save()
+    try:
+        result = subprocess.run(command, env=environment, check=False)
+    except BaseException:
+        record["status"] = "launch_failed"
+        save()
+        raise
+    record.update(status="completed", exit_code=result.returncode)
+    save()
+    return result.returncode
+
+
+def native_child(command: list[str], *, artifact_root: Path = EVIDENCE_ROOT) -> int:
     if not command:
         raise RuntimeError("native child requires an executable")
     inherited = os.environ.get(CLIENT_CONFIG_SCOPE)
@@ -25,7 +104,7 @@ def native_child(command: list[str]) -> int:
         if (not root.is_dir()
                 or os.environ.get("INKSON_CONFIG_PATH") != str(root / "inkson" / "config.json")):
             raise RuntimeError("native client configuration scope is inconsistent")
-        return subprocess.run(command, check=False).returncode
+        return invoke_native_child(command, os.environ.copy(), artifact_root)
     with tempfile.TemporaryDirectory(prefix="cotest-native-client-") as scratch:
         root = Path(scratch)
         environment = os.environ.copy()
@@ -34,7 +113,7 @@ def native_child(command: list[str]) -> int:
             CLIENT_CONFIG_SCOPE: str(root),
             "INKSON_CONFIG_PATH": str(root / "inkson" / "config.json"),
         })
-        return subprocess.run(command, env=environment, check=False).returncode
+        return invoke_native_child(command, environment, artifact_root)
 
 
 def cargo_native_runner(command: list[str], directory: Path) -> list[str]:
