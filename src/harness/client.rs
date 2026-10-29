@@ -35,6 +35,8 @@ use super::{
     realm_create_payload_for_station, refresh_typed_event_proof_with_signing_seed,
 };
 
+mod event_submit_retry;
+
 #[derive(Clone)]
 pub struct TestActorClient {
     pub(super) http: OperationSelectingHttpClient,
@@ -1020,12 +1022,7 @@ impl TestActorClient {
             )
             .await?;
         let grant_id = arkret_identifiers::GrantId::from_event_id(&event.event_id);
-        let response = expect_json(
-            self.post("/_arkret/self/events")
-                .json(&crate::publication::initial_submission(event.clone(), "")?),
-            StatusCode::OK,
-        )
-        .await?;
+        let response = self.submit_authored_event(&event).await?;
         Ok((grant_id.to_string(), response))
     }
 
@@ -1061,13 +1058,7 @@ impl TestActorClient {
 
     pub async fn submit_event(&self, realm_id: &str, kind: &str, payload: Value) -> Result<Value> {
         let event = self.author_event(realm_id, kind, payload).await?;
-        let body = expect_json(
-            self.post("/_arkret/self/events")
-                .json(&crate::publication::initial_submission(event.clone(), "")?),
-            StatusCode::OK,
-        )
-        .await?;
-        Ok(body)
+        self.submit_authored_event(&event).await
     }
 
     /// Authors and submits an Event carrying explicit semantic causal edges.
