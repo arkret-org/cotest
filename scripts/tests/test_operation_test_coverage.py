@@ -431,6 +431,23 @@ fn typed_operation() {
         with mock.patch.object(inventory, "discover_layer_sources", side_effect=reversed_sources):
             self.assertEqual(inventory.generate(self.root), expected)
 
+    def test_linked_repository_roots_keep_the_same_inventory_and_source_digests(self) -> None:
+        expected = inventory.generate(self.root)
+        linked = self.root / "linked-workspace"
+        linked.mkdir()
+        for repository in ("arkret-spec", "arkret-rust-sdk", "coland", "cotest", "inkson"):
+            directory_link(linked / repository, self.root / repository)
+        self.assertEqual(inventory.generate(linked), expected)
+
+    def test_relative_source_identity_refuses_outside_paths_and_parent_traversal(self) -> None:
+        with mock.patch.object(inventory, "WORKSPACE_ROOT", self.root.resolve()):
+            for path in (
+                self.root.parent / "outside.rs",
+                self.root / "coland" / ".." / ".." / "outside.rs",
+            ):
+                with self.subTest(path=path), self.assertRaises(ValueError):
+                    inventory.relative_path(path)
+
     def test_unclassified_operation_shaped_literal_fails_closed(self) -> None:
         self.write(
             "cotest/e2e/tests/unknown.spec.ts",
