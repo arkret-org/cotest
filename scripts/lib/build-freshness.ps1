@@ -413,6 +413,33 @@ function Copy-RunScopedNativeArtifact {
     return $destination
 }
 
+function Write-RunScopedNativeToolEnvironment {
+    param(
+        [Parameter(Mandatory = $true)][hashtable]$Tools,
+        [Parameter(Mandatory = $true)][string]$Path
+    )
+
+    $allowed = @('COTEST_WIRE_BIN', 'COTEST_PROVISION_BIN', 'INKSON_WIRE_BIN')
+    if ($Tools.Count -eq 0) { throw 'No frozen native tools to export' }
+    $lines = foreach ($name in @($Tools.Keys | Sort-Object)) {
+        if ($allowed -cnotcontains $name) { throw 'Unknown native tool environment variable' }
+        $value = [string]$Tools[$name]
+        if (-not [IO.Path]::IsPathFullyQualified($value) -or $value -match '[\r\n]') {
+            throw 'Native tool environment requires an absolute single-line path'
+        }
+        $resolved = Resolve-BuildInputPath -Path $value
+        $receipt = Get-Content -Raw -LiteralPath "$resolved.cotest-runtime-source.json" | ConvertFrom-Json
+        if ($receipt.runtime_artifact -cne $resolved -or
+            $receipt.artifact_sha256 -cnotmatch '^[0-9a-f]{64}$' -or
+            (Get-FileHash -LiteralPath $resolved -Algorithm SHA256).Hash.ToLowerInvariant() -cne $receipt.artifact_sha256) {
+            throw 'Frozen native tool no longer matches its copy receipt'
+        }
+        "$name=$resolved"
+    }
+    # Validate every tool before appending anything to the caller's env file.
+    [IO.File]::AppendAllText($Path, (($lines -join "`n") + "`n"), [Text.UTF8Encoding]::new($false))
+}
+
 function Test-ArtifactBuildStamp {
     param(
         [Parameter(Mandatory = $true)][string]$ArtifactPath,

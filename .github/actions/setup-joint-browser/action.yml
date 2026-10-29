@@ -15,7 +15,49 @@ runs:
       run: rustup target add wasm32-unknown-unknown
     - name: Install Dioxus CLI
       shell: bash
-      run: cargo install dioxus-cli --version 0.7.10 --locked
+      run: |
+        set -euo pipefail
+        test "$RUNNER_OS/$RUNNER_ARCH" = Linux/X64
+        tools=$(mktemp -d "$RUNNER_TEMP/dioxus-cli-0.7.10-XXXXXX")
+        archive="$tools/dx.tar.gz"
+        # Bind the published bytes as well as the version; the upstream tag
+        # and release assets are mutable. This is the existing CLI version.
+        curl -q --fail --silent --show-error --location --retry 3 \
+          --proto '=https' --proto-redir '=https' \
+          https://github.com/DioxusLabs/dioxus/releases/download/v0.7.10/dx-x86_64-unknown-linux-gnu.tar.gz \
+          --output "$archive"
+        printf '%s  %s\n' 4363e4ed2a3f1eb7f4d38d2d59aed59ce43271c44c16b425e92c89a64761fbe7 "$archive" \
+          | sha256sum --check --strict
+        python - "$archive" "$tools/dx" <<'PY'
+        from pathlib import Path, PurePosixPath
+        import os
+        import shutil
+        import sys
+        import tarfile
+        with tarfile.open(sys.argv[1], 'r:gz') as archive:
+            matches = [item for item in archive.getmembers()
+                       if PurePosixPath(item.name).parts == ('dx',)]
+            if len(matches) != 1:
+                raise SystemExit('expected one published dx binary')
+            member = matches[0]
+            if (not member.isfile() or member.mode & 0o7000 or not member.mode & 0o111
+                    or not 0 < member.size <= 512 * 1024 * 1024):
+                raise SystemExit('invalid published dx binary')
+            binary = Path(sys.argv[2])
+            with archive.extractfile(member) as source, binary.open('xb') as target:
+                shutil.copyfileobj(source, target)
+            os.chmod(binary, member.mode & 0o777)
+        PY
+        "$tools/dx" --version | tee "$tools/version.txt"
+        python - "$tools/version.txt" <<'PY'
+        from pathlib import Path
+        import re
+        import sys
+        version = Path(sys.argv[1]).read_text(encoding='utf-8').strip()
+        if not re.fullmatch(r'dioxus 0\.7\.10(?: \([^\r\n]*\))?', version):
+            raise SystemExit('published dx has an unexpected version')
+        PY
+        printf '%s\n' "$tools" >> "$GITHUB_PATH"
     - name: Install locked Inkson wasm-bindgen CLI
       shell: bash
       run: |

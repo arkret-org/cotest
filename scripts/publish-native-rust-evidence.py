@@ -35,9 +35,17 @@ SOURCES = {
 MAX_BYTES = 4 * 1024 * 1024
 
 
+def resolve_evidence_path(path: Path) -> Path:
+    try:
+        return path.resolve()
+    except RuntimeError:
+        # Python 3.12 includes the private path in symlink-loop errors.
+        raise ValueError("invalid linked evidence path") from None
+
+
 def confined(path: Path, root: Path) -> Path:
     absolute = path.absolute()
-    if absolute.resolve() != absolute or not absolute.is_relative_to(root):
+    if resolve_evidence_path(absolute) != absolute or not absolute.is_relative_to(root):
         raise ValueError("linked or unowned evidence")
     return absolute
 
@@ -182,7 +190,7 @@ def collect(run_root: Path, allowed_root: Path) -> dict:
 def publish(run_root: Path, output_dir: Path, *, allowed_root: Path = EVIDENCE_ROOT) -> dict:
     run_root = run_root.absolute()
     output_dir = output_dir.absolute()
-    if output_dir.resolve() != output_dir or output_dir.is_relative_to(run_root):
+    if resolve_evidence_path(output_dir) != output_dir or output_dir.is_relative_to(run_root):
         raise ValueError("public output must be separate from private evidence")
     result = collect(run_root, allowed_root)
     output_dir.mkdir(parents=True, mode=0o700, exist_ok=False)
