@@ -17,7 +17,10 @@ use crate::scenarios::mls_lifecycle_live::{ACTIVE_SUITE, Member};
 pub(crate) mod emission;
 
 pub async fn run() -> Result<()> {
-    crate::scenarios::message_mls_cross_station_live::run_with_signal(true).await
+    crate::harness::heap_future(|| {
+        crate::scenarios::message_mls_cross_station_live::run_with_signal(true)
+    })
+    .await
 }
 
 pub async fn run_ban() -> Result<()> {
@@ -908,21 +911,63 @@ pub(crate) async fn exercise_two_station_signal(
     pause_file: &std::path::Path,
     boundary: emission::Boundary,
 ) -> Result<()> {
-    let bootstrap = super::mls_lifecycle_live::accepted_full_view(&bob.client, state).await?;
-    ensure!(bootstrap.commit.commit_id == *head);
-    wait_for_replica_cut(y_url, &bootstrap.commit).await?;
-    let before = [counts(x_url, realm).await?, counts(y_url, realm).await?];
-    for reverse in [false, true] {
-        let (sender, receiver, sender_group, receiver_group) = if reverse {
-            (bob, alice, &mut *bob_group, &*alice_group)
-        } else {
-            (alice, bob, &mut *alice_group, &*bob_group)
+    crate::harness::heap_future(|| async move {
+        let bootstrap = super::mls_lifecycle_live::accepted_full_view(&bob.client, state).await?;
+        ensure!(bootstrap.commit.commit_id == *head);
+        wait_for_replica_cut(y_url, &bootstrap.commit).await?;
+        let before = [counts(x_url, realm).await?, counts(y_url, realm).await?];
+        for reverse in [false, true] {
+            let (sender, receiver, sender_group, receiver_group) = if reverse {
+                (bob, alice, &mut *bob_group, &*alice_group)
+            } else {
+                (alice, bob, &mut *alice_group, &*bob_group)
+            };
+            deliver(
+                sender,
+                receiver,
+                sender_group,
+                receiver_group,
+                realm,
+                strand,
+                state,
+                head,
+                ScopeRef::Realm {
+                    realm_id: realm.clone(),
+                },
+                None,
+                SignalClass::Session,
+                1,
+                reverse.then_some(x),
+                None,
+            )
+            .await?;
+        }
+        for (index, url) in [x_url, y_url].iter().enumerate() {
+            let after = counts(url, realm).await?;
+            ensure!(
+                after[0..2] == before[index][0..2] && after[2] == before[index][2] + 2,
+                "Signal is transient and relays exactly once at each Station"
+            );
+        }
+        let product_frame = |sequence| -> Result<Vec<u8>> {
+            let frame = arkret::MessageStreamKeyframe::new(
+                sequence,
+                strand.parse()?,
+                arkret::MessageId::from_event_id(state),
+                0,
+                arkret::MessageStreamId::new_v7_at(Utc::now().timestamp_millis() as u64),
+                0,
+                arkret::MessageStreamFormat::Plain,
+                "authorized transient body",
+                false,
+            )?;
+            Ok(arkret_canonical::canonical_json_bytes(&frame)?)
         };
         deliver(
-            sender,
-            receiver,
-            sender_group,
-            receiver_group,
+            bob,
+            alice,
+            bob_group,
+            alice_group,
             realm,
             strand,
             state,
@@ -932,505 +977,466 @@ pub(crate) async fn exercise_two_station_signal(
             },
             None,
             SignalClass::Session,
-            1,
-            reverse.then_some(x),
+            8,
+            None,
+            Some((product_frame(8)?, false)),
+        )
+        .await?;
+        let initial_revoke: arkret_wire::AuthoritySubmitResponseBody = serde_json::from_value(
+            alice
+                .client
+                .revoke_realm_grant(
+                    realm.as_str(),
+                    arkret_wire::GrantId::from_event_id(&initial_message_grant.event_ref).as_str(),
+                )
+                .await?,
+        )?;
+        let arkret_wire::AuthoritySubmitResponseBody::Accepted {
+            commit: initial_revoked,
+            ..
+        } = initial_revoke
+        else {
+            anyhow::bail!("initial MessageCreate grant revoke must be accepted");
+        };
+        super::mls_lifecycle_live::accepted_full_view(&bob.client, &initial_revoked.event_ref).await?;
+        wait_for_replica_cut(y_url, &initial_revoked).await?;
+        let send_grant = super::human_device_producer_live::grant_realm_actions(
+            &alice.client,
+            x,
+            realm.as_str(),
+            &bob.account,
+            &[arkret_wire::CapabilityActionId::MESSAGE_STREAM_SEND],
+        )
+        .await?;
+        super::mls_lifecycle_live::accepted_full_view(&bob.client, &send_grant.event_ref).await?;
+        wait_for_replica_cut(y_url, &send_grant).await?;
+        deliver(
+            bob,
+            alice,
+            bob_group,
+            alice_group,
+            realm,
+            strand,
+            state,
+            &send_grant.commit_id,
+            ScopeRef::Realm {
+                realm_id: realm.clone(),
+            },
+            None,
+            SignalClass::Session,
+            9,
+            None,
+            Some((product_frame(9)?, false)),
+        )
+        .await?;
+        let dual_grant = super::human_device_producer_live::grant_realm_actions(
+            &alice.client,
+            x,
+            realm.as_str(),
+            &bob.account,
+            &[
+                arkret_wire::CapabilityActionId::MESSAGE_STREAM_SEND,
+                arkret_wire::CapabilityActionId::MESSAGE_CREATE,
+            ],
+        )
+        .await?;
+        super::mls_lifecycle_live::accepted_full_view(&bob.client, &dual_grant.event_ref).await?;
+        wait_for_replica_cut(y_url, &dual_grant).await?;
+        deliver(
+            bob,
+            alice,
+            bob_group,
+            alice_group,
+            realm,
+            strand,
+            state,
+            &dual_grant.commit_id,
+            ScopeRef::Realm {
+                realm_id: realm.clone(),
+            },
+            None,
+            SignalClass::Session,
+            10,
+            Some(x),
+            Some((product_frame(10)?, true)),
+        )
+        .await?;
+        let revoke_product: arkret_wire::AuthoritySubmitResponseBody = serde_json::from_value(
+            alice
+                .client
+                .revoke_realm_grant(
+                    realm.as_str(),
+                    arkret_wire::GrantId::from_event_id(&dual_grant.event_ref).as_str(),
+                )
+                .await?,
+        )?;
+        let arkret_wire::AuthoritySubmitResponseBody::Accepted {
+            commit: product_revoked,
+            ..
+        } = revoke_product
+        else {
+            anyhow::bail!("MessageStream revoke must be accepted");
+        };
+        super::mls_lifecycle_live::accepted_full_view(&bob.client, &product_revoked.event_ref).await?;
+        wait_for_replica_cut(y_url, &product_revoked).await?;
+        deliver(
+            bob,
+            alice,
+            bob_group,
+            alice_group,
+            realm,
+            strand,
+            state,
+            &dual_grant.commit_id,
+            ScopeRef::Realm {
+                realm_id: realm.clone(),
+            },
+            None,
+            SignalClass::Session,
+            11,
+            None,
+            Some((product_frame(11)?, false)),
+        )
+        .await?;
+        let typing_frame = |sequence: u64| -> Result<Vec<u8>> {
+            Ok(arkret_canonical::canonical_json_bytes(&json!({
+                "kind":"ak.typing", "payload_sequence":(sequence).to_string(), "strand_id":strand, "typing":true
+            }))?)
+        };
+        deliver(
+            bob,
+            alice,
+            bob_group,
+            alice_group,
+            realm,
+            strand,
+            state,
+            &product_revoked.commit_id,
+            ScopeRef::Realm {
+                realm_id: realm.clone(),
+            },
+            None,
+            SignalClass::Session,
+            12,
+            None,
+            Some((typing_frame(12)?, false)),
+        )
+        .await?;
+        let typing_grant = super::human_device_producer_live::grant_realm_actions(
+            &alice.client,
+            x,
+            realm.as_str(),
+            &bob.account,
+            &[arkret_wire::CapabilityActionId::TYPING_BROADCAST],
+        )
+        .await?;
+        super::mls_lifecycle_live::accepted_full_view(&bob.client, &typing_grant.event_ref).await?;
+        wait_for_replica_cut(y_url, &typing_grant).await?;
+        deliver(
+            bob,
+            alice,
+            bob_group,
+            alice_group,
+            realm,
+            strand,
+            state,
+            &typing_grant.commit_id,
+            ScopeRef::Realm {
+                realm_id: realm.clone(),
+            },
+            None,
+            SignalClass::Session,
+            13,
+            Some(x),
+            Some((typing_frame(13)?, true)),
+        )
+        .await?;
+        let policy_id = arkret_wire::PolicyId::new_v7_at(Utc::now().timestamp_millis() as u64);
+        let mut policy: arkret_models_collaboration::governance::operation_wire::Policy =
+            serde_json::from_value(json!({
+                "id":policy_id, "schema":"ak.schema.policy.v1", "realm_id":realm,
+                "policy_kind":"access", "rules":[{"rule_id":"typing","kind":"action","effect":"deny","actions":[arkret_wire::CapabilityActionId::TYPING_BROADCAST]}],
+                "default_effect":"allow", "created_by":alice.actor,
+                "created_at":arkret_canonical::format_timestamp_canonical(Utc::now())
+            }))?;
+        policy.validate()?;
+        let set_policy = |policy: &arkret_models_collaboration::governance::operation_wire::Policy| -> Result<
+            arkret_models_collaboration::governance::operation_wire::PolicySetStatePayload,
+        > {
+            Ok(serde_json::from_value(
+                json!({"policy_id":policy_id,"value":policy}),
+            )?)
+        };
+        let outcome: arkret_wire::AuthoritySubmitResponseBody = serde_json::from_value(
+            alice
+                .client
+                .submit_event(
+                    realm.as_str(),
+                    arkret_wire::EventKind::PolicySet.as_str(),
+                    serde_json::to_value(set_policy(&policy)?)?,
+                )
+                .await?,
+        )?;
+        let arkret_wire::AuthoritySubmitResponseBody::Accepted {
+            commit: policy_denied,
+            ..
+        } = outcome
+        else {
+            anyhow::bail!("Typing Policy deny must be accepted");
+        };
+        super::mls_lifecycle_live::accepted_full_view(&bob.client, &policy_denied.event_ref).await?;
+        wait_for_replica_cut(y_url, &policy_denied).await?;
+        // The original cut had the grant and no deny; the current Policy must win.
+        deliver(
+            bob,
+            alice,
+            bob_group,
+            alice_group,
+            realm,
+            strand,
+            state,
+            &typing_grant.commit_id,
+            ScopeRef::Realm {
+                realm_id: realm.clone(),
+            },
+            None,
+            SignalClass::Session,
+            14,
+            None,
+            Some((typing_frame(14)?, false)),
+        )
+        .await?;
+        policy.rules[0].effect = arkret_wire::PolicyEffect::Allow;
+        let outcome: arkret_wire::AuthoritySubmitResponseBody = serde_json::from_value(
+            alice
+                .client
+                .submit_event(
+                    realm.as_str(),
+                    arkret_wire::EventKind::PolicySet.as_str(),
+                    serde_json::to_value(set_policy(&policy)?)?,
+                )
+                .await?,
+        )?;
+        let arkret_wire::AuthoritySubmitResponseBody::Accepted {
+            commit: policy_allowed,
+            ..
+        } = outcome
+        else {
+            anyhow::bail!("Typing Policy allow must be accepted");
+        };
+        super::mls_lifecycle_live::accepted_full_view(&bob.client, &policy_allowed.event_ref).await?;
+        wait_for_replica_cut(y_url, &policy_allowed).await?;
+        deliver(
+            bob,
+            alice,
+            bob_group,
+            alice_group,
+            realm,
+            strand,
+            state,
+            &policy_allowed.commit_id,
+            ScopeRef::Realm {
+                realm_id: realm.clone(),
+            },
+            None,
+            SignalClass::Session,
+            15,
+            Some(x),
+            Some((typing_frame(15)?, true)),
+        )
+        .await?;
+        let typing_revoke: arkret_wire::AuthoritySubmitResponseBody = serde_json::from_value(
+            alice
+                .client
+                .revoke_realm_grant(
+                    realm.as_str(),
+                    arkret_wire::GrantId::from_event_id(&typing_grant.event_ref).as_str(),
+                )
+                .await?,
+        )?;
+        let arkret_wire::AuthoritySubmitResponseBody::Accepted {
+            commit: typing_revoked,
+            ..
+        } = typing_revoke
+        else {
+            anyhow::bail!("Typing revoke must be accepted");
+        };
+        super::mls_lifecycle_live::accepted_full_view(&bob.client, &typing_revoked.event_ref).await?;
+        wait_for_replica_cut(y_url, &typing_revoked).await?;
+        // Keep the original grant-bearing basis; current revocation must win.
+        deliver(
+            bob,
+            alice,
+            bob_group,
+            alice_group,
+            realm,
+            strand,
+            state,
+            &policy_allowed.commit_id,
+            ScopeRef::Realm {
+                realm_id: realm.clone(),
+            },
+            None,
+            SignalClass::Session,
+            16,
+            None,
+            Some((typing_frame(16)?, false)),
+        )
+        .await?;
+        let old = envelope(
+            bob,
+            bob_group,
+            realm,
+            strand,
+            state,
+            old_head,
+            SignalClass::Session,
+            2,
+        )?;
+        deny(bob, &old, realm, &[x_url, y_url])
+            .await
+            .context("old cut did not contain sender membership")?;
+        deny_peer(&old, y, x, &[x_url, y_url]).await?;
+        let moderation = envelope(
+            bob,
+            bob_group,
+            realm,
+            strand,
+            state,
+            head,
+            SignalClass::Moderation,
+            3,
+        )?;
+        deny(bob, &moderation, realm, &[x_url, y_url])
+            .await
+            .context("moderation has no accepted capability")?;
+        let moderation_grant = super::human_device_producer_live::grant_realm_actions(
+            &alice.client,
+            x,
+            realm.as_str(),
+            &bob.account,
+            &["ak.call.moderate"],
+        )
+        .await?;
+        super::mls_lifecycle_live::accepted_full_view(&bob.client, &moderation_grant.event_ref).await?;
+        wait_for_replica_cut(y_url, &moderation_grant).await?;
+        let old_moderation = envelope(
+            bob,
+            bob_group,
+            realm,
+            strand,
+            state,
+            head,
+            SignalClass::Moderation,
+            4,
+        )?;
+        deny(bob, &old_moderation, realm, &[x_url, y_url]).await?;
+        deliver(
+            bob,
+            alice,
+            bob_group,
+            alice_group,
+            realm,
+            strand,
+            state,
+            &moderation_grant.commit_id,
+            ScopeRef::Realm {
+                realm_id: realm.clone(),
+            },
+            None,
+            SignalClass::Moderation,
+            17,
+            Some(x),
             None,
         )
         .await?;
-    }
-    for (index, url) in [x_url, y_url].iter().enumerate() {
-        let after = counts(url, realm).await?;
-        ensure!(
-            after[0..2] == before[index][0..2] && after[2] == before[index][2] + 2,
-            "Signal is transient and relays exactly once at each Station"
-        );
-    }
-    let product_frame = |sequence| -> Result<Vec<u8>> {
-        let frame = arkret::MessageStreamKeyframe::new(
-            sequence,
-            strand.parse()?,
-            arkret::MessageId::from_event_id(state),
-            0,
-            arkret::MessageStreamId::new_v7_at(Utc::now().timestamp_millis() as u64),
-            0,
-            arkret::MessageStreamFormat::Plain,
-            "authorized transient body",
-            false,
+        let revoke: arkret_wire::AuthoritySubmitResponseBody = serde_json::from_value(
+            alice
+                .client
+                .revoke_realm_grant(
+                    realm.as_str(),
+                    arkret_wire::GrantId::from_event_id(&moderation_grant.event_ref).as_str(),
+                )
+                .await?,
         )?;
-        Ok(arkret_canonical::canonical_json_bytes(&frame)?)
-    };
-    deliver(
-        bob,
-        alice,
-        bob_group,
-        alice_group,
-        realm,
-        strand,
-        state,
-        head,
-        ScopeRef::Realm {
-            realm_id: realm.clone(),
-        },
-        None,
-        SignalClass::Session,
-        8,
-        None,
-        Some((product_frame(8)?, false)),
-    )
-    .await?;
-    let initial_revoke: arkret_wire::AuthoritySubmitResponseBody = serde_json::from_value(
-        alice
+        let arkret_wire::AuthoritySubmitResponseBody::Accepted {
+            commit: revoked, ..
+        } = revoke
+        else {
+            anyhow::bail!("moderation revoke must be accepted")
+        };
+        super::mls_lifecycle_live::accepted_full_view(&bob.client, &revoked.event_ref).await?;
+        wait_for_replica_cut(y_url, &revoked).await?;
+        let revoked_signal = envelope(
+            bob,
+            bob_group,
+            realm,
+            strand,
+            state,
+            &moderation_grant.commit_id,
+            SignalClass::Moderation,
+            6,
+        )?;
+        deny(bob, &revoked_signal, realm, &[x_url, y_url]).await?;
+        deny_peer(&revoked_signal, y, x, &[x_url, y_url]).await?;
+        exercise_circle(alice, bob, x, y, realm, &[x_url, y_url]).await?;
+        // Circle bootstrap can advance the replica's signed baseline beyond the
+        // original Realm cut. New producers select a currently held exact basis.
+        let fresh_head = super::websocket_live::realm_head(&alice.client, realm.as_str()).await?;
+        let fresh_tail = alice
             .client
-            .revoke_realm_grant(
-                realm.as_str(),
-                arkret_wire::GrantId::from_event_id(&initial_message_grant.event_ref).as_str(),
+            .sdk()
+            .scan_commit_stream_tail(
+                realm.clone(),
+                fresh_head.stream_ref.clone(),
+                fresh_head.stream_position.checked_sub(1),
+                1,
             )
-            .await?,
-    )?;
-    let arkret_wire::AuthoritySubmitResponseBody::Accepted {
-        commit: initial_revoked,
-        ..
-    } = initial_revoke
-    else {
-        anyhow::bail!("initial MessageCreate grant revoke must be accepted");
-    };
-    super::mls_lifecycle_live::accepted_full_view(&bob.client, &initial_revoked.event_ref).await?;
-    wait_for_replica_cut(y_url, &initial_revoked).await?;
-    let send_grant = super::human_device_producer_live::grant_realm_actions(
-        &alice.client,
-        x,
-        realm.as_str(),
-        &bob.account,
-        &[arkret_wire::CapabilityActionId::MESSAGE_STREAM_SEND],
-    )
-    .await?;
-    super::mls_lifecycle_live::accepted_full_view(&bob.client, &send_grant.event_ref).await?;
-    wait_for_replica_cut(y_url, &send_grant).await?;
-    deliver(
-        bob,
-        alice,
-        bob_group,
-        alice_group,
-        realm,
-        strand,
-        state,
-        &send_grant.commit_id,
-        ScopeRef::Realm {
-            realm_id: realm.clone(),
-        },
-        None,
-        SignalClass::Session,
-        9,
-        None,
-        Some((product_frame(9)?, false)),
-    )
-    .await?;
-    let dual_grant = super::human_device_producer_live::grant_realm_actions(
-        &alice.client,
-        x,
-        realm.as_str(),
-        &bob.account,
-        &[
-            arkret_wire::CapabilityActionId::MESSAGE_STREAM_SEND,
-            arkret_wire::CapabilityActionId::MESSAGE_CREATE,
-        ],
-    )
-    .await?;
-    super::mls_lifecycle_live::accepted_full_view(&bob.client, &dual_grant.event_ref).await?;
-    wait_for_replica_cut(y_url, &dual_grant).await?;
-    deliver(
-        bob,
-        alice,
-        bob_group,
-        alice_group,
-        realm,
-        strand,
-        state,
-        &dual_grant.commit_id,
-        ScopeRef::Realm {
-            realm_id: realm.clone(),
-        },
-        None,
-        SignalClass::Session,
-        10,
-        Some(x),
-        Some((product_frame(10)?, true)),
-    )
-    .await?;
-    let revoke_product: arkret_wire::AuthoritySubmitResponseBody = serde_json::from_value(
-        alice
-            .client
-            .revoke_realm_grant(
-                realm.as_str(),
-                arkret_wire::GrantId::from_event_id(&dual_grant.event_ref).as_str(),
-            )
-            .await?,
-    )?;
-    let arkret_wire::AuthoritySubmitResponseBody::Accepted {
-        commit: product_revoked,
-        ..
-    } = revoke_product
-    else {
-        anyhow::bail!("MessageStream revoke must be accepted");
-    };
-    super::mls_lifecycle_live::accepted_full_view(&bob.client, &product_revoked.event_ref).await?;
-    wait_for_replica_cut(y_url, &product_revoked).await?;
-    deliver(
-        bob,
-        alice,
-        bob_group,
-        alice_group,
-        realm,
-        strand,
-        state,
-        &dual_grant.commit_id,
-        ScopeRef::Realm {
-            realm_id: realm.clone(),
-        },
-        None,
-        SignalClass::Session,
-        11,
-        None,
-        Some((product_frame(11)?, false)),
-    )
-    .await?;
-    let typing_frame = |sequence: u64| -> Result<Vec<u8>> {
-        Ok(arkret_canonical::canonical_json_bytes(&json!({
-            "kind":"ak.typing", "payload_sequence":(sequence).to_string(), "strand_id":strand, "typing":true
-        }))?)
-    };
-    deliver(
-        bob,
-        alice,
-        bob_group,
-        alice_group,
-        realm,
-        strand,
-        state,
-        &product_revoked.commit_id,
-        ScopeRef::Realm {
-            realm_id: realm.clone(),
-        },
-        None,
-        SignalClass::Session,
-        12,
-        None,
-        Some((typing_frame(12)?, false)),
-    )
-    .await?;
-    let typing_grant = super::human_device_producer_live::grant_realm_actions(
-        &alice.client,
-        x,
-        realm.as_str(),
-        &bob.account,
-        &[arkret_wire::CapabilityActionId::TYPING_BROADCAST],
-    )
-    .await?;
-    super::mls_lifecycle_live::accepted_full_view(&bob.client, &typing_grant.event_ref).await?;
-    wait_for_replica_cut(y_url, &typing_grant).await?;
-    deliver(
-        bob,
-        alice,
-        bob_group,
-        alice_group,
-        realm,
-        strand,
-        state,
-        &typing_grant.commit_id,
-        ScopeRef::Realm {
-            realm_id: realm.clone(),
-        },
-        None,
-        SignalClass::Session,
-        13,
-        Some(x),
-        Some((typing_frame(13)?, true)),
-    )
-    .await?;
-    let policy_id = arkret_wire::PolicyId::new_v7_at(Utc::now().timestamp_millis() as u64);
-    let mut policy: arkret_models_collaboration::governance::operation_wire::Policy =
-        serde_json::from_value(json!({
-            "id":policy_id, "schema":"ak.schema.policy.v1", "realm_id":realm,
-            "policy_kind":"access", "rules":[{"rule_id":"typing","kind":"action","effect":"deny","actions":[arkret_wire::CapabilityActionId::TYPING_BROADCAST]}],
-            "default_effect":"allow", "created_by":alice.actor,
-            "created_at":arkret_canonical::format_timestamp_canonical(Utc::now())
-        }))?;
-    policy.validate()?;
-    let set_policy = |policy: &arkret_models_collaboration::governance::operation_wire::Policy| -> Result<
-        arkret_models_collaboration::governance::operation_wire::PolicySetStatePayload,
-    > {
-        Ok(serde_json::from_value(
-            json!({"policy_id":policy_id,"value":policy}),
-        )?)
-    };
-    let outcome: arkret_wire::AuthoritySubmitResponseBody = serde_json::from_value(
-        alice
-            .client
-            .submit_event(
-                realm.as_str(),
-                arkret_wire::EventKind::PolicySet.as_str(),
-                serde_json::to_value(set_policy(&policy)?)?,
-            )
-            .await?,
-    )?;
-    let arkret_wire::AuthoritySubmitResponseBody::Accepted {
-        commit: policy_denied,
-        ..
-    } = outcome
-    else {
-        anyhow::bail!("Typing Policy deny must be accepted");
-    };
-    super::mls_lifecycle_live::accepted_full_view(&bob.client, &policy_denied.event_ref).await?;
-    wait_for_replica_cut(y_url, &policy_denied).await?;
-    // The original cut had the grant and no deny; the current Policy must win.
-    deliver(
-        bob,
-        alice,
-        bob_group,
-        alice_group,
-        realm,
-        strand,
-        state,
-        &typing_grant.commit_id,
-        ScopeRef::Realm {
-            realm_id: realm.clone(),
-        },
-        None,
-        SignalClass::Session,
-        14,
-        None,
-        Some((typing_frame(14)?, false)),
-    )
-    .await?;
-    policy.rules[0].effect = arkret_wire::PolicyEffect::Allow;
-    let outcome: arkret_wire::AuthoritySubmitResponseBody = serde_json::from_value(
-        alice
-            .client
-            .submit_event(
-                realm.as_str(),
-                arkret_wire::EventKind::PolicySet.as_str(),
-                serde_json::to_value(set_policy(&policy)?)?,
-            )
-            .await?,
-    )?;
-    let arkret_wire::AuthoritySubmitResponseBody::Accepted {
-        commit: policy_allowed,
-        ..
-    } = outcome
-    else {
-        anyhow::bail!("Typing Policy allow must be accepted");
-    };
-    super::mls_lifecycle_live::accepted_full_view(&bob.client, &policy_allowed.event_ref).await?;
-    wait_for_replica_cut(y_url, &policy_allowed).await?;
-    deliver(
-        bob,
-        alice,
-        bob_group,
-        alice_group,
-        realm,
-        strand,
-        state,
-        &policy_allowed.commit_id,
-        ScopeRef::Realm {
-            realm_id: realm.clone(),
-        },
-        None,
-        SignalClass::Session,
-        15,
-        Some(x),
-        Some((typing_frame(15)?, true)),
-    )
-    .await?;
-    let typing_revoke: arkret_wire::AuthoritySubmitResponseBody = serde_json::from_value(
-        alice
-            .client
-            .revoke_realm_grant(
-                realm.as_str(),
-                arkret_wire::GrantId::from_event_id(&typing_grant.event_ref).as_str(),
-            )
-            .await?,
-    )?;
-    let arkret_wire::AuthoritySubmitResponseBody::Accepted {
-        commit: typing_revoked,
-        ..
-    } = typing_revoke
-    else {
-        anyhow::bail!("Typing revoke must be accepted");
-    };
-    super::mls_lifecycle_live::accepted_full_view(&bob.client, &typing_revoked.event_ref).await?;
-    wait_for_replica_cut(y_url, &typing_revoked).await?;
-    // Keep the original grant-bearing basis; current revocation must win.
-    deliver(
-        bob,
-        alice,
-        bob_group,
-        alice_group,
-        realm,
-        strand,
-        state,
-        &policy_allowed.commit_id,
-        ScopeRef::Realm {
-            realm_id: realm.clone(),
-        },
-        None,
-        SignalClass::Session,
-        16,
-        None,
-        Some((typing_frame(16)?, false)),
-    )
-    .await?;
-    let old = envelope(
-        bob,
-        bob_group,
-        realm,
-        strand,
-        state,
-        old_head,
-        SignalClass::Session,
-        2,
-    )?;
-    deny(bob, &old, realm, &[x_url, y_url])
-        .await
-        .context("old cut did not contain sender membership")?;
-    deny_peer(&old, y, x, &[x_url, y_url]).await?;
-    let moderation = envelope(
-        bob,
-        bob_group,
-        realm,
-        strand,
-        state,
-        head,
-        SignalClass::Moderation,
-        3,
-    )?;
-    deny(bob, &moderation, realm, &[x_url, y_url])
-        .await
-        .context("moderation has no accepted capability")?;
-    let moderation_grant = super::human_device_producer_live::grant_realm_actions(
-        &alice.client,
-        x,
-        realm.as_str(),
-        &bob.account,
-        &["ak.call.moderate"],
-    )
-    .await?;
-    super::mls_lifecycle_live::accepted_full_view(&bob.client, &moderation_grant.event_ref).await?;
-    wait_for_replica_cut(y_url, &moderation_grant).await?;
-    let old_moderation = envelope(
-        bob,
-        bob_group,
-        realm,
-        strand,
-        state,
-        head,
-        SignalClass::Moderation,
-        4,
-    )?;
-    deny(bob, &old_moderation, realm, &[x_url, y_url]).await?;
-    deliver(
-        bob,
-        alice,
-        bob_group,
-        alice_group,
-        realm,
-        strand,
-        state,
-        &moderation_grant.commit_id,
-        ScopeRef::Realm {
-            realm_id: realm.clone(),
-        },
-        None,
-        SignalClass::Moderation,
-        17,
-        Some(x),
-        None,
-    )
-    .await?;
-    let revoke: arkret_wire::AuthoritySubmitResponseBody = serde_json::from_value(
-        alice
-            .client
-            .revoke_realm_grant(
-                realm.as_str(),
-                arkret_wire::GrantId::from_event_id(&moderation_grant.event_ref).as_str(),
-            )
-            .await?,
-    )?;
-    let arkret_wire::AuthoritySubmitResponseBody::Accepted {
-        commit: revoked, ..
-    } = revoke
-    else {
-        anyhow::bail!("moderation revoke must be accepted")
-    };
-    super::mls_lifecycle_live::accepted_full_view(&bob.client, &revoked.event_ref).await?;
-    wait_for_replica_cut(y_url, &revoked).await?;
-    let revoked_signal = envelope(
-        bob,
-        bob_group,
-        realm,
-        strand,
-        state,
-        &moderation_grant.commit_id,
-        SignalClass::Moderation,
-        6,
-    )?;
-    deny(bob, &revoked_signal, realm, &[x_url, y_url]).await?;
-    deny_peer(&revoked_signal, y, x, &[x_url, y_url]).await?;
-    exercise_circle(alice, bob, x, y, realm, &[x_url, y_url]).await?;
-    // Circle bootstrap can advance the replica's signed baseline beyond the
-    // original Realm cut. New producers select a currently held exact basis.
-    let fresh_head = super::websocket_live::realm_head(&alice.client, realm.as_str()).await?;
-    let fresh_tail = alice
-        .client
-        .sdk()
-        .scan_commit_stream_tail(
-            realm.clone(),
-            fresh_head.stream_ref.clone(),
-            fresh_head.stream_position.checked_sub(1),
-            1,
+            .await?;
+        let fresh_basis = fresh_tail
+            .committed_events
+            .last()
+            .context("fresh accepted Realm basis")?
+            .commit()
+            .clone();
+        ensure!(fresh_basis.commit_id == fresh_head.commit_id);
+        super::mls_lifecycle_live::accepted_full_view(&bob.client, &fresh_basis.event_ref).await?;
+        wait_for_replica_cut(y_url, &fresh_basis).await?;
+
+        let fresh = envelope(
+            bob,
+            bob_group,
+            realm,
+            strand,
+            state,
+            &fresh_basis.commit_id,
+            SignalClass::Session,
+            18,
+        )?;
+        emission::exercise(
+            alice,
+            bob,
+            alice_group,
+            bob_group,
+            realm,
+            strand,
+            state,
+            &fresh_basis.commit_id,
+            x,
+            y,
+            &[x_url, y_url],
+            pause_file,
+            boundary,
         )
         .await?;
-    let fresh_basis = fresh_tail
-        .committed_events
-        .last()
-        .context("fresh accepted Realm basis")?
-        .commit()
-        .clone();
-    ensure!(fresh_basis.commit_id == fresh_head.commit_id);
-    super::mls_lifecycle_live::accepted_full_view(&bob.client, &fresh_basis.event_ref).await?;
-    wait_for_replica_cut(y_url, &fresh_basis).await?;
 
-    let fresh = envelope(
-        bob,
-        bob_group,
-        realm,
-        strand,
-        state,
-        &fresh_basis.commit_id,
-        SignalClass::Session,
-        18,
-    )?;
-    emission::exercise(
-        alice,
-        bob,
-        alice_group,
-        bob_group,
-        realm,
-        strand,
-        state,
-        &fresh_basis.commit_id,
-        x,
-        y,
-        &[x_url, y_url],
-        pause_file,
-        boundary,
-    )
-    .await?;
-
-    deny(bob, &fresh, realm, &[x_url, y_url])
-        .await
-        .context("current membership or terminal fence denies an older otherwise valid cut")?;
-    eprintln!(
-        "[signal-live] actual TLS Stations=2 directions=2 realm_session_deliveries=2 circle_session_deliveries=2 granted_moderation_deliveries=1 recipient_proof_mls_aead_plaintext=5 old_cut_denied=1 moderation_denied=1 current_membership_or_terminal_denied=1 denied_relay_event_commit_writes=0"
-    );
-    Ok(())
+        deny(bob, &fresh, realm, &[x_url, y_url])
+            .await
+            .context("current membership or terminal fence denies an older otherwise valid cut")?;
+        eprintln!(
+            "[signal-live] actual TLS Stations=2 directions=2 realm_session_deliveries=2 circle_session_deliveries=2 granted_moderation_deliveries=1 recipient_proof_mls_aead_plaintext=5 old_cut_denied=1 moderation_denied=1 current_membership_or_terminal_denied=1 denied_relay_event_commit_writes=0"
+        );
+        Ok(())
+    })
+    .await
 }
