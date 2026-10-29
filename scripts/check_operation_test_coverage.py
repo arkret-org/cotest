@@ -245,10 +245,11 @@ def discover_layer_sources(workspace_root: Path = WORKSPACE_ROOT) -> tuple[Layer
         for path in source_paths(root, ".rs")
         if source_file(path)
     }
-    cotest_crates = cotest / "crates"
-    if cotest_crates.is_dir():
+    for inline_root in (cotest / "src", cotest / "crates"):
+        if not inline_root.is_dir():
+            continue
         cotest_rust.update(
-            path for path in source_paths(cotest_crates, ".rs")
+            path for path in source_paths(inline_root, ".rs")
             if source_file(path)
             and rust_test_like(path, read_source_text(path))
         )
