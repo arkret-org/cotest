@@ -815,6 +815,10 @@ pub async fn old_and_new_contact_signatures_survive_cold_peer_restart() -> Resul
 }
 
 pub async fn concurrent_requests_complete_glare_round() -> Result<()> {
+    use DirectConversationResolveResponseBody::{
+        AwaitingFounder, CreationRequired, TemporarilyUnavailable,
+    };
+
     let Some(alice_database) = database("contact-glare-live")? else {
         return Ok(());
     };
@@ -903,22 +907,45 @@ pub async fn concurrent_requests_complete_glare_round() -> Result<()> {
         alice_round.contact_round_id == bob_round.contact_round_id,
         "glare Stations installed different Contact rounds"
     );
-    let alice_resolve = alice
-        .sdk()
-        .direct_conversation_resolve(&DirectConversationResolveRequestBody {
-            peer: ContactPeer::Human {
-                account_id: bob_account.clone(),
-            },
-        })
-        .await?;
-    let bob_resolve = bob
-        .sdk()
-        .direct_conversation_resolve(&DirectConversationResolveRequestBody {
-            peer: ContactPeer::Human {
-                account_id: alice_account.clone(),
-            },
-        })
-        .await?;
+    // Accepted Contact can precede both verified current proofs. Wait only for
+    // unresolved authoring material; deterministic outcomes keep the assertions below.
+    let deadline = Instant::now() + Duration::from_secs(30);
+    let (alice_resolve, bob_resolve) = loop {
+        let alice_resolve = alice
+            .sdk()
+            .direct_conversation_resolve(&DirectConversationResolveRequestBody {
+                peer: ContactPeer::Human {
+                    account_id: bob_account.clone(),
+                },
+            })
+            .await?;
+        let bob_resolve = bob
+            .sdk()
+            .direct_conversation_resolve(&DirectConversationResolveRequestBody {
+                peer: ContactPeer::Human {
+                    account_id: alice_account.clone(),
+                },
+            })
+            .await?;
+        let pending_material = matches!(
+            (&alice_resolve, &bob_resolve),
+            (
+                TemporarilyUnavailable { .. },
+                AwaitingFounder { .. } | CreationRequired { .. } | TemporarilyUnavailable { .. }
+            ) | (
+                AwaitingFounder { .. } | CreationRequired { .. },
+                TemporarilyUnavailable { .. }
+            )
+        );
+        if !pending_material {
+            break (alice_resolve, bob_resolve);
+        }
+        ensure!(
+            Instant::now() < deadline,
+            "glare founding material remained unavailable: Alice {alice_resolve:?}; Bob {bob_resolve:?}"
+        );
+        tokio::time::sleep(Duration::from_millis(250)).await;
+    };
     let founder_material = match (&alice_resolve, &bob_resolve) {
         (
             DirectConversationResolveResponseBody::CreationRequired {
