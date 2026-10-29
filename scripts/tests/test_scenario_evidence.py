@@ -35,6 +35,8 @@ class ScenarioEvidenceTests(unittest.TestCase):
             "import-only": 'import { openRegisteredUserPage } from "../../helpers/users";',
             "injected-session": "await openDpopUserPage(browser, request, 'fixture');",
             "garth-write": "const client = new GarthTestClient(); await client.createRealm();",
+            "email-verification": "await registrationEmailCode(request, 'fixture@example.test');",
+            "email-import-only": 'import { registrationEmailCode } from "../../helpers/coauth-register";',
         }.items():
             (root / f"e2e/tests/{name}.spec.ts").write_text(source, encoding="utf-8")
         shell = shutil.which("pwsh")
@@ -76,11 +78,26 @@ class ScenarioEvidenceTests(unittest.TestCase):
         self.assertIn("create_realm_passive_prompt_dismissal", entry["declared_test_bypasses"])
         self.assertIn("mls_backup_unlock_and_missing_recovery_prompt_behavior", entry["claims_excluded"])
 
+    def test_registered_browser_helpers_declare_the_email_mock_boundary(self) -> None:
+        for key in (
+            "discovery/contact-request-ui",
+            "identity/account-profile-ui",
+            "joint/realm-invite-link-sync",
+        ):
+            with self.subTest(scenario=key):
+                self.assertEqual(self.scenarios[key]["mocks"], ["email"])
+
+    def test_email_verification_calls_propagate_the_dependency_without_import_false_positives(self) -> None:
+        self.assertEqual(self.scenarios["email-verification"]["mocks"], ["email"])
+        self.assertEqual(self.scenarios["email-import-only"]["mocks"], [])
+        self.assertEqual(self.scenarios["garth-write"]["mocks"], ["email"])
+
     def test_registration_validation_is_ui_without_claiming_completed_identity(self) -> None:
         entry = self.scenarios["identity/registration-contact-validation"]
         self.assertEqual(entry["evidence_class"], "live-product")
         self.assertEqual(entry["real_services"], ["coauth", "coland", "inkson"])
         self.assertEqual(entry["identity_establishment"], ["fixture_or_not_applicable"])
+        self.assertEqual(entry["mocks"], [])
 
     def test_coauth_account_ui_does_not_claim_inkson_or_principal_authoring(self) -> None:
         entry = self.scenarios["identity/coauth-handle-length-ui"]
@@ -88,6 +105,7 @@ class ScenarioEvidenceTests(unittest.TestCase):
         self.assertEqual(entry["real_services"], ["coauth"])
         self.assertEqual(entry["identity_establishment"], ["coauth_registration_ui"])
         self.assertEqual(entry["protocol_object_producers"], ["coauth_product_client"])
+        self.assertEqual(entry["mocks"], ["email"])
         self.assertEqual(entry["claims_excluded"], [
             "coland_business_operations", "oauth_authorization",
             "principal_registration_and_recovery_custody",

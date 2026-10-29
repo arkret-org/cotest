@@ -96,7 +96,11 @@ foreach ($file in Get-ChildItem -LiteralPath $testsRoot -Recurse -File -Filter "
         $pattern = 'mock[_-]?' + [regex]::Escape($mock)
         if ($source -match $pattern) { $mocks.Add($mock) }
     }
-    if ($usesCanonicalProvisioning) { $mocks.Add("email") }
+    # Both registration helpers read the managed stack's mock email inbox.
+    # Match calls rather than imports when a spec invokes verification directly.
+    if ($usesCanonicalProvisioning -or $usesRegisteredUi -or ($source -match '\bregistrationEmailCode\s*\(')) {
+        $mocks.Add("email")
+    }
 
     $producers = New-Object System.Collections.Generic.List[string]
     if ($usesInksonUi) { $producers.Add("inkson_product_client") }
