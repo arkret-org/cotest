@@ -288,12 +288,38 @@ pub async fn run_federation_revoked_service_key_replay_live() -> Result<()> {
         "fresh Commit under successor service key",
     )
     .await?;
-    let successor_outcomes = replicate(
-        fixture.group.server(1),
-        fixture.group.server(0),
-        &replication_body(&fixture.alice, &fresh_event, &fresh_commit).await?,
-    )
-    .await?;
+    let successor_body = replication_body(&fixture.alice, &fresh_event, &fresh_commit).await?;
+    let successor_request = fixture
+        .group
+        .server(1)
+        .signed_peer_post_request_with_idempotency_key(
+            fixture.group.server(0),
+            PEER_EVENTS,
+            &successor_body,
+            fixture.group.server(1).service_id(),
+            Some("federation-key-successor-replay"),
+        )?;
+    ensure!(
+        successor_request.body().and_then(reqwest::Body::as_bytes)
+            == Some(successor_body.as_slice()),
+        "the successor request changed its exact replication body"
+    );
+    let successor_response = fixture
+        .group
+        .server(1)
+        .http()
+        .execute(
+            successor_request
+                .try_clone()
+                .context("clone successor request")?,
+        )
+        .await?;
+    ensure!(successor_response.status() == StatusCode::OK);
+    let successor: PeerAuthoritySubmitResponseBody = successor_response.json().await?;
+    let PeerAuthoritySubmitResponseBody::CommittedReplication(successor_value) = &successor else {
+        bail!("successor service key returned another peer branch");
+    };
+    let successor_outcomes = &successor_value.replication_outcomes;
     ensure!(
         matches!(
             successor_outcomes.as_slice(),
@@ -306,18 +332,29 @@ pub async fn run_federation_revoked_service_key_replay_live() -> Result<()> {
         &fresh_commit,
         &wait_held(&fixture.bob, &fresh_event.event_id, HELD_WINDOW).await?,
     )?;
-    let successor_replay = replicate(
-        fixture.group.server(1),
-        fixture.group.server(0),
-        &replication_body(&fixture.alice, &fresh_event, &fresh_commit).await?,
-    )
-    .await?;
+    let held_before_successor_replay = held_commit_ids(&fixture.bob, &fixture.realm).await?;
+    let successor_replay_response = fixture
+        .group
+        .server(1)
+        .http()
+        .execute(
+            successor_request
+                .try_clone()
+                .context("clone exact successor replay")?,
+        )
+        .await?;
+    ensure!(successor_replay_response.status() == StatusCode::OK);
+    let successor_replay: PeerAuthoritySubmitResponseBody =
+        successor_replay_response.json().await?;
+    // federation.md section 3 preserves the first per-item result: Stored
+    // remains Stored on an exact same-basis receipt replay, not Duplicate.
     ensure!(
-        matches!(
-            successor_replay.as_slice(),
-            [CommittedEventReplicationOutcome::Duplicate {}]
-        ),
+        successor_replay == successor,
         "the successor service key did not authenticate a held Commit replay: {successor_replay:?}"
+    );
+    ensure!(
+        held_commit_ids(&fixture.bob, &fixture.realm).await? == held_before_successor_replay,
+        "successor-key receipt replay changed the recipient's committed Realm stream"
     );
     let before = held_commit_ids(&fixture.bob, &fixture.realm).await?;
     ensure!(
