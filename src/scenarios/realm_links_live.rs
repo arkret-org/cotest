@@ -3,17 +3,17 @@ use anyhow::{Context, Result, ensure};
 use arkret_models_collaboration::governance::realm_governance::{
     RealmLinkKind, RealmLinkList, RealmLinkStatus,
 };
-use arkret_wire::{EventAdmissionSubmission, EventKind};
+use arkret_wire::{AccountId, EventAdmissionSubmission, EventKind};
 use reqwest::StatusCode;
 use serde_json::{Value, json};
 
-use crate::harness::{TestActorClient, TestServerGroup, expect_json};
-use crate::scenarios::_helpers::bridge::MockCoauthIntrospectionServer;
-use crate::scenarios::human_device_producer_live::{
-    create_realm_with_join_rule, database, grant_realm_actions, membership_payload,
-    standard_client, station_env,
+use crate::harness::{TestActorClient, expect_json};
+use crate::scenarios::agent_runtime_live::coauth_session_evidence::{
+    actual_agent_deployment, additional_controller,
 };
-use crate::scenarios::identity_test_support::HARNESS_INTERNAL_AUTHORITY_SECRET;
+use crate::scenarios::human_device_producer_live::{
+    create_realm_with_join_rule, grant_realm_actions, membership_payload,
+};
 use crate::scenarios::peer_semantic_union_live::{
     realm_business_footprint, submit_and_expect_commit,
 };
@@ -51,22 +51,30 @@ async fn schema_refusal(client: &TestActorClient, body: &Value) -> Result<()> {
 }
 
 pub async fn run() -> Result<()> {
-    let db = database("realm-links-live")?.context("Realm links runner requires PostgreSQL")?;
-    let coauth = MockCoauthIntrospectionServer::spawn_with_internal_secret(
-        HARNESS_INTERNAL_AUTHORITY_SECRET,
-    )
-    .await?;
-    let mut group = TestServerGroup::try_multi_external_with_node_envs(
-        "realm-links-live",
-        &[station_env(&db.connect_url, &coauth)],
-    )
-    .await?
-    .context("Realm links runner requires production Coland")?;
-    let station = group.server(0);
-    let (alice, alice_account) =
-        standard_client(station, &coauth, "links-source-owner", ALICE_DEVICE).await?;
-    let (bob, bob_account) =
-        standard_client(station, &coauth, "links-target-owner", BOB_DEVICE).await?;
+    // Listing links verifies live Account Authority status in addition to the
+    // Station's accepted Realm facts; a session-introspection-only mock cannot
+    // supply that current source.
+    let mut deployment = actual_agent_deployment("realm-links-live").await?;
+    let station = &deployment.station;
+    let database_url = station
+        .owned_database_url()
+        .context("Realm links runner requires PostgreSQL")?
+        .to_owned();
+    let alice = additional_controller(&deployment, "links-source-owner", ALICE_DEVICE).await?;
+    let bob = additional_controller(&deployment, "links-target-owner", BOB_DEVICE).await?;
+    let account = |client: &TestActorClient| -> Result<AccountId> {
+        Ok(AccountId::new(
+            client
+                .principal
+                .as_ref()
+                .context("normally onboarded Realm link principal")?
+                .core_id
+                .clone(),
+            station.service_id().clone(),
+        ))
+    };
+    let alice_account = account(&alice)?;
+    let bob_account = account(&bob)?;
     let source =
         create_realm_with_join_rule(&alice, "Source independent Realm", "public", &[station])
             .await?;
@@ -99,13 +107,14 @@ pub async fn run() -> Result<()> {
                     && link.status == RealmLinkStatus::Active),
         "accepted relation was not listed"
     );
-    let mut target_before = realm_business_footprint(&db.connect_url, &target).await?;
+    let mut target_before = realm_business_footprint(&database_url, &target).await?;
     let carol_device = "ak:device:01904100-0000-7000-8000-000000003413";
-    let (carol, carol_account) =
-        standard_client(station, &coauth, "links-unrelated-applicant", carol_device).await?;
+    let carol =
+        additional_controller(&deployment, "links-unrelated-applicant", carol_device).await?;
+    let carol_account = account(&carol)?;
     // B/D: a real source policy write cannot alter target policy, grants,
     // notification projections, quotas, Events or Commits.
-    let source_before = realm_business_footprint(&db.connect_url, &source).await?;
+    let source_before = realm_business_footprint(&database_url, &source).await?;
     let current = policy(&source_before)?;
     let mut next = current.restate(current.policy_revision + 1);
     next.federation_policy = Some(serde_json::from_value(json!("closed"))?);
@@ -121,10 +130,10 @@ pub async fn run() -> Result<()> {
         .await?;
     submit_and_expect_commit(&alice, &alice_account, ALICE_DEVICE, &change).await?;
     ensure!(
-        realm_business_footprint(&db.connect_url, &target).await? == target_before,
+        realm_business_footprint(&database_url, &target).await? == target_before,
         "source policy cascaded across a link"
     );
-    let source_cut = realm_business_footprint(&db.connect_url, &source).await?;
+    let source_cut = realm_business_footprint(&database_url, &source).await?;
     let denied_join = carol.author_event(&source, EventKind::MemberState.as_str(), membership_payload(
         &source, carol_account.clone(), arkret_models_collaboration::governance::membership_invite::MembershipPayloadState::Join, "same applicant source admission")?).await?;
     let response = carol
@@ -144,13 +153,13 @@ pub async fn run() -> Result<()> {
         "source local predicate was not enforced: {status} {problem}"
     );
     ensure!(
-        realm_business_footprint(&db.connect_url, &source).await? == source_cut,
+        realm_business_footprint(&database_url, &source).await? == source_cut,
         "source denied admission left durable effects"
     );
     let allowed_join = carol.author_event(&target, EventKind::MemberState.as_str(), membership_payload(
         &target, carol_account.clone(), arkret_models_collaboration::governance::membership_invite::MembershipPayloadState::Join, "same applicant target admission")?).await?;
     submit_and_expect_commit(&carol, &carol_account, carol_device, &allowed_join).await?;
-    target_before = realm_business_footprint(&db.connect_url, &target).await?;
+    target_before = realm_business_footprint(&database_url, &target).await?;
     // C: source ownership does not authorize an otherwise well-formed target update.
     let target_policy = policy(&target_before)?;
     let unauthorized = alice
@@ -176,7 +185,7 @@ pub async fn run() -> Result<()> {
         "source controller authorized at target: {status} {problem}"
     );
     ensure!(
-        realm_business_footprint(&db.connect_url, &target).await? == target_before,
+        realm_business_footprint(&database_url, &target).await? == target_before,
         "denied source controller wrote target business state"
     );
     // An explicit target-local join and grant authorizes the target update;
@@ -193,7 +202,7 @@ pub async fn run() -> Result<()> {
         )
         .await?;
     submit_and_expect_commit(&alice, &alice_account, ALICE_DEVICE, &local_update).await?;
-    target_before = realm_business_footprint(&db.connect_url, &target).await?;
+    target_before = realm_business_footprint(&database_url, &target).await?;
     // Old event kinds and old link payloads reach the HTTP schema boundary;
     // no fake Event kind is accepted by the production authoring API.
     let valid = serde_json::to_value(EventAdmissionSubmission::new(link.clone()))?;
@@ -202,7 +211,7 @@ pub async fn run() -> Result<()> {
         body["event"]["kind"] = json!(old_kind);
         schema_refusal(&bob, &body).await?;
         ensure!(
-            realm_business_footprint(&db.connect_url, &target).await? == target_before,
+            realm_business_footprint(&database_url, &target).await? == target_before,
             "retired kind mutated target"
         );
     }
@@ -216,7 +225,7 @@ pub async fn run() -> Result<()> {
         body["event"]["payload"][field] = json!({});
         schema_refusal(&bob, &body).await?;
         ensure!(
-            realm_business_footprint(&db.connect_url, &target).await? == target_before,
+            realm_business_footprint(&database_url, &target).await? == target_before,
             "retired {field} mutated target"
         );
     }
@@ -230,7 +239,7 @@ pub async fn run() -> Result<()> {
     );
     // Local link lifecycle never derives target policy/grant/notification state.
     for state in ["rejected", "tombstoned"] {
-        let before = realm_business_footprint(&db.connect_url, &target).await?;
+        let before = realm_business_footprint(&database_url, &target).await?;
         let event = bob
             .author_event(
                 &target,
@@ -239,7 +248,7 @@ pub async fn run() -> Result<()> {
             )
             .await?;
         submit_and_expect_commit(&bob, &bob_account, BOB_DEVICE, &event).await?;
-        let after = realm_business_footprint(&db.connect_url, &target).await?;
+        let after = realm_business_footprint(&database_url, &target).await?;
         for (table, rows) in before.as_object().context("footprint object")? {
             if !matches!(
                 table.as_str(),
@@ -254,10 +263,10 @@ pub async fn run() -> Result<()> {
     }
     // E: service restart consumes only accepted current-v1 local rows. Historical
     // legacy-row quarantine requires an actual historical schema (never invented here).
-    let before_restart = realm_business_footprint(&db.connect_url, &target).await?;
-    group.server_mut(0).restart_external_process().await?;
+    let before_restart = realm_business_footprint(&database_url, &target).await?;
+    deployment.station.restart_external_process().await?;
     ensure!(
-        realm_business_footprint(&db.connect_url, &target).await? == before_restart,
+        realm_business_footprint(&database_url, &target).await? == before_restart,
         "restart reinterpreted local target state"
     );
     let listed: RealmLinkList = serde_json::from_value(
