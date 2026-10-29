@@ -127,10 +127,13 @@ fn sdk_keeps_profile_event_closed_and_returns_the_covering_commit() {
     // The create author region is the closed actor_profile_definition, not the
     // materialized object: schema, realm, times and id are reducer outputs.
     let identity = read("arkret-rust-sdk/crates/models-identity/src/actor_profile.rs");
+    assert!(identity.contains("include!(\"generated/actor_profile_contracts.rs\")"));
+    let identity_models =
+        read("arkret-rust-sdk/crates/models-identity/src/generated/actor_profile_contracts.rs");
     let definition = source_between(
-        &identity,
-        "pub struct ActorProfileDefinition",
-        "impl ActorProfileDefinition",
+        &identity_models,
+        "pub struct ActorProfileDefinition {",
+        "\n}",
     );
     for reducer_member in ["pub schema", "pub realm_id", "pub created_at", "pub id:"] {
         assert!(!definition.contains(reducer_member), "{reducer_member}");
@@ -141,8 +144,22 @@ fn sdk_keeps_profile_event_closed_and_returns_the_covering_commit() {
 
     let payload =
         read("arkret-rust-sdk/crates/models-collaboration/src/events_payloads/actor_profile.rs");
-    assert!(payload.contains("pub object: ActorProfileDefinition"));
-    assert!(payload.contains("pub struct ActorProfileUpdatePayload"));
+    assert!(payload.contains("include!(\"generated/actor_profile_contracts.rs\")"));
+    let payload_models = read(
+        "arkret-rust-sdk/crates/models-collaboration/src/events_payloads/generated/actor_profile_contracts.rs",
+    );
+    let create = source_between(
+        &payload_models,
+        "pub struct ActorProfileCreatePayload {",
+        "\n}",
+    );
+    assert!(create.contains("pub object: ActorProfileDefinition"));
+    let update = source_between(
+        &payload_models,
+        "pub struct ActorProfileUpdatePayload {",
+        "\n}",
+    );
+    assert!(update.contains("pub patch: Patch"));
     assert!(payload.contains("validate_for_account_self_service"));
     assert!(payload.contains("profile_fields."));
 
@@ -161,7 +178,7 @@ fn sdk_keeps_profile_event_closed_and_returns_the_covering_commit() {
         "pub async fn account_update_profile(",
         "pub async fn account_device_pair(",
     );
-    assert!(method.contains("request: &AccountUpdateProfileRequestBody"));
+    assert!(method.contains("request: &VerifiedSubmission<AccountUpdateProfileRequestBody>"));
     assert!(method.contains("request.validate()?"));
     assert!(method.contains("self.post(\"/_arkret/self/account/profile\", request)"));
 

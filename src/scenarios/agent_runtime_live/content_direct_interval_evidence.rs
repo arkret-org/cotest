@@ -17,6 +17,7 @@ async fn contact(
     client: &TestActorClient,
     peer: &ActorId,
     state: ContactState,
+    required_scope: Option<ContactScope>,
     phase: &str,
 ) -> Result<ContactView> {
     let deadline = Instant::now() + Duration::from_secs(45);
@@ -29,18 +30,33 @@ async fn contact(
             .contacts;
         let summary = observed
             .iter()
-            .map(|row| json!({"peer":row.peer,"state":row.state}))
+            .map(|row| {
+                json!({
+                    "peer":row.peer,"state":row.state,
+                    "granted_to_peer_scopes":row.granted_to_peer_scopes,
+                    "granted_by_peer_scopes":row.granted_by_peer_scopes,
+                    "bidirectional_scopes":row.bidirectional_scopes,
+                    "request_event_ref":row.request_event_ref,
+                    "response_event_ref":row.response_event_ref,
+                    "next_prepare_input":row.next_prepare_input
+                })
+            })
             .collect::<Vec<_>>();
-        if let Some(row) = observed
-            .into_iter()
-            .find(|row| row.peer.contact_actor_id() == *peer && row.state == state)
-        {
+        if let Some(row) = observed.into_iter().find(|row| {
+            row.peer.contact_actor_id() == *peer
+                && row.state == state
+                && required_scope.is_none_or(|scope| {
+                    row.granted_to_peer_scopes.contains(&scope)
+                        && row.granted_by_peer_scopes.contains(&scope)
+                        && row.bidirectional_scopes.contains(&scope)
+                })
+        }) {
             println!("[agent-direct-interval-step] phase={phase} expected_state_reached=1");
             return Ok(row);
         }
         ensure!(
             Instant::now() < deadline,
-            "normal peer Contact did not converge: phase={phase} expected={state:?} observed={summary:?}"
+            "normal peer Contact did not converge: phase={phase} expected={state:?} required_scope={required_scope:?} observed={summary:?}"
         );
         tokio::time::sleep(Duration::from_millis(100)).await;
     }
@@ -284,6 +300,7 @@ pub async fn run_agent_content_direct_interval_production()
         &agent.runtime,
         &ActorId::account(foreign.account.clone()),
         ContactState::PendingIncoming,
+        None,
         "local_pending_incoming",
     )
     .await?;
@@ -293,6 +310,9 @@ pub async fn run_agent_content_direct_interval_production()
         &agent.runtime,
         &ActorId::account(foreign.account.clone()),
         ContactState::Accepted,
+        // Accepted can have an empty scope set (Contact §3). Wait for the
+        // actual two directional grants before using this local snapshot.
+        Some(ContactScope::DirectMessage),
         "local_accepted",
     )
     .await?;
@@ -300,6 +320,7 @@ pub async fn run_agent_content_direct_interval_production()
         &foreign.controller,
         &ActorId::account(agent.agent_account.clone()),
         ContactState::Accepted,
+        None,
         "foreign_accepted",
     )
     .await?;
