@@ -7,7 +7,7 @@
     "test_layers": {
       "coland_unit": {
         "source_file_count": 478,
-        "source_sha256": "791fe5e981a42dbeeb75c3922b8632ab47eeaf0c1c1e439266f5452443b09368",
+        "source_sha256": "ce3be85dba8a5b655661689e60acad7f817bc3a355dd1724987d4a9f4ddd663b",
         "evidence_count": 847,
         "covered_operation_count": 167
       },
@@ -9042,11 +9042,11 @@
         "storage_parity": [
           {
             "file": "coland/crates/storage-postgres/tests/contact_admission_unit.rs",
-            "line": 666,
+            "line": 927,
             "scope": "current_contact_cas_and_frozen_response_rollback_together_on_conflicting_result",
             "scope_kind": "rust_test",
             "occurrence_lines": [
-              687
+              948
             ],
             "protected_oracle": false,
             "scope_sha256": "c544bd1d1dbcffabc9c5f0a78d70ac0f1ec4d4220040523b823206d803ac93ee",
