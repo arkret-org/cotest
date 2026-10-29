@@ -139,19 +139,66 @@ jobs:
         # P5.1 — upstream checkouts now hard-fail (see above) so the missing-svc
         # warning branch is removed; the build step also no longer swallows
         # individual `cargo build` failures.
+        shell: pwsh
         run: |
-          set -euo pipefail
-          for svc in coland coauth floria; do
-            echo "::group::cargo build $svc"
-            features=()
-            if [ "$svc" = "coland" ]; then
-              features=(--features conformance-harness)
-            elif [ "$svc" = "coauth" ]; then
-              features=(--features cedar)
-            fi
-            (cd "$svc" && cargo build --release --locked "${features[@]}")
-            echo "::endgroup::"
-          done
+          $ErrorActionPreference = 'Stop'
+          . ./cotest/scripts/lib/build-freshness.ps1
+          $workspace = (Get-Location).Path
+          $sdk = Join-Path $workspace 'arkret-rust-sdk'
+          $evidence = Join-Path $workspace 'cotest/artifacts/upstream-service-builds'
+          New-Item -ItemType Directory -Force -Path $evidence | Out-Null
+          # The supplemental SDK workspace is inspected independently by the
+          # provenance helper, including members unused by a service binary.
+          & cargo metadata --manifest-path (Join-Path $sdk 'Cargo.toml') --locked --all-features --format-version 1 | Out-Null
+          if ($LASTEXITCODE -ne 0) { throw 'SDK build-input metadata warmup failed' }
+          foreach ($svc in @('coland', 'coauth', 'floria')) {
+            Write-Output "::group::cargo build $svc"
+            $root = Join-Path $workspace $svc
+            Push-Location $root
+            try {
+              # Warm the locked dependency graph before the provenance helper's
+              # offline metadata query, including optional product dependencies.
+              $metadataJson = & cargo metadata --locked --all-features --format-version 1
+              if ($LASTEXITCODE -ne 0) { throw "Cargo metadata failed for $svc" }
+              $metadata = ($metadataJson -join "`n") | ConvertFrom-Json
+              $packages = @($metadata.packages | Where-Object {
+                $metadata.workspace_members -ccontains $_.id -and
+                @($_.targets | Where-Object { $_.name -ceq $svc -and $_.kind -contains 'bin' }).Count -gt 0
+              })
+              if ($packages.Count -ne 1) { throw "Expected exactly one workspace binary package for $svc" }
+              $target = Resolve-BuildInputPath -Path $metadata.target_directory
+              $expected = Join-Path $target "release/$svc"
+              $roots = @($root, $sdk)
+              $before = @(Get-ArtifactBuildRepositoryStates -ArtifactPath $expected -RepositoryRoots $roots)
+              $features = @()
+              if ($svc -eq 'coland') { $features = @('--features', 'conformance-harness') }
+              elseif ($svc -eq 'coauth') { $features = @('--features', 'cedar') }
+              $messages = Join-Path $evidence "$svc.jsonl"
+              & cargo build --release --locked @features --message-format=json-render-diagnostics |
+                Set-Content -LiteralPath $messages -Encoding utf8
+              if ($LASTEXITCODE -ne 0) { throw "Cargo release build failed for $svc" }
+              $artifacts = @(Get-Content -LiteralPath $messages | ForEach-Object { $_ | ConvertFrom-Json } |
+                Where-Object {
+                  $_.reason -eq 'compiler-artifact' -and $_.package_id -ceq $packages[0].id -and
+                  $_.target.name -ceq $svc -and
+                  $_.target.kind -contains 'bin' -and $_.executable
+                })
+              if ($artifacts.Count -ne 1) { throw "Expected exactly one actual release executable for $svc" }
+              $artifact = Resolve-BuildInputPath -Path $artifacts[0].executable
+              if ($artifact -cne (Resolve-BuildInputPath -Path $expected)) {
+                throw "Unexpected Cargo release executable for $svc"
+              }
+              $after = @(Get-ArtifactBuildRepositoryStates -ArtifactPath $artifact -RepositoryRoots $roots)
+              Assert-BuildInputStatesUnchanged -Before $before -After $after
+              Write-ArtifactBuildStamp -ArtifactPath $artifact -RepositoryStates $after | Out-Null
+              $verified = Test-ArtifactBuildStamp -ArtifactPath $artifact -RepositoryStates $after
+              if (-not $verified.Matches) { throw "Release build stamp verification failed for $svc" }
+              Add-Content -LiteralPath $env:GITHUB_ENV -Value ("{0}_BIN={1}" -f $svc.ToUpperInvariant(), $artifact)
+            } finally {
+              Pop-Location
+              Write-Output '::endgroup::'
+            }
+          }
       - name: Prepare locked joint browser tooling
         uses: ./cotest/.github/actions/setup-joint-browser
         with:
