@@ -98,16 +98,24 @@ def invoke_native_child(command: list[str], environment: dict[str, str],
 def native_child(command: list[str], *, artifact_root: Path = EVIDENCE_ROOT) -> int:
     if not command:
         raise RuntimeError("native child requires an executable")
-    inherited = os.environ.get(CLIENT_CONFIG_SCOPE)
+    if "COTEST_NATIVE_WORKSPACE_PLAN" in os.environ:
+        from native_workspace_execution import run_child
+        return run_child(command, os.environ.copy(),
+                         lambda environment: isolated_native_child(command, environment, artifact_root))
+    return isolated_native_child(command, os.environ.copy(), artifact_root)
+
+
+def isolated_native_child(command: list[str], environment: dict[str, str], artifact_root: Path) -> int:
+    inherited = environment.get(CLIENT_CONFIG_SCOPE)
     if inherited is not None:
         root = Path(inherited)
         if (not root.is_dir()
-                or os.environ.get("INKSON_CONFIG_PATH") != str(root / "inkson" / "config.json")):
+                or environment.get("INKSON_CONFIG_PATH") != str(root / "inkson" / "config.json")):
             raise RuntimeError("native client configuration scope is inconsistent")
-        return invoke_native_child(command, os.environ.copy(), artifact_root)
+        return invoke_native_child(command, environment, artifact_root)
     with tempfile.TemporaryDirectory(prefix="cotest-native-client-") as scratch:
         root = Path(scratch)
-        environment = os.environ.copy()
+        environment = environment.copy()
         environment.setdefault("COTEST_PYTHON_BIN", sys.executable)
         environment.update({
             CLIENT_CONFIG_SCOPE: str(root),
@@ -174,7 +182,7 @@ def openssl(executable: str, *arguments: str) -> None:
     )
 
 
-def run(command: list[str]) -> int:
+def run(command: list[str], *, cargo_messages: Path | None = None) -> int:
     executable = shutil.which("openssl")
     if executable is None:
         raise RuntimeError("openssl is required to create native test TLS credentials")
@@ -229,8 +237,28 @@ def run(command: list[str]) -> int:
             "INKSON_CONFIG_PATH": str(directory / "inkson" / "config.json"),
         })
         environment.pop(CLIENT_CONFIG_SCOPE, None)
+        if "COTEST_NATIVE_WORKSPACE_PLAN" in environment:
+            from native_workspace_execution import configure_environment
+            configure_environment(environment)
         command = cargo_native_runner(command, directory)
-        return subprocess.run(command, env=environment, check=False).returncode
+        if cargo_messages is None:
+            return subprocess.run(command, env=environment, check=False).returncode
+        if (not cargo_messages.is_absolute()
+                or cargo_messages.parent.resolve() != cargo_messages.parent):
+            raise RuntimeError("Cargo message output requires a fresh absolute unlinked path")
+        with cargo_messages.open('x', encoding='utf-8') as output:
+            result = subprocess.run(command, env=environment, stdout=output, check=False)
+        if os.name != 'nt':
+            cargo_messages.chmod(0o600)
+        # Only Cargo writes this channel. Keep outer keystore lease diagnostics
+        # on their original stdout and preserve rendered compiler errors.
+        for line in cargo_messages.read_text(encoding='utf-8').splitlines():
+            message = json.loads(line)
+            if message.get('reason') == 'compiler-message':
+                rendered = message.get('message', {}).get('rendered')
+                if rendered:
+                    print(rendered, file=sys.stderr, end='')
+        return result.returncode
 
 
 def main() -> int:
@@ -239,12 +267,23 @@ def main() -> int:
         return native_child(command[1:])
     if command[:1] == ["--"]:
         command = command[1:]
+    cargo_messages = None
+    if command[:1] == ['--cargo-messages']:
+        if len(command) < 4:
+            print('Cargo message capture requires an output and full no-run Cargo command', file=sys.stderr)
+            return 2
+        cargo_messages = Path(command[1])
+        command = command[2:]
+        if (Path(command[0]).stem.lower() != 'cargo' or 'test' not in command[:3]
+                or '--no-run' not in command or '--message-format=json' not in command):
+            print('Cargo message capture is restricted to the full no-run test build', file=sys.stderr)
+            return 2
     if not command:
         print("usage: run-native-rust-tests.py [--] command [arguments ...]", file=sys.stderr)
         return 2
     try:
-        return run(command)
-    except (OSError, RuntimeError, subprocess.CalledProcessError) as error:
+        return run(command, cargo_messages=cargo_messages)
+    except (OSError, RuntimeError, ValueError, subprocess.CalledProcessError) as error:
         print(f"native test TLS setup failed: {error}", file=sys.stderr)
         return 1
 

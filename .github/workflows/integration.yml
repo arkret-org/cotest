@@ -22,408 +22,428 @@ env:
   SIBLING_REF: main
 
 jobs:
+  native-sources:
+    name: freeze native validation sources
+    runs-on: ubuntu-latest
+    outputs:
+      refs: ${{ steps.refs.outputs.result }}
+    steps:
+    - name: Resolve the run's immutable source set
+      id: refs
+      uses: actions/github-script@v7
+      with:
+        github-token: ${{ secrets.CI_REPO_TOKEN || github.token }}
+        script: |
+          const refs = {cotest: context.sha};
+          const siblings = ['arkret-spec', 'arkret-rust-sdk', 'inkson', 'coland',
+            'coauth', 'floria', 'flagon', 'chime', 'garth', 'bridges'];
+          await Promise.all(siblings.map(async repo => {
+            const {data} = await github.rest.repos.getCommit({owner: context.repo.owner, repo, ref: 'main'});
+            refs[repo] = data.sha;
+          }));
+          const {data} = await github.rest.repos.getCommit({owner: 'savfox-ai', repo: 'savfox', ref: 'main'});
+          refs.savfox = data.sha;
+          for (const [repo, sha] of Object.entries(refs)) {
+            if (!/^[0-9a-f]{40}$/.test(sha)) throw new Error(`Invalid commit for ${repo}`);
+            core.info(`${repo}=${sha}`);
+          }
+          return refs;
+  native-workspace:
+    name: complete default workspace before live gates
+    needs: native-sources
+    uses: ./.github/workflows/native-workspace.yml
+    with:
+      source_refs: ${{ needs.native-sources.outputs.refs }}
+    secrets: inherit
   joint-bringup:
     name: bringup coland + coauth + floria + cotest
     runs-on: ubuntu-latest
-    timeout-minutes: 180
+    timeout-minutes: 360
     services:
       postgres:
-        image: postgres:17
+        image: postgres:18-alpine
         env:
           POSTGRES_USER: cotest
           POSTGRES_PASSWORD: cotest-ci
           POSTGRES_DB: postgres
         ports:
-          - 5432:5432
-        options: >-
-          --health-cmd "pg_isready -U cotest -d postgres"
-          --health-interval 5s
-          --health-timeout 5s
-          --health-retries 12
+        - 5432:5432
+        options: --health-cmd "pg_isready -U cotest -d postgres" --health-interval 5s --health-timeout 5s --health-retries
+          12
     env:
       COLAND_BIN: ${{ github.workspace }}/coland/target/release/coland
       COAUTH_BIN: ${{ github.workspace }}/coauth/target/release/coauth
       FLORIA_BIN: ${{ github.workspace }}/floria/target/release/floria
       DATABASE_URL: postgresql://cotest:cotest-ci@127.0.0.1:5432/cotest_test_coauth_evidence
-      CARGO_BUILD_JOBS: "2"
+      CARGO_BUILD_JOBS: '2'
+      CARGO_INCREMENTAL: '0'
+      CARGO_PROFILE_DEV_DEBUG: '0'
+      CARGO_PROFILE_TEST_DEBUG: '0'
     steps:
-      - uses: actions/checkout@v4
-        with:
-          path: cotest
-      - uses: actions/checkout@v4
-        with:
-          repository: ${{ github.repository_owner }}/arkret-spec
-          path: arkret-spec
-          ref: ${{ env.SIBLING_REF }}
-      - uses: actions/checkout@v4
-        with:
-          repository: ${{ github.repository_owner }}/arkret-rust-sdk
-          path: arkret-rust-sdk
-          ref: ${{ env.SIBLING_REF }}
-      - uses: actions/checkout@v4
-        with:
-          repository: ${{ github.repository_owner }}/garth
-          path: garth
-          ref: ${{ env.SIBLING_REF }}
-      - uses: actions/checkout@v4
-        with:
-          repository: ${{ github.repository_owner }}/chime
-          path: chime
-          ref: ${{ env.SIBLING_REF }}
-      - uses: actions/checkout@v4
-        with:
-          repository: ${{ github.repository_owner }}/inkson
-          path: inkson
-          ref: ${{ env.SIBLING_REF }}
-      # Upstream checkout failures MUST hard-fail the job: no
-      # `continue-on-error: true` here. A partial bringup must never be
-      # green-lighted.
-      - uses: actions/checkout@v4
-        with:
-          repository: ${{ github.repository_owner }}/coland
-          path: coland
-          ref: ${{ env.SIBLING_REF }}
-      - name: Complete Coland build dependency layout
-        working-directory: coland
-        env:
-          CI_REPO_TOKEN: ${{ secrets.CI_REPO_TOKEN || github.token }}
-        run: bash .ci/checkout-build-dependencies.sh
-
-      - uses: actions/checkout@v4
-        with:
-          repository: ${{ github.repository_owner }}/coauth
-          path: coauth
-          ref: ${{ env.SIBLING_REF }}
-      - uses: actions/checkout@v4
-        with:
-          repository: ${{ github.repository_owner }}/floria
-          path: floria
-          ref: ${{ env.SIBLING_REF }}
-      - name: Install Linux desktop dependencies
-        run: |
+    - uses: actions/checkout@v4
+      with:
+        path: cotest
+        ref: ${{ fromJSON(needs.native-sources.outputs.refs).cotest }}
+    - uses: ./cotest/.github/actions/checkout-native-sources
+      with:
+        refs: ${{ needs.native-sources.outputs.refs }}
+        token: ${{ secrets.CI_REPO_TOKEN || github.token }}
+    - name: Install Linux desktop dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev libxdo-dev dbus-x11 gnome-keyring libsecret-tools openssl
+    - name: Select PostgreSQL 18 backup tools
+      shell: bash
+      run: |
+        set -euo pipefail
+        pg_bin=/usr/lib/postgresql/18/bin
+        if [ ! -x "$pg_bin/pg_dump" ]; then
+          if ! apt-cache show postgresql-client-18 >/dev/null 2>&1; then
+            sudo install -d /usr/share/postgresql-common/pgdg
+            sudo curl --fail --silent --show-error \
+              https://www.postgresql.org/media/keys/ACCC4CF8.asc \
+              --output /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc
+            . /etc/os-release
+            printf 'Types: deb\nURIs: https://apt.postgresql.org/pub/repos/apt\nSuites: %s-pgdg\nArchitectures: %s\nComponents: main\nSigned-By: /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc\n' \
+              "$VERSION_CODENAME" "$(dpkg --print-architecture)" \
+              | sudo tee /etc/apt/sources.list.d/cotest-pgdg.sources >/dev/null
+          fi
           sudo apt-get update
-          sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev libxdo-dev dbus-x11 gnome-keyring libsecret-tools openssl
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-      - name: Install canonical Spec evaluator dependencies
-        run: python -m pip install -r arkret-spec/tools/requirements.txt
-      - uses: dtolnay/rust-toolchain@master
-        with:
-          toolchain: "1.98"
-          targets: wasm32-unknown-unknown
-      - uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: |
-            cotest
-            coland
-            coauth
-            floria
-      - uses: actions/setup-node@v4
-        with:
-          node-version: "24"
-      # Runs before the ~40 minutes of builds and live tests below: a retired
-      # protocol literal is a fixture bug the compiler cannot see, and finding
-      # it after the bringup wastes the whole job. The scanner proves itself
-      # against planted vectors first, so a scanner that silently stopped
-      # matching cannot report "clean".
-      - name: stale protocol literal scan
-        working-directory: cotest
-        run: |
-          set -euo pipefail
-          sh scripts/tests/stale-literal-scan.tests.sh
-          sh scripts/stale-literal-scan.sh
-      - name: build upstream services
-        # P5.1 — upstream checkouts now hard-fail (see above) so the missing-svc
-        # warning branch is removed; the build step also no longer swallows
-        # individual `cargo build` failures.
-        run: |
-          set -euo pipefail
-          for svc in coland coauth floria; do
-            echo "::group::cargo build $svc"
-            features=()
-            if [ "$svc" = "coland" ]; then
-              features=(--features conformance-harness)
-            elif [ "$svc" = "coauth" ]; then
-              features=(--features cedar)
-            fi
-            (cd "$svc" && cargo build --release --locked "${features[@]}")
-            echo "::endgroup::"
-          done
-      - name: install playwright
-        working-directory: cotest/e2e
-        run: |
-          npm ci
-          npx playwright install --with-deps chromium
-      - name: install dioxus cli
-        run: cargo install dioxus-cli --version 0.7.10 --locked
-      - name: Install frontend task runner
-        uses: extractions/setup-just@53165ef7e734c5c07cb06b3c8e7b647c5aa16db3 # v4
-        with:
-          just-version: "1.46.0"
-      - name: Expose the locked Dioxus JavaScript bundler
-        working-directory: cotest/e2e
-        run: |
-          test "$(node_modules/.bin/esbuild --version)" = "0.28.2"
-          printf '%s\n' "$PWD/node_modules/.bin" >> "$GITHUB_PATH"
-      - name: Prepare Linux joint prerequisites
-        id: joint_prerequisites
-        run: bash cotest/scripts/prepare-linux-joint-e2e.sh setup
-
-      - name: real OIDC returning-login and device-key non-skip lane
-        working-directory: cotest
-        shell: pwsh
-        run: >
-          ./scripts/run-joint-e2e.ps1
-          -StartCoauth
-          -RunProfile joint-smoke
-          -PlaywrightProject joint-inkson
-          -Grep '@returning-login-gate|@returning-device-key-gate|@onboarding-recovery-gate'
-          -RequireScenario 'identity/oidc-login-flow.spec.ts,identity/device-key-lifecycle.spec.ts'
-          -ForbidSkippedTests
-          -StartupTimeoutSeconds 900
-      - name: Restore Linux hosts permissions
-        if: always() && steps.joint_prerequisites.outcome != 'skipped' && steps.joint_prerequisites.outcome != ''
-        run: bash cotest/scripts/prepare-linux-joint-e2e.sh restore
-
-      - name: Migrate isolated Coauth route-evidence database
-        run: |
-          createdb -h 127.0.0.1 -U cotest cotest_test_coauth_evidence
-          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f coauth/crates/storage-postgres/migrations/00000000000000_initial/up.sql
-        env:
-          PGPASSWORD: cotest-ci
-      - name: Capture SDK artifact for native contract tests
-        working-directory: cotest
-        run: |
-          mkdir -p artifacts/sdk-artifact-build
-          cargo metadata --locked --format-version 1 > artifacts/sdk-artifact-build/metadata.json
-          cargo build --locked -p cotest --lib --message-format=json > artifacts/sdk-artifact-build/build.jsonl
-          python scripts/capture_sdk_artifact.py \
-            --cargo-messages artifacts/sdk-artifact-build/build.jsonl \
-            --cargo-metadata artifacts/sdk-artifact-build/metadata.json \
-            --sdk-manifest ../arkret-rust-sdk/crates/sdk/Cargo.toml \
-            --output "$RUNNER_TEMP/cotest-sdk-artifact"
-          echo "COTEST_SDK_ARTIFACT_MANIFEST=$RUNNER_TEMP/cotest-sdk-artifact/artifact.json" >> "$GITHUB_ENV"
-      - name: run cotest harness
-        working-directory: cotest
-        # Default tests must pass before any live opt-in gates run.
-        # Includes every existing runner crate plus the mandatory cotest-inkson-client-tests member.
-        # The combined 54-runner audit lives in that client package; root services-live remains separate.
-        run: bash ../inkson/scripts/with-native-keystore.sh python scripts/run-native-rust-tests.py cargo test --workspace --locked
-      - name: mandatory production Inkson client lane
-        working-directory: cotest
-        shell: pwsh
-        env:
-          COTEST_COLAND_DATABASE_URL: postgresql://cotest:cotest-ci@127.0.0.1:5432/postgres
-          COTEST_REQUIRE_LIVE_SERVICES: "1"
-        # The exact 31 selections use the original live fixtures. The planner
-        # rejects missing prerequisites, missing targets and empty selections;
-        # the root services-live six-test profile remains independently intact.
-        run: ./scripts/run-server-conformance.ps1 -Profile inkson-client-live -Runtime process
-      - name: production placeholder-proof rejection sentinel
-        working-directory: cotest
-        # This is the only reverse guard for "production coland rejects the
-        # inkson dev-proof placeholder", so CI wires COLAND_BIN explicitly and
-        # treats missing binary / test failure as red.
-        run: cargo test --locked --features test-with-containers --test production_rejects_placeholder_proof_e2e -- --ignored production_rejects_placeholder_proof_e2e
-      - name: run live Playwright smoke
-        working-directory: cotest/e2e
-        env:
-          COTEST_COLAND_BASE_URL: http://127.0.0.1:8008
-          COTEST_EMBEDDED_WEBVH_REGISTRATION_BEARER: cotest-webvh-registration
-          COTEST_WIRE_BIN: ${{ github.workspace }}/cotest/target/debug/cotest-wire
-          COTEST_JOINT_RUN_DIR: ${{ github.workspace }}/cotest/artifacts/runs/integration-playwright/joint-e2e
-        run: |
-          set -euo pipefail
-          mkdir -p "$RUNNER_TEMP/coland-objects"
-          COLAND_DEVELOPMENT_MODE=1 \
-          COLAND_CANDIDATE_JOIN_POLICY=1 \
-          COLAND_PUBLIC_BASE_URL="$COTEST_COLAND_BASE_URL" \
-          COLAND_EMBEDDED_WEBVH_REGISTRATION_BEARER="$COTEST_EMBEDDED_WEBVH_REGISTRATION_BEARER" \
-          COLAND_METRICS_BIND="127.0.0.1:9008" \
-          COLAND_OBJECT_STORAGE_BACKEND="filesystem" \
-          COLAND_OBJECT_STORAGE_LOCAL_ROOT="$RUNNER_TEMP/coland-objects" \
-          "$COLAND_BIN" --bind 127.0.0.1:8008 > "$RUNNER_TEMP/coland-playwright.log" 2>&1 &
-          coland_pid=$!
-          cleanup() {
-            set +e
-            kill "$coland_pid" 2>/dev/null
-            wait "$coland_pid" 2>/dev/null
+          sudo apt-get install -y postgresql-client-18
+        fi
+        "$pg_bin/pg_dump" --version | grep -E '^pg_dump \(PostgreSQL\) 18\.'
+        "$pg_bin/pg_restore" --version | grep -E '^pg_restore \(PostgreSQL\) 18\.'
+        server_version=$("$pg_bin/psql" "$DATABASE_URL" -Atc 'SHOW server_version_num')
+        test "$((server_version / 10000))" -eq 18
+        printf 'PostgreSQL server_version_num=%s\n' "$server_version"
+        printf '%s\n' "$pg_bin" >> "$GITHUB_PATH"
+        printf 'COTEST_PG_DUMP=%s/pg_dump\nCOTEST_PSQL=%s/psql\n' "$pg_bin" "$pg_bin" >> "$GITHUB_ENV"
+      env:
+        DATABASE_URL: postgresql://cotest:cotest-ci@127.0.0.1:5432/postgres
+    - uses: actions/setup-python@v5
+      with:
+        python-version: '3.12'
+    - name: Install canonical Spec evaluator dependencies
+      run: python -m pip install -r arkret-spec/tools/requirements.txt
+    - uses: dtolnay/rust-toolchain@master
+      with:
+        toolchain: '1.98'
+        targets: wasm32-unknown-unknown
+    - uses: Swatinem/rust-cache@v2
+      with:
+        workspaces: |
+          cotest
+          coland
+          coauth
+          floria
+    - uses: actions/setup-node@v4
+      with:
+        node-version: '24'
+    - name: stale protocol literal scan
+      working-directory: cotest
+      run: |
+        set -euo pipefail
+        sh scripts/tests/stale-literal-scan.tests.sh
+        sh scripts/stale-literal-scan.sh
+    - name: build upstream services
+      shell: pwsh
+      run: |
+        $ErrorActionPreference = 'Stop'
+        . ./cotest/scripts/lib/build-freshness.ps1
+        $workspace = (Get-Location).Path
+        $sdk = Join-Path $workspace 'arkret-rust-sdk'
+        $evidence = Join-Path $workspace 'cotest/artifacts/upstream-service-builds'
+        New-Item -ItemType Directory -Force -Path $evidence | Out-Null
+        # The supplemental SDK workspace is inspected independently by the
+        # provenance helper, including members unused by a service binary.
+        & cargo metadata --manifest-path (Join-Path $sdk 'Cargo.toml') --locked --all-features --format-version 1 | Out-Null
+        if ($LASTEXITCODE -ne 0) { throw 'SDK build-input metadata warmup failed' }
+        foreach ($svc in @('coland', 'coauth', 'floria')) {
+          Write-Output "::group::cargo build $svc"
+          $root = Join-Path $workspace $svc
+          Push-Location $root
+          try {
+            # Warm the locked dependency graph before the provenance helper's
+            # offline metadata query, including optional product dependencies.
+            $metadataJson = & cargo metadata --locked --all-features --format-version 1
+            if ($LASTEXITCODE -ne 0) { throw "Cargo metadata failed for $svc" }
+            $metadata = ($metadataJson -join "`n") | ConvertFrom-Json -AsHashtable
+            $packages = @($metadata.packages | Where-Object {
+              $metadata.workspace_members -ccontains $_.id -and
+              @($_.targets | Where-Object { $_.name -ceq $svc -and $_.kind -contains 'bin' }).Count -gt 0
+            })
+            if ($packages.Count -ne 1) { throw "Expected exactly one workspace binary package for $svc" }
+            $target = Resolve-BuildInputPath -Path $metadata.target_directory
+            $expected = Join-Path $target "release/$svc"
+            $roots = @($root, $sdk)
+            $before = @(Get-ArtifactBuildRepositoryStates -ArtifactPath $expected -RepositoryRoots $roots)
+            $features = @()
+            if ($svc -eq 'coland') { $features = @('--features', 'conformance-harness') }
+            elseif ($svc -eq 'coauth') { $features = @('--features', 'cedar') }
+            $messages = Join-Path $evidence "$svc.jsonl"
+            & cargo build --release --locked @features --message-format=json-render-diagnostics |
+              Set-Content -LiteralPath $messages -Encoding utf8
+            if ($LASTEXITCODE -ne 0) { throw "Cargo release build failed for $svc" }
+            $artifacts = @(Get-Content -LiteralPath $messages | ForEach-Object { $_ | ConvertFrom-Json } |
+              Where-Object {
+                $_.reason -eq 'compiler-artifact' -and $_.package_id -ceq $packages[0].id -and
+                $_.target.name -ceq $svc -and
+                $_.target.kind -contains 'bin' -and $_.executable
+              })
+            if ($artifacts.Count -ne 1) { throw "Expected exactly one actual release executable for $svc" }
+            $artifact = Resolve-BuildInputPath -Path $artifacts[0].executable
+            if ($artifact -cne (Resolve-BuildInputPath -Path $expected)) {
+              throw "Unexpected Cargo release executable for $svc"
+            }
+            $after = @(Get-ArtifactBuildRepositoryStates -ArtifactPath $artifact -RepositoryRoots $roots)
+            Assert-BuildInputStatesUnchanged -Before $before -After $after
+            Write-ArtifactBuildStamp -ArtifactPath $artifact -RepositoryStates $after | Out-Null
+            $verified = Test-ArtifactBuildStamp -ArtifactPath $artifact -RepositoryStates $after
+            if (-not $verified.Matches) { throw "Release build stamp verification failed for $svc" }
+            Add-Content -LiteralPath $env:GITHUB_ENV -Value ("{0}_BIN={1}" -f $svc.ToUpperInvariant(), $artifact)
+          } finally {
+            Pop-Location
+            Write-Output '::endgroup::'
           }
-          trap cleanup EXIT
+        }
+    - name: Prepare locked joint browser tooling
+      uses: ./cotest/.github/actions/setup-joint-browser
+      with:
+        project: chromium
+    - name: Prepare Linux joint prerequisites
+      id: joint_prerequisites
+      run: bash cotest/scripts/prepare-linux-joint-e2e.sh setup
+    - name: Prepare current browser conjunction artifacts
+      working-directory: cotest
+      shell: pwsh
+      run: ./scripts/run-joint-e2e.ps1 -StartCoauth -RunProfile joint-smoke -PlaywrightProject joint-inkson -Grep '@returning-login-gate|@returning-device-key-gate|@onboarding-recovery-gate'
+        -RequireScenario 'identity/oidc-login-flow.spec.ts,identity/device-key-lifecycle.spec.ts' -ForbidSkippedTests -StartupTimeoutSeconds
+        900 -PreflightOnly -NativeToolsEnvironmentFile $env:GITHUB_ENV
+    - name: real OIDC returning-login and device-key non-skip lane
+      working-directory: cotest
+      shell: pwsh
+      run: |
+        ./scripts/run-joint-e2e.ps1 -StartCoauth -RunProfile joint-smoke -PlaywrightProject joint-inkson -Grep '@returning-login-gate|@returning-device-key-gate|@onboarding-recovery-gate' -RequireScenario 'identity/oidc-login-flow.spec.ts,identity/device-key-lifecycle.spec.ts' -ForbidSkippedTests -StartupTimeoutSeconds 900
+    - name: Restore Linux hosts permissions
+      if: always() && steps.joint_prerequisites.outcome != 'skipped' && steps.joint_prerequisites.outcome != ''
+      run: bash cotest/scripts/prepare-linux-joint-e2e.sh restore
+    - name: Sanitize joint startup failure diagnostics
+      if: failure()
+      shell: pwsh
+      run: ./cotest/scripts/publish-joint-failure.ps1 -RunRoot cotest/artifacts/runs/joint-e2e -OutputDirectory "${{ runner.temp
+        }}/integration-public-failure"
+    - name: Preserve joint preparation failure evidence
+      if: failure()
+      uses: actions/upload-artifact@v4
+      with:
+        name: integration-joint-failure-${{ github.run_id }}
+        path: |
+          cotest/artifacts/runs/joint-e2e/**/services/prepare-*.log
+          ${{ runner.temp }}/integration-public-failure/
+        if-no-files-found: ignore
+        retention-days: 7
+    - name: Migrate isolated Coauth route-evidence database
+      run: |
+        createdb -h 127.0.0.1 -U cotest cotest_test_coauth_evidence
+        psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f coauth/crates/storage-postgres/migrations/00000000000000_initial/up.sql
+      env:
+        PGPASSWORD: cotest-ci
+    - name: Capture SDK artifact for native contract tests
+      working-directory: cotest
+      run: |
+        mkdir -p artifacts/sdk-artifact-build
+        cargo metadata --locked --format-version 1 > artifacts/sdk-artifact-build/metadata.json
+        cargo build --locked -p cotest --lib --message-format=json > artifacts/sdk-artifact-build/build.jsonl
+        python scripts/capture_sdk_artifact.py \
+          --cargo-messages artifacts/sdk-artifact-build/build.jsonl \
+          --cargo-metadata artifacts/sdk-artifact-build/metadata.json \
+          --sdk-manifest ../arkret-rust-sdk/crates/sdk/Cargo.toml \
+          --output "$RUNNER_TEMP/cotest-sdk-artifact"
+        echo "COTEST_SDK_ARTIFACT_MANIFEST=$RUNNER_TEMP/cotest-sdk-artifact/artifact.json" >> "$GITHUB_ENV"
+    - name: mandatory production Inkson client lane
+      working-directory: cotest
+      shell: pwsh
+      env:
+        COTEST_COLAND_DATABASE_URL: postgresql://cotest:cotest-ci@127.0.0.1:5432/postgres
+        COTEST_REQUIRE_LIVE_SERVICES: '1'
+      run: ./scripts/run-server-conformance.ps1 -Profile inkson-client-live -Runtime process
+    - name: production placeholder-proof rejection sentinel
+      working-directory: cotest
+      run: cargo test --locked --features test-with-containers --test production_rejects_placeholder_proof_e2e -- --ignored
+        production_rejects_placeholder_proof_e2e
+    - name: run live Playwright smoke
+      working-directory: cotest/e2e
+      env:
+        COTEST_COLAND_BASE_URL: http://127.0.0.1:8008
+        COTEST_EMBEDDED_WEBVH_REGISTRATION_BEARER: cotest-webvh-registration
+        COTEST_WIRE_BIN: ${{ github.workspace }}/cotest/target/debug/cotest-wire
+        COTEST_JOINT_RUN_DIR: ${{ github.workspace }}/cotest/artifacts/runs/integration-playwright/joint-e2e
+      run: |
+        set -euo pipefail
+        mkdir -p "$RUNNER_TEMP/coland-objects"
+        COLAND_DEVELOPMENT_MODE=1 \
+        COLAND_CANDIDATE_JOIN_POLICY=1 \
+        COLAND_PUBLIC_BASE_URL="$COTEST_COLAND_BASE_URL" \
+        COLAND_EMBEDDED_WEBVH_REGISTRATION_BEARER="$COTEST_EMBEDDED_WEBVH_REGISTRATION_BEARER" \
+        COLAND_METRICS_BIND="127.0.0.1:9008" \
+        COLAND_OBJECT_STORAGE_BACKEND="filesystem" \
+        COLAND_OBJECT_STORAGE_LOCAL_ROOT="$RUNNER_TEMP/coland-objects" \
+        "$COLAND_BIN" --bind 127.0.0.1:8008 > "$RUNNER_TEMP/coland-playwright.log" 2>&1 &
+        coland_pid=$!
+        cleanup() {
+          set +e
+          kill "$coland_pid" 2>/dev/null
+          wait "$coland_pid" 2>/dev/null
+        }
+        trap cleanup EXIT
+        for _ in {1..40}; do
+          if curl -fsS "$COTEST_COLAND_BASE_URL/health" >/dev/null; then
+            break
+          fi
+          sleep 1
+        done
+        curl -fsS "$COTEST_COLAND_BASE_URL/health" >/dev/null
+        export COTEST_COLAND_SERVICE_ID
+        COTEST_COLAND_SERVICE_ID="$(curl -fsS "$COTEST_COLAND_BASE_URL/health" | jq -er '.checks.service_identity.service_id')"
+        npx playwright test --config playwright.config.ts --project=chromium tests/sync/service-surface-contract.spec.ts --grep "coland /_arkret/describe"
+    - name: run federation security hardening Playwright
+      working-directory: cotest/e2e
+      env:
+        COTEST_COLAND_BASE_URL: http://coland-alpha.security-ci.local:8011
+        COTEST_COLAND_ALPHA_BASE_URL: http://coland-alpha.security-ci.local:8011
+        COTEST_COLAND_BETA_BASE_URL: http://coland-beta.security-ci.local:8012
+        COTEST_COLAND_SERVICE_SIGNING_KEY: OTk5OTk5OTk5OTk5OTk5OTk5OTk5OTk5OTk5OTk5OTk=
+        COTEST_COLAND_BETA_SERVICE_SIGNING_KEY: ODg4ODg4ODg4ODg4ODg4ODg4ODg4ODg4ODg4ODg4ODg=
+        COTEST_EMBEDDED_WEBVH_REGISTRATION_BEARER: cotest-webvh-registration
+        COTEST_EXPECT_FEDERATION_DENYLIST: '1'
+        COTEST_REQUIRE_DUAL_COLAND: '1'
+        COTEST_JOINT_RUN_DIR: ${{ github.workspace }}/cotest/artifacts/runs/federation-security-hardening/joint-e2e
+        RUST_LOG: info
+      run: |
+        set -euo pipefail
+
+        echo "127.0.0.1 coland-alpha.security-ci.local coland-beta.security-ci.local" \
+          | sudo tee -a /etc/hosts > /dev/null
+
+        # Only the deny-listing side of each pair is set, so both env names
+        # carry real coverage: beta rejects alpha inbound, alpha drops beta
+        # from outbound fanout.
+        start_coland() {
+          local name="$1"
+          local bind="$2"
+          local metrics_bind="$3"
+          local base_url="$4"
+          local trust_domain="$5"
+          local notary_seed="$6"
+          local peer_url="$7"
+          local denylist_name="$8"
+          local denylist_host="$9"
+          local objects_root="$RUNNER_TEMP/${name}-objects"
+          mkdir -p "$objects_root"
+          env \
+            COLAND_DEVELOPMENT_MODE=1 \
+            COLAND_PUBLIC_BASE_URL="$base_url" \
+            COLAND_TRUST_DOMAIN="$trust_domain" \
+            COLAND_NOTARY_SIGNING_KEY="$notary_seed" \
+            COLAND_EMBEDDED_WEBVH_REGISTRATION_BEARER="$COTEST_EMBEDDED_WEBVH_REGISTRATION_BEARER" \
+            COLAND_METRICS_BIND="$metrics_bind" \
+            COLAND_OBJECT_STORAGE_BACKEND="filesystem" \
+            COLAND_OBJECT_STORAGE_LOCAL_ROOT="$objects_root" \
+            COLAND_FEDERATION_PEERS="$peer_url" \
+            COLAND_EGRESS_ALLOW_PRIVATE_NETWORKS=1 \
+            "${denylist_name}=${denylist_host}" \
+            "$COLAND_BIN" --bind "$bind" > "$RUNNER_TEMP/${name}.log" 2>&1 &
+          echo "$!"
+        }
+
+        alpha_pid=$(start_coland \
+          "coland-alpha-security" \
+          "127.0.0.1:8011" \
+          "127.0.0.1:9011" \
+          "$COTEST_COLAND_ALPHA_BASE_URL" \
+          "ak:trust_domain:coland-alpha.security-ci.local" \
+          "$COTEST_COLAND_SERVICE_SIGNING_KEY" \
+          "$COTEST_COLAND_BETA_BASE_URL" \
+          "COLAND_FEDERATION_PEER_DENYLIST" \
+          "coland-beta.security-ci.local")
+        beta_pid=$(start_coland \
+          "coland-beta-security" \
+          "127.0.0.1:8012" \
+          "127.0.0.1:9012" \
+          "$COTEST_COLAND_BETA_BASE_URL" \
+          "ak:trust_domain:coland-beta.security-ci.local" \
+          "$COTEST_COLAND_BETA_SERVICE_SIGNING_KEY" \
+          "$COTEST_COLAND_ALPHA_BASE_URL" \
+          "COLAND_FEDERATION_DENYLIST" \
+          "coland-alpha.security-ci.local")
+        cleanup() {
+          set +e
+          kill "$alpha_pid" "$beta_pid" 2>/dev/null
+          wait "$alpha_pid" "$beta_pid" 2>/dev/null
+        }
+        trap cleanup EXIT
+
+        for url in "$COTEST_COLAND_ALPHA_BASE_URL/health" "$COTEST_COLAND_BETA_BASE_URL/health"; do
           for _ in {1..40}; do
-            if curl -fsS "$COTEST_COLAND_BASE_URL/health" >/dev/null; then
+            if curl -fsS "$url" >/dev/null; then
               break
             fi
             sleep 1
           done
-          curl -fsS "$COTEST_COLAND_BASE_URL/health" >/dev/null
-          export COTEST_COLAND_SERVICE_ID
-          COTEST_COLAND_SERVICE_ID="$(curl -fsS "$COTEST_COLAND_BASE_URL/health" | jq -er '.checks.service_identity.service_id')"
-          npx playwright test --config playwright.config.ts --project=chromium tests/sync/service-surface-contract.spec.ts --grep "coland /_arkret/describe"
-      - name: run federation security hardening Playwright
-        working-directory: cotest/e2e
-        # Each node gets its own hostname (mapped to loopback below) instead of
-        # a bare `127.0.0.1:<port>`. The denylist matcher compares *hosts*, not
-        # host:port, so two nodes sharing `127.0.0.1` can only be deny-listed
-        # together — the assertions would then hold for any implementation.
-        # Distinct hostnames also give distinct service DIDs and trust domains,
-        # because coland derives both from `COLAND_PUBLIC_BASE_URL`, so no
-        # identity has to be injected into boot config (decisions/0012).
-        #
-        # Private-network egress stays *allowed* here on purpose. With it off,
-        # neither node can reach the other at all, both assertions pass without
-        # the denylist ever running, and the job reports a false green. The
-        # egress guard itself is covered by coland's own unit tests.
-        env:
-          COTEST_COLAND_BASE_URL: http://coland-alpha.security-ci.local:8011
-          COTEST_COLAND_ALPHA_BASE_URL: http://coland-alpha.security-ci.local:8011
-          COTEST_COLAND_BETA_BASE_URL: http://coland-beta.security-ci.local:8012
-          # FIXTURE ONLY, same seeds the joint-e2e runner uses: handed to coland
-          # as `COLAND_NOTARY_SIGNING_KEY` and to the spec as the peer signing
-          # key, so the inbound push carries a cryptographically *valid*
-          # signature. Without them the push dies at signature verification and
-          # never reaches the denylist branch.
-          COTEST_COLAND_SERVICE_SIGNING_KEY: OTk5OTk5OTk5OTk5OTk5OTk5OTk5OTk5OTk5OTk5OTk=
-          COTEST_COLAND_BETA_SERVICE_SIGNING_KEY: ODg4ODg4ODg4ODg4ODg4ODg4ODg4ODg4ODg4ODg4ODg=
-          # Outbound-fanout coverage registers a real user on alpha, and the
-          # embedded did:webvh registration endpoint answers 503 until this is
-          # configured on both sides.
-          COTEST_EMBEDDED_WEBVH_REGISTRATION_BEARER: cotest-webvh-registration
-          COTEST_EXPECT_FEDERATION_DENYLIST: "1"
-          COTEST_REQUIRE_DUAL_COLAND: "1"
-          COTEST_JOINT_RUN_DIR: ${{ github.workspace }}/cotest/artifacts/runs/federation-security-hardening/joint-e2e
-          RUST_LOG: info
-        run: |
-          set -euo pipefail
+          curl -fsS "$url" >/dev/null
+        done
 
-          echo "127.0.0.1 coland-alpha.security-ci.local coland-beta.security-ci.local" \
-            | sudo tee -a /etc/hosts > /dev/null
+        # Both processes must still be alive: a node that died after answering
+        # /health once would leave the topology half-built.
+        kill -0 "$alpha_pid"
+        kill -0 "$beta_pid"
 
-          # Only the deny-listing side of each pair is set, so both env names
-          # carry real coverage: beta rejects alpha inbound, alpha drops beta
-          # from outbound fanout.
-          start_coland() {
-            local name="$1"
-            local bind="$2"
-            local metrics_bind="$3"
-            local base_url="$4"
-            local trust_domain="$5"
-            local notary_seed="$6"
-            local peer_url="$7"
-            local denylist_name="$8"
-            local denylist_host="$9"
-            local objects_root="$RUNNER_TEMP/${name}-objects"
-            mkdir -p "$objects_root"
-            env \
-              COLAND_DEVELOPMENT_MODE=1 \
-              COLAND_PUBLIC_BASE_URL="$base_url" \
-              COLAND_TRUST_DOMAIN="$trust_domain" \
-              COLAND_NOTARY_SIGNING_KEY="$notary_seed" \
-              COLAND_EMBEDDED_WEBVH_REGISTRATION_BEARER="$COTEST_EMBEDDED_WEBVH_REGISTRATION_BEARER" \
-              COLAND_METRICS_BIND="$metrics_bind" \
-              COLAND_OBJECT_STORAGE_BACKEND="filesystem" \
-              COLAND_OBJECT_STORAGE_LOCAL_ROOT="$objects_root" \
-              COLAND_FEDERATION_PEERS="$peer_url" \
-              COLAND_EGRESS_ALLOW_PRIVATE_NETWORKS=1 \
-              "${denylist_name}=${denylist_host}" \
-              "$COLAND_BIN" --bind "$bind" > "$RUNNER_TEMP/${name}.log" 2>&1 &
-            echo "$!"
-          }
+        # Service identity comes from the running process, never from config.
+        export COTEST_COLAND_ALPHA_SERVICE_ID
+        export COTEST_COLAND_BETA_SERVICE_ID
+        export COTEST_COLAND_SERVICE_ID
+        COTEST_COLAND_ALPHA_SERVICE_ID="$(curl -fsS "$COTEST_COLAND_ALPHA_BASE_URL/health" | jq -er '.checks.service_identity.service_id')"
+        COTEST_COLAND_BETA_SERVICE_ID="$(curl -fsS "$COTEST_COLAND_BETA_BASE_URL/health" | jq -er '.checks.service_identity.service_id')"
+        COTEST_COLAND_SERVICE_ID="$COTEST_COLAND_ALPHA_SERVICE_ID"
+        if [ "$COTEST_COLAND_ALPHA_SERVICE_ID" = "$COTEST_COLAND_BETA_SERVICE_ID" ]; then
+          echo "::error::alpha and beta minted the same service DID; the denylist cannot distinguish them" >&2
+          exit 1
+        fi
 
-          alpha_pid=$(start_coland \
-            "coland-alpha-security" \
-            "127.0.0.1:8011" \
-            "127.0.0.1:9011" \
-            "$COTEST_COLAND_ALPHA_BASE_URL" \
-            "ak:trust_domain:coland-alpha.security-ci.local" \
-            "$COTEST_COLAND_SERVICE_SIGNING_KEY" \
-            "$COTEST_COLAND_BETA_BASE_URL" \
-            "COLAND_FEDERATION_PEER_DENYLIST" \
-            "coland-beta.security-ci.local")
-          beta_pid=$(start_coland \
-            "coland-beta-security" \
-            "127.0.0.1:8012" \
-            "127.0.0.1:9012" \
-            "$COTEST_COLAND_BETA_BASE_URL" \
-            "ak:trust_domain:coland-beta.security-ci.local" \
-            "$COTEST_COLAND_BETA_SERVICE_SIGNING_KEY" \
-            "$COTEST_COLAND_ALPHA_BASE_URL" \
-            "COLAND_FEDERATION_DENYLIST" \
-            "coland-alpha.security-ci.local")
-          cleanup() {
-            set +e
-            kill "$alpha_pid" "$beta_pid" 2>/dev/null
-            wait "$alpha_pid" "$beta_pid" 2>/dev/null
-          }
-          trap cleanup EXIT
-
-          for url in "$COTEST_COLAND_ALPHA_BASE_URL/health" "$COTEST_COLAND_BETA_BASE_URL/health"; do
-            for _ in {1..40}; do
-              if curl -fsS "$url" >/dev/null; then
-                break
-              fi
-              sleep 1
-            done
-            curl -fsS "$url" >/dev/null
+        # Peer discovery installs the other node's assertion key. Until it has
+        # run, an inbound push is rejected for an unresolvable key rather than
+        # by the denylist, which is exactly the vacuous pass this job exists
+        # to prevent.
+        for log in "$RUNNER_TEMP/coland-alpha-security.log" "$RUNNER_TEMP/coland-beta-security.log"; do
+          for _ in {1..60}; do
+            if grep -q "resolved federation peer service identity and assertion key" "$log"; then
+              break
+            fi
+            sleep 1
           done
-
-          # Both processes must still be alive: a node that died after answering
-          # /health once would leave the topology half-built.
-          kill -0 "$alpha_pid"
-          kill -0 "$beta_pid"
-
-          # Service identity comes from the running process, never from config.
-          export COTEST_COLAND_ALPHA_SERVICE_ID
-          export COTEST_COLAND_BETA_SERVICE_ID
-          export COTEST_COLAND_SERVICE_ID
-          COTEST_COLAND_ALPHA_SERVICE_ID="$(curl -fsS "$COTEST_COLAND_ALPHA_BASE_URL/health" | jq -er '.checks.service_identity.service_id')"
-          COTEST_COLAND_BETA_SERVICE_ID="$(curl -fsS "$COTEST_COLAND_BETA_BASE_URL/health" | jq -er '.checks.service_identity.service_id')"
-          COTEST_COLAND_SERVICE_ID="$COTEST_COLAND_ALPHA_SERVICE_ID"
-          if [ "$COTEST_COLAND_ALPHA_SERVICE_ID" = "$COTEST_COLAND_BETA_SERVICE_ID" ]; then
-            echo "::error::alpha and beta minted the same service DID; the denylist cannot distinguish them" >&2
+          if ! grep -q "resolved federation peer service identity and assertion key" "$log"; then
+            echo "::error::$log never resolved its federation peer" >&2
             exit 1
           fi
+        done
 
-          # Peer discovery installs the other node's assertion key. Until it has
-          # run, an inbound push is rejected for an unresolvable key rather than
-          # by the denylist, which is exactly the vacuous pass this job exists
-          # to prevent.
-          for log in "$RUNNER_TEMP/coland-alpha-security.log" "$RUNNER_TEMP/coland-beta-security.log"; do
-            for _ in {1..60}; do
-              if grep -q "resolved federation peer service identity and assertion key" "$log"; then
-                break
-              fi
-              sleep 1
-            done
-            if ! grep -q "resolved federation peer service identity and assertion key" "$log"; then
-              echo "::error::$log never resolved its federation peer" >&2
-              exit 1
-            fi
-          done
-
-          npx playwright test --config playwright.config.ts --project=chromium tests/federation/security-hardening.spec.ts
-      - name: run selected ignored live harness probes
-        working-directory: cotest
-        # Keep this list explicit. A workspace-wide `cargo test -- --ignored`
-        # also runs tracked scaffold/manual debt. Nightly should fail on
-        # selected live probe failures, not on known deferred work.
-        #
-        # The `test-with-containers` feature is Linux-only (see
-        # `src/scenarios/_helpers/coauth_bootstrap.rs`). We enable it
-        # here so the Ubuntu job exercises the testcontainers bring-up
-        # alongside the docker-CLI path.
-        run: |
-          set -euo pipefail
-          cargo test --locked --features test-with-containers --test _bootstrap_smoke ephemeral_postgres_starts_and_stops -- --ignored
-          cargo test --locked --features test-with-containers --test _bootstrap_smoke coauth_can_be_spawned_with_ephemeral_postgres -- --ignored
-          cargo test --locked --features test-with-containers --test _bootstrap_smoke floria_can_be_spawned_with_rendered_config -- --ignored
-          cargo test --locked --features test-with-containers --test chaos_inject_smoke testcontainers_postgres_bringup_smoke -- --ignored
-      - name: upload live harness artifacts
-        uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: live-harness-artifacts
-          path: |
-            cotest/artifacts/runs/integration-playwright
-            cotest/artifacts/runs/federation-security-hardening
+        npx playwright test --config playwright.config.ts --project=chromium tests/federation/security-hardening.spec.ts
+    - name: run selected ignored live harness probes
+      working-directory: cotest
+      run: |
+        set -euo pipefail
+        cargo test --locked --features test-with-containers --test _bootstrap_smoke ephemeral_postgres_starts_and_stops -- --ignored
+        cargo test --locked --features test-with-containers --test _bootstrap_smoke coauth_can_be_spawned_with_ephemeral_postgres -- --ignored
+        cargo test --locked --features test-with-containers --test _bootstrap_smoke floria_can_be_spawned_with_rendered_config -- --ignored
+        cargo test --locked --features test-with-containers --test chaos_inject_smoke testcontainers_postgres_bringup_smoke -- --ignored
+    - name: upload live harness artifacts
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: live-harness-artifacts
+        path: |
+          cotest/artifacts/runs/integration-playwright
+          cotest/artifacts/runs/federation-security-hardening
+    needs:
+    - native-sources
+    - native-workspace
