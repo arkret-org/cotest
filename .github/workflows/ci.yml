@@ -205,16 +205,19 @@ jobs:
         run: |
           set -euo pipefail
           for svc in coland coauth floria flagon; do
+            binary_name="$svc"
             features=()
             if [ "$svc" = "coland" ]; then
               features=(--features conformance-harness)
             elif [ "$svc" = "coauth" ]; then
               features=(--features cedar)
+            elif [ "$svc" = "flagon" ]; then
+              binary_name=server
             fi
-            cargo build --manifest-path "$svc/Cargo.toml" --locked --bin "$svc" "${features[@]}"
+            cargo build --manifest-path "$svc/Cargo.toml" --locked --bin "$binary_name" "${features[@]}"
             target=$(cargo metadata --manifest-path "$svc/Cargo.toml" --locked --format-version 1 --no-deps | jq -er '.target_directory')
             key=$(printf '%s_BIN' "$svc" | tr '[:lower:]' '[:upper:]')
-            echo "$key=$target/debug/$svc" >> "$GITHUB_ENV"
+            echo "$key=$target/debug/$binary_name" >> "$GITHUB_ENV"
           done
       - name: Build real Savfox native binding worker
         shell: bash
