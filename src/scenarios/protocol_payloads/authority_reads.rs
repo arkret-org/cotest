@@ -197,7 +197,8 @@ pub async fn live_authority_bundle_and_scan_verify_through_garth() -> Result<()>
         StatusCode::FORBIDDEN,
         "capability_denied",
     )
-    .await?;
+    .await
+    .context("foreign Account stream scan refusal")?;
     let unknown = arkret_wire::RealmAuthorityBundleRequestBody {
         realm_id: arkret_wire::RealmId::from_event_id(&arkret_wire::EventId::from_digest(
             arkret_canonical::DigestSuite::Sha256,
@@ -211,10 +212,11 @@ pub async fn live_authority_bundle_and_scan_verify_through_garth() -> Result<()>
             .post(server.url("/_arkret/open/realm-authority/bundle"))
             .header(reqwest::header::CONTENT_TYPE, "application/json")
             .body(arkret_canonical::canonical_json_bytes(&unknown)?),
-        StatusCode::FORBIDDEN,
-        "capability_denied",
+        StatusCode::NOT_FOUND,
+        "not_found",
     )
-    .await?;
+    .await
+    .context("unknown public authority bundle must not disclose existence")?;
     Ok(())
 }
 
