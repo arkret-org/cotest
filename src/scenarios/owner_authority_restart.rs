@@ -58,10 +58,10 @@ pub async fn owner_invite_remove_grant_revoke_survive_restart() -> Result<()> {
     let created = alice.create_realm("Owner Restart Authority").await?;
     let realm_id = created;
 
-    server.kill_immediately().await?;
-    drop(server);
-    let mut server =
-        ArkretServer::spawn_with_database_url(test_name, &database_url, &keystore_env).await?;
+    // Restart the real child at the same canonical Station endpoint. Spawning
+    // a second listener would change its selected base while reusing the
+    // persisted service identity, which strict Station admission must reject.
+    server.restart_external_process().await?;
     let alice = server.standard_client(&alice_did, alice_device).await?;
     let bob = server.standard_client(&bob_did, bob_device).await?;
     alice.track_controlled_realm(&arkret_identifiers::RealmId::new(realm_id.clone())?);
