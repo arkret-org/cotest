@@ -6,6 +6,7 @@ import io
 import json
 import os
 from pathlib import Path
+import re
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -228,6 +229,104 @@ class NativeOperationStatusTests(unittest.TestCase):
         result = real_publish(loop, self.root / "os-loop-public", artifacts_root=self.artifacts,
                               declarations=self.declarations)
         self.assertIn("invalid_run_root", result["diagnostics"])
+
+    def failure_phase(self):
+        source = (publisher.REPO / publisher.MLS_SOURCE).read_bytes()
+        lines = source.decode("utf-8").splitlines()
+        line = lines.index('        phase.mark("mimi_control", line!());') + 1
+        self.write("native-sources.json", {"cotest/" + publisher.MLS_SOURCE: hashlib.sha256(source).hexdigest()})
+        (self.run / "diagnostics").mkdir(exist_ok=True)
+        return {"case": publisher.MLS_CASE, "stage": "mimi_control", "source": publisher.MLS_SOURCE,
+                "line": line, "status": None, "error_code": None}
+
+    def failed_mls_log(self):
+        names = (*publisher.REQUIRED, *publisher.META)
+        lines = [f"test {name} ... {'FAILED' if name == publisher.MLS_CASE else 'ok'}" for name in names]
+        lines += [PRIVATE, "test result: FAILED. 14 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 12.50s"]
+        (self.run / "native.log").write_text("\n".join(lines) + "\n", encoding="utf-8")
+        result = json.loads((self.run / "native-result.json").read_text())
+        self.write("native-result.json", dict(result, exit_code=101))
+
+    def test_failed_mls_phase_is_source_bound_without_http_or_proof_credit(self):
+        self.failed_mls_log()
+        phase = self.failure_phase()
+        self.write("diagnostics/mls-interop.json", phase)
+        result = self.publish()
+        self.assertEqual(result["failure_phases"], [phase])
+        self.assertEqual(result["counts"], {"passed": 14, "failed": 1, "ignored": 0, "measured": 0, "filtered_out": 0})
+        self.assertEqual(result["status"], "failed")
+        self.assertFalse(result["export_complete"])
+        self.assertFalse(result["native_execution_complete"])
+        self.assertIsNone(result["coverage"])
+        self.assertEqual(len(result["tests"]), 13)
+        self.assertEqual(len(result["meta_tests"]), 2)
+        real_publish = publisher.publish
+        def isolated(run_root, output_dir):
+            return real_publish(run_root, output_dir, artifacts_root=self.artifacts, declarations=self.declarations)
+        with patch.object(publisher, "publish", side_effect=isolated), contextlib.redirect_stdout(io.StringIO()):
+            code = publisher.main(["--run-root", str(self.run), "--output-dir", str(self.root / "failed-phase-cli")])
+        self.assertEqual(code, 1)
+
+    def test_failure_phase_rejects_unknown_fields_facts_source_and_locations(self):
+        self.failed_mls_log()
+        phase = self.failure_phase()
+        corruptions = [dict(phase, **{key: PRIVATE}) for key in ("case", "stage", "source")]
+        corruptions += [dict(phase, line=value) for value in (True, 0, 10001, phase["line"] + 1)]
+        corruptions += [dict(phase, status=503), dict(phase, error_code="temporarily_unavailable"),
+                        dict(phase, message=PRIVATE), {key: value for key, value in phase.items() if key != "status"}]
+        for index, value in enumerate(corruptions):
+            with self.subTest(index=index):
+                self.write("diagnostics/mls-interop.json", value)
+                result = self.publish(f"bad-phase-{index}")
+                self.assertEqual(result["failure_phases"], [])
+                self.assertIn("unavailable_mls_failure_phase", result["diagnostics"])
+                self.assertFalse(result["export_complete"])
+                self.assertIsNone(result["coverage"])
+        self.write("diagnostics/mls-interop.json", phase)
+        self.write("native-sources.json", {"cotest/" + publisher.MLS_SOURCE: "a" * 64})
+        self.assertEqual(self.publish("changed-phase-source")["failure_phases"], [])
+
+    def test_failure_phase_duplicate_json_missing_and_hardlinks_are_unavailable(self):
+        self.failed_mls_log()
+        self.assertEqual(self.publish("missing-phase")["failure_phases"], [])
+        phase = self.failure_phase()
+        path = self.run / "diagnostics/mls-interop.json"
+        raws = [json.dumps(phase)[:-1] + ',"stage":"' + PRIVATE + '"}',
+                PRIVATE, '{"line": NaN}', '\x00', 'x' * 4097]
+        for index, raw in enumerate(raws):
+            path.write_text(raw, encoding="utf-8")
+            result = self.publish(f"invalid-phase-json-{index}")
+            self.assertEqual(result["failure_phases"], [])
+            self.assertIn("unavailable_mls_failure_phase", result["diagnostics"])
+        outside = self.root / "private-phase.json"
+        outside.write_text(json.dumps(phase), encoding="utf-8")
+        path.unlink()
+        os.link(outside, path)
+        self.assertEqual(self.publish("phase-hardlink")["failure_phases"], [])
+
+    def test_passed_case_never_consumes_failure_phase_or_changes_coverage(self):
+        phase = self.failure_phase()
+        self.write("diagnostics/mls-interop.json", dict(phase, message=PRIVATE))
+        result = self.publish()
+        self.assertEqual(result["failure_phases"], [])
+        self.assertNotIn("unavailable_mls_failure_phase", result["diagnostics"])
+        self.assertTrue(result["export_complete"])
+        self.assertEqual(result["coverage"]["remaining"], len(self.unmapped))
+
+    def test_phase_resolve_fault_is_private_and_marker_inventory_matches_source(self):
+        self.failed_mls_log()
+        self.write("diagnostics/mls-interop.json", self.failure_phase())
+        original = Path.resolve
+        def raising(path, *args, **kwargs):
+            if path.name == "mls-interop.json":
+                raise RuntimeError("Symlink loop from " + PRIVATE)
+            return original(path, *args, **kwargs)
+        with patch.object(Path, "resolve", autospec=True, side_effect=raising):
+            self.assertEqual(self.publish("resolve-phase")["failure_phases"], [])
+        source = (publisher.REPO / publisher.MLS_SOURCE).read_text(encoding="utf-8")
+        stages = re.findall(r'phase\.mark\("([a-z_]+)", line!\(\)\);', source)
+        self.assertEqual(set(stages), publisher.MLS_STAGES)
+        self.assertEqual(len(stages), len(set(stages)))
 
 
 if __name__ == "__main__":

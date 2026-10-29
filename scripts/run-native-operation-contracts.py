@@ -117,6 +117,10 @@ def main():
         product = build(output, name, environment)
         products.append(product)
         environment[name.upper() + "_BIN"] = product["executable"]
+    # Failure locations are private diagnostics, never observations or proof.
+    diagnostics = output / "diagnostics"
+    diagnostics.mkdir(mode=0o700)
+    environment["COTEST_NATIVE_FAILURE_DIAGNOSTICS_DIR"] = str(diagnostics)
     document = gate.declarations()
     command = [sys.executable, "-B", str(gate.REPO / "scripts/run-native-rust-tests.py"), "--",
                "cargo", "test", "--locked", "--test", "native_operation_contracts", "--", "--nocapture", "--test-threads=1"]
