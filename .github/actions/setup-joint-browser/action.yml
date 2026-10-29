@@ -1,0 +1,64 @@
+name: Prepare locked joint browser tooling
+description: Install the existing joint browser build tools against the checked-out Inkson lock.
+inputs:
+  project:
+    description: Playwright browser project.
+    default: chromium
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-node@v4
+      with:
+        node-version: "24"
+    - name: Install native toolchain web target
+      shell: bash
+      run: rustup target add wasm32-unknown-unknown
+    - name: Install Dioxus CLI
+      shell: bash
+      run: cargo install dioxus-cli --version 0.7.10 --locked
+    - name: Install locked Inkson wasm-bindgen CLI
+      shell: bash
+      run: |
+        set -euo pipefail
+        version="$(python - <<'PY'
+        import re
+        import tomllib
+        from pathlib import Path
+        packages = tomllib.loads(Path("inkson/Cargo.lock").read_text())["package"]
+        versions = {p["version"] for p in packages if p["name"] == "wasm-bindgen"}
+        if len(versions) != 1:
+            raise SystemExit("Expected exactly one locked Inkson wasm-bindgen version")
+        version = versions.pop()
+        if not re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+", version):
+            raise SystemExit("Expected a stable wasm-bindgen version")
+        print(version)
+        PY
+        )"
+        tools="${DX_HOME:-$HOME/.dx}/tools/wasm-bindgen-$version"
+        cargo install wasm-bindgen-cli --version "$version" --locked --bin wasm-bindgen --root "$tools"
+        install -m 755 "$tools/bin/wasm-bindgen" "$tools/wasm-bindgen"
+        test "$("$tools/wasm-bindgen" --version)" = "wasm-bindgen $version"
+    - name: Install frontend task runner
+      uses: extractions/setup-just@53165ef7e734c5c07cb06b3c8e7b647c5aa16db3 # v4
+      with:
+        just-version: "1.46.0"
+    - name: Install locked Playwright browser
+      shell: bash
+      working-directory: cotest/e2e
+      env:
+        BROWSER_PROJECT: ${{ inputs.project }}
+      run: |
+        set -euo pipefail
+        case "$BROWSER_PROJECT" in
+          chromium|firefox|webkit) ;;
+          *) echo "unsupported Playwright browser project" >&2; exit 1 ;;
+        esac
+        npm ci
+        ./node_modules/.bin/playwright install --with-deps "$BROWSER_PROJECT"
+    - name: Expose the locked Dioxus JavaScript bundler
+      shell: bash
+      working-directory: cotest/e2e
+      run: |
+        set -euo pipefail
+        test "$(node_modules/.bin/esbuild --version)" = "0.28.2"
+        printf '%s\n' "$PWD/node_modules/.bin" >> "$GITHUB_PATH"
