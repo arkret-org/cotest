@@ -9,24 +9,25 @@ use crate::harness::{
     dispatch_accepted_invite_and_await_delivery, expect_audit_action, expect_json, expect_status,
     invite_create_payload, submitted_event_id,
 };
-use crate::scenarios::identity_test_support::{
-    actor_did_for_service_did, spawn_with_harness_account_authority,
+use crate::scenarios::agent_runtime_live::coauth_session_evidence::{
+    actual_agent_deployment, additional_controller,
 };
 
 pub async fn contacts_invites_listing_export_and_audit_work() -> Result<()> {
-    let server = spawn_with_harness_account_authority("directory-workflow", &[]).await?;
-    let alice_did = actor_did_for_service_did(server.service_did(), "directory-alice")?;
-    let alice = server
-        .standard_client(&alice_did, "ak:device:01904100-0000-7000-8000-0000000000a1")
+    let mut deployment = actual_agent_deployment("directory-workflow").await?;
+    let alice = deployment.controller.clone();
+    let bob = additional_controller(
+        &deployment,
+        "bob-directory",
+        "ak:device:01904100-0000-7000-8000-0000000000b0",
+    )
+    .await?;
+    let administrator = deployment.account.principal_id.clone();
+    deployment
+        .station
+        .restart_with_registry_administrators(&[administrator])
         .await?;
-    let bob_did = actor_did_for_service_did(server.service_did(), "directory-bob")?;
-    let bob = server
-        .standard_register_client(
-            &bob_did,
-            "@bob-directory",
-            "ak:device:01904100-0000-7000-8000-0000000000b0",
-        )
-        .await?;
+    let server = &deployment.station;
     alice
         .request_contact(&bob.actor)
         .await
