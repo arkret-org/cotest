@@ -1019,7 +1019,7 @@ pub async fn run_signer_keys_query_live() -> Result<()> {
 
     let serialized = serde_json::to_value(&outcome)?;
     ensure!(
-        serialized["results"][0]["key"]
+        serialized["resolutions"][0]["key"]
             .as_object()
             .context("key object")?
             .len()
