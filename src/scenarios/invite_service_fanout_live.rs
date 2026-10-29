@@ -1304,6 +1304,8 @@ async fn generic_consent_opaque_timings(
     holder: &TestActorClient,
     evidence: IntroductionEvidence,
 ) -> Result<()> {
+    use arkret_models_collaboration::governance::invite_addressing::InviteDeliveryResponseBody;
+
     let never = server
         .standard_client(
             &actor_did_for_service_did(server.service_did(), "consent-never-matching")?,
@@ -1333,10 +1335,15 @@ async fn generic_consent_opaque_timings(
     for sample in 0..26 {
         for class in [sample % 2, 1 - sample % 2] {
             requests[class].idempotency_key = format!("consent-opaque-{class}-{sample}");
-            let started = Instant::now();
             let client = if class == 0 { revoked } else { &never };
-            let response:arkret_models_collaboration::governance::invite_addressing::InviteDeliveryResponseBody=serde_json::from_value(expect_json(client.post("/_arkret/self/invites/dispatch").json(&requests[class]),StatusCode::OK).await?)?;
-            let elapsed = started.elapsed().as_secs_f64();
+            // Compare complete HTTP exchanges, excluding client DPoP/DTO
+            // work and the harness's validation and evidence writes.
+            let request = client
+                .post("/_arkret/self/invites/dispatch")
+                .json(&requests[class]);
+            let response = crate::harness::expect_response(request, StatusCode::OK).await?;
+            let elapsed = response.http_elapsed().as_secs_f64();
+            let response: InviteDeliveryResponseBody = serde_json::from_value(response.json()?)?;
             ensure!(response.status==arkret_models_collaboration::governance::invite_addressing::InviteDeliveryOutcomeStatus::Deferred && response.disclosed_outcome.is_none() && response.retry_after_ms.is_none(),"generic Invite disclosed Consent history");
             if sample >= 2 {
                 samples[class].push(elapsed);
@@ -1351,7 +1358,9 @@ async fn generic_consent_opaque_timings(
     }
     ensure!(
         distance <= 1.63f64 * (2.0f64 / 24.0f64).sqrt(),
-        "generic Invite Consent-history timing separated: KS={distance}"
+        "generic Invite Consent-history timing separated: KS={distance}; revoked_seconds={:?}; never_matching_seconds={:?}",
+        samples[0],
+        samples[1],
     );
     let after = account_data_row(holder, AccountDataKey::ACCOUNT_INVITE_DELIVERY).await?;
     ensure!(
