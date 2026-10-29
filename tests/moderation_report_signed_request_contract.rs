@@ -60,9 +60,16 @@ fn registry_and_schema_pin_the_exact_signed_report_event() {
     // Mirrors `moderation-report.schema.json`: a direct-holder signed Event
     // whose current authorization and scope the governance Station resolves,
     // so the submission carries no caller-selected authorization basis.
+    let mut required = event["required"]
+        .as_array()
+        .expect("required fields array")
+        .iter()
+        .map(|field| field.as_str().expect("required field name"))
+        .collect::<Vec<_>>();
+    required.sort_unstable();
     assert_eq!(
-        event["required"],
-        json!(["kind", "payload", "realm_id", "scope_ref", "actor_id"])
+        required,
+        ["actor_id", "kind", "payload", "realm_id", "scope_ref"]
     );
     assert_eq!(
         event["not"],

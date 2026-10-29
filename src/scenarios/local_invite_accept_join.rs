@@ -13,8 +13,9 @@
 //!    `ak.message.create`, after which it is committed and Alice's stream scan returns it in full;
 //! 4. Bob's own scan starts at his accepting Commit (`membership_join`, decision 0108 §1045); his
 //!    `/head` Snapshot names the same floor and carries the Invite, grant and roster rows; his
-//!    Account window uses the exact independently signed `stream_history` original for its anchor
-//!    (`zh/sync/client-sync.md` §5.2); a current `/head` cannot replace that original;
+//!    Account window above that floor names an independently issued exact `stream_history` Snapshot
+//!    as its committed prefix (`zh/sync/client-sync.md` §5.2); a current `/head` Snapshot cannot
+//!    replace that historical basis;
 //! 5. Bob leaves by his own `ak.member.state`; his Account realm list removes the Realm and his
 //!    scan is refused.
 
@@ -135,34 +136,51 @@ async fn realm_window(
         .with_context(|| format!("the requested Realm detail is absent: {line}"))
 }
 
-async fn read_history_original(
+fn window_positions(
+    entry: &arkret_models_collaboration::sync_frames::account_subscribe::RealmSyncEntry,
+) -> Vec<u64> {
+    entry
+        .committed_events
+        .iter()
+        .flatten()
+        .map(|row| row.commit().stream_position)
+        .collect()
+}
+
+async fn exact_window_basis(
     client: &TestActorClient,
     realm: &RealmId,
-    window: &arkret_models_collaboration::sync_frames::account_sync::RealmStreamWindow,
+    stream: &CommitStreamRef,
+    account: &AccountId,
+    basis: &arkret_models_collaboration::sync_frames::account_sync::StreamWindowStartBasis,
 ) -> Result<arkret_wire::RealmStateSnapshot> {
-    let basis = window
-        .window_start_basis
-        .as_ref()
-        .context("exact history basis")?;
     let snapshot = client
         .sdk()
         .realm_state_snapshot_by_ref(realm, &basis.snapshot_ref)
-        .await?;
+        .await
+        .context("retrieve the window's exact original historical basis")?;
     snapshot.validate_purpose()?;
-    let signed = snapshot
+    ensure!(
+        &snapshot.realm_id == realm && snapshot.snapshot_id == basis.snapshot_ref,
+        "historical response does not bind the exact requested Realm and Snapshot"
+    );
+    let history = snapshot
         .history_basis
         .as_ref()
-        .context("signed history coverage")?;
+        .context("historical window basis omitted its signed scope")?;
     ensure!(
         snapshot.purpose == arkret_wire::RealmSnapshotPurpose::StreamHistory
             && snapshot.governance_generation == basis.governance_generation
-            && signed.account_id == account_of(client)?
-            && signed.stream_ref == window.stream_ref
-            && signed.anchor_position == basis.anchor_position
-            && signed.anchor_commit_ref == basis.anchor_commit_ref
-            && signed.accepted_dependency_refs
-                == basis.accepted_dependency_refs.clone().unwrap_or_default(),
-        "history original does not bind the exact holder, stream and prefix"
+            && &history.account_id == account
+            && &history.stream_ref == stream
+            && history.anchor_position == basis.anchor_position
+            && history.anchor_commit_ref == basis.anchor_commit_ref
+            && history.accepted_dependency_refs.as_slice()
+                == basis
+                    .accepted_dependency_refs
+                    .as_deref()
+                    .unwrap_or_default(),
+        "the exact original does not cover the window's authenticated account and prefix"
     );
     let (_, seed) = crate::harness::test_service_signing_key("local-invite-accept-join");
     let key = arkret_signatures::PublicKeyMaterial::Ed25519Raw {
@@ -191,17 +209,6 @@ async fn read_history_original(
         "history must not replace current"
     );
     Ok(snapshot)
-}
-
-fn window_positions(
-    entry: &arkret_models_collaboration::sync_frames::account_subscribe::RealmSyncEntry,
-) -> Vec<u64> {
-    entry
-        .committed_events
-        .iter()
-        .flatten()
-        .map(|row| row.commit().stream_position)
-        .collect()
 }
 
 pub async fn local_invite_accept_join_run() -> Result<()> {
@@ -363,6 +370,7 @@ pub async fn local_invite_accept_join_run() -> Result<()> {
     .context("Bob's /head")?;
     let head_snapshot: arkret_wire::RealmStateSnapshot = serde_json::from_value(head_body.clone())
         .context("Bob's /head is a closed signed Snapshot")?;
+    head_snapshot.require_full_recovery()?;
     let head_position = realm_head(&alice, &realm_id).await?;
     let realm_stream = CommitStreamRef::Realm {
         realm_id: realm_id.clone(),
@@ -397,7 +405,7 @@ pub async fn local_invite_accept_join_run() -> Result<()> {
     );
 
     // With no newer Commit, the tail is empty above Bob's join floor. Its
-    // independent history original covers the same cut as the current head.
+    // independent historical basis must be read by the exact issued reference.
     let whole = realm_window(&bob, &realm, 20).await?;
     let whole_window = whole
         .streams
@@ -408,23 +416,22 @@ pub async fn local_invite_accept_join_run() -> Result<()> {
         window_positions(&whole).is_empty()
             && whole_window.limited
             && whole_window.preview_only.is_none()
+            && whole_window.head_commit_ref == head_snapshot.visible_stream_heads[0].commit_id
             && whole_window
                 .window_start_basis
                 .as_ref()
                 .is_some_and(|basis| basis.anchor_position == head_position
                     && basis.anchor_commit_ref == whole_window.head_commit_ref),
-        "Bob's empty tail must bind the exact head prefix: {whole_window:?}"
+        "Bob's empty tail must bind the exact committed head: {whole_window:?}"
     );
-    let history = read_history_original(&bob, &realm_id, whole_window).await?;
-    ensure!(
-        history.current_state_entries == head_snapshot.current_state_entries
-            && history.visible_stream_heads == head_snapshot.visible_stream_heads
-            && history.retention_and_history_floor == head_snapshot.retention_and_history_floor,
-        "independent history original differs from Bob's current head at the same cut"
-    );
+    let whole_basis = whole_window
+        .window_start_basis
+        .as_ref()
+        .context("Bob's empty tail omitted its historical basis")?;
+    let original_basis =
+        exact_window_basis(&bob, &realm_id, &realm_stream, &bob_account, whole_basis).await?;
 
-    // One more Commit: the one-row tail retains the same exact prefix. Read
-    // each window's own reference instead of substituting a current /head.
+    // One more Commit: the one-row tail retains the same committed prefix.
     bob.send_message(&realm, &strand_id, "after the head")
         .await
         .context("Bob's second Message is committed")?;
@@ -443,22 +450,16 @@ pub async fn local_invite_accept_join_run() -> Result<()> {
             && latest_window.limited
             && latest_window.preview_only.is_none()
             && basis.anchor_position == head_position
-            && basis.anchor_commit_ref == whole_window.head_commit_ref,
-        "the one-row window changed its original prefix: {latest_window:?}"
+            && basis.anchor_commit_ref == whole_basis.anchor_commit_ref,
+        "the one-row window is backed by the original committed prefix: {latest_window:?}"
     );
-    let latest_history = read_history_original(&bob, &realm_id, latest_window).await?;
+    exact_window_basis(&bob, &realm_id, &realm_stream, &bob_account, basis).await?;
     ensure!(
-        latest_history.history_basis == history.history_basis
-            && latest_history.current_state_entries == history.current_state_entries
-            && latest_history.visible_stream_heads == history.visible_stream_heads
-            && latest_history.retention_and_history_floor == history.retention_and_history_floor,
-        "the later window's exact original changed the accepted prefix"
-    );
-    let reread = read_history_original(&bob, &realm_id, whole_window).await?;
-    ensure!(
-        arkret_canonical::canonical_json_bytes(&reread)?
-            == arkret_canonical::canonical_json_bytes(&history)?,
-        "the first window's retained signed original changed after a later Commit"
+        bob.sdk()
+            .realm_state_snapshot_by_ref(&realm_id, &whole_basis.snapshot_ref)
+            .await?
+            == original_basis,
+        "the later message or window replaced the earlier original historical basis"
     );
 
     // (5) Bob leaves by his own Event.
