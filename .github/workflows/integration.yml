@@ -25,7 +25,9 @@ jobs:
   joint-bringup:
     name: bringup coland + coauth + floria + cotest
     runs-on: ubuntu-latest
-    timeout-minutes: 180
+    # Allow cold service builds and the complete native workspace to finish.
+    # Scenario deadlines and performance assertions remain unchanged.
+    timeout-minutes: 360
     services:
       postgres:
         image: postgres:17
