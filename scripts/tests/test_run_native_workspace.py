@@ -24,7 +24,11 @@ def load(name, path):
 _HERE = Path(__file__).resolve().parent
 cli = load("run_native_workspace_cli", _HERE.parent / "run-native-workspace.py")
 fixtures = load("native_scope_cli_fixtures", _HERE / "test_native_workspace_scope.py")
-_BASE = Path("D:/BuildCache/arkret-ci-20261028/native-scope-tests")
+_DEFAULT_BASE = (Path("D:/BuildCache/arkret-ci-20261028/native-scope-tests")
+                 if os.name == "nt" else Path(tempfile.gettempdir()) / "cotest-native-scope-tests")
+_BASE = Path(os.environ.get("COTEST_NATIVE_SCOPE_TEST_ROOT", str(_DEFAULT_BASE)))
+if not _BASE.is_absolute():
+    raise ValueError("scope test root must be absolute")
 
 
 class CliTests(unittest.TestCase):
@@ -185,7 +189,7 @@ class CliTests(unittest.TestCase):
         self.proofs()
         directory = self.base / "shard-0"
         file = next((directory / "runtime/docs").glob("*.json"))
-        file.unlink()  # Only a fresh synthetic receipt under the verified D test root.
+        file.unlink()  # Only a fresh synthetic receipt under the verified run-owned root.
         self.assertEqual(self.invoke(["publish", "--plan", str(directory / "private-plan.json"),
                                       "--output", str(directory / "scope-proof.json")])[0], 0)
         self.assertEqual(self.invoke(["aggregate", "--root", str(self.base)])[0], 1)
