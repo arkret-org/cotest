@@ -167,7 +167,7 @@ jobs:
             # offline metadata query, including optional product dependencies.
             $metadataJson = & cargo metadata --locked --all-features --format-version 1
             if ($LASTEXITCODE -ne 0) { throw "Cargo metadata failed for $svc" }
-            $metadata = ($metadataJson -join "`n") | ConvertFrom-Json
+            $metadata = ($metadataJson -join "`n") | ConvertFrom-Json -AsHashtable
             $packages = @($metadata.packages | Where-Object {
               $metadata.workspace_members -ccontains $_.id -and
               @($_.targets | Where-Object { $_.name -ceq $svc -and $_.kind -contains 'bin' }).Count -gt 0
