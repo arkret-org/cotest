@@ -903,22 +903,79 @@ pub async fn concurrent_requests_complete_glare_round() -> Result<()> {
         alice_round.contact_round_id == bob_round.contact_round_id,
         "glare Stations installed different Contact rounds"
     );
-    let alice_resolve = alice
-        .sdk()
-        .direct_conversation_resolve(&DirectConversationResolveRequestBody {
-            peer: ContactPeer::Human {
-                account_id: bob_account.clone(),
-            },
-        })
-        .await?;
-    let bob_resolve = bob
-        .sdk()
-        .direct_conversation_resolve(&DirectConversationResolveRequestBody {
-            peer: ContactPeer::Human {
-                account_id: alice_account.clone(),
-            },
-        })
-        .await?;
+    // Accepted list rows do not imply the founder already has both fresh
+    // source attestations. Resolve can request the missing current material
+    // and return the specified temporary state (Contact/DC sections 3.2, 9.1).
+    // Poll only these reads within the existing Contact convergence budget;
+    // never resubmit a signed request or transfer authority on timeout.
+    let deadline = Instant::now() + Duration::from_secs(30);
+    let mut observed_founder = None;
+    let (alice_resolve, bob_resolve) = loop {
+        let alice_resolve = alice
+            .sdk()
+            .direct_conversation_resolve(&DirectConversationResolveRequestBody {
+                peer: ContactPeer::Human {
+                    account_id: bob_account.clone(),
+                },
+            })
+            .await?;
+        let bob_resolve = bob
+            .sdk()
+            .direct_conversation_resolve(&DirectConversationResolveRequestBody {
+                peer: ContactPeer::Human {
+                    account_id: alice_account.clone(),
+                },
+            })
+            .await?;
+        for (index, outcome) in [&alice_resolve, &bob_resolve].into_iter().enumerate() {
+            if let DirectConversationResolveResponseBody::CreationRequired {
+                next_founding_input,
+            } = outcome
+            {
+                ensure!(
+                    observed_founder.is_none_or(|founder| founder == index),
+                    "glare founder authority changed during current-material convergence"
+                );
+                observed_founder = Some(index);
+                let DirectConversationFoundingAuthorityEvidence::Human {
+                    contact_round_evidence,
+                } = &next_founding_input.founding_authority_evidence
+                else {
+                    bail!("glare founder received non-Contact DC authority");
+                };
+                ensure!(
+                    contact_round_evidence.contact_round_id == alice_round.contact_round_id,
+                    "glare founding material changed the accepted Contact round"
+                );
+            }
+        }
+        let temporary = matches!(
+            alice_resolve,
+            DirectConversationResolveResponseBody::TemporarilyUnavailable { .. }
+        ) || matches!(
+            bob_resolve,
+            DirectConversationResolveResponseBody::TemporarilyUnavailable { .. }
+        );
+        if !temporary {
+            break (alice_resolve, bob_resolve);
+        }
+        for outcome in [&alice_resolve, &bob_resolve] {
+            ensure!(
+                matches!(
+                    outcome,
+                    DirectConversationResolveResponseBody::CreationRequired { .. }
+                        | DirectConversationResolveResponseBody::AwaitingFounder { .. }
+                        | DirectConversationResolveResponseBody::TemporarilyUnavailable { .. }
+                ),
+                "glare reached an unexpected DC outcome: {outcome:?}"
+            );
+        }
+        ensure!(
+            Instant::now() < deadline,
+            "glare current material did not converge: Alice {alice_resolve:?}; Bob {bob_resolve:?}"
+        );
+        tokio::time::sleep(Duration::from_millis(250)).await;
+    };
     let founder_material = match (&alice_resolve, &bob_resolve) {
         (
             DirectConversationResolveResponseBody::CreationRequired {

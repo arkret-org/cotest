@@ -288,35 +288,57 @@ pub async fn run_federation_revoked_service_key_replay_live() -> Result<()> {
         "fresh Commit under successor service key",
     )
     .await?;
-    let successor_outcomes = replicate(
-        fixture.group.server(1),
-        fixture.group.server(0),
-        &replication_body(&fixture.alice, &fresh_event, &fresh_commit).await?,
-    )
-    .await?;
+    let successor_body = replication_body(&fixture.alice, &fresh_event, &fresh_commit).await?;
+    let successor_request = fixture
+        .group
+        .server(1)
+        .signed_peer_post_request_with_idempotency_key(
+            fixture.group.server(0),
+            PEER_EVENTS,
+            &successor_body,
+            fixture.group.server(1).service_id(),
+            Some("federation-key-successor-replay"),
+        )?;
+    let successor = fixture
+        .group
+        .server(1)
+        .http()
+        .execute(
+            successor_request
+                .try_clone()
+                .context("clone exact successor request")?,
+        )
+        .await?;
+    ensure!(successor.status() == StatusCode::OK);
+    let successor: PeerAuthoritySubmitResponseBody = successor.json().await?;
     ensure!(
         matches!(
-            successor_outcomes.as_slice(),
-            [CommittedEventReplicationOutcome::Stored {}
-                | CommittedEventReplicationOutcome::Duplicate {}]
+            &successor,
+            PeerAuthoritySubmitResponseBody::CommittedReplication(value)
+                if matches!(value.replication_outcomes.as_slice(),
+                    [CommittedEventReplicationOutcome::Stored {}
+                        | CommittedEventReplicationOutcome::Duplicate {}])
         ),
-        "the successor service key did not authenticate and store a current peer submit: {successor_outcomes:?}"
+        "the successor service key did not authenticate and store a current peer submit: {successor:?}"
     );
     ensure_same_commit(
         &fresh_commit,
         &wait_held(&fixture.bob, &fresh_event.event_id, HELD_WINDOW).await?,
     )?;
-    let successor_replay = replicate(
-        fixture.group.server(1),
-        fixture.group.server(0),
-        &replication_body(&fixture.alice, &fresh_event, &fresh_commit).await?,
-    )
-    .await?;
+    let before_successor_replay = held_commit_ids(&fixture.bob, &fixture.realm).await?;
+    let successor_replay = fixture
+        .group
+        .server(1)
+        .http()
+        .execute(successor_request)
+        .await?;
+    ensure!(successor_replay.status() == StatusCode::OK);
+    let successor_replay: PeerAuthoritySubmitResponseBody = successor_replay.json().await?;
+    // An exact same-basis replay retains its first outcome. In particular a
+    // first Stored result must remain Stored, rather than become Duplicate.
     ensure!(
-        matches!(
-            successor_replay.as_slice(),
-            [CommittedEventReplicationOutcome::Duplicate {}]
-        ),
+        successor_replay == successor
+            && held_commit_ids(&fixture.bob, &fixture.realm).await? == before_successor_replay,
         "the successor service key did not authenticate a held Commit replay: {successor_replay:?}"
     );
     let before = held_commit_ids(&fixture.bob, &fixture.realm).await?;

@@ -343,11 +343,18 @@ pub async fn cross_station_invite_join_run() -> Result<()> {
         .await?;
     let false_status = false_source.status();
     let false_body = false_source.json::<Value>().await?;
+    // This locator names a reachable Station that does not govern the Realm.
+    // It is a wrong source, not an unreachable governing Station.
     ensure!(
-        false_status == StatusCode::SERVICE_UNAVAILABLE
-            && problem_is(&false_body, "temporarily_unavailable"),
-        "an unverified locator must remain retryable and confer no preview: {false_status} {false_body}"
+        false_status == StatusCode::NOT_FOUND && problem_is(&false_body, "not_found"),
+        "a wrong-source locator must confer no preview: {false_status} {false_body}"
     );
+    for field in ["type", "title", "status", "detail"] {
+        ensure!(
+            false_body[field] == hidden_body[field],
+            "wrong-source and non-invitee refusals differ at {field}"
+        );
+    }
     ensure!(
         false_started.elapsed() >= Duration::from_millis(150),
         "a locator refusal bypassed the non-enumerating preview timing floor"

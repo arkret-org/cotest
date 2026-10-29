@@ -50,7 +50,7 @@ fn protocol_simplification_shape_cases_execute_without_semantic_credit() -> Resu
     let fixture = cotest::conformance::load_fixture_value("protocol-simplification-fixture.json")?;
     execution
         .assert_complete_against_cases(fixture["schema_validation_cases"].as_array().unwrap())?;
-    assert_eq!(execution.cases.len(), 26);
+    assert_eq!(execution.cases.len(), 27);
     assert_eq!(fixture["cases"].as_array().unwrap().len(), 35);
     Ok(())
 }

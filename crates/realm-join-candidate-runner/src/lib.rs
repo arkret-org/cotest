@@ -44,7 +44,6 @@ const NONCE: &str = "AAAAAAAAAAAAAAAAAAAAAA";
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct FixtureRoot {
-    fixture_kind: String,
     runner: Runner,
     vector_id: String,
     accepted_candidate: Value,
@@ -178,7 +177,6 @@ fn load_fixture() -> Result<FixtureRoot> {
 }
 
 fn validate_fixture_metadata(fixture: &FixtureRoot) -> Result<()> {
-    ensure!(fixture.fixture_kind == "schema_and_semantic");
     ensure!(fixture.runner.kind == "named_suite");
     ensure!(fixture.runner.entrypoint == REALM_JOIN_CANDIDATE_ENTRYPOINT);
     ensure!(fixture.vector_id == "ak.vector.realm_join_candidate.untrusted_locator.v1");

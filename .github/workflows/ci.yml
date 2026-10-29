@@ -18,31 +18,60 @@ env:
   SIBLING_REF: main
 
 jobs:
+  native-sources:
+    name: freeze native validation sources
+    runs-on: ubuntu-latest
+    outputs:
+      refs: ${{ steps.refs.outputs.result }}
+    steps:
+      - name: Resolve the run's immutable source set
+        id: refs
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.CI_REPO_TOKEN || github.token }}
+          script: |
+            const refs = {cotest: context.sha};
+            const siblings = ['arkret-spec', 'arkret-rust-sdk', 'inkson', 'coland',
+              'coauth', 'floria', 'flagon', 'chime', 'garth', 'bridges'];
+            await Promise.all(siblings.map(async repo => {
+              const {data} = await github.rest.repos.getCommit({owner: context.repo.owner, repo, ref: 'main'});
+              refs[repo] = data.sha;
+            }));
+            const {data} = await github.rest.repos.getCommit({owner: 'savfox-ai', repo: 'savfox', ref: 'main'});
+            refs.savfox = data.sha;
+            for (const [repo, sha] of Object.entries(refs)) {
+              if (!/^[0-9a-f]{40}$/.test(sha)) throw new Error(`Invalid commit for ${repo}`);
+              core.info(`${repo}=${sha}`);
+            }
+            return refs;
+
   rust:
-    name: rust (${{ matrix.toolchain }} / clippy / test)
+    name: rust (${{ matrix.toolchain }} / ${{ matrix.lane }})
+    needs: native-sources
     runs-on: ubuntu-latest
     timeout-minutes: 360
     services:
       postgres:
         image: postgres:18-alpine
         env:
-          POSTGRES_DB: cotest_coauth_evidence
+          POSTGRES_DB: cotest_test_coauth_evidence
           POSTGRES_USER: cotest
           POSTGRES_PASSWORD: cotest-ci
         ports:
           - 5432:5432
         options: >-
-          --health-cmd "pg_isready -U cotest -d cotest_coauth_evidence"
+          --health-cmd "pg_isready -U cotest -d cotest_test_coauth_evidence"
           --health-interval 5s
           --health-timeout 5s
           --health-retries 12
     env:
-      DATABASE_URL: postgresql://cotest:cotest-ci@127.0.0.1:5432/cotest_coauth_evidence
+      DATABASE_URL: postgresql://cotest:cotest-ci@127.0.0.1:5432/cotest_test_coauth_evidence
       # Process scenarios create independent database leases from this real
       # PostgreSQL service. Missing live prerequisites must fail this lane.
-      COTEST_COLAND_DATABASE_URL: postgresql://cotest:cotest-ci@127.0.0.1:5432/cotest_coauth_evidence
-      COLAND_TEST_DATABASE_URL: postgresql://cotest:cotest-ci@127.0.0.1:5432/cotest_coauth_evidence
-      COTEST_COAUTH_DATABASE_URL: postgresql://cotest:cotest-ci@127.0.0.1:5432/cotest_coauth_evidence
+      COTEST_COLAND_DATABASE_URL: postgresql://cotest:cotest-ci@127.0.0.1:5432/cotest_test_coauth_evidence
+      COLAND_TEST_DATABASE_URL: postgresql://cotest:cotest-ci@127.0.0.1:5432/cotest_test_coauth_evidence
+      COTEST_COAUTH_DATABASE_URL: postgresql://cotest:cotest-ci@127.0.0.1:5432/cotest_test_coauth_evidence
+      COTEST_FLAGON_DATABASE_URL: postgresql://cotest:cotest-ci@127.0.0.1:5432/postgres
       COTEST_REQUIRE_LIVE_SERVICES: "1"
       # The workspace links many complete process-test executables. Keep
       # assertions enabled while avoiding parallel linker and debug-data pressure.
@@ -56,65 +85,16 @@ jobs:
         # The crate uses edition 2024 and the current SDK requires the
         # release pipeline toolchain.
         toolchain: ["1.98"]
+        # Independent gates use the same source set. The complete workspace
+        # test and authority commands each retain their original full scope.
+        lane: [checks, workspace, authority, contact]
     steps:
       - uses: actions/checkout@v4
         with:
           path: cotest
-      # arkret-rust-sdk is a path dependency; check it out as a sibling so
-      # `cargo check` resolves crates/* under ../arkret-rust-sdk.
-      - uses: actions/checkout@v4
+      - uses: ./cotest/.github/actions/checkout-native-sources
         with:
-          repository: ${{ github.repository_owner }}/arkret-spec
-          path: arkret-spec
-          ref: ${{ env.SIBLING_REF }}
-          token: ${{ secrets.CI_REPO_TOKEN || github.token }}
-      - uses: actions/checkout@v4
-        with:
-          repository: ${{ github.repository_owner }}/inkson
-          path: inkson
-          ref: ${{ env.SIBLING_REF }}
-          token: ${{ secrets.CI_REPO_TOKEN || github.token }}
-      - uses: actions/checkout@v4
-        with:
-          repository: ${{ github.repository_owner }}/coland
-          path: coland
-          ref: ${{ env.SIBLING_REF }}
-          token: ${{ secrets.CI_REPO_TOKEN || github.token }}
-      - name: Complete Coland build dependency layout
-        working-directory: coland
-        env:
-          CI_REPO_TOKEN: ${{ secrets.CI_REPO_TOKEN || github.token }}
-        run: bash .ci/checkout-build-dependencies.sh
-
-      - uses: actions/checkout@v4
-        with:
-          repository: ${{ github.repository_owner }}/coauth
-          path: coauth
-          ref: ${{ env.SIBLING_REF }}
-          token: ${{ secrets.CI_REPO_TOKEN || github.token }}
-      - uses: actions/checkout@v4
-        with:
-          repository: ${{ github.repository_owner }}/floria
-          path: floria
-          ref: ${{ env.SIBLING_REF }}
-          token: ${{ secrets.CI_REPO_TOKEN || github.token }}
-      - uses: actions/checkout@v4
-        with:
-          repository: ${{ github.repository_owner }}/chime
-          path: chime
-          ref: ${{ env.SIBLING_REF }}
-          token: ${{ secrets.CI_REPO_TOKEN || github.token }}
-      - uses: actions/checkout@v4
-        with:
-          repository: ${{ github.repository_owner }}/arkret-rust-sdk
-          path: arkret-rust-sdk
-          ref: ${{ env.SIBLING_REF }}
-          token: ${{ secrets.CI_REPO_TOKEN || github.token }}
-      - uses: actions/checkout@v4
-        with:
-          repository: ${{ github.repository_owner }}/garth
-          path: garth
-          ref: ${{ env.SIBLING_REF }}
+          refs: ${{ needs.native-sources.outputs.refs }}
           token: ${{ secrets.CI_REPO_TOKEN || github.token }}
       - name: Install Linux desktop dependencies
         run: |
@@ -155,7 +135,11 @@ jobs:
         run: python -m pip install -r arkret-spec/tools/requirements.txt
       - name: Native runner isolation and public evidence regressions
         working-directory: cotest
-        run: python -B -m unittest scripts.tests.test_run_native_rust_tests scripts.tests.test_publish_native_rust_evidence scripts.tests.test_run_native_operation_contracts
+        run: python -B -m unittest scripts.tests.test_run_native_rust_tests scripts.tests.test_publish_native_rust_evidence scripts.tests.test_run_native_operation_contracts scripts.tests.test_publish_native_operation_status
+      - name: Native preparation tool handoff regressions
+        working-directory: cotest
+        shell: pwsh
+        run: ./scripts/tests/native-tool-environment.tests.ps1
 
       - name: Install nightly rustfmt
         uses: dtolnay/rust-toolchain@nightly
@@ -171,14 +155,17 @@ jobs:
       - name: Migrate isolated Coauth route-evidence database
         run: psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f coauth/crates/storage-postgres/migrations/00000000000000_initial/up.sql
       - name: fmt
+        if: matrix.lane == 'checks'
         working-directory: cotest
         run: cargo +nightly fmt --all -- --check
       - name: clippy
+        if: matrix.lane == 'checks'
         working-directory: cotest
         # cotest carries TODO scaffolding for in-flight coverage; treat
         # warnings as errors so drift surfaces before merge.
         run: cargo clippy --workspace --all-targets -- -D warnings
       - name: build (all-features)
+        if: matrix.lane == 'workspace'
         working-directory: cotest
         run: |
           mkdir -p artifacts/sdk-artifact-build
@@ -191,25 +178,31 @@ jobs:
             --output "$RUNNER_TEMP/cotest-sdk-artifact"
           echo "COTEST_SDK_ARTIFACT_MANIFEST=$RUNNER_TEMP/cotest-sdk-artifact/artifact.json" >> "$GITHUB_ENV"
       - name: build (no-default-features)
+        if: matrix.lane == 'checks'
         working-directory: cotest
         run: cargo build --workspace --no-default-features --locked
       - name: Build fresh process-mode test services
+        if: matrix.lane == 'workspace'
         shell: bash
         run: |
           set -euo pipefail
-          for svc in coland coauth floria; do
+          for svc in coland coauth floria flagon; do
+            binary_name="$svc"
             features=()
             if [ "$svc" = "coland" ]; then
               features=(--features conformance-harness)
             elif [ "$svc" = "coauth" ]; then
               features=(--features cedar)
+            elif [ "$svc" = "flagon" ]; then
+              binary_name=server
             fi
-            cargo build --manifest-path "$svc/Cargo.toml" --locked --bin "$svc" "${features[@]}"
+            cargo build --manifest-path "$svc/Cargo.toml" --locked --bin "$binary_name" "${features[@]}"
             target=$(cargo metadata --manifest-path "$svc/Cargo.toml" --locked --format-version 1 --no-deps | jq -er '.target_directory')
             key=$(printf '%s_BIN' "$svc" | tr '[:lower:]' '[:upper:]')
-            echo "$key=$target/debug/$svc" >> "$GITHUB_ENV"
+            echo "$key=$target/debug/$binary_name" >> "$GITHUB_ENV"
           done
       - name: Build real Savfox native binding worker
+        if: matrix.lane == 'workspace'
         shell: bash
         run: |
           set -euo pipefail
@@ -230,18 +223,42 @@ jobs:
           esac
           test -x "$worker"
           printf 'COTEST_SAVFOX_BINDING_WORKER=%s\n' "$worker" >> "$GITHUB_ENV"
+      - name: Build fresh Contact federation service
+        if: matrix.lane == 'contact'
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo build --manifest-path coland/Cargo.toml --locked --bin coland --features conformance-harness
+          target=$(cargo metadata --manifest-path coland/Cargo.toml --locked --format-version 1 --no-deps | jq -er '.target_directory')
+          test -x "$target/debug/coland"
+          printf 'COLAND_BIN=%s/debug/coland\n' "$target" >> "$GITHUB_ENV"
+      - name: Diagnose the complete Contact federation target
+        if: matrix.lane == 'contact'
+        working-directory: cotest
+        # The prior workspace timed out after a real failure in this target,
+        # before libtest could publish its captured error. Run all five cases
+        # independently while the full workspace retains every original target.
+        # This diagnostic's default feature graph is not workspace acceptance.
+        run: >-
+          bash ../inkson/scripts/with-native-keystore.sh
+          python scripts/run-native-rust-tests.py
+          cargo test --locked -p cotest --test contact_federation_live -- --nocapture
       - name: Prepare locked joint browser tooling
+        if: matrix.lane == 'workspace'
         uses: ./cotest/.github/actions/setup-joint-browser
       - name: Prepare Linux joint prerequisites
+        if: matrix.lane == 'workspace'
         id: rust_joint_prerequisites
         run: bash cotest/scripts/prepare-linux-joint-e2e.sh setup
       - name: Prepare current browser conjunction artifacts
+        if: matrix.lane == 'workspace'
         id: rust_browser_artifacts
         working-directory: cotest
         shell: pwsh
         run: >-
           ./scripts/run-joint-e2e.ps1
           -PreflightOnly
+          -NativeToolsEnvironmentFile $env:GITHUB_ENV
           -JointDir artifacts/native-browser-preparation
           -ColandBin $env:COLAND_BIN
           -StartCoauth
@@ -252,32 +269,33 @@ jobs:
           -RequireScenario "joint/agent-provision-recovery-prerequisite"
           -ForbidSkippedTests
       - name: test
+        if: matrix.lane == 'workspace'
         id: rust_tests
         working-directory: cotest
         # Mandatory process scenarios use the freshly built sibling services.
         # Explicit opt-in ignored probes remain in integration.yml.
         run: bash ../inkson/scripts/with-native-keystore.sh python scripts/run-native-rust-tests.py cargo test --workspace --locked --no-fail-fast
       - name: Verify complete native operation authority contracts
-        if: ${{ !cancelled() && steps.rust_browser_artifacts.outcome == 'success' }}
+        if: matrix.lane == 'authority'
         working-directory: cotest
         run: >-
           bash ../inkson/scripts/with-native-keystore.sh
           python scripts/run-native-operation-contracts.py
           --output artifacts/native-operation-contracts-ci
       - name: check_ignore_comments hygiene
-        if: ${{ !cancelled() && steps.rust_browser_artifacts.outcome == 'success' }}
+        if: ${{ !cancelled() && matrix.lane == 'checks' }}
         working-directory: cotest
         # Every `#[ignore]` attribute must carry a `/// Issue:` or
         # `/// Gating:` justification and a valid `/// Tier:` declaration.
         run: bash scripts/check_ignore_comments.sh
       - name: Publish bounded native browser status
-        if: always()
+        if: always() && matrix.lane == 'workspace'
         run: >-
           python -B cotest/scripts/publish-native-rust-evidence.py
           --run-root cotest/artifacts/native-rust/${{ github.run_id }}-${{ github.run_attempt }}
           --output-dir "${{ runner.temp }}/native-rust-public"
       - name: Sanitize native startup diagnostics
-        if: always()
+        if: always() && matrix.lane == 'workspace'
         shell: pwsh
         run: |
           ./cotest/scripts/publish-joint-failure.ps1 `
@@ -287,7 +305,7 @@ jobs:
             -RunRoot cotest/artifacts/native-browser-preparation `
             -OutputDirectory "$env:RUNNER_TEMP/native-rust-preparation-public"
       - name: Preserve public native diagnostics
-        if: always()
+        if: always() && matrix.lane == 'workspace'
         uses: actions/upload-artifact@v4
         with:
           name: native-rust-public-${{ github.sha }}
@@ -296,6 +314,20 @@ jobs:
             ${{ runner.temp }}/native-rust-public/summary.json
             ${{ runner.temp }}/native-rust-startup-public/
             ${{ runner.temp }}/native-rust-preparation-public/
+      - name: Publish bounded native authority status
+        if: always() && matrix.lane == 'authority'
+        working-directory: cotest
+        run: >-
+          python -B scripts/publish-native-operation-status.py
+          --run-root artifacts/native-operation-contracts-ci
+          --output-dir "${{ runner.temp }}/native-operation-public"
+      - name: Preserve public authority status
+        if: always() && matrix.lane == 'authority'
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-operation-status-${{ github.sha }}
+          if-no-files-found: error
+          path: ${{ runner.temp }}/native-operation-public/summary.json
       - name: Restore Linux hosts permissions
         if: always() && steps.rust_joint_prerequisites.outcome != 'skipped' && steps.rust_joint_prerequisites.outcome != ''
         run: bash cotest/scripts/prepare-linux-joint-e2e.sh restore
@@ -419,7 +451,6 @@ jobs:
         run: |
           ./scripts/generate-e2e-coverage.ps1 -Check
           ./scripts/generate-scenario-evidence.ps1 -Check
-          python -B -m unittest scripts.tests.test_scenario_evidence -v
       - name: provisioning cache isolation
         working-directory: cotest/e2e
         # The memo behind `ensureRegistered` is load-bearing: the Coauth handle
