@@ -196,11 +196,17 @@ mod tests {
         headers.insert(CONTENT_TYPE, "application/json".parse().unwrap());
         assert!(retry_hint(StatusCode::SERVICE_UNAVAILABLE, &headers, &body, now).is_none());
         let (headers, _) = temporary_problem();
-        for body in [
-            serde_json::json!({"type":"https://arkret.org/problems/temporarily_unavailable","title":"temporary","status":409,"detail":"wrong status"}),
-            serde_json::json!({"type":"https://untrusted.example/temporarily_unavailable","title":"temporary","status":503,"detail":"wrong type"}),
-            serde_json::json!({"type":"https://arkret.org/problems/temporarily_unavailable","title":"temporary","status":503,"detail":"legacy","ok":false}),
+        let canonical: Value = serde_json::from_slice(&body).unwrap();
+        for (field, invalid) in [
+            ("status", serde_json::json!(409)),
+            (
+                "type",
+                serde_json::json!("https://untrusted.example/temporarily_unavailable"),
+            ),
+            ("ok", serde_json::json!(false)),
         ] {
+            let mut body = canonical.clone();
+            body[field] = invalid;
             assert!(
                 retry_hint(
                     StatusCode::SERVICE_UNAVAILABLE,
