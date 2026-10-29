@@ -215,10 +215,14 @@ def publish(args):
         public = _module("native_workspace_scope").public_plan(private)
         _require(_source_snapshot(Path(private["workspace_root"]), public["source_refs"])
                  == private["build_context"]["source_snapshot_sha256"])
-        proof["plan"] = public
         runtime = private_path.parent / "runtime"
+        # Adapter failures are never user-test failures. In particular,
+        # rustdoc must not credit an adapter exit as a should_panic success.
+        _require(not os.path.lexists(runtime / "adapter-failed.json"))
+        proof["plan"] = public
         proof["native_receipts"] = _read_receipts(runtime / "native", doc=False)
         proof["doc_receipts"] = _read_receipts(runtime / "docs", doc=True)
+        _require(not os.path.lexists(runtime / "adapter-failed.json"))
         # This certifies safe export only. Missing/started/failed receipts do
         # not gain execution credit: the mandatory aggregate rejects them.
         proof["export_complete"] = True

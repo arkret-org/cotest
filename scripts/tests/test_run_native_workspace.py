@@ -190,6 +190,21 @@ class CliTests(unittest.TestCase):
                                       "--output", str(directory / "scope-proof.json")])[0], 0)
         self.assertEqual(self.invoke(["aggregate", "--root", str(self.base)])[0], 1)
 
+    def test_adapter_failure_marker_cannot_be_hidden_by_successful_rustdoc_receipts(self):
+        self.proofs()
+        directory = self.base / "shard-0"
+        marker = directory / "runtime/adapter-failed.json"
+        marker.write_text(json.dumps({"private": str(self.base)}), encoding="utf-8")
+        result = self.invoke(["publish", "--plan", str(directory / "private-plan.json"),
+                              "--output", str(directory / "scope-proof.json")])
+        self.assertEqual(result[0], 1)
+        self.assertEqual(result[2], "native workspace scope: command failed\n")
+        safe = (directory / "scope-proof.json").read_text()
+        self.assertFalse(json.loads(safe)["export_complete"])
+        self.assertNotIn(str(marker), safe + result[1] + result[2])
+        self.assertNotIn(str(self.base), safe + result[1] + result[2])
+        self.assertEqual(self.invoke(["aggregate", "--root", str(self.base)])[0], 1)
+
     def test_malformed_receipt_and_source_drift_fail_safe_without_private_text(self):
         self.proofs()
         directory = self.base / "shard-0"
