@@ -7,7 +7,7 @@
     "test_layers": {
       "coland_unit": {
         "source_file_count": 478,
-        "source_sha256": "57ff6e1588f388178bd751b701fc381fd36fff3c1f8a046c6d3fdb4765e5a8e2",
+        "source_sha256": "1c1191ed06ce2a6f170ba3db3773ac15cb354bf030c797b91f86b571655618a4",
         "evidence_count": 847,
         "covered_operation_count": 167
       },
@@ -24,8 +24,8 @@
         "covered_operation_count": 130
       },
       "cotest_e2e": {
-        "source_file_count": 136,
-        "source_sha256": "79ded6bf6fd0b0137a591c263bae7317434264a0ded8fa6a3bacb711aa7641f7",
+        "source_file_count": 137,
+        "source_sha256": "ead86234792fb98b2e9f25e86f1b82516ff2280e88db586a7eece2e1cd4f7220",
         "evidence_count": 47,
         "covered_operation_count": 21
       },
@@ -27443,11 +27443,11 @@
           },
           {
             "file": "coland/crates/storage-postgres/tests/sidecar_authority_cut.rs",
-            "line": 5341,
+            "line": 5344,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              5341
+              5344
             ],
             "protected_oracle": false,
             "scope_sha256": "7c2250bbb972900f9c74c156bdf9562aa6672b0092e6af2ccc99aa9e3be6fcb9",
@@ -27460,11 +27460,11 @@
           },
           {
             "file": "coland/crates/storage-postgres/tests/sidecar_authority_cut.rs",
-            "line": 5346,
+            "line": 5349,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              5346
+              5349
             ],
             "protected_oracle": false,
             "scope_sha256": "8bd5c4012f47d57e576dd57a1d7d9cac99ee5e3aae97f2ef376fd5c44d92c98d",
@@ -36824,11 +36824,11 @@
         "storage_parity": [
           {
             "file": "coland/crates/storage-postgres/tests/sidecar_authority_cut.rs",
-            "line": 5342,
+            "line": 5345,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              5342
+              5345
             ],
             "protected_oracle": false,
             "scope_sha256": "7576565ca9c177448be7baeb93e384c3aae0d513b2b81736f503eaf64d11471d",
@@ -36841,11 +36841,11 @@
           },
           {
             "file": "coland/crates/storage-postgres/tests/sidecar_authority_cut.rs",
-            "line": 5347,
+            "line": 5350,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              5347
+              5350
             ],
             "protected_oracle": false,
             "scope_sha256": "1a8475fd2430a9631be6e2b5f8a71e04d7bfe2cc96a8dadd6c1f3d77bd0afd03",
