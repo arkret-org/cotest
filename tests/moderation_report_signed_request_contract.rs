@@ -62,7 +62,7 @@ fn registry_and_schema_pin_the_exact_signed_report_event() {
     // so the submission carries no caller-selected authorization basis.
     assert_eq!(
         event["required"],
-        json!(["kind", "realm_id", "scope_ref", "actor_id", "payload"])
+        json!(["kind", "payload", "realm_id", "scope_ref", "actor_id"])
     );
     assert_eq!(
         event["not"],
