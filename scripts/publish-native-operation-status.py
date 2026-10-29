@@ -42,6 +42,19 @@ SHA = re.compile(r"[0-9a-f]{64}\Z")
 OPERATION = re.compile(r"ak\.[a-z0-9_]+(?:\.[a-z0-9_]+)+\.v[0-9]+\Z")
 MAX_JSON = 8 * 1024 * 1024
 MAX_LOG = 16 * 1024 * 1024
+MLS_CASE = "mls_interop_retains_native_claims_mls_and_mimi_originals"
+MLS_SOURCE = "src/scenarios/native_operation_contracts/mls_interop.rs"
+MLS_STAGES = frozenset((
+    "deployment", "recipient_session", "realm_membership", "keypackage_upload",
+    "keypackage_claim", "mls_genesis", "mls_add_welcome", "durable_snapshot",
+    "keypackage_consume", "keypackage_revoke", "mimi_control", "peer_membership_reads",
+    "peer_signal", "mimi_message", "mimi_notify", "watch_audit", "media_token",
+    "peer_invite", "authority_originals", "retain_attempt", "verify_schemas",
+    "verify_claim_receipt", "verify_consume_receipt", "verify_realm_commits",
+    "verify_mimi_control", "verify_bootstrap_current", "verify_mimi_message",
+    "verify_mimi_notify", "verify_watch_audit", "verify_media_token", "verify_peer_invite",
+    "verify_peer_membership_reads", "verify_peer_signal", "retain_evidence",
+))
 
 
 def resolved(path: Path) -> Path:
@@ -202,6 +215,29 @@ def coverage_facts(value, scope, unmapped):
             "uncovered_operations": sorted(missing)}
 
 
+def mls_failure_phase(root, sources):
+    """Return only a closed, source-bound propagation marker, never an error."""
+    raw = read_file(root / "diagnostics/mls-interop.json", root, 4096)
+    value = decode_json(raw)
+    fields = {"case", "stage", "source", "line", "status", "error_code"}
+    if not isinstance(value, dict) or set(value) != fields:
+        raise ValueError("invalid failure phase")
+    if value["case"] != MLS_CASE or value["source"] != MLS_SOURCE:
+        raise ValueError("unknown failure source")
+    stage, line = value["stage"], value["line"]
+    if not isinstance(stage, str) or stage not in MLS_STAGES or type(line) is not int or not 1 <= line <= 10000:
+        raise ValueError("unknown failure location")
+    if value["status"] is not None or value["error_code"] is not None:
+        raise ValueError("unavailable HTTP facts")
+    source = read_file(REPO / MLS_SOURCE, REPO, 512 * 1024)
+    if not isinstance(sources, dict) or sources.get("cotest/" + MLS_SOURCE) != hashlib.sha256(source).hexdigest():
+        raise ValueError("failure source changed")
+    lines = source.decode("utf-8", errors="strict").splitlines()
+    if line > len(lines) or lines[line - 1].strip() != f'phase.mark("{stage}", line!());':
+        raise ValueError("failure location changed")
+    return value
+
+
 def publish(run_root: Path, output_dir: Path, *, artifacts_root=ARTIFACTS, declarations=DECLARATIONS):
     """Read private inputs and create a new, independent safe output directory."""
     output = output_dir.absolute()
@@ -209,7 +245,7 @@ def publish(run_root: Path, output_dir: Path, *, artifacts_root=ARTIFACTS, decla
         raise ValueError("unsafe public output")
     summary = {"status": "incomplete", "export_complete": False, "native_execution_complete": False,
                "native": None, "tests": [], "meta_tests": [], "counts": None,
-               "coverage": None, "hashes": {}, "diagnostics": []}
+               "coverage": None, "hashes": {}, "diagnostics": [], "failure_phases": []}
     found = {}
     try:
         root = confined(run_root, artifacts_root)
@@ -269,6 +305,12 @@ def publish(run_root: Path, output_dir: Path, *, artifacts_root=ARTIFACTS, decla
         summary["status"] = "passed" if summary["coverage"]["acceptance"] else "failed"
     elif native is not None and (native["exit_code"] != 0 or not native["sources_unchanged"]):
         summary["status"] = "failed"
+    # Auxiliary failure locations cannot change export, execution or coverage credit.
+    if root is not None and found.get(MLS_CASE) == "failed":
+        try:
+            summary["failure_phases"].append(mls_failure_phase(root, values.get("native-sources.json")))
+        except (ValueError, OSError, KeyError, TypeError, RecursionError, OverflowError):
+            summary["diagnostics"].append("unavailable_mls_failure_phase")
     output.mkdir(parents=True, exist_ok=False)
     (output / "summary.json").write_text(json.dumps(summary, indent=2) + "\n", encoding="utf-8")
     return summary
