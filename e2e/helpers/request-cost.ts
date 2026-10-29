@@ -10,8 +10,8 @@ type SocketCost = { origin: string; path: string; opened_ms: number; sent_frames
   requested_channels: Array<{ channel_id: string; operation_id: string }>;
   opened_channels: Array<{ channel_id: string; operation_id: string }> };
 
-const socketKinds = new Set(["challenge", "welcome", "opened", "data", "channel_control", "closed", "error", "ping", "pong", "connection_control"]);
-const streamKinds = new Set(["delta", "checkpoint", "heartbeat", "catchup_complete", "resync_required", "dropped", "unauthorized", "committed_event"]);
+const socketKinds = new Set(["challenge", "welcome", "opened", "data", "control", "closed", "error", "ping", "reauth_required"]);
+const streamKinds = new Set(["delta", "checkpoint", "heartbeat", "catchup_complete", "resync_required", "dropped", "unauthorized", "committed_event", "drain"]);
 
 // Observe the actual browser transport, excluding Node fixture/oracle callers.
 // Retain only costs and public operation coordinates, never headers or bodies.
@@ -98,7 +98,7 @@ export function observeRequestCost(page: Page) {
           && row.requested_channels.some(channel => channel.channel_id === frame.channel_id)) {
           const counts = row.channel_frame_kinds[frame.channel_id] ??= {};
           const payloadKind = streamKinds.has(frame.payload?.kind) ? frame.payload.kind : "other";
-          const key = kind === "data" || kind === "channel_control" ? `${kind}:${payloadKind}` : kind;
+          const key = kind === "data" || kind === "control" ? `${kind}:${payloadKind}` : kind;
           counts[key] = (counts[key] ?? 0) + 1;
         }
         if (frame.kind === "opened" && typeof frame.channel_id === "string" && typeof frame.operation_id === "string") {

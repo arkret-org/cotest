@@ -89,7 +89,7 @@ test("channel discriminator counts distinguish idle transport from delivered Acc
   send({ kind: "open", channel_id: "account-1", operation_id: "ak.self.account.stream.subscribe.v1" });
   receive({ kind: "opened", channel_id: "account-1", operation_id: "ak.self.account.stream.subscribe.v1" });
   receive({ kind: "data", channel_id: "account-1", payload: { kind: "delta", cursor: "private-cursor", contacts: ["private-content"] } });
-  receive({ kind: "channel_control", channel_id: "account-1", payload: { kind: "heartbeat" } });
+  receive({ kind: "control", frame_scope: "channel", channel_id: "account-1", payload: { kind: "heartbeat" } });
   receive({ kind: "ping", nonce: "private-challenge" });
   receive({ kind: "private-kind", channel_id: "account-1", payload: { kind: "private-payload-kind" } });
   socket.emit("socketerror", "private-error-message");
@@ -97,7 +97,7 @@ test("channel discriminator counts distinguish idle transport from delivered Acc
   const value = await cost.snapshot();
   const row = value.websocket[0];
   assert.equal(row.channel_frame_kinds["account-1"]["data:delta"], 1);
-  assert.equal(row.channel_frame_kinds["account-1"]["channel_control:heartbeat"], 1);
+  assert.equal(row.channel_frame_kinds["account-1"]["control:heartbeat"], 1);
   assert.equal(row.received_kinds.ping, 1);
   assert.equal(row.received_kinds.other, 1);
   assert.equal(row.socket_errors, 1);
