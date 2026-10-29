@@ -12,6 +12,8 @@ use crate::scenarios::_helpers::bridge::MockCoauthIntrospectionServer;
 use crate::scenarios::human_device_producer_live::{database, standard_client, station_env};
 use crate::scenarios::identity_test_support::HARNESS_INTERNAL_AUTHORITY_SECRET;
 
+mod worker_endpoint;
+
 async fn cursor(client: &TestActorClient) -> Result<String> {
     Ok(client
         .sdk()
@@ -460,6 +462,7 @@ pub async fn queued_websocket_cursor_revocation_live() -> Result<()> {
 }
 
 pub async fn shared_database_two_process_cursor_revocation_live() -> Result<()> {
+    let endpoint = worker_endpoint::WorkerEndpoint::bind().await?;
     let database = database("cursor-shared-processes")?.context("real PostgreSQL required")?;
     let issuer = MockCoauthIntrospectionServer::spawn_with_internal_secret(
         HARNESS_INTERNAL_AUTHORITY_SECRET,
@@ -473,6 +476,10 @@ pub async fn shared_database_two_process_cursor_revocation_live() -> Result<()> 
     let mut env = station_env(&database.connect_url, &issuer);
     let (seed, _) = crate::harness::test_service_signing_key("cursor-shared-station");
     env.extend([
+        (
+            "COLAND_PUBLIC_BASE_URL".to_owned(),
+            endpoint.base.to_string(),
+        ),
         ("COLAND_NOTARY_SIGNING_KEY".to_owned(), seed),
         (
             "COLAND_KEYSTORE_BACKEND".to_owned(),
@@ -497,10 +504,18 @@ pub async fn shared_database_two_process_cursor_revocation_live() -> Result<()> 
     )
     .await?
     .context("two actual Coland processes required")?;
+    endpoint.configure([group.server(0).base_url(), group.server(1).base_url()])?;
+    for index in 0..2 {
+        group
+            .server_mut(index)
+            .select_public_worker_endpoint(endpoint.base.clone())
+            .await?;
+    }
     ensure!(
         group.server(0).service_id() == group.server(1).service_id(),
         "shared durable issuer loaded as different Station identities"
     );
+    endpoint.select(0);
     let (writer, _) = standard_client(
         group.server(0),
         &issuer,
@@ -515,6 +530,7 @@ pub async fn shared_database_two_process_cursor_revocation_live() -> Result<()> 
     let crate::harness::ClientSession::Canonical { grant, .. } = writer.session() else {
         anyhow::bail!("actual standard session required")
     };
+    endpoint.select(1);
     let reader = group
         .server(1)
         .bind_native_host_session(
@@ -524,8 +540,11 @@ pub async fn shared_database_two_process_cursor_revocation_live() -> Result<()> 
             &issuer,
         )
         .await?;
+    endpoint.select(0);
     let writer_cursor = cursor(&writer).await?;
+    endpoint.select(1);
     let reader_cursor = cursor(&reader).await?;
+    endpoint.select(0);
     writer
         .sdk()
         .account_cursor_revoke(&AccountCursorRevokeRequestBody {
@@ -534,12 +553,16 @@ pub async fn shared_database_two_process_cursor_revocation_live() -> Result<()> 
             revoke_scope: CursorRevokeScope::SameDevice,
         })
         .await?;
+    endpoint.select(1);
     revoked(&reader, &writer_cursor, &database.connect_url).await?;
     revoked(&reader, &reader_cursor, &database.connect_url).await?;
     let fresh_reader_cursor = cursor(&reader).await?;
+    endpoint.select(0);
     revoked(&writer, &fresh_reader_cursor, &database.connect_url).await?;
+    endpoint.select(1);
     group.server_mut(1).restart_external_process().await?;
     revoked(&reader, &writer_cursor, &database.connect_url).await?;
+    endpoint.assert_both_workers_used()?;
     println!(
         "[cursor-revocation] concurrent_os_processes=2 shared_durable_issuer=1 same_device_group=1 cross_process_refusals=3 new_reader_handle_covered=1 independent_reader_process_restart=1 full_refusal_footprint_unchanged=1"
     );
