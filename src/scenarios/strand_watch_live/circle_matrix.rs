@@ -5,7 +5,7 @@ use arkret_models_collaboration::authority_commit::{
 use arkret_models_collaboration::strand_watch_operations::{
     WatchAuditReadRequestBody, WatchAuditReadResponseBody,
 };
-use arkret_wire::{AccountId, EventAdmissionSubmission, SemanticRef};
+use arkret_wire::{AccountId, CommittedEventFullView, EventAdmissionSubmission, SemanticRef};
 use serde_json::json;
 
 use super::*;
@@ -23,6 +23,7 @@ pub(super) async fn run(
     bob_account: &AccountId,
     owner: &TestActorClient,
     governor: &ArkretServer,
+    origin: &ArkretServer,
     realm: &str,
     parents: &[(AccountId, arkret_wire::CurrentRevision)],
 ) -> Result<()> {
@@ -36,6 +37,7 @@ pub(super) async fn run(
         .await?;
     join(
         owner,
+        governor,
         realm,
         &circle,
         &owner_actor,
@@ -57,8 +59,9 @@ pub(super) async fn run(
         .await?;
     }
     let bob_actor = ActorId::account(bob_account.clone());
-    join(
+    let bob_join = join(
         bob,
+        origin,
         realm,
         &circle,
         &bob_actor,
@@ -105,7 +108,17 @@ pub(super) async fn run(
         json!({"strand_id":strand,"watcher_actor_id":bob_actor,"level":"participating"}),
     )
     .await?;
-    let own_commit = submit_and_expect_commit(bob, bob_account, &bob.device_id, &own).await?;
+    let own_submission = submit_and_expect_commit(bob, bob_account, &bob.device_id, &own).await;
+    if own_submission.is_err() {
+        diagnose_join_basis(
+            origin,
+            &bob_join.event,
+            Some(&bob_join.commit),
+            "first_circle_watch_failed",
+        )
+        .await;
+    }
+    let own_commit = own_submission?;
     current(
         read(bob, &selector).await?,
         &own_commit,
@@ -143,7 +156,7 @@ pub(super) async fn run(
         .context("Alice accepted parent join")?
         .1
         .clone();
-    join(alice, realm, &circle, &writer, alice_parent.clone()).await?;
+    join(alice, origin, realm, &circle, &writer, alice_parent.clone()).await?;
     let observed: WatchAuditReadResponseBody = serde_json::from_value(
         expect_json(
             alice
@@ -295,11 +308,12 @@ pub(super) async fn run(
 
 async fn join(
     client: &TestActorClient,
+    station: &ArkretServer,
     realm: &str,
     circle: &arkret_wire::CircleId,
     actor: &ActorId,
     parent: arkret_wire::CurrentRevision,
-) -> Result<()> {
+) -> Result<CommittedEventFullView> {
     let joined = circle_event(
         client,
         realm,
@@ -314,7 +328,7 @@ async fn join(
             .post(&format!("/_arkret/self/circles/{circle}/members"))
             .canonical_json(
                 &arkret_models_collaboration::governance::circle::CircleMemberRequestBody {
-                    member_event: EventAdmissionSubmission::new(joined),
+                    member_event: EventAdmissionSubmission::new(joined.clone()),
                 },
             )?,
         StatusCode::OK,
@@ -324,7 +338,127 @@ async fn join(
         outcome["membership"] == "join" && outcome["circle_id"] == circle.as_str(),
         "Circle membership was not committed: {outcome}"
     );
-    Ok(())
+    // A friendly membership response is not the accepted original. Read the
+    // original without resubmitting it: a second write could hide a rejected
+    // first submission behind a later successful admission.
+    let accepted = async {
+        let CommittedEventView::Full(full) =
+            client.sdk().committed_event_get(&joined.event_id).await?
+        else {
+            bail!("Circle join original is withheld from its own member");
+        };
+        full.validate_shape()?;
+        ensure!(
+            full.event == joined
+                && full.commit.event_ref == joined.event_id
+                && full.commit.realm_id == joined.realm_id
+                && full.commit.stream_ref
+                    == CommitStreamRef::from_scope(
+                        &joined.scope_ref,
+                        Some(joined.realm_id.clone())
+                    )?,
+            "Circle join response has no exact accepted original in its scope stream"
+        );
+        Ok::<_, anyhow::Error>(full)
+    }
+    .await;
+    if accepted.is_err() {
+        diagnose_join_basis(station, &joined, None, "circle_join_original_unavailable").await;
+    }
+    accepted
+}
+
+async fn diagnose_join_basis(
+    station: &ArkretServer,
+    joined: &Event,
+    accepted: Option<&RealmCommit>,
+    phase: &'static str,
+) {
+    let mut diagnostic = json!({
+        "phase":phase,
+        "capture_ok":false,
+        "same_readonly_cut":false,
+        "is_failed_admission_cut":false,
+        "snapshot_sha256":null,
+        "accepted_join_commit_sha256":accepted.map(|commit|
+            arkret_canonical::sha256_hex(commit.commit_id.as_str().as_bytes())),
+        "facts":null
+    });
+    if let Some(url) = station.configured_database_url()
+        && let arkret_wire::ScopeRef::Circle { circle_id, .. } = &joined.scope_ref
+    {
+        let url = url.to_owned();
+        let realm = joined.realm_id.to_string();
+        let circle = circle_id.to_string();
+        let actor = joined.actor_id.to_string();
+        let service = station.service_id().to_string();
+        let event_id = joined.event_id.to_string();
+        let original = serde_json::to_value(joined);
+        if let Ok(original) = original {
+            let captured = tokio::task::spawn_blocking(move || -> Result<serde_json::Value> {
+                let mut config = url.parse::<postgres::Config>()?;
+                config
+                    .connect_timeout(std::time::Duration::from_secs(2))
+                    .options("-c default_transaction_read_only=on -c statement_timeout=2000 -c lock_timeout=500");
+                let mut database = config.connect(postgres::NoTls)?;
+                let mut cut = database.build_transaction()
+                    .isolation_level(postgres::IsolationLevel::RepeatableRead)
+                    .read_only(true).start()?;
+                let row = cut.query_one(
+                    "WITH anchors AS (
+                        SELECT a.anchor_commit_id,c.stream_ref FROM replica_stream_anchors a
+                        JOIN realm_commits c ON c.commit_id=a.join_commit_id WHERE a.realm_id=$1
+                    ), member AS (
+                        SELECT * FROM circle_member_state_current_states
+                        WHERE realm_id=$1 AND circle_id=$2 AND member_id=$3
+                    ), original AS (
+                        SELECT c.commit_id FROM realm_commits c JOIN canonical_events e ON e.pk=c.event_pk
+                        WHERE c.realm_id=$1 AND c.commit_json->>'event_ref'=$5
+                          AND e.state='committed' AND e.envelope=$6
+                    )
+                    SELECT txid_current_snapshot()::text,jsonb_build_object(
+                        'realm_anchor_rows',(SELECT count(*) FROM anchors WHERE stream_ref->>'kind'='realm'),
+                        'realm_anchored_rows',(SELECT count(*) FROM anchors WHERE stream_ref->>'kind'='realm' AND anchor_commit_id IS NOT NULL),
+                        'circle_anchor_rows',(SELECT count(*) FROM anchors WHERE stream_ref->>'kind'='circle' AND stream_ref->>'circle_id'=$2),
+                        'circle_anchored_rows',(SELECT count(*) FROM anchors WHERE stream_ref->>'kind'='circle' AND stream_ref->>'circle_id'=$2 AND anchor_commit_id IS NOT NULL),
+                        'own_parent_rows',(SELECT count(*) FROM member_state_current_states WHERE realm_id=$1 AND member_id=$3),
+                        'own_parent_join_rows',(SELECT count(*) FROM member_state_current_states WHERE realm_id=$1 AND member_id=$3 AND membership='join'),
+                        'own_circle_member_rows',(SELECT count(*) FROM member),
+                        'own_circle_join_rows',(SELECT count(*) FROM member WHERE membership='join'),
+                        'own_parent_revision_exact',(SELECT bool_or(circle_member_parent_join_current(realm_id,member_id,value)) FROM member),
+                        'circle_active_rows',(SELECT count(*) FROM circle_current_states WHERE realm_id=$1 AND circle_id=$2 AND value->>'state'='active'),
+                        'exact_accepted_join_original_rows',(SELECT count(*) FROM original),
+                        'own_current_matches_original',(SELECT bool_or(current_commit_id IN (SELECT commit_id FROM original)) FROM member),
+                        'local_live_realm_join_rows',(SELECT count(*) FROM member_state_current_states WHERE realm_id=$1 AND membership='join' AND member_id::jsonb->'account_id'->>'station_id'=$4),
+                        'local_live_circle_join_rows',(SELECT count(*) FROM circle_member_state_current_states cm
+                            JOIN member_state_current_states rm ON rm.realm_id=cm.realm_id AND rm.member_id=cm.member_id
+                            JOIN circle_current_states c ON c.realm_id=cm.realm_id AND c.circle_id=cm.circle_id
+                            WHERE cm.realm_id=$1 AND cm.circle_id=$2 AND cm.membership='join' AND rm.membership='join'
+                              AND circle_member_parent_join_current(cm.realm_id,cm.member_id,cm.value)
+                              AND c.value->>'state'='active' AND cm.member_id::jsonb->'account_id'->>'station_id'=$4)
+                    )",
+                    &[&realm, &circle, &actor, &service, &event_id, &original],
+                )?;
+                let snapshot: String = row.try_get(0)?;
+                let facts: serde_json::Value = row.try_get(1)?;
+                cut.commit()?;
+                Ok(json!({"snapshot_sha256":arkret_canonical::sha256_hex(snapshot.as_bytes()),"facts":facts}))
+            }).await;
+            if let Ok(Ok(captured)) = captured {
+                diagnostic["capture_ok"] = json!(true);
+                diagnostic["same_readonly_cut"] = json!(true);
+                diagnostic["snapshot_sha256"] = captured["snapshot_sha256"].clone();
+                diagnostic["facts"] = captured["facts"].clone();
+            }
+        }
+    }
+    // This later, read-only cut is not the failed admission's transaction.
+    // Capture faults and stderr failures must never replace the original error.
+    use std::io::Write as _;
+    let _ = writeln!(
+        std::io::stderr().lock(),
+        "[circle-watch-basis-diagnostic] {diagnostic}"
+    );
 }
 
 async fn member_pair(
