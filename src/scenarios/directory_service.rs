@@ -6,18 +6,27 @@ use reqwest::{Client, StatusCode};
 use serde_json::Value as JsonValue;
 
 use crate::harness::NonProtocolTestBody;
-use crate::scenarios::_helpers::external_binary::{FLAGON_SPEC, try_spawn};
+use crate::scenarios::_helpers::coauth_bootstrap::{EphemeralPg, spawn_ephemeral_postgres_for};
+use crate::scenarios::_helpers::external_binary::{
+    FLAGON_SPEC, locate_external_binary, try_spawn_with_extra_env,
+};
 
 enum DirectoryTarget {
     Attached(String),
-    Spawned(crate::scenarios::_helpers::external_binary::SpawnedExternalProcess),
+    Spawned(Box<OwnedDirectory>),
+}
+
+struct OwnedDirectory {
+    process: crate::scenarios::_helpers::external_binary::SpawnedExternalProcess,
+    // The process drops before its independently leased database.
+    _database: EphemeralPg,
 }
 
 impl DirectoryTarget {
     fn base_url(&self) -> &str {
         match self {
             Self::Attached(base_url) => base_url,
-            Self::Spawned(process) => &process.base_url,
+            Self::Spawned(directory) => &directory.process.base_url,
         }
     }
 
@@ -41,7 +50,7 @@ pub async fn flagon_directory_service_profile_is_discoverable() -> Result<()> {
     let Some(directory) = directory_target().await? else {
         crate::scenarios::_helpers::live_gate::skip_or_fail(
             "flagon_directory_service_profile_is_discoverable",
-            "set FLAGON_BASE_URL or build flagon and set DATABASE_URL",
+            "set FLAGON_BASE_URL or build Flagon and provide COTEST_FLAGON_DATABASE_URL",
         )?;
         return Ok(());
     };
@@ -191,7 +200,24 @@ async fn directory_target() -> Result<Option<DirectoryTarget>> {
     {
         return Ok(Some(DirectoryTarget::Attached(base_url)));
     }
-    Ok(try_spawn(&FLAGON_SPEC).await?.map(DirectoryTarget::Spawned))
+    if locate_external_binary(&FLAGON_SPEC).is_none() {
+        return Ok(None);
+    }
+    let Some(database) = spawn_ephemeral_postgres_for("COTEST_FLAGON_DATABASE_URL")? else {
+        return Ok(None);
+    };
+    let Some(process) = try_spawn_with_extra_env(
+        &FLAGON_SPEC,
+        &[("DATABASE_URL", database.connect_url.as_str())],
+    )
+    .await?
+    else {
+        return Ok(None);
+    };
+    Ok(Some(DirectoryTarget::Spawned(Box::new(OwnedDirectory {
+        process,
+        _database: database,
+    }))))
 }
 
 async fn get_json(http: &Client, url: String) -> Result<JsonValue> {
@@ -240,7 +266,6 @@ fn assert_array_exact(value: &JsonValue, key: &str, expected: &[&str]) {
 /// Real current-v1 Directory exclusion evidence on a dedicated initialized PG.
 /// Unknown paths are negative probes, never registered operation substitutes.
 pub(crate) async fn verify_consent_discovery_exclusions() -> Result<()> {
-    use crate::scenarios::_helpers::external_binary::try_spawn_with_extra_env;
     let db =
         crate::scenarios::human_device_producer_live::database("consent-directory-exclusions")?
             .context("Consent exclusion evidence requires PostgreSQL")?;

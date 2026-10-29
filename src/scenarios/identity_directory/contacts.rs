@@ -9,29 +9,31 @@ use crate::harness::{
     dispatch_accepted_invite_and_await_delivery, expect_audit_action, expect_json, expect_status,
     invite_create_payload, submitted_event_id,
 };
+use crate::scenarios::agent_runtime_live::coauth_session_evidence::{
+    actual_agent_deployment, additional_controller,
+};
 use crate::scenarios::identity_test_support::{
     actor_did_for_service_did, spawn_with_harness_account_authority,
 };
 
 pub async fn contacts_invites_listing_export_and_audit_work() -> Result<()> {
-    let server = spawn_with_harness_account_authority("directory-workflow", &[]).await?;
-    let alice_did = actor_did_for_service_did(server.service_did(), "directory-alice")?;
-    let alice = server
-        .standard_client(&alice_did, "ak:device:01904100-0000-7000-8000-0000000000a1")
-        .await?;
-    let bob_did = actor_did_for_service_did(server.service_did(), "directory-bob")?;
-    let bob = server
-        .standard_register_client(
-            &bob_did,
-            "@bob-directory",
-            "ak:device:01904100-0000-7000-8000-0000000000b0",
-        )
-        .await?;
+    // Export rechecks the real Account Authority lifecycle. An
+    // introspection-only fixture cannot supply that issuer's current record.
+    // This existing deployment performs Human onboarding and creates no Agent.
+    let deployment = actual_agent_deployment("directory-workflow").await?;
+    let server = &deployment.station;
+    let alice = &deployment.controller;
+    let bob = additional_controller(
+        &deployment,
+        "directory-bob",
+        "ak:device:01904100-0000-7000-8000-0000000000b0",
+    )
+    .await?;
     alice
         .request_contact(&bob.actor)
         .await
         .context("Alice requests Contact")?;
-    bob.accept_contact(&alice)
+    bob.accept_contact(alice)
         .await
         .context("Bob accepts Contact")?;
 
@@ -70,7 +72,7 @@ pub async fn contacts_invites_listing_export_and_audit_work() -> Result<()> {
     let invite_event_id = submitted_event_id(&invite_event)?;
     let invite_id = arkret_identifiers::InviteId::from_event_id(&invite_event_id).to_string();
     dispatch_accepted_invite_and_await_delivery(
-        &alice,
+        alice,
         &bob,
         invite_event_id.as_str(),
         &invite_id,
@@ -152,20 +154,53 @@ pub async fn contacts_invites_listing_export_and_audit_work() -> Result<()> {
         "committed Realm scan did not include submitted message Event"
     );
 
-    let audit_events = expect_json(
+    // Ordinary Coauth device grants do not include deployment-local admin.read.
+    // Verify that boundary before testing the separate harness admin query.
+    expect_status(
         alice.get("/_coland/admin/audit/events?limit=20"),
-        StatusCode::OK,
+        StatusCode::FORBIDDEN,
     )
     .await?;
-    // The local admin audit log records administrative session/account
-    // actions. Realm Events are proven by their signed Commit stream above.
-    let _ = expect_audit_action(&audit_events, "account.register")?;
-
     expect_status(
         alice.get(&format!("/_coland/admin/audit/events?actor={}", bob.actor)),
         StatusCode::FORBIDDEN,
     )
     .await?;
 
+    verify_deployment_local_audit().await?;
+    Ok(())
+}
+
+async fn verify_deployment_local_audit() -> Result<()> {
+    // This explicitly compiled development fixture tests the local audit read
+    // model and actor isolation. It is not evidence of Coauth admin issuance.
+    let server = spawn_with_harness_account_authority("directory-local-audit", &[]).await?;
+    let alice_did = actor_did_for_service_did(server.service_did(), "directory-auditor")?;
+    let alice = server
+        .register_client(
+            &alice_did,
+            "@directory-auditor",
+            "ak:device:01904100-0000-7000-8000-0000000000a1",
+        )
+        .await?;
+    let bob_did = actor_did_for_service_did(server.service_did(), "directory-audit-bob")?;
+    let bob = server
+        .register_client(
+            &bob_did,
+            "@directory-audit-bob",
+            "ak:device:01904100-0000-7000-8000-0000000000b0",
+        )
+        .await?;
+    let audit_events = expect_json(
+        alice.get("/_coland/admin/audit/events?limit=20"),
+        StatusCode::OK,
+    )
+    .await?;
+    let _ = expect_audit_action(&audit_events, "account.register")?;
+    expect_status(
+        alice.get(&format!("/_coland/admin/audit/events?actor={}", bob.actor)),
+        StatusCode::FORBIDDEN,
+    )
+    .await?;
     Ok(())
 }

@@ -150,7 +150,13 @@ def sha256_text(value: str) -> str:
 
 
 def relative_path(path: Path) -> str:
-    return path.resolve().relative_to(WORKSPACE_ROOT).as_posix()
+    # Inventory identities use checkout-relative paths. Resolving a repository
+    # junction here moves its sources outside this workspace and also replaces
+    # file-symlink identities; source fingerprints still read the actual bytes.
+    relative = path.absolute().relative_to(WORKSPACE_ROOT)
+    if ".." in relative.parts:
+        raise ValueError(f"source identity contains parent traversal: {path}")
+    return relative.as_posix()
 
 
 def read_source_bytes(path: Path) -> bytes:

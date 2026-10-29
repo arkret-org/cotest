@@ -44,7 +44,7 @@ jobs:
       COLAND_BIN: ${{ github.workspace }}/coland/target/release/coland
       COAUTH_BIN: ${{ github.workspace }}/coauth/target/release/coauth
       FLORIA_BIN: ${{ github.workspace }}/floria/target/release/floria
-      DATABASE_URL: postgresql://cotest:cotest-ci@127.0.0.1:5432/cotest_coauth_evidence
+      DATABASE_URL: postgresql://cotest:cotest-ci@127.0.0.1:5432/cotest_test_coauth_evidence
       CARGO_BUILD_JOBS: "2"
     steps:
       - uses: actions/checkout@v4
@@ -188,7 +188,7 @@ jobs:
 
       - name: Migrate isolated Coauth route-evidence database
         run: |
-          createdb -h 127.0.0.1 -U cotest cotest_coauth_evidence
+          createdb -h 127.0.0.1 -U cotest cotest_test_coauth_evidence
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f coauth/crates/storage-postgres/migrations/00000000000000_initial/up.sql
         env:
           PGPASSWORD: cotest-ci
