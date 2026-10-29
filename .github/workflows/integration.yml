@@ -150,25 +150,28 @@ jobs:
             (cd "$svc" && cargo build --release --locked "${features[@]}")
             echo "::endgroup::"
           done
-      - name: install playwright
-        working-directory: cotest/e2e
-        run: |
-          npm ci
-          npx playwright install --with-deps chromium
-      - name: install dioxus cli
-        run: cargo install dioxus-cli --version 0.7.10 --locked
-      - name: Install frontend task runner
-        uses: extractions/setup-just@53165ef7e734c5c07cb06b3c8e7b647c5aa16db3 # v4
+      - name: Prepare locked joint browser tooling
+        uses: ./cotest/.github/actions/setup-joint-browser
         with:
-          just-version: "1.46.0"
-      - name: Expose the locked Dioxus JavaScript bundler
-        working-directory: cotest/e2e
-        run: |
-          test "$(node_modules/.bin/esbuild --version)" = "0.28.2"
-          printf '%s\n' "$PWD/node_modules/.bin" >> "$GITHUB_PATH"
+          project: chromium
       - name: Prepare Linux joint prerequisites
         id: joint_prerequisites
         run: bash cotest/scripts/prepare-linux-joint-e2e.sh setup
+
+      - name: Prepare current browser conjunction artifacts
+        working-directory: cotest
+        shell: pwsh
+        run: >-
+          ./scripts/run-joint-e2e.ps1
+          -StartCoauth
+          -RunProfile joint-smoke
+          -PlaywrightProject joint-inkson
+          -Grep '@returning-login-gate|@returning-device-key-gate|@onboarding-recovery-gate'
+          -RequireScenario 'identity/oidc-login-flow.spec.ts,identity/device-key-lifecycle.spec.ts'
+          -ForbidSkippedTests
+          -StartupTimeoutSeconds 900
+          -PreflightOnly
+          -NativeToolsEnvironmentFile $env:GITHUB_ENV
 
       - name: real OIDC returning-login and device-key non-skip lane
         working-directory: cotest
@@ -185,6 +188,25 @@ jobs:
       - name: Restore Linux hosts permissions
         if: always() && steps.joint_prerequisites.outcome != 'skipped' && steps.joint_prerequisites.outcome != ''
         run: bash cotest/scripts/prepare-linux-joint-e2e.sh restore
+
+      - name: Sanitize joint startup failure diagnostics
+        if: failure()
+        shell: pwsh
+        run: >-
+          ./cotest/scripts/publish-joint-failure.ps1
+          -RunRoot cotest/artifacts/runs/joint-e2e
+          -OutputDirectory "${{ runner.temp }}/integration-public-failure"
+
+      - name: Preserve joint preparation failure evidence
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: integration-joint-failure-${{ github.run_id }}
+          path: |
+            cotest/artifacts/runs/joint-e2e/**/services/prepare-*.log
+            ${{ runner.temp }}/integration-public-failure/
+          if-no-files-found: ignore
+          retention-days: 7
 
       - name: Migrate isolated Coauth route-evidence database
         run: |
