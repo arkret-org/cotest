@@ -1,0 +1,105 @@
+name: Check out the native run source set
+description: Use the same immutable sibling commits in every native validation lane.
+inputs:
+  refs:
+    description: Complete repository SHA map resolved once for this workflow run.
+    required: true
+  token:
+    description: Token permitted to read the sibling repositories.
+    required: true
+runs:
+  using: composite
+  steps:
+    - uses: actions/checkout@v4
+      with:
+        repository: ${{ github.repository_owner }}/arkret-spec
+        path: arkret-spec
+        ref: ${{ fromJSON(inputs.refs)['arkret-spec'] }}
+        token: ${{ inputs.token }}
+    - uses: actions/checkout@v4
+      with:
+        repository: ${{ github.repository_owner }}/arkret-rust-sdk
+        path: arkret-rust-sdk
+        ref: ${{ fromJSON(inputs.refs)['arkret-rust-sdk'] }}
+        token: ${{ inputs.token }}
+    - uses: actions/checkout@v4
+      with:
+        repository: ${{ github.repository_owner }}/inkson
+        path: inkson
+        ref: ${{ fromJSON(inputs.refs).inkson }}
+        token: ${{ inputs.token }}
+    - uses: actions/checkout@v4
+      with:
+        repository: ${{ github.repository_owner }}/coland
+        path: coland
+        ref: ${{ fromJSON(inputs.refs).coland }}
+        token: ${{ inputs.token }}
+    - uses: actions/checkout@v4
+      with:
+        repository: ${{ github.repository_owner }}/coauth
+        path: coauth
+        ref: ${{ fromJSON(inputs.refs).coauth }}
+        token: ${{ inputs.token }}
+    - uses: actions/checkout@v4
+      with:
+        repository: ${{ github.repository_owner }}/floria
+        path: floria
+        ref: ${{ fromJSON(inputs.refs).floria }}
+        token: ${{ inputs.token }}
+    - uses: actions/checkout@v4
+      with:
+        repository: ${{ github.repository_owner }}/chime
+        path: chime
+        ref: ${{ fromJSON(inputs.refs).chime }}
+        token: ${{ inputs.token }}
+    - uses: actions/checkout@v4
+      with:
+        repository: ${{ github.repository_owner }}/garth
+        path: garth
+        ref: ${{ fromJSON(inputs.refs).garth }}
+        token: ${{ inputs.token }}
+    - uses: actions/checkout@v4
+      with:
+        repository: ${{ github.repository_owner }}/bridges
+        path: bridges
+        ref: ${{ fromJSON(inputs.refs).bridges }}
+        token: ${{ inputs.token }}
+    - uses: actions/checkout@v4
+      with:
+        repository: savfox-ai/savfox
+        path: _native-savfox-checkout
+        ref: ${{ fromJSON(inputs.refs).savfox }}
+        token: ${{ inputs.token }}
+        persist-credentials: false
+    - name: Place and verify the frozen source set
+      shell: bash
+      env:
+        NATIVE_SOURCE_REFS: ${{ inputs.refs }}
+      run: |
+        set -euo pipefail
+        destination="$(dirname -- "$GITHUB_WORKSPACE")/savfox-ai/savfox"
+        test ! -e "$destination"
+        mkdir -p -- "$(dirname -- "$destination")"
+        mv -- "$GITHUB_WORKSPACE/_native-savfox-checkout" "$destination"
+        python - <<'PY'
+        import json
+        import os
+        from pathlib import Path
+        import re
+        import subprocess
+        refs = json.loads(os.environ['NATIVE_SOURCE_REFS'])
+        required = {'cotest', 'arkret-spec', 'arkret-rust-sdk', 'inkson', 'coland',
+                    'coauth', 'floria', 'chime', 'garth', 'bridges', 'savfox'}
+        if set(refs) != required:
+            raise SystemExit('incomplete native source set')
+        workspace = Path(os.environ['GITHUB_WORKSPACE'])
+        for name, expected in sorted(refs.items()):
+            if not isinstance(expected, str) or not re.fullmatch('[0-9a-f]{40}', expected):
+                raise SystemExit('invalid native source commit')
+            root = workspace.parent / 'savfox-ai/savfox' if name == 'savfox' else workspace / name
+            actual = subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=root, text=True).strip()
+            dirty = subprocess.check_output(['git', 'status', '--porcelain'], cwd=root, text=True)
+            if actual != expected or dirty:
+                raise SystemExit(f'native source mismatch: {name}')
+            print(f'native source {name}={actual}')
+        PY

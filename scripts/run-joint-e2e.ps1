@@ -151,6 +151,7 @@ param(
     # trust root and canonical bridge after provisioning gates and before the joint suite.
     [string]$PostProvisionCommand,
     [switch]$PreflightOnly,
+    [string]$NativeToolsEnvironmentFile,
     [switch]$RunnerSelfTest,
     [ValidateRange(1, 32)]
     [int]$ServerCount = 1,
@@ -3271,6 +3272,9 @@ if ($RunnerSelfTest) {
     Invoke-RunnerSelfTest
     exit 0
 }
+if ($NativeToolsEnvironmentFile -and -not $PreflightOnly) {
+    throw 'Native tool environment export requires -PreflightOnly'
+}
 
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 $workspaceRoot = (Resolve-Path (Join-Path $repoRoot "..")).Path
@@ -4268,13 +4272,9 @@ try {
         -JsonPath $preflightJson `
         -MarkdownPath $preflightMd
 
-    if ($PreflightOnly) {
-        Write-Host "Preflight completed; no services were started."
-        exit 0
-    }
-
     # Cargo's live provisioning tests can replace target/debug native bins.
-    # Freeze the selected bytes before mocks or long-lived callers inherit them.
+    # Freeze before preflight returns as well: a subsequent cargo test can
+    # replace these bins before its first browser conjunction starts.
     $nativeRuntimeRoot = Join-Path $jointDir "tools"
     $nativeBuildRoots = @($repoRoot, (Join-Path $workspaceRoot "arkret-rust-sdk"))
     $callerProvidedWire = [bool]$env:COTEST_WIRE_BIN
@@ -4288,11 +4288,18 @@ try {
         $env:COTEST_WIRE_BIN = Copy-RunScopedNativeArtifact -ArtifactPath $selectedWireBinary `
             -DestinationRoot $nativeRuntimeRoot -RepositoryStates $wireBuildStates -CallerProvided:$callerProvidedWire
     }
-    $runtimeProvisionBinary = Join-Path $cotestTargetDirectory ("debug/" + (Get-NativeExecutableName -Name "cotest-provision"))
+    $callerProvidedProvision = [bool]$env:COTEST_PROVISION_BIN
+    $runtimeProvisionBinary = if ($callerProvidedProvision) { $env:COTEST_PROVISION_BIN } else {
+        Join-Path $cotestTargetDirectory ("debug/" + (Get-NativeExecutableName -Name "cotest-provision"))
+    }
     if (Test-Path -LiteralPath $runtimeProvisionBinary -PathType Leaf) {
-        $provisionBuildStates = @(Get-ArtifactBuildRepositoryStates -ArtifactPath $runtimeProvisionBinary -RepositoryRoots $nativeBuildRoots)
+        $provisionBuildStates = if ($callerProvidedProvision) { $null } else {
+            @(Get-ArtifactBuildRepositoryStates -ArtifactPath $runtimeProvisionBinary -RepositoryRoots $nativeBuildRoots)
+        }
         $runtimeProvisionBinary = Copy-RunScopedNativeArtifact -ArtifactPath $runtimeProvisionBinary `
-            -DestinationRoot $nativeRuntimeRoot -RepositoryStates $provisionBuildStates
+            -DestinationRoot $nativeRuntimeRoot -RepositoryStates $provisionBuildStates -CallerProvided:$callerProvidedProvision
+    } elseif ($callerProvidedProvision) {
+        throw "Caller-provided provisioning tool is missing: $runtimeProvisionBinary"
     }
 
     if ($requiresInkson) {
@@ -4305,6 +4312,19 @@ try {
         }
         $env:INKSON_WIRE_BIN = Copy-RunScopedNativeArtifact -ArtifactPath $selectedInksonWireBinary `
             -DestinationRoot $nativeRuntimeRoot -RepositoryStates $observerStates -CallerProvided:$callerProvidedObserver
+    }
+
+    if ($NativeToolsEnvironmentFile) {
+        $toolPaths = @{
+            COTEST_WIRE_BIN = $env:COTEST_WIRE_BIN
+            COTEST_PROVISION_BIN = $runtimeProvisionBinary
+        }
+        if ($requiresInkson) { $toolPaths.INKSON_WIRE_BIN = $env:INKSON_WIRE_BIN }
+        Write-RunScopedNativeToolEnvironment -Tools $toolPaths -Path $NativeToolsEnvironmentFile
+    }
+    if ($PreflightOnly) {
+        Write-Host "Preflight completed; verified native tools were frozen and no services were started."
+        exit 0
     }
 
     # Serve an immutable, run-scoped copy of the verified Inkson bundle. A

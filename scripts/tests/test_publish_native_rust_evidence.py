@@ -1,9 +1,12 @@
 """Synthetic parser fixtures prove privacy and fail-closed status, not SUT success."""
+import contextlib
 import importlib.util
+import io
 import json
 from pathlib import Path
 import tempfile
 import unittest
+from unittest.mock import patch
 import xml.etree.ElementTree as ET
 
 
@@ -188,6 +191,35 @@ class PublisherTests(unittest.TestCase):
         path = private / "browser/junit.xml"
         path.write_bytes(b"\xef\xbb\xbf" + path.read_bytes())
         self.assertTrue(self.publish()["all_passed"])
+
+    def test_python312_symlink_loop_drops_private_paths_and_cli_traceback(self):
+        self.both()
+        original = Path.resolve
+        marker = "PRIVATE_PATH_MARKER"
+
+        def input_loop(path, *args, **kwargs):
+            if path.name == "input-before.json":
+                raise RuntimeError("Symlink loop from " + marker)
+            return original(path, *args, **kwargs)
+
+        with patch.object(Path, "resolve", input_loop):
+            result = self.publish()
+        self.assertFalse(result["complete"])
+        self.assertNotIn(marker, json.dumps(result))
+
+        def output_loop(path, *args, **kwargs):
+            if path == self.output:
+                raise RuntimeError("Symlink loop from " + marker)
+            return original(path, *args, **kwargs)
+
+        capture = io.StringIO()
+        with patch.object(Path, "resolve", output_loop), patch("sys.argv", [
+            "publish-native-rust-evidence.py", "--run-root", str(self.run),
+            "--output-dir", str(self.output),
+        ]), contextlib.redirect_stdout(capture):
+            code = publisher.main()
+        self.assertEqual(code, 1)
+        self.assertNotIn(marker, capture.getvalue())
 
 
 if __name__ == "__main__":

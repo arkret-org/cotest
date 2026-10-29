@@ -6,27 +6,26 @@ use reqwest::StatusCode;
 use serde_json::{Value, json};
 
 use crate::harness::{TestActorClient, expect_json, expect_status, member_transition_payload};
+use crate::scenarios::agent_runtime_live::coauth_session_evidence::{
+    actual_agent_deployment, additional_controller,
+};
 use crate::scenarios::identity_test_support::{
     actor_did_for_service_did, spawn_with_harness_account_authority,
 };
 
-const BOB_HANDLE: &str = "@collab-bob";
-
 pub async fn account_contact_space_message_sync_workflow() -> Result<()> {
-    let server = spawn_with_harness_account_authority("collaboration-workflow", &[]).await?;
-    let alice_did = actor_did_for_service_did(server.service_did(), "collab-alice")?;
-    let alice = server
-        .standard_client(&alice_did, "ak:device:01904100-0000-7000-8000-0000000000a1")
-        .await?;
-    let bob_did = actor_did_for_service_did(server.service_did(), "collab-bob")?;
-    let bob = server
-        .standard_register_client_with_localpart(
-            &bob_did,
-            BOB_HANDLE,
-            BOB_HANDLE.trim_start_matches('@'),
-            "ak:device:01904100-0000-7000-8000-0000000000b0",
-        )
-        .await?;
+    // Realm reads require fresh Account Authority state, which an
+    // introspection-only issuer cannot supply. Reuse normal product onboarding
+    // against the owned Coauth and Station; no Agent is provisioned here.
+    let deployment = actual_agent_deployment("collaboration-workflow").await?;
+    let server = &deployment.station;
+    let alice = &deployment.controller;
+    let bob = additional_controller(
+        &deployment,
+        "collab-bob",
+        "ak:device:01904100-0000-7000-8000-0000000000b0",
+    )
+    .await?;
 
     let alice_core_id = crate::harness::actor_core_id(&alice.actor)?;
     let bob_did = arkret_identifiers::Did::new(bob.actor.clone())?;
@@ -62,9 +61,9 @@ pub async fn account_contact_space_message_sync_workflow() -> Result<()> {
             .as_str(),
         bob_core_id.as_str()
     );
-    bob.accept_contact(&alice).await?;
+    bob.accept_contact(alice).await?;
 
-    let realm_id = create_collaboration_realm(&alice).await?;
+    let realm_id = create_collaboration_realm(alice).await?;
     let strand_id = alice.default_strand_id(&realm_id)?;
     let created_space = expect_json(
         alice.get(&format!("/_arkret/self/realms/{realm_id}")),
@@ -114,7 +113,7 @@ pub async fn account_contact_space_message_sync_workflow() -> Result<()> {
     let bob_reply_event_id = crate::harness::submitted_event_id(&bob_reply)?;
     assert!(bob_reply_event_id.as_str().starts_with("ak:event:"));
 
-    let alice_timeline = committed_events(&alice, &realm_id).await?;
+    let alice_timeline = committed_events(alice, &realm_id).await?;
     assert!(
         alice_timeline
             .iter()
@@ -166,7 +165,7 @@ pub async fn account_contact_space_message_sync_workflow() -> Result<()> {
             .any(|row| row["realm_id"] == realm_id && row["membership"] == "join")
     );
 
-    let lifecycle = committed_events(&alice, &realm_id).await?;
+    let lifecycle = committed_events(alice, &realm_id).await?;
     let event_kinds: BTreeSet<_> = lifecycle
         .iter()
         .filter_map(|event| {
