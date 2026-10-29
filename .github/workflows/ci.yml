@@ -155,7 +155,7 @@ jobs:
         run: python -m pip install -r arkret-spec/tools/requirements.txt
       - name: Native runner isolation and public evidence regressions
         working-directory: cotest
-        run: python -B -m unittest scripts.tests.test_run_native_rust_tests scripts.tests.test_publish_native_rust_evidence
+        run: python -B -m unittest scripts.tests.test_run_native_rust_tests scripts.tests.test_publish_native_rust_evidence scripts.tests.test_run_native_operation_contracts
 
       - name: Install nightly rustfmt
         uses: dtolnay/rust-toolchain@nightly

@@ -85,6 +85,7 @@ def build(output, name, environment):
     frozen = output / "tools" / executables[0].name
     frozen.parent.mkdir(exist_ok=True)
     shutil.copyfile(executables[0], frozen)
+    shutil.copymode(executables[0], frozen)
     result.update(executable=str(frozen), sha256=digest(frozen))
     write(output / f"{name}-result.json", result)
     return {"producer_result": f"{name}-result.json", "executable": str(frozen), "sha256": result["sha256"]}
