@@ -501,6 +501,8 @@ pub async fn shared_database_two_process_cursor_revocation_live() -> Result<()> 
         group.server(0).service_id() == group.server(1).service_id(),
         "shared durable issuer loaded as different Station identities"
     );
+    // A Station has one accepted public base, even when two processes serve it.
+    let relay = group.server_mut(0).install_service_route_relay().await?;
     let (writer, _) = standard_client(
         group.server(0),
         &issuer,
@@ -515,6 +517,7 @@ pub async fn shared_database_two_process_cursor_revocation_live() -> Result<()> 
     let crate::harness::ClientSession::Canonical { grant, .. } = writer.session() else {
         anyhow::bail!("actual standard session required")
     };
+    group.server_mut(1).join_service_route_relay(&relay).await?;
     let reader = group
         .server(1)
         .bind_native_host_session(
@@ -524,8 +527,16 @@ pub async fn shared_database_two_process_cursor_revocation_live() -> Result<()> 
             &issuer,
         )
         .await?;
+    let subscribe = "/_arkret/self/account/subscribe";
+    let revoke = "/_arkret/self/account/cursor/revoke";
+    let writer_reads = relay.forwarded_requests(group.server(0), subscribe)?;
+    let reader_reads = relay.forwarded_requests(group.server(1), subscribe)?;
+    let writer_revokes = relay.forwarded_requests(group.server(0), revoke)?;
+    relay.select_backend(group.server(0))?;
     let writer_cursor = cursor(&writer).await?;
+    relay.select_backend(group.server(1))?;
     let reader_cursor = cursor(&reader).await?;
+    relay.select_backend(group.server(0))?;
     writer
         .sdk()
         .account_cursor_revoke(&AccountCursorRevokeRequestBody {
@@ -534,12 +545,21 @@ pub async fn shared_database_two_process_cursor_revocation_live() -> Result<()> 
             revoke_scope: CursorRevokeScope::SameDevice,
         })
         .await?;
+    relay.select_backend(group.server(1))?;
     revoked(&reader, &writer_cursor, &database.connect_url).await?;
     revoked(&reader, &reader_cursor, &database.connect_url).await?;
     let fresh_reader_cursor = cursor(&reader).await?;
+    relay.select_backend(group.server(0))?;
     revoked(&writer, &fresh_reader_cursor, &database.connect_url).await?;
+    relay.select_backend(group.server(1))?;
     group.server_mut(1).restart_external_process().await?;
     revoked(&reader, &writer_cursor, &database.connect_url).await?;
+    ensure!(
+        relay.forwarded_requests(group.server(0), subscribe)? == writer_reads + 2
+            && relay.forwarded_requests(group.server(1), subscribe)? == reader_reads + 5
+            && relay.forwarded_requests(group.server(0), revoke)? == writer_revokes + 1,
+        "canonical frontend did not deliver exact cursor operations to both real processes"
+    );
     println!(
         "[cursor-revocation] concurrent_os_processes=2 shared_durable_issuer=1 same_device_group=1 cross_process_refusals=3 new_reader_handle_covered=1 independent_reader_process_restart=1 full_refusal_footprint_unchanged=1"
     );

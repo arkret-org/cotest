@@ -18,6 +18,8 @@ struct FaultState {
     method_only: bool,
     replies: BTreeMap<String, (u16, Vec<u8>)>,
     requests: BTreeMap<String, usize>,
+    upstream: Option<Url>,
+    forwarded: BTreeMap<(String, String), usize>,
 }
 
 impl ServiceRouteControl {
@@ -45,10 +47,44 @@ impl ServiceRouteControl {
 pub struct ServiceRouteRelay {
     control: ServiceRouteControl,
     task: tokio::task::JoinHandle<()>,
+    public_base: Url,
+    service_id: arkret_wire::DidCoreId,
+    trust_domain: arkret_wire::TrustDomainId,
 }
 impl ServiceRouteRelay {
     pub fn control(&self) -> ServiceRouteControl {
         self.control.clone()
+    }
+
+    pub fn select_backend(&self, server: &ArkretServer) -> Result<()> {
+        ensure!(
+            server.service_id == self.service_id && server.trust_domain == self.trust_domain,
+            "route relay backend belongs to another Station"
+        );
+        let config = server
+            .external_restart
+            .as_ref()
+            .context("owned relay backend")?;
+        self.control.0.lock().unwrap().upstream =
+            Some(Url::parse(&format!("https://{}/", config.bind))?);
+        Ok(())
+    }
+
+    pub fn forwarded_requests(&self, server: &ArkretServer, path: &str) -> Result<usize> {
+        let config = server
+            .external_restart
+            .as_ref()
+            .context("owned relay backend")?;
+        let upstream = Url::parse(&format!("https://{}/", config.bind))?;
+        Ok(self
+            .control
+            .0
+            .lock()
+            .unwrap()
+            .forwarded
+            .get(&(upstream.to_string(), path.to_owned()))
+            .copied()
+            .unwrap_or(0))
     }
 }
 impl Drop for ServiceRouteRelay {
@@ -66,17 +102,25 @@ struct Relay {
 impl Relay {
     async fn forward(&self, req: &mut Request, res: &mut Response) -> Result<()> {
         let path = req.uri().path().to_owned();
-        let replacement = {
+        let account_stream = path == "/_arkret/self/account/subscribe";
+        let (replacement, upstream) = {
             let mut state = self.control.0.lock().unwrap();
             *state.requests.entry(path.clone()).or_default() += 1;
-            state.replies.get(&path).cloned().or_else(|| {
+            let replacement = state.replies.get(&path).cloned().or_else(|| {
                 (state.method_only && !path.starts_with("/webvh/")).then(|| {
                     (
                         503,
                         b"retired service endpoint; method hosting only".to_vec(),
                     )
                 })
-            })
+            });
+            (
+                replacement,
+                state
+                    .upstream
+                    .clone()
+                    .unwrap_or_else(|| self.upstream.clone()),
+            )
         };
         if let Some((status, bytes)) = replacement {
             res.status_code(salvo::http::StatusCode::from_u16(status)?);
@@ -94,7 +138,7 @@ impl Relay {
             res.write_body(bytes)?;
             return Ok(());
         }
-        let target = self.upstream.join(
+        let target = upstream.join(
             req.uri()
                 .path_and_query()
                 .context("route relay path")?
@@ -119,13 +163,25 @@ impl Relay {
             .body(body)
             .send()
             .await?;
+        *self
+            .control
+            .0
+            .lock()
+            .unwrap()
+            .forwarded
+            .entry((upstream.to_string(), path))
+            .or_default() += 1;
         res.status_code(response.status());
         let mut headers = response.headers().clone();
         headers.remove("content-length");
         headers.remove("transfer-encoding");
         headers.remove("connection");
         *res.headers_mut() = headers;
-        res.write_body(response.bytes().await?)?;
+        if account_stream {
+            res.stream(response.bytes_stream());
+        } else {
+            res.write_body(response.bytes().await?)?;
+        }
         Ok(())
     }
 }
@@ -139,7 +195,13 @@ impl Relay {
     }
 }
 
-async fn listen(tls: &HarnessTls, public: &Url, upstream: Url) -> Result<ServiceRouteRelay> {
+async fn listen(
+    tls: &HarnessTls,
+    public: &Url,
+    upstream: Url,
+    service_id: arkret_wire::DidCoreId,
+    trust_domain: arkret_wire::TrustDomainId,
+) -> Result<ServiceRouteRelay> {
     let _ = rustls::crypto::aws_lc_rs::default_provider().install_default();
     let acceptor = HttpListener::new(format!(
         "127.0.0.1:{}",
@@ -163,6 +225,9 @@ async fn listen(tls: &HarnessTls, public: &Url, upstream: Url) -> Result<Service
         .push(Router::with_path("{**rest}").goal(relay));
     Ok(ServiceRouteRelay {
         control,
+        public_base: public.clone(),
+        service_id,
+        trust_domain,
         task: tokio::spawn(async move {
             Server::new(acceptor).serve(router).await;
         }),
@@ -183,6 +248,8 @@ impl ArkretServer {
             &tls,
             &self.base_url,
             Url::parse(&format!("https://{bind}/"))?,
+            self.service_id.clone(),
+            self.trust_domain.clone(),
         )
         .await?;
         self.external_restart.as_mut().unwrap().bind = bind;
@@ -190,6 +257,24 @@ impl ArkretServer {
         self._port_reservations.push(private);
         self.start_external_process().await?;
         Ok(relay)
+    }
+
+    /// Put another process of the same durable Station behind its public origin.
+    pub async fn join_service_route_relay(&mut self, relay: &ServiceRouteRelay) -> Result<()> {
+        ensure!(
+            self.service_id == relay.service_id && self.trust_domain == relay.trust_domain,
+            "shared frontend requires the same durable Station"
+        );
+        self.stop_external_process().await?;
+        self.base_url = relay.public_base.clone();
+        self.external_restart
+            .as_mut()
+            .context("owned relay backend")?
+            .extra_env
+            .retain(|(key, _)| key != "COLAND_PUBLIC_BASE_URL");
+        // Readiness and identity checks must hit this newly started process.
+        relay.select_backend(self)?;
+        self.start_external_process().await
     }
 
     /// Keep the original method host and explicitly sign an endpoint successor
@@ -217,7 +302,14 @@ impl ArkretServer {
             .await?;
         self.external_restart.as_mut().unwrap().bind = bind.clone();
         port.release();
-        let relay = listen(&tls, &public, Url::parse(&format!("https://{bind}/"))?).await?;
+        let relay = listen(
+            &tls,
+            &public,
+            Url::parse(&format!("https://{bind}/"))?,
+            self.service_id.clone(),
+            self.trust_domain.clone(),
+        )
+        .await?;
         self._port_reservations.push(port);
         old.0.lock().unwrap().method_only = true;
         self.base_url = public;
