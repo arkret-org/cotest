@@ -27,6 +27,143 @@ pub const REVIEWED_SIDECAR_CONTENT_CASES: [&str; 17] = [
     "sidecar_material_not_a_write_grant_operation",
 ];
 
+async fn diagnose_first_mode_failure(
+    station: &ArkretServer,
+    client: &TestActorClient,
+    realm: &RealmId,
+    agent: &AccountId,
+    accepted_generation: u64,
+) {
+    let mut diagnostic = json!({
+        "phase":"first_public_mode_failed",
+        "sql_capture_ok":false,
+        "same_sql_readonly_cut":false,
+        "sql_is_failed_admission_cut":false,
+        "sql_snapshot_sha256":null,
+        "sql_head_position":null,
+        "sql_head_sha256":null,
+        "sql_head_generation":null,
+        "sql_prefix_rows":null,
+        "sql_prefix_distinct_positions":null,
+        "sql_prefix_min":null,
+        "sql_prefix_max":null,
+        "sql_canonical_mode_originals":null,
+        "sql_accepted_mode_originals":null,
+        "sql_mode_projection_rows":null,
+        "exact_current_kind":"unavailable",
+        "exact_current_head_position":null,
+        "exact_current_head_sha256":null,
+        "exact_current_expected_generation":accepted_generation,
+        "http_read_shares_sql_cut":false
+    });
+    if let Some(database) = station.configured_database_url() {
+        let database = database.to_owned();
+        let realm = realm.to_string();
+        let agent = json!(agent);
+        let captured = tokio::task::spawn_blocking(move || -> Result<serde_json::Value> {
+            let mut config = database.parse::<postgres::Config>()?;
+            config
+                .connect_timeout(Duration::from_secs(2))
+                .options("-c default_transaction_read_only=on -c statement_timeout=2000 -c lock_timeout=500");
+            let mut database = config.connect(postgres::NoTls)?;
+            let mut cut = database
+                .build_transaction()
+                .isolation_level(postgres::IsolationLevel::RepeatableRead)
+                .read_only(true)
+                .start()?;
+            let mode_kind = arkret_wire::EventKind::AgentInteractionSet.as_str();
+            let row = cut.query_one(
+                "WITH prefix AS (
+                    SELECT commit_id,stream_position,governance_generation,event_pk
+                    FROM realm_commits
+                    WHERE realm_id=$1 AND stream_ref=jsonb_build_object('kind','realm','realm_id',$1)
+                )
+                SELECT txid_current_snapshot()::text,
+                    COUNT(*)::bigint,COUNT(DISTINCT stream_position)::bigint,
+                    MIN(stream_position),MAX(stream_position),
+                    (SELECT commit_id FROM prefix ORDER BY stream_position DESC LIMIT 1),
+                    (SELECT governance_generation FROM prefix ORDER BY stream_position DESC LIMIT 1),
+                    (SELECT COUNT(*)::bigint FROM canonical_events e WHERE e.realm_id=$1
+                        AND e.kind=$3 AND e.state='committed'
+                        AND e.envelope->'payload'->'agent_account_id'=$2),
+                    (SELECT COUNT(*)::bigint FROM canonical_events e JOIN prefix c ON c.event_pk=e.pk
+                        WHERE e.realm_id=$1 AND e.kind=$3 AND e.state='committed'
+                        AND e.envelope->'payload'->'agent_account_id'=$2),
+                    (SELECT COUNT(*)::bigint FROM agent_interaction_current_states
+                        WHERE realm_id=$1 AND agent_account_id=$2)
+                FROM prefix",
+                &[&realm, &agent, &mode_kind],
+            )?;
+            let snapshot: String = row.try_get(0)?;
+            let head: Option<String> = row.try_get(5)?;
+            let captured = json!({
+                "sql_capture_ok":true,
+                "same_sql_readonly_cut":true,
+                "sql_snapshot_sha256":arkret_canonical::sha256_hex(snapshot.as_bytes()),
+                "sql_head_position":row.try_get::<_,Option<i64>>(4)?,
+                "sql_head_sha256":head.map(|id| arkret_canonical::sha256_hex(id.as_bytes())),
+                "sql_head_generation":row.try_get::<_,Option<i64>>(6)?,
+                "sql_prefix_rows":row.try_get::<_,i64>(1)?,
+                "sql_prefix_distinct_positions":row.try_get::<_,i64>(2)?,
+                "sql_prefix_min":row.try_get::<_,Option<i64>>(3)?,
+                "sql_prefix_max":row.try_get::<_,Option<i64>>(4)?,
+                "sql_canonical_mode_originals":row.try_get::<_,i64>(7)?,
+                "sql_accepted_mode_originals":row.try_get::<_,i64>(8)?,
+                "sql_mode_projection_rows":row.try_get::<_,i64>(9)?
+            });
+            cut.commit()?;
+            Ok(captured)
+        })
+        .await;
+        if let Ok(Ok(captured)) = captured {
+            for (key, value) in captured.as_object().into_iter().flatten() {
+                diagnostic[key.as_str()] = value.clone();
+            }
+        }
+    }
+    // This later HTTP observation is not the failed admission cut or the SQL cut.
+    use arkret_models_collaboration::exact_current_state::{
+        ExactCurrentStateReadRequestBody, ExactCurrentStateReadResponseBody,
+        ExactCurrentStateSelector,
+    };
+    let request = ExactCurrentStateReadRequestBody {
+        realm_id: realm.clone(),
+        selector: ExactCurrentStateSelector::AgentInteraction(
+            arkret_models_collaboration::agent_interaction::AgentInteractionExactCurrentSelector::new(
+                agent.clone(),
+            ),
+        ),
+    };
+    let sdk = client.sdk();
+    if let Ok(Ok(outcome)) = tokio::time::timeout(
+        Duration::from_secs(3),
+        sdk.exact_current_state(&request, accepted_generation),
+    )
+    .await
+    {
+        let (kind, head) = match outcome {
+            ExactCurrentStateReadResponseBody::Present {
+                effective_stream_head,
+                ..
+            } => ("present", effective_stream_head),
+            ExactCurrentStateReadResponseBody::NeverWritten {
+                effective_stream_head,
+                ..
+            } => ("never_written", effective_stream_head),
+        };
+        diagnostic["exact_current_kind"] = json!(kind);
+        diagnostic["exact_current_head_position"] = json!(head.stream_position);
+        diagnostic["exact_current_head_sha256"] = json!(arkret_canonical::sha256_hex(
+            head.commit_id.as_str().as_bytes()
+        ));
+    }
+    use std::io::Write as _;
+    let _ = writeln!(
+        std::io::stderr().lock(),
+        "[agent-sidecar-mode-diagnostic] {diagnostic}"
+    );
+}
+
 async fn other_controller_content(
     deployment: &coauth_session_evidence::ActualAgentDeployment,
     agent: &AgentRuntimeSession,
@@ -1443,13 +1580,24 @@ pub async fn run_agent_content_sidecar_production()
             serde_json::to_value(set)?,
         )
         .await?;
-    crate::scenarios::human_device_producer_live::submit_and_expect_commit(
+    let mode_submission = crate::scenarios::human_device_producer_live::submit_and_expect_commit(
         client,
         &deployment.account,
         &client.device_id,
         &change,
     )
-    .await?;
+    .await;
+    if mode_submission.is_err() {
+        diagnose_first_mode_failure(
+            &deployment.station,
+            client,
+            &realm,
+            &agent.agent_account,
+            future_state.commit.governance_generation,
+        )
+        .await;
+    }
+    mode_submission?;
     let retained = client.sdk().agent_sidecar_get(&sidecar).await?;
     ensure!(
         retained.desired_agent_ids == vec![agent.agent_account.principal_id.clone()]
