@@ -173,8 +173,17 @@ def read_source_text(path: Path) -> str:
     return read_source_bytes(path).decode("utf-8", errors="replace")
 
 
+def ignored_source_path(path: Path) -> bool:
+    try:
+        parts = path.absolute().relative_to(WORKSPACE_ROOT).parts
+    except ValueError:
+        # Standalone walker callers retain their original lexical filtering.
+        parts = path.parts
+    return any(part in IGNORED_DIRS for part in parts)
+
+
 def source_file(path: Path) -> bool:
-    return path.is_file() and not any(part in IGNORED_DIRS for part in path.parts)
+    return path.is_file() and not ignored_source_path(path)
 
 
 def directory_reparse_link(path: Path) -> bool:
@@ -189,7 +198,7 @@ def directory_reparse_link(path: Path) -> bool:
 
 def source_paths(root: Path, suffix: str) -> Iterable[Path]:
     """Walk source files while pruning the existing ignored directories."""
-    if not root.is_dir() or any(part in IGNORED_DIRS for part in root.parts):
+    if not root.is_dir() or ignored_source_path(root):
         return
     for directory, directories, files in os.walk(root, followlinks=False):
         parent = Path(directory)

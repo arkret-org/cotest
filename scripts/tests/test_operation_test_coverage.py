@@ -6,6 +6,7 @@ import io
 import json
 import os
 import re
+import shutil
 import stat
 import sys
 import tempfile
@@ -100,6 +101,24 @@ class OperationTestCoverageTests(unittest.TestCase):
         path = self.root / relative
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_bytes(content.encode("utf-8"))
+
+    def test_ignored_workspace_ancestors_preserve_all_five_source_layers(self) -> None:
+        expected = inventory.generate(self.root)
+        layers = expected["generated_from"]["test_layers"]
+        self.assertEqual(len(layers), 5)
+        self.assertTrue(all(layer["source_file_count"] > 0 for layer in layers.values()))
+        for ignored in inventory.IGNORED_DIRS:
+            self.write(
+                f"cotest/tests/{ignored}/phantom.rs",
+                rust_test("must_stay_excluded", OP_ONE, "assert_eq!(actual, expected);"),
+            )
+        self.assertEqual(inventory.generate(self.root), expected)
+        with tempfile.TemporaryDirectory() as parent:
+            for ancestor in sorted(inventory.IGNORED_DIRS):
+                with self.subTest(ancestor=ancestor):
+                    nested = Path(parent) / ancestor / "workspace"
+                    shutil.copytree(self.root, nested)
+                    self.assertEqual(inventory.generate(nested), expected)
 
     def test_source_walk_prunes_ignored_and_directory_links_without_losing_sources(self) -> None:
         sources = self.root / "source-walk"
