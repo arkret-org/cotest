@@ -21,7 +21,7 @@ static RETRY_HISTORY: OnceLock<Mutex<RetryHistory>> = OnceLock::new();
 impl TestActorClient {
     /// Keep the full canonical request and producer proof unchanged when a
     /// governing stream advances before its candidate RealmCommit is stored.
-    pub(super) async fn submit_authored_event(&self, event: &arkret_wire::Event) -> Result<Value> {
+    pub(crate) async fn submit_authored_event(&self, event: &arkret_wire::Event) -> Result<Value> {
         let submission = crate::publication::initial_submission(event.clone(), "")?;
         let frozen_body = arkret_canonical::canonical_json_bytes(&submission)?;
         self.replay_signed_request(
