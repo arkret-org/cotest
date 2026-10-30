@@ -163,8 +163,11 @@ pub async fn service_migration_preserves_business_and_refreshes_peer_route() -> 
         )
         .await?,
     )?;
-    let initial_binding =
-        StationConnectionBinding::from_description(station.base_url(), &initial_description, true)?;
+    let initial_binding = StationConnectionBinding::from_description(
+        &station.base_url(),
+        &initial_description,
+        true,
+    )?;
     let original_core = station.service_id().to_owned();
     let old_did = station.service_did().to_owned();
     let target = station.reserve_public_base_target()?;
