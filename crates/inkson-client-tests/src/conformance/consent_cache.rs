@@ -1050,9 +1050,6 @@ async fn sfu_media(
     let holder_invite =
         prepare_invitation(context, &call, &holder, media.clone(), *sequence).await?;
     *sequence += 1;
-    let peer = context.denied_holder.account.clone();
-    let peer_invite = prepare_invitation(context, &call, &peer, media.clone(), *sequence).await?;
-    *sequence += 1;
     ensure!(
         product_attempt(
             context,
@@ -1064,6 +1061,12 @@ async fn sfu_media(
         .await?
             == 1
     );
+    let holder_token = invited_token(context, &holder_invite, media.clone());
+    let holder_outcome = exchange(&context.holder, &holder_token).await?;
+    verify_token(context, &holder_token, &holder_outcome).await?;
+    let peer = context.denied_holder.account.clone();
+    let peer_invite = prepare_invitation(context, &call, &peer, media.clone(), *sequence).await?;
+    *sequence += 1;
     ensure!(
         product_attempt(
             context,
@@ -1075,13 +1078,10 @@ async fn sfu_media(
         .await?
             == 1
     );
-    let holder_token = invited_token(context, &holder_invite, media.clone());
     let mut peer_token = invited_token(context, &peer_invite, media);
     peer_token.actor_id = context.denied_holder.actor.clone();
     peer_token.device_id = context.denied_holder.device.clone();
-    let holder_outcome = exchange(&context.holder, &holder_token).await?;
     let peer_outcome = exchange(&context.denied_holder, &peer_token).await?;
-    verify_token(context, &holder_token, &holder_outcome).await?;
     verify_token(context, &peer_token, &peer_outcome).await?;
     accept_roster(context, &context.holder, &holder_outcome).await?;
     accept_roster(context, &context.denied_holder, &peer_outcome).await?;
