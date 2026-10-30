@@ -188,7 +188,7 @@ jobs:
       if: always() && matrix.lane == 'authority'
       uses: actions/upload-artifact@v4
       with:
-        name: native-operation-status-${{ github.sha }}
+        name: native-operation-status-${{ github.sha }}-${{ github.run_attempt }}
         if-no-files-found: error
         path: ${{ runner.temp }}/native-operation-public/summary.json
     - name: Record native runner resources
@@ -757,7 +757,7 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: joint-failure-${{ github.run_id }}-${{ matrix.project }}
+          name: joint-failure-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.project }}
           path: |
             cotest/artifacts/runs/joint-e2e/**/services/prepare-*.log
             cotest/e2e/test-results/
