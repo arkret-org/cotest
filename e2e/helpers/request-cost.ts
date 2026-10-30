@@ -5,8 +5,13 @@ type HttpCost = { method: string; origin: string; path: string; started_ms: numb
   request_body_bytes: number | null; request_header_bytes: number | null; rows: number | null };
 type SocketCost = { origin: string; path: string; opened_ms: number; sent_frames: number; received_frames: number;
   sent_bytes: number; received_bytes: number;
+  received_kinds: Record<string, number>; channel_frame_kinds: Record<string, Record<string, number>>;
+  closed_ms: number | null; socket_errors: number;
   requested_channels: Array<{ channel_id: string; operation_id: string }>;
   opened_channels: Array<{ channel_id: string; operation_id: string }> };
+
+const socketKinds = new Set(["challenge", "welcome", "opened", "data", "control", "closed", "error", "ping", "reauth_required"]);
+const streamKinds = new Set(["delta", "checkpoint", "heartbeat", "catchup_complete", "resync_required", "dropped", "unauthorized", "committed_event", "drain"]);
 
 // Observe the actual browser transport, excluding Node fixture/oracle callers.
 // Retain only costs and public operation coordinates, never headers or bodies.
@@ -67,8 +72,11 @@ export function observeRequestCost(page: Page) {
     const { origin, pathname: path } = new URL(socket.url());
     if (!path.startsWith("/_arkret/")) return;
     const row: SocketCost = { origin, path, opened_ms: elapsed(), sent_frames: 0, received_frames: 0,
-      sent_bytes: 0, received_bytes: 0, requested_channels: [], opened_channels: [] };
+      sent_bytes: 0, received_bytes: 0, requested_channels: [], opened_channels: [],
+      received_kinds: {}, channel_frame_kinds: {}, closed_ms: null, socket_errors: 0 };
     sockets.push(row);
+    socket.on("close", () => { row.closed_ms = elapsed(); });
+    socket.on("socketerror", () => { row.socket_errors += 1; });
     socket.on("framesent", ({ payload }) => {
       row.sent_frames += 1; row.sent_bytes += Buffer.byteLength(payload);
       try {
@@ -82,6 +90,17 @@ export function observeRequestCost(page: Page) {
       row.received_frames += 1; row.received_bytes += Buffer.byteLength(payload);
       try {
         const frame = JSON.parse(payload.toString());
+        // Keep only closed discriminator counts. Payloads, cursors, challenges,
+        // credentials and arbitrary error text must never enter this evidence.
+        const kind = socketKinds.has(frame.kind) ? frame.kind : "other";
+        row.received_kinds[kind] = (row.received_kinds[kind] ?? 0) + 1;
+        if (typeof frame.channel_id === "string"
+          && row.requested_channels.some(channel => channel.channel_id === frame.channel_id)) {
+          const counts = row.channel_frame_kinds[frame.channel_id] ??= {};
+          const payloadKind = streamKinds.has(frame.payload?.kind) ? frame.payload.kind : "other";
+          const key = kind === "data" || kind === "control" ? `${kind}:${payloadKind}` : kind;
+          counts[key] = (counts[key] ?? 0) + 1;
+        }
         if (frame.kind === "opened" && typeof frame.channel_id === "string" && typeof frame.operation_id === "string") {
           row.opened_channels.push({ channel_id: frame.channel_id, operation_id: frame.operation_id });
         }

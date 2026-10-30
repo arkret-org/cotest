@@ -78,3 +78,30 @@ test("WebSocket byte counts retain operation coordinates but no authentication p
   assert.equal(JSON.stringify(value).includes("opaque-content"), false);
   cost.dispose();
 });
+
+test("channel discriminator counts distinguish idle transport from delivered Account frames without payloads", async () => {
+  const page = blankPage();
+  const cost = observeRequestCost(page);
+  const socket = new EventEmitter(); socket.url = () => "wss://station.test/_arkret/ws";
+  page.emit("websocket", socket);
+  const send = frame => socket.emit("framesent", { payload: JSON.stringify(frame) });
+  const receive = frame => socket.emit("framereceived", { payload: JSON.stringify(frame) });
+  send({ kind: "open", channel_id: "account-1", operation_id: "ak.self.account.stream.subscribe.v1" });
+  receive({ kind: "opened", channel_id: "account-1", operation_id: "ak.self.account.stream.subscribe.v1" });
+  receive({ kind: "data", channel_id: "account-1", payload: { kind: "delta", cursor: "private-cursor", contacts: ["private-content"] } });
+  receive({ kind: "control", frame_scope: "channel", channel_id: "account-1", payload: { kind: "heartbeat" } });
+  receive({ kind: "ping", nonce: "private-challenge" });
+  receive({ kind: "private-kind", channel_id: "account-1", payload: { kind: "private-payload-kind" } });
+  socket.emit("socketerror", "private-error-message");
+  socket.emit("close");
+  const value = await cost.snapshot();
+  const row = value.websocket[0];
+  assert.equal(row.channel_frame_kinds["account-1"]["data:delta"], 1);
+  assert.equal(row.channel_frame_kinds["account-1"]["control:heartbeat"], 1);
+  assert.equal(row.received_kinds.ping, 1);
+  assert.equal(row.received_kinds.other, 1);
+  assert.equal(row.socket_errors, 1);
+  assert.equal(typeof row.closed_ms, "number");
+  assert.equal(JSON.stringify(value).includes("private-"), false);
+  cost.dispose();
+});
