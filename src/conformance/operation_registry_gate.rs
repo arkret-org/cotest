@@ -1282,8 +1282,13 @@ fn scan_source_file(
             continue;
         }
         let method = infer_method_near(&lines, index);
-        for literal in extract_string_literals(line) {
+        let rust_source = path.extension().and_then(|value| value.to_str()) == Some("rs");
+        for literal in extract_source_string_literals(line, rust_source) {
             if !literal.contains("_arkret") {
+                continue;
+            }
+            if is_path_prefix_predicate(line, &literal) || (rust_source && is_sql_literal(&literal))
+            {
                 continue;
             }
             if !source_context_allows_literal(line, &lines, index, method.as_deref()) {
@@ -1465,6 +1470,11 @@ fn source_context_allows_literal(
         || context.contains("postjson(")
         || context.contains("putjson(")
         || context.contains("deletejson(")
+        || context.contains("peer(")
+        // A nearby get(variable) can consume a literal URL even though it is
+        // not enough evidence to distinguish an HTTP verb from row.get(...).
+        || context.contains(".get(")
+        || line.contains("format!(")
         || context.contains("path ===")
         || context.contains("pathname ===")
         || context.contains("pathname.match")
@@ -1484,6 +1494,11 @@ fn infer_method_near(lines: &[&str], index: usize) -> Option<String> {
     if let Some(method) = infer_method_from_line(lines[index]) {
         return Some(method);
     }
+    // A constructed URL has no request verb until its later use. Keep the
+    // registered path check without borrowing a neighbouring request's verb.
+    if lines[index].contains("format!(") && lines[index].trim_start().starts_with("let ") {
+        return None;
+    }
     // Router-table style spread across lines:
     //   Router::with_path("/_arkret/...")
     //       .post(handler),
@@ -1492,7 +1507,15 @@ fn infer_method_near(lines: &[&str], index: usize) -> Option<String> {
     // would otherwise pick up a neighbouring route's verb earlier in the
     // `.push(...).push(...)` chain (INFERABLE_METHODS iteration order makes GET
     // win over POST when both appear in the window).
-    for following in lines.iter().skip(index + 1).take(2) {
+    for following in lines
+        .iter()
+        .skip(index + 1)
+        .take(if lines[index].contains("with_path(") {
+            2
+        } else {
+            0
+        })
+    {
         if following.contains("with_path(") || following.contains("Router::") {
             break;
         }
@@ -1538,6 +1561,15 @@ fn is_bare_path_list_element(line: &str) -> bool {
 
 fn infer_method_from_line(line: &str) -> Option<String> {
     let arkret_index = line.find("_arkret")?;
+    let prefix = &line[..arkret_index];
+    for method in HTTP_METHODS {
+        if prefix
+            .to_ascii_lowercase()
+            .ends_with(&format!("{} /", method.to_ascii_lowercase()))
+        {
+            return Some((*method).to_owned());
+        }
+    }
     // Fetch-style calls carry the verb as an explicit property after the URL.
     // Read it from the same source line so a QUERY call cannot borrow GET/POST
     // from a neighboring array element, and neighboring calls cannot borrow
@@ -1553,7 +1585,6 @@ fn infer_method_from_line(line: &str) -> Option<String> {
             return Some((*method).to_owned());
         }
     }
-    let prefix = &line[..arkret_index];
     // A request verb on this URL's line outranks unrelated row.get calls in
     // the fallback context window.
     if let Some((_, method)) = INFERABLE_METHODS
@@ -1561,6 +1592,7 @@ fn infer_method_from_line(line: &str) -> Option<String> {
         .filter_map(|method| {
             prefix
                 .rfind(&format!(".{}(", method.to_ascii_lowercase()))
+                .filter(|offset| *method != "GET" || get_has_url_argument(&line[*offset + 5..]))
                 .map(|offset| (offset, *method))
         })
         .max_by_key(|(offset, _)| *offset)
@@ -1598,7 +1630,9 @@ fn infer_method_from_context(context: &str) -> Option<String> {
                 "PathItemType::{method_title}",
                 method_title = title_method(method)
             ))
-            || context.contains(&format!(".{lower}("))
+            || (context.contains(&format!(".{lower}("))
+                && (*method != "GET"
+                    || context.match_indices(".get(").any(|(offset, _)| get_has_url_argument(&context[offset + 5..]))))
             || context.contains(&format!("{lower}_json"))
             // camelCase TS wrappers: getJson(/postJson(/... — matched
             // case-insensitively with the call paren so unrelated identifiers
@@ -1642,13 +1676,133 @@ fn title_method(method: &str) -> String {
     out
 }
 
+fn get_has_url_argument(argument: &str) -> bool {
+    let argument = argument.trim_start().trim_start_matches('&').trim_start();
+    if argument.starts_with("format!(") || argument.starts_with("concat!(") {
+        return true;
+    }
+    let argument = argument.trim_start_matches('r').trim_start_matches('#');
+    let Some(&first) = argument.as_bytes().first() else {
+        return false;
+    };
+    if !matches!(first, b'"' | b'\'' | b'`') {
+        return false;
+    }
+    let value = &argument[1..];
+    value.starts_with('/')
+        || value.starts_with("_arkret/")
+        || value.starts_with("http://")
+        || value.starts_with("https://")
+}
+
+fn is_sql_literal(value: &str) -> bool {
+    let upper = value.to_ascii_uppercase();
+    let mut words = upper.split_ascii_whitespace();
+    let first = words.next().unwrap_or("");
+    matches!(
+        first,
+        "SELECT" | "WITH" | "INSERT" | "UPDATE" | "CREATE" | "ALTER"
+    ) || (first == "DELETE" && words.next() == Some("FROM"))
+}
+
+fn is_path_prefix_predicate(line: &str, literal: &str) -> bool {
+    if !literal.starts_with("/_arkret/") && !literal.starts_with("_arkret/") {
+        return false;
+    }
+    for quote in ['"', '\'', '`'] {
+        let quoted = format!("{quote}{literal}{quote}");
+        if line.matches(&quoted).count() != 1 {
+            continue;
+        }
+        let Some(offset) = line.find(&quoted) else {
+            continue;
+        };
+        let before = line[..offset].trim_end();
+        let Some(call) = before.strip_suffix('(') else {
+            continue;
+        };
+        if call.trim_end().ends_with(".startsWith") || call.trim_end().ends_with(".starts_with") {
+            return true;
+        }
+    }
+    false
+}
+
 fn extract_string_literals(line: &str) -> Vec<String> {
+    extract_source_string_literals(line, false)
+}
+
+fn rust_char_literal_end(line: &str, index: usize) -> Option<usize> {
+    let bytes = line.as_bytes();
+    if bytes.get(index) != Some(&b'\'') {
+        return None;
+    }
+    let character = line.get(index + 1..)?.chars().next()?;
+    let mut end = index + 1 + character.len_utf8();
+    if character == '\\' {
+        let escape = *bytes.get(end)?;
+        end += 1;
+        match escape {
+            b'\'' | b'"' | b'\\' | b'n' | b'r' | b't' | b'0' => {}
+            b'x' => {
+                if !bytes.get(end..end + 2)?.iter().all(u8::is_ascii_hexdigit) {
+                    return None;
+                }
+                end += 2;
+            }
+            b'u' => {
+                if bytes.get(end) != Some(&b'{') {
+                    return None;
+                }
+                end += 1;
+                let mut digits = 0;
+                let mut value = 0_u32;
+                loop {
+                    let byte = *bytes.get(end)?;
+                    if byte == b'}' {
+                        break;
+                    }
+                    if byte != b'_' {
+                        let digit = char::from(byte).to_digit(16)?;
+                        digits += 1;
+                        if digits > 6 {
+                            return None;
+                        }
+                        value = value.checked_mul(16)?.checked_add(digit)?;
+                    }
+                    end += 1;
+                }
+                if digits == 0 || char::from_u32(value).is_none() {
+                    return None;
+                }
+                end += 1;
+            }
+            _ => return None,
+        }
+    } else if matches!(character, '\'' | '\n' | '\r' | '\t') {
+        return None;
+    }
+    (bytes.get(end) == Some(&b'\'')).then_some(end + 1)
+}
+
+fn extract_source_string_literals(line: &str, rust_source: bool) -> Vec<String> {
     let bytes = line.as_bytes();
     let mut literals = Vec::new();
     let mut i = 0usize;
     while i < bytes.len() {
         let quote = bytes[i];
         if !matches!(quote, b'"' | b'\'' | b'`') {
+            i += 1;
+            continue;
+        }
+        if rust_source && quote != b'"' {
+            // Consume a real character atomically so its double quote cannot
+            // swallow a following request. Lifetimes and SQL strings are not
+            // Rust character literals and remain outside string extraction.
+            if let Some(end) = rust_char_literal_end(line, i) {
+                i = end;
+                continue;
+            }
             i += 1;
             continue;
         }
@@ -2090,6 +2244,159 @@ mod tests {
     fn explicit_fetch_query_method_wins_over_neighboring_get_calls() {
         let line = r#"response: await request.fetch(`${base}/_arkret/self/events`, { method: "QUERY", data: { limit: 20 } })"#;
         assert_eq!(infer_method_from_line(line).as_deref(), Some("QUERY"));
+    }
+
+    #[test]
+    fn peer_transport_does_not_borrow_value_get_methods() {
+        let lines = [
+            "let value = row.get(0);",
+            r#"peer(receiver, source, "/_arkret/peer/keys/keypackages/claims/query", body, None);"#,
+            r#"let state = value.get("state");"#,
+        ];
+        assert_eq!(infer_method_near(&lines, 1), None);
+        assert!(source_context_allows_literal(lines[1], &lines, 1, None));
+        assert_eq!(
+            extract_path_candidates(&extract_source_string_literals(lines[1], true)[0]),
+            vec!["/_arkret/peer/keys/keypackages/claims/query"]
+        );
+    }
+
+    #[test]
+    fn constructed_url_does_not_borrow_a_neighboring_verb() {
+        let lines = [
+            r#"let trusted_base = format!("/_arkret/self/keys/backups/{}", id);"#,
+            r#"client.post("/_arkret/self/keys/backups/delete-challenge");"#,
+        ];
+        assert_eq!(infer_method_near(&lines, 0), None);
+        assert!(source_context_allows_literal(lines[0], &lines, 0, None));
+        assert_eq!(infer_method_near(&lines, 1).as_deref(), Some("POST"));
+    }
+
+    #[test]
+    fn request_line_assertions_bind_their_actual_method() {
+        let lines = [
+            r#"let value = body.get("state");"#,
+            r#"assert!(headers.starts_with("post /_arkret/self/streams/scan "));"#,
+        ];
+        assert_eq!(infer_method_near(&lines, 1).as_deref(), Some("POST"));
+        assert!(!is_path_prefix_predicate(
+            lines[1],
+            "post /_arkret/self/streams/scan "
+        ));
+        assert!(!is_sql_literal("DELETE /_arkret/self/events HTTP/1.1"));
+        assert!(is_sql_literal(
+            "DELETE FROM held WHERE endpoint='/_arkret/self/events'"
+        ));
+    }
+
+    #[test]
+    fn uri_predicates_do_not_hide_concrete_requests() {
+        let line = r#"path.startsWith("/_arkret/self/") && client.post("/_arkret/self/unknown");"#;
+        assert!(is_path_prefix_predicate(line, "/_arkret/self/"));
+        assert!(!is_path_prefix_predicate(line, "/_arkret/self/unknown"));
+        let repeated = r#"path.startsWith("/_arkret/self/") && fetch("/_arkret/self/");"#;
+        assert!(!is_path_prefix_predicate(repeated, "/_arkret/self/"));
+        assert_eq!(
+            extract_path_candidates("/_arkret/self/unknown"),
+            vec!["/_arkret/self/unknown"]
+        );
+    }
+
+    #[test]
+    fn rust_sql_values_are_not_typescript_request_literals() {
+        assert!(
+            extract_source_string_literals(
+                "AND endpoint='/_arkret/peer/keys/keypackages/claim'",
+                true
+            )
+            .is_empty()
+        );
+        assert_eq!(
+            extract_source_string_literals("client.post('/_arkret/self/events');", false),
+            vec!["/_arkret/self/events"]
+        );
+        assert!(is_sql_literal(
+            "SELECT COUNT(*) FROM held WHERE endpoint='/_arkret/self/events'"
+        ));
+    }
+
+    #[test]
+    fn rust_character_atoms_do_not_hide_following_unknown_requests() {
+        for character in [
+            r#"'"'"#,
+            r#"'\''"#,
+            r#"'\\'"#,
+            r#"'\u{22}'"#,
+            r#"'\u{1F980}'"#,
+            r#"'\x22'"#,
+            r#"'\n'"#,
+            "'é'",
+            "'🦀'",
+        ] {
+            assert_eq!(rust_char_literal_end(character, 0), Some(character.len()));
+            let temporary = tempfile::tempdir().unwrap();
+            let file = temporary.path().join("request.rs");
+            fs::write(
+                &file,
+                format!(
+                    "let marker = {character}; client.post(\"/_arkret/self/unregistered-after-char\");"
+                ),
+            )
+            .unwrap();
+            let mut observed = BTreeSet::new();
+            scan_source_file("fixture", temporary.path(), &file, &mut observed).unwrap();
+            assert_eq!(observed.len(), 1, "request after {character}");
+            let entry = observed.first().unwrap();
+            assert_eq!(entry.path, "/_arkret/self/unregistered-after-char");
+            assert_eq!(entry.method.as_deref(), Some("POST"));
+        }
+    }
+
+    #[test]
+    fn rust_lifetimes_and_multi_character_sql_are_not_character_atoms() {
+        for value in [
+            "'a",
+            "'static",
+            "'label:",
+            "'/_arkret/self/sql-value'",
+            "'SELECT'",
+            "''",
+            r#"'\u{}'"#,
+            r#"'\u{D800}'"#,
+            r#"'\xGG'"#,
+        ] {
+            assert_eq!(rust_char_literal_end(value, 0), None, "{value}");
+        }
+        let line = r#"let endpoint: &'a str = "/_arkret/self/unregistered-lifetime"; client.post(endpoint);"#;
+        assert_eq!(
+            extract_source_string_literals(line, true),
+            vec!["/_arkret/self/unregistered-lifetime"]
+        );
+    }
+
+    #[test]
+    fn variable_get_urls_remain_candidates_without_misclassifying_row_access() {
+        let temporary = tempfile::tempdir().unwrap();
+        let file = temporary.path().join("request.rs");
+        let text = concat!(
+            "let metadata = row.get(0);\n",
+            "let url = \"/_arkret/self/unregistered-variable-url\";\n",
+            "let response = client.get(url);\n",
+            "\n\n\n\n",
+            "let sql = \"SELECT * FROM held WHERE endpoint='/_arkret/self/sql-value'\";\n",
+            "let row = connection.query_one(sql);\n",
+            "let value = row.get(0);\n",
+            "path.starts_with(\"/_arkret/self/\");\n",
+        );
+        fs::write(&file, text).unwrap();
+        let lines = text.lines().collect::<Vec<_>>();
+        assert_eq!(infer_method_near(&lines, 1), None);
+        let mut observed = BTreeSet::new();
+        scan_source_file("fixture", temporary.path(), &file, &mut observed).unwrap();
+        assert_eq!(observed.len(), 1);
+        let entry = observed.first().unwrap();
+        assert_eq!(entry.path, "/_arkret/self/unregistered-variable-url");
+        assert_eq!(entry.method, None);
     }
 
     #[test]
