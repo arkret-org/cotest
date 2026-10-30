@@ -1679,8 +1679,24 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
         // Bob now completes the atomic PCR create + founding-device authorization.
         // This publishes his real event-signer KeyPackage after the invite already
         // exists, exercising the deferred Welcome reconciliation path.
+        let bobPrejoinOriginalReads = 0;
         const bobFlow = await openDpopUserPageFromSession(browser, bobSession,
-          { beforeNavigate: async page => { costs.push({ reader: "bob", cost: observeRequestCost(page) }); } });
+          { beforeNavigate: async page => {
+            costs.push({ reader: "bob", cost: observeRequestCost(page) });
+            // A since-join member recovers from signed current and its Welcome,
+            // not the creator's position-zero original. Observe the real scan
+            // without intercepting or replacing any authority response.
+            page.on("request", request => {
+              if (request.method() !== "POST"
+                  || new URL(request.url()).pathname !== "/_arkret/self/streams/scan") return;
+              const body = request.postDataJSON();
+              if (body?.realm_id === realmId && body?.stream_ref?.kind === "realm"
+                  && body.stream_ref.realm_id === realmId
+                  && body.before_position === 1 && body.limit === 1) {
+                bobPrejoinOriginalReads += 1;
+              }
+            });
+          } });
         expect(bobFlow).toBeTruthy();
         bobPage = bobFlow!.page;
         await bobPage.completeRecoveryKeySetupIfPrompted();
@@ -1897,6 +1913,9 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
         await assertCardDecrypts(bobPage, aliceCard, aliceDescription);
         await assertE2eeStorageIsHardened(bobPage.page, [aliceDescription]);
         await stepShot(bobPage.page, testInfo, "C-bob-card-survives-reload");
+        expect(bobPrejoinOriginalReads,
+          "late-member decrypt and reload must not depend on the prejoin founding original (Inkson #37)")
+          .toBe(0);
 
         if (fault === "late-transition-tail") {
           const carolSession = await createDpopUserSession(request, "xmenc-carol");

@@ -15,6 +15,7 @@
 ## Spec 锚点
 
 - `crypto-media/encryption-and-audit.md` §2.2-§2.4 —— Welcome/Commit、application envelope、sync+epoch
+- `governance/history-visibility.md` §3.1 —— 晚加入成员不需要 position 0 原始行；从同 cut 的已验证 current 与 Welcome 恢复，不能为创建者分类越过历史 floor。
 - `models/realm-and-space.md` §2.2 —— accepted Genesis 与 `since_join`
 - `models/realm-and-space.md` §3.7.2 —— E2EE Realm
 - `models/strand-and-message.md` §2-§3 —— Strand 私有 `body` 内容路径
@@ -39,6 +40,8 @@
 ## Steps
 
 **顺序关键:内容必须在 bob 加入后创建。** 否则加入前内容对 bob 既被 history_access=since_join 裁剪、又因 MLS 前向保密(bob 无该 epoch 密钥)解不开——皆为正确行为,不是本场景要验的协作路径。
+
+加入后首次解密与重新加载期间，观察 Bob 的真实 `/_arkret/self/streams/scan` 请求，断言没有对本 Realm 的 `before_position=1, limit=1` 创世原行探测。此断言与已有私有卡片正文解密、冷刷新后持续可读及反向协作一起成立，不拦截或伪造任何响应（Inkson #37 回归）。
 
 1. alice 建**空** Realm，随后接受 MLS Genesis；history policy 为 `since_join`。
 2. bob 先授权 invite consent 并通过标准接口签发 locator；alice 使用该 locator 在界面中邀请 bob。此时 Bob 尚未开启浏览器／发布 KeyPackage，邀请事实必须持久化，状态不得伪称 `MLS Welcome queued`。裸地址在缺省策略下进入 quarantine，不能用放宽默认策略替代引介证据。
