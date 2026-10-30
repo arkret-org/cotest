@@ -1,4 +1,4 @@
-//! Exact ordinary Event replay for a registered transient governance response.
+//! Exact signed-request replay for registered transient governance responses.
 
 use std::collections::{BTreeMap, VecDeque};
 use std::sync::{Mutex, OnceLock};
@@ -12,7 +12,7 @@ use serde_json::Value;
 use super::TestActorClient;
 use crate::harness::assertions::{HTTP_REQUEST_DEADLINE, send_recorded};
 
-type RetryHistory = BTreeMap<(String, String), VecDeque<Instant>>;
+type RetryHistory = BTreeMap<(String, String, String), VecDeque<Instant>>;
 
 const RETRY_WINDOW: Duration = Duration::from_secs(300);
 const MAX_WINDOW_RETRIES: usize = 5;
@@ -24,9 +24,37 @@ impl TestActorClient {
     pub(super) async fn submit_authored_event(&self, event: &arkret_wire::Event) -> Result<Value> {
         let submission = crate::publication::initial_submission(event.clone(), "")?;
         let frozen_body = arkret_canonical::canonical_json_bytes(&submission)?;
-        let operation =
-            arkret_wire::ServiceOperationId::from_wire("ak.self.events.command.submit.v1")
-                .context("self Event submit operation is unregistered")?;
+        self.replay_signed_request(
+            "/_arkret/self/events",
+            "ak.self.events.command.submit.v1",
+            frozen_body,
+        )
+        .await
+    }
+
+    /// Replay the entire original signed audit request, retaining its frozen
+    /// observation identity rather than authoring another audit Event.
+    pub(crate) async fn read_audited_watch(
+        &self,
+        request: &arkret_models_collaboration::strand_watch_operations::WatchAuditReadRequestBody,
+    ) -> Result<Value> {
+        let frozen_body = arkret_canonical::canonical_json_bytes(request)?;
+        self.replay_signed_request(
+            "/_arkret/self/strands/watch/audit-read",
+            "ak.self.strand.watch.command.audit_read.v1",
+            frozen_body,
+        )
+        .await
+    }
+
+    async fn replay_signed_request(
+        &self,
+        endpoint: &'static str,
+        operation_id: &'static str,
+        frozen_body: Vec<u8>,
+    ) -> Result<Value> {
+        let operation = arkret_wire::ServiceOperationId::from_wire(operation_id)
+            .context("signed replay operation is unregistered")?;
         let descriptor = operation.descriptor();
         let replay_safe = descriptor.retry_safe == Some(true)
             && descriptor.idempotency_mechanism == Some("canonical_hash");
@@ -38,7 +66,7 @@ impl TestActorClient {
                 // A new transport proof may be issued, never a new Event or
                 // a modified canonical-hash replay identity.
                 let response = send_recorded(
-                    self.post("/_arkret/self/events")
+                    self.post(endpoint)
                         .header(CONTENT_TYPE, "application/json")
                         .body(frozen_body.clone()),
                 )
@@ -72,14 +100,14 @@ impl TestActorClient {
                     return Err(rejected());
                 }
                 tokio::time::sleep(delay).await;
-                if !reserve_retry(&self.service_id, &self.actor) {
+                if !reserve_retry(&self.service_id, &self.actor, endpoint) {
                     return Err(rejected());
                 }
                 retries += 1;
             }
         })
         .await
-        .context("exact Event submission exhausted the existing HTTP request budget")?
+        .context("exact signed request exhausted the existing HTTP request budget")?
     }
 }
 
@@ -149,16 +177,22 @@ fn retry_delay(policy: &arkret_http_client::RetryConfig, attempt: usize) -> Opti
     Some(delay.mul_f64(1.0 + 0.2 * jitter))
 }
 
-fn reserve_retry(service: &str, actor: &str) -> bool {
+fn reserve_retry(service: &str, actor: &str, endpoint: &str) -> bool {
     let Ok(mut history) = RETRY_HISTORY.get_or_init(Mutex::default).lock() else {
         return false;
     };
-    reserve_retry_at(&mut history, service, actor, Instant::now())
+    reserve_retry_at(&mut history, service, actor, endpoint, Instant::now())
 }
 
-fn reserve_retry_at(history: &mut RetryHistory, service: &str, actor: &str, now: Instant) -> bool {
+fn reserve_retry_at(
+    history: &mut RetryHistory,
+    service: &str,
+    actor: &str,
+    endpoint: &str,
+    now: Instant,
+) -> bool {
     let retries = history
-        .entry((service.to_owned(), actor.to_owned()))
+        .entry((service.to_owned(), actor.to_owned(), endpoint.to_owned()))
         .or_default();
     retries.retain(|sent| now.saturating_duration_since(*sent) < RETRY_WINDOW);
     if retries.len() >= MAX_WINDOW_RETRIES {
@@ -265,19 +299,52 @@ mod tests {
     }
 
     #[test]
-    fn actor_service_retry_window_is_shared_and_expires_without_sleep() {
+    fn actor_service_endpoint_retry_window_is_shared_and_expires_without_sleep() {
         let mut history = RetryHistory::new();
         let now = Instant::now();
+        let endpoint = "/_arkret/self/events";
         for _ in 0..5 {
-            assert!(reserve_retry_at(&mut history, "station-a", "alice", now));
+            assert!(reserve_retry_at(
+                &mut history,
+                "station-a",
+                "alice",
+                endpoint,
+                now
+            ));
         }
-        assert!(!reserve_retry_at(&mut history, "station-a", "alice", now));
-        assert!(reserve_retry_at(&mut history, "station-a", "bob", now));
-        assert!(reserve_retry_at(&mut history, "station-b", "alice", now));
+        assert!(!reserve_retry_at(
+            &mut history,
+            "station-a",
+            "alice",
+            endpoint,
+            now
+        ));
+        assert!(reserve_retry_at(
+            &mut history,
+            "station-a",
+            "bob",
+            endpoint,
+            now
+        ));
+        assert!(reserve_retry_at(
+            &mut history,
+            "station-b",
+            "alice",
+            endpoint,
+            now
+        ));
         assert!(reserve_retry_at(
             &mut history,
             "station-a",
             "alice",
+            "/_arkret/self/strands/watch/audit-read",
+            now
+        ));
+        assert!(reserve_retry_at(
+            &mut history,
+            "station-a",
+            "alice",
+            endpoint,
             now + RETRY_WINDOW
         ));
     }
