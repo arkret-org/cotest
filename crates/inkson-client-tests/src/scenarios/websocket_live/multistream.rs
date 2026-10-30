@@ -12,6 +12,226 @@ use serde_json::json;
 
 use super::*;
 
+struct LiveActors {
+    alice: Member,
+    bob: Member,
+    reader_epoch: u64,
+    core_epoch: Option<u64>,
+    pin_requested: bool,
+    supplied_epoch: Option<u64>,
+    provide_calls: u64,
+    pair_reauthentications: u64,
+    writer_reauthentications: u64,
+    stage: &'static str,
+}
+
+type ActorSlots = std::rc::Rc<std::cell::RefCell<LiveActors>>;
+
+fn member_snapshot(member: &Member) -> Member {
+    Member {
+        client: member.client.clone(),
+        account: member.account.clone(),
+        actor: member.actor.clone(),
+        device: member.device.clone(),
+        method: member.method.clone(),
+        key: member.key.clone(),
+        authorize_event_id: member.authorize_event_id.clone(),
+    }
+}
+
+fn require_core_epoch(actors: &ActorSlots, expected: u64) -> Result<()> {
+    let actors = actors.borrow();
+    ensure!(
+        actors.core_epoch == Some(expected) && actors.reader_epoch == expected,
+        "reader authentication changed during the fixed-session core"
+    );
+    Ok(())
+}
+
+fn current_reader_transport(actors: &ActorSlots) -> Result<arkret_http_client::Client> {
+    let mut actors = actors.borrow_mut();
+    ensure!(
+        actors
+            .core_epoch
+            .is_none_or(|epoch| epoch == actors.reader_epoch),
+        "reader authentication changed during the fixed-session core"
+    );
+    let http = actors.bob.client.sdk();
+    ensure!(
+        http.own_station_result_client()?.is_some(),
+        "current reader has no live bound native source"
+    );
+    actors.provide_calls = actors
+        .provide_calls
+        .checked_add(1)
+        .context("reader provider counter overflow")?;
+    actors.supplied_epoch = Some(actors.reader_epoch);
+    Ok(http)
+}
+
+async fn maintain_preparation_sessions(
+    governor: &ArkretServer,
+    server: &ArkretServer,
+    issuer: &MockCoauthIntrospectionServer,
+    actors: ActorSlots,
+    token: inkson::realm_events_engine::ValueCell<String>,
+    wake: Arc<tokio::sync::Notify>,
+) -> Result<()> {
+    // Keep a single-head wait plus the ordinary refresh margin in reserve.
+    // This is remaining issuer lifetime, not a forced three-minute rotation.
+    let renewal_margin = Duration::from_secs(120 + 60);
+    loop {
+        let pin = actors.borrow().pin_requested;
+        let remaining = {
+            let actors = actors.borrow();
+            actors
+                .alice
+                .client
+                .checked_native_session_remaining()?
+                .min(actors.bob.client.checked_native_session_remaining()?)
+        };
+        if pin || remaining <= renewal_margin {
+            let (old_alice, old_bob) = {
+                let actors = actors.borrow();
+                ensure!(
+                    actors.core_epoch.is_none(),
+                    "core reader may not reauthenticate"
+                );
+                (actors.alice.client.clone(), actors.bob.client.clone())
+            };
+            let fresh_alice = governor
+                .reissue_mock_native_host_session(&old_alice, issuer)
+                .await?;
+            let fresh_bob = server
+                .reissue_mock_native_host_session(&old_bob, issuer)
+                .await?;
+            {
+                let mut actors = actors.borrow_mut();
+                ensure!(
+                    actors.core_epoch.is_none(),
+                    "core reader may not reauthenticate"
+                );
+                actors.reader_epoch = actors
+                    .reader_epoch
+                    .checked_add(1)
+                    .context("reader epoch overflow")?;
+                actors.pair_reauthentications = actors
+                    .pair_reauthentications
+                    .checked_add(1)
+                    .context("reauthentication counter overflow")?;
+                actors.alice.client = fresh_alice;
+                actors.bob.client = fresh_bob;
+                token.set(actors.bob.client.session().credential().to_owned());
+                if pin {
+                    actors.core_epoch = Some(actors.reader_epoch);
+                }
+            }
+            // Publish the coherent replacement first. There is no await before
+            // invalidating only the old local sources; issuer records survive.
+            old_alice.invalidate_local_native_session()?;
+            old_bob.invalidate_local_native_session()?;
+            if pin {
+                return std::future::pending::<Result<()>>().await;
+            }
+            continue;
+        }
+        tokio::select! {
+            _ = wake.notified() => {},
+            _ = tokio::time::sleep(remaining.saturating_sub(renewal_margin)) => {},
+        }
+    }
+}
+
+async fn current_writer_for_author(
+    governor: &ArkretServer,
+    issuer: &MockCoauthIntrospectionServer,
+    actors: &ActorSlots,
+    core_epoch: u64,
+) -> Result<Member> {
+    require_core_epoch(actors, core_epoch)?;
+    let old = actors.borrow().alice.client.clone();
+    let fresh = governor
+        .reissue_mock_native_host_session(&old, issuer)
+        .await?;
+    {
+        let mut actors = actors.borrow_mut();
+        ensure!(actors.core_epoch == Some(core_epoch) && actors.reader_epoch == core_epoch);
+        actors.alice.client = fresh;
+        actors.writer_reauthentications = actors
+            .writer_reauthentications
+            .checked_add(1)
+            .context("writer authentication counter overflow")?;
+    }
+    old.invalidate_local_native_session()?;
+    Ok(member_snapshot(&actors.borrow().alice))
+}
+
+fn successful_subscriptions(
+    snapshot: &crate::scenarios::_helpers::service_metrics::MetricsSnapshot,
+    require_seen: bool,
+) -> Result<u64> {
+    ensure!(
+        snapshot.has_metric("coland_request_total"),
+        "request counter is unavailable"
+    );
+    let mut total = 0u64;
+    let mut seen_success = false;
+    let mut labels = std::collections::BTreeSet::new();
+    for sample in snapshot.samples().iter().filter(|sample| {
+        sample.name == "coland_request_total" && sample.matches(&[("op", SUBSCRIBE_OP)])
+    }) {
+        ensure!(
+            labels.insert(sample.labels.clone()),
+            "duplicate subscription counter series"
+        );
+        let status = sample
+            .labels
+            .get("status")
+            .context("subscription counter has no status label")?;
+        ensure!(
+            status.len() == 3 && status.bytes().all(|byte| byte.is_ascii_digit()),
+            "unknown subscription status label"
+        );
+        ensure!(
+            status
+                .parse::<u16>()
+                .is_ok_and(|value| (100..600).contains(&value)),
+            "unknown subscription status value"
+        );
+        ensure!(
+            sample.value.is_finite()
+                && sample.value >= 0.0
+                && sample.value.fract() == 0.0
+                && sample.value <= (1u64 << 53) as f64,
+            "invalid subscription counter value"
+        );
+        if status == "200" {
+            seen_success = true;
+            total = total
+                .checked_add(sample.value as u64)
+                .context("subscription counter overflow")?;
+        }
+    }
+    ensure!(
+        !require_seen || seen_success,
+        "successful subscription counter is unavailable"
+    );
+    Ok(total)
+}
+
+fn pending_precore_opens(
+    provides: u64,
+    success_before: u64,
+    success_at_boundary: u64,
+) -> Result<u64> {
+    let completed = success_at_boundary
+        .checked_sub(success_before)
+        .context("subscription counter regressed")?;
+    provides
+        .checked_sub(completed)
+        .context("subscription counts exceed the single-send provider bound")
+}
+
 pub async fn run() -> Result<()> {
     cotest::harness::heap_future(|| run_matrix(65)).await
 }
@@ -780,6 +1000,21 @@ async fn run_matrix(circle_count: usize) -> Result<()> {
         .did_boundary_metrics()?
         .context("actual subscription request counters")?;
     let before = metrics.snapshot().await?;
+    let success_before = successful_subscriptions(&before, false)?;
+    let actors = std::rc::Rc::new(std::cell::RefCell::new(LiveActors {
+        alice: alice_member,
+        bob: bob_member,
+        reader_epoch: 0,
+        core_epoch: None,
+        pin_requested: false,
+        supplied_epoch: None,
+        provide_calls: 0,
+        pair_reauthentications: 0,
+        writer_reauthentications: 0,
+        stage: "preparation",
+    }));
+    let token = value_cell(bob.session().credential().to_owned());
+    let auth_wake = Arc::new(tokio::sync::Notify::new());
     let effect = inkson::realm_events_engine::EffectRegistry::default().register(
         inkson::realm_events_engine::EffectKey {
             owner: inkson::realm_events_engine::EffectOwner::Realm {
@@ -796,7 +1031,7 @@ async fn run_matrix(circle_count: usize) -> Result<()> {
     let ctx = inkson::realm_events_engine::RealmEventsEngineContext {
         websocket_rail: inkson::realm_events_engine::WebSocketRail::default(),
         base_url: inkson::realm_events_engine::ValueReader::new(move || base.clone()),
-        token: value_cell(bob.session().credential().to_owned()),
+        token: token.clone(),
         state_store: store.clone(),
         selected_realm_id: inkson::realm_events_engine::ValueReader::new(move || selected.clone()),
         route_enabled: inkson::realm_events_engine::ValueReader::new(|| true),
@@ -810,18 +1045,27 @@ async fn run_matrix(circle_count: usize) -> Result<()> {
         }),
         effect: effect.clone(),
     };
-    let http = bob.sdk();
+    let reader_actors = actors.clone();
     let runner = inkson::realm_events_engine::run_realm_events_engine_with_transport(
         0,
         inkson::realm_events_engine::ValueReader::new(|| 0),
         realm.clone(),
         ctx,
         move |_| {
-            let http = http.clone();
-            async move { Ok(http) }
+            let selected = current_reader_transport(&reader_actors);
+            async move { selected }
         },
     );
     tokio::pin!(runner);
+    let lifecycle = maintain_preparation_sessions(
+        governor,
+        server,
+        &issuer,
+        actors.clone(),
+        token,
+        auth_wake.clone(),
+    );
+    tokio::pin!(lifecycle);
     let observation = async {
         for expected in &initial.visible_stream_heads {
             wait_head(&store, expected).await.with_context(|| {
@@ -835,7 +1079,72 @@ async fn run_matrix(circle_count: usize) -> Result<()> {
         eprintln!(
             "[2133-multistream] initial_streams={initial_streams} all_signed_heads_durable=1"
         );
+        actors.borrow_mut().pin_requested = true;
+        actors.borrow_mut().stage = "reader_pin";
+        auth_wake.notify_one();
+        let core_epoch = tokio::time::timeout(Duration::from_secs(120), async {
+            loop {
+                let ready = {
+                    let actors = actors.borrow();
+                    actors
+                        .core_epoch
+                        .filter(|epoch| actors.supplied_epoch == Some(*epoch))
+                };
+                if let Some(epoch) = ready {
+                    return epoch;
+                }
+                tokio::time::sleep(Duration::from_millis(100)).await;
+            }
+        })
+        .await
+        .context("one live follower acquires the final preparation session")?;
+        actors.borrow_mut().stage = "sentinel";
+        let sentinel_writer =
+            current_writer_for_author(governor, &issuer, &actors, core_epoch).await?;
+        let sentinel = circle_event(
+            &sentinel_writer.client,
+            &realm,
+            busy_circle,
+            EventKind::MessageCreate,
+            json!({"strand_id":busy_strand_id,"track_name":"discussion",
+                "content":{"kind":"ak.content.text","body":"Authenticated observation boundary"}}),
+        )
+        .await?;
+        let sentinel_commit = submit_and_expect_commit(
+            &sentinel_writer.client,
+            &account_id,
+            &sentinel_writer.client.device_id,
+            &sentinel,
+        )
+        .await?;
+        wait_head(
+            &store,
+            &arkret_wire::CommitStreamHead {
+                stream_ref: busy_stream.clone(),
+                stream_position: sentinel_commit.stream_position,
+                commit_id: sentinel_commit.commit_id,
+            },
+        )
+        .await
+        .context("fresh-session follower installs the real boundary Message")?;
+        require_core_epoch(&actors, core_epoch)?;
+        // Read the real successful response counter BEFORE the local provide
+        // count. With the fixture's unchanged retry=0, every provide can open
+        // at most one HTTP subscription. Exclude even late pre-core opens.
+        let boundary_success = successful_subscriptions(&metrics.snapshot().await?, true)?;
+        let boundary_provides = actors.borrow().provide_calls;
+        let pending_opens =
+            pending_precore_opens(boundary_provides, success_before, boundary_success)?;
+        let required_natural_opens = pending_opens
+            .checked_add(1)
+            .context("rollover bound overflow")?;
+        eprintln!(
+            "[2133-multistream-auth] reader_epoch={core_epoch} pre_core_provides={boundary_provides} pending_open_upper_bound={pending_opens} authoritative_expiry_remaining_ms=null sentinel_exact_head_durable=1"
+        );
         for busy in [false, true] {
+            actors.borrow_mut().stage = if busy { "busy" } else { "idle" };
+            let writer = current_writer_for_author(governor, &issuer, &actors, core_epoch).await?;
+            let alice = writer.client.clone();
             let deadline = tokio::time::Instant::now() + Duration::from_secs(100);
             let busy_writes = std::cell::Cell::new(0usize);
             let busy_head = std::cell::RefCell::new(None);
@@ -895,6 +1204,7 @@ async fn run_matrix(circle_count: usize) -> Result<()> {
                 Ok::<(), anyhow::Error>(())
             };
             tokio::try_join!(observe_target, pressure)?;
+            require_core_epoch(&actors, core_epoch)?;
             ensure!(
                 !busy || busy_writes.get() >= 2,
                 "busy evidence requires accepted hints before and after the target"
@@ -916,6 +1226,12 @@ async fn run_matrix(circle_count: usize) -> Result<()> {
                 busy_writes.get()
             );
         }
+        actors.borrow_mut().stage = "new_scope";
+        let alice_member =
+            current_writer_for_author(governor, &issuer, &actors, core_epoch).await?;
+        let alice = alice_member.client.clone();
+        let bob_member = member_snapshot(&actors.borrow().bob);
+        let bob = bob_member.client.clone();
         let circle = circle_create(
             &alice,
             &realm,
@@ -945,6 +1261,7 @@ async fn run_matrix(circle_count: usize) -> Result<()> {
                 stored_head(&store, &expected.stream_ref)
             )
         })?;
+        require_core_epoch(&actors, core_epoch)?;
         eprintln!("[2133-multistream] new_circle_head_durable=1");
         for head in &final_cut.visible_stream_heads {
             wait_head(&store, head).await.with_context(|| {
@@ -961,11 +1278,17 @@ async fn run_matrix(circle_count: usize) -> Result<()> {
         );
         ensure!(final_cut.visible_stream_heads.len() == initial_streams + 1);
         ensure!(epoch.get() > 0);
+        actors.borrow_mut().stage = "rollover";
         tokio::time::timeout(Duration::from_secs(75), async {
             loop {
-                if requests(&metrics.snapshot().await?, SUBSCRIBE_OP)
-                    - requests(&before, SUBSCRIBE_OP)
+                require_core_epoch(&actors, core_epoch)?;
+                let observed = metrics.snapshot().await?;
+                let natural_opens = successful_subscriptions(&observed, true)?
+                    .checked_sub(boundary_success)
+                    .context("successful subscription counter regressed")?;
+                if requests(&observed, SUBSCRIBE_OP) - requests(&before, SUBSCRIBE_OP)
                     >= if beyond_hint_page { 2 } else { 1 }
+                    && (!beyond_hint_page || natural_opens >= required_natural_opens)
                 {
                     return Ok::<(), anyhow::Error>(());
                 }
@@ -974,15 +1297,35 @@ async fn run_matrix(circle_count: usize) -> Result<()> {
         })
         .await
         .context("actual HTTP subscription rollover")??;
+        require_core_epoch(&actors, core_epoch)?;
+        actors.borrow_mut().stage = "complete";
+        let auth = actors.borrow();
+        eprintln!(
+            "[2133-multistream-auth] pair_reauthentications={} writer_reauthentications={} core_reader_changes=0 natural_rollover_excludes_auth_opens=1",
+            auth.pair_reauthentications, auth.writer_reauthentications
+        );
         Ok::<(), anyhow::Error>(())
     };
     tokio::pin!(observation);
     let (result, runner_ended) = tokio::select! {
         result=&mut observation=>(result,false),
         _=&mut runner=>(Err(anyhow::anyhow!("native follower ended before matrix completion")),true),
+        result=&mut lifecycle=>(match result {
+            Err(error)=>Err(error.context("fixture authentication lifecycle")),
+            Ok(())=>Err(anyhow::anyhow!("authentication lifecycle ended before matrix completion")),
+        },false),
     };
     if let Err(error) = &result {
         eprintln!("[2133-multistream-failure] observation={error:#}");
+        let actors = actors.borrow();
+        let remaining = actors.bob.client.checked_native_session_remaining().ok();
+        let diagnostic = json!({"stage":actors.stage,"reader_epoch":actors.reader_epoch,
+            "core_epoch":actors.core_epoch,"reader_source_live":remaining.is_some(),
+            "remaining_ms":remaining.map(|value| value.as_millis()),
+            "pair_reauthentications":actors.pair_reauthentications,
+            "writer_reauthentications":actors.writer_reauthentications,
+            "is_failed_http_cut":false});
+        eprintln!("[2133-multistream-auth-failure] {diagnostic}");
     }
     if runner_ended {
         return result;
@@ -1008,4 +1351,37 @@ async fn run_matrix(circle_count: usize) -> Result<()> {
         usize::from(beyond_hint_page)
     );
     Ok(())
+}
+
+#[cfg(test)]
+mod lifecycle_tests {
+    use super::*;
+
+    #[test]
+    fn pending_open_bound_excludes_late_precore_responses() -> Result<()> {
+        ensure!(pending_precore_opens(4, 10, 13)? == 1);
+        ensure!(pending_precore_opens(4, 10, 14)? == 0);
+        ensure!(pending_precore_opens(3, 10, 14).is_err());
+        ensure!(pending_precore_opens(3, 10, 9).is_err());
+        Ok(())
+    }
+
+    #[test]
+    fn successful_open_counter_rejects_unknown_duplicate_or_invalid_series() -> Result<()> {
+        use crate::scenarios::_helpers::service_metrics::MetricsSnapshot;
+        let sample = format!("coland_request_total{{op=\"{SUBSCRIBE_OP}\",status=\"200\"}} 3\n");
+        ensure!(successful_subscriptions(&MetricsSnapshot::parse(&sample), true)? == 3);
+        for body in [
+            format!("coland_request_total{{op=\"{SUBSCRIBE_OP}\"}} 3"),
+            format!("{sample}{sample}"),
+            sample.replace(" 3", " -1"),
+            sample.replace(" 3", " 1.5"),
+            sample.replace("status=\"200\"", "status=\"unknown\""),
+            sample.replace("status=\"200\"", "status=\"999\""),
+            String::new(),
+        ] {
+            ensure!(successful_subscriptions(&MetricsSnapshot::parse(&body), true).is_err());
+        }
+        Ok(())
+    }
 }

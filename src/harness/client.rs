@@ -53,6 +53,7 @@ pub struct TestActorClient {
     /// session and silently wrong for a canonical one, whose grant is only
     /// valid with a per-request proof. Go through [`Self::authorize`].
     pub(super) session: super::ClientSession,
+    pub(super) native_session_invalidator: Option<super::native_session::LocalSessionInvalidator>,
     /// Realms this actor created, i.e. the ones whose authority-root cell it
     /// controls. `capabilities.md` section 3.2: v1 genesis issues no self-grant,
     /// so the controller authorizes its own Events by naming that cell in
@@ -88,6 +89,34 @@ type HeldGrants = std::sync::Arc<
 impl TestActorClient {
     pub fn sdk(&self) -> SdkClient {
         self.sdk.clone()
+    }
+
+    /// End only this captured fixture host source, never its issuer record.
+    /// Publish the replacement actor first; already captured SDK results must
+    /// fail their original session fence rather than follow the new client.
+    pub fn invalidate_local_native_session(&self) -> Result<()> {
+        self.native_session_invalidator
+            .as_ref()
+            .context("fixture client has no local native session source")?
+            .invalidate();
+        Ok(())
+    }
+
+    /// Read only the remaining lifetime of the exact live fixture issuer
+    /// record. A changed, revoked or replaced source is never a fresh lease.
+    pub fn checked_native_session_remaining(&self) -> Result<std::time::Duration> {
+        let source = self
+            .sdk
+            .own_station_result_client()?
+            .context("fixture client has no bound native session")?;
+        source.check_session()?;
+        let remaining = self
+            .native_session_invalidator
+            .as_ref()
+            .context("fixture client has no local native session source")?
+            .remaining_for(&source)?;
+        source.check_session()?;
+        Ok(remaining)
     }
 
     /// These fixture clients are registered Humans: their accepted PCR remains
