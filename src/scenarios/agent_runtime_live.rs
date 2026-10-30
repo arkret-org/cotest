@@ -61,6 +61,9 @@ mod act_on_behalf_conjunction;
 mod act_on_behalf_evidence;
 mod binding_evidence;
 pub(crate) mod coauth_session_evidence;
+pub use coauth_session_evidence::{
+    ActualAgentDeployment, actual_agent_deployment, additional_controller,
+};
 mod content_ceiling_evidence;
 mod content_cross_authority_evidence;
 mod content_direct_evidence;

@@ -172,6 +172,28 @@ class OperationTestCoverageTests(unittest.TestCase):
         cotest = next(layer for layer in layers if layer.name == "cotest_rust")
         self.assertIn(self.root / "cotest/crates/inkson-client-tests/src/scenarios/actual_client.rs", cotest.files)
 
+    def test_harness_inline_tests_are_assigned_without_inventing_a_protocol_oracle(self) -> None:
+        relative = "cotest/src/harness/client/event_submit_retry.rs"
+        self.write(relative, 'const OPERATION: &str = "' + OP_TWO + '";\n'
+                   '#[cfg(test)] mod tests { #[test] fn retry_hint() { assert!(true); } }\n')
+        self.write("cotest/src/harness/ordinary.rs", 'const OPERATION: &str = "' + OP_TWO + '";\n')
+        cotest = next(layer for layer in inventory.discover_layer_sources(self.root)
+                      if layer.name == "cotest_rust")
+        self.assertIn(self.root / relative, cotest.files)
+        self.assertNotIn(self.root / "cotest/src/harness/ordinary.rs", cotest.files)
+        result = inventory.generate(self.root)
+        evidence = matrix_cell(result, OP_TWO, "cotest_rust")["responsibilities"]["fault_recovery"]
+        row = next(item for item in evidence if item["file"] == relative)
+        self.assertEqual(row["scope_kind"], "module_helper")
+        self.assertIsNone(row["assertion_sha256"])
+        self.assertEqual(result["closure"]["unknown_test_files"], [])
+
+    def test_test_like_files_outside_cotest_source_roots_remain_unassigned(self) -> None:
+        self.write("cotest/other-tests/unassigned.rs",
+                   rust_test("unknown_location", OP_TWO, "assert!(result.is_ok());"))
+        with self.assertRaisesRegex(ValueError, "unknown_test_files"):
+            inventory.generate(self.root)
+
     def test_retained_evidence_and_linked_external_sources_cannot_change_the_test_inventory(self) -> None:
         expected = inventory.generate(self.root)
         self.write(

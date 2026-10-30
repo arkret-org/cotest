@@ -19,6 +19,7 @@ _LOCAL = Path(__file__).resolve().parent
 _MODULES = {}
 _NATIVE_KEYS = {"shard_index", "target_identity_sha256", "status", "exit_code", "executable_sha256"}
 _DOC_KEYS = _NATIVE_KEYS - {"executable_sha256"}
+_SHARD_COUNTS = (4, 8)
 
 
 def _require(ok):
@@ -213,6 +214,7 @@ def publish(args):
         private_path = Path(args.plan)
         private = _json(private_path)
         public = _module("native_workspace_scope").public_plan(private)
+        _require(public["shard_count"] in _SHARD_COUNTS)
         _require(_source_snapshot(Path(private["workspace_root"]), public["source_refs"])
                  == private["build_context"]["source_snapshot_sha256"])
         runtime = private_path.parent / "runtime"
@@ -237,13 +239,15 @@ def aggregate(args):
     root = Path(args.root).resolve(strict=True)
     _require(root.is_dir())
     files = sorted(root.rglob("scope-proof.json"))
-    _require(len(files) == 4)
+    _require(len(files) in _SHARD_COUNTS)
     plans, native, docs = [], [], []
     for path in files:
         path.resolve(strict=True).relative_to(root)
         proof = _json(path)
         _require(set(proof) == {"export_complete", "plan", "native_receipts", "doc_receipts"}
                  and proof["export_complete"] is True)
+        _require(type(proof["plan"]["shard_count"]) is int
+                 and proof["plan"]["shard_count"] == len(files))
         _require(proof["plan"]["source_refs"] == refs)
         plans.append(proof["plan"])
         native.extend(proof["native_receipts"])
@@ -266,7 +270,7 @@ def main(arguments=None):
         if name == "plan":
             sub.add_argument("--messages", required=True)
             sub.add_argument("--before-context", required=True)
-            sub.add_argument("--shards", type=int, choices=[4], default=4)
+            sub.add_argument("--shards", type=int, choices=_SHARD_COUNTS, default=4)
             sub.add_argument("--shard-index", required=True, type=int)
             sub.add_argument("--github-env-file")
     sub = commands.add_parser("publish")

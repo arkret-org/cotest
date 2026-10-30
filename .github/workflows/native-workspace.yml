@@ -46,6 +46,10 @@ jobs:
         - 1
         - 2
         - 3
+        - 4
+        - 5
+        - 6
+        - 7
     steps:
     - uses: actions/checkout@v4
       with:
@@ -88,6 +92,12 @@ jobs:
     - uses: actions/setup-python@v5
       with:
         python-version: '3.12'
+    - name: Media runtime preparation resource regressions
+      working-directory: cotest
+      run: python -B -m unittest scripts.tests.test_prepare_native_media_runtime
+    - name: Prepare verified isolated native media runtime
+      working-directory: cotest
+      run: python -B scripts/prepare-native-media-runtime.py --runner-temp "$RUNNER_TEMP" --github-env "$GITHUB_ENV"
     - name: Install canonical Spec evaluator dependencies
       run: python -m pip install -r arkret-spec/tools/requirements.txt
     - name: Native runner isolation and public evidence regressions
@@ -209,7 +219,7 @@ jobs:
           --cargo-messages "$scope/build.jsonl" \
           cargo test --workspace --locked --no-fail-fast --no-run --message-format=json
         python -B scripts/run-native-workspace.py plan \
-          --metadata "$scope/metadata.json" --messages "$scope/build.jsonl" --shards 4 \
+          --metadata "$scope/metadata.json" --messages "$scope/build.jsonl" --shards 8 \
           --sources-json-env NATIVE_SOURCE_REFS --before-context "$scope/before-context.json" \
           --shard-index '${{ matrix.shard }}' --output "$scope/plan.json" \
           --github-env-file "$GITHUB_ENV"

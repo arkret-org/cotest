@@ -354,13 +354,13 @@
           ]
         },
         {
-          "operation_id": "ak.self.consent.command.grant.v1",
+          "operation_id": "ak.self.consent.command.replace.v1",
           "surfaces": [
             "consent_management"
           ]
         },
         {
-          "operation_id": "ak.self.consent.command.revoke.v1",
+          "operation_id": "ak.self.consent.command.request.v1",
           "surfaces": [
             "consent_management"
           ]
@@ -414,8 +414,8 @@
           "kind": "ordinary",
           "path": "../coland/crates/http/src/routing/identity/consent.rs",
           "markers": [
-            "ak.self.consent.command.grant.v1",
-            "ak.self.consent.command.revoke.v1"
+            "ak.self.consent.command.replace.v1",
+            "ak.self.consent.command.request.v1"
           ]
         },
         {
@@ -734,7 +734,8 @@
       "status": "partially_implemented",
       "surfaces": [
         "push",
-        "realtime_media"
+        "realtime_media",
+        "call_invitation_admission"
       ],
       "operation_spine": [
         {
@@ -772,6 +773,24 @@
           "surfaces": [
             "realtime_media"
           ]
+        },
+        {
+          "operation_id": "ak.self.call.invitation.command.send.v1",
+          "surfaces": [
+            "call_invitation_admission"
+          ]
+        },
+        {
+          "operation_id": "ak.peer.call.invitation.command.relay.v1",
+          "surfaces": [
+            "call_invitation_admission"
+          ]
+        },
+        {
+          "operation_id": "ak.peer.call.invitation.read.admission.v1",
+          "surfaces": [
+            "call_invitation_admission"
+          ]
         }
       ],
       "coverage": [
@@ -805,6 +824,16 @@
           "markers": [
             "/_arkret/edge/push/register-device",
             "/_arkret/self/rtc/ice-config"
+          ]
+        },
+        {
+          "kind": "ordinary",
+          "path": "../coland/crates/http/src/routing/call_admission.rs",
+          "markers": [
+            "operation_id = \"ak.self.call.invitation.command.send\"",
+            "operation_id = \"ak.peer.call.invitation.command.relay\"",
+            "operation_id = \"ak.peer.call.invitation.read.admission\"",
+            "fn verdict_signature_uses_registered_native_history_and_exact_assertion_method"
           ]
         }
       ]
@@ -982,7 +1011,13 @@
           ]
         },
         {
-          "operation_id": "ak.self.applet.ghost.command.provision.v1",
+          "operation_id": "ak.self.applet.ghost.command.preview.v1",
+          "surfaces": [
+            "applet_ghost"
+          ]
+        },
+        {
+          "operation_id": "ak.self.applet.bot.command.preview.v1",
           "surfaces": [
             "applet_ghost"
           ]
@@ -1031,8 +1066,24 @@
           "path": "../coland/crates/http/src/routing/extensions/applet_bridge/endpoints.rs",
           "markers": [
             "operation_id = \"ak.self.applet.command.install\"",
-            "fn first_install_commit_rejects_expiry_but_exact_success_replay_does_not",
-            "fn successful_install_replay_rejects_changed_body"
+            "return json_ok(existing.install_response);",
+            "fn successful_install_replay_rejects_changed_body",
+            "ak.self.applet.ghost.command.preview.v1"
+          ]
+        },
+        {
+          "kind": "ordinary",
+          "path": "../coland/crates/http/src/routing/extensions/applet_bridge/install.rs",
+          "markers": [
+            "fn validate_applet_package(",
+            ".with_internal_reason(\"applet_package_expired\")"
+          ]
+        },
+        {
+          "kind": "ordinary",
+          "path": "../coland/crates/http/src/routing/extensions/applet_bridge/bot.rs",
+          "markers": [
+            "operation_id = \"ak.self.applet.bot.command.preview\""
           ]
         },
         {
@@ -1211,9 +1262,15 @@
       "coverage": [
         {
           "kind": "ordinary",
-          "path": "../arkret-rust-sdk/crates/wire/src/authority_commit.rs",
+          "path": "../arkret-rust-sdk/crates/wire/src/generated/authority_commit_contracts.rs",
           "markers": [
-            "pub struct ActorPrivateEventSubmitRequestBody",
+            "pub struct ActorPrivateEventSubmitRequestBody"
+          ]
+        },
+        {
+          "kind": "ordinary",
+          "path": "../arkret-rust-sdk/crates/wire/src/authority_commit/tests.rs",
+          "markers": [
             "fn actor_private_submit_outcome_is_closed_per_event_kind"
           ]
         },

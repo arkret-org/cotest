@@ -8,7 +8,7 @@ use arkret_models_collaboration::strand_watch_operations::{
 };
 
 use super::*;
-use crate::harness::{ArkretServer, expect_json};
+use crate::harness::ArkretServer;
 use crate::scenarios::mls_lifecycle_live::{self as mls, Member};
 
 pub(super) async fn exercise(
@@ -70,14 +70,8 @@ pub(super) async fn exercise(
     let request = WatchAuditReadRequestBody {
         audit_submission: arkret_wire::EventAdmissionSubmission::new(event.clone()),
     };
-    let send = |body: &WatchAuditReadRequestBody| {
-        alice
-            .client
-            .post("/_arkret/self/strands/watch/audit-read")
-            .json(body)
-    };
     let accepted: WatchAuditReadResponseBody =
-        serde_json::from_value(expect_json(send(&request), reqwest::StatusCode::OK).await?)?;
+        serde_json::from_value(alice.client.read_audited_watch(&request).await?)?;
     accepted.validate_for_request(&request, 0)?;
     let StrandWatchCurrentResponseBody::Current { current_state, .. } = &accepted.current else {
         anyhow::bail!("audit never observed the actual admitted Watch")
@@ -118,7 +112,7 @@ pub(super) async fn exercise(
     .await?;
     let clear_view = mls::accepted_full_view(&bob.client, &clear.event_id).await?;
     let replay: WatchAuditReadResponseBody =
-        serde_json::from_value(expect_json(send(&request), reqwest::StatusCode::OK).await?)?;
+        serde_json::from_value(alice.client.read_audited_watch(&request).await?)?;
     ensure!(
         json!(replay) == json!(accepted),
         "audit replay disclosed a later private value"
@@ -135,7 +129,7 @@ pub(super) async fn exercise(
         audit_submission: arkret_wire::EventAdmissionSubmission::new(event.clone()),
     };
     let current: WatchAuditReadResponseBody =
-        serde_json::from_value(expect_json(send(&next), reqwest::StatusCode::OK).await?)?;
+        serde_json::from_value(alice.client.read_audited_watch(&next).await?)?;
     current.validate_for_request(&next, 0)?;
     ensure!(
         matches!(&current.current,StrandWatchCurrentResponseBody::Current {current_state,..} if current_state.value==StrandWatchValue::Cleared(()) && current_state.revision.commit_id==clear_view.commit.commit_id),

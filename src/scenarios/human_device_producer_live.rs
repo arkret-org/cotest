@@ -1014,19 +1014,39 @@ pub fn ensure_same_commit(submitted: &RealmCommit, observed: &CommittedEventView
     Ok(())
 }
 
+fn committed_event_read_failure_diagnostic(error: &arkret_http_client::Error) -> Value {
+    let status = match error {
+        arkret_http_client::Error::Api { status, .. } => Some(*status),
+        _ => None,
+    };
+    json!({
+        "stage": "committed_event_read_deadline",
+        "status": status,
+        "error_code": error.error_code().map(ErrorCode::as_str),
+    })
+}
+
 pub async fn wait_for_committed(
     client: &TestActorClient,
     event_id: &EventId,
 ) -> Result<CommittedEventView> {
     let deadline = Instant::now() + Duration::from_secs(120);
     loop {
-        if let Ok(view) = client.sdk().committed_event_get(event_id).await {
-            view.validate_shape()?;
-            ensure!(view.commit().event_ref == *event_id);
-            return Ok(view);
-        }
-        if Instant::now() >= deadline {
-            bail!("committed Event {event_id} did not reach the Station");
+        match client.sdk().committed_event_get(event_id).await {
+            Ok(view) => {
+                view.validate_shape()?;
+                ensure!(view.commit().event_ref == *event_id);
+                return Ok(view);
+            }
+            Err(error) => {
+                if Instant::now() >= deadline {
+                    eprintln!(
+                        "[committed-event-read-diagnostic] {}",
+                        committed_event_read_failure_diagnostic(&error)
+                    );
+                    bail!("committed Event {event_id} did not reach the Station");
+                }
+            }
         }
         tokio::time::sleep(Duration::from_millis(500)).await;
     }
@@ -1724,4 +1744,52 @@ pub async fn original_human_signer_fact(
         suite,
     )?;
     Ok(fact)
+}
+
+#[cfg(test)]
+mod committed_event_read_diagnostic_tests {
+    use super::*;
+
+    #[test]
+    fn committed_event_read_diagnostics_use_only_last_typed_scalars() {
+        const PRIVATE: &str = "PRIVATE_token_SQL_https://secret.invalid/path";
+        for (error, status, code) in [
+            (
+                arkret_http_client::Error::Api {
+                    status: 503,
+                    error: Box::new(arkret_wire::Problem::new(
+                        ErrorCode::TemporarilyUnavailable.as_str(),
+                        503,
+                        PRIVATE,
+                    )),
+                },
+                Some(503_u16),
+                Some("temporarily_unavailable"),
+            ),
+            (
+                arkret_http_client::Error::Api {
+                    status: 409,
+                    error: Box::new(arkret_wire::Problem::new(PRIVATE, 409, PRIVATE)),
+                },
+                Some(409_u16),
+                None,
+            ),
+            (
+                arkret_http_client::Error::Http(PRIVATE.to_owned()),
+                None,
+                None,
+            ),
+        ] {
+            let diagnostic = committed_event_read_failure_diagnostic(&error);
+            assert_eq!(
+                diagnostic,
+                json!({
+                    "stage": "committed_event_read_deadline",
+                    "status": status,
+                    "error_code": code,
+                })
+            );
+            assert!(!diagnostic.to_string().contains(PRIVATE));
+        }
+    }
 }
