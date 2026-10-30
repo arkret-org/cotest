@@ -117,9 +117,152 @@ jobs:
       with:
         toolchain: 1.98
         components: rustfmt, clippy
+    - name: Freeze and validate dependency cache lock inputs
+      id: native_dependency_cache_inputs
+      shell: bash
+      run: |
+        set -euo pipefail
+        cat > "$RUNNER_TEMP/native-dependency-cache-locks.py" <<'PY'
+        import hashlib
+        import json
+        import os
+        from pathlib import Path
+        import re
+        import subprocess
+        import sys
+
+        ROOTS = ("cotest", "coland", "coauth", "floria", "flagon", "../savfox-ai/savfox")
+        FIELDS = {"path", "head", "mode", "blob", "sha256", "bytes"}
+
+
+        def fail():
+            raise SystemExit("dependency-cache frozen lock validation failed")
+
+
+        def directories():
+            workspace = Path(os.environ["GITHUB_WORKSPACE"])
+            temporary = Path(os.environ["RUNNER_TEMP"])
+            if not workspace.is_absolute() or not temporary.is_absolute():
+                fail()
+            return {name: (workspace / name).resolve(strict=True) for name in ROOTS}, temporary.resolve(strict=True)
+
+
+        def git(root, *args):
+            return subprocess.check_output(["git", "-C", str(root), *args], stderr=subprocess.PIPE)
+
+
+        def capture():
+            roots, _ = directories()
+            result = {}
+            for name, root in roots.items():
+                lock = root / "Cargo.lock"
+                if lock.is_symlink() or not lock.is_file():
+                    fail()
+                if Path(git(root, "rev-parse", "--show-toplevel").decode().strip()).resolve(strict=True) != root:
+                    fail()
+                head = git(root, "rev-parse", "--verify", "HEAD").decode().strip()
+                tree = re.fullmatch(rb"(100644|100755) blob ([0-9a-f]{40})\tCargo.lock\x00", git(root, "ls-tree", "-z", "HEAD", "--", "Cargo.lock"))
+                index = re.fullmatch(rb"(100644|100755) ([0-9a-f]{40}) 0\tCargo.lock\x00", git(root, "ls-files", "--stage", "-z", "--", "Cargo.lock"))
+                if not re.fullmatch(r"[0-9a-f]{40}", head) or not tree or not index or tree.groups() != index.groups():
+                    fail()
+                if git(root, "status", "--porcelain=v1", "--untracked-files=no", "--", "Cargo.lock"):
+                    fail()
+                data = lock.read_bytes()
+                blob = tree[2].decode()
+                if not data or data != git(root, "cat-file", "blob", blob):
+                    fail()
+                result[name] = {"path": str(root), "head": head, "mode": tree[1].decode(), "blob": blob,
+                                "sha256": hashlib.sha256(data).hexdigest(), "bytes": len(data)}
+            return result
+
+
+        def snapshot_path():
+            return directories()[1] / "native-dependency-cache-locks.json"
+
+
+        def unique_object(pairs):
+            result = {}
+            for key, value in pairs:
+                if key in result:
+                    fail()
+                result[key] = value
+            return result
+
+
+        def check():
+            path = snapshot_path()
+            if path.is_symlink() or not path.is_file():
+                fail()
+            saved = json.loads(path.read_text(encoding="utf-8"), object_pairs_hook=unique_object)
+            if (type(saved) is not dict or set(saved) != {"version", "roots"}
+                    or type(saved["version"]) is not int or saved["version"] != 1
+                    or type(saved["roots"]) is not dict or set(saved["roots"]) != set(ROOTS)):
+                fail()
+            for row in saved["roots"].values():
+                if (type(row) is not dict or set(row) != FIELDS
+                        or type(row["bytes"]) is not int or row["bytes"] <= 0
+                        or any(type(row[key]) is not str for key in FIELDS - {"bytes"})):
+                    fail()
+            if saved["roots"] != capture():
+                fail()
+
+
+        def main(args):
+            if args == ["prepare"]:
+                before = capture()
+                with snapshot_path().open("x", encoding="utf-8") as target:
+                    json.dump({"version": 1, "roots": before}, target, sort_keys=True)
+                try:
+                    for root in directories()[0].values():
+                        subprocess.run(["cargo", "metadata", "--all-features", "--locked", "--format-version", "1"],
+                                       cwd=root, stdout=subprocess.DEVNULL, check=True)
+                finally:
+                    check()
+            elif args == ["check"]:
+                check()
+            elif len(args) > 1 and args[0] == "cache-command":
+                check()
+                command = args[1:]
+                if command[:2] == ["cargo", "metadata"]:
+                    if Path.cwd().resolve(strict=True) not in directories()[0].values():
+                        fail()
+                    if "--locked" not in command:
+                        command.insert(2, "--locked")
+                try:
+                    code = subprocess.run(command).returncode
+                finally:
+                    check()
+                raise SystemExit(code)
+            else:
+                fail()
+
+
+        if __name__ == "__main__":
+            try:
+                main(sys.argv[1:])
+            except (OSError, ValueError, KeyError, subprocess.SubprocessError):
+                fail()
+        PY
+        python -B "$RUNNER_TEMP/native-dependency-cache-locks.py" prepare
     - uses: Swatinem/rust-cache@v2
       with:
-        workspaces: cotest
+        workspaces: |
+          cotest -> target
+          coland -> target
+          coauth -> target
+          floria -> target
+          flagon -> target
+          ../savfox-ai/savfox -> target
+        cache-on-failure: 'true'
+        cache-workspace-crates: 'false'
+        cache-all-crates: 'false'
+        # The action also invokes metadata in its post/save phase. Keep that
+        # command locked; its upstream error catch is not a replacement gate.
+        cmd-format: python -B "${{ runner.temp }}/native-dependency-cache-locks.py" cache-command {0}
+    - name: Verify dependency cache left frozen locks unchanged
+      if: always() && steps.native_dependency_cache_inputs.outcome == 'success'
+      shell: bash
+      run: python -B "$RUNNER_TEMP/native-dependency-cache-locks.py" check
     - name: Migrate isolated Coauth route-evidence database
       run: psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f coauth/crates/storage-postgres/migrations/00000000000000_initial/up.sql
     - name: build (all-features)
