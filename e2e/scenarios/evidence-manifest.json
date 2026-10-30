@@ -63,6 +63,30 @@
       ]
     },
     {
+      "scenario_key": "discovery/contact-request-ui",
+      "suite_kind": "joint-e2e",
+      "realism_level": "live-product",
+      "evidence_class": "live-product",
+      "real_services": [
+        "coauth",
+        "coland",
+        "inkson"
+      ],
+      "mocks": [
+        "email"
+      ],
+      "identity_establishment": [
+        "coauth_registration_ui",
+        "inkson_identity_onboarding_ui",
+        "oauth_authorization_ui"
+      ],
+      "protocol_object_producers": [
+        "inkson_product_client"
+      ],
+      "declared_test_bypasses": [],
+      "claims_excluded": []
+    },
+    {
       "scenario_key": "discovery/notifications",
       "suite_kind": "joint-e2e",
       "realism_level": "fixture-only",
@@ -419,29 +443,26 @@
     {
       "scenario_key": "identity/account-profile-ui",
       "suite_kind": "joint-e2e",
-      "realism_level": "fixture-only",
-      "evidence_class": "fixture-only",
+      "realism_level": "live-product",
+      "evidence_class": "live-product",
       "real_services": [
         "coauth",
         "coland",
         "inkson"
       ],
-      "mocks": [],
+      "mocks": [
+        "email"
+      ],
       "identity_establishment": [
-        "session_injection"
+        "coauth_registration_ui",
+        "inkson_identity_onboarding_ui",
+        "oauth_authorization_ui"
       ],
       "protocol_object_producers": [
-        "inkson_product_client",
-        "raw_http_fixture"
+        "inkson_product_client"
       ],
-      "declared_test_bypasses": [
-        "raw_http_fixture_or_oracle",
-        "session_injection"
-      ],
-      "claims_excluded": [
-        "registration_login_authorization",
-        "ui_driven_business_flow_for_raw_http_steps"
-      ]
+      "declared_test_bypasses": [],
+      "claims_excluded": []
     },
     {
       "scenario_key": "identity/consent-grant",
@@ -659,7 +680,7 @@
       ]
     },
     {
-      "scenario_key": "identity/registration-continuation",
+      "scenario_key": "identity/registration-contact-validation",
       "suite_kind": "joint-e2e",
       "realism_level": "live-product",
       "evidence_class": "live-product",
@@ -669,6 +690,28 @@
         "inkson"
       ],
       "mocks": [],
+      "identity_establishment": [
+        "fixture_or_not_applicable"
+      ],
+      "protocol_object_producers": [
+        "inkson_product_client"
+      ],
+      "declared_test_bypasses": [],
+      "claims_excluded": []
+    },
+    {
+      "scenario_key": "identity/registration-continuation",
+      "suite_kind": "joint-e2e",
+      "realism_level": "live-product",
+      "evidence_class": "live-product",
+      "real_services": [
+        "coauth",
+        "coland",
+        "inkson"
+      ],
+      "mocks": [
+        "email"
+      ],
       "identity_establishment": [
         "coauth_registration_ui",
         "inkson_identity_onboarding_ui",
@@ -1114,6 +1157,34 @@
       ],
       "declared_test_bypasses": [],
       "claims_excluded": []
+    },
+    {
+      "scenario_key": "joint/realm-invite-link-sync",
+      "suite_kind": "joint-e2e",
+      "realism_level": "fixture-only",
+      "evidence_class": "fixture-only",
+      "real_services": [
+        "coauth",
+        "coland",
+        "inkson"
+      ],
+      "mocks": [
+        "email"
+      ],
+      "identity_establishment": [
+        "coauth_registration_ui",
+        "inkson_identity_onboarding_ui",
+        "oauth_authorization_ui"
+      ],
+      "protocol_object_producers": [
+        "inkson_product_client"
+      ],
+      "declared_test_bypasses": [
+        "create_realm_passive_prompt_dismissal"
+      ],
+      "claims_excluded": [
+        "mls_backup_unlock_and_missing_recovery_prompt_behavior"
+      ]
     },
     {
       "scenario_key": "kanban/calendar",
@@ -1689,6 +1760,24 @@
         "product_protocol_object_generation",
         "ui_driven_business_flow_for_raw_http_steps"
       ]
+    },
+    {
+      "scenario_key": "sync/websocket-deployment",
+      "suite_kind": "joint-e2e",
+      "realism_level": "fixture-only",
+      "evidence_class": "fixture-only",
+      "real_services": [
+        "coland"
+      ],
+      "mocks": [],
+      "identity_establishment": [
+        "fixture_or_not_applicable"
+      ],
+      "protocol_object_producers": [
+        "fixture_or_not_applicable"
+      ],
+      "declared_test_bypasses": [],
+      "claims_excluded": []
     },
     {
       "scenario_key": "workflows/daily-standup",

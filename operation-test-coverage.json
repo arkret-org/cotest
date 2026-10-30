@@ -7,33 +7,33 @@
     "test_layers": {
       "coland_unit": {
         "source_file_count": 478,
-        "source_sha256": "538519715bd12a4f86fef3588e1a3b2918b5d9e835147c311c71d3d01a0b3d9e",
+        "source_sha256": "ce3be85dba8a5b655661689e60acad7f817bc3a355dd1724987d4a9f4ddd663b",
         "evidence_count": 847,
         "covered_operation_count": 167
       },
       "coland_http": {
         "source_file_count": 52,
-        "source_sha256": "8fb98de29448c1ac7f17d8bb71249c4cf749987acd471ff2a7de635d98dcbc09",
+        "source_sha256": "03c1e0db173c4816c6a3216e3d72fb9a7741b325d7eabba73605a14adeb3f6c5",
         "evidence_count": 84,
         "covered_operation_count": 48
       },
       "cotest_rust": {
         "source_file_count": 633,
-        "source_sha256": "c14c0f697e291537fed5d5ed337996396523a5fb87a3e5febb659703751c1df3",
+        "source_sha256": "827c2cfe2c2c5d62a6d75f5ec02361fa518cc433f4a21b048843d5a91c25fc06",
         "evidence_count": 395,
         "covered_operation_count": 130
       },
       "cotest_e2e": {
-        "source_file_count": 132,
-        "source_sha256": "92d96c5631fb283ae0ff52d6bb56a0a604cef7b07eb240b8eb692c9fd91cb96a",
+        "source_file_count": 136,
+        "source_sha256": "79ded6bf6fd0b0137a591c263bae7317434264a0ded8fa6a3bacb711aa7641f7",
         "evidence_count": 47,
         "covered_operation_count": 21
       },
       "inkson_e2e": {
         "source_file_count": 36,
-        "source_sha256": "e4b0832c3fea0afd0c4a2cc4375a87753b056f7a4d0cad768377c3beef2d65f2",
-        "evidence_count": 70,
-        "covered_operation_count": 48
+        "source_sha256": "46081c98b8c66fa1d4444726d954e06ef3cd0d203f6231b7554472f2b9d8cca4",
+        "evidence_count": 72,
+        "covered_operation_count": 49
       }
     }
   },
@@ -269,11 +269,11 @@
         "protocol_kat": [
           {
             "file": "coland/crates/http/src/config.rs",
-            "line": 486,
+            "line": 489,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              486
+              489
             ],
             "protected_oracle": false,
             "scope_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
@@ -2157,11 +2157,11 @@
         "protocol_kat": [
           {
             "file": "cotest/src/scenarios/directory_service.rs",
-            "line": 58,
+            "line": 67,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              58
+              67
             ],
             "protected_oracle": false,
             "scope_sha256": "6d8b2604fed7237d1eec9f5deb5cface56a073730d54dc5448788ce7f9929852",
@@ -2174,11 +2174,11 @@
           },
           {
             "file": "cotest/src/scenarios/directory_service.rs",
-            "line": 95,
+            "line": 104,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              95
+              104
             ],
             "protected_oracle": false,
             "scope_sha256": "6d8b2604fed7237d1eec9f5deb5cface56a073730d54dc5448788ce7f9929852",
@@ -2191,11 +2191,11 @@
           },
           {
             "file": "cotest/src/scenarios/directory_service.rs",
-            "line": 160,
+            "line": 169,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              160
+              169
             ],
             "protected_oracle": false,
             "scope_sha256": "77a716dc94ec999acd5cbc80fa409f64e248ff955180210b868f5a22e2bf8cdc",
@@ -2208,11 +2208,11 @@
           },
           {
             "file": "cotest/src/scenarios/directory_service.rs",
-            "line": 256,
+            "line": 281,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              256
+              281
             ],
             "protected_oracle": false,
             "scope_sha256": "6d8b2604fed7237d1eec9f5deb5cface56a073730d54dc5448788ce7f9929852",
@@ -2255,11 +2255,11 @@
         "product_flow": [
           {
             "file": "inkson/tests/e2e/mockArkretApi.ts",
-            "line": 2677,
+            "line": 2726,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              2677
+              2726
             ],
             "protected_oracle": false,
             "scope_sha256": "84bee0ed2609ad43c8eb5ad33a2fdb43eb6bc66f00da4505b0ae538de597fc0a",
@@ -2274,11 +2274,11 @@
           },
           {
             "file": "inkson/tests/e2e/mockArkretApi.ts",
-            "line": 4322,
+            "line": 4407,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              4322
+              4407
             ],
             "protected_oracle": false,
             "scope_sha256": "0d902215a82c1afa6ace39d1ae2490a854c2fce2ae31527d45267ed2971f6342",
@@ -2345,11 +2345,11 @@
           },
           {
             "file": "cotest/src/scenarios/directory_service.rs",
-            "line": 105,
+            "line": 114,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              105
+              114
             ],
             "protected_oracle": false,
             "scope_sha256": "60cbd1d94c4ca996bec1828113e78a56d768d477c683b604816a7a5240b5f891",
@@ -2362,11 +2362,11 @@
           },
           {
             "file": "cotest/src/scenarios/directory_service.rs",
-            "line": 164,
+            "line": 173,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              164
+              173
             ],
             "protected_oracle": false,
             "scope_sha256": "74c851a40263b214ad77750bfbca5d021e060756edc3494a674ebeba0f933e56",
@@ -2443,11 +2443,11 @@
         "product_flow": [
           {
             "file": "inkson/tests/e2e/mockArkretApi.ts",
-            "line": 2666,
+            "line": 2715,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              2666
+              2715
             ],
             "protected_oracle": false,
             "scope_sha256": "8cbc52d86fa5cc57040433f11f88448e7e2c7c7ff6c72b586aebc22d75ee50ce",
@@ -2462,11 +2462,11 @@
           },
           {
             "file": "inkson/tests/e2e/mockArkretApi.ts",
-            "line": 4317,
+            "line": 4402,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              4317
+              4402
             ],
             "protected_oracle": false,
             "scope_sha256": "289c7d2d3ee6c0b2e5b712e781db2e9157556c8c3a1f2ba3a28c52c8e1af93e1",
@@ -2550,11 +2550,11 @@
           },
           {
             "file": "cotest/src/scenarios/directory_service.rs",
-            "line": 100,
+            "line": 109,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              100
+              109
             ],
             "protected_oracle": false,
             "scope_sha256": "02a7a43bfb995a3e7560ef1e8567c20671e0802b3dfd2befdc51f4cfd44c3928",
@@ -2567,11 +2567,11 @@
           },
           {
             "file": "cotest/src/scenarios/directory_service.rs",
-            "line": 168,
+            "line": 177,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              168
+              177
             ],
             "protected_oracle": false,
             "scope_sha256": "593b108ff54a8a09ce3c7f5723acd1a246459efdfafc7b31f5b13790ed8dfada",
@@ -2631,11 +2631,11 @@
         "product_flow": [
           {
             "file": "inkson/tests/e2e/mockArkretApi.ts",
-            "line": 2634,
+            "line": 2683,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              2634
+              2683
             ],
             "protected_oracle": false,
             "scope_sha256": "1a3eff34f481bf829dc4f2f8f4830822574fa300a7e5b4971853ef473c7bb40c",
@@ -2961,11 +2961,11 @@
         "protocol_kat": [
           {
             "file": "cotest/crates/test-support/src/provisioning/gate.rs",
-            "line": 551,
+            "line": 569,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              551
+              569
             ],
             "protected_oracle": false,
             "scope_sha256": "0df42148a35c0c0284e50a6b7ee4fdbd85e75b719802f470b4e54aead45e5776",
@@ -4330,11 +4330,11 @@
         "protocol_kat": [
           {
             "file": "cotest/crates/test-support/src/provisioning/gate.rs",
-            "line": 552,
+            "line": 570,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              552
+              570
             ],
             "protected_oracle": false,
             "scope_sha256": "c55df0499c218ce02668e8b1c3a12ac8c864553867ffb02fd6ad3c7e4dc2dfb9",
@@ -4621,11 +4621,11 @@
           },
           {
             "file": "cotest/crates/test-support/src/provisioning/gate.rs",
-            "line": 246,
+            "line": 264,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              246
+              264
             ],
             "protected_oracle": false,
             "scope_sha256": "5c668151986b8e3741bdc38330072b0482868b8611d32bcce0b9b9bfdfd59186",
@@ -4638,11 +4638,11 @@
           },
           {
             "file": "cotest/crates/test-support/src/provisioning/gate.rs",
-            "line": 264,
+            "line": 282,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              264
+              282
             ],
             "protected_oracle": false,
             "scope_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
@@ -6089,11 +6089,11 @@
           },
           {
             "file": "coland/crates/http/src/routing/interop/mimi/handlers.rs",
-            "line": 1356,
+            "line": 1355,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              1356
+              1355
             ],
             "protected_oracle": false,
             "scope_sha256": "0a715600a06a1a5f9141ff5dc51a9235639497d81f60277455ebae706846bfc4",
@@ -6189,11 +6189,11 @@
           },
           {
             "file": "coland/crates/http/src/routing/interop/mimi/handlers.rs",
-            "line": 1180,
+            "line": 1179,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              1180
+              1179
             ],
             "protected_oracle": false,
             "scope_sha256": "a2839ed8bf6fbb24df82ad7f8e530def2789dfbf7617ad0e83083bceb6e5cc76",
@@ -6206,11 +6206,11 @@
           },
           {
             "file": "coland/crates/http/src/routing/interop/mimi/handlers.rs",
-            "line": 1203,
+            "line": 1202,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              1203
+              1202
             ],
             "protected_oracle": false,
             "scope_sha256": "c63f451b338965ca4f74357fd3984cf2f927d94a28a285546df7fb6ff54e032b",
@@ -6393,11 +6393,11 @@
           },
           {
             "file": "coland/crates/http/src/routing/interop/mimi/handlers.rs",
-            "line": 361,
+            "line": 360,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              361
+              360
             ],
             "protected_oracle": false,
             "scope_sha256": "a234a2589bf558374ac54004abe3e927a753119aa8ce9688cabd74970d9229c6",
@@ -6410,11 +6410,11 @@
           },
           {
             "file": "coland/crates/http/src/routing/interop/mimi/handlers.rs",
-            "line": 399,
+            "line": 398,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              399
+              398
             ],
             "protected_oracle": false,
             "scope_sha256": "7faeba2c870c4dec44bf2609024e886d5010444fc548cd2c65baf85e292ba22a",
@@ -6427,11 +6427,11 @@
           },
           {
             "file": "coland/crates/http/src/routing/interop/mimi/handlers.rs",
-            "line": 713,
+            "line": 712,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              713
+              712
             ],
             "protected_oracle": false,
             "scope_sha256": "3573bfd62a11a615e73870695a8b4bc867e2143dde882479088a969378f1eb94",
@@ -6597,11 +6597,11 @@
           },
           {
             "file": "coland/crates/http/src/routing/interop/mimi/handlers.rs",
-            "line": 210,
+            "line": 209,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              210
+              209
             ],
             "protected_oracle": false,
             "scope_sha256": "e926119265eeada542dc5a51741e1f1bacd6242fc0b89af13a41db3e7e83b198",
@@ -6750,11 +6750,11 @@
           },
           {
             "file": "coland/crates/http/src/routing/interop/mimi/handlers.rs",
-            "line": 419,
+            "line": 418,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              419
+              418
             ],
             "protected_oracle": false,
             "scope_sha256": "b3d0901494939d0012029ee7805c17b1a925a2e12fd43d62f575e805c353dcad",
@@ -7206,11 +7206,11 @@
           },
           {
             "file": "coland/crates/http/src/routing/interop/mimi/handlers.rs",
-            "line": 1109,
+            "line": 1108,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              1109
+              1108
             ],
             "protected_oracle": false,
             "scope_sha256": "e5975f0de2b5e82624499a251d0c929f0b33a9f92041973cc2bb00b0079c5239",
@@ -7223,11 +7223,11 @@
           },
           {
             "file": "coland/crates/http/src/routing/interop/mimi/handlers.rs",
-            "line": 1159,
+            "line": 1158,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              1159
+              1158
             ],
             "protected_oracle": false,
             "scope_sha256": "959d785ca5ce26ac019ad6f5857261bb0b523236718f67baa507b7d855171c9d",
@@ -7448,11 +7448,11 @@
         "product_flow": [
           {
             "file": "inkson/tests/e2e/mockArkretApi.ts",
-            "line": 4312,
+            "line": 4397,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              4312
+              4397
             ],
             "protected_oracle": false,
             "scope_sha256": "dfa117ced15fa63b40362435ed19e8545f4cdf47b8ad9d9608fec60ed6850fbc",
@@ -9042,11 +9042,11 @@
         "storage_parity": [
           {
             "file": "coland/crates/storage-postgres/tests/contact_admission_unit.rs",
-            "line": 599,
+            "line": 927,
             "scope": "current_contact_cas_and_frozen_response_rollback_together_on_conflicting_result",
             "scope_kind": "rust_test",
             "occurrence_lines": [
-              620
+              948
             ],
             "protected_oracle": false,
             "scope_sha256": "c544bd1d1dbcffabc9c5f0a78d70ac0f1ec4d4220040523b823206d803ac93ee",
@@ -9402,11 +9402,11 @@
         "protocol_kat": [
           {
             "file": "coland/crates/http/src/config.rs",
-            "line": 424,
+            "line": 427,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              424
+              427
             ],
             "protected_oracle": false,
             "scope_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
@@ -11554,11 +11554,11 @@
           },
           {
             "file": "coland/crates/http/src/routing/realm_join/preview_tests.rs",
-            "line": 734,
+            "line": 735,
             "scope": "preview_routes_authenticate_before_reading_the_body",
             "scope_kind": "rust_test",
             "occurrence_lines": [
-              770
+              771
             ],
             "protected_oracle": false,
             "scope_sha256": "aeb8e3bf3b1fbb7c57c262cd0a41c0248eefa52f6902b533ad44b7f238437b56",
@@ -13038,11 +13038,11 @@
         "product_flow": [
           {
             "file": "inkson/tests/e2e/mockArkretApi.ts",
-            "line": 4332,
+            "line": 4417,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              4332
+              4417
             ],
             "protected_oracle": false,
             "scope_sha256": "e791abbdd61c9daf8ef38b51a13620dae92b40ad2a374ccd5d3dbb524a3b60c2",
@@ -13916,11 +13916,11 @@
         "product_flow": [
           {
             "file": "inkson/tests/e2e/mockArkretApi.ts",
-            "line": 4327,
+            "line": 4412,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              4327
+              4412
             ],
             "protected_oracle": false,
             "scope_sha256": "de2f906f6a0ed8887a7ac00f9ef1e6a081552297e4681ccfcb5c0f3c3923ada5",
@@ -14695,11 +14695,11 @@
         "product_flow": [
           {
             "file": "cotest/e2e/helpers/users.ts",
-            "line": 1824,
+            "line": 1825,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              1824
+              1825
             ],
             "protected_oracle": false,
             "scope_sha256": "7bc8e550bf2b5d638557096f7f54d8426af60f20d53a5e4bfaa690c96eaf9e9e",
@@ -14726,11 +14726,11 @@
         "product_flow": [
           {
             "file": "inkson/tests/e2e/mockArkretApi.ts",
-            "line": 4337,
+            "line": 4422,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              4337
+              4422
             ],
             "protected_oracle": false,
             "scope_sha256": "43e41ea2dcba1bf5ffc01365ea7b25bd575260e8ed6599c21bbd64595acbb106",
@@ -14927,11 +14927,11 @@
         "protocol_kat": [
           {
             "file": "cotest/crates/test-support/src/provisioning/gate.rs",
-            "line": 553,
+            "line": 571,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              553
+              571
             ],
             "protected_oracle": false,
             "scope_sha256": "a1f59c1bd40af93cecc57161f39cc81833541e54c0d0c8bce86b484fef4633f0",
@@ -15412,11 +15412,11 @@
         "product_flow": [
           {
             "file": "inkson/tests/e2e/mockArkretApi.ts",
-            "line": 2377,
+            "line": 2422,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              2377
+              2422
             ],
             "protected_oracle": false,
             "scope_sha256": "d46189ef754bb1a106697d0966b6cd49a17a9f9fc8278c0d844448a2b3efa208",
@@ -16075,6 +16075,31 @@
         "http_binding": [],
         "product_flow": [
           {
+            "file": "inkson/tests/e2e/inkson.strands.notifications-directory.spec.ts",
+            "line": 369,
+            "scope": "notification feed controls and local mute feedback follow the active language",
+            "scope_kind": "typescript_test",
+            "occurrence_lines": [
+              396
+            ],
+            "protected_oracle": false,
+            "scope_sha256": "94da90636346d903e1ed98d8d903f9a91199bd5d13599f15fa8e8e2c0813e1e8",
+            "input_sha256": "4bd566f71536207b8a7d2730c02f2f2dccb6ee1fb34f938dccb1eb1eaece579e",
+            "assertion_sha256": "092892a856c8f2ef5c072ad653ab83fff42be60c194aaff0cb1764753927e6c6",
+            "input_preview": [
+              "test(\"notification feed controls and local mute feedback follow the active language\", async ({",
+              "page,",
+              "}) => {",
+              "await openSettings(page);"
+            ],
+            "assertion_preview": [
+              "await expect(page.getByTestId(\"client-shell\")).toHaveAttribute(\"data-locale\", language);",
+              "expect(response.status()).toBe(200);",
+              "expect(response.request().headers()[\"arkret-operation\"]).toBe(\"ak.self.account_data.resource.replace.v1\");",
+              "expect(event.kind).toBe(\"ak.account_data.set\");"
+            ]
+          },
+          {
             "file": "inkson/tests/e2e/mockRemainingOperations.ts",
             "line": 127,
             "scope": "<module_helper>",
@@ -16476,16 +16501,16 @@
         "protocol_kat": [
           {
             "file": "cotest/tests/account_profile_signed_request_contract.rs",
-            "line": 169,
+            "line": 187,
             "scope": "actor_profile_resolve_carries_the_event_without_a_seal_and_one_failure_value",
             "scope_kind": "rust_test",
             "occurrence_lines": [
-              207
+              225
             ],
             "protected_oracle": false,
-            "scope_sha256": "f8592672bda77364d1f8bb51a8b784b97fff438404150070a529966e2fa75c69",
+            "scope_sha256": "e2299bebcdad07f80eebdcd98fc16ef9ce8b5728463665a0dcc1972c2bf80939",
             "input_sha256": "4865554864037d8fffcb4805a000a4eb12ccf279eb50a0114f79e57e06e0c3f6",
-            "assertion_sha256": "8816c81ca76e0d1a724317269d05433b874bbe96c2ffb87e2031fc4c5b74ac14",
+            "assertion_sha256": "b21465766ac454cf95b236b2be4ed0b3ba032a5c756ec865e4903f3559373968",
             "input_preview": [
               "let schema: Value = serde_json::from_str(&read(",
               "\"arkret-spec/spec/v1/artifacts/schemas/actor-profile-operations.schema.json\",",
@@ -16528,7 +16553,27 @@
         "protocol_kat": [],
         "storage_parity": [],
         "http_binding": [],
-        "product_flow": [],
+        "product_flow": [
+          {
+            "file": "inkson/tests/e2e/mockArkretApi.ts",
+            "line": 4116,
+            "scope": "<module_helper>",
+            "scope_kind": "module_helper",
+            "occurrence_lines": [
+              4116
+            ],
+            "protected_oracle": false,
+            "scope_sha256": "acb4cb50f11a4355fea084a7a67b4a2af3793b42ff41babaf76bcf291a0d02ab",
+            "input_sha256": "0493c6051a2cd9d1b43d7c55c1716be22c8b25a986f60e61b5b6fb979315a2a7",
+            "assertion_sha256": "acb4cb50f11a4355fea084a7a67b4a2af3793b42ff41babaf76bcf291a0d02ab",
+            "input_preview": [
+              "ak.self.actor_profile.read.resolve.v1"
+            ],
+            "assertion_preview": [
+              "expect(route.request().headers()[\"arkret-operation\"]).toBe(\"ak.self.actor_profile.read.resolve.v1\");"
+            ]
+          }
+        ],
         "fault_recovery": [],
         "security_negative": []
       }
@@ -18663,11 +18708,11 @@
           },
           {
             "file": "coland/crates/storage-postgres/tests/support/applet_authoring.rs",
-            "line": 8498,
+            "line": 8509,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              8498
+              8509
             ],
             "protected_oracle": false,
             "scope_sha256": "a02e525f0d411c852e6476aefb2ccc67e094220ace1f5df806cee06e74ebb471",
@@ -19045,11 +19090,11 @@
         "storage_parity": [
           {
             "file": "coland/crates/storage-postgres/tests/support/applet_authoring.rs",
-            "line": 7326,
+            "line": 7337,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              7326
+              7337
             ],
             "protected_oracle": false,
             "scope_sha256": "b6b53f5c08ab55b38a526c7040dadb787a53e3811016ddbf18bf12fcf574bd05",
@@ -19807,11 +19852,11 @@
         "product_flow": [
           {
             "file": "cotest/e2e/helpers/users.ts",
-            "line": 569,
+            "line": 570,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              569
+              570
             ],
             "protected_oracle": false,
             "scope_sha256": "20358a78ab304f13d29748034b4769703c7268542adcaca6d8b03705be2a2fa9",
@@ -20036,11 +20081,11 @@
           },
           {
             "file": "cotest/e2e/helpers/users.ts",
-            "line": 1275,
+            "line": 1276,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              1275
+              1276
             ],
             "protected_oracle": false,
             "scope_sha256": "2373fff14a20d85da0146a37b391dee3849e61eeb485e77de39e962b32d2c539",
@@ -20333,11 +20378,11 @@
         "storage_parity": [
           {
             "file": "coland/crates/storage-postgres/tests/support/applet_authoring.rs",
-            "line": 7223,
+            "line": 7234,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              7223
+              7234
             ],
             "protected_oracle": false,
             "scope_sha256": "c27e87dede3917dbf9c43437388ef63728c78117b1b8f3ec5d7d55effb591bd3",
@@ -20494,11 +20539,11 @@
         "storage_parity": [
           {
             "file": "coland/crates/storage-postgres/tests/sidecar_authority_cut.rs",
-            "line": 8332,
+            "line": 8368,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              8332
+              8368
             ],
             "protected_oracle": false,
             "scope_sha256": "9e28a4a60f9099cc7cb0c6c7eebfbf84cfeea0521c1aae6d27f89291f0cfa25d",
@@ -20511,11 +20556,11 @@
           },
           {
             "file": "coland/crates/storage-postgres/tests/sidecar_authority_cut.rs",
-            "line": 10101,
+            "line": 10137,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              10101
+              10137
             ],
             "protected_oracle": false,
             "scope_sha256": "9e28a4a60f9099cc7cb0c6c7eebfbf84cfeea0521c1aae6d27f89291f0cfa25d",
@@ -20528,11 +20573,11 @@
           },
           {
             "file": "coland/crates/storage-postgres/tests/support/applet_authoring.rs",
-            "line": 7223,
+            "line": 7234,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              7223
+              7234
             ],
             "protected_oracle": false,
             "scope_sha256": "c27e87dede3917dbf9c43437388ef63728c78117b1b8f3ec5d7d55effb591bd3",
@@ -20672,11 +20717,11 @@
         "storage_parity": [
           {
             "file": "coland/crates/storage-postgres/tests/sidecar_authority_cut.rs",
-            "line": 8333,
+            "line": 8369,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              8333
+              8369
             ],
             "protected_oracle": false,
             "scope_sha256": "ce6b8708cf69f7d2b1257af1d11ae10ed7ac891e77b5cac7341d15754f7a78d3",
@@ -20689,11 +20734,11 @@
           },
           {
             "file": "coland/crates/storage-postgres/tests/sidecar_authority_cut.rs",
-            "line": 10096,
+            "line": 10132,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              10096
+              10132
             ],
             "protected_oracle": false,
             "scope_sha256": "ce6b8708cf69f7d2b1257af1d11ae10ed7ac891e77b5cac7341d15754f7a78d3",
@@ -20868,11 +20913,11 @@
         "storage_parity": [
           {
             "file": "coland/crates/storage-postgres/tests/support/applet_authoring.rs",
-            "line": 7223,
+            "line": 7234,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              7223
+              7234
             ],
             "protected_oracle": false,
             "scope_sha256": "c27e87dede3917dbf9c43437388ef63728c78117b1b8f3ec5d7d55effb591bd3",
@@ -22899,11 +22944,11 @@
           },
           {
             "file": "cotest/e2e/helpers/users.ts",
-            "line": 1825,
+            "line": 1826,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              1825
+              1826
             ],
             "protected_oracle": false,
             "scope_sha256": "7c1edd881c90220c5ec6cf29be16f46e907e823dd6305f49bcbc5f8ae5d35a8c",
@@ -22968,11 +23013,11 @@
         "product_flow": [
           {
             "file": "inkson/tests/e2e/mockArkretApi.ts",
-            "line": 325,
+            "line": 357,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              325
+              357
             ],
             "protected_oracle": false,
             "scope_sha256": "4b39f13a6a7d6f88a495149587b26326113fcdd4f7ed0806f5c9b28ead97eb86",
@@ -22985,11 +23030,11 @@
           },
           {
             "file": "inkson/tests/e2e/mockArkretApi.ts",
-            "line": 1482,
+            "line": 1526,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              1482
+              1526
             ],
             "protected_oracle": false,
             "scope_sha256": "7c1edd881c90220c5ec6cf29be16f46e907e823dd6305f49bcbc5f8ae5d35a8c",
@@ -23002,11 +23047,11 @@
           },
           {
             "file": "inkson/tests/e2e/mockArkretApi.ts",
-            "line": 2761,
+            "line": 2829,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              2761
+              2829
             ],
             "protected_oracle": false,
             "scope_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
@@ -23142,11 +23187,11 @@
         "storage_parity": [
           {
             "file": "coland/crates/storage-postgres/tests/realm_membership_fanout.rs",
-            "line": 2337,
+            "line": 2372,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              2337
+              2372
             ],
             "protected_oracle": false,
             "scope_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
@@ -23159,11 +23204,11 @@
           },
           {
             "file": "coland/crates/storage-postgres/tests/sidecar_authority_cut.rs",
-            "line": 8331,
+            "line": 8367,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              8331
+              8367
             ],
             "protected_oracle": false,
             "scope_sha256": "38c92efa7c8dabcc9e56fe8a9f03042047f99c7e54a3deacde64137bc0471172",
@@ -23176,11 +23221,11 @@
           },
           {
             "file": "coland/crates/storage-postgres/tests/sidecar_authority_cut.rs",
-            "line": 9594,
+            "line": 9630,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              9594
+              9630
             ],
             "protected_oracle": false,
             "scope_sha256": "fd755bc4ab48f07f3d9c0bcfe816ffc3034824a71e43b9dbc0b391d5eadc1e4c",
@@ -23193,11 +23238,11 @@
           },
           {
             "file": "coland/crates/storage-postgres/tests/sidecar_authority_cut.rs",
-            "line": 9615,
+            "line": 9651,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              9615
+              9651
             ],
             "protected_oracle": false,
             "scope_sha256": "38c92efa7c8dabcc9e56fe8a9f03042047f99c7e54a3deacde64137bc0471172",
@@ -23210,11 +23255,11 @@
           },
           {
             "file": "coland/crates/storage-postgres/tests/sidecar_authority_cut.rs",
-            "line": 9648,
+            "line": 9684,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              9648
+              9684
             ],
             "protected_oracle": false,
             "scope_sha256": "38c92efa7c8dabcc9e56fe8a9f03042047f99c7e54a3deacde64137bc0471172",
@@ -23227,11 +23272,11 @@
           },
           {
             "file": "coland/crates/storage-postgres/tests/sidecar_authority_cut.rs",
-            "line": 9720,
+            "line": 9756,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              9720
+              9756
             ],
             "protected_oracle": false,
             "scope_sha256": "38c92efa7c8dabcc9e56fe8a9f03042047f99c7e54a3deacde64137bc0471172",
@@ -23244,11 +23289,11 @@
           },
           {
             "file": "coland/crates/storage-postgres/tests/sidecar_authority_cut.rs",
-            "line": 11329,
+            "line": 11365,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              11329
+              11365
             ],
             "protected_oracle": false,
             "scope_sha256": "fd755bc4ab48f07f3d9c0bcfe816ffc3034824a71e43b9dbc0b391d5eadc1e4c",
@@ -23261,11 +23306,11 @@
           },
           {
             "file": "coland/crates/storage-postgres/tests/sidecar_authority_cut.rs",
-            "line": 11353,
+            "line": 11389,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              11353
+              11389
             ],
             "protected_oracle": false,
             "scope_sha256": "fd755bc4ab48f07f3d9c0bcfe816ffc3034824a71e43b9dbc0b391d5eadc1e4c",
@@ -23278,11 +23323,11 @@
           },
           {
             "file": "coland/crates/storage-postgres/tests/sidecar_authority_cut.rs",
-            "line": 12758,
+            "line": 12794,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              12758
+              12794
             ],
             "protected_oracle": false,
             "scope_sha256": "38c92efa7c8dabcc9e56fe8a9f03042047f99c7e54a3deacde64137bc0471172",
@@ -23406,11 +23451,11 @@
           },
           {
             "file": "cotest/src/scenarios/agent_runtime_live/content_direct_interval_evidence.rs",
-            "line": 250,
+            "line": 266,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              250
+              266
             ],
             "protected_oracle": false,
             "scope_sha256": "255554f40c0c6747ee79443b797ea81f3362b76510d90af9500d07750349316e",
@@ -23521,11 +23566,11 @@
         "product_flow": [
           {
             "file": "inkson/tests/e2e/mockArkretApi.ts",
-            "line": 358,
+            "line": 390,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              358
+              390
             ],
             "protected_oracle": false,
             "scope_sha256": "902bf51e084b13319d27f93d4a53f8c35c68999ac591c49b8c6677c2f80c6329",
@@ -23902,11 +23947,11 @@
           },
           {
             "file": "coland/crates/storage-postgres/tests/sidecar_authority_cut.rs",
-            "line": 9830,
+            "line": 9866,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              9830
+              9866
             ],
             "protected_oracle": false,
             "scope_sha256": "b3fd7f441260b97a91b25096e04ab6416d325ac7ca75d2bd1cb30a9048e62af6",
@@ -23919,11 +23964,11 @@
           },
           {
             "file": "coland/crates/storage-postgres/tests/sidecar_authority_cut.rs",
-            "line": 9875,
+            "line": 9911,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              9875
+              9911
             ],
             "protected_oracle": false,
             "scope_sha256": "b3fd7f441260b97a91b25096e04ab6416d325ac7ca75d2bd1cb30a9048e62af6",
@@ -24103,11 +24148,11 @@
         "product_flow": [
           {
             "file": "inkson/tests/e2e/mockArkretApi.ts",
-            "line": 1481,
+            "line": 1525,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              1481
+              1525
             ],
             "protected_oracle": false,
             "scope_sha256": "b3fd7f441260b97a91b25096e04ab6416d325ac7ca75d2bd1cb30a9048e62af6",
@@ -24120,11 +24165,11 @@
           },
           {
             "file": "inkson/tests/e2e/mockArkretApi.ts",
-            "line": 1488,
+            "line": 1532,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              1488
+              1532
             ],
             "protected_oracle": false,
             "scope_sha256": "8e3f776dda16f75f311fa1a1c80dd8129b2d3fbf7ae7be6f71a4223cd85f9fca",
@@ -25126,11 +25171,11 @@
         "protocol_kat": [
           {
             "file": "cotest/src/scenarios/agent_runtime_live/content_direct_interval_evidence.rs",
-            "line": 246,
+            "line": 262,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              246
+              262
             ],
             "protected_oracle": false,
             "scope_sha256": "37795d59855acfcb9984fe93d2ad652f3cb27d4c1edeaa597e60801350779f86",
@@ -25382,11 +25427,11 @@
         "protocol_kat": [
           {
             "file": "cotest/src/scenarios/agent_runtime_live/content_direct_interval_evidence.rs",
-            "line": 247,
+            "line": 263,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              247
+              263
             ],
             "protected_oracle": false,
             "scope_sha256": "a4ce1c49db6e5268068e59fa1205b97ca6a82ab9c226a83d297253c4dd3eb865",
@@ -26448,11 +26493,11 @@
           },
           {
             "file": "coland/crates/storage-postgres/tests/sidecar_authority_cut.rs",
-            "line": 10438,
+            "line": 10474,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              10438
+              10474
             ],
             "protected_oracle": false,
             "scope_sha256": "7c94b54f17fc7b0d6795604d43ec656e4b4bf17edb81782b3624743e1fae2024",
@@ -26465,11 +26510,11 @@
           },
           {
             "file": "coland/crates/storage-postgres/tests/sidecar_authority_cut.rs",
-            "line": 10555,
+            "line": 10591,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              10555
+              10591
             ],
             "protected_oracle": false,
             "scope_sha256": "7c94b54f17fc7b0d6795604d43ec656e4b4bf17edb81782b3624743e1fae2024",
@@ -26482,11 +26527,11 @@
           },
           {
             "file": "coland/crates/storage-postgres/tests/sidecar_authority_cut.rs",
-            "line": 11958,
+            "line": 11994,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              11958
+              11994
             ],
             "protected_oracle": false,
             "scope_sha256": "7c94b54f17fc7b0d6795604d43ec656e4b4bf17edb81782b3624743e1fae2024",
@@ -26645,11 +26690,11 @@
           },
           {
             "file": "cotest/src/scenarios/agent_runtime_live/content_direct_interval_evidence.rs",
-            "line": 251,
+            "line": 267,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              251
+              267
             ],
             "protected_oracle": false,
             "scope_sha256": "a22730ff076c1b7b0f6999451b5e464449067ad7797781782914dd4fc5ce2bf2",
@@ -26890,11 +26935,11 @@
           },
           {
             "file": "cotest/src/scenarios/agent_runtime_live/content_direct_interval_evidence.rs",
-            "line": 248,
+            "line": 264,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              248
+              264
             ],
             "protected_oracle": false,
             "scope_sha256": "b1259e60c8ef1d9de7a37c793feb2192c30c8d3080bd091aa7e06f7932bd759e",
@@ -27443,11 +27488,11 @@
           },
           {
             "file": "coland/crates/storage-postgres/tests/sidecar_authority_cut.rs",
-            "line": 5305,
+            "line": 5344,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              5305
+              5344
             ],
             "protected_oracle": false,
             "scope_sha256": "7c2250bbb972900f9c74c156bdf9562aa6672b0092e6af2ccc99aa9e3be6fcb9",
@@ -27460,11 +27505,11 @@
           },
           {
             "file": "coland/crates/storage-postgres/tests/sidecar_authority_cut.rs",
-            "line": 5310,
+            "line": 5349,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              5310
+              5349
             ],
             "protected_oracle": false,
             "scope_sha256": "8bd5c4012f47d57e576dd57a1d7d9cac99ee5e3aae97f2ef376fd5c44d92c98d",
@@ -27477,11 +27522,11 @@
           },
           {
             "file": "coland/crates/storage-postgres/tests/sidecar_authority_cut.rs",
-            "line": 6153,
+            "line": 6189,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              6153
+              6189
             ],
             "protected_oracle": false,
             "scope_sha256": "07a1e30acf86cc83677fbd71b584ec571d5ca5f7f42b9e62dd5de471247ed383",
@@ -27494,11 +27539,11 @@
           },
           {
             "file": "coland/crates/storage-postgres/tests/sidecar_authority_cut.rs",
-            "line": 8327,
+            "line": 8363,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              8327
+              8363
             ],
             "protected_oracle": false,
             "scope_sha256": "7c2250bbb972900f9c74c156bdf9562aa6672b0092e6af2ccc99aa9e3be6fcb9",
@@ -27511,11 +27556,11 @@
           },
           {
             "file": "coland/crates/storage-postgres/tests/sidecar_authority_cut.rs",
-            "line": 8336,
+            "line": 8372,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              8336
+              8372
             ],
             "protected_oracle": false,
             "scope_sha256": "8bd5c4012f47d57e576dd57a1d7d9cac99ee5e3aae97f2ef376fd5c44d92c98d",
@@ -28072,11 +28117,11 @@
           },
           {
             "file": "coland/crates/storage-postgres/tests/support/applet_authoring.rs",
-            "line": 8405,
+            "line": 8416,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              8405
+              8416
             ],
             "protected_oracle": false,
             "scope_sha256": "6846d16b9c007d1e13805ff9eb5535db7c0e5addae301bb565ea16433c1b80df",
@@ -28089,11 +28134,11 @@
           },
           {
             "file": "coland/crates/storage-postgres/tests/support/applet_authoring.rs",
-            "line": 8570,
+            "line": 8581,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              8570
+              8581
             ],
             "protected_oracle": false,
             "scope_sha256": "6846d16b9c007d1e13805ff9eb5535db7c0e5addae301bb565ea16433c1b80df",
@@ -29614,11 +29659,11 @@
           },
           {
             "file": "cotest/src/scenarios/agent_runtime_live/content_direct_interval_evidence.rs",
-            "line": 249,
+            "line": 265,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              249
+              265
             ],
             "protected_oracle": false,
             "scope_sha256": "74f3a4cd050130df557336250729608031e98d81e47ee68868fd023ae6797278",
@@ -29716,11 +29761,11 @@
           },
           {
             "file": "cotest/src/scenarios/agent_runtime_live/content_sidecar_evidence.rs",
-            "line": 1479,
+            "line": 1519,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              1479
+              1519
             ],
             "protected_oracle": false,
             "scope_sha256": "85590e9fce26aee770132b14fda27e003c3ab96ccb677f579231174361c61caf",
@@ -30121,11 +30166,11 @@
         "product_flow": [
           {
             "file": "inkson/tests/e2e/mockArkretApi.ts",
-            "line": 338,
+            "line": 370,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              338
+              370
             ],
             "protected_oracle": false,
             "scope_sha256": "85de118b723a1ccf7a5fa4fee203c39b6c737a834988a2080d4bba326091e11d",
@@ -30138,11 +30183,11 @@
           },
           {
             "file": "inkson/tests/e2e/mockArkretApi.ts",
-            "line": 693,
+            "line": 725,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              693
+              725
             ],
             "protected_oracle": false,
             "scope_sha256": "1e519962e18d76904bb5a28ef476d6335a01d4d03ae7343b31241eb233a0ace6",
@@ -30155,11 +30200,11 @@
           },
           {
             "file": "inkson/tests/e2e/mockArkretApi.ts",
-            "line": 1483,
+            "line": 1527,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              1483
+              1527
             ],
             "protected_oracle": false,
             "scope_sha256": "a49aa403833e455f456910b66763a0177dd1ba3c23a71ccea9018a091007b008",
@@ -30504,11 +30549,11 @@
         "product_flow": [
           {
             "file": "inkson/tests/e2e/mockArkretApi.ts",
-            "line": 600,
+            "line": 632,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              600
+              632
             ],
             "protected_oracle": false,
             "scope_sha256": "10edf326936baa0b536bb85c5a4b45a242ea1a1a3b05c0bb607b9470ac68837c",
@@ -30652,11 +30697,11 @@
         "product_flow": [
           {
             "file": "inkson/tests/e2e/mockArkretApi.ts",
-            "line": 600,
+            "line": 632,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              600
+              632
             ],
             "protected_oracle": false,
             "scope_sha256": "10edf326936baa0b536bb85c5a4b45a242ea1a1a3b05c0bb607b9470ac68837c",
@@ -31084,11 +31129,11 @@
         "product_flow": [
           {
             "file": "inkson/tests/e2e/mockArkretApi.ts",
-            "line": 2807,
+            "line": 2875,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              2807
+              2875
             ],
             "protected_oracle": false,
             "scope_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
@@ -32808,11 +32853,11 @@
           },
           {
             "file": "coland/crates/http/src/routing/mls.rs",
-            "line": 3325,
+            "line": 3322,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              3325
+              3322
             ],
             "protected_oracle": false,
             "scope_sha256": "377117755cddea7fdddf4e4b6dee77887bcb77d47cc4a506f01051fb633d9575",
@@ -32825,11 +32870,11 @@
           },
           {
             "file": "coland/crates/http/src/routing/mls_keypackage_native.rs",
-            "line": 660,
+            "line": 657,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              660
+              657
             ],
             "protected_oracle": false,
             "scope_sha256": "0886d13a2adc0242029d07cff02585c2bab38e7d8d5f85ffd004781afe2de2e4",
@@ -32842,11 +32887,11 @@
           },
           {
             "file": "coland/crates/http/src/routing/mls_keypackage_native.rs",
-            "line": 731,
+            "line": 728,
             "scope": "current_device_refusal_preserves_its_registered_consume_code",
             "scope_kind": "rust_test",
             "occurrence_lines": [
-              746
+              743
             ],
             "protected_oracle": false,
             "scope_sha256": "a7289bfb5b425d2fb9b62083ca50dabc1c87e52ed9774425ba8c00dc7d109265",
@@ -33259,11 +33304,11 @@
         "protocol_kat": [
           {
             "file": "coland/crates/http/src/routing/mls.rs",
-            "line": 3839,
+            "line": 3836,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              3839
+              3836
             ],
             "protected_oracle": false,
             "scope_sha256": "9cdb944d176b65d02f025bdef189747f5437641ba16287edde0dd4dbf7df6419",
@@ -33529,11 +33574,11 @@
           },
           {
             "file": "coland/crates/http/src/routing/mls.rs",
-            "line": 2629,
+            "line": 2626,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              2629
+              2626
             ],
             "protected_oracle": false,
             "scope_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
@@ -33546,11 +33591,11 @@
           },
           {
             "file": "coland/crates/http/src/routing/mls.rs",
-            "line": 2637,
+            "line": 2634,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              2637
+              2634
             ],
             "protected_oracle": false,
             "scope_sha256": "8cde49d12d68ac5c03eaa1ee2ce1c1c3fb6bec3073431877d76898c342a2e499",
@@ -33563,11 +33608,11 @@
           },
           {
             "file": "coland/crates/http/src/routing/mls.rs",
-            "line": 2726,
+            "line": 2723,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              2726
+              2723
             ],
             "protected_oracle": false,
             "scope_sha256": "ff27628ca9b721f114d09262eeefddbf7af0bbca571524a8db28afc52f44377e",
@@ -34626,11 +34671,11 @@
         "storage_parity": [
           {
             "file": "coland/crates/storage-postgres/tests/sidecar_authority_cut.rs",
-            "line": 6837,
+            "line": 6873,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              6837
+              6873
             ],
             "protected_oracle": false,
             "scope_sha256": "720dff700ec9e4bcbe2711da60bb001d45b64ff55e3428966f6fcf8dcbc5478c",
@@ -34643,11 +34688,11 @@
           },
           {
             "file": "coland/crates/storage-postgres/tests/sidecar_authority_cut.rs",
-            "line": 7538,
+            "line": 7574,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              7538
+              7574
             ],
             "protected_oracle": false,
             "scope_sha256": "035f3d20d7d5fa0e9aef7c5fe1eb56980bb94c0221b605b879d88a5762d5da17",
@@ -34778,11 +34823,11 @@
         "storage_parity": [
           {
             "file": "coland/crates/storage-postgres/tests/sidecar_authority_cut.rs",
-            "line": 6638,
+            "line": 6674,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              6638
+              6674
             ],
             "protected_oracle": false,
             "scope_sha256": "a12464da7f6f4a667300a287bb5a264d00c1a7d09d13e30441d0e1c9ea565356",
@@ -34795,11 +34840,11 @@
           },
           {
             "file": "coland/crates/storage-postgres/tests/sidecar_authority_cut.rs",
-            "line": 6661,
+            "line": 6697,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              6661
+              6697
             ],
             "protected_oracle": false,
             "scope_sha256": "a12464da7f6f4a667300a287bb5a264d00c1a7d09d13e30441d0e1c9ea565356",
@@ -34812,11 +34857,11 @@
           },
           {
             "file": "coland/crates/storage-postgres/tests/sidecar_authority_cut.rs",
-            "line": 6683,
+            "line": 6719,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              6683
+              6719
             ],
             "protected_oracle": false,
             "scope_sha256": "a12464da7f6f4a667300a287bb5a264d00c1a7d09d13e30441d0e1c9ea565356",
@@ -34829,11 +34874,11 @@
           },
           {
             "file": "coland/crates/storage-postgres/tests/sidecar_authority_cut.rs",
-            "line": 7241,
+            "line": 7277,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              7241
+              7277
             ],
             "protected_oracle": false,
             "scope_sha256": "a12464da7f6f4a667300a287bb5a264d00c1a7d09d13e30441d0e1c9ea565356",
@@ -34846,11 +34891,11 @@
           },
           {
             "file": "coland/crates/storage-postgres/tests/sidecar_authority_cut.rs",
-            "line": 7536,
+            "line": 7572,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              7536
+              7572
             ],
             "protected_oracle": false,
             "scope_sha256": "3da27637316ca33166582da0644b2ba15ae3213c2c5cda97d2893fa049dab0f6",
@@ -34964,11 +35009,11 @@
         "storage_parity": [
           {
             "file": "coland/crates/storage-postgres/tests/sidecar_authority_cut.rs",
-            "line": 6692,
+            "line": 6728,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              6692
+              6728
             ],
             "protected_oracle": false,
             "scope_sha256": "d89d28da76484c7a47f84ae16641f9d71db95b3a3b8ea9149cd81cfa9ced571e",
@@ -34981,11 +35026,11 @@
           },
           {
             "file": "coland/crates/storage-postgres/tests/sidecar_authority_cut.rs",
-            "line": 6709,
+            "line": 6745,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              6709
+              6745
             ],
             "protected_oracle": false,
             "scope_sha256": "d89d28da76484c7a47f84ae16641f9d71db95b3a3b8ea9149cd81cfa9ced571e",
@@ -34998,11 +35043,11 @@
           },
           {
             "file": "coland/crates/storage-postgres/tests/sidecar_authority_cut.rs",
-            "line": 7232,
+            "line": 7268,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              7232
+              7268
             ],
             "protected_oracle": false,
             "scope_sha256": "d89d28da76484c7a47f84ae16641f9d71db95b3a3b8ea9149cd81cfa9ced571e",
@@ -35015,11 +35060,11 @@
           },
           {
             "file": "coland/crates/storage-postgres/tests/sidecar_authority_cut.rs",
-            "line": 7537,
+            "line": 7573,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              7537
+              7573
             ],
             "protected_oracle": false,
             "scope_sha256": "edce517ebb61ef2f16203b29c9f4ae030b91e37e63e26168c3f4f40400fdafe3",
@@ -36118,9 +36163,9 @@
               36
             ],
             "protected_oracle": false,
-            "scope_sha256": "6e74400986c54bed745d1386c129e4a42e312404fd77bf0dd93262a362c207f6",
-            "input_sha256": "f8f9c935ddfca67f53031a4ea3df404e08bcb257cdfe83411c91444e6c9ff949",
-            "assertion_sha256": "588d87edbc90fa404db43e20554e448ac0e236fcfd39ae0ec8683a1c11c8caba",
+            "scope_sha256": "43657563e1368f4c6cd12b4d8cb4547c07f53ae5432b1dba325cd7a8cf07a4a5",
+            "input_sha256": "c2f7c462561ac9ef0df752112969046b46e8d147b88a3d207d7bb69da7245e25",
+            "assertion_sha256": "6aec9997ba5c2421607bd13ed6a31d23c3f35faf00503a252340734d173d4233",
             "input_preview": [
               "let registry: Value = serde_json::from_str(&read(",
               "\"arkret-spec/spec/v1/artifacts/registry/operation-registry.json\",",
@@ -36824,11 +36869,11 @@
         "storage_parity": [
           {
             "file": "coland/crates/storage-postgres/tests/sidecar_authority_cut.rs",
-            "line": 5306,
+            "line": 5345,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              5306
+              5345
             ],
             "protected_oracle": false,
             "scope_sha256": "7576565ca9c177448be7baeb93e384c3aae0d513b2b81736f503eaf64d11471d",
@@ -36841,11 +36886,11 @@
           },
           {
             "file": "coland/crates/storage-postgres/tests/sidecar_authority_cut.rs",
-            "line": 5311,
+            "line": 5350,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              5311
+              5350
             ],
             "protected_oracle": false,
             "scope_sha256": "1a8475fd2430a9631be6e2b5f8a71e04d7bfe2cc96a8dadd6c1f3d77bd0afd03",
@@ -37277,11 +37322,11 @@
         "product_flow": [
           {
             "file": "inkson/tests/e2e/mockArkretApi.ts",
-            "line": 327,
+            "line": 359,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              327
+              359
             ],
             "protected_oracle": false,
             "scope_sha256": "4f374dc54f420115089a85ba97df532994afcbfb145212f0eea64cf5af0cdc38",
@@ -37957,11 +38002,11 @@
           },
           {
             "file": "coland/crates/http/src/routing/realm_join/preview_tests.rs",
-            "line": 734,
+            "line": 735,
             "scope": "preview_routes_authenticate_before_reading_the_body",
             "scope_kind": "rust_test",
             "occurrence_lines": [
-              751
+              752
             ],
             "protected_oracle": false,
             "scope_sha256": "aeb8e3bf3b1fbb7c57c262cd0a41c0248eefa52f6902b533ad44b7f238437b56",
@@ -38534,11 +38579,11 @@
         "product_flow": [
           {
             "file": "inkson/tests/e2e/mockArkretApi.ts",
-            "line": 284,
+            "line": 316,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              284
+              316
             ],
             "protected_oracle": false,
             "scope_sha256": "5f1de3bb3ad59eac29c567fa3a352b633d97f2ee9f0aed61a867c014dbb43b44",
@@ -38840,11 +38885,11 @@
         "product_flow": [
           {
             "file": "inkson/tests/e2e/mockArkretApi.ts",
-            "line": 283,
+            "line": 315,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              283
+              315
             ],
             "protected_oracle": false,
             "scope_sha256": "4584c0d8f0c7ef3b5a3227163c42de370ed03222fa1152be4ecde80db750f1a4",
@@ -39850,11 +39895,11 @@
         "protocol_kat": [
           {
             "file": "cotest/src/scenarios/fanout_route_miss_live.rs",
-            "line": 955,
+            "line": 977,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              955
+              977
             ],
             "protected_oracle": false,
             "scope_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
@@ -40384,11 +40429,11 @@
         "product_flow": [
           {
             "file": "inkson/tests/e2e/mockArkretApi.ts",
-            "line": 326,
+            "line": 358,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              326
+              358
             ],
             "protected_oracle": false,
             "scope_sha256": "8a3db6f885931cffa61558d987464d49db4a84c2601c96f0a8516c8fb80d956a",
@@ -40910,11 +40955,11 @@
         "product_flow": [
           {
             "file": "cotest/e2e/helpers/users.ts",
-            "line": 1159,
+            "line": 1160,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              1159
+              1160
             ],
             "protected_oracle": false,
             "scope_sha256": "406ae34ca80eb063c081a8492c23c11d38410ad57224a0a732498aa3f02f5ef9",
@@ -40941,11 +40986,11 @@
         "product_flow": [
           {
             "file": "inkson/tests/e2e/mockArkretApi.ts",
-            "line": 4302,
+            "line": 4387,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              4302
+              4387
             ],
             "protected_oracle": false,
             "scope_sha256": "bff91b0dd11264a51db00878778fe137a8879146a8ff78e3d6e2252bf7f48fe8",
@@ -40958,11 +41003,11 @@
           },
           {
             "file": "inkson/tests/e2e/mockArkretApi.ts",
-            "line": 4307,
+            "line": 4392,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              4307
+              4392
             ],
             "protected_oracle": false,
             "scope_sha256": "bff91b0dd11264a51db00878778fe137a8879146a8ff78e3d6e2252bf7f48fe8",

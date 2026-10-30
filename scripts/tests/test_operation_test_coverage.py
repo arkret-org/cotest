@@ -6,6 +6,7 @@ import io
 import json
 import os
 import re
+import shutil
 import stat
 import sys
 import tempfile
@@ -100,6 +101,24 @@ class OperationTestCoverageTests(unittest.TestCase):
         path = self.root / relative
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_bytes(content.encode("utf-8"))
+
+    def test_ignored_workspace_ancestors_preserve_all_five_source_layers(self) -> None:
+        expected = inventory.generate(self.root)
+        layers = expected["generated_from"]["test_layers"]
+        self.assertEqual(len(layers), 5)
+        self.assertTrue(all(layer["source_file_count"] > 0 for layer in layers.values()))
+        for ignored in inventory.IGNORED_DIRS:
+            self.write(
+                f"cotest/tests/{ignored}/phantom.rs",
+                rust_test("must_stay_excluded", OP_ONE, "assert_eq!(actual, expected);"),
+            )
+        self.assertEqual(inventory.generate(self.root), expected)
+        with tempfile.TemporaryDirectory() as parent:
+            for ancestor in sorted(inventory.IGNORED_DIRS):
+                with self.subTest(ancestor=ancestor):
+                    nested = Path(parent) / ancestor / "workspace"
+                    shutil.copytree(self.root, nested)
+                    self.assertEqual(inventory.generate(nested), expected)
 
     def test_source_walk_prunes_ignored_and_directory_links_without_losing_sources(self) -> None:
         sources = self.root / "source-walk"
@@ -430,6 +449,23 @@ fn typed_operation() {
             return tuple(inventory.LayerSource(layer.name, tuple(reversed(layer.files))) for layer in discover(root))
         with mock.patch.object(inventory, "discover_layer_sources", side_effect=reversed_sources):
             self.assertEqual(inventory.generate(self.root), expected)
+
+    def test_linked_repository_roots_keep_the_same_inventory_and_source_digests(self) -> None:
+        expected = inventory.generate(self.root)
+        linked = self.root / "linked-workspace"
+        linked.mkdir()
+        for repository in ("arkret-spec", "arkret-rust-sdk", "coland", "cotest", "inkson"):
+            directory_link(linked / repository, self.root / repository)
+        self.assertEqual(inventory.generate(linked), expected)
+
+    def test_relative_source_identity_refuses_outside_paths_and_parent_traversal(self) -> None:
+        with mock.patch.object(inventory, "WORKSPACE_ROOT", self.root.resolve()):
+            for path in (
+                self.root.parent / "outside.rs",
+                self.root / "coland" / ".." / ".." / "outside.rs",
+            ):
+                with self.subTest(path=path), self.assertRaises(ValueError):
+                    inventory.relative_path(path)
 
     def test_unclassified_operation_shaped_literal_fails_closed(self) -> None:
         self.write(

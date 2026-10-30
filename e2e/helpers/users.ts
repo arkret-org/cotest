@@ -25,6 +25,7 @@ import {
   accountHandoffHeaders,
   createCanonicalAccountHandoff,
   registerCoauthPasswordAccount,
+  registrationEmailCode,
   type CoauthPasswordAccount,
 } from "./coauth-register";
 import {
@@ -1967,6 +1968,94 @@ export async function openDpopUserPage(
     await allowExplicitInviteNotifications(request, session, opts.server);
   }
   return openDpopUserPageFromSession(browser, session, opts);
+}
+
+// Establish browser-owned keys and custody through the production UI. Unlike
+// accepted-device fixtures, this needs no test-only WASM session injection.
+export async function openRegisteredUserPage(
+  browser: Browser,
+  request: APIRequestContext,
+  prefix: string,
+): Promise<{ user: JointUser; page: JointUserPage }> {
+  if (!coauthBaseUrl()) throw new Error("UI registration requires Coauth");
+  const user = uniqueUser(prefix.slice(0, 20));
+  const joint = await openUserPage(browser, user, {
+    neutralLoginConfig: true,
+    keepDeviceAuthorizationModal: true,
+    autoCompleteRecoveryKeySetup: false,
+  });
+  const page = joint.page;
+  page.setDefaultTimeout(30_000);
+  page.setDefaultNavigationTimeout(60_000);
+  const email = `ui-${randomUUID()}@example.test`;
+  try {
+    await page.goto("/register");
+    await page.getByTestId("register-server").fill(colandBaseUrl());
+    await page.getByTestId("register-open-account-authority").click();
+    await page.locator('input[autocomplete="username"]').fill(user.name);
+    await page.locator('input[autocomplete="email"]').fill(email);
+    await page.locator("#new-password").fill("1amTester!");
+    await page.locator("#confirm-new-password").fill("1amTester!");
+    await page.getByRole("button", { name: /^create account$/i }).click();
+    const codeInput = page.locator('input[autocomplete="one-time-code"]');
+    const registrationError = page.getByRole("alert");
+    await expect(codeInput.or(registrationError)).toBeVisible({ timeout: 60_000 });
+    await expect(registrationError).toHaveCount(0);
+    await expect(codeInput).toBeVisible({ timeout: 60_000 });
+    const code = await registrationEmailCode(request, email);
+    await expect.poll(async () => {
+      if (!(await codeInput.isVisible())) return true;
+      await codeInput.fill(code);
+      await page.getByRole("button", { name: /^verify$/i }).click();
+      return !(await codeInput.isVisible());
+    }, { timeout: 60_000, intervals: [500] }).toBe(true);
+    await page.locator('input[autocomplete="name"]').fill(user.displayName);
+    await page.getByRole("button", { name: /^continue$/i }).click();
+    const finish = page.getByRole("button", { name: /^create account$/i });
+    const approve = page.getByTestId("coauth-oauth-approve");
+    const choose = page.getByTestId("choose-new-identity");
+    await expect(finish.or(approve).or(choose)).toBeVisible({ timeout: 60_000 });
+    if (await finish.isVisible()) await finish.click();
+    await expect(approve.or(choose)).toBeVisible({ timeout: 60_000 });
+    if (await approve.isVisible()) await approve.click();
+    await choose.click({ timeout: 90_000 });
+    const words = page.getByTestId("onboarding-recovery-key-display").locator("li");
+    await expect(words).toHaveCount(24);
+    const recoveryKey = (await words.allTextContents()).map(word => word.trim()).join(" ");
+    const downloaded = page.waitForEvent("download");
+    await page.getByTestId("onboarding-download-recovery-key").click();
+    await (await downloaded).path();
+    await page.getByTestId("onboarding-recovery-key-confirm").fill(recoveryKey);
+    const registration = page.waitForResponse(response =>
+      new URL(response.url()).pathname.endsWith("/_arkret/gate/account/register")
+      && response.request().method() === "POST", { timeout: 120_000 });
+    await page.getByTestId("onboarding-bind-identity").click();
+    const accepted = await registration;
+    expect(accepted.status(), "browser-owned identity registration is accepted").toBe(200);
+    const outcome = await accepted.json();
+    expect(outcome.principal_id).toMatch(/^ak:did_core:/);
+    expect(outcome.issued_session?.device_id).toMatch(/^ak:device:/);
+    user.id = outcome.principal_id;
+    user.deviceId = outcome.issued_session.device_id;
+    const resolutionUrl = new URL(`${colandBaseUrl()}/_arkret/open/principals/${encodeURIComponent(user.id)}/resolution`);
+    resolutionUrl.searchParams.set("station_id", colandServiceId());
+    const resolutionResponse = await request.get(resolutionUrl.toString());
+    expect(resolutionResponse.status()).toBe(200);
+    const resolution = await resolutionResponse.json() as PublicPrincipalResolution;
+    expect(resolution.account_id).toEqual(outcome.issued_session.account_id);
+    user.did = resolution.resolution_projection.did;
+    await expect(page.getByTestId("onboarding-complete")).toBeVisible({ timeout: 120_000 });
+    await page.getByTestId("onboarding-complete").getByRole("link", { name: "Continue", exact: true }).click();
+    await expect(page.getByTestId("client-shell")).toBeVisible({ timeout: 90_000 });
+    // The restored shell can precede connect and signer activation. A fresh
+    // account's first accepted stream cursor proves that bootstrap has ended.
+    await expect(page.getByTestId("status-label")).toHaveText("Online", { timeout: 90_000 });
+    await expect(page.getByTestId("sync-cursor")).toContainText("ak:cursor:", { timeout: 90_000 });
+    return { user, page: joint };
+  } catch (error) {
+    await joint.close();
+    throw error;
+  }
 }
 
 export async function openDpopUserPageForAccount(
