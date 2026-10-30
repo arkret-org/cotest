@@ -230,6 +230,111 @@ class NativeOperationStatusTests(unittest.TestCase):
                               declarations=self.declarations)
         self.assertIn("invalid_run_root", result["diagnostics"])
 
+    def preflight_only(self, code=101, unchanged=True):
+        for name in ("native-result.json", "native-sources.json", "native.log", "coverage.json"):
+            (self.run / name).unlink(missing_ok=True)
+        result = {"command": [PRIVATE, "-B", PRIVATE], "exit_code": code,
+                  "seconds": 1.25, "sources_unchanged": unchanged,
+                  "source_fence": "service-isolation-sources.json",
+                  "log": "service-isolation.log", "target_directory": PRIVATE}
+        self.write("service-isolation-result.json", result)
+        self.write("service-isolation-sources.json", {PRIVATE: "a" * 64})
+        (self.run / "service-isolation.log").write_bytes(PRIVATE.encode() + b"\xff\x00")
+        return result
+
+    def assert_no_native_credit(self, result):
+        self.assertFalse(result["export_complete"])
+        self.assertFalse(result["native_execution_complete"])
+        for field in ("native", "counts", "coverage"):
+            self.assertIsNone(result[field])
+        self.assertEqual([row["status"] for row in result["tests"]], ["not_observed"] * 13)
+        self.assertEqual([row["status"] for row in result["meta_tests"]], ["not_observed"] * 2)
+
+    def test_preflight_failure_exports_only_typed_facts_and_hashes(self):
+        self.preflight_only()
+        result = self.publish()
+        self.assert_no_native_credit(result)
+        expected = {"stage": "service_isolation", "exit_code": 101,
+                    "sources_unchanged": True, "seconds": 1.25}
+        for field, name in (("result_sha256", "service-isolation-result.json"),
+                            ("source_fence_sha256", "service-isolation-sources.json"),
+                            ("log_sha256", "service-isolation.log")):
+            expected[field] = hashlib.sha256((self.run / name).read_bytes()).hexdigest()
+        self.assertEqual(result["preflight"], expected)
+        self.assertEqual(result["preflight_diagnostics"], [])
+        self.assertEqual(result["status"], "incomplete")
+        real_publish = publisher.publish
+        def isolated(run_root, output_dir):
+            return real_publish(run_root, output_dir, artifacts_root=self.artifacts,
+                                declarations=self.declarations)
+        capture = io.StringIO()
+        with patch.object(publisher, "publish", side_effect=isolated), contextlib.redirect_stdout(capture):
+            code = publisher.main(["--run-root", str(self.run), "--output-dir", str(self.root / "preflight-cli")])
+        self.assertEqual(code, 1)
+        self.assertNotIn(PRIVATE, capture.getvalue())
+
+    def test_preflight_success_or_source_change_never_infers_a_native_outcome(self):
+        for index, (code, unchanged) in enumerate(((0, True), (0, False), (124, False))):
+            self.preflight_only(code, unchanged)
+            result = self.publish(f"preflight-scalars-{index}")
+            self.assert_no_native_credit(result)
+            self.assertEqual(result["preflight"]["exit_code"], code)
+            self.assertIs(result["preflight"]["sources_unchanged"], unchanged)
+            self.assertEqual(result["status"], "incomplete")
+            self.assertNotIn("failed_stage", result)
+
+    def test_preflight_malformed_results_never_export_private_values(self):
+        original = self.preflight_only()
+        corruptions = [dict(original, **{key: value}) for key, value in (
+            ("exit_code", True), ("exit_code", 1.5), ("sources_unchanged", PRIVATE),
+            ("seconds", True), ("seconds", float("nan")), ("seconds", 10 ** 1000),
+            ("log", "../" + PRIVATE), ("source_fence", "../" + PRIVATE), ("message", PRIVATE))]
+        for index, value in enumerate(corruptions):
+            self.write("service-isolation-result.json", value)
+            result = self.publish(f"preflight-invalid-{index}")
+            self.assert_no_native_credit(result)
+            self.assertIsNone(result["preflight"])
+            self.assertEqual(result["preflight_diagnostics"], ["unavailable_service_isolation"])
+        (self.run / "service-isolation-result.json").write_bytes(b'{"exit_code":0,"exit_code":101}')
+        self.assertIsNone(self.publish("preflight-duplicate")["preflight"])
+        self.write("service-isolation-result.json", original)
+        self.write("service-isolation-sources.json", {PRIVATE: PRIVATE})
+        self.assertIsNone(self.publish("preflight-invalid-fence")["preflight"])
+
+    def test_preflight_missing_linked_or_unresolvable_inputs_fail_closed(self):
+        self.preflight_only()
+        for index, name in enumerate(("service-isolation-result.json", "service-isolation-sources.json",
+                                      "service-isolation.log")):
+            path = self.run / name
+            original = path.read_bytes()
+            path.unlink()
+            self.assertIsNone(self.publish(f"preflight-missing-{index}")["preflight"])
+            path.write_bytes(original)
+        log = self.run / "service-isolation.log"
+        hardlink = self.root / "private-hardlink"
+        os.link(log, hardlink)
+        try:
+            self.assertIsNone(self.publish("preflight-hardlink")["preflight"])
+        finally:
+            hardlink.unlink()
+        original_resolve = Path.resolve
+        def raising(path, *args, **kwargs):
+            if path == log:
+                raise RuntimeError("Symlink loop " + PRIVATE)
+            return original_resolve(path, *args, **kwargs)
+        with patch.object(Path, "resolve", autospec=True, side_effect=raising):
+            self.assertIsNone(self.publish("preflight-resolve-loop")["preflight"])
+
+    def test_preflight_cannot_override_existing_native_execution_or_coverage(self):
+        baseline = self.publish("native-baseline")
+        self.write("service-isolation-result.json", {"message": PRIVATE})
+        result = self.publish("native-optional-preflight")
+        for field in ("native", "counts", "coverage", "status", "export_complete",
+                      "native_execution_complete", "tests", "meta_tests", "diagnostics"):
+            self.assertEqual(result[field], baseline[field])
+        self.assertIsNone(result["preflight"])
+        self.assertEqual(result["preflight_diagnostics"], [])
+
     def failure_phase(self):
         source = (publisher.REPO / publisher.MLS_SOURCE).read_bytes()
         lines = source.decode("utf-8").splitlines()

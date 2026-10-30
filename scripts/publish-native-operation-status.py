@@ -143,6 +143,31 @@ def native_facts(value):
     return {"exit_code": code, "sources_unchanged": unchanged, "seconds": seconds}
 
 
+def service_isolation_facts(root):
+    # These are diagnostics for a run that never produced native results.
+    # Private commands, paths, source maps and log contents never leave here.
+    raw = read_file(root / "service-isolation-result.json", root, MAX_JSON)
+    value = decode_json(raw)
+    fields = {"command", "exit_code", "seconds", "sources_unchanged",
+              "source_fence", "log", "target_directory"}
+    if not isinstance(value, dict) or set(value) != fields:
+        raise ValueError("invalid preflight result")
+    code, unchanged, seconds = value["exit_code"], value["sources_unchanged"], value["seconds"]
+    if type(code) is not int or not -65535 <= code <= 4294967295 or type(unchanged) is not bool:
+        raise ValueError("invalid preflight result types")
+    if type(seconds) not in (int, float) or not 0 <= seconds <= 86400 or not math.isfinite(seconds):
+        raise ValueError("invalid preflight duration")
+    if value["log"] != "service-isolation.log" or value["source_fence"] != "service-isolation-sources.json":
+        raise ValueError("unexpected preflight input reference")
+    sources = read_file(root / "service-isolation-sources.json", root, MAX_JSON)
+    validate_sources(decode_json(sources))
+    log = read_file(root / "service-isolation.log", root, MAX_LOG)
+    return {"stage": "service_isolation", "exit_code": code, "sources_unchanged": unchanged,
+            "seconds": seconds, "result_sha256": hashlib.sha256(raw).hexdigest(),
+            "source_fence_sha256": hashlib.sha256(sources).hexdigest(),
+            "log_sha256": hashlib.sha256(log).hexdigest()}
+
+
 def log_status(data: bytes):
     text = data.decode("utf-8-sig", errors="strict")
     text = re.sub(r"\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)", "", text)
@@ -245,7 +270,8 @@ def publish(run_root: Path, output_dir: Path, *, artifacts_root=ARTIFACTS, decla
         raise ValueError("unsafe public output")
     summary = {"status": "incomplete", "export_complete": False, "native_execution_complete": False,
                "native": None, "tests": [], "meta_tests": [], "counts": None,
-               "coverage": None, "hashes": {}, "diagnostics": [], "failure_phases": []}
+               "coverage": None, "hashes": {}, "diagnostics": [], "failure_phases": [],
+               "preflight": None, "preflight_diagnostics": []}
     found = {}
     try:
         root = confined(run_root, artifacts_root)
@@ -311,6 +337,13 @@ def publish(run_root: Path, output_dir: Path, *, artifacts_root=ARTIFACTS, decla
             summary["failure_phases"].append(mls_failure_phase(root, values.get("native-sources.json")))
         except (ValueError, OSError, KeyError, TypeError, RecursionError, OverflowError):
             summary["diagnostics"].append("unavailable_mls_failure_phase")
+    # A successful preflight does not establish where later work stopped, and
+    # neither valid nor unavailable auxiliary facts change native gate credit.
+    if root is not None and native is None:
+        try:
+            summary["preflight"] = service_isolation_facts(root)
+        except (ValueError, OSError, KeyError, TypeError, RecursionError, OverflowError):
+            summary["preflight_diagnostics"].append("unavailable_service_isolation")
     output.mkdir(parents=True, exist_ok=False)
     (output / "summary.json").write_text(json.dumps(summary, indent=2) + "\n", encoding="utf-8")
     return summary
