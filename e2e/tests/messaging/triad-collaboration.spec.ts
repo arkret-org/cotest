@@ -234,7 +234,7 @@ test.describe("single-server triad collaboration", () => {
   // sets redacted=true → chat-redacted-tombstone) so alice renders the tombstone
   // on reload, not just bob's optimistic local redact.
   test(
-    "alice + bob + carol drive space lifecycle, mutual messaging, late-join history visibility, and redact tombstone",
+    "alice + bob + carol drive space lifecycle, mutual messaging, late-join history visibility, and redact tombstone @community-collaboration-gate",
     async ({
     browser,
     request,
