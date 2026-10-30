@@ -234,7 +234,7 @@ test.describe("single-server triad collaboration", () => {
   // sets redacted=true → chat-redacted-tombstone) so alice renders the tombstone
   // on reload, not just bob's optimistic local redact.
   test(
-    "alice + bob + carol drive space lifecycle, mutual messaging, late-join history visibility, and redact tombstone",
+    "alice + bob + carol drive space lifecycle, mutual messaging, late-join history visibility, and redact tombstone @community-collaboration-gate",
     async ({
     browser,
     request,
@@ -242,7 +242,7 @@ test.describe("single-server triad collaboration", () => {
     // Three real logins, four sealed grants, three navigations per member,
     // and the complete edit/redact flow share this budget. Each convergence
     // assertion retains its own shorter bound.
-    test.setTimeout(540_000);
+    test.setTimeout(660_000);
     const stamp = Date.now();
     const [aliceFlow, bobFlow, carolFlow] = await Promise.all([
       openDpopUserPage(browser, request, "s1-alice"),
@@ -264,6 +264,8 @@ test.describe("single-server triad collaboration", () => {
     const m2 = `M2 bob reply ${stamp}`;
     const m2Edited = `${m2} (edited)`;
     const m3 = `M3 welcome carol ${stamp}`;
+    const refusedBody = `Bob refused before message capability ${stamp}`;
+    const approvedBody = `Bob accepted after message capability ${stamp}`;
 
     try {
       // Phase A — alice creates space, seed-invites bob; bob accepts.
@@ -279,11 +281,42 @@ test.describe("single-server triad collaboration", () => {
       await stepShot(alicePage.page, testInfo, "A-alice-space-created");
 
       await bobPage.acceptInvite(realmId);
+      await bobPage.gotoTimelineRealm(realmId);
+      await bobPage.page.getByTestId("chat-input").fill(refusedBody);
+      await expect(bobPage.page.getByTestId("send-chat-button")).toBeEnabled({
+        timeout: 90_000,
+      });
+      await bobPage.page.getByTestId("send-chat-button").click();
+      const refusedEvent = bobPage.timelineEvent(refusedBody);
+      await expect(refusedEvent.getByTestId("message-send-status")).toHaveAttribute(
+        "title", "Message send failed", { timeout: 90_000 },
+      );
+      await expect(bobPage.page.getByTestId("chat-input")).toHaveValue(refusedBody);
+      // This helper performs a full document navigation, retaining only the
+      // durable account store rather than the optimistic component state.
+      await bobPage.gotoTimelineRealm(realmId);
+      await expect(refusedEvent.getByTestId("message-send-status")).toHaveAttribute(
+        "title", "Message send failed", { timeout: 90_000 },
+      );
+      await expect(refusedEvent.locator('[data-send-state="sending"]')).toHaveCount(0);
+      await alicePage.gotoTimelineRealm(realmId);
+      await expect(alicePage.timelineEvent(refusedBody)).toHaveCount(0);
+      await stepShot(bobPage.page, testInfo, "A-refused-message-cold-recovery");
       await alicePage.grantRealmCapability(
         realmId,
         bobFlow.session.accountId,
         "ak.message.create",
       );
+      await bobPage.sendTimelineMessage(realmId, approvedBody);
+      await alicePage.gotoTimelineRealm(realmId);
+      await expect(alicePage.timelineEvent(approvedBody)).toBeVisible({ timeout: 90_000 });
+      await expect(alicePage.timelineEvent(refusedBody)).toHaveCount(0);
+      await bobPage.gotoTimelineRealm(realmId);
+      await bobPage.waitForTimelineEventSettled(approvedBody);
+      await expect(refusedEvent.getByTestId("message-send-status")).toHaveAttribute(
+        "title", "Message send failed", { timeout: 90_000 },
+      );
+      await expect(refusedEvent.locator('[data-send-state="sending"]')).toHaveCount(0);
       await alicePage.grantRealmCapability(
         realmId,
         bobFlow.session.accountId,
@@ -342,6 +375,8 @@ test.describe("single-server triad collaboration", () => {
       // carol sees nothing posted before she became a member.
       await expect(carolPage.timelineEvent(m1)).toHaveCount(0);
       await expect(carolPage.timelineEvent(m2Edited)).toHaveCount(0);
+      await expect(carolPage.timelineEvent(approvedBody)).toHaveCount(0);
+      await expect(carolPage.timelineEvent(refusedBody)).toHaveCount(0);
       await stepShot(carolPage.page, testInfo, "C-carol-pre-join-hidden");
 
       // Phase D — post-join message reaches all three.

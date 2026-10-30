@@ -353,7 +353,7 @@ $script:UseManagedCoauthAssertionKey = [bool]($StartCoauth -and -not $CoauthComm
 # neither list stops the run rather than letting the resource decision below
 # guess. `inkson-build-id` is absent on purpose: it is a setup project that the
 # browser projects pull in through `dependencies`, never selected directly.
-$script:BrowserPlaywrightProjects = @("chrome", "chromium", "joint-inkson")
+$script:BrowserPlaywrightProjects = @("chrome", "chromium", "joint-inkson", "joint-collaboration")
 $script:BrowserlessPlaywrightProjects = @("joint-api")
 
 function Resolve-PlaywrightProjects {

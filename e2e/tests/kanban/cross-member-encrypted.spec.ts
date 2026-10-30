@@ -1548,8 +1548,8 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
   });
   }
 
-  for (const fault of [undefined, "commit-response-lost", "welcome-before-durable", "welcome-response-lost", "retryable-unavailable", "private-state-blocked", "late-transition-tail", "card-before-send", "card-create-response-lost", "card-move-response-lost", "station-restart", "member-leave", "member-revoke", "history-after-501", "requests-websocket", "requests-http-fallback"] as const) {
-    test("bob joins an MLS-encrypted realm and decrypts alice's encrypted card content; survives reload; bob's own card projects back to alice" + (fault ? `; recovers ${fault}` : ""), async ({
+  for (const fault of [undefined, "commit-response-lost", "welcome-before-durable", "welcome-response-lost", "retryable-unavailable", "private-state-blocked", "late-transition-tail", "card-before-send", "card-create-response-lost", "card-move-response-lost", "station-restart", "member-leave", "member-revoke", "history-after-501", "requests-websocket", "requests-http-fallback", "calendar-location"] as const) {
+    test("bob joins an MLS-encrypted realm and decrypts alice's encrypted card content; survives reload; bob's own card projects back to alice" + (fault === "calendar-location" ? "; encrypted calendar location survives member cold recovery" : fault ? `; recovers ${fault}` : "") + (!fault || fault === "calendar-location" ? " @community-collaboration-gate" : ""), async ({
       browser,
       request,
     }, testInfo) => {
@@ -1679,8 +1679,24 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
         // Bob now completes the atomic PCR create + founding-device authorization.
         // This publishes his real event-signer KeyPackage after the invite already
         // exists, exercising the deferred Welcome reconciliation path.
+        let bobPrejoinOriginalReads = 0;
         const bobFlow = await openDpopUserPageFromSession(browser, bobSession,
-          { beforeNavigate: async page => { costs.push({ reader: "bob", cost: observeRequestCost(page) }); } });
+          { beforeNavigate: async page => {
+            costs.push({ reader: "bob", cost: observeRequestCost(page) });
+            // A since-join member recovers from signed current and its Welcome,
+            // not the creator's position-zero original. Observe the real scan
+            // without intercepting or replacing any authority response.
+            page.on("request", request => {
+              if (request.method() !== "POST"
+                  || new URL(request.url()).pathname !== "/_arkret/self/streams/scan") return;
+              const body = request.postDataJSON();
+              if (body?.realm_id === realmId && body?.stream_ref?.kind === "realm"
+                  && body.stream_ref.realm_id === realmId
+                  && body.before_position === 1 && body.limit === 1) {
+                bobPrejoinOriginalReads += 1;
+              }
+            });
+          } });
         expect(bobFlow).toBeTruthy();
         bobPage = bobFlow!.page;
         await bobPage.completeRecoveryKeySetupIfPrompted();
@@ -1897,6 +1913,53 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
         await assertCardDecrypts(bobPage, aliceCard, aliceDescription);
         await assertE2eeStorageIsHardened(bobPage.page, [aliceDescription]);
         await stepShot(bobPage.page, testInfo, "C-bob-card-survives-reload");
+        expect(bobPrejoinOriginalReads,
+          "late-member decrypt and reload must not depend on the prejoin founding original (Inkson #37)")
+          .toBe(0);
+
+        if (fault === "calendar-location") {
+          const location = `Private community entrance ${stamp}`;
+          const openCalendar = async (reader: JointUserPage) => {
+            await dismissRecoveryNags(reader);
+            await reader.page.getByTestId("kanban-card").filter({hasText: aliceCard}).first().click();
+            const detail = reader.page.getByTestId("card-detail-modal");
+            await expect(detail).toBeVisible();
+            return detail.getByTestId("card-detail-calendar");
+          };
+          await openReaderBoard(alicePage, realmId, boardId);
+          await assertCardDecrypts(alicePage, aliceCard, aliceDescription);
+          const creatorCalendar = await openCalendar(alicePage);
+          await creatorCalendar.getByTestId("card-detail-edit-calendar-button").click();
+          const editor = alicePage.page.getByTestId("card-detail-calendar-editor-dialog");
+          await expect(editor).toBeVisible();
+          await editor.getByTestId("card-detail-calendar-start-input").fill("2026-10-31T13:20:00");
+          await editor.getByTestId("card-detail-calendar-end-input").fill("2026-10-31T16:30:00");
+          await editor.getByTestId("card-detail-calendar-timezone-input").fill("Asia/Shanghai");
+          await editor.getByTestId("card-detail-calendar-location-input").fill(location);
+          const write = alicePage.page.waitForResponse(response => {
+            if (response.request().method() !== "POST" ||
+                new URL(response.url()).pathname !== "/_arkret/self/events") return false;
+            const event = response.request().postDataJSON()?.event;
+            return event?.realm_id === realmId && event?.kind === "ak.strand.update";
+          }, {timeout: 120_000});
+          await editor.getByTestId("card-detail-save-button").click();
+          const response = await write;
+          expect(response.status(), await response.text()).toBeLessThan(400);
+          expect(response.request().postData()).not.toContain(location);
+          await expect(creatorCalendar).toContainText(location, {timeout: 90_000});
+          const memberCalendar = await openCalendar(bobPage);
+          await expect(memberCalendar).toContainText(location, {timeout: 90_000});
+          await bobPage.page.reload({waitUntil: "domcontentloaded"});
+          await readyReaderBoard(bobPage, boardId);
+          await assertCardDecrypts(bobPage, aliceCard, aliceDescription);
+          await openCalendar(bobPage);
+          await expect(memberCalendar).toContainText(location, {timeout: 90_000});
+          await assertE2eeStorageIsHardened(bobPage.page, [aliceDescription, location]);
+          expect(bobPrejoinOriginalReads).toBe(0);
+          await stepShot(bobPage.page, testInfo, "C-member-decrypted-calendar-location-after-reload");
+          await bobPage.page.getByTestId("card-detail-close-button").click();
+          await alicePage.page.getByTestId("card-detail-close-button").click();
+        }
 
         if (fault === "late-transition-tail") {
           const carolSession = await createDpopUserSession(request, "xmenc-carol");

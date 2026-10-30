@@ -741,6 +741,20 @@ jobs:
           -RequireScenario "identity/oidc-login-flow.spec.ts"
           -ForbidSkippedTests
 
+      - name: Run real multi-user collaboration regressions
+        working-directory: cotest
+        shell: pwsh
+        run: >
+          ./scripts/run-joint-e2e.ps1
+          -ColandRuntime docker
+          -ColandImage cotest-coland:pr-${{ github.run_id }}
+          -StartCoauth
+          -RunProfile joint-smoke
+          -PlaywrightProject joint-collaboration
+          -Grep "@community-collaboration-gate"
+          -RequireScenario "messaging/triad-collaboration.spec.ts,kanban/cross-member-encrypted.spec.ts,joint/encrypted-attachment-two-device.spec.ts"
+          -ForbidSkippedTests
+
       - name: Restore Linux hosts permissions
         if: always() && steps.joint_prerequisites.outcome != 'skipped' && steps.joint_prerequisites.outcome != ''
         run: bash cotest/scripts/prepare-linux-joint-e2e.sh restore
