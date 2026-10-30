@@ -385,8 +385,8 @@ async fn run_at_two_stations(
     };
     let x = group.server(0);
     let y = group.server(1);
-    let alice = Member::provision(x, &coauth, "message-mls-alice", ALICE_DEVICE).await?;
-    let bob = Member::provision(y, &coauth, "message-mls-bob", BOB_DEVICE).await?;
+    let mut alice = Member::provision(x, &coauth, "message-mls-alice", ALICE_DEVICE).await?;
+    let mut bob = Member::provision(y, &coauth, "message-mls-bob", BOB_DEVICE).await?;
     let realm =
         create_realm_with_join_rule(&alice.client, "Message MLS two Stations", "invite", &[x, y])
             .await?;
@@ -594,6 +594,21 @@ async fn run_at_two_stations(
                 false,
             )
             .await?;
+        // The completed observer owned and dropped its native hosts. Reauthenticate
+        // the same accepted Devices before the next phase opens new hosts; this
+        // creates distinct fixture-ledger records, never extends old expiry or
+        // claims to exercise the production Account Authority refresh operation.
+        alice.client = x
+            .reissue_mock_native_host_session(&alice.client, &coauth)
+            .await
+            .context("reauthenticate the sender between completed Call phases")?;
+        bob.client = y
+            .reissue_mock_native_host_session(&bob.client, &coauth)
+            .await
+            .context("reauthenticate the holder between completed Call phases")?;
+        eprintln!(
+            "[consent-call] phase=material_recovery_reauthentication distinct_mock_grants=2 predecessor_expiry_unchanged=1"
+        );
         let material_relay = group.server_mut(1).install_scan_gap_relay().await?;
         observer
             .observe_material_recovery(
