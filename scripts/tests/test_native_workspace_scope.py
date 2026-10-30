@@ -1,11 +1,13 @@
-"""Synthetic complete-build and receipt regressions; no subprocess or files."""
+"""Synthetic complete-build/receipt and local cost-file regressions; no subprocess."""
 
 import copy
 import hashlib
 import importlib.util
 import json
 from pathlib import Path
+import tempfile
 import unittest
+from unittest.mock import patch
 
 
 _SPEC = importlib.util.spec_from_file_location(
@@ -97,9 +99,14 @@ class PlanTests(unittest.TestCase):
         self.assertEqual(len(plan["compile_only_examples"]), 1)
         names = [r for r in plan["native_targets"] if r["identity"]["name"] == "same_test_name"]
         self.assertEqual(len({r["identity_sha256"] for r in names}), 2)
-        for row in plan["native_targets"]:
-            expected = 0 if row["identity"]["name"] in scope._PROVISION else int(row["identity_sha256"], 16) % 4
-            self.assertEqual(row["assigned_shard"], expected)
+        expected = {("one", "test", "agent_provision_production"): 0,
+                    ("one", "test", "agent_vectors_production"): 0,
+                    ("two", "test", "same_test_name"): 1,
+                    ("one", "bin", "tool"): 2, ("one", "lib", "shared_lib"): 3,
+                    ("one", "test", "same_test_name"): 1, ("two", "lib", "shared_lib"): 2}
+        self.assertEqual({(r["identity"]["package"], r["identity"]["kind"][0],
+                           r["identity"]["name"]): r["assigned_shard"]
+                          for r in plan["native_targets"]}, expected)
         for row in plan["doctest_targets"]:
             self.assertTrue(row["src_path"].startswith(row["package_manifest_dir"] + "/"))
             self.assertEqual(row["identity"]["version"], "0.3.0")
@@ -279,6 +286,157 @@ class AggregateTests(unittest.TestCase):
             mutation(docs)
             with self.subTest(mutation=mutations.index(mutation)), self.assertRaises(ValueError):
                 scope.validate_aggregate(self.plans, self.native, docs)
+
+
+class CostAllocationTests(unittest.TestCase):
+    def setUp(self):
+        self.policy = scope._load_cost_policy()
+
+    @staticmethod
+    def row(name):
+        identity = {"package": "synthetic", "version": "0.3.0", "kind": ["test"],
+                    "name": name, "source": f"tests/{name}.rs"}
+        return {"identity": identity, "identity_sha256": scope._digest(identity)}
+
+    def test_positive_unknown_cost_and_fixed_ties_not_input_order(self):
+        rows = [self.row(name) for name in ("alpha", "beta", "gamma", "delta")]
+        self.assertTrue(all(r["identity_sha256"] not in self.policy["weights"] for r in rows))
+        ordered = sorted(rows, key=lambda r: r["identity_sha256"])
+        # Four equal positive costs fill shard 0,1,2 then choose 0 again.
+        expected = {r["identity_sha256"]: shard for r, shard in zip(ordered, (0, 1, 2, 0))}
+        self.assertEqual(scope._assign_native_targets(rows, 3), expected)
+        self.assertEqual(scope._assign_native_targets(list(reversed(rows)), 3), expected)
+
+    def test_cost_descending_places_larger_work_first(self):
+        rows = [self.row(name) for name in ("large", "medium", "small")]
+        policy = copy.deepcopy(self.policy)
+        policy["weights"].update({r["identity_sha256"]: weight
+                                  for r, weight in zip(rows, (9, 5, 4))})
+        with patch.object(scope, "_load_cost_policy", return_value=scope._validate_cost_policy(policy)):
+            self.assertEqual(scope._assign_native_targets(rows, 2),
+                             {r["identity_sha256"]: shard for r, shard in zip(rows, (0, 1, 1))})
+
+    def test_equal_load_uses_index_even_when_it_has_more_targets(self):
+        rows = sorted([self.row(f"tie_{i}") for i in range(7)], key=lambda r: r["identity_sha256"])
+        policy = copy.deepcopy(self.policy)
+        policy["weights"].update({r["identity_sha256"]: weight
+                                  for r, weight in zip(rows, (7, 4, 3, 3, 1, 1, 1))})
+        with patch.object(scope, "_load_cost_policy", return_value=scope._validate_cost_policy(policy)):
+            # Before the last item, loads are 7/6/6 and counts are 1/3/2.
+            # The required tie is index 1, even though index 2 has fewer items.
+            self.assertEqual(scope._assign_native_targets(rows, 3),
+                             {r["identity_sha256"]: shard
+                              for r, shard in zip(rows, (0, 1, 2, 2, 1, 1, 1))})
+
+    def test_reserved_audit_is_singleton_and_both_provisions_stay_zero(self):
+        reserved = self.policy["provenance"]["capacity_reservation"]
+        rows = [self.row(name) for name in sorted(scope._PROVISION)]
+        rows += [{"identity": reserved["identity"], "identity_sha256": reserved["identity_sha256"]}]
+        rows += [self.row(f"unknown_{i}") for i in range(6)]
+        assigned = scope._assign_native_targets(rows, 8)
+        self.assertTrue(all(assigned[r["identity_sha256"]] == 0 for r in rows[:2]))
+        self.assertEqual(assigned[reserved["identity_sha256"]], 1)
+        self.assertEqual(sum(shard == 1 for shard in assigned.values()), 1)
+        drifted = copy.deepcopy(rows)
+        drifted[2]["identity"]["version"] = "0.4.0"
+        drifted[2]["identity_sha256"] = scope._digest(drifted[2]["identity"])
+        with self.assertRaisesRegex(ValueError, "capacity target identity needs review"):
+            scope._assign_native_targets(drifted, 8)
+
+    def test_invalid_cost_policy_is_not_silently_replaced(self):
+        key = next(iter(self.policy["weights"]))
+        changes = [lambda p: p.update(schema_version=True),
+                   lambda p: p.update(algorithm="hash-modulo"),
+                   lambda p: p.update(default_unknown_weight=0),
+                   lambda p: p.update(default_unknown_weight=True),
+                   lambda p: p.update(extra="unreviewed"),
+                   lambda p: p.update(weights={}),
+                   lambda p: p["weights"].update({key: 0}),
+                   lambda p: p["weights"].update({key: -1}),
+                   lambda p: p["weights"].update({key: 1.5}),
+                   lambda p: p["weights"].update({key: True}),
+                   lambda p: p["weights"].update({"not-an-identity": 3}),
+                   lambda p: p["provenance"].update(failed_observations_are_lower_bounds=False),
+                   lambda p: p["provenance"]["historical_observation"].update(runtime_execution_credit=True),
+                   lambda p: p["provenance"]["capacity_reservation"].update(identity_sha256="f" * 64),
+                   lambda p: p["provenance"]["capacity_reservation"].update(weight=1)]
+        for change in changes:
+            invalid = copy.deepcopy(self.policy)
+            change(invalid)
+            with self.subTest(change=changes.index(change)), self.assertRaises(ValueError):
+                scope._validate_cost_policy(invalid)
+
+    def test_missing_malformed_duplicate_or_non_utf8_cost_file_fails_closed(self):
+        with tempfile.TemporaryDirectory(prefix="native-cost-tests-") as directory:
+            path = Path(directory) / "costs.json"
+            with patch.object(scope, "_COST_PATH", path), self.assertRaises(ValueError):
+                make_plan()
+            key, value = next(iter(self.policy["weights"].items()))
+            valid = json.dumps(self.policy)
+            duplicate_id = valid.replace(f'"{key}": {value}',
+                                         f'"{key}": {value}, "{key}": {value}', 1)
+            for raw in (b"{", b"\xff", b'{"schema_version":1,"schema_version":1}',
+                        duplicate_id.encode("utf-8")):
+                path.write_bytes(raw)
+                with self.subTest(raw_length=len(raw)), patch.object(scope, "_COST_PATH", path):
+                    with self.assertRaises(ValueError):
+                        make_plan()
+
+    def test_public_plan_rechecks_changed_allocation_with_same_policy(self):
+        plan = make_plan()
+        public = scope.public_plan(plan)
+        self.assertEqual(len(public["native_targets"]), 7)
+        for row in plan["native_targets"]:
+            changed = copy.deepcopy(plan)
+            target = next(r for r in changed["native_targets"] if r["identity_sha256"] == row["identity_sha256"])
+            target["assigned_shard"] = (target["assigned_shard"] + 1) % 4
+            with self.subTest(identity=row["identity_sha256"]), self.assertRaises(ValueError):
+                scope.public_plan(changed)
+
+    def test_full_235_native_31_doc_scope_still_requires_all_eight_shards(self):
+        metadata, messages = fixture()
+        template_package = metadata["packages"][0]
+        template_target = template_package["targets"][0]
+        metadata["packages"] = []
+        metadata["workspace_members"] = []
+        messages = []
+        for index in range(31):
+            name = f"synthetic_{index:02}"
+            package = {**template_package, "name": name, "id": f"path:/work/cotest/{name}",
+                       "manifest_path": f"/work/cotest/crates/{name}/Cargo.toml", "targets": []}
+            kinds = [("lib", name)]
+            if index < 3:
+                kinds.append(("bin", f"tool_{index}"))
+            # 31 libraries + 3 binaries + 201 integration targets = 235.
+            kinds += [("test", f"case_{index}_{j}") for j in range(7 if index < 15 else 6)]
+            if index == 0:
+                kinds[2:4] = [("test", n) for n in sorted(scope._PROVISION)]
+                kinds.append(("example", "pg_evidence"))
+            for kind, target_name in kinds:
+                target = {**template_target, "kind": [kind], "name": target_name,
+                          "crate_types": ["lib" if kind == "lib" else "bin"],
+                          "src_path": f"/work/cotest/crates/{name}/{kind}/{target_name}.rs",
+                          "test": kind != "example", "doctest": kind == "lib", "doc": kind == "lib"}
+                package["targets"].append(target)
+                messages.append({"reason": "compiler-artifact", "package_id": package["id"],
+                                 "target": target, "profile": {"test": kind != "example"},
+                                 "features": ["default"],
+                                 "executable": f"/cache/target/debug/{name}-{target_name}"})
+            metadata["packages"].append(package)
+            metadata["workspace_members"].append(package["id"])
+        messages.append({"reason": "build-finished", "success": True})
+        private = scope.create_plan(metadata, messages, 8, REFS, file_sha256=hasher)
+        plans = [scope.public_plan({**private, "shard_index": i}) for i in range(8)]
+        native, docs = complete_receipts(plans)
+        result = scope.validate_aggregate(plans, native, docs)
+        self.assertEqual((result["native_targets"], result["native_completed_targets"],
+                          result["doctest_targets"], result["completed_doc_receipts"]), (235, 235, 31, 248))
+        self.assertEqual(len(native), 1880)
+        for receipts, other, is_native in ((native, docs, True), (docs, native, False)):
+            incomplete = receipts[:-1]
+            with self.subTest(native=is_native), self.assertRaises(ValueError):
+                scope.validate_aggregate(plans, incomplete if is_native else other,
+                                         other if is_native else incomplete)
 
 
 if __name__ == "__main__":
