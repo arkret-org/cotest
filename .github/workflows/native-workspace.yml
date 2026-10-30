@@ -46,6 +46,10 @@ jobs:
         - 1
         - 2
         - 3
+        - 4
+        - 5
+        - 6
+        - 7
     steps:
     - uses: actions/checkout@v4
       with:
@@ -215,7 +219,7 @@ jobs:
           --cargo-messages "$scope/build.jsonl" \
           cargo test --workspace --locked --no-fail-fast --no-run --message-format=json
         python -B scripts/run-native-workspace.py plan \
-          --metadata "$scope/metadata.json" --messages "$scope/build.jsonl" --shards 4 \
+          --metadata "$scope/metadata.json" --messages "$scope/build.jsonl" --shards 8 \
           --sources-json-env NATIVE_SOURCE_REFS --before-context "$scope/before-context.json" \
           --shard-index '${{ matrix.shard }}' --output "$scope/plan.json" \
           --github-env-file "$GITHUB_ENV"
