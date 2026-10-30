@@ -467,7 +467,7 @@ pub async fn run_agent_content_direct_interval_production()
         foreign
             .station
             .http()
-            .get(foreign.station.url("/_arkret/open/service"))
+            .get(foreign.station.url("/_arkret/describe"))
             .send()
             .await
             .is_err(),
