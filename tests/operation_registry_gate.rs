@@ -374,6 +374,297 @@ fn negative_routes_are_scoped_to_one_test_file_method_and_path() -> Result<()> {
     Ok(())
 }
 
+#[test]
+fn metadata_values_and_url_assertions_do_not_borrow_request_methods() -> Result<()> {
+    let temp = tempfile::tempdir()?;
+    let artifacts_root = temp.path().join("artifacts");
+    let classifications = temp.path().join("operation-product-private-paths.json");
+    let source_dir = temp.path().join("source");
+    write_minimal_artifacts(
+        &artifacts_root,
+        &[
+            (
+                "ak.self.blob.presign.v1",
+                "POST /_arkret/self/blob/presign",
+                "typed_response",
+                None,
+                None,
+            ),
+            (
+                "ak.self.blob.resource.get.v1",
+                "GET /_arkret/self/blob/get",
+                "typed_response",
+                None,
+                None,
+            ),
+        ],
+        &[
+            (
+                "POST",
+                "/_arkret/self/blob/presign",
+                "ak.self.blob.presign.v1",
+            ),
+            (
+                "GET",
+                "/_arkret/self/blob/get",
+                "ak.self.blob.resource.get.v1",
+            ),
+        ],
+    )?;
+    write_json(&classifications, &json!({"allowed": []}))?;
+    for (label, snippet, expected_paths, expected_failures) in [
+        (
+            "Describe base field construction",
+            r#"let gate_account_base_url = format!("{account_origin}/_arkret/gate/account"); Some(AccountAuthority { gate_account_base_url, extra: Default::default() });"#,
+            0,
+            0,
+        ),
+        (
+            "principal registration fixture field value",
+            r#"let fixture = principal_registration_fixture(json!({"gate_account_base_url": format!("{}/_arkret/gate/account", deployment.coauth.base_url())}))?;"#,
+            0,
+            0,
+        ),
+        (
+            "Describe exact metadata comparison",
+            "ensure!(\n metadata[\"account_authority\"][\"gate_account_base_url\"]\n == format!(\"{origin}/_arkret/gate/account\"),\n \"gate origin mismatch\");",
+            0,
+            0,
+        ),
+        (
+            "presign POST followed by URL.path GET assertion",
+            "let value = expect_json(controller.post(\"/_arkret/self/blob/presign\").json(&request), OK).await?;\nlet issued = issued(value)?;\nlet url = issued.url.parse()?; ensure!(url.path() == \"/_arkret/self/blob/get\", \"path\");",
+            2,
+            0,
+        ),
+        (
+            "an actual POST to the GET resource stays invalid",
+            r#"client.post("/_arkret/self/blob/get");"#,
+            1,
+            1,
+        ),
+        (
+            "same-line metadata cannot exempt a real unknown POST",
+            r#"let gate_account_base_url = format!("{origin}/_arkret/gate/account"); client.post("/_arkret/unknown"); Some(AccountAuthority { gate_account_base_url, extra: Default::default() });"#,
+            1,
+            1,
+        ),
+        (
+            "next-line metadata cannot exempt a real unknown POST",
+            "let gate_account_base_url = format!(\"{origin}/_arkret/gate/account\");\nclient.post(\"/_arkret/unknown\");\nSome(AccountAuthority { gate_account_base_url, extra: Default::default() });",
+            1,
+            1,
+        ),
+        (
+            "a nearby field name cannot exempt a request argument",
+            r#"let field = "gate_account_base_url"; client.post(format!("{origin}/_arkret/gate/account"));"#,
+            1,
+            1,
+        ),
+        (
+            "metadata beside a request in the same JSON expression",
+            r#"json!({"gate_account_base_url":format!("{origin}/_arkret/gate/account"), "result":client.post("/_arkret/unknown")});"#,
+            1,
+            1,
+        ),
+        (
+            "a metadata-named variable used as a bare request URL is not exempt",
+            "let gate_account_base_url = format!(\"{origin}/_arkret/gate/account\");\nclient.post(&gate_account_base_url);",
+            1,
+            1,
+        ),
+        (
+            "a same-line metadata-named variable request is not exempt",
+            r#"let gate_account_base_url = format!("{origin}/_arkret/gate/account"); client.post(gate_account_base_url.clone());"#,
+            1,
+            1,
+        ),
+        (
+            "a multiline canonical_post metadata-variable URL is not exempt",
+            "let gate_account_base_url = format!(\"{origin}/_arkret/gate/account\");\ncanonical_post(\n &client,\n &gate_account_base_url,\n &body);",
+            1,
+            1,
+        ),
+        (
+            "an unused metadata-named variable is not sufficient evidence",
+            r#"let gate_account_base_url = format!("{origin}/_arkret/gate/account");"#,
+            1,
+            1,
+        ),
+        (
+            "a real field consumer plus another request use is not exempt",
+            r#"let gate_account_base_url = format!("{origin}/_arkret/gate/account"); client.post(&gate_account_base_url); Some(AccountAuthority { gate_account_base_url, extra: Default::default() });"#,
+            1,
+            1,
+        ),
+        (
+            "a metadata JSON value cannot hide a nested bare POST",
+            r#"json!({"gate_account_base_url": client.post(format!("{origin}/_arkret/gate/account"))});"#,
+            1,
+            1,
+        ),
+        (
+            "a typed field expression call argument is not shorthand",
+            r#"let gate_account_base_url = format!("{origin}/_arkret/gate/account"); Some(AccountAuthority { issuer: canonical_post(&client, gate_account_base_url, body)?.build()?.url().clone(), extra: Default::default() });"#,
+            1,
+            1,
+        ),
+        (
+            "a typed named field value is not shorthand",
+            r#"let gate_account_base_url = format!("{origin}/_arkret/gate/account"); Some(AccountAuthority { origin: gate_account_base_url, extra: Default::default() });"#,
+            1,
+            1,
+        ),
+        (
+            "a typed field array expression is not shorthand",
+            r#"let gate_account_base_url = format!("{origin}/_arkret/gate/account"); Some(AccountAuthority { origin: [first, gate_account_base_url, last], extra: Default::default() });"#,
+            1,
+            1,
+        ),
+        (
+            "a quote in a block comment cannot hide an actual request use",
+            "let gate_account_base_url = format!(\"{origin}/_arkret/gate/account\");\n/* \"*/ client.post(&gate_account_base_url); let s = \"*/\";\nSome(AccountAuthority { gate_account_base_url, extra: Default::default() });",
+            1,
+            1,
+        ),
+        (
+            "a metadata descendant is not the Describe base value",
+            r#"let gate_account_base_url = format!("{origin}/_arkret/gate/account/unknown");"#,
+            1,
+            1,
+        ),
+    ] {
+        let file = "src/scenarios/probe.rs";
+        write_source(&source_dir, file, snippet)?;
+        let report = build_operation_registry_gate_report_from_paths(paths(
+            &artifacts_root,
+            &classifications,
+            source_root("cotest", &source_dir, file),
+        ))?;
+        assert_eq!(report.entries.len(), expected_paths, "{label}");
+        assert_eq!(
+            report.failed_entries().count(),
+            expected_failures,
+            "{label}"
+        );
+        assert_eq!(
+            validate_operation_registry_gate_report(&report).is_ok(),
+            expected_failures == 0,
+            "{label}"
+        );
+        if label == "presign POST followed by URL.path GET assertion" {
+            let assertion = report
+                .entries
+                .iter()
+                .find(|entry| entry.path == "/_arkret/self/blob/get")
+                .expect("the URL assertion still checks the registered path");
+            assert_eq!(assertion.method, None);
+        }
+        if label.contains("unknown POST")
+            || label == "an actual POST to the GET resource stays invalid"
+        {
+            assert_eq!(
+                report.failed_entries().next().unwrap().method.as_deref(),
+                Some("POST"),
+                "{label}"
+            );
+        }
+    }
+    Ok(())
+}
+
+#[test]
+fn canonical_post_retired_erase_requires_the_exact_negative_route_triple() -> Result<()> {
+    let temp = tempfile::tempdir()?;
+    let artifacts_root = temp.path().join("artifacts");
+    let classifications = temp.path().join("operation-product-private-paths.json");
+    let source_dir = temp.path().join("source");
+    write_minimal_artifacts(
+        &artifacts_root,
+        &[(
+            "ak.server.read.describe.v1",
+            "GET /_arkret/describe",
+            "typed_response",
+            None,
+            None,
+        )],
+        &[("GET", "/_arkret/describe", "ak.server.read.describe.v1")],
+    )?;
+    write_json(
+        &classifications,
+        &json!({
+            "allowed": [],
+            "negative_test_paths": [{
+                "source": "cotest", "source_file": "src/scenarios/security_rotation_live.rs",
+                "method": "POST", "path": "/_arkret/self/keys/backup-series/erase",
+                "reason": "This exact retired erase probe asserts 404/unrecognized_endpoint and an unchanged listing."
+            }]
+        }),
+    )?;
+    for (source, file, method, path, allowed) in [
+        (
+            "cotest",
+            "src/scenarios/security_rotation_live.rs",
+            "post",
+            "erase",
+            true,
+        ),
+        (
+            "coland",
+            "src/scenarios/security_rotation_live.rs",
+            "post",
+            "erase",
+            false,
+        ),
+        (
+            "cotest",
+            "src/scenarios/elsewhere.rs",
+            "post",
+            "erase",
+            false,
+        ),
+        (
+            "cotest",
+            "src/scenarios/security_rotation_live.rs",
+            "get",
+            "erase",
+            false,
+        ),
+        (
+            "cotest",
+            "src/scenarios/security_rotation_live.rs",
+            "post",
+            "other",
+            false,
+        ),
+    ] {
+        let snippet = format!(
+            "let foreign = canonical_{method}(\n &client_a,\n \"/_arkret/self/keys/backup-series/{path}\",\n &json!({{}}),\n)?.send().await?;"
+        );
+        write_source(&source_dir, file, &snippet)?;
+        let report = build_operation_registry_gate_report_from_paths(paths(
+            &artifacts_root,
+            &classifications,
+            source_root(source, &source_dir, file),
+        ))?;
+        assert_eq!(report.entries.len(), 1);
+        assert_eq!(
+            report.entries[0].method.as_deref(),
+            Some(if method == "post" { "POST" } else { "GET" })
+        );
+        assert_eq!(
+            validate_operation_registry_gate_report(&report).is_ok(),
+            allowed
+        );
+        assert_eq!(
+            report.entries[0].gate_status == OperationRegistryGateStatus::NegativeTest,
+            allowed
+        );
+        assert!(report.entries[0].operation_id.is_none());
+    }
+    Ok(())
+}
+
 fn paths(
     artifacts_root: &Path,
     product_private_path: &Path,
