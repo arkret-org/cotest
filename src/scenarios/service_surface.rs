@@ -98,13 +98,6 @@ pub async fn server_exposes_core_service_surface() -> Result<()> {
     Ok(())
 }
 
-/// Advertised JSON bundle members the live Station does not mount. Each is a
-/// false Describe claim (`service-surface.md` §3: only bundles the deployment
-/// really implements may be advertised, and a frozen bundle cannot drop a
-/// member). The set mirrors Coland's own ratchet and may only shrink.
-const KNOWN_ADVERTISED_UNMOUNTED: &[arkret_wire::ServiceOperationId] =
-    &[arkret_wire::ServiceOperationId::EdgeAppletManagedActorCommandAuthorV1];
-
 /// Advertised Station members served by the Account Authority of the same
 /// Station TCB. The deployment gateway routes pairing and issuer-ledger
 /// revocation to Coauth, so a bare Coland process does not mount them. The
@@ -213,15 +206,13 @@ pub async fn advertised_operations_are_mounted_and_selectable() -> Result<()> {
         }
     }
     unmounted.sort_by_key(|operation| operation.as_str());
-    let mut known = KNOWN_ADVERTISED_UNMOUNTED.to_vec();
-    known.sort_by_key(|operation| operation.as_str());
     anyhow::ensure!(
         refused.is_empty(),
         "advertised operations refused by the live selector: {refused:?}"
     );
     anyhow::ensure!(
-        unmounted == known,
-        "advertised but unmounted operations changed: {unmounted:?}"
+        unmounted.is_empty(),
+        "advertised operations must all be mounted: {unmounted:?}"
     );
     anyhow::ensure!(
         probed.contains(&arkret_wire::ServiceOperationId::PeerCommittedEventReadScanV1)
