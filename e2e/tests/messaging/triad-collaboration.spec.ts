@@ -287,11 +287,11 @@ test.describe("single-server triad collaboration", () => {
         timeout: 90_000,
       });
       await bobPage.page.getByTestId("send-chat-button").click();
-      await expect(bobPage.page.getByTestId("chat-input")).toHaveValue(refusedBody);
       const refusedEvent = bobPage.timelineEvent(refusedBody);
       await expect(refusedEvent.getByTestId("message-send-status")).toHaveAttribute(
         "title", "Message send failed", { timeout: 90_000 },
       );
+      await expect(bobPage.page.getByTestId("chat-input")).toHaveValue(refusedBody);
       // This helper performs a full document navigation, retaining only the
       // durable account store rather than the optimistic component state.
       await bobPage.gotoTimelineRealm(realmId);
