@@ -1639,6 +1639,7 @@ impl ArkretServer {
         };
         let health_url = self.base_url.join("health")?;
         let untrusted = HttpClient::builder()
+            .tls_certs_only(std::iter::empty::<reqwest::Certificate>())
             .connect_timeout(HARNESS_CONNECT_TIMEOUT)
             .timeout(HARNESS_CONNECT_TIMEOUT)
             .no_proxy()
