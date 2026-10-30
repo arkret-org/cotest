@@ -39,8 +39,22 @@ foreach ($name in @("Resolve-PlaywrightProjects", "Resolve-ClientKind", "Resolve
     Invoke-Expression $function[0].Extent.Text
 }
 
-$script:BrowserPlaywrightProjects = @("chrome", "chromium", "joint-inkson")
-$script:BrowserlessPlaywrightProjects = @("joint-api")
+foreach ($name in @("BrowserPlaywrightProjects", "BrowserlessPlaywrightProjects")) {
+    $assignment = @($ast.FindAll({
+        param($node)
+        $node -is [System.Management.Automation.Language.AssignmentStatementAst] -and
+        $node.Left.Extent.Text -eq ('$script:' + $name)
+    }, $true))
+    Assert-Equal 1 $assignment.Count "runner project registry must have one assignment"
+    Invoke-Expression $assignment[0].Extent.Text
+}
+
+$collaboration = @(Resolve-PlaywrightProjects -RunProfile "joint-smoke" `
+    -PlaywrightProject "joint-collaboration" -PlaywrightProjectWasExplicit $true)
+Assert-Equal 1 $collaboration.Count "collaboration lane selects exactly one browser project"
+Assert-Equal "joint-collaboration" $collaboration[0] "collaboration project selection"
+Assert-Equal $true (Resolve-InksonRequirement -PlaywrightProjects $collaboration `
+    -RunProfile "joint-smoke" -InksonArguments @{}) "collaboration must prepare the real Inkson test bundle"
 
 $projects = @(Resolve-PlaywrightProjects `
         -RunProfile "joint-api" `
