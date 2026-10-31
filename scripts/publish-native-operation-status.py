@@ -14,6 +14,7 @@ import math
 from pathlib import Path
 import re
 import stat
+import subprocess
 
 
 REPO = Path(__file__).resolve().parents[1]
@@ -263,6 +264,73 @@ def mls_failure_phase(root, sources):
     return value
 
 
+def compiler_primary_locations(data, sources):
+    """Advisory compiler-shaped observations; never error text or proof credit."""
+    validate_sources(sources)
+    text = data.decode("utf-8-sig", errors="strict")
+    text = re.sub(r"\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)", "", text)
+    text = re.sub(r"\x1b\[[0-?]*[ -/]*[@-~]", "", text)
+    if "\x00" in text or "\x1b" in text:
+        raise ValueError("invalid compiler observation")
+    lines = text.splitlines()
+    if any(len(line) > 65536 for line in lines):
+        raise ValueError("oversized compiler observation")
+    if any(re.match(r"(?:Running\b|running \d+ tests?\b|test\b)", line.lstrip()) for line in lines):
+        raise ValueError("runtime compiler observation")
+    records, seen, pending = [], set(), None
+    headers = 0
+
+    def finish():
+        if pending is None or pending["location"] is None:
+            return
+        source, line, column = pending["location"]
+        if source.startswith("/") or any(part in ("", ".", "..") for part in source.split("/")):
+            raise ValueError("unknown compiler source")
+        tracked = subprocess.run(
+            ["git", "--no-optional-locks", "-C", str(REPO), "ls-files", "--stage", "-z", "--", source],
+            stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, check=False, timeout=5,
+        )
+        expected = rb"(?:100644|100755) [0-9a-f]{40} 0\t" + re.escape(source.encode("ascii")) + b"\0"
+        if tracked.returncode != 0 or re.fullmatch(expected, tracked.stdout) is None:
+            raise ValueError("untracked compiler source")
+        raw = read_file(REPO / source, REPO, 512 * 1024)
+        digest = hashlib.sha256(raw).hexdigest()
+        if sources.get("cotest/" + source) != digest:
+            raise ValueError("changed compiler source")
+        source_lines = raw.decode("utf-8", errors="strict").splitlines()
+        if not 1 <= line <= len(source_lines) or not 1 <= column <= len(source_lines[line - 1]) + 1:
+            raise ValueError("unknown compiler position")
+        key = (pending["code"], pending["lint"], source, line, column, digest)
+        if key not in seen:
+            seen.add(key)
+            records.append({"reason": "compiler_primary_location_observed", "underlying_cause": "unknown",
+                            "code": pending["code"], "lint": pending["lint"], "source": source,
+                            "line": line, "column": column, "source_sha256": digest})
+            if len(records) > 4:
+                raise ValueError("too many compiler observations")
+
+    for value in lines:
+        header = re.fullmatch(r"error(?:\[(E[0-9]{4})\])?:[^\r\n]*", value)
+        if header:
+            headers += 1
+            if headers > 8:
+                raise ValueError("too many compiler headers")
+            finish()
+            pending = {"code": header[1], "lint": None, "location": None, "next_primary": True}
+            continue
+        if pending is None:
+            continue
+        if pending["next_primary"] and value.strip():
+            pending["next_primary"] = False
+            location = re.fullmatch(r"\s*-->\s+([A-Za-z0-9_./-]+\.rs):([1-9][0-9]*):([1-9][0-9]*)\s*", value)
+            if location:
+                pending["location"] = (location[1], int(location[2]), int(location[3]))
+        if pending["code"] is None and re.fullmatch(r"\s*= note: `-D dead-code` implied by `-D warnings`", value):
+            pending["lint"] = "dead_code"
+    finish()
+    return records
+
+
 def publish(run_root: Path, output_dir: Path, *, artifacts_root=ARTIFACTS, declarations=DECLARATIONS):
     """Read private inputs and create a new, independent safe output directory."""
     output = output_dir.absolute()
@@ -271,7 +339,8 @@ def publish(run_root: Path, output_dir: Path, *, artifacts_root=ARTIFACTS, decla
     summary = {"status": "incomplete", "export_complete": False, "native_execution_complete": False,
                "native": None, "tests": [], "meta_tests": [], "counts": None,
                "coverage": None, "hashes": {}, "diagnostics": [], "failure_phases": [],
-               "preflight": None, "preflight_diagnostics": []}
+               "preflight": None, "preflight_diagnostics": [],
+               "compiler_diagnostics": [], "compiler_diagnostic_notes": []}
     found = {}
     try:
         root = confined(run_root, artifacts_root)
@@ -344,6 +413,16 @@ def publish(run_root: Path, output_dir: Path, *, artifacts_root=ARTIFACTS, decla
             summary["preflight"] = service_isolation_facts(root)
         except (ValueError, OSError, KeyError, TypeError, RecursionError, OverflowError):
             summary["preflight_diagnostics"].append("unavailable_service_isolation")
+    # This auxiliary observation never changes the original gate or its diagnostics.
+    if (native is not None and native["exit_code"] != 0 and native["sources_unchanged"]
+            and not found and summary["counts"] is None and not summary["native_execution_complete"]
+            and "invalid_native_log" not in summary["diagnostics"] and "native.log" in values):
+        try:
+            summary["compiler_diagnostics"] = compiler_primary_locations(values["native.log"], values.get("native-sources.json"))
+            if not summary["compiler_diagnostics"]:
+                summary["compiler_diagnostic_notes"].append("unavailable_native_compiler_observation")
+        except (ValueError, OSError, KeyError, TypeError, RecursionError, OverflowError, subprocess.SubprocessError):
+            summary["compiler_diagnostic_notes"].append("unavailable_native_compiler_observation")
     output.mkdir(parents=True, exist_ok=False)
     (output / "summary.json").write_text(json.dumps(summary, indent=2) + "\n", encoding="utf-8")
     return summary
