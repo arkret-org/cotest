@@ -89,7 +89,7 @@ async fn ensure_history_basis_from_issued_cut(
     original.validate_purpose()?;
     let account = arkret_wire::AccountId::new(
         arkret_wire::DidCoreId::new(cotest::harness::actor_core_id(&author.actor)?)?,
-        arkret_wire::DidCoreId::new(author.service_id.clone())?,
+        arkret_wire::DidCoreId::new(author.service_id().to_owned())?,
     );
     let coverage = original
         .history_basis
