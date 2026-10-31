@@ -256,7 +256,7 @@ jobs:
       run: |
         mkdir -p artifacts/sdk-artifact-build
         cargo metadata --locked --format-version 1 > artifacts/sdk-artifact-build/metadata.json
-        cargo build --locked -p cotest --lib --message-format=json > artifacts/sdk-artifact-build/build.jsonl
+        cargo build --locked -p cotest --lib --message-format=json-render-diagnostics > artifacts/sdk-artifact-build/build.jsonl
         python scripts/capture_sdk_artifact.py \
           --cargo-messages artifacts/sdk-artifact-build/build.jsonl \
           --cargo-metadata artifacts/sdk-artifact-build/metadata.json \
