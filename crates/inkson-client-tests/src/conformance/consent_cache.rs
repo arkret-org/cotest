@@ -891,7 +891,21 @@ fn product_attempt_after_current<'a>(
     dedicated: bool,
 ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<usize>> + 'a>> {
     cotest::harness::heap_future(move || async move {
-        let mut stream = ready_stream(member).await?;
+        let stream = ready_stream(member).await?;
+        product_attempt_on_ready_stream(context, member, native, request, dedicated, stream).await
+    })
+}
+
+#[inline(never)]
+fn product_attempt_on_ready_stream<'a>(
+    context: &'a ConsentCallContext,
+    member: &'a Member,
+    native: &'a inkson::sync_engine::NativeAccountHost,
+    request: &'a CallInvitationSendRequestBody,
+    dedicated: bool,
+    mut stream: arkret_http_client::SignalSubscribeFrameStream,
+) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<usize>> + 'a>> {
+    cotest::harness::heap_future(move || async move {
         if dedicated {
             send(context, request).await?;
         } else {
@@ -1111,16 +1125,21 @@ async fn sfu_media(
         screen: false,
     };
     let holder = context.holder.account.clone();
+    holder_native
+        .catch_up_selected_realm_until_complete(&context.realm)
+        .await?;
+    let holder_stream = ready_stream(&context.holder).await?;
     let holder_invite =
         prepare_invitation(context, &call, &holder, media.clone(), *sequence).await?;
     *sequence += 1;
     ensure!(
-        product_attempt(
+        product_attempt_on_ready_stream(
             context,
             &context.holder,
             holder_native,
             &holder_invite,
-            true
+            true,
+            holder_stream,
         )
         .await?
             == 1
@@ -1129,15 +1148,20 @@ async fn sfu_media(
     let holder_outcome = exchange(&context.holder, &holder_token).await?;
     verify_token(context, &holder_token, &holder_outcome).await?;
     let peer = context.denied_holder.account.clone();
+    denied_native
+        .catch_up_selected_realm_until_complete(&context.realm)
+        .await?;
+    let peer_stream = ready_stream(&context.denied_holder).await?;
     let peer_invite = prepare_invitation(context, &call, &peer, media.clone(), *sequence).await?;
     *sequence += 1;
     ensure!(
-        product_attempt(
+        product_attempt_on_ready_stream(
             context,
             &context.denied_holder,
             denied_native,
             &peer_invite,
-            true
+            true,
+            peer_stream,
         )
         .await?
             == 1
