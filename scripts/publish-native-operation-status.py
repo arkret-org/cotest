@@ -14,6 +14,7 @@ import math
 from pathlib import Path
 import re
 import stat
+import subprocess
 
 
 REPO = Path(__file__).resolve().parents[1]
@@ -42,6 +43,19 @@ SHA = re.compile(r"[0-9a-f]{64}\Z")
 OPERATION = re.compile(r"ak\.[a-z0-9_]+(?:\.[a-z0-9_]+)+\.v[0-9]+\Z")
 MAX_JSON = 8 * 1024 * 1024
 MAX_LOG = 16 * 1024 * 1024
+MLS_CASE = "mls_interop_retains_native_claims_mls_and_mimi_originals"
+MLS_SOURCE = "src/scenarios/native_operation_contracts/mls_interop.rs"
+MLS_STAGES = frozenset((
+    "deployment", "recipient_session", "realm_membership", "keypackage_upload",
+    "keypackage_claim", "mls_genesis", "mls_add_welcome", "durable_snapshot",
+    "keypackage_consume", "keypackage_revoke", "mimi_control", "peer_membership_reads",
+    "peer_signal", "mimi_message", "mimi_notify", "watch_audit", "media_token",
+    "peer_invite", "authority_originals", "retain_attempt", "verify_schemas",
+    "verify_claim_receipt", "verify_consume_receipt", "verify_realm_commits",
+    "verify_mimi_control", "verify_bootstrap_current", "verify_mimi_message",
+    "verify_mimi_notify", "verify_watch_audit", "verify_media_token", "verify_peer_invite",
+    "verify_peer_membership_reads", "verify_peer_signal", "retain_evidence",
+))
 
 
 def resolved(path: Path) -> Path:
@@ -130,6 +144,31 @@ def native_facts(value):
     return {"exit_code": code, "sources_unchanged": unchanged, "seconds": seconds}
 
 
+def service_isolation_facts(root):
+    # These are diagnostics for a run that never produced native results.
+    # Private commands, paths, source maps and log contents never leave here.
+    raw = read_file(root / "service-isolation-result.json", root, MAX_JSON)
+    value = decode_json(raw)
+    fields = {"command", "exit_code", "seconds", "sources_unchanged",
+              "source_fence", "log", "target_directory"}
+    if not isinstance(value, dict) or set(value) != fields:
+        raise ValueError("invalid preflight result")
+    code, unchanged, seconds = value["exit_code"], value["sources_unchanged"], value["seconds"]
+    if type(code) is not int or not -65535 <= code <= 4294967295 or type(unchanged) is not bool:
+        raise ValueError("invalid preflight result types")
+    if type(seconds) not in (int, float) or not 0 <= seconds <= 86400 or not math.isfinite(seconds):
+        raise ValueError("invalid preflight duration")
+    if value["log"] != "service-isolation.log" or value["source_fence"] != "service-isolation-sources.json":
+        raise ValueError("unexpected preflight input reference")
+    sources = read_file(root / "service-isolation-sources.json", root, MAX_JSON)
+    validate_sources(decode_json(sources))
+    log = read_file(root / "service-isolation.log", root, MAX_LOG)
+    return {"stage": "service_isolation", "exit_code": code, "sources_unchanged": unchanged,
+            "seconds": seconds, "result_sha256": hashlib.sha256(raw).hexdigest(),
+            "source_fence_sha256": hashlib.sha256(sources).hexdigest(),
+            "log_sha256": hashlib.sha256(log).hexdigest()}
+
+
 def log_status(data: bytes):
     text = data.decode("utf-8-sig", errors="strict")
     text = re.sub(r"\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)", "", text)
@@ -202,6 +241,96 @@ def coverage_facts(value, scope, unmapped):
             "uncovered_operations": sorted(missing)}
 
 
+def mls_failure_phase(root, sources):
+    """Return only a closed, source-bound propagation marker, never an error."""
+    raw = read_file(root / "diagnostics/mls-interop.json", root, 4096)
+    value = decode_json(raw)
+    fields = {"case", "stage", "source", "line", "status", "error_code"}
+    if not isinstance(value, dict) or set(value) != fields:
+        raise ValueError("invalid failure phase")
+    if value["case"] != MLS_CASE or value["source"] != MLS_SOURCE:
+        raise ValueError("unknown failure source")
+    stage, line = value["stage"], value["line"]
+    if not isinstance(stage, str) or stage not in MLS_STAGES or type(line) is not int or not 1 <= line <= 10000:
+        raise ValueError("unknown failure location")
+    if value["status"] is not None or value["error_code"] is not None:
+        raise ValueError("unavailable HTTP facts")
+    source = read_file(REPO / MLS_SOURCE, REPO, 512 * 1024)
+    if not isinstance(sources, dict) or sources.get("cotest/" + MLS_SOURCE) != hashlib.sha256(source).hexdigest():
+        raise ValueError("failure source changed")
+    lines = source.decode("utf-8", errors="strict").splitlines()
+    if line > len(lines) or lines[line - 1].strip() != f'phase.mark("{stage}", line!());':
+        raise ValueError("failure location changed")
+    return value
+
+
+def compiler_primary_locations(data, sources):
+    """Advisory compiler-shaped observations; never error text or proof credit."""
+    validate_sources(sources)
+    text = data.decode("utf-8-sig", errors="strict")
+    text = re.sub(r"\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)", "", text)
+    text = re.sub(r"\x1b\[[0-?]*[ -/]*[@-~]", "", text)
+    if "\x00" in text or "\x1b" in text:
+        raise ValueError("invalid compiler observation")
+    lines = text.splitlines()
+    if any(len(line) > 65536 for line in lines):
+        raise ValueError("oversized compiler observation")
+    if any(re.match(r"(?:Running\b|running \d+ tests?\b|test\b)", line.lstrip()) for line in lines):
+        raise ValueError("runtime compiler observation")
+    records, seen, pending = [], set(), None
+    headers = 0
+
+    def finish():
+        if pending is None or pending["location"] is None:
+            return
+        source, line, column = pending["location"]
+        if source.startswith("/") or any(part in ("", ".", "..") for part in source.split("/")):
+            raise ValueError("unknown compiler source")
+        tracked = subprocess.run(
+            ["git", "--no-optional-locks", "-C", str(REPO), "ls-files", "--stage", "-z", "--", source],
+            stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, check=False, timeout=5,
+        )
+        expected = rb"(?:100644|100755) [0-9a-f]{40} 0\t" + re.escape(source.encode("ascii")) + b"\0"
+        if tracked.returncode != 0 or re.fullmatch(expected, tracked.stdout) is None:
+            raise ValueError("untracked compiler source")
+        raw = read_file(REPO / source, REPO, 512 * 1024)
+        digest = hashlib.sha256(raw).hexdigest()
+        if sources.get("cotest/" + source) != digest:
+            raise ValueError("changed compiler source")
+        source_lines = raw.decode("utf-8", errors="strict").splitlines()
+        if not 1 <= line <= len(source_lines) or not 1 <= column <= len(source_lines[line - 1]) + 1:
+            raise ValueError("unknown compiler position")
+        key = (pending["code"], pending["lint"], source, line, column, digest)
+        if key not in seen:
+            seen.add(key)
+            records.append({"reason": "compiler_primary_location_observed", "underlying_cause": "unknown",
+                            "code": pending["code"], "lint": pending["lint"], "source": source,
+                            "line": line, "column": column, "source_sha256": digest})
+            if len(records) > 4:
+                raise ValueError("too many compiler observations")
+
+    for value in lines:
+        header = re.fullmatch(r"error(?:\[(E[0-9]{4})\])?:[^\r\n]*", value)
+        if header:
+            headers += 1
+            if headers > 8:
+                raise ValueError("too many compiler headers")
+            finish()
+            pending = {"code": header[1], "lint": None, "location": None, "next_primary": True}
+            continue
+        if pending is None:
+            continue
+        if pending["next_primary"] and value.strip():
+            pending["next_primary"] = False
+            location = re.fullmatch(r"\s*-->\s+([A-Za-z0-9_./-]+\.rs):([1-9][0-9]*):([1-9][0-9]*)\s*", value)
+            if location:
+                pending["location"] = (location[1], int(location[2]), int(location[3]))
+        if pending["code"] is None and re.fullmatch(r"\s*= note: `-D dead-code` implied by `-D warnings`", value):
+            pending["lint"] = "dead_code"
+    finish()
+    return records
+
+
 def publish(run_root: Path, output_dir: Path, *, artifacts_root=ARTIFACTS, declarations=DECLARATIONS):
     """Read private inputs and create a new, independent safe output directory."""
     output = output_dir.absolute()
@@ -209,7 +338,9 @@ def publish(run_root: Path, output_dir: Path, *, artifacts_root=ARTIFACTS, decla
         raise ValueError("unsafe public output")
     summary = {"status": "incomplete", "export_complete": False, "native_execution_complete": False,
                "native": None, "tests": [], "meta_tests": [], "counts": None,
-               "coverage": None, "hashes": {}, "diagnostics": []}
+               "coverage": None, "hashes": {}, "diagnostics": [], "failure_phases": [],
+               "preflight": None, "preflight_diagnostics": [],
+               "compiler_diagnostics": [], "compiler_diagnostic_notes": []}
     found = {}
     try:
         root = confined(run_root, artifacts_root)
@@ -269,6 +400,29 @@ def publish(run_root: Path, output_dir: Path, *, artifacts_root=ARTIFACTS, decla
         summary["status"] = "passed" if summary["coverage"]["acceptance"] else "failed"
     elif native is not None and (native["exit_code"] != 0 or not native["sources_unchanged"]):
         summary["status"] = "failed"
+    # Auxiliary failure locations cannot change export, execution or coverage credit.
+    if root is not None and found.get(MLS_CASE) == "failed":
+        try:
+            summary["failure_phases"].append(mls_failure_phase(root, values.get("native-sources.json")))
+        except (ValueError, OSError, KeyError, TypeError, RecursionError, OverflowError):
+            summary["diagnostics"].append("unavailable_mls_failure_phase")
+    # A successful preflight does not establish where later work stopped, and
+    # neither valid nor unavailable auxiliary facts change native gate credit.
+    if root is not None and native is None:
+        try:
+            summary["preflight"] = service_isolation_facts(root)
+        except (ValueError, OSError, KeyError, TypeError, RecursionError, OverflowError):
+            summary["preflight_diagnostics"].append("unavailable_service_isolation")
+    # This auxiliary observation never changes the original gate or its diagnostics.
+    if (native is not None and native["exit_code"] != 0 and native["sources_unchanged"]
+            and not found and summary["counts"] is None and not summary["native_execution_complete"]
+            and "invalid_native_log" not in summary["diagnostics"] and "native.log" in values):
+        try:
+            summary["compiler_diagnostics"] = compiler_primary_locations(values["native.log"], values.get("native-sources.json"))
+            if not summary["compiler_diagnostics"]:
+                summary["compiler_diagnostic_notes"].append("unavailable_native_compiler_observation")
+        except (ValueError, OSError, KeyError, TypeError, RecursionError, OverflowError, subprocess.SubprocessError):
+            summary["compiler_diagnostic_notes"].append("unavailable_native_compiler_observation")
     output.mkdir(parents=True, exist_ok=False)
     (output / "summary.json").write_text(json.dumps(summary, indent=2) + "\n", encoding="utf-8")
     return summary

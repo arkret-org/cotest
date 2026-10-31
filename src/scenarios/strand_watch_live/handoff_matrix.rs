@@ -137,6 +137,10 @@ pub(super) async fn run(
         &old_key,
         at,
     )?;
+    let (management, private_bytes) = store.export_management_private_state(&typed_realm).await?;
+    store
+        .import_management_private_state(&management, &private_bytes)
+        .await?;
     let originals = store.handoff_originals(&typed_realm).await?;
     let mut facts = Vec::new();
     for full in &originals {
@@ -173,7 +177,7 @@ pub(super) async fn run(
     };
     let mut handoff = RealmAuthorityHandoff {
         pcr_private_state_digest: None,
-        management_private_state_digest: None,
+        management_private_state_digest: Some(management.digest()?),
         handoff_id: RealmAuthorityHandoffId::from_digest(arkret_canonical::sha256_bytes(
             change.event_id.as_str().as_bytes(),
         )),
@@ -231,7 +235,7 @@ pub(super) async fn run(
         &new_key,
     )?;
     let activation = AuthorityRealmAuthorityHandoffRequestBody {
-        management_private_state: None,
+        management_private_state: Some(management.clone()),
         pcr_private_state: None,
         handoff,
         final_stream_heads: heads,
@@ -247,6 +251,12 @@ pub(super) async fn run(
     // Realm ledgers, rather than using the public member snapshot as an import.
     group.server_mut(2).stop_external_process().await?;
     import_private_database(old_url, new_url).await?;
+    let incoming = Db::connect(Some(new_url), PoolTuning::default()).await?;
+    PgAuthorityCommitStore {
+        pool: incoming.pool.context("incoming pool")?,
+    }
+    .import_management_private_state(&management, &private_bytes)
+    .await?;
     group.server_mut(2).start_external_process().await?;
     let old = group.server(1);
     let new = group.server(2);
@@ -396,9 +406,9 @@ async fn import_private_database(source: &str, destination: &str) -> Result<()> 
         }
         drop(own);
         let path=std::env::temp_dir().join(format!("2136-private-handoff-{}.sql",std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH)?.as_nanos()));
-        let dump=std::process::Command::new("/opt/homebrew/opt/libpq/bin/pg_dump").args(["--clean","--if-exists","--no-owner","--no-privileges","--file"]).arg(&path).arg(&source).output()?;
+        let dump=std::process::Command::new(std::env::var_os("COTEST_PG_DUMP").unwrap_or_else(|| "pg_dump".into())).args(["--clean","--if-exists","--no-owner","--no-privileges","--file"]).arg(&path).arg(&source).output()?;
         ensure!(dump.status.success(),"private pg_dump: {}",String::from_utf8_lossy(&dump.stderr));
-        let restore=std::process::Command::new("/opt/homebrew/opt/libpq/bin/psql").args(["--single-transaction","--set=ON_ERROR_STOP=1","--file"]).arg(&path).arg(&destination).output()?;
+        let restore=std::process::Command::new(std::env::var_os("COTEST_PSQL").unwrap_or_else(|| "psql".into())).args(["--single-transaction","--set=ON_ERROR_STOP=1","--file"]).arg(&path).arg(&destination).output()?;
         std::fs::remove_file(path)?;
         ensure!(restore.status.success(),"private psql import: {}",String::from_utf8_lossy(&restore.stderr));
         let mut own=postgres::Client::connect(&destination,postgres::NoTls)?;

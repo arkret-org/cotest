@@ -245,7 +245,7 @@ fn assert_aad_field_binding(signal: &SignalEnvelope) -> Result<usize> {
             "/encrypted_payload/aead_profile",
             serde_json::json!("MLS_128_DHKEMX25519_CHACHA20POLY1305_SHA256_Ed25519"),
         ),
-        ("/encrypted_payload/epoch", serde_json::json!(7)),
+        ("/encrypted_payload/epoch", serde_json::json!("7")),
         (
             "/encrypted_payload/nonce",
             serde_json::json!("AAAAAAAAAAAAAAAB"),

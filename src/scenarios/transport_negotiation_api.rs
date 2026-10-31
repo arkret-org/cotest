@@ -6,7 +6,6 @@ use arkret_signatures::http_signature::{
     parse_signature_input, sign_message,
 };
 use reqwest::{Request, StatusCode};
-use serde_json::json;
 
 use super::agent_runtime_live::coauth_session_evidence::actual_agent_deployment;
 use super::human_device_producer_live::submit_and_expect_commit;
@@ -92,16 +91,6 @@ pub async fn transport_negotiation_api_migration() -> Result<()> {
             "Station did not advertise its HTTP binding"
         );
     }
-    let unsigned = recipient
-        .http()
-        .post(recipient.url("/_arkret/peer/events"))
-        .json(&json!({"events":[]}))
-        .send()
-        .await?;
-    ensure!(
-        unsigned.status().is_client_error() && unsigned.status() != StatusCode::NOT_FOUND,
-        "peer submit route did not reject unsigned input"
-    );
     let alice = &source_deployment.controller;
     let account = &source_deployment.account;
     let realm = alice.create_realm("transport accepted source").await?;
@@ -115,6 +104,20 @@ pub async fn transport_negotiation_api_migration() -> Result<()> {
         .await?;
     let commit = submit_and_expect_commit(alice, account, &alice.device_id, &event).await?;
     let body = super::fanout_route_miss_live::replication_body(alice, &event, &commit).await?;
+    let mut unsigned = recipient.signed_peer_post_request_with_idempotency_key(
+        source,
+        "/_arkret/peer/events",
+        &body,
+        recipient.service_id(),
+        None,
+    )?;
+    unsigned.headers_mut().remove("signature");
+    unsigned.headers_mut().remove("signature-input");
+    let unsigned = recipient.http().execute(unsigned).await?;
+    ensure!(
+        unsigned.status().is_client_error() && unsigned.status() != StatusCode::NOT_FOUND,
+        "peer submit route did not reject unsigned input"
+    );
     let mut errors = Vec::new();
     for (expired, wrong_key, code) in [
         (true, false, "signature_window_invalid"),

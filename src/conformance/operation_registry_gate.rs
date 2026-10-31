@@ -1276,20 +1276,36 @@ fn scan_source_file(
     let relative = path.strip_prefix(root).unwrap_or(path);
 
     scan_coland_extension_table(source, relative, &scannable_lines, out);
+    let rust_source = path.extension().and_then(|value| value.to_str()) == Some("rs");
+    let gate_base_is_metadata_field =
+        account_gate_base_is_metadata_field(&scannable_lines, rust_source);
 
     for (index, line) in scannable_lines.iter().enumerate() {
         if is_comment_only_line(line) {
             continue;
         }
         let method = infer_method_near(&lines, index);
-        for literal in extract_string_literals(line) {
+        for occurrence in source_string_occurrences(line, rust_source) {
+            let literal = &occurrence.value;
             if !literal.contains("_arkret") {
                 continue;
             }
+            if is_path_prefix_predicate(line, literal) || (rust_source && is_sql_literal(literal)) {
+                continue;
+            }
+            let prefix = literal_expression_prefix(&scannable_lines, index, occurrence.start);
+            if is_account_gate_metadata_value(&prefix, literal, gate_base_is_metadata_field) {
+                continue;
+            }
+            let method = if is_url_path_comparison(&prefix) {
+                None
+            } else {
+                enclosing_request_method(&prefix, rust_source).or_else(|| method.clone())
+            };
             if !source_context_allows_literal(line, &lines, index, method.as_deref()) {
                 continue;
             }
-            for candidate in extract_path_candidates(&literal) {
+            for candidate in extract_path_candidates(literal) {
                 push_observed(source, relative, index + 1, method.clone(), candidate, out);
             }
         }
@@ -1441,6 +1457,220 @@ fn scan_coland_extension_table(
     }
 }
 
+// The same source line may contain a metadata URL, a path assertion and a real
+// request. Bind each decision to its literal, not the first path or nearby verb.
+fn literal_expression_prefix(lines: &[&str], index: usize, start: usize) -> String {
+    let mut prefix = lines[index.saturating_sub(3)..index].join("\n");
+    prefix.push('\n');
+    prefix.push_str(&lines[index][..start]);
+    prefix
+}
+
+fn is_account_gate_metadata_value(
+    prefix: &str,
+    literal: &str,
+    gate_base_is_metadata_field: bool,
+) -> bool {
+    let candidates = extract_path_candidates(literal);
+    if candidates.len() != 1 || candidates[0] != "/_arkret/gate/account" {
+        return false;
+    }
+    let compact = prefix
+        .chars()
+        .filter(|ch| !ch.is_whitespace())
+        .collect::<String>();
+    // Describe's base URI is a field value, not the bare HTTP operation. These
+    // exact expressions do not exempt adjacent requests or descendant paths.
+    (gate_base_is_metadata_field && compact.ends_with("letgate_account_base_url=format!("))
+        || compact.ends_with("\"gate_account_base_url\":format!(")
+        || compact.ends_with("metadata[\"account_authority\"][\"gate_account_base_url\"]==format!(")
+}
+
+// The local variable must have one definition and one actual typed Describe
+// field consumer. Unknown use, shadowing or any reuse remains checked; a name
+// alone cannot turn a real request URL into metadata evidence.
+fn account_gate_base_is_metadata_field(lines: &[&str], rust_source: bool) -> bool {
+    const NAME: &str = "gate_account_base_url";
+    let source = lines.join("\n");
+    let code = source_code_mask(&source, rust_source);
+    let Ok(code) = std::str::from_utf8(&code) else {
+        return false;
+    };
+    let positions = code
+        .match_indices(NAME)
+        .filter_map(|(offset, _)| {
+            let identifier_char = |byte: u8| byte.is_ascii_alphanumeric() || byte == b'_';
+            (!code.as_bytes()[..offset]
+                .last()
+                .copied()
+                .is_some_and(identifier_char)
+                && !code
+                    .as_bytes()
+                    .get(offset + NAME.len())
+                    .copied()
+                    .is_some_and(identifier_char))
+            .then_some(offset)
+        })
+        .collect::<Vec<_>>();
+    let [definition, field] = positions.as_slice() else {
+        return false;
+    };
+    if code[..*definition].split_whitespace().last() != Some("let")
+        || !code[*definition + NAME.len()..]
+            .trim_start()
+            .starts_with('=')
+        || !code[*field + NAME.len()..].trim_start().starts_with(',')
+    {
+        return false;
+    }
+    let mut braces = Vec::new();
+    for (offset, byte) in code.as_bytes()[..*field].iter().enumerate() {
+        match byte {
+            b'{' => braces.push(offset),
+            b'}' => {
+                braces.pop();
+            }
+            _ => {}
+        }
+    }
+    let Some(open) = braces.last() else {
+        return false;
+    };
+    if code[..*open]
+        .trim_end()
+        .rsplit(|ch: char| !ch.is_ascii_alphanumeric() && ch != '_')
+        .next()
+        != Some("AccountAuthority")
+    {
+        return false;
+    }
+    let fields = &code[*open + 1..*field];
+    if !fields.trim_end().is_empty() && !fields.trim_end().ends_with(',') {
+        return false;
+    }
+    // A comma inside a field's call/array expression is not a struct-field
+    // boundary. The observed identifier must really be a shorthand field.
+    let mut delimiters = Vec::new();
+    for byte in fields.bytes() {
+        match byte {
+            b'(' | b'[' | b'{' => delimiters.push(byte),
+            b')' if delimiters.pop() != Some(b'(') => return false,
+            b']' if delimiters.pop() != Some(b'[') => return false,
+            b'}' if delimiters.pop() != Some(b'{') => return false,
+            _ => {}
+        }
+    }
+    delimiters.is_empty()
+}
+
+fn is_url_path_comparison(prefix: &str) -> bool {
+    let compact = prefix
+        .chars()
+        .filter(|ch| !ch.is_whitespace())
+        .collect::<String>();
+    compact.ends_with(".path()==") || compact.ends_with(".path()!=")
+}
+
+fn source_code_mask(source: &str, rust_source: bool) -> Vec<u8> {
+    // Lex in source order: a quote inside a comment is not a string opener,
+    // and comment punctuation inside a real string is not a comment boundary.
+    let bytes = source.as_bytes();
+    let mut code = bytes.to_vec();
+    let mut i = 0;
+    while i < bytes.len() {
+        let start = i;
+        if bytes.get(i..i + 2) == Some(b"//") {
+            while i < bytes.len() && bytes[i] != b'\n' {
+                i += 1;
+            }
+        } else if bytes.get(i..i + 2) == Some(b"/*") {
+            i += 2;
+            let mut depth = 1usize;
+            while i < bytes.len() && depth > 0 {
+                if bytes.get(i..i + 2) == Some(b"/*") {
+                    depth += 1;
+                    i += 2;
+                } else if bytes.get(i..i + 2) == Some(b"*/") {
+                    depth -= 1;
+                    i += 2;
+                } else {
+                    i += 1;
+                }
+            }
+        } else if rust_source && bytes[i] == b'r' {
+            let mut quote = i + 1;
+            while bytes.get(quote) == Some(&b'#') {
+                quote += 1;
+            }
+            if bytes.get(quote) != Some(&b'"') {
+                i += 1;
+                continue;
+            }
+            let terminator = format!("\"{}", "#".repeat(quote - i - 1));
+            i = source[quote + 1..]
+                .find(&terminator)
+                .map_or(bytes.len(), |end| quote + 1 + end + terminator.len());
+        } else if rust_source && bytes[i] == b'\'' {
+            let Some(end) = rust_char_literal_end(source, i) else {
+                i += 1;
+                continue;
+            };
+            i = end;
+        } else if bytes[i] == b'"' || (!rust_source && matches!(bytes[i], b'\'' | b'`')) {
+            let quote = bytes[i];
+            i += 1;
+            while i < bytes.len() {
+                if bytes[i] == b'\\' {
+                    i = (i + 2).min(bytes.len());
+                } else if bytes[i] == quote {
+                    i += 1;
+                    break;
+                } else {
+                    i += 1;
+                }
+            }
+        } else {
+            i += 1;
+            continue;
+        }
+        code[start..i].fill(b' ');
+    }
+    code
+}
+
+fn enclosing_request_method(prefix: &str, rust_source: bool) -> Option<String> {
+    let code = source_code_mask(prefix, rust_source);
+    let mut calls = Vec::new();
+    for (offset, byte) in code.iter().enumerate() {
+        match byte {
+            b'(' => calls.push(offset),
+            b')' => {
+                calls.pop();
+            }
+            _ => {}
+        }
+    }
+    for offset in calls.into_iter().rev() {
+        let before = std::str::from_utf8(&code[..offset]).ok()?.trim_end();
+        let token = before
+            .rsplit(|ch: char| {
+                !ch.is_ascii_alphanumeric() && ch != '_' && ch != '.' && ch != ':' && ch != '!'
+            })
+            .next()?;
+        for method in INFERABLE_METHODS {
+            let lower = method.to_ascii_lowercase();
+            if token.ends_with(&format!(".{lower}"))
+                || token.rsplit("::").next() == Some(format!("canonical_{lower}").as_str())
+                || token.rsplit('.').next() == Some(format!("{lower}_json").as_str())
+                || token.rsplit('.').next() == Some(format!("{lower}Json").as_str())
+            {
+                return Some((*method).to_owned());
+            }
+        }
+    }
+    None
+}
+
 fn source_context_allows_literal(
     line: &str,
     lines: &[&str],
@@ -1465,6 +1695,11 @@ fn source_context_allows_literal(
         || context.contains("postjson(")
         || context.contains("putjson(")
         || context.contains("deletejson(")
+        || context.contains("peer(")
+        // A nearby get(variable) can consume a literal URL even though it is
+        // not enough evidence to distinguish an HTTP verb from row.get(...).
+        || context.contains(".get(")
+        || line.contains("format!(")
         || context.contains("path ===")
         || context.contains("pathname ===")
         || context.contains("pathname.match")
@@ -1484,6 +1719,11 @@ fn infer_method_near(lines: &[&str], index: usize) -> Option<String> {
     if let Some(method) = infer_method_from_line(lines[index]) {
         return Some(method);
     }
+    // A constructed URL has no request verb until its later use. Keep the
+    // registered path check without borrowing a neighbouring request's verb.
+    if lines[index].contains("format!(") && lines[index].trim_start().starts_with("let ") {
+        return None;
+    }
     // Router-table style spread across lines:
     //   Router::with_path("/_arkret/...")
     //       .post(handler),
@@ -1492,7 +1732,15 @@ fn infer_method_near(lines: &[&str], index: usize) -> Option<String> {
     // would otherwise pick up a neighbouring route's verb earlier in the
     // `.push(...).push(...)` chain (INFERABLE_METHODS iteration order makes GET
     // win over POST when both appear in the window).
-    for following in lines.iter().skip(index + 1).take(2) {
+    for following in lines
+        .iter()
+        .skip(index + 1)
+        .take(if lines[index].contains("with_path(") {
+            2
+        } else {
+            0
+        })
+    {
         if following.contains("with_path(") || following.contains("Router::") {
             break;
         }
@@ -1538,6 +1786,15 @@ fn is_bare_path_list_element(line: &str) -> bool {
 
 fn infer_method_from_line(line: &str) -> Option<String> {
     let arkret_index = line.find("_arkret")?;
+    let prefix = &line[..arkret_index];
+    for method in HTTP_METHODS {
+        if prefix
+            .to_ascii_lowercase()
+            .ends_with(&format!("{} /", method.to_ascii_lowercase()))
+        {
+            return Some((*method).to_owned());
+        }
+    }
     // Fetch-style calls carry the verb as an explicit property after the URL.
     // Read it from the same source line so a QUERY call cannot borrow GET/POST
     // from a neighboring array element, and neighboring calls cannot borrow
@@ -1553,7 +1810,6 @@ fn infer_method_from_line(line: &str) -> Option<String> {
             return Some((*method).to_owned());
         }
     }
-    let prefix = &line[..arkret_index];
     // A request verb on this URL's line outranks unrelated row.get calls in
     // the fallback context window.
     if let Some((_, method)) = INFERABLE_METHODS
@@ -1561,6 +1817,7 @@ fn infer_method_from_line(line: &str) -> Option<String> {
         .filter_map(|method| {
             prefix
                 .rfind(&format!(".{}(", method.to_ascii_lowercase()))
+                .filter(|offset| *method != "GET" || get_has_url_argument(&line[*offset + 5..]))
                 .map(|offset| (offset, *method))
         })
         .max_by_key(|(offset, _)| *offset)
@@ -1598,7 +1855,9 @@ fn infer_method_from_context(context: &str) -> Option<String> {
                 "PathItemType::{method_title}",
                 method_title = title_method(method)
             ))
-            || context.contains(&format!(".{lower}("))
+            || (context.contains(&format!(".{lower}("))
+                && (*method != "GET"
+                    || context.match_indices(".get(").any(|(offset, _)| get_has_url_argument(&context[offset + 5..]))))
             || context.contains(&format!("{lower}_json"))
             // camelCase TS wrappers: getJson(/postJson(/... — matched
             // case-insensitively with the call paren so unrelated identifiers
@@ -1642,13 +1901,146 @@ fn title_method(method: &str) -> String {
     out
 }
 
+fn get_has_url_argument(argument: &str) -> bool {
+    let argument = argument.trim_start().trim_start_matches('&').trim_start();
+    if argument.starts_with("format!(") || argument.starts_with("concat!(") {
+        return true;
+    }
+    let argument = argument.trim_start_matches('r').trim_start_matches('#');
+    let Some(&first) = argument.as_bytes().first() else {
+        return false;
+    };
+    if !matches!(first, b'"' | b'\'' | b'`') {
+        return false;
+    }
+    let value = &argument[1..];
+    value.starts_with('/')
+        || value.starts_with("_arkret/")
+        || value.starts_with("http://")
+        || value.starts_with("https://")
+}
+
+fn is_sql_literal(value: &str) -> bool {
+    let upper = value.to_ascii_uppercase();
+    let mut words = upper.split_ascii_whitespace();
+    let first = words.next().unwrap_or("");
+    matches!(
+        first,
+        "SELECT" | "WITH" | "INSERT" | "UPDATE" | "CREATE" | "ALTER"
+    ) || (first == "DELETE" && words.next() == Some("FROM"))
+}
+
+fn is_path_prefix_predicate(line: &str, literal: &str) -> bool {
+    if !literal.starts_with("/_arkret/") && !literal.starts_with("_arkret/") {
+        return false;
+    }
+    for quote in ['"', '\'', '`'] {
+        let quoted = format!("{quote}{literal}{quote}");
+        if line.matches(&quoted).count() != 1 {
+            continue;
+        }
+        let Some(offset) = line.find(&quoted) else {
+            continue;
+        };
+        let before = line[..offset].trim_end();
+        let Some(call) = before.strip_suffix('(') else {
+            continue;
+        };
+        if call.trim_end().ends_with(".startsWith") || call.trim_end().ends_with(".starts_with") {
+            return true;
+        }
+    }
+    false
+}
+
 fn extract_string_literals(line: &str) -> Vec<String> {
+    extract_source_string_literals(line, false)
+}
+
+fn rust_char_literal_end(line: &str, index: usize) -> Option<usize> {
+    let bytes = line.as_bytes();
+    if bytes.get(index) != Some(&b'\'') {
+        return None;
+    }
+    let character = line.get(index + 1..)?.chars().next()?;
+    let mut end = index + 1 + character.len_utf8();
+    if character == '\\' {
+        let escape = *bytes.get(end)?;
+        end += 1;
+        match escape {
+            b'\'' | b'"' | b'\\' | b'n' | b'r' | b't' | b'0' => {}
+            b'x' => {
+                if !bytes.get(end..end + 2)?.iter().all(u8::is_ascii_hexdigit) {
+                    return None;
+                }
+                end += 2;
+            }
+            b'u' => {
+                if bytes.get(end) != Some(&b'{') {
+                    return None;
+                }
+                end += 1;
+                let mut digits = 0;
+                let mut value = 0_u32;
+                loop {
+                    let byte = *bytes.get(end)?;
+                    if byte == b'}' {
+                        break;
+                    }
+                    if byte != b'_' {
+                        let digit = char::from(byte).to_digit(16)?;
+                        digits += 1;
+                        if digits > 6 {
+                            return None;
+                        }
+                        value = value.checked_mul(16)?.checked_add(digit)?;
+                    }
+                    end += 1;
+                }
+                if digits == 0 || char::from_u32(value).is_none() {
+                    return None;
+                }
+                end += 1;
+            }
+            _ => return None,
+        }
+    } else if matches!(character, '\'' | '\n' | '\r' | '\t') {
+        return None;
+    }
+    (bytes.get(end) == Some(&b'\'')).then_some(end + 1)
+}
+
+#[derive(Debug)]
+struct SourceStringOccurrence {
+    value: String,
+    start: usize,
+}
+
+fn extract_source_string_literals(line: &str, rust_source: bool) -> Vec<String> {
+    source_string_occurrences(line, rust_source)
+        .into_iter()
+        .map(|occurrence| occurrence.value)
+        .collect()
+}
+
+fn source_string_occurrences(line: &str, rust_source: bool) -> Vec<SourceStringOccurrence> {
     let bytes = line.as_bytes();
     let mut literals = Vec::new();
     let mut i = 0usize;
     while i < bytes.len() {
         let quote = bytes[i];
         if !matches!(quote, b'"' | b'\'' | b'`') {
+            i += 1;
+            continue;
+        }
+        if rust_source && quote != b'"' {
+            // Consume a real character atomically so its double quote cannot
+            // swallow a following request. Lifetimes and SQL strings are not
+            // Rust character literals and remain outside string extraction.
+            if let Some(end) = rust_char_literal_end(line, i) {
+                i = end;
+                continue;
+            }
             i += 1;
             continue;
         }
@@ -1679,7 +2071,10 @@ fn extract_string_literals(line: &str) -> Vec<String> {
             i += 1;
         }
         if i < bytes.len() && bytes[i] == quote {
-            literals.push(literal);
+            literals.push(SourceStringOccurrence {
+                value: literal,
+                start: start - 1,
+            });
             i += 1;
         }
     }
@@ -2090,6 +2485,159 @@ mod tests {
     fn explicit_fetch_query_method_wins_over_neighboring_get_calls() {
         let line = r#"response: await request.fetch(`${base}/_arkret/self/events`, { method: "QUERY", data: { limit: 20 } })"#;
         assert_eq!(infer_method_from_line(line).as_deref(), Some("QUERY"));
+    }
+
+    #[test]
+    fn peer_transport_does_not_borrow_value_get_methods() {
+        let lines = [
+            "let value = row.get(0);",
+            r#"peer(receiver, source, "/_arkret/peer/keys/keypackages/claims/query", body, None);"#,
+            r#"let state = value.get("state");"#,
+        ];
+        assert_eq!(infer_method_near(&lines, 1), None);
+        assert!(source_context_allows_literal(lines[1], &lines, 1, None));
+        assert_eq!(
+            extract_path_candidates(&extract_source_string_literals(lines[1], true)[0]),
+            vec!["/_arkret/peer/keys/keypackages/claims/query"]
+        );
+    }
+
+    #[test]
+    fn constructed_url_does_not_borrow_a_neighboring_verb() {
+        let lines = [
+            r#"let trusted_base = format!("/_arkret/self/keys/backups/{}", id);"#,
+            r#"client.post("/_arkret/self/keys/backups/delete-challenge");"#,
+        ];
+        assert_eq!(infer_method_near(&lines, 0), None);
+        assert!(source_context_allows_literal(lines[0], &lines, 0, None));
+        assert_eq!(infer_method_near(&lines, 1).as_deref(), Some("POST"));
+    }
+
+    #[test]
+    fn request_line_assertions_bind_their_actual_method() {
+        let lines = [
+            r#"let value = body.get("state");"#,
+            r#"assert!(headers.starts_with("post /_arkret/self/streams/scan "));"#,
+        ];
+        assert_eq!(infer_method_near(&lines, 1).as_deref(), Some("POST"));
+        assert!(!is_path_prefix_predicate(
+            lines[1],
+            "post /_arkret/self/streams/scan "
+        ));
+        assert!(!is_sql_literal("DELETE /_arkret/self/events HTTP/1.1"));
+        assert!(is_sql_literal(
+            "DELETE FROM held WHERE endpoint='/_arkret/self/events'"
+        ));
+    }
+
+    #[test]
+    fn uri_predicates_do_not_hide_concrete_requests() {
+        let line = r#"path.startsWith("/_arkret/self/") && client.post("/_arkret/self/unknown");"#;
+        assert!(is_path_prefix_predicate(line, "/_arkret/self/"));
+        assert!(!is_path_prefix_predicate(line, "/_arkret/self/unknown"));
+        let repeated = r#"path.startsWith("/_arkret/self/") && fetch("/_arkret/self/");"#;
+        assert!(!is_path_prefix_predicate(repeated, "/_arkret/self/"));
+        assert_eq!(
+            extract_path_candidates("/_arkret/self/unknown"),
+            vec!["/_arkret/self/unknown"]
+        );
+    }
+
+    #[test]
+    fn rust_sql_values_are_not_typescript_request_literals() {
+        assert!(
+            extract_source_string_literals(
+                "AND endpoint='/_arkret/peer/keys/keypackages/claim'",
+                true
+            )
+            .is_empty()
+        );
+        assert_eq!(
+            extract_source_string_literals("client.post('/_arkret/self/events');", false),
+            vec!["/_arkret/self/events"]
+        );
+        assert!(is_sql_literal(
+            "SELECT COUNT(*) FROM held WHERE endpoint='/_arkret/self/events'"
+        ));
+    }
+
+    #[test]
+    fn rust_character_atoms_do_not_hide_following_unknown_requests() {
+        for character in [
+            r#"'"'"#,
+            r#"'\''"#,
+            r#"'\\'"#,
+            r#"'\u{22}'"#,
+            r#"'\u{1F980}'"#,
+            r#"'\x22'"#,
+            r#"'\n'"#,
+            "'é'",
+            "'🦀'",
+        ] {
+            assert_eq!(rust_char_literal_end(character, 0), Some(character.len()));
+            let temporary = tempfile::tempdir().unwrap();
+            let file = temporary.path().join("request.rs");
+            fs::write(
+                &file,
+                format!(
+                    "let marker = {character}; client.post(\"/_arkret/self/unregistered-after-char\");"
+                ),
+            )
+            .unwrap();
+            let mut observed = BTreeSet::new();
+            scan_source_file("fixture", temporary.path(), &file, &mut observed).unwrap();
+            assert_eq!(observed.len(), 1, "request after {character}");
+            let entry = observed.first().unwrap();
+            assert_eq!(entry.path, "/_arkret/self/unregistered-after-char");
+            assert_eq!(entry.method.as_deref(), Some("POST"));
+        }
+    }
+
+    #[test]
+    fn rust_lifetimes_and_multi_character_sql_are_not_character_atoms() {
+        for value in [
+            "'a",
+            "'static",
+            "'label:",
+            "'/_arkret/self/sql-value'",
+            "'SELECT'",
+            "''",
+            r#"'\u{}'"#,
+            r#"'\u{D800}'"#,
+            r#"'\xGG'"#,
+        ] {
+            assert_eq!(rust_char_literal_end(value, 0), None, "{value}");
+        }
+        let line = r#"let endpoint: &'a str = "/_arkret/self/unregistered-lifetime"; client.post(endpoint);"#;
+        assert_eq!(
+            extract_source_string_literals(line, true),
+            vec!["/_arkret/self/unregistered-lifetime"]
+        );
+    }
+
+    #[test]
+    fn variable_get_urls_remain_candidates_without_misclassifying_row_access() {
+        let temporary = tempfile::tempdir().unwrap();
+        let file = temporary.path().join("request.rs");
+        let text = concat!(
+            "let metadata = row.get(0);\n",
+            "let url = \"/_arkret/self/unregistered-variable-url\";\n",
+            "let response = client.get(url);\n",
+            "\n\n\n\n",
+            "let sql = \"SELECT * FROM held WHERE endpoint='/_arkret/self/sql-value'\";\n",
+            "let row = connection.query_one(sql);\n",
+            "let value = row.get(0);\n",
+            "path.starts_with(\"/_arkret/self/\");\n",
+        );
+        fs::write(&file, text).unwrap();
+        let lines = text.lines().collect::<Vec<_>>();
+        assert_eq!(infer_method_near(&lines, 1), None);
+        let mut observed = BTreeSet::new();
+        scan_source_file("fixture", temporary.path(), &file, &mut observed).unwrap();
+        assert_eq!(observed.len(), 1);
+        let entry = observed.first().unwrap();
+        assert_eq!(entry.path, "/_arkret/self/unregistered-variable-url");
+        assert_eq!(entry.method, None);
     }
 
     #[test]

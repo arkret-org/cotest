@@ -188,7 +188,7 @@ jobs:
       if: always() && matrix.lane == 'authority'
       uses: actions/upload-artifact@v4
       with:
-        name: native-operation-status-${{ github.sha }}
+        name: native-operation-status-${{ github.sha }}-${{ github.run_attempt }}
         if-no-files-found: error
         path: ${{ runner.temp }}/native-operation-public/summary.json
     - name: Record native runner resources
@@ -672,7 +672,7 @@ jobs:
 
   e2e:
     name: e2e (playwright / ${{ matrix.project }})
-    needs: typecheck
+    needs: [typecheck, native-sources]
     runs-on: ubuntu-latest
     timeout-minutes: 180
     # PR gate: run a real Playwright probe against a live coland instead of
@@ -687,58 +687,9 @@ jobs:
         with:
           path: cotest
 
-      - uses: actions/checkout@v4
+      - uses: ./cotest/.github/actions/checkout-native-sources
         with:
-          repository: ${{ github.repository_owner }}/floria
-          path: floria
-          ref: ${{ env.SIBLING_REF }}
-          token: ${{ secrets.CI_REPO_TOKEN || github.token }}
-      - uses: actions/checkout@v4
-        with:
-          repository: ${{ github.repository_owner }}/arkret-rust-sdk
-          path: arkret-rust-sdk
-          ref: ${{ env.SIBLING_REF }}
-          token: ${{ secrets.CI_REPO_TOKEN || github.token }}
-      - uses: actions/checkout@v4
-        with:
-          repository: ${{ github.repository_owner }}/garth
-          path: garth
-          ref: ${{ env.SIBLING_REF }}
-          token: ${{ secrets.CI_REPO_TOKEN || github.token }}
-
-      - uses: actions/checkout@v4
-        with:
-          repository: ${{ github.repository_owner }}/arkret-spec
-          path: arkret-spec
-          ref: ${{ env.SIBLING_REF }}
-          token: ${{ secrets.CI_REPO_TOKEN || github.token }}
-
-      - uses: actions/checkout@v4
-        with:
-          repository: ${{ github.repository_owner }}/chime
-          path: chime
-          ref: ${{ env.SIBLING_REF }}
-          token: ${{ secrets.CI_REPO_TOKEN || github.token }}
-
-      - uses: actions/checkout@v4
-        with:
-          repository: ${{ github.repository_owner }}/inkson
-          path: inkson
-          ref: ${{ env.SIBLING_REF }}
-          token: ${{ secrets.CI_REPO_TOKEN || github.token }}
-
-      - uses: actions/checkout@v4
-        with:
-          repository: ${{ github.repository_owner }}/coauth
-          path: coauth
-          ref: ${{ env.SIBLING_REF }}
-          token: ${{ secrets.CI_REPO_TOKEN || github.token }}
-
-      - uses: actions/checkout@v4
-        with:
-          repository: ${{ github.repository_owner }}/coland
-          path: coland
-          ref: ${{ env.SIBLING_REF }}
+          refs: ${{ needs.native-sources.outputs.refs }}
           token: ${{ secrets.CI_REPO_TOKEN || github.token }}
 
       - name: Complete Coland build dependency layout
@@ -761,6 +712,10 @@ jobs:
         uses: ./cotest/.github/actions/setup-joint-browser
         with:
           project: ${{ matrix.project }}
+      - name: Reclaim Docker build space
+        run: |
+          docker system prune --all --force
+          docker builder prune --all --force
       - name: Build coland Docker image
         working-directory: cotest
         shell: pwsh
@@ -776,7 +731,7 @@ jobs:
         id: joint_prerequisites
         run: bash cotest/scripts/prepare-linux-joint-e2e.sh setup
 
-      - name: Run real OIDC returning-login merge gate
+      - name: Run real OIDC, recovery and collaboration regression merge gate
         working-directory: cotest
         shell: pwsh
         run: >
@@ -786,8 +741,8 @@ jobs:
           -StartCoauth
           -RunProfile joint-smoke
           -PlaywrightProject joint-inkson
-          -Grep "@returning-login-gate|@onboarding-recovery-gate"
-          -RequireScenario "identity/oidc-login-flow.spec.ts"
+          -Grep "@returning-login-gate|@onboarding-recovery-gate|share-link members keep synchronizing messages and leave after reload; MLS=|account owner uploads, cold-loads and clears the canonical profile avatar through Settings|registration explains its supported required contact methods|public HTTPS deployment delivers the same-origin WSS challenge|cold requester signs a real locator Contact request; recipient=|Contact address instructions advertise only supported inputs"
+          -RequireScenario "identity/oidc-login-flow.spec.ts,joint/realm-invite-link-sync.spec.ts,discovery/contact-request-ui.spec.ts,identity/account-profile-ui.spec.ts,identity/registration-contact-validation.spec.ts,sync/websocket-deployment.spec.ts"
           -ForbidSkippedTests
 
       - name: Restore Linux hosts permissions
@@ -806,7 +761,7 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: joint-failure-${{ github.run_id }}-${{ matrix.project }}
+          name: joint-failure-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.project }}
           path: |
             cotest/artifacts/runs/joint-e2e/**/services/prepare-*.log
             cotest/e2e/test-results/

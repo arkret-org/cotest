@@ -180,6 +180,13 @@
   "negative_test_paths": [
     {
       "source": "cotest",
+      "source_file": "src/scenarios/security_rotation_live.rs",
+      "method": "POST",
+      "path": "/_arkret/self/keys/backup-series/erase",
+      "reason": "The exact retired erase probe requires 404/unrecognized_endpoint and an unchanged backup listing; erase_old_material belongs only to the durable transaction worker, with no public self HTTP binding."
+    },
+    {
+      "source": "cotest",
       "source_file": "src/scenarios/realm_links_live.rs",
       "method": "GET",
       "path": "/_arkret/self/realms/{target}/effective-policy",

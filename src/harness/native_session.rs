@@ -10,6 +10,45 @@ use super::{ClientSession, TestActorClient};
 use crate::scenarios::_helpers::bridge::{MockCoauthGrantLedger, MockCoauthIntrospectionServer};
 
 #[derive(Clone)]
+pub(super) struct LocalSessionInvalidator {
+    engine: SessionEngine<arkret_http_client::Client>,
+}
+
+impl LocalSessionInvalidator {
+    pub(super) fn invalidate(&self) {
+        self.engine.clear_state();
+    }
+
+    pub(super) fn remaining(&self) -> Result<std::time::Duration> {
+        self.engine
+            .current_state()
+            .context("fixture native session source is inactive")?
+            .expires_at
+            .signed_duration_since(chrono::Utc::now())
+            .to_std()
+            .context("fixture native issuer record is expired")
+    }
+
+    pub(super) fn remaining_for(
+        &self,
+        source: &arkret_http_client::own_station_results::OwnStationStateClient,
+    ) -> Result<std::time::Duration> {
+        let before = self.engine.own_station_snapshot(source.binding())?;
+        ensure!(
+            &before == source.session()?,
+            "fixture lease belongs to another captured source"
+        );
+        let remaining = self.remaining()?;
+        ensure!(
+            self.engine.own_station_snapshot(source.binding())? == before,
+            "fixture lease source changed while reading its remaining lifetime"
+        );
+        source.check_session()?;
+        Ok(remaining)
+    }
+}
+
+#[derive(Clone)]
 struct HostFactory {
     http: arkret_http_client::Client,
     issuer: MockCoauthGrantLedger,
@@ -107,14 +146,12 @@ pub(super) async fn bind_standard_host(
         binding: binding.clone(),
         credential: grant.clone(),
     };
-    let provider = SessionTransportProvider::new(
-        SessionEngine::with_state(client.sdk.clone(), state),
-        factory,
-        Default::default(),
-    );
+    let engine = SessionEngine::with_state(client.sdk.clone(), state);
+    let provider = SessionTransportProvider::new(engine.clone(), factory, Default::default());
     client.sdk = provider
         .own_station_result_client(client.sdk.clone(), binding)?
         .http_client()?;
+    client.native_session_invalidator = Some(LocalSessionInvalidator { engine });
     Ok(client)
 }
 
@@ -123,6 +160,107 @@ mod tests {
     use std::sync::Arc;
 
     use super::*;
+
+    #[tokio::test]
+    async fn published_reauthentication_invalidates_only_the_old_local_source() -> Result<()> {
+        let issuer = MockCoauthIntrospectionServer::spawn().await?;
+        let station = arkret_wire::DidCoreId::new("ak:did_core:web:station.example")?;
+        let principal = "ak:did_core:web:alice.example";
+        let device = "ak:device:01904100-0000-7000-8000-0000000000a1";
+        let key = ed25519_dalek::SigningKey::from_bytes(&[0x52; 32]);
+        let first = crate::scenarios::bridge_contracts::session_grant::mock_session_grant_jwt(
+            principal,
+            device,
+            station.as_str(),
+        );
+        let (unsigned, _) = first.rsplit_once('.').context("fixture signature")?;
+        let second = format!(
+            "{unsigned}.{}",
+            arkret_canonical::base64url_encode([0x53; 64])
+        );
+        let bind = |credential: &str| -> Result<_> {
+            issuer.bind_founding_device_grant(
+                credential,
+                principal,
+                device,
+                "fixture-authorize",
+                &key.verifying_key(),
+            )?;
+            let state = issuer.own_station_session_state(credential, &station)?;
+            let http =
+                arkret_http_client::Client::builder(url::Url::parse("http://localhost:1234/")?)
+                    .allow_insecure_localhost()
+                    .auth(arkret_http_client::Auth::Bearer(credential.to_owned()))
+                    .build()?;
+            let binding = arkret::StationConnectionBinding {
+                base_url: http.base_url().to_string(),
+                service_id: station.clone(),
+                trust_domain: arkret_wire::TrustDomainId::new("ak:trust_domain:station.example")?,
+                authentication_metadata: arkret::AuthenticationMetadata::minimal(),
+            };
+            let engine = SessionEngine::with_state(http.clone(), state.clone());
+            let provider = SessionTransportProvider::new(
+                engine.clone(),
+                HostFactory {
+                    http: http.clone(),
+                    issuer: issuer.grant_ledger(),
+                    binding: binding.clone(),
+                    credential: credential.to_owned(),
+                },
+                Default::default(),
+            );
+            Ok((
+                provider
+                    .own_station_result_client(http, binding)?
+                    .http_client()?,
+                LocalSessionInvalidator { engine },
+                state,
+            ))
+        };
+        let (old, old_source, old_record) = bind(&first)?;
+        let old_copy = old.clone();
+        let (fresh, fresh_source, fresh_record) = bind(&second)?;
+        ensure!(old_record.grant_id != fresh_record.grant_id);
+        ensure!(
+            old_record.account_id == fresh_record.account_id
+                && old_record.device_id == fresh_record.device_id
+        );
+        let fresh_bound = fresh.own_station_result_client()?.context("fresh source")?;
+        ensure!(
+            old_source.remaining_for(&fresh_bound).is_err(),
+            "an old invalidator supplied a new client's lease"
+        );
+        ensure!(!fresh_source.remaining_for(&fresh_bound)?.is_zero());
+        let published = Arc::new(std::sync::Mutex::new(fresh));
+        old_source.invalidate();
+        ensure!(
+            old.own_station_result_client().is_err()
+                && old_copy.own_station_result_client().is_err()
+        );
+        ensure!(old_source.remaining().is_err());
+        ensure!(
+            published
+                .lock()
+                .expect("published fixture client")
+                .own_station_result_client()?
+                .is_some()
+        );
+        ensure!(!fresh_source.remaining()?.is_zero());
+        ensure!(
+            issuer.own_station_session_state(&first, &station)? == old_record,
+            "local invalidation changed the old issuer record or expiry"
+        );
+        issuer.set_grant_expiry(&second, chrono::Utc::now() - chrono::Duration::seconds(1))?;
+        ensure!(
+            published
+                .lock()
+                .expect("published fixture client")
+                .own_station_result_client()
+                .is_err()
+        );
+        ensure!(fresh_source.remaining_for(&fresh_bound).is_err());
+        Ok(())
+    }
 
     #[tokio::test]
     async fn carried_host_session_refuses_issuer_revocation_and_engine_replacement() -> Result<()> {

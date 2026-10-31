@@ -12,6 +12,226 @@ use serde_json::json;
 
 use super::*;
 
+struct LiveActors {
+    alice: Member,
+    bob: Member,
+    reader_epoch: u64,
+    core_epoch: Option<u64>,
+    pin_requested: bool,
+    supplied_epoch: Option<u64>,
+    provide_calls: u64,
+    pair_reauthentications: u64,
+    writer_reauthentications: u64,
+    stage: &'static str,
+}
+
+type ActorSlots = std::rc::Rc<std::cell::RefCell<LiveActors>>;
+
+fn member_snapshot(member: &Member) -> Member {
+    Member {
+        client: member.client.clone(),
+        account: member.account.clone(),
+        actor: member.actor.clone(),
+        device: member.device.clone(),
+        method: member.method.clone(),
+        key: member.key.clone(),
+        authorize_event_id: member.authorize_event_id.clone(),
+    }
+}
+
+fn require_core_epoch(actors: &ActorSlots, expected: u64) -> Result<()> {
+    let actors = actors.borrow();
+    ensure!(
+        actors.core_epoch == Some(expected) && actors.reader_epoch == expected,
+        "reader authentication changed during the fixed-session core"
+    );
+    Ok(())
+}
+
+fn current_reader_transport(actors: &ActorSlots) -> Result<arkret_http_client::Client> {
+    let mut actors = actors.borrow_mut();
+    ensure!(
+        actors
+            .core_epoch
+            .is_none_or(|epoch| epoch == actors.reader_epoch),
+        "reader authentication changed during the fixed-session core"
+    );
+    let http = actors.bob.client.sdk();
+    ensure!(
+        http.own_station_result_client()?.is_some(),
+        "current reader has no live bound native source"
+    );
+    actors.provide_calls = actors
+        .provide_calls
+        .checked_add(1)
+        .context("reader provider counter overflow")?;
+    actors.supplied_epoch = Some(actors.reader_epoch);
+    Ok(http)
+}
+
+async fn maintain_preparation_sessions(
+    governor: &ArkretServer,
+    server: &ArkretServer,
+    issuer: &MockCoauthIntrospectionServer,
+    actors: ActorSlots,
+    token: inkson::realm_events_engine::ValueCell<String>,
+    wake: Arc<tokio::sync::Notify>,
+) -> Result<()> {
+    // Keep a single-head wait plus the ordinary refresh margin in reserve.
+    // This is remaining issuer lifetime, not a forced three-minute rotation.
+    let renewal_margin = Duration::from_secs(120 + 60);
+    loop {
+        let pin = actors.borrow().pin_requested;
+        let remaining = {
+            let actors = actors.borrow();
+            actors
+                .alice
+                .client
+                .checked_native_session_remaining()?
+                .min(actors.bob.client.checked_native_session_remaining()?)
+        };
+        if pin || remaining <= renewal_margin {
+            let (old_alice, old_bob) = {
+                let actors = actors.borrow();
+                ensure!(
+                    actors.core_epoch.is_none(),
+                    "core reader may not reauthenticate"
+                );
+                (actors.alice.client.clone(), actors.bob.client.clone())
+            };
+            let fresh_alice = governor
+                .reissue_mock_native_host_session(&old_alice, issuer)
+                .await?;
+            let fresh_bob = server
+                .reissue_mock_native_host_session(&old_bob, issuer)
+                .await?;
+            {
+                let mut actors = actors.borrow_mut();
+                ensure!(
+                    actors.core_epoch.is_none(),
+                    "core reader may not reauthenticate"
+                );
+                actors.reader_epoch = actors
+                    .reader_epoch
+                    .checked_add(1)
+                    .context("reader epoch overflow")?;
+                actors.pair_reauthentications = actors
+                    .pair_reauthentications
+                    .checked_add(1)
+                    .context("reauthentication counter overflow")?;
+                actors.alice.client = fresh_alice;
+                actors.bob.client = fresh_bob;
+                token.set(actors.bob.client.session().credential().to_owned());
+                if pin {
+                    actors.core_epoch = Some(actors.reader_epoch);
+                }
+            }
+            // Publish the coherent replacement first. There is no await before
+            // invalidating only the old local sources; issuer records survive.
+            old_alice.invalidate_local_native_session()?;
+            old_bob.invalidate_local_native_session()?;
+            if pin {
+                return std::future::pending::<Result<()>>().await;
+            }
+            continue;
+        }
+        tokio::select! {
+            _ = wake.notified() => {},
+            _ = tokio::time::sleep(remaining.saturating_sub(renewal_margin)) => {},
+        }
+    }
+}
+
+async fn current_writer_for_author(
+    governor: &ArkretServer,
+    issuer: &MockCoauthIntrospectionServer,
+    actors: &ActorSlots,
+    core_epoch: u64,
+) -> Result<Member> {
+    require_core_epoch(actors, core_epoch)?;
+    let old = actors.borrow().alice.client.clone();
+    let fresh = governor
+        .reissue_mock_native_host_session(&old, issuer)
+        .await?;
+    {
+        let mut actors = actors.borrow_mut();
+        ensure!(actors.core_epoch == Some(core_epoch) && actors.reader_epoch == core_epoch);
+        actors.alice.client = fresh;
+        actors.writer_reauthentications = actors
+            .writer_reauthentications
+            .checked_add(1)
+            .context("writer authentication counter overflow")?;
+    }
+    old.invalidate_local_native_session()?;
+    Ok(member_snapshot(&actors.borrow().alice))
+}
+
+fn successful_subscriptions(
+    snapshot: &crate::scenarios::_helpers::service_metrics::MetricsSnapshot,
+    require_seen: bool,
+) -> Result<u64> {
+    ensure!(
+        snapshot.has_metric("coland_request_total"),
+        "request counter is unavailable"
+    );
+    let mut total = 0u64;
+    let mut seen_success = false;
+    let mut labels = std::collections::BTreeSet::new();
+    for sample in snapshot.samples().iter().filter(|sample| {
+        sample.name == "coland_request_total" && sample.matches(&[("op", SUBSCRIBE_OP)])
+    }) {
+        ensure!(
+            labels.insert(sample.labels.clone()),
+            "duplicate subscription counter series"
+        );
+        let status = sample
+            .labels
+            .get("status")
+            .context("subscription counter has no status label")?;
+        ensure!(
+            status.len() == 3 && status.bytes().all(|byte| byte.is_ascii_digit()),
+            "unknown subscription status label"
+        );
+        ensure!(
+            status
+                .parse::<u16>()
+                .is_ok_and(|value| (100..600).contains(&value)),
+            "unknown subscription status value"
+        );
+        ensure!(
+            sample.value.is_finite()
+                && sample.value >= 0.0
+                && sample.value.fract() == 0.0
+                && sample.value <= (1u64 << 53) as f64,
+            "invalid subscription counter value"
+        );
+        if status == "200" {
+            seen_success = true;
+            total = total
+                .checked_add(sample.value as u64)
+                .context("subscription counter overflow")?;
+        }
+    }
+    ensure!(
+        !require_seen || seen_success,
+        "successful subscription counter is unavailable"
+    );
+    Ok(total)
+}
+
+fn pending_precore_opens(
+    provides: u64,
+    success_before: u64,
+    success_at_boundary: u64,
+) -> Result<u64> {
+    let completed = success_at_boundary
+        .checked_sub(success_before)
+        .context("subscription counter regressed")?;
+    provides
+        .checked_sub(completed)
+        .context("subscription counts exceed the single-send provider bound")
+}
+
 pub async fn run() -> Result<()> {
     cotest::harness::heap_future(|| run_matrix(65)).await
 }
@@ -114,6 +334,399 @@ async fn join_at_parent(
     )
     .await?;
     Ok(())
+}
+
+// These are later, independent read-only cuts, not the failed HTTP read's cut.
+// The exact Grant is selected by its fixture inputs, never by a latest-row or
+// error-message heuristic. No returned private identifier is printed verbatim.
+const GRANT_FAILURE_GOVERNANCE_SQL: &str = r"
+BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY;
+SET LOCAL statement_timeout='500ms';
+SET LOCAL lock_timeout='250ms';
+WITH matches AS (
+    SELECT c.commit_json->>'event_ref' AS event_ref,c.commit_id,c.stream_position
+    FROM canonical_events e JOIN realm_commits c ON c.event_pk=e.pk
+    WHERE e.realm_id=:'realm' AND e.kind='ak.capability.grant' AND e.state='committed'
+      AND e.scope_ref=:'stream'::jsonb AND c.realm_id=:'realm' AND c.stream_key=:'stream_key'
+      AND c.stream_ref=:'stream'::jsonb AND e.envelope->>'event_id'=c.commit_json->>'event_ref'
+      AND e.envelope->'actor_id'=:'issuer'::jsonb
+      AND e.envelope->'payload'->'grant'->'issuer_id'=:'issuer'::jsonb
+      AND e.envelope->'payload'->'grant'->'subject'=:'subject'::jsonb
+      AND e.envelope->'payload'->'grant'->'actions'=:'actions'::jsonb
+      AND e.envelope->'payload'->'grant'->'resources'=:'resources'::jsonb
+), exact AS (
+    SELECT event_ref,commit_id,stream_position FROM matches WHERE (SELECT COUNT(*) FROM matches)=1
+), head AS (
+    SELECT commit_id,stream_position FROM realm_commits
+    WHERE realm_id=:'realm' AND stream_key=:'stream_key'
+    ORDER BY stream_position DESC LIMIT 1
+), outbox AS (
+    SELECT o.state,o.attempts,o.semantic_attempts,o.last_http_status,
+      o.last_error_code IS NOT NULL AS error_present,
+      o.realm_fanout->'authority_witnesses' @> jsonb_build_array(jsonb_build_object(
+        'member_id',:'subject'::jsonb,'membership_event_ref',:'join_ref')) AS exact_join_witness
+    FROM federation_outbox o CROSS JOIN exact g
+    WHERE o.peer_id=:'peer' AND o.realm_fanout->>'realm_id'=:'realm'
+      AND o.realm_fanout->'source_event_ids' @> jsonb_build_array(g.event_ref)
+)
+SELECT jsonb_build_array(txid_current_snapshot()::text,
+    (SELECT event_ref FROM exact),(SELECT commit_id FROM exact),(SELECT commit_id FROM head),
+    jsonb_build_array(
+      (SELECT COUNT(*) FROM matches),(SELECT stream_position FROM exact),
+      (SELECT stream_position FROM head),(SELECT COUNT(*) FROM outbox),
+      (SELECT COUNT(*) FROM outbox WHERE state='pending'),
+      (SELECT COUNT(*) FROM outbox WHERE state='pending_route'),
+      (SELECT COUNT(*) FROM outbox WHERE state='leased'),
+      (SELECT COUNT(*) FROM outbox WHERE state='delivered'),
+      (SELECT COUNT(*) FROM outbox WHERE state='cancelled_authority_lost'),
+      (SELECT MAX(attempts) FROM outbox),(SELECT MAX(semantic_attempts) FROM outbox),
+      (SELECT MAX(last_http_status) FROM outbox),
+      (SELECT COUNT(*) FROM outbox WHERE exact_join_witness),
+      (SELECT COUNT(*) FROM outbox WHERE error_present),
+      (SELECT COUNT(*) FROM outbox WHERE state NOT IN
+         ('pending','pending_route','leased','delivered','cancelled_authority_lost'))));
+COMMIT;
+";
+
+const GRANT_FAILURE_MEMBER_SQL: &str = r"
+BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY;
+SET LOCAL statement_timeout='500ms';
+SET LOCAL lock_timeout='250ms';
+WITH target AS (
+    SELECT c.commit_id,c.stream_position,c.event_pk,c.stream_ref
+    FROM realm_commits c WHERE c.realm_id=:'realm' AND c.stream_key=:'stream_key'
+      AND c.commit_json->>'event_ref'=:'event_ref'
+), anchor AS (
+    SELECT a.anchor_commit_id,a.anchor_stream_position,a.join_commit_id,
+      j.stream_position AS opening_position FROM replica_stream_anchors a
+    JOIN realm_commits j ON j.commit_id=a.join_commit_id
+    WHERE a.realm_id=:'realm' AND a.stream_key=:'stream_key'
+      AND j.realm_id=a.realm_id AND j.stream_key=a.stream_key
+), member AS (
+    SELECT membership,current_commit_id,current_stream_position FROM member_state_current_states
+    WHERE realm_id=:'realm' AND member_id=:'subject_key'
+), head AS (
+    SELECT commit_id,stream_position FROM realm_commits
+    WHERE realm_id=:'realm' AND stream_key=:'stream_key'
+    ORDER BY stream_position DESC LIMIT 1
+), outbox AS (
+    SELECT state,attempts,semantic_attempts,last_http_status FROM federation_outbox
+    WHERE peer_id=:'governance_peer' AND realm_fanout->>'realm_id'=:'realm'
+      AND realm_fanout->'source_event_ids' @> jsonb_build_array(:'event_ref'::text)
+)
+SELECT jsonb_build_array(txid_current_snapshot()::text,(SELECT commit_id FROM head),
+    jsonb_build_array(
+      (SELECT COUNT(*) FROM canonical_events e WHERE e.realm_id=:'realm'
+         AND e.envelope->>'event_id'=:'event_ref' AND e.state='committed'),
+      (SELECT COUNT(*) FROM target c JOIN canonical_events e ON e.pk=c.event_pk
+         WHERE e.state='committed' AND e.envelope->>'event_id'=:'event_ref'),
+      (SELECT COUNT(*) FROM target WHERE event_pk IS NULL),
+      (SELECT COUNT(*) FROM target WHERE commit_id=:'commit_id'
+         AND stream_position=:'position'::bigint AND stream_ref=:'stream'::jsonb),
+      (SELECT COUNT(*) FROM anchor),
+      (SELECT COUNT(*) FROM anchor WHERE anchor_commit_id IS NOT NULL),
+      (SELECT COUNT(*) FROM anchor a JOIN realm_commits j ON j.commit_id=a.join_commit_id
+         WHERE j.commit_json->>'event_ref'=:'join_ref'),
+      (SELECT anchor_stream_position FROM anchor),(SELECT opening_position FROM anchor),
+      (SELECT stream_position FROM head),(SELECT COUNT(*) FROM member),
+      (SELECT COUNT(*) FROM member WHERE membership='join'),
+      (SELECT COUNT(*) FROM member WHERE membership='join' AND current_commit_id=:'parent_commit'
+         AND current_stream_position=:'parent_position'::bigint),
+      (SELECT current_stream_position FROM member),
+      (SELECT COUNT(*) FROM member m JOIN realm_commits j ON j.commit_id=m.current_commit_id
+         JOIN canonical_events e ON e.pk=j.event_pk
+         WHERE m.membership='join' AND e.state='committed' AND j.realm_id=m.realm_id
+           AND j.stream_key=:'stream_key' AND j.stream_position=m.current_stream_position
+           AND e.envelope->>'event_id'=:'join_ref'),
+      (SELECT COUNT(*) FROM target t CROSS JOIN member m
+         WHERE t.stream_position>=m.current_stream_position),
+      (SELECT COUNT(*) FROM member m CROSS JOIN anchor a
+         WHERE m.current_stream_position>=a.opening_position),
+      (SELECT COUNT(*) FROM realm_bootstrap_current_states
+         WHERE realm_id=:'realm' AND state_family='realm_history_access' AND value=to_jsonb('since_join'::text)),
+      (SELECT COUNT(*) FROM circle_member_state_current_states
+         WHERE realm_id=:'realm' AND circle_id=:'circle' AND member_id=:'subject_key'
+           AND membership='join'),
+      (SELECT COUNT(*) FROM outbox),
+      (SELECT COUNT(*) FROM outbox WHERE state='pending'),
+      (SELECT COUNT(*) FROM outbox WHERE state='pending_route'),
+      (SELECT COUNT(*) FROM outbox WHERE state='leased'),
+      (SELECT COUNT(*) FROM outbox WHERE state='delivered'),
+      (SELECT COUNT(*) FROM outbox WHERE state='cancelled_authority_lost'),
+      (SELECT MAX(attempts) FROM outbox),(SELECT MAX(semantic_attempts) FROM outbox),
+      (SELECT MAX(last_http_status) FROM outbox)));
+COMMIT;
+";
+
+/// Keep the child owned until it exits, including after a timeout. Never let a
+/// background database reader outlive the fixture's database/reset leases.
+async fn grant_failure_sql_cut(
+    database: &str,
+    sql: &'static str,
+    variables: &[(String, String)],
+) -> Option<serde_json::Value> {
+    use std::process::Stdio;
+
+    use tokio::io::{AsyncReadExt as _, AsyncWriteExt as _};
+    let mut command = tokio::process::Command::new(
+        std::env::var_os("COTEST_PSQL").unwrap_or_else(|| "psql".into()),
+    );
+    command
+        .args([
+            "-X",
+            "-qAt",
+            "-w",
+            "--set=ON_ERROR_STOP=1",
+            "--pset=pager=off",
+        ])
+        .arg("--dbname")
+        .arg(database)
+        .env("PGCONNECT_TIMEOUT", "1")
+        .env("PGCLIENTENCODING", "UTF8")
+        .env(
+            "PGOPTIONS",
+            "-c default_transaction_read_only=on -c statement_timeout=500 -c lock_timeout=250",
+        )
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .kill_on_drop(true);
+    for (name, value) in variables {
+        command.arg("--set").arg(format!("{name}={value}"));
+    }
+    let mut child = command.spawn().ok()?;
+    let captured = tokio::time::timeout(Duration::from_secs(2), async {
+        let mut input = child.stdin.take().context("diagnostic input unavailable")?;
+        input.write_all(sql.as_bytes()).await?;
+        input.shutdown().await?;
+        drop(input);
+        let mut bytes = Vec::new();
+        child
+            .stdout
+            .take()
+            .context("diagnostic output unavailable")?
+            .take(16_385)
+            .read_to_end(&mut bytes)
+            .await?;
+        ensure!(bytes.len() <= 16_384, "diagnostic output limit");
+        ensure!(child.wait().await?.success(), "diagnostic capture failed");
+        Ok::<_, anyhow::Error>(serde_json::from_slice::<serde_json::Value>(&bytes)?)
+    })
+    .await;
+    if let Ok(Ok(value)) = captured {
+        Some(value)
+    } else {
+        // Nothing about the command, DSN, SQL, or its errors is rendered.
+        let _ = child.kill().await;
+        let _ = child.wait().await;
+        None
+    }
+}
+
+fn grant_failure_number_facts(
+    value: &serde_json::Value,
+    names: &[&str],
+) -> Option<serde_json::Value> {
+    let values = value.as_array()?;
+    if values.len() != names.len()
+        || values
+            .iter()
+            .any(|value| !value.is_null() && value.as_u64().is_none())
+    {
+        return None;
+    }
+    Some(serde_json::Value::Object(
+        names
+            .iter()
+            .zip(values)
+            .map(|(name, value)| ((*name).to_owned(), value.clone()))
+            .collect(),
+    ))
+}
+
+fn grant_failure_cut_hash(value: &serde_json::Value) -> Option<String> {
+    value
+        .as_str()
+        .map(|value| arkret_canonical::sha256_hex(value.as_bytes()))
+}
+
+struct GrantReadFailureContext<'a> {
+    governance_database: &'a str,
+    member_database: &'a str,
+    realm: &'a RealmId,
+    circle: &'a arkret_wire::CircleId,
+    issuer: &'a ActorId,
+    subject: &'a ActorId,
+    peer: &'a arkret_wire::DidCoreId,
+    governance_peer: &'a arkret_wire::DidCoreId,
+    join_ref: &'a arkret_wire::EventId,
+    parent: &'a arkret_wire::CurrentRevision,
+}
+
+async fn capture_grant_read_failure(
+    context: &GrantReadFailureContext<'_>,
+) -> Result<serde_json::Value> {
+    let stream = CommitStreamRef::Realm {
+        realm_id: context.realm.clone(),
+    };
+    let subject = serde_json::to_string(context.subject)?;
+    let mut variables = vec![
+        ("realm".into(), context.realm.to_string()),
+        ("circle".into(), context.circle.to_string()),
+        ("stream".into(), serde_json::to_string(&stream)?),
+        (
+            "stream_key".into(),
+            String::from_utf8(arkret_canonical::canonical_json_bytes(&stream)?)?,
+        ),
+        ("issuer".into(), serde_json::to_string(context.issuer)?),
+        ("subject".into(), subject),
+        ("subject_key".into(), context.subject.to_string()),
+        ("peer".into(), context.peer.to_string()),
+        (
+            "governance_peer".into(),
+            context.governance_peer.to_string(),
+        ),
+        ("join_ref".into(), context.join_ref.to_string()),
+        ("parent_commit".into(), context.parent.commit_id.to_string()),
+        (
+            "parent_position".into(),
+            context.parent.stream_position.to_string(),
+        ),
+        (
+            "actions".into(),
+            serde_json::to_string(&["ak.circle.member.add", "ak.mls.genesis"])?,
+        ),
+        (
+            "resources".into(),
+            serde_json::to_string(&json!([
+                {"kind":"circle","realm_id":context.realm,"circle_id":context.circle}
+            ]))?,
+        ),
+    ];
+    let mut diagnostic = json!({
+        "phase":"grant_circle_actions_failed", "is_failed_http_cut":false,
+        "cross_database_same_cut":false,"original_helper_stage_unknown":true,
+        "authorization_decision_computed":false,
+        "governance":{"capture_ok":false,"same_readonly_cut":false},
+        "member":{"capture_ok":false,"same_readonly_cut":false}
+    });
+    let Some(governance) = grant_failure_sql_cut(
+        context.governance_database,
+        GRANT_FAILURE_GOVERNANCE_SQL,
+        &variables,
+    )
+    .await
+    else {
+        return Ok(diagnostic);
+    };
+    let rows = governance
+        .as_array()
+        .filter(|row| row.len() == 5)
+        .context("diagnostic shape")?;
+    let facts = grant_failure_number_facts(
+        &rows[4],
+        &[
+            "matching_grants",
+            "grant_position",
+            "head_position",
+            "outbox_rows",
+            "outbox_pending",
+            "outbox_pending_route",
+            "outbox_leased",
+            "outbox_delivered",
+            "outbox_authority_lost",
+            "outbox_max_attempts",
+            "outbox_max_semantic_attempts",
+            "outbox_max_http_status",
+            "outbox_exact_join_witness_rows",
+            "outbox_error_present_rows",
+            "outbox_other_state_rows",
+        ],
+    )
+    .context("diagnostic scalars")?;
+    diagnostic["governance"] = json!({
+        "capture_ok":true,"same_readonly_cut":true,
+        "snapshot_sha256":grant_failure_cut_hash(&rows[0]).context("diagnostic snapshot")?,
+        "head_sha256":grant_failure_cut_hash(&rows[3]),"inputs":facts
+    });
+    // Zero or ambiguous matches stay unknown; neither permits a guessed read.
+    if diagnostic["governance"]["inputs"]["matching_grants"].as_u64() != Some(1) {
+        return Ok(diagnostic);
+    }
+    let event = arkret_wire::EventId::new(
+        rows[1]
+            .as_str()
+            .context("diagnostic Event reference")?
+            .to_owned(),
+    )?;
+    let commit: arkret_wire::RealmCommitId = rows[2]
+        .as_str()
+        .context("diagnostic Commit reference")?
+        .parse()?;
+    let position = diagnostic["governance"]["inputs"]["grant_position"]
+        .as_u64()
+        .context("diagnostic position")?;
+    diagnostic["governance"]["event_sha256"] =
+        json!(arkret_canonical::sha256_hex(event.as_str().as_bytes()));
+    diagnostic["governance"]["commit_sha256"] =
+        json!(arkret_canonical::sha256_hex(commit.as_str().as_bytes()));
+    variables.extend([
+        ("event_ref".into(), event.to_string()),
+        ("commit_id".into(), commit.to_string()),
+        ("position".into(), position.to_string()),
+    ]);
+    if let Some(member) = grant_failure_sql_cut(
+        context.member_database,
+        GRANT_FAILURE_MEMBER_SQL,
+        &variables,
+    )
+    .await
+    {
+        let rows = member
+            .as_array()
+            .filter(|row| row.len() == 3)
+            .context("diagnostic shape")?;
+        let facts = grant_failure_number_facts(
+            &rows[2],
+            &[
+                "committed_original_rows",
+                "full_pair_rows",
+                "chain_node_rows",
+                "exact_commit_rows",
+                "anchor_with_opening_rows",
+                "anchored_rows",
+                "anchor_exact_join_rows",
+                "anchor_position",
+                "opening_position",
+                "head_position",
+                "member_current_rows",
+                "member_join_rows",
+                "exact_parent_revision_rows",
+                "member_current_position",
+                "current_join_original_rows",
+                "target_at_or_after_current_join_rows",
+                "current_join_at_or_after_opening_rows",
+                "since_join_history_rows",
+                "circle_join_rows",
+                "outbox_rows",
+                "outbox_pending",
+                "outbox_pending_route",
+                "outbox_leased",
+                "outbox_delivered",
+                "outbox_authority_lost",
+                "outbox_max_attempts",
+                "outbox_max_semantic_attempts",
+                "outbox_max_http_status",
+            ],
+        )
+        .context("diagnostic scalars")?;
+        diagnostic["member"] = json!({
+            "capture_ok":true,"same_readonly_cut":true,
+            "snapshot_sha256":grant_failure_cut_hash(&rows[0]).context("diagnostic snapshot")?,
+            "head_sha256":grant_failure_cut_hash(&rows[1]),"floor_inputs_only":true,"inputs":facts
+        });
+    }
+    Ok(diagnostic)
 }
 
 async fn run_matrix(circle_count: usize) -> Result<()> {
@@ -229,7 +842,35 @@ async fn run_matrix(circle_count: usize) -> Result<()> {
         )
         .await?;
         join_at_parent(&alice, &realm, &circle, &actor, &alice_parent).await?;
-        grant_circle_actions(&alice_member, &realm, &circle, &bob_member).await?;
+        if let Err(error) = grant_circle_actions(&alice_member, &realm, &circle, &bob_member).await
+        {
+            let captured = capture_grant_read_failure(&GrantReadFailureContext {
+                governance_database: &governance_database.connect_url,
+                member_database: &member_database.connect_url,
+                realm: &realm_id,
+                circle: &circle,
+                issuer: &alice_member.actor,
+                subject: &bob_member.actor,
+                peer: server.service_id(),
+                governance_peer: governor.service_id(),
+                join_ref: &join.event_id,
+                parent: &bob_parent,
+            })
+            .await
+            .unwrap_or_else(|_| {
+                json!({
+                    "phase":"grant_circle_actions_failed","capture_ok":false,
+                    "is_failed_http_cut":false,"cross_database_same_cut":false,
+                    "original_helper_stage_unknown":true,"authorization_decision_computed":false
+                })
+            });
+            use std::io::Write as _;
+            let _ = writeln!(
+                std::io::stderr().lock(),
+                "[multistream-grant-read-diagnostic] {captured}"
+            );
+            return Err(error);
+        }
         join_at_parent(&bob, &realm, &circle, &bob_member.actor, &bob_parent).await?;
         if (index + 1) % 10 == 0 {
             eprintln!(
@@ -359,6 +1000,21 @@ async fn run_matrix(circle_count: usize) -> Result<()> {
         .did_boundary_metrics()?
         .context("actual subscription request counters")?;
     let before = metrics.snapshot().await?;
+    let success_before = successful_subscriptions(&before, false)?;
+    let actors = std::rc::Rc::new(std::cell::RefCell::new(LiveActors {
+        alice: alice_member,
+        bob: bob_member,
+        reader_epoch: 0,
+        core_epoch: None,
+        pin_requested: false,
+        supplied_epoch: None,
+        provide_calls: 0,
+        pair_reauthentications: 0,
+        writer_reauthentications: 0,
+        stage: "preparation",
+    }));
+    let token = value_cell(bob.session().credential().to_owned());
+    let auth_wake = Arc::new(tokio::sync::Notify::new());
     let effect = inkson::realm_events_engine::EffectRegistry::default().register(
         inkson::realm_events_engine::EffectKey {
             owner: inkson::realm_events_engine::EffectOwner::Realm {
@@ -375,7 +1031,7 @@ async fn run_matrix(circle_count: usize) -> Result<()> {
     let ctx = inkson::realm_events_engine::RealmEventsEngineContext {
         websocket_rail: inkson::realm_events_engine::WebSocketRail::default(),
         base_url: inkson::realm_events_engine::ValueReader::new(move || base.clone()),
-        token: value_cell(bob.session().credential().to_owned()),
+        token: token.clone(),
         state_store: store.clone(),
         selected_realm_id: inkson::realm_events_engine::ValueReader::new(move || selected.clone()),
         route_enabled: inkson::realm_events_engine::ValueReader::new(|| true),
@@ -389,18 +1045,27 @@ async fn run_matrix(circle_count: usize) -> Result<()> {
         }),
         effect: effect.clone(),
     };
-    let http = bob.sdk();
+    let reader_actors = actors.clone();
     let runner = inkson::realm_events_engine::run_realm_events_engine_with_transport(
         0,
         inkson::realm_events_engine::ValueReader::new(|| 0),
         realm.clone(),
         ctx,
         move |_| {
-            let http = http.clone();
-            async move { Ok(http) }
+            let selected = current_reader_transport(&reader_actors);
+            async move { selected }
         },
     );
     tokio::pin!(runner);
+    let lifecycle = maintain_preparation_sessions(
+        governor,
+        server,
+        &issuer,
+        actors.clone(),
+        token,
+        auth_wake.clone(),
+    );
+    tokio::pin!(lifecycle);
     let observation = async {
         for expected in &initial.visible_stream_heads {
             wait_head(&store, expected).await.with_context(|| {
@@ -414,7 +1079,72 @@ async fn run_matrix(circle_count: usize) -> Result<()> {
         eprintln!(
             "[2133-multistream] initial_streams={initial_streams} all_signed_heads_durable=1"
         );
+        actors.borrow_mut().pin_requested = true;
+        actors.borrow_mut().stage = "reader_pin";
+        auth_wake.notify_one();
+        let core_epoch = tokio::time::timeout(Duration::from_secs(120), async {
+            loop {
+                let ready = {
+                    let actors = actors.borrow();
+                    actors
+                        .core_epoch
+                        .filter(|epoch| actors.supplied_epoch == Some(*epoch))
+                };
+                if let Some(epoch) = ready {
+                    return epoch;
+                }
+                tokio::time::sleep(Duration::from_millis(100)).await;
+            }
+        })
+        .await
+        .context("one live follower acquires the final preparation session")?;
+        actors.borrow_mut().stage = "sentinel";
+        let sentinel_writer =
+            current_writer_for_author(governor, &issuer, &actors, core_epoch).await?;
+        let sentinel = circle_event(
+            &sentinel_writer.client,
+            &realm,
+            busy_circle,
+            EventKind::MessageCreate,
+            json!({"strand_id":busy_strand_id,"track_name":"discussion",
+                "content":{"kind":"ak.content.text","body":"Authenticated observation boundary"}}),
+        )
+        .await?;
+        let sentinel_commit = submit_and_expect_commit(
+            &sentinel_writer.client,
+            &account_id,
+            &sentinel_writer.client.device_id,
+            &sentinel,
+        )
+        .await?;
+        wait_head(
+            &store,
+            &arkret_wire::CommitStreamHead {
+                stream_ref: busy_stream.clone(),
+                stream_position: sentinel_commit.stream_position,
+                commit_id: sentinel_commit.commit_id,
+            },
+        )
+        .await
+        .context("fresh-session follower installs the real boundary Message")?;
+        require_core_epoch(&actors, core_epoch)?;
+        // Read the real successful response counter BEFORE the local provide
+        // count. With the fixture's unchanged retry=0, every provide can open
+        // at most one HTTP subscription. Exclude even late pre-core opens.
+        let boundary_success = successful_subscriptions(&metrics.snapshot().await?, true)?;
+        let boundary_provides = actors.borrow().provide_calls;
+        let pending_opens =
+            pending_precore_opens(boundary_provides, success_before, boundary_success)?;
+        let required_natural_opens = pending_opens
+            .checked_add(1)
+            .context("rollover bound overflow")?;
+        eprintln!(
+            "[2133-multistream-auth] reader_epoch={core_epoch} pre_core_provides={boundary_provides} pending_open_upper_bound={pending_opens} authoritative_expiry_remaining_ms=null sentinel_exact_head_durable=1"
+        );
         for busy in [false, true] {
+            actors.borrow_mut().stage = if busy { "busy" } else { "idle" };
+            let writer = current_writer_for_author(governor, &issuer, &actors, core_epoch).await?;
+            let alice = writer.client.clone();
             let deadline = tokio::time::Instant::now() + Duration::from_secs(100);
             let busy_writes = std::cell::Cell::new(0usize);
             let busy_head = std::cell::RefCell::new(None);
@@ -474,6 +1204,7 @@ async fn run_matrix(circle_count: usize) -> Result<()> {
                 Ok::<(), anyhow::Error>(())
             };
             tokio::try_join!(observe_target, pressure)?;
+            require_core_epoch(&actors, core_epoch)?;
             ensure!(
                 !busy || busy_writes.get() >= 2,
                 "busy evidence requires accepted hints before and after the target"
@@ -495,6 +1226,12 @@ async fn run_matrix(circle_count: usize) -> Result<()> {
                 busy_writes.get()
             );
         }
+        actors.borrow_mut().stage = "new_scope";
+        let alice_member =
+            current_writer_for_author(governor, &issuer, &actors, core_epoch).await?;
+        let alice = alice_member.client.clone();
+        let bob_member = member_snapshot(&actors.borrow().bob);
+        let bob = bob_member.client.clone();
         let circle = circle_create(
             &alice,
             &realm,
@@ -524,6 +1261,7 @@ async fn run_matrix(circle_count: usize) -> Result<()> {
                 stored_head(&store, &expected.stream_ref)
             )
         })?;
+        require_core_epoch(&actors, core_epoch)?;
         eprintln!("[2133-multistream] new_circle_head_durable=1");
         for head in &final_cut.visible_stream_heads {
             wait_head(&store, head).await.with_context(|| {
@@ -540,11 +1278,17 @@ async fn run_matrix(circle_count: usize) -> Result<()> {
         );
         ensure!(final_cut.visible_stream_heads.len() == initial_streams + 1);
         ensure!(epoch.get() > 0);
+        actors.borrow_mut().stage = "rollover";
         tokio::time::timeout(Duration::from_secs(75), async {
             loop {
-                if requests(&metrics.snapshot().await?, SUBSCRIBE_OP)
-                    - requests(&before, SUBSCRIBE_OP)
+                require_core_epoch(&actors, core_epoch)?;
+                let observed = metrics.snapshot().await?;
+                let natural_opens = successful_subscriptions(&observed, true)?
+                    .checked_sub(boundary_success)
+                    .context("successful subscription counter regressed")?;
+                if requests(&observed, SUBSCRIBE_OP) - requests(&before, SUBSCRIBE_OP)
                     >= if beyond_hint_page { 2 } else { 1 }
+                    && (!beyond_hint_page || natural_opens >= required_natural_opens)
                 {
                     return Ok::<(), anyhow::Error>(());
                 }
@@ -553,15 +1297,35 @@ async fn run_matrix(circle_count: usize) -> Result<()> {
         })
         .await
         .context("actual HTTP subscription rollover")??;
+        require_core_epoch(&actors, core_epoch)?;
+        actors.borrow_mut().stage = "complete";
+        let auth = actors.borrow();
+        eprintln!(
+            "[2133-multistream-auth] pair_reauthentications={} writer_reauthentications={} core_reader_changes=0 natural_rollover_excludes_auth_opens=1",
+            auth.pair_reauthentications, auth.writer_reauthentications
+        );
         Ok::<(), anyhow::Error>(())
     };
     tokio::pin!(observation);
     let (result, runner_ended) = tokio::select! {
         result=&mut observation=>(result,false),
         _=&mut runner=>(Err(anyhow::anyhow!("native follower ended before matrix completion")),true),
+        result=&mut lifecycle=>(match result {
+            Err(error)=>Err(error.context("fixture authentication lifecycle")),
+            Ok(())=>Err(anyhow::anyhow!("authentication lifecycle ended before matrix completion")),
+        },false),
     };
     if let Err(error) = &result {
         eprintln!("[2133-multistream-failure] observation={error:#}");
+        let actors = actors.borrow();
+        let remaining = actors.bob.client.checked_native_session_remaining().ok();
+        let diagnostic = json!({"stage":actors.stage,"reader_epoch":actors.reader_epoch,
+            "core_epoch":actors.core_epoch,"reader_source_live":remaining.is_some(),
+            "remaining_ms":remaining.map(|value| value.as_millis()),
+            "pair_reauthentications":actors.pair_reauthentications,
+            "writer_reauthentications":actors.writer_reauthentications,
+            "is_failed_http_cut":false});
+        eprintln!("[2133-multistream-auth-failure] {diagnostic}");
     }
     if runner_ended {
         return result;
@@ -587,4 +1351,37 @@ async fn run_matrix(circle_count: usize) -> Result<()> {
         usize::from(beyond_hint_page)
     );
     Ok(())
+}
+
+#[cfg(test)]
+mod lifecycle_tests {
+    use super::*;
+
+    #[test]
+    fn pending_open_bound_excludes_late_precore_responses() -> Result<()> {
+        ensure!(pending_precore_opens(4, 10, 13)? == 1);
+        ensure!(pending_precore_opens(4, 10, 14)? == 0);
+        ensure!(pending_precore_opens(3, 10, 14).is_err());
+        ensure!(pending_precore_opens(3, 10, 9).is_err());
+        Ok(())
+    }
+
+    #[test]
+    fn successful_open_counter_rejects_unknown_duplicate_or_invalid_series() -> Result<()> {
+        use crate::scenarios::_helpers::service_metrics::MetricsSnapshot;
+        let sample = format!("coland_request_total{{op=\"{SUBSCRIBE_OP}\",status=\"200\"}} 3\n");
+        ensure!(successful_subscriptions(&MetricsSnapshot::parse(&sample), true)? == 3);
+        for body in [
+            format!("coland_request_total{{op=\"{SUBSCRIBE_OP}\"}} 3"),
+            format!("{sample}{sample}"),
+            sample.replace(" 3", " -1"),
+            sample.replace(" 3", " 1.5"),
+            sample.replace("status=\"200\"", "status=\"unknown\""),
+            sample.replace("status=\"200\"", "status=\"999\""),
+            String::new(),
+        ] {
+            ensure!(successful_subscriptions(&MetricsSnapshot::parse(&body), true).is_err());
+        }
+        Ok(())
+    }
 }

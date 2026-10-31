@@ -1,11 +1,13 @@
 //! A production CLI relocation retains service, Account and Realm authority.
 use anyhow::{Context, Result, ensure};
 use arkret_identity::{verify_current_service_resolution, verify_service_resolution_floor};
+use arkret_models_discovery::StationConnectionBinding;
 use arkret_models_identity::{AuthenticatedServiceResolution, ServiceMethodState};
 use reqwest::StatusCode;
 
 use crate::harness::{
-    ArkretServer, CanonicalJsonBody, TestServerGroup, expect_json, message_create_text_payload,
+    ArkretServer, CanonicalJsonBody, TestServerGroup, expect_api_error, expect_json,
+    message_create_text_payload,
 };
 
 async fn resolution(server: &ArkretServer) -> Result<AuthenticatedServiceResolution> {
@@ -154,6 +156,18 @@ pub async fn service_migration_preserves_business_and_refreshes_peer_route() -> 
         .send_message(&realm, &strand, "peer before service migration")
         .await?;
     let before = resolution(station).await?;
+    let initial_description = serde_json::from_value(
+        expect_json(
+            station.http().get(station.url("/_arkret/describe")),
+            StatusCode::OK,
+        )
+        .await?,
+    )?;
+    let initial_binding = StationConnectionBinding::from_description(
+        &station.base_url(),
+        &initial_description,
+        true,
+    )?;
     let original_core = station.service_id().to_owned();
     let old_did = station.service_did().to_owned();
     let target = station.reserve_public_base_target()?;
@@ -188,6 +202,31 @@ pub async fn service_migration_preserves_business_and_refreshes_peer_route() -> 
         .await?,
     )?;
     target_description.validate_route_projection(&route)?;
+    // The operator explicitly selected the CLI-verified same-core target.
+    // Validate its public binding before issuing or sending a new credential.
+    let target_binding =
+        StationConnectionBinding::from_description(&target, &target_description, true)?;
+    let initial_authority = initial_binding
+        .authentication_metadata
+        .account_authority
+        .as_ref()
+        .context("original Station Account Authority")?;
+    let target_authority = target_binding
+        .authentication_metadata
+        .account_authority
+        .as_ref()
+        .context("migrated Station Account Authority")?;
+    ensure!(
+        target_binding.base_url == target.as_str()
+            && target_binding.service_id == initial_binding.service_id
+            && target_binding.service_id == original_core
+            && target_binding.trust_domain == initial_binding.trust_domain
+            && &target_binding.trust_domain == station.trust_domain()
+            && target_authority.origin == initial_authority.origin
+            && target_authority.gate_account_base_url == initial_authority.gate_account_base_url
+            && target_authority.origin.as_str() == issuer.origin(),
+        "migration changed the selected Station identity or Account Authority"
+    );
     let old_origin: url::Url = station_origin.parse()?;
     let historical_host = station
         .serve_historical_public_base(&old_origin, &old_did)
@@ -222,8 +261,8 @@ pub async fn service_migration_preserves_business_and_refreshes_peer_route() -> 
         .await?,
     )?;
     old_description.validate_route_projection(&route)?;
-    // Drift preserves service under the accepted identity. Retirement is an
-    // explicit operator action, independently of method relocation.
+    // Historical hosting retains the original method history, but the old
+    // request URI is not the newly selected canonical Station binding.
     let historical_probe = owner
         .author_event(
             &realm,
@@ -231,17 +270,77 @@ pub async fn service_migration_preserves_business_and_refreshes_peer_route() -> 
             message_create_text_payload(&strand, "historical listener before explicit retirement")?,
         )
         .await?;
-    expect_json(
-        owner.post("/_arkret/self/events").canonical_json(
-            &arkret_wire::EventAdmissionSubmission::new(historical_probe),
-        )?,
-        StatusCode::OK,
+    let submission = arkret_wire::EventAdmissionSubmission::new(historical_probe.clone());
+    expect_api_error(
+        owner
+            .post("/_arkret/self/events")
+            .canonical_json(&submission)?,
+        StatusCode::UNAUTHORIZED,
+        "unauthenticated",
     )
     .await?;
-    drop(historical_host);
-    let owner = station
-        .reconnect_after_public_base_migration(&owner, &issuer)
+
+    let predecessor =
+        issuer.own_station_session_state(owner.session().credential(), station.service_id())?;
+    // This is a fresh mock-AA issuer record for the same accepted Device,
+    // not evidence of production OIDC authentication or token refresh.
+    let reissued = station
+        .reissue_mock_native_host_session(&owner, &issuer)
         .await?;
+    ensure!(
+        reissued.session().credential() != owner.session().credential(),
+        "migration reused the old credential for a new Station binding"
+    );
+    let renewed =
+        issuer.own_station_session_state(reissued.session().credential(), station.service_id())?;
+    ensure!(
+        renewed.account_id == predecessor.account_id
+            && renewed.device_id == predecessor.device_id
+            && renewed.audience_id == predecessor.audience_id
+            && renewed.grant_id != predecessor.grant_id
+            && renewed.granted_scope == predecessor.granted_scope
+            && renewed.dpop_jkt == predecessor.dpop_jkt
+            && renewed.session_public_key == predecessor.session_public_key,
+        "migration mock authentication changed the Account, Device, holder or scopes"
+    );
+    let owner = station
+        .reconnect_after_public_base_migration(&reissued, &issuer)
+        .await?;
+    ensure!(
+        owner.session().credential() == reissued.session().credential()
+            && owner.url("/_arkret/self/events") == station.url("/_arkret/self/events"),
+        "reconnected client did not use the fresh credential at the selected canonical base"
+    );
+    let accepted: arkret_wire::AuthoritySubmitResponseBody = serde_json::from_value(
+        expect_json(
+            owner
+                .post("/_arkret/self/events")
+                .canonical_json(&submission)?,
+            StatusCode::OK,
+        )
+        .await?,
+    )?;
+    accepted.validate_for_request(&arkret_wire::AuthoritySubmitRequestBody::Event(submission))?;
+    let arkret_wire::AuthoritySubmitResponseBody::Accepted {
+        status: arkret_wire::AuthorityCommitStatus::Committed,
+        commit,
+    } = accepted
+    else {
+        anyhow::bail!("the frozen migration probe did not receive a new accepted Commit");
+    };
+    let arkret_wire::CommittedEventView::Full(original) = owner
+        .sdk()
+        .committed_event_get(&historical_probe.event_id)
+        .await?
+    else {
+        anyhow::bail!("the accepted frozen migration probe was withheld");
+    };
+    original.validate_shape()?;
+    ensure!(
+        original.event == historical_probe && original.commit == commit,
+        "migration changed the frozen original Event or its accepted Commit"
+    );
+    drop(historical_host);
     owner
         .send_message(&realm, &strand, "same owner and Realm after migration")
         .await?;
