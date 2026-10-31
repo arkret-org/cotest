@@ -727,7 +727,7 @@ jobs:
         id: joint_prerequisites
         run: bash cotest/scripts/prepare-linux-joint-e2e.sh setup
 
-      - name: Run real OIDC returning-login merge gate
+      - name: Run real OIDC, recovery and collaboration regression merge gate
         working-directory: cotest
         shell: pwsh
         run: >
@@ -737,8 +737,8 @@ jobs:
           -StartCoauth
           -RunProfile joint-smoke
           -PlaywrightProject joint-inkson
-          -Grep "@returning-login-gate|@onboarding-recovery-gate"
-          -RequireScenario "identity/oidc-login-flow.spec.ts"
+          -Grep "@returning-login-gate|@onboarding-recovery-gate|share-link members keep synchronizing messages and leave after reload; MLS=|account owner uploads, cold-loads and clears the canonical profile avatar through Settings|registration explains its supported required contact methods|public HTTPS deployment delivers the same-origin WSS challenge|cold requester signs a real locator Contact request; recipient=|Contact address instructions advertise only supported inputs"
+          -RequireScenario "identity/oidc-login-flow.spec.ts,joint/realm-invite-link-sync.spec.ts,discovery/contact-request-ui.spec.ts,identity/account-profile-ui.spec.ts,identity/registration-contact-validation.spec.ts,sync/websocket-deployment.spec.ts"
           -ForbidSkippedTests
 
       - name: Restore Linux hosts permissions
