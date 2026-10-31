@@ -712,6 +712,10 @@ jobs:
         uses: ./cotest/.github/actions/setup-joint-browser
         with:
           project: ${{ matrix.project }}
+      - name: Reclaim Docker build space
+        run: |
+          docker system prune --all --force
+          docker builder prune --all --force
       - name: Build coland Docker image
         working-directory: cotest
         shell: pwsh
