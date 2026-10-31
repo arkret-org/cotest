@@ -51,6 +51,80 @@ fn ensure_paired_calendar_source(entries: &[arkret_wire::CurrentState]) -> Resul
     Ok(())
 }
 
+/// A history window names an independently signed, Account-bound original,
+/// not the full-recovery object used as its same-cut issuance input.
+async fn ensure_history_basis_from_issued_cut(
+    author: &crate::harness::TestActorClient,
+    issued: &arkret_wire::RealmStateSnapshot,
+    window: &arkret_models_collaboration::sync_frames::account_sync::RealmStreamWindow,
+) -> Result<()> {
+    ensure!(
+        issued.purpose == arkret_wire::RealmSnapshotPurpose::FullRecovery
+            && issued.history_basis.is_none(),
+        "the original head is a full recovery cut"
+    );
+    let basis = window
+        .window_start_basis
+        .as_ref()
+        .context("the exact window carries a history basis")?;
+    let [anchor] = issued.visible_stream_heads.as_slice() else {
+        anyhow::bail!("this fixture's issued cut has exactly one Realm stream");
+    };
+    ensure!(
+        window.stream_ref == anchor.stream_ref
+            && basis.anchor_position == anchor.stream_position
+            && basis.anchor_commit_ref == anchor.commit_id
+            && basis.governance_generation == issued.governance_generation
+            && basis.snapshot_ref != issued.snapshot_id,
+        "the window must name an independent history original for the exact issued cut"
+    );
+    let original: arkret_wire::RealmStateSnapshot = serde_json::from_value(
+        expect_json(
+            by_ref_request(author, &basis.snapshot_ref, issued.realm_id.as_str()),
+            StatusCode::OK,
+        )
+        .await?,
+    )
+    .context("the referenced history original is a closed signed snapshot")?;
+    original.validate_purpose()?;
+    let account = arkret_wire::AccountId::new(
+        arkret_wire::DidCoreId::new(cotest::harness::actor_core_id(&author.actor)?)?,
+        arkret_wire::DidCoreId::new(author.service_id.clone())?,
+    );
+    let coverage = original
+        .history_basis
+        .as_ref()
+        .context("the history original carries signed coverage")?;
+    ensure!(
+        original.snapshot_id == basis.snapshot_ref
+            && original.snapshot_id != issued.snapshot_id
+            && original.realm_id == issued.realm_id
+            && original.governance_generation == basis.governance_generation
+            && original.purpose == arkret_wire::RealmSnapshotPurpose::StreamHistory
+            && coverage.account_id == account
+            && coverage.stream_ref == window.stream_ref
+            && coverage.anchor_position == basis.anchor_position
+            && coverage.anchor_commit_ref == basis.anchor_commit_ref
+            && coverage.accepted_dependency_refs.as_slice()
+                == basis
+                    .accepted_dependency_refs
+                    .as_deref()
+                    .unwrap_or_default(),
+        "the by-ref original must bind this Account, stream, anchor, tenure and exact dependencies"
+    );
+    ensure!(
+        original.visible_stream_heads == issued.visible_stream_heads
+            && original.current_state_entries == issued.current_state_entries
+            && original.retention_and_history_floor == issued.retention_and_history_floor,
+        "the history original must retain the actual issued cut's heads, rows and floors"
+    );
+    ensure!(
+        original.require_full_recovery().is_err(),
+        "the history original must not replace current recovery"
+    );
+    Ok(())
+}
+
 async fn account_detail_frames(
     client: &crate::harness::TestActorClient,
     filter: &serde_json::Value,
@@ -310,12 +384,14 @@ pub async fn limited_window_strand_tail_verifies_with_same_cut_current_through_i
     };
     ensure!(
         window.preview_only.is_none()
-            && window.window_start_basis.as_ref().is_some_and(|basis| {
-                basis.anchor_position == 6 && basis.snapshot_ref == issued.snapshot_id
-            })
+            && window
+                .window_start_basis
+                .as_ref()
+                .is_some_and(|basis| basis.anchor_position == 6)
             && window_positions(&entry) == vec![7, 8],
         "the window must name the issued anchor and carry the Strand tail: {window:?}"
     );
+    ensure_history_basis_from_issued_cut(&author, &issued, window).await?;
     let current = entry.current.as_ref().context("same-cut current")?;
 
     let http = native.client();
@@ -497,12 +573,14 @@ pub async fn message_tail_window_beyond_twenty_commits_verifies_through_inkson()
             && window.complete
             && window.preview_only.is_none()
             && window.next_position == 31
-            && window.window_start_basis.as_ref().is_some_and(|basis| {
-                basis.anchor_position == 10 && basis.snapshot_ref == issued.snapshot_id
-            })
+            && window
+                .window_start_basis
+                .as_ref()
+                .is_some_and(|basis| basis.anchor_position == 10)
             && window_positions(&entry) == (11..=30).collect::<Vec<_>>(),
         "the default window must carry the twenty-message tail on the issued anchor: {window:?}"
     );
+    ensure_history_basis_from_issued_cut(&author, &issued, window).await?;
     let current = entry.current.as_ref().context("same-cut current")?;
     ensure!(
         current.entries.len() == 33
@@ -671,12 +749,14 @@ pub async fn restricted_join_policy_floor_verifies_through_inkson() -> Result<()
     };
     ensure!(
         window.preview_only.is_none()
-            && window.window_start_basis.as_ref().is_some_and(|basis| {
-                basis.anchor_position == 6 && basis.snapshot_ref == issued.snapshot_id
-            })
+            && window
+                .window_start_basis
+                .as_ref()
+                .is_some_and(|basis| basis.anchor_position == 6)
             && window_positions(&entry) == vec![7, 8],
         "the window must name the restricted cut as its basis: {window:?}"
     );
+    ensure_history_basis_from_issued_cut(&author, &issued, window).await?;
     let verified =
         inkson::realm_events_engine::verify_account_frame_commits(&native.client(), &frame)
             .await

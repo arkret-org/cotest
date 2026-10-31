@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from pathlib import Path
 import posixpath
 import re
 
@@ -23,6 +24,7 @@ _PUBLIC_KEYS = {"schema_version", "shard_count", "shard_index", "source_refs",
                 "compiled_graph_sha256", "native_targets", "doctest_targets",
                 "compile_only_examples"}
 _PROVISION = {"agent_provision_production", "agent_vectors_production"}
+_COST_PATH = Path(__file__).with_name("native-workspace-costs.json")
 
 
 def _require(condition, message):
@@ -48,6 +50,113 @@ def _sha(value, length=64):
 def _integer(value, minimum=0):
     _require(type(value) is int and value >= minimum, "invalid integer")
     return value
+
+
+def _cost_identity(identity):
+    _require(isinstance(identity, dict) and set(identity) ==
+             {"package", "version", "kind", "name", "source"}, "invalid cost target identity")
+    _require(identity["kind"] in [["lib"], ["bin"], ["test"]]
+             and all(isinstance(identity[k], str) and identity[k]
+                     for k in ("package", "version", "name", "source")),
+             "invalid cost target identity")
+    source = identity["source"]
+    _require(source not in {".", ".."} and not source.startswith(("/", "../")) and ":" not in source
+             and "\\" not in source and posixpath.normpath(source) == source,
+             "invalid cost target source")
+
+
+def _validate_cost_policy(policy):
+    _require(isinstance(policy, dict) and set(policy) ==
+             {"schema_version", "algorithm", "default_unknown_weight", "weights", "provenance"},
+             "invalid cost policy fields")
+    _require(type(policy["schema_version"]) is int and policy["schema_version"] == 1
+             and policy["algorithm"] == "positive-weight-greedy-v1", "unknown cost policy schema")
+    _integer(policy["default_unknown_weight"], 1)
+    weights = policy["weights"]
+    _require(isinstance(weights, dict) and weights, "empty cost weights")
+    for identity, weight in weights.items():
+        _sha(identity)
+        _integer(weight, 1)
+    provenance = policy["provenance"]
+    _require(isinstance(provenance, dict) and set(provenance) == {
+        "source_head", "github_run_id", "evidence_basename", "evidence_sha256", "conversion",
+        "failed_observation_ids", "failed_observations_are_lower_bounds", "capacity_reservation",
+        "github_run_url", "historical_observation"}, "invalid cost provenance")
+    _sha(provenance["source_head"], 40)
+    run = _integer(provenance["github_run_id"], 1)
+    _require(provenance["github_run_url"] ==
+             f"https://github.com/arkret-org/cotest/actions/runs/{run}", "invalid cost run URL")
+    _require(isinstance(provenance["conversion"], str) and provenance["conversion"],
+             "missing cost conversion description")
+    failed = _strings(provenance["failed_observation_ids"])
+    _require(set(failed) <= set(weights) and provenance["failed_observations_are_lower_bounds"] is True,
+             "invalid failed cost observations")
+    historical = provenance["historical_observation"]
+    _require(isinstance(historical, dict) and set(historical) == {
+        "source_head", "github_run_url", "evidence_basename", "evidence_sha256",
+        "weights_are_planning_observations_only", "runtime_execution_credit"},
+        "invalid historical cost provenance")
+    _sha(historical["source_head"], 40)
+    _require(isinstance(historical["github_run_url"], str) and re.fullmatch(
+        r"https://github\.com/arkret-org/cotest/actions/runs/[1-9][0-9]*",
+        historical["github_run_url"]) and historical["weights_are_planning_observations_only"] is True
+        and historical["runtime_execution_credit"] is False, "invalid historical cost credit")
+    for evidence in (provenance, historical):
+        _sha(evidence["evidence_sha256"])
+        _require(isinstance(evidence["evidence_basename"], str) and re.fullmatch(
+            r"[A-Za-z0-9_-]+\.json", evidence["evidence_basename"]), "invalid cost evidence basename")
+    reservation = provenance["capacity_reservation"]
+    _require(isinstance(reservation, dict) and set(reservation) ==
+             {"identity", "identity_sha256", "weight", "meaning"}, "invalid capacity reservation")
+    _cost_identity(reservation["identity"])
+    identity = _sha(reservation["identity_sha256"])
+    _require(_digest(reservation["identity"]) == identity, "capacity identity digest mismatch")
+    weight = _integer(reservation["weight"], 1)
+    _require(weights.get(identity) == weight and isinstance(reservation["meaning"], str)
+             and reservation["meaning"], "invalid capacity weight")
+    return policy
+
+
+def _unique_cost_keys(pairs):
+    result = {}
+    for key, value in pairs:
+        _require(key not in result, "duplicate cost policy key")
+        result[key] = value
+    return result
+
+
+def _load_cost_policy():
+    # Only this tracked adjacent manifest controls placement. Missing or invalid
+    # data is an error; observations never replace execution receipts or budgets.
+    try:
+        policy = json.loads(_COST_PATH.read_text(encoding="utf-8"),
+                            object_pairs_hook=_unique_cost_keys)
+    except (OSError, UnicodeError, ValueError):
+        raise ValueError("cannot read valid workspace cost policy") from None
+    return _validate_cost_policy(policy)
+
+
+def _assign_native_targets(rows, shards):
+    _integer(shards, 1)
+    policy = _load_cost_policy()
+    reservation = policy["provenance"]["capacity_reservation"]
+    expected = reservation["identity"]
+    weights, assigned, loads = {}, {}, [0] * shards
+    for row in rows:
+        identity, digest = row["identity"], _sha(row["identity_sha256"])
+        _cost_identity(identity)
+        _require(_digest(identity) == digest and digest not in weights, "invalid allocation identity")
+        if (identity["package"], identity["name"]) == (expected["package"], expected["name"]):
+            _require(digest == reservation["identity_sha256"], "capacity target identity needs review")
+        weights[digest] = policy["weights"].get(digest, policy["default_unknown_weight"])
+        if identity["name"] in _PROVISION:
+            assigned[digest] = 0
+            loads[0] += weights[digest]
+    for digest in sorted(set(weights) - set(assigned), key=lambda key: (-weights[key], key)):
+        shard = min(range(shards), key=lambda index: (loads[index], index))
+        assigned[digest] = shard
+        loads[shard] += weights[digest]
+    return assigned
 
 
 def _absolute(value):
@@ -165,10 +274,7 @@ def create_plan(metadata: dict, messages: list[dict], shards: int,
             if target["test"]:
                 _require(target["kind"] in [["lib"], ["bin"], ["test"]],
                          "unreviewed executable target kind")
-                assigned = int(identity_sha, 16) % shards
-                if target["name"] in _PROVISION:
-                    assigned = 0
-                native.append({**row, "assigned_shard": assigned})
+                native.append(dict(row))
             if target["doctest"]:
                 _require(target["kind"] == ["lib"], "unreviewed doctest kind")
                 docs.append(dict(row))
@@ -179,6 +285,9 @@ def create_plan(metadata: dict, messages: list[dict], shards: int,
     _require(native, "no native test targets")
     _require(len({row["identity_sha256"] for row in native}) == len(native),
              "duplicate global target identity")
+    assignments = _assign_native_targets(native, shards)
+    for row in native:
+        row["assigned_shard"] = assignments[row["identity_sha256"]]
     _require(isinstance(messages, list) and messages, "empty build message stream")
     finished = [m for m in messages if m.get("reason") == "build-finished"]
     _require(len(finished) == 1 and finished[0].get("success") is True
@@ -257,14 +366,14 @@ def public_plan(plan: dict) -> dict:
     result = {k: plan[k] for k in ("schema_version", "shard_count", "shard_index", "source_refs",
                                   "compiled_graph_sha256")}
     result["source_refs"] = _refs(result["source_refs"])
+    assignments = _assign_native_targets(plan["native_targets"], plan["shard_count"])
     for key in ("native_targets", "doctest_targets", "compile_only_examples"):
         rows = []
         for row in plan[key]:
             _require(_digest(row["identity"]) == row["identity_sha256"], "target identity digest mismatch")
             if key == "native_targets":
-                assigned = (0 if row["identity"]["name"] in _PROVISION else
-                            int(row["identity_sha256"], 16) % plan["shard_count"])
-                _require(row["assigned_shard"] == assigned, "target assignment differs from stable identity hash")
+                _require(row["assigned_shard"] == assignments[row["identity_sha256"]],
+                         "target assignment differs from reviewed cost allocation")
             fields = ("identity_sha256", "assigned_shard", "executable_sha256") if key == "native_targets" else ("identity_sha256",)
             rows.append({k: row[k] for k in fields})
         result[key] = rows

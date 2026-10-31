@@ -299,47 +299,62 @@ pub async fn run_federation_revoked_service_key_replay_live() -> Result<()> {
             fixture.group.server(1).service_id(),
             Some("federation-key-successor-replay"),
         )?;
-    let successor = fixture
+    ensure!(
+        successor_request.body().and_then(reqwest::Body::as_bytes)
+            == Some(successor_body.as_slice()),
+        "the successor request changed its exact replication body"
+    );
+    let successor_response = fixture
         .group
         .server(1)
         .http()
         .execute(
             successor_request
                 .try_clone()
-                .context("clone exact successor request")?,
+                .context("clone successor request")?,
         )
         .await?;
-    ensure!(successor.status() == StatusCode::OK);
-    let successor: PeerAuthoritySubmitResponseBody = successor.json().await?;
+    ensure!(successor_response.status() == StatusCode::OK);
+    let successor: PeerAuthoritySubmitResponseBody = successor_response.json().await?;
+    let PeerAuthoritySubmitResponseBody::CommittedReplication(successor_value) = &successor else {
+        bail!("successor service key returned another peer branch");
+    };
+    let successor_outcomes = &successor_value.replication_outcomes;
     ensure!(
         matches!(
-            &successor,
-            PeerAuthoritySubmitResponseBody::CommittedReplication(value)
-                if matches!(value.replication_outcomes.as_slice(),
-                    [CommittedEventReplicationOutcome::Stored {}
-                        | CommittedEventReplicationOutcome::Duplicate {}])
+            successor_outcomes.as_slice(),
+            [CommittedEventReplicationOutcome::Stored {}
+                | CommittedEventReplicationOutcome::Duplicate {}]
         ),
-        "the successor service key did not authenticate and store a current peer submit: {successor:?}"
+        "the successor service key did not authenticate and store a current peer submit: {successor_outcomes:?}"
     );
     ensure_same_commit(
         &fresh_commit,
         &wait_held(&fixture.bob, &fresh_event.event_id, HELD_WINDOW).await?,
     )?;
-    let before_successor_replay = held_commit_ids(&fixture.bob, &fixture.realm).await?;
-    let successor_replay = fixture
+    let held_before_successor_replay = held_commit_ids(&fixture.bob, &fixture.realm).await?;
+    let successor_replay_response = fixture
         .group
         .server(1)
         .http()
-        .execute(successor_request)
+        .execute(
+            successor_request
+                .try_clone()
+                .context("clone exact successor replay")?,
+        )
         .await?;
-    ensure!(successor_replay.status() == StatusCode::OK);
-    let successor_replay: PeerAuthoritySubmitResponseBody = successor_replay.json().await?;
-    // An exact same-basis replay retains its first outcome. In particular a
-    // first Stored result must remain Stored, rather than become Duplicate.
+    ensure!(successor_replay_response.status() == StatusCode::OK);
+    let successor_replay: PeerAuthoritySubmitResponseBody =
+        successor_replay_response.json().await?;
+    // federation.md section 3 preserves the first per-item result: Stored
+    // remains Stored on an exact same-basis receipt replay, not Duplicate.
     ensure!(
-        successor_replay == successor
-            && held_commit_ids(&fixture.bob, &fixture.realm).await? == before_successor_replay,
+        successor_replay == successor,
         "the successor service key did not authenticate a held Commit replay: {successor_replay:?}"
+    );
+    ensure!(
+        held_commit_ids(&fixture.bob, &fixture.realm).await? == held_before_successor_replay,
+        "successor-key receipt replay changed the recipient's committed Realm stream"
     );
     let before = held_commit_ids(&fixture.bob, &fixture.realm).await?;
     ensure!(
@@ -1041,7 +1056,7 @@ pub async fn run_signer_keys_query_live() -> Result<()> {
 
     let serialized = serde_json::to_value(&outcome)?;
     ensure!(
-        serialized["results"][0]["key"]
+        serialized["resolutions"][0]["key"]
             .as_object()
             .context("key object")?
             .len()

@@ -298,6 +298,27 @@ pub(crate) async fn submit_and_open_content(
     Ok(commit)
 }
 
+fn write_call_phase_progress(stage: &'static str, started: Option<std::time::Instant>) {
+    use std::io::Write;
+
+    let (status, elapsed_ms) = match started {
+        Some(started) => ("ok", Some(started.elapsed().as_millis())),
+        None => ("start", None),
+    };
+    let progress = serde_json::json!({
+        "stage": stage,
+        "status": status,
+        "elapsed_ms": elapsed_ms,
+        "session_expiry_remaining_ms": null,
+    });
+    // Caller boundaries only: do not read credentials or infer an internal cut.
+    // Direct stderr survives libtest capture; write failure changes no outcome.
+    let stderr = std::io::stderr();
+    let mut stderr = stderr.lock();
+    let _ = writeln!(stderr, "[consent-call-phase] {progress}");
+    let _ = stderr.flush();
+}
+
 pub async fn run() -> Result<()> {
     run_with_signal(false).await
 }
@@ -385,8 +406,8 @@ async fn run_at_two_stations(
     };
     let x = group.server(0);
     let y = group.server(1);
-    let alice = Member::provision(x, &coauth, "message-mls-alice", ALICE_DEVICE).await?;
-    let bob = Member::provision(y, &coauth, "message-mls-bob", BOB_DEVICE).await?;
+    let mut alice = Member::provision(x, &coauth, "message-mls-alice", ALICE_DEVICE).await?;
+    let mut bob = Member::provision(y, &coauth, "message-mls-bob", BOB_DEVICE).await?;
     let realm =
         create_realm_with_join_rule(&alice.client, "Message MLS two Stations", "invite", &[x, y])
             .await?;
@@ -579,6 +600,8 @@ async fn run_at_two_stations(
         )
         .await?;
         observer.configure_emission_probe(&pause_file)?;
+        let phase_started = std::time::Instant::now();
+        write_call_phase_progress("ordinary_observer_join", None);
         observer
             .observe_ordinary_call_invite(
                 &alice,
@@ -594,7 +617,34 @@ async fn run_at_two_stations(
                 false,
             )
             .await?;
+        write_call_phase_progress("ordinary_observer_join", Some(phase_started));
+        // The completed observer owned and dropped its native hosts. Reauthenticate
+        // the same accepted Devices before the next phase opens new hosts; this
+        // creates distinct fixture-ledger records, never extends old expiry or
+        // claims to exercise the production Account Authority refresh operation.
+        let phase_started = std::time::Instant::now();
+        write_call_phase_progress("reauth_sender", None);
+        alice.client = x
+            .reissue_mock_native_host_session(&alice.client, &coauth)
+            .await
+            .context("reauthenticate the sender between completed Call phases")?;
+        write_call_phase_progress("reauth_sender", Some(phase_started));
+        let phase_started = std::time::Instant::now();
+        write_call_phase_progress("reauth_holder", None);
+        bob.client = y
+            .reissue_mock_native_host_session(&bob.client, &coauth)
+            .await
+            .context("reauthenticate the holder between completed Call phases")?;
+        write_call_phase_progress("reauth_holder", Some(phase_started));
+        eprintln!(
+            "[consent-call] phase=material_recovery_reauthentication distinct_mock_grants=2 predecessor_expiry_unchanged=1"
+        );
+        let phase_started = std::time::Instant::now();
+        write_call_phase_progress("relay_install", None);
         let material_relay = group.server_mut(1).install_scan_gap_relay().await?;
+        write_call_phase_progress("relay_install", Some(phase_started));
+        let phase_started = std::time::Instant::now();
+        write_call_phase_progress("material_recovery", None);
         observer
             .observe_material_recovery(
                 &alice,
@@ -606,6 +656,7 @@ async fn run_at_two_stations(
                 material_relay.control(),
             )
             .await?;
+        write_call_phase_progress("material_recovery", Some(phase_started));
         group.server_mut(0).restart_external_process().await?;
         group.server_mut(1).restart_external_process().await?;
         observer.after_station_restart(&bob).await?;

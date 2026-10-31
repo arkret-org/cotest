@@ -241,6 +241,31 @@ mod realm_actor_fixture_tests {
         .unwrap();
         package.stamp_registration_epoch(&evidence).unwrap();
         package.stamp_package_digest().unwrap();
+        let package_key = SigningKey::from_bytes(&[23; 32]);
+        let package_signer = arkret_signatures::Ed25519PayloadSigner::new(
+            package_key.clone(),
+            document.id.clone(),
+            service_method.clone(),
+        );
+        package.sign(&package_signer, &service_method).unwrap();
+        let proof = package.proof.as_ref().unwrap();
+        assert_eq!(proof.verification_method, service_method);
+        let mut unsigned = package.clone();
+        unsigned.proof = None;
+        let package_bytes = canonical::canonical_json_bytes(&unsigned).unwrap();
+        assert_eq!(
+            proof.payload_digest.as_str(),
+            canonical::sha256_digest(&package_bytes)
+        );
+        arkret_signatures::Ed25519DetachedJwsVerifier::new()
+            .verify_detached_jws(
+                &proof.jws,
+                &package_bytes,
+                &arkret_signatures::PublicKeyMaterial::Ed25519Raw {
+                    bytes: package_key.verifying_key().as_bytes().to_vec(),
+                },
+            )
+            .unwrap();
         let station_did = Did::new("did:web:station.example").unwrap();
         let station_id = project_did_to_core_id(&station_did).unwrap();
         let station_method = DidUrl::new("did:web:station.example#notary-key").unwrap();
@@ -316,6 +341,12 @@ mod realm_actor_fixture_tests {
     #[test]
     fn current_author_fixture_rejects_untrusted_station_and_retired_or_wrong_material() {
         let input = author_input(false);
+        let mut unsigned = input.clone();
+        unsigned["applet_package"]
+            .as_object_mut()
+            .unwrap()
+            .remove("proof");
+        assert!(applet_realm_actor_author(unsigned).is_err());
         let mut stale = input.clone();
         stale["station_verification_method"] = json!("did:web:station.example#rotated-key");
         assert_eq!(

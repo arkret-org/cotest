@@ -237,6 +237,34 @@ async fn original(alice: &Member, event: &Event) -> Result<Value> {
     Ok(json!({"original":full,"producer_source":fact}))
 }
 
+async fn publish_link_preview_policy(alice: &Member, realm: &RealmId) -> Result<()> {
+    use arkret_models_collaboration::events_payloads::preview::{
+        PreviewPolicyPayload, PreviewPolicyPayloadValue,
+    };
+
+    let policy = PreviewPolicyPayload {
+        value: PreviewPolicyPayloadValue {
+            mode: "directory_card".to_owned(),
+            audiences: vec!["link_token_holder".to_owned()],
+            fields: vec!["join_rule".to_owned(), "history_access".to_owned()],
+            history: None,
+            token: None,
+        },
+        reason: None,
+    };
+    let event = alice
+        .client
+        .author_event(
+            realm.as_str(),
+            EventKind::RealmPreviewPolicy.as_str(),
+            serde_json::to_value(policy)?,
+        )
+        .await?;
+    human::submit_and_expect_commit(&alice.client, &alice.account, alice.device.as_str(), &event)
+        .await?;
+    Ok(())
+}
+
 pub(super) async fn run() -> Result<()> {
     let (result,observations) = observe(crate::harness::heap_future(|| async {
         let mut source = crate::scenarios::agent_runtime_live::coauth_session_evidence::actual_agent_deployment("realm-link-source").await?;
@@ -250,6 +278,7 @@ pub(super) async fn run() -> Result<()> {
         let carol = super::mls_interop::member(carol,source.station.service_id())?;
         let david = super::mls_interop::member(remote.controller.clone(),remote.station.service_id())?;
         let realm:RealmId = human::create_realm_with_join_rule(&alice.client,"Native user-shared link","invite",&[&source.station,&remote.station]).await?.parse()?;
+        publish_link_preview_policy(&alice, &realm).await?;
         let (secret,creation) = create(&alice,&realm,2,3600).await?;
         let link = RealmInviteLinkId::from_event_id(&creation.event_id);
         let before_preview = footprint(&source.station,&realm).await?;

@@ -1,7 +1,6 @@
 """CLI regressions with synthetic data, dummy bytes and mocked read-only tools."""
 
 import contextlib
-import copy
 import hashlib
 import importlib.util
 import io
@@ -78,23 +77,28 @@ class CliTests(unittest.TestCase):
             code = cli.main(arguments)
         return code, stdout.getvalue(), stderr.getvalue()
 
-    def prepare(self):
+    def prepare(self, shards=4):
         result = self.invoke(["snapshot", "--metadata", str(self.meta), "--output", str(self.before)])
         self.assertEqual(result[0], 0, result)
         result = self.invoke(["plan", "--metadata", str(self.meta), "--messages", str(self.msg),
-                              "--before-context", str(self.before), "--shard-index", "0",
+                              "--before-context", str(self.before), "--shards", str(shards),
+                              "--shard-index", "0",
                               "--output", str(self.private), "--github-env-file", str(self.env_file)])
         self.assertEqual(result[0], 0, result)
         return json.loads(self.private.read_text())
 
-    def proofs(self):
-        original = self.prepare()
-        for shard in range(4):
-            private = copy.deepcopy(original)
-            private["shard_index"] = shard
-            private["raw_metadata"] = {"private": str(self.base)}
+    def proofs(self, shards=4):
+        self.prepare(shards=shards)
+        for shard in range(shards):
             directory = self.base / f"shard-{shard}"
             plan = directory / "private-plan.json"
+            result = self.invoke([
+                "plan", "--metadata", str(self.meta), "--messages", str(self.msg),
+                "--before-context", str(self.before), "--shards", str(shards),
+                "--shard-index", str(shard), "--output", str(plan)])
+            self.assertEqual(result[0], 0, result)
+            private = json.loads(plan.read_text())
+            private["raw_metadata"] = {"private": str(self.base)}
             cli._atomic_json(plan, private)
             public = cli._module("native_workspace_scope").public_plan(private)
             native, docs = fixtures.complete_receipts([public])
@@ -168,6 +172,44 @@ class CliTests(unittest.TestCase):
         self.assertNotIn(str(self.base), proof)
         self.assertNotIn("build_context", proof)
         self.assertNotIn("compiled_units", proof)
+
+    def test_eight_cli_plans_publish_and_aggregate_but_missing_eighth_is_rejected(self):
+        root = self.proofs(shards=8)
+        for shard in range(8):
+            proof = json.loads((self.base / f"shard-{shard}/scope-proof.json").read_text())
+            self.assertEqual(proof["plan"]["shard_count"], 8)
+            self.assertEqual(proof["plan"]["shard_index"], shard)
+        code, stdout, stderr = self.invoke(["aggregate", "--root", str(root)])
+        self.assertEqual((code, stderr), (0, ""))
+        summary = json.loads(stdout)
+        self.assertEqual(summary["shards"], 8)
+        self.assertEqual(summary["native_completed_targets"], 7)
+        self.assertEqual(summary["completed_doc_receipts"], 16)
+        (self.base / "shard-7/scope-proof.json").unlink()
+        output = self.base / "incomplete-aggregate.json"
+        code, stdout, stderr = self.invoke([
+            "aggregate", "--root", str(root), "--output", str(output)])
+        self.assertEqual(code, 1)
+        self.assertFalse(output.exists())
+        self.assertEqual(stdout, "")
+        self.assertEqual(stderr, "native workspace scope: command failed\n")
+
+    def test_aggregate_rejects_mixed_declared_shard_counts(self):
+        self.proofs(shards=8)
+        path = self.base / "shard-7/scope-proof.json"
+        proof = json.loads(path.read_text())
+        proof["plan"]["shard_count"] = 4
+        cli._atomic_json(path, proof)
+        self.assertEqual(self.invoke(["aggregate", "--root", str(self.base)])[0], 1)
+
+    def test_plan_rejects_unreviewed_shard_counts(self):
+        for count in (1, 6, 16):
+            with self.subTest(shards=count), self.assertRaises(SystemExit) as rejected:
+                self.invoke([
+                    "plan", "--metadata", str(self.meta), "--messages", str(self.msg),
+                    "--before-context", str(self.before), "--shards", str(count),
+                    "--shard-index", "0", "--output", str(self.private)])
+            self.assertEqual(rejected.exception.code, 2)
 
     def test_real_failed_receipt_is_safely_preserved_but_cannot_aggregate(self):
         self.proofs()

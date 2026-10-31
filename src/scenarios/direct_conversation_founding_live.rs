@@ -182,16 +182,7 @@ async fn upload_unbound_blob(member: &Member, bytes: &[u8]) -> Result<String> {
 
 /// Submit one Event through the self events union and return its outcome.
 async fn submit(member: &Member, event: &Event) -> Result<AuthoritySubmitResponseBody> {
-    let (status, body) = post_json(
-        &member.client,
-        &EventAdmissionSubmission::new(event.clone()),
-    )
-    .await?;
-    ensure!(
-        status == StatusCode::OK,
-        "{} was not decided with a closed outcome: {status} {body}",
-        event.kind.as_str()
-    );
+    let body = member.client.submit_authored_event(event).await?;
     Ok(serde_json::from_value(body)?)
 }
 

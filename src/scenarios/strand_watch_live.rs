@@ -1127,6 +1127,7 @@ async fn run_registered_watch_audit(
             &bob_account,
             controller,
             group.server(1),
+            group.server(0),
             &realm,
             &joining_revisions,
         )
