@@ -2014,7 +2014,6 @@ fn rust_char_literal_end(line: &str, index: usize) -> Option<usize> {
 struct SourceStringOccurrence {
     value: String,
     start: usize,
-    end: usize,
 }
 
 fn extract_source_string_literals(line: &str, rust_source: bool) -> Vec<String> {
@@ -2075,7 +2074,6 @@ fn source_string_occurrences(line: &str, rust_source: bool) -> Vec<SourceStringO
             literals.push(SourceStringOccurrence {
                 value: literal,
                 start: start - 1,
-                end: i + 1,
             });
             i += 1;
         }
