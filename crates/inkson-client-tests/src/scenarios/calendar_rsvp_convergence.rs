@@ -741,54 +741,23 @@ pub async fn calendar_rsvp_converges_across_concurrent_responses() -> Result<()>
 }
 
 /// The same Calendar current value must survive a real process restart and exact
-/// Event replay. The scenario uses a throw-away Postgres when Docker is
-/// available; environments without either Postgres source report an explicit
-/// live-row skip while reducer unit tests still run.
+/// Event replay. Real Account Authority lifecycle records remain available
+/// while the same Station process is killed and restarted with its retained
+/// database, public identity, keystore, and authenticated clients.
 pub async fn calendar_rsvp_persists_across_restart_and_replay() -> Result<()> {
-    // `COTEST_COLAND_DATABASE_URL` is an administrator connection, not a test
-    // database: used directly, every run replays onto the previous run's rows
-    // and a stale `service_identity` fails this restart assertion for reasons
-    // that have nothing to do with the code under test. This helper creates a
-    // per-run database from it (and falls back to Docker), dropping it on Drop.
-    let ephemeral = crate::scenarios::_helpers::coauth_bootstrap::spawn_ephemeral_postgres_for(
-        "COTEST_COLAND_DATABASE_URL",
-    )?;
-    let Some(database) = ephemeral.as_ref() else {
-        eprintln!(
-            "calendar RSVP restart row skipped: no COTEST_COLAND_DATABASE_URL and Docker/Postgres unavailable"
-        );
-        return Ok(());
-    };
-    let database_url = database.connect_url.clone();
+    use cotest::scenarios::agent_runtime_live::{actual_agent_deployment, additional_controller};
 
-    let test_name = "calendar-rsvp-restart";
-    let keystore_dir = tempfile::tempdir()?;
-    let keystore_path = keystore_dir
-        .path()
-        .join("coland.v1")
-        .to_string_lossy()
-        .into_owned();
-    let keystore_env = [
-        ("COLAND_KEYSTORE_BACKEND", "encrypted_file"),
-        ("COLAND_KEYSTORE_PATH", keystore_path.as_str()),
-        (
-            "COLAND_KEYSTORE_MASTER_KEY",
-            "ERERERERERERERERERERERERERERERERERERERERERE=",
-        ),
-    ];
-    let mut server =
-        ArkretServer::spawn_with_database_url(test_name, &database_url, &keystore_env).await?;
-    let alice_did = actor_did_for_service_did(server.service_did(), ALICE_LOCAL)?;
-    let bob_did = actor_did_for_service_did(server.service_did(), BOB_LOCAL)?;
-    let alice_did = alice_did.as_str();
-    let bob_did = bob_did.as_str();
-    let alice = server
-        .standard_register_client(
-            alice_did,
-            "@cotest-rsvp-alice",
-            "ak:device:01904100-0000-7000-8000-0000000000d1",
-        )
-        .await?;
+    let mut deployment = actual_agent_deployment("calendar-rsvp-restart").await?;
+    let alice = deployment.controller.clone();
+    let bob = additional_controller(
+        &deployment,
+        "bob-calendar-restart",
+        "ak:device:01904100-0000-7000-8000-0000000000d2",
+    )
+    .await?;
+    let server = &mut deployment.station;
+    let alice_did = alice.actor.as_str();
+    let bob_did = bob.actor.as_str();
     let alice_second_device = alice.clone();
     let created = alice
         .create_realm_bootstrap_with(json!({
@@ -871,14 +840,7 @@ pub async fn calendar_rsvp_persists_across_restart_and_replay() -> Result<()> {
     .await?;
 
     assert_realm_identity(&alice, &realm_id).await?;
-    server.kill_immediately().await?;
-    drop(server);
-    let mut server =
-        ArkretServer::spawn_with_database_url(test_name, &database_url, &keystore_env).await?;
-    let alice = server
-        .standard_client(alice_did, "ak:device:01904100-0000-7000-8000-0000000000d1")
-        .await?;
-    let alice_second_device = alice.clone();
+    server.restart_external_process().await?;
     let restarted_strand = signed_strand_value(
         &alice,
         &RealmId::new(realm_id.clone())?,
@@ -940,13 +902,7 @@ pub async fn calendar_rsvp_persists_across_restart_and_replay() -> Result<()> {
         .await?;
     let resolved_commit = submit_prepared_event(&alice, &resolved).await?;
     ensure!(resolved_commit.stream_position > declined_commit.stream_position);
-    server.kill_immediately().await?;
-    drop(server);
-    let server =
-        ArkretServer::spawn_with_database_url(test_name, &database_url, &keystore_env).await?;
-    let alice = server
-        .standard_client(alice_did, "ak:device:01904100-0000-7000-8000-0000000000d1")
-        .await?;
+    server.restart_external_process().await?;
     assert_signed_snapshot_rsvp(
         &alice,
         &RealmId::new(realm_id.clone())?,
@@ -957,7 +913,6 @@ pub async fn calendar_rsvp_persists_across_restart_and_replay() -> Result<()> {
     )
     .await?;
 
-    drop(ephemeral);
     Ok(())
 }
 

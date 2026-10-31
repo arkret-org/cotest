@@ -27,11 +27,11 @@ pub async fn run_agent_longevity_session_boundary() -> Result<()> {
     Ok(())
 }
 
-pub(crate) struct ActualAgentDeployment {
-    pub http: reqwest::Client,
-    pub oidc_client_id: String,
+pub struct ActualAgentDeployment {
+    pub(crate) http: reqwest::Client,
+    pub(crate) oidc_client_id: String,
     pub station: ArkretServer,
-    pub coauth: crate::scenarios::_helpers::coauth_bootstrap::SpawnedCoauth,
+    pub(crate) coauth: crate::scenarios::_helpers::coauth_bootstrap::SpawnedCoauth,
     pub controller: crate::harness::TestActorClient,
     pub account: arkret_wire::AccountId,
     pub(crate) endpoints: DeploymentEndpoints,
@@ -39,7 +39,7 @@ pub(crate) struct ActualAgentDeployment {
     _email: SpawnedExternalProcess,
 }
 
-pub(crate) fn actual_agent_deployment(
+pub fn actual_agent_deployment(
     label: &str,
 ) -> impl std::future::Future<Output = Result<ActualAgentDeployment>> + '_ {
     crate::harness::heap_future(|| actual_agent_deployment_configured(label))
@@ -266,7 +266,7 @@ async fn actual_agent_deployment_configured(label: &str) -> Result<ActualAgentDe
     })
 }
 
-pub(crate) async fn additional_controller(
+pub async fn additional_controller(
     deployment: &ActualAgentDeployment,
     handle: &str,
     device_id: &str,

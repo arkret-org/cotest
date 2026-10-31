@@ -91,6 +91,7 @@ pub async fn authz_grant_lifecycle_and_audit_work() -> Result<()> {
         "resources": [{"kind":"realm", "realm_id":realm_id, "match_scope":"realm_wide"}],
         "constraints": [{
             "constraint_kind":"quota",
+            "constraint_subkind":"rate",
             "effect":"allow",
             "max_operation_count":5,
             "period":"PT1H",

@@ -6,6 +6,7 @@ import io
 import json
 import os
 from pathlib import Path
+import re
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -228,6 +229,366 @@ class NativeOperationStatusTests(unittest.TestCase):
         result = real_publish(loop, self.root / "os-loop-public", artifacts_root=self.artifacts,
                               declarations=self.declarations)
         self.assertIn("invalid_run_root", result["diagnostics"])
+
+    def preflight_only(self, code=101, unchanged=True):
+        for name in ("native-result.json", "native-sources.json", "native.log", "coverage.json"):
+            (self.run / name).unlink(missing_ok=True)
+        result = {"command": [PRIVATE, "-B", PRIVATE], "exit_code": code,
+                  "seconds": 1.25, "sources_unchanged": unchanged,
+                  "source_fence": "service-isolation-sources.json",
+                  "log": "service-isolation.log", "target_directory": PRIVATE}
+        self.write("service-isolation-result.json", result)
+        self.write("service-isolation-sources.json", {PRIVATE: "a" * 64})
+        (self.run / "service-isolation.log").write_bytes(PRIVATE.encode() + b"\xff\x00")
+        return result
+
+    def assert_no_native_credit(self, result):
+        self.assertFalse(result["export_complete"])
+        self.assertFalse(result["native_execution_complete"])
+        for field in ("native", "counts", "coverage"):
+            self.assertIsNone(result[field])
+        self.assertEqual([row["status"] for row in result["tests"]], ["not_observed"] * 13)
+        self.assertEqual([row["status"] for row in result["meta_tests"]], ["not_observed"] * 2)
+
+    def test_preflight_failure_exports_only_typed_facts_and_hashes(self):
+        self.preflight_only()
+        result = self.publish()
+        self.assert_no_native_credit(result)
+        expected = {"stage": "service_isolation", "exit_code": 101,
+                    "sources_unchanged": True, "seconds": 1.25}
+        for field, name in (("result_sha256", "service-isolation-result.json"),
+                            ("source_fence_sha256", "service-isolation-sources.json"),
+                            ("log_sha256", "service-isolation.log")):
+            expected[field] = hashlib.sha256((self.run / name).read_bytes()).hexdigest()
+        self.assertEqual(result["preflight"], expected)
+        self.assertEqual(result["preflight_diagnostics"], [])
+        self.assertEqual(result["status"], "incomplete")
+        real_publish = publisher.publish
+        def isolated(run_root, output_dir):
+            return real_publish(run_root, output_dir, artifacts_root=self.artifacts,
+                                declarations=self.declarations)
+        capture = io.StringIO()
+        with patch.object(publisher, "publish", side_effect=isolated), contextlib.redirect_stdout(capture):
+            code = publisher.main(["--run-root", str(self.run), "--output-dir", str(self.root / "preflight-cli")])
+        self.assertEqual(code, 1)
+        self.assertNotIn(PRIVATE, capture.getvalue())
+
+    def test_preflight_success_or_source_change_never_infers_a_native_outcome(self):
+        for index, (code, unchanged) in enumerate(((0, True), (0, False), (124, False))):
+            self.preflight_only(code, unchanged)
+            result = self.publish(f"preflight-scalars-{index}")
+            self.assert_no_native_credit(result)
+            self.assertEqual(result["preflight"]["exit_code"], code)
+            self.assertIs(result["preflight"]["sources_unchanged"], unchanged)
+            self.assertEqual(result["status"], "incomplete")
+            self.assertNotIn("failed_stage", result)
+
+    def test_preflight_malformed_results_never_export_private_values(self):
+        original = self.preflight_only()
+        corruptions = [dict(original, **{key: value}) for key, value in (
+            ("exit_code", True), ("exit_code", 1.5), ("sources_unchanged", PRIVATE),
+            ("seconds", True), ("seconds", float("nan")), ("seconds", 10 ** 1000),
+            ("log", "../" + PRIVATE), ("source_fence", "../" + PRIVATE), ("message", PRIVATE))]
+        for index, value in enumerate(corruptions):
+            self.write("service-isolation-result.json", value)
+            result = self.publish(f"preflight-invalid-{index}")
+            self.assert_no_native_credit(result)
+            self.assertIsNone(result["preflight"])
+            self.assertEqual(result["preflight_diagnostics"], ["unavailable_service_isolation"])
+        (self.run / "service-isolation-result.json").write_bytes(b'{"exit_code":0,"exit_code":101}')
+        self.assertIsNone(self.publish("preflight-duplicate")["preflight"])
+        self.write("service-isolation-result.json", original)
+        self.write("service-isolation-sources.json", {PRIVATE: PRIVATE})
+        self.assertIsNone(self.publish("preflight-invalid-fence")["preflight"])
+
+    def test_preflight_missing_linked_or_unresolvable_inputs_fail_closed(self):
+        self.preflight_only()
+        for index, name in enumerate(("service-isolation-result.json", "service-isolation-sources.json",
+                                      "service-isolation.log")):
+            path = self.run / name
+            original = path.read_bytes()
+            path.unlink()
+            self.assertIsNone(self.publish(f"preflight-missing-{index}")["preflight"])
+            path.write_bytes(original)
+        log = self.run / "service-isolation.log"
+        hardlink = self.root / "private-hardlink"
+        os.link(log, hardlink)
+        try:
+            self.assertIsNone(self.publish("preflight-hardlink")["preflight"])
+        finally:
+            hardlink.unlink()
+        original_resolve = Path.resolve
+        def raising(path, *args, **kwargs):
+            if path == log:
+                raise RuntimeError("Symlink loop " + PRIVATE)
+            return original_resolve(path, *args, **kwargs)
+        with patch.object(Path, "resolve", autospec=True, side_effect=raising):
+            self.assertIsNone(self.publish("preflight-resolve-loop")["preflight"])
+
+    def test_preflight_cannot_override_existing_native_execution_or_coverage(self):
+        baseline = self.publish("native-baseline")
+        self.write("service-isolation-result.json", {"message": PRIVATE})
+        result = self.publish("native-optional-preflight")
+        for field in ("native", "counts", "coverage", "status", "export_complete",
+                      "native_execution_complete", "tests", "meta_tests", "diagnostics"):
+            self.assertEqual(result[field], baseline[field])
+        self.assertIsNone(result["preflight"])
+        self.assertEqual(result["preflight_diagnostics"], [])
+
+    def failure_phase(self):
+        source = (publisher.REPO / publisher.MLS_SOURCE).read_bytes()
+        lines = source.decode("utf-8").splitlines()
+        line = lines.index('        phase.mark("mimi_control", line!());') + 1
+        self.write("native-sources.json", {"cotest/" + publisher.MLS_SOURCE: hashlib.sha256(source).hexdigest()})
+        (self.run / "diagnostics").mkdir(exist_ok=True)
+        return {"case": publisher.MLS_CASE, "stage": "mimi_control", "source": publisher.MLS_SOURCE,
+                "line": line, "status": None, "error_code": None}
+
+    def failed_mls_log(self):
+        names = (*publisher.REQUIRED, *publisher.META)
+        lines = [f"test {name} ... {'FAILED' if name == publisher.MLS_CASE else 'ok'}" for name in names]
+        lines += [PRIVATE, "test result: FAILED. 14 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 12.50s"]
+        (self.run / "native.log").write_text("\n".join(lines) + "\n", encoding="utf-8")
+        result = json.loads((self.run / "native-result.json").read_text())
+        self.write("native-result.json", dict(result, exit_code=101))
+
+    def test_failed_mls_phase_is_source_bound_without_http_or_proof_credit(self):
+        self.failed_mls_log()
+        phase = self.failure_phase()
+        self.write("diagnostics/mls-interop.json", phase)
+        result = self.publish()
+        self.assertEqual(result["failure_phases"], [phase])
+        self.assertEqual(result["counts"], {"passed": 14, "failed": 1, "ignored": 0, "measured": 0, "filtered_out": 0})
+        self.assertEqual(result["status"], "failed")
+        self.assertFalse(result["export_complete"])
+        self.assertFalse(result["native_execution_complete"])
+        self.assertIsNone(result["coverage"])
+        self.assertEqual(len(result["tests"]), 13)
+        self.assertEqual(len(result["meta_tests"]), 2)
+        real_publish = publisher.publish
+        def isolated(run_root, output_dir):
+            return real_publish(run_root, output_dir, artifacts_root=self.artifacts, declarations=self.declarations)
+        with patch.object(publisher, "publish", side_effect=isolated), contextlib.redirect_stdout(io.StringIO()):
+            code = publisher.main(["--run-root", str(self.run), "--output-dir", str(self.root / "failed-phase-cli")])
+        self.assertEqual(code, 1)
+
+    def test_failure_phase_rejects_unknown_fields_facts_source_and_locations(self):
+        self.failed_mls_log()
+        phase = self.failure_phase()
+        corruptions = [dict(phase, **{key: PRIVATE}) for key in ("case", "stage", "source")]
+        corruptions += [dict(phase, line=value) for value in (True, 0, 10001, phase["line"] + 1)]
+        corruptions += [dict(phase, status=503), dict(phase, error_code="temporarily_unavailable"),
+                        dict(phase, message=PRIVATE), {key: value for key, value in phase.items() if key != "status"}]
+        for index, value in enumerate(corruptions):
+            with self.subTest(index=index):
+                self.write("diagnostics/mls-interop.json", value)
+                result = self.publish(f"bad-phase-{index}")
+                self.assertEqual(result["failure_phases"], [])
+                self.assertIn("unavailable_mls_failure_phase", result["diagnostics"])
+                self.assertFalse(result["export_complete"])
+                self.assertIsNone(result["coverage"])
+        self.write("diagnostics/mls-interop.json", phase)
+        self.write("native-sources.json", {"cotest/" + publisher.MLS_SOURCE: "a" * 64})
+        self.assertEqual(self.publish("changed-phase-source")["failure_phases"], [])
+
+    def test_failure_phase_duplicate_json_missing_and_hardlinks_are_unavailable(self):
+        self.failed_mls_log()
+        self.assertEqual(self.publish("missing-phase")["failure_phases"], [])
+        phase = self.failure_phase()
+        path = self.run / "diagnostics/mls-interop.json"
+        raws = [json.dumps(phase)[:-1] + ',"stage":"' + PRIVATE + '"}',
+                PRIVATE, '{"line": NaN}', '\x00', 'x' * 4097]
+        for index, raw in enumerate(raws):
+            path.write_text(raw, encoding="utf-8")
+            result = self.publish(f"invalid-phase-json-{index}")
+            self.assertEqual(result["failure_phases"], [])
+            self.assertIn("unavailable_mls_failure_phase", result["diagnostics"])
+        outside = self.root / "private-phase.json"
+        outside.write_text(json.dumps(phase), encoding="utf-8")
+        path.unlink()
+        os.link(outside, path)
+        self.assertEqual(self.publish("phase-hardlink")["failure_phases"], [])
+
+    def test_passed_case_never_consumes_failure_phase_or_changes_coverage(self):
+        phase = self.failure_phase()
+        self.write("diagnostics/mls-interop.json", dict(phase, message=PRIVATE))
+        result = self.publish()
+        self.assertEqual(result["failure_phases"], [])
+        self.assertNotIn("unavailable_mls_failure_phase", result["diagnostics"])
+        self.assertTrue(result["export_complete"])
+        self.assertEqual(result["coverage"]["remaining"], len(self.unmapped))
+
+    def test_phase_resolve_fault_is_private_and_marker_inventory_matches_source(self):
+        self.failed_mls_log()
+        self.write("diagnostics/mls-interop.json", self.failure_phase())
+        original = Path.resolve
+        def raising(path, *args, **kwargs):
+            if path.name == "mls-interop.json":
+                raise RuntimeError("Symlink loop from " + PRIVATE)
+            return original(path, *args, **kwargs)
+        with patch.object(Path, "resolve", autospec=True, side_effect=raising):
+            self.assertEqual(self.publish("resolve-phase")["failure_phases"], [])
+        source = (publisher.REPO / publisher.MLS_SOURCE).read_text(encoding="utf-8")
+        stages = re.findall(r'phase\.mark\("([a-z_]+)", line!\(\)\);', source)
+        self.assertEqual(set(stages), publisher.MLS_STAGES)
+        self.assertEqual(len(stages), len(set(stages)))
+
+
+    def compiler_fixture(self):
+        repo = self.root / "source-repository"
+        source = "src/compiler_observation.rs"
+        path = repo / source
+        path.parent.mkdir(parents=True, exist_ok=True)
+        raw = b"pub struct Example {\n    hidden: usize,\n}\n"
+        path.write_bytes(raw)
+        digest = hashlib.sha256(raw).hexdigest()
+        self.write("native-sources.json", {"cotest/" + source: digest})
+        self.write("native-result.json", {
+            "exit_code": 101, "sources_unchanged": True, "seconds": 1.0,
+            "log": "native.log", "source_fence": "native-sources.json",
+        })
+        return repo, source, digest
+
+    def compiler_log(self, source, *, header="error[E0308]: " + PRIVATE, suffix=""):
+        (self.run / "native.log").write_text(
+            header + "\n  --> " + source + ":2:5\n2 | " + PRIVATE + "\n" + suffix,
+            encoding="utf-8")
+
+    def tracked_result(self, source, *, mode="100644", stage="0", code=0):
+        output = (mode + " " + "a" * 40 + " " + stage + "\t" + source + "\0").encode()
+        return publisher.subprocess.CompletedProcess([], code, stdout=output)
+
+    def assert_no_compiler_credit(self, result):
+        self.assertEqual(result["status"], "failed")
+        self.assertFalse(result["export_complete"])
+        self.assertFalse(result["native_execution_complete"])
+        self.assertIsNone(result["coverage"])
+        self.assertIsNone(result["counts"])
+        self.assertTrue(all(row["status"] == "not_observed" for row in result["tests"] + result["meta_tests"]))
+
+    def test_compiler_observation_exports_only_closed_source_bound_fields(self):
+        repo, source, digest = self.compiler_fixture()
+        self.compiler_log(source)
+        with patch.object(publisher, "REPO", repo), patch.object(
+                publisher.subprocess, "run", return_value=self.tracked_result(source)) as tracked:
+            result = self.publish()
+        self.assert_no_compiler_credit(result)
+        self.assertEqual(result["compiler_diagnostics"], [{
+            "reason": "compiler_primary_location_observed", "underlying_cause": "unknown",
+            "code": "E0308", "lint": None, "source": source,
+            "line": 2, "column": 5, "source_sha256": digest,
+        }])
+        self.assertEqual(result["compiler_diagnostic_notes"], [])
+        args, options = tracked.call_args
+        self.assertEqual(args[0][-2:], ["--", source])
+        self.assertEqual(options["timeout"], 5)
+        self.assertEqual(options["stderr"], publisher.subprocess.DEVNULL)
+
+    def test_compiler_observation_ansi_dead_code_and_duplicate_locations(self):
+        repo, source, _ = self.compiler_fixture()
+        note = "  = note: `-D dead-code` implied by `-D warnings`\n"
+        self.compiler_log(source, header="\x1b[31merror\x1b[0m: " + PRIVATE, suffix=note)
+        original = (self.run / "native.log").read_bytes()
+        (self.run / "native.log").write_bytes(original + original)
+        with patch.object(publisher, "REPO", repo), patch.object(
+                publisher.subprocess, "run", return_value=self.tracked_result(source)):
+            result = self.publish()
+        self.assert_no_compiler_credit(result)
+        self.assertEqual(len(result["compiler_diagnostics"]), 1)
+        self.assertIsNone(result["compiler_diagnostics"][0]["code"])
+        self.assertEqual(result["compiler_diagnostics"][0]["lint"], "dead_code")
+
+    def test_compiler_observation_requires_unique_regular_stage_zero_tracking(self):
+        repo, source, _ = self.compiler_fixture()
+        self.compiler_log(source)
+        invalid = [self.tracked_result(source, mode="120000"), self.tracked_result(source, stage="1"),
+                   self.tracked_result(source, code=1), self.tracked_result("src/another.rs")]
+        duplicate = self.tracked_result(source)
+        duplicate.stdout *= 2
+        invalid.append(duplicate)
+        for index, response in enumerate(invalid):
+            with self.subTest(index=index), patch.object(publisher, "REPO", repo), patch.object(
+                    publisher.subprocess, "run", return_value=response):
+                result = self.publish(f"tracking-{index}")
+            self.assert_no_compiler_credit(result)
+            self.assertEqual(result["compiler_diagnostics"], [])
+            self.assertEqual(result["compiler_diagnostic_notes"], ["unavailable_native_compiler_observation"])
+
+    def test_untracked_compiler_source_is_not_opened(self):
+        repo, source, _ = self.compiler_fixture()
+        self.compiler_log(source)
+        original_read = publisher.read_file
+
+        def guarded(path, *args):
+            if path == repo / source:
+                raise AssertionError("untracked source was opened")
+            return original_read(path, *args)
+
+        with patch.object(publisher, "REPO", repo), patch.object(
+                publisher.subprocess, "run", return_value=self.tracked_result(source, code=1)), patch.object(
+                publisher, "read_file", side_effect=guarded):
+            self.assertEqual(self.publish()["compiler_diagnostics"], [])
+
+    def test_compiler_observation_rejects_unsafe_unfenced_or_out_of_range_sources(self):
+        repo, source, _ = self.compiler_fixture()
+        cases = [("../" + source, 2, 5), ("/" + source, 2, 5),
+                 ("C:/" + source, 2, 5), (source, 999, 5), (source, 2, 999)]
+        for index, (location, line, column) in enumerate(cases):
+            (self.run / "native.log").write_text(
+                f"error[E0308]: {PRIVATE}\n --> {location}:{line}:{column}\n", encoding="utf-8")
+            with self.subTest(index=index), patch.object(publisher, "REPO", repo), patch.object(
+                    publisher.subprocess, "run", return_value=self.tracked_result(source)):
+                result = self.publish(f"location-{index}")
+            self.assertEqual(result["compiler_diagnostics"], [])
+        self.compiler_log(source)
+        self.write("native-sources.json", {"cotest/" + source: "b" * 64})
+        with patch.object(publisher, "REPO", repo), patch.object(
+                publisher.subprocess, "run", return_value=self.tracked_result(source)):
+            self.assertEqual(self.publish("source-mismatch")["compiler_diagnostics"], [])
+
+    def test_compiler_observation_does_not_classify_runtime_or_malformed_logs(self):
+        repo, source, _ = self.compiler_fixture()
+        base = f"error[E0308]: {PRIVATE}\n --> {source}:2:5\n"
+        cases = [base + "running 0 tests\n", base + "    Running tests/native_operation_contracts.rs\n",
+                 base + f"test {publisher.REQUIRED[0]} ... {PRIVATE}\n", base + "test result: truncated\n",
+                 base.encode() + b"\xff", base + "x" * 65537, base + "\x00", base + "\x1b"]
+        for index, text in enumerate(cases):
+            (self.run / "native.log").write_bytes(text if isinstance(text, bytes) else text.encode())
+            with self.subTest(index=index), patch.object(publisher, "REPO", repo), patch.object(
+                    publisher.subprocess, "run", side_effect=AssertionError("runtime log queried Git")):
+                result = self.publish(f"runtime-{index}")
+            self.assertEqual(result["compiler_diagnostics"], [])
+
+    def test_compiler_observation_git_failures_never_export_private_errors(self):
+        repo, source, _ = self.compiler_fixture()
+        self.compiler_log(source)
+        errors = [OSError(PRIVATE), publisher.subprocess.TimeoutExpired([PRIVATE], 5)]
+        for index, error in enumerate(errors):
+            with self.subTest(index=index), patch.object(publisher, "REPO", repo), patch.object(
+                    publisher.subprocess, "run", side_effect=error):
+                result = self.publish(f"git-error-{index}")
+            self.assertEqual(result["compiler_diagnostics"], [])
+            self.assertEqual(result["compiler_diagnostic_notes"], ["unavailable_native_compiler_observation"])
+
+    def test_compiler_observation_bounds_drop_partial_auxiliary_records(self):
+        repo, source, _ = self.compiler_fixture()
+        texts = ["".join(f"error[E{index:04d}]: {PRIVATE}\n --> {source}:2:5\n" for index in range(5)),
+                 "".join(f"error[E{index:04d}]: {PRIVATE}\n" for index in range(9))]
+        for index, text in enumerate(texts):
+            (self.run / "native.log").write_text(text, encoding="utf-8")
+            with patch.object(publisher, "REPO", repo), patch.object(
+                    publisher.subprocess, "run", return_value=self.tracked_result(source)):
+                result = self.publish(f"bounded-{index}")
+            self.assert_no_compiler_credit(result)
+            self.assertEqual(result["compiler_diagnostics"], [])
+
+    def test_successful_native_export_does_not_query_compiler_tracking(self):
+        with patch.object(publisher.subprocess, "run", side_effect=AssertionError("successful native queried Git")):
+            result = self.publish()
+        self.assertTrue(result["export_complete"])
+        self.assertFalse(result["coverage"]["acceptance"])
+        self.assertEqual(result["compiler_diagnostics"], [])
+        self.assertEqual(result["compiler_diagnostic_notes"], [])
 
 
 if __name__ == "__main__":

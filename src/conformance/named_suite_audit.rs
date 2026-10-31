@@ -620,6 +620,28 @@ fn assert_named_gap_inventory(
     Ok(unwired)
 }
 
+fn write_named_suite_progress(entrypoint: &str, fixture: &str, completed: Option<(u128, bool)>) {
+    use std::io::Write;
+
+    let (stage, elapsed_ms, invocation_ok) = match completed {
+        Some((elapsed_ms, invocation_ok)) => ("end", Some(elapsed_ms), Some(invocation_ok)),
+        None => ("start", None, None),
+    };
+    let progress = serde_json::json!({
+        "stage": stage,
+        "entrypoint": entrypoint,
+        "fixture": fixture,
+        "elapsed_ms": elapsed_ms,
+        "invocation_ok": invocation_ok,
+    });
+    // Bypass libtest's buffered capture so a timed-out invocation retains
+    // its last public progress boundary. Logging failures cannot change it.
+    let stderr = std::io::stderr();
+    let mut stderr = stderr.lock();
+    let _ = writeln!(stderr, "[named-suite-progress] {progress}");
+    let _ = stderr.flush();
+}
+
 /// Diagnostic execution retains gaps; unlike the claim gate, its success is
 /// not a conformance claim. Consumers must report every gap in the result.
 pub fn inspect_named_suite_execution_with_clients(
@@ -675,6 +697,8 @@ pub fn inspect_named_suite_execution_with_clients(
             .get(entrypoint)
             .ok_or_else(|| anyhow!("registered runner {entrypoint} has no canonical fixture"))?
         {
+            let invocation_started = std::time::Instant::now();
+            write_named_suite_progress(entrypoint, file_name, None);
             let result = (if entrypoint == SYNC_CLIENT_ENTRYPOINT {
                 match runner {
                     Runner::Cases(run) => run().and_then(|execution| {
@@ -718,6 +742,11 @@ pub fn inspect_named_suite_execution_with_clients(
                 }
                 Ok(result)
             });
+            write_named_suite_progress(
+                entrypoint,
+                file_name,
+                Some((invocation_started.elapsed().as_millis(), result.is_ok())),
+            );
             let result = match result {
                 Ok(result) => result,
                 Err(error) => {

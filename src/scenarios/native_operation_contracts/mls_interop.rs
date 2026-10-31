@@ -54,9 +54,61 @@ pub(super) fn member(client: TestActorClient, station: &arkret_wire::DidCoreId) 
     })
 }
 
+// These are propagation phases, not inferred HTTP facts or domain proof.
+struct FailurePhase(std::sync::Mutex<(&'static str, u32)>);
+
+impl FailurePhase {
+    fn mark(&self, stage: &'static str, line: u32) {
+        if let Ok(mut phase) = self.0.lock() {
+            *phase = (stage, line);
+        }
+    }
+
+    fn retain_failure(&self) {
+        let Some(directory) = std::env::var_os("COTEST_NATIVE_FAILURE_DIAGNOSTICS_DIR") else {
+            return;
+        };
+        let Ok(phase) = self.0.lock() else {
+            return;
+        };
+        let source = file!();
+        if source != "src/scenarios/native_operation_contracts/mls_interop.rs" || phase.1 == 0 {
+            return;
+        }
+        // Failure to retain a diagnostic must never replace the original error.
+        let retained = || -> std::io::Result<()> {
+            use std::io::Write as _;
+            let mut file = std::fs::OpenOptions::new()
+                .write(true)
+                .create_new(true)
+                .open(std::path::PathBuf::from(directory).join("mls-interop.json"))?;
+            file.write_all(&serde_json::to_vec(&json!({
+                "case": "mls_interop_retains_native_claims_mls_and_mimi_originals",
+                "stage": phase.0,
+                "source": source,
+                "line": phase.1,
+                "status": null,
+                "error_code": null
+            }))?)
+        };
+        let _ = retained();
+    }
+}
+
 pub(super) async fn run() -> Result<()> {
+    let phase = FailurePhase(std::sync::Mutex::new(("deployment", 0)));
+    let result = run_with_phase(&phase).await;
+    if result.is_err() {
+        phase.retain_failure();
+    }
+    result
+}
+
+async fn run_with_phase(phase: &FailurePhase) -> Result<()> {
     let (result,observations)=observe(crate::harness::heap_future(|| async {
+        phase.mark("deployment", line!());
         let deployment=crate::harness::heap_future(|| crate::scenarios::agent_runtime_live::coauth_session_evidence::actual_agent_deployment("native-keypackage-lifecycle")).await?;
+        phase.mark("recipient_session", line!());
         let device=DeviceId::new(arkret_identifiers::new_prefixed_uuid7("ak:device:"))?;
         let ca=deployment.station.tls_ca_path().context("owned Station CA absent")?;
         let bob_http=reqwest::Client::builder().tls_backend_rustls().tls_certs_only(reqwest::Certificate::from_pem_bundle(&std::fs::read(ca)?)?).cookie_store(true).redirect(reqwest::redirect::Policy::none()).timeout(std::time::Duration::from_secs(45)).build()?;
@@ -64,11 +116,13 @@ pub(super) async fn run() -> Result<()> {
         let bob=member(bob,deployment.station.service_id())?;
         let alice=member(deployment.controller,deployment.station.service_id())?;
         let stations=[&deployment.station];
+        phase.mark("realm_membership", line!());
         let realm:arkret_wire::RealmId=crate::harness::heap_future(|| crate::scenarios::human_device_producer_live::create_realm_with_join_rule(&alice.client,"Native KeyPackage lifecycle","public",&stations)).await?.parse()?;
         let realm_genesis=mls::accepted_full_view(&alice.client,&arkret_wire::EventId::from_digest(arkret_canonical::DigestSuite::Sha256,realm.digest_bytes())).await?;
         let join=bob.client.author_event(realm.as_str(),EventKind::MemberState.as_str(),crate::scenarios::human_device_producer_live::membership_payload(realm.as_str(),bob.account.clone(),arkret_models_collaboration::governance::membership_invite::MembershipPayloadState::Join,"native MLS recipient")?).await?;
         let joined=crate::scenarios::human_device_producer_live::submit_and_expect_commit(&bob.client,&bob.account,bob.device.as_str(),&join).await?;
         let bob_identity=bob.mls_identity()?;
+        phase.mark("keypackage_upload", line!());
         let first=bob_identity.key_package_record()?;
         let spare=bob_identity.key_package_record()?;
         let upload=bob_identity.signed_key_packages_upload_request(&[first.clone(),spare.clone()],bob.method.as_str())?;
@@ -77,6 +131,7 @@ pub(super) async fn run() -> Result<()> {
         let scope=ScopeRef::Realm { realm_id:realm.clone() };
         let group_id=scope.canonical_mls_group_id()?;
         let mut request_id=[0u8;16];getrandom::fill(&mut request_id).context("obtain claim OS entropy")?;
+        phase.mark("keypackage_claim", line!());
         let claim_request=mls::claim_request_between(&alice,&deployment.station,&deployment.station,&bob,&realm,group_id.as_str(),request_id,chrono::Duration::minutes(4))?;
         let send_claim=||alice.client.post("/_arkret/self/keys/keypackages/claim").header("Idempotency-Key",claim_request.claim_request_id.as_str()).json(&claim_request);
         let original=expect_json(send_claim(),reqwest::StatusCode::OK).await?;
@@ -89,6 +144,7 @@ pub(super) async fn run() -> Result<()> {
         let query=KeyPackagesClaimQueryRequestBody { claim_id:claim.claim_id.clone().parse()? };
         let queried=expect_json(bob.client.post("/_arkret/self/keys/keypackages/claims/query").json(&query),reqwest::StatusCode::OK).await?;
         ensure!(queried==original,"recipient claim lookup changed the original outcome");
+        phase.mark("mls_genesis", line!());
         let genesis_binding=MlsGovernanceBindingPayload::new(scope.clone(),None,0,0,0)?;
         let mut alice_group=alice.mls_identity()?.create_group_with_governance_binding(&scope,&genesis_binding)?;
         alice_group.install_local_creator_binding(alice.actor.clone(),Some(alice.authorize_event_id.clone()))?;
@@ -101,6 +157,7 @@ pub(super) async fn run() -> Result<()> {
         let genesis=alice.client.author_event(realm.as_str(),EventKind::MlsGenesis.as_str(),mls::canonical(json!({"cipher_suite":mls::ACTIVE_SUITE,"group_info_ref":info_ref,"ratchet_tree_ref":tree_ref,"governance_binding":genesis_binding,"creator_leaf_authority":creator_authority,"created_at":arkret_canonical::format_timestamp_canonical(chrono::Utc::now())}))?).await?;
         crate::scenarios::human_device_producer_live::submit_and_expect_commit(&alice.client,&alice.account,alice.device.as_str(),&genesis).await?;
         crate::scenarios::message_mls_cross_station_live::install_bindings(&mut alice_group,&[&alice]).await?;
+        phase.mark("mls_add_welcome", line!());
         let add_binding=MlsGovernanceBindingPayload::new(scope.clone(),Some(genesis.event_id.clone()),0,1,0)?;
         let add=alice_group.add_member_with_governance_binding(&mls::claimed_keypackage_record(claim,&bob)?,&add_binding)?;
         let payload=MlsCommitPayload::new(genesis.event_id.clone(),0,&add.commit,add_binding)?;
@@ -117,6 +174,7 @@ pub(super) async fn run() -> Result<()> {
         ensure!(queued==vec![welcome.clone()],"recipient did not receive the exact admitted Welcome");
         let mut bob_group=ArkretMlsGroup::join_from_verified_welcome_delivery(bob_identity,&welcome,&committed)?;
         crate::scenarios::message_mls_cross_station_live::install_bindings(&mut bob_group,&[&alice,&bob]).await?;
+        phase.mark("durable_snapshot", line!());
         let record=bob_group.export_state_record()?;
         let bytes=serde_json::to_vec(&record)?;
         let mut durable=tempfile::NamedTempFile::new()?;
@@ -127,11 +185,13 @@ pub(super) async fn run() -> Result<()> {
         crate::scenarios::message_mls_cross_station_live::install_bindings(&mut restored,&[&alice,&bob]).await?;
         ensure!(restored.epoch()==1 && restored.group_id()==group_id,"recipient durable snapshot did not restore the accepted group");
         bob.client.post("/_arkret/self/device_messages/ack").json(&DeviceMessagesAcknowledgementRequestBody { acknowledgement_token:ack }).send().await?.error_for_status()?;
+        phase.mark("keypackage_consume", line!());
         let receipt=RecipientMlsDurableReceipt { domain:NonEmptyString::new(arkret_wire::DomainSeparationId::MLS_RECIPIENT_DURABLE_RECEIPT_V1).map_err(anyhow::Error::msg)?,claim_request_id:claim_request.claim_request_id.clone(),keypackage_ref:NonEmptyString::new(claim.keypackage_ref.clone()).map_err(anyhow::Error::msg)?,recipient:RecipientMlsDurableSigner::Device { recipient_account_id:bob.account.clone(),recipient_device_id:bob.device.clone(),device_verification_method:bob.method.clone() },recipient_id:deployment.station.service_id().clone(),realm_id:realm.clone(),mls_group_id:group_id.clone(),mls_epoch:restored.epoch(),welcome_ref:welcome.welcome_id.clone(),welcome_digest:welcome.durable_receipt_digest()?,durable_at:arkret_canonical::normalize_timestamp_canonical(chrono::Utc::now()),signature:KeyOperationSignature { kid:NonEmptyString::new(bob.method.to_string()).map_err(anyhow::Error::msg)?,signature_algorithm:None,signature:Base64UrlString::new("AA").map_err(anyhow::Error::msg)? } };
         let signer=bob.mls_identity()?;
         let consume=signer.signed_key_packages_consume_request(claim.claim_id.clone().parse()?,signer.sign_recipient_mls_durable_receipt(receipt)?)?;
         let consumed=expect_json(bob.client.post("/_arkret/self/keys/keypackages/consume").json(&consume),reqwest::StatusCode::OK).await?;
         ensure!(expect_json(bob.client.post("/_arkret/self/keys/keypackages/consume").json(&consume),reqwest::StatusCode::OK).await?==consumed,"consume retry changed the accepted durable receipt");
+        phase.mark("keypackage_revoke", line!());
         let unused=if claim.keypackage_ref==first.keypackage_ref.to_string() {spare.keypackage_ref.to_string()} else {first.keypackage_ref.to_string()};
         let fields=KeyPackagesRevokeFields { keypackage_refs:vec![unused.clone()],device_id:bob.device.clone(),reason:None };
         let signature=arkret_signatures::keypackages::sign_keypackages_revoke_request(&fields,bob.method.as_str(),&bob.key.to_bytes())?;
@@ -139,15 +199,24 @@ pub(super) async fn run() -> Result<()> {
         let revoked=expect_json(bob.client.post("/_arkret/self/keys/keypackages/revoke").json(&revoke),reqwest::StatusCode::OK).await?;
         ensure!(revoked["revoked"]==json!([unused]),"native revoke did not remove the unused accepted package");
         let membership=mls::accepted_full_view(&bob.client,&join.event_id).await?;
+        phase.mark("mimi_control", line!());
         let mimi_control=crate::harness::heap_future(|| super::mimi_control::exercise(&deployment.station,&alice,&bob,&realm,&group_id,&membership)).await?;
+        phase.mark("peer_membership_reads", line!());
         let peer_reads=crate::harness::heap_future(|| super::peer_membership_reads::exercise(&deployment.station,&alice,&bob,&realm,&membership)).await?;
+        phase.mark("peer_signal", line!());
         let signal=crate::harness::heap_future(|| super::peer_signal::exercise(&deployment.station,&alice,&bob,&realm,&commit_event.event_id,&mut alice_group,&mut restored)).await?;
+        phase.mark("mimi_message", line!());
         let binding:arkret_wire::CommittedEventFullView=serde_json::from_value(mimi_control["binding_commit"].clone())?;
         let mimi_message=crate::harness::heap_future(|| super::mimi_message::exercise(&deployment.station,&alice,&bob,&mut alice_group,&mut restored,&realm,&commit_event.event_id,&binding)).await?;
+        phase.mark("mimi_notify", line!());
         let mimi_notify=crate::harness::heap_future(|| super::mimi_notify::exercise(&deployment.station,&bob,&realm,&binding,&mimi_message)).await?;
+        phase.mark("watch_audit", line!());
         let watch_audit=crate::harness::heap_future(|| super::watch_audit::exercise(&deployment.station,&alice,&bob,&realm)).await?;
+        phase.mark("media_token", line!());
         let media_token=crate::harness::heap_future(|| super::media_token::exercise(&deployment.station,&alice,&realm)).await?;
+        phase.mark("peer_invite", line!());
         let peer_invite=crate::harness::heap_future(|| super::peer_invite::exercise(&deployment.station,&alice,&bob)).await?;
+        phase.mark("authority_originals", line!());
         let database=deployment.station.configured_database_url().context("native database absent")?.to_owned();
         let claim_id=claim.claim_id.clone();
         let originals=tokio::task::spawn_blocking(move || -> Result<Value> {
@@ -161,9 +230,15 @@ pub(super) async fn run() -> Result<()> {
         ensure!(originals["claim"]["state"]=="consumed" && originals["claim"]["outcome"]==original && originals["revoked_package"]["claimed_by_mls_group_id"]=="revoked" && originals["revoked_package"]["claim_expires_at_unix_ms"].is_null(),"native KeyPackage ledger lost its accepted lifecycle");
         Ok::<_,anyhow::Error>(json!({"mimi_notify":mimi_notify,"mimi_message":mimi_message,"watch_audit":watch_audit,"media_token":media_token,"peer_invite":peer_invite,"peer_reads":peer_reads,"signal":signal,"mimi_control":mimi_control,"claim_request":claim_request,"claim":claimed,"query":queried,"upload":upload,"uploaded":uploaded,"member_join":join,"member_join_commit":joined,"genesis":genesis,"accepted_genesis":accepted_genesis,"realm_genesis":realm_genesis,"submission":submission,"accepted":accepted,"committed":committed,"welcome":welcome,"consume_request":consume,"consumed":consumed,"revoke_request":revoke,"revoked":revoked,"durable_snapshot_digest":arkret_canonical::sha256_digest(&bytes),"restored_epoch":restored.epoch(),"authority_originals":originals,"processes":[deployment.coauth.server.native_process_identity()?,deployment.station.native_process_identity()?]}))
     })).await;
-    retain_attempt("mls-interop", &observations)?;
+    let retained = retain_attempt("mls-interop", &observations);
+    if retained.is_err() {
+        phase.mark("retain_attempt", line!());
+    }
+    retained?;
     let mut artifact = result?;
+    phase.mark("verify_schemas", line!());
     validate_exchange_schemas(&observations, &SCOPE)?;
+    phase.mark("verify_claim_receipt", line!());
     let claimed: KeyPackagesClaimResponseBody = serde_json::from_value(artifact["claim"].clone())?;
     let original_request: KeyPackagesClaimRequestBody =
         serde_json::from_value(artifact["claim_request"].clone())?;
@@ -178,6 +253,7 @@ pub(super) async fn run() -> Result<()> {
         claimed.claim_receipt.claimed_at,
         &peer_keypackage_claim_receipt_signing_bytes(&claimed.claim_receipt)?,
     )?;
+    phase.mark("verify_consume_receipt", line!());
     let consumed: KeyPackagesConsumeResponseBody =
         serde_json::from_value(artifact["consumed"].clone())?;
     let request: KeyPackagesConsumeRequestBody =
@@ -200,6 +276,7 @@ pub(super) async fn run() -> Result<()> {
         consumed.consume_receipt.consumed_at,
         &consumed.consume_receipt.canonical_signing_bytes()?,
     )?;
+    phase.mark("verify_realm_commits", line!());
     let views = ["realm_genesis", "accepted_genesis", "committed"]
         .map(|member| serde_json::from_value(artifact[member].clone()))
         .into_iter()
@@ -215,7 +292,9 @@ pub(super) async fn run() -> Result<()> {
             "MLS commit changed its accepted Realm governor"
         );
     }
+    phase.mark("verify_mimi_control", line!());
     super::mimi_control::verify(&observations, &artifact["mimi_control"])?;
+    phase.mark("verify_bootstrap_current", line!());
     let binding: arkret_wire::CommittedEventFullView =
         serde_json::from_value(artifact["mimi_control"]["binding_commit"].clone())?;
     let binding_payload = serde_json::to_value(&binding.event.payload)?;
@@ -232,17 +311,25 @@ pub(super) async fn run() -> Result<()> {
             .contains(&expected),
         "peer bootstrap omitted or changed its accepted MIMI binding Current"
     );
+    phase.mark("verify_mimi_message", line!());
     super::mimi_message::verify(&observations, &artifact["mimi_message"])?;
+    phase.mark("verify_mimi_notify", line!());
     super::mimi_notify::verify(
         &observations,
         &artifact["mimi_notify"],
         &artifact["mimi_message"],
     )?;
+    phase.mark("verify_watch_audit", line!());
     super::watch_audit::verify(&observations, &artifact["watch_audit"])?;
+    phase.mark("verify_media_token", line!());
     super::media_token::verify(&observations, &artifact["media_token"])?;
+    phase.mark("verify_peer_invite", line!());
     super::peer_invite::verify(&observations, &artifact["peer_invite"])?;
+    phase.mark("verify_peer_membership_reads", line!());
     super::peer_membership_reads::verify(&observations, &artifact["peer_reads"])?;
+    phase.mark("verify_peer_signal", line!());
     super::peer_signal::verify(&observations, &artifact["signal"])?;
+    phase.mark("retain_evidence", line!());
     artifact["case"] = json!("mls_interop");
 
     artifact["scope"] = json!(SCOPE);

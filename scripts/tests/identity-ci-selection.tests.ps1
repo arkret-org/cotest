@@ -62,10 +62,43 @@ Assert-Contains $multiDevice "a fresh browser can use the 24-word Recovery Key i
 Assert-Contains $realmMatrix "fresh browser registration creates, writes, and reloads plaintext and encrypted Realms" "canonical Realm encryption matrix is missing"
 Assert-NotContains $oidc 'test.describe.configure({ mode: "serial" })' "independent OIDC cases must not cascade-skip after an earlier failure"
 
-Assert-Contains $ci "-PlaywrightProject joint-inkson" "merge CI does not select the joint-inkson project"
-Assert-Contains $ci '@returning-login-gate|@onboarding-recovery-gate' "merge CI does not select returning login and Recovery Key onboarding"
-Assert-Contains $ci '-RequireScenario "identity/oidc-login-flow.spec.ts"' "merge CI does not require returning-login junit evidence"
-Assert-Contains $ci "-ForbidSkippedTests" "merge CI still permits a skipped returning-login false green"
+# Keep the merge gate checks on the same e2e job and runner command.
+$mergeJobs = @([regex]::Matches($ci, '(?ms)^  e2e:\r?\n(?<body>.*?)(?=^  [A-Za-z][A-Za-z0-9_-]*:|\z)'))
+if ($mergeJobs.Count -ne 1) { throw "merge CI must have one e2e job" }
+$mergeJob = $mergeJobs[0].Groups['body'].Value
+if (@([regex]::Matches($mergeJob, '(?m)^    timeout-minutes: 180\r?$')).Count -ne 1) {
+    throw "merge browser job must retain its 180 minute budget"
+}
+$mergeSteps = @([regex]::Matches($mergeJob, '(?ms)^      - name: Run real OIDC, recovery and collaboration regression merge gate\r?\n(?<body>.*?)(?=^      - |\z)'))
+if ($mergeSteps.Count -ne 1) { throw "merge CI must have one named joint regression step" }
+$mergeCommand = $mergeSteps[0].Groups['body'].Value
+foreach ($line in @('        run: >', '          ./scripts/run-joint-e2e.ps1', '          -PlaywrightProject joint-inkson', '          -ForbidSkippedTests')) {
+    if (@([regex]::Matches($mergeCommand, '(?m)^' + [regex]::Escape($line) + '\r?$')).Count -ne 1) {
+        throw "merge joint command must contain exactly one required line: $line"
+    }
+}
+$grepArguments = @([regex]::Matches($mergeCommand, '(?m)^          -Grep "([^"\r\n]+)"\r?$'))
+$scenarioArguments = @([regex]::Matches($mergeCommand, '(?m)^          -RequireScenario "([^"\r\n]+)"\r?$'))
+if ($grepArguments.Count -ne 1 -or $scenarioArguments.Count -ne 1) {
+    throw "merge joint command must have one literal Grep and RequireScenario argument"
+}
+$grepAlternatives = $grepArguments[0].Groups[1].Value.Split('|')
+foreach ($tag in @('@returning-login-gate', '@onboarding-recovery-gate')) {
+    if ($grepAlternatives -cnotcontains $tag) { throw "merge joint command lost identity tag: $tag" }
+}
+$mergeScenarios = $scenarioArguments[0].Groups[1].Value.Split(',')
+$seenScenarios = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::Ordinal)
+foreach ($scenario in $mergeScenarios) {
+    if ($scenario -notmatch '^[A-Za-z0-9_-]+(?:/[A-Za-z0-9_-]+)*\.spec\.ts$' -or -not $seenScenarios.Add($scenario)) {
+        throw "merge joint required scenarios must be nonempty unique literal spec paths"
+    }
+    if (-not (Test-Path -LiteralPath (Join-Path $repoRoot "e2e/tests/$scenario") -PathType Leaf)) {
+        throw "merge joint required scenario has no actual spec: $scenario"
+    }
+}
+foreach ($required in @('identity/oidc-login-flow.spec.ts', 'joint/realm-invite-link-sync.spec.ts', 'discovery/contact-request-ui.spec.ts', 'identity/account-profile-ui.spec.ts', 'identity/registration-contact-validation.spec.ts', 'sync/websocket-deployment.spec.ts')) {
+    if (-not $seenScenarios.Contains($required)) { throw "merge CI lost required scenario: $required" }
+}
 
 Assert-Contains $integration "-PlaywrightProject joint-inkson" "nightly does not select the joint-inkson project"
 Assert-Contains $integration "@returning-login-gate|@returning-device-key-gate|@onboarding-recovery-gate" "nightly does not select all identity cases"

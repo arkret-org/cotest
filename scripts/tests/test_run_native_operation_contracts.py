@@ -1,5 +1,7 @@
 """Filesystem transport regressions; these fixtures are not native authority evidence."""
 import importlib.util
+import contextlib
+import io
 import json
 import os
 from pathlib import Path
@@ -95,6 +97,46 @@ class FrozenProductTests(unittest.TestCase):
         producer = json.loads((self.output / "coland-result.json").read_text())
         self.assertNotIn("executable", producer)
         self.assertNotIn("sha256", producer)
+
+    def test_failure_diagnostics_are_separate_and_do_not_bypass_the_native_gate(self):
+        output = self.root / "artifacts/new-run"
+        document = runner.gate.declarations()
+        products = []
+        calls = []
+        def build(root, name, environment):
+            self.assertNotIn("COTEST_NATIVE_FAILURE_DIAGNOSTICS_DIR", environment)
+            product = {"executable": str(self.source), "sha256": runner.digest(self.source)}
+            products.append(product)
+            return product
+        def execute(root, name, repository, command, environment, **kwargs):
+            calls.append(name)
+            if name == "native":
+                diagnostic = Path(environment["COTEST_NATIVE_FAILURE_DIAGNOSTICS_DIR"])
+                observation = Path(environment["COTEST_NATIVE_OPERATION_EVIDENCE_DIR"])
+                self.assertEqual(diagnostic, output / "diagnostics")
+                self.assertTrue(diagnostic.is_dir())
+                self.assertFalse(diagnostic.is_relative_to(observation))
+                self.assertEqual(command[-3:], ["--", "--nocapture", "--test-threads=1"])
+                self.assertFalse(kwargs["require_success"])
+                return {"exit_code": 101, "sources_unchanged": True}
+            return {"exit_code": 0, "sources_unchanged": True}
+        with patch.object(runner.gate, "REPO", self.root), \
+                patch.object(runner.gate, "declarations", return_value=document), \
+                patch.object(sys, "argv", ["runner", "--output", str(output)]), \
+                patch.dict(os.environ, {"COTEST_COAUTH_DATABASE_URL": "synthetic-coauth",
+                                       "COTEST_COLAND_DATABASE_URL": "synthetic-coland"}, clear=True), \
+                patch.object(runner, "build", side_effect=build), \
+                patch.object(runner, "execute", side_effect=execute), \
+                patch.object(runner.audit_native_operation_schemas, "audit", return_value={"schema_valid": True}), \
+                patch.object(runner.gate, "evidence_coverage") as coverage, \
+                contextlib.redirect_stdout(io.StringIO()):
+            with self.assertRaisesRegex(ValueError, "native failed"):
+                runner.main()
+        self.assertEqual(calls, ["service-isolation", "native"])
+        self.assertEqual(len(products), 2)
+        self.assertEqual(list((output / "observations").iterdir()), [])
+        self.assertEqual(json.loads((output / "native-result.json").read_text())["exit_code"], 101)
+        coverage.assert_not_called()
 
 
 if __name__ == "__main__":

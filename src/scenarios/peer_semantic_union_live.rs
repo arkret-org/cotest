@@ -70,7 +70,7 @@ pub(crate) async fn realm_business_footprint(database: &str, realm: &str) -> Res
     let realm = realm.to_owned();
     tokio::task::spawn_blocking(move || -> Result<Value> {
         let mut db = postgres::Client::connect(&database, postgres::NoTls)?;
-        let tables = db.query("SELECT table_name FROM information_schema.columns WHERE table_schema='public' AND column_name='realm_id' AND (table_name IN ('canonical_events','realm_commits','notifications','event_notification_relay','capability_quota_counters','capability_quota_buckets','capability_quota_consumptions') OR right(table_name,16)='_current_states') ORDER BY table_name", &[])?;
+        let tables = db.query("SELECT table_name FROM information_schema.columns WHERE table_schema='public' AND column_name='realm_id' AND (table_name IN ('canonical_events','realm_commits','notifications','event_notification_relay','capability_quota_counters','capability_quota_buckets','capability_quota_consumptions') OR right(table_name,length('_current_states'))='_current_states') ORDER BY table_name", &[])?;
         let mut result = serde_json::Map::new();
         for table in tables {
             let name: String = table.get(0);

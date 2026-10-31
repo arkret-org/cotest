@@ -16,17 +16,24 @@ use serde_json::{Value, json};
 use url::Url;
 
 const ACCOUNT_SUBSCRIBE_FRAME_DEADLINE: Duration = Duration::from_secs(40);
-const HTTP_REQUEST_DEADLINE: Duration = Duration::from_secs(45);
+pub(super) const HTTP_REQUEST_DEADLINE: Duration = Duration::from_secs(45);
 static TRANSCRIPT_WRITE_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
 
 pub struct RecordedResponse {
     pub status: StatusCode,
     pub headers: HeaderMap,
     pub body: Vec<u8>,
+    http_elapsed: Duration,
     context: String,
 }
 
 impl RecordedResponse {
+    /// HTTP send through the complete response body, excluding request
+    /// preparation and the harness's subsequent validation and evidence IO.
+    pub fn http_elapsed(&self) -> Duration {
+        self.http_elapsed
+    }
+
     pub fn text(&self) -> String {
         String::from_utf8_lossy(&self.body).into_owned()
     }
@@ -307,7 +314,9 @@ pub(crate) async fn send_recorded(builder: RequestBuilder) -> Result<RecordedRes
 
     let status = response.status();
     let headers = response.headers().clone();
-    let body = response.bytes().await?.to_vec();
+    let body = response.bytes().await?;
+    let http_elapsed = started.elapsed();
+    let body = body.to_vec();
     let registered_empty = native_request
         .as_ref()
         .and_then(|request| request.headers().get("arkret-operation"))
@@ -339,6 +348,7 @@ pub(crate) async fn send_recorded(builder: RequestBuilder) -> Result<RecordedRes
         status,
         headers,
         body,
+        http_elapsed,
         context,
     })
 }

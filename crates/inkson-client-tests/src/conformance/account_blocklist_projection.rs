@@ -1732,15 +1732,21 @@ pub async fn contact_first_dm_cross_station_private_boundary_live() -> Result<()
             .contacts
             .into_iter()
             .find(|row| row.peer.contact_actor_id() == holder.actor);
+        // The pending request carries the sender's offer. Contact scopes only
+        // authorize after the exact round is established (Contact spec §3).
         if incoming.as_ref().is_some_and(|row| {
             row.state == ContactState::PendingIncoming
                 && row.request_event_ref.as_ref() == Some(&event_ref)
-                && row
-                    .granted_by_peer_scopes
-                    .contains(&ContactScope::DirectMessage)
+                && row.bidirectional_scopes.is_empty()
+                && row.effective_scopes.as_ref().is_some_and(Vec::is_empty)
+                && row.direct_conversation.is_none()
         }) && outgoing.as_ref().is_some_and(|row| {
             row.state == ContactState::PendingOutgoing
                 && row.request_event_ref.as_ref() == Some(&event_ref)
+                && row.granted_to_peer_scopes.as_slice() == [ContactScope::DirectMessage]
+                && row.bidirectional_scopes.is_empty()
+                && row.effective_scopes.as_ref().is_some_and(Vec::is_empty)
+                && row.direct_conversation.is_none()
         }) {
             break;
         }

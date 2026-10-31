@@ -1,9 +1,13 @@
-//! Whole-original refusal on the real Account projector and durability barrier.
+//! Whole-frame refusal when an actual referenced history original is revoked.
 
+use std::collections::BTreeSet;
 use std::sync::Mutex;
 
 use anyhow::{Context, Result, ensure};
-use arkret_wire::{ActorId, CommitStreamRef, Event, EventKind, RealmId, StrandId};
+use arkret_wire::{
+    ActorId, CommitStreamRef, CurrentSelector, CurrentState, Event, EventKind, RealmId,
+    RealmSnapshotPurpose, RealmStateSnapshot, StrandId,
+};
 use cotest::harness::TestActorClient;
 use cotest::scenarios::circle_poll_scope_live::{circle_create, circle_event, join_circle};
 use cotest::scenarios::human_device_producer_live::{
@@ -18,9 +22,140 @@ struct RevokeAfterIssuance {
     http: arkret_http_client::Client,
     leave: Event,
     account_id: arkret_wire::AccountId,
-    issued: arkret_wire::RealmSnapshotId,
+    issued: RealmStateSnapshot,
     target: CommitStreamRef,
-    held: Mutex<Option<AccountSubscribeBatch>>,
+    revoked: CommitStreamRef,
+    held: Mutex<
+        Option<(
+            AccountSubscribeBatch,
+            RealmStateSnapshot,
+            RealmStateSnapshot,
+        )>,
+    >,
+}
+
+impl RevokeAfterIssuance {
+    async fn history_original(
+        &self,
+        window: &arkret_models_collaboration::sync_frames::account_sync::RealmStreamWindow,
+    ) -> Result<RealmStateSnapshot> {
+        self.issued.require_full_recovery()?;
+        let basis = window
+            .window_start_basis
+            .as_ref()
+            .context("real history basis")?;
+        let original = self
+            .http
+            .realm_state_snapshot_by_ref(&self.issued.realm_id, &basis.snapshot_ref)
+            .await?;
+        original.validate_purpose()?;
+        let signed = original
+            .history_basis
+            .as_ref()
+            .context("signed history coverage")?;
+        ensure!(
+            self.issued.purpose == RealmSnapshotPurpose::FullRecovery
+                && window.limited
+                && window.complete
+                && window.window_limit == 20
+                && window.preview_only.is_none()
+                && original.purpose == RealmSnapshotPurpose::StreamHistory
+                && original.snapshot_id == basis.snapshot_ref
+                && original.snapshot_id != self.issued.snapshot_id
+                && original.realm_id == self.issued.realm_id
+                && original.governance_generation == basis.governance_generation
+                && basis.governance_generation == self.issued.governance_generation
+                && signed.account_id == self.account_id
+                && signed.stream_ref == window.stream_ref
+                && signed.anchor_position == basis.anchor_position
+                && signed.anchor_commit_ref == basis.anchor_commit_ref
+                && signed.accepted_dependency_refs.as_slice()
+                    == basis
+                        .accepted_dependency_refs
+                        .as_deref()
+                        .unwrap_or_default()
+                && self
+                    .issued
+                    .visible_stream_heads
+                    .iter()
+                    .any(|head| head.stream_ref == window.stream_ref
+                        && head.stream_position == basis.anchor_position
+                        && head.commit_id == basis.anchor_commit_ref),
+            "the actual Account basis must bind an independent history original at the issued cut"
+        );
+        let CommitStreamRef::Circle { circle_id, .. } = &window.stream_ref else {
+            anyhow::bail!("revocation fixture requires actual Circle windows");
+        };
+        let member = CurrentSelector::MemberState {
+            actor_id: ActorId::account(self.account_id.clone()),
+        };
+        let definition = CurrentSelector::Circle {
+            circle_id: circle_id.clone(),
+        };
+        let expected_entries = self
+            .issued
+            .current_state_entries
+            .iter()
+            .filter(|row| {
+                let CurrentState::Value {
+                    selector,
+                    source_stream_ref,
+                    ..
+                } = row;
+                (source_stream_ref == &window.stream_ref
+                    && !matches!(
+                        selector,
+                        CurrentSelector::Circle { .. } | CurrentSelector::Sidecar { .. }
+                    ))
+                    || selector == &member
+                    || selector == &definition
+            })
+            .cloned()
+            .collect::<Vec<_>>();
+        let mut sources = BTreeSet::from([window.stream_ref.clone()]);
+        for row in &expected_entries {
+            let CurrentState::Value {
+                source_stream_ref, ..
+            } = row;
+            sources.insert(source_stream_ref.clone());
+        }
+        let expected_heads = self
+            .issued
+            .visible_stream_heads
+            .iter()
+            .filter(|head| sources.contains(&head.stream_ref))
+            .cloned()
+            .collect::<Vec<_>>();
+        let expected_floors = self
+            .issued
+            .retention_and_history_floor
+            .stream_floors
+            .iter()
+            .filter(|floor| sources.contains(&floor.stream_ref))
+            .cloned()
+            .collect::<Vec<_>>();
+        ensure!(
+            original.current_state_entries == expected_entries
+                && original.visible_stream_heads == expected_heads
+                && original.retention_and_history_floor.history_access
+                    == self.issued.retention_and_history_floor.history_access
+                && original.retention_and_history_floor.stream_floors == expected_floors
+                && original.require_full_recovery().is_err(),
+            "the history original must retain the exact target selector closure, heads and floors"
+        );
+        let mut identity = serde_json::to_value(&original)?;
+        let identity = identity.as_object_mut().context("snapshot identity")?;
+        identity.remove("snapshot_id");
+        identity.remove("signature");
+        ensure!(
+            original.snapshot_id
+                == arkret_wire::RealmSnapshotId::from_digest(arkret_canonical::sha256_bytes(
+                    arkret_canonical::canonical_json_bytes(identity)?
+                )),
+            "the actual history original must retain its content ID"
+        );
+        Ok(original)
+    }
 }
 
 impl AccountSubscribeTransport for RevokeAfterIssuance {
@@ -31,17 +166,47 @@ impl AccountSubscribeTransport for RevokeAfterIssuance {
         arkret_models_collaboration::sync_frames::account_subscribe::AccountSubscribeReadAction,
     > {
         let batch = self.http.account_subscribe_batch(request).await?;
-        let basis = batch
-            .frames
-            .iter()
-            .flat_map(|frame| frame.realms.iter())
-            .flat_map(|realms| realms.entries.values())
-            .flat_map(|entry| entry.streams.iter().flatten())
-            .find(|window| window.stream_ref == self.target)
-            .and_then(|window| window.window_start_basis.as_ref());
-        if basis.is_none_or(|basis| basis.snapshot_ref != self.issued) {
+        let window = |stream: &CommitStreamRef| {
+            batch
+                .frames
+                .iter()
+                .flat_map(|frame| frame.realms.iter())
+                .flat_map(|realms| realms.entries.values())
+                .flat_map(|entry| entry.streams.iter().flatten())
+                .find(|window| &window.stream_ref == stream)
+                .cloned()
+                .ok_or_else(|| {
+                    garth::Error::Protocol(
+                        "actual Account frame omitted a required Circle window".into(),
+                    )
+                })
+        };
+        let target_window = window(&self.target)?;
+        let revoked_window = window(&self.revoked)?;
+        if target_window
+            .window_start_basis
+            .as_ref()
+            .and_then(|basis| basis.anchor_position.checked_add(21))
+            != Some(target_window.next_position)
+            || revoked_window
+                .window_start_basis
+                .as_ref()
+                .and_then(|basis| basis.anchor_position.checked_add(2))
+                != Some(revoked_window.next_position)
+        {
+            return Err(garth::Error::Protocol("the real frame must carry twenty target messages and the other Circle's one real Strand tail".into()));
+        }
+        let target = self
+            .history_original(&target_window)
+            .await
+            .map_err(|error| garth::Error::Protocol(error.to_string()))?;
+        let revoked = self
+            .history_original(&revoked_window)
+            .await
+            .map_err(|error| garth::Error::Protocol(error.to_string()))?;
+        if target.snapshot_id == revoked.snapshot_id {
             return Err(garth::Error::Protocol(
-                "actual Account tail did not name the held whole original".into(),
+                "distinct Circle windows must have distinct exact history originals".into(),
             ));
         }
         if self.held.lock().unwrap().is_some() {
@@ -57,7 +222,7 @@ impl AccountSubscribeTransport for RevokeAfterIssuance {
         )
         .await
         .map_err(|error| garth::Error::Protocol(error.to_string()))?;
-        *self.held.lock().unwrap() = Some(batch.clone());
+        *self.held.lock().unwrap() = Some((batch.clone(), target, revoked));
         Ok(arkret_models_collaboration::sync_frames::account_subscribe::AccountSubscribeReadAction::Batch(batch))
     }
 }
@@ -134,6 +299,22 @@ async fn run() -> Result<()> {
     .await?;
     host.catch_up_selected_realm_until_complete(&realm).await?;
     let issued = author.sdk().realm_state_snapshot_head(&realm).await?;
+    // Advance the other real Circle after its issued anchor. Its delivered
+    // join at position 0 then has a real successor and a history basis; an
+    // unchanged head at the genesis floor would have no such basis.
+    let revoked_tail = circle_event(
+        author,
+        realm.as_str(),
+        &circles[1],
+        EventKind::StrandCreate,
+        json!({"object":{
+            "schema":"ak.schema.strand.v1","realm_id":realm,"scope_circle_id":circles[1],
+            "tracks":{"discussion":{"is_primary":true,"profile":"discussion"}},
+            "metadata":{"title":"Revoked scope tail"},"state":"active","created_by":actor
+        }}),
+    )
+    .await?;
+    submit_and_expect_commit(author, &account_id, &author.device_id, &revoked_tail).await?;
     for index in 0..20 {
         let event = circle_event(author,realm.as_str(),&circles[0],EventKind::MessageCreate,json!({
             "strand_id":strand_id,"track_name":"discussion","content":{"kind":"ak.content.text","body":format!("Held target tail {index}")}
@@ -152,14 +333,18 @@ async fn run() -> Result<()> {
         http: native.client(),
         leave,
         account_id: account_id.clone(),
-        issued: issued.snapshot_id.clone(),
+        issued: issued.clone(),
         target: target.clone(),
+        revoked: CommitStreamRef::Circle {
+            realm_id: realm.clone(),
+            circle_id: circles[1].clone(),
+        },
         held: Default::default(),
     };
     let refused = host.catch_up_with_conformance_transport(&rail).await;
     ensure!(
         rail.held.lock().unwrap().is_some(),
-        "real Account frame was never issued"
+        "real Account frame was never issued: {refused:?}"
     );
     ensure!(
         matches!(&refused,Err(garth::Error::Api { status:503, error })
@@ -172,6 +357,36 @@ async fn run() -> Result<()> {
                 == committed
             && host.state_store().conformance_account_checkpoint_token()? == checkpoint,
         "rejected whole Account frame changed durable rows, root or cursor"
+    );
+    let (_, target_original, revoked_original) = rail
+        .held
+        .lock()
+        .unwrap()
+        .clone()
+        .context("held actual Account frame")?;
+    let still_readable = rail
+        .http
+        .realm_state_snapshot_by_ref(&realm, &target_original.snapshot_id)
+        .await?;
+    cotest::scenarios::protocol_payloads::snapshot_head_disclosure::ensure_same_object(
+        &target_original,
+        &still_readable,
+    )?;
+    let revoked_read = rail
+        .http
+        .realm_state_snapshot_by_ref(&realm, &revoked_original.snapshot_id)
+        .await
+        .map_err(garth::Error::from);
+    let full_read = rail
+        .http
+        .realm_state_snapshot_by_ref(&realm, &issued.snapshot_id)
+        .await
+        .map_err(garth::Error::from);
+    ensure!(
+        [&revoked_read, &full_read].iter().all(|read| matches!(read,
+            Err(garth::Error::Api { status:503, error })
+                if error.error_code() == Some(arkret_wire::ErrorCode::RealmStateSnapshotUnavailable))),
+        "the revoked history original and its covered full recovery original must both be wholly unavailable"
     );
     let current = author.sdk().realm_state_snapshot_head(&realm).await?;
     ensure!(

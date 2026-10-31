@@ -124,6 +124,10 @@ export default defineConfig({
       testDir: "./tests",
       testMatch: [
         "joint/*.spec.ts",
+        "discovery/contact-request-ui.spec.ts",
+        "identity/account-profile-ui.spec.ts",
+        "identity/registration-contact-validation.spec.ts",
+        "sync/websocket-deployment.spec.ts",
         "encryption/key-backup.spec.ts",
         "identity/device-key-lifecycle.spec.ts",
         "identity/multi-device.spec.ts",
