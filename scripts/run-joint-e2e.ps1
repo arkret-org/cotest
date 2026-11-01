@@ -4250,7 +4250,7 @@ try {
                 -Command $buildCommand `
                 -WorkingDirectory $InksonRoot `
                 -LogDirectory $serviceLogDir
-            $preparationTasks.Add([pscustomobject]@{ Name = "inkson"; BuildInputsBefore = $preBuildStates; RequiredArtifactPaths = @(Get-JointInksonRequiredArtifactPaths); ArtifactRoot = $inksonStaticRoot; Service = $service; Started = $started; Artifact = $inksonStaticIndex; AllowUnchangedArtifact = $false; RepositoryRoots = @($InksonRoot, (Join-Path $workspaceRoot "arkret-rust-sdk"), (Join-Path $workspaceRoot "garth"), (Join-Path $workspaceRoot "chime")) })
+            $preparationTasks.Add([pscustomobject]@{ Name = "inkson"; BuildInputsBefore = $preBuildStates; RequiredArtifactPaths = @(Get-JointInksonRequiredArtifactPaths); ArtifactRoot = $inksonStaticRoot; Service = $service; Started = $started; Artifact = $inksonStaticIndex; UpdatedArtifact = $inksonWasm; AllowUnchangedArtifact = $false; RepositoryRoots = @($InksonRoot, (Join-Path $workspaceRoot "arkret-rust-sdk"), (Join-Path $workspaceRoot "garth"), (Join-Path $workspaceRoot "chime")) })
         } else {
             $preparationTimings.Add([pscustomobject]@{ name = "inkson"; status = "cache-hit"; duration_seconds = 0; detail = $inksonFreshness.Detail })
         }
@@ -4264,8 +4264,11 @@ try {
         $duration = [Math]::Round(($task.Service.Process.ExitTime - $task.Started).TotalSeconds, 3)
         $exitCode = $task.Service.Process.ExitCode
         $artifactExists = Test-Path -LiteralPath $task.Artifact -PathType Leaf
-        $artifactUpdated = $artifactExists -and `
-            (Get-Item -LiteralPath $task.Artifact -Force).LastWriteTimeUtc -ge $task.Started.ToUniversalTime().AddSeconds(-2)
+        # Static HTML retains its source mtime. Check the generated WASM for
+        # a browser build, while the stamp below binds every required member.
+        $updatedArtifact = if ($task.PSObject.Properties["UpdatedArtifact"]) { $task.UpdatedArtifact } else { $task.Artifact }
+        $artifactUpdated = (Test-Path -LiteralPath $updatedArtifact -PathType Leaf) -and `
+            (Get-Item -LiteralPath $updatedArtifact -Force).LastWriteTimeUtc -ge $task.Started.ToUniversalTime().AddSeconds(-2)
         if (($null -ne $exitCode -and $exitCode -ne 0) -or -not $artifactExists) {
             throw "preparing $($task.Name) failed (exit=$exitCode, artifact_updated=$artifactUpdated); see $($task.Service.Stdout) and $($task.Service.Stderr)"
         }
