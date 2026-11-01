@@ -2,178 +2,84 @@
 // Contract: e2e/scenarios/identity/account-profile-ui.md
 // Spec: models/profile.md, interfaces/http-api.md
 
+import { writeFileSync } from "node:fs";
+
 import { expect, test } from "../../helpers/arkret-test";
 import { colandBaseUrl } from "../../helpers/env";
-import {
-  assertJointStackNotRequired,
-  openDpopUserPage,
-  selfPathHeadersForDpopSession,
-} from "../../helpers/users";
+import { openRegisteredUserPage } from "../../helpers/users";
 
 const ONE_PIXEL_PNG = Buffer.from(
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=",
   "base64",
 );
 
-test("@fully-implemented account owner uploads and clears the canonical profile avatar through Settings", async ({
-  browser,
-  request,
-}) => {
-  test.setTimeout(240_000);
-  const flow = await openDpopUserPage(
-    browser,
-    request,
-    `account-profile-ui-${Date.now()}`,
-  );
-  if (!flow) {
-    assertJointStackNotRequired("account profile settings DPoP login");
-    test.skip(true, "coauth DPoP session-grant login is unavailable");
-    return;
-  }
-
-  const { page, session } = flow;
+test("@fully-implemented account owner uploads, cold-loads and clears the canonical profile avatar through Settings", async ({ browser, request }, testInfo) => {
+  test.setTimeout(480_000);
+  const { page } = await openRegisteredUserPage(browser, request, `account-profile-ui-${Date.now()}`);
   const profileUrl = `${colandBaseUrl()}/_arkret/self/account/profile`;
-  const viewerUrl = `${colandBaseUrl()}/_arkret/self/account/viewer`;
-
+  const viewerBaseUrl = colandBaseUrl();
+  const profileWrite = () => page.page.waitForResponse(response =>
+    response.url() === profileUrl && response.request().method() === "POST", { timeout: 90_000 });
+  const coldViewer = async () => {
+    const viewer = page.page.waitForResponse(response =>
+      response.url() === `${viewerBaseUrl}/_arkret/self/account/viewer` && response.request().method() === "GET" && response.status() === 200,
+      { timeout: 90_000 });
+    await page.page.reload({ waitUntil: "domcontentloaded" });
+    // Observe the product's authenticated read, including its real refresh chain.
+    return (await (await viewer).json()).profile;
+  };
   try {
     await page.gotoSettings();
-    await expect(page.page.getByTestId("settings-avatar-card")).toBeVisible({
-      timeout: 60_000,
-    });
-
+    await expect(page.page.locator(".settings-avatar-card")).toBeVisible({ timeout: 60_000 });
     const displayName = `Profile ${Date.now()}`;
     const biography = `Bio ${Date.now()}`;
-    await page.page.getByTestId("settings-profile-display-name").fill(displayName);
-    await page.page.getByTestId("settings-profile-biography").fill(biography);
-    const savedTextProfile = page.page.waitForResponse(
-      (response) =>
-        response.url() === profileUrl &&
-        response.request().method() === "POST" &&
-        response.status() === 200,
-      { timeout: 90_000 },
-    );
-    await page.page.getByTestId("settings-profile-save").click();
+    await page.page.locator(".settings-avatar-card").getByLabel("Display name", { exact: true }).fill(displayName);
+    await page.page.locator(".settings-avatar-card").getByLabel("Bio", { exact: true }).fill(biography);
+    const savedTextProfile = profileWrite();
+    await page.page.locator(".settings-profile-fields").getByRole("button", { name: "Save profile", exact: true }).click();
     const savedText = await savedTextProfile;
-    expect(savedText.request().postData() ?? "").toMatch(
-      /ak\.profile\.(?:create|update)/,
-    );
-    await expect(page.page.getByTestId("settings-profile-status")).toContainText(
-      /saved|已保存/i,
-    );
-    await expect
-      .poll(
-        async () => {
-          const response = await request.get(viewerUrl, {
-            headers: selfPathHeadersForDpopSession(session, "GET", viewerUrl),
-          });
-          if (!response.ok()) return {};
-          const body = (await response.json()) as {
-            profile?: {
-              display_name?: string;
-              profile_fields?: { biography?: string };
-            };
-          };
-          return {
-            displayName: body.profile?.display_name,
-            biography: body.profile?.profile_fields?.biography,
-          };
-        },
-        { timeout: 60_000, intervals: [250, 500, 1_000, 2_000] },
-      )
-      .toEqual({ displayName, biography });
+    expect(savedText.status()).toBe(200);
+    expect(savedText.request().postData() ?? "").toMatch(/ak\.profile\.(?:create|update)/);
+    await expect(page.page.locator(".settings-profile-fields .write-status")).toContainText(/saved|已保存/i);
 
-    await page.page.getByTestId("settings-avatar-input").setInputFiles({
-      name: "avatar.png",
-      mimeType: "image/png",
-      buffer: ONE_PIXEL_PNG,
-    });
-    await expect(
-      page.page.getByTestId("settings-avatar-upload-cropped"),
-    ).toBeVisible({ timeout: 30_000 });
-
-    const publishedProfile = page.page.waitForResponse(
-      (response) =>
-        response.url() === profileUrl &&
-        response.request().method() === "POST" &&
-        response.status() === 200,
-      { timeout: 90_000 },
-    );
-    await page.page.getByTestId("settings-avatar-upload-cropped").click();
+    const avatarPath = testInfo.outputPath("avatar.png");
+    writeFileSync(avatarPath, ONE_PIXEL_PNG);
+    const fileChooser = page.page.waitForEvent("filechooser");
+    await page.page.locator(".settings-avatar-card").getByRole("button", { name: "Upload new avatar", exact: true }).click();
+    await (await fileChooser).setFiles(avatarPath);
+    await expect(page.page.getByRole("dialog", { name: "Edit avatar", exact: true }).getByRole("button", { name: "Upload cropped avatar", exact: true })).toBeVisible({ timeout: 30_000 });
+    const publishedProfile = profileWrite();
+    await page.page.getByRole("dialog", { name: "Edit avatar", exact: true }).getByRole("button", { name: "Upload cropped avatar", exact: true }).click();
     const published = await publishedProfile;
-    const publishedText = await published.text();
-    expect(published.status(), publishedText).toBe(200);
+    expect(published.status()).toBe(200);
     expect(published.request().postData() ?? "").toContain("ak.profile.update");
+    await expect(page.page.locator(".settings-avatar-card .settings-avatar-preview").locator("img")).toHaveAttribute("src", /^data:image\//);
 
-    let avatarBlobRef = "";
-    await expect
-      .poll(
-        async () => {
-          const response = await request.get(viewerUrl, {
-            headers: selfPathHeadersForDpopSession(
-              session,
-              "GET",
-              viewerUrl,
-            ),
-          });
-          if (!response.ok()) return "";
-          const body = (await response.json()) as {
-            profile?: { avatar_blob_ref?: string | null };
-          };
-          avatarBlobRef = body.profile?.avatar_blob_ref ?? "";
-          return avatarBlobRef;
-        },
-        { timeout: 60_000, intervals: [250, 500, 1_000, 2_000] },
-      )
-      .toMatch(/^ak:blob:sha256:[a-f0-9]{64}$/);
-    await expect(
-      page.page.getByTestId("settings-avatar-preview").locator("img"),
-    ).toHaveAttribute("src", /^data:image\//);
+    const restoredProfile = await coldViewer();
+    expect(restoredProfile.display_name).toBe(displayName);
+    expect(restoredProfile.profile_fields?.biography).toBe(biography);
+    const avatarBlobRef = restoredProfile.avatar_blob_ref;
+    expect(avatarBlobRef).toMatch(/^ak:blob:sha256:[a-f0-9]{64}$/);
+    const restoredAvatar = page.page.locator(".settings-avatar-card .settings-avatar-preview").locator("img");
+    await expect(restoredAvatar).toBeVisible({ timeout: 90_000 });
+    await restoredAvatar.scrollIntoViewIfNeeded();
+    await expect.poll(() => restoredAvatar.evaluate((image: HTMLImageElement) =>
+      image.complete && image.naturalWidth > 0), { timeout: 60_000 }).toBe(true);
+    await expect(page.page.locator(".settings-avatar-card .settings-avatar-preview").locator(".resource-error")).toHaveCount(0);
 
-    const clearedProfile = page.page.waitForResponse(
-      (response) =>
-        response.url() === profileUrl &&
-        response.request().method() === "POST" &&
-        response.status() === 200,
-      { timeout: 90_000 },
-    );
-    await page.page.getByTestId("settings-avatar-clear").click();
+    const clearedProfile = profileWrite();
+    await page.page.locator(".settings-avatar-card").getByRole("button", { name: "Remove avatar", exact: true }).click();
     const cleared = await clearedProfile;
-    const clearedText = await cleared.text();
-    expect(cleared.status(), clearedText).toBe(200);
+    expect(cleared.status()).toBe(200);
     expect(cleared.request().postData() ?? "").toContain("ak.profile.update");
     expect(cleared.request().postData() ?? "").not.toContain(avatarBlobRef);
-
-    await expect
-      .poll(
-        async () => {
-          const response = await request.get(viewerUrl, {
-            headers: selfPathHeadersForDpopSession(
-              session,
-              "GET",
-              viewerUrl,
-            ),
-          });
-          if (!response.ok()) return avatarBlobRef;
-          const body = (await response.json()) as {
-            profile?: { avatar_blob_ref?: string | null };
-          };
-          return body.profile?.avatar_blob_ref ?? "";
-        },
-        { timeout: 60_000, intervals: [250, 500, 1_000, 2_000] },
-      )
-      .toBe("");
-
-    await page.page.reload({ waitUntil: "domcontentloaded" });
-    await expect(page.page.getByTestId("settings-avatar-card")).toBeVisible({
-      timeout: 60_000,
-    });
-    await expect(page.page.getByTestId("settings-profile-display-name")).toHaveValue(
-      displayName,
-      { timeout: 60_000 },
-    );
-    await expect(page.page.getByTestId("settings-profile-biography")).toHaveValue(biography);
-    await expect(page.page.getByTestId("settings-avatar-clear")).toHaveCount(0);
-  } finally {
-    await page.close();
-  }
+    // Let the UI finish its accepted write and local tombstone before navigation.
+    await expect(page.page.locator(".settings-avatar-card").getByRole("button", { name: "Remove avatar", exact: true })).toHaveCount(0);
+    const emptyProfile = await coldViewer();
+    expect(emptyProfile.avatar_blob_ref ?? "").toBe("");
+    await expect(page.page.locator(".settings-avatar-card")).toBeVisible({ timeout: 60_000 });
+    await expect(page.page.locator(".settings-avatar-card").getByLabel("Display name", { exact: true })).toHaveValue(displayName);
+    await expect(page.page.locator(".settings-avatar-card").getByLabel("Bio", { exact: true })).toHaveValue(biography);
+    await expect(page.page.locator(".settings-avatar-card").getByRole("button", { name: "Remove avatar", exact: true })).toHaveCount(0);
+  } finally { await page.close(); }
 });

@@ -29,7 +29,7 @@ $ast = [System.Management.Automation.Language.Parser]::ParseFile(
 )
 if ($parseErrors.Count -gt 0) { throw "Joint runner has PowerShell parse errors" }
 
-foreach ($name in @("Resolve-PlaywrightProjects", "Resolve-ClientKind", "Resolve-InksonRequirement", "Get-JointInksonBuildPlan")) {
+foreach ($name in @("Resolve-PlaywrightProjects", "Resolve-ClientKind", "Resolve-InksonRequirement", "Quote-PsLiteral", "Get-JointInksonRequiredArtifactPaths", "Get-JointInksonBuildPlan")) {
     $function = @($ast.FindAll({
                 param($node)
                 $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and
@@ -74,10 +74,10 @@ foreach ($fresh in @($false, $true)) {
     foreach ($marker in @($false, $true)) {
         $standard = Get-JointInksonBuildPlan -StartMockAppletRegistry $false -ArtifactFresh $fresh -TestFeaturePresent $marker
         Assert-Equal (-not $fresh -or -not $marker) $standard.ShouldBuild "standard lane preserves its freshness/marker decision"
-        Assert-Equal "dx build --profile joint-e2e --platform web --features web,wasm-localstorage-secrets-test" $standard.Command "standard lane must not add Applet UI features"
+        Assert-Equal "& 'python' 'scripts/build_web.py' --profile joint-e2e --features 'web,wasm-localstorage-secrets-test'" $standard.Command "standard lane must not add Applet UI features"
         $applet = Get-JointInksonBuildPlan -StartMockAppletRegistry $true -ArtifactFresh $fresh -TestFeaturePresent $marker
         Assert-Equal $true $applet.ShouldBuild "Applet lane must build even with source-fresh bytes and the session marker"
-        Assert-Equal "dx build --profile joint-e2e --platform web --features web,wasm-localstorage-secrets-test,experimental-applets" $applet.Command "Applet lane must compile the actual UI feature"
+        Assert-Equal "& 'python' 'scripts/build_web.py' --profile joint-e2e --features 'web,wasm-localstorage-secrets-test,experimental-applets'" $applet.Command "Applet lane must compile the actual UI feature"
     }
 }
 # Bind that tested decision to the real managed WASM preparation path.
@@ -92,12 +92,17 @@ $buildBranch = $ast.Find({ param($node)
     $node.Clauses[0].Item1.Extent.Text -eq '$inksonBuildPlan.ShouldBuild'
 }, $true)
 Assert-Equal $true ($null -ne $buildBranch) "normal managed build must obey ShouldBuild"
-$dxCalls = @($buildBranch.FindAll({ param($node)
-    $node -is [System.Management.Automation.Language.CommandAst] -and
-    $node.GetCommandName() -eq "Add-DioxusNoDownloadsEnvironment"
-}, $true))
-Assert-Equal 1 $dxCalls.Count "managed build must retain the normal Dioxus preparation"
-Assert-Equal $true ($dxCalls[0].Extent.Text.Contains('-Command $inksonBuildPlan.Command')) "normal Dioxus invocation must use the tested feature list"
-Assert-Equal $true ($buildBranch.Extent.Text.Contains('finalize-inkson-joint-e2e-wasm.ps1')) "Applet build must retain the official WASM finalizer"
+$buildText = $buildBranch.Extent.Text
+Assert-Equal $true ($buildText.Contains('$buildCommand = $inksonBuildPlan.Command')) "managed build must use the official tested plan"
+Assert-Equal $false ($buildText.Contains('finalize-inkson-joint-e2e-wasm.ps1')) "Glory startup must not receive the obsolete Dioxus loader"
+Assert-Equal $true ($plans[0].Extent.Text.Contains('-PythonExecutable (Get-PythonExecutable)')) "build must use the discovered Python runtime"
+Assert-Equal $true ($plans[0].Extent.Text.Contains('-BuildScript (Join-Path $InksonRoot "scripts/build_web.py")')) "build must use the actual checked-out Inkson entry point"
+$required = @(Get-JointInksonRequiredArtifactPaths)
+$expected = @("index.html", "bootstrap.js", "assets/pkg/inkson_bg.wasm", "assets/pkg/inkson.js", "assets/app.css", "assets/sapid.css", "ui-build-info.json")
+Assert-Equal ($expected -join ',') ($required -join ',') "content identity must cover the official bootstrap, code, styles and provenance"
+Assert-Equal 7 @($required | Select-Object -Unique).Count "required bundle members must be unique"
+$quoted = Get-JointInksonBuildPlan -StartMockAppletRegistry $false -ArtifactFresh $false -TestFeaturePresent $false `
+    -PythonExecutable "D:/Tool Dir/python.exe" -BuildScript "D:/Repo's/inkson/scripts/build_web.py"
+Assert-Equal "& 'D:/Tool Dir/python.exe' 'D:/Repo''s/inkson/scripts/build_web.py' --profile joint-e2e --features 'web,wasm-localstorage-secrets-test'" $quoted.Command "real runtime and repository paths must be quoted without shell reinterpretation"
 
 Write-Host "joint-client-selection.tests.ps1: PASS (client selection and Applet build feature/cache decisions)"

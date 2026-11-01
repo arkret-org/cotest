@@ -277,6 +277,7 @@ struct AddMemberInput {
     group_state: String,
     claim: KeyPackageClaimRecord,
     base_group_state_ref: EventId,
+    #[serde(with = "arkret_canonical::serde_helpers::uint64_decimal")]
     key_access_revision: u64,
 }
 
@@ -419,7 +420,7 @@ pub fn mls_install_commit(input: Value) -> Result<Value> {
     let epoch = group.install_accepted_commit(&input.accepted_commit, &input.base)?;
     install_leaf_bindings(&mut group, &input.members)?;
     Ok(json!({
-        "epoch": epoch,
+        "epoch": epoch.to_string(),
         "group_state": encode_group(&group)?,
     }))
 }
@@ -476,7 +477,7 @@ pub fn mls_join_welcome(input: Value) -> Result<Value> {
     )?;
     install_leaf_bindings(&mut group, &input.members)?;
     Ok(json!({
-        "epoch": group.epoch(),
+        "epoch": group.epoch().to_string(),
         "group_state": encode_group(&group)?,
     }))
 }

@@ -55,6 +55,7 @@ impl CallAdmissionObserver {
         holder: &Member,
         station: &cotest::harness::ArkretServer,
         holder_station: &cotest::harness::ArkretServer,
+        coauth: Option<&cotest::scenarios::_helpers::bridge::MockCoauthIntrospectionServer>,
         realm: &arkret_wire::RealmId,
         accepted_group: &arkret_wire::EventId,
         sender_group: &mut arkret::ArkretMlsGroup,
@@ -86,6 +87,7 @@ impl CallAdmissionObserver {
                             holder,
                             station,
                             holder_station,
+                            coauth,
                             realm,
                             accepted_group,
                             sender_group,
@@ -180,6 +182,7 @@ impl MlsClientObserver for CallAdmissionObserver {
             holder,
             station,
             station,
+            None,
             realm,
             accepted_group,
             sender_group,
@@ -217,6 +220,7 @@ impl cotest::scenarios::message_mls_cross_station_live::CrossStationCallObserver
         holder: &Member,
         station: &cotest::harness::ArkretServer,
         holder_station: &cotest::harness::ArkretServer,
+        coauth: &cotest::scenarios::_helpers::bridge::MockCoauthIntrospectionServer,
         realm: &arkret_wire::RealmId,
         accepted_group: &arkret_wire::EventId,
         sender_group: &mut arkret::ArkretMlsGroup,
@@ -231,6 +235,7 @@ impl cotest::scenarios::message_mls_cross_station_live::CrossStationCallObserver
             holder,
             station,
             holder_station,
+            Some(coauth),
             realm,
             accepted_group,
             sender_group,
@@ -479,6 +484,7 @@ async fn run_at_accepted_mls(
     holder: &Member,
     station: &cotest::harness::ArkretServer,
     holder_station: &cotest::harness::ArkretServer,
+    coauth: Option<&cotest::scenarios::_helpers::bridge::MockCoauthIntrospectionServer>,
     realm: &arkret_wire::RealmId,
     accepted_group: &arkret_wire::EventId,
     sender_group: &arkret::ArkretMlsGroup,
@@ -572,11 +578,17 @@ async fn run_at_accepted_mls(
         sender,
         holder,
         holder_station,
+        station,
+        coauth,
         realm,
+        accepted_group,
+        sender_group,
+        holder_group,
         &sender_host,
         &holder_host,
         other_holder,
         other_host.as_ref(),
+        directory.path(),
         emission_probe,
     )
     .await
@@ -591,11 +603,17 @@ fn run_call_cases<'a>(
     sender: &'a Member,
     holder: &'a Member,
     holder_station: &'a cotest::harness::ArkretServer,
+    station: &'a cotest::harness::ArkretServer,
+    coauth: Option<&'a cotest::scenarios::_helpers::bridge::MockCoauthIntrospectionServer>,
     realm: &'a arkret_wire::RealmId,
+    accepted_group: &'a arkret_wire::EventId,
+    sender_group: &'a arkret::ArkretMlsGroup,
+    holder_group: &'a arkret::ArkretMlsGroup,
     sender_host: &'a inkson::sync_engine::NativeAccountHost,
     holder_host: &'a inkson::sync_engine::NativeAccountHost,
     other_holder: Option<(&'a Member, &'a arkret::ArkretMlsGroup)>,
     other_host: Option<&'a inkson::sync_engine::NativeAccountHost>,
+    directory: &'a std::path::Path,
     emission_probe: Option<&'a std::path::Path>,
 ) -> CallCaseFuture<'a> {
     Box::pin(async move {
@@ -603,6 +621,77 @@ fn run_call_cases<'a>(
         let mut receiver = garth::signal::SignalReceiver::new();
         let mut refreshes = Vec::new();
         for (sequence, video) in [(1, false), (2, true)] {
+            let fresh = if video {
+                if let Some(coauth) = coauth {
+                    let sender_client = station
+                        .reissue_mock_native_host_session(&sender.client, coauth)
+                        .await
+                        .context("reauthenticate the sender between Call product phases")?;
+                    let holder_client = holder_station
+                        .reissue_mock_native_host_session(&holder.client, coauth)
+                        .await
+                        .context("reauthenticate the holder between Call product phases")?;
+                    Some((
+                        sender.with_client(sender_client),
+                        holder.with_client(holder_client),
+                    ))
+                } else {
+                    None
+                }
+            } else {
+                None
+            };
+            let sender = fresh.as_ref().map_or(sender, |(member, _)| member);
+            let holder = fresh.as_ref().map_or(holder, |(_, member)| member);
+            let fresh_sender_host = if fresh.is_some() {
+                Some(
+                    native_call_endpoint(
+                        sender,
+                        realm,
+                        accepted_group,
+                        sender_group,
+                        &directory.join("sender-second.json"),
+                    )
+                    .await?,
+                )
+            } else {
+                None
+            };
+            let sender_host = fresh_sender_host.as_ref().unwrap_or(sender_host);
+            let fresh_holder_host = if fresh.is_some() {
+                Some(
+                    native_call_endpoint(
+                        holder,
+                        realm,
+                        accepted_group,
+                        holder_group,
+                        &directory.join("holder-second.json"),
+                    )
+                    .await?,
+                )
+            } else {
+                None
+            };
+            let holder_host = fresh_holder_host.as_ref().unwrap_or(holder_host);
+            let fresh_other_host = if fresh.is_some() {
+                if let Some((other, group)) = other_holder {
+                    Some(
+                        native_call_endpoint(
+                            other,
+                            realm,
+                            accepted_group,
+                            group,
+                            &directory.join("other-second.json"),
+                        )
+                        .await?,
+                    )
+                } else {
+                    None
+                }
+            } else {
+                None
+            };
+            let other_host = fresh_other_host.as_ref().or(other_host);
             let (granted, original_grant) = grant_payload_record(
                 holder,
                 &sender.actor,

@@ -159,6 +159,11 @@ async fn exact_window_basis(
         .realm_state_snapshot_by_ref(realm, &basis.snapshot_ref)
         .await
         .context("retrieve the window's exact original historical basis")?;
+    snapshot.validate_purpose()?;
+    ensure!(
+        &snapshot.realm_id == realm && snapshot.snapshot_id == basis.snapshot_ref,
+        "historical response does not bind the exact requested Realm and Snapshot"
+    );
     let history = snapshot
         .history_basis
         .as_ref()
@@ -176,6 +181,32 @@ async fn exact_window_basis(
                     .as_deref()
                     .unwrap_or_default(),
         "the exact original does not cover the window's authenticated account and prefix"
+    );
+    let (_, seed) = crate::harness::test_service_signing_key("local-invite-accept-join");
+    let key = arkret_signatures::PublicKeyMaterial::Ed25519Raw {
+        bytes: ed25519_dalek::SigningKey::from_bytes(&seed)
+            .verifying_key()
+            .to_bytes()
+            .to_vec(),
+    };
+    let unsigned = arkret_canonical::unsigned_value(&snapshot, &["signature"])?;
+    arkret_signatures::detached_object::verify_detached_object_signature(
+        &snapshot.signature,
+        &unsigned,
+        arkret_wire::DetachedSignatureContext::RealmSnapshot,
+        &key,
+    )?;
+    let identity = arkret_canonical::unsigned_value(&snapshot, &["signature", "snapshot_id"])?;
+    let expected_id = arkret_wire::RealmSnapshotId::from_digest(arkret_canonical::sha256_bytes(
+        &arkret_canonical::canonical_json_bytes(&identity)?,
+    ));
+    ensure!(
+        snapshot.snapshot_id == expected_id,
+        "history original is not content-addressed"
+    );
+    ensure!(
+        snapshot.require_full_recovery().is_err(),
+        "history must not replace current"
     );
     Ok(snapshot)
 }

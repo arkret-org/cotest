@@ -22,6 +22,43 @@ import { expect, type Locator } from "@playwright/test";
  *   argument of the original `selectOption`)
  */
 export async function selectDxcOption(scope: Locator, value: string): Promise<void> {
+  const native = await scope.evaluate(element => element.tagName === "SELECT")
+    ? scope : scope.locator("select");
+  if (await native.count() > 0) {
+    await expect(native).toHaveCount(1);
+    await expect(native).toBeVisible({ timeout: 30_000 });
+    await native.selectOption(value, { timeout: 15_000 });
+    return;
+  }
+  if (await scope.evaluate(element => element.matches('.sapid-select[data-gly-combobox="select"]'))) {
+    await expect(scope).toHaveCount(1);
+    await expect(scope).toBeVisible({ timeout: 30_000 });
+    await expect(scope).toBeEnabled({ timeout: 30_000 });
+    const controls = await scope.getAttribute("aria-controls");
+    const suffix = "-listbox-4_root";
+    if (!controls?.startsWith("sapid-select-") || !controls.endsWith(suffix)) {
+      throw new Error("The Sapid select has no exact listbox identity");
+    }
+    if (!/^[\x21-\x7e]{1,64}$/.test(value)) {
+      throw new Error("The Sapid option key must be a bounded ASCII semantic identity");
+    }
+    // Sapid's public SemanticId uses the same namespace for trigger, listbox,
+    // and wire-keyed options. Match the full identity, not a display label.
+    const optionId = `${controls.slice(0, -suffix.length)}-option-${value.length}_${value}`;
+    const quote = (text: string) => text.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+    const panel = scope.page().locator(`[role="listbox"][id="${quote(controls)}"]`);
+    if ((await scope.getAttribute("aria-expanded")) !== "true") {
+      await scope.click({ timeout: 15_000 });
+    }
+    await expect(panel).toBeVisible({ timeout: 30_000 });
+    const option = panel.locator(`[role="option"][id="${quote(optionId)}"][data-gly-option-owner="${quote(controls)}"]`);
+    await expect(option).toHaveCount(1);
+    await expect(option).toBeEnabled({ timeout: 15_000 });
+    await option.click({ timeout: 15_000 });
+    await expect(option).toHaveAttribute("aria-selected", "true", { timeout: 15_000 });
+    await expect(scope).toHaveAttribute("aria-expanded", "false", { timeout: 15_000 });
+    return;
+  }
   const trigger = scope.locator('button[aria-haspopup="listbox"]').first();
   const quotedValue = value.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
   let selected = false;

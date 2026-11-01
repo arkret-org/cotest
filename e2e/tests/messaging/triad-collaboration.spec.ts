@@ -282,23 +282,19 @@ test.describe("single-server triad collaboration", () => {
 
       await bobPage.acceptInvite(realmId);
       await bobPage.gotoTimelineRealm(realmId);
-      await bobPage.page.getByTestId("chat-input").fill(refusedBody);
-      await expect(bobPage.page.getByTestId("send-chat-button")).toBeEnabled({
+      await bobPage.page.getByRole("textbox", { name: "Message", exact: true }).fill(refusedBody);
+      await expect(bobPage.page.locator(".send-chat-button")).toBeEnabled({
         timeout: 90_000,
       });
-      await bobPage.page.getByTestId("send-chat-button").click();
+      await bobPage.page.locator(".send-chat-button").click();
       const refusedEvent = bobPage.timelineEvent(refusedBody);
-      await expect(refusedEvent.getByTestId("message-send-status")).toHaveAttribute(
-        "title", "Message send failed", { timeout: 90_000 },
-      );
-      await expect(bobPage.page.getByTestId("chat-input")).toHaveValue(refusedBody);
+      await expect(refusedEvent.locator(".message-send-status")).toHaveClass(/\bis-failed\b/, { timeout: 90_000 });
+      await expect(bobPage.page.getByRole("textbox", { name: "Message", exact: true })).toHaveValue(refusedBody);
       // This helper performs a full document navigation, retaining only the
       // durable account store rather than the optimistic component state.
       await bobPage.gotoTimelineRealm(realmId);
-      await expect(refusedEvent.getByTestId("message-send-status")).toHaveAttribute(
-        "title", "Message send failed", { timeout: 90_000 },
-      );
-      await expect(refusedEvent.locator('[data-send-state="sending"]')).toHaveCount(0);
+      await expect(refusedEvent.locator(".message-send-status")).toHaveClass(/\bis-failed\b/, { timeout: 90_000 });
+      await expect(refusedEvent.locator(".message-send-status.is-pending")).toHaveCount(0);
       await alicePage.gotoTimelineRealm(realmId);
       await expect(alicePage.timelineEvent(refusedBody)).toHaveCount(0);
       await stepShot(bobPage.page, testInfo, "A-refused-message-cold-recovery");
@@ -313,10 +309,8 @@ test.describe("single-server triad collaboration", () => {
       await expect(alicePage.timelineEvent(refusedBody)).toHaveCount(0);
       await bobPage.gotoTimelineRealm(realmId);
       await bobPage.waitForTimelineEventSettled(approvedBody);
-      await expect(refusedEvent.getByTestId("message-send-status")).toHaveAttribute(
-        "title", "Message send failed", { timeout: 90_000 },
-      );
-      await expect(refusedEvent.locator('[data-send-state="sending"]')).toHaveCount(0);
+      await expect(refusedEvent.locator(".message-send-status")).toHaveClass(/\bis-failed\b/, { timeout: 90_000 });
+      await expect(refusedEvent.locator(".message-send-status.is-pending")).toHaveCount(0);
       await alicePage.grantRealmCapability(
         realmId,
         bobFlow.session.accountId,
@@ -334,24 +328,24 @@ test.describe("single-server triad collaboration", () => {
       await stepShot(alicePage.page, testInfo, "B-m1-sent");
 
       await bobPage.gotoTimelineRealm(realmId);
-      await expect(bobPage.page.getByTestId("message-list")).toContainText(m1, {
+      await expect(bobPage.page.locator(".message-list")).toContainText(m1, {
         timeout: 30_000,
       });
       await stepShot(bobPage.page, testInfo, "B-bob-received-m1");
 
       // Reply to M1, then edit. Chat view's reply testids use the `chat-*` prefix.
       await bobPage.clickTimelineReply(m1);
-      await expect(bobPage.page.getByTestId("chat-reply-banner")).toBeVisible();
+      await expect(bobPage.page.locator(".chat-reply-banner")).toBeVisible();
       await bobPage.sendTimelineMessage(realmId, m2);
       const m2EventOnBob = bobPage.timelineEvent(m2);
-      await expect(m2EventOnBob.getByTestId("chat-reply-indicator")).toBeVisible();
+      await expect(m2EventOnBob.locator(".chat-reply-indicator")).toBeVisible();
       await stepShot(bobPage.page, testInfo, "B-bob-replied");
 
       await bobPage.clickTimelineEdit(m2);
-      await bobPage.page.getByTestId("chat-edit-composer").locator("textarea").fill(m2Edited);
-      await bobPage.page.getByTestId("chat-save-edit-button").click();
+      await bobPage.page.locator(".chat-edit-composer").locator("textarea").fill(m2Edited);
+      await bobPage.page.locator(".chat-save-edit-button").click();
       await bobPage.waitForTimelineEventSettled(m2Edited);
-      await expect(bobPage.page.getByTestId("chat-status")).toContainText(/Message updated/i);
+      await expect(bobPage.page.locator(".chat-status")).toContainText(/Message updated/i);
       await stepShot(bobPage.page, testInfo, "B-bob-edited-m2");
 
       // Alice sees the edited reply.
@@ -389,27 +383,27 @@ test.describe("single-server triad collaboration", () => {
       // (she never saw M2 anyway because of history_access).
       await bobPage.gotoTimelineRealm(realmId);
       await bobPage.clickTimelineRedact(m2Edited);
-      await bobPage.page.getByTestId("chat-confirm-redact-button").click();
-      await expect(bobPage.page.getByTestId("chat-redacted-tombstone")).toBeVisible({ timeout: 30_000 });
-      await expect(bobPage.page.getByTestId("chat-status")).toContainText(/Message removed/i);
+      await bobPage.page.locator(".chat-confirm-redact-button").click();
+      await expect(bobPage.page.locator(".chat-redacted-tombstone")).toBeVisible({ timeout: 30_000 });
+      await expect(bobPage.page.locator(".chat-status")).toContainText(/Message removed/i);
       await stepShot(bobPage.page, testInfo, "E-bob-redacted");
 
       await expect
         .poll(
-          () => alicePage.page.getByTestId("chat-redacted-tombstone").count(),
+          () => alicePage.page.locator(".chat-redacted-tombstone").count(),
           { timeout: 60_000, intervals: [500, 1_000, 2_000, 5_000] },
         )
         .toBeGreaterThan(0);
       // The redacted body should not be visible in plain form anymore.
-      await expect(alicePage.page.getByTestId("message-list")).not.toContainText(m2Edited);
+      await expect(alicePage.page.locator(".message-list")).not.toContainText(m2Edited);
       await stepShot(alicePage.page, testInfo, "E-alice-sees-tombstone");
 
       await carolPage.gotoTimelineRealm(realmId);
       // Carol only sees M3 (and possibly the tombstone marker for M2, but never
       // its original text).
       await carolPage.expectTimelineEventVisible(m3, 30_000);
-      await expect(carolPage.page.getByTestId("message-list")).not.toContainText(m1);
-      await expect(carolPage.page.getByTestId("message-list")).not.toContainText(m2Edited);
+      await expect(carolPage.page.locator(".message-list")).not.toContainText(m1);
+      await expect(carolPage.page.locator(".message-list")).not.toContainText(m2Edited);
     } finally {
       await Promise.allSettled([carolPage.close(), bobPage.close(), alicePage.close()]);
     }

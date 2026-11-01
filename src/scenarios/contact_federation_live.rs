@@ -144,8 +144,8 @@ async fn tombstone_contact(
     row: &arkret::contact_operations::ContactView,
 ) -> Result<()> {
     use arkret::contact_operations::{
-        ContactCommitPhase, ContactCommitRequestBody, ContactOperationResponseBody,
-        ContactPreparedResponseBody,
+        ContactAcceptedResponseBody, ContactCommitPhase, ContactCommitRequestBody,
+        ContactOperationResponseBody, ContactPreparedResponseBody,
     };
     let next = row
         .next_prepare_input
@@ -183,25 +183,63 @@ async fn tombstone_contact(
     else {
         bail!("cross-Station tombstone did not prepare: {prepared:?}");
     };
-    let committed: ContactOperationResponseBody = serde_json::from_value(
-        expect_json(
-            holder.post(path).json(&ContactCommitRequestBody {
-                phase: ContactCommitPhase::Commit,
-                operation_id,
-                idempotency_key,
-                reservation_handle,
-                signed_event: holder.sign_prepared_contact_event(
-                    &event_draft,
-                    arkret_wire::event_kind_str::CONTACT_TOMBSTONE,
-                )?,
-            }),
-            StatusCode::OK,
+    let commit = ContactCommitRequestBody {
+        phase: ContactCommitPhase::Commit,
+        operation_id,
+        idempotency_key,
+        reservation_handle,
+        signed_event: holder.sign_prepared_contact_event(
+            &event_draft,
+            arkret_wire::event_kind_str::CONTACT_TOMBSTONE,
+        )?,
+    };
+    let frozen = arkret_canonical::canonical_json_bytes(&commit)?;
+    let deadline = Instant::now() + Duration::from_secs(15);
+    let committed: ContactOperationResponseBody = loop {
+        let response = crate::harness::send_recorded(
+            holder
+                .post(path)
+                .header("content-type", "application/json")
+                .body(frozen.clone()),
         )
-        .await?,
-    )?;
+        .await?;
+        if response.status == StatusCode::OK {
+            break serde_json::from_value(response.json()?)?;
+        }
+        let problem: arkret_wire::Problem = serde_json::from_value(response.json()?)?;
+        ensure!(
+            response.status == StatusCode::SERVICE_UNAVAILABLE
+                && problem.error_code() == Some(arkret_wire::ErrorCode::TemporarilyUnavailable)
+                && Instant::now() < deadline,
+            "frozen Contact tombstone commit did not recover: {}",
+            response.context()
+        );
+        // Retry only the original canonical commit body, including the signed
+        // Event, reservation and both keys. A lineage conflict is never retried.
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    };
+    let ContactOperationResponseBody::Accepted {
+        outcome:
+            ContactAcceptedResponseBody::Tombstone {
+                operation_id,
+                lineage,
+                current_proof,
+            },
+    } = &committed
+    else {
+        bail!("cross-Station tombstone was not accepted: {committed:?}");
+    };
     ensure!(
-        matches!(committed, ContactOperationResponseBody::Accepted { .. }),
-        "cross-Station tombstone was not accepted: {committed:?}"
+        operation_id == &commit.operation_id
+            && lineage.event_ref == commit.signed_event.event_id
+            && lineage.issuer.contact_actor_id() == commit.signed_event.actor_id
+            && lineage.peer == row.peer
+            && lineage.contact_round_id.as_ref() == Some(&next.contact_round_id)
+            && lineage.version == next.version
+            && lineage.predecessor_event_ref.as_ref() == Some(&next.predecessor_event_ref)
+            && current_proof.head_event_ref == commit.signed_event.event_id
+            && current_proof.version == next.version,
+        "tombstone response changed its frozen operation, Event, holder or lineage"
     );
     Ok(())
 }
@@ -815,10 +853,6 @@ pub async fn old_and_new_contact_signatures_survive_cold_peer_restart() -> Resul
 }
 
 pub async fn concurrent_requests_complete_glare_round() -> Result<()> {
-    use DirectConversationResolveResponseBody::{
-        AwaitingFounder, CreationRequired, TemporarilyUnavailable,
-    };
-
     let Some(alice_database) = database("contact-glare-live")? else {
         return Ok(());
     };
@@ -907,9 +941,13 @@ pub async fn concurrent_requests_complete_glare_round() -> Result<()> {
         alice_round.contact_round_id == bob_round.contact_round_id,
         "glare Stations installed different Contact rounds"
     );
-    // Accepted Contact can precede both verified current proofs. Wait only for
-    // unresolved authoring material; deterministic outcomes keep the assertions below.
+    // Accepted list rows do not imply the founder already has both fresh
+    // source attestations. Resolve can request the missing current material
+    // and return the specified temporary state (Contact/DC sections 3.2, 9.1).
+    // Poll only these reads within the existing Contact convergence budget;
+    // never resubmit a signed request or transfer authority on timeout.
     let deadline = Instant::now() + Duration::from_secs(30);
+    let mut observed_founder = None;
     let (alice_resolve, bob_resolve) = loop {
         let alice_resolve = alice
             .sdk()
@@ -927,22 +965,52 @@ pub async fn concurrent_requests_complete_glare_round() -> Result<()> {
                 },
             })
             .await?;
-        let pending_material = matches!(
-            (&alice_resolve, &bob_resolve),
-            (
-                TemporarilyUnavailable { .. },
-                AwaitingFounder { .. } | CreationRequired { .. } | TemporarilyUnavailable { .. }
-            ) | (
-                AwaitingFounder { .. } | CreationRequired { .. },
-                TemporarilyUnavailable { .. }
-            )
+        for (index, outcome) in [&alice_resolve, &bob_resolve].into_iter().enumerate() {
+            if let DirectConversationResolveResponseBody::CreationRequired {
+                next_founding_input,
+            } = outcome
+            {
+                ensure!(
+                    observed_founder.is_none_or(|founder| founder == index),
+                    "glare founder authority changed during current-material convergence"
+                );
+                observed_founder = Some(index);
+                let DirectConversationFoundingAuthorityEvidence::Human {
+                    contact_round_evidence,
+                } = &next_founding_input.founding_authority_evidence
+                else {
+                    bail!("glare founder received non-Contact DC authority");
+                };
+                ensure!(
+                    contact_round_evidence.contact_round_id == alice_round.contact_round_id,
+                    "glare founding material changed the accepted Contact round"
+                );
+            }
+        }
+        let temporary = matches!(
+            alice_resolve,
+            DirectConversationResolveResponseBody::TemporarilyUnavailable { .. }
+        ) || matches!(
+            bob_resolve,
+            DirectConversationResolveResponseBody::TemporarilyUnavailable { .. }
         );
-        if !pending_material {
+        if !temporary {
             break (alice_resolve, bob_resolve);
+        }
+        for outcome in [&alice_resolve, &bob_resolve] {
+            ensure!(
+                matches!(
+                    outcome,
+                    DirectConversationResolveResponseBody::CreationRequired { .. }
+                        | DirectConversationResolveResponseBody::AwaitingFounder { .. }
+                        | DirectConversationResolveResponseBody::TemporarilyUnavailable { .. }
+                ),
+                "glare reached an unexpected DC outcome: {outcome:?}"
+            );
         }
         ensure!(
             Instant::now() < deadline,
-            "glare founding material remained unavailable: Alice {alice_resolve:?}; Bob {bob_resolve:?}"
+            "glare current material did not converge: Alice {alice_resolve:?}; Bob {bob_resolve:?}"
         );
         tokio::time::sleep(Duration::from_millis(250)).await;
     };

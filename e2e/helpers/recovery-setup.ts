@@ -1,5 +1,13 @@
 import { expect, type Page } from "@playwright/test";
 
+export function recoverySetupDialog(page: Page) {
+  return page.getByRole("dialog", { name: "Set up your recovery key", exact: true });
+}
+
+export function generatedRecoveryKey(page: Page) {
+  return recoverySetupDialog(page).getByRole("textbox", { name: "Recovery key (24 words)", exact: true });
+}
+
 const recoverySetupCompletions = new WeakMap<Page, Promise<string>>();
 const completedRecoverySetups = new WeakMap<Page, string>();
 const failedRecoverySetups = new WeakMap<Page, unknown>();
@@ -33,15 +41,15 @@ export function completeRecoverySetup(
       recoveryKey.trim().split(/\s+/).filter(Boolean).length,
       "recovery-key setup must expose exactly 24 words",
     ).toBe(24);
-    const dialog = page.getByTestId("recovery-key-setup-banner").last();
+    const dialog = recoverySetupDialog(page);
     if (
       completedRecoverySetups.get(page) === recoveryKey &&
       await dialog.isHidden()
     ) {
       return recoveryKey;
     }
-    const confirmation = page.getByTestId("recovery-key-setup-confirm-key").last();
-    const saved = page.getByTestId("recovery-key-setup-saved").last();
+    const confirmation = dialog.getByRole("textbox", { name: "Re-enter the saved recovery key", exact: true });
+    const saved = dialog.getByRole("button", { name: "Confirm saved key", exact: true });
     await confirmation.fill(recoveryKey, { timeout: 10_000 });
     const confirmMatches = async () =>
       (await confirmation.inputValue()).trim() === recoveryKey;
@@ -110,7 +118,7 @@ export async function installRecoverySetupHandler(
   const arm = async () => {
     if (closingRecoveryPages.has(page) || page.isClosed()) return;
     await page.addLocatorHandler(
-      page.getByTestId("recovery-key-setup-generated-key"),
+      generatedRecoveryKey(page),
       async (generated) => {
         if (closingRecoveryPages.has(page)) return;
         if (failedRecoverySetups.has(page)) throw failedRecoverySetups.get(page);

@@ -658,9 +658,22 @@ impl ArkretServer {
                 issuer,
             )
             .await?;
+        let fresh_state =
+            issuer.own_station_session_state(fresh.session.credential(), &self.service_id)?;
+        anyhow::ensure!(
+            fresh_state.grant_id != predecessor.grant_id
+                && fresh_state.account_id == predecessor.account_id
+                && fresh_state.device_id == predecessor.device_id
+                && fresh_state.audience_id == predecessor.audience_id
+                && fresh_state.granted_scope == predecessor.granted_scope
+                && fresh_state.session_public_key == predecessor.session_public_key
+                && fresh_state.dpop_jkt == predecessor.dpop_jkt,
+            "mock reauthentication changed the accepted holder or its authority"
+        );
         let mut retained = client.clone();
         retained.session = fresh.session;
         retained.sdk = fresh.sdk;
+        retained.native_session_invalidator = fresh.native_session_invalidator;
         Ok(retained)
     }
 
@@ -2077,6 +2090,7 @@ impl ArkretServer {
             actor: actor.to_owned(),
             device_id: device_id.to_owned(),
             session,
+            native_session_invalidator: None,
             principal,
             consent_current_authority: self
                 .external_restart

@@ -835,11 +835,16 @@ pub async fn submit_and_expect_commit(
         // signed Event; authoring a replacement could duplicate its effect.
         tokio::time::sleep(Duration::from_millis(100)).await;
     };
-    let AuthoritySubmitResponseBody::Accepted { status, commit } = outcome else {
+    // Exact retry may recover the original Commit as `duplicate`. Bind both
+    // closed accepted statuses to the same frozen Event, Realm and scope stream.
+    outcome.validate_for_request(&arkret_wire::AuthoritySubmitRequestBody::Event(
+        submission.clone(),
+    ))?;
+    let AuthoritySubmitResponseBody::Accepted { commit, .. } = outcome else {
         bail!("{} was not accepted: {outcome:?}", event.kind.as_str());
     };
     ensure!(
-        status == AuthorityCommitStatus::Committed && commit.event_ref == event.event_id,
+        commit.event_ref == event.event_id,
         "{} was not committed as submitted",
         event.kind.as_str()
     );

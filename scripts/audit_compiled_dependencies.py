@@ -58,7 +58,7 @@ def main() -> int:
         tree = subprocess.run(
             ["cargo", "tree", "--workspace", "--all-features", "--locked",
              "--target", target, "--prefix", "none", "--format", "{p}"],
-            cwd=ROOT, text=True, capture_output=True, check=True,
+            cwd=ROOT, text=True, stdout=subprocess.PIPE, check=True,
         )
         selected = parse_tree(tree.stdout)
         print(f"audit graph {target}: {len(selected)} packages", flush=True)

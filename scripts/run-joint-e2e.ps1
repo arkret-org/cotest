@@ -198,7 +198,9 @@ function Get-JointInksonBuildPlan {
     param(
         [Parameter(Mandatory = $true)][bool]$StartMockAppletRegistry,
         [Parameter(Mandatory = $true)][bool]$ArtifactFresh,
-        [Parameter(Mandatory = $true)][bool]$TestFeaturePresent
+        [Parameter(Mandatory = $true)][bool]$TestFeaturePresent,
+        [string]$PythonExecutable = "python",
+        [string]$BuildScript = "scripts/build_web.py"
     )
     $features = "web,wasm-localstorage-secrets-test"
     if ($StartMockAppletRegistry) { $features += ",experimental-applets" }
@@ -206,8 +208,19 @@ function Get-JointInksonBuildPlan {
         # Source/content stamps do not record the Cargo feature selection.
         # Always build the Applet lane rather than reuse a feature-ambiguous bundle.
         ShouldBuild = $StartMockAppletRegistry -or -not $ArtifactFresh -or -not $TestFeaturePresent
-        Command = "dx build --profile joint-e2e --platform web --features $features"
+        Command = "& {0} {1} --profile joint-e2e --features {2}" -f `
+            (Quote-PsLiteral $PythonExecutable), (Quote-PsLiteral $BuildScript), (Quote-PsLiteral $features)
     }
+}
+
+function Get-JointInksonRequiredArtifactPaths {
+    # These are the real files emitted by Inkson's locked Glory web builder.
+    return @("index.html", "bootstrap.js", "assets/pkg/inkson_bg.wasm", "assets/pkg/inkson.js", "assets/app.css", "assets/sapid.css", "ui-build-info.json")
+}
+
+function Get-JointCoauthRequiredArtifactPaths {
+    # These files are emitted by Coauth's locked Glory/Sapid frontend builder.
+    return @("index.html", "assets/bootstrap.js", "assets/pkg/coauth_frontend_bg.wasm", "assets/pkg/coauth_frontend.js", "assets/main.css", "assets/sapid.css", "ui-build-info.json")
 }
 
 function Get-JointSavfoxBuildCommand {
@@ -1131,7 +1144,7 @@ function Invoke-JointE2ePreflight {
             $inksonFreshness = Get-ArtifactFreshness `
                 -ArtifactPath $InksonStaticIndex `
                 -ArtifactRoot (Split-Path -Parent $InksonStaticIndex) `
-                -RequiredArtifactPaths @("index.html", "wasm/inkson_bg.wasm", "wasm/inkson.js") `
+                -RequiredArtifactPaths @(Get-JointInksonRequiredArtifactPaths) `
                 -RepositoryRoots @(
                     $InksonRoot,
                     (Join-Path $WorkspaceRoot "arkret-rust-sdk"),
@@ -1143,7 +1156,7 @@ function Invoke-JointE2ePreflight {
             } else {
                 Add-PreflightResult $results "inkson bundle freshness" "fail" $inksonFreshness.Detail
             }
-            $inksonWasm = Join-Path (Split-Path -Parent $InksonStaticIndex) "wasm\inkson_bg.wasm"
+            $inksonWasm = Join-Path (Split-Path -Parent $InksonStaticIndex) "assets\pkg\inkson_bg.wasm"
             if (Test-BinaryContainsAsciiMarker -Path $inksonWasm -Marker "inkson.test.session_injection.v1") {
                 Add-PreflightResult $results "inkson test-session feature" "pass" $inksonWasm
             } else {
@@ -2676,66 +2689,6 @@ function Get-CargoLockPackageVersion {
     return $null
 }
 
-function Get-DioxusNoDownloadsPathPrefix {
-    param(
-        [string]$ProjectRoot
-    )
-
-    $dxHome = if ($env:DX_HOME) { $env:DX_HOME } else { Join-Path $HOME ".dx" }
-    $toolsRoot = Join-Path $dxHome "tools"
-    $segments = @()
-
-    if (Test-Path $toolsRoot) {
-        $preferredWasmBindgenDir = $null
-        if ($ProjectRoot) {
-            $wasmBindgenVersion = Get-CargoLockPackageVersion `
-                -CargoLockPath (Join-Path $ProjectRoot "Cargo.lock") `
-                -PackageName "wasm-bindgen"
-            if ($wasmBindgenVersion) {
-                $candidate = Join-Path $toolsRoot "wasm-bindgen-$wasmBindgenVersion"
-                if (Test-Path $candidate) {
-                    $preferredWasmBindgenDir = (Resolve-Path $candidate).Path
-                    $segments += $preferredWasmBindgenDir
-                }
-            }
-        }
-
-        $segments += Get-ChildItem -Path $toolsRoot -Directory -Filter "wasm-bindgen-*" -ErrorAction SilentlyContinue |
-            Sort-Object -Property Name -Descending |
-            ForEach-Object { $_.FullName } |
-            Where-Object { -not $preferredWasmBindgenDir -or $_ -ne $preferredWasmBindgenDir }
-        $segments += Get-ChildItem -Path $toolsRoot -Directory -Filter "esbuild-*" -ErrorAction SilentlyContinue |
-            Sort-Object -Property Name -Descending |
-            ForEach-Object { $_.FullName }
-        $segments += Get-ChildItem -Path $toolsRoot -Directory -Filter "binaryen-*" -ErrorAction SilentlyContinue |
-            Sort-Object -Property Name -Descending |
-            ForEach-Object { Join-Path $_.FullName "bin" }
-    }
-
-    $cargoBin = Join-Path $HOME ".cargo\bin"
-    if (Test-Path $cargoBin) {
-        $segments += $cargoBin
-    }
-
-    $existing = @($segments | Where-Object { $_ -and (Test-Path $_) })
-    return ($existing -join [System.IO.Path]::PathSeparator)
-}
-
-function Add-DioxusNoDownloadsEnvironment {
-    param(
-        [Parameter(Mandatory = $true)][string]$Command,
-        [string]$ProjectRoot
-    )
-
-    $pathPrefix = Get-DioxusNoDownloadsPathPrefix -ProjectRoot $ProjectRoot
-    $prefix = "`$env:NO_DOWNLOADS='1'; "
-    if ($pathPrefix) {
-        $escapedPathPrefix = $pathPrefix.Replace("'", "''")
-        $prefix += "`$env:PATH='$escapedPathPrefix' + [System.IO.Path]::PathSeparator + `$env:PATH; "
-    }
-    return "$prefix$Command"
-}
-
 function Get-ManagedDockerIdentityArguments {
     param(
         [Parameter(Mandatory = $true)][bool]$LinuxHost,
@@ -2770,6 +2723,91 @@ function Get-ManagedDockerIdentityArguments {
     return @("--workdir", "/tmp/coland-state")
 }
 
+# Pure topology checks: only the run-owned plaintext Caddy edge may attest TLS.
+# host.docker.internal is an outbound destination and is not this peer proof.
+function Get-ManagedColandBridgeProxyTopology {
+    param([Parameter(Mandatory = $true)][System.Collections.IDictionary]$Network)
+    if ($Network.Name -ne 'bridge' -or $Network.Driver -ne 'bridge' -or
+        $Network.Scope -ne 'local' -or $Network.Internal -ne $false -or
+        [string]$Network.Id -cnotmatch '^[a-f0-9]{64}$') {
+        throw 'Managed TLS requires the exact local default Docker bridge'
+    }
+    $gateways = @()
+    foreach ($config in @($Network.IPAM.Config)) {
+        if (-not $config.Gateway) { continue }
+        $gateway = $null
+        if (-not [Net.IPAddress]::TryParse([string]$config.Gateway, [ref]$gateway)) {
+            throw 'Managed TLS bridge gateway must be an exact IP address'
+        }
+        if ($gateway.AddressFamily -ne [Net.Sockets.AddressFamily]::InterNetwork) { continue }
+        $octets = $gateway.GetAddressBytes()
+        if ($octets[0] -eq 0 -or $octets[0] -eq 127 -or $octets[0] -ge 224 -or
+            ($octets[0] -eq 169 -and $octets[1] -eq 254)) {
+            throw 'Managed TLS bridge gateway is not a usable internal peer'
+        }
+        $parts = ([string]$config.Subnet).Split('/')
+        $subnet = $null; $prefix = 0
+        if ($parts.Count -ne 2 -or -not [Net.IPAddress]::TryParse($parts[0], [ref]$subnet) -or
+            $subnet.AddressFamily -ne [Net.Sockets.AddressFamily]::InterNetwork -or
+            -not [int]::TryParse($parts[1], [ref]$prefix) -or $prefix -lt 1 -or $prefix -gt 30) {
+            throw 'Managed TLS bridge requires an exact IPv4 subnet'
+        }
+        $networkBytes = $subnet.GetAddressBytes()
+        for ($index = 0; $index -lt 4; $index++) {
+            $bits = [Math]::Min(8, [Math]::Max(0, $prefix - 8 * $index))
+            $mask = if ($bits -eq 0) { 0 } else { (255 -shl (8 - $bits)) -band 255 }
+            if (($networkBytes[$index] -band $mask) -ne $networkBytes[$index] -or
+                ($octets[$index] -band $mask) -ne $networkBytes[$index]) {
+                throw 'Managed TLS gateway and bridge subnet disagree'
+            }
+        }
+        $gateways += $gateway.ToString()
+    }
+    if ($gateways.Count -ne 1) { throw 'Managed TLS bridge must have exactly one IPv4 gateway' }
+    return [pscustomobject]@{ NetworkId = [string]$Network.Id; Gateway = [string]$gateways[0] }
+}
+
+function Resolve-ManagedColandTlsProxyPeer {
+    param(
+        [Parameter(Mandatory = $true)][bool]$ManagedHttps,
+        [Parameter(Mandatory = $true)][ValidateSet('binary', 'docker')][string]$Runtime,
+        [Parameter(Mandatory = $true)][bool]$LinuxHost,
+        [System.Collections.IDictionary]$Network
+    )
+    if (-not $ManagedHttps) { return $null }
+    if ($Runtime -eq 'binary') { return '127.0.0.1' }
+    # Preserve non-Linux managed Docker behavior without guessing a trusted peer.
+    if (-not $LinuxHost) { return $null }
+    if ($null -eq $Network) { throw 'Managed Docker TLS proxy requires actual bridge topology' }
+    return (Get-ManagedColandBridgeProxyTopology -Network $Network).Gateway
+}
+
+function Assert-ManagedColandTlsProxyContainer {
+    param(
+        [Parameter(Mandatory = $true)][System.Collections.IDictionary]$Network,
+        [Parameter(Mandatory = $true)][System.Collections.IDictionary]$Container,
+        [Parameter(Mandatory = $true)][string]$ExpectedPeer,
+        [Parameter(Mandatory = $true)][int]$HostPort,
+        [Parameter(Mandatory = $true)][int]$ContainerPort
+    )
+    $topology = Get-ManagedColandBridgeProxyTopology -Network $Network
+    if ($ExpectedPeer -cne $topology.Gateway -or $Container.mode -notin @('default', 'bridge') -or
+        @($Container.networks.Keys).Count -ne 1 -or -not $Container.networks.Contains('bridge')) {
+        throw 'Managed TLS container is not on the selected default bridge'
+    }
+    $bridge = $Container.networks.bridge
+    if ($bridge.NetworkID -cne $topology.NetworkId -or $bridge.Gateway -cne $ExpectedPeer) {
+        throw 'Managed TLS container bridge identity or gateway changed'
+    }
+    $key = "$ContainerPort/tcp"
+    if (-not $Container.ports.Contains($key)) { throw 'Managed TLS container backend port is missing' }
+    $bindings = @($Container.ports[$key])
+    if ($bindings.Count -ne 1 -or $bindings[0].HostIp -cne '127.0.0.1' -or
+        $bindings[0].HostPort -cne [string]$HostPort) {
+        throw 'Managed TLS backend must retain its exact loopback published port'
+    }
+}
+
 function Start-ManagedDockerColand {
     param(
         [Parameter(Mandatory = $true)][string]$Name,
@@ -2794,6 +2832,20 @@ function Start-ManagedDockerColand {
 
     $identityArguments = @(Get-ManagedDockerIdentityArguments -LinuxHost $IsLinux -Image $Image -MountDirectories @($ObjectsRoot, $StateRoot, $LogDirectory))
 
+    $managedProxyNetwork = $null
+    if ($jointTlsAssets -and $IsLinux) {
+        # Read only topology fields; do not copy container config/environment.
+        $networkFormat = '{"Name":{{json .Name}},"Id":{{json .Id}},"Driver":{{json .Driver}},"Scope":{{json .Scope}},"Internal":{{json .Internal}},"IPAM":{{json .IPAM}}}'
+        $networkRaw = Invoke-NativeCapture -FilePath 'docker' -Arguments @('network', 'inspect', 'bridge', '--format', $networkFormat)
+        if ($LASTEXITCODE -ne 0) { throw 'Cannot inspect the managed TLS default bridge' }
+        $managedProxyNetwork = ($networkRaw | Out-String) | ConvertFrom-Json -AsHashtable
+        $proxyPeer = Resolve-ManagedColandTlsProxyPeer -ManagedHttps $true -Runtime docker -LinuxHost $IsLinux -Network $managedProxyNetwork
+        $ownedEnvironment = [ordered]@{}
+        foreach ($entry in $Environment.GetEnumerator()) { $ownedEnvironment[$entry.Key] = $entry.Value }
+        $ownedEnvironment.COLAND_TLS_TERMINATION_PROXY_IPS = $proxyPeer
+        $Environment = $ownedEnvironment
+    }
+
     $runArgs = @(
         "run",
         "-d",
@@ -2817,6 +2869,9 @@ function Start-ManagedDockerColand {
             "-e", "SSL_CERT_FILE=/cotest-ca/ca.pem"
         )
     }
+    if ($jointTlsAssets -and -not $IsLinux) {
+        Write-Host 'Managed Docker WSS proxy trust is unchanged on this platform; no unverified proxy IP is trusted'
+    }
     foreach ($key in $Environment.Keys) {
         $value = [string]$Environment[$key]
         $runArgs += @("-e", "$key=$value")
@@ -2829,6 +2884,21 @@ function Start-ManagedDockerColand {
     "" | Set-Content -Path $stderr -Encoding UTF8
     if ($LASTEXITCODE -ne 0) {
         throw "docker run failed for $Name; see $stdout"
+    }
+
+    if ($null -ne $managedProxyNetwork) {
+        try {
+            $containerFormat = '{"networks":{{json .NetworkSettings.Networks}},"mode":{{json .HostConfig.NetworkMode}},"ports":{{json .HostConfig.PortBindings}}}'
+            $containerRaw = Invoke-NativeCapture -FilePath 'docker' -Arguments @('inspect', '--format', $containerFormat, $containerName)
+            if ($LASTEXITCODE -ne 0) { throw 'Cannot inspect the owned managed TLS container topology' }
+            $containerTopology = ($containerRaw | Out-String) | ConvertFrom-Json -AsHashtable
+            Assert-ManagedColandTlsProxyContainer -Network $managedProxyNetwork -Container $containerTopology `
+                -ExpectedPeer $proxyPeer -HostPort $HostPort -ContainerPort $ContainerPort
+        } catch {
+            # Not yet returned to the managed-service registry: clean only this owned container.
+            & docker rm -f $containerName 2>$null | Out-Null
+            throw 'Owned Coland TLS proxy topology verification failed'
+        }
     }
 
     [pscustomobject]@{
@@ -3892,17 +3962,12 @@ $preflightSourceHeadsJson = Join-Path $jointDir "preflight-source-heads.json"
 $preflightSourceHeads = $null
 $managedServiceFailuresJson = Join-Path $jointDir "managed-service-failures.json"
 $managedServiceFailuresMd = Join-Path $jointDir "managed-service-failures.md"
-# The harness serves a static bundle, not a Dioxus devserver. A debug bundle
-# enables dioxus-web devtools and repeatedly opens `/_dioxus` hot-reload
-# WebSockets; the static server cannot satisfy that protocol and the failed
-# CloseEvent path can corrupt the wasm callback heap. Inkson's joint-e2e profile
-# compiles out devtools while retaining the cotest-only session injection feature.
-# Dioxus places every non-release custom profile under its `debug` web output
-# directory even though Cargo itself uses the named `joint-e2e` profile.
+# Build and serve Inkson's official Glory bundle from its actual Cargo target.
+# The verified bundle is copied to an immutable run-scoped static root below.
 $inksonStaticRoot = $null
 $inksonStaticIndex = $null
 if ($requiresInkson) {
-    $inksonStaticRoot = Join-Path $inksonTargetDirectory "dx\inkson\debug\web\public"
+    $inksonStaticRoot = Join-Path $inksonTargetDirectory "web"
     $inksonStaticIndex = Join-Path $inksonStaticRoot "index.html"
 }
 
@@ -4072,9 +4137,12 @@ try {
         # renders the pre-Passkey page). Keep the served Wasm bundle under the
         # same source-freshness gate as the backend binary.
         $coauthRoot = Join-Path $workspaceRoot "coauth"
-        $coauthFrontendArtifact = Join-Path $coauthRoot "dist\wasm\coauth-frontend_bg.wasm"
+        $coauthFrontendRoot = Join-Path $coauthRoot "dist"
+        $coauthFrontendArtifact = Join-Path $coauthFrontendRoot "assets/pkg/coauth_frontend_bg.wasm"
         $coauthFrontendFreshness = Get-ArtifactFreshness `
             -ArtifactPath $coauthFrontendArtifact `
+            -ArtifactRoot $coauthFrontendRoot `
+            -RequiredArtifactPaths @(Get-JointCoauthRequiredArtifactPaths) `
             -RepositoryRoots @(
                 $coauthRoot,
                 (Join-Path $workspaceRoot "arkret-rust-sdk")
@@ -4082,13 +4150,15 @@ try {
         if (-not $coauthFrontendFreshness.Fresh) {
             Write-Host "Preparing coauth frontend: $($coauthFrontendFreshness.Detail)"
             $started = Get-Date
-            $preBuildStates = @(Get-ArtifactBuildRepositoryStates -ArtifactPath $coauthFrontendArtifact -RepositoryRoots @($coauthRoot, (Join-Path $workspaceRoot "arkret-rust-sdk")))
+            $preBuildStates = @(Get-ArtifactBuildRepositoryStates -ArtifactPath $coauthFrontendArtifact -ArtifactRoot $coauthFrontendRoot -RepositoryRoots @($coauthRoot, (Join-Path $workspaceRoot "arkret-rust-sdk")))
+            $python = Get-PythonExecutable
+            $coauthFrontendCommand = "& {0} scripts/install-wasm-bindgen.py; if (`$LASTEXITCODE -ne 0) {{ exit `$LASTEXITCODE }}; & {0} scripts/build-frontend.py --out-dir dist" -f (Quote-PsLiteral $python)
             $service = Start-ManagedCommand `
                 -Name "prepare-coauth-frontend" `
-                -Command "just frontend-assets" `
+                -Command $coauthFrontendCommand `
                 -WorkingDirectory $coauthRoot `
                 -LogDirectory $serviceLogDir
-            $preparationTasks.Add([pscustomobject]@{ Name = "coauth-frontend"; BuildInputsBefore = $preBuildStates; Service = $service; Started = $started; Artifact = $coauthFrontendArtifact; AllowUnchangedArtifact = $true; RepositoryRoots = @($coauthRoot, (Join-Path $workspaceRoot "arkret-rust-sdk")) })
+            $preparationTasks.Add([pscustomobject]@{ Name = "coauth-frontend"; BuildInputsBefore = $preBuildStates; ArtifactRoot = $coauthFrontendRoot; RequiredArtifactPaths = @(Get-JointCoauthRequiredArtifactPaths); Service = $service; Started = $started; Artifact = $coauthFrontendArtifact; AllowUnchangedArtifact = $true; RepositoryRoots = @($coauthRoot, (Join-Path $workspaceRoot "arkret-rust-sdk")) })
         } else {
             $preparationTimings.Add([pscustomobject]@{ name = "coauth-frontend"; status = "cache-hit"; duration_seconds = 0; detail = $coauthFrontendFreshness.Detail })
         }
@@ -4145,11 +4215,11 @@ try {
     }
 
     if (-not $SkipBuild -and $willStartDefaultInkson) {
-        $inksonWasm = Join-Path $inksonStaticRoot "wasm\inkson_bg.wasm"
+        $inksonWasm = Join-Path $inksonStaticRoot "assets\pkg\inkson_bg.wasm"
         $inksonFreshness = Get-ArtifactFreshness `
             -ArtifactPath $inksonStaticIndex `
             -ArtifactRoot $inksonStaticRoot `
-            -RequiredArtifactPaths @("index.html", "wasm/inkson_bg.wasm", "wasm/inkson.js") `
+            -RequiredArtifactPaths @(Get-JointInksonRequiredArtifactPaths) `
             -RepositoryRoots @(
                 $InksonRoot,
                 (Join-Path $workspaceRoot "arkret-rust-sdk"),
@@ -4166,29 +4236,21 @@ try {
         $inksonBuildPlan = Get-JointInksonBuildPlan `
             -StartMockAppletRegistry ([bool]$StartMockAppletRegistry) `
             -ArtifactFresh ([bool]$inksonFreshness.Fresh) `
-            -TestFeaturePresent ([bool]$inksonTestFeaturePresent)
+            -TestFeaturePresent ([bool]$inksonTestFeaturePresent) `
+            -PythonExecutable (Get-PythonExecutable) `
+            -BuildScript (Join-Path $InksonRoot "scripts/build_web.py")
         if ($inksonBuildPlan.ShouldBuild) {
             Write-Host "Preparing inkson web bundle: $($inksonFreshness.Detail)"
             $started = Get-Date
-            $buildCommand = Add-DioxusNoDownloadsEnvironment `
-                -Command $inksonBuildPlan.Command `
-                -ProjectRoot $InksonRoot
-            # Dioxus 0.7.10 can assemble the shared debug output from a stale
-            # wasm-dev executable even though Cargo built the requested custom
-            # profile. Re-run wasm-bindgen against Cargo's exact joint-e2e
-            # artifact so the static bundle cannot silently lose the cotest
-            # feature or regain debug-only devtools.
-            $jointE2eWasm = Join-Path $inksonTargetDirectory "wasm32-unknown-unknown\joint-e2e\inkson.wasm"
-            $inksonWasmOutputDir = Join-Path $inksonStaticRoot "wasm"
-            $finalizeInksonWasm = Join-Path $repoRoot "scripts\finalize-inkson-joint-e2e-wasm.ps1"
-            $buildCommand = "$buildCommand; if (`$LASTEXITCODE -ne 0) { exit `$LASTEXITCODE }; & $(Quote-PsLiteral $finalizeInksonWasm) -SourceWasm $(Quote-PsLiteral $jointE2eWasm) -OutputDirectory $(Quote-PsLiteral $inksonWasmOutputDir)"
+            # The official builder selects the locked wasm-bindgen CLI and owns startup generation.
+            $buildCommand = $inksonBuildPlan.Command
             $preBuildStates = @(Get-ArtifactBuildRepositoryStates -ArtifactPath $inksonStaticIndex -RepositoryRoots @($InksonRoot, (Join-Path $workspaceRoot "arkret-rust-sdk"), (Join-Path $workspaceRoot "garth"), (Join-Path $workspaceRoot "chime")) -ArtifactRoot $inksonStaticRoot)
             $service = Start-ManagedCommand `
                 -Name "prepare-inkson" `
                 -Command $buildCommand `
                 -WorkingDirectory $InksonRoot `
                 -LogDirectory $serviceLogDir
-            $preparationTasks.Add([pscustomobject]@{ Name = "inkson"; BuildInputsBefore = $preBuildStates; RequiredArtifactPaths = @("index.html", "wasm/inkson_bg.wasm", "wasm/inkson.js"); ArtifactRoot = $inksonStaticRoot; Service = $service; Started = $started; Artifact = $inksonStaticIndex; AllowUnchangedArtifact = $false; RepositoryRoots = @($InksonRoot, (Join-Path $workspaceRoot "arkret-rust-sdk"), (Join-Path $workspaceRoot "garth"), (Join-Path $workspaceRoot "chime")) })
+            $preparationTasks.Add([pscustomobject]@{ Name = "inkson"; BuildInputsBefore = $preBuildStates; RequiredArtifactPaths = @(Get-JointInksonRequiredArtifactPaths); ArtifactRoot = $inksonStaticRoot; Service = $service; Started = $started; Artifact = $inksonStaticIndex; AllowUnchangedArtifact = $false; RepositoryRoots = @($InksonRoot, (Join-Path $workspaceRoot "arkret-rust-sdk"), (Join-Path $workspaceRoot "garth"), (Join-Path $workspaceRoot "chime")) })
         } else {
             $preparationTimings.Add([pscustomobject]@{ name = "inkson"; status = "cache-hit"; duration_seconds = 0; detail = $inksonFreshness.Detail })
         }
@@ -4225,7 +4287,7 @@ try {
         $preparationTimings.Add([pscustomobject]@{ name = $task.Name; status = $status; duration_seconds = $duration; detail = $task.Artifact })
     }
     if ($willStartDefaultInkson) {
-        $inksonWasm = Join-Path $inksonStaticRoot "wasm\inkson_bg.wasm"
+        $inksonWasm = Join-Path $inksonStaticRoot "assets\pkg\inkson_bg.wasm"
         if (-not (Test-BinaryContainsAsciiMarker -Path $inksonWasm -Marker "inkson.test.session_injection.v1")) {
             throw "prepared inkson bundle lacks the wasm-localstorage-secrets-test marker: $inksonWasm"
         }
@@ -4327,26 +4389,22 @@ try {
         exit 0
     }
 
-    # Serve an immutable, run-scoped copy of the verified Inkson bundle. A
-    # separately running `dx serve` watches the same repository and can replace
-    # target\dx\...\public in place with a dev build while a long joint-full run
-    # is active. Besides transient 404/MIME failures, that replacement drops the
-    # cotest-only session-injection feature and turns later browser failures into
-    # misleading "no session grant" cascades.
+    # Serve an immutable, run-scoped copy of the content-verified Glory bundle.
+    # A separate development build must not replace files during a joint run.
     if ($willStartDefaultInkson) {
         $inksonRuntimeRoot = Join-Path $jointDir "inkson-web"
         New-Item -ItemType Directory -Path $inksonRuntimeRoot -Force | Out-Null
-        $verifiedBundle = Get-ArtifactContentIdentity -ArtifactPath $inksonStaticIndex -ArtifactRoot $inksonStaticRoot -RequiredArtifactPaths @("index.html", "wasm/inkson_bg.wasm", "wasm/inkson.js")
+        $verifiedBundle = Get-ArtifactContentIdentity -ArtifactPath $inksonStaticIndex -ArtifactRoot $inksonStaticRoot -RequiredArtifactPaths @(Get-JointInksonRequiredArtifactPaths)
         $verifiedStamp = Get-Content -Raw -LiteralPath (Get-ArtifactBuildStampPath -ArtifactPath $inksonStaticIndex) | ConvertFrom-Json
         if ($verifiedBundle.Sha256 -cne $verifiedStamp.artifact_content_sha256 -or $verifiedBundle.Count -ne $verifiedStamp.artifact_file_count) {
             throw "The Inkson bundle changed after its verified build stamp"
         }
         Copy-Item -Path (Join-Path $inksonStaticRoot "*") -Destination $inksonRuntimeRoot -Recurse -Force
-        $servedBundle = Get-ArtifactContentIdentity -ArtifactPath (Join-Path $inksonRuntimeRoot "index.html") -ArtifactRoot $inksonRuntimeRoot -RequiredArtifactPaths @("index.html", "wasm/inkson_bg.wasm", "wasm/inkson.js")
+        $servedBundle = Get-ArtifactContentIdentity -ArtifactPath (Join-Path $inksonRuntimeRoot "index.html") -ArtifactRoot $inksonRuntimeRoot -RequiredArtifactPaths @(Get-JointInksonRequiredArtifactPaths)
         if ($servedBundle.Sha256 -cne $verifiedBundle.Sha256 -or $servedBundle.Count -ne $verifiedBundle.Count) {
             throw "The served Inkson bundle differs from the verified build contents"
         }
-        $runtimeWasm = Join-Path $inksonRuntimeRoot "wasm\inkson_bg.wasm"
+        $runtimeWasm = Join-Path $inksonRuntimeRoot "assets\pkg\inkson_bg.wasm"
         if (-not (Test-BinaryContainsAsciiMarker -Path $runtimeWasm -Marker "inkson.test.session_injection.v1")) {
             throw "run-scoped inkson bundle lacks the wasm-localstorage-secrets-test marker: $runtimeWasm"
         }
@@ -4908,6 +4966,10 @@ try {
             COLAND_LIVEKIT_API_SECRET = "joint-e2e-livekit-secret"
             COLAND_WEBVH_DEGRADED_NO_WITNESS_MAX_SECS = "$WebvhDegradedNoWitnessMaxSecs"
             COLAND_EMBEDDED_WEBVH_REGISTRATION_BEARER = $CoauthEmbeddedWebvhRegistrationBearer
+        }
+        if ($jointTlsAssets) {
+            $values.COLAND_TLS_TERMINATION_PROXY_IPS = Resolve-ManagedColandTlsProxyPeer `
+                -ManagedHttps $true -Runtime binary -LinuxHost $IsLinux
         }
         # See Build-ColandDockerEnvironment: the assertion key is discovered from
         # the Account Authority, never pinned to a runner-side constant.

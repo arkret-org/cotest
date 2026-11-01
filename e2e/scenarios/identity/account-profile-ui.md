@@ -12,14 +12,14 @@
 
 ## 流程与断言
 
-1. 以真实 Coauth DPoP grant 打开 Inkson，进入账户设置。
+1. 通过真实注册、邮箱验证、OAuth、身份创建和恢复密钥确认建立浏览器自己的账号与设备，进入账户设置；不依赖测试专用 WASM 会话注入。
 2. 从 UI 填写非空显示名称与简介并保存，断言 Inkson 发布 `ak.profile.create` 或 `ak.profile.update`；viewer 返回相同 `display_name` 与 `profile_fields.biography`。
 3. 选择有效 PNG，在裁剪对话框确认上传。
 4. 断言 blob 上传后发布的是同一 profile 的 `ak.profile.update`，且返回成功。
-5. 轮询 `/_arkret/self/account/viewer`，断言 canonical `avatar_blob_ref` 为 content-addressed blob。
-6. 从 UI 清除头像，断言再次发布 `ak.profile.update`，viewer 中头像为空。
+5. 保留头像并冷刷新，观测浏览器真实认证的 `/_arkret/self/account/viewer`，断言显示名称、简介与 canonical content-addressed `avatar_blob_ref`；要求图片完成像素解码且无 Blob 错误。
+6. 从 UI 清除头像，断言再次发布 `ak.profile.update`；冷刷新后真实 viewer 中头像为空。
 7. 刷新页面，清除状态仍保持。
 
 ## Evidence 边界
 
-业务写操作全部由 Inkson 产生；测试仅用 DPoP viewer GET 作为独立投影 oracle。身份建立仍使用 session injection，因此不声明注册/登录 UI 覆盖。
+业务写操作和身份密钥全部由正常 UI 建立。服务端投影来自浏览器实际认证的 viewer GET 响应，冷刷新后的可见图像是独立渲染断言；不读取密钥或自行续期不透明 grant。

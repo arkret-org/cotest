@@ -20,7 +20,7 @@ export async function revealTimelineEvent(
   page: Page,
   event: Locator,
   timeout = 30_000,
-  feed: Locator = page.getByTestId("message-list"),
+  feed: Locator = page.locator(".message-list"),
 ): Promise<void> {
   let restart = true;
   await expect.poll(async () => {

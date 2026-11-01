@@ -1077,17 +1077,12 @@ fn classify_observed_operation(
     registry_by_key: &BTreeMap<OperationKey, RegisteredOperation>,
     product_private: &ProductPrivateIndex,
 ) -> OperationRegistryGateEntry {
-    if let Some((operation_id, key)) =
-        find_registered_operation(&observed, registry_by_key).map(|operation| {
-            (
-                operation.operation_id.clone(),
-                Some(operation.key.method.clone()),
-            )
-        })
+    if let Some(operation_id) = find_registered_operation(&observed, registry_by_key)
+        .map(|operation| operation.operation_id.clone())
     {
         return OperationRegistryGateEntry {
             source: observed.source,
-            method: observed.method.or(key),
+            method: observed.method,
             path: observed.path,
             evidence: observed.evidence,
             gate_status: OperationRegistryGateStatus::Registered,
@@ -1276,25 +1271,39 @@ fn scan_source_file(
     let relative = path.strip_prefix(root).unwrap_or(path);
 
     scan_coland_extension_table(source, relative, &scannable_lines, out);
+    let rust_source = path.extension().and_then(|value| value.to_str()) == Some("rs");
+    let gate_base_is_metadata_field =
+        account_gate_base_is_metadata_field(&scannable_lines, rust_source);
 
     for (index, line) in scannable_lines.iter().enumerate() {
         if is_comment_only_line(line) {
             continue;
         }
         let method = infer_method_near(&lines, index);
-        let rust_source = path.extension().and_then(|value| value.to_str()) == Some("rs");
-        for literal in extract_source_string_literals(line, rust_source) {
+        for occurrence in source_string_occurrences(line, rust_source) {
+            let literal = &occurrence.value;
             if !literal.contains("_arkret") {
                 continue;
             }
-            if is_path_prefix_predicate(line, &literal) || (rust_source && is_sql_literal(&literal))
+            if is_path_prefix_predicate(line, literal) || (rust_source && is_sql_literal(literal)) {
+                continue;
+            }
+            let prefix = literal_expression_prefix(&scannable_lines, index, occurrence.start);
+            if is_account_gate_metadata_value(&prefix, literal, gate_base_is_metadata_field) {
+                continue;
+            }
+            let url_path_comparison = is_url_path_comparison(&prefix);
+            let method = if url_path_comparison {
+                None
+            } else {
+                enclosing_request_method(&prefix, rust_source).or_else(|| method.clone())
+            };
+            if !url_path_comparison
+                && !source_context_allows_literal(line, &lines, index, method.as_deref())
             {
                 continue;
             }
-            if !source_context_allows_literal(line, &lines, index, method.as_deref()) {
-                continue;
-            }
-            for candidate in extract_path_candidates(&literal) {
+            for candidate in extract_path_candidates(literal) {
                 push_observed(source, relative, index + 1, method.clone(), candidate, out);
             }
         }
@@ -1444,6 +1453,220 @@ fn scan_coland_extension_table(
             push_observed(source, relative, index + 1, Some(method), path, out);
         }
     }
+}
+
+// The same source line may contain a metadata URL, a path assertion and a real
+// request. Bind each decision to its literal, not the first path or nearby verb.
+fn literal_expression_prefix(lines: &[&str], index: usize, start: usize) -> String {
+    let mut prefix = lines[index.saturating_sub(3)..index].join("\n");
+    prefix.push('\n');
+    prefix.push_str(&lines[index][..start]);
+    prefix
+}
+
+fn is_account_gate_metadata_value(
+    prefix: &str,
+    literal: &str,
+    gate_base_is_metadata_field: bool,
+) -> bool {
+    let candidates = extract_path_candidates(literal);
+    if candidates.len() != 1 || candidates[0] != "/_arkret/gate/account" {
+        return false;
+    }
+    let compact = prefix
+        .chars()
+        .filter(|ch| !ch.is_whitespace())
+        .collect::<String>();
+    // Describe's base URI is a field value, not the bare HTTP operation. These
+    // exact expressions do not exempt adjacent requests or descendant paths.
+    (gate_base_is_metadata_field && compact.ends_with("letgate_account_base_url=format!("))
+        || compact.ends_with("\"gate_account_base_url\":format!(")
+        || compact.ends_with("metadata[\"account_authority\"][\"gate_account_base_url\"]==format!(")
+}
+
+// The local variable must have one definition and one actual typed Describe
+// field consumer. Unknown use, shadowing or any reuse remains checked; a name
+// alone cannot turn a real request URL into metadata evidence.
+fn account_gate_base_is_metadata_field(lines: &[&str], rust_source: bool) -> bool {
+    const NAME: &str = "gate_account_base_url";
+    let source = lines.join("\n");
+    let code = source_code_mask(&source, rust_source);
+    let Ok(code) = std::str::from_utf8(&code) else {
+        return false;
+    };
+    let positions = code
+        .match_indices(NAME)
+        .filter_map(|(offset, _)| {
+            let identifier_char = |byte: u8| byte.is_ascii_alphanumeric() || byte == b'_';
+            (!code.as_bytes()[..offset]
+                .last()
+                .copied()
+                .is_some_and(identifier_char)
+                && !code
+                    .as_bytes()
+                    .get(offset + NAME.len())
+                    .copied()
+                    .is_some_and(identifier_char))
+            .then_some(offset)
+        })
+        .collect::<Vec<_>>();
+    let [definition, field] = positions.as_slice() else {
+        return false;
+    };
+    if code[..*definition].split_whitespace().last() != Some("let")
+        || !code[*definition + NAME.len()..]
+            .trim_start()
+            .starts_with('=')
+        || !code[*field + NAME.len()..].trim_start().starts_with(',')
+    {
+        return false;
+    }
+    let mut braces = Vec::new();
+    for (offset, byte) in code.as_bytes()[..*field].iter().enumerate() {
+        match byte {
+            b'{' => braces.push(offset),
+            b'}' => {
+                braces.pop();
+            }
+            _ => {}
+        }
+    }
+    let Some(open) = braces.last() else {
+        return false;
+    };
+    if code[..*open]
+        .trim_end()
+        .rsplit(|ch: char| !ch.is_ascii_alphanumeric() && ch != '_')
+        .next()
+        != Some("AccountAuthority")
+    {
+        return false;
+    }
+    let fields = &code[*open + 1..*field];
+    if !fields.trim_end().is_empty() && !fields.trim_end().ends_with(',') {
+        return false;
+    }
+    // A comma inside a field's call/array expression is not a struct-field
+    // boundary. The observed identifier must really be a shorthand field.
+    let mut delimiters = Vec::new();
+    for byte in fields.bytes() {
+        match byte {
+            b'(' | b'[' | b'{' => delimiters.push(byte),
+            b')' if delimiters.pop() != Some(b'(') => return false,
+            b']' if delimiters.pop() != Some(b'[') => return false,
+            b'}' if delimiters.pop() != Some(b'{') => return false,
+            _ => {}
+        }
+    }
+    delimiters.is_empty()
+}
+
+fn is_url_path_comparison(prefix: &str) -> bool {
+    let compact = prefix
+        .chars()
+        .filter(|ch| !ch.is_whitespace())
+        .collect::<String>();
+    compact.ends_with(".path()==") || compact.ends_with(".path()!=")
+}
+
+fn source_code_mask(source: &str, rust_source: bool) -> Vec<u8> {
+    // Lex in source order: a quote inside a comment is not a string opener,
+    // and comment punctuation inside a real string is not a comment boundary.
+    let bytes = source.as_bytes();
+    let mut code = bytes.to_vec();
+    let mut i = 0;
+    while i < bytes.len() {
+        let start = i;
+        if bytes.get(i..i + 2) == Some(b"//") {
+            while i < bytes.len() && bytes[i] != b'\n' {
+                i += 1;
+            }
+        } else if bytes.get(i..i + 2) == Some(b"/*") {
+            i += 2;
+            let mut depth = 1usize;
+            while i < bytes.len() && depth > 0 {
+                if bytes.get(i..i + 2) == Some(b"/*") {
+                    depth += 1;
+                    i += 2;
+                } else if bytes.get(i..i + 2) == Some(b"*/") {
+                    depth -= 1;
+                    i += 2;
+                } else {
+                    i += 1;
+                }
+            }
+        } else if rust_source && bytes[i] == b'r' {
+            let mut quote = i + 1;
+            while bytes.get(quote) == Some(&b'#') {
+                quote += 1;
+            }
+            if bytes.get(quote) != Some(&b'"') {
+                i += 1;
+                continue;
+            }
+            let terminator = format!("\"{}", "#".repeat(quote - i - 1));
+            i = source[quote + 1..]
+                .find(&terminator)
+                .map_or(bytes.len(), |end| quote + 1 + end + terminator.len());
+        } else if rust_source && bytes[i] == b'\'' {
+            let Some(end) = rust_char_literal_end(source, i) else {
+                i += 1;
+                continue;
+            };
+            i = end;
+        } else if bytes[i] == b'"' || (!rust_source && matches!(bytes[i], b'\'' | b'`')) {
+            let quote = bytes[i];
+            i += 1;
+            while i < bytes.len() {
+                if bytes[i] == b'\\' {
+                    i = (i + 2).min(bytes.len());
+                } else if bytes[i] == quote {
+                    i += 1;
+                    break;
+                } else {
+                    i += 1;
+                }
+            }
+        } else {
+            i += 1;
+            continue;
+        }
+        code[start..i].fill(b' ');
+    }
+    code
+}
+
+fn enclosing_request_method(prefix: &str, rust_source: bool) -> Option<String> {
+    let code = source_code_mask(prefix, rust_source);
+    let mut calls = Vec::new();
+    for (offset, byte) in code.iter().enumerate() {
+        match byte {
+            b'(' => calls.push(offset),
+            b')' => {
+                calls.pop();
+            }
+            _ => {}
+        }
+    }
+    for offset in calls.into_iter().rev() {
+        let before = std::str::from_utf8(&code[..offset]).ok()?.trim_end();
+        let token = before
+            .rsplit(|ch: char| {
+                !ch.is_ascii_alphanumeric() && ch != '_' && ch != '.' && ch != ':' && ch != '!'
+            })
+            .next()?;
+        for method in INFERABLE_METHODS {
+            let lower = method.to_ascii_lowercase();
+            if token.ends_with(&format!(".{lower}"))
+                || token.rsplit("::").next() == Some(format!("canonical_{lower}").as_str())
+                || token.rsplit('.').next() == Some(format!("{lower}_json").as_str())
+                || token.rsplit('.').next() == Some(format!("{lower}Json").as_str())
+            {
+                return Some((*method).to_owned());
+            }
+        }
+    }
+    None
 }
 
 fn source_context_allows_literal(
@@ -1785,7 +2008,20 @@ fn rust_char_literal_end(line: &str, index: usize) -> Option<usize> {
     (bytes.get(end) == Some(&b'\'')).then_some(end + 1)
 }
 
+#[derive(Debug)]
+struct SourceStringOccurrence {
+    value: String,
+    start: usize,
+}
+
 fn extract_source_string_literals(line: &str, rust_source: bool) -> Vec<String> {
+    source_string_occurrences(line, rust_source)
+        .into_iter()
+        .map(|occurrence| occurrence.value)
+        .collect()
+}
+
+fn source_string_occurrences(line: &str, rust_source: bool) -> Vec<SourceStringOccurrence> {
     let bytes = line.as_bytes();
     let mut literals = Vec::new();
     let mut i = 0usize;
@@ -1833,7 +2069,10 @@ fn extract_source_string_literals(line: &str, rust_source: bool) -> Vec<String> 
             i += 1;
         }
         if i < bytes.len() && bytes[i] == quote {
-            literals.push(literal);
+            literals.push(SourceStringOccurrence {
+                value: literal,
+                start: start - 1,
+            });
             i += 1;
         }
     }

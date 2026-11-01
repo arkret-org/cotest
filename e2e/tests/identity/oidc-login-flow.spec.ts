@@ -107,10 +107,10 @@ test.describe("real OIDC browser login lifecycle @fully-implemented", () => {
       });
       try {
         await jointPage.gotoLogin();
-        await page.getByTestId("login-server-url").fill(colandBaseUrl());
-        await page.getByTestId("start-server-login-button").click();
+        await page.getByLabel("Sign-in server URL", { exact: true }).fill(colandBaseUrl());
+        await page.locator(".auth-panel:not(.registration-panel)").getByRole("button", { name: "Sign in to this server", exact: true }).click();
         await submitCoauthPasswordCredentials(page, account);
-        const approve = page.getByTestId("coauth-oauth-approve");
+        const approve = page.locator(".login-container").getByRole("button", { name: "Allow", exact: true });
         if (
           await approve
             .waitFor({ state: "visible", timeout: 20_000 })
@@ -120,14 +120,13 @@ test.describe("real OIDC browser login lifecycle @fully-implemented", () => {
           await approve.click();
         }
 
-        await page.getByTestId("choose-new-identity").click().catch(async (error) => {
-          const status = await page.getByTestId("auth-status").textContent().catch(() => null);
+        await page.locator(".identity-choice-card").getByRole("button", { name: "Continue", exact: true }).click().catch(async (error) => {
+          const status = await page.locator(".auth-status").textContent().catch(() => null);
           const stage = status?.match(/(?:Account handoff outcome failed validation|Persist account handoff credential failed|Persist account handoff checkpoint failed|Account Authority handoff failed|Account handoff request failed):[^\n]*/)?.[0];
           throw new Error(`Onboarding was not reached: ${stage?.replace(/[A-Za-z0-9_-]{32,}/g, "[redacted]") ?? "no recognized authentication failure"}`, { cause: error });
         });
         const displayedWords = page
-          .getByTestId("onboarding-recovery-key-display")
-          .locator("li");
+          .locator(".onboarding-recovery-key-display .rk-word");
         await expect(displayedWords).toHaveCount(24, { timeout: 120_000 });
         const recoveryKey = (await displayedWords.allTextContents())
           .map((word) => word.trim())
@@ -135,7 +134,7 @@ test.describe("real OIDC browser login lifecycle @fully-implemented", () => {
         expect(recoveryKey.split(/\s+/)).toHaveLength(24);
         expect(identityCreationRequests).toHaveLength(0);
         await page
-          .getByTestId("onboarding-recovery-key-confirm")
+          .getByLabel("Re-enter the 24 words", { exact: true })
           .fill(recoveryKey);
 
         let interruptedRecoveryPolicyPublish = false;
@@ -189,16 +188,16 @@ test.describe("real OIDC browser login lifecycle @fully-implemented", () => {
           "**/_arkret/root/identity/recovery-policy",
           interruptFirstRecoveryPolicyPublish,
         );
-        await page.getByTestId("onboarding-bind-identity").click();
+        await page.locator("button.onboarding-bind-identity").click();
 
         if (injectChallengeRateLimit) {
           await expect(page.getByText(/The Account Authority asked this device to wait/)).toBeVisible();
         }
 
         await expect(
-          page.getByTestId("onboarding-resume-diagnostics"),
+          page.locator(".onboarding-resume-inventory"),
         ).toBeVisible({ timeout: 240_000 });
-        await expect(page.getByTestId("retry-onboarding-resume")).toBeVisible();
+        await expect(page.locator("button.retry-onboarding-resume")).toBeVisible();
         expect(
           interruptedRecoveryPolicyPublish,
           "the test must interrupt the recovery-material gate after account acceptance",
@@ -225,10 +224,10 @@ test.describe("real OIDC browser login lifecycle @fully-implemented", () => {
         );
         await page.reload({ waitUntil: "domcontentloaded" });
         await expect(
-          page.getByTestId("onboarding-recovery-key-display").locator("li"),
+          page.locator(".onboarding-recovery-key-display .rk-word"),
         ).toHaveCount(24, { timeout: 120_000 });
         await page
-          .getByTestId("onboarding-recovery-key-confirm")
+          .getByLabel("Re-enter the 24 words", { exact: true })
           .fill(recoveryKey);
         const postConfirmationNavigations: string[] = [];
         page.on("framenavigated", (frame) => {
@@ -236,12 +235,12 @@ test.describe("real OIDC browser login lifecycle @fully-implemented", () => {
             postConfirmationNavigations.push(frame.url());
           }
         });
-        await page.getByTestId("onboarding-bind-identity").click();
+        await page.locator("button.onboarding-bind-identity").click();
 
-        await expect(page.getByTestId("onboarding-complete")).toContainText(
-          "Identity ready",
-          { timeout: 240_000 },
-        );
+        const completion = page.locator(".onboarding-panel .onboarding-card").filter({
+          has: page.getByRole("heading", { name: /^(Identity ready|You're all set)$/ }),
+        });
+        await expect(completion).toBeVisible({ timeout: 240_000 });
         expect(
           onboardingResponses.length,
           "the UI must reconcile onboarding through the Account Authority",
@@ -256,16 +255,16 @@ test.describe("real OIDC browser login lifecycle @fully-implemented", () => {
           "resuming an accepted setup must not create another identity or device",
         ).toBe(creationRequestCountAtInterruption);
 
-        await page
-          .getByTestId("onboarding-complete")
-          .getByRole("link", {
+        await completion
+          .getByRole("button", {
             name: "Continue",
+            exact: true,
           })
           .click();
-        await expect(page.getByTestId("client-shell")).toBeVisible({
+        await expect(page.locator("html[data-inkson-app-shell] .shell.app")).toBeVisible({
           timeout: 120_000,
         });
-        await expect(page.getByTestId("login-panel")).toHaveCount(0);
+        await expect(page.locator(".auth-panel:not(.registration-panel)")).toHaveCount(0);
         expect(
           postConfirmationNavigations.map((url) => new URL(url).pathname),
           "accepted Recovery Key confirmation must never transit through /login",
@@ -319,10 +318,10 @@ test.describe("real OIDC browser login lifecycle @fully-implemented", () => {
       //    persists the bearer can lag the first paint.
       await test.step("session survives a full page reload", async () => {
         await page.reload({ waitUntil: "domcontentloaded" });
-        await expect(page.getByTestId("client-shell")).toBeVisible({
+        await expect(page.locator("html[data-inkson-app-shell] .shell.app")).toBeVisible({
           timeout: 120_000,
         });
-        await expect(page.getByTestId("login-panel")).toHaveCount(0);
+        await expect(page.locator(".auth-panel:not(.registration-panel)")).toHaveCount(0);
         expect(new URL(page.url()).pathname).not.toBe("/login");
       });
 
@@ -335,7 +334,7 @@ test.describe("real OIDC browser login lifecycle @fully-implemented", () => {
       await test.step("returning user signs back in", async () => {
         await serverLoginViaCoauth(page, account);
         expect(new URL(page.url()).pathname).not.toBe("/onboarding");
-        await expect(page.getByTestId("pcr-policy-device-recovery")).toHaveCount(0);
+        await expect(page.locator(".pcr-policy-device-recovery")).toHaveCount(0);
         const returningDeviceId = await page.evaluate(() => {
           const config = JSON.parse(
             window.localStorage.getItem("inkson.config.v1") ?? "{}",

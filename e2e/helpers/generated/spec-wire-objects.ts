@@ -7875,3 +7875,31 @@ export type EventAdmissionSubmission = {
     };
   }>;
 };
+
+/** `current-state.schema.json#/$defs/mls_group_value` — closed object schema. */
+export type MlsGroupValue = {
+  "effective_scope": {
+    "kind": "realm";
+    "realm_id": string;
+  } | {
+    "kind": "circle";
+    "realm_id": string;
+    "circle_id": string;
+  } | {
+    "kind": "sidecar";
+    "realm_id": string;
+    "sidecar_id": string;
+  } | {
+    "kind": "realm_genesis";
+  } | {
+    "kind": "realm_control";
+    "realm_id": string;
+  };
+  "genesis_event_ref": string;
+  "cipher_suite": string;
+  "current_mls_commit_event_ref": string;
+  "epoch": string;
+  "current_key_access_revision": string;
+  "covered_key_access_revision": string;
+  "public_tree_ref": string;
+};

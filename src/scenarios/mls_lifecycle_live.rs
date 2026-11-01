@@ -131,6 +131,18 @@ impl Member {
         })
     }
 
+    pub fn with_client(&self, client: TestActorClient) -> Self {
+        Self {
+            client,
+            account: self.account.clone(),
+            actor: self.actor.clone(),
+            device: self.device.clone(),
+            method: self.method.clone(),
+            key: self.key.clone(),
+            authorize_event_id: self.authorize_event_id.clone(),
+        }
+    }
+
     /// The MLS endpoint of the founding device: its LeafNode key is the
     /// authorized device key and its BasicCredential the complete ActorId.
     pub fn mls_identity(&self) -> Result<ArkretMlsIdentity> {

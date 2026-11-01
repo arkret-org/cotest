@@ -118,6 +118,11 @@ const TARGETS = [
     pointer: "#/$defs/EventAdmissionSubmission",
     typeName: "EventAdmissionSubmission",
   },
+  {
+    file: "current-state.schema.json",
+    pointer: "#/$defs/mls_group_value",
+    typeName: "MlsGroupValue",
+  },
 ];
 
 const schemaCache = new Map();

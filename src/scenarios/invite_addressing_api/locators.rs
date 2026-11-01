@@ -163,8 +163,11 @@ pub(super) async fn exercise(station: &ArkretServer, holder: &TestActorClient) -
         .json(&InviteLocatorResolveRequestBody::new(&issued.locator_token))
         .send()
         .await?;
+    let path_status = path.status();
+    let path_problem: Value = path.json().await?;
     ensure!(
-        path.status() == StatusCode::NOT_FOUND,
+        path_status == StatusCode::NOT_FOUND
+            && path_problem["type"] == "https://arkret.org/problems/unrecognized_endpoint",
         "locator token path leak was accepted"
     );
     let response = resolve(station, &issued.locator_token).await?;

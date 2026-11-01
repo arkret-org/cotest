@@ -16,7 +16,9 @@ import { expect, type APIRequestContext } from "@playwright/test";
 import { type ColandKey, colandBaseUrl, colandServiceId } from "../env";
 import { authHeaders, expectJsonOk, wireErrCode } from "./request";
 import { canonicalJson, cotestWire } from "./wire-client";
-import type { KeyPackagesUploadResponseBody } from "../generated/spec-wire-objects";
+import type { KeyPackagesUploadResponseBody, MlsGroupValue } from "../generated/spec-wire-objects";
+import { uint64Decimal, uint64Value } from "../uint64-decimal";
+export type { MlsGroupValue } from "../generated/spec-wire-objects";
 import {
   accountActorId,
   assertAuthoritySubmitOutcome,
@@ -36,22 +38,11 @@ export type MlsDevice = {
   server?: ColandKey;
 };
 
-/// The closed `current-state.schema.json#/$defs/mls_group_value`.
-export type MlsGroupValue = {
-  effective_scope: Record<string, unknown>;
-  genesis_event_ref: string;
-  current_mls_commit_event_ref: string;
-  epoch: number;
-  current_key_access_revision: number;
-  covered_key_access_revision: number;
-  public_tree_ref: string;
-};
-
 /// A joined member's own group state, ready to encrypt at `epoch`.
 export type MlsMemberGroup = {
   realmId: string;
   groupState: string;
-  epoch: number;
+  epoch: string;
   groupStateRef: string;
 };
 
@@ -280,7 +271,13 @@ export async function readScopeMlsGroupCurrentApi(
   if (entries.length > 1) {
     throw new Error(`Realm snapshot carries ${entries.length} mls_group results for one scope`);
   }
-  return entries[0]?.value as MlsGroupValue | undefined;
+  const value = entries[0]?.value as MlsGroupValue | undefined;
+  if (value !== undefined) {
+    uint64Decimal(value.epoch);
+    uint64Decimal(value.current_key_access_revision);
+    uint64Decimal(value.covered_key_access_revision);
+  }
+  return value;
 }
 
 /// Activate MLS for the Realm scope: the owner's device founds the epoch-zero
@@ -497,7 +494,7 @@ export async function addRealmMlsMemberApi(
       device_public_key_b64url: memberSigner.publicKeyB64url,
     },
   ];
-  const installed = cotestWire<{ group_state: string; epoch: number }>(
+  const installed = cotestWire<{ group_state: string; epoch: string }>(
     "mls-install-commit",
     {
       group_state: added.group_state,
@@ -506,7 +503,7 @@ export async function addRealmMlsMemberApi(
       members,
     },
   );
-  expect(installed.epoch).toBe(current.epoch + 1);
+  expect(uint64Value(installed.epoch)).toBe(uint64Value(current.epoch) + 1n);
   creator.groupState = installed.group_state;
   creator.members = members;
   pendingJoins.set(joinKey(realmId, member, opts.scopeRef), {
@@ -567,7 +564,7 @@ export async function joinRealmMlsWelcomeApi(
     member,
     pending.commitEventId,
   );
-  const joined = cotestWire<{ group_state: string; epoch: number }>(
+  const joined = cotestWire<{ group_state: string; epoch: string }>(
     "mls-join-welcome",
     {
       identity_state: pending.identityState,
@@ -596,7 +593,7 @@ export async function joinRealmMlsWelcomeApi(
   const group = {
     realmId,
     groupState: joined.group_state,
-    epoch: joined.epoch,
+    epoch: uint64Decimal(joined.epoch),
     groupStateRef: pending.commitEventId,
   };
   joinedMembers.set(joinKey(realmId, member, opts.scopeRef), group);

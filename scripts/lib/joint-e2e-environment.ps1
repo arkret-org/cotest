@@ -105,7 +105,7 @@ function Add-CotestHostsBlock {
     if ($normalizedHosts.Count -eq 0) { throw "At least one hosts name is required" }
     foreach ($hostName in $normalizedHosts) {
         if ($hostName -notmatch '^(?:coland|coauth)-server[1-9][0-9]*\.local\.host$' -and
-            $hostName -notin @("unregistered.local.host", "mock-applet-registry.local.host", "flagon.local.host")) {
+            $hostName -notin @("unregistered.local.host", "mock-applet-registry.local.host", "flagon.local.host", "coland-server1.localhost", "coauth-server1.localhost", "unregistered.localhost")) {
             throw "Refusing host outside the cotest joint namespace: $hostName"
         }
     }

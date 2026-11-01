@@ -891,7 +891,21 @@ fn product_attempt_after_current<'a>(
     dedicated: bool,
 ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<usize>> + 'a>> {
     cotest::harness::heap_future(move || async move {
-        let mut stream = ready_stream(member).await?;
+        let stream = ready_stream(member).await?;
+        product_attempt_on_ready_stream(context, member, native, request, dedicated, stream).await
+    })
+}
+
+#[inline(never)]
+fn product_attempt_on_ready_stream<'a>(
+    context: &'a ConsentCallContext,
+    member: &'a Member,
+    native: &'a inkson::sync_engine::NativeAccountHost,
+    request: &'a CallInvitationSendRequestBody,
+    dedicated: bool,
+    mut stream: arkret_http_client::SignalSubscribeFrameStream,
+) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<usize>> + 'a>> {
+    cotest::harness::heap_future(move || async move {
         if dedicated {
             send(context, request).await?;
         } else {
@@ -969,9 +983,73 @@ fn product_attempt_after_current<'a>(
                 started.elapsed().as_millis()
             );
         }
+        // These are caller-side bounds around the real consumer, not its
+        // internal fresh-Consent cut. Retain only scalar facts for failure.
+        let consumer_started = std::time::Instant::now();
+        let pre_consumer_now = Utc::now();
+        let pre_consumer_capture = match &received {
+            garth::signal::SignalReceiveOutcome::Accepted {
+                call_invitation: Some(delivery),
+                effective_expires_at,
+                ..
+            } => Some((
+                serde_json::json!({
+                    "request_valid": delivery.request.validate().is_ok(),
+                    "request_digest_matches": canonical_request_digest(&delivery.request)
+                        .is_ok_and(|digest| digest == delivery.decision.request_digest),
+                    "admitted": delivery.decision.admitted,
+                    "evaluated_not_future": delivery.decision.evaluated_at <= pre_consumer_now,
+                    "decision_live": delivery.decision.expires_at > pre_consumer_now,
+                    "decision_window_at_most_30s": delivery.decision.expires_at
+                        <= delivery.decision.evaluated_at + Duration::seconds(30),
+                    "decision_within_invitation": delivery.decision.expires_at
+                        <= delivery.request.invitation.expires_at,
+                    "invitation_live": delivery.request.invitation.expires_at > pre_consumer_now,
+                    "signal_live": *effective_expires_at > pre_consumer_now,
+                    "decision_remaining_ms": delivery.decision.expires_at
+                        .signed_duration_since(pre_consumer_now).num_milliseconds(),
+                    "invitation_remaining_ms": delivery.request.invitation.expires_at
+                        .signed_duration_since(pre_consumer_now).num_milliseconds(),
+                    "signal_remaining_ms": effective_expires_at
+                        .signed_duration_since(pre_consumer_now).num_milliseconds(),
+                    "decision_age_ms": pre_consumer_now
+                        .signed_duration_since(delivery.decision.evaluated_at).num_milliseconds(),
+                    "generation_matches_consumer_fresh_cut": null,
+                }),
+                delivery.decision.expires_at,
+                delivery.request.invitation.expires_at,
+                *effective_expires_at,
+            )),
+            _ => None,
+        };
         let projected =
             inkson::conformance::observe_native_call_projection(native, received).await?;
+        let post_consumer_now = Utc::now();
         if dedicated && projected == 0 {
+            let (pre_consumer_capture, post_consumer_capture) = match pre_consumer_capture {
+                Some((pre, decision_expires_at, invitation_expires_at, signal_expires_at)) => (
+                    Some(pre),
+                    Some(serde_json::json!({
+                        "decision_remaining_ms": decision_expires_at
+                            .signed_duration_since(post_consumer_now).num_milliseconds(),
+                        "invitation_remaining_ms": invitation_expires_at
+                            .signed_duration_since(post_consumer_now).num_milliseconds(),
+                        "signal_remaining_ms": signal_expires_at
+                            .signed_duration_since(post_consumer_now).num_milliseconds(),
+                    })),
+                ),
+                None => (None, None),
+            };
+            eprintln!(
+                "[2141-product-cut-bounds] {}",
+                serde_json::json!({
+                    "stage": "native_product_projection_zero",
+                    "pre_consumer_capture": pre_consumer_capture,
+                    "post_consumer_capture": post_consumer_capture,
+                    "caller_interval_elapsed_ms": consumer_started.elapsed().as_millis(),
+                    "generation_matches_consumer_fresh_cut": null,
+                })
+            );
             let read =
                 inkson::conformance::read_native_call_consent(native, &request.invitation).await;
             let read_ok = read.is_ok();
@@ -1047,41 +1125,51 @@ async fn sfu_media(
         screen: false,
     };
     let holder = context.holder.account.clone();
+    holder_native
+        .catch_up_selected_realm_until_complete(&context.realm)
+        .await?;
+    let holder_stream = ready_stream(&context.holder).await?;
     let holder_invite =
         prepare_invitation(context, &call, &holder, media.clone(), *sequence).await?;
     *sequence += 1;
-    let peer = context.denied_holder.account.clone();
-    let peer_invite = prepare_invitation(context, &call, &peer, media.clone(), *sequence).await?;
-    *sequence += 1;
     ensure!(
-        product_attempt(
+        product_attempt_on_ready_stream(
             context,
             &context.holder,
             holder_native,
             &holder_invite,
-            true
-        )
-        .await?
-            == 1
-    );
-    ensure!(
-        product_attempt(
-            context,
-            &context.denied_holder,
-            denied_native,
-            &peer_invite,
-            true
+            true,
+            holder_stream,
         )
         .await?
             == 1
     );
     let holder_token = invited_token(context, &holder_invite, media.clone());
+    let holder_outcome = exchange(&context.holder, &holder_token).await?;
+    verify_token(context, &holder_token, &holder_outcome).await?;
+    let peer = context.denied_holder.account.clone();
+    denied_native
+        .catch_up_selected_realm_until_complete(&context.realm)
+        .await?;
+    let peer_stream = ready_stream(&context.denied_holder).await?;
+    let peer_invite = prepare_invitation(context, &call, &peer, media.clone(), *sequence).await?;
+    *sequence += 1;
+    ensure!(
+        product_attempt_on_ready_stream(
+            context,
+            &context.denied_holder,
+            denied_native,
+            &peer_invite,
+            true,
+            peer_stream,
+        )
+        .await?
+            == 1
+    );
     let mut peer_token = invited_token(context, &peer_invite, media);
     peer_token.actor_id = context.denied_holder.actor.clone();
     peer_token.device_id = context.denied_holder.device.clone();
-    let holder_outcome = exchange(&context.holder, &holder_token).await?;
     let peer_outcome = exchange(&context.denied_holder, &peer_token).await?;
-    verify_token(context, &holder_token, &holder_outcome).await?;
     verify_token(context, &peer_token, &peer_outcome).await?;
     accept_roster(context, &context.holder, &holder_outcome).await?;
     accept_roster(context, &context.denied_holder, &peer_outcome).await?;

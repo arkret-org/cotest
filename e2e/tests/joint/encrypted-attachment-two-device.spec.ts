@@ -1,7 +1,7 @@
 // Real product attachment selection, durable preparation, upload, send and receive.
 import { createHash } from "node:crypto";
 import { execFile } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { expect, test, type Page } from "../../helpers/arkret-test";
@@ -9,6 +9,7 @@ import { canonicalJson } from "../../helpers/coland-api";
 import { colandBaseUrl } from "../../helpers/env";
 import { grantInviteConsentArkret } from "../../helpers/contact-api";
 import { readScopeMlsGroupCurrentApi } from "../../helpers/coland-api/mls";
+import { uint64Decimal, uint64Value } from "../../helpers/uint64-decimal";
 import { createDpopUserSession, issueInviteLocatorToken, openDpopUserPageFromSession, selfPathHeadersForDpopSession, type JointUserPage } from "../../helpers/users";
 
 const sha = (bytes: Uint8Array) => createHash("sha256").update(bytes).digest("hex");
@@ -79,17 +80,27 @@ async function holderAttachments(page: Page) {
   });
 }
 
-async function drop(page: Page, name: string, mime: string, bytes: Uint8Array) {
-  await expect(page.getByTestId("send-chat-button")).toBeEnabled({timeout: 120_000});
-  await page.getByTestId("compose-drop-zone").evaluate((zone, file) => {
-    const transfer = new DataTransfer();
-    transfer.items.add(new File([Uint8Array.from(file.bytes)], file.name, {type: file.mime}));
-    zone.dispatchEvent(new DragEvent("drop", {bubbles: true, cancelable: true, dataTransfer: transfer}));
-  }, {name, mime, bytes: Array.from(bytes)});
+async function drop(page: Page, filePath: string) {
+  await expect(page.locator(".send-chat-button")).toBeEnabled({timeout: 120_000});
+  const zone = page.locator(".compose-drop-zone");
+  await zone.scrollIntoViewIfNeeded();
+  const bounds = await zone.boundingBox();
+  if (!bounds) throw new Error("The real attachment drop zone has no visible bounds");
+  const session = await page.context().newCDPSession(page);
+  try {
+    const data = {items: [], files: [filePath], dragOperationsMask: 1};
+    for (const type of ["dragEnter", "dragOver", "drop"] as const) {
+      await session.send("Input.dispatchDragEvent", {
+        type, x: bounds.x + bounds.width / 2, y: bounds.y + bounds.height / 2, data,
+      });
+    }
+  } finally {
+    await session.detach();
+  }
 }
 
 async function scrollTimeline(page: Page, edge: "oldest" | "latest") {
-  await page.getByTestId("message-list").evaluate((feed, last) => {
+  await page.locator(".message-list").evaluate((feed, last) => {
     feed.scrollTop = last ? feed.scrollHeight : 0;
     feed.dispatchEvent(new Event("scroll", {bubbles: true}));
   }, edge === "latest");
@@ -105,7 +116,7 @@ test("encrypted attachment two-device upload/send/history/render and exact resta
   if (!alice) throw new Error("sender device did not open");
   let bob: JointUserPage | undefined;
   let late: JointUserPage | undefined;
-  const png = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/5h8AAAAASUVORK5CYII=", "base64");
+  const png = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+ip1sAAAAASUVORK5CYII=", "base64");
   const marker = `private attachment two-device ${Date.now()}`;
   const uploads: Array<{ref: string; size: number; digest: string; metadata: Record<string, string>}> = [];
   let cut = true;
@@ -124,8 +135,11 @@ test("encrypted attachment two-device upload/send/history/render and exact resta
     await bob.acknowledgeRecommendedEncryptionPromptIfVisible();
     await bob.completeMlsAccountRecoveryIfPrompted(bobSession.recoveryKey!);
     await bob.acceptInvite(realm);
-    await expect.poll(async () => (await readScopeMlsGroupCurrentApi(request, aliceSession.grantJwt, realm))?.epoch ?? -1,
-      {timeout: 120_000, intervals: [1_000, 2_000]}).toBeGreaterThanOrEqual(1);
+    await expect.poll(async () => {
+      const current = await readScopeMlsGroupCurrentApi(request, aliceSession.grantJwt, realm);
+      return current === undefined ? -1n : uint64Value(current.epoch);
+    },
+      {timeout: 120_000, intervals: [1_000, 2_000]}).toBeGreaterThanOrEqual(1n);
     await bob.completeMlsAccountRecoveryIfPrompted(bobSession.recoveryKey!);
     await Promise.all([alice.gotoTimelineRealm(realm), bob.gotoTimelineRealm(realm)]);
 
@@ -155,10 +169,12 @@ test("encrypted attachment two-device upload/send/history/render and exact resta
     // Exercise the actual file chooser in an encrypted composer (Inkson #39).
     // Later uploads retain the drop path and all existing ciphertext/restart
     // assertions; opening the menu alone cannot count as upload coverage.
-    await alice.page.getByTestId("attachment-menu-button").click();
+    const imagePath = testInfo.outputPath("private-image.png");
+    writeFileSync(imagePath, png);
+    await alice.page.locator(".attachment-menu-button").click();
     const fileChooser = alice.page.waitForEvent("filechooser");
-    await alice.page.getByTestId("compose-file-input").click();
-    await (await fileChooser).setFiles({name: "private-image.png", mimeType: "image/png", buffer: png});
+    await alice.page.locator("button.attachment-file-picker").click();
+    await (await fileChooser).setFiles(imagePath);
     await expect.poll(async () => uploads.length, {timeout: 60_000}).toBe(1);
     const before = (await holderAttachments(alice.page)).find(o => o.scope.realm_id === realm)!;
     expect(before.inputLength).toBe(0);
@@ -167,16 +183,16 @@ test("encrypted attachment two-device upload/send/history/render and exact resta
     await alice.completeRecoveryKeySetupIfPrompted();
     await alice.gotoTimelineRealm(realm);
     try {
-      await expect(alice.page.getByTestId("compose-attachment")).toHaveCount(1, {timeout: 120_000});
+      await expect(alice.page.locator(".compose-attachment")).toHaveCount(1, {timeout: 120_000});
       await expect.poll(async () => (await holderAttachments(alice.page)).find(o => o.id === before.id)?.uploaded,
         {timeout: 120_000}).toBe(true);
     } catch (error) {
       await testInfo.attach("attachment-recovery-targets.json", {contentType: "application/json", body: JSON.stringify({
         frozen: {id:before.id,scope:before.scope,strand:before.strand,blob_ref:before.blobRef},
         objects: (await holderAttachments(alice.page)).map(o => ({id:o.id,scope:o.scope,strand:o.strand,uploaded:o.uploaded})),
-        source: await alice.page.getByTestId("composer-send-scope").allTextContents(),
-        progress: await alice.page.getByTestId("compose-upload-progress").allTextContents(),
-        chips: await alice.page.getByTestId("compose-attachment").count(),
+        source: await alice.page.locator(".composer-send-scope").allTextContents(),
+        progress: await alice.page.locator(".compose-upload-progress").allTextContents(),
+        chips: await alice.page.locator(".compose-attachment").count(),
         uploads: uploads.map(u=>u.ref),
       })});
       throw error;
@@ -223,16 +239,18 @@ test("encrypted attachment two-device upload/send/history/render and exact resta
       await abaHeld;
       await route.fulfill({response}).catch(() => {});
     });
-    await drop(alice.page, "target-aba.png", "image/png", png);
+    const targetAbaPath = testInfo.outputPath("target-aba.png");
+    writeFileSync(targetAbaPath, png);
+    await drop(alice.page, targetAbaPath);
     await expect.poll(() => abaAccepted, {timeout: 60_000}).toBe(true);
-    await alice.page.getByTestId("chat-input").fill("temporary changed target draft");
-    await alice.page.getByTestId("chat-input").fill("");
-    await expect(alice.page.getByTestId("compose-upload-progress")).toContainText(/target changed/, {timeout: 30_000});
+    await alice.page.getByRole("textbox", { name: "Message", exact: true }).fill("temporary changed target draft");
+    await alice.page.getByRole("textbox", { name: "Message", exact: true }).fill("");
+    await expect(alice.page.locator(".compose-upload-progress")).toContainText(/target changed/, {timeout: 30_000});
     releaseAba();
     await alice.page.unroute(uploadPattern);
     const aba = (await holderAttachments(alice.page)).find(o => o.filename === "target-aba.png")!;
     expect(aba.uploaded).toBe(false);
-    await expect(alice.page.getByTestId("send-chat-button")).toBeDisabled();
+    await expect(alice.page.locator(".send-chat-button")).toBeDisabled();
     await alice.page.getByRole("button", {name: "Retry attachments", exact: true}).click();
     await expect.poll(async () => (await holderAttachments(alice.page)).find(o => o.id === aba.id)?.uploaded,
       {timeout: 120_000}).toBe(true);
@@ -241,7 +259,9 @@ test("encrypted attachment two-device upload/send/history/render and exact resta
     await expect(bob.page.getByRole("img", {name: "target-aba.png", exact: true})).toBeVisible({timeout: 120_000});
 
     // New objects use fresh salt/key material even for identical source bytes.
-    await drop(alice.page, "fresh-private-image.png", "image/png", png);
+    const freshImagePath = testInfo.outputPath("fresh-private-image.png");
+    writeFileSync(freshImagePath, png);
+    await drop(alice.page, freshImagePath);
     await expect.poll(async () => (await holderAttachments(alice.page)).find(o => o.filename === "fresh-private-image.png")?.uploaded,
       {timeout: 120_000}).toBe(true);
     const fresh = (await holderAttachments(alice.page)).find(o => o.filename === "fresh-private-image.png")!;
@@ -258,7 +278,9 @@ test("encrypted attachment two-device upload/send/history/render and exact resta
         return original.call(this);
       };
     });
-    await drop(alice.page, "large-private.bin", "application/octet-stream", large);
+    const largePath = testInfo.outputPath("large-private.bin");
+    writeFileSync(largePath, large);
+    await drop(alice.page, largePath);
     await expect.poll(async () => (await holderAttachments(alice.page)).find(o => o.filename === "large-private.bin")?.uploaded,
       {timeout: 120_000}).toBe(true);
     const sourceReads = await alice.page.evaluate(() => {
@@ -271,13 +293,17 @@ test("encrypted attachment two-device upload/send/history/render and exact resta
     expect(sourceReads.length).toBe(Math.ceil(large.length / 262_144));
     await alice.sendTimelineMessage(realm, `${marker} fresh and segmented`);
     await expect(bob.page.getByRole("img", {name: "fresh-private-image.png", exact: true})).toBeVisible({timeout: 120_000});
-    const largeLink = bob.page.getByTestId("verified-attachment-download").filter({hasText: "large-private.bin"});
+    const largeLink = bob.page.getByRole("button", {name: "large-private.bin", exact: true});
     await expect(largeLink).toBeVisible({timeout: 120_000});
-    const downloaded = await largeLink.evaluate(async (link: HTMLAnchorElement) => Array.from(new Uint8Array(await (await fetch(link.href)).arrayBuffer())));
+    const largeDownloadPromise = bob.page.waitForEvent("download");
+    await largeLink.click();
+    const largeDownloadPath = await (await largeDownloadPromise).path();
+    if (!largeDownloadPath) throw new Error("The verified attachment download has no local artifact");
+    const downloaded = readFileSync(largeDownloadPath);
     expect(sha(Buffer.from(downloaded))).toBe(sha(large));
 
     const longBody = `${marker} long text\n` + "segmented UTF-8 正文\n".repeat(20_000) + "long-text-final-验收";
-    const longInput = alice.page.getByTestId("chat-input");
+    const longInput = alice.page.getByRole("textbox", { name: "Message", exact: true });
     try {
       await expect(longInput).toBeVisible({timeout: 120_000});
       await expect(longInput).toBeEditable({timeout: 120_000});
@@ -299,26 +325,41 @@ test("encrypted attachment two-device upload/send/history/render and exact resta
       await testInfo.attach("long-text-input-boundary.png", {contentType: "image/png", body: await alice.page.screenshot()});
       throw error;
     }
-    await expect(alice.page.getByTestId("send-chat-button")).toBeEnabled({timeout: 120_000});
-    await alice.page.getByTestId("send-chat-button").click();
-    await expect(bob.page.getByTestId("verified-long-text-page")).toContainText(`${marker} long text`, {timeout: 120_000});
-    const textLink = bob.page.getByRole("link", {name: "Download full text", exact: true});
-    const firstPageUrl = await textLink.getAttribute("href");
+    await expect(alice.page.locator(".send-chat-button")).toBeEnabled({timeout: 120_000});
+    await alice.page.locator(".send-chat-button").click();
+    await expect(bob.page.locator(".verified-long-text-page")).toContainText(`${marker} long text`, {timeout: 120_000});
+    const textReader = bob.page.locator(".verified-long-text");
+    const firstReaderNode = await textReader.elementHandle();
+    if (!firstReaderNode) throw new Error("The verified long-text reader has no mounted element");
+    const textLink = textReader.locator("button.verified-attachment-download");
+    const firstDownloadPromise = bob.page.waitForEvent("download");
+    await textLink.click();
+    const firstDownload = await firstDownloadPromise;
+    const firstPageUrl = firstDownload.url();
     expect(firstPageUrl).toMatch(/^blob:/);
-    const textReader = bob.page.getByTestId("verified-long-text");
-    const firstReaderId = await textReader.getAttribute("data-reader-id");
+    const firstReaderId = await textReader.evaluate((element: HTMLElement) => {
+      const identities = new WeakMap<Element, number>();
+      let next = 0;
+      const token = (node: Element) => {
+        let value = identities.get(node);
+        if (value === undefined) { value = ++next; identities.set(node, value); }
+        return value;
+      };
+      (window as any).__attachmentReaderTrace = {changes: [], token, observer: null};
+      return token(element);
+    });
     const firstBinding = await textReader.evaluate((element: HTMLElement) => ({
-      row: element.closest("[data-message-id]")?.getAttribute("data-message-id"),
-      renderer: element.closest("[data-attachment-renderer-id]")?.getAttribute("data-attachment-renderer-id"),
-      source: element.closest("[data-attachment-source]")?.getAttribute("data-attachment-source"),
-      feed: element.closest('[id^="chat-feed-"]')?.id,
+      rowClass: element.closest(".chat-message")?.className ?? null,
+      readerClass: element.className,
+      feed: element.closest('[id^="chat-feed-"]')?.id ?? null,
     }));
     await textReader.evaluate((element: HTMLElement) => {
       const feed = element.closest('[id^="chat-feed-"]')!;
-      const changes: unknown[] = [];
-      const ids = (node: Node) => node instanceof Element ? [node, ...Array.from(node.querySelectorAll('[data-message-id],[data-reader-id],[data-attachment-renderer-id]'))]
-        .filter(e => e.hasAttribute("data-message-id") || e.hasAttribute("data-reader-id") || e.hasAttribute("data-attachment-renderer-id"))
-        .map(e => ({row: e.getAttribute("data-message-id"), reader: e.getAttribute("data-reader-id"), renderer: e.getAttribute("data-attachment-renderer-id")})) : [];
+      const trace = (window as any).__attachmentReaderTrace;
+      const changes: unknown[] = trace.changes;
+      const ids = (node: Node) => node instanceof Element ? [node, ...Array.from(node.querySelectorAll('.chat-message,.verified-long-text,.verified-long-text-viewport'))]
+        .filter(e => e.matches(".chat-message,.verified-long-text,.verified-long-text-viewport"))
+        .map(e => ({node: trace.token(e), className: e.className})) : [];
       const observer = new MutationObserver(entries => {
         for (const entry of entries) {
           const removed = Array.from(entry.removedNodes).flatMap(ids);
@@ -327,36 +368,38 @@ test("encrypted attachment two-device upload/send/history/render and exact resta
         }
       });
       observer.observe(feed, {childList: true, subtree: true});
-      (window as any).__attachmentReaderTrace = {changes, observer};
+      trace.observer = observer;
     });
-    const textViewport = bob.page.getByTestId("verified-long-text-viewport");
+    const textViewport = bob.page.locator(".verified-long-text-viewport");
     const firstPageHeight = await textViewport.evaluate((element: HTMLElement) => element.getBoundingClientRect().height);
     expect(firstPageHeight).toBeGreaterThan(0);
     expect(firstPageHeight).toBeLessThanOrEqual(384);
     let fullText: string;
     try {
-      await bob.page.getByTestId("verified-long-text-last").click();
-      await expect(bob.page.getByTestId("verified-long-text-page")).toContainText("long-text-final-验收");
+      await bob.page.locator(".verified-long-text-last").click();
+      await expect(bob.page.locator(".verified-long-text-page")).toContainText("long-text-final-验收");
       // Let ResizeObserver/virtual-window feedback settle; paging must keep the
       // same mounted verified artifact, rather than recreating a revoked URL.
       await bob.page.evaluate(() => new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
-      await expect(bob.page.getByTestId("verified-long-text-page")).toContainText("long-text-final-验收");
-      await expect(textReader).toHaveAttribute("data-reader-id", firstReaderId!);
-      await expect(textLink).toHaveAttribute("href", firstPageUrl!);
+      await expect(bob.page.locator(".verified-long-text-page")).toContainText("long-text-final-验收");
+      await expect.poll(() => textReader.evaluate((element, original) => element === original, firstReaderNode)).toBe(true);
+      const nextDownloadPromise = bob.page.waitForEvent("download");
+      await textLink.click();
+      const nextDownload = await nextDownloadPromise;
+      expect(nextDownload.url()).toBe(firstPageUrl);
       expect(await textViewport.evaluate((element: HTMLElement) => element.getBoundingClientRect().height)).toBe(firstPageHeight);
-      fullText = await textLink.evaluate(async (link: HTMLAnchorElement) => await (await fetch(link.href)).text());
+      const fullTextPath = await nextDownload.path();
+      if (!fullTextPath) throw new Error("The verified long-text download has no local artifact");
+      fullText = readFileSync(fullTextPath, "utf8");
     } catch (error) {
       await testInfo.attach("long-text-reader-boundary.json", {contentType: "application/json", body: JSON.stringify({
         firstPageUrl, firstReaderId, firstPageHeight, firstBinding,
         current: await textReader.evaluate((element: HTMLElement) => ({
-          reader: element.dataset.readerId, page: element.dataset.pageIndex,
-          url: element.querySelector("a")?.getAttribute("href"),
-          row: element.closest("[data-message-id]")?.getAttribute("data-message-id"),
-          renderer: element.closest("[data-attachment-renderer-id]")?.getAttribute("data-attachment-renderer-id"),
-          source: element.closest("[data-attachment-source]")?.getAttribute("data-attachment-source"),
-          revision: element.closest("[data-attachment-load-revision]")?.getAttribute("data-attachment-load-revision"),
+          reader: (window as any).__attachmentReaderTrace?.token(element) ?? null,
+          readerClass: element.className,
+          rowClass: element.closest(".chat-message")?.className ?? null,
           rectangle: element.getBoundingClientRect().toJSON(),
-          lastDisabled: (element.querySelector('[data-testid="verified-long-text-last"]') as HTMLButtonElement)?.disabled,
+          lastDisabled: (element.querySelector("button.verified-long-text-last") as HTMLButtonElement)?.disabled,
           feed: element.closest('[id^="chat-feed-"]')?.scrollTop,
         })).catch(() => null),
         changes: await bob.page.evaluate(() => (window as any).__attachmentReaderTrace?.changes),
@@ -378,7 +421,7 @@ test("encrypted attachment two-device upload/send/history/render and exact resta
 
     // A genuine Add advances the accepted epoch. Existing members retain old
     // authorized checkpoints, while a since-join member has no historical key.
-    const oldEpoch = (await readScopeMlsGroupCurrentApi(request, aliceSession.grantJwt, realm))!.epoch;
+    const oldEpoch = uint64Decimal((await readScopeMlsGroupCurrentApi(request, aliceSession.grantJwt, realm))!.epoch);
     const lateSession = await createDpopUserSession(request, "attachment-late-history");
     if (!lateSession) throw new Error("historical authorization needs a real third participant");
     await grantInviteConsentArkret(request, lateSession.grantJwt, lateSession.user, aliceSession.user.id);
@@ -390,8 +433,11 @@ test("encrypted attachment two-device upload/send/history/render and exact resta
     await late.acknowledgeRecommendedEncryptionPromptIfVisible();
     await late.completeMlsAccountRecoveryIfPrompted(lateSession.recoveryKey!);
     await late.acceptInvite(realm);
-    await expect.poll(async () => (await readScopeMlsGroupCurrentApi(request, aliceSession.grantJwt, realm))?.epoch ?? -1,
-      {timeout: 120_000}).toBeGreaterThan(oldEpoch);
+    await expect.poll(async () => {
+      const current = await readScopeMlsGroupCurrentApi(request, aliceSession.grantJwt, realm);
+      return current === undefined ? -1n : uint64Value(current.epoch);
+    },
+      {timeout: 120_000}).toBeGreaterThan(uint64Value(oldEpoch));
     await late.gotoTimelineRealm(realm);
     const historicalSourceUrl = `${colandBaseUrl()}/_arkret/self/committed-events/${encodeURIComponent(originalMessageId)}`;
     const historicalSource = await request.get(historicalSourceUrl, {
@@ -399,8 +445,8 @@ test("encrypted attachment two-device upload/send/history/render and exact resta
     });
     expect(historicalSource.status()).toBe(404);
     expect((await historicalSource.json()).type).toBe("https://arkret.org/problems/not_found");
-    await expect(late.page.getByTestId("verified-attachment-image")).toHaveCount(0);
-    await expect(late.page.getByTestId("verified-long-text")).toHaveCount(0);
+    await expect(late.page.locator(".verified-attachment-image")).toHaveCount(0);
+    await expect(late.page.locator(".verified-long-text")).toHaveCount(0);
     await bob.page.reload({waitUntil: "domcontentloaded"});
     await bob.gotoTimelineRealm(realm);
     await scrollTimeline(bob.page, "oldest");
@@ -412,12 +458,12 @@ test("encrypted attachment two-device upload/send/history/render and exact resta
     expect(await bob.page.evaluate(async url => {
       try { await fetch(url!); return true; } catch { return false; }
     }, previousPreviewUrl)).toBe(false);
-    await expect(bob.page.getByTestId("verified-attachment-image")).toHaveCount(0);
+    await expect(bob.page.locator(".verified-attachment-image")).toHaveCount(0);
     await bob.gotoTimelineRealm(realm);
     await scrollTimeline(bob.page, "oldest");
     await expect(bob.page.getByRole("img", {name: "private-image.png", exact: true})).toBeVisible({timeout: 120_000});
     await scrollTimeline(bob.page, "latest");
-    await expect(bob.page.getByTestId("verified-long-text-page")).toContainText(`${marker} long text`, {timeout: 120_000});
+    await expect(bob.page.locator(".verified-long-text-page")).toContainText(`${marker} long text`, {timeout: 120_000});
     await bob.page.reload({waitUntil: "domcontentloaded"});
     await bob.gotoTimelineRealm(realm);
     await scrollTimeline(bob.page, "oldest");
@@ -442,7 +488,7 @@ test("encrypted attachment two-device upload/send/history/render and exact resta
     await bob.page.reload({waitUntil: "domcontentloaded"});
     await bob.gotoTimelineRealm(realm);
     await scrollTimeline(bob.page, "oldest");
-    await expect(bob.page.getByTestId("attachment-error").first()).toBeVisible({timeout: 120_000});
+    await expect(bob.page.locator(".attachment-error").first()).toBeVisible({timeout: 120_000});
     expect(tampered).toBeGreaterThan(0);
     await expect(bob.page.getByRole("img", {name: "private-image.png", exact: true})).toHaveCount(0);
     await testInfo.attach("encrypted-attachment-two-device-evidence.json", {body: JSON.stringify({realm, senderDevice: aliceSession.user.deviceId, receiverDevice: bobSession.user.deviceId,

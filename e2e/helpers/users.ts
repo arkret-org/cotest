@@ -25,6 +25,7 @@ import {
   accountHandoffHeaders,
   createCanonicalAccountHandoff,
   registerCoauthPasswordAccount,
+  registrationEmailCode,
   type CoauthPasswordAccount,
 } from "./coauth-register";
 import {
@@ -62,6 +63,8 @@ import { observeBrowserSessionRefresh } from "./browser-session-refresh";
 import { revealTimelineEvent } from "./timeline-visibility";
 import {
   completeRecoverySetup,
+  recoverySetupDialog,
+  generatedRecoveryKey,
   finishRecoverySetupBeforeClose,
   installRecoverySetupHandler,
 } from "./recovery-setup";
@@ -275,7 +278,7 @@ export class JointUserPage {
   }
 
   async gotoHome() {
-    const shell = this.page.getByTestId("client-shell");
+    const shell = this.page.locator("html[data-inkson-app-shell] .shell.app");
     for (let attempt = 0; attempt < 3; attempt += 1) {
       if (attempt === 0) {
         await this.page.goto("/", { waitUntil: "domcontentloaded" });
@@ -327,7 +330,7 @@ export class JointUserPage {
 
   async gotoLogin() {
     await this.page.goto("/login", { waitUntil: "domcontentloaded" });
-    await expect(this.page.getByTestId("login-panel")).toBeVisible({
+    await expect(this.page.locator(".auth-panel").filter({ has: this.page.getByRole("heading", { name: "Sign in", exact: true }) })).toBeVisible({
       timeout: 120_000,
     });
     await this.dismissDeviceAuthorizationPrompt();
@@ -336,7 +339,7 @@ export class JointUserPage {
   async gotoSetup(opts: { completeRecoveryKeySetup?: boolean } = {}) {
     // inkson's /setup is the Overview; the Realm wizard lives at the
     // /setup/realms section. inkson/src/routes.rs §SetupSection.
-    const lifecycle = this.page.getByTestId("realm-lifecycle-strand");
+    const lifecycle = this.page.locator(".realm-lifecycle-strand");
     const setupLink = this.page.locator('a[href="/setup/realms"]:visible').first();
     for (let attempt = 0; attempt < 3; attempt += 1) {
       if (opts.completeRecoveryKeySetup ?? true) {
@@ -360,8 +363,7 @@ export class JointUserPage {
         return;
       }
       if (
-        !(await this.page
-          .getByTestId("client-shell")
+        !(await this.page.locator("html[data-inkson-app-shell] .shell.app")
           .isVisible({ timeout: 1_000 })
           .catch(() => false))
       ) {
@@ -392,11 +394,11 @@ export class JointUserPage {
   }
 
   async gotoSettings() {
-    await this.gotoAppPanel("/settings", "settings-panel");
+    await this.gotoAppPanel("/settings", "settings-panel", this.page.locator(".settings-page"));
   }
 
   async gotoNotifications() {
-    await this.gotoAppPanel("/notifications", "notifications-panel");
+    await this.gotoAppPanel("/notifications", "notifications-panel", this.page.locator(".notifications-panel"));
   }
 
   async gotoNotificationSettings() {
@@ -408,7 +410,7 @@ export class JointUserPage {
 
   async gotoRealmAdmin(realmId: string) {
     await this.navigateWithinApp(`/realms/${realmId}/settings`);
-    await expect(this.page.getByTestId("realm-admin-panel")).toBeVisible({
+    await expect(this.page.locator(".realm-settings")).toBeVisible({
       timeout: 120_000,
     });
     await this.dismissDeviceAuthorizationPrompt();
@@ -430,14 +432,14 @@ export class JointUserPage {
       .toBe(destination);
 
     if (section === "members") {
-      await expect(this.page.getByTestId("realm-members-panel")).toBeVisible({
+      await expect(this.page.locator(".realm-members-panel")).toBeVisible({
         timeout: 120_000,
       });
       await this.dismissDeviceAuthorizationPrompt();
       return;
     }
 
-    await expect(this.page.getByTestId("realm-admin-panel")).toBeVisible({
+    await expect(this.page.locator(".realm-settings")).toBeVisible({
       timeout: 120_000,
     });
     await this.dismissDeviceAuthorizationPrompt();
@@ -451,8 +453,8 @@ export class JointUserPage {
     };
     const label = sectionLabel[section];
     if (label) {
-      const tabs = this.page.getByTestId("realm-admin-sections");
-      const tab = tabs.getByRole("link", { name: label, exact: true }).first();
+      const tabs = this.page.locator(".settings-sidebar-column");
+      const tab = tabs.getByRole("button", { name: label, exact: true }).first();
       if ((await tab.count()) > 0) {
         await tab.click();
       }
@@ -483,8 +485,8 @@ export class JointUserPage {
     }, path);
   }
 
-  async gotoAppPanel(path: string, testId: string) {
-    const panel = this.page.getByTestId(testId);
+  async gotoAppPanel(path: string, testId: string, panelLocator?: Locator) {
+    const panel = panelLocator ?? this.page.getByTestId(testId);
     for (let attempt = 0; attempt < 3; attempt += 1) {
       await this.navigateWithinApp(path);
       if (
@@ -518,16 +520,16 @@ export class JointUserPage {
       (url) => matchesRealmChatRoute(url, realmId),
       { timeout: 60_000 },
     );
-    await expect(this.page.getByTestId("chat-panel")).toBeVisible({
+    await expect(this.page.locator(".chat-panel")).toBeVisible({
       timeout: 120_000,
     });
     await this.dismissPassiveBlockingPrompts(opts.completeRecoveryKeySetup ?? true);
-    await expect(this.page.getByTestId("message-list")).toBeVisible({
+    await expect(this.page.locator(".message-list")).toBeVisible({
       timeout: 120_000,
     });
-    await expect(this.page.getByTestId("chat-panel")).toHaveAttribute(
-      "data-initial-sync",
-      "complete",
+    await expect(this.page.locator(".chat-panel")).toHaveAttribute(
+      "class",
+      /(?:^|\s)initial-sync-complete(?:\s|$)/,
       { timeout: 120_000 },
     );
   }
@@ -542,11 +544,11 @@ export class JointUserPage {
     action: string,
   ): Promise<string> {
     await this.gotoRealmAdminSection(realmId, "security");
-    await this.page.getByTestId("advanced-access-toggle").click();
-    await this.page.getByTestId("cap-grant-tag-input").fill(action);
-    await this.page.getByTestId("cap-grant-subject-input").fill(canonicalJson(subjectAccount));
-    await this.page.getByTestId("cap-grant-submit-button").click();
-    const status = this.page.getByTestId("realm-admin-status");
+    await this.page.locator(".advanced-access-toggle").click();
+    await this.page.locator(".cap-grant-tag-input :is(input,textarea)").fill(action);
+    await this.page.locator(".cap-grant-subject-input :is(input,textarea)").fill(canonicalJson(subjectAccount));
+    await this.page.locator(".cap-grant-submit-button").click();
+    const status = this.page.locator(".realm-settings-content > .write-status");
     await expect(status).toContainText("Permission granted. Grant ID:", {
       timeout: 120_000,
     });
@@ -605,9 +607,7 @@ export class JointUserPage {
   }): Promise<boolean> {
     let handled = false;
     if (opts.completeRecoveryKeySetup) {
-      const openRecoverySetup = this.page
-        .getByTestId("recovery-setup-open-recovery")
-        .last();
+      const openRecoverySetup = this.page.locator(".recovery-setup-banner").getByRole("button", { name: "Configure recovery", exact: true });
       if (
         await openRecoverySetup.isVisible({ timeout: 1_000 }).catch(() => false)
       ) {
@@ -617,12 +617,13 @@ export class JointUserPage {
       const recoveryKey = await this.completeRecoveryKeySetupIfPrompted(2_000);
       handled ||= recoveryKey !== undefined;
     }
-    for (const [testId, modalTestId] of [
-      ["mls-backup-dismiss", "mls-backup-modal"],
-      ["mls-recovery-missing-dismiss", "mls-recovery-missing-modal"],
-      ["mls-unlock-dismiss", "mls-unlock-modal"],
+    for (const [dialogName, buttonName, modalTestId] of [
+      ["Back up encrypted history", "Remind me later", "mls-backup-modal"],
+      ["This device does not have the encryption key yet", "Dismiss", "mls-recovery-missing-modal"],
+      ["Restore encryption keys", "Close", "mls-unlock-modal"],
     ] as const) {
-      const button = this.page.getByTestId(testId).last();
+      const dialog = this.page.getByRole("dialog", { name: dialogName, exact: true });
+      const button = dialog.getByRole("button", { name: buttonName, exact: true });
       if (await button.isVisible({ timeout: 250 }).catch(() => false)) {
         if (!opts.allowPassivePromptDismissal) {
           throw new Error(
@@ -630,7 +631,7 @@ export class JointUserPage {
           );
         }
         await button.click();
-        await expect(this.page.getByTestId(modalTestId).last()).toBeHidden({
+        await expect(dialog).toBeHidden({
           timeout: 10_000,
         });
         handled = true;
@@ -731,15 +732,8 @@ export class JointUserPage {
   async completeRecoveryKeySetupIfPrompted(
     timeoutMs = 5_000,
   ): Promise<string | undefined> {
-    const prompt = this.page
-      .locator(
-        [
-          '[data-testid="recovery-key-setup-modal"]',
-          '[data-testid="recovery-key-setup-banner"]',
-        ].join(","),
-      )
-      .first();
-    const dialog = this.page.getByTestId("recovery-key-setup-banner").last();
+    const prompt = recoverySetupDialog(this.page);
+    const dialog = prompt;
     const visible = await prompt
       .waitFor({ state: "visible", timeout: timeoutMs })
       .then(() => true)
@@ -748,13 +742,11 @@ export class JointUserPage {
       return undefined;
     }
 
-    const unauthorized = this.page
-      .getByTestId("recovery-key-setup-device-unauthorized")
-      .last();
-    const restore = this.page.getByTestId("recovery-key-setup-restore").last();
-    const status = this.page.getByTestId("recovery-key-setup-status").last();
+    const unauthorized = dialog.getByText(/^This device isn't authorized to save recovery data yet\./);
+    const restore = dialog.getByRole("button", { name: "Restore with existing recovery key", exact: true });
+    const status = dialog.locator(".mls-recovery-modal-body > p").last();
     const closeRecoveryPrompt = async () => {
-      const close = this.page.getByTestId("recovery-key-setup-dismiss").last();
+      const close = dialog.getByRole("button", { name: /^(Close|Not now)$/ });
       if (await close.isVisible({ timeout: 2_000 }).catch(() => false)) {
         await close.click({ timeout: 5_000 });
       } else {
@@ -789,9 +781,7 @@ export class JointUserPage {
       return undefined;
     }
 
-    const generatedKeyField = this.page
-      .getByTestId("recovery-key-setup-generated-key")
-      .last();
+    const generatedKeyField = generatedRecoveryKey(this.page);
     const deadline = Date.now() + 30_000;
     while (Date.now() < deadline) {
       if (await dialog.isHidden({ timeout: 100 }).catch(() => false)) {
@@ -855,19 +845,17 @@ export class JointUserPage {
     await this.page.bringToFront();
     const unlockPrompt = this.page
       .locator(
-        '[data-testid="mls-unlock-modal"], [data-testid="mls-unlock-banner"]',
+        '[role="dialog"][aria-label="Restore encryption keys"]',
       )
       .last();
     await expect(unlockPrompt).toBeVisible({ timeout: 90_000 });
 
-    const showRecoveryKey = this.page.getByTestId(
-      "mls-unlock-show-recovery-key",
-    );
+    const showRecoveryKey = unlockPrompt.getByRole("button", { name: "Use recovery key instead", exact: true });
     if (await showRecoveryKey.isVisible().catch(() => false)) {
       await showRecoveryKey.click();
     }
-    await this.page.getByTestId("mls-unlock-passphrase").fill(recoveryKey);
-    await this.page.getByTestId("mls-unlock-submit").click();
+    await unlockPrompt.getByLabel("24-word recovery key", { exact: true }).fill(recoveryKey);
+    await unlockPrompt.getByRole("button", { name: "Unlock with key", exact: true }).click();
     await expect(unlockPrompt).not.toBeVisible({ timeout: 120_000 });
   }
 
@@ -875,20 +863,26 @@ export class JointUserPage {
     recoveryKey: string,
     timeoutMs = 15_000,
   ): Promise<boolean> {
-    const prompt = this.page.getByTestId("mls-backup-modal").last();
+    const prompt = this.page.getByRole("dialog", { name: "Back up encrypted history", exact: true });
     if (!(await prompt.waitFor({ state: "visible", timeout: timeoutMs })
       .then(() => true).catch(() => false))) return false;
     expect(recoveryKey.trim().split(/\s+/).length === 24,
       "the account's confirmed Recovery Key is required for the MLS backup").toBe(true);
-    const existingKey = prompt.getByTestId("mls-backup-existing-key");
+    const existingKey = prompt.getByRole("textbox", { name: "Recovery Key (24 words)", exact: true });
     await expect(existingKey).toBeVisible({ timeout: 30_000 });
     // Dispatch the normal input event without exposing Recovery Key words
     // in a locator.fill failure's reporter-visible call log.
     await existingKey.evaluate((element, secret) => {
-      Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")!.set!.call(element, secret);
+      const prototype = element instanceof HTMLTextAreaElement
+        ? HTMLTextAreaElement.prototype
+        : element instanceof HTMLInputElement
+          ? HTMLInputElement.prototype
+          : undefined;
+      if (!prototype) throw new Error("MLS backup key control is not a real text input");
+      Object.getOwnPropertyDescriptor(prototype, "value")!.set!.call(element, secret);
       element.dispatchEvent(new Event("input", { bubbles: true }));
     }, recoveryKey);
-    const submit = prompt.getByTestId("mls-backup-submit");
+    const submit = prompt.getByRole("button", { name: "Back up with Recovery Key", exact: true });
     await expect(submit).toBeEnabled({ timeout: 30_000 });
     const accepted = this.page.waitForResponse((response) =>
       response.request().method() === "PUT"
@@ -902,7 +896,7 @@ export class JointUserPage {
     } catch (error) {
       // Classify only public status copy; never put recovery words or raw
       // request/response bodies into the Playwright error or its attachments.
-      const status = await prompt.getByTestId("mls-backup-status").textContent().catch(() => "");
+      const status = await prompt.locator(".mls-recovery-modal-body > p").last().textContent().catch(() => "");
       const reasons = [
         ["missing-pcr-evidence", "Frozen PCR authority evidence is required"],
         ["wrong-pcr-evidence", "Frozen PCR authority evidence does not match this account"],
@@ -923,12 +917,12 @@ export class JointUserPage {
 
   async completeMlsAccountRecoveryIfPrompted(recoveryKey: string): Promise<boolean> {
     const prompt = this.page.locator(
-      '[data-testid="mls-unlock-modal"], [data-testid="mls-unlock-banner"], [data-testid="mls-backup-modal"]',
+      '[role="dialog"][aria-label="Restore encryption keys"], [role="dialog"][aria-label="Back up encrypted history"]',
     ).last();
     if (!(await prompt.waitFor({ state: "visible", timeout: 15_000 })
       .then(() => true).catch(() => false))) return false;
     const unlock = this.page.locator(
-      '[data-testid="mls-unlock-modal"], [data-testid="mls-unlock-banner"]',
+      '[role="dialog"][aria-label="Restore encryption keys"]',
     ).last();
     if (await unlock.isVisible()) {
       await this.unlockMlsAccountSecret(recoveryKey);
@@ -965,16 +959,16 @@ export class JointUserPage {
       completeRecoveryKeySetup: opts.completeRecoveryKeySetup ?? true,
       allowPassivePromptDismissal: opts.allowPassivePromptDismissal ?? true,
     };
-    let strand = this.page.getByTestId("realm-lifecycle-strand").last();
-    let titleInput = strand.getByTestId("realm-title-input");
+    let strand = this.page.locator(".realm-lifecycle-strand").last();
+    let titleInput = strand.locator(".realm-title-input :is(input,textarea)");
     for (let attempt = 0; attempt < 2; attempt += 1) {
       await this.gotoSetup({
         completeRecoveryKeySetup: promptHandling.completeRecoveryKeySetup,
       });
       await this.dismissCreateRealmBlockingPrompts(promptHandling);
-      strand = this.page.getByTestId("realm-lifecycle-strand").last();
-      titleInput = strand.getByTestId("realm-title-input");
-      const another = strand.getByTestId("new-realm-start-another");
+      strand = this.page.locator(".realm-lifecycle-strand").last();
+      titleInput = strand.locator(".realm-title-input :is(input,textarea)");
+      const another = strand.locator(".new-realm-start-another");
       if (await another.isVisible({ timeout: 1_000 }).catch(() => false)) {
         await expect(another).toBeEnabled({ timeout: 30_000 });
         await this.clickCreateRealmControl(another, promptHandling);
@@ -1012,48 +1006,48 @@ export class JointUserPage {
     });
 
     await this.fillWithPassivePromptRetry(
-      strand.getByTestId("realm-title-input"),
+      strand.locator(".realm-title-input :is(input,textarea)"),
       opts.title,
     );
     if (opts.summary !== undefined) {
       await this.fillWithPassivePromptRetry(
-        strand.getByTestId("realm-summary-input"),
+        strand.locator(".realm-summary-input :is(input,textarea)"),
         opts.summary,
       );
     }
-    const basicsNext = strand.getByTestId("new-realm-next-button").first();
+    const basicsNext = strand.locator(".new-realm-next-button").first();
     await expect(basicsNext).toBeEnabled({ timeout: 30_000 });
     await this.clickCreateRealmControl(basicsNext, promptHandling);
 
     if (opts.discoverability !== undefined) {
       await this.selectCreateRealmOption(
-        strand.getByTestId("realm-discoverability-input"),
+        strand.locator(".realm-discoverability-input"),
         opts.discoverability,
         promptHandling,
       );
     }
     if (opts.joinRule !== undefined) {
       await this.selectCreateRealmOption(
-        strand.getByTestId("realm-policy-join-rule-input"),
+        strand.locator(".realm-policy-join-rule-input"),
         opts.joinRule,
         promptHandling,
       );
     }
     if (opts.historyAccess !== undefined) {
       await this.selectCreateRealmOption(
-        strand.getByTestId("realm-policy-history-access-input"),
+        strand.locator(".realm-policy-history-access-input"),
         opts.historyAccess,
         promptHandling,
       );
     }
     if (opts.mlsActivated !== undefined) {
       await this.selectCreateRealmOption(
-        strand.getByTestId("realm-mls-activation-input"),
+        strand.locator(".realm-mls-activation-input"),
         opts.mlsActivated ? "after_create" : "not_now",
         promptHandling,
       );
     }
-    const policyNext = strand.getByTestId("new-realm-next-button").first();
+    const policyNext = strand.locator(".new-realm-next-button").first();
     await expect(policyNext).toBeEnabled({ timeout: 30_000 });
     await this.clickCreateRealmControl(policyNext, promptHandling);
 
@@ -1061,7 +1055,7 @@ export class JointUserPage {
     // the selected recipient service nor current service-resolution evidence.
     // Create the canonical owner-only genesis first, then use the ordinary
     // Realm admin invite path below with a closed InviteAddress for each seed.
-    const createButton = strand.getByTestId("create-realm-button");
+    const createButton = strand.locator(".create-realm-button");
     await expect(createButton).toBeEnabled({ timeout: 30_000 });
     await this.clickCreateRealmControl(createButton, promptHandling);
 
@@ -1069,7 +1063,7 @@ export class JointUserPage {
     // the business outcome, so it is fail-closed unless the scenario declares
     // the bypass explicitly in its source/evidence metadata.
     const recoveryGate = this.page
-      .getByTestId("encrypted-realm-recovery-gate")
+      .locator(".encrypted-realm-recovery-gate")
       .last();
     const gateAppeared = await recoveryGate
       .waitFor({ state: "visible", timeout: 2_000 })
@@ -1082,7 +1076,7 @@ export class JointUserPage {
         );
       }
       const override = this.page
-        .getByTestId("encrypted-realm-recovery-gate-override")
+        .locator(".encrypted-realm-recovery-gate-override")
         .last();
       for (let attempt = 0; attempt < 3; attempt += 1) {
         if (await recoveryGate.isHidden({ timeout: 100 }).catch(() => false)) {
@@ -1092,7 +1086,7 @@ export class JointUserPage {
       }
       await expect(recoveryGate).toBeHidden({ timeout: 10_000 });
       const alreadyCreated = await strand
-        .getByTestId("selected-realm-id")
+        .locator(".selected-realm-id")
         .last()
         .isVisible({ timeout: 100 })
         .catch(() => false);
@@ -1105,11 +1099,11 @@ export class JointUserPage {
     // Realm acceptance is only the first part of bootstrap. The Done step keeps
     // its action disabled until governance and, where selected, MLS genesis are
     // complete. Do not hand a partially bootstrapped Realm to the next action.
-    const done = strand.getByTestId("realm-setup-done");
+    const done = strand.locator(".realm-setup-done");
     await expect(done).toBeVisible({ timeout: 120_000 });
-    const selectedRealm = done.getByTestId("selected-realm-id");
+    const selectedRealm = done.locator(".selected-realm-id");
     await expect(selectedRealm).toHaveAttribute(
-      "title",
+      "aria-label",
       /^ak:realm:[A-Za-z0-9_-]{44}$/,
       { timeout: 120_000 },
     );
@@ -1119,7 +1113,7 @@ export class JointUserPage {
     await expect(openRealm).toBeVisible({ timeout: 180_000 });
     const text = await strand.innerText();
     expect(text, `realm bootstrap failed: ${text}`).not.toContain(" failed:");
-    const realmId = await selectedRealm.getAttribute("title");
+    const realmId = await selectedRealm.getAttribute("aria-label");
     expect(realmId, `created realm id in: ${text}`).toMatch(
       /^ak:realm:[A-Za-z0-9_-]{44}$/,
     );
@@ -1173,42 +1167,22 @@ export class JointUserPage {
         },
       });
     }
-    // The responsive shell renders desktop and compact Realm navigation at the
-    // same time. Selecting the first accessible-name match can pick the hidden
-    // copy and incorrectly fall back to a cold page load. Prefer the visible,
-    // Realm-bound link so the authenticated app/session stays mounted.
-    const membersNav = this.page
-      .locator(`a[href="/realms/${realmId}/members"]:visible`)
-      .first();
-    if (!(await membersNav.isVisible({ timeout: 15_000 }).catch(() => false))) {
-      // Realm creation updates projections and the responsive context bar
-      // asynchronously. Stay inside the mounted application: select the Realm
-      // from the sidebar, then wait for its context navigation to appear.
-      const realmNav = this.page
-        .locator(`a[href="/realms/${realmId}"]:visible`)
-        .first();
-      await expect(realmNav).toBeVisible({ timeout: 60_000 });
-      await realmNav.click();
-      if (
-        !(await membersNav.isVisible({ timeout: 5_000 }).catch(() => false))
-      ) {
-        // Narrow viewports collapse Realm destinations into the context menu;
-        // its links are mounted only while the menu is open.
-        const contextMenu = this.page.getByTestId("realm-context-menu-button");
-        await expect(contextMenu).toBeVisible({ timeout: 30_000 });
-        await contextMenu.click();
-      }
-      await expect(membersNav).toBeVisible({ timeout: 30_000 });
-    }
-    await membersNav.click();
-    const members = this.page.getByTestId("realm-members-panel");
+    // Members is a supported Realm route. Keep the authenticated app mounted
+    // through the existing native history navigation instead of relying on a
+    // responsive context-menu link that is removed when its menu closes.
+    const membersPath = `/realms/${realmId}/members`;
+    await this.navigateWithinApp(membersPath);
+    await expect
+      .poll(() => decodeURIComponent(new URL(this.page.url()).pathname), { timeout: 30_000 })
+      .toBe(membersPath);
+    const members = this.page.locator(".realm-members-panel");
     await expect(members).toBeVisible({ timeout: 120_000 });
-    await members.getByTestId("open-invite-modal-button").click();
-    const invite = this.page.getByTestId("invite-member-modal");
+    await members.locator(".open-invite-modal-button").click();
+    const invite = this.page.locator(".invite-member-modal");
     await expect(invite).toBeVisible({ timeout: 30_000 });
-    await invite.getByTestId("invite-target-input").fill(targetInput);
-    await invite.getByTestId("send-invite-button").click();
-    const status = members.getByTestId("realm-members-status");
+    await invite.locator(".invite-target-input :is(input,textarea)").fill(targetInput);
+    await invite.locator(".send-invite-button").click();
+    const status = members.locator(":scope > .write-status");
     const displayLabel = expectedDisplayLabel ?? targetId;
     const expected =
       expectStatus ??
@@ -1298,10 +1272,10 @@ export class JointUserPage {
     // backdrop intercepts the refresh click and the helper times out without
     // ever exercising invite acceptance.
     await this.dismissPassiveBlockingPrompts();
-    const refresh = this.page.getByTestId("refresh-notifications");
+    const refresh = this.page.locator(".refresh-notifications");
     const inviteItem = this.page
-      .getByTestId("notification-item")
-      .filter({ has: this.page.locator(`[title="${realmId}"]`) })
+      .getByRole("group", { name: realmId, exact: true })
+      .and(this.page.locator(".notification-item"))
       .filter({ hasText: /Realm invite|You were invited/i });
 
     await expect
@@ -1316,15 +1290,15 @@ export class JointUserPage {
       )
       .toBeGreaterThan(0);
 
-    const accept = inviteItem.first().getByTestId("notification-action");
+    const accept = inviteItem.first().locator(".notification-action");
     await expect(accept).toBeVisible({ timeout: 30_000 });
     await accept.click();
-    await expect(this.page.getByTestId("notifications-status")).toContainText(
+    await expect(this.page.locator(".notifications-status")).toContainText(
       /Joined Realm/,
       { timeout: 90_000 },
     );
     await expect(
-      this.page.getByTestId("notifications-status"),
+      this.page.locator(".notifications-status"),
     ).not.toContainText(/Governance verification pending/, { timeout: 1_000 });
   }
 
@@ -1334,12 +1308,12 @@ export class JointUserPage {
       await this.gotoTimelineRealm(realmId);
     }
     await this.dismissPassiveBlockingPrompts();
-    await this.page.getByTestId("chat-input").fill(body);
+    await this.page.locator(".chat-input").fill(body);
     // A restored history can render before the verified current cut opens the
     // send gate. Wait for the actual gate, then retain the ordinary click.
-    await expect(this.page.getByTestId("send-chat-button")).toBeEnabled({ timeout: 90_000 });
+    await expect(this.page.locator(".send-chat-button")).toBeEnabled({ timeout: 90_000 });
     await this.clickWithPassivePromptRetry(
-      this.page.getByTestId("send-chat-button"),
+      this.page.locator(".send-chat-button"),
     );
     await this.waitForTimelineEventSettled(body);
   }
@@ -1356,7 +1330,7 @@ export class JointUserPage {
     if (!this.page.url().includes(`/chat/${realmId}`)) {
       await this.gotoTimelineRealm(realmId);
     }
-    const input = this.page.getByTestId("chat-input");
+    const input = this.page.locator(".chat-input");
     await input.fill("");
     await this.page.getByTestId("mention-trigger-button").click();
     const escapeAttr = (value: string) =>
@@ -1369,9 +1343,9 @@ export class JointUserPage {
     const prefix = (await input.inputValue()).trimEnd();
     const body = `${prefix} ${suffix.trim()}`.trim();
     await input.fill(body);
-    await expect(this.page.getByTestId("send-chat-button")).toBeEnabled({ timeout: 90_000 });
+    await expect(this.page.locator(".send-chat-button")).toBeEnabled({ timeout: 90_000 });
     await this.clickWithPassivePromptRetry(
-      this.page.getByTestId("send-chat-button"),
+      this.page.locator(".send-chat-button"),
     );
     await this.waitForTimelineEventSettled(body);
     return body;
@@ -1383,7 +1357,7 @@ export class JointUserPage {
       await this.gotoTimelineRealm(realmId);
     }
     await this.dismissPassiveBlockingPrompts();
-    const events = this.page.getByTestId("chat-message");
+    const events = this.page.locator(".chat-message");
     const count = await events.count();
     const out: string[] = [];
     for (let i = 0; i < count; i += 1) {
@@ -1394,7 +1368,7 @@ export class JointUserPage {
 
   timelineEvent(body: string): Locator {
     return this.page
-      .getByTestId("chat-message")
+      .locator(".chat-message")
       .filter({ hasText: body })
       .first();
   }
@@ -1402,18 +1376,18 @@ export class JointUserPage {
   async waitForTimelineEventSettled(body: string, timeout = 90_000) {
     const event = this.timelineEvent(body);
     await expect(event).toBeVisible({ timeout });
-    const pending = event.getByTestId("message-send-status");
+    const pending = event.locator(".message-send-status");
     const initialTimeout = Math.min(timeout, 15_000);
     const settledWithoutReload = await expect(pending)
       .toHaveCount(0, { timeout: initialTimeout })
       .then(() => true)
       .catch(() => false);
-    const acceptedEventId = /^chat-msg-ak:event:[A-Za-z0-9_-]+$/;
-    const acceptedWithoutReload = settledWithoutReload && acceptedEventId.test(
-      (await event.getAttribute("id")) ?? "",
+    const canonicalMessageClass = /(?:^|\s)is-canonical-message(?:\s|$)/;
+    const acceptedWithoutReload = settledWithoutReload && canonicalMessageClass.test(
+      (await event.getAttribute("class")) ?? "",
     );
     if (acceptedWithoutReload) {
-      await expect(event.getByTestId("chat-message-error")).toHaveCount(0);
+      await expect(event.locator(".chat-message-error")).toHaveCount(0);
       return;
     }
 
@@ -1425,12 +1399,12 @@ export class JointUserPage {
     const remainingTimeout = Math.max(5_000, timeout - initialTimeout);
     await this.page.reload({ waitUntil: "domcontentloaded" });
     await this.dismissPassiveBlockingPrompts();
-    await expect(this.page.getByTestId("chat-panel")).toBeVisible({
+    await expect(this.page.locator(".chat-panel")).toBeVisible({
       timeout: Math.min(remainingTimeout, 60_000),
     });
     await expect(event).toBeVisible({ timeout: remainingTimeout });
-    await expect(event).toHaveAttribute("id", acceptedEventId, { timeout: remainingTimeout });
-    await expect(event.getByTestId("chat-message-error")).toHaveCount(0);
+    await expect(event).toHaveClass(canonicalMessageClass, { timeout: remainingTimeout });
+    await expect(event.locator(".chat-message-error")).toHaveCount(0);
     await expect(pending).toHaveCount(0, {
       timeout: remainingTimeout,
     });
@@ -1469,10 +1443,20 @@ export class JointUserPage {
     await this.withPassivePromptRetry(async () => {
       await event.scrollIntoViewIfNeeded({ timeout: 5_000 });
       await event.hover({ timeout: 5_000 });
-      const menuButton = event.getByTestId("chat-message-menu-button");
+      const menuButton = event.locator("button.chat-action-menu-trigger");
       await expect(menuButton).toBeVisible({ timeout: 5_000 });
       await menuButton.click({ timeout: 5_000 });
-      const action = event.getByTestId(testId);
+      const menuId = await menuButton.getAttribute("aria-controls");
+      if (!menuId) throw new Error("message action trigger omitted its real menu relationship");
+      const actionSelectors: Record<string, string> = {
+        "message-context-reply-button": ".message-context-reply-button",
+        "message-context-edit-button": ".message-context-edit-button",
+        "message-context-redact-button": ".message-context-redact-button",
+      };
+      const selector = actionSelectors[testId];
+      if (!selector) throw new Error("unknown selected timeline action");
+      const menu = this.page.locator(`[role="menu"][id=${JSON.stringify(menuId)}]`);
+      const action = menu.locator(selector);
       await expect(action).toBeVisible({ timeout: 5_000 });
       await action.click({ timeout: 5_000 });
     });
@@ -1967,6 +1951,97 @@ export async function openDpopUserPage(
     await allowExplicitInviteNotifications(request, session, opts.server);
   }
   return openDpopUserPageFromSession(browser, session, opts);
+}
+
+// Establish browser-owned keys and custody through the production UI. Unlike
+// accepted-device fixtures, this needs no test-only WASM session injection.
+export async function openRegisteredUserPage(
+  browser: Browser,
+  request: APIRequestContext,
+  prefix: string,
+): Promise<{ user: JointUser; page: JointUserPage }> {
+  if (!coauthBaseUrl()) throw new Error("UI registration requires Coauth");
+  const user = uniqueUser(prefix.slice(0, 20));
+  const joint = await openUserPage(browser, user, {
+    neutralLoginConfig: true,
+    keepDeviceAuthorizationModal: true,
+    autoCompleteRecoveryKeySetup: false,
+  });
+  const page = joint.page;
+  page.setDefaultTimeout(30_000);
+  page.setDefaultNavigationTimeout(60_000);
+  const email = `ui-${randomUUID()}@example.test`;
+  try {
+    await page.goto("/register");
+    await page.getByLabel("Station", { exact: true }).fill(colandBaseUrl());
+    await page.locator(".registration-panel").getByRole("button", { name: "Continue", exact: true }).click();
+    await page.getByLabel("Username", { exact: true }).fill(user.name);
+    await page.getByLabel("Email address", { exact: true }).fill(email);
+    await page.getByLabel("New password", { exact: true }).fill("1amTester!");
+    await page.getByLabel("Confirm password", { exact: true }).fill("1amTester!");
+    await page.getByRole("button", { name: /^create account$/i }).click();
+    const codeInput = page.getByLabel("Verification code", { exact: true });
+    const registrationError = page.getByRole("alert");
+    await expect(codeInput.or(registrationError)).toBeVisible({ timeout: 60_000 });
+    await expect(registrationError).toHaveCount(0);
+    await expect(codeInput).toBeVisible({ timeout: 60_000 });
+    const code = await registrationEmailCode(request, email);
+    await expect.poll(async () => {
+      if (!(await codeInput.isVisible())) return true;
+      await codeInput.fill(code);
+      await page.getByRole("button", { name: /^verify$/i }).click();
+      return !(await codeInput.isVisible());
+    }, { timeout: 60_000, intervals: [500] }).toBe(true);
+    await page.getByLabel(/^display name$/i).fill(user.displayName);
+    await page.getByRole("button", { name: /^continue$/i }).click();
+    const finish = page.getByRole("button", { name: /^create account$/i });
+    const approve = page.locator(".login-container").getByRole("button", { name: "Allow", exact: true });
+    const choose = page.locator(".identity-choice-card").getByRole("button", { name: "Continue", exact: true });
+    await expect(finish.or(approve).or(choose)).toBeVisible({ timeout: 60_000 });
+    if (await finish.isVisible()) await finish.click();
+    await expect(approve.or(choose)).toBeVisible({ timeout: 60_000 });
+    if (await approve.isVisible()) await approve.click();
+    await choose.click({ timeout: 90_000 });
+    const words = page.locator(".onboarding-recovery-key-display .rk-word");
+    await expect(words).toHaveCount(24);
+    const recoveryKey = (await words.allTextContents()).map(word => word.trim()).join(" ");
+    const downloaded = page.waitForEvent("download");
+    await page.locator(".onboarding-panel").getByRole("button", { name: "Download .txt", exact: true }).click();
+    await (await downloaded).path();
+    await page.getByLabel("Re-enter the 24 words", { exact: true }).fill(recoveryKey);
+    const registration = page.waitForResponse(response =>
+      new URL(response.url()).pathname.endsWith("/_arkret/gate/account/register")
+      && response.request().method() === "POST", { timeout: 120_000 });
+    await page.locator(".onboarding-panel").getByRole("button", { name: "Save and continue", exact: true }).click();
+    const accepted = await registration;
+    expect(accepted.status(), "browser-owned identity registration is accepted").toBe(200);
+    const outcome = await accepted.json();
+    expect(outcome.principal_id).toMatch(/^ak:did_core:/);
+    expect(outcome.issued_session?.device_id).toMatch(/^ak:device:/);
+    user.id = outcome.principal_id;
+    user.deviceId = outcome.issued_session.device_id;
+    const resolutionUrl = new URL(`${colandBaseUrl()}/_arkret/open/principals/${encodeURIComponent(user.id)}/resolution`);
+    resolutionUrl.searchParams.set("station_id", colandServiceId());
+    const resolutionResponse = await request.get(resolutionUrl.toString());
+    expect(resolutionResponse.status()).toBe(200);
+    const resolution = await resolutionResponse.json() as PublicPrincipalResolution;
+    expect(resolution.account_id).toEqual(outcome.issued_session.account_id);
+    user.did = resolution.resolution_projection.did;
+    const completedOnboarding = page.locator(".onboarding-card").filter({
+      has: page.getByRole("heading", { name: /^(?:You're all set|Identity ready)$/, exact: true }),
+    });
+    await expect(completedOnboarding).toBeVisible({ timeout: 120_000 });
+    await completedOnboarding.getByRole("button", { name: "Continue", exact: true }).click();
+    await expect(page.locator("html[data-inkson-app-shell] .shell.app")).toBeVisible({ timeout: 90_000 });
+    // The restored shell can precede connect and signer activation. A fresh
+    // account's first accepted stream cursor proves that bootstrap has ended.
+    await expect(page.locator(".connection-status .status-label")).toHaveText("Online", { timeout: 90_000 });
+    await expect(page.locator(".connection-status .sync-cursor")).toContainText("ak:cursor:", { timeout: 90_000 });
+    return { user, page: joint };
+  } catch (error) {
+    await joint.close();
+    throw error;
+  }
 }
 
 export async function openDpopUserPageForAccount(
@@ -2916,7 +2991,7 @@ function escapeRegex(value: string): string {
 }
 
 async function dismissDeviceAuthorizationPrompt(page: Page) {
-  const dismiss = page.getByTestId("device-authorization-dismiss").last();
+  const dismiss = page.getByRole("dialog", { name: "Authorize this device", exact: true }).getByRole("button", { name: "Continue with limited access", exact: true });
   if (await dismiss.isVisible({ timeout: 100 }).catch(() => false)) {
     await dismiss.click();
   }

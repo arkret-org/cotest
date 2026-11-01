@@ -418,18 +418,18 @@ async function buildEncryptedBoardListCard(
     expect(milliseconds > 0, "the original Kanban readiness deadline expired").toBe(true);
     return milliseconds;
   };
-  await expect(page.getByTestId("kanban-panel")).toBeVisible({ timeout: remaining() });
+  await expect(page.locator(".kanban-panel")).toBeVisible({ timeout: remaining() });
   if (creatorRecoveryProof) {
     await waitForOriginalCreatorReady(page, realmId, creatorRecoveryProof, remaining);
-    await page.getByTestId("new-board-toggle").click({ timeout: remaining() });
-    await page.getByTestId("new-board-title-input").fill(boardTitle, { timeout: remaining() });
-    await expect(page.getByTestId("create-board-space-button")).toBeEnabled({ timeout: remaining() });
+    await page.locator(".new-board-toggle").click({ timeout: remaining() });
+    await page.locator(".new-board-title-input :is(input,textarea)").fill(boardTitle, { timeout: remaining() });
+    await expect(page.locator(".create-board-space-button")).toBeEnabled({ timeout: remaining() });
   } else {
-    await page.getByTestId("new-board-toggle").click();
-    await page.getByTestId("new-board-title-input").fill(boardTitle);
+    await page.locator(".new-board-toggle").click();
+    await page.locator(".new-board-title-input :is(input,textarea)").fill(boardTitle);
   }
-  await page.getByTestId("create-board-space-button").click();
-  await expect(page.getByTestId("kanban-empty-board")).toContainText(
+  await page.locator(".create-board-space-button").click();
+  await expect(page.locator(".kanban-empty-board")).toContainText(
     /No lists yet/,
     {
       timeout: 45_000,
@@ -443,25 +443,25 @@ async function buildEncryptedBoardListCard(
   );
   expect(boardId, `board id from url ${page.url()}`).toMatch(/^ak:space:/);
 
-  await page.getByTestId("new-column-input").fill(listTitle);
-  await page.getByTestId("add-column-button").click();
+  await page.locator("input.new-column-input").fill(listTitle);
+  await page.locator(".add-column-button").click();
   const column = page
-    .getByTestId("kanban-column")
+    .locator(".kanban-column")
     .filter({ hasText: listTitle })
     .first();
   await expect(column).toBeVisible({ timeout: 45_000 });
   if (!createCard) return boardId;
-  await column.getByTestId("add-card-button").click();
-  await column.getByTestId("new-card-title-input").fill(cardTitle);
-  await column.getByTestId("save-card-button").click();
+  await column.locator(".add-card-button").click();
+  await column.locator(".new-card-title-input").fill(cardTitle);
+  await column.locator(".save-card-button").click();
   const resumed = await afterCardSubmitted?.();
   if (resumed) page = resumed;
-  const createdCard = page.getByTestId("kanban-column").filter({ hasText: listTitle }).first()
-    .getByTestId("kanban-card").filter({ hasText: cardTitle });
+  const createdCard = page.locator(".kanban-column").filter({ hasText: listTitle }).first()
+    .locator(".kanban-card").filter({ hasText: cardTitle });
   await expect(createdCard).toBeVisible({ timeout: 45_000 });
   // A visible optimistic draft does not yet name an accepted Strand. Editing
   // its private tracks requires the confirmed object identity.
-  await expect(createdCard).toHaveAttribute("data-card-draft", "false", {
+  await expect(createdCard).not.toHaveClass(/(?:^|\s)is-draft(?:\s|$)/, {
     timeout: 120_000,
   });
   return boardId;
@@ -476,11 +476,11 @@ async function addEncryptedDescription(
   description: string,
 ): Promise<void> {
   await page
-    .getByTestId("kanban-card")
+    .locator(".kanban-card")
     .filter({ hasText: cardTitle })
     .first()
     .click();
-  await expect(page.getByTestId("card-detail-modal")).toBeVisible({
+  await expect(page.locator(".card-detail-modal")).toBeVisible({
     timeout: 45_000,
   });
   await expect
@@ -490,22 +490,12 @@ async function addEncryptedDescription(
     new URL(page.url()).pathname.split("/task/")[1]?.split("/")[0] ?? "",
   );
   expect(taskId, `card detail route for ${cardTitle}`).toMatch(/^ak:strand:/);
-  await page.getByTestId("card-detail-tab-description").click();
-  await page.getByTestId("card-detail-edit-description-button").click();
+  await page.locator(".card-detail-tab-description").click();
+  await page.locator(".card-detail-edit-description-button").click();
 
-  const editor = page.getByTestId("card-detail-description-input");
+  const editor = page.locator(".card-detail-edit-form").getByRole("textbox", { name: "Description", exact: true });
   await expect(editor).toBeAttached({ timeout: 45_000 });
-  await editor.evaluate((node, value) => {
-    const textarea = node as HTMLTextAreaElement;
-    textarea.value = value;
-    textarea.dispatchEvent(
-      new InputEvent("input", {
-        bubbles: true,
-        inputType: "insertText",
-        data: value,
-      }),
-    );
-  }, description);
+  await editor.fill(description);
 
   const responseDeadline = Date.now() + 120_000;
   let response: Awaited<ReturnType<Page["waitForResponse"]>> | undefined;
@@ -518,7 +508,7 @@ async function addEncryptedDescription(
       (candidate.request().postData() ?? "").includes("ak.strand.update"),
     { timeout: 120_000 },
   ).catch(() => undefined);
-  const save = page.getByTestId("card-detail-save-button");
+  const save = page.locator(".card-detail-save-button");
   let ingressObserved = false;
   let preAuthoringRetries = 0;
   const captureRequest = (request: import("@playwright/test").Request) => {
@@ -536,7 +526,7 @@ async function addEncryptedDescription(
 
       const status =
         (
-          await page.getByTestId("card-detail-edit-status").textContent()
+          await page.locator(".card-detail-edit-status").textContent()
         )?.trim() ?? "";
       expect(
         status,
@@ -598,14 +588,14 @@ async function addEncryptedDescription(
     "description leaked as plaintext into the ak.strand.update wire — realm not actually encrypted",
   ).toBe(false);
 
-  await expect(page.getByTestId("card-description-panel")).toContainText(
+  await expect(page.locator(".card-description-panel")).toContainText(
     description,
     {
       timeout: 120_000,
     },
   );
   // Close the modal so the invitee-side assertions start from the board.
-  await page.getByTestId("card-detail-close-button").click();
+  await page.locator(".card-detail-close-button").click();
 }
 
 // Open the target card as the reader and PROVE decryption: the private body is
@@ -616,7 +606,7 @@ async function assertCardDecrypts(
   expectedDescription: string,
 ): Promise<void> {
   const card = reader.page
-    .getByTestId("kanban-card")
+    .locator(".kanban-card")
     .filter({ hasText: cardTitle })
     .first();
   await expect(
@@ -629,13 +619,13 @@ async function assertCardDecrypts(
   // placeholder that a decrypt/hydration failure renders.
   await expect(
     reader.page
-      .getByTestId("kanban-card-redacted")
+      .locator(".board-card-redacted")
       .filter({ hasText: cardTitle }),
   ).toHaveCount(0);
 
   // The recovery/backup nag modal can re-pop and its backdrop intercepts the
   // card click; dismiss it then open the card, retrying past a late modal.
-  const detailModal = reader.page.getByTestId("card-detail-modal");
+  const detailModal = reader.page.locator(".card-detail-modal");
   await expect
     .poll(
       async () => {
@@ -652,18 +642,18 @@ async function assertCardDecrypts(
     )
     .toBe(true);
   await dismissRecoveryNags(reader);
-  await reader.page.getByTestId("card-detail-tab-description").click();
+  await reader.page.locator(".card-detail-tab-description").click();
 
   // The decryption proof: the private body renders in plaintext...
-  await expect(reader.page.getByTestId("card-description-panel")).toContainText(
+  await expect(reader.page.locator(".card-description-panel")).toContainText(
     expectedDescription,
     { timeout: 120_000 },
   );
   // ...and the "locked / cannot decrypt" affordance is NOT shown.
-  await expect(reader.page.getByTestId("card-detail-body-locked")).toHaveCount(
+  await expect(reader.page.locator(".card-detail-description-locked")).toHaveCount(
     0,
   );
-  await reader.page.getByTestId("card-detail-close-button").click();
+  await reader.page.locator(".card-detail-close-button").click();
 }
 
 // A member who has not set up encrypted-history recovery (every invitee, and
@@ -677,12 +667,13 @@ async function dismissRecoveryNags(reader: JointUserPage): Promise<void> {
   // NO dismiss affordance — it must be COMPLETED (save the generated key + confirm
   // it back). An invitee hits it the moment they touch encrypted content.
   await reader.completeRecoveryKeySetupIfPrompted(500).catch(() => undefined);
-  for (const testId of [
-    "mls-backup-dismiss",
-    "mls-recovery-missing-dismiss",
-    "mls-unlock-dismiss",
-  ]) {
-    const btn = page.getByTestId(testId).last();
+  for (const [dialogName, buttonName] of [
+    ["Back up encrypted history", "Remind me later"],
+    ["This device does not have the encryption key yet", "Dismiss"],
+    ["Restore encryption keys", "Close"],
+  ] as const) {
+    const btn = page.getByRole("dialog", { name: dialogName, exact: true })
+      .getByRole("button", { name: buttonName, exact: true });
     if (await btn.isVisible({ timeout: 300 }).catch(() => false)) {
       await btn.click({ timeout: 3_000 }).catch(() => {});
     }
@@ -702,7 +693,7 @@ async function readyReaderBoard(
   boardId: string,
 ): Promise<void> {
   const page = reader.page;
-  await expect(page.getByTestId("kanban-panel")).toBeVisible({
+  await expect(page.locator(".kanban-panel")).toBeVisible({
     timeout: 120_000,
   });
   // Clear the recovery/backup nags whose modal backdrop blocks board interaction
@@ -717,28 +708,23 @@ async function readyReaderBoard(
   // projection is the actual thing under test), so a hiccup opening the dxc
   // Select here is NOT fatal — assertCardDecrypts (a 90s poll for the decrypted
   // card) is the real gate.
-  const selectScope = page.getByTestId("board-space-select");
-  const trigger = selectScope
-    .locator('button[aria-haspopup="listbox"]')
-    .first();
-  const quoted = boardId.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
-  const option = selectScope.locator(`[role="option"][data-value="${quoted}"]`);
+  const selectScope = page.locator(".board-space-selector");
+  const trigger = selectScope.locator("button.board-space-select-button").first();
+  const option = page.locator("button.board-select-menu-item.is-active");
   for (let attempt = 0; attempt < 4; attempt += 1) {
     await dismissRecoveryNags(reader);
-    if (
-      (await trigger.getAttribute("aria-expanded").catch(() => null)) !== "true"
-    ) {
+    if (!(await option.isVisible().catch(() => false))) {
       await trigger.click({ force: true, timeout: 3_000 }).catch(() => {});
     }
     if (await option.isVisible({ timeout: 1_500 }).catch(() => false)) {
+      expect(decodeURIComponent(new URL(page.url()).pathname).split("/board/")[1]?.split("/")[0]).toBe(boardId);
       await option.click({ force: true }).catch(() => {});
       break;
     }
   }
-  if (
-    (await trigger.getAttribute("aria-expanded").catch(() => null)) === "true"
-  ) {
-    await trigger.press("Escape").catch(() => {});
+  const scrim = page.locator("button.board-popover-scrim");
+  if (await scrim.isVisible().catch(() => false)) {
+    await scrim.click().catch(() => {});
   }
 }
 
@@ -1179,10 +1165,10 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
           // Space titles are encrypted metadata too. A losing private group
           // cannot author even a Board until lawful winner material is acquired.
           const assertBoardCreateBlocked = async () => {
-            await expect(creator.page.getByTestId("kanban-panel")).toBeVisible({ timeout: 60_000 });
-            await creator.page.getByTestId("new-board-toggle").click();
-            await creator.page.getByTestId("new-board-title-input").fill(boardTitle);
-            await expect(creator.page.getByTestId("create-board-space-button")).toBeDisabled();
+            await expect(creator.page.locator(".kanban-panel")).toBeVisible({ timeout: 60_000 });
+            await creator.page.locator(".new-board-toggle").click();
+            await creator.page.locator(".new-board-title-input :is(input,textarea)").fill(boardTitle);
+            await expect(creator.page.locator(".create-board-space-button")).toBeDisabled();
           };
           await creator.page.goto(`/kanban/${cutRealmId!}`, { waitUntil: "domcontentloaded" });
           await assertBoardCreateBlocked();
@@ -1507,7 +1493,7 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
         expect(terminal.ready_receipt).toBeUndefined();
         await expect(creator.page.getByTestId("creator-mls-quarantined").first()).toBeVisible({ timeout: 60_000 });
         await expect(creator.page.getByTestId("creator-mls-retry-button")).toHaveCount(0);
-        await expect(creator.page.getByTestId("kanban-column").filter({ hasText: listTitle }).first().getByTestId("add-card-button")).toBeDisabled();
+        await expect(creator.page.locator(".kanban-column").filter({ hasText: listTitle }).first().locator(".add-card-button")).toBeDisabled();
         const createCount = submittedCreateIds.size;
         await creator.page.reload({ waitUntil: "domcontentloaded" });
         await expect(creator.page.getByTestId("creator-mls-quarantined").first()).toBeVisible({ timeout: 60_000 });
@@ -1515,7 +1501,7 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
         expect(reopened.diagnostic).toEqual(terminal.diagnostic);
         expect(reopened.intent).toEqual(terminal.intent);
         expect(reopened.ready_index.filter((receipt: Record<string, any>) => receipt.effective_scope.realm_id === realmId)).toHaveLength(0);
-        await expect(creator.page.getByTestId("kanban-column").filter({ hasText: listTitle }).first().getByTestId("add-card-button")).toBeDisabled();
+        await expect(creator.page.locator(".kanban-column").filter({ hasText: listTitle }).first().locator(".add-card-button")).toBeDisabled();
         expect(submittedCreateIds.size).toBe(createCount);
         expect(submittedGenesisIds.size).toBe(genesisCount);
         await stepShot(creator.page, testInfo, "C-quarantined-original-survives-reload-with-closed-send-gate");
@@ -1639,13 +1625,13 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
           }, { timeout: 120_000 });
           const boardId = await buildEncryptedBoardListCard(alicePage.page, realmId,
             `Retained board ${stamp}`, `Retained list ${stamp}`, "unused", false);
-          await expect(alicePage.page.getByTestId("kanban-column").first()).toHaveAttribute("data-column-draft", "false");
+          await expect(alicePage.page.locator(".kanban-column").first()).toHaveAttribute("data-column-draft", "false");
           const response = await receipt;
           const event = response.request().postDataJSON().event as Record<string, unknown>;
           const outcome = await response.json();
           assertAuthoritySubmitOutcome(outcome, event, "pre-join retained Board");
           expect(retypeEventDerivedId(String(event.event_id), "space")).toBe(boardId);
-          const listId = await alicePage.page.getByTestId("kanban-column").first()
+          const listId = await alicePage.page.locator(".kanban-column").first()
             .getByTestId("list-archive-button").getAttribute("data-space-container-id");
           expect(listId).toMatch(/^ak:space:/);
           retainedBoard = { boardId, listId: listId!, eventId: String(event.event_id), streamPosition: Number(outcome.commit.stream_position) };
@@ -1807,7 +1793,7 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
           }
         }
         if (cardFault) {
-          await expect(alicePage.page.getByTestId("kanban-card").filter({ hasText: aliceCard })).toHaveCount(1);
+          await expect(alicePage.page.locator(".kanban-card").filter({ hasText: aliceCard })).toHaveCount(1);
           await testInfo.attach("card-placement-exact-originals.json", { contentType: "application/json", body: JSON.stringify(cardFault.assertOneCardAndPlacement()) });
         }
         await addEncryptedDescription(
@@ -1825,9 +1811,9 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
           await bobPage.completeMlsAccountRecoveryIfPrompted(bobSession.recoveryKey!);
           expect(retainedBoard).toBeTruthy();
           await openReaderBoard(bobPage, realmId, retainedBoard!.boardId);
-          await expect(bobPage.page.getByTestId("kanban-column")).toHaveCount(1);
-          await expect(bobPage.page.getByTestId("kanban-column").first()).toHaveAttribute("data-column-draft", "false");
-          await expect(bobPage.page.getByTestId("kanban-column").first().getByTestId("list-archive-button"))
+          await expect(bobPage.page.locator(".kanban-column")).toHaveCount(1);
+          await expect(bobPage.page.locator(".kanban-column").first()).toHaveAttribute("data-column-draft", "false");
+          await expect(bobPage.page.locator(".kanban-column").first().getByTestId("list-archive-button"))
             .toHaveAttribute("data-space-container-id", retainedBoard!.listId);
           await testInfo.attach("kanban-history-fresh-reader.json", { contentType: "application/json",
             body: JSON.stringify({ reader_closed_before_seed: true, fresh_context_after_card_commit: true,
@@ -1884,14 +1870,14 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
           await expect.poll(() => privateReadCuts, { timeout: 90_000 }).toBeGreaterThan(0);
           // The List structure is accepted, but its title is encrypted metadata
           // and must remain undisclosed while the private Welcome state is cut.
-          const committedList = bobPage.page.getByTestId("kanban-column");
+          const committedList = bobPage.page.locator(".kanban-column");
           await expect(committedList).toHaveCount(1, { timeout: 90_000 });
           await expect(committedList).toBeVisible({ timeout: 90_000 });
           await expect(committedList).toHaveAttribute("data-column-draft", "false");
           await expect(committedList).not.toContainText(listTitle);
-          await expect(bobPage.page.getByTestId("kanban-panel")).not.toContainText(boardTitle);
-          await expect(bobPage.page.getByTestId("kanban-panel")).not.toContainText(aliceCard);
-          await expect(committedList.getByTestId("add-card-button")).toBeDisabled();
+          await expect(bobPage.page.locator(".kanban-panel")).not.toContainText(boardTitle);
+          await expect(bobPage.page.locator(".kanban-panel")).not.toContainText(aliceCard);
+          await expect(committedList.locator(".add-card-button")).toBeDisabled();
           await openPendingTimeline(bobPage, realmId);
           await expect(bobPage.page.getByTestId("chat-panel")).toHaveAttribute("data-initial-sync", "pending");
           holdPrivateState = false;
@@ -1921,28 +1907,28 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
           const location = `Private community entrance ${stamp}`;
           const openCalendar = async (reader: JointUserPage) => {
             await dismissRecoveryNags(reader);
-            await reader.page.getByTestId("kanban-card").filter({hasText: aliceCard}).first().click();
-            const detail = reader.page.getByTestId("card-detail-modal");
+            await reader.page.locator(".kanban-card").filter({hasText: aliceCard}).first().click();
+            const detail = reader.page.locator(".card-detail-modal");
             await expect(detail).toBeVisible();
-            return detail.getByTestId("card-detail-calendar");
+            return detail.locator(".card-detail-calendar");
           };
           await openReaderBoard(alicePage, realmId, boardId);
           await assertCardDecrypts(alicePage, aliceCard, aliceDescription);
           const creatorCalendar = await openCalendar(alicePage);
-          await creatorCalendar.getByTestId("card-detail-edit-calendar-button").click();
-          const editor = alicePage.page.getByTestId("card-detail-calendar-editor-dialog");
+          await creatorCalendar.locator("button.card-detail-calendar-edit").click();
+          const editor = alicePage.page.locator(".card-detail-calendar-editor-dialog");
           await expect(editor).toBeVisible();
-          await editor.getByTestId("card-detail-calendar-start-input").fill("2026-10-31T13:20:00");
-          await editor.getByTestId("card-detail-calendar-end-input").fill("2026-10-31T16:30:00");
-          await editor.getByTestId("card-detail-calendar-timezone-input").fill("Asia/Shanghai");
-          await editor.getByTestId("card-detail-calendar-location-input").fill(location);
+          await editor.locator(".card-detail-calendar-start-input input").fill("2026-10-31T13:20:00");
+          await editor.locator(".card-detail-calendar-end-input input").fill("2026-10-31T16:30:00");
+          await editor.locator(".card-detail-calendar-timezone-input input").fill("Asia/Shanghai");
+          await editor.locator(".card-detail-calendar-location-input input").fill(location);
           const write = alicePage.page.waitForResponse(response => {
             if (response.request().method() !== "POST" ||
                 new URL(response.url()).pathname !== "/_arkret/self/events") return false;
             const event = response.request().postDataJSON()?.event;
             return event?.realm_id === realmId && event?.kind === "ak.strand.update";
           }, {timeout: 120_000});
-          await editor.getByTestId("card-detail-save-button").click();
+          await editor.locator(".card-detail-save-button").click();
           const response = await write;
           expect(response.status(), await response.text()).toBeLessThan(400);
           expect(response.request().postData()).not.toContain(location);
@@ -1957,8 +1943,8 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
           await assertE2eeStorageIsHardened(bobPage.page, [aliceDescription, location]);
           expect(bobPrejoinOriginalReads).toBe(0);
           await stepShot(bobPage.page, testInfo, "C-member-decrypted-calendar-location-after-reload");
-          await bobPage.page.getByTestId("card-detail-close-button").click();
-          await alicePage.page.getByTestId("card-detail-close-button").click();
+          await bobPage.page.locator(".card-detail-close-button").click();
+          await alicePage.page.locator(".card-detail-close-button").click();
         }
 
         if (fault === "late-transition-tail") {
@@ -2021,30 +2007,30 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
         // 6) Reverse direction: bob adds his own card; it must project back to
         //    alice (the admission fork historically broke BOTH directions).
         const bobColumn = bobPage.page
-          .getByTestId("kanban-column")
+          .locator(".kanban-column")
           .filter({ hasText: listTitle })
           .first();
-        await bobColumn.getByTestId("add-card-button").click();
-        await bobColumn.getByTestId("new-card-title-input").fill(bobCard);
-        await bobColumn.getByTestId("save-card-button").click();
+        await bobColumn.locator(".add-card-button").click();
+        await bobColumn.locator(".new-card-title-input").fill(bobCard);
+        await bobColumn.locator(".save-card-button").click();
         await expect(
-          bobColumn.getByTestId("kanban-card").filter({ hasText: bobCard }),
+          bobColumn.locator(".kanban-card").filter({ hasText: bobCard }),
         ).toBeVisible({
           timeout: 45_000,
         });
         await expect(
-          bobColumn.getByTestId("kanban-card").filter({ hasText: bobCard }),
-        ).toHaveAttribute("data-card-draft", "false", { timeout: 120_000 });
+          bobColumn.locator(".kanban-card").filter({ hasText: bobCard }),
+        ).not.toHaveClass(/(?:^|\s)is-draft(?:\s|$)/, { timeout: 120_000 });
         await addEncryptedDescription(bobPage.page, bobCard, bobDescription);
 
         await openReaderBoard(alicePage, realmId, boardId);
         await expect(
-          alicePage.page.getByTestId("kanban-card").filter({ hasText: bobCard }),
+          alicePage.page.locator(".kanban-card").filter({ hasText: bobCard }),
           "bob's card must project back to alice (reverse cross-member sync)",
         ).toBeVisible({ timeout: 90_000 });
         await expect(
           alicePage.page
-            .getByTestId("kanban-card-redacted")
+            .locator(".board-card-redacted")
             .filter({ hasText: bobCard }),
         ).toHaveCount(0);
         await assertCardDecrypts(alicePage, bobCard, bobDescription);
@@ -2101,9 +2087,9 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
         if (fault === "member-leave" || fault === "member-revoke") {
           await openReaderBoard(bobPage, realmId, boardId);
           await assertCardDecrypts(bobPage, aliceCard, aliceDescription);
-          await bobPage.page.getByTestId("kanban-card").filter({ hasText: aliceCard }).first().click();
-          await bobPage.page.getByTestId("card-detail-tab-description").click();
-          await expect(bobPage.page.getByTestId("card-description-panel")).toContainText(aliceDescription);
+          await bobPage.page.locator(".kanban-card").filter({ hasText: aliceCard }).first().click();
+          await bobPage.page.locator(".card-detail-tab-description").click();
+          await expect(bobPage.page.locator(".card-description-panel")).toContainText(aliceDescription);
           const event = signedEventEnvelope({
             actorId: fault === "member-leave" ? bob.id : alice.id,
             realmId,
@@ -2120,7 +2106,7 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
           expect(typeof terminalCommit.commit_id).toBe("string");
           const assertClosed = async () => {
             await expect(bobPage!.page.getByText(aliceDescription, { exact: false })).toHaveCount(0, { timeout: 90_000 });
-            await expect(bobPage!.page.getByTestId("kanban-card").filter({ hasText: aliceCard })).toHaveCount(0);
+            await expect(bobPage!.page.locator(".kanban-card").filter({ hasText: aliceCard })).toHaveCount(0);
             await expect(bobPage!.page.locator('[data-testid="kanban-panel"] [data-testid="add-card-button"]:enabled')).toHaveCount(0);
           };
           await assertClosed();
@@ -2239,8 +2225,8 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
               index % 2 === 0 ? boardId : otherBoardId);
           }
           await selectDxcOption(alicePage.page.getByTestId("board-space-select"), boardId);
-          await expect(alicePage.page.getByTestId("kanban-card").filter({ hasText: aliceCard })).toBeVisible();
-          await expect(alicePage.page.getByTestId("kanban-card").filter({ hasText: otherCard })).toHaveCount(0);
+          await expect(alicePage.page.locator(".kanban-card").filter({ hasText: aliceCard })).toBeVisible();
+          await expect(alicePage.page.locator(".kanban-card").filter({ hasText: otherCard })).toHaveCount(0);
           await assertCardDecrypts(alicePage, aliceCard, aliceDescription);
           const switching = await cost.snapshot(switchingStart);
           expect(lists(switching)).toHaveLength(0);
@@ -2251,8 +2237,8 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
         }
         outboundFault?.assertExactReplay();
         if (cardFault) {
-          await expect(alicePage.page.getByTestId("kanban-card").filter({ hasText: aliceCard })).toHaveCount(1);
-          await expect(bobPage.page.getByTestId("kanban-card").filter({ hasText: aliceCard })).toHaveCount(1);
+          await expect(alicePage.page.locator(".kanban-card").filter({ hasText: aliceCard })).toHaveCount(1);
+          await expect(bobPage.page.locator(".kanban-card").filter({ hasText: aliceCard })).toHaveCount(1);
           await testInfo.attach("card-placement-final-originals.json", { contentType: "application/json", body: JSON.stringify(cardFault.assertOneCardAndPlacement()) });
         }
       } catch (error) {

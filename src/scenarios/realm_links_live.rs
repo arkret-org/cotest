@@ -18,7 +18,6 @@ use crate::scenarios::peer_semantic_union_live::{
     realm_business_footprint, submit_and_expect_commit,
 };
 
-const ALICE_DEVICE: &str = "ak:device:01904100-0000-7000-8000-000000003411";
 const BOB_DEVICE: &str = "ak:device:01904100-0000-7000-8000-000000003412";
 
 fn policy(
@@ -60,7 +59,9 @@ pub async fn run() -> Result<()> {
         .owned_database_url()
         .context("Realm links runner requires PostgreSQL")?
         .to_owned();
-    let alice = additional_controller(&deployment, "links-source-owner", ALICE_DEVICE).await?;
+    // The deployment's normally onboarded controller is the source owner;
+    // only Bob and Carol need additional accounts for these three actors.
+    let alice = deployment.controller.clone();
     let bob = additional_controller(&deployment, "links-target-owner", BOB_DEVICE).await?;
     let account = |client: &TestActorClient| -> Result<AccountId> {
         Ok(AccountId::new(
@@ -112,6 +113,20 @@ pub async fn run() -> Result<()> {
     let carol =
         additional_controller(&deployment, "links-unrelated-applicant", carol_device).await?;
     let carol_account = account(&carol)?;
+    ensure!(
+        alice_account == deployment.account
+            && alice_account != bob_account
+            && alice_account != carol_account
+            && bob_account != carol_account
+            && alice.device_id != bob.device_id
+            && alice.device_id != carol.device_id
+            && bob.device_id != carol.device_id
+            && [&alice, &bob, &carol].iter().all(|client| matches!(
+                client.session(),
+                crate::harness::ClientSession::Canonical { .. }
+            )),
+        "Realm links require three distinct normally onboarded Accounts and Devices"
+    );
     // B/D: a real source policy write cannot alter target policy, grants,
     // notification projections, quotas, Events or Commits.
     let source_before = realm_business_footprint(&database_url, &source).await?;
@@ -128,7 +143,7 @@ pub async fn run() -> Result<()> {
             serde_json::to_value(next)?,
         )
         .await?;
-    submit_and_expect_commit(&alice, &alice_account, ALICE_DEVICE, &change).await?;
+    submit_and_expect_commit(&alice, &alice_account, &alice.device_id, &change).await?;
     ensure!(
         realm_business_footprint(&database_url, &target).await? == target_before,
         "source policy cascaded across a link"
@@ -192,7 +207,7 @@ pub async fn run() -> Result<()> {
     // the source root grant never substitutes for either accepted target fact.
     let alice_join = alice.author_event(&target, EventKind::MemberState.as_str(), membership_payload(
         &target, alice_account.clone(), arkret_models_collaboration::governance::membership_invite::MembershipPayloadState::Join, "target local member")?).await?;
-    submit_and_expect_commit(&alice, &alice_account, ALICE_DEVICE, &alice_join).await?;
+    submit_and_expect_commit(&alice, &alice_account, &alice.device_id, &alice_join).await?;
     grant_realm_actions(&bob, station, &target, &alice_account, &["ak.realm.admin"]).await?;
     let local_update = alice
         .author_event(
@@ -201,7 +216,7 @@ pub async fn run() -> Result<()> {
             serde_json::to_value(target_policy.restate(target_policy.policy_revision + 1))?,
         )
         .await?;
-    submit_and_expect_commit(&alice, &alice_account, ALICE_DEVICE, &local_update).await?;
+    submit_and_expect_commit(&alice, &alice_account, &alice.device_id, &local_update).await?;
     target_before = realm_business_footprint(&database_url, &target).await?;
     // Old event kinds and old link payloads reach the HTTP schema boundary;
     // no fake Event kind is accepted by the production authoring API.

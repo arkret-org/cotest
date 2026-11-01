@@ -18,9 +18,9 @@ export async function submitCoauthPasswordCredentials(
   page: Page,
   account: RealOidcAccount,
 ): Promise<void> {
-  const loginHandle = page.locator("#login-handle");
-  const loginPassword = page.locator("#login-password");
-  const shell = page.getByTestId("client-shell");
+  const loginHandle = page.getByLabel("Username", { exact: true });
+  const loginPassword = page.getByLabel("Password", { exact: true });
+  const shell = page.locator("html[data-inkson-app-shell] .shell.app");
 
   await expect(loginHandle.or(loginPassword).or(shell)).toBeVisible({
     timeout: 60_000,
@@ -35,7 +35,7 @@ export async function submitCoauthPasswordCredentials(
     await loginHandle.click();
     await loginHandle.fill(identifier);
     await expect(loginHandle).toHaveValue(identifier, { timeout: 5_000 });
-    const next = page.getByTestId("coauth-login-identifier-submit");
+    const next = page.locator(".login-container").getByRole("button", { name: "Continue", exact: true });
     if (await next.isVisible()) {
       await next.click();
     }
@@ -47,7 +47,7 @@ export async function submitCoauthPasswordCredentials(
   }
 
   await loginPassword.fill(account.password);
-  await page.getByTestId("coauth-login-submit").click();
+  await page.locator(".login-container").getByRole("button", { name: "Sign in", exact: true }).click();
 }
 
 // Drive inkson's server-login button through coauth and back to the signed-in
@@ -58,12 +58,12 @@ export async function serverLoginViaCoauth(
   account: RealOidcAccount,
 ): Promise<void> {
   for (let attempt = 0; attempt < 2; attempt += 1) {
-    await page.getByTestId("login-server-url").fill(colandBaseUrl());
-    await page.getByTestId("start-server-login-button").click();
+    await page.getByLabel("Sign-in server URL", { exact: true }).fill(colandBaseUrl());
+    await page.locator(".auth-panel:not(.registration-panel)").getByRole("button", { name: "Sign in to this server", exact: true }).click();
 
     await submitCoauthPasswordCredentials(page, account);
 
-    const approve = page.getByTestId("coauth-oauth-approve");
+    const approve = page.locator(".login-container").getByRole("button", { name: "Allow", exact: true });
     const consentShown = await approve
       .waitFor({ state: "visible", timeout: 20_000 })
       .then(() => true)
@@ -72,13 +72,13 @@ export async function serverLoginViaCoauth(
       await approve.click();
     }
 
-    const shell = page.getByTestId("client-shell");
+    const shell = page.locator("html[data-inkson-app-shell] .shell.app");
     const authenticated = await expect(shell)
       .toBeVisible({ timeout: 60_000 })
       .then(() => true)
       .catch(() => false);
     if (authenticated) {
-      await expect(page.getByTestId("login-panel")).toHaveCount(0);
+      await expect(page.locator(".auth-panel:not(.registration-panel)")).toHaveCount(0);
       return;
     }
 
@@ -90,13 +90,13 @@ export async function serverLoginViaCoauth(
       await page.goto(`${new URL(page.url()).origin}/login`, {
         waitUntil: "domcontentloaded",
       });
-      await expect(page.getByTestId("login-panel")).toBeVisible({
+      await expect(page.locator(".auth-panel:not(.registration-panel)")).toBeVisible({
         timeout: 30_000,
       });
     }
   }
   const status = await page
-    .getByTestId("auth-status")
+    .locator(".auth-panel .auth-status")
     .textContent()
     .catch(() => null);
   // Read only the dedicated status element, never the page or recovery words.
@@ -112,12 +112,12 @@ export async function hardLogoutViaAccountMenu(
   jointPage: JointUserPage,
 ): Promise<void> {
   const page = jointPage.page;
-  await page.getByTestId("account-menu-button").click();
-  await page.getByTestId("account-menu-session-logout").click();
-  await expect(page.getByTestId("login-panel")).toBeVisible({
+  await page.getByRole("button", { name: "Account menu", exact: true }).click();
+  await page.locator(".account-menu").getByRole("button", { name: "Log out", exact: true }).click();
+  await expect(page.locator(".auth-panel:not(.registration-panel)")).toBeVisible({
     timeout: 60_000,
   });
-  await expect(page.getByTestId("client-shell")).toHaveCount(0);
+  await expect(page.locator("html[data-inkson-app-shell] .shell.app")).toHaveCount(0);
 }
 
 // A bound account's first browser session is already a returning-device flow.

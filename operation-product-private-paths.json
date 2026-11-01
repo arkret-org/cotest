@@ -180,6 +180,20 @@
   "negative_test_paths": [
     {
       "source": "cotest",
+      "source_file": "src/scenarios/invite_addressing_api/locators.rs",
+      "method": "POST",
+      "path": "/_arkret/open/invite-locators/resolve/{}",
+      "reason": "Exact locator-token-in-path negative probe: Spec127 permits the secret only in the JSON body; the test requires404/unrecognized_endpoint and then resolves the same issued token through the real registered body operation. No protocol operation or positive execution credit is declared."
+    },
+    {
+      "source": "cotest",
+      "source_file": "src/scenarios/security_rotation_live.rs",
+      "method": "POST",
+      "path": "/_arkret/self/keys/backup-series/erase",
+      "reason": "The exact retired erase probe requires 404/unrecognized_endpoint and an unchanged backup listing; erase_old_material belongs only to the durable transaction worker, with no public self HTTP binding."
+    },
+    {
+      "source": "cotest",
       "source_file": "src/scenarios/realm_links_live.rs",
       "method": "GET",
       "path": "/_arkret/self/realms/{target}/effective-policy",

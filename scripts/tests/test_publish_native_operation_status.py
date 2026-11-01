@@ -434,5 +434,162 @@ class NativeOperationStatusTests(unittest.TestCase):
         self.assertEqual(len(stages), len(set(stages)))
 
 
+    def compiler_fixture(self):
+        repo = self.root / "source-repository"
+        source = "src/compiler_observation.rs"
+        path = repo / source
+        path.parent.mkdir(parents=True, exist_ok=True)
+        raw = b"pub struct Example {\n    hidden: usize,\n}\n"
+        path.write_bytes(raw)
+        digest = hashlib.sha256(raw).hexdigest()
+        self.write("native-sources.json", {"cotest/" + source: digest})
+        self.write("native-result.json", {
+            "exit_code": 101, "sources_unchanged": True, "seconds": 1.0,
+            "log": "native.log", "source_fence": "native-sources.json",
+        })
+        return repo, source, digest
+
+    def compiler_log(self, source, *, header="error[E0308]: " + PRIVATE, suffix=""):
+        (self.run / "native.log").write_text(
+            header + "\n  --> " + source + ":2:5\n2 | " + PRIVATE + "\n" + suffix,
+            encoding="utf-8")
+
+    def tracked_result(self, source, *, mode="100644", stage="0", code=0):
+        output = (mode + " " + "a" * 40 + " " + stage + "\t" + source + "\0").encode()
+        return publisher.subprocess.CompletedProcess([], code, stdout=output)
+
+    def assert_no_compiler_credit(self, result):
+        self.assertEqual(result["status"], "failed")
+        self.assertFalse(result["export_complete"])
+        self.assertFalse(result["native_execution_complete"])
+        self.assertIsNone(result["coverage"])
+        self.assertIsNone(result["counts"])
+        self.assertTrue(all(row["status"] == "not_observed" for row in result["tests"] + result["meta_tests"]))
+
+    def test_compiler_observation_exports_only_closed_source_bound_fields(self):
+        repo, source, digest = self.compiler_fixture()
+        self.compiler_log(source)
+        with patch.object(publisher, "REPO", repo), patch.object(
+                publisher.subprocess, "run", return_value=self.tracked_result(source)) as tracked:
+            result = self.publish()
+        self.assert_no_compiler_credit(result)
+        self.assertEqual(result["compiler_diagnostics"], [{
+            "reason": "compiler_primary_location_observed", "underlying_cause": "unknown",
+            "code": "E0308", "lint": None, "source": source,
+            "line": 2, "column": 5, "source_sha256": digest,
+        }])
+        self.assertEqual(result["compiler_diagnostic_notes"], [])
+        args, options = tracked.call_args
+        self.assertEqual(args[0][-2:], ["--", source])
+        self.assertEqual(options["timeout"], 5)
+        self.assertEqual(options["stderr"], publisher.subprocess.DEVNULL)
+
+    def test_compiler_observation_ansi_dead_code_and_duplicate_locations(self):
+        repo, source, _ = self.compiler_fixture()
+        note = "  = note: `-D dead-code` implied by `-D warnings`\n"
+        self.compiler_log(source, header="\x1b[31merror\x1b[0m: " + PRIVATE, suffix=note)
+        original = (self.run / "native.log").read_bytes()
+        (self.run / "native.log").write_bytes(original + original)
+        with patch.object(publisher, "REPO", repo), patch.object(
+                publisher.subprocess, "run", return_value=self.tracked_result(source)):
+            result = self.publish()
+        self.assert_no_compiler_credit(result)
+        self.assertEqual(len(result["compiler_diagnostics"]), 1)
+        self.assertIsNone(result["compiler_diagnostics"][0]["code"])
+        self.assertEqual(result["compiler_diagnostics"][0]["lint"], "dead_code")
+
+    def test_compiler_observation_requires_unique_regular_stage_zero_tracking(self):
+        repo, source, _ = self.compiler_fixture()
+        self.compiler_log(source)
+        invalid = [self.tracked_result(source, mode="120000"), self.tracked_result(source, stage="1"),
+                   self.tracked_result(source, code=1), self.tracked_result("src/another.rs")]
+        duplicate = self.tracked_result(source)
+        duplicate.stdout *= 2
+        invalid.append(duplicate)
+        for index, response in enumerate(invalid):
+            with self.subTest(index=index), patch.object(publisher, "REPO", repo), patch.object(
+                    publisher.subprocess, "run", return_value=response):
+                result = self.publish(f"tracking-{index}")
+            self.assert_no_compiler_credit(result)
+            self.assertEqual(result["compiler_diagnostics"], [])
+            self.assertEqual(result["compiler_diagnostic_notes"], ["unavailable_native_compiler_observation"])
+
+    def test_untracked_compiler_source_is_not_opened(self):
+        repo, source, _ = self.compiler_fixture()
+        self.compiler_log(source)
+        original_read = publisher.read_file
+
+        def guarded(path, *args):
+            if path == repo / source:
+                raise AssertionError("untracked source was opened")
+            return original_read(path, *args)
+
+        with patch.object(publisher, "REPO", repo), patch.object(
+                publisher.subprocess, "run", return_value=self.tracked_result(source, code=1)), patch.object(
+                publisher, "read_file", side_effect=guarded):
+            self.assertEqual(self.publish()["compiler_diagnostics"], [])
+
+    def test_compiler_observation_rejects_unsafe_unfenced_or_out_of_range_sources(self):
+        repo, source, _ = self.compiler_fixture()
+        cases = [("../" + source, 2, 5), ("/" + source, 2, 5),
+                 ("C:/" + source, 2, 5), (source, 999, 5), (source, 2, 999)]
+        for index, (location, line, column) in enumerate(cases):
+            (self.run / "native.log").write_text(
+                f"error[E0308]: {PRIVATE}\n --> {location}:{line}:{column}\n", encoding="utf-8")
+            with self.subTest(index=index), patch.object(publisher, "REPO", repo), patch.object(
+                    publisher.subprocess, "run", return_value=self.tracked_result(source)):
+                result = self.publish(f"location-{index}")
+            self.assertEqual(result["compiler_diagnostics"], [])
+        self.compiler_log(source)
+        self.write("native-sources.json", {"cotest/" + source: "b" * 64})
+        with patch.object(publisher, "REPO", repo), patch.object(
+                publisher.subprocess, "run", return_value=self.tracked_result(source)):
+            self.assertEqual(self.publish("source-mismatch")["compiler_diagnostics"], [])
+
+    def test_compiler_observation_does_not_classify_runtime_or_malformed_logs(self):
+        repo, source, _ = self.compiler_fixture()
+        base = f"error[E0308]: {PRIVATE}\n --> {source}:2:5\n"
+        cases = [base + "running 0 tests\n", base + "    Running tests/native_operation_contracts.rs\n",
+                 base + f"test {publisher.REQUIRED[0]} ... {PRIVATE}\n", base + "test result: truncated\n",
+                 base.encode() + b"\xff", base + "x" * 65537, base + "\x00", base + "\x1b"]
+        for index, text in enumerate(cases):
+            (self.run / "native.log").write_bytes(text if isinstance(text, bytes) else text.encode())
+            with self.subTest(index=index), patch.object(publisher, "REPO", repo), patch.object(
+                    publisher.subprocess, "run", side_effect=AssertionError("runtime log queried Git")):
+                result = self.publish(f"runtime-{index}")
+            self.assertEqual(result["compiler_diagnostics"], [])
+
+    def test_compiler_observation_git_failures_never_export_private_errors(self):
+        repo, source, _ = self.compiler_fixture()
+        self.compiler_log(source)
+        errors = [OSError(PRIVATE), publisher.subprocess.TimeoutExpired([PRIVATE], 5)]
+        for index, error in enumerate(errors):
+            with self.subTest(index=index), patch.object(publisher, "REPO", repo), patch.object(
+                    publisher.subprocess, "run", side_effect=error):
+                result = self.publish(f"git-error-{index}")
+            self.assertEqual(result["compiler_diagnostics"], [])
+            self.assertEqual(result["compiler_diagnostic_notes"], ["unavailable_native_compiler_observation"])
+
+    def test_compiler_observation_bounds_drop_partial_auxiliary_records(self):
+        repo, source, _ = self.compiler_fixture()
+        texts = ["".join(f"error[E{index:04d}]: {PRIVATE}\n --> {source}:2:5\n" for index in range(5)),
+                 "".join(f"error[E{index:04d}]: {PRIVATE}\n" for index in range(9))]
+        for index, text in enumerate(texts):
+            (self.run / "native.log").write_text(text, encoding="utf-8")
+            with patch.object(publisher, "REPO", repo), patch.object(
+                    publisher.subprocess, "run", return_value=self.tracked_result(source)):
+                result = self.publish(f"bounded-{index}")
+            self.assert_no_compiler_credit(result)
+            self.assertEqual(result["compiler_diagnostics"], [])
+
+    def test_successful_native_export_does_not_query_compiler_tracking(self):
+        with patch.object(publisher.subprocess, "run", side_effect=AssertionError("successful native queried Git")):
+            result = self.publish()
+        self.assertTrue(result["export_complete"])
+        self.assertFalse(result["coverage"]["acceptance"])
+        self.assertEqual(result["compiler_diagnostics"], [])
+        self.assertEqual(result["compiler_diagnostic_notes"], [])
+
+
 if __name__ == "__main__":
     unittest.main()

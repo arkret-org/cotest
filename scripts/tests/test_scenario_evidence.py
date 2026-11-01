@@ -1,0 +1,284 @@
+from __future__ import annotations
+
+import json
+import shutil
+import subprocess
+import tempfile
+import unittest
+from pathlib import Path
+
+
+ROOT = Path(__file__).resolve().parents[2]
+
+
+class ScenarioEvidenceTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.temp = tempfile.TemporaryDirectory(prefix="cotest-scenario-evidence-")
+        cls.addClassCleanup(cls.temp.cleanup)
+        root = Path(cls.temp.name)
+        (root / "scripts").mkdir()
+        (root / "e2e/scenarios").mkdir(parents=True)
+        script = root / "scripts/generate-scenario-evidence.ps1"
+        shutil.copyfile(ROOT / "scripts/generate-scenario-evidence.ps1", script)
+        for relative in (
+            "discovery/contact-request-ui.spec.ts",
+            "identity/account-profile-ui.spec.ts",
+            "joint/realm-invite-link-sync.spec.ts",
+            "identity/registration-contact-validation.spec.ts",
+            "identity/coauth-handle-length-ui.spec.ts",
+            "identity/oidc-login-flow.spec.ts",
+            "identity/saved-account-session-switch.spec.ts",
+        ):
+            target = root / "e2e/tests" / relative
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(ROOT / "e2e/tests" / relative, target)
+        for name, source in {
+            "import-only": 'import { openRegisteredUserPage } from "../../helpers/users";',
+            "injected-session": "await openDpopUserPage(browser, request, 'fixture');",
+            "garth-write": "const client = new GarthTestClient(); await client.createRealm();",
+            "email-verification": "await registrationEmailCode(request, 'fixture@example.test');",
+            "email-import-only": 'import { registrationEmailCode } from "../../helpers/coauth-register";',
+        }.items():
+            (root / f"e2e/tests/{name}.spec.ts").write_text(source, encoding="utf-8")
+        for name, source in {'current-registration-form': 'await page.goto("/register");\n'
+                                      'await page.getByLabel("Station", { exact: true '
+                                      '}).fill(colandBaseUrl());\n'
+                                      'await '
+                                      'page.locator(".registration-panel").getByRole("button", { '
+                                      'name: "Continue", exact: true }).click();',
+         'legacy-registration-form': 'await '
+                                     'page.getByTestId("register-open-account-authority").click();',
+         'registration-label-only': 'page.getByLabel("Station", { exact: true });',
+         'registration-query-only': 'await page.goto("/register");\n'
+                                    'await page.getByLabel("Station", { exact: true '
+                                    '}).fill(colandBaseUrl());\n'
+                                    'await '
+                                    'page.locator(".registration-panel").getByRole("button", { '
+                                    'name: "Continue", exact: true });',
+         'registration-comment-only': '// await page.goto("/register");\n'
+                                      '// await page.getByLabel("Station", { exact: true '
+                                      '}).fill(colandBaseUrl());\n'
+                                      '// await '
+                                      'page.locator(".registration-panel").getByRole("button", { '
+                                      'name: "Continue", exact: true }).click();',
+         'registration-template-only': 'const example = `await page.goto("/register");\n'
+                                       'await page.getByLabel("Station", { exact: true '
+                                       '}).fill(colandBaseUrl());\n'
+                                       'await '
+                                       'page.locator(".registration-panel").getByRole("button", '
+                                       '{ name: "Continue", exact: true }).click();`;',
+         'registration-quoted-only': 'const example = "await page.goto(\\"/register\\");\\nawait '
+                                     'page.getByLabel(\\"Station\\", { exact: true '
+                                     '}).fill(colandBaseUrl());\\nawait '
+                                     'page.locator(\\".registration-panel\\").getByRole(\\"button\\", '
+                                     '{ name: \\"Continue\\", exact: true }).click();";',
+         'legacy-registration-query-only': 'page.getByTestId("register-open-account-authority");',
+         'current-direct-onboarding': 'await joint.gotoLogin();\n'
+                                      'await submitCoauthPasswordCredentials(page, account);\n'
+                                      'await '
+                                      'page.locator(".identity-choice-card").getByRole("button", '
+                                      '{ name: "Continue", exact: true }).click();\n'
+                                      'await '
+                                      'page.locator("button.onboarding-bind-identity").click();\n'
+                                      'const approve = '
+                                      'page.locator(".login-container").getByRole("button", { '
+                                      'name: "Allow", exact: true });\n'
+                                      'await approve.click();',
+         'legacy-direct-onboarding': 'await joint.gotoLogin(); await '
+                                     'submitCoauthPasswordCredentials(page, account);\n'
+                                     'await page.getByTestId("choose-new-identity").click();\n'
+                                     'await '
+                                     'page.getByTestId("onboarding-bind-identity").click();\n'
+                                     'const approve = page.getByTestId("coauth-oauth-approve"); '
+                                     'await approve.click();',
+         'direct-onboarding-comment-only': '// await joint.gotoLogin();\n'
+                                           '// await submitCoauthPasswordCredentials(page, '
+                                           'account);\n'
+                                           '// await '
+                                           'page.locator(".identity-choice-card").getByRole("button", '
+                                           '{ name: "Continue", exact: true }).click();\n'
+                                           '// await '
+                                           'page.locator("button.onboarding-bind-identity").click();\n'
+                                           '// const approve = '
+                                           'page.locator(".login-container").getByRole("button", '
+                                           '{ name: "Allow", exact: true });\n'
+                                           '// await approve.click();',
+         'direct-onboarding-query-only': 'await joint.gotoLogin();\n'
+                                         'await submitCoauthPasswordCredentials(page, account);\n'
+                                         'await '
+                                         'page.locator(".identity-choice-card").getByRole("button", '
+                                         '{ name: "Continue", exact: true });\n'
+                                         'await '
+                                         'page.locator("button.onboarding-bind-identity");\n'
+                                         'const approve = '
+                                         'page.locator(".login-container").getByRole("button", { '
+                                         'name: "Allow", exact: true });\n'
+                                         'await approve;',
+         'account-helper-import-only': 'import { registerUnboundCoauthPasswordAccount, '
+                                       'registerCoauthPasswordAccount } from '
+                                       '"../../helpers/coauth-register";',
+         'unbound-account-http-fixture': 'const account = await '
+                                         'registerUnboundCoauthPasswordAccount(request, '
+                                         'authority, args);',
+         'bound-account-http-fixture': 'const account = await '
+                                       'registerCoauthPasswordAccount(request, authority);',
+         'account-helper-comment-only': '// const account = await '
+                                        'registerUnboundCoauthPasswordAccount(request, '
+                                        'authority, args);'}.items():
+            (root / f"e2e/tests/{name}.spec.ts").write_text(source, encoding="utf-8")
+        shell = shutil.which("pwsh")
+        if shell is None:
+            raise RuntimeError("PowerShell is required to verify the evidence generator")
+        subprocess.run(
+            [shell, "-NoProfile", "-File", str(script)],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        manifest = json.loads((root / "e2e/scenarios/evidence-manifest.json").read_text(encoding="utf-8"))
+        cls.scenarios = {entry["scenario_key"]: entry for entry in manifest["scenarios"]}
+
+    def test_real_browser_registration_helpers_keep_their_full_identity_boundary(self) -> None:
+        for key in (
+            "discovery/contact-request-ui",
+            "identity/account-profile-ui",
+            "joint/realm-invite-link-sync",
+        ):
+            with self.subTest(scenario=key):
+                entry = self.scenarios[key]
+                if key != "joint/realm-invite-link-sync":
+                    self.assertEqual(entry["evidence_class"], "live-product")
+                self.assertEqual(entry["real_services"], ["coauth", "coland", "inkson"])
+                self.assertEqual(entry["identity_establishment"], [
+                    "coauth_registration_ui", "inkson_identity_onboarding_ui", "oauth_authorization_ui",
+                ])
+                producers = ["inkson_product_client"]
+                if key == "discovery/contact-request-ui":
+                    producers.insert(0, "cotest_wire_oracle")
+                self.assertEqual(entry["protocol_object_producers"], producers)
+                if key != "joint/realm-invite-link-sync":
+                    self.assertEqual(entry["declared_test_bypasses"], [])
+
+    def test_registration_does_not_erase_the_realm_prompt_bypass(self) -> None:
+        entry = self.scenarios["joint/realm-invite-link-sync"]
+        self.assertEqual(entry["evidence_class"], "fixture-only")
+        self.assertIn("create_realm_passive_prompt_dismissal", entry["declared_test_bypasses"])
+        self.assertIn("mls_backup_unlock_and_missing_recovery_prompt_behavior", entry["claims_excluded"])
+
+    def test_registered_browser_helpers_declare_the_email_mock_boundary(self) -> None:
+        for key in (
+            "discovery/contact-request-ui",
+            "identity/account-profile-ui",
+            "joint/realm-invite-link-sync",
+        ):
+            with self.subTest(scenario=key):
+                self.assertEqual(self.scenarios[key]["mocks"], ["email"])
+
+    def test_email_verification_calls_propagate_the_dependency_without_import_false_positives(self) -> None:
+        self.assertEqual(self.scenarios["email-verification"]["mocks"], ["email"])
+        self.assertEqual(self.scenarios["email-import-only"]["mocks"], [])
+        self.assertEqual(self.scenarios["garth-write"]["mocks"], ["email"])
+
+    def test_registration_validation_is_ui_without_claiming_completed_identity(self) -> None:
+        entry = self.scenarios["identity/registration-contact-validation"]
+        self.assertEqual(entry["evidence_class"], "live-product")
+        self.assertEqual(entry["real_services"], ["coauth", "coland", "inkson"])
+        self.assertEqual(entry["identity_establishment"], ["fixture_or_not_applicable"])
+        self.assertEqual(entry["mocks"], [])
+
+    def test_coauth_account_ui_does_not_claim_inkson_or_principal_authoring(self) -> None:
+        entry = self.scenarios["identity/coauth-handle-length-ui"]
+        self.assertEqual(entry["evidence_class"], "live-product")
+        self.assertEqual(entry["real_services"], ["coauth"])
+        self.assertEqual(entry["identity_establishment"], ["coauth_registration_ui"])
+        self.assertEqual(entry["protocol_object_producers"], ["coauth_product_client"])
+        self.assertEqual(entry["mocks"], ["email"])
+        self.assertEqual(entry["claims_excluded"], [
+            "coland_business_operations", "oauth_authorization",
+            "principal_registration_and_recovery_custody",
+        ])
+
+    def test_imports_do_not_claim_a_registration_journey(self) -> None:
+        entry = self.scenarios["import-only"]
+        self.assertEqual(entry["evidence_class"], "fixture-only")
+        self.assertEqual(entry["identity_establishment"], ["fixture_or_not_applicable"])
+        self.assertNotIn("inkson_product_client", entry["protocol_object_producers"])
+
+    def test_injected_sessions_remain_excluded_from_real_registration(self) -> None:
+        entry = self.scenarios["injected-session"]
+        self.assertEqual(entry["evidence_class"], "fixture-only")
+        self.assertIn("session_injection", entry["declared_test_bypasses"])
+        self.assertIn("registration_login_authorization", entry["claims_excluded"])
+        self.assertNotIn("coauth_registration_ui", entry["identity_establishment"])
+
+    def test_garth_writes_do_not_claim_inkson_ui(self) -> None:
+        entry = self.scenarios["garth-write"]
+        self.assertEqual(entry["evidence_class"], "server-contract")
+        self.assertNotIn("inkson_product_client", entry["protocol_object_producers"])
+
+
+    def test_direct_identity_ui_does_not_claim_coauth_registration_ui(self) -> None:
+        for key in ("identity/oidc-login-flow", "legacy-direct-onboarding", "current-direct-onboarding"):
+            with self.subTest(scenario=key):
+                self.assertEqual(self.scenarios[key]["identity_establishment"], [
+                    "inkson_identity_onboarding_ui", "oauth_authorization_ui",
+                ])
+
+    def test_current_and_legacy_actual_registration_actions_remain_ui(self) -> None:
+        for key in ("current-registration-form", "legacy-registration-form"):
+            with self.subTest(scenario=key):
+                self.assertIn("inkson_product_client", self.scenarios[key]["protocol_object_producers"])
+                self.assertEqual(self.scenarios[key]["identity_establishment"], ["fixture_or_not_applicable"])
+
+    def test_registration_labels_queries_comments_and_examples_are_not_actions(self) -> None:
+        for key in ("registration-label-only", "registration-query-only", "registration-comment-only", "registration-template-only", "registration-quoted-only", "legacy-registration-query-only"):
+            with self.subTest(scenario=key):
+                self.assertNotIn("inkson_product_client", self.scenarios[key]["protocol_object_producers"])
+                self.assertEqual(self.scenarios[key]["identity_establishment"], ["fixture_or_not_applicable"])
+
+    def test_direct_identity_queries_and_comments_are_not_identity_ceremonies(self) -> None:
+        # Do not change the older generic OAuth name heuristic in this patch.
+        self.assertNotIn("inkson_identity_onboarding_ui", self.scenarios["direct-onboarding-comment-only"]["identity_establishment"])
+        self.assertNotIn("coauth_registration_ui", self.scenarios["direct-onboarding-comment-only"]["identity_establishment"])
+        # The query-only case still actually submits OAuth credentials, but
+        # never clicks either identity choice or binding.
+        self.assertEqual(self.scenarios["direct-onboarding-query-only"]["identity_establishment"], ["oauth_authorization_ui"])
+
+
+
+    def test_known_called_account_http_helpers_propagate_only_existing_fixture_boundaries(self) -> None:
+        for key in ("identity/oidc-login-flow", "unbound-account-http-fixture", "bound-account-http-fixture"):
+            with self.subTest(scenario=key):
+                self.assertIn("email", self.scenarios[key]["mocks"])
+                self.assertIn("raw_http_fixture", self.scenarios[key]["protocol_object_producers"])
+                self.assertIn("raw_http_fixture_or_oracle", self.scenarios[key]["declared_test_bypasses"])
+                self.assertIn("ui_driven_business_flow_for_raw_http_steps", self.scenarios[key]["claims_excluded"])
+                self.assertNotIn("coauth_registration_ui", self.scenarios[key]["identity_establishment"])
+
+    def test_account_helper_imports_and_comments_do_not_propagate_fixture_execution(self) -> None:
+        for key in ("account-helper-import-only", "account-helper-comment-only"):
+            with self.subTest(scenario=key):
+                self.assertEqual(self.scenarios[key]["mocks"], [])
+                self.assertNotIn("raw_http_fixture", self.scenarios[key]["protocol_object_producers"])
+
+
+    def test_direct_page_onboarding_keeps_the_real_mixed_ui_and_http_boundary(self) -> None:
+        # This actual spec uses Page.goto plus local authorize/identity helpers,
+        # with no openUserPage/gotoLogin marker for the older name heuristic.
+        entry = self.scenarios["identity/saved-account-session-switch"]
+        self.assertEqual(entry["evidence_class"], "fixture-only")
+        self.assertEqual(entry["real_services"], ["coauth", "coland", "inkson"])
+        self.assertEqual(entry["identity_establishment"], [
+            "inkson_identity_onboarding_ui", "oauth_authorization_ui",
+        ])
+        self.assertEqual(entry["protocol_object_producers"], [
+            "inkson_product_client", "raw_http_fixture",
+        ])
+        self.assertEqual(entry["mocks"], ["email"])
+        self.assertIn("raw_http_fixture_or_oracle", entry["declared_test_bypasses"])
+        self.assertIn("ui_driven_business_flow_for_raw_http_steps", entry["claims_excluded"])
+
+
+if __name__ == "__main__":
+    unittest.main()

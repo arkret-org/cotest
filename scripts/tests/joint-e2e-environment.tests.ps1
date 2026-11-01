@@ -158,4 +158,29 @@ if (-not $IsWindows) {
     Assert-Equal 200 (Get-CotestArtifactDrive -OutputDirectory '/Volumes/Data' -Drives $drives).AvailableFreeSpace 'mount root itself must match'
 }
 
+# Only the three existing one-Station localhost names may receive an owned override.
+$localNames = @('coland-server1.localhost', 'coauth-server1.localhost', 'unregistered.localhost')
+$localMarker = New-CotestHostsMarker -RunId 'unit-localhost-owned'
+$oldMarker = New-CotestHostsMarker -RunId '20261023-060217'
+foreach ($newline in @("`r`n", "`n")) {
+    $userBytes = "127.0.0.1 localhost${newline}10.0.0.8 user-owned.example${newline}"
+    $oldBytes = Add-CotestHostsBlock -Content $userBytes -Hosts @('coland-server1.local.host', 'coauth-server1.local.host', 'unregistered.local.host') -Marker $oldMarker
+    $withOurs = Add-CotestHostsBlock -Content $oldBytes -Hosts $localNames -Marker $localMarker
+    Assert-True ($withOurs.StartsWith($oldBytes, [StringComparison]::Ordinal)) 'existing old block and user bytes must remain an exact prefix'
+    foreach ($localName in $localNames) {
+        Assert-Equal 1 ([regex]::Matches($withOurs, '(?m)^127\.0\.0\.1\t' + [regex]::Escape($localName) + '\r?$').Count) 'each exact localhost name must have one loopback-only entry'
+    }
+    $concurrentUserBytes = "10.0.0.9 concurrent-user.example${newline}"
+    $cleaned = Remove-CotestHostsBlocks -Content ($withOurs + $concurrentUserBytes) -Marker $localMarker
+    Assert-Equal ($oldBytes + $concurrentUserBytes) $cleaned 'cleanup must remove only this run and retain the old marker plus later user edits'
+    $duplicateRejected = $false
+    try { Add-CotestHostsBlock -Content $withOurs -Hosts $localNames -Marker $localMarker | Out-Null } catch { $duplicateRejected = $true }
+    Assert-True $duplicateRejected 'a conflicting localhost marker must still be rejected'
+}
+foreach ($badLocalName in @('other.localhost', 'coland-server2.localhost', 'coauth-server2.localhost', 'coland-server01.localhost', 'coland-server1.localhost.example.com', '198.18.1.161', '198.18.1.161 coland-server1.localhost', "coland-server1.localhost`n192.0.2.1 example.com")) {
+    $badRejected = $false
+    try { Add-CotestHostsBlock -Content $original -Hosts @($badLocalName) -Marker $localMarker | Out-Null } catch { $badRejected = $true }
+    Assert-True $badRejected 'unknown, non-loopback-address or injected localhost inputs must remain rejected'
+}
+
 Write-Host "joint-e2e-environment.tests.ps1: PASS"

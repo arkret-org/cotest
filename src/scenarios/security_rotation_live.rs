@@ -995,7 +995,7 @@ pub async fn security_rotation_runs_worker_steps_to_local_commit() -> Result<()>
     // 4. The worker owns erase; no public self HTTP binding remains.
     let foreign = canonical_post(
         &client_a,
-        &format!("/_arkret/self/keys/backup-series/{}", "erase"),
+        "/_arkret/self/keys/backup-series/erase",
         &serde_json::json!({}),
     )?
     .send()
