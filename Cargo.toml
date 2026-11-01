@@ -336,3 +336,6 @@ uuid = { version = "1.26.0", features = ["v7"] }
 
 [lints]
 workspace = true
+
+[patch."https://github.com/sapid-ui/sapid.git"]
+glory = { git = "https://github.com/glory-rs/glory.git", rev = "b9d06545c701510ba18d5cdb7cd363c102cad906", version = "0.3.1" }
