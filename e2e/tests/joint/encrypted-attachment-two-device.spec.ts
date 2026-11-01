@@ -95,7 +95,7 @@ async function scrollTimeline(page: Page, edge: "oldest" | "latest") {
   }, edge === "latest");
 }
 
-test("encrypted attachment two-device upload/send/history/render and exact restart recovery @fully-implemented", async ({browser, request}, testInfo) => {
+test("encrypted attachment two-device upload/send/history/render and exact restart recovery @fully-implemented @community-collaboration-gate", async ({browser, request}, testInfo) => {
   test.setTimeout(1_800_000);
   const [aliceSession, bobSession] = await Promise.all([
     createDpopUserSession(request, "attachment-alice"), createDpopUserSession(request, "attachment-bob"),
@@ -152,7 +152,13 @@ test("encrypted attachment two-device upload/send/history/render and exact resta
       uploads.push({ref: outcome.blob_ref, size: outcome.size_bytes, digest: sha(ciphertext), metadata: {scheme: "ak.blob.stream_aead.v1"}});
       if (cut) { cut = false; await route.abort("failed"); } else { await route.fulfill({response}); }
     });
-    await drop(alice.page, "private-image.png", "image/png", png);
+    // Exercise the actual file chooser in an encrypted composer (Inkson #39).
+    // Later uploads retain the drop path and all existing ciphertext/restart
+    // assertions; opening the menu alone cannot count as upload coverage.
+    await alice.page.getByTestId("attachment-menu-button").click();
+    const fileChooser = alice.page.waitForEvent("filechooser");
+    await alice.page.getByTestId("compose-file-input").click();
+    await (await fileChooser).setFiles({name: "private-image.png", mimeType: "image/png", buffer: png});
     await expect.poll(async () => uploads.length, {timeout: 60_000}).toBe(1);
     const before = (await holderAttachments(alice.page)).find(o => o.scope.realm_id === realm)!;
     expect(before.inputLength).toBe(0);

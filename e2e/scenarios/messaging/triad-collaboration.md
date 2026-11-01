@@ -33,9 +33,17 @@
 
 ## Pre-conditions
 
-- 三个 DID 都通过 `POST /_coland/self/account/register` 注册过 (与现有 `ensureRegistered` 行为一致)
-- 三个 actor 都持有有效 dev session token (`POST /_coland/gate/auth/dev-login`)
-- 三个 actor 的 browser context 都通过 `inkson.config.v1` localStorage 注入 server_url + account_did + device_id + session_credential
+- UI 旅程通过既有 `openDpopUserPage` 完成真实 Coauth 注册、DPoP session-grant 登录和 Inkson 设备初始化，各 actor 使用隔离的 browser context。
+- 邀请由创建者提交，成员显式接受；membership 本身不授予消息写入能力，所需 capability 由创建者通过正式权限 UI 授予。
+- API 子用例与 UI 旅程分别计数；API helper 的执行不替代真实 UI 断言。
+
+### 明确拒绝后的持久终态回归（Inkson #38）
+
+- 依据 `authz/capabilities.md` §3.2 和 `models/event-and-patch.md` §5.1 的提交生命周期，在 Bob 获得 `ak.message.create` 前通过真实 composer 发送独特消息，断言明确失败、草稿恢复。
+- 完整 document navigation 后，原本地消息仍须为 `Message send failed`，不得显示 `data-send-state=sending`。
+- Alice 通过正式 UI 授权，Bob 发送另一条独特消息；Alice 必须实际接收新消息且看不到原拒绝消息。
+- Bob 再次完整 document navigation 后，新消息须为 accepted Event，旧拒绝行仍失败，不因后续成功而复活为 Sending。
+- Carol 晚加入后，两条加入前消息均不可见。该 UI 旅程保持既有明文拓扑；真实 MLS 现场和原生 unknown-outcome 反向控制分别留存，不以此测试冒充覆盖。
 
 ## Steps
 

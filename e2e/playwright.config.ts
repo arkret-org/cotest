@@ -85,6 +85,16 @@ export default defineConfig({
   },
   projects: [
     {
+      name: "joint-collaboration",
+      dependencies: ["inkson-build-id"],
+      testMatch: [
+        "messaging/triad-collaboration.spec.ts",
+        "kanban/cross-member-encrypted.spec.ts",
+        "joint/encrypted-attachment-two-device.spec.ts",
+      ],
+      use: { ...devices["Desktop Chrome"], baseURL },
+    },
+    {
       // Browser lanes depend on this; `joint-api` deliberately does not. Its
       // own `testDir` keeps the setup file out of every other project's
       // collection, so it never counts as business coverage.

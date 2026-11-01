@@ -18,7 +18,7 @@
 
 ## 非空业务断言
 
-1. UI 实际 File drop，经 SDK KDF/AEAD、canonical multipart 和结构化私有 Message，由另一设备解密并显示实际 PNG pixels/bytes。
+1. 加密 composer 的“添加附件”菜单通过实际 file chooser 选择首个文件（Inkson #39），后续文件保留 File drop 路径；经 SDK KDF/AEAD、canonical multipart 和结构化私有 Message，由另一设备解密并显示实际 PNG pixels/bytes。只打开菜单不算上传通过。
 2. 服务接受上传后丢失响应，发送端刷新恢复：salt、descriptor、nonce prefix、密文字节和 BlobRef 精确重用。
 3. 草稿改走再改回取消旧 continuation；未完成附件不能发送，显式重试沿用原对象。
 4. 同样输入的另一新 object 使用 fresh salt/key 和不同密文；跨多段大文件下载的 SHA-256 等于真实输入。

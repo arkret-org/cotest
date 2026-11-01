@@ -712,6 +712,10 @@ jobs:
         uses: ./cotest/.github/actions/setup-joint-browser
         with:
           project: ${{ matrix.project }}
+      - name: Reclaim Docker build space
+        run: |
+          docker system prune --all --force
+          docker builder prune --all --force
       - name: Build coland Docker image
         working-directory: cotest
         shell: pwsh
@@ -739,6 +743,20 @@ jobs:
           -PlaywrightProject joint-inkson
           -Grep "@returning-login-gate|@onboarding-recovery-gate"
           -RequireScenario "identity/oidc-login-flow.spec.ts"
+          -ForbidSkippedTests
+
+      - name: Run real multi-user collaboration regressions
+        working-directory: cotest
+        shell: pwsh
+        run: >
+          ./scripts/run-joint-e2e.ps1
+          -ColandRuntime docker
+          -ColandImage cotest-coland:pr-${{ github.run_id }}
+          -StartCoauth
+          -RunProfile joint-smoke
+          -PlaywrightProject joint-collaboration
+          -Grep "@community-collaboration-gate"
+          -RequireScenario "messaging/triad-collaboration.spec.ts,kanban/cross-member-encrypted.spec.ts,joint/encrypted-attachment-two-device.spec.ts"
           -ForbidSkippedTests
 
       - name: Restore Linux hosts permissions
