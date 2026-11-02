@@ -20,7 +20,6 @@ import {
   openDpopUserPage, uniqueUser,
 } from "../../helpers/users";
 import { selectProductOptionByLabel } from "../../helpers/product-select";
-import { uint64Value } from "../../helpers/uint64-decimal";
 import { createMimiProvider, postSignedMimiProviderRequest } from "../../helpers/mimi-provider";
 import { contactRow, requestContactArkret } from "../../helpers/contact-api";
 
@@ -222,7 +221,11 @@ test.describe("complete peer Consent", () => {
       if (emptyRevision.state !== "present") {
         throw new Error("confirmed empty Consent reverted to never_written");
       }
-      expect(uint64Value(emptyRevision.revision.stream_position)).toBeGreaterThan(uint64Value(extendedRevision.revision.stream_position));
+      const previousPosition = extendedRevision.revision.stream_position;
+      const emptyPosition = emptyRevision.revision.stream_position;
+      expect(Number.isSafeInteger(previousPosition) && previousPosition >= 0).toBe(true);
+      expect(Number.isSafeInteger(emptyPosition) && emptyPosition >= 0).toBe(true);
+      expect(emptyPosition).toBeGreaterThan(previousPosition);
       expect(emptyRevision.revision.commit_id).not.toBe(extendedRevision.revision.commit_id);
       await actor.clickWithPassivePromptRetry(actor.page.locator(".consent-read-complete-button"));
       await expect(input).toBeVisible({ timeout: 30_000 });

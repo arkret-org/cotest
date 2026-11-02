@@ -242,8 +242,8 @@ for (const mode of ["avatar", "lost-responses", "retryable-profile", "account-sw
       expect(matching[0].avatar_blob_ref).toBe(acceptedAvatar);
       const row = page.locator(".agent-admin-row").filter({ hasText: slug });
       await expect(row).toHaveCount(1);
-      const image = row.locator(".agent-admin-avatar");
-      if (acceptedAvatar) await expect(image.locator("img")).toHaveAttribute("src", /^data:image\//, { timeout: 120_000 });
+      const image = row.locator(".agent-admin-row-avatar");
+      if (acceptedAvatar) await expect(image).toHaveAttribute("src", /^data:image\//, { timeout: 120_000 });
       else await expect(image).toHaveClass(/generated-avatar/);
       const bounds = await image.boundingBox();
       expect(bounds?.width).toBe(36);

@@ -624,10 +624,14 @@ test("normal administrator default denial admits an exact controller exception a
   expect(outcome.commit?.event_ref).toBe(built.envelope.event_id);
 });
 
+function managementReviewPanel(page: Page): Locator {
+  return page.locator(".management-review-principal")
+    .locator("xpath=ancestor::*[contains(concat(' ', normalize-space(@class), ' '), ' event ')][1]");
+}
+
 async function reviewPanel(user: JointUserPage, realm: string) {
   await user.gotoRealmAdminSection(realm, "access");
-  const panel = user.page.locator(".management-review-principal")
-    .locator("xpath=ancestor::*[contains(concat(' ', normalize-space(@class), ' '), ' event ')][1]");
+  const panel = managementReviewPanel(user.page);
   await expect(panel).toHaveCount(1);
   await expect(panel).toBeVisible({ timeout: 120_000 });
   return panel;
@@ -717,7 +721,7 @@ async function loseAcceptedReviewResponse(page: Page, operation: "requests" | "d
   try {
     await click();
     const value = await observed;
-    await expect(page.locator(":scope > .write-status")).toContainText("操作被拒绝或当前证据不可用", { timeout: 180_000 });
+    await expect(managementReviewPanel(page).locator(":scope > .write-status")).toContainText("操作被拒绝或当前证据不可用", { timeout: 180_000 });
     return value;
   } finally { await page.unroute(pattern); }
 }
@@ -745,7 +749,7 @@ async function switchReviewRealmAndReload(user: JointUserPage, originalRealm: st
       const href = await page.locator(".realm-admin-nav-item-access").getAttribute("href");
       return href !== null && decodeURIComponent(new URL(href, page.url()).pathname.split("/")[2] ?? "") === realm;
     }, { message: "rendered Realm navigation matches the requested Realm" }).toBe(true);
-    const panel = page.locator(".event:has(> .event-head :text-is(\"Agent 管理审批\"))");
+    const panel = managementReviewPanel(page);
     await expect(panel).toBeVisible({ timeout: 120_000 });
     await expect(panel.locator(".management-review-frozen-candidate")).toHaveCount(0);
     await expect(panel.getByRole("textbox", { name: "分享原审批请求（复制给管理员或原请求者）", exact: true })).toHaveCount(0);
@@ -756,7 +760,7 @@ async function switchReviewRealmAndReload(user: JointUserPage, originalRealm: st
     await expect(panel.locator(".management-review-request")).toHaveText("冻结候选并请求审批（不提交业务）");
     expect(await page.evaluate(() => performance.timeOrigin), "Realm switch keeps the original document").toBe(documentOrigin);
   }
-  const panel = page.locator(".event:has(> .event-head :text-is(\"Agent 管理审批\"))");
+  const panel = managementReviewPanel(page);
   await panel.locator(".management-review-request-json").locator("input, textarea").fill(share);
   const request = JSON.parse(share);
   const loaded = await reviewResponse(page, "status",

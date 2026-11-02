@@ -1,6 +1,7 @@
 import { accountActorId } from "./coland-api";
 import { actorRow } from "./product-locators";
 import { selectProductOptionByLabel } from "./product-select";
+import { getCircleArkret } from "./circle-api";
 import { expect, test, operationSelector, isDirectAdmissionOutcomeReason } from "./arkret-test";
 import type { Page, Response, Request, APIRequestContext } from "@playwright/test";
 import { assertAuthoritySubmitOutcome, authHeaders, canonicalJson, readCommitStreamHeadApi, scanRealmStreamApi, sdkEventDerivedIds, sha256CanonicalJson, signedEventEnvelope, wireErrCode } from "./coland-api";
@@ -30,6 +31,13 @@ export async function createDirectBoundaryCircleStrand(
   await expect(page).toHaveURL(/\/realms\/[^/]+\/circles\/[^/]+$/);
   const circleId = decodeURIComponent(new URL(page.url()).pathname.split("/").at(-1)!);
   expect(circleId).toMatch(/^ak:circle:/);
+  await expect.poll(async () => {
+    const circle = await getCircleArkret(request, token, circleId);
+    expect(circle.circle_id).toBe(circleId);
+    expect(circle.realm_id).toBe(realmId);
+    expect(circle.title).toBe(title);
+    return circle.viewer_membership;
+  }, { timeout: 90_000 }).toBe("join");
 
   await page.goto(`/chat/${encodeURIComponent(realmId)}`, { waitUntil: "domcontentloaded" });
   await page.locator(".open-channel-dialog").click();
