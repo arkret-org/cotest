@@ -73,9 +73,14 @@ test("@fully-implemented calendar schedule and RSVP survive the canonical Strand
     await expect(page.page.locator(".kanban-empty-board")).toBeVisible({
       timeout: 45_000,
     });
+    await expect(page.page).toHaveURL(url => decodeURIComponent(url.pathname)
+      .startsWith(`/kanban/${realmId}/board/ak:space:`), { timeout: 120_000 });
 
     const columnTitle = `Upcoming ${stamp}`;
     await page.page.locator(".new-column-input").fill(columnTitle);
+    await expect(page.page.locator(".new-column-input")).toHaveValue(columnTitle);
+    await expect(page.page.locator(".input-prompt-host").filter({ has: page.page.locator(".new-column-input") })
+      .locator(".input-empty-prompt")).toHaveCount(0);
     await page.page.locator(".add-column-button").click();
     const column = page.page
       .locator(".kanban-column")

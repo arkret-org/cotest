@@ -21,7 +21,7 @@ export function accountRow(scope: Page | Locator, rowClass: string, account: Acc
 
 export function actorRow(scope: Page | Locator, rowClass: string, actor: ActorId): Locator {
   return row(scope, rowClass).filter({
-    has: pageFor(scope).getByLabel(canonicalJson(actor), { exact: true }),
+    has: pageFor(scope).getByText(canonicalJson(actor), { exact: true }),
   });
 }
 

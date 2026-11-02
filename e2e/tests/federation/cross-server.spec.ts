@@ -328,9 +328,7 @@ test.describe("cross-server federation", () => {
       await alicePage.page
         .getByRole("button", { name: "Pending invites", exact: true })
         .click();
-      // Same attribute rename as spaces/moderation-ban: the row carries
-      // `data-member-id` holding the canonical ActorId key, so match the
-      // principal id as a substring.
+      // Bind the complete recipient, including the remote Station.
       const aliceInviteRow = actorRow(alicePage.page, ".pending-invite-row", accountActorId(bob.id, "server2"));
       await expect(aliceInviteRow).toBeVisible({ timeout: 30_000 });
     } finally {

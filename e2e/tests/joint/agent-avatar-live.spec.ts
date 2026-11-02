@@ -188,7 +188,7 @@ for (const mode of ["avatar", "lost-responses", "retryable-profile", "account-sw
       await expect(page.locator(".agent-admin-provision-agent-slug").locator("input, textarea")).toHaveValue(slug);
       holdProfile = false;
       await expect(page.locator(".agent-admin .write-status")).toContainText("Created", { timeout: 180_000 });
-      await expect(page.locator(".agent-admin-provision")).toHaveCount(0);
+      await expect(page.locator('.agent-admin-detail-pane:has(> .event-head :text-is("Create agent"))')).toHaveCount(0);
     } else if (mode === "profile-rejected") {
       await expect(page.locator(".agent-admin .write-status")).toContainText("Agent was created; its avatar is still pending", { timeout: 180_000 });
       await expect(page.locator(".agent-admin .write-status")).toContainText("capability_denied");
@@ -196,7 +196,7 @@ for (const mode of ["avatar", "lost-responses", "retryable-profile", "account-sw
       await expect(page.locator(".agent-admin-avatar-preview")).not.toHaveClass(/generated-avatar/);
     } else {
       await expect(page.locator(".agent-admin .write-status")).toContainText("Created", { timeout: 180_000 });
-      await expect(page.locator(".agent-admin-provision")).toHaveCount(0);
+      await expect(page.locator('.agent-admin-detail-pane:has(> .event-head :text-is("Create agent"))')).toHaveCount(0);
     }
     await expect.poll(() => agent, { timeout: 180_000 }).toMatch(/^ak:did_core:/);
     for (let reload = 0; reload < 2; reload++) {

@@ -62,10 +62,10 @@ import {
 test.describe.configure({ mode: "serial" });
 
 async function sendCrossStationEncrypted(page: Page, message: string) {
-  await page.locator(".chat-input").fill(message);
   if (await page.getByRole("dialog", { name: "Back up encrypted history", exact: true }).isVisible()) {
     await page.getByRole("button", { name: "Remind me later", exact: true }).click();
   }
+  await page.locator(".chat-input").fill(message);
   const realm = new URL(page.url()).pathname.split("/").map(decodeURIComponent).find(value => value.startsWith("ak:realm:"));
   expect(realm).toBeTruthy();
   const isOriginal = (event: { kind?: string; realm_id?: string }) => event.kind === "ak.message.create" && event.realm_id === realm;
@@ -74,8 +74,10 @@ async function sendCrossStationEncrypted(page: Page, message: string) {
     return outgoing.method() === "POST" && new URL(response.url()).pathname === "/_arkret/self/events"
       && decodeIngressEvents(outgoing.postData(), { context: "cross-Station Direct original" }).some(isOriginal);
   }, { timeout: 90_000 });
-  await submitOrdinaryComposerDraft(page, message, { timeout: 90_000 });
-  const response = await submitted;
+  const [response] = await Promise.all([
+    submitted,
+    submitOrdinaryComposerDraft(page, message, { timeout: 90_000 }),
+  ]);
   const original = decodeIngressEvents(response.request().postData(), { context: "cross-Station Direct original" }).find(isOriginal)!;
   expect(original.payload?.encrypted_content).toBeTruthy();
   expect(response.ok(), `Direct submission HTTP ${response.status()}`).toBe(true);

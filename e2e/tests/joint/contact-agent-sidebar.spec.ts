@@ -200,7 +200,7 @@ async function provisionPendingAgent(
   await page.locator(".settings-nav-item-agents").click();
   await expect(page).toHaveURL(/\/settings\/agents(?:\?|$)/);
   await page.locator(".agent-admin-create-open-button").click();
-  await expect(page.locator(".agent-admin-provision")).toBeVisible();
+  await expect(page.locator('.agent-admin-detail-pane:has(> .event-head :text-is("Create agent"))')).toBeVisible();
   await page.locator(".agent-admin-provision-agent-slug").locator("input, textarea").fill(agentSlug);
   await expect(page.locator(".agent-admin-provision-button")).toBeEnabled();
 
