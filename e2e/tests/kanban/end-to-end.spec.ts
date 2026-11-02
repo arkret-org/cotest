@@ -107,9 +107,9 @@ async function waitForStrandProjection(
 }
 
 async function addCardThroughColumn(column: Locator, title: string) {
-  const titleInput = column.getByTestId("new-card-title-input").last();
+  const titleInput = column.locator(".new-card-title-input").last();
   if (!(await titleInput.isVisible({ timeout: 250 }).catch(() => false))) {
-    const addButton = column.getByTestId("add-card-button").last();
+    const addButton = column.locator(".add-card-button").last();
     await expect(addButton).toBeVisible({ timeout: 30_000 });
     await expect(addButton).toBeEnabled({ timeout: 30_000 });
     await addButton.click({ timeout: 5_000 }).catch(async (error) => {
@@ -120,7 +120,7 @@ async function addCardThroughColumn(column: Locator, title: string) {
   }
   await expect(titleInput).toBeVisible({ timeout: 30_000 });
   await titleInput.fill(title);
-  const saveButton = column.getByTestId("save-card-button").last();
+  const saveButton = column.locator(".save-card-button").last();
   await expect(saveButton).toBeEnabled({ timeout: 30_000 });
   await saveButton.click({ timeout: 10_000 });
 }
@@ -132,23 +132,23 @@ async function buildEncryptedBoardAndCard(
   cardTitle: string,
 ): Promise<void> {
   await page.goto(`/kanban/${realmId}`, { waitUntil: "domcontentloaded" });
-  await expect(page.getByTestId("kanban-panel")).toBeVisible({ timeout: 120_000 });
-  await page.getByTestId("new-board-toggle").click();
-  await page.getByTestId("new-board-title-input").fill(`Enc Board ${stamp}`);
-  await page.getByTestId("create-board-space-button").click();
-  await expect(page.getByTestId("kanban-empty-board")).toContainText(/No lists yet/, {
+  await expect(page.locator(".kanban-panel")).toBeVisible({ timeout: 120_000 });
+  await page.locator(".new-board-toggle").click();
+  await page.locator(".new-board-title-input input, .new-board-title-input textarea").fill(`Enc Board ${stamp}`);
+  await page.locator(".create-board-space-button").click();
+  await expect(page.locator(".kanban-empty-board")).toContainText(/No lists yet/, {
     timeout: 45_000,
   });
   const columnName = `Todo-${stamp}`;
-  await page.getByTestId("new-column-input").fill(columnName);
-  await page.getByTestId("add-column-button").click();
-  const column = page.getByTestId("kanban-column").filter({ hasText: columnName }).first();
+  await page.locator(".new-column-input").fill(columnName);
+  await page.locator(".add-column-button").click();
+  const column = page.locator(".kanban-column").filter({ hasText: columnName }).first();
   await expect(column).toHaveAttribute("data-column-draft", "false", { timeout: 45_000 });
   await addCardThroughColumn(column, cardTitle);
-  await expect(column.getByTestId("kanban-card").filter({ hasText: cardTitle })).toBeVisible({
+  await expect(column.locator(".kanban-card").filter({ hasText: cardTitle })).toBeVisible({
     timeout: 45_000,
   });
-  await expect(column.getByTestId("kanban-card").filter({ hasText: cardTitle })).toHaveAttribute(
+  await expect(column.locator(".kanban-card").filter({ hasText: cardTitle })).toHaveAttribute(
     "data-card-draft", "false", { timeout: 45_000 },
   );
 }
@@ -156,13 +156,13 @@ async function buildEncryptedBoardAndCard(
 // Drive the visible editor and verify its product bridge updates the fallback
 // value. Both slots use this editor; only one edit form is mounted at a time.
 async function setCardDetailEditorValue(page: Page, value: string): Promise<void> {
-  const editor = page.getByTestId("card-detail-description-rich-editor")
+  const editor = page.locator(".card-detail-description-rich-editor")
     .locator('.ProseMirror.toastui-editor-contents[contenteditable="true"]');
   await expect(editor).toBeVisible({ timeout: 45_000 });
   await editor.click();
   await editor.press("ControlOrMeta+A");
   await editor.pressSequentially(value);
-  const input = page.getByTestId("card-detail-description-input");
+  const input = page.locator(".card-detail-description-input");
   await expect(input).toHaveValue(value);
 }
 
@@ -275,13 +275,13 @@ test.describe("kanban end-to-end", () => {
       // is the hardcoded demo Realm the test user is NOT a member of, and
       // every ak.strand.* event would 403 with capability_denied).
       await alicePage.page.goto(`/kanban/${realmId}`, { waitUntil: "domcontentloaded" });
-      await expect(alicePage.page.getByTestId("kanban-panel")).toBeVisible({ timeout: 120_000 });
-      await alicePage.page.getByTestId("new-board-toggle").click();
+      await expect(alicePage.page.locator(".kanban-panel")).toBeVisible({ timeout: 120_000 });
+      await alicePage.page.locator(".new-board-toggle").click();
       await alicePage.page
-        .getByTestId("new-board-title-input")
+        .locator(".new-board-title-input input, .new-board-title-input textarea")
         .fill(`Sprint 23 ${stamp}`);
-      await alicePage.page.getByTestId("create-board-space-button").click();
-      await expect(alicePage.page.getByTestId("kanban-empty-board")).toContainText(
+      await alicePage.page.locator(".create-board-space-button").click();
+      await expect(alicePage.page.locator(".kanban-empty-board")).toContainText(
         /No lists yet/,
         { timeout: 30_000 },
       );
@@ -289,16 +289,16 @@ test.describe("kanban end-to-end", () => {
 
       // Add three columns (lists).
       for (const columnName of [`Todo-${stamp}`, `InProgress-${stamp}`, `Done-${stamp}`]) {
-        await alicePage.page.getByTestId("new-column-input").fill(columnName);
-        await alicePage.page.getByTestId("add-column-button").click();
+        await alicePage.page.locator(".new-column-input").fill(columnName);
+        await alicePage.page.locator(".add-column-button").click();
         await expect(
-          alicePage.page.getByTestId("kanban-column").filter({ hasText: columnName }),
+          alicePage.page.locator(".kanban-column").filter({ hasText: columnName }),
         ).toBeVisible({ timeout: 30_000 });
       }
       await stepShot(alicePage.page, testInfo, "B-three-columns");
 
       const todoColumn = alicePage.page
-        .getByTestId("kanban-column")
+        .locator(".kanban-column")
         .filter({ hasText: `Todo-${stamp}` })
         .first();
 
@@ -307,7 +307,7 @@ test.describe("kanban end-to-end", () => {
       for (const cardName of [cardA, cardB]) {
         await addCardThroughColumn(todoColumn, cardName);
         await expect(
-          todoColumn.getByTestId("kanban-card").filter({ hasText: cardName }),
+          todoColumn.locator(".kanban-card").filter({ hasText: cardName }),
         ).toBeVisible({ timeout: 30_000 });
       }
       await stepShot(alicePage.page, testInfo, "C-two-cards");
@@ -316,61 +316,61 @@ test.describe("kanban end-to-end", () => {
       // The card-archive-button is hidden until the parent .board-card is
       // hovered, so hover the card first to make it actionable.
       const cardALocator = todoColumn
-        .getByTestId("kanban-card")
+        .locator(".kanban-card")
         .filter({ hasText: cardA })
         .first();
       await expect(cardALocator).toHaveAttribute("data-card-draft", "false", {
         timeout: 120_000,
       });
       await cardALocator.hover();
-      await cardALocator.getByTestId("card-archive-button").click();
-      await expect(alicePage.page.getByTestId("board-status")).toContainText(
+      await cardALocator.locator(".card-archive-button").click();
+      await expect(alicePage.page.locator(".board-status")).toContainText(
         "ak.strand.archive accepted; card lifecycle = Archived",
         { timeout: 120_000 },
       );
-      await expect(todoColumn.getByTestId("kanban-card").filter({ hasText: cardA })).toHaveCount(0, {
+      await expect(todoColumn.locator(".kanban-card").filter({ hasText: cardA })).toHaveCount(0, {
         timeout: 30_000,
       });
       // Card A appears in archived list.
       await expect(
-        alicePage.page.getByTestId("kanban-archived-card-row").filter({ hasText: cardA }),
+        alicePage.page.locator(".kanban-archived-card-row").filter({ hasText: cardA }),
       ).toBeVisible({ timeout: 30_000 });
       await stepShot(alicePage.page, testInfo, "D-card-archived");
 
       // The archived state must come back from durable server data, rather
       // than only from the optimistic board projection in this page.
       await alicePage.page.reload({ waitUntil: "domcontentloaded" });
-      await expect(alicePage.page.getByTestId("kanban-panel")).toBeVisible({ timeout: 120_000 });
+      await expect(alicePage.page.locator(".kanban-panel")).toBeVisible({ timeout: 120_000 });
       await expect(
-        alicePage.page.getByTestId("kanban-card").filter({ hasText: cardA }),
+        alicePage.page.locator(".kanban-card").filter({ hasText: cardA }),
       ).toHaveCount(0);
       await expect(
-        alicePage.page.getByTestId("kanban-archived-card-row").filter({ hasText: cardA }),
+        alicePage.page.locator(".kanban-archived-card-row").filter({ hasText: cardA }),
       ).toBeVisible({ timeout: 30_000 });
 
       // Restore Card A from archive — it should reappear on the board.
       const archivedRow = alicePage.page
-        .getByTestId("kanban-archived-card-row")
+        .locator(".kanban-archived-card-row")
         .filter({ hasText: cardA })
         .first();
-      await archivedRow.getByTestId("card-restore-button").click();
+      await archivedRow.locator(".card-restore-button").click();
       // The card appears optimistically before its lifecycle Event is signed
       // and durably submitted. Destroy the runtime only after exact acceptance.
-      await expect(alicePage.page.getByTestId("board-status")).toContainText(
+      await expect(alicePage.page.locator(".board-status")).toContainText(
         "ak.strand.restore accepted; card lifecycle = Active",
         { timeout: 120_000 },
       );
       await expect(
-        alicePage.page.getByTestId("kanban-card").filter({ hasText: cardA }),
+        alicePage.page.locator(".kanban-card").filter({ hasText: cardA }),
       ).toBeVisible({ timeout: 30_000 });
       await stepShot(alicePage.page, testInfo, "E-card-restored");
 
       await alicePage.page.reload({ waitUntil: "domcontentloaded" });
       await expect(
-        alicePage.page.getByTestId("kanban-card").filter({ hasText: cardA }),
+        alicePage.page.locator(".kanban-card").filter({ hasText: cardA }),
       ).toBeVisible({ timeout: 120_000 });
       await expect(
-        alicePage.page.getByTestId("kanban-archived-card-row").filter({ hasText: cardA }),
+        alicePage.page.locator(".kanban-archived-card-row").filter({ hasText: cardA }),
       ).toHaveCount(0);
     } finally {
       await alicePage.close();
@@ -680,34 +680,34 @@ test.describe("kanban end-to-end", () => {
         joinRule: "invite",
       });
       await alicePage.page.goto(`/kanban/${realmId}`, { waitUntil: "domcontentloaded" });
-      await expect(alicePage.page.getByTestId("kanban-panel")).toBeVisible({ timeout: 120_000 });
-      await alicePage.page.getByTestId("new-board-toggle").click();
-      await alicePage.page.getByTestId("new-board-title-input").fill(`Column Drag ${stamp}`);
-      await alicePage.page.getByTestId("create-board-space-button").click();
-      await expect(alicePage.page.getByTestId("kanban-empty-board")).toContainText(/No lists yet/, {
+      await expect(alicePage.page.locator(".kanban-panel")).toBeVisible({ timeout: 120_000 });
+      await alicePage.page.locator(".new-board-toggle").click();
+      await alicePage.page.locator(".new-board-title-input input, .new-board-title-input textarea").fill(`Column Drag ${stamp}`);
+      await alicePage.page.locator(".create-board-space-button").click();
+      await expect(alicePage.page.locator(".kanban-empty-board")).toContainText(/No lists yet/, {
         timeout: 30_000,
       });
 
       for (const columnName of [first, second, third]) {
-        await alicePage.page.getByTestId("new-column-input").fill(columnName);
-        await alicePage.page.getByTestId("add-column-button").click();
+        await alicePage.page.locator(".new-column-input").fill(columnName);
+        await alicePage.page.locator(".add-column-button").click();
         await expect(
-          alicePage.page.getByTestId("kanban-column").filter({ hasText: columnName }),
+          alicePage.page.locator(".kanban-column").filter({ hasText: columnName }),
         ).toHaveAttribute("data-column-draft", "false", { timeout: 30_000 });
       }
 
-      const firstColumn = alicePage.page.getByTestId("kanban-column").filter({ hasText: first });
-      const thirdColumn = alicePage.page.getByTestId("kanban-column").filter({ hasText: third });
-      await expect(firstColumn.getByTestId("column-drop-target-before")).toHaveCount(1);
-      await expect(thirdColumn.getByTestId("column-drag-handle")).toBeVisible();
-      await expect(thirdColumn.getByTestId("column-drag-handle")).toBeEnabled({ timeout: 45_000 });
+      const firstColumn = alicePage.page.locator(".kanban-column").filter({ hasText: first });
+      const thirdColumn = alicePage.page.locator(".kanban-column").filter({ hasText: third });
+      await expect(firstColumn.locator(".column-drop-target-before")).toHaveCount(1);
+      await expect(thirdColumn.locator(".column-drag-handle")).toBeVisible();
+      await expect(thirdColumn.locator(".column-drag-handle")).toBeEnabled({ timeout: 45_000 });
 
       await thirdColumn
-        .getByTestId("column-drag-handle")
-        .dragTo(firstColumn.getByTestId("column-drop-target-before"), { force: true });
+        .locator(".column-drag-handle")
+        .dragTo(firstColumn.locator(".column-drop-target-before"), { force: true });
       await stepShot(alicePage.page, testInfo, "column-handles-reordered");
 
-      await expect(alicePage.page.getByTestId("kanban-column-title")).toHaveText(
+      await expect(alicePage.page.locator(".kanban-column-title")).toHaveText(
         [third, first, second],
         { timeout: 30_000 },
       );
@@ -744,11 +744,11 @@ test.describe("kanban end-to-end", () => {
         mlsActivated: false,
       });
       await alicePage.page.goto(`/kanban/${realmId}`, { waitUntil: "domcontentloaded" });
-      await expect(alicePage.page.getByTestId("kanban-panel")).toBeVisible({ timeout: 120_000 });
-      await alicePage.page.getByTestId("new-board-toggle").click();
-      await alicePage.page.getByTestId("new-board-title-input").fill(`Order Board ${stamp}`);
-      await alicePage.page.getByTestId("create-board-space-button").click();
-      await expect(alicePage.page.getByTestId("kanban-empty-board")).toContainText(/No lists yet/, {
+      await expect(alicePage.page.locator(".kanban-panel")).toBeVisible({ timeout: 120_000 });
+      await alicePage.page.locator(".new-board-toggle").click();
+      await alicePage.page.locator(".new-board-title-input input, .new-board-title-input textarea").fill(`Order Board ${stamp}`);
+      await alicePage.page.locator(".create-board-space-button").click();
+      await expect(alicePage.page.locator(".kanban-empty-board")).toContainText(/No lists yet/, {
         timeout: 30_000,
       });
       await expect
@@ -760,23 +760,23 @@ test.describe("kanban end-to-end", () => {
       expect(boardId).toMatch(/^ak:space:/);
 
       for (const columnName of [first, second, third]) {
-        await alicePage.page.getByTestId("new-column-input").fill(columnName);
-        await alicePage.page.getByTestId("add-column-button").click();
+        await alicePage.page.locator(".new-column-input").fill(columnName);
+        await alicePage.page.locator(".add-column-button").click();
         await expect(
-          alicePage.page.getByTestId("kanban-column").filter({ hasText: columnName }),
+          alicePage.page.locator(".kanban-column").filter({ hasText: columnName }),
         ).toHaveAttribute("data-column-draft", "false", { timeout: 30_000 });
       }
 
-      const firstColumn = alicePage.page.getByTestId("kanban-column").filter({ hasText: first });
-      const thirdColumn = alicePage.page.getByTestId("kanban-column").filter({ hasText: third });
-      await expect(thirdColumn.getByTestId("column-drag-handle")).toBeEnabled({ timeout: 45_000 });
-      await thirdColumn.getByTestId("column-drag-handle").dragTo(
-        firstColumn.getByTestId("column-drop-target-before"),
+      const firstColumn = alicePage.page.locator(".kanban-column").filter({ hasText: first });
+      const thirdColumn = alicePage.page.locator(".kanban-column").filter({ hasText: third });
+      await expect(thirdColumn.locator(".column-drag-handle")).toBeEnabled({ timeout: 45_000 });
+      await thirdColumn.locator(".column-drag-handle").dragTo(
+        firstColumn.locator(".column-drop-target-before"),
         { force: true },
       );
       await stepShot(alicePage.page, testInfo, "columns-reordered");
 
-      await expect(alicePage.page.getByTestId("kanban-column-title")).toHaveText(
+      await expect(alicePage.page.locator(".kanban-column-title")).toHaveText(
         [third, first, second], { timeout: 30_000 },
       );
       const spacesUrl = `${colandBaseUrl()}/_arkret/self/realms/${encodeURIComponent(realmId)}/spaces`;
@@ -799,7 +799,7 @@ test.describe("kanban end-to-end", () => {
           .map((space) => space.title);
       }, { timeout: 30_000 }).toEqual([third, first, second]);
       await alicePage.page.reload({ waitUntil: "domcontentloaded" });
-      await expect(alicePage.page.getByTestId("kanban-column-title")).toHaveText(
+      await expect(alicePage.page.locator(".kanban-column-title")).toHaveText(
         [third, first, second], { timeout: 60_000 },
       );
     } finally {
@@ -875,30 +875,30 @@ test.describe("kanban end-to-end", () => {
       });
 
       await alicePage.page.goto(`/kanban/${realmId}`, { waitUntil: "domcontentloaded" });
-      await expect(alicePage.page.getByTestId("kanban-panel")).toBeVisible({ timeout: 120_000 });
+      await expect(alicePage.page.locator(".kanban-panel")).toBeVisible({ timeout: 120_000 });
 
       // Board + one column + one card (title only).
-      await alicePage.page.getByTestId("new-board-toggle").click();
-      await alicePage.page.getByTestId("new-board-title-input").fill(`Enc Board ${stamp}`);
-      await alicePage.page.getByTestId("create-board-space-button").click();
-      await expect(alicePage.page.getByTestId("kanban-empty-board")).toContainText(/No lists yet/, {
+      await alicePage.page.locator(".new-board-toggle").click();
+      await alicePage.page.locator(".new-board-title-input input, .new-board-title-input textarea").fill(`Enc Board ${stamp}`);
+      await alicePage.page.locator(".create-board-space-button").click();
+      await expect(alicePage.page.locator(".kanban-empty-board")).toContainText(/No lists yet/, {
         timeout: 45_000,
       });
 
       const todoColumnName = `Todo-${stamp}`;
-      await alicePage.page.getByTestId("new-column-input").fill(todoColumnName);
-      await alicePage.page.getByTestId("add-column-button").click();
+      await alicePage.page.locator(".new-column-input").fill(todoColumnName);
+      await alicePage.page.locator(".add-column-button").click();
       const todoColumn = alicePage.page
-        .getByTestId("kanban-column")
+        .locator(".kanban-column")
         .filter({ hasText: todoColumnName })
         .first();
       await expect(todoColumn).toBeVisible({ timeout: 45_000 });
 
-      await todoColumn.getByTestId("add-card-button").click();
-      await todoColumn.getByTestId("new-card-title-input").fill(cardTitle);
-      await todoColumn.getByTestId("save-card-button").click();
+      await todoColumn.locator(".add-card-button").click();
+      await todoColumn.locator(".new-card-title-input").fill(cardTitle);
+      await todoColumn.locator(".save-card-button").click();
       const cardLocator = todoColumn
-        .getByTestId("kanban-card")
+        .locator(".kanban-card")
         .filter({ hasText: cardTitle })
         .first();
       await expect(cardLocator).toBeVisible({ timeout: 45_000 });
@@ -909,9 +909,9 @@ test.describe("kanban end-to-end", () => {
       // The Description editor binds to the Strand's private `body` field, which
       // is exactly what the content-encryption floor inspects.
       await cardLocator.click();
-      await expect(alicePage.page.getByTestId("card-detail-modal")).toBeVisible({ timeout: 45_000 });
-      await alicePage.page.getByTestId("card-detail-tab-description").click();
-      await alicePage.page.getByTestId("card-detail-edit-description-button").click();
+      await expect(alicePage.page.locator(".card-detail-modal")).toBeVisible({ timeout: 45_000 });
+      await alicePage.page.locator(".card-detail-tab-description").click();
+      await alicePage.page.locator(".card-detail-edit-description-button").click();
 
       await setCardDetailEditorValue(alicePage.page, description);
 
@@ -924,7 +924,7 @@ test.describe("kanban end-to-end", () => {
           (response.request().postData() ?? "").includes("ak.strand.update"),
         { timeout: 60_000 },
       );
-      await alicePage.page.getByTestId("card-detail-save-button").click();
+      await alicePage.page.locator(".card-detail-save-button").click();
 
       const response = await strandUpdate;
       const responseBody = await response.text();
@@ -946,7 +946,7 @@ test.describe("kanban end-to-end", () => {
 
       // UI corroboration: the description renders and no encrypted-write error
       // surfaces anywhere in the detail panel.
-      await expect(alicePage.page.getByTestId("card-description-panel")).toContainText(description, {
+      await expect(alicePage.page.locator(".card-description-panel")).toContainText(description, {
         timeout: 120_000,
       });
       await expect(
@@ -993,13 +993,13 @@ test.describe("kanban end-to-end", () => {
       await buildEncryptedBoardAndCard(alicePage.page, realmId, stamp, cardTitle);
 
       await alicePage.page
-        .getByTestId("kanban-card")
+        .locator(".kanban-card")
         .filter({ hasText: cardTitle })
         .first()
         .click();
-      await expect(alicePage.page.getByTestId("card-detail-modal")).toBeVisible({ timeout: 45_000 });
-      await alicePage.page.getByTestId("card-detail-tab-synthesis").click();
-      await alicePage.page.getByTestId("card-detail-new-synthesis-button").click();
+      await expect(alicePage.page.locator(".card-detail-modal")).toBeVisible({ timeout: 45_000 });
+      await alicePage.page.locator(".card-detail-tab-synthesis").click();
+      await alicePage.page.locator(".card-detail-new-synthesis-button").click();
       await setCardDetailEditorValue(alicePage.page, synthesis);
 
       const strandUpdate = alicePage.page.waitForResponse(
@@ -1009,7 +1009,7 @@ test.describe("kanban end-to-end", () => {
           (response.request().postData() ?? "").includes("ak.strand.update"),
         { timeout: 60_000 },
       );
-      await alicePage.page.getByTestId("card-detail-save-button").click();
+      await alicePage.page.locator(".card-detail-save-button").click();
 
       const response = await strandUpdate;
       const responseBody = await response.text();
@@ -1026,7 +1026,7 @@ test.describe("kanban end-to-end", () => {
         `synthesis leaked as plaintext into the ak.strand.update body — realm not actually encrypted or client skipped MLS encryption`,
       ).toBe(false);
 
-      await expect(alicePage.page.getByTestId("card-synthesis-panel")).toContainText(synthesis, {
+      await expect(alicePage.page.locator(".card-synthesis-panel")).toContainText(synthesis, {
         timeout: 120_000,
       });
       expect(floorViolations, floorViolations.join("\n")).toEqual([]);
@@ -1072,16 +1072,16 @@ test.describe("kanban end-to-end", () => {
       await buildEncryptedBoardAndCard(alicePage.page, realmId, stamp, cardTitle);
 
       await alicePage.page
-        .getByTestId("kanban-card")
+        .locator(".kanban-card")
         .filter({ hasText: cardTitle })
         .first()
         .click();
-      await expect(alicePage.page.getByTestId("card-detail-modal")).toBeVisible({ timeout: 45_000 });
-      await alicePage.page.getByTestId("card-detail-tab-discussion").click();
-      await expect(alicePage.page.getByTestId("chat-panel")).toBeVisible({ timeout: 45_000 });
+      await expect(alicePage.page.locator(".card-detail-modal")).toBeVisible({ timeout: 45_000 });
+      await alicePage.page.locator(".card-detail-tab-discussion").click();
+      await expect(alicePage.page.locator(".chat-panel")).toBeVisible({ timeout: 45_000 });
 
-      await alicePage.page.getByTestId("chat-input").fill(comment);
-      await expect(alicePage.page.getByTestId("send-chat-button")).toBeEnabled({ timeout: 90_000 });
+      await alicePage.page.locator(".chat-input").fill(comment);
+      await expect(alicePage.page.locator(".send-chat-button")).toBeEnabled({ timeout: 90_000 });
       const messageCreate = alicePage.page.waitForResponse(
         (response) =>
           response.url().includes("/_arkret/self/events") &&
@@ -1089,7 +1089,7 @@ test.describe("kanban end-to-end", () => {
           (response.request().postData() ?? "").includes("ak.message.create"),
         { timeout: 60_000 },
       );
-      await alicePage.page.getByTestId("send-chat-button").click();
+      await alicePage.page.locator(".send-chat-button").click();
 
       const response = await messageCreate;
       const responseBody = await response.text();
@@ -1106,7 +1106,7 @@ test.describe("kanban end-to-end", () => {
         `comment leaked as plaintext into the ak.message.create body — realm not actually encrypted or client skipped MLS encryption`,
       ).toBe(false);
 
-      await expect(alicePage.page.getByTestId("chat-panel")).toContainText(comment, {
+      await expect(alicePage.page.locator(".chat-panel")).toContainText(comment, {
         timeout: 120_000,
       });
       expect(floorViolations, floorViolations.join("\n")).toEqual([]);

@@ -91,7 +91,7 @@ export async function installCardPlacementFault(page: Page, realm: string, fault
         expect(durable!.move).toBe(cutId); expect(durable!.moveCount).toBe(1);
       } else expect(durable!.move).toBeNull();
       if (fault !== "card-move-response-lost") {
-        await expect(page.getByTestId("kanban-card").filter({ hasText: cardTitle })).toHaveAttribute("data-card-draft", "true");
+        await expect(page.locator(".kanban-card").filter({ hasText: cardTitle })).toHaveAttribute("data-card-draft", "true");
       }
       const url = page.url();
       let processRestarted = false;

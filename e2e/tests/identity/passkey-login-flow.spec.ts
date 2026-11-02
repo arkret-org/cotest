@@ -118,15 +118,15 @@ test.describe("Coauth passkey browser lifecycle @fully-implemented", () => {
         );
 
         await page.goto(`${coauth}/security`);
-        await page.locator("#new-passkey-label").fill("Virtual security key");
-        await page.getByTestId("coauth-add-passkey").click();
+        await page.getByRole("textbox", { name: "New passkey name", exact: true }).fill("Virtual security key");
+        await page.getByRole("button", { name: "Add passkey", exact: true }).click();
         await expect(
           page.getByText("Virtual security key", { exact: true }),
         ).toBeVisible({
           timeout: 30_000,
         });
 
-        const label = page.locator('input[id^="passkey-label-"]');
+        const label = page.getByRole("textbox", { name: "Passkey name", exact: true });
         await label.fill("Renamed passkey");
         await page.getByRole("button", { name: "Save name" }).click();
         await expect(
@@ -242,8 +242,8 @@ test.describe("Coauth passkey browser lifecycle @fully-implemented", () => {
 
         await page.goto(`${coauth}/security`);
         await authenticator.add("usb");
-        await page.locator("#new-passkey-label").fill("Replacement passkey");
-        await page.getByTestId("coauth-add-passkey").click();
+        await page.getByRole("textbox", { name: "New passkey name", exact: true }).fill("Replacement passkey");
+        await page.getByRole("button", { name: "Add passkey", exact: true }).click();
         await expect(
           page.getByText("Replacement passkey", { exact: true }),
         ).toBeVisible({ timeout: 30_000 });
@@ -292,8 +292,8 @@ test.describe("Coauth passkey browser lifecycle @fully-implemented", () => {
         await jointPage.gotoHome();
         await hardLogoutViaAccountMenu(jointPage);
         await jointPage.gotoLogin();
-        await page.getByTestId("login-server-url").fill(colandBaseUrl());
-        await page.getByTestId("start-server-login-button").click();
+        await page.locator(".auth-station-field input").fill(colandBaseUrl());
+        await page.locator(".auth-primary").click();
 
         const identifier = page.locator("#login-handle");
         const passkeyButton = page.getByTestId("coauth-login-passkey");
@@ -315,10 +315,10 @@ test.describe("Coauth passkey browser lifecycle @fully-implemented", () => {
         ) {
           await approve.click();
         }
-        await expect(page.getByTestId("client-shell")).toBeVisible({
+        await expect(page.locator(".shell.app")).toBeVisible({
           timeout: 120_000,
         });
-        await expect(page.getByTestId("login-panel")).toHaveCount(0);
+        await expect(page.locator(".auth-panel")).toHaveCount(0);
       });
     } finally {
       await authenticator.dispose();

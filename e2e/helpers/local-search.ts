@@ -8,29 +8,30 @@ export async function postponeSearchEncryptionPrompts(
   options: { allowUnpublishedRecoverySetup?: boolean } = {},
 ): Promise<() => Promise<void>> {
   const prompts: Array<readonly [string, string]> = [
-    ["mls-unlock-banner", "mls-unlock-dismiss"],
-    ["mls-backup-modal", "mls-backup-dismiss"],
+    ["Restore encryption keys", "Not now"],
+    ["Back up encrypted history", "Remind me later"],
   ];
   if (options.allowUnpublishedRecoverySetup) {
     // Plaintext reads do not require the E2EE recovery-material gate. Only
     // these callers may postpone its unpublished setup through normal UI.
-    prompts.push(["recovery-key-setup-modal", "recovery-key-setup-dismiss-unpublished"],
-      ["recovery-key-setup-modal", "recovery-key-setup-dismiss"]);
+    prompts.push(["Set up your recovery key", "Close without publishing"],
+      ["Set up your recovery key", "Not now"]);
   }
-  const frontmost = () => page.evaluate(entries => {
-    for (const [prompt, dismiss] of entries) {
-      const button = document.querySelector<HTMLButtonElement>(
-        `[data-testid="${prompt}"] [data-testid="${dismiss}"]`,
-      );
-      if (!button || button.disabled) continue;
-      const bounds = button.getBoundingClientRect();
-      if (!bounds.width || !bounds.height) continue;
-      const top = document.elementFromPoint(bounds.x + bounds.width / 2,
-        bounds.y + bounds.height / 2);
-      if (top && (top === button || button.contains(top))) return { prompt, dismiss };
+  const frontmost = async () => {
+    for (const [prompt, dismiss] of prompts) {
+      const button = page.getByRole("dialog", { name: prompt, exact: true })
+        .getByRole("button", { name: dismiss, exact: true });
+      if (!await button.isVisible() || !await button.isEnabled()) continue;
+      const uncovered = await button.evaluate(element => {
+        const bounds = element.getBoundingClientRect();
+        const top = document.elementFromPoint(bounds.x + bounds.width / 2,
+          bounds.y + bounds.height / 2);
+        return Boolean(top && (top === element || element.contains(top)));
+      });
+      if (uncovered) return { prompt, dismiss };
     }
     return null;
-  }, prompts);
+  };
   let postponing = false;
   const postpone = async () => {
     if (postponing) return;
@@ -39,9 +40,9 @@ export async function postponeSearchEncryptionPrompts(
       for (let attempt = 0; attempt < 3; attempt++) {
         const selected = await frontmost();
         if (!selected) return;
-        const dialog = page.getByTestId(selected.prompt);
+        const dialog = page.getByRole("dialog", { name: selected.prompt, exact: true });
         try {
-          await dialog.getByTestId(selected.dismiss).click({ timeout: 1_000 });
+          await dialog.getByRole("button", { name: selected.dismiss, exact: true }).click({ timeout: 1_000 });
         } catch (error) {
           // The initial setup can reveal words between hit-test and click.
           // Re-select its normal dismissal; another foreground workflow keeps
@@ -62,7 +63,7 @@ export async function postponeSearchEncryptionPrompts(
   for (const prompt of new Set(prompts.map(([prompt]) => prompt))) {
     // A covered background reminder remains visible while the real workflow
     // is active. Waiting for it to hide here would deadlock that workflow.
-    await page.addLocatorHandler(page.getByTestId(prompt), postpone, { noWaitAfter: true });
+    await page.addLocatorHandler(page.getByRole("dialog", { name: prompt, exact: true }), postpone, { noWaitAfter: true });
   }
   await postpone();
   return postpone;

@@ -69,16 +69,16 @@ async function runHolderRevocation(
         if (activePolicy === null) {
           await flow.page.gotoAppPanel("/settings/recovery", "recovery-panel");
           const page = flow.page.page;
-          await page.getByTestId("recovery-key-regenerate").click();
-          const generated = (await page.getByTestId("recovery-key-current").textContent())!.trim();
+          await page.locator(".recovery-key-regenerate").click();
+          const generated = (await page.locator(".recovery-key-current").textContent())!.trim();
           expect(generated.split(/\s+/).length).toBe(24);
-          await page.getByTestId("recovery-key-confirm-input").evaluate((element, secret) => {
+          await page.locator(".recovery-key-confirm-input").locator("input, textarea").evaluate((element, secret) => {
             Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")!.set!.call(element, secret);
             element.dispatchEvent(new Event("input", { bubbles: true }));
           }, generated);
-          await page.getByTestId("recovery-key-clear-live").click();
-          await expect(page.getByTestId("recovery-key-confirm-form")).toHaveCount(0, { timeout: 120_000 });
-          await expect(page.getByTestId("recovery-key-regenerate")).toBeDisabled();
+          await page.locator(".recovery-key-clear-live").click();
+          await expect(page.locator(".recovery-key-confirm-form")).toHaveCount(0, { timeout: 120_000 });
+          await expect(page.locator(".recovery-key-regenerate")).toBeDisabled();
           flow.page.session.onRecoveryKeyConfigured?.(generated);
         } else {
           expect(activePolicy).toBeTruthy();
@@ -112,10 +112,10 @@ async function runHolderRevocation(
       await flow.page.gotoTimelineRealm(realm);
       await flow.page.completeRecoveryKeySetupIfPrompted(100);
       await flow.page.page.keyboard.press("Control+F");
-      const panel = flow.page.page.getByTestId("global-search-panel");
-      await panel.getByTestId("global-search-input").fill(body);
-      await panel.getByTestId("global-search-submit").click();
-      const row = panel.getByTestId("global-search-result-item");
+      const panel = flow.page.page.locator(".global-search-panel");
+      await panel.locator(".global-search-input").fill(body);
+      await panel.locator(".global-search-submit").click();
+      const row = panel.locator(".global-search-result-item");
       await expect(row).toHaveCount(1);
       await expect(row).toHaveAttribute("data-event-id", accepted.event_id);
       const result = await native("accepted-device-positive", session);
@@ -154,18 +154,18 @@ async function runHolderRevocation(
     // A current publication can already have refreshed this query and paused
     // its authenticated read. Ordinary Enter also submits when it is idle;
     // the barrier below proves a real read rather than assuming a click ran.
-    await replacingPage.getByTestId("global-search-input").press("Enter");
+    await replacingPage.locator(".global-search-input").press("Enter");
     await expect.poll(() => replacingPage.evaluate(() => (window as unknown as {
       holderSearchReadBarrier: { observed: number };
     }).holderSearchReadBarrier.observed)).toBeGreaterThan(0);
-    await expect(replacingPage.getByTestId("global-search-results-loading")).toBeVisible();
-    await replacingPage.getByTestId("account-menu-button").click();
-    const picker = replacingPage.getByTestId("account-menu").getByTestId("account-switch-select");
+    await expect(replacingPage.locator(".global-search-results-loading")).toBeVisible();
+    await replacingPage.locator(".account-menu-button").click();
+    const picker = replacingPage.locator(".account-menu").locator(".account-picker__select");
     const savedProfile = await picker.inputValue();
     expect(savedProfile).not.toBe("");
-    await replacingPage.getByTestId("account-menu").getByTestId("account-add").click();
-    await expect(replacingPage.getByTestId("login-panel")).toBeVisible({ timeout: 120_000 });
-    await expect(replacingPage.getByTestId("client-shell")).toHaveCount(0);
+    await replacingPage.locator(".account-menu").locator(".account-picker__add").click();
+    await expect(replacingPage.locator(".auth-panel")).toBeVisible({ timeout: 120_000 });
+    await expect(replacingPage.locator(".shell.app")).toHaveCount(0);
     await replacingPage.evaluate(() => (window as unknown as {
       holderSearchReadBarrier: { release: () => void };
     }).holderSearchReadBarrier.release());
@@ -174,23 +174,23 @@ async function runHolderRevocation(
       return b.delivered === b.observed && b.delivered > 0;
     })).toBe(true);
     const retainedSource = await native("issuer-holder-remains-valid-during-local-replacement", owner);
-    await expect(replacingPage.getByTestId("login-panel")).toBeVisible();
-    await expect(replacingPage.getByTestId("global-search-result-item")).toHaveCount(0);
-    await replacingPage.getByTestId("return-previous-account").click();
-    await expect(replacingPage.getByTestId("client-shell")).toBeVisible({ timeout: 120_000 });
+    await expect(replacingPage.locator(".auth-panel")).toBeVisible();
+    await expect(replacingPage.locator(".global-search-result-item")).toHaveCount(0);
+    await replacingPage.getByRole("button", { name: "Back to previous account", exact: true }).click();
+    await expect(replacingPage.locator(".shell.app")).toBeVisible({ timeout: 120_000 });
     expect(await replacingPage.evaluate(() => JSON.parse(localStorage.getItem("inkson.config.v1") ?? "{}").active_account?.profile_id)).toBe(savedProfile);
     await flows[0]!.page.completeRecoveryKeySetupIfPrompted(100);
     expect(await replacingPage.evaluate(() => performance.timeOrigin)).toBe(origin);
     await replacingPage.keyboard.press("Control+F");
-    await expect(replacingPage.getByTestId("global-search-results-empty")).toBeVisible();
-    await expect(replacingPage.getByTestId("global-search-result-item")).toHaveCount(0);
-    await replacingPage.getByTestId("global-search-input").fill(body);
-    await replacingPage.getByTestId("global-search-submit").click();
-    const freshRow = replacingPage.getByTestId("global-search-result-item");
+    await expect(replacingPage.locator(".global-search-results-empty")).toBeVisible();
+    await expect(replacingPage.locator(".global-search-result-item")).toHaveCount(0);
+    await replacingPage.locator(".global-search-input").fill(body);
+    await replacingPage.locator(".global-search-submit").click();
+    const freshRow = replacingPage.locator(".global-search-result-item");
     await expect(freshRow).toHaveCount(1);
     await expect(freshRow).toHaveAttribute("data-event-id", retainedSource.event_id);
     await expect(freshRow).toHaveAttribute("data-commit-id", retainedSource.covering_commit.commit_id);
-    await expect(freshRow.getByTestId("global-search-result-snippet")).toHaveText(body);
+    await expect(freshRow.locator(".global-search-result-snippet")).toHaveText(body);
     observations.push({ step: "same-document-root-session-and-pending-device-replacement",
       sameDocument: true, deliveredLateAuthenticatedRead: true,
       originalEvent: retainedSource.event_id, originalCommit: retainedSource.covering_commit.commit_id });
@@ -202,26 +202,26 @@ async function runHolderRevocation(
       await ownerPage.goto(new URL("/settings/devices", ownerPage.url()).toString());
       const target = ownerPage.locator(`[data-testid="device-row"][data-device-id="${sibling.user.deviceId}"]`);
       await expect(target).toBeVisible({ timeout: 120_000 });
-      await target.getByTestId("device-revoke-button").click();
+      await target.locator(".device-revoke-button").click();
       // Deliver the ordinary input event without putting Recovery Key words
       // into a locator.fill failure's reporter-visible call log.
-      await ownerPage.getByTestId("device-revoke-passphrase-input").evaluate((element, secret) => {
+      await ownerPage.locator(".device-revoke-passphrase input").evaluate((element, secret) => {
         Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(element, secret);
         element.dispatchEvent(new Event("input", { bubbles: true }));
       }, owner.recoveryKey!);
-      await ownerPage.getByTestId("device-revoke-confirm-button").click();
-      await expect(ownerPage.getByTestId("device-revoke-status"))
+      await ownerPage.locator(".device-revoke-confirm-button").click();
+      await expect(ownerPage.locator(".device-revoke-status"))
         .toContainText("through transaction", { timeout: 180_000 });
-      await expect(flows[1]!.page.page.getByTestId("global-search-result-item")).toHaveCount(0,
+      await expect(flows[1]!.page.page.locator(".global-search-result-item")).toHaveCount(0,
         { timeout: 120_000 });
       await expect(observeNativeSearch(sibling, realm, body,
         testInfo.outputPath("revoked-device-native.json"))).rejects.toThrow(/401|unauthorized|revok|not.*active|unavailable/i);
       await native("independent-holder-still-authorized", owner);
       await flows[0]!.page.gotoTimelineRealm(realm);
       await ownerPage.keyboard.press("Control+F");
-      await ownerPage.getByTestId("global-search-input").fill(body);
-      await ownerPage.getByTestId("global-search-submit").click();
-      await expect(ownerPage.getByTestId("global-search-result-snippet")).toHaveText(body);
+      await ownerPage.locator(".global-search-input").fill(body);
+      await ownerPage.locator(".global-search-submit").click();
+      await expect(ownerPage.locator(".global-search-result-snippet")).toHaveText(body);
 
     } else {
       const url = `${coauthBaseUrl()}/_arkret/gate/account/session-grants/revoke`;
@@ -230,24 +230,24 @@ async function runHolderRevocation(
       const outcome = await revoked.json();
       expect(outcome.revoked_count).toBe(1);
       expect(outcome.revoked_session_grant_ids).toEqual([owner.grantId]);
-      await expect(flows[0]!.page.page.getByTestId("global-search-result-item")).toHaveCount(0,
+      await expect(flows[0]!.page.page.locator(".global-search-result-item")).toHaveCount(0,
         { timeout: 120_000 });
       await expect(observeNativeSearch(owner, realm, body,
         testInfo.outputPath("revoked-session-native.json"))).rejects.toThrow(/401|unauthorized|revok|grant.*invalid/i);
       await native("independent-session-remains-authorized-after-targeted-revoke", sibling);
       const siblingPage = flows[1]!.page.page;
-      await siblingPage.getByTestId("global-search-input").fill(body);
-      await siblingPage.getByTestId("global-search-submit").click();
-      await expect(siblingPage.getByTestId("global-search-results-loading")).toHaveCount(0);
-      await expect(siblingPage.getByTestId("global-search-result-item"))
+      await siblingPage.locator(".global-search-input").fill(body);
+      await siblingPage.locator(".global-search-submit").click();
+      await expect(siblingPage.locator(".global-search-results-loading")).toHaveCount(0);
+      await expect(siblingPage.locator(".global-search-result-item"))
         .toHaveAttribute("data-event-id", accepted.event_id);
-      await expect(siblingPage.getByTestId("global-search-result-snippet")).toHaveText(body);
+      await expect(siblingPage.locator(".global-search-result-snippet")).toHaveText(body);
     }
     for (const flow of (revokedHolder === "Device" ? [flows[1]!] : [flows[0]!])) {
       await flow.page.page.reload({ waitUntil: "domcontentloaded" });
-      await expect(flow.page.page.getByTestId("login-panel")).toBeVisible({ timeout: 120_000 });
-      await expect(flow.page.page.getByTestId("global-search-result-item")).toHaveCount(0);
-      await expect(flow.page.page.getByTestId("client-shell")).toHaveCount(0, { timeout: 120_000 });
+      await expect(flow.page.page.locator(".auth-panel")).toBeVisible({ timeout: 120_000 });
+      await expect(flow.page.page.locator(".global-search-result-item")).toHaveCount(0);
+      await expect(flow.page.page.locator(".shell.app")).toHaveCount(0, { timeout: 120_000 });
     }
   } finally {
     await testInfo.attach("real-holder-search.json", {

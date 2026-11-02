@@ -48,10 +48,10 @@ test("Chat file drop freezes structured plaintext and encrypted attachments", as
       page.on("request", observe);
       try {
         const body = `private attachment ${Date.now()}`;
-        await expect(page.getByTestId("send-chat-button")).toBeEnabled({timeout: 120_000});
+        await expect(page.locator(".send-chat-button")).toBeEnabled({timeout: 120_000});
         const uploaded = page.waitForResponse(response =>
           new URL(response.url()).pathname === "/_arkret/self/blob/upload" && response.request().method() === "POST");
-        await page.getByTestId("compose-drop-zone").evaluate((zone, body) => {
+        await page.locator(".compose-drop-zone").evaluate((zone, body) => {
           const transfer = new DataTransfer();
           transfer.items.add(new File([body], "private-note.txt", { type: "text/plain" }));
           zone.dispatchEvent(new DragEvent("drop", { bubbles: true, cancelable: true, dataTransfer: transfer }));
@@ -61,10 +61,10 @@ test("Chat file drop freezes structured plaintext and encrypted attachments", as
         const outcome = await response.json();
         const bytes = Buffer.from(body, "utf8");
         const expectedRef = outcome.blob_ref as string;
-        await expect(page.getByTestId("compose-upload-progress")).toContainText("1 attachment(s) ready");
-        await expect(page.getByTestId("compose-attachment")).toHaveCount(1);
+        await expect(page.locator(".compose-upload-progress")).toContainText("1 attachment(s) ready");
+        await expect(page.locator(".compose-attachment")).toHaveCount(1);
         expect(uploadRequests).toHaveLength(1);
-        await expect(page.getByTestId("chat-input")).toHaveValue("");
+        await expect(page.locator(".chat-input")).toHaveValue("");
         const base = colandBaseUrl();
         const downloadUrl = `${base}/_arkret/self/blob/get?blob_ref=${encodeURIComponent(expectedRef)}`;
         const download = await request.get(downloadUrl, {

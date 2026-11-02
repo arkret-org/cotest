@@ -62,7 +62,7 @@ export class InksonTestClient implements TestClient {
     // reaches.
     const session = this.#sessionFor(user);
     await session.page.gotoHome();
-    await expect(session.page.page.getByTestId("client-shell")).toBeVisible({
+    await expect(session.page.page.locator(".shell.app")).toBeVisible({
       timeout: 60_000,
     });
     return {

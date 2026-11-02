@@ -92,12 +92,12 @@ test.describe("harness mocks selftest @fully-implemented", () => {
     expect(inspect.kinds.scenarios.length).toBeGreaterThanOrEqual(2);
   });
 
-  test("mock-email: send/claim happy path + token expiry", async ({ request }) => {
+  test("mock-email: delivery inbox retains expiry metadata and retired claim is absent", async ({ request }) => {
     const baseUrl = mockEmailBaseUrl();
     test.skip(!baseUrl, "mock-email not started for this run");
 
     const to = `alice-${Date.now()}@selftest.invalid`;
-    // Fresh token with TTL=1s → expect 410 after wait.
+    // Delivery records retain expiry; the retired verification service is absent.
     const expiringToken = `expiring-${Date.now()}`;
     const sendExpiring = await request.post(`${baseUrl}/mock/email/verification/send`, {
       data: { to, token: expiringToken, ttl_seconds: 1, body_html: "<p>hi</p>" },
@@ -107,8 +107,13 @@ test.describe("harness mocks selftest @fully-implemented", () => {
     const claimExpired = await request.post(`${baseUrl}/mock/email/verification/claim`, {
       data: { token: expiringToken, did: "did:web:alice.selftest" },
     });
-    expect(claimExpired.status()).toBe(410);
-    expect((await claimExpired.json()).error).toBe("token_expired");
+    expect(claimExpired.status()).toBe(404);
+    expect((await claimExpired.json()).error).toBe("not_found");
+    const expiredInbox = await request.get(`${baseUrl}/mock/email/verification/inbox?to=${encodeURIComponent(to)}`);
+    expect(expiredInbox.status()).toBe(200);
+    const expiredRecord = (await expiredInbox.json()).messages.find((message: { token?: string }) => message.token === expiringToken);
+    expect(expiredRecord).toBeDefined();
+    expect(Date.parse(expiredRecord.expires_at)).toBeLessThanOrEqual(Date.now());
 
     // Happy path with a longer TTL
     const goodToken = `good-${Date.now()}`;

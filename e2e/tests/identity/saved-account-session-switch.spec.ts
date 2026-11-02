@@ -24,45 +24,45 @@ async function currentAccount(page: Page): Promise<SavedAccount> {
 }
 
 async function authorize(page: Page, account: RealOidcAccount): Promise<void> {
-  await page.getByTestId("login-server-url").fill(colandBaseUrl());
-  await page.getByTestId("start-server-login-button").click();
+  await page.locator(".auth-station-field input").fill(colandBaseUrl());
+  await page.locator(".auth-primary").click();
   await expect(page.locator("#login-handle").or(page.locator("#login-password")))
     .toBeVisible({ timeout: 30_000 });
   const changeAccount = page.getByTestId("coauth-login-change-identifier");
   if (await changeAccount.isVisible()) await changeAccount.click();
   await submitCoauthPasswordCredentials(page, account);
   const approve = page.getByTestId("coauth-oauth-approve");
-  const inkson = page.getByTestId("auth-shell").or(page.getByTestId("client-shell"));
+  const inkson = page.locator(".auth-shell").or(page.locator(".shell.app"));
   await expect(approve.or(inkson)).toBeVisible({ timeout: 30_000 });
   if (await approve.isVisible()) await approve.click();
   await expect(inkson).toBeVisible({ timeout: 30_000 });
 }
 
 async function completeNewIdentity(page: Page): Promise<void> {
-  await page.getByTestId("choose-new-identity").click();
-  await expect(page.getByTestId("account-switcher")).toHaveCount(0);
-  const words = page.getByTestId("onboarding-recovery-key-display").locator("li");
+  await page.locator(".choose-new-identity").click();
+  await expect(page.locator(".account-switcher")).toHaveCount(0);
+  const words = page.locator(".onboarding-recovery-key-display").locator("li");
   await expect(words).toHaveCount(24);
   const recoveryKey = (await words.allTextContents()).map((word) => word.trim()).join(" ");
-  await page.getByTestId("onboarding-recovery-key-confirm").fill(recoveryKey);
-  await page.getByTestId("onboarding-bind-identity").click();
-  await expect(page.getByTestId("onboarding-complete")).toBeVisible({ timeout: 120_000 });
-  await page.getByTestId("onboarding-complete").getByRole("link", { name: "Continue", exact: true }).click();
-  await expect(page.getByTestId("client-shell")).toBeVisible({ timeout: 30_000 });
+  await page.locator(".onboarding-recovery-key-confirm").fill(recoveryKey);
+  await page.locator(".onboarding-bind-identity").click();
+  await expect(page.locator(".onboarding-complete")).toBeVisible({ timeout: 120_000 });
+  await page.locator(".onboarding-complete").getByRole("link", { name: "Continue", exact: true }).click();
+  await expect(page.locator(".shell.app")).toBeVisible({ timeout: 30_000 });
 }
 
 async function addAccount(page: Page): Promise<void> {
-  await page.getByTestId("account-menu-button").click();
-  await page.getByTestId("account-menu").getByTestId("account-add").click();
-  await expect(page.getByTestId("login-panel")).toBeVisible();
-  await expect(page.getByTestId("account-switcher")).toHaveCount(0);
-  await expect(page.getByTestId("return-previous-account")).toBeVisible();
-  await expect(page.getByTestId("start-server-login-button")).toHaveText("Sign in to this server");
+  await page.locator(".account-menu-button").click();
+  await page.locator(".account-menu").locator(".account-picker__add").click();
+  await expect(page.locator(".auth-panel")).toBeVisible();
+  await expect(page.locator(".account-switcher")).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Back to previous account", exact: true })).toBeVisible();
+  await expect(page.locator(".auth-primary")).toHaveText("Sign in to this server");
 }
 
 async function selectSavedAccount(page: Page, account: SavedAccount): Promise<void> {
-  if (!(await page.getByTestId("account-menu").isVisible())) {
-    await page.getByTestId("account-menu-button").click();
+  if (!(await page.locator(".account-menu").isVisible())) {
+    await page.locator(".account-menu-button").click();
   }
   // The previous account's already-issued request may finish during retirement.
   // Require a real successful response for the selected principal as well as
@@ -79,11 +79,11 @@ async function selectSavedAccount(page: Page, account: SavedAccount): Promise<vo
       throw error;
     }
   });
-  await page.getByTestId("account-switch-select").selectOption(account.profile_id);
+  await page.locator(".account-picker__select").selectOption(account.profile_id);
   const result = await (await viewer).json();
   expect(result.principal_id).toBe(account.authority.principal_id);
   expect(result.primary_handle_claim.claim.subject_account_id).toEqual(account.authority);
-  await expect(page.getByTestId("client-shell")).toBeVisible();
+  await expect(page.locator(".shell.app")).toBeVisible();
   expect(await currentAccount(page)).toEqual(account);
 }
 
@@ -108,13 +108,13 @@ test("real saved sessions survive add-account, switch both ways and require Coau
   });
   try {
     await page.goto("/login");
-    await expect(page.getByTestId("login-panel")).toBeVisible();
-    await expect(page.getByTestId("account-switcher")).toHaveCount(0);
+    await expect(page.locator(".auth-panel")).toBeVisible();
+    await expect(page.locator(".account-switcher")).toHaveCount(0);
     await authorize(page, first);
     await completeNewIdentity(page);
     const firstAccount = await currentAccount(page);
     await page.reload();
-    await expect(page.getByTestId("client-shell")).toBeVisible({ timeout: 30_000 });
+    await expect(page.locator(".shell.app")).toBeVisible({ timeout: 30_000 });
     expect(await currentAccount(page)).toEqual(firstAccount);
 
     const documentOrigin = await page.evaluate(() => performance.timeOrigin);
@@ -127,9 +127,9 @@ test("real saved sessions survive add-account, switch both ways and require Coau
     };
     page.on("request", captureAuthorization);
     await addAccount(page);
-    await page.getByTestId("login-server-url").fill("https://unused-server.example/");
-    await page.getByTestId("return-previous-account").click();
-    await expect(page.getByTestId("client-shell")).toBeVisible();
+    await page.locator(".auth-station-field input").fill("https://unused-server.example/");
+    await page.getByRole("button", { name: "Back to previous account", exact: true }).click();
+    await expect(page.locator(".shell.app")).toBeVisible();
     expect(await currentAccount(page)).toEqual(firstAccount);
     expect(await page.evaluate(() => performance.timeOrigin)).toBe(documentOrigin);
     expect(authorizationRequests).toHaveLength(0);
@@ -149,11 +149,11 @@ test("real saved sessions survive add-account, switch both ways and require Coau
       localStorage.setItem("inkson.profiles.v1", JSON.stringify(profiles));
     });
     await page.reload();
-    await expect(page.getByTestId("client-shell")).toBeVisible({ timeout: 30_000 });
+    await expect(page.locator(".shell.app")).toBeVisible({ timeout: 30_000 });
     expect(await currentAccount(page)).toEqual(secondAccount);
-    await page.getByTestId("account-menu-button").click();
-    await expect(page.getByTestId("account-switch-select").locator(`option[value="${firstAccount.profile_id}"]`)).toContainText(first.handle);
-    await expect(page.getByTestId("account-switch-select").locator(`option[value="${secondAccount.profile_id}"]`)).toContainText(second.handle);
+    await page.locator(".account-menu-button").click();
+    await expect(page.locator(".account-picker__select").locator(`option[value="${firstAccount.profile_id}"]`)).toContainText(first.handle);
+    await expect(page.locator(".account-picker__select").locator(`option[value="${secondAccount.profile_id}"]`)).toContainText(second.handle);
     const warmOrigin = await page.evaluate(() => performance.timeOrigin);
     const authorizationsBeforeSwitch = authorizationRequests.length;
     await selectSavedAccount(page, firstAccount);
@@ -162,14 +162,14 @@ test("real saved sessions survive add-account, switch both ways and require Coau
     expect(authorizationRequests).toHaveLength(authorizationsBeforeSwitch);
 
     await selectSavedAccount(page, firstAccount);
-    await page.getByTestId("account-menu-button").click();
-    await page.getByTestId("account-menu-session-logout").click();
-    await expect(page.getByTestId("login-panel")).toBeVisible();
-    await expect(page.getByTestId("account-switcher")).toHaveCount(0);
-    await expect(page.getByTestId("client-shell")).toHaveCount(0);
-    await expect(page.getByTestId("login-server-url")).toHaveValue(firstAccount.server_url);
+    await page.locator(".account-menu-button").click();
+    await page.getByRole("button", { name: "Log out", exact: true }).click();
+    await expect(page.locator(".auth-panel")).toBeVisible();
+    await expect(page.locator(".account-switcher")).toHaveCount(0);
+    await expect(page.locator(".shell.app")).toHaveCount(0);
+    await expect(page.locator(".auth-station-field input")).toHaveValue(firstAccount.server_url);
     await authorize(page, first);
-    await expect(page.getByTestId("client-shell")).toBeVisible({ timeout: 30_000 });
+    await expect(page.locator(".shell.app")).toBeVisible({ timeout: 30_000 });
     expect(await currentAccount(page)).toEqual(firstAccount);
     const returningRequest = authorizationRequests.at(-1)!;
     expect(returningRequest.searchParams.get("prompt")).toBe("login");

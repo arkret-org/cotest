@@ -116,8 +116,8 @@ async function gotoChat(userPage: JointUserPage, realmId: string) {
     window.history.forward();
     await forward;
   }, `/chat/${realmId}`);
-  await expect(userPage.page.getByTestId("chat-panel")).toBeVisible({ timeout: 120_000 });
-  await expect(userPage.page.getByTestId("channel-item").first()).toBeVisible({ timeout: 30_000 });
+  await expect(userPage.page.locator(".chat-panel")).toBeVisible({ timeout: 120_000 });
+  await expect(userPage.page.locator(".channel-item").first()).toBeVisible({ timeout: 30_000 });
 }
 
 async function sendChatMessage(userPage: JointUserPage, realmId: string, body: string) {
@@ -125,12 +125,12 @@ async function sendChatMessage(userPage: JointUserPage, realmId: string, body: s
   // The recipient initially sees the fail-closed encrypted composer while its
   // verified Realm current is still loading. Wait for the plaintext policy
   // selected by this scenario before authoring a message.
-  await expect(userPage.page.getByTestId("send-e2ee-move-button")).toBeVisible({ timeout: 30_000 });
-  await userPage.page.getByTestId("chat-input").fill(body);
-  await userPage.page.getByTestId("send-chat-button").click();
+  await expect(userPage.page.locator(".send-e2ee-move-button")).toBeVisible({ timeout: 30_000 });
+  await userPage.page.locator(".chat-input").fill(body);
+  await userPage.page.locator(".send-chat-button").click();
   await expect(chatMessage(userPage, body)).toBeVisible({ timeout: 30_000 });
 }
 
 function chatMessage(userPage: JointUserPage, body: string) {
-  return userPage.page.getByTestId("chat-message").filter({ hasText: body }).first();
+  return userPage.page.locator(".chat-message").filter({ hasText: body }).first();
 }

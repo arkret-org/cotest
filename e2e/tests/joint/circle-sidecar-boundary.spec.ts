@@ -21,13 +21,13 @@ jointTest.describe("Circle and Sidecar object boundary @fully-implemented", () =
       await page.goto(`/realms/${encodeURIComponent(jointRealm.realmId)}/circles`, {
         waitUntil: "domcontentloaded",
       });
-      await expect(page.getByTestId("circles-panel")).toBeVisible();
-      await page.getByTestId("circle-create-open").click();
-      await page.getByTestId("circle-create-title").fill(title);
-      await page.getByTestId("circle-create-submit").click();
+      await expect(page.locator(".circles-page")).toBeVisible();
+      await page.locator(".circles-new").click();
+      await page.locator(".circle-create-title input, .circle-create-title textarea").fill(title);
+      await page.locator(".circle-create").click();
 
       await expect(page).toHaveURL(/\/realms\/[^/]+\/circles\/[^/]+$/);
-      await expect(page.getByTestId("circle-detail")).toContainText(title);
+      await expect(page.locator(".circle-detail")).toContainText(title);
 
       const circleId = decodeURIComponent(page.url().split("/").at(-1) ?? "");
       const created = await getCircle(request, jointRealm.aliceSession, circleId);

@@ -83,8 +83,8 @@ test("0540 real Station 1/100/1000 Realm durable cold startup records first scre
       const promptsBefore = postponedPrompts;
       const loadingStarted = Date.now();
       await flow.page.gotoHome();
-      const rows = page.locator(`[data-testid="realm-tree-node-button"][title^="${prefix}"]`);
-      const more = page.getByTestId("realm-list-load-more");
+      const rows = page.locator(`.realm-tree-node-button[title^="${prefix}"]`);
+      const more = page.getByRole("button", { name: "Load More Realms", exact: true });
       let loadMoreClicks = 0;
       await expect.poll(async () => {
         await postpone!();
@@ -98,18 +98,18 @@ test("0540 real Station 1/100/1000 Realm durable cold startup records first scre
         message: `all ${count} accepted Realm summaries reach the real navigation` }).toBe(count);
       const fullMetadataVisibleMs = Date.now() - loadingStarted;
       await flow.page.gotoTimelineRealm(realms[0]!, { completeRecoveryKeySetup: false });
-      await expect(page.getByTestId("message-list").getByText(`${prefix}accepted-body`, { exact: true }))
+      await expect(page.locator(".message-list").getByText(`${prefix}accepted-body`, { exact: true }))
         .toBeVisible({ timeout: 120_000 });
       // A full document reload keeps the previously installed durable dataset.
       // It is a cold application start, not a new browser-profile first install.
       const coldStarted = Date.now();
       await page.reload({ waitUntil: "domcontentloaded" });
-      await expect(page.getByTestId("message-list").getByText(`${prefix}accepted-body`, { exact: true }))
+      await expect(page.locator(".message-list").getByText(`${prefix}accepted-body`, { exact: true }))
         .toBeVisible({ timeout: 120_000 });
       const coldBodyVisibleMs = Date.now() - coldStarted;
       await expect(rows).toHaveCount(count, { timeout: 120_000 });
       await postpone();
-      const input = page.getByTestId("chat-input");
+      const input = page.locator(".chat-input");
       await input.fill("unsent capacity responsiveness check");
       await expect(input).toHaveValue("unsent capacity responsiveness check");
       await input.fill("");

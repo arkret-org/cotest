@@ -133,7 +133,7 @@ test.describe("key backup + restore", () => {
       const firstKey = promptedKey ?? session.recoveryKey ?? "";
       expect(firstKey.split(/\s+/)).toHaveLength(24);
       await device.gotoAppPanel("/settings/recovery", "recovery-panel");
-      await expect(device.page.getByTestId("recovery-key-section")).toBeVisible(
+      await expect(device.page.locator(".recovery-key-section")).toBeVisible(
         {
           timeout: 120_000,
         },
@@ -141,7 +141,7 @@ test.describe("key backup + restore", () => {
 
       // The settings page MUST NOT ask for a user passphrase.
       await expect(
-        device.page.getByTestId("recovery-key-passphrase"),
+        device.page.locator(".recovery-key-passphrase"),
       ).toHaveCount(0);
 
       // key-management.md §7.6.1: list metadata only classifies an envelope
@@ -182,10 +182,10 @@ test.describe("key backup + restore", () => {
       // Direct replacement was removed by the staged two-entry handoff
       // protocol. The settings surface must not silently rotate the key.
       await expect(
-        device.page.getByTestId("recovery-key-regenerate"),
+        device.page.locator(".recovery-key-regenerate"),
       ).toBeDisabled();
       await expect(
-        device.page.getByTestId("recovery-key-regenerate"),
+        device.page.locator(".recovery-key-regenerate"),
       ).toHaveAttribute("title", /staged handoff/i);
     } finally {
       await device.close();
@@ -280,7 +280,7 @@ test.describe("key backup + restore", () => {
       collectA1ProtocolFailures(deviceB.page, protocolFailures);
 
       await deviceB.gotoHome();
-      await expect(deviceB.page.getByTestId("mls-unlock-banner")).toBeVisible({
+      await expect(deviceB.page.locator(".mls-unlock-dialog")).toBeVisible({
         timeout: 90_000,
       });
       await unlockMlsAccountSecret(deviceB.page, recoveryKey);
@@ -477,7 +477,7 @@ test.describe("key backup + restore", () => {
 
       await deviceB.gotoHome();
       await expectGrantDpopSelfPath(deviceBTrace, "device B real OIDC login");
-      await expect(deviceB.page.getByTestId("mls-unlock-banner")).toBeVisible({
+      await expect(deviceB.page.locator(".mls-unlock-dialog")).toBeVisible({
         timeout: 90_000,
       });
       await unlockMlsAccountSecret(deviceB.page, recoveryKey);
@@ -503,10 +503,10 @@ test.describe("key backup + restore", () => {
 
       const reloadTraceStart = deviceBTrace.authorizedSelfRequests.length;
       await deviceB.page.reload({ waitUntil: "domcontentloaded" });
-      await expect(deviceB.page.getByTestId("client-shell")).toBeVisible({
+      await expect(deviceB.page.locator(".shell.app")).toBeVisible({
         timeout: 120_000,
       });
-      await expect(deviceB.page.getByTestId("login-panel")).toHaveCount(0);
+      await expect(deviceB.page.locator(".auth-panel")).toHaveCount(0);
       await expectNewGrantDpopSelfPath(
         deviceBTrace,
         reloadTraceStart,
@@ -646,7 +646,7 @@ test.describe("key backup + restore", () => {
       collectA1ProtocolFailures(deviceB.page, protocolFailures);
 
       await deviceB.gotoHome();
-      await expect(deviceB.page.getByTestId("mls-unlock-banner")).toBeVisible({
+      await expect(deviceB.page.locator(".mls-unlock-dialog")).toBeVisible({
         timeout: 90_000,
       });
       await unlockMlsAccountSecret(deviceB.page, recoveryKey);
@@ -654,16 +654,16 @@ test.describe("key backup + restore", () => {
         waitUntil: "domcontentloaded",
       });
       await deviceB.acknowledgeRecommendedEncryptionPromptIfVisible(30_000);
-      await expect(deviceB.page.getByTestId("kanban-panel")).toBeVisible({
+      await expect(deviceB.page.locator(".kanban-panel")).toBeVisible({
         timeout: 120_000,
       });
       await expect(
-        deviceB.page.getByTestId("board-space-select-button"),
+        deviceB.page.locator(".board-space-select-button"),
       ).toContainText(boardTitle, {
         timeout: 45_000,
       });
       await expect(
-        deviceB.page.getByTestId("kanban-card").filter({ hasText: cardTitle }),
+        deviceB.page.locator(".kanban-card").filter({ hasText: cardTitle }),
       ).toBeVisible({ timeout: 90_000 });
 
       const deviceBPrivatePlaintextBackupsBefore =
@@ -679,24 +679,24 @@ test.describe("key backup + restore", () => {
       await deviceA.page.goto(`/kanban/${realmId}/board/${boardId}`, {
         waitUntil: "domcontentloaded",
       });
-      await expect(deviceA.page.getByTestId("kanban-panel")).toBeVisible({
+      await expect(deviceA.page.locator(".kanban-panel")).toBeVisible({
         timeout: 120_000,
       });
       if (await restoreMlsHistoryIfPrompted(deviceA.page, recoveryKey)) {
         await deviceA.page.goto(`/kanban/${realmId}/board/${boardId}`, {
           waitUntil: "domcontentloaded",
         });
-        await expect(deviceA.page.getByTestId("kanban-panel")).toBeVisible({
+        await expect(deviceA.page.locator(".kanban-panel")).toBeVisible({
           timeout: 120_000,
         });
         await expect(
-          deviceA.page.getByTestId("board-space-select-button"),
+          deviceA.page.locator(".board-space-select-button"),
         ).toContainText(boardTitle, {
           timeout: 45_000,
         });
       }
       await deviceA.page
-        .getByTestId("kanban-card")
+        .locator(".kanban-card")
         .filter({ hasText: cardTitle })
         .click();
       await expect(
@@ -811,10 +811,10 @@ async function openAndPairFreshDeviceForAccount(
       waitUntil: "domcontentloaded",
     });
     await requestingDevice.page
-      .getByTestId("login-server-url")
+      .locator(".auth-station-field input")
       .fill(colandBaseUrl());
     await requestingDevice.page
-      .getByTestId("start-server-login-button")
+      .locator(".auth-primary")
       .click();
     await submitCoauthPasswordCredentials(requestingDevice.page, account);
     const approve = requestingDevice.page.getByTestId("coauth-oauth-approve");
@@ -827,19 +827,17 @@ async function openAndPairFreshDeviceForAccount(
       await approve.click();
     }
     await expect(
-      requestingDevice.page.getByTestId("device-setup-required"),
+      requestingDevice.page.locator(".device-setup-required"),
     ).toBeVisible({ timeout: 120_000 });
     await requestingDevice.page
-      .getByTestId("device-setup-pairing-start")
+      .locator(".device-setup-pairing-start")
       .click();
-    const pairingCode = requestingDevice.page.getByTestId(
-      "device-setup-pairing-code",
-    );
+    const pairingCode = requestingDevice.page.locator(".device-setup-pairing-code");
     await expect(pairingCode).toBeVisible({ timeout: 30_000 });
     const code = (await pairingCode.textContent())?.trim() ?? "";
     expect(code).not.toBe("");
     const pairingLink = await requestingDevice.page
-      .getByTestId("device-setup-pairing-link")
+      .locator(".device-setup-pairing-link")
       .inputValue();
     await approvePairingLinkOnAuthorizedDevice(
       authorizingDevice,
@@ -848,21 +846,21 @@ async function openAndPairFreshDeviceForAccount(
     );
 
     await requestingDevice.page
-      .getByTestId("device-setup-pairing-status")
+      .locator(".device-setup-pairing-status")
       .click();
     await expect(
-      requestingDevice.page.getByTestId("device-setup-status"),
+      requestingDevice.page.locator(".device-setup-status"),
     ).toContainText("Device authorization is accepted", {
       timeout: 90_000,
     });
     await requestingDevice.page
       .getByRole("link", { name: "Sign in again after approval" })
       .click();
-    await expect(requestingDevice.page.getByTestId("login-panel")).toBeVisible({
+    await expect(requestingDevice.page.locator(".auth-panel")).toBeVisible({
       timeout: 30_000,
     });
     await serverLoginViaCoauth(requestingDevice.page, account);
-    await expect(requestingDevice.page.getByTestId("client-shell")).toBeVisible(
+    await expect(requestingDevice.page.locator(".shell.app")).toBeVisible(
       {
         timeout: 120_000,
       },
@@ -1103,7 +1101,7 @@ async function createMlsRecoveryBackupFromPrompt(
     return setupRecoveryKey;
   }
 
-  const backupPrompt = page.getByTestId("mls-backup-modal");
+  const backupPrompt = page.getByRole("dialog", { name: "Back up encrypted history", exact: true });
   const backupPromptVisible = await backupPrompt
     .waitFor({ state: "visible", timeout: 5_000 })
     .then(() => true)
@@ -1121,32 +1119,33 @@ async function createMlsRecoveryBackupFromPrompt(
   await expect(backupPrompt).toBeVisible({
     timeout: 90_000,
   });
-  await expect(page.getByTestId("mls-backup-banner")).toHaveAttribute(
+  await expect(backupPrompt).toHaveAttribute(
     "role",
     "dialog",
   );
-  await expect(page.getByTestId("mls-backup-banner")).toHaveAttribute(
+  await expect(backupPrompt).toHaveAttribute(
     "aria-modal",
     "true",
   );
-  await expect(page.getByTestId("mls-backup-submit")).toBeVisible();
-  await expect(page.getByTestId("mls-backup-passphrase")).toHaveCount(0);
-  await expect(page.getByTestId("mls-backup-confirm")).toHaveCount(0);
+  await expect(page.getByRole("button", { name: /^(Create recovery key|Back up with Recovery Key|Retry backup|Backing up\.\.\.)$/ })).toBeVisible();
+  await expect(page.getByRole("textbox", { name: "Recovery Key (24 words)", exact: true })).toHaveCount(0);
+  await expect(page.locator(".mls-backup-confirm")).toHaveCount(0);
 
-  await page.getByTestId("mls-backup-submit").click();
-  const generatedKeyField = page.getByTestId("mls-backup-generated-key");
+  await page.getByRole("button", { name: /^(Create recovery key|Back up with Recovery Key|Retry backup|Backing up\.\.\.)$/ }).click();
+  const generatedKeyField = page.locator(".mls-backup-banner .recovery-key-words");
   await expect(generatedKeyField).toBeVisible({ timeout: 120_000 });
   const recoveryKey = (await generatedKeyField.inputValue()).trim();
   expect(recoveryKey.split(/\s+/)).toHaveLength(24);
   await expect(
-    page.getByTestId("mls-backup-generated-key-warning"),
+    page.locator(".mls-backup-banner .form-hint-warn"),
   ).toBeVisible();
-  await expect(page.getByTestId("mls-backup-saved")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Confirm saved key", exact: true })).toBeVisible();
 
   await expectMlsAccountSecretBackupUploaded(keyBackupPuts);
 
-  await page.getByTestId("mls-backup-saved").click();
-  await expect(page.getByTestId("mls-backup-modal")).toHaveCount(0);
+  await backupPrompt.getByRole("textbox", { name: "Re-enter the saved Recovery Key", exact: true }).fill(recoveryKey);
+  await page.getByRole("button", { name: "Confirm saved key", exact: true }).click();
+  await expect(page.getByRole("dialog", { name: "Back up encrypted history", exact: true })).toHaveCount(0);
   return recoveryKey;
 }
 
@@ -1154,7 +1153,7 @@ async function completeRecoveryKeySetupPrompt(
   page: Page,
   timeout: number,
 ): Promise<string | undefined> {
-  const setupPrompt = page.getByTestId("recovery-key-setup-modal").last();
+  const setupPrompt = page.getByRole("dialog", { name: "Set up your recovery key", exact: true });
   const setupPromptVisible = await setupPrompt
     .waitFor({ state: "visible", timeout })
     .then(() => true)
@@ -1163,30 +1162,30 @@ async function completeRecoveryKeySetupPrompt(
     return undefined;
   }
 
-  await expect(page.getByTestId("recovery-key-setup-banner")).toHaveAttribute(
+  await expect(setupPrompt).toHaveAttribute(
     "role",
     "dialog",
   );
-  await expect(page.getByTestId("recovery-key-setup-banner")).toHaveAttribute(
+  await expect(setupPrompt).toHaveAttribute(
     "aria-modal",
     "true",
   );
 
   const generatedKeyField = page
-    .getByTestId("recovery-key-setup-generated-key")
+    .locator(".recovery-key-setup-modal .recovery-key-words")
     .last();
   await expect(generatedKeyField).toBeVisible({ timeout: 120_000 });
   const recoveryKey = (await generatedKeyField.inputValue()).trim();
   expect(recoveryKey.split(/\s+/)).toHaveLength(24);
   await expect(
-    page.getByTestId("recovery-key-setup-generated-key-warning").last(),
+    page.locator(".recovery-key-setup-modal .form-hint-warn").last(),
   ).toBeVisible();
 
   await page
-    .getByTestId("recovery-key-setup-confirm-key")
+    .getByRole("textbox", { name: "Re-enter the saved recovery key", exact: true })
     .last()
     .fill(recoveryKey);
-  await page.getByTestId("recovery-key-setup-saved").last().click();
+  await page.getByRole("button", { name: "Confirm saved key", exact: true }).last().click();
   await expect(setupPrompt).toBeHidden({ timeout: 30_000 });
   return recoveryKey;
 }
@@ -1253,15 +1252,15 @@ async function unlockMlsAccountSecret(page: Page, recoveryKey: string) {
   }
   // `mls-unlock-passphrase` is the historical testid of the unlock input;
   // since the Recovery Key convergence it accepts only the 24-word key.
-  const showRecoveryKey = page.getByTestId("mls-unlock-show-recovery-key");
+  const showRecoveryKey = page.getByRole("button", { name: "Use recovery key instead", exact: true });
   if (await showRecoveryKey.isVisible().catch(() => false)) {
     await showRecoveryKey.click();
   }
-  await expect(page.getByTestId("mls-unlock-passphrase")).toBeVisible({
+  await expect(page.getByRole("textbox", { name: "24-word recovery key", exact: true })).toBeVisible({
     timeout: 30_000,
   });
-  await page.getByTestId("mls-unlock-passphrase").fill(recoveryKey);
-  await page.getByTestId("mls-unlock-submit").click();
+  await page.getByRole("textbox", { name: "24-word recovery key", exact: true }).fill(recoveryKey);
+  await page.getByRole("button", { name: "Unlock with key", exact: true }).click();
   await expect
     .poll(
       async () => {
@@ -1287,7 +1286,7 @@ async function restoreMlsHistoryIfPrompted(
   recoveryKey: string,
 ): Promise<boolean> {
   try {
-    await expect(page.getByTestId("mls-unlock-modal")).toBeVisible({
+    await expect(page.locator(".mls-unlock-dialog")).toBeVisible({
       timeout: 45_000,
     });
   } catch {
@@ -1305,13 +1304,13 @@ async function createKanbanBoardListAndCard(
   cardTitle: string,
 ): Promise<string> {
   await page.goto(`/kanban/${realmId}`, { waitUntil: "domcontentloaded" });
-  await expect(page.getByTestId("kanban-panel")).toBeVisible({
+  await expect(page.locator(".kanban-panel")).toBeVisible({
     timeout: 120_000,
   });
-  await page.getByTestId("new-board-toggle").click();
-  await page.getByTestId("new-board-title-input").fill(boardTitle);
-  await page.getByTestId("create-board-space-button").click();
-  await expect(page.getByTestId("kanban-empty-board")).toContainText(
+  await page.locator(".new-board-toggle").click();
+  await page.locator(".new-board-title-input input, .new-board-title-input textarea").fill(boardTitle);
+  await page.locator(".create-board-space-button").click();
+  await expect(page.locator(".kanban-empty-board")).toContainText(
     /No lists yet/,
     {
       timeout: 45_000,
@@ -1325,17 +1324,17 @@ async function createKanbanBoardListAndCard(
   );
   expect(boardId).toMatch(/^ak:space:/);
 
-  await page.getByTestId("new-column-input").fill(listTitle);
-  await page.getByTestId("add-column-button").click();
+  await page.locator(".new-column-input").fill(listTitle);
+  await page.locator(".add-column-button").click();
   const column = page
-    .getByTestId("kanban-column")
+    .locator(".kanban-column")
     .filter({ hasText: listTitle })
     .first();
   await expect(column).toBeVisible({ timeout: 45_000 });
-  await column.getByTestId("add-card-button").click();
-  await column.getByTestId("new-card-title-input").fill(cardTitle);
-  await column.getByTestId("save-card-button").click();
-  const createdCard = column.getByTestId("kanban-card").filter({ hasText: cardTitle });
+  await column.locator(".add-card-button").click();
+  await column.locator(".new-card-title-input").fill(cardTitle);
+  await column.locator(".save-card-button").click();
+  const createdCard = column.locator(".kanban-card").filter({ hasText: cardTitle });
   await expect(createdCard).toBeVisible({ timeout: 45_000 });
   // Editing requires the accepted Strand, not its optimistic queued draft.
   await expect(createdCard).toHaveAttribute("data-card-draft", "false", {
@@ -1350,17 +1349,17 @@ async function updateCardDescription(
   description: string,
 ) {
   await page
-    .getByTestId("kanban-card")
+    .locator(".kanban-card")
     .filter({ hasText: cardTitle })
     .first()
     .click();
-  await expect(page.getByTestId("card-detail-modal")).toBeVisible({
+  await expect(page.locator(".card-detail-modal")).toBeVisible({
     timeout: 45_000,
   });
-  await page.getByTestId("card-detail-edit-description-button").click();
+  await page.locator(".card-detail-edit-description-button").click();
   await setCardDetailEditorValue(page, description);
-  const save = page.getByTestId("card-detail-save-button");
-  const panel = page.getByTestId("card-description-panel");
+  const save = page.locator(".card-detail-save-button");
+  const panel = page.locator(".card-description-panel");
   let ingressObserved = false;
   let preAuthoringRetries = 0;
   const captureRequest = (request: Request) => {
@@ -1377,7 +1376,7 @@ async function updateCardDescription(
       const text = await panel.textContent() ?? "";
       if (text.includes(description)) return text;
       const remaining = Math.max(1, deadline - Date.now());
-      const status = await page.getByTestId("card-detail-edit-status")
+      const status = await page.locator(".card-detail-edit-status")
         .textContent({ timeout: Math.min(1_000, remaining) }).catch(() => null);
       // Retry the retained draft only for a known refusal before any ingress.
       // Once a request exists, recovery belongs to the original signed Event.
@@ -1403,7 +1402,7 @@ async function setCardDetailEditorValue(
   page: Page,
   value: string,
 ): Promise<void> {
-  const input = page.getByTestId("card-detail-description-input");
+  const input = page.locator(".card-detail-description-input");
   await expect(input).toBeAttached({ timeout: 45_000 });
   await input.evaluate((node, nextValue) => {
     const textarea = node as HTMLTextAreaElement;

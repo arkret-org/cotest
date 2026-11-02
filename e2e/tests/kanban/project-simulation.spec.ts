@@ -70,9 +70,9 @@ async function addCardThroughColumn(
   column: Locator,
   title: string,
 ): Promise<void> {
-  const titleInput = column.getByTestId("new-card-title-input").last();
+  const titleInput = column.locator(".new-card-title-input").last();
   if (!(await titleInput.isVisible({ timeout: 250 }).catch(() => false))) {
-    const addButton = column.getByTestId("add-card-button").last();
+    const addButton = column.locator(".add-card-button").last();
     await expect(addButton).toBeVisible({ timeout: 30_000 });
     await addButton.click({ timeout: 5_000 }).catch(async (error) => {
       if (!(await titleInput.isVisible({ timeout: 500 }).catch(() => false))) {
@@ -82,7 +82,7 @@ async function addCardThroughColumn(
   }
   await expect(titleInput).toBeVisible({ timeout: 30_000 });
   await titleInput.fill(title);
-  const saveButton = column.getByTestId("save-card-button").last();
+  const saveButton = column.locator(".save-card-button").last();
   await expect(saveButton).toBeEnabled({ timeout: 30_000 });
   await saveButton.click({ timeout: 10_000 });
 }
@@ -519,79 +519,79 @@ test.describe("project simulation", () => {
       await alicePage.page.goto(`/kanban/${realmId}`, {
         waitUntil: "domcontentloaded",
       });
-      await expect(alicePage.page.getByTestId("kanban-panel")).toBeVisible({
+      await expect(alicePage.page.locator(".kanban-panel")).toBeVisible({
         timeout: 120_000,
       });
-      await alicePage.page.getByTestId("new-board-toggle").click();
+      await alicePage.page.locator(".new-board-toggle").click();
       await alicePage.page
-        .getByTestId("new-board-title-input")
+        .locator(".new-board-title-input input, .new-board-title-input textarea")
         .fill(`Overdue Board ${stamp}`);
-      await alicePage.page.getByTestId("create-board-space-button").click();
+      await alicePage.page.locator(".create-board-space-button").click();
       await expect(
-        alicePage.page.getByTestId("kanban-empty-board"),
+        alicePage.page.locator(".kanban-empty-board"),
       ).toBeVisible({
         timeout: 45_000,
       });
 
       const columnTitle = `Todo ${stamp}`;
-      await alicePage.page.getByTestId("new-column-input").fill(columnTitle);
-      await alicePage.page.getByTestId("add-column-button").click();
+      await alicePage.page.locator(".new-column-input").fill(columnTitle);
+      await alicePage.page.locator(".add-column-button").click();
       const column = alicePage.page
-        .getByTestId("kanban-column")
+        .locator(".kanban-column")
         .filter({ hasText: columnTitle })
         .first();
       await expect(column).toBeVisible({ timeout: 45_000 });
       for (const title of [overdueTitle, onTrackTitle]) {
         await addCardThroughColumn(column, title);
         await expect(
-          column.getByTestId("kanban-card").filter({ hasText: title }),
+          column.locator(".kanban-card").filter({ hasText: title }),
         ).toBeVisible({
           timeout: 45_000,
         });
       }
 
       const overdueCard = column
-        .getByTestId("kanban-card")
+        .locator(".kanban-card")
         .filter({ hasText: overdueTitle })
         .first();
       await expect(overdueCard).toHaveAttribute("data-card-draft", "false", {
         timeout: 45_000,
       });
       await overdueCard.click();
-      const detail = alicePage.page.getByTestId("card-detail-modal");
+      const detail = alicePage.page.locator(".card-detail-modal");
       await expect(detail).toBeVisible({ timeout: 45_000 });
       await detail.getByRole("button", { name: "Add due date" }).click();
-      const duePicker = detail.getByTestId("card-detail-due-picker");
+      const duePicker = detail.locator(".card-detail-due-picker");
       await duePicker
-        .getByTestId("card-detail-due-inline-input")
+        .locator(".card-detail-due-inline-input")
         .fill("2020-01-01");
       await duePicker.getByRole("button", { name: "Save" }).click();
       await expect(duePicker).toBeHidden({ timeout: 45_000 });
-      await detail.getByTestId("card-detail-close-button").click();
+      await detail.locator(".card-detail-close-button").click();
 
       const overdueCardAfterSave = alicePage.page
-        .getByTestId("kanban-card")
+        .locator(".kanban-card")
         .filter({ hasText: overdueTitle })
         .first();
       await expect(overdueCardAfterSave).toBeVisible({ timeout: 45_000 });
       await expect(
-        overdueCardAfterSave.getByTestId("kanban-card-overdue-badge"),
+        overdueCardAfterSave.locator(".kanban-card-overdue-badge"),
       ).toBeVisible({
         timeout: 45_000,
       });
       await expect(
-        overdueCardAfterSave.getByTestId("kanban-card-due"),
+        overdueCardAfterSave.locator(".kanban-card-due"),
       ).toHaveAttribute("data-overdue", "true");
       await stepShot(alicePage.page, testInfo, "A-overdue-badge");
 
       // The on-track card (no due_date) must NOT show the overdue badge.
       const onTrackCard = alicePage.page
-        .getByTestId("kanban-card")
+        .locator(".kanban-card")
         .filter({ hasText: onTrackTitle })
         .first();
       await expect(onTrackCard).toBeVisible({ timeout: 45_000 });
       await expect(
-        onTrackCard.getByTestId("kanban-card-overdue-badge"),
+        onTrackCard.locator(".kanban-card-overdue-badge"),
       ).toHaveCount(0);
     } finally {
       await alicePage.close();

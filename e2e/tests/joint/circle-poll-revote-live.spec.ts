@@ -74,10 +74,10 @@ test("Circle poll survives readback, replacement, a new browser process and anot
   await page.goto(`/realms/${encodeURIComponent(realmId)}/circles`, {
     waitUntil: "domcontentloaded",
   });
-  await expect(page.getByTestId("circles-panel")).toBeVisible();
-  await page.getByTestId("circle-create-open").click();
-  await page.getByTestId("circle-create-title").fill(circleTitle);
-  await page.getByTestId("circle-create-submit").click();
+  await expect(page.locator(".circles-page")).toBeVisible();
+  await page.locator(".circles-new").click();
+  await page.locator(".circle-create-title input, .circle-create-title textarea").fill(circleTitle);
+  await page.locator(".circle-create").click();
   await expect(page).toHaveURL(/\/realms\/[^/]+\/circles\/[^/]+$/);
   const circleId = decodeURIComponent(page.url().split("/").at(-1) ?? "");
   expect(circleId).toMatch(/^ak:circle:/);
@@ -88,32 +88,32 @@ test("Circle poll survives readback, replacement, a new browser process and anot
 
   await activePage.gotoTimelineRealm(realmId);
   await activePage.completeRecoveryKeySetupIfPrompted(2_000);
-  await page.getByTestId("open-channel-dialog").click();
-  await expect(page.getByTestId("channel-create-modal")).toBeVisible();
-  await page.getByTestId("new-channel-name").fill(strandTitle);
-  const picker = page.getByTestId("new-channel-circle-scope");
+  await page.locator(".open-channel-dialog").click();
+  await expect(page.locator(".channel-create-modal")).toBeVisible();
+  await page.locator(".new-channel-name").fill(strandTitle);
+  const picker = page.locator(".new-channel-circle-scope");
   await picker.locator('button[aria-haspopup="listbox"]').click();
   await picker.locator(`[role="option"][data-value="${circleId}"]`).click();
   await expect(picker.locator('button[aria-haspopup="listbox"]')).toContainText(circleTitle);
-  await expect(page.getByTestId("channel-create-modal")).toBeVisible();
-  await page.getByTestId("create-channel-button").click();
-  const channel = page.getByTestId("channel-item").filter({ hasText: strandTitle });
+  await expect(page.locator(".channel-create-modal")).toBeVisible();
+  await page.locator(".create-channel-button").click();
+  const channel = page.locator(".channel-item").filter({ hasText: strandTitle });
   await expect(channel).toBeVisible({ timeout: 60_000 });
   await channel.click();
   await expect(channel).toHaveClass(/active/);
 
-  await page.getByTestId("open-poll-composer-button").click();
-  await page.getByTestId("poll-question-input").fill(question);
-  await page.getByTestId("poll-option-input").nth(0).fill(answers[0]!);
-  await page.getByTestId("poll-option-input").nth(1).fill(answers[1]!);
-  await page.getByTestId("send-poll-button").click();
-  const poll = page.getByTestId("poll-card").filter({ hasText: question }).first();
+  await page.locator(".open-poll-composer-button").click();
+  await page.locator(".poll-question-input").fill(question);
+  await page.locator(".poll-option-input").nth(0).fill(answers[0]!);
+  await page.locator(".poll-option-input").nth(1).fill(answers[1]!);
+  await page.locator(".send-poll-button").click();
+  const poll = page.locator(".poll-card").filter({ hasText: question }).first();
   await expect(poll).toBeVisible({ timeout: 60_000 });
   await expect(poll).toHaveAttribute("data-poll-id", /^ak:message:/, { timeout: 60_000 });
   const pollRef = await poll.getAttribute("data-poll-id");
   expect(pollRef).toMatch(/^ak:message:/);
   const pollEventRef = pollRef!.replace(/^ak:message:/, "ak:event:");
-  await expect(page.getByTestId("chat-message").filter({ has: poll })).toHaveAttribute(
+  await expect(page.locator(".chat-message").filter({ has: poll })).toHaveAttribute(
     "data-circle-scope-id", circleId,
   );
 
@@ -183,24 +183,24 @@ test("Circle poll survives readback, replacement, a new browser process and anot
             && ((entry.value as Record<string, unknown>)?.metadata as Record<string, unknown>)?.title === strandTitle)),
           "Account current carries the accepted Circle Strand").toBe(true);
         await activePage.gotoTimelineRealm(realmId);
-        await expect(page.getByTestId("chat-panel")).toBeVisible({ timeout: 120_000 });
-        await expect(page.getByTestId("chat-panel")).toHaveAttribute(
+        await expect(page.locator(".chat-panel")).toBeVisible({ timeout: 120_000 });
+        await expect(page.locator(".chat-panel")).toHaveAttribute(
           "data-initial-sync", "complete", { timeout: 120_000 },
         );
-        await page.getByTestId("channel-item").filter({ hasText: strandTitle }).click();
-        await expect(page.getByTestId("poll-card").filter({ hasText: question })).toBeVisible();
+        await page.locator(".channel-item").filter({ hasText: strandTitle }).click();
+        await expect(page.locator(".poll-card").filter({ hasText: question })).toBeVisible();
       }
-      const card = page.getByTestId("poll-card").filter({ hasText: question }).first();
-      await card.getByTestId("poll-option").filter({ hasText: answer }).click();
+      const card = page.locator(".poll-card").filter({ hasText: question }).first();
+      await card.locator(".poll-option").filter({ hasText: answer }).click();
       await testInfo.attach("safe-poll-vote-dispatch", { contentType: "application/json",
-        body: JSON.stringify({ index, pollState: await card.getByTestId("poll-state").textContent(),
-          status: await page.getByTestId("chat-status").textContent(),
+        body: JSON.stringify({ index, pollState: await card.locator(".poll-state").textContent(),
+          status: await page.locator(".chat-status").textContent(),
           pollRef: await card.getAttribute("data-poll-id") }) });
-      await expect(page.getByTestId("chat-status")).toContainText(/poll vote/i, { timeout: 10_000 });
+      await expect(page.locator(".chat-status")).toContainText(/poll vote/i, { timeout: 10_000 });
       const expectedCounts = index === 1 ? ["0", "1"] : ["1", "0"];
       for (const [optionIndex, count] of expectedCounts.entries()) {
-        await expect(card.getByTestId("poll-result-row").filter({ hasText: answers[optionIndex]! })
-          .getByTestId("poll-vote-count")).toHaveText(count, { timeout: 60_000 });
+        await expect(card.locator(".poll-result-row").filter({ hasText: answers[optionIndex]! })
+          .locator(".poll-vote-count")).toHaveText(count, { timeout: 60_000 });
       }
       await expect.poll(async () => {
         const scan = await circlePollEvents(request, aliceToken, realmId, circleId);

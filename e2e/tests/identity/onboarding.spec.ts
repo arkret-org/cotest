@@ -41,7 +41,7 @@ test.describe("identity-scope boot safety", () => {
     });
 
     await page.goto("/login", { waitUntil: "domcontentloaded" });
-    await expect(page.getByTestId("login-panel")).toBeVisible({
+    await expect(page.locator(".auth-panel")).toBeVisible({
       timeout: 60_000,
     });
     await page.waitForTimeout(1_000);

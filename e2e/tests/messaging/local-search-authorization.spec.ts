@@ -31,17 +31,17 @@ test("0540 real local search preserves native/browser source identity and withdr
       strands.push(strandId);
     }
     const page = flow.page.page;
-    const panel = page.getByTestId("global-search-panel");
-    const row = panel.getByTestId("global-search-result-item");
+    const panel = page.locator(".global-search-panel");
+    const row = panel.locator(".global-search-result-item");
     const search = async (query: string, count: number) => {
       await flow.page.completeRecoveryKeySetupIfPrompted(100);
       if (!await panel.isVisible()) await page.keyboard.press("Control+F");
       await expect(panel).toBeVisible();
-      await panel.getByTestId("global-search-input").fill(query);
-      await panel.getByTestId("global-search-submit").click();
+      await panel.locator(".global-search-input").fill(query);
+      await panel.locator(".global-search-submit").click();
       await expect(row).toHaveCount(count);
-      if (count) await expect(row.getByTestId("global-search-result-snippet")).toHaveText(query);
-      else await expect(panel.getByTestId("global-search-results-no-results")).toBeVisible();
+      if (count) await expect(row.locator(".global-search-result-snippet")).toHaveText(query);
+      else await expect(panel.locator(".global-search-results-no-results")).toBeVisible();
     };
     const native = async (step: string, selectedRealm: string, query: string, count: number) => {
       const result = await observeNativeSearch(flow.session, selectedRealm, query,
@@ -89,13 +89,13 @@ test("0540 real local search preserves native/browser source identity and withdr
     // A newly accepted independent source proves the post-departure Account
     // update was installed; an old cached control cannot satisfy this step.
     await flow.page.gotoTimelineRealm(realms[1]!);
-    await expect(page.getByTestId("message-list").getByText(freshControl, { exact: true })).toBeVisible({ timeout: 120_000 });
+    await expect(page.locator(".message-list").getByText(freshControl, { exact: true })).toBeVisible({ timeout: 120_000 });
     await search(freshControl, 1);
     await native("fresh-control-after-departure", realms[1]!, freshControl, 1);
     await search(targetBody, 0);
     await native("retained-target-after-departure", realms[1]!, targetBody, 0);
     await page.reload({ waitUntil: "domcontentloaded" });
-    await expect(page.getByTestId("client-shell")).toBeVisible({ timeout: 120_000 });
+    await expect(page.locator(".shell.app")).toBeVisible({ timeout: 120_000 });
     await search(targetBody, 0);
     await search(freshControl, 1);
     await native("cold-retained-target-after-departure", realms[1]!, targetBody, 0);

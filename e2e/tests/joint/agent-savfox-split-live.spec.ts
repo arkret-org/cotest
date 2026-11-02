@@ -138,7 +138,7 @@ jointTest.describe("Agent Savfox split live @fully-implemented", () => {
       const savfoxBaseUrl = savfoxBaseUrlRaw!.replace(/\/$/, "");
       const savfoxToken = savfoxTokenRaw!;
       const inkson = jointRealm.alicePage.page;
-      const approvalModal = inkson.getByTestId("agent-runtime-approval-modal");
+      const approvalModal = inkson.locator(".agent-runtime-approval-dialog");
       const agentSlug = `savfox-live-${Date.now().toString(36)}`;
       const lifecycleEvidenceOnly =
         process.env.COTEST_AGENT_LIFECYCLE_EVIDENCE_ONLY === "1";
@@ -177,14 +177,14 @@ jointTest.describe("Agent Savfox split live @fully-implemented", () => {
 
       // ── Phase 1: provision the Agent and capture its first pairing handle ──
       await jointRealm.alicePage.gotoSettings();
-      await inkson.getByTestId("settings-nav-item-agents").click();
+      await inkson.locator(".settings-nav-item-agents").click();
       await expect(inkson).toHaveURL(/\/settings\/agents(?:\?|$)/);
-      await inkson.getByTestId("agent-admin-create-open-button").click();
+      await inkson.locator(".agent-admin-create-open-button").click();
       await inkson
-        .getByTestId("agent-admin-provision-agent-slug")
+        .locator(".agent-admin-provision-agent-slug").locator("input, textarea")
         .fill(agentSlug);
       await expect(
-        inkson.getByTestId("agent-admin-provision-button"),
+        inkson.locator(".agent-admin-provision-button"),
       ).toBeEnabled();
       const commitResponsePromise = inkson.waitForResponse(
         (response) => {
@@ -198,7 +198,7 @@ jointTest.describe("Agent Savfox split live @fully-implemented", () => {
         },
         { timeout: 180_000 },
       );
-      await inkson.getByTestId("agent-admin-provision-button").click();
+      await inkson.locator(".agent-admin-provision-button").click();
       const commitResponse = await commitResponsePromise;
       const commitText = await commitResponse.text();
       expect(commitResponse.status(), commitText).toBe(201);
@@ -212,11 +212,11 @@ jointTest.describe("Agent Savfox split live @fully-implemented", () => {
         pairingRequestId: provisioned.pairing_request_id,
         pairingCode: provisioned.pairing_code,
       };
-      await expect(inkson.getByTestId("agent-admin-pairing-card")).toBeVisible({
+      await expect(inkson.locator(".agent-admin-pairing-card")).toBeVisible({
         timeout: 180_000,
       });
       const pairingLink = await inkson
-        .getByTestId("agent-admin-pairing-url")
+        .locator(".agent-admin-pairing-url")
         .inputValue();
       expect(pairingLink).toContain(
         "/_arkret/open/agent-pairing/resolve#token=",
@@ -271,7 +271,7 @@ jointTest.describe("Agent Savfox split live @fully-implemented", () => {
         }
 
         const inksonCode = (
-          await inkson.getByTestId("agent-runtime-approval-code").innerText()
+          await inkson.locator(".agent-runtime-approval-code").innerText()
         ).trim();
         const groupedPairingCode = displayPairingCode(firstPairing.pairingCode);
         expect(inksonCode).toBe(groupedPairingCode);
@@ -285,7 +285,7 @@ jointTest.describe("Agent Savfox split live @fully-implemented", () => {
         ).toBeVisible({ timeout: 30_000 });
 
         // ── Phase 3: approve and record the first authorized binding ──
-        await inkson.getByTestId("agent-runtime-approval-approve").click();
+        await inkson.locator(".agent-runtime-approval-approve").click();
         await expect(approvalModal).toHaveCount(0, {
           timeout: 180_000,
         });
@@ -326,12 +326,12 @@ jointTest.describe("Agent Savfox split live @fully-implemented", () => {
         expect(firstAuthorizedEventRef).not.toBe("");
 
         await inkson.reload();
-        await expect(inkson.getByTestId("agent-admin")).toBeVisible({
+        await expect(inkson.locator(".agent-admin")).toBeVisible({
           timeout: 120_000,
         });
         await expect(approvalModal).toHaveCount(0);
         await expect(
-          inkson.getByTestId("agent-admin-pairing-card"),
+          inkson.locator(".agent-admin-pairing-card"),
         ).toHaveCount(0);
 
         // ── Phase 4: a replacement pairing must not inherit the live binding ──
@@ -339,9 +339,9 @@ jointTest.describe("Agent Savfox split live @fully-implemented", () => {
         // completes, so the open handle projects `replacing`. A status poll for
         // the NEW pairing_request_id MUST NOT hand the new runtime the binding
         // the controller approved for the previous request.
-        await inkson.getByTestId("agent-admin-row").first().click();
+        await inkson.locator(".agent-admin-row").first().click();
         await expect(
-          inkson.getByTestId("agent-admin-runtime-state-badge"),
+          inkson.locator(".agent-admin-runtime-state-badge"),
         ).toBeVisible({ timeout: 120_000 });
         const renewResponsePromise = inkson.waitForResponse((response) => {
           const outgoing = response.request();
@@ -350,9 +350,9 @@ jointTest.describe("Agent Savfox split live @fully-implemented", () => {
             new URL(outgoing.url()).pathname.endsWith("/renew-pairing")
           );
         });
-        await inkson.getByTestId("agent-admin-replace-runtime-button").click();
+        await inkson.locator(".agent-admin-replace-runtime-button").click();
         await inkson
-          .getByTestId("agent-admin-replace-runtime-confirm-button")
+          .locator(".agent-admin-replace-runtime-confirm-button")
           .click();
         const renewResponse = await renewResponsePromise;
         const renewText = await renewResponse.text();
@@ -392,10 +392,10 @@ jointTest.describe("Agent Savfox split live @fully-implemented", () => {
         ).toBeNull();
 
         await expect(
-          inkson.getByTestId("agent-admin-pairing-card"),
+          inkson.locator(".agent-admin-pairing-card"),
         ).toBeVisible({ timeout: 120_000 });
         const replacementLink = await inkson
-          .getByTestId("agent-admin-pairing-url")
+          .locator(".agent-admin-pairing-url")
           .inputValue();
         expect(replacementLink).not.toBe(pairingLink);
 
@@ -454,12 +454,12 @@ jointTest.describe("Agent Savfox split live @fully-implemented", () => {
         await expect(approvalModal).toContainText("replaces the runtime key");
         expect(
           (
-            await inkson.getByTestId("agent-runtime-approval-code").innerText()
+            await inkson.locator(".agent-runtime-approval-code").innerText()
           ).trim(),
         ).toBe(displayPairingCode(replacementPairing.pairingCode));
 
         // ── Phase 6: approving the replacement supersedes the old binding ──
-        await inkson.getByTestId("agent-runtime-approval-approve").click();
+        await inkson.locator(".agent-runtime-approval-approve").click();
         await expect(approvalModal).toHaveCount(0, { timeout: 180_000 });
         await expect(
           savfox.getByText("Agent paired and channel saved.", { exact: true }),
@@ -483,7 +483,7 @@ jointTest.describe("Agent Savfox split live @fully-implemented", () => {
         // instead of authoring a second one, and it must not claim a second
         // peer KeyPackage.
         await inkson.reload();
-        await expect(inkson.getByTestId("agent-admin")).toBeVisible({
+        await expect(inkson.locator(".agent-admin")).toBeVisible({
           timeout: 120_000,
         });
         const mlsSubmissions = trackMlsSubmissions(inkson);
@@ -502,7 +502,7 @@ jointTest.describe("Agent Savfox split live @fully-implemented", () => {
         try {
           crashedEventIds = await crash.waitForCutSubmission();
         } catch (error) {
-          const toasts = await inkson.getByTestId("toast-item").allTextContents();
+          const toasts = await inkson.locator(".toast-item").allTextContents();
           throw new Error(
             `Agent Direct Conversation did not submit MLS: ` +
               JSON.stringify({
@@ -533,10 +533,10 @@ jointTest.describe("Agent Savfox split live @fully-implemented", () => {
             (await bindings.all()).length > 0,
           diagnostics: () => JSON.stringify(mlsSubmissions.diagnostics()),
         });
-        await expect(inkson.getByTestId("chat-panel")).toBeVisible({
+        await expect(inkson.locator(".chat-panel")).toBeVisible({
           timeout: 180_000,
         });
-        await expect(inkson.getByTestId("chat-input")).toBeVisible({
+        await expect(inkson.locator(".chat-input")).toBeVisible({
           timeout: 30_000,
         });
 
@@ -568,19 +568,19 @@ jointTest.describe("Agent Savfox split live @fully-implemented", () => {
 
         // ── Phase 8: a real user message is answered by the live runtime ──
         const prompt = "请只回复 pong";
-        await inkson.getByTestId("chat-input").fill(prompt);
+        await inkson.locator(".chat-input").fill(prompt);
         await jointRealm.alicePage.clickWithPassivePromptRetry(
-          inkson.getByTestId("send-chat-button"),
+          inkson.locator(".send-chat-button"),
         );
         await expect(
-          inkson.getByTestId("chat-message").filter({ hasText: prompt }),
+          inkson.locator(".chat-message").filter({ hasText: prompt }),
         ).toBeVisible({ timeout: 30_000 });
 
         const pongBody = inkson
-          .getByTestId("content-block-text")
+          .locator(".content-block-text")
           .filter({ hasText: /^pong(?:\r?\n|$)/ });
         const pongMessage = inkson
-          .getByTestId("chat-message")
+          .locator(".chat-message")
           .filter({ has: pongBody });
         await expect(pongMessage).toBeVisible({ timeout: 180_000 });
         expect((await pongBody.innerText()).split(/\r?\n/, 1)[0]).toBe("pong");
@@ -589,10 +589,10 @@ jointTest.describe("Agent Savfox split live @fully-implemented", () => {
           "plaintext",
         );
         await expect(
-          pongMessage.getByTestId("member-badge-agent"),
+          pongMessage.locator(".member-badge-agent"),
         ).toBeVisible();
         await expect(
-          pongMessage.getByTestId("crypto-status-needs-verification"),
+          pongMessage.locator(".crypto-status-needs-verification"),
         ).toHaveCount(0);
 
         // Realm receive and its durable signer evidence must survive a reload
@@ -609,8 +609,8 @@ jointTest.describe("Agent Savfox split live @fully-implemented", () => {
           await expect(pongMessage).toBeVisible({ timeout: 180_000 });
           expect(await eventIdFromMessage(pongMessage)).toBe(acceptedReplyId);
           await expect(pongMessage).toHaveAttribute("data-crypto-state", "plaintext");
-          await expect(pongMessage.getByTestId("member-badge-agent")).toBeVisible();
-          await expect(pongMessage.getByTestId("crypto-status-needs-verification")).toHaveCount(0);
+          await expect(pongMessage.locator(".member-badge-agent")).toBeVisible();
+          await expect(pongMessage.locator(".crypto-status-needs-verification")).toHaveCount(0);
           await expect(inkson.getByText(/GroupStateError\(PendingCommit\)/)).toHaveCount(0);
         } finally {
           await accountOutage.restore();
@@ -628,7 +628,7 @@ jointTest.describe("Agent Savfox split live @fully-implemented", () => {
               waitUntil: "domcontentloaded",
             });
             const row = inkson
-              .getByTestId("agent-admin-row")
+              .locator(".agent-admin-row")
               .filter({ hasText: agentSlug })
               .first();
             await expect(row).toBeVisible({ timeout: 120_000 });
@@ -639,45 +639,45 @@ jointTest.describe("Agent Savfox split live @fully-implemented", () => {
               waitUntil: "domcontentloaded",
             });
             const historicalMessage = inkson
-              .getByTestId("chat-message")
-              .filter({ has: inkson.getByTestId("content-block-text").filter({ hasText: /^pong(?:\r?\n|$)/ }) })
+              .locator(".chat-message")
+              .filter({ has: inkson.locator(".content-block-text").filter({ hasText: /^pong(?:\r?\n|$)/ }) })
               .last();
             await expect(historicalMessage).toBeVisible({ timeout: 180_000 });
             expect(await eventIdFromMessage(historicalMessage)).toBe(responseEventId);
             await expect(historicalMessage).toHaveAttribute("data-crypto-state", "plaintext");
             await expect(
-              historicalMessage.getByTestId("member-badge-agent"),
+              historicalMessage.locator(".member-badge-agent"),
             ).toBeVisible();
             await expect(
-              historicalMessage.getByTestId("crypto-status-needs-verification"),
+              historicalMessage.locator(".crypto-status-needs-verification"),
             ).toHaveCount(0);
           };
 
           await openAgentDetails();
-          await inkson.getByTestId("agent-admin-enabled-switch").click();
-          await expect(inkson.getByTestId("agent-admin-last-op")).toContainText(
+          await inkson.locator(".agent-admin-enabled-switch").click();
+          await expect(inkson.locator(".agent-admin .write-status")).toContainText(
             "Paused. Status: paused.",
             { timeout: 180_000 },
           );
           await assertFrozenHistoricalEvent();
 
           await openAgentDetails();
-          await inkson.getByTestId("agent-admin-enabled-switch").click();
-          await expect(inkson.getByTestId("agent-admin-last-op")).toContainText(
+          await inkson.locator(".agent-admin-enabled-switch").click();
+          await expect(inkson.locator(".agent-admin .write-status")).toContainText(
             "Resumed. Status: active.",
             { timeout: 180_000 },
           );
           await assertFrozenHistoricalEvent();
 
           await openAgentDetails();
-          await inkson.getByTestId("agent-admin-deactivate-button").click();
+          await inkson.locator(".agent-admin-deactivate-button").click();
           await inkson
-            .getByTestId("agent-admin-deactivate-confirm-input")
+            .locator(".agent-admin-deactivate-confirm-input input, .agent-admin-deactivate-confirm-input textarea")
             .fill("DEACTIVATE");
           await inkson
-            .getByTestId("agent-admin-deactivate-confirm-button")
+            .locator(".agent-admin-deactivate-confirm-button")
             .click();
-          await expect(inkson.getByTestId("agent-admin-last-op")).toContainText(
+          await expect(inkson.locator(".agent-admin .write-status")).toContainText(
             "Agent deactivated permanently.",
             { timeout: 180_000 },
           );
@@ -723,7 +723,7 @@ jointTest.describe("Agent Savfox split live @fully-implemented", () => {
           jointRealm.alice.deviceId,
         );
         await expect(
-          secondController.page.getByTestId("sidecar-security-state"),
+          secondController.page.locator(".sidecar-security-state"),
         ).toHaveCount(0);
 
         // ── Phase 9: route a source-card prompt through the private Sidecar ──
@@ -739,7 +739,7 @@ jointTest.describe("Agent Savfox split live @fully-implemented", () => {
           jointRealm.realmId,
           `Sidecar source ${Date.now().toString(36)}`,
         );
-        await sourceCard.getByTestId("card-detail-sidebar-tab-members").click();
+        await sourceCard.locator(".card-detail-sidebar-tab-members").click();
         const sourceAgent = sourceCard.locator(
           `[data-testid="card-detail-agent-row"][data-agent-id="${firstPairing.agentId}"]`,
         );
@@ -756,8 +756,8 @@ jointTest.describe("Agent Savfox split live @fully-implemented", () => {
         // enabled Send control before click can retain that old DOM node.
         try {
           await expect.poll(async () => ({
-            enabled: await sourceCard.getByTestId("send-chat-button").isEnabled(),
-            route: await sourceCard.getByTestId("composer-send-scope").getAttribute("data-send-route"),
+            enabled: await sourceCard.locator(".send-chat-button").isEnabled(),
+            route: await sourceCard.locator(".composer-send-scope").getAttribute("data-send-route"),
             boundAgent: await sourceCard.locator(
               `[data-testid="mention-chip"][data-mention-principal-id="${firstPairing.agentId}"]`,
             ).count(),
@@ -765,7 +765,7 @@ jointTest.describe("Agent Savfox split live @fully-implemented", () => {
         } catch (error) {
           await testInfo.attach("source-card-send-blockers", {
             body: Buffer.from(JSON.stringify({
-              blockers: await sourceCard.getByTestId("send-chat-button")
+              blockers: await sourceCard.locator(".send-chat-button")
                 .getAttribute("data-send-blockers").catch(() => null),
             })),
             contentType: "application/json",
@@ -803,7 +803,7 @@ jointTest.describe("Agent Savfox split live @fully-implemented", () => {
           const ensureResponsePromise = waitForSidecarEnsureAcceptance(inkson, testInfo);
           [ensured] = await Promise.all([
             ensureResponsePromise,
-            sourceCard.getByTestId("send-chat-button").click(),
+            sourceCard.locator(".send-chat-button").click(),
           ]);
           expect(ensureCutFaults).toBe(1);
         } finally {
@@ -817,10 +817,10 @@ jointTest.describe("Agent Savfox split live @fully-implemented", () => {
         );
         // Embedded cards hide the chat header; verify its derived crypto state
         // and the typed readiness below, then require visible private messages.
-        await expect(inkson.getByTestId("sidecar-security-state")).toBeAttached({
+        await expect(inkson.locator(".sidecar-security-state")).toBeAttached({
           timeout: 120_000,
         });
-        await expect(inkson.getByTestId("sidecar-security-state")).toHaveText(
+        await expect(inkson.locator(".sidecar-security-state")).toHaveText(
           "E2EE",
           { timeout: 180_000 },
         );
@@ -833,38 +833,38 @@ jointTest.describe("Agent Savfox split live @fully-implemented", () => {
         expect(readySidecar.effective_agent_ids).toContain(firstPairing.agentId);
         // Ensure and request submission are one Send action. Accepted private
         // input clears once; restored private history cannot route a new draft.
-        await expect(sourceCard.getByTestId("chat-input")).toHaveValue("", {
+        await expect(sourceCard.locator(".chat-input")).toHaveValue("", {
           timeout: 30_000,
         });
-        await expect(sourceCard.getByTestId("composer-send-scope"))
+        await expect(sourceCard.locator(".composer-send-scope"))
           .toHaveAttribute("data-send-route", "Shared");
 
         const requestMessage = sourceCard
-          .getByTestId("chat-message")
+          .locator(".chat-message")
           .filter({ hasText: sidecarPrompt })
           .last();
         await expect(requestMessage).toBeVisible({ timeout: 30_000 });
         await expect(
-          requestMessage.getByTestId("message-private-sidecar-badge"),
+          requestMessage.locator(".message-private-sidecar-badge"),
         ).toBeVisible();
         const sidecarPongMessage = sourceCard
-          .getByTestId("chat-message")
+          .locator(".chat-message")
           .filter({
             has: inkson
-              .getByTestId("content-block-text")
+              .locator(".content-block-text")
               .filter({ hasText: /^pong(?:\r?\n|$)/ }),
           })
           .last();
         const sidecarPongBody = sidecarPongMessage
-          .getByTestId("content-block-text")
+          .locator(".content-block-text")
           .filter({ hasText: /^pong(?:\r?\n|$)/ })
           .last();
         await expect(sidecarPongMessage).toBeVisible({ timeout: 180_000 });
         await expect(
-          sidecarPongMessage.getByTestId("message-private-sidecar-badge"),
+          sidecarPongMessage.locator(".message-private-sidecar-badge"),
         ).toBeVisible();
         await expect(
-          sidecarPongMessage.getByTestId("member-badge-agent"),
+          sidecarPongMessage.locator(".member-badge-agent"),
         ).toBeVisible();
 
         const evidence = {
@@ -916,25 +916,25 @@ jointTest.describe("Agent Savfox split live @fully-implemented", () => {
         ).toBe(true);
         await secondController.unlockMlsAccountSecret(controllerRecoveryKey!);
         const secondCard =
-          secondController.page.getByTestId("card-detail-modal");
+          secondController.page.locator(".card-detail-modal");
         await expect(secondCard).toBeVisible({ timeout: 120_000 });
-        await expect(secondCard.getByTestId("card-detail-tab-discussion"))
+        await expect(secondCard.locator(".card-detail-tab-discussion"))
           .toHaveAttribute("aria-selected", "true", { timeout: 30_000 });
         await expect(
-          secondController.page.getByTestId("sidecar-security-state"),
+          secondController.page.locator(".sidecar-security-state"),
         ).toBeAttached({ timeout: 180_000 });
         await expect(
-          secondController.page.getByTestId("sidecar-security-state"),
+          secondController.page.locator(".sidecar-security-state"),
         ).toHaveText("E2EE", { timeout: 180_000 });
         const secondRequest = secondCard
-          .getByTestId("chat-message")
+          .locator(".chat-message")
           .filter({ hasText: sidecarPrompt })
           .last();
         const secondPong = secondCard
-          .getByTestId("chat-message")
+          .locator(".chat-message")
           .filter({
             has: secondController.page
-              .getByTestId("content-block-text")
+              .locator(".content-block-text")
               .filter({ hasText: /^pong(?:\r?\n|$)/ }),
           })
           .last();
@@ -1062,10 +1062,10 @@ jointTest.describe("Agent Savfox split live @fully-implemented", () => {
           unaddressedReceiptPath,
         );
         await inkson.goto(sourceCardUrl, { waitUntil: "domcontentloaded" });
-        const privacyCard = inkson.getByTestId("card-detail-modal");
+        const privacyCard = inkson.locator(".card-detail-modal");
         await expect(privacyCard).toBeVisible({ timeout: 120_000 });
         await privacyCard
-          .getByTestId("card-detail-sidebar-tab-members")
+          .locator(".card-detail-sidebar-tab-members")
           .click();
         const addressedAgentRow = privacyCard.locator(
           `[data-testid="card-detail-agent-row"][data-agent-id="${firstPairing.agentId}"]`,
@@ -1074,10 +1074,10 @@ jointTest.describe("Agent Savfox split live @fully-implemented", () => {
         // This source already has an accepted Sidecar mapping. Reopening it
         // restores that private target and converges its native MLS roster;
         // it does not require another ensure/context-attach action.
-        await expect(inkson.getByTestId("sidecar-security-state")).toBeAttached({
+        await expect(inkson.locator(".sidecar-security-state")).toBeAttached({
           timeout: 120_000,
         });
-        await expect(inkson.getByTestId("sidecar-security-state")).toHaveText(
+        await expect(inkson.locator(".sidecar-security-state")).toHaveText(
           "E2EE",
           { timeout: 180_000 },
         );
@@ -1088,7 +1088,7 @@ jointTest.describe("Agent Savfox split live @fully-implemented", () => {
           firstPairing.agentId,
           privacyPrompt,
         );
-        await expect(privacyCard.getByTestId("send-chat-button")).toBeEnabled({
+        await expect(privacyCard.locator(".send-chat-button")).toBeEnabled({
           timeout: 30_000,
         });
         const privacySidecar = await readSidecarCurrent(
@@ -1103,16 +1103,16 @@ jointTest.describe("Agent Savfox split live @fully-implemented", () => {
             unaddressedAgent.agentId,
           ]),
         );
-        await expect(privacyCard.getByTestId("send-chat-button")).toBeEnabled({
+        await expect(privacyCard.locator(".send-chat-button")).toBeEnabled({
           timeout: 30_000,
         });
         const privacyPongs = privacyCard
-          .getByTestId("content-block-text")
+          .locator(".content-block-text")
           .filter({ hasText: /^pong(?:\r?\n|$)/ });
         const privacyPongsBefore = await privacyPongs.count();
-        await privacyCard.getByTestId("send-chat-button").click();
+        await privacyCard.locator(".send-chat-button").click();
         const privacyRequest = privacyCard
-          .getByTestId("chat-message")
+          .locator(".chat-message")
           .filter({ hasText: privacyPrompt })
           .last();
         await expect(privacyRequest).toBeVisible({ timeout: 30_000 });
@@ -1144,8 +1144,8 @@ jointTest.describe("Agent Savfox split live @fully-implemented", () => {
         const privacyPong = privacyPongs.last();
         await expect(privacyPong).toBeVisible({ timeout: 180_000 });
         const privacyReplyId = await eventIdFromMessage(
-          privacyCard.getByTestId("chat-message").filter({
-            has: inkson.getByTestId("content-block-text").filter({ hasText: /^pong(?:\r?\n|$)/ }),
+          privacyCard.locator(".chat-message").filter({
+            has: inkson.locator(".content-block-text").filter({ hasText: /^pong(?:\r?\n|$)/ }),
           }).last(),
         );
         await testInfo.attach("sidecar-unaddressed-runtime-gate", {
@@ -1176,27 +1176,27 @@ jointTest.describe("Agent Savfox split live @fully-implemented", () => {
           waitUntil: "domcontentloaded",
         });
         const adminRow = inkson
-          .getByTestId("agent-admin-row")
+          .locator(".agent-admin-row")
           .filter({ hasText: agentSlug })
           .first();
         await expect(adminRow).toBeVisible({ timeout: 120_000 });
         await adminRow.click();
-        const enabledSwitch = inkson.getByTestId("agent-admin-enabled-switch");
+        const enabledSwitch = inkson.locator(".agent-admin-enabled-switch");
         await expect(enabledSwitch).toBeVisible({ timeout: 30_000 });
         await expect(enabledSwitch).toBeEnabled({ timeout: 30_000 });
         await enabledSwitch.click();
-        await expect(inkson.getByTestId("agent-admin-last-op")).toContainText(
+        await expect(inkson.locator(".agent-admin .write-status")).toContainText(
           "Paused",
           { timeout: 180_000 },
         );
 
         await inkson.goto(sourceCardUrl, { waitUntil: "domcontentloaded" });
-        const resumedCard = inkson.getByTestId("card-detail-modal");
+        const resumedCard = inkson.locator(".card-detail-modal");
         await expect(resumedCard).toBeVisible({ timeout: 120_000 });
-        await expect(inkson.getByTestId("sidecar-security-state")).toBeAttached({
+        await expect(inkson.locator(".sidecar-security-state")).toBeAttached({
           timeout: 120_000,
         });
-        await expect(inkson.getByTestId("sidecar-security-state")).toHaveText(
+        await expect(inkson.locator(".sidecar-security-state")).toHaveText(
           "E2EE",
           { timeout: 180_000 },
         );
@@ -1223,7 +1223,7 @@ jointTest.describe("Agent Savfox split live @fully-implemented", () => {
         };
         inkson.on("request", capturePostPauseSubmissions);
         const blockedPrompt = `paused runtime must not execute ${Date.now()}`;
-        await resumedCard.getByTestId("card-detail-sidebar-tab-members").click();
+        await resumedCard.locator(".card-detail-sidebar-tab-members").click();
         const pausedAgentRow = resumedCard.locator(
           `[data-testid="card-detail-agent-row"][data-agent-id="${firstPairing.agentId}"]`,
         );
@@ -1234,8 +1234,8 @@ jointTest.describe("Agent Savfox split live @fully-implemented", () => {
           firstPairing.agentId,
           blockedPrompt,
         );
-        await expect(resumedCard.getByTestId("send-chat-button")).toBeDisabled();
-        await resumedCard.getByTestId("chat-input").press("Enter");
+        await expect(resumedCard.locator(".send-chat-button")).toBeDisabled();
+        await resumedCard.locator(".chat-input").press("Enter");
         await expect
           .poll(() => receiptCount(receiptPath), {
             timeout: 15_000,
@@ -1244,11 +1244,11 @@ jointTest.describe("Agent Savfox split live @fully-implemented", () => {
           .toBe(receiptsBeforePause);
         await inkson.waitForTimeout(5_000);
         inkson.off("request", capturePostPauseSubmissions);
-        await expect(resumedCard.getByTestId("chat-input")).toHaveValue(
+        await expect(resumedCard.locator(".chat-input")).toHaveValue(
           new RegExp(blockedPrompt),
         );
         await expect(
-          resumedCard.getByTestId("chat-message").filter({ hasText: blockedPrompt }),
+          resumedCard.locator(".chat-message").filter({ hasText: blockedPrompt }),
         ).toHaveCount(0);
         expect(
           postPauseSubmissions.filter(
@@ -1266,27 +1266,27 @@ jointTest.describe("Agent Savfox split live @fully-implemented", () => {
           `[id=${JSON.stringify(`chat-msg-${evidence.response_event_id}`)}]`,
         );
         await revealTimelineEvent(inkson, retainedReply, 30_000,
-          resumedCard.getByTestId("message-list").last());
+          resumedCard.locator(".message-list").last());
         await expect(retainedReply).toBeVisible();
         expect(await eventIdFromMessage(retainedReply)).toBe(evidence.response_event_id);
-        const sharedBody = await retainedReply.getByTestId("content-block-text")
+        const sharedBody = await retainedReply.locator(".content-block-text")
           .filter({ hasText: /^pong(?:\r?\n|$)/ }).last().innerText();
         expect(sharedBody.trim()).toBe("pong");
         const publishCard = await createSidecarSourceCard(
           inkson, jointRealm.realmId, `Shared result ${Date.now().toString(36)}`,
         );
-        const publishDiscussion = publishCard.getByTestId("card-detail-tab-discussion");
+        const publishDiscussion = publishCard.locator(".card-detail-tab-discussion");
         await publishDiscussion.click();
         await expect(publishDiscussion).toHaveAttribute("aria-selected", "true");
         const publishUrl = new URL(inkson.url());
         const publishStrandId = decodeURIComponent(publishUrl.pathname).split("/task/")[1];
         expect(publishStrandId).toMatch(/^ak:strand:[A-Za-z0-9_-]+$/);
         expect(publishUrl.searchParams.get("tab")).toBe("discussion");
-        await publishCard.getByTestId("chat-input").fill(sharedBody);
-        await expect(publishCard.getByTestId("composer-send-scope"))
+        await publishCard.locator(".chat-input").fill(sharedBody);
+        await expect(publishCard.locator(".composer-send-scope"))
           .toHaveAttribute("data-send-route", "Shared");
-        await expect(inkson.getByTestId("sidecar-security-state")).toHaveCount(0);
-        await expect(publishCard.getByTestId("send-chat-button")).toBeEnabled({ timeout: 30_000 });
+        await expect(inkson.locator(".sidecar-security-state")).toHaveCount(0);
+        await expect(publishCard.locator(".send-chat-button")).toBeEnabled({ timeout: 30_000 });
         const publishResponsePromise = inkson.waitForResponse(
           (response) => response.request().method() === "POST"
             && new URL(response.url()).pathname === EVENTS_SUBMIT_PATH
@@ -1294,7 +1294,7 @@ jointTest.describe("Agent Savfox split live @fully-implemented", () => {
               event.kind === "ak.message.create" && event.payload?.strand_id === publishStrandId),
           { timeout: 120_000 },
         );
-        await publishCard.getByTestId("send-chat-button").click();
+        await publishCard.locator(".send-chat-button").click();
         const publishResponse = await publishResponsePromise;
         const publishSubmission = eventSubmissions(
           publishResponse.request().postData(),
@@ -1315,7 +1315,7 @@ jointTest.describe("Agent Savfox split live @fully-implemented", () => {
           kind: "realm", realm_id: jointRealm.realmId,
         });
         expect(publishSubmission.payload?.strand_id).toBe(publishStrandId);
-        await expect(publishCard.getByTestId("chat-message")
+        await expect(publishCard.locator(".chat-message")
           .filter({ hasText: sharedBody })).toBeVisible({ timeout: 120_000 });
         expect(JSON.stringify(publishSubmission)).not.toMatch(
           /sidecar_id|backing_circle|private_relation|exchange_id|private_history|context_locator/,
@@ -1409,17 +1409,17 @@ jointTest("fresh Agent pairing gates the first send until binding and answers on
       expect(foundingOutcome.commits[i].previous_commit_ref ?? null).toBe(i ? foundingOutcome.commits[i - 1].commit_id : null);
     }
     await expect.poll(() => heldResolves).toBeGreaterThan(0);
-    await expect(inkson.getByTestId("chat-panel")).toBeVisible();
+    await expect(inkson.locator(".chat-panel")).toBeVisible();
     const acceptedPath = new URL(inkson.url()).pathname;
     const acceptedToVisibleMs = Date.now() - foundingAcceptedAt!;
-    await expect(inkson.getByTestId("send-chat-button")).toBeDisabled();
-    await expect(inkson.getByTestId("chat-panel")).not.toContainText("Strand not found");
-    await inkson.getByTestId("account-menu-button").click();
-    await inkson.getByTestId("account-menu-settings").click();
-    await expect(inkson.getByTestId("settings-panel")).toBeVisible();
+    await expect(inkson.locator(".send-chat-button")).toBeDisabled();
+    await expect(inkson.locator(".chat-panel")).not.toContainText("Strand not found");
+    await inkson.locator(".account-menu-button").click();
+    await inkson.locator(".account-menu-settings").click();
+    await expect(inkson.locator(".settings-panel")).toBeVisible();
     await inkson.goBack();
     await expect(inkson).toHaveURL(url => url.pathname === acceptedPath);
-    await expect(inkson.getByTestId("send-chat-button")).toBeDisabled();
+    await expect(inkson.locator(".send-chat-button")).toBeDisabled();
     await testInfo.attach("owned-agent-held-second-resolve", {
       body: JSON.stringify({ accepted_to_visible_ms: acceptedToVisibleMs,
         accepted_path: acceptedPath, pending_resolve_requests: heldResolves, send_disabled: true, shell_survived_page_navigation: true }),
@@ -1428,9 +1428,9 @@ jointTest("fresh Agent pairing gates the first send until binding and answers on
     releaseSecondResolve();
     await expect.poll(() => Boolean(heldBinding), { timeout: 180_000 }).toBe(true);
     await expect.poll(() => phases.includes("provisional:durable"), { timeout: 30_000 }).toBe(true);
-    await expect(inkson.getByTestId("chat-panel")).toBeVisible();
-    const send = inkson.getByTestId("send-chat-button");
-    const input = inkson.getByTestId("chat-input");
+    await expect(inkson.locator(".chat-panel")).toBeVisible();
+    const send = inkson.locator(".send-chat-button");
+    const input = inkson.locator(".chat-input");
     const prompt = "请只回复 pong";
     await input.fill(prompt);
     await expect(send).toBeDisabled();
@@ -1451,12 +1451,12 @@ jointTest("fresh Agent pairing gates the first send until binding and answers on
       role: "direct_conversation_binding",
       critical: true,
     });
-    const pongBody = inkson.getByTestId("content-block-text").filter({ hasText: /^pong(?:\r?\n|$)/ });
-    const pong = inkson.getByTestId("chat-message").filter({ has: pongBody });
+    const pongBody = inkson.locator(".content-block-text").filter({ hasText: /^pong(?:\r?\n|$)/ });
+    const pong = inkson.locator(".chat-message").filter({ has: pongBody });
     await expect(pong).toBeVisible({ timeout: 180_000 });
     await expect(pong).toHaveAttribute("data-crypto-state", "plaintext");
-    await expect(pong.getByTestId("member-badge-agent")).toBeVisible();
-    await expect(pong.getByTestId("crypto-status-needs-verification")).toHaveCount(0);
+    await expect(pong.locator(".member-badge-agent")).toBeVisible();
+    await expect(pong.locator(".crypto-status-needs-verification")).toHaveCount(0);
     await expect(pong).toHaveCount(1);
     await expect(send).toBeEnabled();
     await testInfo.attach("cold-first-send", { body: JSON.stringify({
@@ -1546,7 +1546,7 @@ nativePublicReplyTest.describe("Native public fixed reply @native-public-reply",
                 && event.payload?.interaction_mode === "public");
           }, { timeout: 180_000 });
           const row = controller.locator(`[data-testid="member-self-agent-row"][data-agent-id="${pairing.agentId}"]`);
-          await row.getByTestId("member-agent-interaction-mode").getByRole("button", { name: /^(公开|Public)$/ }).click();
+          await row.locator(".member-agent-interaction-mode").getByRole("button", { name: /^(公开|Public)$/ }).click();
           const response = await publicResponse;
           expect(response.ok()).toBe(true);
           const mode = eventSubmissions(response.request().postData()).find(event => event.kind === "ak.agent.interaction.set")!;
@@ -1573,7 +1573,7 @@ nativePublicReplyTest.describe("Native public fixed reply @native-public-reply",
             return !!group && group.covered_key_access_revision === group.current_key_access_revision;
           }, { timeout: 120_000 }).toBe(true);
           const card = await createSidecarSourceCard(controller, realm, `Native public source ${Date.now()}`);
-          await card.getByTestId("card-detail-tab-discussion").click();
+          await card.locator(".card-detail-tab-discussion").click();
           const cardAddress = new URL(controller.url());
           const strand = decodeURIComponent(cardAddress.pathname).split("/task/")[1];
           expect(strand).toMatch(/^ak:strand:/);
@@ -1584,9 +1584,9 @@ nativePublicReplyTest.describe("Native public fixed reply @native-public-reply",
           await openSavfoxArkretChannel(savfox, base, token);
           await saveSavfoxChannel(savfox);
           await caller.goto(cardAddress.toString(), { waitUntil: "domcontentloaded" });
-          const callerCard = caller.getByTestId("card-detail-modal");
+          const callerCard = caller.locator(".card-detail-modal");
           await expect(callerCard).toBeVisible({ timeout: 120_000 });
-          await callerCard.getByTestId("card-detail-tab-discussion").click();
+          await callerCard.locator(".card-detail-tab-discussion").click();
           const before = await receiptCount(receipts);
           const firstPrompt = `native-public-first-${Date.now()} 请只回复 pong`;
           const first = await nativePublicMentionAndReply(caller, callerCard, request, jointRealm,
@@ -1604,11 +1604,11 @@ nativePublicReplyTest.describe("Native public fixed reply @native-public-reply",
           }
           const restartProof = await restartNativeMain(request);
           await caller.reload({ waitUntil: "domcontentloaded" });
-          const restoredCard = caller.getByTestId("card-detail-modal");
+          const restoredCard = caller.locator(".card-detail-modal");
           await expect(restoredCard).toBeVisible({ timeout: 120_000 });
-          await restoredCard.getByTestId("card-detail-tab-discussion").click();
-          const restored = restoredCard.getByTestId("chat-message").filter({
-            has: caller.getByTestId("content-block-text").filter({ hasText: /^pong(?:\r?\n|$)/ }),
+          await restoredCard.locator(".card-detail-tab-discussion").click();
+          const restored = restoredCard.locator(".chat-message").filter({
+            has: caller.locator(".content-block-text").filter({ hasText: /^pong(?:\r?\n|$)/ }),
           });
           await expect(restored).toHaveCount(1, { timeout: 180_000 });
           expect(await eventIdFromMessage(restored)).toBe(first.replyId);
@@ -1650,12 +1650,12 @@ nativePublicReplyTest.describe("Native public fixed reply @native-public-reply",
 async function confirmNativePublicStrandAuthority(page: Page, realm: JointRealmFixture,
   agentId: string, strand: string): Promise<void> {
   await page.goto(`/realms/${realm.realmId}/members`, { waitUntil: "domcontentloaded" });
-  await expect(page.getByTestId("realm-members-panel")).toBeVisible({ timeout: 120_000 });
-  await page.getByTestId("members-section-my-agents").click();
+  await expect(page.locator(".realm-members-panel")).toBeVisible({ timeout: 120_000 });
+  await page.getByRole("button", { name: "My agents", exact: true }).click();
   const row = page.locator(`[data-testid="member-self-agent-row"][data-agent-id="${agentId}"]`);
-  const panel = row.getByTestId("member-agent-authority");
-  await expect(panel.getByTestId("owned-agent-scope")).toBeVisible({ timeout: 120_000 });
-  await panel.getByTestId("owned-agent-scope").selectOption(strand);
+  const panel = row.locator(".member-agent-authority");
+  await expect(panel.locator(".owned-agent-scope")).toBeVisible({ timeout: 120_000 });
+  await panel.locator(".owned-agent-scope").selectOption(strand);
   for (const label of ["发送消息", "读取 Strand", "读取事件", "读取对象"]) {
     await panel.getByRole("checkbox", { name: label, exact: true }).check();
   }
@@ -1663,7 +1663,7 @@ async function confirmNativePublicStrandAuthority(page: Page, realm: JointRealmF
     && new URL(response.url()).pathname === EVENTS_SUBMIT_PATH
     && eventSubmissions(response.request().postData()).some(event => event.kind === "ak.capability.grant"),
   { timeout: 180_000 });
-  await panel.getByTestId("owned-agent-confirm-authority").click();
+  await panel.locator(".owned-agent-confirm-authority").click();
   const response = await accepted;
   expect(response.ok()).toBe(true);
   const event = eventSubmissions(response.request().postData()).find(event => event.kind === "ak.capability.grant")!;
@@ -1685,17 +1685,17 @@ async function confirmNativePublicStrandAuthority(page: Page, realm: JointRealmF
   expect(String(sources[0].controller_join_event_id)).toMatch(/^ak:event:/);
   expect(String(sources[0].agent_join_event_id)).toMatch(/^ak:event:/);
   expect(sources[0].controller_join_event_id === sources[0].agent_join_event_id).toBe(false);
-  await expect(panel.getByTestId("owned-agent-accepted-grant")).toContainText("Active", { timeout: 180_000 });
+  await expect(panel.locator(".owned-agent-accepted-grant")).toContainText("Active", { timeout: 180_000 });
 }
 
 async function pairNativeManagedSavfoxAgent(
   controller: Page, savfox: Page, pairing: PairingHandle & { pairingLink: string },
 ): Promise<void> {
   await startSavfoxPairing(savfox, pairing.pairingLink);
-  await expect(controller.getByTestId("agent-runtime-approval-modal")).toBeVisible({ timeout: 120_000 });
-  expect((await controller.getByTestId("agent-runtime-approval-code").innerText()).trim() === displayPairingCode(pairing.pairingCode)).toBe(true);
-  await controller.getByTestId("agent-runtime-approval-approve").click();
-  await expect(controller.getByTestId("agent-runtime-approval-modal")).toHaveCount(0, { timeout: 180_000 });
+  await expect(controller.locator(".agent-runtime-approval-dialog")).toBeVisible({ timeout: 120_000 });
+  expect((await controller.locator(".agent-runtime-approval-code").innerText()).trim() === displayPairingCode(pairing.pairingCode)).toBe(true);
+  await controller.locator(".agent-runtime-approval-approve").click();
+  await expect(controller.locator(".agent-runtime-approval-dialog")).toHaveCount(0, { timeout: 180_000 });
   const saved = savfox.getByText("Agent paired and channel saved.", { exact: true });
   const deadline = Date.now() + 180_000;
   while (Date.now() < deadline) {
@@ -1741,17 +1741,17 @@ async function readNativeCommittedEvent(request: APIRequestContext, session: Dpo
 
 async function nativePublicMentionAndReply(page: Page, card: Locator, request: APIRequestContext,
   realm: JointRealmFixture, agentId: string, strand: string, prompt: string, expectedReplies: number) {
-  await card.getByTestId("card-detail-tab-discussion").click();
+  await card.locator(".card-detail-tab-discussion").click();
   // Independent Humans use the public composer picker. Card Agent rows are
   // supplied by the controller's private owned inventory, not this caller's.
   const stationId = realm.aliceSession.accountId.station_id;
-  const composer = card.getByTestId("chat-input");
+  const composer = card.locator(".chat-input");
   await composer.fill("@");
   const candidate = card.locator(
     `button[data-testid="mention-suggestion"][data-mention-principal-id="${agentId}"][data-mention-station-id="${stationId}"]`,
   );
   await expect(candidate).toBeVisible({ timeout: 120_000 });
-  await expect(candidate.getByTestId("mention-suggestion-agent-badge")).toBeVisible();
+  await expect(candidate.locator(".mention-suggestion-agent-badge")).toBeVisible();
   await candidate.click();
   const chip = card.locator(
     `[data-testid="mention-chip"][data-mention-principal-id="${agentId}"][data-mention-station-id="${stationId}"]`,
@@ -1761,14 +1761,14 @@ async function nativePublicMentionAndReply(page: Page, card: Locator, request: A
   expect(mention).toMatch(/^@/);
   await expect(composer).toHaveValue(`${mention} `);
   await composer.fill(`${mention} ${prompt}`);
-  await expect(card.getByTestId("composer-send-scope")).toHaveAttribute("data-send-route", "Shared");
+  await expect(card.locator(".composer-send-scope")).toHaveAttribute("data-send-route", "Shared");
   const sourceResponse = page.waitForResponse(response => {
     const request = response.request();
     return request.method() === "POST" && new URL(response.url()).pathname === EVENTS_SUBMIT_PATH
       && eventSubmissions(request.postData()).some(event => event.kind === "ak.message.create" && event.payload?.strand_id === strand);
   }, { timeout: 180_000 });
-  await expect(card.getByTestId("send-chat-button")).toBeEnabled({ timeout: 120_000 });
-  await card.getByTestId("send-chat-button").click();
+  await expect(card.locator(".send-chat-button")).toBeEnabled({ timeout: 120_000 });
+  await card.locator(".send-chat-button").click();
   const response = await sourceResponse;
   expect(response.ok()).toBe(true);
   const source = eventSubmissions(response.request().postData()).find(event => event.kind === "ak.message.create" && event.payload?.strand_id === strand)!;
@@ -1777,14 +1777,14 @@ async function nativePublicMentionAndReply(page: Page, card: Locator, request: A
   expect(canonicalJson(source.scope_ref) === canonicalJson({ kind: "realm", realm_id: realm.realmId })).toBe(true);
   expect(source.payload?.content === undefined).toBe(true);
   expect(typeof source.payload?.encrypted_content === "object" && source.payload?.encrypted_content !== null).toBe(true);
-  const pong = card.getByTestId("chat-message").filter({
-    has: page.getByTestId("content-block-text").filter({ hasText: /^pong(?:\r?\n|$)/ }),
+  const pong = card.locator(".chat-message").filter({
+    has: page.locator(".content-block-text").filter({ hasText: /^pong(?:\r?\n|$)/ }),
   });
   await expect(pong).toHaveCount(expectedReplies, { timeout: 180_000 });
   const reply = pong.last();
   await expect(reply).toHaveAttribute("data-crypto-state", "plaintext");
-  await expect(reply.getByTestId("member-badge-agent")).toBeVisible();
-  await expect(reply.getByTestId("crypto-status-needs-verification")).toHaveCount(0);
+  await expect(reply.locator(".member-badge-agent")).toBeVisible();
+  await expect(reply.locator(".crypto-status-needs-verification")).toHaveCount(0);
   const replyId = await eventIdFromMessage(reply);
   expect(replyId).toMatch(/^ak:event:/);
   const view = await readNativeCommittedEvent(request, realm.bobSession, replyId);
@@ -1870,13 +1870,13 @@ async function openOwnAgentDirectChat(
     diagnostics?: () => string | Promise<string>;
   } = {},
 ): Promise<void> {
-  await expect(inkson.getByTestId("realm-sidebar-tab-direct")).toBeVisible({
+  await expect(inkson.getByRole("button", { name: "Contacts", exact: true })).toBeVisible({
     timeout: 120_000,
   });
-  await inkson.getByTestId("realm-sidebar-tab-direct").click();
+  await inkson.getByRole("button", { name: "Contacts", exact: true }).click();
   const ownAgentRow = inkson
-    .getByTestId("contact-sidebar-self-group")
-    .getByTestId("contact-sidebar-agent-row")
+    .locator(".contact-sidebar-self-group")
+    .locator(".contact-sidebar-agent-row")
     .filter({ hasText: agentSlug });
   await expect(ownAgentRow).toBeVisible({ timeout: 120_000 });
   if (!options.retryUntilChatReady) {
@@ -1884,7 +1884,7 @@ async function openOwnAgentDirectChat(
     return;
   }
 
-  const chatPanel = inkson.getByTestId("chat-panel");
+  const chatPanel = inkson.locator(".chat-panel");
   let lastOpenFailure = "no product error was rendered";
   try {
     await expect
@@ -1894,13 +1894,13 @@ async function openOwnAgentDirectChat(
             return (await options.resumedSubmissionReady?.()) ?? true;
           }
           const toastText = (
-            await inkson.getByTestId("toast-item").allTextContents()
+            await inkson.locator(".toast-item").allTextContents()
           )
             .map((text) => text.trim())
             .filter(Boolean)
             .join(" | ");
           if (toastText) lastOpenFailure = toastText;
-          const directTab = inkson.getByTestId("realm-sidebar-tab-direct");
+          const directTab = inkson.getByRole("button", { name: "Contacts", exact: true });
           if (
             !(await ownAgentRow.isVisible().catch(() => false)) &&
             (await directTab.isVisible().catch(() => false))
@@ -1984,7 +1984,7 @@ async function sidecarEchoProjection(
 }> {
   // Inspect the foreground surface a controller sees when switching devices.
   await card.page().bringToFront();
-  const messages = card.getByTestId("chat-message");
+  const messages = card.locator(".chat-message");
   const echoes: Array<{
     eventId: string;
     body: string;
@@ -1996,7 +1996,7 @@ async function sidecarEchoProjection(
     const eventId = await eventIdFromMessage(message);
     if (eventId !== requestEventId && eventId !== responseEventId) continue;
     await expect(
-      message.getByTestId("message-private-sidecar-badge"),
+      message.locator(".message-private-sidecar-badge"),
     ).toBeVisible();
     const body = (
       await message
@@ -2012,7 +2012,7 @@ async function sidecarEchoProjection(
       eventId,
       body,
       actorClass:
-        (await message.getByTestId("member-badge-agent").count()) > 0
+        (await message.locator(".member-badge-agent").count()) > 0
           ? "agent"
           : "controller",
       placement: "hosted_source_card",
@@ -2526,22 +2526,22 @@ async function assertSidecarLocalSearchPrivacy(
   ] as const) {
     await user.gotoTimelineRealm(joint.realmId);
     await user.page.reload({ waitUntil: "domcontentloaded" });
-    await expect(user.page.getByTestId("client-shell")).toBeVisible({ timeout: 120_000 });
+    await expect(user.page.locator(".shell.app")).toBeVisible({ timeout: 120_000 });
     await user.completeRecoveryKeySetupIfPrompted(100);
     await user.page.keyboard.press("Control+F");
-    const panel = user.page.getByTestId("global-search-panel");
-    const rows = panel.getByTestId("global-search-result-item");
+    const panel = user.page.locator(".global-search-panel");
+    const rows = panel.locator(".global-search-result-item");
     for (const query of ["pong", privateBody, sourceStrandId]) {
-      await panel.getByTestId("global-search-input").fill(query);
-      await panel.getByTestId("global-search-submit").click();
+      await panel.locator(".global-search-input").fill(query);
+      await panel.locator(".global-search-submit").click();
       if (query === "pong") {
         await expect(panel.locator(`[data-testid="global-search-result-item"][data-event-id="${sharedEventId}"]`))
           .toHaveCount(1);
       } else if (query === privateBody) {
-        await expect(panel.getByTestId("global-search-results-no-results")).toBeVisible();
+        await expect(panel.locator(".global-search-results-no-results")).toBeVisible();
         await expect(rows).toHaveCount(0);
       } else {
-        await expect(panel.getByTestId("global-search-results-loading")).toHaveCount(0);
+        await expect(panel.locator(".global-search-results-loading")).toHaveCount(0);
       }
       const visible = await rows.evaluateAll(elements => elements.map(element => ({
         event_id: element.getAttribute("data-event-id"), text: element.textContent,

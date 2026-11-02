@@ -64,7 +64,7 @@ test.describe("workflow: team onboarding", () => {
 
       // Phase B — Yuki picks up the welcome and replies.
       await yukiPage.gotoTimelineRealm(realmId);
-      await expect(yukiPage.page.getByTestId("message-list")).toContainText(
+      await expect(yukiPage.page.locator(".message-list")).toContainText(
         welcome,
         {
           timeout: 30_000,
@@ -72,14 +72,14 @@ test.describe("workflow: team onboarding", () => {
       );
       await yukiPage.clickTimelineReply(welcome);
       await expect(
-        yukiPage.page.getByTestId("chat-reply-banner"),
+        yukiPage.page.locator(".chat-reply-banner"),
       ).toBeVisible();
       await yukiPage.sendTimelineMessage(realmId, yukiThanks);
       await expect(yukiPage.timelineEvent(yukiThanks)).toBeVisible({
         timeout: 30_000,
       });
       await expect(
-        yukiPage.timelineEvent(yukiThanks).getByTestId("chat-reply-indicator"),
+        yukiPage.timelineEvent(yukiThanks).locator(".chat-reply-indicator"),
       ).toBeVisible({ timeout: 30_000 });
       await stepShot(yukiPage.page, testInfo, "B-yuki-replied");
 
@@ -90,12 +90,12 @@ test.describe("workflow: team onboarding", () => {
       });
       await meiPage.clickTimelineEdit(welcome);
       await meiPage.page
-        .getByTestId("chat-edit-composer")
+        .locator(".chat-edit-composer")
         .locator("textarea")
         .fill(welcomeEdited);
-      await meiPage.page.getByTestId("chat-save-edit-button").click();
+      await meiPage.page.locator(".chat-save-edit-button").click();
       await meiPage.waitForTimelineEventSettled(welcomeEdited);
-      await expect(meiPage.page.getByTestId("chat-status")).toContainText(
+      await expect(meiPage.page.locator(".chat-status")).toContainText(
         /Message updated/i,
       );
       await yukiPage.gotoTimelineRealm(realmId);
@@ -166,13 +166,13 @@ test.describe("workflow: team onboarding", () => {
       const meiMessage = meiPage.timelineEvent(welcome);
       await expect(meiMessage).toBeVisible({ timeout: 30_000 });
       await meiMessage.hover();
-      await meiMessage.getByTestId("chat-message-menu-button").click();
-      const pinButton = meiMessage.getByTestId("message-shared-pin-button");
+      await meiMessage.locator(".chat-message-menu-button").click();
+      const pinButton = meiMessage.locator(".message-shared-pin-button");
       await expect(pinButton).toBeVisible({ timeout: 30_000 });
       await pinButton.click();
 
-      const meiPinnedBar = meiPage.page.getByTestId("pinned-bar");
-      await expect(meiPinnedBar.getByTestId("pinned-bar-item")).toContainText(
+      const meiPinnedBar = meiPage.page.locator(".pinned-bar");
+      await expect(meiPinnedBar.locator(".pinned-bar-item")).toContainText(
         welcome.slice(0, 40),
         { timeout: 30_000 },
       );
@@ -181,15 +181,15 @@ test.describe("workflow: team onboarding", () => {
       // Yuki keeps seeing the welcome at the top: the shared pin projects
       // into Yuki's pinned bar once the `ak.pin.add` event syncs.
       await yukiPage.gotoTimelineRealm(realmId);
-      await expect(yukiPage.page.getByTestId("message-list")).toContainText(
+      await expect(yukiPage.page.locator(".message-list")).toContainText(
         welcome,
         {
           timeout: 30_000,
         },
       );
       const yukiPinnedItem = yukiPage.page
-        .getByTestId("pinned-bar")
-        .getByTestId("pinned-bar-item");
+        .locator(".pinned-bar")
+        .locator(".pinned-bar-item");
       await expect(yukiPinnedItem).toContainText(welcome.slice(0, 40), {
         timeout: 60_000,
       });
@@ -235,28 +235,28 @@ test.describe("workflow: team onboarding", () => {
       // First edit -> revision count 1.
       await meiPage.clickTimelineEdit(welcome);
       await meiPage.page
-        .getByTestId("chat-edit-composer")
+        .locator(".chat-edit-composer")
         .locator("textarea")
         .fill(welcomeV2);
-      await meiPage.page.getByTestId("chat-save-edit-button").click();
+      await meiPage.page.locator(".chat-save-edit-button").click();
       await meiPage.waitForTimelineEventSettled(welcomeV2);
       const afterFirst = meiPage
         .timelineEvent(welcomeV2)
-        .getByTestId("message-write-status");
+        .locator(".message-write-status");
       await expect(afterFirst).toBeVisible({ timeout: 30_000 });
       await expect(afterFirst).toHaveAttribute("data-revision-count", "1");
 
       // Second edit -> revision count 2.
       await meiPage.clickTimelineEdit(welcomeV2);
       await meiPage.page
-        .getByTestId("chat-edit-composer")
+        .locator(".chat-edit-composer")
         .locator("textarea")
         .fill(welcomeV3);
-      await meiPage.page.getByTestId("chat-save-edit-button").click();
+      await meiPage.page.locator(".chat-save-edit-button").click();
       await meiPage.waitForTimelineEventSettled(welcomeV3);
       const afterSecond = meiPage
         .timelineEvent(welcomeV3)
-        .getByTestId("message-write-status");
+        .locator(".message-write-status");
       await expect(afterSecond).toBeVisible({ timeout: 30_000 });
       await expect(afterSecond).toHaveAttribute("data-revision-count", "2");
       await expect(afterSecond).toContainText("2");

@@ -145,31 +145,31 @@ test.describe("complete peer Consent", () => {
     await replaceConsentScopeApi(request, token, flow.user.id, peer, "invite", preserved);
     try {
       await actor.gotoAppPanel("/settings/consent", "consent-settings-panel");
-      await actor.page.getByTestId("consent-peer-input").fill(bob.id);
-      await actor.page.getByTestId("consent-peer-station-input").fill(colandServiceId());
-      await actor.clickWithPassivePromptRetry(actor.page.getByTestId("consent-read-complete-button"));
-      const input = actor.page.getByTestId("consent-permissions-input");
+      await actor.page.locator(".consent-peer-input").locator("input, textarea").fill(bob.id);
+      await actor.page.locator(".consent-peer-station-input").locator("input, textarea").fill(colandServiceId());
+      await actor.clickWithPassivePromptRetry(actor.page.locator(".consent-read-complete-button"));
+      const input = actor.page.locator(".consent-permissions-input").locator("input, textarea");
       await expect(input).toBeVisible({ timeout: 30_000 });
       expect(JSON.parse(await input.inputValue())).toEqual([preserved]);
       for (const scope of ["voice_call", "video_call", "presence"]) {
-        await actor.page.getByTestId(`consent-toggle-${scope}`).check();
+        await actor.page.locator('[class~="' + `consent-toggle-${scope}` + '"]').check();
       }
       const replacement: ConsentPermission[] = [
         preserved, { consent_scope: "voice_call" },
         { consent_scope: "video_call" }, { consent_scope: "presence" },
       ];
       expect(JSON.parse(await input.inputValue())).toEqual(replacement);
-      await actor.clickWithPassivePromptRetry(actor.page.getByTestId("consent-preview-button"));
-      const diff = actor.page.getByTestId("consent-replacement-diff");
+      await actor.clickWithPassivePromptRetry(actor.page.locator(".consent-preview-button"));
+      const diff = actor.page.locator(".consent-replacement-diff");
       await expect(diff).toBeVisible();
       expect(JSON.parse(await diff.locator("pre").nth(0).innerText())).toEqual([preserved]);
       expect(JSON.parse(await diff.locator("pre").nth(1).innerText())).toEqual(replacement);
       // Preview is not a write; only explicit confirmation changes the current.
       expect(consentPermissions(await readConsentCurrentApi(request, token, flow.user.id, peer))).toEqual([preserved]);
-      await actor.clickWithPassivePromptRetry(actor.page.getByTestId("consent-confirm-replace-button"));
+      await actor.clickWithPassivePromptRetry(actor.page.locator(".consent-confirm-replace-button"));
       await expect.poll(async () => consentPermissions(await readConsentCurrentApi(request, token, flow.user.id, peer)))
         .toEqual(replacement);
-      await expect(actor.page.getByTestId("consent-confirm-replace-button")).toHaveCount(0);
+      await expect(actor.page.locator(".consent-confirm-replace-button")).toHaveCount(0);
 
       const extended = await readConsentCurrentApi(request, token, flow.user.id, peer);
       expect(extended.current.state).toBe("present");
@@ -183,34 +183,34 @@ test.describe("complete peer Consent", () => {
       // inactive permissions and the presence of every optional member.
       await actor.page.reload();
       await actor.gotoAppPanel("/settings/consent", "consent-settings-panel");
-      await actor.page.getByTestId("consent-peer-input").fill(bob.id);
-      await actor.page.getByTestId("consent-peer-station-input").fill(colandServiceId());
-      await actor.clickWithPassivePromptRetry(actor.page.getByTestId("consent-read-complete-button"));
+      await actor.page.locator(".consent-peer-input").locator("input, textarea").fill(bob.id);
+      await actor.page.locator(".consent-peer-station-input").locator("input, textarea").fill(colandServiceId());
+      await actor.clickWithPassivePromptRetry(actor.page.locator(".consent-read-complete-button"));
       await expect(input).toBeVisible({ timeout: 30_000 });
       expect(JSON.parse(await input.inputValue())).toEqual(replacement);
       for (const scope of ["invite", "voice_call", "video_call", "presence"]) {
-        await expect(actor.page.getByTestId(`consent-toggle-${scope}`)).toBeChecked();
+        await expect(actor.page.locator('[class~="' + `consent-toggle-${scope}` + '"]')).toBeChecked();
       }
       expect(consentExpectedCurrent(await readConsentCurrentApi(request, token, flow.user.id, peer)))
         .toEqual(extendedRevision);
 
       for (const scope of ["invite", "voice_call", "video_call", "presence"]) {
-        await actor.page.getByTestId(`consent-toggle-${scope}`).uncheck();
+        await actor.page.locator('[class~="' + `consent-toggle-${scope}` + '"]').uncheck();
       }
       expect(JSON.parse(await input.inputValue())).toEqual([]);
-      await actor.clickWithPassivePromptRetry(actor.page.getByTestId("consent-preview-button"));
+      await actor.clickWithPassivePromptRetry(actor.page.locator(".consent-preview-button"));
       await expect(diff).toBeVisible();
       expect(JSON.parse(await diff.locator("pre").nth(0).innerText())).toEqual(replacement);
       expect(JSON.parse(await diff.locator("pre").nth(1).innerText())).toEqual([]);
       const beforeEmptyConfirmation = await readConsentCurrentApi(request, token, flow.user.id, peer);
       expect(consentPermissions(beforeEmptyConfirmation)).toEqual(replacement);
       expect(consentExpectedCurrent(beforeEmptyConfirmation)).toEqual(extendedRevision);
-      await actor.clickWithPassivePromptRetry(actor.page.getByTestId("consent-confirm-replace-button"));
+      await actor.clickWithPassivePromptRetry(actor.page.locator(".consent-confirm-replace-button"));
       await expect.poll(async () => {
         const current = await readConsentCurrentApi(request, token, flow.user.id, peer);
         return { state: current.current.state, permissions: consentPermissions(current) };
       }).toEqual({ state: "present", permissions: [] });
-      await expect(actor.page.getByTestId("consent-confirm-replace-button")).toHaveCount(0);
+      await expect(actor.page.locator(".consent-confirm-replace-button")).toHaveCount(0);
       const empty = await readConsentCurrentApi(request, token, flow.user.id, peer);
       const emptyRevision = consentExpectedCurrent(empty);
       expect(emptyRevision.state).toBe("present");
@@ -219,18 +219,18 @@ test.describe("complete peer Consent", () => {
       }
       expect(emptyRevision.revision.stream_position).toBeGreaterThan(extendedRevision.revision.stream_position);
       expect(emptyRevision.revision.commit_id).not.toBe(extendedRevision.revision.commit_id);
-      await actor.clickWithPassivePromptRetry(actor.page.getByTestId("consent-read-complete-button"));
+      await actor.clickWithPassivePromptRetry(actor.page.locator(".consent-read-complete-button"));
       await expect(input).toBeVisible({ timeout: 30_000 });
       expect(JSON.parse(await input.inputValue())).toEqual([]);
       for (const scope of ["invite", "voice_call", "video_call", "presence"]) {
-        await expect(actor.page.getByTestId(`consent-toggle-${scope}`)).not.toBeChecked();
+        await expect(actor.page.locator('[class~="' + `consent-toggle-${scope}` + '"]')).not.toBeChecked();
       }
       // The opaque request surface contains concrete non-invite scopes only.
-      await selectDxcOption(actor.page.getByTestId("consent-request-scope-input"), "video_call");
-      await actor.page.getByTestId("consent-request-holder-input").fill(bob.id);
-      await actor.page.getByTestId("consent-request-holder-station-input").fill(colandServiceId());
-      await actor.clickWithPassivePromptRetry(actor.page.getByTestId("consent-request-submit-button"));
-      await expect(actor.page.getByTestId("write-status")).toContainText(/accepted for processing|已受理/i, { timeout: 30_000 });
+      await selectDxcOption(actor.page.locator(".consent-request-scope-input"), "video_call");
+      await actor.page.locator(".consent-request-holder-input").fill(bob.id);
+      await actor.page.locator(".consent-request-holder-station-input").fill(colandServiceId());
+      await actor.clickWithPassivePromptRetry(actor.page.locator(".consent-request-submit-button"));
+      await expect(actor.page.locator(".write-status")).toContainText(/accepted for processing|已受理/i, { timeout: 30_000 });
     } finally {
       await actor.close();
     }
@@ -560,23 +560,23 @@ test("complete peer Consent lost outcome replays the original after cold reload 
     await route.fulfill({ response });
   };
   const selectPeer = async () => {
-    await actor.page.getByTestId("consent-peer-input").fill(peerUser.id);
-    await actor.page.getByTestId("consent-peer-station-input").fill(colandServiceId());
+    await actor.page.locator(".consent-peer-input").locator("input, textarea").fill(peerUser.id);
+    await actor.page.locator(".consent-peer-station-input").locator("input, textarea").fill(colandServiceId());
   };
   try {
     await actor.gotoAppPanel("/settings/consent", "consent-settings-panel");
     await selectPeer();
-    await actor.clickWithPassivePromptRetry(actor.page.getByTestId("consent-read-complete-button"));
-    const input = actor.page.getByTestId("consent-permissions-input");
+    await actor.clickWithPassivePromptRetry(actor.page.locator(".consent-read-complete-button"));
+    const input = actor.page.locator(".consent-permissions-input").locator("input, textarea");
     await expect(input).toBeVisible({ timeout: 30_000 });
     expect(JSON.parse(await input.inputValue())).toEqual([]);
-    await actor.page.getByTestId("consent-toggle-invite").check();
-    await actor.clickWithPassivePromptRetry(actor.page.getByTestId("consent-preview-button"));
+    await actor.page.locator(".consent-toggle-invite").check();
+    await actor.clickWithPassivePromptRetry(actor.page.locator(".consent-preview-button"));
     await actor.page.route("**/_arkret/self/events", handler);
     await actor.page.route("**/_arkret/self/committed-events/*", readHandler);
-    await actor.clickWithPassivePromptRetry(actor.page.getByTestId("consent-confirm-replace-button"));
+    await actor.clickWithPassivePromptRetry(actor.page.locator(".consent-confirm-replace-button"));
     await expect.poll(() => originalCommit, { timeout: 60_000 }).toBeTruthy();
-    await expect(actor.page.getByTestId("consent-read-complete-button")).toBeEnabled({ timeout: 60_000 });
+    await expect(actor.page.locator(".consent-read-complete-button")).toBeEnabled({ timeout: 60_000 });
     const accepted = await readConsentCurrentApi(request, flow.session.grantJwt, flow.user.id, peer);
     expect(accepted.current.state).toBe("present");
     if (accepted.current.state !== "present") throw new Error("real original acceptance is missing");
@@ -588,20 +588,20 @@ test("complete peer Consent lost outcome replays the original after cold reload 
       peer, expected_current: consentExpectedCurrent(accepted), permissions: target,
     });
     expect(later.view.revision.commit_id).not.toBe(originalCommit);
-    await actor.clickWithPassivePromptRetry(actor.page.getByTestId("consent-read-complete-button"));
+    await actor.clickWithPassivePromptRetry(actor.page.locator(".consent-read-complete-button"));
     await expect(input).toBeVisible({ timeout: 30_000 });
     expect(JSON.parse(await input.inputValue())).toEqual(target);
-    await expect(actor.page.getByTestId("consent-confirm-replace-button")).toHaveCount(0);
+    await expect(actor.page.locator(".consent-confirm-replace-button")).toHaveCount(0);
     const beforeReload = bytes.length;
     await actor.page.reload();
     await actor.gotoAppPanel("/settings/consent", "consent-settings-panel");
     await selectPeer();
-    await actor.clickWithPassivePromptRetry(actor.page.getByTestId("consent-recover-original-button"));
+    await actor.clickWithPassivePromptRetry(actor.page.locator(".consent-recover-original-button"));
     await expect.poll(() => bytes.length, { timeout: 60_000 }).toBeGreaterThan(beforeReload);
     expect(blockedOriginalReads).toBeGreaterThan(0);
     loseResponses = false;
-    await expect(actor.page.getByTestId("consent-recover-original-button")).toBeEnabled({ timeout: 60_000 });
-    await actor.clickWithPassivePromptRetry(actor.page.getByTestId("consent-recover-original-button"));
+    await expect(actor.page.locator(".consent-recover-original-button")).toBeEnabled({ timeout: 60_000 });
+    await actor.clickWithPassivePromptRetry(actor.page.locator(".consent-recover-original-button"));
     await expect.poll(() => replayCommits.length, { timeout: 60_000 }).toBeGreaterThan(0);
     expect(recoveredOriginalReads).toBeGreaterThan(0);
     expect(new Set(bytes).size).toBe(1);
@@ -610,7 +610,7 @@ test("complete peer Consent lost outcome replays the original after cold reload 
     if (current.current.state !== "present") throw new Error("later current disappeared");
     expect(current.current.current_state.revision).toEqual(later.view.revision);
     expect(consentPermissions(current)).toEqual(target);
-    await actor.clickWithPassivePromptRetry(actor.page.getByTestId("consent-read-complete-button"));
+    await actor.clickWithPassivePromptRetry(actor.page.locator(".consent-read-complete-button"));
     await expect(input).toBeVisible({ timeout: 30_000 });
     expect(JSON.parse(await input.inputValue())).toEqual(target);
     await testInfo.attach("cold-consent-original-recovery", {
@@ -628,19 +628,19 @@ type ConsentActor = NonNullable<Awaited<ReturnType<typeof openDpopUserPage>>>["p
 
 async function openCompletePeer(actor: ConsentActor, peerId: string) {
   await actor.gotoAppPanel("/settings/consent", "consent-settings-panel");
-  await actor.page.getByTestId("consent-peer-input").fill(peerId);
-  await actor.page.getByTestId("consent-peer-station-input").fill(colandServiceId());
-  await actor.clickWithPassivePromptRetry(actor.page.getByTestId("consent-read-complete-button"));
-  const input = actor.page.getByTestId("consent-permissions-input");
+  await actor.page.locator(".consent-peer-input").locator("input, textarea").fill(peerId);
+  await actor.page.locator(".consent-peer-station-input").locator("input, textarea").fill(colandServiceId());
+  await actor.clickWithPassivePromptRetry(actor.page.locator(".consent-read-complete-button"));
+  const input = actor.page.locator(".consent-permissions-input").locator("input, textarea");
   await expect(input).toBeVisible({ timeout: 30_000 });
   return input;
 }
 
 async function confirmPermissions(actor: ConsentActor, permissions: ConsentPermission[]) {
-  await actor.page.getByTestId("consent-permissions-input").fill(canonicalJson(permissions));
-  await actor.clickWithPassivePromptRetry(actor.page.getByTestId("consent-preview-button"));
-  await expect(actor.page.getByTestId("consent-replacement-diff")).toBeVisible();
-  await actor.clickWithPassivePromptRetry(actor.page.getByTestId("consent-confirm-replace-button"));
+  await actor.page.locator(".consent-permissions-input").locator("input, textarea").fill(canonicalJson(permissions));
+  await actor.clickWithPassivePromptRetry(actor.page.locator(".consent-preview-button"));
+  await expect(actor.page.locator(".consent-replacement-diff")).toBeVisible();
+  await actor.clickWithPassivePromptRetry(actor.page.locator(".consent-confirm-replace-button"));
 }
 
 test("complete peer Consent real expiry preserves the stored permission and original revision", async ({ browser, request }) => {
@@ -708,8 +708,8 @@ test("complete peer Consent UI clears and regrants one peer while a voice reques
     const regranted = consentExpectedCurrent(await read());
     expect(regranted).not.toEqual(first);
     expect(regranted).not.toEqual(empty);
-    await expect(flow.page.page.getByTestId("consent-peer-row")).toHaveCount(1);
-    expect(JSON.parse((await flow.page.page.getByTestId("consent-peer-row").getAttribute("data-peer"))!)).toEqual(peer);
+    await expect(flow.page.page.locator(".consent-peer-row")).toHaveCount(1);
+    expect(JSON.parse((await flow.page.page.locator(".consent-peer-row").getAttribute("data-peer"))!)).toEqual(peer);
     const url = `${colandBaseUrl()}/_arkret/self/consent/request`;
     const requested = await request.post(url, {
       headers: { ...authHeaders(peerToken, "POST", url), "content-type": "application/json" },
@@ -736,13 +736,13 @@ test("complete peer Consent remains never_written when the real contacts modal s
     if (!holder || !requester) throw new Error("Contact/Consent UI acceptance requires two real DPoP sessions");
     const actor = requester.page;
     await actor.gotoAppPanel("/contacts", "contacts-panel");
-    await actor.clickWithPassivePromptRetry(actor.page.getByTestId("add-contact-button"));
-    await expect(actor.page.getByTestId("contact-request-panel")).toBeVisible({ timeout: 30_000 });
-    await actor.fillWithPassivePromptRetry(actor.page.getByTestId("contact-target-input"),
+    await actor.clickWithPassivePromptRetry(actor.page.locator(".add-contact-button"));
+    await expect(actor.page.locator(".contact-request-panel")).toBeVisible({ timeout: 30_000 });
+    await actor.fillWithPassivePromptRetry(actor.page.locator(".contact-target-input input, .contact-target-input textarea"),
       canonicalJson(accountActorId(holder.user.id)));
-    await expect(actor.page.getByTestId("contact-scope-direct_message")).toHaveCount(0);
-    await expect(actor.page.getByTestId("contact-scope-invite")).toHaveCount(0);
-    await actor.clickWithPassivePromptRetry(actor.page.getByTestId("send-contact-request-button"));
+    await expect(actor.page.locator(".contact-scope-direct_message")).toHaveCount(0);
+    await expect(actor.page.locator(".contact-scope-invite")).toHaveCount(0);
+    await actor.clickWithPassivePromptRetry(actor.page.locator(".send-contact-request-button"));
     await expect.poll(async () => (await contactRow(request, requester.session.grantJwt, holder.user.id))?.state,
       { timeout: 60_000 }).toBe("pending_outgoing");
     const holderPeer = { kind: "actor" as const, actor_id: accountActorId(requester.user.id) };

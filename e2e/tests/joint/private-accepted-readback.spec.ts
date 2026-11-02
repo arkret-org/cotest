@@ -50,16 +50,16 @@ test.describe("Private accepted readback real UI @fully-implemented", () => {
       console.info("[private-readback-ui] real Agent paired and Realm participation ready");
       const card = await createSidecarSourceCard(page, realm, `Readback source ${Date.now()}`);
       const exchanges: Array<{ request: string; response: string; prompt: string }> = [];
-      const replies = card.getByTestId("chat-message").filter({ has:
-        page.getByTestId("content-block-text").filter({ hasText: /^pong(?:\r?\n|$)/ }) });
+      const replies = card.locator(".chat-message").filter({ has:
+        page.locator(".content-block-text").filter({ hasText: /^pong(?:\r?\n|$)/ }) });
       for (let index = 0; index < 3; index += 1) {
-        await card.getByTestId("card-detail-sidebar-tab-members").click();
+        await card.locator(".card-detail-sidebar-tab-members").click();
         const member = card.locator(`[data-testid="card-detail-agent-row"][data-agent-id="${pairing.agentId}"]`);
         await expect(member).toBeVisible({ timeout: 120_000 });
         const prompt = `Readback ${index + 1}: please reply only pong`;
         await composeSourceAgentMention(card, member, pairing.agentId, prompt);
-        await expect(card.getByTestId("composer-send-scope")).toHaveAttribute("data-send-route", "Sidecar");
-        await expect(card.getByTestId("send-chat-button")).toBeEnabled({ timeout: 120_000 });
+        await expect(card.locator(".composer-send-scope")).toHaveAttribute("data-send-route", "Sidecar");
+        await expect(card.locator(".send-chat-button")).toBeEnabled({ timeout: 120_000 });
         if (index === 0) await hints.suppress();
         const ensure = index === 0 ? waitForSidecarEnsureAcceptance(page, info) : undefined;
         const receipt = page.waitForResponse(response => {
@@ -68,21 +68,21 @@ test.describe("Private accepted readback real UI @fully-implemented", () => {
             && decodeIngressEvents(outgoing.postData(), { context: "private accepted receipt" })
               .some(isPrivateMessage);
         }, { timeout: 180_000 });
-        await card.getByTestId("send-chat-button").click();
+        await card.locator(".send-chat-button").click();
         if (ensure) await ensure;
         const accepted = await receipt;
         const original = decodeIngressEvents(accepted.request().postData(), { context: "private signed original" })
           .find(isPrivateMessage)!;
         expect(accepted.ok()).toBe(true);
         assertAuthoritySubmitOutcome(await accepted.json(), original, "real private UI accepted write");
-        const authored = card.getByTestId("chat-message").filter({ hasText: prompt }).last();
+        const authored = card.locator(".chat-message").filter({ hasText: prompt }).last();
         await expect(authored).toBeVisible({ timeout: 120_000 });
         await expect(authored).toHaveAttribute("data-crypto-state", "plaintext");
         await expect(replies).toHaveCount(index + 1, { timeout: 180_000 });
         const reply = replies.last();
         await expect(reply).toHaveAttribute("data-crypto-state", "plaintext");
-        await expect(reply.getByTestId("member-badge-agent")).toBeVisible();
-        await expect(reply.getByTestId("message-private-sidecar-badge")).toBeVisible();
+        await expect(reply.locator(".member-badge-agent")).toBeVisible();
+        await expect(reply.locator(".message-private-sidecar-badge")).toBeVisible();
         const requestId = await eventIdFromMessage(authored);
         const responseId = await eventIdFromMessage(reply);
         expect(requestId).toBe(original.event_id);
@@ -90,7 +90,7 @@ test.describe("Private accepted readback real UI @fully-implemented", () => {
         await assertFold(page, realm, requestId, responseId);
         console.info(`[private-readback-ui] private exchange ${index + 1} accepted, installed and visible without live hints`);
         exchanges.push({ request: requestId, response: responseId, prompt });
-        await expect(card.getByTestId("chat-input")).toHaveValue("");
+        await expect(card.locator(".chat-input")).toHaveValue("");
       }
       const blockedHints = hints.observations();
       expect(blockedHints.blocked_http_subscriptions + blockedHints.dropped_live_frames,
@@ -104,14 +104,14 @@ test.describe("Private accepted readback real UI @fully-implemented", () => {
       // A cold page must obtain a fresh baseline; restored data is never an allow ticket.
       await hints.restore();
       await page.reload();
-      const reopened = page.getByTestId("card-detail-modal");
+      const reopened = page.locator(".card-detail-modal");
       await expect(reopened).toBeVisible({ timeout: 180_000 });
       for (const exchange of exchanges) {
-        await expect(reopened.getByTestId("chat-message").filter({ hasText: exchange.prompt })).toBeVisible({ timeout: 120_000 });
+        await expect(reopened.locator(".chat-message").filter({ hasText: exchange.prompt })).toBeVisible({ timeout: 120_000 });
         await assertFold(page, realm, exchange.request, exchange.response);
       }
-      await expect(reopened.getByTestId("chat-message").filter({ has:
-        page.getByTestId("content-block-text").filter({ hasText: /^pong(?:\r?\n|$)/ }) })).toHaveCount(3);
+      await expect(reopened.locator(".chat-message").filter({ has:
+        page.locator(".content-block-text").filter({ hasText: /^pong(?:\r?\n|$)/ }) })).toHaveCount(3);
       expect(submissions.size).toBe(3);
       expect([...submissions.values()]).toEqual([1, 1, 1]);
       await info.attach("private-cold-reload-evidence", { contentType: "application/json",
@@ -168,8 +168,8 @@ async function registerController(owner: JointUserPage, request: APIRequestConte
   const page = owner.page;
   const user = owner.user;
   await owner.gotoLogin();
-  await page.getByTestId("login-server-url").fill(colandBaseUrl());
-  await page.getByTestId("start-server-login-button").click();
+  await page.locator(".auth-station-field input").fill(colandBaseUrl());
+  await page.locator(".auth-primary").click();
   await page.getByRole("link", { name: /create account/i }).click();
   await page.locator('input[autocomplete="username"]').fill(user.name);
   await page.locator('input[autocomplete="email"]').fill(`${user.name}@example.test`);
@@ -192,19 +192,19 @@ async function registerController(owner: JointUserPage, request: APIRequestConte
     await page.getByRole("button", { name: /^continue$/i }).click();
   }
   await approve.click({ timeout: 120_000 });
-  await page.getByTestId("choose-new-identity").click();
-  const words = page.getByTestId("onboarding-recovery-key-display").locator("li");
+  await page.locator(".choose-new-identity").click();
+  const words = page.locator(".onboarding-recovery-key-display").locator("li");
   await expect(words).toHaveCount(24, { timeout: 120_000 });
   const key = (await words.allTextContents()).map(value => value.trim()).join(" ");
-  await page.getByTestId("onboarding-recovery-key-confirm").evaluate((element, key) => {
+  await page.locator(".onboarding-recovery-key-confirm").evaluate((element, key) => {
     const prototype = element instanceof HTMLTextAreaElement ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;
     Object.getOwnPropertyDescriptor(prototype, "value")!.set!.call(element, key);
     element.dispatchEvent(new Event("input", { bubbles: true }));
   }, key);
-  await page.getByTestId("onboarding-bind-identity").click();
-  await expect(page.getByTestId("onboarding-complete")).toContainText("Identity ready", { timeout: 240_000 });
-  await page.getByTestId("onboarding-complete").getByRole("link", { name: "Continue" }).click();
-  await expect(page.getByTestId("client-shell")).toBeVisible({ timeout: 120_000 });
+  await page.locator(".onboarding-bind-identity").click();
+  await expect(page.locator(".onboarding-complete")).toContainText("Identity ready", { timeout: 240_000 });
+  await page.locator(".onboarding-complete").getByRole("link", { name: "Continue" }).click();
+  await expect(page.locator(".shell.app")).toBeVisible({ timeout: 120_000 });
   const identity = await page.evaluate(() => JSON.parse(localStorage.getItem("inkson.config.v1")!).active_account);
   expect(identity.authority.principal_id).toMatch(/^ak:did_core:/);
   // Fixture labels follow the identity produced by the UI; no browser state is seeded.

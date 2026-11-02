@@ -104,27 +104,27 @@ test.describe("workflow: sprint planning", () => {
 
       // Phase B — both engineers receive the kickoff and reply with claims.
       await bobPage.gotoTimelineRealm(realmId);
-      await expect(bobPage.page.getByTestId("message-list")).toContainText(
+      await expect(bobPage.page.locator(".message-list")).toContainText(
         kickoff,
         {
           timeout: encryptedSyncTimeout,
         },
       );
       await bobPage.clickTimelineReply(kickoff);
-      await expect(bobPage.page.getByTestId("chat-reply-banner")).toBeVisible();
+      await expect(bobPage.page.locator(".chat-reply-banner")).toBeVisible();
       await bobPage.sendTimelineMessage(realmId, bobClaim);
       await expect(bobPage.timelineEvent(bobClaim)).toBeVisible({
         timeout: encryptedSyncTimeout,
       });
       await expect(
-        bobPage.timelineEvent(bobClaim).getByTestId("chat-reply-indicator"),
+        bobPage.timelineEvent(bobClaim).locator(".chat-reply-indicator"),
       ).toBeVisible({
         timeout: encryptedSyncTimeout,
       });
       await stepShot(bobPage.page, testInfo, "B-bob-claimed");
 
       await carolPage.gotoTimelineRealm(realmId);
-      await expect(carolPage.page.getByTestId("message-list")).toContainText(
+      await expect(carolPage.page.locator(".message-list")).toContainText(
         kickoff,
         {
           timeout: encryptedSyncTimeout,
@@ -132,14 +132,14 @@ test.describe("workflow: sprint planning", () => {
       );
       await carolPage.clickTimelineReply(kickoff);
       await expect(
-        carolPage.page.getByTestId("chat-reply-banner"),
+        carolPage.page.locator(".chat-reply-banner"),
       ).toBeVisible();
       await carolPage.sendTimelineMessage(realmId, carolClaim);
       await expect(carolPage.timelineEvent(carolClaim)).toBeVisible({
         timeout: encryptedSyncTimeout,
       });
       await expect(
-        carolPage.timelineEvent(carolClaim).getByTestId("chat-reply-indicator"),
+        carolPage.timelineEvent(carolClaim).locator(".chat-reply-indicator"),
       ).toBeVisible({
         timeout: encryptedSyncTimeout,
       });
@@ -215,40 +215,40 @@ test.describe("workflow: sprint planning", () => {
       await meiPage.page.goto(`/kanban/${realmId}`, {
         waitUntil: "domcontentloaded",
       });
-      await expect(meiPage.page.getByTestId("kanban-panel")).toBeVisible({
+      await expect(meiPage.page.locator(".kanban-panel")).toBeVisible({
         timeout: 120_000,
       });
-      await meiPage.page.getByTestId("new-board-toggle").click();
-      await meiPage.page.getByTestId("new-board-title-input").fill(boardTitle);
-      await meiPage.page.getByTestId("create-board-space-button").click();
+      await meiPage.page.locator(".new-board-toggle").click();
+      await meiPage.page.locator(".new-board-title-input input, .new-board-title-input textarea").fill(boardTitle);
+      await meiPage.page.locator(".create-board-space-button").click();
       await expect(
-        meiPage.page.getByTestId("board-space-select-button"),
+        meiPage.page.locator(".board-space-select-button"),
       ).toContainText(boardTitle, { timeout: 45_000 });
 
       for (const columnName of [backlog, todo, doing, done]) {
-        await meiPage.page.getByTestId("new-column-input").fill(columnName);
-        await meiPage.page.getByTestId("add-column-button").click();
+        await meiPage.page.locator(".new-column-input").fill(columnName);
+        await meiPage.page.locator(".add-column-button").click();
         await expect(
           meiPage.page
-            .getByTestId("kanban-column")
+            .locator(".kanban-column")
             .filter({ hasText: columnName }),
         ).toBeVisible({ timeout: 30_000 });
       }
 
       const backlogColumn = meiPage.page
-        .getByTestId("kanban-column")
+        .locator(".kanban-column")
         .filter({ hasText: backlog });
 
       // Add 5 cards back-to-back. inkson surfaces each card's draft-state
       // independently (data-card-draft) so the batch is observable even
       // before every create event acks. The composer intentionally stays open
       // after Save so consecutive cards can be entered without reopening it.
-      await backlogColumn.getByTestId("add-card-button").click();
+      await backlogColumn.locator(".add-card-button").click();
       for (const story of stories) {
-        await backlogColumn.getByTestId("new-card-title-input").fill(story);
-        await backlogColumn.getByTestId("save-card-button").click();
+        await backlogColumn.locator(".new-card-title-input").fill(story);
+        await backlogColumn.locator(".save-card-button").click();
         await expect(
-          backlogColumn.getByTestId("kanban-card").filter({ hasText: story }),
+          backlogColumn.locator(".kanban-card").filter({ hasText: story }),
         ).toBeVisible({ timeout: 30_000 });
       }
       await stepShot(meiPage.page, testInfo, "batch-A-queued");
@@ -258,7 +258,7 @@ test.describe("workflow: sprint planning", () => {
       // archive flow can act on the whole column once it settles.
       for (const story of stories) {
         const card = backlogColumn
-          .getByTestId("kanban-card")
+          .locator(".kanban-card")
           .filter({ hasText: story });
         await expect(card).toHaveAttribute("data-card-draft", "false", {
           timeout: 90_000,
@@ -328,14 +328,14 @@ test.describe("workflow: sprint planning", () => {
       await meiPage.page.goto(`/kanban/${realmId}`, {
         waitUntil: "domcontentloaded",
       });
-      await expect(meiPage.page.getByTestId("kanban-panel")).toBeVisible({
+      await expect(meiPage.page.locator(".kanban-panel")).toBeVisible({
         timeout: 120_000,
       });
-      await meiPage.page.getByTestId("new-board-toggle").click();
-      await meiPage.page.getByTestId("new-board-title-input").fill(boardTitle);
-      await meiPage.page.getByTestId("create-board-space-button").click();
+      await meiPage.page.locator(".new-board-toggle").click();
+      await meiPage.page.locator(".new-board-title-input input, .new-board-title-input textarea").fill(boardTitle);
+      await meiPage.page.locator(".create-board-space-button").click();
       await expect(
-        meiPage.page.getByTestId("kanban-empty-board"),
+        meiPage.page.locator(".kanban-empty-board"),
       ).toContainText(/No lists yet/, {
         timeout: 30_000,
       });
@@ -356,17 +356,17 @@ test.describe("workflow: sprint planning", () => {
       );
       expect(boardId).toMatch(/^ak:space:/);
       await expect(
-        meiPage.page.getByTestId("board-space-select-button"),
+        meiPage.page.locator(".board-space-select-button"),
       ).toContainText(boardTitle, {
         timeout: 30_000,
       });
 
       for (const columnName of [backlog, todo, doing, done]) {
-        await meiPage.page.getByTestId("new-column-input").fill(columnName);
-        await meiPage.page.getByTestId("add-column-button").click();
+        await meiPage.page.locator(".new-column-input").fill(columnName);
+        await meiPage.page.locator(".add-column-button").click();
         await expect(
           meiPage.page
-            .getByTestId("kanban-column")
+            .locator(".kanban-column")
             .filter({ hasText: columnName }),
         ).toBeVisible({ timeout: 30_000 });
       }
@@ -374,79 +374,79 @@ test.describe("workflow: sprint planning", () => {
       await bobPage.page.goto(`/kanban/${realmId}/board/${boardId}`, {
         waitUntil: "domcontentloaded",
       });
-      await expect(bobPage.page.getByTestId("kanban-panel")).toBeVisible({
+      await expect(bobPage.page.locator(".kanban-panel")).toBeVisible({
         timeout: 120_000,
       });
       await expect(
-        bobPage.page.getByTestId("board-space-select-button"),
+        bobPage.page.locator(".board-space-select-button"),
       ).toContainText(boardTitle, {
         timeout: 30_000,
       });
       await expect(
-        bobPage.page.getByTestId("kanban-column").filter({ hasText: backlog }),
+        bobPage.page.locator(".kanban-column").filter({ hasText: backlog }),
       ).toBeVisible({ timeout: 30_000 });
 
       const backlogColumn = meiPage.page
-        .getByTestId("kanban-column")
+        .locator(".kanban-column")
         .filter({ hasText: backlog });
       const liveStory = stories[0];
-      await backlogColumn.getByTestId("add-card-button").click();
-      await backlogColumn.getByTestId("new-card-title-input").fill(liveStory);
-      await backlogColumn.getByTestId("save-card-button").click();
+      await backlogColumn.locator(".add-card-button").click();
+      await backlogColumn.locator(".new-card-title-input").fill(liveStory);
+      await backlogColumn.locator(".save-card-button").click();
       await expect(
-        backlogColumn.getByTestId("kanban-card").filter({ hasText: liveStory }),
+        backlogColumn.locator(".kanban-card").filter({ hasText: liveStory }),
       ).toBeVisible({ timeout: 30_000 });
       await expect(
         bobPage.page
-          .getByTestId("kanban-column")
+          .locator(".kanban-column")
           .filter({ hasText: backlog })
-          .getByTestId("kanban-card")
+          .locator(".kanban-card")
           .filter({ hasText: liveStory }),
       ).toBeVisible({ timeout: 45_000 });
 
       const bobLiveCard = bobPage.page
-        .getByTestId("kanban-column")
+        .locator(".kanban-column")
         .filter({ hasText: backlog })
-        .getByTestId("kanban-card")
+        .locator(".kanban-card")
         .filter({ hasText: liveStory });
       await bobPage.clickWithPassivePromptRetry(bobLiveCard);
-      await expect(bobPage.page.getByTestId("card-detail-modal")).toBeVisible({
+      await expect(bobPage.page.locator(".card-detail-modal")).toBeVisible({
         timeout: 30_000,
       });
 
       const meiLiveCard = backlogColumn
-        .getByTestId("kanban-card")
+        .locator(".kanban-card")
         .filter({ hasText: liveStory });
       await meiPage.clickWithPassivePromptRetry(meiLiveCard);
-      await expect(meiPage.page.getByTestId("card-detail-modal")).toBeVisible({
+      await expect(meiPage.page.locator(".card-detail-modal")).toBeVisible({
         timeout: 30_000,
       });
       await meiPage.page
-        .getByTestId("card-detail-edit-description-button")
+        .locator(".card-detail-edit-description-button")
         .click();
       await setCardDetailEditorValue(meiPage.page, detailDescription);
-      await meiPage.page.getByTestId("card-detail-save-button").click();
+      await meiPage.page.locator(".card-detail-save-button").click();
       await expect(
-        meiPage.page.getByTestId("card-description-panel"),
+        meiPage.page.locator(".card-description-panel"),
       ).toContainText(detailDescription, { timeout: 30_000 });
       await expect(
-        bobPage.page.getByTestId("card-description-panel"),
+        bobPage.page.locator(".card-description-panel"),
       ).toContainText(detailDescription, { timeout: 60_000 });
 
-      await meiPage.page.getByTestId("card-detail-tab-synthesis").click();
+      await meiPage.page.locator(".card-detail-tab-synthesis").click();
       await meiPage.page
-        .getByTestId("card-detail-new-synthesis-button")
+        .locator(".card-detail-new-synthesis-button")
         .click();
       await setCardDetailEditorValue(meiPage.page, synthesisNote);
-      await meiPage.page.getByTestId("card-detail-save-button").click();
+      await meiPage.page.locator(".card-detail-save-button").click();
       await expect(
-        meiPage.page.getByTestId("card-synthesis-panel"),
+        meiPage.page.locator(".card-synthesis-panel"),
       ).toContainText(synthesisNote, {
         timeout: 30_000,
       });
-      await bobPage.page.getByTestId("card-detail-tab-synthesis").click();
+      await bobPage.page.locator(".card-detail-tab-synthesis").click();
       await expect(
-        bobPage.page.getByTestId("card-synthesis-panel"),
+        bobPage.page.locator(".card-synthesis-panel"),
       ).toContainText(synthesisNote, {
         timeout: 60_000,
       });
@@ -455,42 +455,42 @@ test.describe("workflow: sprint planning", () => {
         waitUntil: "domcontentloaded",
       });
       await expect(
-        bobPage.page.getByTestId("board-space-select-button"),
+        bobPage.page.locator(".board-space-select-button"),
       ).toContainText(boardTitle, {
         timeout: 30_000,
       });
       await bobPage.page
-        .getByTestId("kanban-column")
+        .locator(".kanban-column")
         .filter({ hasText: backlog })
-        .getByTestId("kanban-card")
+        .locator(".kanban-card")
         .filter({ hasText: liveStory })
         .click();
       await expect(
-        bobPage.page.getByTestId("card-description-panel"),
+        bobPage.page.locator(".card-description-panel"),
       ).toContainText(detailDescription, { timeout: 60_000 });
-      await bobPage.page.getByTestId("card-detail-tab-synthesis").click();
+      await bobPage.page.locator(".card-detail-tab-synthesis").click();
       await expect(
-        bobPage.page.getByTestId("card-synthesis-panel"),
+        bobPage.page.locator(".card-synthesis-panel"),
       ).toContainText(synthesisNote, {
         timeout: 60_000,
       });
-      await meiPage.page.getByTestId("card-detail-close-button").click();
-      await expect(meiPage.page.getByTestId("card-detail-modal")).toBeHidden({
+      await meiPage.page.locator(".card-detail-close-button").click();
+      await expect(meiPage.page.locator(".card-detail-modal")).toBeHidden({
         timeout: 30_000,
       });
 
       // M1 continuous create keeps the cleared composer open until Cancel.
       // Opening card details must not discard that existing creation flow.
-      await expect(backlogColumn.getByTestId("new-card-title-input")).toBeVisible();
+      await expect(backlogColumn.locator(".new-card-title-input")).toBeVisible();
       for (const story of stories.slice(1)) {
         // The continuous-create composer remains open after saving a card.
-        if (!(await backlogColumn.getByTestId("new-card-title-input").isVisible())) {
-          await backlogColumn.getByTestId("add-card-button").click();
+        if (!(await backlogColumn.locator(".new-card-title-input").isVisible())) {
+          await backlogColumn.locator(".add-card-button").click();
         }
-        await backlogColumn.getByTestId("new-card-title-input").fill(story);
-        await backlogColumn.getByTestId("save-card-button").click();
+        await backlogColumn.locator(".new-card-title-input").fill(story);
+        await backlogColumn.locator(".save-card-button").click();
         await expect(
-          backlogColumn.getByTestId("kanban-card").filter({ hasText: story }),
+          backlogColumn.locator(".kanban-card").filter({ hasText: story }),
         ).toBeVisible({ timeout: 30_000 });
       }
       await expect
@@ -511,28 +511,28 @@ test.describe("workflow: sprint planning", () => {
         await actor.page.goto(`/kanban/${realmId}/board/${boardId}`, {
           waitUntil: "domcontentloaded",
         });
-        await expect(actor.page.getByTestId("kanban-panel")).toBeVisible({
+        await expect(actor.page.locator(".kanban-panel")).toBeVisible({
           timeout: 120_000,
         });
         await expect(
-          actor.page.getByTestId("board-space-select-button"),
+          actor.page.locator(".board-space-select-button"),
         ).toContainText(boardTitle, {
           timeout: 30_000,
         });
         for (const columnName of [backlog, todo, doing, done]) {
           await expect(
             actor.page
-              .getByTestId("kanban-column")
+              .locator(".kanban-column")
               .filter({ hasText: columnName }),
           ).toBeVisible({ timeout: 30_000 });
         }
         const hydratedBacklog = actor.page
-          .getByTestId("kanban-column")
+          .locator(".kanban-column")
           .filter({ hasText: backlog });
         for (const story of stories) {
           await expect(
             hydratedBacklog
-              .getByTestId("kanban-card")
+              .locator(".kanban-card")
               .filter({ hasText: story }),
           ).toBeVisible({ timeout: 30_000 });
         }
@@ -591,33 +591,33 @@ test.describe("workflow: sprint planning", () => {
       await meiPage.page.goto(`/kanban/${realmId}`, {
         waitUntil: "domcontentloaded",
       });
-      await expect(meiPage.page.getByTestId("kanban-panel")).toBeVisible({
+      await expect(meiPage.page.locator(".kanban-panel")).toBeVisible({
         timeout: 120_000,
       });
-      await meiPage.page.getByTestId("new-board-toggle").click();
-      await meiPage.page.getByTestId("new-board-title-input").fill(boardTitle);
-      await meiPage.page.getByTestId("create-board-space-button").click();
+      await meiPage.page.locator(".new-board-toggle").click();
+      await meiPage.page.locator(".new-board-title-input input, .new-board-title-input textarea").fill(boardTitle);
+      await meiPage.page.locator(".create-board-space-button").click();
       await expect(
-        meiPage.page.getByTestId("board-space-select-button"),
+        meiPage.page.locator(".board-space-select-button"),
       ).toContainText(boardTitle, { timeout: 45_000 });
 
-      await meiPage.page.getByTestId("new-column-input").fill(column);
-      await meiPage.page.getByTestId("add-column-button").click();
+      await meiPage.page.locator(".new-column-input").fill(column);
+      await meiPage.page.locator(".add-column-button").click();
       const backlogColumn = meiPage.page
-        .getByTestId("kanban-column")
+        .locator(".kanban-column")
         .filter({ hasText: column });
       await expect(backlogColumn).toBeVisible({ timeout: 30_000 });
 
-      await backlogColumn.getByTestId("add-card-button").click();
-      const cardTitleInput = backlogColumn.getByTestId("new-card-title-input");
+      await backlogColumn.locator(".add-card-button").click();
+      const cardTitleInput = backlogColumn.locator(".new-card-title-input");
       // M1 continuous create retains the composer and clears it after Save.
       for (const card of cards) {
         await expect(cardTitleInput).toBeVisible();
         await cardTitleInput.fill(card);
-        await backlogColumn.getByTestId("save-card-button").click();
+        await backlogColumn.locator(".save-card-button").click();
         await expect(cardTitleInput).toHaveValue("");
         const cardLocator = backlogColumn
-          .getByTestId("kanban-card")
+          .locator(".kanban-card")
           .filter({ hasText: card });
         await expect(cardLocator).toBeVisible({ timeout: 30_000 });
         await expect(cardLocator).toHaveAttribute("data-card-draft", "false", {
@@ -629,17 +629,17 @@ test.describe("workflow: sprint planning", () => {
       // Bulk archive the whole board: cascade-archive every active card +
       // list, then the board Space itself. The button opens a confirmation
       // dialog first; the cascade only fires from the confirm button.
-      await meiPage.page.getByTestId("archive-board-button").click();
-      await meiPage.page.getByTestId("archive-board-confirm-button").click();
+      await meiPage.page.locator(".archive-board-button").click();
+      await meiPage.page.locator(".archive-board-confirm-button").click();
 
       // Cascade: cards and the column drop out of the active board view.
       for (const card of cards) {
         await expect(
-          meiPage.page.getByTestId("kanban-card").filter({ hasText: card }),
+          meiPage.page.locator(".kanban-card").filter({ hasText: card }),
         ).toHaveCount(0, { timeout: 90_000 });
       }
       await expect(
-        meiPage.page.getByTestId("kanban-column").filter({ hasText: column }),
+        meiPage.page.locator(".kanban-column").filter({ hasText: column }),
       ).toHaveCount(0, { timeout: 90_000 });
       await stepShot(meiPage.page, testInfo, "archiveboard-B-cascaded");
     } finally {
@@ -699,12 +699,12 @@ async function setCardDetailEditorValue(
   page: Page,
   value: string,
 ): Promise<void> {
-  const editor = page.getByTestId("card-detail-description-rich-editor")
+  const editor = page.locator(".card-detail-description-rich-editor")
     .locator('.ProseMirror.toastui-editor-contents[contenteditable="true"]');
   await expect(editor).toBeVisible({ timeout: 45_000 });
   await editor.click();
   await editor.press("ControlOrMeta+A");
   await editor.pressSequentially(value);
-  const input = page.getByTestId("card-detail-description-input");
+  const input = page.locator(".card-detail-description-input");
   await expect(input).toHaveValue(value);
 }

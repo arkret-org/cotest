@@ -54,17 +54,17 @@ async function rejectedWithoutEffects(bridge: ProvisioningBridge, runtime: strin
 async function provisionOwnedAgent(user: JointUserPage): Promise<string> {
   const page = user.page;
   await user.gotoSettings();
-  await page.getByTestId("settings-nav-item-agents").click();
-  await expect(page.getByTestId("agent-admin")).toBeVisible();
-  await page.getByTestId("agent-admin-create-open-button").click();
-  await page.getByTestId("agent-admin-provision-agent-slug").fill(`owned-member-${Date.now().toString(36)}`);
+  await page.locator(".settings-nav-item-agents").click();
+  await expect(page.locator(".agent-admin")).toBeVisible();
+  await page.locator(".agent-admin-create-open-button").click();
+  await page.locator(".agent-admin-provision-agent-slug").locator("input, textarea").fill(`owned-member-${Date.now().toString(36)}`);
   const committed = page.waitForResponse(response => {
     const request = response.request();
     return response.status() === 201 && request.method() === "POST"
       && new URL(response.url()).pathname === "/_arkret/self/agents"
       && request.postDataJSON()?.phase === "commit";
   }, { timeout: 180_000 });
-  await page.getByTestId("agent-admin-provision-button").click();
+  await page.locator(".agent-admin-provision-button").click();
   // This response also carries private pairing material. Retain only the public
   // principal locator and never attach/dump its body or pairing code.
   const agent = (await (await committed).json()).agent_id;
@@ -75,21 +75,21 @@ async function provisionOwnedAgent(user: JointUserPage): Promise<string> {
 
 async function members(page: Page, realm: string, agent: string): Promise<Locator> {
   await page.goto(`/realms/${realm}/members`, { waitUntil: "domcontentloaded" });
-  await expect(page.getByTestId("realm-members-panel")).toBeVisible({ timeout: 120_000 });
-  await page.getByTestId("members-section-my-agents").click();
+  await expect(page.locator(".realm-members-panel")).toBeVisible({ timeout: 120_000 });
+  await page.getByRole("button", { name: "My agents", exact: true }).click();
   return page.locator(`[data-testid="member-self-agent-row"][data-agent-id="${agent}"]`);
 }
 
 async function confirm(page: Page, panel: Locator, realm: string, account: unknown, agent: unknown, strand: string,
   expectedRejection?: "agent_requested_scope_commitment_invalid"): Promise<string> {
-  await panel.getByTestId("owned-agent-scope").selectOption(strand);
+  await panel.locator(".owned-agent-scope").selectOption(strand);
   await panel.getByRole("checkbox", { name: "发送消息", exact: true }).check();
   const published = page.waitForResponse(response => {
     const request = response.request();
     if (request.method() !== "POST" || new URL(response.url()).pathname !== "/_arkret/self/events") return false;
     return decodeIngressEvents(request.postData()).some(event => event.realm_id === realm && event.kind === "ak.capability.grant");
   }, { timeout: 180_000 });
-  await panel.getByTestId("owned-agent-confirm-authority").click();
+  await panel.locator(".owned-agent-confirm-authority").click();
   const response = await published;
   const event = decodeIngressEvents(response.request().postData()).find(event => event.kind === "ak.capability.grant")!;
   if (expectedRejection) {
@@ -152,24 +152,24 @@ test("ordinary member explicitly grants, withdraws cold and confirms a new owned
   const bob = jointRealm.bobPage.page;
   const agentId = await provisionOwnedAgent(jointRealm.bobPage);
   const row = await members(bob, realm, agentId);
-  await bob.getByTestId("open-add-realm-agent-modal-button").click();
+  await bob.locator(".open-add-realm-agent-modal-button").click();
   const available = bob.locator(`[data-testid="available-realm-agent-row"][data-agent-id="${agentId}"]`);
   await expect(available).toBeVisible({ timeout: 120_000 });
-  await available.getByTestId("confirm-add-agent-to-realm").click();
+  await available.locator(".confirm-add-agent-to-realm").click();
   await expect(row).toBeVisible({ timeout: 180_000 });
-  const panel = row.getByTestId("member-agent-authority");
+  const panel = row.locator(".member-agent-authority");
   await expect(panel).toBeVisible({ timeout: 180_000 });
   // The roster row already existed before Add. Re-read the two accepted join
   // generations through the normal control before asserting confirmation UI.
   await expect(async () => {
-    const confirmButton = panel.getByTestId("owned-agent-confirm-authority");
+    const confirmButton = panel.locator(".owned-agent-confirm-authority");
     if (!await confirmButton.isVisible()) {
       const refresh = panel.getByRole("button", { name: "刷新当前权限与管理限制", exact: true });
       if (await refresh.isEnabled()) await refresh.click();
     }
     await expect(confirmButton).toBeVisible({ timeout: 1_000 });
   }).toPass({ timeout: 120_000, intervals: [1_000, 2_000, 5_000] }).catch(async error => {
-    const status = await panel.getByTestId("owned-agent-authority-status").textContent().catch(() => null);
+    const status = await panel.locator(".owned-agent-authority-status").textContent().catch(() => null);
     const safeStatus = status && !/Bearer|eyJ[A-Za-z0-9_-]{20}|recovery.key|private.key/i.test(status)
       ? status.slice(0, 1_000) : "status unavailable";
     await test.info().attach("owned-agent-authority-join-status", {
@@ -177,7 +177,7 @@ test("ordinary member explicitly grants, withdraws cold and confirms a new owned
     });
     throw error;
   });
-  await expect(panel.getByTestId("owned-agent-confirm-authority")).toBeDisabled();
+  await expect(panel.locator(".owned-agent-confirm-authority")).toBeDisabled();
   await expect(panel.getByRole("checkbox", { name: "发送消息", exact: true })).not.toBeChecked();
   const agentAccount = { principal_id: agentId, station_id: jointRealm.bobSession.accountId.station_id };
   const beforeUnqualified = await footprint(realm, jointRealm.bobSession.accountId.station_id);
@@ -185,8 +185,8 @@ test("ordinary member explicitly grants, withdraws cold and confirms a new owned
     "agent_requested_scope_commitment_invalid");
   expect((await footprint(realm, jointRealm.bobSession.accountId.station_id)).tables).toEqual(beforeUnqualified.tables);
   await expect(panel.locator(`[data-grant-id="${unqualified}"]`)).toHaveCount(0);
-  await row.getByTestId("member-agent-interaction-mode").getByRole("button", { name: /^(公开|Public)$/ }).click();
-  const reply = row.getByTestId("member-agent-reply-toggle");
+  await row.locator(".member-agent-interaction-mode").getByRole("button", { name: /^(公开|Public)$/ }).click();
+  const reply = row.locator(".member-agent-reply-toggle");
   if (await reply.getAttribute("aria-checked") !== "true") await reply.click();
   await expect(reply).toHaveAttribute("aria-checked", "true", { timeout: 120_000 });
   const bridge = ProvisioningBridge.start();
@@ -203,7 +203,7 @@ test("ordinary member explicitly grants, withdraws cold and confirms a new owned
     // Current pairing custody proves the private immutable ceiling, but is
     // neither a content grant nor the ordinary member's explicit confirmation.
     await rejectedWithoutEffects(bridge, runtime.runtimeId, realm, strand, session.accountId.station_id);
-    const qualifiedPanel = (await members(bob, realm, agentId)).getByTestId("member-agent-authority");
+    const qualifiedPanel = (await members(bob, realm, agentId)).locator(".member-agent-authority");
     const first = await confirm(bob, qualifiedPanel, realm, session.accountId, agentAccount, strand);
     await expect(qualifiedPanel.locator(`[data-grant-id="${first}"]`)).toContainText("当前权限/管理预检允许（运行时仍需验收）", { timeout: 120_000 });
     // Preflight is separately labelled. Only the real Agent-signed accepted
@@ -218,15 +218,15 @@ test("ordinary member explicitly grants, withdraws cold and confirms a new owned
     expect(accepted.commitId).toMatch(/^ak:realm_commit:/);
     await bob.reload({ waitUntil: "domcontentloaded" });
     await members(bob, realm, agentId);
-    const ledger = bob.getByTestId("owned-agent-withdrawal-ledger");
+    const ledger = bob.locator(".owned-agent-withdrawal-ledger");
     const retained = ledger.locator(`[data-grant-id="${first}"]`);
     await expect(retained).toContainText("Active", { timeout: 120_000 });
-    await retained.getByTestId("owned-agent-withdraw-retained").click();
+    await retained.locator(".owned-agent-withdraw-retained").click();
     await expect(retained).toContainText("Revoked", { timeout: 180_000 });
-    await expect(retained.getByTestId("owned-agent-withdraw-retained")).toHaveCount(0);
+    await expect(retained.locator(".owned-agent-withdraw-retained")).toHaveCount(0);
     await rejectedWithoutEffects(bridge, runtime.runtimeId, realm, strand, session.accountId.station_id);
-    const currentPanel = (await members(bob, realm, agentId)).getByTestId("member-agent-authority");
-    await expect(currentPanel.getByTestId("owned-agent-confirm-authority")).toBeDisabled();
+    const currentPanel = (await members(bob, realm, agentId)).locator(".member-agent-authority");
+    await expect(currentPanel.locator(".owned-agent-confirm-authority")).toBeDisabled();
     const second = await confirm(bob, currentPanel, realm, jointRealm.bobSession.accountId, agentAccount, strand);
     expect(second).not.toBe(first);
     await expect(currentPanel.locator(`[data-grant-id="${first}"]`)).toContainText("Revoked");
@@ -237,11 +237,11 @@ test("ordinary member explicitly grants, withdraws cold and confirms a new owned
     expect((await bridge.submitAgentMessage(runtime.runtimeId, renewed)).accepted).toBe(true);
     // Departure must not hide the dedicated original-issuer withdrawal, even
     // though the ordinary snapshot/Agent roster read gate now refuses access.
-    await bob.getByTestId("members-section-members").click();
-    await expect(bob.getByTestId("member-row-leave-button")).toHaveCount(1);
-    await bob.getByTestId("member-row-leave-button").click();
+    await bob.getByRole("button", { name: "Members", exact: true }).click();
+    await expect(bob.locator(".member-row-leave-button")).toHaveCount(1);
+    await bob.locator(".member-row-leave-button").click();
     await members(bob, realm, agentId);
-    const departed = bob.getByTestId("owned-agent-withdrawal-ledger").locator(`[data-grant-id="${second}"]`);
+    const departed = bob.locator(".owned-agent-withdrawal-ledger").locator(`[data-grant-id="${second}"]`);
     await expect(departed).toContainText("Active", { timeout: 120_000 });
     const withdrawalPath = "**/_arkret/self/events";
     let originalWithdrawal: string | undefined;
@@ -282,9 +282,9 @@ test("ordinary member explicitly grants, withdraws cold and confirms a new owned
     };
     await bob.route(withdrawalPath, loseWithdrawalResponse);
     try {
-      await departed.getByTestId("owned-agent-withdraw-retained").click();
+      await departed.locator(".owned-agent-withdraw-retained").click();
       await expect(departed).toContainText("Revoked", { timeout: 180_000 });
-      await expect(departed.getByTestId("owned-agent-withdraw-retained")).toHaveCount(0);
+      await expect(departed.locator(".owned-agent-withdraw-retained")).toHaveCount(0);
       expect(forwardedWithdrawals).toBe(1);
     } finally {
       await bob.unroute(withdrawalPath, loseWithdrawalResponse);
@@ -302,7 +302,7 @@ const managementOperations = ["join", "authorize", "execute", "read", "deliver",
 
 async function policyEditor(user: JointUserPage, realm: string): Promise<Locator> {
   await user.gotoRealmAdminSection(realm, "access");
-  const editor = user.page.getByTestId("agent-policy-editor");
+  const editor = user.page.locator(".agent-policy-editor");
   await expect(editor).toBeVisible({ timeout: 120_000 });
   return editor;
 }
@@ -310,8 +310,8 @@ async function policyEditor(user: JointUserPage, realm: string): Promise<Locator
 async function loadPolicyEditor(user: JointUserPage, realm: string, id?: string): Promise<Locator> {
   const editor = await policyEditor(user, realm);
   if (id) await editor.getByLabel("Exact Policy id", { exact: true }).fill(id);
-  await editor.getByTestId("agent-policy-read-current").click();
-  await expect(editor.getByTestId("agent-policy-status"))
+  await editor.locator(".agent-policy-read-current").click();
+  await expect(editor.locator(".agent-policy-status"))
     .toContainText(/Accepted current|Authoritative never_written/, { timeout: 120_000 });
   return editor;
 }
@@ -343,8 +343,8 @@ async function savePolicyEditor(user: JointUserPage, editor: Locator, realm: str
     return decodeIngressEvents(response.request().postData()).some(event =>
       event.kind === "ak.policy.set" && event.realm_id === realm && event.payload?.policy_id === id);
   }, { timeout: 180_000 });
-  await expect(editor.getByTestId("agent-policy-save")).toBeEnabled();
-  await editor.getByTestId("agent-policy-save").click();
+  await expect(editor.locator(".agent-policy-save")).toBeEnabled();
+  await editor.locator(".agent-policy-save").click();
   const observed = await response;
   const outcome = await observed.json() as Record<string, any>;
   // Never stringify a surprising signed Commit or whole outcome as diagnostics.
@@ -353,7 +353,7 @@ async function savePolicyEditor(user: JointUserPage, editor: Locator, realm: str
   const event = decodeIngressEvents(observed.request().postData()).find(event => event.payload?.policy_id === id)!;
   expect(typeof event.producer_proof === "object").toBe(true);
   expect(outcome.commit?.event_ref).toBe(event.event_id);
-  await expect(editor.getByTestId("agent-policy-status"))
+  await expect(editor.locator(".agent-policy-status"))
     .toContainText("Policy committed and exact current confirmed", { timeout: 180_000 });
   return { event, outcome };
 }
@@ -387,7 +387,7 @@ test("administrator configures all Realm operations and Circle operations with e
     const id = await editor.getByLabel("Exact Policy id", { exact: true }).inputValue();
     let previous: Record<string, unknown> | null = null;
     for (const operation of managementOperations.filter(op => !circleId || op !== "publish")) {
-      const rule = editor.getByTestId("agent-policy-rule");
+      const rule = editor.locator(".agent-policy-rule");
       await chooseManagementOperations(rule, [operation]);
       await rule.getByLabel("Effect", { exact: true }).selectOption("deny");
       const write = await savePolicyEditor(user, editor, realm);
@@ -399,13 +399,13 @@ test("administrator configures all Realm operations and Circle operations with e
       // A reload must re-read accepted exact current, not reuse the form as proof.
       await user.page.reload({ waitUntil: "domcontentloaded" });
       editor = await loadPolicyEditor(user, realm, id);
-      await expect(editor.getByTestId("agent-policy-rule").getByRole("checkbox", { name: operation, exact: true })).toBeChecked();
+      await expect(editor.locator(".agent-policy-rule").getByRole("checkbox", { name: operation, exact: true })).toBeChecked();
       await expect(editor.getByLabel("Scope Circle id (blank means this Realm)", { exact: true })).toHaveValue(circleId ?? "");
     }
     if (circleId) {
       // This is only a legal Policy value. Public interaction still has its
       // single Realm producer; this write is not Circle publish effectiveness.
-      const rule = editor.getByTestId("agent-policy-rule");
+      const rule = editor.locator(".agent-policy-rule");
       await chooseManagementOperations(rule, ["publish"]);
       const publish = await savePolicyEditor(user, editor, realm);
       await assertPolicyCurrent(request, jointRealm.aliceSession, realm, publish);
@@ -415,7 +415,7 @@ test("administrator configures all Realm operations and Circle operations with e
       await rule.getByLabel("Approvers: complete SDK ActorId array", { exact: true }).fill(canonicalJson([
         { kind: "account", account_id: jointRealm.aliceSession.accountId },
       ]));
-      await expect(editor.getByTestId("agent-policy-save")).toBeDisabled();
+      await expect(editor.locator(".agent-policy-save")).toBeDisabled();
       expect(canonicalJson((await exactPolicy(request, jointRealm.aliceSession, realm, id)).entry.value)
         === canonicalJson(publish.event.payload!.value)).toBe(true);
     }
@@ -449,14 +449,14 @@ test("administrator Policy stale CAS and ordinary member edits refuse without ef
   });
   try {
     const staleEditor = await loadPolicyEditor(sibling!.page, realm, id);
-    await staleEditor.getByTestId("agent-policy-rule").getByLabel("Effect", { exact: true }).selectOption("allow");
+    await staleEditor.locator(".agent-policy-rule").getByLabel("Effect", { exact: true }).selectOption("allow");
     const staleResponse = sibling!.page.page.waitForResponse(response =>
       response.request().method() === "POST" && new URL(response.url()).pathname === "/_arkret/self/events"
       && decodeIngressEvents(response.request().postData()).some(event => event.payload?.policy_id === id));
     const [refusal, { accepted, before }] = await Promise.all([
       staleResponse,
       (async () => {
-        await staleEditor.getByTestId("agent-policy-save").click();
+        await staleEditor.locator(".agent-policy-save").click();
         await frozen;
         // Freeze through normal authoring while its null CAS basis is valid.
         // The other page commits before this original request reaches the Station.
@@ -471,7 +471,7 @@ test("administrator Policy stale CAS and ordinary member edits refuse without ef
     expect(refusal.status(), "stale null revision must not overwrite the accepted Policy").toBe(409);
     expect(wireErrCode(body) ?? body.reason_code).toBe("failed_precondition");
     expect(body.commit === undefined && body.commits === undefined).toBe(true);
-    await expect(staleEditor.getByTestId("agent-policy-status")).toContainText("The original Policy was rejected", { timeout: 120_000 });
+    await expect(staleEditor.locator(".agent-policy-status")).toContainText("The original Policy was rejected", { timeout: 120_000 });
     expect(canonicalJson((await footprint(realm, jointRealm.aliceSession.accountId.station_id)).tables) === canonicalJson(before.tables)).toBe(true);
     const unchanged = await exactPolicy(request, jointRealm.aliceSession, realm, id);
     expect(canonicalJson(unchanged.entry) === canonicalJson(accepted.entry)).toBe(true);
@@ -493,10 +493,10 @@ test("administrator Policy stale CAS and ordinary member edits refuse without ef
   const read = jointRealm.bobPage.page.waitForResponse(response => response.request().method() === "POST"
     && new URL(response.url()).pathname === "/_arkret/self/current-state/exact"
     && response.request().postDataJSON()?.selector?.policy_id === id);
-  await memberEditor.getByTestId("agent-policy-read-current").click();
+  await memberEditor.locator(".agent-policy-read-current").click();
   expect((await read).status()).toBe(404);
-  await expect(memberEditor.getByTestId("agent-policy-status")).toContainText("creation remains blocked", { timeout: 120_000 });
-  await expect(memberEditor.getByTestId("agent-policy-save")).toBeDisabled();
+  await expect(memberEditor.locator(".agent-policy-status")).toContainText("creation remains blocked", { timeout: 120_000 });
+  await expect(memberEditor.locator(".agent-policy-save")).toBeDisabled();
   const accepted = await exactPolicy(request, jointRealm.aliceSession, realm, id);
   const event = signedEventEnvelope({ actorId: jointRealm.bob.id, realmId: realm, kind: "ak.policy.set",
     payload: { policy_id: id, expected_revision: accepted.entry.revision, value: accepted.entry.value } });
@@ -525,7 +525,7 @@ test("normal administrator default denial admits an exact controller exception a
   let editor = await loadPolicyEditor(user, realm);
   const id = await editor.getByLabel("Exact Policy id", { exact: true }).inputValue();
   await editor.getByLabel("Default effect", { exact: true }).selectOption("deny");
-  let rule = editor.getByTestId("agent-policy-rule");
+  let rule = editor.locator(".agent-policy-rule");
   await chooseManagementOperations(rule, ["join"]);
   await rule.getByLabel("Effect", { exact: true }).selectOption("allow");
   await rule.getByLabel("Agent selector", { exact: true }).selectOption("controller");
@@ -533,7 +533,7 @@ test("normal administrator default denial admits an exact controller exception a
   await rule.getByLabel("Complete Account: station_id", { exact: true }).fill(jointRealm.aliceSession.accountId.station_id);
   await assertPolicyCurrent(request, jointRealm.aliceSession, realm, await savePolicyEditor(user, editor, realm));
   await members(user.page, realm, agent);
-  await user.page.getByTestId("open-add-realm-agent-modal-button").click();
+  await user.page.locator(".open-add-realm-agent-modal-button").click();
   const available = user.page.locator(`[data-testid="available-realm-agent-row"][data-agent-id="${agent}"]`);
   await expect(available).toBeVisible({ timeout: 120_000 });
   const joining = user.page.waitForResponse(response => response.request().method() === "POST"
@@ -541,13 +541,13 @@ test("normal administrator default denial admits an exact controller exception a
     && decodeIngressEvents(response.request().postData()).some(event => event.kind === "ak.member.state"
       && canonicalJson(event.payload?.member_id) === canonicalJson({ kind: "account", account_id: {
         principal_id: agent, station_id: jointRealm.aliceSession.accountId.station_id } })));
-  await available.getByTestId("confirm-add-agent-to-realm").click();
+  await available.locator(".confirm-add-agent-to-realm").click();
   expect((await joining).status()).toBe(200);
   await expect(user.page.locator(`[data-testid="member-self-agent-row"][data-agent-id="${agent}"]`)).toBeVisible({ timeout: 120_000 });
 
   const other = await provisionOwnedAgent(jointRealm.bobPage);
   await members(jointRealm.bobPage.page, realm, other);
-  await jointRealm.bobPage.page.getByTestId("open-add-realm-agent-modal-button").click();
+  await jointRealm.bobPage.page.locator(".open-add-realm-agent-modal-button").click();
   const denied = jointRealm.bobPage.page.locator(`[data-testid="available-realm-agent-row"][data-agent-id="${other}"]`);
   await expect(denied).toBeVisible({ timeout: 120_000 });
   const beforeJoin = await footprint(realm, jointRealm.bobSession.accountId.station_id);
@@ -555,7 +555,7 @@ test("normal administrator default denial admits an exact controller exception a
     && new URL(response.url()).pathname === "/_arkret/self/events"
     && decodeIngressEvents(response.request().postData()).some(event => event.kind === "ak.member.state"
       && (event.payload?.member_id as any)?.account_id?.principal_id === other));
-  await denied.getByTestId("confirm-add-agent-to-realm").click();
+  await denied.locator(".confirm-add-agent-to-realm").click();
   const rejection = await refusing;
   const rejectionBody = await rejection.json();
   expect(rejection.status()).toBe(403);
@@ -570,14 +570,14 @@ test("normal administrator default denial admits an exact controller exception a
   })).status()).toBe(200);
   editor = await loadPolicyEditor(user, realm, id);
   await editor.getByLabel("Default effect", { exact: true }).selectOption("allow");
-  rule = editor.getByTestId("agent-policy-rule");
+  rule = editor.locator(".agent-policy-rule");
   await chooseManagementOperations(rule, ["authorize"]);
   await rule.getByLabel("Effect", { exact: true }).selectOption("deny");
   await savePolicyEditor(user, editor, realm);
   const child = await loadPolicyEditor(user, realm);
   await child.getByLabel("Scope Circle id (blank means this Realm)", { exact: true }).fill(circle.circle_id);
-  await chooseManagementOperations(child.getByTestId("agent-policy-rule"), ["authorize"]);
-  await child.getByTestId("agent-policy-rule").getByLabel("Effect", { exact: true }).selectOption("allow");
+  await chooseManagementOperations(child.locator(".agent-policy-rule"), ["authorize"]);
+  await child.locator(".agent-policy-rule").getByLabel("Effect", { exact: true }).selectOption("allow");
   await assertPolicyCurrent(request, jointRealm.aliceSession, realm, await savePolicyEditor(user, child, realm));
   // Grant admission consumes the accepted immutable provision/key custody.
   // Establish it before testing the parent authorize policy, then keep the
@@ -606,7 +606,7 @@ test("normal administrator default denial admits an exact controller exception a
   expect(body.commit === undefined && body.commits === undefined).toBe(true);
   expect(canonicalJson(await footprint(realm, jointRealm.aliceSession.accountId.station_id, String(built.envelope.event_id))) === canonicalJson(before)).toBe(true);
   editor = await loadPolicyEditor(user, realm, id);
-  await editor.getByTestId("agent-policy-rule").getByLabel("Effect", { exact: true }).selectOption("allow");
+  await editor.locator(".agent-policy-rule").getByLabel("Effect", { exact: true }).selectOption("allow");
   await savePolicyEditor(user, editor, realm);
   const accepted = await rawSubmitSignedEventApi(request, jointRealm.aliceToken, built.envelope);
   expect(accepted.status(), "removing the parent denial admits the same narrow original grant").toBe(200);
@@ -617,7 +617,7 @@ test("normal administrator default denial admits an exact controller exception a
 
 async function reviewPanel(user: JointUserPage, realm: string) {
   await user.gotoRealmAdminSection(realm, "access");
-  const panel = user.page.getByTestId("management-review-panel");
+  const panel = user.page.locator(".management-review-panel");
   await expect(panel).toBeVisible({ timeout: 120_000 });
   return panel;
 }
@@ -706,7 +706,7 @@ async function loseAcceptedReviewResponse(page: Page, operation: "requests" | "d
   try {
     await click();
     const value = await observed;
-    await expect(page.getByTestId("management-review-status")).toContainText("操作被拒绝或当前证据不可用", { timeout: 180_000 });
+    await expect(page.locator(".management-review-status")).toContainText("操作被拒绝或当前证据不可用", { timeout: 180_000 });
     return value;
   } finally { await page.unroute(pattern); }
 }
@@ -714,7 +714,7 @@ async function loseAcceptedReviewResponse(page: Page, operation: "requests" | "d
 async function sharedReview(panel: Locator, candidate: Record<string, any>) {
   const summary = panel.getByText("分享原审批请求", { exact: false });
   if (await summary.locator("..").getAttribute("open") === null) await summary.click();
-  const json = await panel.getByTestId("management-review-share-json").inputValue();
+  const json = await panel.locator(".management-review-share-json").locator("input, textarea").inputValue();
   // Both sides retain the complete signed candidate. Boolean equality keeps
   // unexpected producer signatures out of Playwright diagnostics.
   expect(canonicalJson(JSON.parse(json)) === canonicalJson(candidate)).toBe(true);
@@ -731,32 +731,32 @@ async function switchReviewRealmAndReload(user: JointUserPage, originalRealm: st
     await user.gotoAppPanel(`/realms/${encodeURIComponent(realm)}/settings/access`, "realm-admin-panel");
     await expect.poll(() => new URL(page.url()).pathname).toBe(`/realms/${encodeURIComponent(realm)}/settings/access`);
     await expect.poll(async () => {
-      const href = await page.getByTestId("realm-admin-nav-item-access").getAttribute("href");
+      const href = await page.locator(".realm-admin-nav-item-access").getAttribute("href");
       return href !== null && decodeURIComponent(new URL(href, page.url()).pathname.split("/")[2] ?? "") === realm;
     }, { message: "rendered Realm navigation matches the requested Realm" }).toBe(true);
-    const panel = page.getByTestId("management-review-panel");
+    const panel = page.locator(".management-review-panel");
     await expect(panel).toBeVisible({ timeout: 120_000 });
-    await expect(panel.getByTestId("management-review-frozen-candidate")).toHaveCount(0);
-    await expect(panel.getByTestId("management-review-share-json")).toHaveCount(0);
-    await expect(panel.getByTestId("management-review-request-json")).toHaveValue("");
-    await expect(panel.getByTestId("management-review-recovery-key")).toHaveCount(0);
-    await expect(panel.getByTestId("management-review-retry-decision")).toHaveCount(0);
-    await expect(panel.getByTestId("management-review-submit")).toHaveCount(0);
-    await expect(panel.getByTestId("management-review-request")).toHaveText("冻结候选并请求审批（不提交业务）");
+    await expect(panel.locator(".management-review-frozen-candidate")).toHaveCount(0);
+    await expect(panel.locator(".management-review-share-json").locator("input, textarea")).toHaveCount(0);
+    await expect(panel.locator(".management-review-request-json").locator("input, textarea")).toHaveValue("");
+    await expect(panel.locator(".management-review-recovery-key").locator("input, textarea")).toHaveCount(0);
+    await expect(panel.locator(".management-review-retry-decision")).toHaveCount(0);
+    await expect(panel.locator(".management-review-submit")).toHaveCount(0);
+    await expect(panel.locator(".management-review-request")).toHaveText("冻结候选并请求审批（不提交业务）");
     expect(await page.evaluate(() => performance.timeOrigin), "Realm switch keeps the original document").toBe(documentOrigin);
   }
-  const panel = page.getByTestId("management-review-panel");
-  await panel.getByTestId("management-review-request-json").fill(share);
+  const panel = page.locator(".management-review-panel");
+  await panel.locator(".management-review-request-json").locator("input, textarea").fill(share);
   const request = JSON.parse(share);
   const loaded = await reviewResponse(page, "status",
-    () => panel.getByTestId("management-review-load").click(), request.request_id);
+    () => panel.locator(".management-review-load").click(), request.request_id);
   expect(loaded.status()).toBe(200);
   const outcome = await loaded.json();
   expect(outcome.status).toBe(expectedStatus);
   expect(outcome.request_id).toBe(request.request_id);
-  await expect(panel.getByTestId("management-review-frozen-candidate"))
+  await expect(panel.locator(".management-review-frozen-candidate"))
     .toContainText(request.target.event.event_id);
-  await expect(panel.getByTestId("management-review-retry-decision")).toHaveCount(0);
+  await expect(panel.locator(".management-review-retry-decision")).toHaveCount(0);
 }
 
 test("normal controller requests join and public review, distinct administrator signs native control and exact durable Events commit @agent-management-review", async ({ jointRealm, request }) => {
@@ -803,7 +803,7 @@ test("normal controller requests join and public review, distinct administrator 
   expect(otherRealm).not.toBe(realm);
   const editor = await loadPolicyEditor(jointRealm.alicePage, realm);
   await editor.getByLabel("Default effect", { exact: true }).selectOption("allow");
-  const rule = editor.getByTestId("agent-policy-rule");
+  const rule = editor.locator(".agent-policy-rule");
   await chooseManagementOperations(rule, ["join", "publish"]);
   await rule.getByLabel("Agent selector", { exact: true }).selectOption("controller");
   await rule.getByLabel("Complete Account: principal_id", { exact: true }).fill(jointRealm.bobSession.accountId.principal_id);
@@ -825,14 +825,14 @@ test("normal controller requests join and public review, distinct administrator 
     let lostRequest: Record<string, any> | undefined;
     if (terminal === "cancel") {
       const lost = await loseAcceptedReviewResponse(jointRealm.bobPage.page, "requests",
-        () => controller.getByTestId("management-review-request").click());
+        () => controller.locator(".management-review-request").click());
       lostRequest = lost.body;
       expect(lost.outcome.status).toBe("pending");
-      await expect(controller.getByTestId("management-review-status")).toContainText("操作被拒绝或当前证据不可用");
-      await expect(controller.getByTestId("management-review-request")).toHaveText("重试原审批请求（保留原候选）");
+      await expect(controller.locator(".management-review-status")).toContainText("操作被拒绝或当前证据不可用");
+      await expect(controller.locator(".management-review-request")).toHaveText("重试原审批请求（保留原候选）");
     }
     const response = await reviewResponse(jointRealm.bobPage.page, "requests",
-      () => controller.getByTestId("management-review-request").click());
+      () => controller.locator(".management-review-request").click());
     expect(response.status()).toBe(200);
     const candidate = response.request().postDataJSON() as Record<string, any>;
     if (lostRequest) expect(canonicalJson(candidate) === canonicalJson(lostRequest), "request response loss retries its exact retained signed request").toBe(true);
@@ -840,9 +840,9 @@ test("normal controller requests join and public review, distinct administrator 
     let decidingPanel = controller;
     let decidingPage = jointRealm.bobPage.page;
     if (terminal === "reject") {
-      await administrator.getByTestId("management-review-request-json").fill(await sharedReview(controller, candidate));
+      await administrator.locator(".management-review-request-json").locator("input, textarea").fill(await sharedReview(controller, candidate));
       const loaded = await reviewResponse(jointRealm.alicePage.page, "status",
-        () => administrator.getByTestId("management-review-load").click(), candidate.request_id);
+        () => administrator.locator(".management-review-load").click(), candidate.request_id);
       expect((await loaded.json()).status).toBe("pending");
       decidingPanel = administrator;
       decidingPage = jointRealm.alicePage.page;
@@ -851,26 +851,26 @@ test("normal controller requests join and public review, distinct administrator 
     if (terminal === "reject") {
       const share = await sharedReview(controller, candidate);
       const lost = await loseAcceptedReviewResponse(decidingPage, "decisions",
-        () => decidingPanel.getByTestId("management-review-reject").click());
+        () => decidingPanel.locator(".management-review-reject").click());
       expect(lost.outcome.status).toBe("rejected");
-      await expect(decidingPanel.getByTestId("management-review-retry-decision")).toBeVisible();
+      await expect(decidingPanel.locator(".management-review-retry-decision")).toBeVisible();
       await switchReviewRealmAndReload(jointRealm.alicePage, realm, otherRealm, share, "rejected");
     } else {
       const refused = await reviewResponse(decidingPage, "decisions",
-        () => decidingPanel.getByTestId("management-review-cancel").click(), candidate.request_id);
+        () => decidingPanel.locator(".management-review-cancel").click(), candidate.request_id);
       expect(refused.status()).toBe(200);
       expect((await refused.json()).status).toBe("cancelled");
     }
     const after = await footprint(realm, station, candidate.target.event.event_id);
     expect(canonicalJson(after.tables) === canonicalJson(before.tables)).toBe(true);
     expect(Object.values(after.candidate_absence!)).toEqual([0, 0, 0, 0, 0, 0]);
-    await expect(decidingPanel.getByTestId("management-review-submit")).toHaveCount(0);
+    await expect(decidingPanel.locator(".management-review-submit")).toHaveCount(0);
   }
   for (const operation of ["join", "publish"] as const) {
     await controller.getByLabel("原管理意图", { exact: true }).selectOption(operation);
     const before = await footprint(realm, station);
     const response = await reviewResponse(jointRealm.bobPage.page, "requests",
-      () => controller.getByTestId("management-review-request").click());
+      () => controller.locator(".management-review-request").click());
     expect(response.status()).toBe(200);
     const candidate = response.request().postDataJSON() as Record<string, any>;
     const pending = await response.json();
@@ -885,45 +885,45 @@ test("normal controller requests join and public review, distinct administrator 
     const inactive = await footprint(realm, station, event.event_id);
     expect(canonicalJson(inactive.tables) === canonicalJson(before.tables)).toBe(true);
     expect(Object.values(inactive.candidate_absence!)).toEqual([0, 0, 0, 0, 0, 0]);
-    await expect(controller.getByTestId("management-review-submit")).toHaveCount(0);
-    await expect(controller.getByTestId("management-review-approve")).toHaveCount(0);
+    await expect(controller.locator(".management-review-submit")).toHaveCount(0);
+    await expect(controller.locator(".management-review-approve")).toHaveCount(0);
     const share = await sharedReview(controller, candidate);
-    await administrator.getByTestId("management-review-request-json").fill(share);
+    await administrator.locator(".management-review-request-json").locator("input, textarea").fill(share);
     const statusResponse = await reviewResponse(jointRealm.alicePage.page, "status",
-      () => administrator.getByTestId("management-review-load").click(), candidate.request_id);
+      () => administrator.locator(".management-review-load").click(), candidate.request_id);
     expect((await statusResponse.json()).target_digest).toBe(pending.target_digest);
-    await expect(administrator.getByTestId("management-review-frozen-candidate")).toContainText(event.event_id);
+    await expect(administrator.locator(".management-review-frozen-candidate")).toContainText(event.event_id);
     await confirmReview(administrator);
     // This accepted principal's Recovery Key is typed into the normal password
     // form. The browser resolves and verifies native history, then derives and
     // signs with its effective update key; no Device/registration VM substitute.
-    await administrator.getByTestId("management-review-recovery-key").fill(
+    await administrator.locator(".management-review-recovery-key").locator("input, textarea").fill(
       registeredSubjectIdentityControl(jointRealm.alice).recoveryKey);
     if (operation === "join") {
-      expect((await administrator.getByTestId("management-review-recovery-key").inputValue()).length > 0).toBe(true);
+      expect((await administrator.locator(".management-review-recovery-key").locator("input, textarea").inputValue()).length > 0).toBe(true);
       await switchReviewRealmAndReload(jointRealm.alicePage, realm, otherRealm, share, "pending");
-      await expect(administrator.getByTestId("management-review-recovery-key")).toHaveValue("");
+      await expect(administrator.locator(".management-review-recovery-key").locator("input, textarea")).toHaveValue("");
       await confirmReview(administrator);
-      await administrator.getByTestId("management-review-recovery-key").fill(
+      await administrator.locator(".management-review-recovery-key").locator("input, textarea").fill(
         registeredSubjectIdentityControl(jointRealm.alice).recoveryKey);
     }
     let approved: Record<string, any>;
     if (operation === "join") {
       const lost = await loseAcceptedReviewResponse(jointRealm.alicePage.page, "decisions",
-        () => administrator.getByTestId("management-review-approve").click());
+        () => administrator.locator(".management-review-approve").click());
       expect(lost.outcome.status).toBe("approved");
-      await expect(administrator.getByTestId("management-review-status")).toContainText("操作被拒绝或当前证据不可用");
-      await expect(administrator.getByTestId("management-review-approve")).toHaveCount(0);
+      await expect(administrator.locator(".management-review-status")).toContainText("操作被拒绝或当前证据不可用");
+      await expect(administrator.locator(".management-review-approve")).toHaveCount(0);
       await confirmReview(administrator);
       const reconciled = await reviewResponse(jointRealm.alicePage.page, "status",
-        () => administrator.getByTestId("management-review-retry-decision").click(), candidate.request_id);
+        () => administrator.locator(".management-review-retry-decision").click(), candidate.request_id);
       approved = await reconciled.json();
       expect(canonicalJson(approved.approval_signatures) === canonicalJson(lost.body.approval_signatures),
         "accepted response loss observes the exact original signature and timestamp").toBe(true);
-      await expect(administrator.getByTestId("management-review-retry-decision")).toHaveCount(0);
+      await expect(administrator.locator(".management-review-retry-decision")).toHaveCount(0);
     } else {
       const decision = await reviewResponse(jointRealm.alicePage.page, "decisions",
-        () => administrator.getByTestId("management-review-approve").click(), candidate.request_id);
+        () => administrator.locator(".management-review-approve").click(), candidate.request_id);
       expect(decision.status()).toBe(200);
       approved = await decision.json();
     }
@@ -936,19 +936,19 @@ test("normal controller requests join and public review, distinct administrator 
     expect(signature.input.approval_context.request_id).toBe(candidate.request_id);
     expect(signature.input.approval_target.event_id).toBe(event.event_id);
     expect(signature.input.request_canonical_digest).toBe(pending.target_digest);
-    await expect(administrator.getByTestId("management-review-recovery-key")).toHaveCount(0);
+    await expect(administrator.locator(".management-review-recovery-key").locator("input, textarea")).toHaveCount(0);
     const stillInactive = await footprint(realm, station, event.event_id);
     expect(canonicalJson(stillInactive) === canonicalJson(inactive)).toBe(true);
     const refresh = await reviewResponse(jointRealm.bobPage.page, "status",
-      () => controller.getByTestId("management-review-refresh").click(), candidate.request_id);
+      () => controller.locator(".management-review-refresh").click(), candidate.request_id);
     expect((await refresh.json()).status).toBe("approved");
-    await expect(controller.getByTestId("management-review-submit")).toBeVisible();
+    await expect(controller.locator(".management-review-submit")).toBeVisible();
     await confirmReview(controller);
     const submittedResponse = jointRealm.bobPage.page.waitForResponse(response =>
       response.request().method() === "POST" && new URL(response.url()).pathname === "/_arkret/self/events"
       && decodeIngressEvents(response.request().postData()).some(value => value.event_id === event.event_id),
     { timeout: 180_000 });
-    await controller.getByTestId("management-review-submit").click();
+    await controller.locator(".management-review-submit").click();
     const submitted = await submittedResponse;
     expect(submitted.status()).toBe(200);
     const actualEvent = decodeIngressEvents(submitted.request().postData()).find(value => value.event_id === event.event_id);
@@ -958,7 +958,7 @@ test("normal controller requests join and public review, distinct administrator 
     const outcome = await submitted.json();
     expect(outcome.status).toBe("committed");
     expect(outcome.commit?.event_ref).toBe(event.event_id);
-    await expect(controller.getByTestId("management-review-status")).toContainText("原候选业务已提交", { timeout: 180_000 });
+    await expect(controller.locator(".management-review-status")).toContainText("原候选业务已提交", { timeout: 180_000 });
     const lookupUrl = `${colandBaseUrl()}/_arkret/self/management-reviews/status`;
     const consumed = await request.post(lookupUrl, { headers: selfPathHeadersForDpopSession(jointRealm.bobSession, "POST", lookupUrl),
       data: canonicalJson({ request_id: candidate.request_id }) });

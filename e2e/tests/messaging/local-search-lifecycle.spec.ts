@@ -44,22 +44,22 @@ test("0540 real local search rechecks late-join history and preserves revision s
   });
   try {
     await flow.page.gotoTimelineRealm(realmId);
-    const panel = page.getByTestId("global-search-panel");
-    const row = panel.getByTestId("global-search-result-item");
+    const panel = page.locator(".global-search-panel");
+    const row = panel.locator(".global-search-result-item");
     const paired = async (step: string, query: string, count: number) => {
       await flow.page.completeRecoveryKeySetupIfPrompted(1_000);
       if (!await panel.isVisible()) await page.keyboard.press("Control+F");
       await expect(panel).toBeVisible();
-      await panel.getByTestId("global-search-input").fill(query);
-      await panel.getByTestId("global-search-submit").click();
+      await panel.locator(".global-search-input").fill(query);
+      await panel.locator(".global-search-submit").click();
       await expect(row).toHaveCount(count);
       let visible: Record<string, string | null> | null = null;
       if (count) {
-        await expect(row.getByTestId("global-search-result-snippet")).toHaveText(query);
+        await expect(row.locator(".global-search-result-snippet")).toHaveText(query);
         visible = { event_id: await row.getAttribute("data-event-id"),
           commit_id: await row.getAttribute("data-commit-id") };
       } else {
-        await expect(panel.getByTestId("global-search-results-no-results")).toBeVisible();
+        await expect(panel.locator(".global-search-results-no-results")).toBeVisible();
       }
       const native: NativeSearchObservation = await observeNativeSearch(reader, realmId, query,
         testInfo.outputPath("native-history-account.json"));
@@ -92,12 +92,12 @@ test("0540 real local search rechecks late-join history and preserves revision s
     expect(revised.result!.source_commit.event_ref).toBe(revision.event_id);
     await paired("revision-does-not-search-the-stale-body", originalBody, 0);
     await page.reload({ waitUntil: "domcontentloaded" });
-    await expect(page.getByTestId("client-shell")).toBeVisible({ timeout: 120_000 });
+    await expect(page.locator(".shell.app")).toBeVisible({ timeout: 120_000 });
     const coldRevision = await paired("cold-current-revision", revisedBody, 1);
     expect(coldRevision.result!.source_event_id).toBe(revision.event_id);
-    await row.getByTestId("global-search-result-link").click();
-    await expect(page.getByTestId("message-list").getByText(revisedBody, { exact: true })).toBeVisible();
-    await expect(page.getByTestId("message-list").getByText(originalBody, { exact: true })).toHaveCount(0);
+    await row.locator(".global-search-result-link").click();
+    await expect(page.locator(".message-list").getByText(revisedBody, { exact: true })).toBeVisible();
+    await expect(page.locator(".message-list").getByText(originalBody, { exact: true })).toHaveCount(0);
 
     const redact = signedEventEnvelope({ actorId: owner.user.id, realmId,
       kind: "ak.message.redact", payload: { message_id: messageId, reason: "author_redaction" } });
@@ -107,11 +107,11 @@ test("0540 real local search rechecks late-join history and preserves revision s
     // Local search reads installed material. Re-enter the source to demand its
     // new accepted window after the result link and global Search navigation.
     await flow.page.gotoTimelineRealm(realmId);
-    await expect(page.getByTestId("message-list").getByText(terminalControl, { exact: true })).toBeVisible({ timeout: 120_000 });
+    await expect(page.locator(".message-list").getByText(terminalControl, { exact: true })).toBeVisible({ timeout: 120_000 });
     await paired("fresh-post-redaction-control", terminalControl, 1);
     await paired("redaction-hides-the-current-revision", revisedBody, 0);
     await page.reload({ waitUntil: "domcontentloaded" });
-    await expect(page.getByTestId("client-shell")).toBeVisible({ timeout: 120_000 });
+    await expect(page.locator(".shell.app")).toBeVisible({ timeout: 120_000 });
     await paired("cold-terminal-redaction", revisedBody, 0);
     await paired("cold-independent-control", terminalControl, 1);
     const history = async (from: string, to: string) => {
@@ -124,11 +124,11 @@ test("0540 real local search rechecks late-join history and preserves revision s
     const tightControl = `history-tight-control-${suffix}`;
     await send(tightControl);
     await flow.page.gotoTimelineRealm(realmId);
-    await expect(page.getByTestId("message-list").getByText(tightControl, { exact: true })).toBeVisible({ timeout: 120_000 });
+    await expect(page.locator(".message-list").getByText(tightControl, { exact: true })).toBeVisible({ timeout: 120_000 });
     await paired("fresh-post-tightening-control", tightControl, 1);
     await paired("since-join-hides-retained-prejoin-message", earlyBody, 0);
     await page.reload({ waitUntil: "domcontentloaded" });
-    await expect(page.getByTestId("client-shell")).toBeVisible({ timeout: 120_000 });
+    await expect(page.locator(".shell.app")).toBeVisible({ timeout: 120_000 });
     await paired("cold-since-join-still-hides-prejoin-message", earlyBody, 0);
     await paired("cold-since-join-keeps-postjoin-control", tightControl, 1);
 

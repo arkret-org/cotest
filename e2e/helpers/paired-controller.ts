@@ -25,8 +25,8 @@ export async function openAndPairSecondController(
     await device.page.goto("/login", {
       waitUntil: "domcontentloaded",
     });
-    await device.page.getByTestId("login-server-url").fill(colandBaseUrl());
-    await device.page.getByTestId("start-server-login-button").click();
+    await device.page.locator(".auth-station-field input").fill(colandBaseUrl());
+    await device.page.locator(".auth-primary").click();
     await submitCoauthPasswordCredentials(device.page, jointRealm.aliceSession.account);
     const approve = device.page.getByTestId("coauth-oauth-approve");
     const consentShown = await approve
@@ -36,17 +36,17 @@ export async function openAndPairSecondController(
     if (consentShown) {
       await approve.click();
     }
-    await expect(device.page.getByTestId("device-setup-required")).toBeVisible({
+    await expect(device.page.locator(".device-setup-required")).toBeVisible({
       timeout: 120_000,
     });
-    await expect(device.page.getByTestId("client-shell")).toHaveCount(0);
-    await device.page.getByTestId("device-setup-pairing-start").click();
-    const pairingCode = device.page.getByTestId("device-setup-pairing-code");
+    await expect(device.page.locator(".shell.app")).toHaveCount(0);
+    await device.page.locator(".device-setup-pairing-start").click();
+    const pairingCode = device.page.locator(".device-setup-pairing-code");
     await expect(pairingCode).toBeVisible({ timeout: 30_000 });
     const code = (await pairingCode.textContent())?.trim() ?? "";
     expect(code).not.toBe("");
     const pairingLink = await device.page
-      .getByTestId("device-setup-pairing-link")
+      .locator(".device-setup-pairing-link")
       .inputValue();
     await approvePairingLinkOnAuthorizedDevice(
       jointRealm.alicePage,
@@ -54,15 +54,15 @@ export async function openAndPairSecondController(
       code,
     );
 
-    await device.page.getByTestId("device-setup-pairing-status").click();
-    await expect(device.page.getByTestId("device-setup-status")).toContainText(
+    await device.page.locator(".device-setup-pairing-status").click();
+    await expect(device.page.locator(".device-setup-status")).toContainText(
       "Device authorization is accepted",
       { timeout: 90_000 },
     );
     await device.page.getByRole("link", { name: "Sign in again after approval" }).click();
-    await expect(device.page.getByTestId("login-panel")).toBeVisible({ timeout: 30_000 });
+    await expect(device.page.locator(".auth-panel")).toBeVisible({ timeout: 30_000 });
     await serverLoginViaCoauth(device.page, jointRealm.aliceSession.account);
-    await expect(device.page.getByTestId("device-setup-required")).toHaveCount(0);
+    await expect(device.page.locator(".device-setup-required")).toHaveCount(0);
     const identity = await device.page.evaluate(() => {
       const config = JSON.parse(window.localStorage.getItem("inkson.config.v1") ?? "{}");
       return {

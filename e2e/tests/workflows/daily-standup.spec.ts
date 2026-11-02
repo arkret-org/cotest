@@ -97,7 +97,7 @@ test.describe("workflow: async daily standup", () => {
       for (const actor of [linPage, patPage, quincyPage]) {
         await actor.gotoTimelineRealm(realmId);
         for (const body of [linStandup, patStandup, quincyStandup]) {
-          await expect(actor.page.getByTestId("message-list")).toContainText(
+          await expect(actor.page.locator(".message-list")).toContainText(
             body,
             {
               timeout: encryptedSyncTimeout,
@@ -109,14 +109,14 @@ test.describe("workflow: async daily standup", () => {
 
       // Phase C — Lin replies on Pat's standup to unblock the PR review.
       await linPage.gotoTimelineRealm(realmId);
-      await expect(linPage.page.getByTestId("message-list")).toContainText(
+      await expect(linPage.page.locator(".message-list")).toContainText(
         patStandup,
         {
           timeout: encryptedSyncTimeout,
         },
       );
       await linPage.clickTimelineReply(patStandup);
-      await expect(linPage.page.getByTestId("chat-reply-banner")).toBeVisible();
+      await expect(linPage.page.locator(".chat-reply-banner")).toBeVisible();
       await linPage.sendTimelineMessage(realmId, linUnblockPat);
       await expect(linPage.timelineEvent(linUnblockPat)).toBeVisible({
         timeout: encryptedSyncTimeout,
@@ -124,7 +124,7 @@ test.describe("workflow: async daily standup", () => {
       await expect(
         linPage
           .timelineEvent(linUnblockPat)
-          .getByTestId("chat-reply-indicator"),
+          .locator(".chat-reply-indicator"),
       ).toBeVisible({ timeout: encryptedSyncTimeout });
 
       await patPage.gotoTimelineRealm(realmId);
@@ -140,15 +140,15 @@ test.describe("workflow: async daily standup", () => {
       });
       await linPage.clickTimelineEdit(linUnblockPat);
       await linPage.page
-        .getByTestId("chat-edit-composer")
+        .locator(".chat-edit-composer")
         .locator("textarea")
         .fill(linUnblockPatFixed);
-      await linPage.page.getByTestId("chat-save-edit-button").click();
+      await linPage.page.locator(".chat-save-edit-button").click();
       await linPage.waitForTimelineEventSettled(
         linUnblockPatFixed,
         encryptedSyncTimeout,
       );
-      await expect(linPage.page.getByTestId("chat-status")).toContainText(
+      await expect(linPage.page.locator(".chat-status")).toContainText(
         /Message updated/i,
       );
       await patPage.gotoTimelineRealm(realmId);
@@ -206,28 +206,28 @@ test.describe("workflow: async daily standup", () => {
         .poll(
           async () =>
             patPage.page
-              .getByTestId("chat-input")
+              .locator(".chat-input")
               .isVisible()
               .catch(() => false),
           { timeout: 30_000 },
         )
         .toBeTruthy();
-      await patPage.page.getByTestId("chat-input").fill(offlinePost);
-      await patPage.page.getByTestId("send-chat-button").click();
+      await patPage.page.locator(".chat-input").fill(offlinePost);
+      await patPage.page.locator(".send-chat-button").click();
 
       // The optimistic row stays visible but is marked queued-offline, and
       // the outbox banner surfaces the parked count.
       const queuedRow = patPage
         .timelineEvent(offlinePost)
-        .getByTestId("message-send-status");
+        .locator(".message-send-status");
       await expect(queuedRow).toHaveAttribute("data-send-state", "queued_offline", {
         timeout: 30_000,
       });
-      const banner = patPage.page.getByTestId("chat-outbox-banner");
+      const banner = patPage.page.locator(".chat-outbox-banner");
       await expect(banner).toBeVisible({ timeout: 30_000 });
       await expect(banner).toHaveAttribute("data-online", "false");
       await expect(
-        patPage.page.getByTestId("chat-outbox-count"),
+        patPage.page.locator(".chat-outbox-count"),
       ).toContainText("1", { timeout: 30_000 });
       await stepShot(patPage.page, testInfo, "offline-A-queued");
 
@@ -237,7 +237,7 @@ test.describe("workflow: async daily standup", () => {
       await patPage.gotoTimelineRealm(realmId);
       await patPage.waitForTimelineEventSettled(offlinePost);
       await expect(
-        patPage.page.getByTestId("chat-outbox-banner"),
+        patPage.page.locator(".chat-outbox-banner"),
       ).toHaveCount(0, { timeout: 60_000 });
       await stepShot(patPage.page, testInfo, "offline-B-flushed");
     } finally {
@@ -277,12 +277,12 @@ test.describe("workflow: async daily standup", () => {
       // sender-side tombstone replaces the body in place. (Cross-user
       // receiver tombstone fold is covered by messaging/triad redaction.)
       await linPage.clickTimelineRedact(wrongTemplate);
-      await linPage.page.getByTestId("chat-confirm-redact-button").click();
+      await linPage.page.locator(".chat-confirm-redact-button").click();
 
       await expect(
-        linPage.page.getByTestId("chat-redacted-tombstone"),
+        linPage.page.locator(".chat-redacted-tombstone"),
       ).toBeVisible({ timeout: 30_000 });
-      await expect(linPage.page.getByTestId("message-list")).not.toContainText(
+      await expect(linPage.page.locator(".message-list")).not.toContainText(
         wrongTemplate,
         { timeout: 30_000 },
       );

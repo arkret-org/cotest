@@ -375,8 +375,8 @@ test.describe("real OIDC browser login lifecycle @fully-implemented", () => {
     const page = jointPage.page;
     try {
       await jointPage.gotoLogin();
-      await page.getByTestId("login-server-url").fill(colandBaseUrl());
-      await page.getByTestId("start-server-login-button").click();
+      await page.locator(".auth-station-field input").fill(colandBaseUrl());
+      await page.locator(".auth-primary").click();
 
       // Submit the real handle with a wrong password.
       await submitCoauthPasswordCredentials(page, {
@@ -390,7 +390,7 @@ test.describe("real OIDC browser login lifecycle @fully-implemented", () => {
         timeout: 30_000,
       });
       await expect(page.locator("#login-password")).toBeVisible();
-      await expect(page.getByTestId("client-shell")).toHaveCount(0);
+      await expect(page.locator(".shell.app")).toHaveCount(0);
     } finally {
       await jointPage.close();
     }
@@ -459,8 +459,8 @@ test.describe("real OIDC browser login lifecycle @fully-implemented", () => {
       });
 
       await test.step("forged principal_unknown surfaces recovery guidance", async () => {
-        await page.getByTestId("login-server-url").fill(colandBaseUrl());
-        await page.getByTestId("start-server-login-button").click();
+        await page.locator(".auth-station-field input").fill(colandBaseUrl());
+        await page.locator(".auth-primary").click();
         await submitCoauthPasswordCredentials(page, account);
         const approve = page.getByTestId("coauth-oauth-approve");
         if (
@@ -471,7 +471,7 @@ test.describe("real OIDC browser login lifecycle @fully-implemented", () => {
         ) {
           await approve.click();
         }
-        const authStatus = page.getByTestId("auth-status");
+        const authStatus = page.locator(".auth-status");
         await expect(authStatus).toContainText("No new identity was created", {
           timeout: 120_000,
         });
@@ -484,11 +484,11 @@ test.describe("real OIDC browser login lifecycle @fully-implemented", () => {
           identityCreationCalls,
           "a forged principal_unknown must never trigger identity creation calls",
         ).toEqual([]);
-        await expect(page.getByTestId("onboarding-panel")).toHaveCount(0);
+        await expect(page.locator(".onboarding-panel")).toHaveCount(0);
         await expect(
-          page.getByTestId("account-handoff-onboarding"),
+          page.locator(".account-handoff-onboarding"),
         ).toHaveCount(0);
-        await expect(page.getByTestId("login-panel")).toBeVisible();
+        await expect(page.locator(".auth-panel")).toBeVisible();
         const state = await page.evaluate((expectedId) => {
           const pendingKeys: string[] = [];
           for (let index = 0; index < localStorage.length; index += 1) {

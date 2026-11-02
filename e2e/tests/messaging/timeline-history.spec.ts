@@ -76,7 +76,7 @@ test("AV-UI-BOUND real WASM cold history keeps 256 variable-height messages reac
     });
     const started = Date.now();
     await flow.page.gotoTimelineRealm(realmId);
-    const feed = page.getByTestId("message-list");
+    const feed = page.locator(".message-list");
     await expect(feed.getByText("history-row-255", { exact: false })).toBeVisible({ timeout: 120_000 });
     const coldVisibleMs = Date.now() - started;
     const seen = new Set<number>();
@@ -111,7 +111,7 @@ test("AV-UI-BOUND real WASM cold history keeps 256 variable-height messages reac
     expect([...seen].sort((a, b) => a - b), "every accepted message is reachable through real scroll")
       .toEqual(Array.from({ length: count }, (_, index) => index));
 
-    const input = page.getByTestId("chat-input");
+    const input = page.locator(".chat-input");
     await input.fill("unsent history responsiveness check");
     await expect(input).toHaveValue("unsent history responsiveness check");
     await input.fill("");

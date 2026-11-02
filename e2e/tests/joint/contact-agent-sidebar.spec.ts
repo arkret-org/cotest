@@ -61,15 +61,15 @@ jointTest.describe("Contacts agent hierarchy @fully-implemented", () => {
       // shell had already loaded its sidebar cache. Reload the product client
       // so the assertion observes the accepted contact projection.
       await alicePage.reload({ waitUntil: "domcontentloaded" });
-      await alicePage.getByTestId("realm-sidebar-tab-direct").click();
+      await alicePage.getByRole("button", { name: "Contacts", exact: true }).click();
 
       const aliceGroups = alicePage.locator(".contact-sidebar-group");
-      const aliceSelfGroup = alicePage.getByTestId("contact-sidebar-self-group");
+      const aliceSelfGroup = alicePage.locator(".contact-sidebar-self-group");
       await expect(aliceGroups.first()).toHaveAttribute(
         "data-testid",
         "contact-sidebar-self-group",
       );
-      await expect(aliceSelfGroup.getByTestId("contact-sidebar-self-row")).toHaveAttribute(
+      await expect(aliceSelfGroup.locator(".contact-sidebar-self-row")).toHaveAttribute(
         "data-peer",
         jointRealm.alice.id,
       );
@@ -82,7 +82,7 @@ jointTest.describe("Contacts agent hierarchy @fully-implemented", () => {
       // it remains manageable in Settings → My Agents. Wait for Bob's
       // contact row first — contacts and own agents land from the same
       // sidebar load, so this guards against asserting before data arrives.
-      const bobContact = alicePage.getByTestId("direct-conversation-row").first();
+      const bobContact = alicePage.locator(".direct-conversation-row").first();
       await expect(bobContact).toBeVisible({ timeout: 30_000 });
       await expect(bobContact).toHaveAttribute(
         "data-peer",
@@ -146,13 +146,13 @@ jointTest.describe("Contacts agent hierarchy @fully-implemented", () => {
       );
       try {
         await bobPage.reload();
-        await bobPage.getByTestId("realm-sidebar-tab-direct").click();
+        await bobPage.getByRole("button", { name: "Contacts", exact: true }).click();
         const bobGroups = bobPage.locator(".contact-sidebar-group");
         await expect(bobGroups.first()).toHaveAttribute(
           "data-testid",
           "contact-sidebar-self-group",
         );
-        const aliceContact = bobPage.getByTestId("direct-conversation-row").first();
+        const aliceContact = bobPage.locator(".direct-conversation-row").first();
         await expect(aliceContact).toBeVisible({ timeout: 30_000 });
         await expect(aliceContact).toHaveAttribute(
           "data-peer",
@@ -161,11 +161,11 @@ jointTest.describe("Contacts agent hierarchy @fully-implemented", () => {
         const aliceGroup = bobPage
           .locator(".contact-sidebar-group")
           .filter({ has: aliceContact });
-        const toggle = aliceGroup.getByTestId("contact-sidebar-agent-toggle");
+        const toggle = aliceGroup.locator(".contact-sidebar-agent-toggle");
         await expect(toggle).toContainText("Agents 1");
         await toggle.click();
         const allowedAgentRow = aliceGroup
-          .getByTestId("contact-sidebar-agent-row")
+          .locator(".contact-sidebar-agent-row")
           .filter({ hasText: allowedAgent.display_name });
         await expect(allowedAgentRow).toBeVisible();
         await expect(allowedAgentRow).toHaveAttribute(
@@ -214,12 +214,12 @@ async function provisionPendingAgent(
   const url = `${colandBaseUrl()}/_arkret/self/agents`;
   const page = controllerPage.page;
   await controllerPage.gotoSettings();
-  await page.getByTestId("settings-nav-item-agents").click();
+  await page.locator(".settings-nav-item-agents").click();
   await expect(page).toHaveURL(/\/settings\/agents(?:\?|$)/);
-  await page.getByTestId("agent-admin-create-open-button").click();
-  await expect(page.getByTestId("agent-admin-provision")).toBeVisible();
-  await page.getByTestId("agent-admin-provision-agent-slug").fill(agentSlug);
-  await expect(page.getByTestId("agent-admin-provision-button")).toBeEnabled();
+  await page.locator(".agent-admin-create-open-button").click();
+  await expect(page.locator(".agent-admin-provision")).toBeVisible();
+  await page.locator(".agent-admin-provision-agent-slug").locator("input, textarea").fill(agentSlug);
+  await expect(page.locator(".agent-admin-provision-button")).toBeEnabled();
 
   let releaseCommit = () => {};
   const commitGate = new Promise<void>((resolve) => {
@@ -254,7 +254,7 @@ async function provisionPendingAgent(
       },
       { timeout: 90_000 },
     );
-    await page.getByTestId("agent-admin-provision-button").click();
+    await page.locator(".agent-admin-provision-button").click();
     const prepareResponse = await prepareResponsePromise;
     const prepareText = await prepareResponse.text();
     expect(prepareResponse.status(), prepareText).toBe(200);
@@ -380,7 +380,7 @@ async function provisionPendingAgent(
 
     // The client now submits and seals the separately frozen Agent PCR
     // genesis, publishes the DID binding entry, and only then exposes pairing.
-    await expect(page.getByTestId("agent-admin-pairing-card")).toBeVisible({
+    await expect(page.locator(".agent-admin-pairing-card")).toBeVisible({
       timeout: 120_000,
     });
 

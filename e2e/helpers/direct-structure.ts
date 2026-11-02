@@ -20,32 +20,32 @@ export async function createDirectBoundaryCircleStrand(
   page: Page, request: APIRequestContext, token: string, realmId: string, title: string,
 ): Promise<string> {
   await page.goto(`/realms/${encodeURIComponent(realmId)}/circles`, { waitUntil: "domcontentloaded" });
-  await page.getByTestId("circle-create-open").click();
-  await page.getByTestId("circle-create-title").fill(title);
-  await expect(page.getByTestId("circle-create-encrypted")).not.toBeChecked();
-  await page.getByTestId("circle-create-submit").click();
+  await page.locator(".circles-new").click();
+  await page.locator(".circle-create-title input, .circle-create-title textarea").fill(title);
+  await expect(page.locator(".circle-encrypted")).not.toBeChecked();
+  await page.locator(".circle-create").click();
   await expect(page).toHaveURL(/\/realms\/[^/]+\/circles\/[^/]+$/);
   const circleId = decodeURIComponent(new URL(page.url()).pathname.split("/").at(-1)!);
   expect(circleId).toMatch(/^ak:circle:/);
 
   await page.goto(`/chat/${encodeURIComponent(realmId)}`, { waitUntil: "domcontentloaded" });
-  await page.getByTestId("open-channel-dialog").click();
-  await expect(page.getByTestId("channel-create-modal")).toBeVisible();
-  await page.getByTestId("new-channel-name").fill(`${title} Strand`);
-  const picker = page.getByTestId("new-channel-circle-scope");
+  await page.locator(".open-channel-dialog").click();
+  await expect(page.locator(".channel-create-modal")).toBeVisible();
+  await page.locator(".new-channel-name").fill(`${title} Strand`);
+  const picker = page.locator(".new-channel-circle-scope");
   await picker.locator('button[aria-haspopup="listbox"]').click();
   await picker.locator(`[role="option"][data-value="${circleId}"]`).click();
   await expect(picker.locator('button[aria-haspopup="listbox"]')).toContainText(title);
-  await page.getByTestId("create-channel-button").click();
-  const channel = page.getByTestId("channel-item").filter({ hasText: `${title} Strand` });
+  await page.locator(".create-channel-button").click();
+  const channel = page.locator(".channel-item").filter({ hasText: `${title} Strand` });
   // The joined Circle can appear in the picker before its signed current cut
   // is installed. Only retry this known pre-authoring refusal; an unknown
   // submission outcome must retain its original durable write identity.
   await expect(async () => {
     if (await channel.isVisible()) return;
-    const status = await page.getByTestId("chat-status").textContent();
+    const status = await page.locator(".chat-status").textContent();
     if (status === "Strand create failed: MLS send gate is not ready: Circle send requires a verified Circle member current") {
-      await page.getByTestId("create-channel-button").click();
+      await page.locator(".create-channel-button").click();
     }
     await expect(channel).toBeVisible({ timeout: 1_000 });
   }).toPass({ timeout: 60_000, intervals: [1_000, 2_000, 5_000] });
@@ -405,7 +405,7 @@ async function assertWrongPlaintextStrand(alice: Page, bob: Page, realm: string,
     && row.sender_endpoint?.device_id === positive.sender_device_id
     && row.admitted_and_decrypted === true && row.target_scope_matches === true
     && row.live_applied === true && row.visible_count > 0), { timeout: 15_000 }).toBe(true);
-  await expect(bob.getByTestId("typing-indicator")).toHaveCount(1);
+  await expect(bob.locator(".typing-indicator")).toHaveCount(1);
   const negative = await realTyping(alice, realm, target!, true);
   expect(negative.accepted, "wrong plaintext target must still have a legal encrypted outer Signal").toBe(true);
   expect(negative.dispatched_recipient_count ?? 0).toBeGreaterThan(0);
@@ -428,7 +428,7 @@ async function assertWrongPlaintextStrand(alice: Page, bob: Page, realm: string,
     && row.typing === false && row.target_scope_matches === true && row.live_applied === true
     && row.visible_count === 0 && isDeepStrictEqual(row.sender_actor_id, positive.sender_actor_id)
     && row.sender_endpoint?.device_id === positive.sender_device_id), { timeout: 15_000 }).toBe(true);
-  await expect(bob.getByTestId("typing-indicator")).toHaveCount(0);
+  await expect(bob.locator(".typing-indicator")).toHaveCount(0);
   const after = await readCommitStreamHeadApi(proof.request, proof.token, realm);
   expect(isDeepStrictEqual(after, before), "ephemeral Typing must not append Event/Commit").toBe(true);
   await test.info().attach("encrypted-signal-actual-wrong-plaintext-strand", {
@@ -439,7 +439,7 @@ async function assertWrongPlaintextStrand(alice: Page, bob: Page, realm: string,
 }
 
 export async function structureWrite(page: Page, action: string, kind: string, title?: string, topic?: string, refusal?: string): Promise<IngressEvent> {
-  const panel = page.getByTestId("direct-structure");
+  const panel = page.locator(".direct-structure");
   await expect(panel).toBeVisible();
   if (!await panel.getByRole("combobox", { name: "Action", exact: true }).isVisible()) {
     await panel.getByRole("button", { name: "Manage chats and topics" }).click();
@@ -486,7 +486,7 @@ export async function structureWrite(page: Page, action: string, kind: string, t
         // A concurrent committed read may refuse before an Event is frozen.
         // Retry the retained editor draft only while no signed request exists;
         // an emitted request still follows the exact original Event checks.
-        const status = await panel.getByTestId("direct-structure-status").textContent();
+        const status = await panel.locator(".direct-structure-status").textContent();
         if (!signedRequestEmitted && preAuthoringRetries < 3
           && /^(?:MLS send gate is not ready: )?account checkpoint changed (?:before|during) committed read$/.test(status?.trim() ?? "")
           && await panel.getByRole("button", { name: "Save", exact: true }).isEnabled()
@@ -509,13 +509,13 @@ export async function structureWrite(page: Page, action: string, kind: string, t
         expect(wireErrCode(outcome)).toBe("failed_precondition");
         expect(outcome.reason_code).toBe(refusal);
         expect(outcome.commit === undefined, "refused write must omit Commit").toBe(true);
-        await expect(panel.getByTestId("direct-structure-status")).not.toHaveText("Saved");
+        await expect(panel.locator(".direct-structure-status")).not.toHaveText("Saved");
         return event;
       }
       expect(accepted.ok(), `structure HTTP refusal: ${accepted.status()} ${String(outcome.type)}`).toBeTruthy();
       expect(outcome.status, `structure refusal: ${String(outcome.reason_code)}`).toBe("committed");
       assertAuthoritySubmitOutcome(outcome, event, action);
-      await expect(panel.getByTestId("direct-structure-status")).toHaveText("Saved", { timeout: Math.max(1, deadline - Date.now()) });
+      await expect(panel.locator(".direct-structure-status")).toHaveText("Saved", { timeout: Math.max(1, deadline - Date.now()) });
       if (boundaryProof && boundaryBefore) await assertStructureBoundary(boundaryProof, boundaryRealm, boundaryBefore, event);
       return event;
     }
@@ -526,7 +526,7 @@ export async function structureWrite(page: Page, action: string, kind: string, t
       signed_event_observed: signedRequestEmitted,
       pre_authoring_retries: preAuthoringRetries,
       panel_visible: await panel.isVisible().catch(() => false),
-      status: await panel.getByTestId("direct-structure-status").textContent().catch(() => null),
+      status: await panel.locator(".direct-structure-status").textContent().catch(() => null),
       save_enabled: await panel.getByRole("button", { name: "Save", exact: true }).isEnabled().catch(() => false),
     };
     await test.info().attach("direct-structure-write-timeout", {
@@ -548,7 +548,7 @@ export async function structureWrite(page: Page, action: string, kind: string, t
 export async function agentTopicChats(page: Page, receiptPath: string, proof: DirectStructureProof) {
   structuralBoundaries.set(page, proof);
   expect(receiptPath, "actual runtime model receipt path").not.toBe("");
-  const panel = page.getByTestId("direct-structure");
+  const panel = page.locator(".direct-structure");
   const mainId = decodeURIComponent(new URL(page.url()).pathname.split("/")[3]);
   const suffix = Date.now();
   const topic = await structureWrite(page, "new_topic", "ak.space.create", `agent-topic-${suffix}`);
@@ -583,7 +583,7 @@ export async function agentTopicChats(page: Page, receiptPath: string, proof: Di
     }
     await choose.selectOption(id);
     await structureWrite(page, "place", "ak.strand.update", undefined, topicId);
-    const preference = panel.getByTestId("direct-agent-reply-preference");
+    const preference = panel.locator(".direct-agent-reply-preference");
     await expect(preference).toBeVisible();
     const replacing = page.waitForResponse(response => response.request().method() === "PUT"
       && /^\/_arkret\/self\/agents\/[^/]+\/participation$/.test(new URL(response.url()).pathname)
@@ -610,7 +610,7 @@ export async function agentTopicChats(page: Page, receiptPath: string, proof: Di
   const receipts = async (): Promise<Array<{ request: unknown; response_pending?: boolean; hold_token?: string }>> => (await readFile(receiptPath, "utf8"))
     .trim().split(/\r?\n/).filter(Boolean).map(line => JSON.parse(line));
   const replyIds = async (): Promise<Set<string>> => {
-    const feed = page.getByTestId("message-list").last();
+    const feed = page.locator(".message-list").last();
     const ids = new Set<string>();
     let top = 0;
     // Count the actual rendered history across every virtual window. A viewport
@@ -656,11 +656,11 @@ export async function agentTopicChats(page: Page, receiptPath: string, proof: Di
     await panel.getByRole("combobox", { name: "Chat", exact: true }).selectOption(id);
     const before = (await receipts()).length;
     const repliesBefore = await replyIds();
-    await expect(page.getByTestId("send-chat-button")).toBeEnabled({ timeout: 180_000 });
-    await page.getByTestId("chat-input").fill(marker);
+    await expect(page.locator(".send-chat-button")).toBeEnabled({ timeout: 180_000 });
+    await page.locator(".chat-input").fill(marker);
     const observed = await observeSelectedHumanSend(page, id);
     try {
-      await page.getByTestId("send-chat-button").click();
+      await page.locator(".send-chat-button").click();
       // One original 180s window covers both pairing and model receipt progress.
       await expect.poll(async () => {
         observed.check();
@@ -708,7 +708,7 @@ export async function agentTopicChats(page: Page, receiptPath: string, proof: Di
       return { total: replies.size, added: [...replies].filter(id => !repliesBefore.has(id)).length,
         retained: [...repliesBefore].every(id => replies.has(id)) };
     }, { timeout: 180_000 }).toEqual({ total: repliesBefore.size + 1, added: 1, retained: true }).catch(async (error: unknown) => {
-      const geometry = await page.getByTestId("message-list").last().evaluate(feed => ({
+      const geometry = await page.locator(".message-list").last().evaluate(feed => ({
         height: feed.getBoundingClientRect().height,
         viewport: feed.clientHeight,
         scrollHeight: feed.scrollHeight,
@@ -752,14 +752,14 @@ export async function agentTopicChats(page: Page, receiptPath: string, proof: Di
   // actual lifecycle; the rejected writes keep the previously valid binding.
   expect(selectedAgent, "pause negative requires the exact Direct Agent").not.toBe("");
   await page.locator(`[data-testid="agent-admin-row"][data-agent-id=${JSON.stringify(selectedAgent)}]`).click();
-  await page.getByTestId("agent-admin-enabled-switch").click();
-  await expect(page.getByTestId("agent-admin-last-op")).toContainText("Paused", { timeout: 180_000 });
+  await page.locator(".agent-admin-enabled-switch").click();
+  await expect(page.locator(".agent-admin .write-status")).toContainText("Paused", { timeout: 180_000 });
   try {
     await rejectDirectStructureEvent(proof, lastChat!, "paused-agent-chat", "ak.strand.archive", { target_ref: chats[0] }, "direct_conversation_participant_authority_denied");
     await rejectDirectStructureEvent(proof, topic, "paused-agent-topic", "ak.space.archive", { space_id: movedTopicId }, "direct_conversation_participant_authority_denied");
   } finally {
-    await page.getByTestId("agent-admin-enabled-switch").click();
-    await expect(page.getByTestId("agent-admin-last-op")).toContainText("Resumed. Status: active.", { timeout: 180_000 });
+    await page.locator(".agent-admin-enabled-switch").click();
+    await expect(page.locator(".agent-admin .write-status")).toContainText("Resumed. Status: active.", { timeout: 180_000 });
     await page.goto(returnPath, { waitUntil: "domcontentloaded" });
   }
   await panel.getByRole("combobox", { name: "Chat", exact: true }).selectOption(mainId);
@@ -897,8 +897,8 @@ async function ownWatchTransitions(page: Page, otherPages: Page[], strandId: str
   let last: IngressEvent | undefined;
   const writes: Array<{ event_id: string | undefined; level: string | null; expected_value: unknown }> = [];
   for (const level of ["all", "muted", "mentions_only", "participating", "default", "all"]) {
-    await page.getByTestId("watch-level-toggle").click();
-    const option = page.getByTestId("watch-level-menu").locator(`[data-watch-level="${level}"]`);
+    await page.locator(".watch-level-toggle").click();
+    const option = page.locator(".watch-level-menu").locator(`[data-watch-level="${level}"]`);
     await expect(option, "the actual self current must enable this choice before observing its write").toBeEnabled({ timeout: 30_000 });
     const [response] = await Promise.all([
       page.waitForResponse(response => response.request().method() === "POST"
@@ -918,7 +918,7 @@ async function ownWatchTransitions(page: Page, otherPages: Page[], strandId: str
     expect(payload.level).toBe(level === "default" ? null : level);
     if (writes.length) expect(payload.expected_value, "CAS is the entire previous cell, including a written null").toEqual(previous);
     const label = { all: "All", muted: "Muted", mentions_only: "Mentions", participating: "Participating", default: "Default" }[level]!;
-    await expect(page.getByTestId("watch-level-toggle")).toContainText(label, { timeout: 90_000 });
+    await expect(page.locator(".watch-level-toggle")).toContainText(label, { timeout: 90_000 });
     previous = level === "default" ? null : {
       level,
       ...(Object.hasOwn(payload, "level_public") ? { level_public: payload.level_public } : {}),
@@ -926,9 +926,9 @@ async function ownWatchTransitions(page: Page, otherPages: Page[], strandId: str
     writes.push({ event_id: event.event_id, level: payload.level as string | null, expected_value: payload.expected_value });
   }
   await page.reload();
-  await expect(page.getByTestId("watch-level-toggle")).toContainText("All", { timeout: 90_000 });
+  await expect(page.locator(".watch-level-toggle")).toContainText("All", { timeout: 90_000 });
   for (const other of otherPages) {
-    await expect(other.getByTestId("watch-level-toggle"), "another participant's private watch never changes this participant's cell").toContainText("Default", { timeout: 90_000 });
+    await expect(other.locator(".watch-level-toggle"), "another participant's private watch never changes this participant's cell").toContainText("Default", { timeout: 90_000 });
   }
   await test.info().attach("watch-whole-value-transitions", {
     body: Buffer.from(JSON.stringify({ strand_id: strandId, writes, private_other_cells_unchanged: true, cold_level: "all" })),
@@ -941,8 +941,8 @@ async function ownWatchTransitions(page: Page, otherPages: Page[], strandId: str
 // it. No secret backend or durability acknowledgement is replaced. Router
 // navigation keeps this document alive while unmounting the settings component.
 async function indexedDbClearRecovery(page: Page, mainId: string, chatId: string, oldDraft: string, cancelSettings: boolean) {
-  const input = page.getByTestId("chat-input");
-  const choose = page.getByTestId("direct-structure").getByRole("combobox", { name: "Chat", exact: true });
+  const input = page.locator(".chat-input");
+  const choose = page.locator(".direct-structure").getByRole("combobox", { name: "Chat", exact: true });
   await choose.selectOption(mainId);
   await input.fill(oldDraft);
   await expect(input).toHaveAttribute("data-draft-storage", "saved");
@@ -1007,19 +1007,19 @@ async function indexedDbClearRecovery(page: Page, mainId: string, chatId: string
     return { held: value.held, aborted: value.aborted, committed: value.committed };
   });
   try {
-    await page.getByTestId("account-menu-button").click();
-    await page.getByTestId("account-menu-settings").click();
-    await page.getByTestId("settings-nav-item-storage").click();
-    await expect(page.getByTestId("e2ee-cache-clear-all")).toBeEnabled();
+    await page.locator(".account-menu-button").click();
+    await page.locator(".account-menu-settings").click();
+    await page.locator(".settings-nav-item-storage").click();
+    await expect(page.locator(".e2ee-cache-clear-all")).toBeEnabled();
     await page.evaluate(() => { (window as any).__directCacheBarrier.armed = true; });
-    await page.getByTestId("e2ee-cache-clear-all").click();
-    await page.getByTestId("e2ee-cache-clear-confirm").click();
+    await page.locator(".e2ee-cache-clear-all").click();
+    await page.locator(".e2ee-cache-clear-confirm").click();
     await expect.poll(async () => (await barrier()).held).toBe(1);
     if (cancelSettings) {
       // Same-document back unmounts the pending settings component before the
       // real transaction fails; the independent cache completion must survive.
       await page.goBack();
-      await expect(page.getByTestId("e2ee-plaintext-cache")).toHaveCount(0);
+      await expect(page.locator(".e2ee-plaintext-cache")).toHaveCount(0);
       await page.goBack();
       await expect(choose).toBeVisible();
       await choose.selectOption(chatId);
@@ -1040,7 +1040,7 @@ async function indexedDbClearRecovery(page: Page, mainId: string, chatId: string
     } else {
       await page.evaluate(() => { (window as any).__directCacheBarrier.release(); });
       await expect.poll(async () => (await barrier()).aborted).toBe(1);
-      await expect(page.getByTestId("e2ee-plaintext-cache").getByRole("status")).toContainText("cleanup failed");
+      await expect(page.locator(".e2ee-plaintext-cache").getByRole("status")).toContainText("cleanup failed");
       await expect.poll(async () => (await barrier()).committed).toBeGreaterThan(0);
       await page.goBack();
       await page.goBack();
@@ -1062,15 +1062,15 @@ async function indexedDbClearRecovery(page: Page, mainId: string, chatId: string
 export async function flatTopicChats(alice: Page, bob: Page, mainMessages: string[], extraDevices: Page[] = [], proof?: DirectStructureProof) {
   const pages = [alice, bob, ...extraDevices];
   for (const page of pages) {
-    await page.addLocatorHandler(page.getByTestId("mls-backup-modal"), async () => {
-      await page.getByTestId("mls-backup-dismiss").click();
+    await page.addLocatorHandler(page.getByRole("dialog", { name: "Back up encrypted history", exact: true }), async () => {
+      await page.getByRole("button", { name: "Remind me later", exact: true }).click();
     });
   }
   try {
     await runFlatTopicChats(alice, bob, mainMessages, extraDevices, proof);
   } finally {
     for (const page of pages) {
-      await page.removeLocatorHandler(page.getByTestId("mls-backup-modal"));
+      await page.removeLocatorHandler(page.getByRole("dialog", { name: "Back up encrypted history", exact: true }));
     }
   }
 }
@@ -1078,7 +1078,7 @@ export async function flatTopicChats(alice: Page, bob: Page, mainMessages: strin
 async function runFlatTopicChats(alice: Page, bob: Page, mainMessages: string[], extraDevices: Page[], proof?: DirectStructureProof) {
   expect(proof, "structure coverage requires the actual accepted participant credentials").toBeDefined();
   structuralBoundaries.set(alice, proof!);
-  await expect(alice.getByTestId("direct-structure").getByRole("combobox", { name: "Action", exact: true })).toHaveCount(0);
+  await expect(alice.locator(".direct-structure").getByRole("combobox", { name: "Action", exact: true })).toHaveCount(0);
   const mainPath = new URL(alice.url()).pathname;
   const mainId = decodeURIComponent(mainPath.split("/")[3]);
   const suffix = Date.now();
@@ -1098,10 +1098,10 @@ async function runFlatTopicChats(alice: Page, bob: Page, mainMessages: string[],
   expect((chat.payload?.object as Record<string, unknown>).topic).toBeUndefined();
   expect(JSON.stringify(chat.payload)).not.toContain(chatName);
   for (const page of [alice, bob, ...extraDevices]) {
-    const choose = page.getByTestId("direct-structure").getByRole("combobox", { name: "Chat", exact: true });
+    const choose = page.locator(".direct-structure").getByRole("combobox", { name: "Chat", exact: true });
     await expect(choose.locator(`option[value=${JSON.stringify(chatId)}]`)).toContainText(chatName, { timeout: 90_000 });
     await choose.selectOption(chatId);
-    for (const message of mainMessages) await expect(page.getByTestId("chat-message").filter({ hasText: message })).toHaveCount(0);
+    for (const message of mainMessages) await expect(page.locator(".chat-message").filter({ hasText: message })).toHaveCount(0);
   }
   const bobWatch = await ownWatchTransitions(bob, [alice, ...extraDevices], chatId);
   await assertWrongPlaintextStrand(alice, bob, chat.realm_id!, chatId, proof!);
@@ -1110,9 +1110,9 @@ async function runFlatTopicChats(alice: Page, bob: Page, mainMessages: string[],
   expect(classified.payload?.expected_state_digest).toMatch(/^sha256:[a-f0-9]{64}$/);
   const patch = classified.payload?.patch as Record<string, { $op: string; value?: { space_id: string } }>;
   expect(patch.topic.value?.space_id).toBe(topicId);
-  const chooseAlice = alice.getByTestId("direct-structure").getByRole("combobox", { name: "Chat", exact: true });
+  const chooseAlice = alice.locator(".direct-structure").getByRole("combobox", { name: "Chat", exact: true });
   const allPages = [alice, bob, ...extraDevices];
-  const chatOptions = (page: Page) => page.getByTestId("direct-structure").getByRole("combobox", { name: "Chat", exact: true });
+  const chatOptions = (page: Page) => page.locator(".direct-structure").getByRole("combobox", { name: "Chat", exact: true });
   const renamedChat = `${chatName}-renamed`;
   const renameChat = await structureWrite(alice, "rename_chat", "ak.strand.update", renamedChat);
   expect(renameChat.payload?.target_ref).toBe(chatId);
@@ -1161,7 +1161,7 @@ async function runFlatTopicChats(alice: Page, bob: Page, mainMessages: string[],
   expect(Object.keys(topicReorder.payload?.patch as object)).toEqual(["rank"]);
   expect((topicReorder.payload?.patch as any).rank.value).toMatch(/^[A-Za-z0-9]{1,128}$/);
   for (const page of allPages) {
-    const manage = page.getByTestId("direct-structure");
+    const manage = page.locator(".direct-structure");
     if (!await manage.getByRole("combobox", { name: "Action", exact: true }).isVisible()) await manage.getByRole("button", { name: "Manage chats and topics" }).click();
     await manage.getByRole("combobox", { name: "Action", exact: true }).selectOption("reorder_topic");
     await expect.poll(async () => await manage.getByRole("combobox", { name: "Topic", exact: true }).locator("option").evaluateAll(options => options.map(option => (option as HTMLOptionElement).value))).toEqual(["", secondTopicId, topicId]);
@@ -1204,19 +1204,19 @@ async function runFlatTopicChats(alice: Page, bob: Page, mainMessages: string[],
   await structureWrite(alice, "delete_topic_target", "ak.space.tombstone", undefined, secondTopicId);
   // Collapsing classification management is a local navigation preference;
   // the selected actual Chat and its watch cell stay available.
-  await alice.getByTestId("direct-structure").getByRole("button", { name: "Manage chats and topics" }).click();
-  await expect(alice.getByTestId("direct-structure").getByRole("combobox", { name: "Action", exact: true })).toHaveCount(0);
+  await alice.locator(".direct-structure").getByRole("button", { name: "Manage chats and topics" }).click();
+  await expect(alice.locator(".direct-structure").getByRole("combobox", { name: "Action", exact: true })).toHaveCount(0);
   await expect(chooseAlice).toHaveValue(chatId);
   const chatDraft = `draft-chat-${suffix}`;
   const mainDraft = `draft-main-${suffix}`;
-  await alice.getByTestId("chat-input").fill(chatDraft);
+  await alice.locator(".chat-input").fill(chatDraft);
   await chooseAlice.selectOption(mainId);
-  await expect(alice.getByTestId("chat-input")).toHaveValue("");
-  await alice.getByTestId("chat-input").fill(mainDraft);
-  await expect(alice.getByTestId("chat-input")).toHaveAttribute("data-draft-storage", "saved");
+  await expect(alice.locator(".chat-input")).toHaveValue("");
+  await alice.locator(".chat-input").fill(mainDraft);
+  await expect(alice.locator(".chat-input")).toHaveAttribute("data-draft-storage", "saved");
   await chooseAlice.selectOption(chatId);
-  await expect(alice.getByTestId("chat-input")).toHaveValue(chatDraft);
-  await expect(alice.getByTestId("chat-input")).toHaveAttribute("data-draft-storage", "saved");
+  await expect(alice.locator(".chat-input")).toHaveValue(chatDraft);
+  await expect(alice.locator(".chat-input")).toHaveAttribute("data-draft-storage", "saved");
   // Both drafts are nonempty at process restart. Storage must isolate the
   // actual Strand and device rather than merely preserve mounted Signals.
   await expect(alice).toHaveURL(url => {
@@ -1227,17 +1227,17 @@ async function runFlatTopicChats(alice: Page, bob: Page, mainMessages: string[],
   });
   await alice.reload();
   await expect(chooseAlice).toHaveValue(chatId, { timeout: 90_000 });
-  await expect(alice.getByTestId("chat-input")).toHaveValue(chatDraft);
+  await expect(alice.locator(".chat-input")).toHaveValue(chatDraft);
   await chooseAlice.selectOption(mainId);
-  await expect(alice.getByTestId("chat-input")).toHaveValue(mainDraft);
+  await expect(alice.locator(".chat-input")).toHaveValue(mainDraft);
   await chooseAlice.selectOption(chatId);
   for (const device of extraDevices) {
-    await expect(device.getByTestId("chat-input")).toHaveValue("");
+    await expect(device.locator(".chat-input")).toHaveValue("");
   }
   for (const [sender, recipient] of [[alice, bob], [bob, alice]] as const) {
     const text = `topic-chat-${sender === alice ? "a" : "b"}-${suffix}`;
     if (sender === alice) {
-      const navigation = bob.getByTestId("direct-structure");
+      const navigation = bob.locator(".direct-structure");
       if (await navigation.getByRole("combobox", { name: "Action", exact: true }).isVisible()) {
         await navigation.getByRole("button", { name: "Manage chats and topics" }).click();
       }
@@ -1246,11 +1246,11 @@ async function runFlatTopicChats(alice: Page, bob: Page, mainMessages: string[],
     }
     const selectedPath = `/direct/${decodeURIComponent(mainPath.split("/")[2])}/${chatId}`;
     await expect(sender).toHaveURL(url => decodeURIComponent(url.pathname) === selectedPath, { timeout: 90_000 });
-    const senderSelection = sender.getByTestId("direct-structure").getByRole("combobox", { name: "Chat", exact: true });
+    const senderSelection = sender.locator(".direct-structure").getByRole("combobox", { name: "Chat", exact: true });
     await expect(senderSelection).toHaveValue(chatId);
-    await sender.getByTestId("chat-input").fill(text);
-    await expect(sender.getByTestId("chat-input")).toHaveValue(text);
-    const sendButton = sender.getByTestId("send-chat-button");
+    await sender.locator(".chat-input").fill(text);
+    await expect(sender.locator(".chat-input")).toHaveValue(text);
+    const sendButton = sender.locator(".send-chat-button");
     // Start the response budget only after the real selected Chat permits a
     // send. Navigation can precede its verified current/MLS installation.
     try {
@@ -1260,7 +1260,7 @@ async function runFlatTopicChats(alice: Page, bob: Page, mainMessages: string[],
         body: JSON.stringify({ side: sender === alice ? "alice" : "bob", selected_chat: chatId,
           route_matches_selected_chat: decodeURIComponent(new URL(sender.url()).pathname) === selectedPath,
           selector_matches_selected_chat: await senderSelection.inputValue().then(value => value === chatId).catch(() => false),
-          input_matches_marker: await sender.getByTestId("chat-input").inputValue().then(value => value === text).catch(() => false),
+          input_matches_marker: await sender.locator(".chat-input").inputValue().then(value => value === text).catch(() => false),
           send_enabled: await sendButton.isEnabled().catch(() => false),
           mls_binding_pending: await sendButton.getAttribute("data-mls-binding-pending").then(value => value === null ? null : value === "true").catch(() => null),
           creator_bootstrap_pending: await sendButton.getAttribute("data-creator-bootstrap-pending").then(value => value === null ? null : value === "true").catch(() => null),
@@ -1280,29 +1280,29 @@ async function runFlatTopicChats(alice: Page, bob: Page, mainMessages: string[],
     expect(message.payload?.encrypted_content).toBeTruthy();
     expect(JSON.stringify(message.payload)).not.toContain(text);
     if (sender === alice) {
-      await expect(bob.getByTestId("direct-structure").getByRole("combobox", { name: "Chat", exact: true })
+      await expect(bob.locator(".direct-structure").getByRole("combobox", { name: "Chat", exact: true })
         .locator(`option[value=${JSON.stringify(chatId)}]`)).toContainText(/\d+ unread/, { timeout: 90_000 });
-      await bob.getByTestId("topbar-notifications-button").click();
-      const notification = bob.getByTestId("notification-item").filter({
+      await bob.locator(".topbar-notifications-link").click();
+      const notification = bob.locator(".notification-item").filter({
         has: bob.locator(`a[href$=${JSON.stringify(`/${chatId}`)}]`),
       }).first();
       await expect(notification).toBeVisible({ timeout: 90_000 });
-      await notification.getByTestId("notification-open-chat").click();
-      await expect(bob.getByTestId("notifications-drawer")).toHaveCount(0);
+      await notification.locator(".notification-open-chat").click();
+      await expect(bob.locator(".notifications-drawer")).toHaveCount(0);
       await expect(bob).toHaveURL(new RegExp(`/direct/.*/${chatId}$`));
-      await expect(bob.getByTestId("direct-structure").getByRole("combobox", { name: "Chat", exact: true })).toHaveValue(chatId);
-      await expect(bob.getByTestId("direct-structure").getByRole("combobox", { name: "Chat", exact: true })
+      await expect(bob.locator(".direct-structure").getByRole("combobox", { name: "Chat", exact: true })).toHaveValue(chatId);
+      await expect(bob.locator(".direct-structure").getByRole("combobox", { name: "Chat", exact: true })
         .locator(`option[value=${JSON.stringify(chatId)}]`)).not.toContainText("unread", { timeout: 90_000 });
     }
-    await expect(recipient.getByTestId("chat-message").filter({ hasText: text })).toBeVisible({ timeout: 90_000 });
+    await expect(recipient.locator(".chat-message").filter({ hasText: text })).toBeVisible({ timeout: 90_000 });
     for (const device of extraDevices) {
-      await expect(device.getByTestId("chat-message").filter({ hasText: text })).toBeVisible({ timeout: 90_000 });
+      await expect(device.locator(".chat-message").filter({ hasText: text })).toBeVisible({ timeout: 90_000 });
     }
   }
   await chooseAlice.selectOption(mainId);
-  await expect(alice.getByTestId("chat-input")).toHaveValue(mainDraft);
+  await expect(alice.locator(".chat-input")).toHaveValue(mainDraft);
   await chooseAlice.selectOption(chatId);
-  await expect(alice.getByTestId("chat-input")).toHaveValue("");
+  await expect(alice.locator(".chat-input")).toHaveValue("");
   await indexedDbClearRecovery(alice, mainId, chatId, mainDraft, false);
   await indexedDbClearRecovery(alice, mainId, chatId, mainDraft, true);
   await chooseAlice.selectOption(chatId);
@@ -1310,7 +1310,7 @@ async function runFlatTopicChats(alice: Page, bob: Page, mainMessages: string[],
   await structureWrite(bob, "rename_topic_target", "ak.space.update", renamed, topicId);
   await Promise.all([alice, bob, ...extraDevices].map(page => page.reload()));
   for (const page of [alice, bob, ...extraDevices]) {
-    const choose = page.getByTestId("direct-structure").getByRole("combobox", { name: "Chat", exact: true });
+    const choose = page.locator(".direct-structure").getByRole("combobox", { name: "Chat", exact: true });
     await expect(choose.locator(`option[value=${JSON.stringify(chatId)}]`)).toContainText(renamed, { timeout: 90_000 });
     await choose.selectOption(chatId);
   }
@@ -1445,7 +1445,7 @@ async function runFlatTopicChats(alice: Page, bob: Page, mainMessages: string[],
   expect(archived.payload?.target_ref).toBe(chatId);
   expect(archived.payload?.target_ref).not.toBe(mainId);
   for (const page of [alice, bob, ...extraDevices]) {
-    await expect(page.getByTestId("direct-structure").getByRole("combobox", { name: "Chat", exact: true })
+    await expect(page.locator(".direct-structure").getByRole("combobox", { name: "Chat", exact: true })
       .locator(`option[value=${JSON.stringify(chatId)}]`)).toContainText("(archived)", { timeout: 90_000 });
   }
   await refusedTopic("archived");
@@ -1453,7 +1453,7 @@ async function runFlatTopicChats(alice: Page, bob: Page, mainMessages: string[],
   expect(restored.payload?.target_ref).toBe(chatId);
   expect(restored.payload?.target_ref).not.toBe(mainId);
   for (const page of [alice, bob, ...extraDevices]) {
-    const option = page.getByTestId("direct-structure").getByRole("combobox", { name: "Chat", exact: true })
+    const option = page.locator(".direct-structure").getByRole("combobox", { name: "Chat", exact: true })
       .locator(`option[value=${JSON.stringify(chatId)}]`);
     await expect(option).not.toContainText("(archived)", { timeout: 90_000 });
     await expect(option).toContainText(renamed);
@@ -1461,15 +1461,15 @@ async function runFlatTopicChats(alice: Page, bob: Page, mainMessages: string[],
   // Committed sends cleared the extra Chat, while the untouched main draft
   // survived the second cold reload and both lifecycle transitions.
   await chooseAlice.selectOption(mainId);
-  await expect(alice.getByTestId("chat-input")).toHaveValue(mainDraft);
+  await expect(alice.locator(".chat-input")).toHaveValue(mainDraft);
   await chooseAlice.selectOption(chatId);
-  await expect(alice.getByTestId("chat-input")).toHaveValue("");
+  await expect(alice.locator(".chat-input")).toHaveValue("");
   const cleared = await structureWrite(alice, "unplace", "ak.strand.update");
   expect((cleared.payload?.patch as Record<string, unknown>).topic).toEqual({ $op: "unset" });
   await structureWrite(bob, "delete_topic_target", "ak.space.tombstone", undefined, topicId);
   for (const page of [alice, bob]) {
-    await page.getByTestId("direct-structure").getByRole("combobox", { name: "Chat", exact: true }).selectOption(mainId);
-    for (const message of mainMessages) await expect(page.getByTestId("chat-message").filter({ hasText: message })).toBeVisible({ timeout: 90_000 });
+    await page.locator(".direct-structure").getByRole("combobox", { name: "Chat", exact: true }).selectOption(mainId);
+    for (const message of mainMessages) await expect(page.locator(".chat-message").filter({ hasText: message })).toBeVisible({ timeout: 90_000 });
   }
   expect(decodeURIComponent(new URL(alice.url()).pathname)).toBe(decodeURIComponent(mainPath));
   expect(decodeURIComponent(new URL(bob.url()).pathname.split("/")[2])).toBe(decodeURIComponent(mainPath.split("/")[2]));

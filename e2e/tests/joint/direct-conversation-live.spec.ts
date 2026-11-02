@@ -241,7 +241,7 @@ return async ({ jointUsers, request, browser }: { jointUsers: JointUsersFixture;
   phase("participant_reload_finished");
   for (const [page, peer] of [[alice, bobSession.user.id], [bob, aliceSession.user.id]] as const) {
     phase(page === alice ? "alice_direct_open_start" : "bob_direct_open_start");
-    await page.getByTestId("realm-sidebar-tab-direct").click();
+    await page.getByRole("button", { name: "Contacts", exact: true }).click();
     const row = page.locator(`[data-testid="direct-conversation-row"][data-peer=${JSON.stringify(canonicalJson(accountActorId(peer, peer === bobSession.user.id && remoteBob ? "server2" : "default")))}]`);
     // The API receipt can precede the remote Contact projection. A pending
     // row is clickable but intentionally cannot start a Direct resolver.
@@ -280,13 +280,13 @@ return async ({ jointUsers, request, browser }: { jointUsers: JointUsersFixture;
     const acceptedAt = foundingAcceptedAt!;
     expect(founder).toBeDefined();
     await expect(founder!).toHaveURL(/\/direct\/ak:realm:.*\/ak:strand:/, { timeout: 15_000 });
-    await expect(founder!.getByTestId("chat-panel")).toBeVisible();
-    await expect(founder!.getByTestId("chat-panel")).toHaveAttribute("data-chat-mode", "direct");
+    await expect(founder!.locator(".chat-panel")).toBeVisible();
+    await expect(founder!.locator(".chat-panel")).toHaveAttribute("data-chat-mode", "direct");
     const acceptedToVisibleMs = Date.now() - acceptedAt;
     test.info().annotations.push({ type: "founding-navigation-ms", description: String(acceptedToVisibleMs) });
-    await founder!.getByTestId("chat-input").fill("held-second-resolve-send-probe");
-    await expect(founder!.getByTestId("send-chat-button")).toBeDisabled();
-    await expect(founder!.getByTestId("chat-panel")).not.toContainText("Strand not found");
+    await founder!.locator(".chat-input").fill("held-second-resolve-send-probe");
+    await expect(founder!.locator(".send-chat-button")).toBeDisabled();
+    await expect(founder!.locator(".chat-panel")).not.toContainText("Strand not found");
     const firstPath = new URL(founder!.url()).pathname;
     if (mode === "logout" || mode === "account") {
       const previousIdentity = mode === "account" ? await founder!.evaluate(() => {
@@ -298,10 +298,10 @@ return async ({ jointUsers, request, browser }: { jointUsers: JointUsersFixture;
         expect(previousIdentity.deviceId).toMatch(/^ak:device:/);
         await actualOldResolution;
       }
-      await founder!.getByTestId("account-menu-button").click();
-      await founder!.getByTestId("account-menu-session-logout").click();
-      await expect(founder!.getByTestId("login-panel")).toBeVisible({ timeout: 60_000 });
-      await expect(founder!.getByTestId("client-shell")).toHaveCount(0);
+      await founder!.locator(".account-menu-button").click();
+      await founder!.getByRole("button", { name: "Log out", exact: true }).click();
+      await expect(founder!.locator(".auth-panel")).toBeVisible({ timeout: 60_000 });
+      await expect(founder!.locator(".shell.app")).toHaveCount(0);
       if (mode === "account") {
         expect(heldResolvedCoordinates, "hold a real old resolution response, not an unissued request").toBeDefined();
         const acceptedPathParts = firstPath.split("/").map(decodeURIComponent);
@@ -310,26 +310,26 @@ return async ({ jointUsers, request, browser }: { jointUsers: JointUsersFixture;
         const replacement = founder === alice ? bobSession : aliceSession;
         const authorized = founder === alice ? bobPage : alicePage;
         expect(previousIdentity!.accountId).not.toEqual(replacement.accountId);
-        await founder!.getByTestId("login-server-url").fill(colandBaseUrl());
-        await founder!.getByTestId("start-server-login-button").click();
+        await founder!.locator(".auth-station-field input").fill(colandBaseUrl());
+        await founder!.locator(".auth-primary").click();
         await submitCoauthPasswordCredentials(founder!, replacement.account);
         const consent = founder!.getByTestId("coauth-oauth-approve");
         if (await consent.waitFor({ state: "visible", timeout: 20_000 }).then(() => true).catch(() => false)) {
           await consent.click();
         }
-        await expect(founder!.getByTestId("device-setup-required")).toBeVisible({ timeout: 120_000 });
-        await expect(founder!.getByTestId("client-shell")).toHaveCount(0);
-        await founder!.getByTestId("device-setup-pairing-start").click();
-        const pairingCode = founder!.getByTestId("device-setup-pairing-code");
+        await expect(founder!.locator(".device-setup-required")).toBeVisible({ timeout: 120_000 });
+        await expect(founder!.locator(".shell.app")).toHaveCount(0);
+        await founder!.locator(".device-setup-pairing-start").click();
+        const pairingCode = founder!.locator(".device-setup-pairing-code");
         await expect(pairingCode).toBeVisible({ timeout: 30_000 });
         const code = (await pairingCode.textContent())?.trim() ?? "";
         expect(code).not.toBe("");
-        const pairingLink = await founder!.getByTestId("device-setup-pairing-link").inputValue();
+        const pairingLink = await founder!.locator(".device-setup-pairing-link").inputValue();
         await approvePairingLinkOnAuthorizedDevice(authorized, pairingLink, code);
-        await founder!.getByTestId("device-setup-pairing-status").click();
-        await expect(founder!.getByTestId("device-setup-status")).toContainText("Device authorization is accepted", { timeout: 90_000 });
+        await founder!.locator(".device-setup-pairing-status").click();
+        await expect(founder!.locator(".device-setup-status")).toContainText("Device authorization is accepted", { timeout: 90_000 });
         await founder!.getByRole("link", { name: "Sign in again after approval" }).click();
-        await expect(founder!.getByTestId("login-panel")).toBeVisible({ timeout: 30_000 });
+        await expect(founder!.locator(".auth-panel")).toBeVisible({ timeout: 30_000 });
         await serverLoginViaCoauth(founder!, replacement.account);
         const currentIdentity = await founder!.evaluate(() => {
           const config = JSON.parse(window.localStorage.getItem("inkson.config.v1") ?? "{}");
@@ -347,15 +347,15 @@ return async ({ jointUsers, request, browser }: { jointUsers: JointUsersFixture;
           const body = await response.json();
           return body.devices?.find((device: { device_id?: string; status?: string }) => device.device_id === currentIdentity.deviceId)?.status;
         }, { timeout: 90_000 }).toBe("active");
-        await expect(founder!.getByTestId("chat-panel")).toHaveCount(0);
+        await expect(founder!.locator(".chat-panel")).toHaveCount(0);
         const replacementPath = new URL(founder!.url()).pathname;
         expect(replacementPath).not.toBe(firstPath);
         releaseResolve();
         await Promise.all([...pendingResolveRoutes]);
         await expect(founder!).toHaveURL(url => url.pathname === replacementPath);
-        await expect(founder!.getByTestId("client-shell")).toBeVisible();
-        await expect(founder!.getByTestId("chat-panel")).toHaveCount(0);
-        await expect(founder!.getByTestId("chat-input")).toHaveCount(0);
+        await expect(founder!.locator(".shell.app")).toBeVisible();
+        await expect(founder!.locator(".chat-panel")).toHaveCount(0);
+        await expect(founder!.locator(".chat-input")).toHaveCount(0);
         await test.info().attach("founding-held-resolve-real-account-device-reentry", {
           body: Buffer.from(JSON.stringify({ original_account: previousIdentity!.accountId,
             original_device: previousIdentity!.deviceId, accepted_account: currentIdentity.accountId,
@@ -372,9 +372,9 @@ return async ({ jointUsers, request, browser }: { jointUsers: JointUsersFixture;
       }
       releaseResolve();
       await Promise.all([...pendingResolveRoutes]);
-      await expect(founder!.getByTestId("login-panel")).toBeVisible();
-      await expect(founder!.getByTestId("chat-panel")).toHaveCount(0);
-      await expect(founder!.getByTestId("client-shell")).toHaveCount(0);
+      await expect(founder!.locator(".auth-panel")).toBeVisible();
+      await expect(founder!.locator(".chat-panel")).toHaveCount(0);
+      await expect(founder!.locator(".shell.app")).toHaveCount(0);
       await test.info().attach("founding-held-resolve-session-terminated", {
         body: Buffer.from(JSON.stringify({ accepted_path: firstPath, actual_hard_logout: true,
           old_resolve_released_after_shell_unmount: true, old_chat_not_installed: true })),
@@ -382,13 +382,13 @@ return async ({ jointUsers, request, browser }: { jointUsers: JointUsersFixture;
       });
       return;
     }
-    await founder!.getByTestId("account-menu-button").click();
-    await founder!.getByTestId("account-menu-settings").click();
-    await expect(founder!.getByTestId("settings-panel")).toBeVisible();
+    await founder!.locator(".account-menu-button").click();
+    await founder!.locator(".account-menu-settings").click();
+    await expect(founder!.locator(".settings-panel")).toBeVisible();
     await founder!.goBack();
     await expect(founder!).toHaveURL(url => url.pathname === firstPath);
-    await expect(founder!.getByTestId("chat-panel")).toBeVisible();
-    await expect(founder!.getByTestId("send-chat-button")).toBeDisabled();
+    await expect(founder!.locator(".chat-panel")).toBeVisible();
+    await expect(founder!.locator(".send-chat-button")).toBeDisabled();
     await test.info().attach("founding-held-resolve-page-navigation", {
       body: Buffer.from(JSON.stringify({ accepted_to_visible_ms: acceptedToVisibleMs,
         accepted_path: firstPath, second_resolve_released: false, strict_send_gate: true, shell_survived_page_navigation: true })),
@@ -405,7 +405,7 @@ return async ({ jointUsers, request, browser }: { jointUsers: JointUsersFixture;
   for (const [page, peer] of [[alice, bobSession.user.id], [bob, aliceSession.user.id]] as const) {
     await expect(async () => {
       if (!new URL(page.url()).pathname.startsWith("/direct/")) {
-        await page.getByTestId("realm-sidebar-tab-direct").click();
+        await page.getByRole("button", { name: "Contacts", exact: true }).click();
         const row = page.locator(`[data-testid="direct-conversation-row"][data-peer=${JSON.stringify(canonicalJson(accountActorId(peer, peer === bobSession.user.id && remoteBob ? "server2" : "default")))}]`);
         // The API receipt can precede the remote Contact projection. A pending
         // row is clickable but intentionally cannot start a Direct resolver.
@@ -429,23 +429,23 @@ return async ({ jointUsers, request, browser }: { jointUsers: JointUsersFixture;
       // covering MLS Commit. Reopen the founder while consume stays blocked;
       // its durable admission must restore the post-Add sending state.
       await bob.reload();
-      await expect.poll(async () => Number(await bob.getByTestId("chat-panel").getAttribute("data-mls-epoch")), { timeout: 180_000 }).toBeGreaterThan(0);
+      await expect.poll(async () => Number(await bob.locator(".chat-panel").getAttribute("data-mls-epoch")), { timeout: 180_000 }).toBeGreaterThan(0);
     }
-    await alice.getByTestId("chat-input").fill("preparation probe");
-    await expect(alice.getByTestId("send-chat-button")).toBeDisabled();
+    await alice.locator(".chat-input").fill("preparation probe");
+    await expect(alice.locator(".send-chat-button")).toBeDisabled();
     // The responder is the founder. Spec §7.2 permits real exporter messages
     // before the peer's durable Welcome, including when that device is offline.
     if (mode === "offline") await alice.context().setOffline(true);
     const provisional = `direct-provisional-${Date.now()}`;
-    await bob.getByTestId("chat-input").fill(provisional);
-    await expect(bob.getByTestId("send-chat-button")).toBeEnabled({ timeout: 120_000 });
+    await bob.locator(".chat-input").fill(provisional);
+    await expect(bob.locator(".send-chat-button")).toBeEnabled({ timeout: 120_000 });
     const submitted = bob.waitForResponse(response => {
       const observed = response.request();
       if (observed.method() !== "POST" || new URL(response.url()).pathname !== "/_arkret/self/events") return false;
       return ingressEvents(decodeEventIngressBody(observed.postDataJSON()))
         .some(event => event.kind === "ak.message.create");
     }, { timeout: 90_000 });
-    await bob.getByTestId("send-chat-button").click();
+    await bob.locator(".send-chat-button").click();
     const response = await submitted;
     expect(response.ok(), await response.text()).toBeTruthy();
     const sentEvent = ingressEvents(decodeEventIngressBody(response.request().postDataJSON()))
@@ -474,8 +474,8 @@ return async ({ jointUsers, request, browser }: { jointUsers: JointUsersFixture;
     await Promise.all([alice.reload(), bob.reload()]);
   }
   for (const page of [alice, bob]) {
-    await page.getByTestId("chat-input").fill("preparation probe");
-    await expect(page.getByTestId("send-chat-button")).toBeEnabled({ timeout: 180_000 });
+    await page.locator(".chat-input").fill("preparation probe");
+    await expect(page.locator(".send-chat-button")).toBeEnabled({ timeout: 180_000 });
     expect(new URL(page.url()).pathname).toBe(path);
   }
   if (mode === "offline") {
@@ -483,18 +483,18 @@ return async ({ jointUsers, request, browser }: { jointUsers: JointUsersFixture;
     // A post-join offline test needs both local snapshots at the joined epoch.
     await expect.poll(async () => {
       const epochs = await Promise.all([alice, bob].map(async page =>
-        Number(await page.getByTestId("chat-panel").getAttribute("data-mls-epoch"))));
+        Number(await page.locator(".chat-panel").getAttribute("data-mls-epoch"))));
       return epochs[0] > 0 && epochs[0] === epochs[1];
     }, { timeout: 180_000 }).toBe(true);
     await alice.context().setOffline(true);
     const offlineMessage = `direct-offline-after-join-${Date.now()}`;
-    await bob.getByTestId("chat-input").fill(offlineMessage);
+    await bob.locator(".chat-input").fill(offlineMessage);
     const offlineSubmission = bob.waitForResponse(response =>
       response.request().method() === "POST"
       && new URL(response.url()).pathname === "/_arkret/self/events"
       && ingressEvents(decodeEventIngressBody(response.request().postDataJSON()))
         .some(event => event.kind === "ak.message.create"), { timeout: 90_000 });
-    await bob.getByTestId("send-chat-button").click();
+    await bob.locator(".send-chat-button").click();
     const offlineResponse = await offlineSubmission;
     expect(offlineResponse.ok(), await offlineResponse.text()).toBeTruthy();
     const offlineEvent = ingressEvents(decodeEventIngressBody(offlineResponse.request().postDataJSON()))
@@ -505,34 +505,34 @@ return async ({ jointUsers, request, browser }: { jointUsers: JointUsersFixture;
     assertAuthoritySubmitOutcome(offlineOutcome, offlineEvent!, "post-join offline Direct message");
     const offlineEnvelope = offlineEvent?.payload?.encrypted_content as { encryption_context?: { epoch?: number } } | undefined;
     expect(offlineEnvelope?.encryption_context?.epoch).toBeGreaterThan(0);
-    await expect(bob.getByTestId("chat-message").filter({ hasText: offlineMessage })).toBeVisible();
+    await expect(bob.locator(".chat-message").filter({ hasText: offlineMessage })).toBeVisible();
     await alice.context().setOffline(false);
     await alice.reload();
-    await expect(alice.getByTestId("chat-message").filter({ hasText: offlineMessage })).toBeVisible({ timeout: 90_000 });
+    await expect(alice.locator(".chat-message").filter({ hasText: offlineMessage })).toBeVisible({ timeout: 90_000 });
     messages.push(offlineMessage);
   }
 
   const exchange = [`direct-alice-${Date.now()}`, `direct-bob-${Date.now()}`];
   messages.push(...exchange);
   for (const [sender, recipient, message] of [[alice, bob, exchange[0]], [bob, alice, exchange[1]]] as const) {
-    await sender.getByTestId("chat-input").fill(message);
-    await sender.getByTestId("send-chat-button").click();
-    await expect(recipient.getByTestId("chat-message").filter({ hasText: message })).toBeVisible({ timeout: 90_000 });
+    await sender.locator(".chat-input").fill(message);
+    await sender.locator(".send-chat-button").click();
+    await expect(recipient.locator(".chat-message").filter({ hasText: message })).toBeVisible({ timeout: 90_000 });
   }
   await Promise.all([alice.reload(), bob.reload()]);
   for (const page of [alice, bob]) {
     for (const message of messages) {
-      await expect(page.getByTestId("chat-message").filter({ hasText: message })).toBeVisible({ timeout: 90_000 });
+      await expect(page.locator(".chat-message").filter({ hasText: message })).toBeVisible({ timeout: 90_000 });
     }
   }
   if (preJoinMessage) {
-    await expect(bob.getByTestId("chat-message").filter({ hasText: preJoinMessage })).toBeVisible({ timeout: 90_000 });
-    await expect(alice.getByTestId("chat-message").filter({ hasText: preJoinMessage })).toHaveCount(0);
+    await expect(bob.locator(".chat-message").filter({ hasText: preJoinMessage })).toBeVisible({ timeout: 90_000 });
+    await expect(alice.locator(".chat-message").filter({ hasText: preJoinMessage })).toHaveCount(0);
   }
   const afterReload = `direct-after-reload-${Date.now()}`;
-  await bob.getByTestId("chat-input").fill(afterReload);
-  await bob.getByTestId("send-chat-button").click();
-  await expect(alice.getByTestId("chat-message").filter({ hasText: afterReload })).toBeVisible({ timeout: 90_000 });
+  await bob.locator(".chat-input").fill(afterReload);
+  await bob.locator(".send-chat-button").click();
+  await expect(alice.locator(".chat-message").filter({ hasText: afterReload })).toBeVisible({ timeout: 90_000 });
   if (mode === "withdrawal" || mode === "leave") {
     await directStructureLifecycleGate(alice, bob, { request, token: aliceSession.grantJwt,
       peer: { token: bobSession.grantJwt, server: "default" } }, mode, async author => {
@@ -558,7 +558,7 @@ return async ({ jointUsers, request, browser }: { jointUsers: JointUsersFixture;
       await paired.page.page.goto(path, { waitUntil: "domcontentloaded" });
       expect(jointUsers.aliceSession.recoveryKey).toBeTruthy();
       await paired.page.unlockMlsAccountSecret(jointUsers.aliceSession.recoveryKey!);
-      await expect(paired.page.page.getByTestId("send-chat-button")).toBeEnabled({ timeout: 180_000 });
+      await expect(paired.page.page.locator(".send-chat-button")).toBeEnabled({ timeout: 180_000 });
       const outsideRealm = await createRealmApi(request, aliceSession.grantJwt, {
         title: `DM boundary outside ${Date.now()}`, mls_activated: false,
       });

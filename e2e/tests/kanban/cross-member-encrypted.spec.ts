@@ -450,6 +450,7 @@ async function buildEncryptedBoardListCard(
     .filter({ hasText: listTitle })
     .first();
   await expect(column).toBeVisible({ timeout: 45_000 });
+  await expect(column.locator(".add-card-button")).toBeEnabled({ timeout: 120_000 });
   if (!createCard) return boardId;
   await column.locator(".add-card-button").click();
   await column.locator(".new-card-title-input").fill(cardTitle);
@@ -741,9 +742,9 @@ async function openReaderBoard(
 
 async function openPendingTimeline(reader: JointUserPage, realmId: string): Promise<void> {
   await reader.page.goto(`/chat/${encodeURIComponent(realmId)}`, { waitUntil: "domcontentloaded" });
-  await expect(reader.page.getByTestId("chat-panel")).toBeVisible({ timeout: 120_000 });
-  await expect(reader.page.getByTestId("message-list")).toBeVisible({ timeout: 120_000 });
-  await expect(reader.page.getByTestId("chat-panel")).toHaveAttribute("data-initial-sync", "pending");
+  await expect(reader.page.locator(".chat-panel")).toBeVisible({ timeout: 120_000 });
+  await expect(reader.page.locator(".message-list")).toBeVisible({ timeout: 120_000 });
+  await expect(reader.page.locator(".chat-panel")).toHaveAttribute("data-initial-sync", "pending");
 }
 
 test.describe("cross-member encrypted kanban @fully-implemented", () => {
@@ -1058,19 +1059,19 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
         // Submit through the real wizard, then destroy its runtime at the
         // accepted-create response or current Device evidence boundary.
         await creator.gotoSetup();
-        const wizard = creator.page.getByTestId("realm-lifecycle-strand").last();
-        const title = wizard.getByTestId("realm-title-input");
+        const wizard = creator.page.locator(".realm-lifecycle-strand").last();
+        const title = wizard.locator(".realm-title-input input, .realm-title-input textarea");
         if (!(await title.isVisible().catch(() => false))) {
           await wizard.getByRole("button", { name: /^Basics/ }).first().click();
         }
         await title.fill(createOptions.title);
-        await wizard.getByTestId("new-realm-next-button").first().click();
-        await selectDxcOption(wizard.getByTestId("realm-discoverability-input"), createOptions.discoverability);
-        await selectDxcOption(wizard.getByTestId("realm-policy-join-rule-input"), createOptions.joinRule);
-        await selectDxcOption(wizard.getByTestId("realm-policy-history-access-input"), createOptions.historyAccess);
-        await selectDxcOption(wizard.getByTestId("realm-mls-activation-input"), "after_create");
-        await wizard.getByTestId("new-realm-next-button").first().click();
-        await wizard.getByTestId("create-realm-button").click();
+        await wizard.locator(".new-realm-next-button").first().click();
+        await selectDxcOption(wizard.locator(".realm-discoverability-input"), createOptions.discoverability);
+        await selectDxcOption(wizard.locator(".realm-policy-join-rule-input"), createOptions.joinRule);
+        await selectDxcOption(wizard.locator(".realm-policy-history-access-input"), createOptions.historyAccess);
+        await selectDxcOption(wizard.locator(".realm-mls-activation-input"), "after_create");
+        await wizard.locator(".new-realm-next-button").first().click();
+        await wizard.locator(".create-realm-button").click();
         if (failLocalPublication) {
           await expect.poll(() => creator.page.evaluate(() => (window as any).__creatorPublicationCut?.intent.effective_scope.realm_id), { timeout: 120_000 }).toBeTruthy();
           cutRealmId = await creator.page.evaluate(() => (window as any).__creatorPublicationCut.intent.effective_scope.realm_id);
@@ -1092,7 +1093,7 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
         let resumedBeforeGenesisCut = false;
         await expect.poll(async () => {
           if (!cutRealmId && !resumedBeforeGenesisCut && (loseGenesisResponse || competingGenesisWins || rejectGenesis)) {
-            const openRealm = wizard.getByTestId("realm-setup-done").getByRole("link", { name: /Open (?:Realm|workspace)/i });
+            const openRealm = wizard.locator(".realm-setup-done").getByRole("link", { name: /Open (?:Realm|workspace)/i });
             if (await openRealm.isVisible().catch(() => false)) {
               // A real unavailable snapshot can stop setup before our target
               // cut. Re-enter its accepted Realm and resume the same record.
@@ -1112,7 +1113,7 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
             expect(refused.rejection.authority_problem.status).toBe(409);
             expect(refused.queue_items.find((item: Record<string, any>) => item.submission.event_id === refused.rejection.event_id).status).toBe("failed");
             await creator.page.goto(`/chat/${encodeURIComponent(cutRealmId!)}`, { waitUntil: "domcontentloaded" });
-            await expect(creator.page.getByTestId("creator-mls-retry-button")).toBeVisible({ timeout: 60_000 });
+            await expect(creator.page.locator(".creator-mls-retry-button")).toBeVisible({ timeout: 60_000 });
             expect((await readCreatorRecords(creator.page)).find((value) => value.intent.effective_scope.realm_id === cutRealmId)!.rejection).toEqual(refused.rejection);
             let unavailableDecisions = 0;
             const captureUnavailable = async (response: import("@playwright/test").Response) => {
@@ -1124,14 +1125,14 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
             try {
               for (let attempt = 0; attempt < 3; attempt += 1) {
                 const beforeUnavailable = unavailableDecisions;
-                const retry = creator.page.getByTestId("creator-mls-retry-button");
+                const retry = creator.page.locator(".creator-mls-retry-button");
                 await expect(retry).toBeEnabled();
                 await retry.click();
                 await expect.poll(async () => {
                   const record = (await readCreatorRecords(creator.page)).find((value) => value.intent.effective_scope.realm_id === cutRealmId)!;
                   if (record.state === "superseded") return true;
                   return unavailableDecisions > beforeUnavailable && await retry.isEnabled().catch(() => false)
-                    && (await creator.page.getByTestId("creator-mls-retry").textContent())?.includes("realm_state_snapshot_unavailable");
+                    && (await creator.page.locator(".creator-mls-retry").textContent())?.includes("realm_state_snapshot_unavailable");
                 }, { timeout: 60_000 }).toBeTruthy();
                 const afterRetry = (await readCreatorRecords(creator.page)).find((value) => value.intent.effective_scope.realm_id === cutRealmId)!;
                 if (afterRetry.state === "superseded") break;
@@ -1224,12 +1225,12 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
             rejectionActive = false;
             await creator.page.goto(`/chat/${encodeURIComponent(cutRealmId!)}`, { waitUntil: "domcontentloaded" });
             for (let retry = 0; retry < 3; retry += 1) {
-              await expect(creator.page.getByTestId("creator-mls-retry-button").first()).toBeEnabled({ timeout: 60_000 });
-              await creator.page.getByTestId("creator-mls-retry-button").first().click();
+              await expect(creator.page.locator(".creator-mls-retry-button").first()).toBeEnabled({ timeout: 60_000 });
+              await creator.page.locator(".creator-mls-retry-button").first().click();
               await expect.poll(async () => {
                 const current = (await readCreatorRecords(creator.page)).find((value) => value.intent.effective_scope.realm_id === cutRealmId)!;
                 if (current.state === "quarantined") return "quarantined";
-                if (await creator.page.getByTestId("creator-mls-retry").filter({ hasText: "realm_state_snapshot_unavailable" }).count()) return "retryable_unavailable";
+                if (await creator.page.locator(".creator-mls-retry").filter({ hasText: "realm_state_snapshot_unavailable" }).count()) return "retryable_unavailable";
                 return "pending";
               }, { timeout: 60_000 }).not.toBe("pending");
               const current = (await readCreatorRecords(creator.page)).find((value) => value.intent.effective_scope.realm_id === cutRealmId)!;
@@ -1250,10 +1251,10 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
             expect(quarantined.diagnostic.recovery_record.rejection).toEqual(terminal.rejection);
             expect(quarantined.diagnostic.recovery_record.rejected_record).toEqual(terminal.rejected_record);
             expect(quarantined.ready_index).toHaveLength(0);
-            await expect(creator.page.getByTestId("creator-mls-quarantined").first()).toBeVisible({ timeout: 60_000 });
-            await expect(creator.page.getByTestId("creator-mls-retry-button")).toHaveCount(0);
+            await expect(creator.page.locator(".creator-mls-quarantined").first()).toBeVisible({ timeout: 60_000 });
+            await expect(creator.page.locator(".creator-mls-retry-button")).toHaveCount(0);
             await creator.page.reload({ waitUntil: "domcontentloaded" });
-            await expect(creator.page.getByTestId("creator-mls-quarantined").first()).toBeVisible({ timeout: 60_000 });
+            await expect(creator.page.locator(".creator-mls-quarantined").first()).toBeVisible({ timeout: 60_000 });
             const reopened = (await readCreatorRecords(creator.page)).find((value) => value.intent.effective_scope.realm_id === cutRealmId)!;
             expect(reopened.diagnostic).toEqual(quarantined.diagnostic);
             expect(reopened.intent).toEqual(terminal.intent);
@@ -1263,7 +1264,7 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
             return;
           }
           await creator.page.goto(`/chat/${encodeURIComponent(cutRealmId!)}`, { waitUntil: "domcontentloaded" });
-          await expect(creator.page.getByTestId("creator-mls-retry-button")).toBeVisible({ timeout: 60_000 });
+          await expect(creator.page.locator(".creator-mls-retry-button")).toBeVisible({ timeout: 60_000 });
           const afterReentry = (await readCreatorRecords(creator.page)).find((value) => value.intent.effective_scope.realm_id === cutRealmId)!;
           expect(afterReentry.state).toBe("rejected");
           expect(afterReentry.rejection).toEqual(closedRejection);
@@ -1280,9 +1281,9 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
               }) });
             } else { await route.fallback(); }
           });
-          await creator.page.getByTestId("creator-mls-retry-button").click();
+          await creator.page.locator(".creator-mls-retry-button").click();
           await expect.poll(() => retryAbsenceCuts, { timeout: 60_000 }).toBeGreaterThan(0);
-          await expect(creator.page.getByTestId("creator-mls-retry-button")).toBeEnabled({ timeout: 60_000 });
+          await expect(creator.page.locator(".creator-mls-retry-button")).toBeEnabled({ timeout: 60_000 });
           const blocked = (await readCreatorRecords(creator.page)).find((value) => value.intent.effective_scope.realm_id === cutRealmId)!;
           expect(blocked.state).toBe("rejected");
           expect(blocked.rejection).toEqual(closedRejection);
@@ -1291,7 +1292,7 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
           rejectionActive = false;
           epochUnitAtCut = undefined;
           signedGenesisAtCut = undefined;
-          await creator.page.getByTestId("creator-mls-retry-button").click();
+          await creator.page.locator(".creator-mls-retry-button").click();
           await expect.poll(async () => (await readCreatorRecords(creator.page)).find((value) => value.intent.effective_scope.realm_id === cutRealmId)?.state,
             { timeout: 90_000 }).toBe("ready");
           const retried = (await readCreatorRecords(creator.page)).find((value) => value.intent.effective_scope.realm_id === cutRealmId)!;
@@ -1471,7 +1472,7 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
           const { queue_items, ready_index, vault_commit_position, ...pendingRecord } = pending;
           expect(pendingRecord, "failed quarantine publication must retain the entire prior durable record").toEqual(damaged);
           expect(ready_index.filter((receipt: Record<string, any>) => receipt.effective_scope.realm_id === realmId)).toEqual([readyReceipt]);
-          await expect(creator.page.getByTestId("creator-mls-quarantined")).toHaveCount(0);
+          await expect(creator.page.locator(".creator-mls-quarantined")).toHaveCount(0);
         }
         await creator.page.goto(boardUrl, { waitUntil: "domcontentloaded" });
         await expect.poll(async () => (await readCreatorRecords(creator.page)).find((value) => value.intent.effective_scope.realm_id === realmId)?.state, { timeout: 60_000 }).toBe("quarantined");
@@ -1491,12 +1492,12 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
         expect(terminal.diagnostic.recovery_queue_items.some((item: Record<string, any>) => item.submission.event_id === genesisId)).toBe(true);
         expect(terminal.ready_index.filter((receipt: Record<string, any>) => receipt.effective_scope.realm_id === realmId)).toHaveLength(0);
         expect(terminal.ready_receipt).toBeUndefined();
-        await expect(creator.page.getByTestId("creator-mls-quarantined").first()).toBeVisible({ timeout: 60_000 });
-        await expect(creator.page.getByTestId("creator-mls-retry-button")).toHaveCount(0);
+        await expect(creator.page.locator(".creator-mls-quarantined").first()).toBeVisible({ timeout: 60_000 });
+        await expect(creator.page.locator(".creator-mls-retry-button")).toHaveCount(0);
         await expect(creator.page.locator(".kanban-column").filter({ hasText: listTitle }).first().locator(".add-card-button")).toBeDisabled();
         const createCount = submittedCreateIds.size;
         await creator.page.reload({ waitUntil: "domcontentloaded" });
-        await expect(creator.page.getByTestId("creator-mls-quarantined").first()).toBeVisible({ timeout: 60_000 });
+        await expect(creator.page.locator(".creator-mls-quarantined").first()).toBeVisible({ timeout: 60_000 });
         const reopened = (await readCreatorRecords(creator.page)).find((value) => value.intent.effective_scope.realm_id === realmId)!;
         expect(reopened.diagnostic).toEqual(terminal.diagnostic);
         expect(reopened.intent).toEqual(terminal.intent);
@@ -1508,7 +1509,7 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
       }
     } catch (error) {
       const records = await readCreatorRecords(creator.page, true).catch(() => []);
-      const retryStatus = await creator.page.getByTestId("creator-mls-retry").allTextContents().catch(() => []);
+      const retryStatus = await creator.page.locator(".creator-mls-retry").allTextContents().catch(() => []);
       const safeStatus = retryStatus.filter((text) =>
         !/bearer |recovery_key|mnemonic|access_token|dpop:|eyJ[A-Za-z0-9_-]+\./i.test(text));
       await testInfo.attach("safe-creator-failure-coordinates", { contentType: "application/json",
@@ -1632,7 +1633,7 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
           assertAuthoritySubmitOutcome(outcome, event, "pre-join retained Board");
           expect(retypeEventDerivedId(String(event.event_id), "space")).toBe(boardId);
           const listId = await alicePage.page.locator(".kanban-column").first()
-            .getByTestId("list-archive-button").getAttribute("data-space-container-id");
+            .locator(".list-archive-button").getAttribute("data-space-container-id");
           expect(listId).toMatch(/^ak:space:/);
           retainedBoard = { boardId, listId: listId!, eventId: String(event.event_id), streamPosition: Number(outcome.commit.stream_position) };
         }
@@ -1813,7 +1814,7 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
           await openReaderBoard(bobPage, realmId, retainedBoard!.boardId);
           await expect(bobPage.page.locator(".kanban-column")).toHaveCount(1);
           await expect(bobPage.page.locator(".kanban-column").first()).toHaveAttribute("data-column-draft", "false");
-          await expect(bobPage.page.locator(".kanban-column").first().getByTestId("list-archive-button"))
+          await expect(bobPage.page.locator(".kanban-column").first().locator(".list-archive-button"))
             .toHaveAttribute("data-space-container-id", retainedBoard!.listId);
           await testInfo.attach("kanban-history-fresh-reader.json", { contentType: "application/json",
             body: JSON.stringify({ reader_closed_before_seed: true, fresh_context_after_card_commit: true,
@@ -1879,10 +1880,10 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
           await expect(bobPage.page.locator(".kanban-panel")).not.toContainText(aliceCard);
           await expect(committedList.locator(".add-card-button")).toBeDisabled();
           await openPendingTimeline(bobPage, realmId);
-          await expect(bobPage.page.getByTestId("chat-panel")).toHaveAttribute("data-initial-sync", "pending");
+          await expect(bobPage.page.locator(".chat-panel")).toHaveAttribute("data-initial-sync", "pending");
           holdPrivateState = false;
           await bobPage.page.unroute(privateClaimQuery);
-          await expect(bobPage.page.getByTestId("chat-panel")).toHaveAttribute("data-initial-sync", "complete", { timeout: 120_000 });
+          await expect(bobPage.page.locator(".chat-panel")).toHaveAttribute("data-initial-sync", "complete", { timeout: 120_000 });
           await openReaderBoard(bobPage, realmId, boardId);
         }
         await assertCardDecrypts(bobPage, aliceCard, aliceDescription);
@@ -2127,7 +2128,7 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
             check();
           }, { description: aliceDescription, title: aliceCard });
           await bobPage.page.reload({ waitUntil: "domcontentloaded" });
-          await expect(bobPage.page.getByTestId("client-shell")).toBeVisible({ timeout: 90_000 });
+          await expect(bobPage.page.locator(".shell.app")).toBeVisible({ timeout: 90_000 });
           await bobPage.page.waitForTimeout(5_000);
           await assertClosed();
           const cold = await bobPage.page.evaluate(() =>
@@ -2221,10 +2222,10 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
             `Other board ${stamp}`, `Other list ${stamp}`, otherCard);
           const switchingStart = cost.mark();
           for (let index = 0; index < 20; index += 1) {
-            await selectDxcOption(alicePage.page.getByTestId("board-space-select"),
+            await selectDxcOption(alicePage.page.locator(".board-space-select"),
               index % 2 === 0 ? boardId : otherBoardId);
           }
-          await selectDxcOption(alicePage.page.getByTestId("board-space-select"), boardId);
+          await selectDxcOption(alicePage.page.locator(".board-space-select"), boardId);
           await expect(alicePage.page.locator(".kanban-card").filter({ hasText: aliceCard })).toBeVisible();
           await expect(alicePage.page.locator(".kanban-card").filter({ hasText: otherCard })).toHaveCount(0);
           await assertCardDecrypts(alicePage, aliceCard, aliceDescription);

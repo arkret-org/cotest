@@ -58,15 +58,15 @@ import {
 test.describe.configure({ mode: "serial" });
 
 async function sendCrossStationEncrypted(page: Page, message: string) {
-  await page.getByTestId("chat-input").fill(message);
+  await page.locator(".chat-input").fill(message);
   const deadline = Date.now() + 30_000;
   const remaining = () => Math.max(1, deadline - Date.now());
-  const send = page.getByTestId("send-chat-button");
+  const send = page.locator(".send-chat-button");
   // A newly installed Welcome can offer optional history backup after navigation.
   // Dismiss that offer through the UI; required key restoration remains untouched.
   await expect.poll(async () => {
-    if (await page.getByTestId("mls-backup-modal").isVisible()) {
-      await page.getByTestId("mls-backup-dismiss").click({ timeout: remaining() });
+    if (await page.getByRole("dialog", { name: "Back up encrypted history", exact: true }).isVisible()) {
+      await page.getByRole("button", { name: "Remind me later", exact: true }).click({ timeout: remaining() });
     }
     return send.isEnabled();
   }, { timeout: remaining(), intervals: [250, 500, 1_000] }).toBe(true);
@@ -386,7 +386,7 @@ test.describe("contact graph federation (server1/server2)", () => {
       // can admit the founding unit, and Alice's resolver answers
       // `awaiting_founder` until it is accepted (9.1). Bob opens first.
       await bobPage.gotoHome();
-      await bobPage.page.getByTestId("realm-sidebar-tab-direct").click();
+      await bobPage.page.getByRole("button", { name: "Contacts", exact: true }).click();
       await bobPage.page
         .locator(
           `[data-testid="direct-conversation-row"][data-peer=${JSON.stringify(canonicalJson(accountActorId(alice.id, "server1")))}]`,
@@ -416,7 +416,7 @@ test.describe("contact graph federation (server1/server2)", () => {
         .toMatchObject({ realm_id: realmId, main_strand_id: strandId });
 
       await alicePage.gotoHome();
-      await alicePage.page.getByTestId("realm-sidebar-tab-direct").click();
+      await alicePage.page.getByRole("button", { name: "Contacts", exact: true }).click();
       const bobRow = alicePage.page.locator(
         `[data-testid="direct-conversation-row"][data-peer=${JSON.stringify(canonicalJson(accountActorId(bob.id, "server2")))}]`,
       );
@@ -432,21 +432,21 @@ test.describe("contact graph federation (server1/server2)", () => {
       const aliceMessage = `cross-ps alice ${Date.now()}`;
       await sendCrossStationEncrypted(alicePage.page, aliceMessage);
       await expect(
-        bobPage.page.getByTestId("chat-message").filter({ hasText: aliceMessage }),
+        bobPage.page.locator(".chat-message").filter({ hasText: aliceMessage }),
       ).toBeVisible({ timeout: 90_000 });
 
       const bobMessage = `cross-ps bob ${Date.now()}`;
       await sendCrossStationEncrypted(bobPage.page, bobMessage);
       await expect(
-        alicePage.page.getByTestId("chat-message").filter({ hasText: bobMessage }),
+        alicePage.page.locator(".chat-message").filter({ hasText: bobMessage }),
       ).toBeVisible({ timeout: 90_000 });
 
       await Promise.all([alicePage.page.reload(), bobPage.page.reload()]);
       await expect(
-        alicePage.page.getByTestId("chat-message").filter({ hasText: bobMessage }),
+        alicePage.page.locator(".chat-message").filter({ hasText: bobMessage }),
       ).toBeVisible({ timeout: 90_000 });
       await expect(
-        bobPage.page.getByTestId("chat-message").filter({ hasText: aliceMessage }),
+        bobPage.page.locator(".chat-message").filter({ hasText: aliceMessage }),
       ).toBeVisible({ timeout: 90_000 });
       // Full structure coverage uses the real accepted participant sessions
       // and independently accepted outside targets, not guessed identifiers.

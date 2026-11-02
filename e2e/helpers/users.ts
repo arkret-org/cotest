@@ -376,7 +376,7 @@ export class JointUserPage {
 
   async gotoOnboarding() {
     await this.page.goto("/onboarding", { waitUntil: "domcontentloaded" });
-    await expect(this.page.getByTestId("account-strand")).toBeVisible({
+    await expect(this.page.locator(".onboarding-panel")).toBeVisible({
       timeout: 120_000,
     });
     await this.dismissDeviceAuthorizationPrompt();
@@ -486,7 +486,7 @@ export class JointUserPage {
   }
 
   async gotoAppPanel(path: string, testId: string, panelLocator?: Locator) {
-    const panel = panelLocator ?? this.page.getByTestId(testId);
+    const panel = panelLocator ?? this.page.locator('[class~="' + testId + '"]');
     for (let attempt = 0; attempt < 3; attempt += 1) {
       await this.navigateWithinApp(path);
       if (
@@ -1332,7 +1332,7 @@ export class JointUserPage {
     }
     const input = this.page.locator(".chat-input");
     await input.fill("");
-    await this.page.getByTestId("mention-trigger-button").click();
+    await this.page.locator(".mention-trigger-button").click();
     const escapeAttr = (value: string) =>
       value.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
     const suggestion = this.page.locator(
@@ -2475,23 +2475,23 @@ export async function approvePairingLinkOnAuthorizedDevice(
     "settings-devices-panel",
   );
   await expect(
-    authorizingDevice.page.getByTestId("accept-pairing-card"),
+    authorizingDevice.page.locator(".accept-pairing-card"),
   ).toBeVisible({ timeout: 60_000 });
   await authorizingDevice.fillWithPassivePromptRetry(
-    authorizingDevice.page.getByTestId("accept-pairing-input"),
+    authorizingDevice.page.locator(".accept-pairing-input").locator("input, textarea"),
     pairingLink,
   );
   await authorizingDevice.clickWithPassivePromptRetry(
-    authorizingDevice.page.getByTestId("accept-pairing-resolve-button"),
+    authorizingDevice.page.locator(".accept-pairing-resolve-button"),
   );
   await expect(
-    authorizingDevice.page.getByTestId("accept-pairing-code"),
+    authorizingDevice.page.locator(".accept-pairing-code"),
   ).toHaveText(expectedCode, { timeout: 90_000 });
   await authorizingDevice.clickWithPassivePromptRetry(
-    authorizingDevice.page.getByTestId("accept-pairing-button"),
+    authorizingDevice.page.locator(".accept-pairing-button"),
   );
   await expect(
-    authorizingDevice.page.getByTestId("accept-pairing-status"),
+    authorizingDevice.page.locator(".accept-pairing-status"),
   ).toContainText("Device authorization accepted", { timeout: 90_000 });
 }
 

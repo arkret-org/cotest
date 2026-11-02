@@ -60,21 +60,21 @@ test.describe("joint-inkson smoke @fully-implemented", () => {
     );
 
     const selfParticipant = jointRealm.alicePage.page
-      .getByTestId("discussion-user-row")
+      .locator(".discussion-user-row")
       .filter({
-        has: jointRealm.alicePage.page.getByTestId("participant-self-badge"),
+        has: jointRealm.alicePage.page.locator(".participant-self-badge"),
       });
     await expect(selfParticipant).toContainText(principalHandle);
 
-    await jointRealm.alicePage.page.getByTestId("account-menu-button").click();
+    await jointRealm.alicePage.page.locator(".account-menu-button").click();
     await expect(
-      jointRealm.alicePage.page.getByTestId("account-menu-handles"),
+      jointRealm.alicePage.page.locator(".account-menu"),
     ).toHaveText(principalHandle);
     if (accountAuthorityHandle && accountAuthorityHandle !== principalHandle) {
       for (const identitySurface of [
         message,
         selfParticipant,
-        jointRealm.alicePage.page.getByTestId("account-menu-handles"),
+        jointRealm.alicePage.page.locator(".account-menu"),
       ]) {
         await expect(identitySurface).not.toContainText(accountAuthorityHandle);
       }
@@ -199,7 +199,7 @@ test.describe("joint-inkson smoke @fully-implemented", () => {
         waitUntil: "domcontentloaded",
       });
       await expect(
-        jointRealm.alicePage.page.getByTestId("chat-panel"),
+        jointRealm.alicePage.page.locator(".chat-panel"),
       ).toBeVisible({
         timeout: 120_000,
       });
@@ -213,7 +213,7 @@ test.describe("joint-inkson smoke @fully-implemented", () => {
       ).toHaveCount(0);
 
       const participantRow = jointRealm.alicePage.page
-        .getByTestId("discussion-user-row")
+        .locator(".discussion-user-row")
         .filter({
           // A dev-login display name is not an authoritative profile label.
           // Select the human row by the canonical full Account ActorId kept
@@ -225,17 +225,17 @@ test.describe("joint-inkson smoke @fully-implemented", () => {
       await expect(participantRow).toBeVisible({ timeout: 60_000 });
       await expect(participantRow).not.toContainText(forgedDisplayName);
       await expect(
-        participantRow.getByTestId("member-badge-agent"),
+        participantRow.locator(".member-badge-agent"),
       ).toHaveCount(0);
       await expect(
-        participantRow.getByTestId("participant-agent-selector"),
+        participantRow.locator(".participant-agent-selector"),
       ).toHaveCount(0);
 
-      const input = jointRealm.alicePage.page.getByTestId("chat-input");
+      const input = jointRealm.alicePage.page.locator(".chat-input");
       await input.fill(`@me/${slug}`);
       await expect(
         jointRealm.alicePage.page
-          .getByTestId("mention-suggestion")
+          .locator(".mention-suggestion")
           .filter({ hasText: `@me/${slug}` }),
       ).toHaveCount(0);
     } finally {
@@ -335,7 +335,7 @@ test.describe("joint-inkson smoke @fully-implemented", () => {
       await bobPage.page.goto("/notifications", {
         waitUntil: "domcontentloaded",
       });
-      const inviteCard = bobPage.page.getByTestId("notification-item").filter({
+      const inviteCard = bobPage.page.locator(".notification-item").filter({
         has: bobPage.page.locator(`[title="${realmId}"]`),
       });
       await expect(inviteCard).toHaveCount(1, { timeout: 30_000 });
@@ -345,14 +345,14 @@ test.describe("joint-inkson smoke @fully-implemented", () => {
       // device state loads and its backdrop swallows every click; complete or
       // dismiss it before accepting the invite.
       await bobPage.clickWithPassivePromptRetry(
-        inviteCard.getByTestId("notification-action"),
+        inviteCard.locator(".notification-action"),
       );
 
       await expect(
-        bobPage.page.getByTestId("notifications-status"),
+        bobPage.page.locator(".notifications-status"),
       ).toContainText(/Joined Realm/, { timeout: 30_000 });
       await expect(inviteCard).toHaveCount(0, { timeout: 30_000 });
-      await expect(bobPage.page.getByTestId("realm-tree-list")).toContainText(
+      await expect(bobPage.page.locator(".realm-tree-list")).toContainText(
         `joint invite ${stamp}`,
         { timeout: 30_000 },
       );

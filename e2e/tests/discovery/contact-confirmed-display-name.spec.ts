@@ -157,7 +157,7 @@ test.describe("contact confirmed display name", () => {
           alicePage.completeRecoveryKeySetupIfPrompted(30_000),
           bobPage.completeRecoveryKeySetupIfPrompted(30_000),
         ]);
-        await bobPage.page.getByTestId("realm-sidebar-tab-direct").click();
+        await bobPage.page.getByRole("button", { name: "Contacts", exact: true }).click();
         const aliceRow = bobPage.page.locator(
           `[data-testid="direct-conversation-row"][data-peer=${JSON.stringify(canonicalJson(accountActorId(alice.id)))}]`,
         );
@@ -172,7 +172,7 @@ test.describe("contact confirmed display name", () => {
         const [, , encodedRealmId, encodedStrandId] = new URL(bobPage.page.url()).pathname.split("/");
         // The recipient opens the same conversation to demand its verified
         // scope current before installing and acknowledging the Welcome.
-        await alicePage.page.getByTestId("realm-sidebar-tab-direct").click();
+        await alicePage.page.getByRole("button", { name: "Contacts", exact: true }).click();
         const bobRow = alicePage.page.locator(
           `[data-testid="direct-conversation-row"][data-peer=${JSON.stringify(canonicalJson(accountActorId(bob.id)))}]`,
         );
@@ -255,17 +255,17 @@ test.describe("contact confirmed display name", () => {
 
       // First explicit confirmation. Accept could not have made one: the pair
       // had no shared Realm when Alice sent the request.
-      const confirm = row.getByTestId(/^contact-confirm-name-/);
+      const confirm = row.locator("[class^=\"contact-confirm-name-\"], [class*=\" contact-confirm-name-\"]");
       await expect(confirm).toBeVisible({ timeout: 60_000 });
       await confirm.click();
-      await expect(row.getByTestId(/^contact-confirm-identity-/)).toBeHidden({
+      await expect(row.locator("[class^=\"contact-confirm-identity-\"], [class*=\" contact-confirm-identity-\"]")).toBeHidden({
         timeout: 60_000,
       });
 
       // A petname is holder-authored and must survive everything below.
       const petname = `Bee ${stamp}`;
-      await row.getByTestId(/^contact-petname-/).first().fill(petname);
-      await row.getByTestId(/^contact-petname-save-/).click();
+      await row.locator("[class^=\"contact-petname-\"], [class*=\" contact-petname-\"]").first().fill(petname);
+      await row.locator("[class^=\"contact-petname-save-\"], [class*=\" contact-petname-save-\"]").click();
       await expect(row).toContainText(petname, { timeout: 60_000 });
 
       const updateEnvelope = signedEventEnvelope({
@@ -290,9 +290,9 @@ test.describe("contact confirmed display name", () => {
       // notice is asserted after a fresh page load rather than in place.
       await alicePage.gotoAppPanel("/settings/contacts", "settings-panel");
       await alicePage.page.reload();
-      await expect(alicePage.page.getByTestId("settings-panel")).toBeVisible({ timeout: 60_000 });
+      await expect(alicePage.page.locator(".settings-panel")).toBeVisible({ timeout: 60_000 });
       const renamedRow = alicePage.page.locator(peerSelector);
-      const notice = renamedRow.getByTestId(/^contact-display-name-changed-/);
+      const notice = renamedRow.locator("[class^=\"contact-display-name-changed-\"], [class*=\" contact-display-name-changed-\"]");
       await expect(notice).toBeVisible({ timeout: 120_000 });
       await expect(notice).toContainText(firstDisplay);
       await expect(notice).toContainText(renamedDisplay);
@@ -301,11 +301,11 @@ test.describe("contact confirmed display name", () => {
 
       // Only an explicit confirmation refreshes the baseline, and it leaves the
       // petname exactly as the holder wrote it.
-      await notice.getByTestId(/^contact-confirm-name-/).click();
+      await notice.locator("[class^=\"contact-confirm-name-\"], [class*=\" contact-confirm-name-\"]").click();
       await expect(notice).toBeHidden({ timeout: 60_000 });
       await expect(renamedRow).toContainText(petname);
       await expect(
-        renamedRow.getByTestId(/^contact-petname-/).first(),
+        renamedRow.locator("[class^=\"contact-petname-\"], [class*=\" contact-petname-\"]").first(),
       ).toHaveValue(petname);
     } finally {
       await alicePage.close();

@@ -51,8 +51,8 @@ test.describe("identity.recovery-key-to-encrypted-realm @fully-implemented", () 
     try {
       await test.step("register and authorize through the product UI", async () => {
         await jointPage.gotoLogin();
-        await page.getByTestId("login-server-url").fill(colandBaseUrl());
-        await page.getByTestId("start-server-login-button").click();
+        await page.locator(".auth-station-field input").fill(colandBaseUrl());
+        await page.locator(".auth-primary").click();
 
         await page.getByRole("link", { name: /create account/i }).click();
         await page.locator('input[autocomplete="username"]').fill(user.name);
@@ -105,9 +105,9 @@ test.describe("identity.recovery-key-to-encrypted-realm @fully-implemented", () 
         await expect(approve).toBeVisible({ timeout: 120_000 });
         await approve.click();
 
-        await page.getByTestId("choose-new-identity").click();
+        await page.locator(".choose-new-identity").click();
         const words = page
-          .getByTestId("onboarding-recovery-key-display")
+          .locator(".onboarding-recovery-key-display")
           .locator("li");
         await expect(words).toHaveCount(24, { timeout: 120_000 });
         const recoveryKey = (await words.allTextContents())
@@ -115,15 +115,15 @@ test.describe("identity.recovery-key-to-encrypted-realm @fully-implemented", () 
           .join(" ");
         expect(recoveryKey.split(/\s+/)).toHaveLength(24);
         await page
-          .getByTestId("onboarding-recovery-key-confirm")
+          .locator(".onboarding-recovery-key-confirm")
           .fill(recoveryKey);
-        await page.getByTestId("onboarding-bind-identity").click();
+        await page.locator(".onboarding-bind-identity").click();
         await expect
           .poll(
             async () => {
               if (
                 await page
-                  .getByTestId("onboarding-complete")
+                  .locator(".onboarding-complete")
                   .isVisible()
                   .catch(() => false)
               ) {
@@ -137,14 +137,14 @@ test.describe("identity.recovery-key-to-encrypted-realm @fully-implemented", () 
             { timeout: 240_000 },
           )
           .toBe("complete");
-        await expect(page.getByTestId("onboarding-complete")).toContainText(
+        await expect(page.locator(".onboarding-complete")).toContainText(
           "Identity ready",
         );
         await page
-          .getByTestId("onboarding-complete")
+          .locator(".onboarding-complete")
           .getByRole("link", { name: "Continue" })
           .click();
-        await expect(page.getByTestId("client-shell")).toBeVisible({
+        await expect(page.locator(".shell.app")).toBeVisible({
           timeout: 120_000,
         });
       });
@@ -208,7 +208,7 @@ test.describe("identity.recovery-key-to-encrypted-realm @fully-implemented", () 
       ).length;
       await test.step("create, open, write and reload the encrypted Realm", async () => {
         await expect(
-          page.getByTestId("encrypted-realm-recovery-gate"),
+          page.locator(".encrypted-realm-recovery-gate"),
         ).toHaveCount(0);
         const faultKind = cut === "accepted_create_response_loss" ? "ak.realm.create"
           : cut === "accepted_discussion_response_loss" ? "ak.strand.create"
@@ -299,7 +299,7 @@ test.describe("identity.recovery-key-to-encrypted-realm @fully-implemented", () 
           observeProtocol(page, protocolHits, protocolDiagnostics);
           trackCreate(page);
           await jointPage.gotoHome();
-          await expect(page.getByTestId("client-shell")).toBeVisible({ timeout: 120_000 });
+          await expect(page.locator(".shell.app")).toBeVisible({ timeout: 120_000 });
           expect(await readActiveIdentity(page)).toEqual(identity);
           await waitForEventIngress(protocolHits,
             (wire) => wire.includes(realmId) && wire.includes("ak.mls.genesis"),
@@ -319,7 +319,7 @@ test.describe("identity.recovery-key-to-encrypted-realm @fully-implemented", () 
           realmId = result.value;
         }
         await expect(
-          page.getByTestId("encrypted-realm-recovery-gate"),
+          page.locator(".encrypted-realm-recovery-gate"),
         ).toHaveCount(0);
         await waitForEventIngress(protocolHits,
           (wire) => wire.includes(realmId) && wire.includes("ak.mls.genesis"),
@@ -354,7 +354,7 @@ test.describe("identity.recovery-key-to-encrypted-realm @fully-implemented", () 
         ).not.toContain(message);
 
         await page.reload({ waitUntil: "domcontentloaded" });
-        await expect(page.getByTestId("client-shell")).toBeVisible({
+        await expect(page.locator(".shell.app")).toBeVisible({
           timeout: 120_000,
         });
         const returningIdentity = await readActiveIdentity(page);
@@ -363,7 +363,7 @@ test.describe("identity.recovery-key-to-encrypted-realm @fully-implemented", () 
         await expect(jointPage.timelineEvent(message)).toBeVisible({
           timeout: 120_000,
         });
-        await expect(page.getByTestId("network-state-badge")).toHaveText(
+        await expect(page.locator(".network-state-badge")).toHaveText(
           "online",
           { timeout: 120_000 },
         );
@@ -396,7 +396,7 @@ test.describe("identity.recovery-key-to-encrypted-realm @fully-implemented", () 
         page = jointPage.page;
         observeProtocol(page, protocolHits, protocolDiagnostics);
         await jointPage.gotoHome();
-        await expect(page.getByTestId("client-shell")).toBeVisible({ timeout: 120_000 });
+        await expect(page.locator(".shell.app")).toBeVisible({ timeout: 120_000 });
         expect(await readActiveIdentity(page)).toEqual(identity);
         await jointPage.gotoTimelineRealm(realmId);
         await expect(jointPage.timelineEvent(message)).toBeVisible({ timeout: 120_000 });
@@ -454,14 +454,14 @@ test.describe("identity.recovery-key-to-encrypted-realm @fully-implemented", () 
         );
 
         await page.reload({ waitUntil: "domcontentloaded" });
-        await expect(page.getByTestId("client-shell")).toBeVisible({
+        await expect(page.locator(".shell.app")).toBeVisible({
           timeout: 120_000,
         });
         await jointPage.gotoTimelineRealm(plaintextRealmId);
         await expect(jointPage.timelineEvent(plaintextMessage)).toBeVisible({
           timeout: 120_000,
         });
-        await expect(page.getByTestId("network-state-badge")).toHaveText(
+        await expect(page.locator(".network-state-badge")).toHaveText(
           "online",
           { timeout: 120_000 },
         );
@@ -469,13 +469,13 @@ test.describe("identity.recovery-key-to-encrypted-realm @fully-implemented", () 
 
       await test.step("manual recovery preserves a healthy bounded inventory", async () => {
         await jointPage.gotoSettings();
-        await page.getByTestId("settings-nav-item-encryption").click();
-        await expect(page.getByTestId("encryption-settings")).toBeVisible();
+        await page.locator(".settings-nav-item-encryption").click();
+        await expect(page.locator(".encryption-settings")).toBeVisible();
         await page
-          .getByTestId("settings-mls-keypackages-refill-button")
+          .locator(".settings-mls-keypackages-refill-button")
           .click();
         await expect(
-          page.getByTestId("settings-mls-keypackages-refill-status"),
+          page.locator(".settings-mls-keypackages-refill-status"),
         ).toContainText(/published:\s*0|已发布[^0-9]*0|补充[^0-9]*0/, {
           timeout: 120_000,
         });

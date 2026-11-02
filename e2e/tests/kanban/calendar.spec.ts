@@ -15,11 +15,11 @@ import {
 } from "../../helpers/users";
 
 async function addCard(column: Locator, title: string): Promise<void> {
-  await column.getByTestId("add-card-button").click();
-  await column.getByTestId("new-card-title-input").fill(title);
-  await column.getByTestId("save-card-button").click();
+  await column.locator(".add-card-button").click();
+  await column.locator(".new-card-title-input").fill(title);
+  await column.locator(".save-card-button").click();
   await expect(
-    column.getByTestId("kanban-card").filter({ hasText: title }).first(),
+    column.locator(".kanban-card").filter({ hasText: title }).first(),
   ).toHaveAttribute("data-card-draft", "false", { timeout: 45_000 });
 }
 
@@ -63,54 +63,54 @@ test("@fully-implemented calendar schedule and RSVP survive the canonical Strand
     await page.page.goto(`/kanban/${realmId}`, {
       waitUntil: "domcontentloaded",
     });
-    await expect(page.page.getByTestId("kanban-panel")).toBeVisible({
+    await expect(page.page.locator(".kanban-panel")).toBeVisible({
       timeout: 120_000,
     });
 
-    await page.page.getByTestId("new-board-toggle").click();
+    await page.page.locator(".new-board-toggle").click();
     await page.page
-      .getByTestId("new-board-title-input")
+      .locator(".new-board-title-input input, .new-board-title-input textarea")
       .fill(`Calendar Board ${stamp}`);
-    await page.page.getByTestId("create-board-space-button").click();
-    await expect(page.page.getByTestId("kanban-empty-board")).toBeVisible({
+    await page.page.locator(".create-board-space-button").click();
+    await expect(page.page.locator(".kanban-empty-board")).toBeVisible({
       timeout: 45_000,
     });
 
     const columnTitle = `Upcoming ${stamp}`;
-    await page.page.getByTestId("new-column-input").fill(columnTitle);
-    await page.page.getByTestId("add-column-button").click();
+    await page.page.locator(".new-column-input").fill(columnTitle);
+    await page.page.locator(".add-column-button").click();
     const column = page.page
-      .getByTestId("kanban-column")
+      .locator(".kanban-column")
       .filter({ hasText: columnTitle })
       .first();
     await expect(column).toBeVisible({ timeout: 45_000 });
     await addCard(column, cardTitle);
 
-    const detail = page.page.getByTestId("card-detail-modal");
+    const detail = page.page.locator(".card-detail-modal");
     // Creating a card may select it immediately. Avoid clicking through an
     // already-open detail overlay, which correctly intercepts board input.
     if (!(await detail.isVisible({ timeout: 1_000 }).catch(() => false))) {
       await column
-        .getByTestId("kanban-card")
+        .locator(".kanban-card")
         .filter({ hasText: cardTitle })
         .first()
         .click();
     }
     await expect(detail).toBeVisible({ timeout: 45_000 });
-    const calendar = detail.getByTestId("card-detail-calendar");
-    await calendar.getByTestId("card-detail-edit-calendar-button").click();
-    const editor = page.page.getByTestId("card-detail-calendar-editor-dialog");
+    const calendar = detail.locator(".card-detail-calendar");
+    await calendar.locator(".card-detail-edit-calendar-button").click();
+    const editor = page.page.locator(".card-detail-calendar-editor-dialog");
     await expect(editor).toBeVisible({ timeout: 30_000 });
-    await editor.getByTestId("card-detail-calendar-start-input").fill(start);
-    await editor.getByTestId("card-detail-calendar-end-input").fill(end);
+    await editor.locator(".card-detail-calendar-start-input").fill(start);
+    await editor.locator(".card-detail-calendar-end-input").fill(end);
     await editor
-      .getByTestId("card-detail-calendar-timezone-input")
+      .locator(".card-detail-calendar-timezone-input")
       .fill(timezone);
     await editor
-      .getByTestId("card-detail-calendar-location-input")
+      .locator(".card-detail-calendar-location-input")
       .fill(location);
     await selectDxcOption(
-      editor.getByTestId("card-detail-calendar-recurrence-select"),
+      editor.locator(".card-detail-calendar-recurrence-select"),
       "weekly",
     );
 
@@ -124,10 +124,10 @@ test("@fully-implemented calendar schedule and RSVP survive the canonical Strand
     const scheduleWrite = page.page
       .waitForResponse(schedulePredicate, { timeout: 90_000 })
       .catch(() => undefined);
-    await editor.getByTestId("card-detail-save-button").click();
+    await editor.locator(".card-detail-save-button").click();
     const scheduled = await scheduleWrite;
     const scheduleStatus = await editor
-      .getByTestId("card-detail-edit-status")
+      .locator(".card-detail-edit-status")
       .textContent({ timeout: 1_000 })
       .catch(() => "schedule write was not emitted");
     expect(scheduled, scheduleStatus ?? "schedule write was not emitted").toBeTruthy();
@@ -158,31 +158,31 @@ test("@fully-implemented calendar schedule and RSVP survive the canonical Strand
     // refs must come from an observed schedule frontier, not solely from the
     // optimistic local card overlay used immediately after saving.
     await page.page.reload({ waitUntil: "domcontentloaded" });
-    await expect(page.page.getByTestId("kanban-panel")).toBeVisible({
+    await expect(page.page.locator(".kanban-panel")).toBeVisible({
       timeout: 120_000,
     });
     // The canonical card route may restore the selected Strand after the board
     // itself becomes visible. Close that late overlay before selecting the
     // projected card again; otherwise it correctly intercepts board input.
-    const restoredOverlay = page.page.getByTestId("card-detail-overlay");
+    const restoredOverlay = page.page.locator(".card-detail-overlay");
     if (
       await restoredOverlay
         .waitFor({ state: "visible", timeout: 30_000 })
         .then(() => true)
         .catch(() => false)
     ) {
-      await restoredOverlay.getByTestId("card-detail-close-button").click();
+      await restoredOverlay.locator(".card-detail-close-button").click();
       await expect(restoredOverlay).toBeHidden({ timeout: 30_000 });
     }
     const reloadedCard = page.page
-      .getByTestId("kanban-card")
+      .locator(".kanban-card")
       .filter({ hasText: cardTitle })
       .first();
     await expect(reloadedCard).toBeVisible({ timeout: 90_000 });
     await reloadedCard.click();
     await expect(detail).toBeVisible({ timeout: 45_000 });
     await expect(
-      calendar.getByTestId("card-detail-calendar-agenda-unresolved"),
+      calendar.locator(".card-detail-calendar-agenda-unresolved"),
     ).toHaveCount(0, { timeout: 90_000 });
 
     await calendar.getByRole("button", { name: "Series", exact: true }).click();
@@ -193,7 +193,7 @@ test("@fully-implemented calendar schedule and RSVP survive the canonical Strand
         (response.request().postData() ?? "").includes("ak.rsvp.set"),
       { timeout: 90_000 },
     );
-    await calendar.getByTestId("card-detail-rsvp-accepted").click();
+    await calendar.locator(".card-detail-rsvp-accepted").click();
     const accepted = await rsvpWrite;
     const acceptedText = await accepted.text();
     expect(accepted.status(), acceptedText).toBeLessThan(400);
@@ -203,27 +203,27 @@ test("@fully-implemented calendar schedule and RSVP survive the canonical Strand
       "application/vnd.arkret.calendar-rsvp-response+json",
     );
     expect(encryptedResponse?.ciphertext).toBeTruthy();
-    await expect(calendar.getByTestId("card-detail-rsvp-own")).toHaveText(
+    await expect(calendar.locator(".card-detail-rsvp-own")).toHaveText(
       "You: accepted",
       { timeout: 90_000 },
     );
-    await expect(calendar.getByTestId("card-detail-rsvp-counts")).toContainText(
+    await expect(calendar.locator(".card-detail-rsvp-counts")).toContainText(
       "1 yes",
     );
 
-    await calendar.getByTestId("card-detail-edit-calendar-button").click();
+    await calendar.locator(".card-detail-edit-calendar-button").click();
     await expect(editor).toBeVisible({ timeout: 30_000 });
     await expect(
-      editor.getByTestId("card-detail-calendar-start-input"),
+      editor.locator(".card-detail-calendar-start-input"),
     ).toHaveValue(start);
     await expect(
-      editor.getByTestId("card-detail-calendar-end-input"),
+      editor.locator(".card-detail-calendar-end-input"),
     ).toHaveValue(end);
     await expect(
-      editor.getByTestId("card-detail-calendar-timezone-input"),
+      editor.locator(".card-detail-calendar-timezone-input"),
     ).toHaveValue(timezone);
     await expect(
-      editor.getByTestId("card-detail-calendar-location-input"),
+      editor.locator(".card-detail-calendar-location-input"),
     ).toHaveValue(location);
   } finally {
     await page.close();

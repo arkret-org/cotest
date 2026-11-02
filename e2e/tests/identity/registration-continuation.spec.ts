@@ -67,8 +67,8 @@ for (const scenario of ["fresh browser", "handoff response loss", "stale busy ch
     }
     try {
       await page.goto("/register");
-      await page.getByTestId("register-server").fill(colandBaseUrl());
-      await page.getByTestId("register-open-account-authority").click();
+      await page.locator(".register-server input, .register-server textarea").fill(colandBaseUrl());
+      await page.locator(".register-open-account-authority").click();
       await page.locator('input[autocomplete="username"]').fill(account.handle);
       await page.locator('input[autocomplete="email"]').fill(email);
       const passwords = page.locator('input[type="password"]');
@@ -91,36 +91,36 @@ for (const scenario of ["fresh browser", "handoff response loss", "stale busy ch
       await page.getByRole("button", { name: /^continue$/i }).click();
       const initialApproval = page.getByTestId("coauth-oauth-approve");
       const finishRegistration = page.getByRole("button", { name: /^create account$/i });
-      await expect(initialApproval.or(finishRegistration).or(page.getByTestId("choose-new-identity"))).toBeVisible();
+      await expect(initialApproval.or(finishRegistration).or(page.locator(".choose-new-identity"))).toBeVisible();
       if (await finishRegistration.isVisible()) await finishRegistration.click();
-      await expect(initialApproval.or(page.getByTestId("choose-new-identity"))).toBeVisible();
+      await expect(initialApproval.or(page.locator(".choose-new-identity"))).toBeVisible();
       if (await initialApproval.isVisible()) await initialApproval.click();
       if (loseHandoffResponse) {
-        await expect(page.getByTestId("auth-status")).toContainText("Start sign-in again");
+        await expect(page.locator(".auth-status")).toContainText("Start sign-in again");
         expect(lostResponse).toBe(true);
       } else if (staleBusy) {
         await expect(page.getByText("Setup is already in progress", { exact: true })).toBeVisible();
         await page.reload();
         await expect(page.getByText("Setup is already in progress", { exact: true })).toBeVisible();
       } else {
-        await expect(page.getByTestId("choose-new-identity")).toBeVisible();
+        await expect(page.locator(".choose-new-identity")).toBeVisible();
         await expect(page).toHaveURL(/\/onboarding$/);
         await page.reload();
-        await expect(page.getByTestId("choose-new-identity")).toBeVisible();
+        await expect(page.locator(".choose-new-identity")).toBeVisible();
       }
       const firstDevice = await page.evaluate(() =>
         JSON.parse(localStorage.getItem("inkson.local_state.v1") ?? "{}").pending_login?.device_id,
       );
       expect(firstDevice).toMatch(/^ak:device:/);
       await jointPage.gotoLogin();
-      await page.getByTestId("login-server-url").fill(colandBaseUrl());
-      await page.getByTestId("start-server-login-button").click();
+      await page.locator(".auth-station-field input").fill(colandBaseUrl());
+      await page.locator(".auth-primary").click();
       await submitCoauthPasswordCredentials(page, account);
       const approve = page.getByTestId("coauth-oauth-approve");
       if (await approve.waitFor({ state: "visible", timeout: 5_000 }).then(() => true).catch(() => false)) {
         await approve.click();
       }
-      await expect(page.getByTestId("choose-new-identity")).toBeVisible();
+      await expect(page.locator(".choose-new-identity")).toBeVisible();
       await expect(page.getByText("Setup is already in progress", { exact: true })).toHaveCount(0);
       expect(leaseIds).toHaveLength(2);
       expect(leaseIds[1], "same-device reauthentication must retain the live setup lease").toBe(leaseIds[0]);
@@ -133,11 +133,11 @@ for (const scenario of ["fresh browser", "handoff response loss", "stale busy ch
       if (scenario === "fresh browser" || losePointerResponse) {
         // Reach the actual Human PCR successor and durable completion. The
         // identity chooser alone cannot detect a failed first backup pointer.
-        await page.getByTestId("choose-new-identity").click();
-        const words = page.getByTestId("onboarding-recovery-key-display").locator("li");
+        await page.locator(".choose-new-identity").click();
+        const words = page.locator(".onboarding-recovery-key-display").locator("li");
         await expect(words).toHaveCount(24);
         const recoveryKey = (await words.allTextContents()).map((word) => word.trim()).join(" ");
-        await page.getByTestId("onboarding-recovery-key-confirm").fill(recoveryKey);
+        await page.locator(".onboarding-recovery-key-confirm").fill(recoveryKey);
         let pointerEventId: string | undefined;
         let originalPointer: Record<string, unknown> | undefined;
         let originalOutcome: Record<string, unknown> | undefined;
@@ -170,10 +170,10 @@ for (const scenario of ["fresh browser", "handoff response loss", "stale busy ch
             }
             await route.abort("connectionfailed");
           });
-          await page.getByTestId("onboarding-bind-identity").click();
+          await page.locator(".onboarding-bind-identity").click();
           await expect.poll(() => pointerResponseLost, { timeout: 90_000 }).toBe(true);
           expect(originalPointer).toBeDefined();
-          await expect(page.getByTestId("onboarding-complete")).toHaveCount(0);
+          await expect(page.locator(".onboarding-complete")).toHaveCount(0);
           await jointPage.close();
           jointPage = await openUserPage(browser, user, {
             persistentUserDataDir: profile,
@@ -202,24 +202,24 @@ for (const scenario of ["fresh browser", "handoff response loss", "stale busy ch
         if (losePointerResponse) {
           await page.goto("/onboarding");
           // Restart may restore custody and ask for the same explicit confirmation.
-          const confirm = page.getByTestId("onboarding-recovery-key-confirm");
-          await expect(page.getByTestId("onboarding-complete").or(confirm)).toBeVisible({ timeout: 90_000 });
+          const confirm = page.locator(".onboarding-recovery-key-confirm");
+          await expect(page.locator(".onboarding-complete").or(confirm)).toBeVisible({ timeout: 90_000 });
           if (await confirm.isVisible()) {
-            const restoredWords = await page.getByTestId("onboarding-recovery-key-display").locator("li").allTextContents();
+            const restoredWords = await page.locator(".onboarding-recovery-key-display").locator("li").allTextContents();
             expect(restoredWords.map(word => word.trim()).join(" ") === recoveryKey,
               "restart must retain the original recovery authority").toBe(true);
             await confirm.fill(recoveryKey);
-            await page.getByTestId("onboarding-bind-identity").click();
+            await page.locator(".onboarding-bind-identity").click();
           }
           // The durable outbound drain starts with the connected client, not
           // while the completion page still owns the handoff continuation.
-          await expect(page.getByTestId("onboarding-complete")).toContainText("Identity ready", {
+          await expect(page.locator(".onboarding-complete")).toContainText("Identity ready", {
             timeout: 90_000,
           });
-          await page.getByTestId("onboarding-complete").getByRole("link", { name: "Continue" }).click();
-          await expect(page.getByTestId("client-shell")).toBeVisible();
+          await page.locator(".onboarding-complete").getByRole("link", { name: "Continue" }).click();
+          await expect(page.locator(".shell.app")).toBeVisible();
         } else {
-          await page.getByTestId("onboarding-bind-identity").click();
+          await page.locator(".onboarding-bind-identity").click();
         }
         const accepted = await pointerAcceptance;
         expect(accepted.ok()).toBe(true);
@@ -238,11 +238,11 @@ for (const scenario of ["fresh browser", "handoff response loss", "stale busy ch
         expect(outcome.commit.event_ref).toBe(event.event_id);
         expect(outcome.commit).not.toHaveProperty("producer_signer_fact_digest");
         if (!losePointerResponse) {
-          await expect(page.getByTestId("onboarding-complete")).toContainText("Identity ready", {
+          await expect(page.locator(".onboarding-complete")).toContainText("Identity ready", {
             timeout: 90_000,
           });
-          await page.getByTestId("onboarding-complete").getByRole("link", { name: "Continue" }).click();
-          await expect(page.getByTestId("client-shell")).toBeVisible();
+          await page.locator(".onboarding-complete").getByRole("link", { name: "Continue" }).click();
+          await expect(page.locator(".shell.app")).toBeVisible();
         }
         const lookup = (await historicalLookup).postDataJSON();
         expect(lookup.recipient_account_id).toEqual(event.actor_id.account_id);
@@ -265,8 +265,8 @@ for (const scenario of ["fresh browser", "handoff response loss", "stale busy ch
           expect(active.pcr).toBe(originalPointer!.realm_id);
         }
         await page.reload();
-        await expect(page.getByTestId("client-shell")).toBeVisible();
-        await expect(page.getByTestId("retry-onboarding-resume")).toHaveCount(0);
+        await expect(page.locator(".shell.app")).toBeVisible();
+        await expect(page.locator(".retry-onboarding-resume")).toHaveCount(0);
       }
     } catch (error) {
       console.error("Registration continuation failed at", new URL(page.url()).pathname,

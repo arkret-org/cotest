@@ -56,23 +56,23 @@ async function gotoChat(page: JointUserPage, realmId: string) {
   if (!page.page.url().includes(`/chat/${realmId}`)) {
     await page.gotoTimelineRealm(realmId);
   }
-  await expect(page.page.getByTestId("chat-panel")).toBeVisible({
+  await expect(page.page.locator(".chat-panel")).toBeVisible({
     timeout: 120_000,
   });
   // Wait for the discussion list to populate at least one channel — inkson's
   // send-chat-button silently no-ops if no selected_channel matches a known
   // channel (chat.rs:2186-2189). Sync hydrates the channel list after mount.
-  await expect(page.page.getByTestId("channel-item").first()).toBeVisible({
+  await expect(page.page.locator(".channel-item").first()).toBeVisible({
     timeout: 30_000,
   });
 }
 
 async function sendChat(page: JointUserPage, realmId: string, body: string) {
   await gotoChat(page, realmId);
-  await page.page.getByTestId("chat-input").fill(body);
-  await page.clickWithPassivePromptRetry(page.page.getByTestId("send-chat-button"));
+  await page.page.locator(".chat-input").fill(body);
+  await page.clickWithPassivePromptRetry(page.page.locator(".send-chat-button"));
   await expect(
-    page.page.getByTestId("chat-message").filter({ hasText: body }),
+    page.page.locator(".chat-message").filter({ hasText: body }),
   ).toBeVisible({ timeout: 30_000 });
 }
 
@@ -534,7 +534,7 @@ test.describe("chat advanced", () => {
           kind: "ak.typing",
           strand_id: strandId,
           typing: true,
-          payload_sequence: Date.now(),
+          payload_sequence: Date.now().toString(),
           ttl_ms: 25_000,
         },
       });
@@ -608,7 +608,7 @@ test.describe("chat advanced", () => {
       const defaultStrandId = await resolveDefaultStrandId(request, aliceToken, realmId);
       await gotoChat(alicePage, realmId);
       await expect(
-        alicePage.page.getByTestId("channel-item").first(),
+        alicePage.page.locator(".channel-item").first(),
       ).toContainText(defaultStrandId);
     } finally {
       await alicePage.close();
@@ -672,43 +672,39 @@ test.describe("chat advanced", () => {
 
       await gotoChat(bobPage, realmId);
       const bobOnM1 = bobPage.page
-        .getByTestId("chat-message")
+        .locator(".chat-message")
         .filter({ hasText: m1 })
         .first();
       await expect(bobOnM1).toBeVisible({ timeout: 30_000 });
       await bobOnM1.hover();
-      await bobOnM1.getByTestId("chat-message-menu-button").click();
-      const bobReact = bobOnM1.getByTestId(
-        "message-context-react-button",
-      );
+      await bobOnM1.locator(".chat-message-menu-button").click();
+      const bobReact = bobOnM1.locator(".message-context-react-button");
       await expect(bobReact).toBeVisible({ timeout: 5_000 });
       await bobReact.click();
-      const bobPicker = bobPage.page.getByTestId("chat-reaction-picker");
+      const bobPicker = bobPage.page.locator(".chat-reaction-picker");
       await expect(bobPicker).toBeVisible();
       await bobPicker.getByRole("button").first().click();
-      await expect(bobOnM1.getByTestId("chat-reactions")).toBeVisible({
+      await expect(bobOnM1.locator(".chat-reactions")).toBeVisible({
         timeout: 30_000,
       });
 
       await gotoChat(carolPage, realmId);
       const carolOnM1 = carolPage.page
-        .getByTestId("chat-message")
+        .locator(".chat-message")
         .filter({ hasText: m1 })
         .first();
       await expect(carolOnM1).toBeVisible({ timeout: 30_000 });
       await carolOnM1.hover();
-      await carolOnM1.getByTestId("chat-message-menu-button").click();
-      const carolReact = carolOnM1.getByTestId(
-        "message-context-react-button",
-      );
+      await carolOnM1.locator(".chat-message-menu-button").click();
+      const carolReact = carolOnM1.locator(".message-context-react-button");
       await expect(carolReact).toBeVisible({ timeout: 5_000 });
       await carolReact.click();
       await carolPage.page
-        .getByTestId("chat-reaction-picker")
+        .locator(".chat-reaction-picker")
         .getByRole("button")
         .first()
         .click();
-      await expect(carolOnM1.getByTestId("chat-reactions")).toBeVisible({
+      await expect(carolOnM1.locator(".chat-reactions")).toBeVisible({
         timeout: 30_000,
       });
 
@@ -718,23 +714,23 @@ test.describe("chat advanced", () => {
       await alicePage.page.reload({ waitUntil: "domcontentloaded" });
       await gotoChat(alicePage, realmId);
       const aliceOnM1 = alicePage.page
-        .getByTestId("chat-message")
+        .locator(".chat-message")
         .filter({ hasText: m1 })
         .first();
-      await expect(aliceOnM1.getByTestId("chat-reactions")).toBeVisible({
+      await expect(aliceOnM1.locator(".chat-reactions")).toBeVisible({
         timeout: 30_000,
       });
       await stepShot(alicePage.page, testInfo, "reactions-converged");
 
       await gotoChat(bobPage, realmId);
       await bobPage.clickTimelineReply(m1);
-      await expect(bobPage.page.getByTestId("chat-reply-banner")).toBeVisible();
+      await expect(bobPage.page.locator(".chat-reply-banner")).toBeVisible();
       await sendChat(bobPage, realmId, m2);
       const bobOnM2 = bobPage.page
-        .getByTestId("chat-message")
+        .locator(".chat-message")
         .filter({ hasText: m2 })
         .first();
-      await expect(bobOnM2.getByTestId("chat-reply-indicator")).toBeVisible();
+      await expect(bobOnM2.locator(".chat-reply-indicator")).toBeVisible();
       await stepShot(bobPage.page, testInfo, "reply-chain");
     } finally {
       if (diagnosticRealmId) {
@@ -812,7 +808,7 @@ test.describe("chat advanced", () => {
 
       });
       await alicePage.gotoTimelineRealm(realmId);
-      await expect(alicePage.page.getByTestId("message-list")).toContainText(
+      await expect(alicePage.page.locator(".message-list")).toContainText(
         mention,
         { timeout: 30_000 },
       );
@@ -821,19 +817,19 @@ test.describe("chat advanced", () => {
       await bobPage.page.goto("/notifications", {
         waitUntil: "domcontentloaded",
       });
-      await expect(bobPage.page.getByTestId("notifications-panel")).toBeVisible(
+      await expect(bobPage.page.locator(".notifications-panel")).toBeVisible(
         {
           timeout: 30_000,
         },
       );
       await expect(
         bobPage.page
-          .getByTestId("notification-item")
+          .locator(".notification-item")
           .filter({ hasText: mention }),
       ).toBeVisible({ timeout: 30_000 });
       await expect(
         bobPage.page
-          .getByTestId("notification-item")
+          .locator(".notification-item")
           .filter({ hasText: /mention/i }),
       ).toBeVisible({ timeout: 30_000 });
 
@@ -841,13 +837,13 @@ test.describe("chat advanced", () => {
         waitUntil: "domcontentloaded",
       });
       await expect(
-        carolPage.page.getByTestId("notifications-panel"),
+        carolPage.page.locator(".notifications-panel"),
       ).toBeVisible({
         timeout: 30_000,
       });
       await expect(
         carolPage.page
-          .getByTestId("notification-item")
+          .locator(".notification-item")
           .filter({ hasText: mention }),
       ).toHaveCount(0);
       await stepShot(bobPage.page, testInfo, "mention-notification-routed");
@@ -912,19 +908,19 @@ test.describe("chat advanced", () => {
         );
       }
       await gotoChat(alicePage, realmId);
-      await alicePage.page.getByTestId("open-poll-composer-button").click();
-      await alicePage.page.getByTestId("poll-question-input").fill(question);
+      await alicePage.page.locator(".open-poll-composer-button").click();
+      await alicePage.page.locator(".poll-question-input").fill(question);
       await alicePage.page
-        .getByTestId("poll-option-input")
+        .locator(".poll-option-input")
         .nth(0)
         .fill(optionA);
       await alicePage.page
-        .getByTestId("poll-option-input")
+        .locator(".poll-option-input")
         .nth(1)
         .fill(optionB);
-      await alicePage.page.getByTestId("send-poll-button").click();
+      await alicePage.page.locator(".send-poll-button").click();
       const poll = alicePage.page
-        .getByTestId("poll-card")
+        .locator(".poll-card")
         .filter({ hasText: question })
         .first();
       await expect(poll).toBeVisible({ timeout: 30_000 });
@@ -933,49 +929,49 @@ test.describe("chat advanced", () => {
 
       await gotoChat(bobPage, realmId);
       const bobPoll = bobPage.page
-        .getByTestId("poll-card")
+        .locator(".poll-card")
         .filter({ hasText: question })
         .first();
       await bobPoll
-        .getByTestId("poll-option")
+        .locator(".poll-option")
         .filter({ hasText: optionA })
         .click();
       await expect(
-        bobPoll.getByTestId("poll-result-row").filter({ hasText: optionA }).getByTestId("poll-vote-count"),
+        bobPoll.locator(".poll-result-row").filter({ hasText: optionA }).locator(".poll-vote-count"),
       ).toHaveText("1");
 
       // Vote replacement: bob switches from optionA to optionB; optionA count
       // drops back to zero and optionB becomes bob's single vote.
       await bobPoll
-        .getByTestId("poll-option")
+        .locator(".poll-option")
         .filter({ hasText: optionB })
         .click();
       await expect(
-        bobPoll.getByTestId("poll-result-row").filter({ hasText: optionA }).getByTestId("poll-vote-count"),
+        bobPoll.locator(".poll-result-row").filter({ hasText: optionA }).locator(".poll-vote-count"),
       ).toHaveText("0");
       await expect(
-        bobPoll.getByTestId("poll-result-row").filter({ hasText: optionB }).getByTestId("poll-vote-count"),
+        bobPoll.locator(".poll-result-row").filter({ hasText: optionB }).locator(".poll-vote-count"),
       ).toHaveText("1");
 
       await gotoChat(carolPage, realmId);
       const carolPoll = carolPage.page
-        .getByTestId("poll-card")
+        .locator(".poll-card")
         .filter({ hasText: question })
         .first();
       await carolPoll
-        .getByTestId("poll-option")
+        .locator(".poll-option")
         .filter({ hasText: optionB })
         .click();
       await expect(
-        carolPoll.getByTestId("poll-result-row").filter({ hasText: optionB }).getByTestId("poll-vote-count"),
+        carolPoll.locator(".poll-result-row").filter({ hasText: optionB }).locator(".poll-vote-count"),
       ).toHaveText("2");
 
       await gotoChat(alicePage, realmId);
-      await poll.getByTestId("poll-close-button").click();
-      await expect(poll.getByTestId("poll-state")).toContainText(/closed/i, {
+      await poll.locator(".poll-close-button").click();
+      await expect(poll.locator(".poll-state")).toContainText(/closed/i, {
         timeout: 30_000,
       });
-      await expect(poll.getByTestId("poll-option")).toHaveCount(0);
+      await expect(poll.locator(".poll-option")).toHaveCount(0);
       await stepShot(alicePage.page, testInfo, "poll-closed");
     } finally {
       await Promise.allSettled([
@@ -1038,7 +1034,7 @@ test.describe("chat advanced", () => {
           `[data-testid="presence-row"][data-actor-id=${JSON.stringify(canonicalJson(accountActorId(peer.id)))}]`,
         )).toContainText(/online/i, { timeout: 90_000 });
       }
-      await alicePage.page.getByTestId("chat-input").fill(`draft ${stamp}`);
+      await alicePage.page.locator(".chat-input").fill(`draft ${stamp}`);
       const aliceTypingIndicator = bobPage.page.locator(
         `[data-testid="typing-indicator"][data-typing-actors*="${cssStringEscape(alice.id)}"]`,
       );
@@ -1157,7 +1153,7 @@ test.describe("chat advanced", () => {
       await bobPage.acceptInvite(realmId);
       await bobPage.completeMlsAccountRecoveryIfPrompted(bobFlow.session.recoveryKey!);
       await Promise.all([gotoChat(alicePage, realmId), gotoChat(bobPage, realmId)]);
-      await expect(alicePage.page.getByTestId("send-chat-button")).toBeEnabled({ timeout: 90_000 });
+      await expect(alicePage.page.locator(".send-chat-button")).toBeEnabled({ timeout: 90_000 });
       const submitted = alicePage.page.waitForResponse(
         (response) => response.url().includes("/_arkret/self/events")
           && response.request().method() === "POST"

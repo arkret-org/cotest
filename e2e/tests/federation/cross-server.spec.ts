@@ -325,7 +325,7 @@ test.describe("cross-server federation", () => {
 
       // The invite MUST be visible in server1's space-invites list right after issuing.
       await alicePage.page
-        .getByTestId("members-section-pending-invites")
+        .getByRole("button", { name: "Pending invites", exact: true })
         .click();
       // Same attribute rename as spaces/moderation-ban: the row carries
       // `data-member-id` holding the canonical ActorId key, so match the

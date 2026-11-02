@@ -37,10 +37,10 @@ test("@fully-implemented Realm owner changes title and summary, then explicitly 
       joinRule: "invite",
     });
     await page.gotoRealmAdminSection(realmId, "profile");
-    const profile = page.page.getByTestId("realm-profile");
+    const profile = page.page.locator(".realm-profile");
     await expect(profile).toBeVisible({ timeout: 60_000 });
-    await profile.getByTestId("realm-name-input").fill(updatedTitle);
-    await profile.getByTestId("realm-summary-input").fill(summary);
+    await profile.locator(".realm-name-input input, .realm-name-input textarea").fill(updatedTitle);
+    await profile.locator(".realm-summary-input").locator("input, textarea").fill(summary);
 
     const metadataWrite = page.page.waitForResponse(
       (response) =>
@@ -49,27 +49,27 @@ test("@fully-implemented Realm owner changes title and summary, then explicitly 
         (response.request().postData() ?? "").includes("ak.realm.profile"),
       { timeout: 90_000 },
     );
-    await profile.getByTestId("update-metadata-button").click();
+    await profile.locator(".update-metadata-button").click();
     const written = await metadataWrite;
     const writtenText = await written.text();
     expect(written.status(), writtenText).toBeLessThan(400);
     expect(written.request().postData() ?? "").toContain(updatedTitle);
     expect(written.request().postData() ?? "").toContain(summary);
-    await expect(page.page.getByTestId("realm-admin-status")).toContainText(
+    await expect(page.page.locator(".realm-settings .write-status")).toContainText(
       /profile updated/i,
       { timeout: 60_000 },
     );
 
     await page.page.reload({ waitUntil: "domcontentloaded" });
     await expect(profile).toBeVisible({ timeout: 60_000 });
-    await expect(profile.getByTestId("realm-name-input")).toHaveValue(
+    await expect(profile.locator(".realm-name-input input, .realm-name-input textarea")).toHaveValue(
       updatedTitle,
     );
-    await expect(profile.getByTestId("realm-summary-input")).toHaveValue(
+    await expect(profile.locator(".realm-summary-input").locator("input, textarea")).toHaveValue(
       summary,
     );
 
-    await profile.getByTestId("realm-summary-input").fill("");
+    await profile.locator(".realm-summary-input").locator("input, textarea").fill("");
     const clearWrite = page.page.waitForResponse(
       (response) =>
         response.url().includes("/_arkret/self/events") &&
@@ -77,7 +77,7 @@ test("@fully-implemented Realm owner changes title and summary, then explicitly 
         (response.request().postData() ?? "").includes("ak.realm.profile"),
       { timeout: 90_000 },
     );
-    await profile.getByTestId("update-metadata-button").click();
+    await profile.locator(".update-metadata-button").click();
     const cleared = await clearWrite;
     const clearedText = await cleared.text();
     expect(cleared.status(), clearedText).toBeLessThan(400);
@@ -90,10 +90,10 @@ test("@fully-implemented Realm owner changes title and summary, then explicitly 
     expect(clearedWire.event?.payload?.title).toBe(updatedTitle);
     await page.page.reload({ waitUntil: "domcontentloaded" });
     await expect(profile).toBeVisible({ timeout: 60_000 });
-    await expect(profile.getByTestId("realm-name-input")).toHaveValue(
+    await expect(profile.locator(".realm-name-input input, .realm-name-input textarea")).toHaveValue(
       updatedTitle,
     );
-    await expect(profile.getByTestId("realm-summary-input")).toHaveValue("");
+    await expect(profile.locator(".realm-summary-input").locator("input, textarea")).toHaveValue("");
   } finally {
     await page.close();
   }

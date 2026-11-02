@@ -172,7 +172,7 @@ test.describe("personal blocklist", () => {
     // on rendered text cannot see the principal id at all — match the attribute.
     const bobBlockedRow = (page: typeof alicePage.page) =>
       page
-        .getByTestId("blocked-user-row")
+        .locator(".blocked-user-row")
         .filter({ has: page.locator(`[data-actor-id*="${bob.id}"]`) })
         .or(page.locator(`[data-testid="blocked-user-row"][data-actor-id*="${bob.id}"]`));
     const apiActorSeq = 8_000_000_200_000_000 + (stamp % 100_000);
@@ -197,7 +197,7 @@ test.describe("personal blocklist", () => {
       const m1 = `S31 m1 ${stamp}`;
       await bobPage.sendTimelineMessage(realmId, m1);
       await alicePage.gotoTimelineRealm(realmId);
-      await expect(alicePage.page.getByTestId("message-list")).toContainText(
+      await expect(alicePage.page.locator(".message-list")).toContainText(
         m1,
         {
           timeout: 30_000,
@@ -208,7 +208,7 @@ test.describe("personal blocklist", () => {
         waitUntil: "domcontentloaded",
       });
       await expect(
-        alicePage.page.getByTestId("blocked-users-panel"),
+        alicePage.page.locator(".blocked-users-panel"),
       ).toBeVisible({
         timeout: 30_000,
       });
@@ -219,13 +219,13 @@ test.describe("personal blocklist", () => {
       // The outer target has one identity kind. Account and service authors are
       // distinguished only by the complete ActorId carried in actor_id.
       await alicePage.page
-        .getByTestId("block-target-input")
+        .locator(".block-target-input input, .block-target-input textarea")
         .fill(JSON.stringify(accountActorId(bob.id)));
-      await alicePage.page.getByTestId("block-user-button").click();
+      await alicePage.page.locator(".block-user-button").click();
       await expect(bobBlockedRow(alicePage.page).first()).toBeVisible({
         timeout: 30_000,
       });
-      await expect(alicePage.page.getByTestId("write-status")).toContainText(
+      await expect(alicePage.page.locator(".write-status")).toContainText(
         /blocked/i,
         { timeout: 30_000 },
       );
@@ -254,12 +254,12 @@ test.describe("personal blocklist", () => {
       await alicePage.gotoTimelineRealm(realmId);
       await expect(
         alicePage.page
-          .getByTestId("event-body")
+          .locator(".event-body")
           .filter({ hasText: m2 })
           .first(),
       ).toBeHidden({ timeout: 30_000 });
       await bobPage.gotoTimelineRealm(realmId);
-      await expect(bobPage.page.getByTestId("message-list")).toContainText(m2, {
+      await expect(bobPage.page.locator(".message-list")).toContainText(m2, {
         timeout: 30_000,
       });
 
@@ -267,7 +267,7 @@ test.describe("personal blocklist", () => {
         waitUntil: "domcontentloaded",
       });
       await expect(
-        alicePage.page.getByTestId("notification-item").filter({ hasText: m2 }),
+        alicePage.page.locator(".notification-item").filter({ hasText: m2 }),
       ).toHaveCount(0);
       await stepShot(alicePage.page, testInfo, "alice-timeline-after-block");
 
@@ -276,7 +276,7 @@ test.describe("personal blocklist", () => {
       });
       await bobBlockedRow(alicePage.page)
         .first()
-        .getByTestId("unblock-button")
+        .locator(".unblock-button")
         .click();
       await expect(bobBlockedRow(alicePage.page)).toHaveCount(0, {
         timeout: 30_000,
@@ -299,7 +299,7 @@ test.describe("personal blocklist", () => {
       const m3 = `S31 m3 ${stamp}`;
       await bobPage.sendTimelineMessage(realmId, m3);
       await alicePage.gotoTimelineRealm(realmId);
-      await expect(alicePage.page.getByTestId("message-list")).toContainText(
+      await expect(alicePage.page.locator(".message-list")).toContainText(
         m3,
         {
           timeout: 30_000,

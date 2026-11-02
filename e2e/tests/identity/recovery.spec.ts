@@ -251,16 +251,16 @@ test.describe("account recovery", () => {
       // recovery_public_key envelope before it returns. Verify the durable
       // result rather than waiting for an already-completed browser request.
       await page.gotoAppPanel("/settings/recovery", "recovery-panel");
-      await expect(page.page.getByTestId("recovery-key-section")).toBeVisible({
+      await expect(page.page.locator(".recovery-key-section")).toBeVisible({
         timeout: 120_000,
       });
       expect(
         session.recoveryKey?.trim().split(/\s+/).filter(Boolean),
       ).toHaveLength(24);
-      await expect(page.page.getByTestId("recovery-key-current")).toBeVisible();
+      await expect(page.page.locator(".recovery-key-current")).toBeVisible();
       // §7.7: the recovery UI MUST NOT request a separate vault passphrase.
       await expect(
-        page.page.getByTestId("recovery-key-passphrase"),
+        page.page.locator(".recovery-key-passphrase"),
       ).toHaveCount(0);
 
       // The gate is the active policy; encrypted account material is a

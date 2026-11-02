@@ -54,10 +54,10 @@ for (const cut of ["none", "create_response_loss", "public_blob_response_loss", 
       await client.completeRecoveryKeySetupIfPrompted(30_000);
       const circlesUrl = `/realms/${encodeURIComponent(realm)}/circles`;
       await page.goto(circlesUrl, { waitUntil: "domcontentloaded" });
-      await page.getByTestId("circle-create-open").click();
-      await page.getByTestId("circle-create-title").fill("Plain sibling");
-      await expect(page.getByTestId("circle-create-encrypted")).not.toBeChecked();
-      await page.getByTestId("circle-create-submit").click();
+      await page.locator(".circles-new").click();
+      await page.locator(".circle-create-title input, .circle-create-title textarea").fill("Plain sibling");
+      await expect(page.locator(".circle-encrypted")).not.toBeChecked();
+      await page.locator(".circle-create").click();
       await expect(page).toHaveURL(/\/realms\/[^/]+\/circles\/[^/]+$/);
       const sibling = decodeURIComponent(page.url().split("/").at(-1)!);
       await client.completeRecoveryKeySetupIfPrompted(2_000);
@@ -125,10 +125,10 @@ for (const cut of ["none", "create_response_loss", "public_blob_response_loss", 
         }
         await route.abort("connectionfailed");
       });
-      await page.getByTestId("circle-create-open").click();
-      await page.getByTestId("circle-create-title").fill("Encrypted independent Circle");
-      await page.getByTestId("circle-create-encrypted").check();
-      await page.getByTestId("circle-create-submit").click();
+      await page.locator(".circles-new").click();
+      await page.locator(".circle-create-title input, .circle-create-title textarea").fill("Encrypted independent Circle");
+      await page.locator(".circle-encrypted").check();
+      await page.locator(".circle-create").click();
       await expect.poll(() => circle, { timeout: 60_000 }).toMatch(/^ak:circle:/);
       if (cut !== "none") {
         if (commitCut) {
@@ -191,20 +191,20 @@ for (const cut of ["none", "create_response_loss", "public_blob_response_loss", 
 
       await client.gotoTimelineRealm(realm);
       await client.completeRecoveryKeySetupIfPrompted(2_000);
-      await expect(page.getByTestId("open-poll-composer-button")).toBeVisible({ timeout: 60_000 });
+      await expect(page.locator(".open-poll-composer-button")).toBeVisible({ timeout: 60_000 });
       const initialDiscussions = own.events.filter(event => event.kind === "ak.strand.create");
       expect(initialDiscussions).toHaveLength(1);
       expect((initialDiscussions[0].payload as Record<string, any>).object).not.toHaveProperty("metadata");
       const strand = String(initialDiscussions[0].event_id).replace(/^ak:event:/, "ak:strand:");
-      const channel = page.getByTestId("channel-item").filter({ hasText: strand });
+      const channel = page.locator(".channel-item").filter({ hasText: strand });
       await expect(channel).toBeVisible({ timeout: 60_000 });
       await channel.click();
-      await expect(page.getByTestId("open-poll-composer-button")).toHaveCount(0);
+      await expect(page.locator(".open-poll-composer-button")).toHaveCount(0);
       const secret = `Circle private body ${Date.now()}`;
-      await expect(page.getByTestId("chat-input")).toBeEnabled({ timeout: 60_000 });
-      await page.getByTestId("chat-input").fill(secret);
-      await page.getByTestId("send-chat-button").click();
-      await expect(page.getByTestId("chat-message").filter({ hasText: secret })).toBeVisible({ timeout: 60_000 });
+      await expect(page.locator(".chat-input")).toBeEnabled({ timeout: 60_000 });
+      await page.locator(".chat-input").fill(secret);
+      await page.locator(".send-chat-button").click();
+      await expect(page.locator(".chat-message").filter({ hasText: secret })).toBeVisible({ timeout: 60_000 });
       await expect.poll(async () => (await scanRealmStreamApi(request, session!.grantJwt, realm, { streamRef: ownStream }))
         .events.filter(event => event.kind === "ak.message.create"), { timeout: 60_000 }).toHaveLength(1);
       const stored = await scanRealmStreamApi(request, session!.grantJwt, realm, { streamRef: ownStream });
@@ -217,13 +217,13 @@ for (const cut of ["none", "create_response_loss", "public_blob_response_loss", 
       // Circle discussion before demanding decrypted durable readback.
       await expect(channel).toBeVisible({ timeout: 60_000 });
       await channel.click();
-      await expect(page.getByTestId("chat-message").filter({ hasText: secret })).toBeVisible({ timeout: 60_000 });
+      await expect(page.locator(".chat-message").filter({ hasText: secret })).toBeVisible({ timeout: 60_000 });
       expect((await readCreatorRecords(page)).find(value => value.intent.effective_scope.circle_id === circle)?.epoch_zero).toEqual(ready.epoch_zero);
     } catch (error) {
       const records = client ? await readCreatorRecords(client.page, true).catch(() => []) : [];
       const bootstrap = client ? await client.page.locator('[role="status"]').allTextContents().catch(() => []) : [];
-      const chatStatus = client ? await client.page.getByTestId("chat-status").allTextContents().catch(() => []) : [];
-      const sendGate = client ? await client.page.getByTestId("send-chat-button").evaluate(button => ({
+      const chatStatus = client ? await client.page.locator(".chat-status").allTextContents().catch(() => []) : [];
+      const sendGate = client ? await client.page.locator(".send-chat-button").evaluate(button => ({
         bindingPending: button.getAttribute("data-mls-binding-pending"),
         creatorPending: button.getAttribute("data-creator-bootstrap-pending"),
         reason: button.getAttribute("title"),

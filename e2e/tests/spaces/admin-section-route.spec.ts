@@ -37,7 +37,7 @@ test.describe("admin section route", () => {
       await alicePage.page.goto(`/realms/${realmId}/settings/access`, {
         waitUntil: "domcontentloaded",
       });
-      await expect(alicePage.page.getByTestId("realm-admin-panel")).toBeVisible(
+      await expect(alicePage.page.locator(".realm-settings")).toBeVisible(
         {
           timeout: 120_000,
         },
@@ -46,8 +46,8 @@ test.describe("admin section route", () => {
       // management is now a sibling route (`/realms/:id/members`), not a
       // RealmAdminSection slug.
       await expect(
-        alicePage.page.getByTestId("realm-admin-nav-item-access"),
-      ).toHaveAttribute("aria-current", "page");
+        alicePage.page.locator(".realm-admin-nav-item-access"),
+      ).toHaveClass(/\bactive\b/);
     } finally {
       await alicePage.close();
     }

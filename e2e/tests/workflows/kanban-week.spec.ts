@@ -39,9 +39,9 @@ async function readRealmEvents(
 
 async function addCardThroughColumn(column: Locator, title: string): Promise<void> {
   for (let attempt = 0; attempt < 4; attempt += 1) {
-    const titleInput = column.getByTestId("new-card-title-input").last();
+    const titleInput = column.locator(".new-card-title-input").last();
     if (!(await titleInput.isVisible({ timeout: 250 }).catch(() => false))) {
-      const addButton = column.getByTestId("add-card-button").last();
+      const addButton = column.locator(".add-card-button").last();
       await expect(addButton).toBeVisible({ timeout: 30_000 });
       await addButton.click({ timeout: 5_000 }).catch(async (error) => {
         if (!(await titleInput.isVisible({ timeout: 500 }).catch(() => false))) {
@@ -51,7 +51,7 @@ async function addCardThroughColumn(column: Locator, title: string): Promise<voi
     }
     await expect(titleInput).toBeVisible({ timeout: 30_000 });
     await titleInput.fill(title);
-    const saveButton = column.getByTestId("save-card-button").last();
+    const saveButton = column.locator(".save-card-button").last();
     if (await saveButton.isEnabled({ timeout: 2_000 }).catch(() => false)) {
       try {
         await saveButton.click({ timeout: 30_000 });
@@ -104,7 +104,7 @@ async function waitForCanonicalStrandId(
     .poll(
       () =>
         card
-          .getByTestId("card-archive-button")
+          .locator(".card-archive-button")
           .getAttribute("data-strand-id"),
       { timeout: 120_000 },
     )
@@ -154,20 +154,20 @@ test.describe("workflow: kanban week-in-review", () => {
         window.history.pushState({}, "", path);
         window.dispatchEvent(new PopStateEvent("popstate"));
       }, `/kanban/${realmId}`);
-      await expect(patPage.page.getByTestId("kanban-panel")).toBeVisible({
+      await expect(patPage.page.locator(".kanban-panel")).toBeVisible({
         timeout: 120_000,
       });
       await patPage.page
-        .getByTestId("new-board-toggle")
+        .locator(".new-board-toggle")
         .evaluate((button: HTMLButtonElement) => button.click());
       await patPage.page
-        .getByTestId("new-board-title-input")
+        .locator(".new-board-title-input input, .new-board-title-input textarea")
         .fill(`Week 21 board ${stamp}`);
-      await patPage.page.getByTestId("create-board-space-button").click();
-      await expect(patPage.page.getByTestId("kanban-empty-board")).toContainText(/No lists yet/, {
+      await patPage.page.locator(".create-board-space-button").click();
+      await expect(patPage.page.locator(".kanban-empty-board")).toContainText(/No lists yet/, {
         timeout: 30_000,
       });
-      await expect(patPage.page.getByTestId("add-column-button")).toBeEnabled({
+      await expect(patPage.page.locator(".add-column-button")).toBeEnabled({
         timeout: 120_000,
       });
       let boardCreate: Record<string, unknown> | undefined;
@@ -182,27 +182,27 @@ test.describe("workflow: kanban week-in-review", () => {
       expect(boardCreate?.seal_basis, "Board create never enters Control Move shape").toBeUndefined();
 
       for (const columnName of [todayList, doingList, doneList]) {
-        await patPage.page.getByTestId("new-column-input").fill(columnName);
-        await patPage.page.getByTestId("add-column-button").click();
+        await patPage.page.locator(".new-column-input").fill(columnName);
+        await patPage.page.locator(".add-column-button").click();
         await expect(
-          patPage.page.getByTestId("kanban-column").filter({ hasText: columnName }),
+          patPage.page.locator(".kanban-column").filter({ hasText: columnName }),
         ).toBeVisible({ timeout: 30_000 });
       }
       await stepShot(patPage.page, testInfo, "A-board-ready");
 
       // Phase B — load Today with four real tasks.
       const today = patPage.page
-        .getByTestId("kanban-column")
+        .locator(".kanban-column")
         .filter({ hasText: todayList })
         .first();
       for (const task of [triageTask, prTask, specTask, planTask]) {
         await addCardThroughColumn(today, task);
-        await expect(today.getByTestId("kanban-card").filter({ hasText: task })).toBeVisible({
+        await expect(today.locator(".kanban-card").filter({ hasText: task })).toBeVisible({
           timeout: 90_000,
         });
       }
       for (const task of [triageTask, prTask, specTask, planTask]) {
-        const card = today.getByTestId("kanban-card").filter({ hasText: task }).first();
+        const card = today.locator(".kanban-card").filter({ hasText: task }).first();
         await waitForCanonicalStrandId(
           request,
           realmId,
@@ -219,47 +219,47 @@ test.describe("workflow: kanban week-in-review", () => {
       // clicking the now-actionable button.
       for (const finished of [triageTask, planTask]) {
         const finishedCard = today
-          .getByTestId("kanban-card")
+          .locator(".kanban-card")
           .filter({ hasText: finished })
           .first();
         await finishedCard.hover();
-        await finishedCard.getByTestId("card-archive-button").click();
-        await expect(today.getByTestId("kanban-card").filter({ hasText: finished })).toHaveCount(
+        await finishedCard.locator(".card-archive-button").click();
+        await expect(today.locator(".kanban-card").filter({ hasText: finished })).toHaveCount(
           0,
           { timeout: 30_000 },
         );
         await expect(
-          patPage.page.getByTestId("kanban-archived-card-row").filter({ hasText: finished }),
+          patPage.page.locator(".kanban-archived-card-row").filter({ hasText: finished }),
         ).toBeVisible({ timeout: 30_000 });
       }
       // Today should still hold the two real-work tasks.
-      await expect(today.getByTestId("kanban-card").filter({ hasText: prTask })).toBeVisible({
+      await expect(today.locator(".kanban-card").filter({ hasText: prTask })).toBeVisible({
         timeout: 30_000,
       });
-      await expect(today.getByTestId("kanban-card").filter({ hasText: specTask })).toBeVisible({
+      await expect(today.locator(".kanban-card").filter({ hasText: specTask })).toBeVisible({
         timeout: 30_000,
       });
       await stepShot(patPage.page, testInfo, "C-two-done");
 
       // Phase D — Pat archives prTask by mistake, then restores it.
       const prCard = today
-        .getByTestId("kanban-card")
+        .locator(".kanban-card")
         .filter({ hasText: prTask })
         .first();
       await prCard.hover();
-      await prCard.getByTestId("card-archive-button").click();
-      await expect(today.getByTestId("kanban-card").filter({ hasText: prTask })).toHaveCount(0, {
+      await prCard.locator(".card-archive-button").click();
+      await expect(today.locator(".kanban-card").filter({ hasText: prTask })).toHaveCount(0, {
         timeout: 30_000,
       });
       const archivedRow = patPage.page
-        .getByTestId("kanban-archived-card-row")
+        .locator(".kanban-archived-card-row")
         .filter({ hasText: prTask })
         .first();
-      await archivedRow.getByTestId("card-restore-button").click();
+      await archivedRow.locator(".card-restore-button").click();
       await expect(
-        patPage.page.getByTestId("kanban-card").filter({ hasText: prTask }),
+        patPage.page.locator(".kanban-card").filter({ hasText: prTask }),
       ).toBeVisible({ timeout: 30_000 });
-      const restoredTitles = await today.getByTestId("kanban-card").allTextContents();
+      const restoredTitles = await today.locator(".kanban-card").allTextContents();
       const restoredPrIndex = restoredTitles.findIndex((title) => title.includes(prTask));
       const restoredSpecIndex = restoredTitles.findIndex((title) => title.includes(specTask));
       expect(restoredPrIndex).toBeGreaterThanOrEqual(0);
@@ -271,7 +271,7 @@ test.describe("workflow: kanban week-in-review", () => {
       // section 3.4: Space archive moves only the List's own lifecycle; its
       // cards keep their state and placement, so restore brings them back.
       const todayListId = await today
-        .getByTestId("list-archive-button")
+        .locator(".list-archive-button")
         .getAttribute("data-space-container-id");
       expect(todayListId ?? "").toMatch(/^ak:space:/);
 
@@ -279,7 +279,7 @@ test.describe("workflow: kanban week-in-review", () => {
       // the column itself first so the button becomes actionable. Clicking
       // it opens a confirmation dialog; the archive submits from confirm.
       await today.hover();
-      await today.getByTestId("list-archive-button").click();
+      await today.locator(".list-archive-button").click();
       const archiveWrite = patPage.page.waitForResponse(
         (response) =>
           new URL(response.url()).pathname === "/_arkret/self/events" &&
@@ -289,13 +289,13 @@ test.describe("workflow: kanban week-in-review", () => {
           ),
         { timeout: 90_000 },
       );
-      await patPage.page.getByTestId("list-archive-confirm-button").click();
+      await patPage.page.locator(".list-archive-confirm-button").click();
       const archiveResponse = await archiveWrite;
       expect(archiveResponse.status(), await archiveResponse.text()).toBeLessThan(400);
-      const archivedLists = patPage.page.getByTestId("kanban-archived-lists");
+      const archivedLists = patPage.page.locator(".kanban-archived-lists");
       await archivedLists.locator("summary").click();
       await expect(
-        patPage.page.getByTestId("kanban-archived-list-row").filter({ hasText: todayList }),
+        patPage.page.locator(".kanban-archived-list-row").filter({ hasText: todayList }),
       ).toBeVisible({ timeout: 30_000 });
       const restoreWrite = patPage.page.waitForResponse(
         (response) =>
@@ -307,15 +307,15 @@ test.describe("workflow: kanban week-in-review", () => {
         { timeout: 90_000 },
       );
       await archivedLists
-        .getByTestId("kanban-archived-list-row")
+        .locator(".kanban-archived-list-row")
         .filter({ hasText: todayList })
         .first()
-        .getByTestId("list-restore-button")
+        .locator(".list-restore-button")
         .click();
       const restoreResponse = await restoreWrite;
       expect(restoreResponse.status(), await restoreResponse.text()).toBeLessThan(400);
       await expect(
-        patPage.page.getByTestId("kanban-column").filter({ hasText: todayList }),
+        patPage.page.locator(".kanban-column").filter({ hasText: todayList }),
       ).toBeVisible({ timeout: 30_000 });
       // event-envelope.schema.json is closed: the archive is an ordinary
       // producer-signed Event whose payload names only the Space

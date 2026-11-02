@@ -72,7 +72,7 @@ test("0540 real local search rechecks Circle revocation and the exact parent joi
     await sendPlaintextMessageViaApi(request, ownerToken, realm, body,
       { actorId: owner.user.id, strandId: publicStrand });
     await flow.page.gotoTimelineRealm(realm, { completeRecoveryKeySetup: false });
-    await expect(flow.page.page.getByTestId("message-list").getByText(body, { exact: true }))
+    await expect(flow.page.page.locator(".message-list").getByText(body, { exact: true }))
       .toBeVisible({ timeout: 120_000 });
   };
   const observations: Array<Record<string, unknown>> = [];
@@ -82,16 +82,16 @@ test("0540 real local search rechecks Circle revocation and the exact parent joi
       observations.push({ step: "postpone-unpublished-plaintext-recovery", prompt }),
       { allowUnpublishedRecoverySetup: true });
     await flow.page.gotoTimelineRealm(realm, { completeRecoveryKeySetup: false });
-    const panel = page.getByTestId("global-search-panel");
-    const rows = panel.getByTestId("global-search-result-item");
+    const panel = page.locator(".global-search-panel");
+    const rows = panel.locator(".global-search-result-item");
     const paired = async (step: string, query: string, count: number) => {
       await postpone();
       if (!await panel.isVisible()) await page.keyboard.press("Control+F");
-      await panel.getByTestId("global-search-input").fill(query);
-      await panel.getByTestId("global-search-submit").click();
+      await panel.locator(".global-search-input").fill(query);
+      await panel.locator(".global-search-submit").click();
       await expect(rows).toHaveCount(count);
-      if (count) await expect(rows.getByTestId("global-search-result-snippet")).toHaveText(query);
-      else await expect(panel.getByTestId("global-search-results-no-results")).toBeVisible();
+      if (count) await expect(rows.locator(".global-search-result-snippet")).toHaveText(query);
+      else await expect(panel.locator(".global-search-results-no-results")).toBeVisible();
       const native = await observeNativeSearch(reader, realm, query,
         testInfo.outputPath("native-circle.json"));
       expect(native.view.results).toHaveLength(count);
@@ -111,7 +111,7 @@ test("0540 real local search rechecks Circle revocation and the exact parent joi
     await paired("new-Realm-control-after-Circle-leave", removedControl, 1);
     await paired("retained-Circle-source-withdrawn", privateBody, 0);
     await page.reload({ waitUntil: "domcontentloaded" });
-    await expect(page.getByTestId("client-shell")).toBeVisible({ timeout: 120_000 });
+    await expect(page.locator(".shell.app")).toBeVisible({ timeout: 120_000 });
     await paired("cold-Circle-leave", privateBody, 0);
     await joinCircle();
     const rejoinedControl = `Circle rejoin control ${suffix}`;
@@ -131,7 +131,7 @@ test("0540 real local search rechecks Circle revocation and the exact parent joi
     await paired("new-parent-Realm-control", changedControl, 1);
     await paired("old-Circle-join-cannot-authorize-new-parent", privateBody, 0);
     await page.reload({ waitUntil: "domcontentloaded" });
-    await expect(page.getByTestId("client-shell")).toBeVisible({ timeout: 120_000 });
+    await expect(page.locator(".shell.app")).toBeVisible({ timeout: 120_000 });
     await paired("cold-parent-replacement", privateBody, 0);
     // The old canonical join is retained even when its parent revision is
     // ineffective. Leave it explicitly before the new parent-bound join.

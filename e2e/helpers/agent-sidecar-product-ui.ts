@@ -91,11 +91,11 @@ export async function provisionAgent(
   agentSlug: string,
 ): Promise<PairingHandle & { pairingLink: string }> {
   await inkson.goto("/settings/agents", { waitUntil: "domcontentloaded" });
-  await expect(inkson.getByTestId("agent-admin")).toBeVisible({
+  await expect(inkson.locator(".agent-admin")).toBeVisible({
     timeout: 120_000,
   });
-  await inkson.getByTestId("agent-admin-create-open-button").click();
-  await inkson.getByTestId("agent-admin-provision-agent-slug").fill(agentSlug);
+  await inkson.locator(".agent-admin-create-open-button").click();
+  await inkson.locator(".agent-admin-provision-agent-slug").locator("input, textarea").fill(agentSlug);
   const commitResponsePromise = inkson.waitForResponse(
     (response) => {
       const outgoing = response.request();
@@ -108,7 +108,7 @@ export async function provisionAgent(
     },
     { timeout: 180_000 },
   );
-  await inkson.getByTestId("agent-admin-provision-button").click();
+  await inkson.locator(".agent-admin-provision-button").click();
   const response = await commitResponsePromise;
   const text = await response.text();
   expect(response.status(), text).toBe(201);
@@ -124,10 +124,10 @@ export async function provisionAgent(
       `[data-testid="agent-admin-row"][data-agent-id=${JSON.stringify(body.agent_id)}]`,
     ),
   ).toHaveAttribute("aria-pressed", "true", { timeout: remainingPairingBudget() });
-  await expect(inkson.getByTestId("agent-admin-slug-title")).toHaveText(agentSlug, {
+  await expect(inkson.locator(".agent-admin-slug-title")).toHaveText(agentSlug, {
     timeout: remainingPairingBudget(),
   });
-  await expect(inkson.getByTestId("agent-admin-pairing-card")).toBeVisible({
+  await expect(inkson.locator(".agent-admin-pairing-card")).toBeVisible({
     timeout: remainingPairingBudget(),
   });
   return {
@@ -135,7 +135,7 @@ export async function provisionAgent(
     pairingRequestId: body.pairing_request_id,
     pairingCode: body.pairing_code,
     pairingLink: await inkson
-      .getByTestId("agent-admin-pairing-url")
+      .locator(".agent-admin-pairing-url")
       .inputValue(),
   };
 }
@@ -146,13 +146,13 @@ export async function pairManagedSavfoxAgent(
   savfox: Page,
   pairing: PairingHandle & { pairingLink: string },
 ): Promise<void> {
-  const approvalModal = inkson.getByTestId("agent-runtime-approval-modal");
+  const approvalModal = inkson.locator(".agent-runtime-approval-dialog");
   await startSavfoxPairing(savfox, pairing.pairingLink);
   await expect(approvalModal).toBeVisible({ timeout: 120_000 });
-  await expect(inkson.getByTestId("agent-runtime-approval-code")).toHaveText(
+  await expect(inkson.locator(".agent-runtime-approval-code")).toHaveText(
     displayPairingCode(pairing.pairingCode),
   );
-  await inkson.getByTestId("agent-runtime-approval-approve").click();
+  await inkson.locator(".agent-runtime-approval-approve").click();
   await expect(approvalModal).toHaveCount(0, { timeout: 180_000 });
   await expect(
     savfox.getByText("Agent paired and channel saved.", { exact: true }),
@@ -185,15 +185,15 @@ export async function addAgentToRealm(
   await page.goto(`/realms/${realmId}/members`, {
     waitUntil: "domcontentloaded",
   });
-  await expect(page.getByTestId("realm-members-panel")).toBeVisible({
+  await expect(page.locator(".realm-members-panel")).toBeVisible({
     timeout: 120_000,
   });
-  await page.getByTestId("members-section-my-agents").click();
+  await page.getByRole("button", { name: "My agents", exact: true }).click();
   const existing = page.locator(
     `[data-testid="member-self-agent-row"][data-agent-id="${agentId}"]`,
   );
   if ((await existing.count()) === 0) {
-    await page.getByTestId("open-add-realm-agent-modal-button").click();
+    await page.locator(".open-add-realm-agent-modal-button").click();
     const available = page.locator(
       `[data-testid="available-realm-agent-row"][data-agent-id="${agentId}"]`,
     );
@@ -209,14 +209,14 @@ export async function addAgentToRealm(
       return outgoing.method() === "POST" && new URL(response.url()).pathname === EVENTS_SUBMIT_PATH
         && eventSubmissions(outgoing.postData()).some(isTargetJoin);
     }, { timeout: 180_000 });
-    await available.getByTestId("confirm-add-agent-to-realm").click();
+    await available.locator(".confirm-add-agent-to-realm").click();
     const joinResponse = await submittedJoin;
     const joinOutcome = await joinResponse.json() as Record<string, unknown>;
     expect(joinResponse.ok(), `Agent join HTTP ${joinResponse.status()}: ${String(joinOutcome.detail ?? "missing Problem detail")}`)
       .toBe(true);
     const join = eventSubmissions(joinResponse.request().postData()).find(isTargetJoin)!;
     assertAuthoritySubmitOutcome(joinOutcome, join, "normal controller-authored Agent first join");
-    await expect(page.getByTestId("realm-members-status")).toContainText(
+    await expect(page.locator(".realm-members-panel .write-status")).toContainText(
       "added agent",
       { timeout: 180_000 },
     );
@@ -225,8 +225,8 @@ export async function addAgentToRealm(
     `[data-testid="member-self-agent-row"][data-agent-id="${agentId}"]`,
   );
   await expect(agentRow).toBeVisible({ timeout: 120_000 });
-  const reply = agentRow.getByTestId("member-agent-reply-toggle");
-  const mention = agentRow.getByTestId("member-agent-mention-toggle");
+  const reply = agentRow.locator(".member-agent-reply-toggle");
+  const mention = agentRow.locator(".member-agent-mention-toggle");
   if ((await reply.getAttribute("aria-checked")) !== "true") {
     await reply.click();
   }
@@ -311,12 +311,12 @@ export async function composeSourceAgentMention(
   expect(actor.kind).toBe("account");
   if (actor.kind !== "account") throw new Error("Agent member must be an Account");
   expect(actor.account_id.principal_id).toBe(agentId);
-  await agentRow.getByTestId("card-detail-member-mention-button").click();
+  await agentRow.locator(".card-detail-member-mention-button").click();
   const chip = card.locator(
     `[data-testid="mention-chip"][data-mention-principal-id="${actor.account_id.principal_id}"][data-mention-station-id="${actor.account_id.station_id}"]`,
   );
   await expect(chip).toBeVisible({ timeout: 30_000 });
-  const composer = card.getByTestId("chat-input");
+  const composer = card.locator(".chat-input");
   const mention = (await chip.locator("span").first().innerText()).trim();
   expect(mention).toMatch(/^@/);
   await expect(composer).toHaveValue(`${mention} `);
@@ -332,12 +332,12 @@ export async function createSidecarSourceCard(
   title: string,
 ) {
   await page.goto(`/kanban/${realmId}`, { waitUntil: "domcontentloaded" });
-  await expect(page.getByTestId("kanban-panel")).toBeVisible({
+  await expect(page.locator(".kanban-panel")).toBeVisible({
     timeout: 120_000,
   });
-  await page.getByTestId("new-board-toggle").click();
-  await page.getByTestId("new-board-title-input").fill(title);
-  await page.getByTestId("create-board-space-button").click();
+  await page.locator(".new-board-toggle").click();
+  await page.locator(".new-board-title-input input, .new-board-title-input textarea").fill(title);
+  await page.locator(".create-board-space-button").click();
   // The toolbar is visible while the Board is still a local pending create.
   // Wait for its accepted canonical route before composing a child List.
   const acceptedBoardRoute = (url: URL) => decodeURIComponent(url.pathname)
@@ -351,7 +351,7 @@ export async function createSidecarSourceCard(
       break;
     } catch {
       if (Date.now() >= deadline) break;
-      const picker = page.getByTestId("board-space-select-button");
+      const picker = page.locator(".board-space-select-button");
       if (!(await picker.isVisible())) continue;
       if (await picker.getAttribute("aria-expanded") !== "true") {
         await picker.click({ timeout: Math.max(1, Math.min(3_000, deadline - Date.now())) });
@@ -369,22 +369,22 @@ export async function createSidecarSourceCard(
   await expect(page).toHaveURL(acceptedBoardRoute, { timeout: 1 });
   // The accepted route can converge while the retry picker is open. Close
   // that ordinary product popover before interacting with the Board below it.
-  const boardPicker = page.getByTestId("board-space-select-button");
+  const boardPicker = page.locator(".board-space-select-button");
   if (await boardPicker.getAttribute("aria-expanded") === "true") await boardPicker.click();
   await expect(page.locator(".board-popover-scrim")).toHaveCount(0);
-  await page.getByTestId("new-column-input").fill("Work");
-  await expect(page.getByTestId("new-column-input")).toHaveValue("Work");
-  await page.getByTestId("add-column-button").click();
-  const column = page.getByTestId("kanban-column").filter({ hasText: "Work" });
+  await page.locator(".new-column-input").fill("Work");
+  await expect(page.locator(".new-column-input")).toHaveValue("Work");
+  await page.locator(".add-column-button").click();
+  const column = page.locator(".kanban-column").filter({ hasText: "Work" });
   await expect(column).toBeVisible({ timeout: 120_000 });
-  await column.getByTestId("add-card-button").click();
-  await column.getByTestId("new-card-title-input").fill(title);
-  await column.getByTestId("save-card-button").click();
-  const card = page.getByTestId("kanban-card").filter({ hasText: title });
+  await column.locator(".add-card-button").click();
+  await column.locator(".new-card-title-input").fill(title);
+  await column.locator(".save-card-button").click();
+  const card = page.locator(".kanban-card").filter({ hasText: title });
   await expect(card).toBeVisible({ timeout: 120_000 });
   await expect(card).toHaveAttribute("data-card-draft", "false", { timeout: 120_000 });
   await card.click();
-  const detail = page.getByTestId("card-detail-modal");
+  const detail = page.locator(".card-detail-modal");
   await expect(detail).toBeVisible({ timeout: 30_000 });
   return detail;
 }

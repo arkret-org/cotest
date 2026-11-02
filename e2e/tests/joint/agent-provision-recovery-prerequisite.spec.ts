@@ -22,14 +22,14 @@ test("Agent creation checks recovery before generating or publishing its DID @ag
   });
   const page = user.page;
   try {
-    await page.addLocatorHandler(page.getByTestId("recovery-key-setup-dismiss-unpublished"), async () => {
-      await page.getByTestId("recovery-key-setup-dismiss-unpublished").click();
+    await page.addLocatorHandler(page.getByRole("button", { name: "Close without publishing", exact: true }), async () => {
+      await page.getByRole("button", { name: "Close without publishing", exact: true }).click();
     });
     await page.goto("/settings", { waitUntil: "domcontentloaded" });
-    await page.getByTestId("settings-nav-item-agents").click();
-    await expect(page.getByTestId("agent-admin")).toBeVisible();
-    await page.getByTestId("agent-admin-create-open-button").click();
-    await page.getByTestId("agent-admin-provision-agent-slug").fill("recovery-required");
+    await page.locator(".settings-nav-item-agents").click();
+    await expect(page.locator(".agent-admin")).toBeVisible();
+    await page.locator(".agent-admin-create-open-button").click();
+    await page.locator(".agent-admin-provision-agent-slug").locator("input, textarea").fill("recovery-required");
     const agentKeyCount = () => page.evaluate(async () => {
       let count = 0;
       for (const info of await indexedDB.databases()) {
@@ -65,14 +65,14 @@ test("Agent creation checks recovery before generating or publishing its DID @ag
     for (let attempt = 0; attempt < 2; attempt++) {
       const checked = page.waitForResponse(response => response.request().method() === "GET"
         && new URL(response.url()).pathname === "/_arkret/root/identity/recovery-policy");
-      await page.getByTestId("agent-admin-provision-button").click();
+      await page.locator(".agent-admin-provision-button").click();
       const response = await checked;
       expect(response.status()).toBe(200);
       const outcome = await response.json();
       expect(outcome.active_policy).toBeNull();
-      await expect(page.getByTestId("agent-admin-last-op"))
+      await expect(page.locator(".agent-admin .write-status"))
         .toHaveText("Set up your recovery policy before creating an Agent.");
-      await expect(page.getByTestId("agent-admin-provision-button")).toBeEnabled();
+      await expect(page.locator(".agent-admin-provision-button")).toBeEnabled();
       expect(writes).toEqual([]);
       expect(await agentKeyCount()).toBe(0);
     }
@@ -101,10 +101,10 @@ test("Agent creation continues through the four stages with an active recovery p
     const savedKey = await user.completeRecoveryKeySetupIfPrompted(120_000);
     expect(Boolean(savedKey), "the recovery policy must be saved through the product UI").toBe(true);
     await user.gotoSettings();
-    await page.getByTestId("settings-nav-item-agents").click();
-    await expect(page.getByTestId("agent-admin")).toBeVisible();
-    await page.getByTestId("agent-admin-create-open-button").click();
-    await page.getByTestId("agent-admin-provision-agent-slug").fill("recovery-ready");
+    await page.locator(".settings-nav-item-agents").click();
+    await expect(page.locator(".agent-admin")).toBeVisible();
+    await page.locator(".agent-admin-create-open-button").click();
+    await page.locator(".agent-admin-provision-agent-slug").locator("input, textarea").fill("recovery-ready");
     const checked = page.waitForResponse(response => response.request().method() === "GET"
       && new URL(response.url()).pathname === "/_arkret/root/identity/recovery-policy");
     const complete = page.waitForResponse(response => response.status() === 201
@@ -112,7 +112,7 @@ test("Agent creation continues through the four stages with an active recovery p
       && new URL(response.url()).pathname === "/_arkret/self/agents"
       && response.request().postDataJSON()?.phase === "commit", { timeout: 180_000 });
     void complete.catch(() => undefined);
-    await page.getByTestId("agent-admin-provision-button").click();
+    await page.locator(".agent-admin-provision-button").click();
     const recovery = await checked;
     expect(recovery.status()).toBe(200);
     const policy = (await recovery.json()).active_policy;
@@ -121,7 +121,7 @@ test("Agent creation continues through the four stages with an active recovery p
     // public locator; never attach or persist the response body.
     const agentId = (await (await complete).json()).agent_id;
     expect(agentId).toMatch(/^ak:did_core:/);
-    await expect(page.getByTestId("agent-admin-last-op"))
+    await expect(page.locator(".agent-admin .write-status"))
       .toContainText("Station-committed Agent PCR", { timeout: 60_000 });
     const weakAgentKeys = await page.evaluate(() => Object.keys(localStorage)
       .filter(key => key.startsWith("agent.did.keys.") || key.includes(".agent.did.keys.")).length);
@@ -156,9 +156,9 @@ for (const cut of ["inception", "provision", "did-binding"] as const) {
       await user.gotoHome();
       expect(Boolean(await user.completeRecoveryKeySetupIfPrompted(120_000))).toBe(true);
       await user.gotoSettings();
-      await page.getByTestId("settings-nav-item-agents").click();
-      await page.getByTestId("agent-admin-create-open-button").click();
-      await page.getByTestId("agent-admin-provision-agent-slug").fill(`crash-${cut}`);
+      await page.locator(".settings-nav-item-agents").click();
+      await page.locator(".agent-admin-create-open-button").click();
+      await page.locator(".agent-admin-provision-agent-slug").locator("input, textarea").fill(`crash-${cut}`);
       await page.route("**/_arkret/**", async route => {
         const outbound = route.request();
         const path = new URL(outbound.url()).pathname;
@@ -182,10 +182,10 @@ for (const cut of ["inception", "provision", "did-binding"] as const) {
         await route.abort("failed");
         releaseCut();
       });
-      await page.getByTestId("agent-admin-provision-button").click();
+      await page.locator(".agent-admin-provision-button").click();
       await cutReached;
       expect(acceptedStage).toBe(cut === "provision" ? "awaiting_pcr_genesis" : "accepted");
-      await expect(page.getByTestId("agent-admin-last-op")).toContainText("remains recoverable");
+      await expect(page.locator(".agent-admin .write-status")).toContainText("remains recoverable");
       await page.unroute("**/_arkret/**");
       stopped = false;
       page.on("request", outbound => {

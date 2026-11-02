@@ -98,11 +98,11 @@ test.describe("workflow: incident response", () => {
       await oncallPage.sendTimelineMessage(realmId, alert);
       await oncallPage.clickTimelineReply(alert);
       await expect(
-        oncallPage.page.getByTestId("chat-reply-banner"),
+        oncallPage.page.locator(".chat-reply-banner"),
       ).toBeVisible();
       await oncallPage.sendTimelineMessage(realmId, ack);
       await expect(
-        oncallPage.timelineEvent(ack).getByTestId("chat-reply-indicator"),
+        oncallPage.timelineEvent(ack).locator(".chat-reply-indicator"),
       ).toBeVisible({
         timeout: 30_000,
       });
@@ -117,7 +117,7 @@ test.describe("workflow: incident response", () => {
       await expect(
         backendPage
           .timelineEvent(diagnostic)
-          .getByTestId("chat-reply-indicator"),
+          .locator(".chat-reply-indicator"),
       ).toBeVisible({
         timeout: 30_000,
       });
@@ -129,7 +129,7 @@ test.describe("workflow: incident response", () => {
       await expect(
         commsPage
           .timelineEvent(publicUpdate)
-          .getByTestId("chat-reply-indicator"),
+          .locator(".chat-reply-indicator"),
       ).toBeVisible({
         timeout: 30_000,
       });
@@ -148,14 +148,14 @@ test.describe("workflow: incident response", () => {
 
       await oncallPage.clickTimelineEdit(alert);
       await oncallPage.page
-        .getByTestId("chat-edit-composer")
+        .locator(".chat-edit-composer")
         .locator("textarea")
         .fill(finalSummary);
-      await oncallPage.page.getByTestId("chat-save-edit-button").click();
+      await oncallPage.page.locator(".chat-save-edit-button").click();
       await expect(oncallPage.timelineEvent(finalSummary)).toBeVisible({
         timeout: 30_000,
       });
-      await expect(oncallPage.page.getByTestId("chat-status")).toContainText(
+      await expect(oncallPage.page.locator(".chat-status")).toContainText(
         /Message updated/i,
       );
       await stepShot(oncallPage.page, testInfo, "D-final-summary");
@@ -294,18 +294,18 @@ test.describe("workflow: incident response", () => {
         waitUntil: "domcontentloaded",
       });
       const blocked = `Public update: root cause leaked token ${stamp}`;
-      await commanderPage.page.getByTestId("chat-input").fill(blocked);
-      await commanderPage.page.getByTestId("send-chat-button").click();
-      await expect(commanderPage.page.getByTestId("chat-status")).toContainText(
+      await commanderPage.page.locator(".chat-input").fill(blocked);
+      await commanderPage.page.locator(".send-chat-button").click();
+      await expect(commanderPage.page.locator(".chat-status")).toContainText(
         /public update blocked|public_update_blocked|Message send failed/i,
       );
       const blockedRow = commanderPage.timelineEvent(blocked);
       await expect(blockedRow).toBeVisible();
-      await expect(blockedRow.getByTestId("message-send-status")).toHaveAttribute(
+      await expect(blockedRow.locator(".message-send-status")).toHaveAttribute(
         "title",
         "Message send failed",
       );
-      await expect(blockedRow.getByTestId("chat-message-error")).toContainText(
+      await expect(blockedRow.locator(".chat-message-error")).toContainText(
         "public_update_blocked",
       );
 

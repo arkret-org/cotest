@@ -168,7 +168,7 @@ test.describe("conformance snapshot/query/scalability vectors @fully-implemented
       expect(cotestWire("verify-realm-state-snapshot", evidence)).toEqual({ verified: true });
 
       const changedBody = structuredClone(snapshot);
-      changedBody.governance_generation += 1;
+      changedBody.governance_generation = (BigInt(changedBody.governance_generation) + 1n).toString();
       expect(verify({ ...evidence, snapshot: changedBody })).toBe(false);
       const changedSignature = structuredClone(snapshot);
       const signature = changedSignature.signature.signature as string;

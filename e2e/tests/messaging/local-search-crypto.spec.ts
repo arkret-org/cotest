@@ -25,17 +25,17 @@ test("0540 real local search never treats missing MLS keys or opaque ciphertext 
     await first.page.sendTimelineMessage(encryptedRealm, body);
     const page = first.page.page;
     await page.keyboard.press("Control+F");
-    const panel = page.getByTestId("global-search-panel");
-    await panel.getByTestId("global-search-input").fill(body);
-    await panel.getByTestId("global-search-submit").click();
-    await expect(panel.getByTestId("global-search-result-item")).toHaveCount(1);
-    await expect(panel.getByTestId("global-search-result-snippet")).toHaveText(body);
+    const panel = page.locator(".global-search-panel");
+    await panel.locator(".global-search-input").fill(body);
+    await panel.locator(".global-search-submit").click();
+    await expect(panel.locator(".global-search-result-item")).toHaveCount(1);
+    await expect(panel.locator(".global-search-result-snippet")).toHaveText(body);
     const events = await listRealmEventsViaApi(request, token, encryptedRealm);
     source = events.filter(event => event.kind === "ak.message.create").at(-1)!;
     expect(source).toBeTruthy();
     expect(source.payload.content).toBeUndefined();
     expect(source.payload.encrypted_content).toBeTruthy();
-    await expect(panel.getByTestId("global-search-result-item")).toHaveAttribute("data-event-id", source.event_id);
+    await expect(panel.locator(".global-search-result-item")).toHaveAttribute("data-event-id", source.event_id);
   } finally {
     await first.page.close();
   }
@@ -56,16 +56,16 @@ test("0540 real local search never treats missing MLS keys or opaque ciphertext 
     const page = second.page.page;
     await postponeSearchEncryptionPrompts(page, prompt =>
       observations.push({ step: "postpone-key-recovery-without-restoring-keys", prompt }));
-    const panel = page.getByTestId("global-search-panel");
+    const panel = page.locator(".global-search-panel");
     const check = async (step: string, selectedRealm: string, query: string, count: number) => {
       await second.page.gotoTimelineRealm(selectedRealm);
       await second.page.completeRecoveryKeySetupIfPrompted(100);
       if (!await panel.isVisible()) await page.keyboard.press("Control+F");
-      await panel.getByTestId("global-search-input").fill(query);
-      await panel.getByTestId("global-search-submit").click();
-      const rows = panel.getByTestId("global-search-result-item");
+      await panel.locator(".global-search-input").fill(query);
+      await panel.locator(".global-search-submit").click();
+      const rows = panel.locator(".global-search-result-item");
       await expect(rows).toHaveCount(count);
-      if (!count) await expect(panel.getByTestId("global-search-results-no-results")).toBeVisible();
+      if (!count) await expect(panel.locator(".global-search-results-no-results")).toBeVisible();
       const native = await observeNativeSearch(sibling, selectedRealm, query,
         testInfo.outputPath("native-keyless.json"));
       expect(native.view.results).toHaveLength(count);
@@ -83,7 +83,7 @@ test("0540 real local search never treats missing MLS keys or opaque ciphertext 
     expect(ciphertext.length).toBeGreaterThan(12);
     await check("opaque-crypto-is-not-searchable-content", encryptedRealm, ciphertext.slice(0, 12), 0);
     await page.reload({ waitUntil: "domcontentloaded" });
-    await expect(page.getByTestId("client-shell")).toBeVisible({ timeout: 120_000 });
+    await expect(page.locator(".shell.app")).toBeVisible({ timeout: 120_000 });
     await check("cold-keyless-read-still-refuses-plaintext", encryptedRealm, body, 0);
     await check("cold-independent-control-still-works", publicRealm, control, 1);
   } finally {

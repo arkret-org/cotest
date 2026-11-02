@@ -536,19 +536,19 @@ test.describe("applet bridge", () => {
       await client.gotoAppPanel("/applets", "applets-panel");
       const row = client.page.locator(`[data-testid="applet-row"][data-applet-id="${signed.applet_package.applet_id}"][data-service-id="${signed.applet_package.service_id}"]`);
       await expect(row).toBeVisible({ timeout: 60_000 });
-      const name = row.getByTestId("applet-bot-name");
-      const create = row.getByTestId("applet-create-bot");
+      const name = row.locator(".applet-bot-name").locator("input, textarea");
+      const create = row.locator(".applet-create-bot");
       await expect(create).toBeEnabled({ timeout: 30_000 });
       const before = await queryRealmEventsApi(request, token, realmId);
       await name.fill(`Durable Bot ${stamp}`);
       const endpoint = `/_arkret/self/applets/${signed.applet_package.applet_id}/configuration`;
       const responseForClick = async (testId: string) => {
         const received = client.page.waitForResponse(response => decodeURIComponent(new URL(response.url()).pathname) === endpoint && response.request().method() === "POST");
-        await row.getByTestId(testId).click();
+        await row.locator('[class~="' + testId + '"]').click();
         const response = await received;
         expect(response.status(), await response.text()).toBe(403);
         expect(wireErrCode(await response.json())).toBe("capability_denied");
-        await expect(row.getByTestId("applet-configuration-status")).not.toBeEmpty();
+        await expect(row.locator(".applet-configuration-status")).not.toBeEmpty();
         return response.request().postDataJSON();
       };
       const original = await responseForClick("applet-create-bot");
@@ -882,8 +882,8 @@ test.describe("applet bridge", () => {
       expect(directRejected.status).toBe("rejected");
       expect(await queryRealmEventsApi(request, aliceToken, realmId)).toEqual(events);
       await alicePage.gotoTimelineRealm(realmId);
-      await expect(alicePage.page.getByTestId("message-list")).toBeVisible({timeout:30_000});
-      await expect(alicePage.page.getByTestId("message-list")).not.toContainText(text);
+      await expect(alicePage.page.locator(".message-list")).toBeVisible({timeout:30_000});
+      await expect(alicePage.page.locator(".message-list")).not.toContainText(text);
 
       const revoke = await revokeAppletRuntime(
         request,

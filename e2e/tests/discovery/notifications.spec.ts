@@ -108,18 +108,18 @@ test.describe("notifications", () => {
 
       // bob navigates to /notifications and should see the new message in the list.
       await bobPage.gotoNotifications();
-      await expect(bobPage.page.getByTestId("notifications-panel")).toBeVisible(
+      await expect(bobPage.page.locator(".notifications-panel")).toBeVisible(
         {
           timeout: 30_000,
         },
       );
       const notification = bobPage.page
-        .getByTestId("notification-item")
+        .locator(".notification-item")
         .filter({ hasText: msg });
       await expect
         .poll(
           async () => {
-            await bobPage.page.getByTestId("refresh-notifications").click();
+            await bobPage.page.locator(".refresh-notifications").click();
             await bobPage.page.waitForTimeout(500);
             return await notification.count();
           },
@@ -178,19 +178,19 @@ test.describe("notifications", () => {
 
       await bobPage.gotoNotificationSettings();
       await expect(
-        bobPage.page.getByTestId("notification-settings-panel"),
+        bobPage.page.locator(".settings-page"),
       ).toBeVisible({
         timeout: 30_000,
       });
       await selectDxcOption(
-        bobPage.page.getByTestId("realm-override-realm-select"),
+        bobPage.page.locator(".realm-override-realm-select"),
         realmId,
       );
       await selectDxcOption(
-        bobPage.page.getByTestId("realm-override-level-select"),
+        bobPage.page.locator(".realm-override-level-select"),
         "muted",
       );
-      await bobPage.page.getByTestId("realm-override-add").click();
+      await bobPage.page.locator(".realm-override-add").click();
       await expect(
         bobPage.page.locator(
           `[data-testid="settings-muted-realm-row"][data-realm-id="${cssStringEscape(realmId)}"]`,
@@ -199,14 +199,14 @@ test.describe("notifications", () => {
 
       await alicePage.sendTimelineMessage(realmId, normalMsg);
       await bobPage.gotoNotifications();
-      await expect(bobPage.page.getByTestId("notifications-panel")).toBeVisible(
+      await expect(bobPage.page.locator(".notifications-panel")).toBeVisible(
         {
           timeout: 30_000,
         },
       );
       await expect(
         bobPage.page
-          .getByTestId("notification-item")
+          .locator(".notification-item")
           .filter({ hasText: normalMsg }),
       ).toHaveCount(0);
 
@@ -217,7 +217,7 @@ test.describe("notifications", () => {
       await bobPage.page.reload({ waitUntil: "domcontentloaded" });
       await expect(
         bobPage.page
-          .getByTestId("notification-item")
+          .locator(".notification-item")
           .filter({ hasText: mentionMsg }),
       ).toHaveCount(0);
       await stepShot(bobPage.page, testInfo, "muted-mention-suppressed");
@@ -293,22 +293,22 @@ test.describe("notifications", () => {
 
       await bobDeviceA.gotoNotificationSettings();
       await expect(
-        bobDeviceA.page.getByTestId("notification-settings-panel"),
+        bobDeviceA.page.locator(".settings-page"),
       ).toBeVisible({
         timeout: 30_000,
       });
       await bobDeviceA.checkWithPassivePromptRetry(
-        bobDeviceA.page.getByTestId("dnd-enabled-toggle"),
+        bobDeviceA.page.locator(".dnd-enabled-toggle"),
       );
       await selectDxcOption(
-        bobDeviceA.page.getByTestId("dnd-mode-select"),
+        bobDeviceA.page.locator(".dnd-mode-select"),
         "now",
       );
       await bobDeviceA.clickWithPassivePromptRetry(
-        bobDeviceA.page.getByTestId("save-notification-settings-button"),
+        bobDeviceA.page.locator(".save-notification-settings-button"),
       );
       await expect(
-        bobDeviceA.page.getByTestId("notification-settings-status"),
+        bobDeviceA.page.locator(".settings-page .write-status"),
       ).toContainText(/do not disturb|dnd/i, { timeout: 30_000 });
 
       const accountDataUrl = `${colandBaseUrl()}/_arkret/self/account_data/${encodeURIComponent("ak.dnd_schedule")}`;
@@ -342,19 +342,19 @@ test.describe("notifications", () => {
       await bobDeviceA.gotoNotifications();
       await expect(
         bobDeviceA.page
-          .getByTestId("notification-item")
+          .locator(".notification-item")
           .filter({ hasText: suppressedMsg }),
       ).toHaveCount(0);
 
       await bobDeviceA.gotoNotificationSettings();
       await bobDeviceA.uncheckWithPassivePromptRetry(
-        bobDeviceA.page.getByTestId("dnd-enabled-toggle"),
+        bobDeviceA.page.locator(".dnd-enabled-toggle"),
       );
       await bobDeviceA.clickWithPassivePromptRetry(
-        bobDeviceA.page.getByTestId("save-notification-settings-button"),
+        bobDeviceA.page.locator(".save-notification-settings-button"),
       );
       await expect(
-        bobDeviceA.page.getByTestId("notification-settings-status"),
+        bobDeviceA.page.locator(".settings-page .write-status"),
       ).toContainText(/dnd disabled/i, { timeout: 30_000 });
       resumedMsg = resumedSuffix;
       await sendMessageApi(request, aliceToken, realmId, resumedMsg, {
@@ -363,7 +363,7 @@ test.describe("notifications", () => {
       await bobDeviceA.gotoNotifications();
       await expect(
         bobDeviceA.page
-          .getByTestId("notification-item")
+          .locator(".notification-item")
           .filter({ hasText: resumedMsg }),
       ).toBeVisible({ timeout: 30_000 });
       await stepShot(bobDeviceA.page, testInfo, "dnd-resumed");
@@ -418,24 +418,24 @@ test.describe("notifications", () => {
     try {
       await bobPage.gotoNotifications();
       const row = bobPage.page
-        .getByTestId("notification-item")
+        .locator(".notification-item")
         .filter({ hasText: msg });
       await expect(row).toBeVisible({ timeout: 30_000 });
-      await expect(row.getByTestId("mark-read-button")).toBeVisible();
+      await expect(row.locator(".mark-read-button")).toBeVisible();
       await expect(
         bobPage.page
-          .getByTestId("topbar-notifications-button")
+          .locator(".topbar-notifications-link")
           .locator(".topbar-notifications-badge"),
       ).toBeVisible({ timeout: 30_000 });
 
-      await bobPage.page.getByTestId("mark-all-read-button").click();
-      await expect(row.getByTestId("mark-unread-button")).toBeVisible({
+      await bobPage.page.locator(".mark-all-read-button").click();
+      await expect(row.locator(".mark-unread-button")).toBeVisible({
         timeout: 30_000,
       });
-      await expect(row.getByTestId("mark-read-button")).toHaveCount(0);
+      await expect(row.locator(".mark-read-button")).toHaveCount(0);
       await expect(
         bobPage.page
-          .getByTestId("topbar-notifications-button")
+          .locator(".topbar-notifications-link")
           .locator(".topbar-notifications-badge"),
       ).toHaveCount(0, { timeout: 30_000 });
       await stepShot(bobPage.page, testInfo, "mark-all-read");
@@ -592,22 +592,22 @@ test.describe("notifications", () => {
       await bobDevice2Page.page.goto("/login", {
         waitUntil: "domcontentloaded",
       });
-      await bobDevice2Page.page.getByTestId("login-server-url").fill(colandBaseUrl());
-      await bobDevice2Page.page.getByTestId("start-server-login-button").click();
+      await bobDevice2Page.page.locator(".auth-station-field input").fill(colandBaseUrl());
+      await bobDevice2Page.page.locator(".auth-primary").click();
       await submitCoauthPasswordCredentials(bobDevice2Page.page, bobAccount);
       const approve = bobDevice2Page.page.getByTestId("coauth-oauth-approve");
       if (await approve.waitFor({ state: "visible", timeout: 20_000 }).then(() => true).catch(() => false)) {
         await approve.click();
       }
-      await expect(bobDevice2Page.page.getByTestId("device-setup-required")).toBeVisible({ timeout: 120_000 });
-      await expect(bobDevice2Page.page.getByTestId("client-shell")).toHaveCount(0);
-      await bobDevice2Page.page.getByTestId("device-setup-pairing-start").click();
-      const pairingCode = bobDevice2Page.page.getByTestId("device-setup-pairing-code");
+      await expect(bobDevice2Page.page.locator(".device-setup-required")).toBeVisible({ timeout: 120_000 });
+      await expect(bobDevice2Page.page.locator(".shell.app")).toHaveCount(0);
+      await bobDevice2Page.page.locator(".device-setup-pairing-start").click();
+      const pairingCode = bobDevice2Page.page.locator(".device-setup-pairing-code");
       await expect(pairingCode).toBeVisible({ timeout: 30_000 });
       const code = (await pairingCode.textContent())?.trim() ?? "";
       expect(code).not.toBe("");
       const pairingLink = await bobDevice2Page.page
-        .getByTestId("device-setup-pairing-link")
+        .locator(".device-setup-pairing-link")
         .inputValue();
       await approvePairingLinkOnAuthorizedDevice(
         bobDevice1,
@@ -615,13 +615,13 @@ test.describe("notifications", () => {
         code,
       );
 
-      await bobDevice2Page.page.getByTestId("device-setup-pairing-status").click();
-      await expect(bobDevice2Page.page.getByTestId("device-setup-status")).toContainText(
+      await bobDevice2Page.page.locator(".device-setup-pairing-status").click();
+      await expect(bobDevice2Page.page.locator(".device-setup-status")).toContainText(
         "Device authorization is accepted", { timeout: 90_000 },
       );
       await bobDevice2Page.page.getByRole("link", { name: "Sign in again after approval" }).click();
       await serverLoginViaCoauth(bobDevice2Page.page, bobAccount);
-      await expect(bobDevice2Page.page.getByTestId("client-shell")).toBeVisible({ timeout: 120_000 });
+      await expect(bobDevice2Page.page.locator(".shell.app")).toBeVisible({ timeout: 120_000 });
       await bobDevice2Page.completeRecoveryKeySetupIfPrompted();
       const unlockPrompt = bobDevice2Page.page.locator(
         '[data-testid="mls-unlock-modal"], [data-testid="mls-unlock-banner"]',
@@ -650,26 +650,26 @@ test.describe("notifications", () => {
 
       await bobDevice1.gotoNotifications();
       const device1Row = bobDevice1.page
-        .getByTestId("notification-item")
+        .locator(".notification-item")
         .filter({ hasText: msg });
       await expect(device1Row).toBeVisible({ timeout: 30_000 });
-      await expect(device1Row.getByTestId("mark-read-button")).toBeVisible({
+      await expect(device1Row.locator(".mark-read-button")).toBeVisible({
         timeout: 30_000,
       });
 
       await bobDevice2Page.gotoNotifications();
       const device2Row = bobDevice2Page.page
-        .getByTestId("notification-item")
+        .locator(".notification-item")
         .filter({ hasText: msg });
       await expect(device2Row).toBeVisible({ timeout: 30_000 });
       await bobDevice2Page.clickWithPassivePromptRetry(
-        bobDevice2Page.page.getByTestId("mark-all-read-button"),
+        bobDevice2Page.page.locator(".mark-all-read-button"),
       );
-      await expect(device2Row.getByTestId("mark-unread-button")).toBeVisible({
+      await expect(device2Row.locator(".mark-unread-button")).toBeVisible({
         timeout: 30_000,
       });
       await expect(
-        bobDevice2Page.page.getByTestId("notifications-status"),
+        bobDevice2Page.page.locator(".notifications-status"),
       ).toContainText(/synced \d+ read cursor/i, { timeout: 30_000 });
 
       // The success toast is transient and may be cleared by the refresh that
@@ -677,13 +677,13 @@ test.describe("notifications", () => {
       // convergence assertion.
       await bobDevice1.page.reload({ waitUntil: "domcontentloaded" });
       const device1ClearedRow = bobDevice1.page
-        .getByTestId("notification-item")
+        .locator(".notification-item")
         .filter({ hasText: msg });
       await expect(
-        device1ClearedRow.getByTestId("mark-unread-button"),
+        device1ClearedRow.locator(".mark-unread-button"),
       ).toBeVisible({ timeout: 30_000 });
       await expect(
-        device1ClearedRow.getByTestId("mark-read-button"),
+        device1ClearedRow.locator(".mark-read-button"),
       ).toHaveCount(0);
       await stepShot(
         bobDevice1.page,

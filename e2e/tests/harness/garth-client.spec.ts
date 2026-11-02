@@ -144,7 +144,7 @@ test("Garth commits a two-member Realm, exchanges messages and resumes a rebuilt
       await writeFile(custody.identitySnapshotPath, JSON.stringify(snapshot));
       try {
         await expect(client.cursorAfterRestart(bob, realm)).rejects.toThrow(corruptedKey === "missing-grant"
-          ? "durable accepted initial session grant unavailable"
+          ? "decode private registration custody"
           : corruptedKey === "session" ? "session holder binding differs" : "private key or trust domain differs");
         expect((await readFile(queuePath)).equals(queueBefore),
           "wrong key source cannot write durable Garth state").toBe(true);

@@ -34,11 +34,11 @@ test.describe("offline queue replay", () => {
       await fixture.bobPage.page.context().setOffline(true);
       const body = `offline queued replay ${Date.now()}`;
       await composeMessage(fixture.bobPage, body);
-      await expect(fixture.bobPage.page.getByTestId("chat-outbox-banner")).toBeVisible({
+      await expect(fixture.bobPage.page.locator(".chat-outbox-banner")).toBeVisible({
         timeout: 30_000,
       });
       await expect(
-        fixture.bobPage.page.getByTestId("chat-outbox-count"),
+        fixture.bobPage.page.locator(".chat-outbox-count"),
       ).toContainText("1", { timeout: 30_000 });
 
       let serialized = JSON.stringify(
@@ -49,7 +49,7 @@ test.describe("offline queue replay", () => {
       await fixture.bobPage.page.context().setOffline(false);
       await fixture.bobPage.gotoTimelineRealm(fixture.realmId);
       await fixture.bobPage.waitForTimelineEventSettled(body, 60_000);
-      await expect(fixture.bobPage.page.getByTestId("chat-outbox-banner")).toHaveCount(0, {
+      await expect(fixture.bobPage.page.locator(".chat-outbox-banner")).toHaveCount(0, {
         timeout: 60_000,
       });
       serialized = JSON.stringify(
@@ -114,8 +114,8 @@ async function createOfflineFixture(
 }
 
 async function composeMessage(userPage: JointUserPage, body: string) {
-  await userPage.page.getByTestId("chat-input").fill(body);
-  await userPage.page.getByTestId("send-chat-button").click();
+  await userPage.page.locator(".chat-input").fill(body);
+  await userPage.page.locator(".send-chat-button").click();
 }
 
 async function closeFixture(fixture: OfflineFixture) {

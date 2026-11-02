@@ -69,7 +69,7 @@ test.describe("fresh-browser device entry paths @fully-implemented", () => {
       await loginFreshBrowserToDeviceSetup(secondDevice.page, account);
 
       await expect(
-        secondDevice.page.getByTestId("device-setup-required"),
+        secondDevice.page.locator(".device-setup-required"),
       ).toBeVisible({ timeout: 120_000 });
       // The device-setup panel MUST say that the account login by itself
       // authorized nothing. The exact sentence is product copy, not spec text
@@ -81,21 +81,19 @@ test.describe("fresh-browser device entry paths @fully-implemented", () => {
           "Login alone cannot authorize a new device, and no session was issued.",
         ),
       ).toBeVisible();
-      await expect(secondDevice.page.getByTestId("client-shell")).toHaveCount(
+      await expect(secondDevice.page.locator(".shell.app")).toHaveCount(
         0,
       );
 
       await secondDevice.page
-        .getByTestId("device-setup-pairing-start")
+        .locator(".device-setup-pairing-start")
         .click();
-      const pairingCode = secondDevice.page.getByTestId(
-        "device-setup-pairing-code",
-      );
+      const pairingCode = secondDevice.page.locator(".device-setup-pairing-code");
       await expect(pairingCode).toBeVisible({ timeout: 30_000 });
       const code = (await pairingCode.textContent())?.trim() ?? "";
       expect(code).not.toBe("");
       const pairingLink = await secondDevice.page
-        .getByTestId("device-setup-pairing-link")
+        .locator(".device-setup-pairing-link")
         .inputValue();
       await approvePairingLinkOnAuthorizedDevice(
         firstDevice,
@@ -104,10 +102,10 @@ test.describe("fresh-browser device entry paths @fully-implemented", () => {
       );
 
       await secondDevice.page
-        .getByTestId("device-setup-pairing-status")
+        .locator(".device-setup-pairing-status")
         .click();
       await expect(
-        secondDevice.page.getByTestId("device-setup-status"),
+        secondDevice.page.locator(".device-setup-status"),
       ).toContainText("Device authorization is accepted", {
         timeout: 90_000,
       });
@@ -132,15 +130,15 @@ test.describe("fresh-browser device entry paths @fully-implemented", () => {
       await secondDevice.page
         .getByRole("link", { name: "Sign in again after approval" })
         .click();
-      await expect(secondDevice.page.getByTestId("login-panel")).toBeVisible({
+      await expect(secondDevice.page.locator(".auth-panel")).toBeVisible({
         timeout: 30_000,
       });
       await serverLoginViaCoauth(secondDevice.page, account);
-      await expect(secondDevice.page.getByTestId("client-shell")).toBeVisible({
+      await expect(secondDevice.page.locator(".shell.app")).toBeVisible({
         timeout: 120_000,
       });
       await expect(
-        secondDevice.page.getByTestId("device-setup-required"),
+        secondDevice.page.locator(".device-setup-required"),
       ).toHaveCount(0);
       const acceptedDeviceId = await configuredDeviceId(secondDevice.page);
       expect(acceptedDeviceId).toMatch(/^ak:device:/);
@@ -228,15 +226,13 @@ test.describe("fresh-browser device entry paths @fully-implemented", () => {
     try {
       await loginFreshBrowserToDeviceSetup(replacement.page, account);
       await expect(
-        replacement.page.getByTestId("device-setup-required"),
+        replacement.page.locator(".device-setup-required"),
       ).toBeVisible({ timeout: 120_000 });
 
       await replacement.page
-        .getByTestId("device-setup-use-recovery-key")
+        .locator(".device-setup-use-recovery-key")
         .click();
-      const recoveryPanel = replacement.page.getByTestId(
-        "pcr-policy-device-recovery",
-      );
+      const recoveryPanel = replacement.page.locator(".pcr-policy-device-recovery");
       await expect(recoveryPanel).toBeVisible();
       await expect(recoveryPanel).toContainText(
         "No approval from another device or administrator is required.",
@@ -256,13 +252,13 @@ test.describe("fresh-browser device entry paths @fully-implemented", () => {
         );
         expect(cut === "completion_grant_response_loss" ? lostCompletionResponse : failedAccountCommit).toBe(true);
         await replacement.page.reload({ waitUntil: "domcontentloaded" });
-        await expect(replacement.page.getByTestId("device-setup-required")).toBeVisible({ timeout: 120_000 });
-        await replacement.page.getByTestId("device-setup-use-recovery-key").click();
+        await expect(replacement.page.locator(".device-setup-required")).toBeVisible({ timeout: 120_000 });
+        await replacement.page.locator(".device-setup-use-recovery-key").click();
         await recoveryPanel.locator("#root-recovery-words").fill(activeRecoveryKey!);
         await recoveryPanel.getByRole("button", { name: "Authorize this device" }).click();
       }
 
-      const shell = replacement.page.getByTestId("client-shell");
+      const shell = replacement.page.locator(".shell.app");
       const terminalFailure = recoveryPanel
         .getByRole("status")
         .filter({ hasText: "Recovery could not finish:" });
@@ -276,10 +272,10 @@ test.describe("fresh-browser device entry paths @fully-implemented", () => {
             );
           }),
       ]);
-      await expect(replacement.page.getByTestId("onboarding-panel")).toHaveCount(
+      await expect(replacement.page.locator(".onboarding-panel")).toHaveCount(
         0,
       );
-      await expect(replacement.page.getByTestId("login-panel")).toHaveCount(0);
+      await expect(replacement.page.locator(".auth-panel")).toHaveCount(0);
 
       expectSuccessfulOperation(
         responses,
@@ -363,10 +359,10 @@ test.describe("fresh-browser device entry paths @fully-implemented", () => {
       ).toContain(oldGenerationProbe.status());
 
       await replacement.page.reload({ waitUntil: "domcontentloaded" });
-      await expect(replacement.page.getByTestId("client-shell")).toBeVisible({
+      await expect(replacement.page.locator(".shell.app")).toBeVisible({
         timeout: 120_000,
       });
-      await expect(replacement.page.getByTestId("login-panel")).toHaveCount(0);
+      await expect(replacement.page.locator(".auth-panel")).toHaveCount(0);
     } finally {
       await Promise.allSettled([
         replacement.close(),
@@ -400,8 +396,8 @@ async function loginFreshBrowserToDeviceSetup(
   await page.goto("/login", {
     waitUntil: "domcontentloaded",
   });
-  await page.getByTestId("login-server-url").fill(colandBaseUrl());
-  await page.getByTestId("start-server-login-button").click();
+  await page.locator(".auth-station-field input").fill(colandBaseUrl());
+  await page.locator(".auth-primary").click();
   await submitCoauthPasswordCredentials(page, account);
 
   const approve = page.getByTestId("coauth-oauth-approve");
@@ -413,10 +409,10 @@ async function loginFreshBrowserToDeviceSetup(
     await approve.click();
   }
 
-  await expect(page.getByTestId("device-setup-required")).toBeVisible({
+  await expect(page.locator(".device-setup-required")).toBeVisible({
     timeout: 120_000,
   });
-  await expect(page.getByTestId("client-shell")).toHaveCount(0);
+  await expect(page.locator(".shell.app")).toHaveCount(0);
 }
 
 function collectProtocolResponses(page: Page): ProtocolResponse[] {

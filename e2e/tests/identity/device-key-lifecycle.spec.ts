@@ -149,11 +149,9 @@ test.describe("holder device key lifecycle separation @fully-implemented", () =>
         try {
           await loginFreshBrowserToDeviceSetup(pairingProbe.page, account);
           await pairingProbe.page
-            .getByTestId("device-setup-pairing-start")
+            .locator(".device-setup-pairing-start")
             .click();
-          const pairingLinkInput = pairingProbe.page.getByTestId(
-            "device-setup-pairing-link",
-          );
+          const pairingLinkInput = pairingProbe.page.locator(".device-setup-pairing-link");
           await expect(pairingLinkInput).toBeVisible({ timeout: 30_000 });
           const pairingLink = new URL(await pairingLinkInput.inputValue());
           expect(pairingLink.search).toBe("");
@@ -203,10 +201,10 @@ test.describe("holder device key lifecycle separation @fully-implemented", () =>
       await test.step("soft refresh preserves the grant-binding key and device signer", async () => {
         const refreshStartIndex = grants.count();
         await reloadWithSessionGrantExpiringSoon(page, activeGrant.jwt, 60);
-        await expect(page.getByTestId("client-shell")).toBeVisible({
+        await expect(page.locator(".shell.app")).toBeVisible({
           timeout: 120_000,
         });
-        await expect(page.getByTestId("login-panel")).toHaveCount(0);
+        await expect(page.locator(".auth-panel")).toHaveCount(0);
 
         const refreshedGrant = await refreshes.waitForLatest();
         expect(
@@ -287,8 +285,8 @@ async function loginFreshBrowserToDeviceSetup(
   account: RealOidcAccount | CoauthPasswordAccount,
 ): Promise<void> {
   await page.goto("/login", { waitUntil: "domcontentloaded" });
-  await page.getByTestId("login-server-url").fill(colandBaseUrl());
-  await page.getByTestId("start-server-login-button").click();
+  await page.locator(".auth-station-field input").fill(colandBaseUrl());
+  await page.locator(".auth-primary").click();
   await submitCoauthPasswordCredentials(page, account);
 
   const approve = page.getByTestId("coauth-oauth-approve");
@@ -301,10 +299,10 @@ async function loginFreshBrowserToDeviceSetup(
     await approve.click();
   }
 
-  await expect(page.getByTestId("device-setup-required")).toBeVisible({
+  await expect(page.locator(".device-setup-required")).toBeVisible({
     timeout: 120_000,
   });
-  await expect(page.getByTestId("client-shell")).toHaveCount(0);
+  await expect(page.locator(".shell.app")).toHaveCount(0);
 }
 
 function observeSessionGrants(page: Page) {
@@ -443,10 +441,10 @@ async function reloadWithSessionGrantExpiringSoon(
 
 async function currentSettingsSignerDid(page: Page): Promise<string> {
   await page.goto("/settings/release", { waitUntil: "domcontentloaded" });
-  await expect(page.getByTestId("settings-session-diagnostics")).toBeVisible({
+  await expect(page.locator(".settings-session-diagnostics")).toBeVisible({
     timeout: 120_000,
   });
-  const signerDid = page.getByTestId("settings-signer-did");
+  const signerDid = page.locator(".settings-signer-did");
   await expect
     .poll(async () => (await signerDid.getAttribute("title")) ?? "", {
       timeout: 60_000,
@@ -464,17 +462,17 @@ async function buildEncryptedBoardListCard(
 ): Promise<string> {
   const page = userPage.page;
   await page.goto(`/kanban/${realmId}`, { waitUntil: "domcontentloaded" });
-  await expect(page.getByTestId("kanban-panel")).toBeVisible({
+  await expect(page.locator(".kanban-panel")).toBeVisible({
     timeout: 120_000,
   });
   await userPage.clickWithPassivePromptRetry(
-    page.getByTestId("new-board-toggle"),
+    page.locator(".new-board-toggle"),
   );
-  await page.getByTestId("new-board-title-input").fill(boardTitle);
+  await page.locator(".new-board-title-input input, .new-board-title-input textarea").fill(boardTitle);
   await userPage.clickWithPassivePromptRetry(
-    page.getByTestId("create-board-space-button"),
+    page.locator(".create-board-space-button"),
   );
-  await expect(page.getByTestId("kanban-empty-board")).toContainText(
+  await expect(page.locator(".kanban-empty-board")).toContainText(
     /No lists yet/,
     {
       timeout: 45_000,
@@ -488,24 +486,24 @@ async function buildEncryptedBoardListCard(
   );
   expect(boardId, `board id from url ${page.url()}`).toMatch(/^ak:space:/);
 
-  await page.getByTestId("new-column-input").fill(listTitle);
+  await page.locator(".new-column-input").fill(listTitle);
   await userPage.clickWithPassivePromptRetry(
-    page.getByTestId("add-column-button"),
+    page.locator(".add-column-button"),
   );
   const column = page
-    .getByTestId("kanban-column")
+    .locator(".kanban-column")
     .filter({ hasText: listTitle })
     .first();
   await expect(column).toBeVisible({ timeout: 45_000 });
   await userPage.clickWithPassivePromptRetry(
-    column.getByTestId("add-card-button"),
+    column.locator(".add-card-button"),
   );
-  await column.getByTestId("new-card-title-input").fill(cardTitle);
+  await column.locator(".new-card-title-input").fill(cardTitle);
   await userPage.clickWithPassivePromptRetry(
-    column.getByTestId("save-card-button"),
+    column.locator(".save-card-button"),
   );
   await expect(
-    column.getByTestId("kanban-card").filter({ hasText: cardTitle }),
+    column.locator(".kanban-card").filter({ hasText: cardTitle }),
   ).toBeVisible({
     timeout: 45_000,
   });
@@ -518,24 +516,24 @@ async function addEncryptedDescription(
   description: string,
 ): Promise<void> {
   const card = page
-    .getByTestId("kanban-card")
+    .locator(".kanban-card")
     .filter({ hasText: cardTitle })
     .first();
   await expect(card).toHaveAttribute("data-card-draft", "false", { timeout: 45_000 });
   await card.click();
-  await expect(page.getByTestId("card-detail-modal")).toBeVisible({
+  await expect(page.locator(".card-detail-modal")).toBeVisible({
     timeout: 45_000,
   });
-  await page.getByTestId("card-detail-tab-description").click();
-  await page.getByTestId("card-detail-edit-description-button").click();
+  await page.locator(".card-detail-tab-description").click();
+  await page.locator(".card-detail-edit-description-button").click();
 
   const richEditor = page
-    .getByTestId("card-detail-description-rich-editor")
+    .locator(".card-detail-description-rich-editor")
     .locator('.ProseMirror.toastui-editor-contents[contenteditable="true"]');
   await expect(richEditor).toBeVisible({ timeout: 45_000 });
   await richEditor.click();
   await richEditor.pressSequentially(description);
-  await expect(page.getByTestId("card-detail-description-input")).toHaveValue(
+  await expect(page.locator(".card-detail-description-input")).toHaveValue(
     description,
   );
 
@@ -546,7 +544,7 @@ async function addEncryptedDescription(
       (response.request().postData() ?? "").includes("ak.strand.update"),
     { timeout: 60_000 },
   );
-  await page.getByTestId("card-detail-save-button").click();
+  await page.locator(".card-detail-save-button").click();
   const response = await strandUpdate;
   const body = await response.text();
   expect(
@@ -557,13 +555,13 @@ async function addEncryptedDescription(
     (response.request().postData() ?? "").includes(description),
     "description leaked as plaintext into the encrypted realm wire",
   ).toBe(false);
-  await expect(page.getByTestId("card-description-panel")).toContainText(
+  await expect(page.locator(".card-description-panel")).toContainText(
     description,
     {
       timeout: 120_000,
     },
   );
-  await page.getByTestId("card-detail-close-button").click();
+  await page.locator(".card-detail-close-button").click();
 }
 
 async function assertCardDescription(
@@ -578,37 +576,37 @@ async function assertCardDescription(
     waitUntil: "domcontentloaded",
   });
   await dismissBlockingEncryptedPrompts(userPage);
-  await expect(page.getByTestId("kanban-panel")).toBeVisible({
+  await expect(page.locator(".kanban-panel")).toBeVisible({
     timeout: 120_000,
   });
   const card = page
-    .getByTestId("kanban-card")
+    .locator(".kanban-card")
     .filter({ hasText: cardTitle })
     .first();
   await expect(card).toBeVisible({ timeout: 90_000 });
   await expect(
-    page.getByTestId("kanban-card-redacted").filter({ hasText: cardTitle }),
+    page.locator(".kanban-card-redacted").filter({ hasText: cardTitle }),
   ).toHaveCount(0);
   // The encrypted-write backup prompt is scheduled asynchronously and can
   // appear after the page-level cleanup above. Use the bounded prompt-aware
   // click so a prompt racing this interaction is dismissed and retried.
   await userPage.clickWithPassivePromptRetry(card);
-  await expect(page.getByTestId("card-detail-modal")).toBeVisible({
+  await expect(page.locator(".card-detail-modal")).toBeVisible({
     timeout: 45_000,
   });
   // The first accepted encrypted write can legitimately trigger the MLS
   // backup prompt after the earlier page-level prompt cleanup. Dismiss that
   // newly-created modal before interacting with the card detail underneath.
   await dismissBlockingEncryptedPrompts(userPage);
-  await page.getByTestId("card-detail-tab-description").click();
-  await expect(page.getByTestId("card-description-panel")).toContainText(
+  await page.locator(".card-detail-tab-description").click();
+  await expect(page.locator(".card-description-panel")).toContainText(
     description,
     {
       timeout: 120_000,
     },
   );
-  await expect(page.getByTestId("card-detail-body-locked")).toHaveCount(0);
-  await page.getByTestId("card-detail-close-button").click();
+  await expect(page.locator(".card-detail-body-locked")).toHaveCount(0);
+  await page.locator(".card-detail-close-button").click();
 }
 
 async function dismissBlockingEncryptedPrompts(
@@ -620,7 +618,7 @@ async function dismissBlockingEncryptedPrompts(
     "mls-recovery-missing-dismiss",
     "mls-unlock-dismiss",
   ]) {
-    const button = userPage.page.getByTestId(testId).last();
+    const button = userPage.page.locator('[class~="' + testId + '"]').last();
     if (await button.isVisible({ timeout: 300 }).catch(() => false)) {
       await button.click({ timeout: 3_000 }).catch(() => {});
     }

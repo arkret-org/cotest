@@ -718,22 +718,22 @@ function prepareSignedPackage(body) {
         {
           method: "POST",
           path: "/_arkret/edge/applet/managed-actors/author",
-          auth: "none",
+          authentication_kind: "none",
         },
         {
           method: "POST",
           path: "/_arkret/edge/applet/transactions",
-          auth: "webhook_signature",
+          authentication_kind: "webhook_signature",
         },
         {
           method: "GET",
           path: "/_arkret/edge/applet/actors/{actor_id}",
-          auth: "bearer",
+          authentication_kind: "bearer",
         },
         {
           method: "GET",
           path: "/_arkret/edge/applet/realms/{realm_id_or_alias}",
-          auth: "bearer",
+          authentication_kind: "bearer",
         },
       ],
     },

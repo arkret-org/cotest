@@ -94,35 +94,35 @@ test.describe("workflow: support escalation", () => {
 
       // Phase B — reply chain: ask → answer → hypothesis.
       await samPage.gotoTimelineRealm(realmId);
-      await expect(samPage.page.getByTestId("message-list")).toContainText(summary, {
+      await expect(samPage.page.locator(".message-list")).toContainText(summary, {
         timeout: 30_000,
       });
       await samPage.clickTimelineReply(summary);
-      await expect(samPage.page.getByTestId("chat-reply-banner")).toBeVisible();
+      await expect(samPage.page.locator(".chat-reply-banner")).toBeVisible();
       await samPage.sendTimelineMessage(realmId, samAsk);
-      await expect(samPage.timelineEvent(samAsk).getByTestId("chat-reply-indicator")).toBeVisible({
+      await expect(samPage.timelineEvent(samAsk).locator(".chat-reply-indicator")).toBeVisible({
         timeout: 30_000,
       });
 
       await alexPage.gotoTimelineRealm(realmId);
-      await expect(alexPage.page.getByTestId("message-list")).toContainText(samAsk, {
+      await expect(alexPage.page.locator(".message-list")).toContainText(samAsk, {
         timeout: 30_000,
       });
       await alexPage.clickTimelineReply(samAsk);
-      await expect(alexPage.page.getByTestId("chat-reply-banner")).toBeVisible();
+      await expect(alexPage.page.locator(".chat-reply-banner")).toBeVisible();
       await alexPage.sendTimelineMessage(realmId, alexAnswer);
-      await expect(alexPage.timelineEvent(alexAnswer).getByTestId("chat-reply-indicator")).toBeVisible({
+      await expect(alexPage.timelineEvent(alexAnswer).locator(".chat-reply-indicator")).toBeVisible({
         timeout: 30_000,
       });
 
       await samPage.gotoTimelineRealm(realmId);
-      await expect(samPage.page.getByTestId("message-list")).toContainText(alexAnswer, {
+      await expect(samPage.page.locator(".message-list")).toContainText(alexAnswer, {
         timeout: 30_000,
       });
       await samPage.clickTimelineReply(alexAnswer);
-      await expect(samPage.page.getByTestId("chat-reply-banner")).toBeVisible();
+      await expect(samPage.page.locator(".chat-reply-banner")).toBeVisible();
       await samPage.sendTimelineMessage(realmId, samHypothesis);
-      await expect(samPage.timelineEvent(samHypothesis).getByTestId("chat-reply-indicator")).toBeVisible({
+      await expect(samPage.timelineEvent(samHypothesis).locator(".chat-reply-indicator")).toBeVisible({
         timeout: 30_000,
       });
       await stepShot(samPage.page, testInfo, "B-reply-chain");
@@ -131,30 +131,30 @@ test.describe("workflow: support escalation", () => {
       await alexPage.gotoTimelineRealm(realmId);
       await expect(alexPage.timelineEvent(summary)).toBeVisible({ timeout: 30_000 });
       await alexPage.clickTimelineEdit(summary);
-      await alexPage.page.getByTestId("chat-edit-composer").locator("textarea").fill(summaryEdited);
-      await alexPage.page.getByTestId("chat-save-edit-button").click();
+      await alexPage.page.locator(".chat-edit-composer").locator("textarea").fill(summaryEdited);
+      await alexPage.page.locator(".chat-save-edit-button").click();
       await alexPage.waitForTimelineEventSettled(summaryEdited);
-      await expect(alexPage.page.getByTestId("chat-status")).toContainText(/Message updated/i);
+      await expect(alexPage.page.locator(".chat-status")).toContainText(/Message updated/i);
       await samPage.gotoTimelineRealm(realmId);
       await expect(samPage.timelineEvent(summaryEdited)).toBeVisible({ timeout: 30_000 });
       await stepShot(alexPage.page, testInfo, "C-summary-patched");
 
       // Phase D — deployment notice + verification close the loop.
       await samPage.clickTimelineReply(samHypothesis);
-      await expect(samPage.page.getByTestId("chat-reply-banner")).toBeVisible();
+      await expect(samPage.page.locator(".chat-reply-banner")).toBeVisible();
       await samPage.sendTimelineMessage(realmId, samDeployed);
-      await expect(samPage.timelineEvent(samDeployed).getByTestId("chat-reply-indicator")).toBeVisible({
+      await expect(samPage.timelineEvent(samDeployed).locator(".chat-reply-indicator")).toBeVisible({
         timeout: 30_000,
       });
 
       await alexPage.gotoTimelineRealm(realmId);
-      await expect(alexPage.page.getByTestId("message-list")).toContainText(samDeployed, {
+      await expect(alexPage.page.locator(".message-list")).toContainText(samDeployed, {
         timeout: 30_000,
       });
       await alexPage.clickTimelineReply(samDeployed);
-      await expect(alexPage.page.getByTestId("chat-reply-banner")).toBeVisible();
+      await expect(alexPage.page.locator(".chat-reply-banner")).toBeVisible();
       await alexPage.sendTimelineMessage(realmId, alexVerified);
-      await expect(alexPage.timelineEvent(alexVerified).getByTestId("chat-reply-indicator")).toBeVisible({
+      await expect(alexPage.timelineEvent(alexVerified).locator(".chat-reply-indicator")).toBeVisible({
         timeout: 30_000,
       });
       await stepShot(alexPage.page, testInfo, "D-verified");
@@ -196,35 +196,35 @@ test.describe("workflow: support escalation", () => {
       await alexPage.page.goto(`/kanban/${realmId}`, {
         waitUntil: "domcontentloaded",
       });
-      await expect(alexPage.page.getByTestId("kanban-panel")).toBeVisible({
+      await expect(alexPage.page.locator(".kanban-panel")).toBeVisible({
         timeout: 120_000,
       });
-      await alexPage.page.getByTestId("new-board-toggle").click();
-      await alexPage.page.getByTestId("new-board-title-input").fill(boardTitle);
-      await alexPage.page.getByTestId("create-board-space-button").click();
+      await alexPage.page.locator(".new-board-toggle").click();
+      await alexPage.page.locator(".new-board-title-input input, .new-board-title-input textarea").fill(boardTitle);
+      await alexPage.page.locator(".create-board-space-button").click();
       await expect(
-        alexPage.page.getByTestId("board-space-select-button"),
+        alexPage.page.locator(".board-space-select-button"),
       ).toContainText(boardTitle, { timeout: 45_000 });
 
       for (const columnName of [triage, inProgress, resolved]) {
-        await alexPage.page.getByTestId("new-column-input").fill(columnName);
-        await alexPage.page.getByTestId("add-column-button").click();
+        await alexPage.page.locator(".new-column-input").fill(columnName);
+        await alexPage.page.locator(".add-column-button").click();
         await expect(
           alexPage.page
-            .getByTestId("kanban-column")
+            .locator(".kanban-column")
             .filter({ hasText: columnName }),
         ).toBeVisible({ timeout: 30_000 });
       }
 
       const triageColumn = alexPage.page
-        .getByTestId("kanban-column")
+        .locator(".kanban-column")
         .filter({ hasText: triage });
-      await triageColumn.getByTestId("add-card-button").click();
-      await triageColumn.getByTestId("new-card-title-input").fill(ticketCard);
-      await triageColumn.getByTestId("save-card-button").click();
+      await triageColumn.locator(".add-card-button").click();
+      await triageColumn.locator(".new-card-title-input").fill(ticketCard);
+      await triageColumn.locator(".save-card-button").click();
 
       const card = triageColumn
-        .getByTestId("kanban-card")
+        .locator(".kanban-card")
         .filter({ hasText: ticketCard });
       await expect(card).toBeVisible({ timeout: 30_000 });
 
@@ -232,8 +232,8 @@ test.describe("workflow: support escalation", () => {
       // server ack: the draft badge is visible and the archive button is
       // gated to "draft" so the archive-then-recreate promote pattern can't
       // act on an unacked card.
-      const archiveButton = card.getByTestId("card-archive-button");
-      const draftBadge = card.getByTestId("kanban-card-draft-badge");
+      const archiveButton = card.locator(".card-archive-button");
+      const draftBadge = card.locator(".kanban-card-draft-badge");
       if (await draftBadge.isVisible({ timeout: 1_000 }).catch(() => false)) {
         await expect(card).toHaveAttribute("data-card-draft", "true");
         await expect(archiveButton).toHaveAttribute("data-cap-gate", "draft");
@@ -294,7 +294,7 @@ test.describe("workflow: support escalation", () => {
       // Alex posts the reply that accidentally leaked PII; Sam receives it.
       await alexPage.sendTimelineMessage(realmId, leaked);
       await samPage.gotoTimelineRealm(realmId);
-      await expect(samPage.page.getByTestId("message-list")).toContainText(leaked, {
+      await expect(samPage.page.locator(".message-list")).toContainText(leaked, {
         timeout: 30_000,
       });
 
@@ -302,15 +302,15 @@ test.describe("workflow: support escalation", () => {
       // replaces the body in place.
       await alexPage.gotoTimelineRealm(realmId);
       await alexPage.clickTimelineRedact(leaked);
-      await alexPage.page.getByTestId("chat-confirm-redact-button").click();
+      await alexPage.page.locator(".chat-confirm-redact-button").click();
       await expect(
-        alexPage.page.getByTestId("chat-redacted-tombstone"),
+        alexPage.page.locator(".chat-redacted-tombstone"),
       ).toBeVisible({ timeout: 30_000 });
       // The tombstone is rendered optimistically. Do not navigate away until
       // the canonical ak.message.redact Event is accepted, otherwise the page
       // can abort the in-flight submit and the reload correctly restores the
       // still-live create Event.
-      await expect(alexPage.page.getByTestId("chat-status")).toContainText(
+      await expect(alexPage.page.locator(".chat-status")).toContainText(
         "Message removed",
         { timeout: 60_000 },
       );
@@ -323,18 +323,18 @@ test.describe("workflow: support escalation", () => {
       // the tombstone surfaces on each reload.
       await alexPage.gotoTimelineRealm(realmId);
       await expect(
-        alexPage.page.getByTestId("chat-redacted-tombstone"),
+        alexPage.page.locator(".chat-redacted-tombstone"),
       ).toBeVisible({ timeout: 30_000 });
-      await expect(alexPage.page.getByTestId("message-list")).not.toContainText(
+      await expect(alexPage.page.locator(".message-list")).not.toContainText(
         leaked,
         { timeout: 30_000 },
       );
 
       await samPage.gotoTimelineRealm(realmId);
       await expect(
-        samPage.page.getByTestId("chat-redacted-tombstone"),
+        samPage.page.locator(".chat-redacted-tombstone"),
       ).toBeVisible({ timeout: 30_000 });
-      await expect(samPage.page.getByTestId("message-list")).not.toContainText(
+      await expect(samPage.page.locator(".message-list")).not.toContainText(
         leaked,
         { timeout: 30_000 },
       );

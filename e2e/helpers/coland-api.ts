@@ -2526,6 +2526,8 @@ export async function resolveDefaultStrandId(
           observed = realm.default_strand_id;
           return true;
         }
+      } else if (response.status() === 503 && wireErrCode(await response.json()) === "temporarily_unavailable") {
+        return false;
       } else if (![403, 404].includes(response.status())) {
         throw new Error(`default Strand read returned ${response.status()}`);
       }
