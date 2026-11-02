@@ -1,6 +1,6 @@
 import { accountActorId } from "./coland-api";
 import { actorRow } from "./product-locators";
-import { selectProductOptionByKey } from "./product-select";
+import { selectProductOptionByLabel } from "./product-select";
 import { expect, test, operationSelector, isDirectAdmissionOutcomeReason } from "./arkret-test";
 import type { Page, Response, Request, APIRequestContext } from "@playwright/test";
 import { assertAuthoritySubmitOutcome, authHeaders, canonicalJson, readCommitStreamHeadApi, scanRealmStreamApi, sdkEventDerivedIds, sha256CanonicalJson, signedEventEnvelope, wireErrCode } from "./coland-api";
@@ -36,7 +36,7 @@ export async function createDirectBoundaryCircleStrand(
   await expect(page.getByRole("dialog", { name: "New Strand", exact: true })).toBeVisible();
   await page.locator(".new-channel-name").fill(`${title} Strand`);
   const picker = page.locator(".circle-scope-picker");
-  await selectProductOptionByKey(picker, circleId);
+  await selectProductOptionByLabel(picker, new RegExp("^" + title.replace(/[^\w-]/g, "\\$&") + " \\(\\d+ members\\)$"));
   await expect(picker.locator('button[aria-haspopup="listbox"]')).toContainText(title);
   await page.locator(".create-channel-button").click();
   const channel = page.locator(".channel-item").filter({ hasText: `${title} Strand` });

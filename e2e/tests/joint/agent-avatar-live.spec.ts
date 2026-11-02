@@ -145,7 +145,25 @@ for (const mode of ["avatar", "lost-responses", "retryable-profile", "account-sw
       ]);
       await chooser.setFiles({ name: "agent.png", mimeType: "image/png", buffer: avatarPng });
       const crop = page.locator(".avatar-crop-editor");
-      await expect(crop).toBeVisible();
+      try {
+        await expect(crop).toBeVisible();
+      } catch (error) {
+        const diagnostic = await page.evaluate(() => {
+          const status = document.querySelector(".agent-admin .avatar-uploader-controls > .muted")?.textContent ?? "";
+          return {
+            statusKind: status === "" ? "empty" : status.startsWith("Adjust crop") ? "selected"
+              : status.startsWith("Could not decode image") ? "decode-error"
+              : status.startsWith("Could not start image read") ? "spawn-error" : "other",
+            files: Array.from(document.querySelectorAll<HTMLInputElement>('input[type="file"]'))
+              .map(input => Array.from(input.files ?? []).map(file => ({ size: file.size, type: file.type }))),
+            cropCount: document.querySelectorAll(".avatar-crop-editor").length,
+          };
+        });
+        await test.info().attach("safe-avatar-picker-boundary", {
+          contentType: "application/json", body: JSON.stringify(diagnostic),
+        });
+        throw error;
+      }
       const [uploaded] = await Promise.all([
         page.waitForResponse(response => response.request().method() === "POST"
           && new URL(response.url()).pathname === "/_arkret/self/blob/upload"),

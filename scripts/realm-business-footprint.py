@@ -112,7 +112,7 @@ SELECT format('SELECT json_build_object(''table'',%L,''rows'',COALESCE(jsonb_agg
 FROM information_schema.columns
 WHERE table_schema='public' AND column_name='realm_id'
   AND (table_name IN ('canonical_events','realm_commits','notifications')
-       OR right(table_name,16)='_current_states')
+       OR right(table_name,length('_current_states'))='_current_states')
 ORDER BY table_name
 \\gexec
 """

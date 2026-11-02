@@ -26,7 +26,7 @@ export async function addBoardList(page: Page, title: string): Promise<Locator> 
     await expect(input).toHaveValue("", { timeout: 1_000 });
   }).toPass({ timeout: 90_000, intervals: [250, 500, 1_000] });
   const column = page.locator(".kanban-column").filter({
-    has: page.locator(".kanban-column-title").and(page.getByRole("button", { name: title, exact: true })),
+    has: page.locator(".kanban-column-title").and(page.getByText(title, { exact: true })),
   });
   await expect(column).toHaveCount(1, { timeout: 120_000 });
   await expect(column).toBeVisible();

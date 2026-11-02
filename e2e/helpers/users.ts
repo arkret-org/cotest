@@ -2486,13 +2486,15 @@ export async function approvePairingLinkOnAuthorizedDevice(
     authorizingDevice.page.locator(".accept-pairing-resolve-button"),
   );
   await expect(
-    authorizingDevice.page.locator(".accept-pairing-code"),
+    authorizingDevice.page.locator(".device-pair-approval-review .device-pair-approval-code"),
   ).toHaveText(expectedCode, { timeout: 90_000 });
   await authorizingDevice.clickWithPassivePromptRetry(
     authorizingDevice.page.locator(".accept-pairing-button"),
   );
   await expect(
-    authorizingDevice.page.locator(".accept-pairing-status"),
+    authorizingDevice.page.locator(".settings-devices-panel .event")
+      .filter({ has: authorizingDevice.page.locator(".accept-pairing-input") })
+      .locator(".write-status"),
   ).toContainText("Device authorization accepted", { timeout: 90_000 });
 }
 

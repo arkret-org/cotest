@@ -4,7 +4,7 @@ import { accountSubscribeRealmFramesApi, canonicalJson, scanRealmStreamApi, acco
 import { eventIdFromMessage } from "../../helpers/message-evidence";
 import { createDpopUserSession, openUserPage, type JointUserPage } from "../../helpers/users";
 import { colandBaseUrl } from "../../helpers/env";
-import { selectProductOptionByKey } from "../../helpers/product-select";
+import { selectProductOptionByLabel } from "../../helpers/product-select";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -94,7 +94,7 @@ test("Circle poll survives readback, replacement, a new browser process and anot
   await expect(page.getByRole("dialog", { name: "New Strand", exact: true })).toBeVisible();
   await page.locator(".new-channel-name").fill(strandTitle);
   const picker = page.locator(".circle-scope-picker");
-  await selectProductOptionByKey(picker, circleId);
+  await selectProductOptionByLabel(picker, new RegExp("^" + circleTitle.replace(/[^\w-]/g, "\\$&") + " \\(\\d+ members\\)$"));
   await expect(picker.locator('button[aria-haspopup="listbox"]')).toContainText(circleTitle);
   await expect(page.getByRole("dialog", { name: "New Strand", exact: true })).toBeVisible();
   await page.locator(".create-channel-button").click();

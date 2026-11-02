@@ -155,7 +155,7 @@ test.describe("complete peer Consent", () => {
       await actor.clickWithPassivePromptRetry(actor.page.locator(".consent-read-complete-button"));
       const input = actor.page.locator(".consent-permissions-input").locator("input, textarea");
       await expect(input).toBeVisible({ timeout: 30_000 });
-      expect(JSON.parse(await input.inputValue())).toEqual([preserved]);
+      await expect.poll(async () => JSON.parse(await input.inputValue())).toEqual([preserved]);
       for (const scope of ["voice_call", "video_call", "presence"]) {
         await actor.page.locator(".consent-permissions-editor").getByRole("checkbox", { name: consentScopeLabels[scope], exact: true }).check();
       }
@@ -163,7 +163,7 @@ test.describe("complete peer Consent", () => {
         preserved, { consent_scope: "voice_call" },
         { consent_scope: "video_call" }, { consent_scope: "presence" },
       ];
-      expect(JSON.parse(await input.inputValue())).toEqual(replacement);
+      await expect.poll(async () => JSON.parse(await input.inputValue())).toEqual(replacement);
       await actor.clickWithPassivePromptRetry(actor.page.locator(".consent-preview-button"));
       const diff = actor.page.locator(".consent-replacement-diff");
       await expect(diff).toBeVisible();
@@ -192,7 +192,7 @@ test.describe("complete peer Consent", () => {
       await actor.page.locator(".consent-peer-station-input").locator("input, textarea").fill(colandServiceId());
       await actor.clickWithPassivePromptRetry(actor.page.locator(".consent-read-complete-button"));
       await expect(input).toBeVisible({ timeout: 30_000 });
-      expect(JSON.parse(await input.inputValue())).toEqual(replacement);
+      await expect.poll(async () => JSON.parse(await input.inputValue())).toEqual(replacement);
       for (const scope of ["invite", "voice_call", "video_call", "presence"]) {
         await expect(actor.page.locator(".consent-permissions-editor").getByRole("checkbox", { name: consentScopeLabels[scope], exact: true })).toBeChecked();
       }
@@ -202,7 +202,7 @@ test.describe("complete peer Consent", () => {
       for (const scope of ["invite", "voice_call", "video_call", "presence"]) {
         await actor.page.locator(".consent-permissions-editor").getByRole("checkbox", { name: consentScopeLabels[scope], exact: true }).uncheck();
       }
-      expect(JSON.parse(await input.inputValue())).toEqual([]);
+      await expect.poll(async () => JSON.parse(await input.inputValue())).toEqual([]);
       await actor.clickWithPassivePromptRetry(actor.page.locator(".consent-preview-button"));
       await expect(diff).toBeVisible();
       expect(JSON.parse(await diff.locator(".preformatted").nth(0).innerText())).toEqual(replacement);
@@ -226,7 +226,7 @@ test.describe("complete peer Consent", () => {
       expect(emptyRevision.revision.commit_id).not.toBe(extendedRevision.revision.commit_id);
       await actor.clickWithPassivePromptRetry(actor.page.locator(".consent-read-complete-button"));
       await expect(input).toBeVisible({ timeout: 30_000 });
-      expect(JSON.parse(await input.inputValue())).toEqual([]);
+      await expect.poll(async () => JSON.parse(await input.inputValue())).toEqual([]);
       for (const scope of ["invite", "voice_call", "video_call", "presence"]) {
         await expect(actor.page.locator(".consent-permissions-editor").getByRole("checkbox", { name: consentScopeLabels[scope], exact: true })).not.toBeChecked();
       }
@@ -574,7 +574,7 @@ test("complete peer Consent lost outcome replays the original after cold reload 
     await actor.clickWithPassivePromptRetry(actor.page.locator(".consent-read-complete-button"));
     const input = actor.page.locator(".consent-permissions-input").locator("input, textarea");
     await expect(input).toBeVisible({ timeout: 30_000 });
-    expect(JSON.parse(await input.inputValue())).toEqual([]);
+    await expect.poll(async () => JSON.parse(await input.inputValue())).toEqual([]);
     await actor.page.locator(".consent-permissions-editor").getByRole("checkbox", { name: "Group invites", exact: true }).check();
     await actor.clickWithPassivePromptRetry(actor.page.locator(".consent-preview-button"));
     await actor.page.route("**/_arkret/self/events", handler);
@@ -595,7 +595,7 @@ test("complete peer Consent lost outcome replays the original after cold reload 
     expect(later.view.revision.commit_id).not.toBe(originalCommit);
     await actor.clickWithPassivePromptRetry(actor.page.locator(".consent-read-complete-button"));
     await expect(input).toBeVisible({ timeout: 30_000 });
-    expect(JSON.parse(await input.inputValue())).toEqual(target);
+    await expect.poll(async () => JSON.parse(await input.inputValue())).toEqual(target);
     await expect(actor.page.locator(".consent-confirm-replace-button")).toHaveCount(0);
     const beforeReload = bytes.length;
     await actor.page.reload();
@@ -617,7 +617,7 @@ test("complete peer Consent lost outcome replays the original after cold reload 
     expect(consentPermissions(current)).toEqual(target);
     await actor.clickWithPassivePromptRetry(actor.page.locator(".consent-read-complete-button"));
     await expect(input).toBeVisible({ timeout: 30_000 });
-    expect(JSON.parse(await input.inputValue())).toEqual(target);
+    await expect.poll(async () => JSON.parse(await input.inputValue())).toEqual(target);
     await testInfo.attach("cold-consent-original-recovery", {
       body: JSON.stringify({ originalEvent, originalCommit, laterRevision: later.view.revision, replayRequests: bytes.length, blockedOriginalReads, recoveredOriginalReads }),
       contentType: "application/json",
@@ -675,7 +675,7 @@ test("complete peer Consent real expiry preserves the stored permission and orig
     expect(consentExpectedCurrent(after)).toEqual(consentExpectedCurrent(before));
     expect(consentPermissions(after)).toEqual(permissions);
     const input = await openCompletePeer(flow.page, peerUser.id);
-    expect(JSON.parse(await input.inputValue())).toEqual(permissions);
+    await expect.poll(async () => JSON.parse(await input.inputValue())).toEqual(permissions);
   } finally {
     await flow.page.close();
   }
