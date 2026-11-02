@@ -128,7 +128,7 @@ test.describe("fresh-browser device entry paths @fully-implemented", () => {
       ).toBe(false);
 
       await secondDevice.page
-        .getByRole("link", { name: "Sign in again after approval" })
+        .getByRole("button", { name: "Sign in again after approval", exact: true })
         .click();
       await expect(secondDevice.page.locator(".auth-panel")).toBeVisible({
         timeout: 30_000,

@@ -332,7 +332,7 @@ return async ({ jointUsers, request, browser }: { jointUsers: JointUsersFixture;
         await approvePairingLinkOnAuthorizedDevice(authorized, pairingLink, code);
         await founder!.locator(".device-setup-pairing-status").click();
         await expect(founder!.locator(".device-setup-status")).toContainText("Device authorization is accepted", { timeout: 90_000 });
-        await founder!.getByRole("link", { name: "Sign in again after approval" }).click();
+        await founder!.getByRole("button", { name: "Sign in again after approval", exact: true }).click();
         await expect(founder!.locator(".auth-panel")).toBeVisible({ timeout: 30_000 });
         await serverLoginViaCoauth(founder!, replacement.account);
         const currentIdentity = await founder!.evaluate(() => {

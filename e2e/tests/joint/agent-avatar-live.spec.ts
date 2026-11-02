@@ -3,7 +3,7 @@ import { decodeIngressEvents } from "../../helpers/event-ingress";
 import { canonicalJson } from "../../helpers/coland-api";
 import { openDpopUserPageFromSession, type JointUserPage } from "../../helpers/users";
 import type { Page } from "../../helpers/arkret-test";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import os from "node:os";
 
@@ -139,11 +139,13 @@ for (const mode of ["avatar", "lost-responses", "retryable-profile", "account-sw
     await page.locator(".agent-admin-create-open-button").click();
     await page.locator(".agent-admin-provision-agent-slug").locator("input, textarea").fill(slug);
     if (mode !== "no-avatar") {
+      const avatarPath = test.info().outputPath("agent.png");
+      await writeFile(avatarPath, avatarPng);
       const [chooser] = await Promise.all([
         page.waitForEvent("filechooser"),
         page.locator("button.agent-admin-avatar-input").click(),
       ]);
-      await chooser.setFiles({ name: "agent.png", mimeType: "image/png", buffer: avatarPng });
+      await chooser.setFiles(avatarPath);
       const crop = page.locator(".avatar-crop-editor");
       try {
         await expect(crop).toBeVisible();

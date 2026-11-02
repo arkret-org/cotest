@@ -1653,7 +1653,7 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
           assertAuthoritySubmitOutcome(await listResponse.json(), listEvent, "pre-join retained List");
           const listId = retypeEventDerivedId(String(listEvent.event_id), "space");
           expect(listId).toMatch(/^ak:space:/);
-          await expect(alicePage.page.getByRole("button", { name: `Retained list ${stamp}`, exact: true })).toBeVisible();
+          await expect(alicePage.page.getByRole("button", { name: `Retained list ${stamp} (${listId})`, exact: true })).toBeVisible();
           retainedBoard = { boardId, listId: listId!, eventId: String(event.event_id), streamPosition: Number(outcome.commit.stream_position) };
         }
         await grantInviteConsentArkret(
@@ -1833,7 +1833,7 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
           await openReaderBoard(bobPage, realmId, retainedBoard!.boardId);
           await expect(bobPage.page.locator(".kanban-column")).toHaveCount(1);
           await expect(bobPage.page.locator(".kanban-column").first().locator(".add-card-button")).toBeEnabled();
-          await expect(bobPage.page.getByRole("button", { name: `Retained list ${stamp}`, exact: true })).toBeVisible();
+          await expect(bobPage.page.getByRole("button", { name: `Retained list ${stamp} (${retainedBoard!.listId})`, exact: true })).toBeVisible();
           await testInfo.attach("kanban-history-fresh-reader.json", { contentType: "application/json",
             body: JSON.stringify({ reader_closed_before_seed: true, fresh_context_after_card_commit: true,
               no_product_current_or_history_cache_copied: true,

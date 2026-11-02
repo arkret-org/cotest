@@ -59,7 +59,7 @@ export async function openAndPairSecondController(
       "Device authorization is accepted",
       { timeout: 90_000 },
     );
-    await device.page.getByRole("link", { name: "Sign in again after approval" }).click();
+    await device.page.getByRole("button", { name: "Sign in again after approval", exact: true }).click();
     await expect(device.page.locator(".auth-panel")).toBeVisible({ timeout: 30_000 });
     await serverLoginViaCoauth(device.page, jointRealm.aliceSession.account);
     await expect(device.page.locator(".device-setup-required")).toHaveCount(0);

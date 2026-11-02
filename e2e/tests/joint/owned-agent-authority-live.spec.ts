@@ -626,7 +626,9 @@ test("normal administrator default denial admits an exact controller exception a
 
 async function reviewPanel(user: JointUserPage, realm: string) {
   await user.gotoRealmAdminSection(realm, "access");
-  const panel = user.page.locator(".event:has(> .event-head :text-is(\"Agent 管理审批\"))");
+  const panel = user.page.locator(".management-review-principal")
+    .locator("xpath=ancestor::*[contains(concat(' ', normalize-space(@class), ' '), ' event ')][1]");
+  await expect(panel).toHaveCount(1);
   await expect(panel).toBeVisible({ timeout: 120_000 });
   return panel;
 }
@@ -715,7 +717,7 @@ async function loseAcceptedReviewResponse(page: Page, operation: "requests" | "d
   try {
     await click();
     const value = await observed;
-    await expect(page.locator(".write-status")).toContainText("操作被拒绝或当前证据不可用", { timeout: 180_000 });
+    await expect(page.locator(":scope > .write-status")).toContainText("操作被拒绝或当前证据不可用", { timeout: 180_000 });
     return value;
   } finally { await page.unroute(pattern); }
 }
@@ -837,7 +839,7 @@ test("normal controller requests join and public review, distinct administrator 
         () => controller.locator(".management-review-request").click());
       lostRequest = lost.body;
       expect(lost.outcome.status).toBe("pending");
-      await expect(controller.locator(".write-status")).toContainText("操作被拒绝或当前证据不可用");
+      await expect(controller.locator(":scope > .write-status")).toContainText("操作被拒绝或当前证据不可用");
       await expect(controller.locator(".management-review-request")).toHaveText("重试原审批请求（保留原候选）");
     }
     const response = await reviewResponse(jointRealm.bobPage.page, "requests",
@@ -921,7 +923,7 @@ test("normal controller requests join and public review, distinct administrator 
       const lost = await loseAcceptedReviewResponse(jointRealm.alicePage.page, "decisions",
         () => administrator.locator(".management-review-approve").click());
       expect(lost.outcome.status).toBe("approved");
-      await expect(administrator.locator(".write-status")).toContainText("操作被拒绝或当前证据不可用");
+      await expect(administrator.locator(":scope > .write-status")).toContainText("操作被拒绝或当前证据不可用");
       await expect(administrator.locator(".management-review-approve")).toHaveCount(0);
       await confirmReview(administrator);
       const reconciled = await reviewResponse(jointRealm.alicePage.page, "status",
@@ -967,7 +969,7 @@ test("normal controller requests join and public review, distinct administrator 
     const outcome = await submitted.json();
     expect(outcome.status).toBe("committed");
     expect(outcome.commit?.event_ref).toBe(event.event_id);
-    await expect(controller.locator(".write-status")).toContainText("原候选业务已提交", { timeout: 180_000 });
+    await expect(controller.locator(":scope > .write-status")).toContainText("原候选业务已提交", { timeout: 180_000 });
     const lookupUrl = `${colandBaseUrl()}/_arkret/self/management-reviews/status`;
     const consumed = await request.post(lookupUrl, { headers: selfPathHeadersForDpopSession(jointRealm.bobSession, "POST", lookupUrl),
       data: canonicalJson({ request_id: candidate.request_id }) });

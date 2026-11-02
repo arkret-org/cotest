@@ -618,7 +618,7 @@ test.describe("notifications", () => {
       await expect(bobDevice2Page.page.locator(".device-setup-status")).toContainText(
         "Device authorization is accepted", { timeout: 90_000 },
       );
-      await bobDevice2Page.page.getByRole("link", { name: "Sign in again after approval" }).click();
+      await bobDevice2Page.page.getByRole("button", { name: "Sign in again after approval", exact: true }).click();
       await serverLoginViaCoauth(bobDevice2Page.page, bobAccount);
       await expect(bobDevice2Page.page.locator(".shell.app")).toBeVisible({ timeout: 120_000 });
       await bobDevice2Page.completeRecoveryKeySetupIfPrompted();

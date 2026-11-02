@@ -855,7 +855,7 @@ async function openAndPairFreshDeviceForAccount(
       timeout: 90_000,
     });
     await requestingDevice.page
-      .getByRole("link", { name: "Sign in again after approval" })
+      .getByRole("button", { name: "Sign in again after approval", exact: true })
       .click();
     await expect(requestingDevice.page.locator(".auth-panel")).toBeVisible({
       timeout: 30_000,
