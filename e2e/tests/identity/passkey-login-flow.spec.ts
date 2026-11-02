@@ -164,13 +164,13 @@ test.describe("Coauth passkey browser lifecycle @fully-implemented", () => {
         });
 
         await page.goto(`${coauth}/login`);
-        const loginHandle = page.locator("#login-handle");
+        const loginHandle = page.getByLabel("Username", { exact: true });
         await expect(loginHandle).toBeVisible({ timeout: 60_000 });
         await loginHandle.click();
         await loginHandle.fill(handle);
         await expect(loginHandle).toHaveValue(handle, { timeout: 5_000 });
-        await page.getByTestId("coauth-login-identifier-submit").click();
-        await page.getByTestId("coauth-login-passkey").focus();
+        await page.locator(".login-container").getByRole("button", { name: "Continue", exact: true }).click();
+        await page.locator(".login-container").getByRole("button", { name: "Sign in with a passkey", exact: true }).focus();
         await page.keyboard.press("Enter");
         await expect(page).toHaveURL(
           new RegExp(`${coauth!.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}/?$`),
@@ -295,18 +295,18 @@ test.describe("Coauth passkey browser lifecycle @fully-implemented", () => {
         await page.locator(".auth-station-field input").fill(colandBaseUrl());
         await page.locator(".auth-primary").click();
 
-        const identifier = page.locator("#login-handle");
-        const passkeyButton = page.getByTestId("coauth-login-passkey");
+        const identifier = page.getByLabel("Username", { exact: true });
+        const passkeyButton = page.locator(".login-container").getByRole("button", { name: "Sign in with a passkey", exact: true });
         await expect(identifier.or(passkeyButton)).toBeVisible({
           timeout: 60_000,
         });
         if (await identifier.isVisible()) {
           await identifier.fill(handle);
-          await page.getByTestId("coauth-login-identifier-submit").click();
+          await page.locator(".login-container").getByRole("button", { name: "Continue", exact: true }).click();
         }
         await passkeyButton.click();
 
-        const approve = page.getByTestId("coauth-oauth-approve");
+        const approve = page.locator(".login-container").getByRole("button", { name: "Allow", exact: true });
         if (
           await approve
             .waitFor({ state: "visible", timeout: 20_000 })

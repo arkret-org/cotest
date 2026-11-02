@@ -1,3 +1,4 @@
+import { addBoardList } from "../../helpers/kanban-product-ui";
 // Kanban end-to-end
 // Contract: e2e/scenarios/kanban/end-to-end.md
 // Spec refs:
@@ -140,8 +141,7 @@ async function buildEncryptedBoardAndCard(
     timeout: 45_000,
   });
   const columnName = `Todo-${stamp}`;
-  await page.locator(".new-column-input").fill(columnName);
-  await page.locator(".add-column-button").click();
+  await addBoardList(page, columnName);
   const column = page.locator(".kanban-column").filter({ hasText: columnName }).first();
   await expect(column.locator(".add-card-button")).toBeEnabled({ timeout: 45_000 });
   await addCardThroughColumn(column, cardTitle);
@@ -151,17 +151,13 @@ async function buildEncryptedBoardAndCard(
   await expect(column.locator(".kanban-card").filter({ hasText: cardTitle })).not.toHaveClass(/\bis-draft\b/, { timeout: 45_000 });
 }
 
-// Drive the visible editor and verify its product bridge updates the fallback
-// value. Both slots use this editor; only one edit form is mounted at a time.
+// Both slots use the visible product editor; only one edit form is mounted at a time.
 async function setCardDetailEditorValue(page: Page, value: string): Promise<void> {
-  const editor = page.locator(".card-detail-description-rich-editor")
-    .locator('.ProseMirror.toastui-editor-contents[contenteditable="true"]');
+  const editor = page.locator(".card-detail-edit-form")
+    .getByRole("textbox", { name: "Description", exact: true });
   await expect(editor).toBeVisible({ timeout: 45_000 });
-  await editor.click();
-  await editor.press("ControlOrMeta+A");
-  await editor.pressSequentially(value);
-  const input = page.locator(".card-detail-description-input");
-  await expect(input).toHaveValue(value);
+  await editor.fill(value);
+  await expect(editor).toHaveValue(value);
 }
 
 // API-level Card creation that mirrors kanban/project-simulation's active
@@ -287,8 +283,7 @@ test.describe("kanban end-to-end", () => {
 
       // Add three columns (lists).
       for (const columnName of [`Todo-${stamp}`, `InProgress-${stamp}`, `Done-${stamp}`]) {
-        await alicePage.page.locator(".new-column-input").fill(columnName);
-        await alicePage.page.locator(".add-column-button").click();
+        await addBoardList(alicePage.page, columnName);
         await expect(
           alicePage.page.locator(".kanban-column").filter({ hasText: columnName }),
         ).toBeVisible({ timeout: 30_000 });
@@ -687,8 +682,7 @@ test.describe("kanban end-to-end", () => {
       });
 
       for (const columnName of [first, second, third]) {
-        await alicePage.page.locator(".new-column-input").fill(columnName);
-        await alicePage.page.locator(".add-column-button").click();
+        await addBoardList(alicePage.page, columnName);
         await expect(alicePage.page.locator(".kanban-column").filter({ hasText: columnName }).locator(".add-card-button")).toBeEnabled({ timeout: 30_000 });
       }
 
@@ -756,8 +750,7 @@ test.describe("kanban end-to-end", () => {
       expect(boardId).toMatch(/^ak:space:/);
 
       for (const columnName of [first, second, third]) {
-        await alicePage.page.locator(".new-column-input").fill(columnName);
-        await alicePage.page.locator(".add-column-button").click();
+        await addBoardList(alicePage.page, columnName);
         await expect(alicePage.page.locator(".kanban-column").filter({ hasText: columnName }).locator(".add-card-button")).toBeEnabled({ timeout: 30_000 });
       }
 
@@ -880,8 +873,7 @@ test.describe("kanban end-to-end", () => {
       });
 
       const todoColumnName = `Todo-${stamp}`;
-      await alicePage.page.locator(".new-column-input").fill(todoColumnName);
-      await alicePage.page.locator(".add-column-button").click();
+      await addBoardList(alicePage.page, todoColumnName);
       const todoColumn = alicePage.page
         .locator(".kanban-column")
         .filter({ hasText: todoColumnName })

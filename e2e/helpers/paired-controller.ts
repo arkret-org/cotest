@@ -28,7 +28,7 @@ export async function openAndPairSecondController(
     await device.page.locator(".auth-station-field input").fill(colandBaseUrl());
     await device.page.locator(".auth-primary").click();
     await submitCoauthPasswordCredentials(device.page, jointRealm.aliceSession.account);
-    const approve = device.page.getByTestId("coauth-oauth-approve");
+    const approve = device.page.locator(".login-container").getByRole("button", { name: "Allow", exact: true });
     const consentShown = await approve
       .waitFor({ state: "visible", timeout: 20_000 })
       .then(() => true)

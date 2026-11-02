@@ -1,3 +1,4 @@
+import { addBoardList } from "../../helpers/kanban-product-ui";
 // Multi-user project simulation
 // Contract: e2e/scenarios/kanban/project-simulation.md
 // Spec refs:
@@ -534,8 +535,7 @@ test.describe("project simulation", () => {
       });
 
       const columnTitle = `Todo ${stamp}`;
-      await alicePage.page.locator(".new-column-input").fill(columnTitle);
-      await alicePage.page.locator(".add-column-button").click();
+      await addBoardList(alicePage.page, columnTitle);
       const column = alicePage.page
         .locator(".kanban-column")
         .filter({ hasText: columnTitle })

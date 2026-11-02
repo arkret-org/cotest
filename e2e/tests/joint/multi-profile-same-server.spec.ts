@@ -2,6 +2,7 @@
 // Contract: Playwright can simulate two local browser profiles against one coland.
 
 import { expect, test } from "../../helpers/arkret-test";
+import { submitOrdinaryComposerDraft } from "../../helpers/composer-handoff";
 import {
   assertJointStackNotRequired,
   type JointUserPage,
@@ -127,7 +128,7 @@ async function sendChatMessage(userPage: JointUserPage, realmId: string, body: s
   // selected by this scenario before authoring a message.
   await expect(userPage.page.locator(".send-e2ee-move-button")).toBeVisible({ timeout: 30_000 });
   await userPage.page.locator(".chat-input").fill(body);
-  await userPage.page.locator(".send-chat-button").click();
+  await submitOrdinaryComposerDraft(userPage.page, body);
   await expect(chatMessage(userPage, body)).toBeVisible({ timeout: 30_000 });
 }
 

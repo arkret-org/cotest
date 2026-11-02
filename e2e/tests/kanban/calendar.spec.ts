@@ -2,6 +2,7 @@
 // Contract: e2e/scenarios/kanban/calendar.md
 // Spec: models/calendar-event.md, models/strand-and-message.md
 
+import { addBoardList } from "../../helpers/kanban-product-ui";
 import {
   expect,
   test,
@@ -77,16 +78,7 @@ test("@fully-implemented calendar schedule and RSVP survive the canonical Strand
       .startsWith(`/kanban/${realmId}/board/ak:space:`), { timeout: 120_000 });
 
     const columnTitle = `Upcoming ${stamp}`;
-    await page.page.locator(".new-column-input").fill(columnTitle);
-    await expect(page.page.locator(".new-column-input")).toHaveValue(columnTitle);
-    await expect(page.page.locator(".input-prompt-host").filter({ has: page.page.locator(".new-column-input") })
-      .locator(".input-empty-prompt")).toHaveCount(0);
-    await page.page.locator(".add-column-button").click();
-    const column = page.page
-      .locator(".kanban-column")
-      .filter({ hasText: columnTitle })
-      .first();
-    await expect(column).toBeVisible({ timeout: 45_000 });
+    const column = await addBoardList(page.page, columnTitle);
     await addCard(column, cardTitle);
 
     const detail = page.page.locator(".card-detail-modal");

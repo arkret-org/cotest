@@ -1,5 +1,6 @@
 import { accountActorId } from "./coland-api";
 import { actorRow } from "./product-locators";
+import { selectProductOptionByKey } from "./product-select";
 import { expect, test, operationSelector, isDirectAdmissionOutcomeReason } from "./arkret-test";
 import type { Page, Response, Request, APIRequestContext } from "@playwright/test";
 import { assertAuthoritySubmitOutcome, authHeaders, canonicalJson, readCommitStreamHeadApi, scanRealmStreamApi, sdkEventDerivedIds, sha256CanonicalJson, signedEventEnvelope, wireErrCode } from "./coland-api";
@@ -10,7 +11,7 @@ import { isDeepStrictEqual } from "node:util";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { fileURLToPath } from "node:url";
-import { colandBaseUrl, colandServiceDid, colandServiceId, colandServiceResolution, configuredServerKeys, type ColandKey } from "./env";
+import { colandBaseUrl, colandServiceDid, colandServiceId, colandServiceResolution, configuredServerKeys, requiredEnv, type ColandKey } from "./env";
 import { cotestWire } from "./coland-api/wire-client";
 import { orderByCanonicalKey } from "./direct-structure-order";
 import { readCurrentSnapshot } from "./direct-current-snapshot";
@@ -32,11 +33,10 @@ export async function createDirectBoundaryCircleStrand(
 
   await page.goto(`/chat/${encodeURIComponent(realmId)}`, { waitUntil: "domcontentloaded" });
   await page.locator(".open-channel-dialog").click();
-  await expect(page.locator(".channel-create-modal")).toBeVisible();
+  await expect(page.getByRole("dialog", { name: "New Strand", exact: true })).toBeVisible();
   await page.locator(".new-channel-name").fill(`${title} Strand`);
   const picker = page.locator(".circle-scope-picker");
-  await picker.locator('button[aria-haspopup="listbox"]').click();
-  await picker.locator(`[role="option"][data-value="${circleId}"]`).click();
+  await selectProductOptionByKey(picker, circleId);
   await expect(picker.locator('button[aria-haspopup="listbox"]')).toContainText(title);
   await page.locator(".create-channel-button").click();
   const channel = page.locator(".channel-item").filter({ hasText: `${title} Strand` });
@@ -315,7 +315,7 @@ async function readVerifiedDirectSuccessors(proof: DirectStructureProof, realm: 
     genesis_event_id: genesis.event_id, genesis_commit: authority.genesis_commit,
     expected_commits: commits };
   const script = fileURLToPath(new URL("../../scripts/realm-business-footprint.py", import.meta.url));
-  const { stdout } = await promisify(execFile)("python3", [script, "--server", servers[0].name,
+  const { stdout } = await promisify(execFile)(requiredEnv("COTEST_PYTHON_EXECUTABLE"), [script, "--server", servers[0].name,
     "--realm", realm, "--stream-after-position", String(beforePosition),
     "--stream-end-position", String(endPosition),
     "--verified-direct-source", JSON.stringify(directSource)], { timeout: 45_000, maxBuffer: 1_048_576 });
@@ -517,7 +517,16 @@ export async function structureWrite(page: Page, action: string, kind: string, t
       expect(accepted.ok(), `structure HTTP refusal: ${accepted.status()} ${String(outcome.type)}`).toBeTruthy();
       expect(outcome.status, `structure refusal: ${String(outcome.reason_code)}`).toBe("committed");
       assertAuthoritySubmitOutcome(outcome, event, action);
-      await expect(panel.locator(".direct-structure-status")).toHaveText("Saved", { timeout: Math.max(1, deadline - Date.now()) });
+      if (action === "new_chat") {
+        const strand = sdkEventDerivedIds(event).object_id;
+        if (!strand?.startsWith("ak:strand:")) throw new Error("Accepted Direct Chat has no SDK-derived Strand identity");
+        await expect.poll(() => new URL(page.url()).pathname.split("/").slice(1).map(decodeURIComponent), {
+          timeout: Math.max(1, deadline - Date.now()),
+        }).toEqual(["direct", boundaryRealm, strand]);
+        await expect(page.locator(".chat-panel .chat-input")).toBeVisible();
+      } else {
+        await expect(panel.locator(".direct-structure-status")).toHaveText("Saved", { timeout: Math.max(1, deadline - Date.now()) });
+      }
       if (boundaryProof && boundaryBefore) await assertStructureBoundary(boundaryProof, boundaryRealm, boundaryBefore, event);
       return event;
     }
@@ -621,12 +630,12 @@ export async function agentTopicChats(page: Page, receiptPath: string, proof: Di
       const window = await feed.evaluate(async (element, offset) => {
         element.scrollTop = offset;
         await new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
-        const rows = Array.from(element.querySelectorAll<HTMLElement>('[data-message-id][data-virtual-index]'));
+        const rows = Array.from(element.querySelectorAll<HTMLElement>('.chat-message[id]'));
         return {
           top: element.scrollTop, height: element.clientHeight, total: element.scrollHeight,
-          replies: rows.filter(row => Array.from(row.querySelectorAll('.content-block-text'))
+          replies: rows.filter(row => Array.from(row.querySelectorAll('.content-block-text, .content-block-markdown'))
             .some(block => /^pong(?:\r?\n|$)/.test(block.textContent ?? "")))
-            .map(row => row.dataset.messageId!),
+            .map(row => row.id),
         };
       }, top);
       for (const id of window.replies) ids.add(id);
@@ -716,11 +725,10 @@ export async function agentTopicChats(page: Page, receiptPath: string, proof: Di
         scrollHeight: feed.scrollHeight,
         scrollTop: feed.scrollTop,
         mountedRows: feed.querySelectorAll('.chat-message').length,
-        indexes: Array.from(feed.querySelectorAll('[data-virtual-index]')).map(row =>
-          Number((row as HTMLElement).dataset.virtualIndex)),
-        rows: Array.from(feed.querySelectorAll<HTMLElement>('[data-virtual-index]')).map(row => ({
-          index: Number(row.dataset.virtualIndex), crypto: row.dataset.cryptoState,
-          pong: Array.from(row.querySelectorAll('.content-block-text'))
+        presentationIds: Array.from(feed.querySelectorAll<HTMLElement>('.chat-message')).map(row => row.id),
+        rows: Array.from(feed.querySelectorAll<HTMLElement>('.chat-message')).map(row => ({
+          presentationId: row.id, cryptoPending: row.classList.contains('is-crypto-pending'),
+          pong: Array.from(row.querySelectorAll('.content-block-text, .content-block-markdown'))
             .some(block => /^pong(?:\r?\n|$)/.test(block.textContent ?? "")),
         })),
       })).catch(() => null);

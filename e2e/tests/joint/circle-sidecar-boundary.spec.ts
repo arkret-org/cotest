@@ -21,7 +21,7 @@ jointTest.describe("Circle and Sidecar object boundary @fully-implemented", () =
       await page.goto(`/realms/${encodeURIComponent(jointRealm.realmId)}/circles`, {
         waitUntil: "domcontentloaded",
       });
-      await expect(page.locator(".circles-page")).toBeVisible();
+      await expect(page.locator(".circle-realm")).toBeVisible();
       await page.locator(".circles-new").click();
       await page.locator(".circle-create-title input, .circle-create-title textarea").fill(title);
       await page.locator(".circle-create").click();

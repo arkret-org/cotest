@@ -174,19 +174,19 @@ async function registerController(owner: JointUserPage, request: APIRequestConte
   await page.locator(".auth-station-field input").fill(colandBaseUrl());
   await page.locator(".auth-primary").click();
   await page.getByRole("link", { name: /create account/i }).click();
-  await page.locator('input[autocomplete="username"]').fill(user.name);
-  await page.locator('input[autocomplete="email"]').fill(`${user.name}@example.test`);
+  await page.getByLabel("Username", { exact: true }).fill(user.name);
+  await page.getByLabel("Email address", { exact: true }).fill(`${user.name}@example.test`);
   const passwords = page.locator('input[type="password"]');
   await expect(passwords).toHaveCount(2);
   await passwords.nth(0).fill("1amTester!");
   await passwords.nth(1).fill("1amTester!");
   await page.getByRole("button", { name: /create account/i }).click();
-  const code = page.locator('input[autocomplete="one-time-code"]');
+  const code = page.getByLabel("Verification code", { exact: true });
   await expect(code).toBeVisible({ timeout: 120_000 });
   await code.fill(await registrationEmailCode(request, `${user.name}@example.test`));
   await page.getByRole("button", { name: /^verify$/i }).click();
-  const display = page.locator('input[autocomplete="name"]');
-  const approve = page.getByTestId("coauth-oauth-approve");
+  const display = page.getByLabel("Display name", { exact: true });
+  const approve = page.locator(".login-container").getByRole("button", { name: "Allow", exact: true });
   // Visibility queries are immediate; wait for the actual post-verification
   // branch before deciding whether this new account needs its profile form.
   await expect(display.or(approve)).toBeVisible({ timeout: 120_000 });

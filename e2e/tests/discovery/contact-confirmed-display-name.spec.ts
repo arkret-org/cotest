@@ -286,7 +286,7 @@ test.describe("contact confirmed display name", () => {
       // notice is asserted after a fresh page load rather than in place.
       await alicePage.gotoAppPanel("/settings/contacts", ".settings-page");
       await alicePage.page.reload();
-      await expect(alicePage.page.locator(".settings-panel")).toBeVisible({ timeout: 60_000 });
+      await expect(alicePage.page.locator(".settings-content-column")).toBeVisible({ timeout: 60_000 });
       const renamedRow = accountRow(alicePage.page, ".contact-row", accountActorId(bob.id).account_id);
       const notice = renamedRow.locator(".contact-display-name-changed");
       await expect(notice).toBeVisible({ timeout: 120_000 });

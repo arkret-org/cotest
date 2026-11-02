@@ -57,8 +57,8 @@ test("0540 real local search preserves native/browser source identity and withdr
     };
     await flow.page.gotoTimelineRealm(realms[0]!);
     await search(targetBody, 1);
-    const originalEvent = await row.getAttribute("data-event-id");
-    const originalCommit = await row.getAttribute("data-commit-id");
+    const originalEvent = await row.locator(".global-search-result-event-reference").innerText();
+    const originalCommit = await row.locator(".global-search-result-commit-reference").innerText();
     const original = await native("initial-target", realms[0]!, targetBody, 1);
     expect(original!.event_id).toBe(originalEvent);
     expect(original!.covering_commit.commit_id).toBe(originalCommit);

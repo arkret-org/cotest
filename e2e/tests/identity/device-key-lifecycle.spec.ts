@@ -1,3 +1,4 @@
+import { addBoardList } from "../../helpers/kanban-product-ui";
 import {
   expect,
   test,
@@ -289,7 +290,7 @@ async function loginFreshBrowserToDeviceSetup(
   await page.locator(".auth-primary").click();
   await submitCoauthPasswordCredentials(page, account);
 
-  const approve = page.getByTestId("coauth-oauth-approve");
+  const approve = page.locator(".login-container").getByRole("button", { name: "Allow", exact: true });
   if (
     await approve
       .waitFor({ state: "visible", timeout: 20_000 })
@@ -444,13 +445,10 @@ async function currentSettingsSignerDid(page: Page): Promise<string> {
   await expect(page.locator(".settings-session-diagnostics")).toBeVisible({
     timeout: 120_000,
   });
-  const signerDid = page.locator(".settings-signer-did");
-  await expect
-    .poll(async () => (await signerDid.getAttribute("title")) ?? "", {
-      timeout: 60_000,
-    })
-    .not.toBe("");
-  return (await signerDid.getAttribute("title"))!;
+  const signerDid = page.locator(".settings-signer-identity");
+  await expect(signerDid).toHaveText(/^(?:ak:did_core:|did:)[^\s]+$/, { timeout: 60_000 });
+  await expect(signerDid).not.toContainText("...");
+  return (await signerDid.innerText()).trim();
 }
 
 async function buildEncryptedBoardListCard(
@@ -486,15 +484,7 @@ async function buildEncryptedBoardListCard(
   );
   expect(boardId, `board id from url ${page.url()}`).toMatch(/^ak:space:/);
 
-  await page.locator(".new-column-input").fill(listTitle);
-  await userPage.clickWithPassivePromptRetry(
-    page.locator(".add-column-button"),
-  );
-  const column = page
-    .locator(".kanban-column")
-    .filter({ hasText: listTitle })
-    .first();
-  await expect(column).toBeVisible({ timeout: 45_000 });
+  const column = await addBoardList(page, listTitle);
   await userPage.clickWithPassivePromptRetry(
     column.locator(".add-card-button"),
   );
@@ -527,13 +517,11 @@ async function addEncryptedDescription(
   await page.locator(".card-detail-tab-description").click();
   await page.locator(".card-detail-edit-description-button").click();
 
-  const richEditor = page
-    .locator(".card-detail-description-rich-editor")
-    .locator('.ProseMirror.toastui-editor-contents[contenteditable="true"]');
+  const richEditor = page.locator(".card-detail-edit-form")
+    .getByRole("textbox", { name: "Description", exact: true });
   await expect(richEditor).toBeVisible({ timeout: 45_000 });
-  await richEditor.click();
-  await richEditor.pressSequentially(description);
-  await expect(page.locator(".card-detail-description-input")).toHaveValue(
+  await richEditor.fill(description);
+  await expect(richEditor).toHaveValue(
     description,
   );
 

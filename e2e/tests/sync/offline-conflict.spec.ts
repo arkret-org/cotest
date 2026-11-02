@@ -188,7 +188,9 @@ test.describe("offline sync + conflict repair", () => {
         .toEqual([fixture.aliceTitle, fixture.bobTitle]);
 
       await fixture.bobPage.gotoRealmAdminSection(fixture.realmId, "profile");
-      const profile = fixture.bobPage.page.locator(".realm-profile");
+      const profile = fixture.bobPage.page.locator(".realm-settings .workflow-form").filter({
+        has: fixture.bobPage.page.getByRole("textbox", { name: "Title", exact: true }),
+      });
       await expect(profile).toBeVisible({ timeout: 60_000 });
       await expect(profile.locator(".realm-name-input input, .realm-name-input textarea")).toHaveValue(
         fixture.bobTitle,

@@ -7,6 +7,7 @@ import type { APIRequestContext, Browser, Page, Response } from "@playwright/tes
 import { requestContactArkret, respondContactArkret, resolvePrincipalLocator, tombstoneContactArkret } from "../../helpers/contact-api";
 import { accountActorId, assertAuthoritySubmitOutcome, canonicalJson, createRealmApi, resolveDefaultStrandId, scanRealmStreamApi, signedEventEnvelope, submitSignedEventApi } from "../../helpers/coland-api";
 import { decodeEventIngressBody, ingressEvents } from "../../helpers/event-ingress";
+import { readScopeMlsGroupCurrentApi } from "../../helpers/coland-api/mls";
 
 import { approvePairingLinkOnAuthorizedDevice, createDpopUserSession, openDpopUserPageFromSession, selfPathHeadersForDpopSession } from "../../helpers/users";
 import { serverLoginViaCoauth, submitCoauthPasswordCredentials } from "../../helpers/real-oidc-login";
@@ -316,7 +317,7 @@ return async ({ jointUsers, request, browser }: { jointUsers: JointUsersFixture;
         await founder!.locator(".auth-station-field input").fill(colandBaseUrl());
         await founder!.locator(".auth-primary").click();
         await submitCoauthPasswordCredentials(founder!, replacement.account);
-        const consent = founder!.getByTestId("coauth-oauth-approve");
+        const consent = founder!.locator(".login-container").getByRole("button", { name: "Allow", exact: true });
         if (await consent.waitFor({ state: "visible", timeout: 20_000 }).then(() => true).catch(() => false)) {
           await consent.click();
         }
@@ -387,7 +388,7 @@ return async ({ jointUsers, request, browser }: { jointUsers: JointUsersFixture;
     }
     await founder!.locator(".account-menu-button").click();
     await founder!.locator(".account-menu-settings").click();
-    await expect(founder!.locator(".settings-panel")).toBeVisible();
+    await expect(founder!.locator(".settings-content-column")).toBeVisible();
     await founder!.goBack();
     await expect(founder!).toHaveURL(url => url.pathname === firstPath);
     await expect(founder!.locator(".chat-panel")).toBeVisible();
@@ -432,7 +433,10 @@ return async ({ jointUsers, request, browser }: { jointUsers: JointUsersFixture;
       // covering MLS Commit. Reopen the founder while consume stays blocked;
       // its durable admission must restore the post-Add sending state.
       await bob.reload();
-      await expect.poll(async () => Number(await bob.locator(".chat-panel").getAttribute("data-mls-epoch")), { timeout: 180_000 }).toBeGreaterThan(0);
+      await expect.poll(async () => uint64Value((await readScopeMlsGroupCurrentApi(
+        request, bobSession.grantJwt, directRealm, { kind: "realm", realm_id: directRealm },
+        remoteBob ? "server2" : "default",
+      ))?.epoch ?? "0"), { timeout: 180_000 }).toBeGreaterThan(0n);
     }
     await alice.locator(".chat-input").fill("preparation probe");
     await expect(alice.locator(".send-chat-button")).toBeDisabled();
@@ -482,13 +486,44 @@ return async ({ jointUsers, request, browser }: { jointUsers: JointUsersFixture;
     expect(new URL(page.url()).pathname).toBe(path);
   }
   if (mode === "offline") {
-    // Enabled alone also describes the founder's legitimate epoch-0 phase.
-    // A post-join offline test needs both local snapshots at the joined epoch.
+    // Verify the joined public state, then prove both local private snapshots
+    // by accepting and decrypting real ordinary encrypted messages at that epoch.
+    const directRealm = decodeURIComponent(path.split("/")[2]);
     await expect.poll(async () => {
-      const epochs = await Promise.all([alice, bob].map(async page =>
-        Number(await page.locator(".chat-panel").getAttribute("data-mls-epoch"))));
-      return epochs[0] > 0 && epochs[0] === epochs[1];
+      const currents = await Promise.all([
+        readScopeMlsGroupCurrentApi(request, aliceSession.grantJwt, directRealm),
+        readScopeMlsGroupCurrentApi(request, bobSession.grantJwt, directRealm, undefined,
+          remoteBob ? "server2" : "default"),
+      ]);
+      const epochs = currents.map(current => uint64Value(current?.epoch ?? "0"));
+      return epochs[0] > 0n && epochs[0] === epochs[1];
     }, { timeout: 180_000 }).toBe(true);
+    const privateEpochs: bigint[] = [];
+    for (const [sender, recipient, name] of [[alice, bob, "alice"], [bob, alice, "bob"]] as const) {
+      const probe = `direct-joined-readiness-${name}-${Date.now()}`;
+      await sender.locator(".chat-input").fill(probe);
+      const [response] = await Promise.all([
+        sender.waitForResponse(response => response.request().method() === "POST"
+          && new URL(response.url()).pathname === "/_arkret/self/events"
+          && ingressEvents(decodeEventIngressBody(response.request().postDataJSON()))
+            .some(event => event.kind === "ak.message.create"), { timeout: 90_000 }),
+        submitOrdinaryComposerDraft(sender, probe),
+      ]);
+      expect(response.ok(), "the ordinary readiness probe must reach authority admission").toBe(true);
+      const original = ingressEvents(decodeEventIngressBody(response.request().postDataJSON()))
+        .find(event => event.kind === "ak.message.create")!;
+      const outcome = await response.json() as Record<string, unknown>;
+      expect(outcome.status).toBe("committed");
+      assertAuthoritySubmitOutcome(outcome, original, "joined Direct private-state readiness");
+      expect(original.scope_ref).toEqual({ kind: "realm", realm_id: directRealm });
+      const envelope = original.payload?.encrypted_content as { encryption_context?: { epoch?: string } } | undefined;
+      const epoch = uint64Value(envelope?.encryption_context?.epoch);
+      expect(epoch).toBeGreaterThan(0n);
+      privateEpochs.push(epoch);
+      await expect(recipient.locator(".chat-message").filter({ hasText: probe })).toBeVisible({ timeout: 90_000 });
+      messages.push(probe);
+    }
+    expect(privateEpochs[0]).toBe(privateEpochs[1]);
     await alice.context().setOffline(true);
     const offlineMessage = `direct-offline-after-join-${Date.now()}`;
     await bob.locator(".chat-input").fill(offlineMessage);
@@ -581,8 +616,9 @@ return async ({ jointUsers, request, browser }: { jointUsers: JointUsersFixture;
     }
   }
   for (const [page, peer] of [[alice, bobSession.user.id], [bob, aliceSession.user.id]] as const) {
-    const presence = page.locator(`.presence-row[data-actor-id=${JSON.stringify(canonicalJson(accountActorId(peer, peer === bobSession.user.id && remoteBob ? "server2" : "default")))}]`);
-    await expect.soft(presence).toHaveAttribute("data-presence-state", "online", { timeout: 90_000 });
+    const identity = canonicalJson(accountActorId(peer, peer === bobSession.user.id && remoteBob ? "server2" : "default"));
+    const presence = page.locator(".presence-row").filter({ has: page.getByLabel(identity, { exact: true }) });
+    await expect.soft(presence).toHaveClass(/\bpresence-row-online\b/, { timeout: 90_000 });
   }
   if (mode === "lost") {
     expect(unchangedUnit, "all founding submissions after restart preserve the original signed bytes").toBe(true);

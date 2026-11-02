@@ -7,7 +7,7 @@ import { selectProductOptionByLabel } from "../../helpers/product-select";
 // is required before authorization; pairing itself must not grant content rights.
 import { test, expect } from "../../helpers/joint-fixture";
 import type { Page, Locator, APIRequestContext, Request, Route } from "../../helpers/arkret-test";
-import { coauthBaseUrl, colandBaseUrl, mockEmailBaseUrl } from "../../helpers/env";
+import { coauthBaseUrl, colandBaseUrl, mockEmailBaseUrl, requiredEnv } from "../../helpers/env";
 import { grantInviteConsentArkret, deliverInviteWithConsentGrant } from "../../helpers/contact-api";
 import { assertAuthoritySubmitOutcome, buildCapabilityGrantEnvelope, canonicalJson, grantCapabilityEventApi, rawSubmitSignedEventApi, refreshEventEnvelopeProof, resolveDefaultStrandId, retypeEventDerivedId, signedEventEnvelope, wireErrCode } from "../../helpers/coland-api";
 import { addCircleMemberRaw, createCircleArkret } from "../../helpers/circle-api";
@@ -26,6 +26,11 @@ test.setTimeout(720_000);
 type Footprint = { tables: Record<string, { count: number; sha256: string }>;
   candidate_absence?: Record<string, number> };
 
+function grantRow(scope: Locator, id: string, retained = false): Locator {
+  return scope.locator(retained ? ".event" : ".owned-agent-accepted-grant")
+    .filter({ hasText: `${id}；` });
+}
+
 async function footprint(realm: string, station: string, candidate?: string): Promise<Footprint> {
   const topology = JSON.parse(await readFile(process.env.COTEST_TOPOLOGY_PATH!, "utf8"));
   const servers = topology.servers.filter((s: { coland: { service_id: string } }) => s.coland.service_id === station);
@@ -33,7 +38,7 @@ async function footprint(realm: string, station: string, candidate?: string): Pr
   const script = fileURLToPath(new URL("../../../scripts/realm-business-footprint.py", import.meta.url));
   const args = [script, "--server", servers[0].name, "--realm", realm];
   if (candidate) args.push("--candidate-event", candidate);
-  const { stdout } = await promisify(execFile)("python3", args, { timeout: 45_000, maxBuffer: 1_048_576 });
+  const { stdout } = await promisify(execFile)(requiredEnv("COTEST_PYTHON_EXECUTABLE"), args, { timeout: 45_000, maxBuffer: 1_048_576 });
   return JSON.parse(stdout) as Footprint;
 }
 
@@ -118,7 +123,7 @@ async function confirm(page: Page, panel: Locator, realm: string, account: unkno
   expect(sources[0].agent_join_event_id).toMatch(/^ak:event:/);
   expect(sources[0].controller_join_event_id).not.toBe(sources[0].agent_join_event_id);
   const id = retypeEventDerivedId(event.event_id!, "grant");
-  await expect(panel.locator(`.owned-agent-accepted-grant[data-grant-id="${id}"]`))
+  await expect(grantRow(panel, id))
     .toContainText("Active", { timeout: 180_000 });
   return id;
 }
@@ -188,11 +193,11 @@ test("ordinary member explicitly grants, withdraws cold and confirms a new owned
   const unqualified = await confirm(bob, panel, realm, jointRealm.bobSession.accountId, agentAccount, strand,
     "agent_requested_scope_commitment_invalid");
   expect((await footprint(realm, jointRealm.bobSession.accountId.station_id)).tables).toEqual(beforeUnqualified.tables);
-  await expect(panel.locator(`[data-grant-id="${unqualified}"]`)).toHaveCount(0);
+  await expect(grantRow(panel, unqualified)).toHaveCount(0);
   await row.locator(".member-agent-interaction-mode").getByRole("button", { name: /^(公开|Public)$/ }).click();
-  const reply = row.locator(".member-agent-reply-toggle");
-  if (await reply.getAttribute("aria-checked") !== "true") await reply.click();
-  await expect(reply).toHaveAttribute("aria-checked", "true", { timeout: 120_000 });
+  const reply = row.getByRole("checkbox", { name: "Reply as agent", exact: true });
+  await reply.setChecked(true);
+  await expect(reply).toBeChecked({ timeout: 120_000 });
   const bridge = ProvisioningBridge.start();
   try {
     const session = jointRealm.bobSession;
@@ -209,10 +214,10 @@ test("ordinary member explicitly grants, withdraws cold and confirms a new owned
     await rejectedWithoutEffects(bridge, runtime.runtimeId, realm, strand, session.accountId.station_id);
     const qualifiedPanel = (await members(bob, realm, agentId)).locator(".event:has(> .event-head :text-is(\"明确授权自有 Agent\"))");
     const first = await confirm(bob, qualifiedPanel, realm, session.accountId, agentAccount, strand);
-    await expect(qualifiedPanel.locator(`[data-grant-id="${first}"]`)).toContainText("当前权限/管理预检允许（运行时仍需验收）", { timeout: 120_000 });
+    await expect(grantRow(qualifiedPanel, first)).toContainText("当前权限/管理预检允许（运行时仍需验收）", { timeout: 120_000 });
     // Preflight is separately labelled. Only the real Agent-signed accepted
     // Message and exact read-back below prove business effectiveness.
-    await expect(qualifiedPanel.locator(`[data-grant-id="${first}"]`)).not.toContainText(/未确认|基础权限|不可达/, { timeout: 120_000 });
+    await expect(grantRow(qualifiedPanel, first)).not.toContainText(/未确认|基础权限|不可达/, { timeout: 120_000 });
     await bridge.issueAgentContentSession(runtime.runtimeId);
     const authored = await bridge.prepareAgentMessage({ runtimeId: runtime.runtimeId, realmId: realm, strandId: strand,
       text: "real Agent signs and commits using the explicitly confirmed narrow owned source" });
@@ -223,7 +228,7 @@ test("ordinary member explicitly grants, withdraws cold and confirms a new owned
     await bob.reload({ waitUntil: "domcontentloaded" });
     await members(bob, realm, agentId);
     const ledger = bob.locator(".owned-agent-withdrawal-ledger");
-    const retained = ledger.locator(`[data-grant-id="${first}"]`);
+    const retained = grantRow(ledger, first, true);
     await expect(retained).toContainText("Active", { timeout: 120_000 });
     await retained.locator(".owned-agent-withdraw-retained").click();
     await expect(retained).toContainText("Revoked", { timeout: 180_000 });
@@ -233,8 +238,8 @@ test("ordinary member explicitly grants, withdraws cold and confirms a new owned
     await expect(currentPanel.locator(".owned-agent-confirm-authority")).toBeDisabled();
     const second = await confirm(bob, currentPanel, realm, jointRealm.bobSession.accountId, agentAccount, strand);
     expect(second).not.toBe(first);
-    await expect(currentPanel.locator(`[data-grant-id="${first}"]`)).toContainText("Revoked");
-    await expect(currentPanel.locator(`[data-grant-id="${second}"]`)).toContainText("Active");
+    await expect(grantRow(currentPanel, first)).toContainText("Revoked");
+    await expect(grantRow(currentPanel, second)).toContainText("Active");
     await bridge.issueAgentContentSession(runtime.runtimeId);
     const renewed = await bridge.prepareAgentMessage({ runtimeId: runtime.runtimeId, realmId: realm, strandId: strand,
       text: "new explicit owned confirmation authorizes a new Agent message" });
@@ -245,7 +250,7 @@ test("ordinary member explicitly grants, withdraws cold and confirms a new owned
     await expect(bob.locator(".member-row-leave-button")).toHaveCount(1);
     await bob.locator(".member-row-leave-button").click();
     await members(bob, realm, agentId);
-    const departed = bob.locator(".owned-agent-withdrawal-ledger").locator(`[data-grant-id="${second}"]`);
+    const departed = grantRow(bob.locator(".owned-agent-withdrawal-ledger"), second, true);
     await expect(departed).toContainText("Active", { timeout: 120_000 });
     const withdrawalPath = "**/_arkret/self/events";
     let originalWithdrawal: string | undefined;
@@ -336,7 +341,7 @@ async function exactPolicy(request: APIRequestContext, session: DpopUserSession,
   const result = await response.json() as Record<string, any>;
   expect(result.realm_id).toBe(realm);
   expect(result.status).toBe("present");
-  expect(result.entry.selector.policy_id).toBe(id);
+  expect(result.current_state.selector).toEqual({ kind: "policy", policy_id: id });
   return result;
 }
 
@@ -365,10 +370,10 @@ async function savePolicyEditor(user: JointUserPage, editor: Locator, realm: str
 async function assertPolicyCurrent(request: APIRequestContext, session: DpopUserSession, realm: string,
   write: Awaited<ReturnType<typeof savePolicyEditor>>) {
   const current = await exactPolicy(request, session, realm, String(write.event.payload!.policy_id));
-  expect(canonicalJson(current.entry.value) === canonicalJson(write.event.payload!.value), "whole accepted Policy value").toBe(true);
-  expect(current.entry.revision.commit_id).toBe(write.outcome.commit.commit_id);
-  expect(current.entry.revision.stream_position).toBe(write.outcome.commit.stream_position);
-  expect(canonicalJson(current.entry.source_stream_ref) === canonicalJson(write.event.scope_ref)).toBe(true);
+  expect(canonicalJson(current.current_state.value) === canonicalJson(write.event.payload!.value), "whole accepted Policy value").toBe(true);
+  expect(current.current_state.revision.commit_id).toBe(write.outcome.commit.commit_id);
+  expect(current.current_state.revision.stream_position).toBe(write.outcome.commit.stream_position);
+  expect(canonicalJson(current.current_state.source_stream_ref) === canonicalJson(write.event.scope_ref)).toBe(true);
   return current;
 }
 
@@ -399,7 +404,7 @@ test("administrator configures all Realm operations and Circle operations with e
       expect((write.event.payload!.value as any).rules[0].agent_operations).toEqual([operation]);
       expect((write.event.payload!.value as any).policy_kind).toBe("agent");
       const current = await assertPolicyCurrent(request, jointRealm.aliceSession, realm, write);
-      previous = current.entry.revision;
+      previous = current.current_state.revision;
       // A reload must re-read accepted exact current, not reuse the form as proof.
       await user.page.reload({ waitUntil: "domcontentloaded" });
       editor = await loadPolicyEditor(user, realm, id);
@@ -420,7 +425,7 @@ test("administrator configures all Realm operations and Circle operations with e
         { kind: "account", account_id: jointRealm.aliceSession.accountId },
       ]));
       await expect(editor.locator(".agent-policy-save")).toBeDisabled();
-      expect(canonicalJson((await exactPolicy(request, jointRealm.aliceSession, realm, id)).entry.value)
+      expect(canonicalJson((await exactPolicy(request, jointRealm.aliceSession, realm, id)).current_state.value)
         === canonicalJson(publish.event.payload!.value)).toBe(true);
     }
   }
@@ -478,10 +483,10 @@ test("administrator Policy stale CAS and ordinary member edits refuse without ef
     await expect(staleEditor.locator(".write-status")).toContainText("The original Policy was rejected", { timeout: 120_000 });
     expect(canonicalJson((await footprint(realm, jointRealm.aliceSession.accountId.station_id)).tables) === canonicalJson(before.tables)).toBe(true);
     const unchanged = await exactPolicy(request, jointRealm.aliceSession, realm, id);
-    expect(canonicalJson(unchanged.entry) === canonicalJson(accepted.entry)).toBe(true);
+    expect(canonicalJson(unchanged.current_state) === canonicalJson(accepted.current_state)).toBe(true);
   } finally {
     releaseStale();
-    await sibling!.page.page.unroute(stalePattern);
+    await sibling!.page.page.unrouteAll({ behavior: "wait" });
     await sibling!.page.close();
   }
 
@@ -503,7 +508,7 @@ test("administrator Policy stale CAS and ordinary member edits refuse without ef
   await expect(memberEditor.locator(".agent-policy-save")).toBeDisabled();
   const accepted = await exactPolicy(request, jointRealm.aliceSession, realm, id);
   const event = signedEventEnvelope({ actorId: jointRealm.bob.id, realmId: realm, kind: "ak.policy.set",
-    payload: { policy_id: id, expected_revision: accepted.entry.revision, value: accepted.entry.value } });
+    payload: { policy_id: id, expected_revision: accepted.current_state.revision, value: accepted.current_state.value } });
   const before = await footprint(realm, jointRealm.bobSession.accountId.station_id, String(event.event_id));
   const refusal = await rawSubmitSignedEventApi(request, jointRealm.bobToken, event);
   const body = await refusal.json();
@@ -975,8 +980,12 @@ test("normal controller requests join and public review, distinct administrator 
           principal_id: agent, station_id: station } } }) });
       expect(current.status()).toBe(200);
       const read = await current.json();
-      expect(read.entry.value.interaction_mode).toBe("public");
-      expect(read.entry.revision.commit_id).toBe(outcome.commit.commit_id);
+      expect(read.realm_id).toBe(realm);
+      expect(read.status).toBe("present");
+      expect(read.current_state.selector).toEqual({ kind: "agent_interaction",
+        agent_account_id: { principal_id: agent, station_id: station } });
+      expect(read.current_state.value.interaction_mode).toBe("public");
+      expect(read.current_state.revision.commit_id).toBe(outcome.commit.commit_id);
     }
   }
 });

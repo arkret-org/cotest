@@ -35,7 +35,7 @@ test("0540 real local search never treats missing MLS keys or opaque ciphertext 
     expect(source).toBeTruthy();
     expect(source.payload.content).toBeUndefined();
     expect(source.payload.encrypted_content).toBeTruthy();
-    await expect(panel.locator(".global-search-result-item")).toHaveAttribute("data-event-id", source.event_id);
+    await expect(panel.locator(".global-search-result-item").locator(".global-search-result-event-reference")).toHaveText(source.event_id);
   } finally {
     await first.page.close();
   }
@@ -71,7 +71,7 @@ test("0540 real local search never treats missing MLS keys or opaque ciphertext 
       expect(native.view.results).toHaveLength(count);
       if (count) {
         expect(native.view.results[0]!.event_id).toBe(acceptedControl.event_id);
-        expect(native.view.results[0]!.event_id).toBe(await rows.getAttribute("data-event-id"));
+        expect(native.view.results[0]!.event_id).toBe(await rows.locator(".global-search-result-event-reference").innerText());
         expect(native.view.results[0]!.content.body).toBe(control);
       }
       observations.push({ step, native });

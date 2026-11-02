@@ -20,9 +20,8 @@
 // unbound-account onboarding is tested separately through the real browser UI.
 //
 // ── CI gate ──────────────────────────────────────────────────────────────────
-// It drives coauth's interactive login + consent pages, which only carry the
-// `data-testid` hooks this test selects (`coauth-login-submit`,
-// `coauth-oauth-approve`) and mint the deterministic dev code when coauth is
+// It drives Coauth's interactive login and consent through their labelled
+// fields and buttons, and uses the deterministic dev code when Coauth is
 // built from source. The joint harness provisions that stack and sets
 // COTEST_REAL_OIDC_LOGIN=1, so this regression flow is part of the default
 // joint-smoke gate. Ad-hoc runs without that env still skip; if the harness
@@ -386,10 +385,10 @@ test.describe("real OIDC browser login lifecycle @fully-implemented", () => {
 
       // coauth surfaces the error and stays on its login page; inkson never
       // reaches the signed-in shell.
-      await expect(page.locator("#login-error")).toBeVisible({
+      await expect(page.locator(".login-container").getByRole("alert").filter({ hasText: "Invalid credentials" })).toBeVisible({
         timeout: 30_000,
       });
-      await expect(page.locator("#login-password")).toBeVisible();
+      await expect(page.getByLabel("Password", { exact: true })).toBeVisible();
       await expect(page.locator(".shell.app")).toHaveCount(0);
     } finally {
       await jointPage.close();
@@ -462,7 +461,7 @@ test.describe("real OIDC browser login lifecycle @fully-implemented", () => {
         await page.locator(".auth-station-field input").fill(colandBaseUrl());
         await page.locator(".auth-primary").click();
         await submitCoauthPasswordCredentials(page, account);
-        const approve = page.getByTestId("coauth-oauth-approve");
+        const approve = page.locator(".login-container").getByRole("button", { name: "Allow", exact: true });
         if (
           await approve
             .waitFor({ state: "visible", timeout: 20_000 })

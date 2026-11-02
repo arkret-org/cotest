@@ -75,7 +75,7 @@ foreach ($file in Get-ChildItem -LiteralPath $testsRoot -Recurse -File -Filter "
         (
             (Test-UiEvidenceCall $uiSource $uiCodeMask '\.locator\(\s*["'']\.choose-new-identity["'']\s*\)\s*\.click\s*\(') -and
             (Test-UiEvidenceCall $uiSource $uiCodeMask '\.locator\(\s*["'']\.onboarding-bind-identity["'']\s*\)\s*\.click\s*\(') -and
-            (Test-UiEvidenceCall $uiSource $uiCodeMask '\.getByTestId\(\s*["'']coauth-oauth-approve["'']\s*\)')
+            (Test-UiEvidenceCall $uiSource $uiCodeMask '\.locator\(\s*["'']\.login-container["'']\s*\)\s*\.getByRole\(\s*["'']button["'']\s*,\s*\{\s*name\s*:\s*["'']Allow["'']\s*,\s*exact\s*:\s*true\s*\}\s*\)')
         ) -or (
             (Test-UiEvidenceCall $uiSource $uiCodeMask '\.locator\(\s*["'']\.identity-choice-card["'']\s*\)\s*\.getByRole\(\s*["'']button["'']\s*,\s*\{\s*name\s*:\s*["'']Continue["'']\s*,\s*exact\s*:\s*true\s*\}\s*\)\s*\.click\s*\(') -and
             (Test-UiEvidenceCall $uiSource $uiCodeMask '\.locator\(\s*["'']button\.onboarding-bind-identity["'']\s*\)\s*\.click\s*\(') -and

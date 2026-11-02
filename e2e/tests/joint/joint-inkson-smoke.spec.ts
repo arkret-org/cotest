@@ -68,7 +68,7 @@ test.describe("joint-inkson smoke @fully-implemented", () => {
 
     await jointRealm.alicePage.page.locator(".account-menu-button").click();
     await expect(
-      jointRealm.alicePage.page.locator(".account-menu"),
+      jointRealm.alicePage.page.locator(".account-menu__head .who"),
     ).toHaveText(principalHandle);
     if (accountAuthorityHandle && accountAuthorityHandle !== principalHandle) {
       for (const identitySurface of [

@@ -1,12 +1,30 @@
 // media-and-blob.md §§2, 2.1, 5: classification, authorized bytes and durable refusal.
 import { createHash, randomBytes } from "node:crypto";
 import { execFile } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
 import { promisify } from "node:util";
-import { expect, test } from "../../helpers/arkret-test";
+import { expect, test, type Page } from "../../helpers/arkret-test";
 import { colandBaseUrl } from "../../helpers/env";
 import { canonicalJson, createRealmApi } from "../../helpers/coland-api";
 import { createDpopUserSession, openDpopUserPage, selfPathHeadersForDpopSession } from "../../helpers/users";
+
+async function dropNativeFile(page: Page, filePath: string): Promise<void> {
+  const zone = page.locator(".compose-drop-zone");
+  await zone.scrollIntoViewIfNeeded();
+  const bounds = await zone.boundingBox();
+  if (!bounds) throw new Error("The real attachment drop zone has no visible bounds");
+  const session = await page.context().newCDPSession(page);
+  try {
+    const data = { items: [], files: [filePath], dragOperationsMask: 1 };
+    for (const type of ["dragEnter", "dragOver", "drop"] as const) {
+      await session.send("Input.dispatchDragEvent", {
+        type, x: bounds.x + bounds.width / 2, y: bounds.y + bounds.height / 2, data,
+      });
+    }
+  } finally {
+    await session.detach();
+  }
+}
 
 async function presignProblemDiagnostic(response: import("@playwright/test").APIResponse): Promise<string> {
   if (response.status() < 400) return "";
@@ -49,14 +67,13 @@ test("Chat file drop freezes structured plaintext and encrypted attachments", as
       try {
         const body = `private attachment ${Date.now()}`;
         await expect(page.locator(".send-chat-button")).toBeEnabled({timeout: 120_000});
-        const uploaded = page.waitForResponse(response =>
-          new URL(response.url()).pathname === "/_arkret/self/blob/upload" && response.request().method() === "POST");
-        await page.locator(".compose-drop-zone").evaluate((zone, body) => {
-          const transfer = new DataTransfer();
-          transfer.items.add(new File([body], "private-note.txt", { type: "text/plain" }));
-          zone.dispatchEvent(new DragEvent("drop", { bubbles: true, cancelable: true, dataTransfer: transfer }));
-        }, body);
-        const response = await uploaded;
+        const filePath = testInfo.outputPath(`private-note-${encrypted}.txt`);
+        writeFileSync(filePath, body, "utf8");
+        const [response] = await Promise.all([
+          page.waitForResponse(response => new URL(response.url()).pathname === "/_arkret/self/blob/upload"
+            && response.request().method() === "POST", { timeout: 90_000 }),
+          dropNativeFile(page, filePath),
+        ]);
         expect(response.status()).toBe(200);
         const outcome = await response.json();
         const bytes = Buffer.from(body, "utf8");

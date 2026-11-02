@@ -44,7 +44,7 @@ test("AV-UI-BOUND real WASM cold history keeps 256 variable-height messages reac
       }).observe({ type: "longtask", buffered: true });
       new MutationObserver(() => {
         const feed = document.querySelector<HTMLElement>('.message-list');
-        const mounted = feed?.querySelectorAll('[data-virtual-index]') ?? [];
+        const mounted = feed?.querySelectorAll('.chat-message') ?? [];
         evidence.peakRows = Math.max(evidence.peakRows, mounted.length);
         const indices = Array.from(mounted).flatMap(row => {
           const match = /history-row-(\d{3})/.exec(row.textContent ?? "");
@@ -69,7 +69,7 @@ test("AV-UI-BOUND real WASM cold history keeps 256 variable-height messages reac
         }
       }).observe(document, { childList: true, subtree: true });
       document.addEventListener("input", event => {
-        if (!(event.target instanceof HTMLElement) || event.target.dataset.testid !== "chat-input") return;
+        if (!(event.target instanceof HTMLElement) || !event.target.matches(".chat-input")) return;
         const start = performance.now();
         requestAnimationFrame(() => evidence.inputFrames.push(performance.now() - start));
       }, true);
@@ -104,8 +104,10 @@ test("AV-UI-BOUND real WASM cold history keeps 256 variable-height messages reac
             windows: record.installedWindows, omittedWindowRecords: record.omittedWindowRecords };
         }), geometry: await feed.evaluate(element => ({
         top: element.scrollTop, height: element.scrollHeight, viewport: element.clientHeight,
-        mounted: Array.from(element.querySelectorAll<HTMLElement>("[data-virtual-index]"))
-          .map(row => Number(row.dataset.virtualIndex)),
+        mounted: Array.from(element.querySelectorAll<HTMLElement>(".chat-message")).flatMap(row => {
+          const marker = /history-row-(\d{3})/.exec(row.textContent ?? "");
+          return marker ? [Number(marker[1])] : [];
+        }),
       })) }, null, 2), contentType: "application/json",
     });
     expect([...seen].sort((a, b) => a - b), "every accepted message is reachable through real scroll")

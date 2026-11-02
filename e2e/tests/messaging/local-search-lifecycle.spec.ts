@@ -56,8 +56,8 @@ test("0540 real local search rechecks late-join history and preserves revision s
       let visible: Record<string, string | null> | null = null;
       if (count) {
         await expect(row.locator(".global-search-result-snippet")).toHaveText(query);
-        visible = { event_id: await row.getAttribute("data-event-id"),
-          commit_id: await row.getAttribute("data-commit-id") };
+        visible = { event_id: await row.locator(".global-search-result-event-reference").innerText(),
+          commit_id: await row.locator(".global-search-result-commit-reference").innerText() };
       } else {
         await expect(panel.locator(".global-search-results-no-results")).toBeVisible();
       }

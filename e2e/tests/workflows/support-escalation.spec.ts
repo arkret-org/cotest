@@ -1,3 +1,4 @@
+import { addBoardList } from "../../helpers/kanban-product-ui";
 // Support escalation workflow — frontline Alex hands off to backend Sam
 // Contract: e2e/scenarios/workflows/support-escalation.md
 // Spec refs:
@@ -207,8 +208,7 @@ test.describe("workflow: support escalation", () => {
       ).toContainText(boardTitle, { timeout: 45_000 });
 
       for (const columnName of [triage, inProgress, resolved]) {
-        await alexPage.page.locator(".new-column-input").fill(columnName);
-        await alexPage.page.locator(".add-column-button").click();
+        await addBoardList(alexPage.page, columnName);
         await expect(
           alexPage.page
             .locator(".kanban-column")
@@ -247,11 +247,7 @@ test.describe("workflow: support escalation", () => {
         timeout: 60_000,
       });
       await expect(draftBadge).toHaveCount(0, { timeout: 30_000 });
-      await expect(archiveButton).not.toHaveAttribute(
-        "data-cap-gate",
-        "draft",
-        { timeout: 30_000 },
-      );
+      await expect(archiveButton).toBeEnabled({ timeout: 30_000 });
       await stepShot(alexPage.page, testInfo, "kanban-B-settled");
     } finally {
       await alexPage.close();

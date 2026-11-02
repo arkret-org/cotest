@@ -1,3 +1,4 @@
+import { addBoardList } from "../../helpers/kanban-product-ui";
 // Kanban week-in-review workflow — single user runs a day on the board
 // Contract: e2e/scenarios/workflows/kanban-week.md
 // Spec refs:
@@ -18,7 +19,7 @@ import {
 import { createRealmViaApi } from "../../helpers/api";
 import { stepShot } from "../../helpers/screenshots";
 import { decodeIngressEvents } from "../../helpers/event-ingress";
-import { scanRealmStreamApi } from "../../helpers/coland-api";
+import { scanRealmStreamApi, sdkEventDerivedObjectId } from "../../helpers/coland-api";
 import {
   openDpopUserPage,
   type DpopUserSession,
@@ -91,24 +92,20 @@ async function waitForCanonicalStrandId(
             return payload?.object?.metadata?.title === title;
           },
         );
-        const eventId = typeof event?.event_id === "string" ? event.event_id : "";
-        strandId = eventId.startsWith("ak:event:")
-          ? `ak:strand:${eventId.slice("ak:event:".length)}`
-          : "";
+        strandId = event ? sdkEventDerivedObjectId(event) : "";
         return strandId;
       },
       { timeout: 120_000 },
     )
     .toMatch(/^ak:strand:/);
-  await expect
-    .poll(
-      () =>
-        card
-          .locator(".card-archive-button")
-          .getAttribute("data-strand-id"),
-      { timeout: 120_000 },
-    )
-    .toBe(strandId);
+  const page = card.page();
+  const boardPath = new URL(page.url()).pathname;
+  await card.click();
+  await expect.poll(() => decodeURIComponent(new URL(page.url()).pathname).endsWith(`/task/${strandId}`))
+    .toBe(true);
+  await page.locator(".card-detail-close-button").click();
+  await expect.poll(() => new URL(page.url()).pathname).toBe(boardPath);
+  await expect(card).toBeVisible();
   return strandId;
 }
 
@@ -150,16 +147,11 @@ test.describe("workflow: kanban week-in-review", () => {
         mlsActivated: false,
         ownerId: patFlow.user.id,
       });
-      await patPage.page.evaluate((path) => {
-        window.history.pushState({}, "", path);
-        window.dispatchEvent(new PopStateEvent("popstate"));
-      }, `/kanban/${realmId}`);
+      await patPage.page.goto(`/kanban/${encodeURIComponent(realmId)}`, { waitUntil: "domcontentloaded" });
       await expect(patPage.page.locator(".kanban-panel")).toBeVisible({
         timeout: 120_000,
       });
-      await patPage.page
-        .locator(".new-board-toggle")
-        .evaluate((button: HTMLButtonElement) => button.click());
+      await patPage.clickWithPassivePromptRetry(patPage.page.locator(".new-board-toggle"));
       await patPage.page
         .locator(".new-board-title-input input, .new-board-title-input textarea")
         .fill(`Week 21 board ${stamp}`);
@@ -182,8 +174,7 @@ test.describe("workflow: kanban week-in-review", () => {
       expect(boardCreate?.seal_basis, "Board create never enters Control Move shape").toBeUndefined();
 
       for (const columnName of [todayList, doingList, doneList]) {
-        await patPage.page.locator(".new-column-input").fill(columnName);
-        await patPage.page.locator(".add-column-button").click();
+        await addBoardList(patPage.page, columnName);
         await expect(
           patPage.page.locator(".kanban-column").filter({ hasText: columnName }),
         ).toBeVisible({ timeout: 30_000 });
@@ -270,9 +261,12 @@ test.describe("workflow: kanban week-in-review", () => {
       // Phase E — archive an entire List and restore it. realm-and-space.md
       // section 3.4: Space archive moves only the List's own lifecycle; its
       // cards keep their state and placement, so restore brings them back.
-      const todayListId = await today
-        .locator(".list-archive-button")
-        .getAttribute("data-space-container-id");
+      const acceptedLists = (await readRealmEvents(request, realmId, patFlow.session)).filter(event => {
+        const object = (event.payload as { object?: { kind?: string; title?: string } } | undefined)?.object;
+        return event.kind === "ak.space.create" && object?.kind === "list" && object.title === todayList;
+      });
+      expect(acceptedLists).toHaveLength(1);
+      const todayListId = sdkEventDerivedObjectId(acceptedLists[0]);
       expect(todayListId ?? "").toMatch(/^ak:space:/);
 
       // list-archive-button is hover-revealed on the column header — hover

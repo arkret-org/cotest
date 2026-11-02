@@ -1307,7 +1307,7 @@ export class JointUserPage {
 
   // Send a message into realmId's chat feed. Asserts chat-status persistence.
   async sendTimelineMessage(realmId: string, body: string) {
-    if (!this.page.url().includes(`/chat/${realmId}`)) {
+    if (!matchesRealmChatRoute(new URL(this.page.url()), realmId)) {
       await this.gotoTimelineRealm(realmId);
     }
     await this.dismissPassiveBlockingPrompts();
@@ -1329,17 +1329,16 @@ export class JointUserPage {
     stationId: string,
     suffix: string,
   ): Promise<string> {
-    if (!this.page.url().includes(`/chat/${realmId}`)) {
+    if (!matchesRealmChatRoute(new URL(this.page.url()), realmId)) {
       await this.gotoTimelineRealm(realmId);
     }
     const input = this.page.locator(".chat-input");
     await input.fill("");
     await this.page.locator(".mention-trigger-button").click();
-    const escapeAttr = (value: string) =>
-      value.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
-    const suggestion = this.page.locator(
-      `.mention-suggestion[data-mention-principal-id="${escapeAttr(principalId)}"][data-mention-station-id="${escapeAttr(stationId)}"]`,
-    );
+    const account = canonicalJson({ principal_id: principalId, station_id: stationId });
+    const label = new RegExp(" — " + account.replace(/[^\w-]/g, "\\$&") + "$");
+    const suggestion = this.page.getByRole("button", { name: label });
+    await expect(suggestion).toHaveCount(1);
     await expect(suggestion).toBeVisible({ timeout: 30_000 });
     await suggestion.click();
     const prefix = (await input.inputValue()).trimEnd();
@@ -1355,7 +1354,7 @@ export class JointUserPage {
 
   // Read visible timeline event texts as an array (deduped on `body`).
   async readTimelineTexts(realmId: string): Promise<string[]> {
-    if (!this.page.url().includes(`/chat/${realmId}`)) {
+    if (!matchesRealmChatRoute(new URL(this.page.url()), realmId)) {
       await this.gotoTimelineRealm(realmId);
     }
     await this.dismissPassiveBlockingPrompts();

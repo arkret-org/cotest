@@ -69,14 +69,14 @@ for (const scenario of ["fresh browser", "handoff response loss", "stale busy ch
       await page.goto("/register");
       await page.locator(".register-server input, .register-server textarea").fill(colandBaseUrl());
       await page.locator(".register-open-account-authority").click();
-      await page.locator('input[autocomplete="username"]').fill(account.handle);
-      await page.locator('input[autocomplete="email"]').fill(email);
+      await page.getByLabel("Username", { exact: true }).fill(account.handle);
+      await page.getByLabel("Email address", { exact: true }).fill(email);
       const passwords = page.locator('input[type="password"]');
       await expect(passwords).toHaveCount(2);
       await passwords.nth(0).fill(account.password);
       await passwords.nth(1).fill(account.password);
       await page.getByRole("button", { name: /create account/i }).click();
-      const codeInput = page.locator('input[autocomplete="one-time-code"]');
+      const codeInput = page.getByLabel("Verification code", { exact: true });
       await expect(codeInput).toBeVisible();
       const code = await registrationEmailCode(request, email);
       await expect.poll(async () => {
@@ -85,11 +85,11 @@ for (const scenario of ["fresh browser", "handoff response loss", "stale busy ch
         await page.getByRole("button", { name: /^verify$/i }).click();
         return !(await codeInput.isVisible());
       }, { timeout: 30_000, intervals: [500] }).toBe(true);
-      const displayName = page.locator('input[autocomplete="name"]');
+      const displayName = page.getByLabel("Display name", { exact: true });
       await expect(displayName).toBeVisible();
       await displayName.fill(user.displayName);
       await page.getByRole("button", { name: /^continue$/i }).click();
-      const initialApproval = page.getByTestId("coauth-oauth-approve");
+      const initialApproval = page.locator(".login-container").getByRole("button", { name: "Allow", exact: true });
       const finishRegistration = page.getByRole("button", { name: /^create account$/i });
       await expect(initialApproval.or(finishRegistration).or(page.locator(".choose-new-identity"))).toBeVisible();
       if (await finishRegistration.isVisible()) await finishRegistration.click();
@@ -116,7 +116,7 @@ for (const scenario of ["fresh browser", "handoff response loss", "stale busy ch
       await page.locator(".auth-station-field input").fill(colandBaseUrl());
       await page.locator(".auth-primary").click();
       await submitCoauthPasswordCredentials(page, account);
-      const approve = page.getByTestId("coauth-oauth-approve");
+      const approve = page.locator(".login-container").getByRole("button", { name: "Allow", exact: true });
       if (await approve.waitFor({ state: "visible", timeout: 5_000 }).then(() => true).catch(() => false)) {
         await approve.click();
       }

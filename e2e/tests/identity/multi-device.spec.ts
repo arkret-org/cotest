@@ -400,7 +400,7 @@ async function loginFreshBrowserToDeviceSetup(
   await page.locator(".auth-primary").click();
   await submitCoauthPasswordCredentials(page, account);
 
-  const approve = page.getByTestId("coauth-oauth-approve");
+  const approve = page.locator(".login-container").getByRole("button", { name: "Allow", exact: true });
   const consentShown = await approve
     .waitFor({ state: "visible", timeout: 20_000 })
     .then(() => true)

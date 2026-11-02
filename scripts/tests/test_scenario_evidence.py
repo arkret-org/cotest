@@ -90,7 +90,8 @@ class ScenarioEvidenceTests(unittest.TestCase):
                                      'await page.locator(".choose-new-identity").click();\n'
                                      'await '
                                      'page.locator(".onboarding-bind-identity").click();\n'
-                                     'const approve = page.getByTestId("coauth-oauth-approve"); '
+                                     'const approve = page.locator(".login-container").getByRole("button", '
+                                     '{ name: "Allow", exact: true }); '
                                      'await approve.click();',
          'direct-onboarding-comment-only': '// await joint.gotoLogin();\n'
                                            '// await submitCoauthPasswordCredentials(page, '

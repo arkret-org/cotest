@@ -1408,7 +1408,7 @@ jointTest("fresh Agent pairing gates the first send until binding and answers on
     await expect(inkson.locator(".chat-panel")).not.toContainText("Strand not found");
     await inkson.locator(".account-menu-button").click();
     await inkson.locator(".account-menu-settings").click();
-    await expect(inkson.locator(".settings-panel")).toBeVisible();
+    await expect(inkson.locator(".settings-content-column")).toBeVisible();
     await inkson.goBack();
     await expect(inkson).toHaveURL(url => url.pathname === acceptedPath);
     await expect(inkson.locator(".send-chat-button")).toBeDisabled();
@@ -1702,9 +1702,7 @@ async function pairNativeManagedSavfoxAgent(
     if (await retry.isVisible() && await retry.isEnabled()) {
       // The original approval can precede issuer reconciliation. Retry only
       // the same retained UI candidate, without re-pairing or new authority.
-      await expect(savfox.getByPlaceholder(
-        "https://arkret.example.org/_arkret/open/agent-pairing/resolve#token=...", { exact: true },
-      )).toHaveValue(pairing.pairingLink, {
+      await expect(savfox.getByLabel("Inkson pairing link", { exact: true })).toHaveValue(pairing.pairingLink, {
         timeout: Math.max(1, Math.min(10_000, deadline - Date.now())),
       });
       await expect(savfox.getByText(displayPairingCode(pairing.pairingCode), { exact: true }))
@@ -1903,7 +1901,7 @@ async function openOwnAgentDirectChat(
           if (
             (await ownAgentRow.isVisible().catch(() => false)) &&
             (await ownAgentRow.isEnabled().catch(() => false)) &&
-            (await ownAgentRow.getAttribute("data-opening")) !== "true"
+            (await ownAgentRow.getAttribute("aria-busy")) !== "true"
           ) {
             await ownAgentRow.click();
           }
@@ -2525,7 +2523,7 @@ async function assertSidecarLocalSearchPrivacy(
       await panel.locator(".global-search-input").fill(query);
       await panel.locator(".global-search-submit").click();
       if (query === "pong") {
-        await expect(panel.locator(`.global-search-result-item[data-event-id="${sharedEventId}"]`))
+        await expect(rows.filter({ has: user.page.getByText(sharedEventId, { exact: true }) }))
           .toHaveCount(1);
       } else if (query === privateBody) {
         await expect(panel.locator(".global-search-results-no-results")).toBeVisible();
@@ -2534,7 +2532,8 @@ async function assertSidecarLocalSearchPrivacy(
         await expect(panel.locator(".global-search-results-loading")).toHaveCount(0);
       }
       const visible = await rows.evaluateAll(elements => elements.map(element => ({
-        event_id: element.getAttribute("data-event-id"), text: element.textContent,
+        event_id: element.querySelector(".global-search-result-event-reference")?.textContent ?? null,
+        text: element.textContent,
       })));
       for (const result of visible) {
         expect(privateEventIds).not.toContain(result.event_id);

@@ -74,7 +74,7 @@ test("0540 real Station 1/100/1000 Realm durable cold startup records first scre
             }
           }).observe({ type: "longtask", buffered: true });
           document.addEventListener("input", event => {
-            if (!(event.target instanceof HTMLElement) || event.target.dataset.testid !== "chat-input") return;
+            if (!(event.target instanceof HTMLElement) || !event.target.matches(".chat-input")) return;
             const start = performance.now();
             requestAnimationFrame(() => metrics.inputFrames.push(performance.now() - start));
           }, true);
@@ -83,7 +83,8 @@ test("0540 real Station 1/100/1000 Realm durable cold startup records first scre
       const promptsBefore = postponedPrompts;
       const loadingStarted = Date.now();
       await flow.page.gotoHome();
-      const rows = page.locator(`.realm-tree-node-button[title^="${prefix}"]`);
+      const rows = page.getByRole("navigation", { name: "Main navigation", exact: true })
+        .getByRole("link", { name: new RegExp(`^${prefix}`) });
       const more = page.getByRole("button", { name: "Load More Realms", exact: true });
       let loadMoreClicks = 0;
       await expect.poll(async () => {

@@ -96,8 +96,8 @@ test("0540 real local search rechecks Circle revocation and the exact parent joi
         testInfo.outputPath("native-circle.json"));
       expect(native.view.results).toHaveLength(count);
       if (count) {
-        expect(native.view.results[0]!.event_id).toBe(await rows.getAttribute("data-event-id"));
-        expect(native.view.results[0]!.covering_commit.commit_id).toBe(await rows.getAttribute("data-commit-id"));
+        expect(native.view.results[0]!.event_id).toBe(await rows.locator(".global-search-result-event-reference").innerText());
+        expect(native.view.results[0]!.covering_commit.commit_id).toBe(await rows.locator(".global-search-result-commit-reference").innerText());
         expect(native.view.results[0]!.content.body).toBe(query);
       }
       observations.push({ step, native });

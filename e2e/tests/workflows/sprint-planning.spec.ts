@@ -1,3 +1,4 @@
+import { addBoardList } from "../../helpers/kanban-product-ui";
 // Sprint planning workflow — tech lead + two engineers commit to stories
 // Contract: e2e/scenarios/workflows/sprint-planning.md
 // Spec refs:
@@ -226,8 +227,7 @@ test.describe("workflow: sprint planning", () => {
       ).toContainText(boardTitle, { timeout: 45_000 });
 
       for (const columnName of [backlog, todo, doing, done]) {
-        await meiPage.page.locator(".new-column-input").fill(columnName);
-        await meiPage.page.locator(".add-column-button").click();
+        await addBoardList(meiPage.page, columnName);
         await expect(
           meiPage.page
             .locator(".kanban-column")
@@ -362,8 +362,7 @@ test.describe("workflow: sprint planning", () => {
       });
 
       for (const columnName of [backlog, todo, doing, done]) {
-        await meiPage.page.locator(".new-column-input").fill(columnName);
-        await meiPage.page.locator(".add-column-button").click();
+        await addBoardList(meiPage.page, columnName);
         await expect(
           meiPage.page
             .locator(".kanban-column")
@@ -601,8 +600,7 @@ test.describe("workflow: sprint planning", () => {
         meiPage.page.locator(".board-space-select-button"),
       ).toContainText(boardTitle, { timeout: 45_000 });
 
-      await meiPage.page.locator(".new-column-input").fill(column);
-      await meiPage.page.locator(".add-column-button").click();
+      await addBoardList(meiPage.page, column);
       const backlogColumn = meiPage.page
         .locator(".kanban-column")
         .filter({ hasText: column });
@@ -699,12 +697,9 @@ async function setCardDetailEditorValue(
   page: Page,
   value: string,
 ): Promise<void> {
-  const editor = page.locator(".card-detail-description-rich-editor")
-    .locator('.ProseMirror.toastui-editor-contents[contenteditable="true"]');
+  const editor = page.locator(".card-detail-edit-form")
+    .getByRole("textbox", { name: "Description", exact: true });
   await expect(editor).toBeVisible({ timeout: 45_000 });
-  await editor.click();
-  await editor.press("ControlOrMeta+A");
-  await editor.pressSequentially(value);
-  const input = page.locator(".card-detail-description-input");
-  await expect(input).toHaveValue(value);
+  await editor.fill(value);
+  await expect(editor).toHaveValue(value);
 }

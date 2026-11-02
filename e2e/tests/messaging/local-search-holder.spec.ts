@@ -117,9 +117,9 @@ async function runHolderRevocation(
       await panel.locator(".global-search-submit").click();
       const row = panel.locator(".global-search-result-item");
       await expect(row).toHaveCount(1);
-      await expect(row).toHaveAttribute("data-event-id", accepted.event_id);
+      await expect(row.locator(".global-search-result-event-reference")).toHaveText(accepted.event_id);
       const result = await native("accepted-device-positive", session);
-      expect(result.covering_commit.commit_id).toBe(await row.getAttribute("data-commit-id"));
+      expect(result.covering_commit.commit_id).toBe(await row.locator(".global-search-result-commit-reference").innerText());
     }
     // Replace the local session through the real root picker while an actual
     // authenticated IndexedDB candidate read is pending. The issuer grant
@@ -188,8 +188,8 @@ async function runHolderRevocation(
     await replacingPage.locator(".global-search-submit").click();
     const freshRow = replacingPage.locator(".global-search-result-item");
     await expect(freshRow).toHaveCount(1);
-    await expect(freshRow).toHaveAttribute("data-event-id", retainedSource.event_id);
-    await expect(freshRow).toHaveAttribute("data-commit-id", retainedSource.covering_commit.commit_id);
+    await expect(freshRow.locator(".global-search-result-event-reference")).toHaveText(retainedSource.event_id);
+    await expect(freshRow.locator(".global-search-result-commit-reference")).toHaveText(retainedSource.covering_commit.commit_id);
     await expect(freshRow.locator(".global-search-result-snippet")).toHaveText(body);
     observations.push({ step: "same-document-root-session-and-pending-device-replacement",
       sameDocument: true, deliveredLateAuthenticatedRead: true,
@@ -200,7 +200,9 @@ async function runHolderRevocation(
       expect(owner.recoveryKey?.trim().split(/\s+/).length).toBe(24);
       const ownerPage = flows[0]!.page.page;
       await ownerPage.goto(new URL("/settings/devices", ownerPage.url()).toString());
-      const target = ownerPage.locator(`.device-row[data-device-id="${sibling.user.deviceId}"]`);
+      const target = ownerPage.locator(".device-row").filter({
+        has: ownerPage.getByText(sibling.user.deviceId, { exact: true }),
+      });
       await expect(target).toBeVisible({ timeout: 120_000 });
       await target.locator(".device-revoke-button").click();
       // Deliver the ordinary input event without putting Recovery Key words
@@ -239,8 +241,8 @@ async function runHolderRevocation(
       await siblingPage.locator(".global-search-input").fill(body);
       await siblingPage.locator(".global-search-submit").click();
       await expect(siblingPage.locator(".global-search-results-loading")).toHaveCount(0);
-      await expect(siblingPage.locator(".global-search-result-item"))
-        .toHaveAttribute("data-event-id", accepted.event_id);
+      await expect(siblingPage.locator(".global-search-result-item").locator(".global-search-result-event-reference"))
+        .toHaveText(accepted.event_id);
       await expect(siblingPage.locator(".global-search-result-snippet")).toHaveText(body);
     }
     for (const flow of (revokedHolder === "Device" ? [flows[1]!] : [flows[0]!])) {

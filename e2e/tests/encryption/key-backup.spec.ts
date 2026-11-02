@@ -1,3 +1,4 @@
+import { addBoardList } from "../../helpers/kanban-product-ui";
 import { authHeaders } from "../../helpers/coland-api";
 import { readCreatorRecords } from "../../helpers/creator-bootstrap";
 import { accountTransportRotationProbe, assertOriginalAcceptedMlsRows } from "../../helpers/session-transport-recovery";
@@ -186,7 +187,7 @@ test.describe("key backup + restore", () => {
       ).toBeDisabled();
       await expect(
         device.page.locator(".recovery-key-regenerate"),
-      ).toHaveAttribute("title", /staged handoff/i);
+      ).toHaveText(/staged handoff required/i);
     } finally {
       await device.close();
     }
@@ -817,7 +818,7 @@ async function openAndPairFreshDeviceForAccount(
       .locator(".auth-primary")
       .click();
     await submitCoauthPasswordCredentials(requestingDevice.page, account);
-    const approve = requestingDevice.page.getByTestId("coauth-oauth-approve");
+    const approve = requestingDevice.page.locator(".login-container").getByRole("button", { name: "Allow", exact: true });
     if (
       await approve
         .waitFor({ state: "visible", timeout: 20_000 })
@@ -1324,8 +1325,7 @@ async function createKanbanBoardListAndCard(
   );
   expect(boardId).toMatch(/^ak:space:/);
 
-  await page.locator(".new-column-input").fill(listTitle);
-  await page.locator(".add-column-button").click();
+  await addBoardList(page, listTitle);
   const column = page
     .locator(".kanban-column")
     .filter({ hasText: listTitle })

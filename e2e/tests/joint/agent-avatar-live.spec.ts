@@ -139,19 +139,28 @@ for (const mode of ["avatar", "lost-responses", "retryable-profile", "account-sw
     await page.locator(".agent-admin-create-open-button").click();
     await page.locator(".agent-admin-provision-agent-slug").locator("input, textarea").fill(slug);
     if (mode !== "no-avatar") {
-      await page.locator(".agent-admin-avatar-input").setInputFiles({ name: "agent.png", mimeType: "image/png", buffer: avatarPng });
-      const uploaded = page.waitForResponse(response => response.request().method() === "POST"
-        && new URL(response.url()).pathname === "/_arkret/self/blob/upload");
-      await page.locator(".agent-admin-avatar-upload-cropped").click();
-      avatar = (await (await uploaded).json()).blob_ref;
+      const [chooser] = await Promise.all([
+        page.waitForEvent("filechooser"),
+        page.locator("button.agent-admin-avatar-input").click(),
+      ]);
+      await chooser.setFiles({ name: "agent.png", mimeType: "image/png", buffer: avatarPng });
+      const crop = page.locator(".avatar-crop-editor");
+      await expect(crop).toBeVisible();
+      const [uploaded] = await Promise.all([
+        page.waitForResponse(response => response.request().method() === "POST"
+          && new URL(response.url()).pathname === "/_arkret/self/blob/upload"),
+        crop.getByRole("button", { name: "Save avatar", exact: true }).click(),
+      ]);
+      expect(uploaded.ok()).toBe(true);
+      avatar = (await uploaded.json()).blob_ref;
       expect(avatar).toMatch(/^ak:blob:/);
-      await expect(page.locator(".agent-admin-avatar-crop-editor")).toHaveCount(0);
+      await expect(crop).toHaveCount(0);
     }
     await page.locator(".agent-admin-provision-button").click();
     if (mode === "provision-rejected") {
       await expect(page.locator(".agent-admin .write-status")).toContainText("Agent creation remains recoverable", { timeout: 180_000 });
       await expect(page.locator(".agent-admin-provision-agent-slug").locator("input, textarea")).toHaveValue(slug);
-      await expect(page.locator(".agent-admin-avatar-preview")).not.toHaveClass(/generated-avatar/);
+      await expect(page.locator(".agent-admin .avatar-uploader-preview .avatar-img")).not.toHaveClass(/generated-avatar/);
       expect(allocatedAgents.size).toBe(0);
       expect(profileAttempts).toBe(0);
       rejectProvision = false;
@@ -193,7 +202,7 @@ for (const mode of ["avatar", "lost-responses", "retryable-profile", "account-sw
       await expect(page.locator(".agent-admin .write-status")).toContainText("Agent was created; its avatar is still pending", { timeout: 180_000 });
       await expect(page.locator(".agent-admin .write-status")).toContainText("capability_denied");
       await expect(page.locator(".agent-admin-provision-agent-slug").locator("input, textarea")).toHaveValue(slug);
-      await expect(page.locator(".agent-admin-avatar-preview")).not.toHaveClass(/generated-avatar/);
+      await expect(page.locator(".agent-admin .avatar-uploader-preview .avatar-img")).not.toHaveClass(/generated-avatar/);
     } else {
       await expect(page.locator(".agent-admin .write-status")).toContainText("Created", { timeout: 180_000 });
       await expect(page.locator('.agent-admin-detail-pane:has(> .event-head :text-is("Create agent"))')).toHaveCount(0);

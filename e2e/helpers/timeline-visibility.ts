@@ -2,7 +2,7 @@ import { expect, type Locator, type Page } from "@playwright/test";
 
 export async function sampleAndAdvanceTimeline(feed: Locator): Promise<string[]> {
   return feed.evaluate(element => {
-    const mounted = Array.from(element.querySelectorAll<HTMLElement>("[data-virtual-index]"));
+    const mounted = Array.from(element.querySelectorAll<HTMLElement>(".chat-message"));
     const sample = mounted.map(row => row.textContent ?? "");
     const bounds = element.getBoundingClientRect();
     const viewportBottom = bounds.top + element.clientTop + element.clientHeight;

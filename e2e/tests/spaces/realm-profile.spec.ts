@@ -37,7 +37,9 @@ test("@fully-implemented Realm owner changes title and summary, then explicitly 
       joinRule: "invite",
     });
     await page.gotoRealmAdminSection(realmId, "profile");
-    const profile = page.page.locator(".realm-profile");
+    const profile = page.page.locator(".realm-settings .workflow-form").filter({
+      has: page.page.getByRole("textbox", { name: "Title", exact: true }),
+    });
     await expect(profile).toBeVisible({ timeout: 60_000 });
     await profile.locator(".realm-name-input input, .realm-name-input textarea").fill(updatedTitle);
     await profile.locator(".realm-summary-input").locator("input, textarea").fill(summary);

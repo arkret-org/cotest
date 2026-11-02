@@ -19,11 +19,16 @@ import {
   assertJointStackNotRequired, ensureRegistered, issueUserSession,
   openDpopUserPage, uniqueUser,
 } from "../../helpers/users";
-import { selectProductOptionByKey } from "../../helpers/product-select";
+import { selectProductOptionByLabel } from "../../helpers/product-select";
+import { uint64Value } from "../../helpers/uint64-decimal";
 import { createMimiProvider, postSignedMimiProviderRequest } from "../../helpers/mimi-provider";
 import { contactRow, requestContactArkret } from "../../helpers/contact-api";
 
 test.describe.configure({ mode: "serial" });
+
+const consentScopeLabels: Record<string, string> = {
+  invite: "Group invites", voice_call: "Voice calls", video_call: "Video calls", presence: "Presence",
+};
 
 function consentPeer(peerId: string, stationId = colandServiceId()) {
   return { kind: "actor" as const, actor_id: accountActorId(peerId, undefined, stationId) };
@@ -152,7 +157,7 @@ test.describe("complete peer Consent", () => {
       await expect(input).toBeVisible({ timeout: 30_000 });
       expect(JSON.parse(await input.inputValue())).toEqual([preserved]);
       for (const scope of ["voice_call", "video_call", "presence"]) {
-        await actor.page.locator('[class~="' + `consent-toggle-${scope}` + '"]').check();
+        await actor.page.locator(".consent-permissions-editor").getByRole("checkbox", { name: consentScopeLabels[scope], exact: true }).check();
       }
       const replacement: ConsentPermission[] = [
         preserved, { consent_scope: "voice_call" },
@@ -162,8 +167,8 @@ test.describe("complete peer Consent", () => {
       await actor.clickWithPassivePromptRetry(actor.page.locator(".consent-preview-button"));
       const diff = actor.page.locator(".consent-replacement-diff");
       await expect(diff).toBeVisible();
-      expect(JSON.parse(await diff.locator("pre").nth(0).innerText())).toEqual([preserved]);
-      expect(JSON.parse(await diff.locator("pre").nth(1).innerText())).toEqual(replacement);
+      expect(JSON.parse(await diff.locator(".preformatted").nth(0).innerText())).toEqual([preserved]);
+      expect(JSON.parse(await diff.locator(".preformatted").nth(1).innerText())).toEqual(replacement);
       // Preview is not a write; only explicit confirmation changes the current.
       expect(consentPermissions(await readConsentCurrentApi(request, token, flow.user.id, peer))).toEqual([preserved]);
       await actor.clickWithPassivePromptRetry(actor.page.locator(".consent-confirm-replace-button"));
@@ -189,19 +194,19 @@ test.describe("complete peer Consent", () => {
       await expect(input).toBeVisible({ timeout: 30_000 });
       expect(JSON.parse(await input.inputValue())).toEqual(replacement);
       for (const scope of ["invite", "voice_call", "video_call", "presence"]) {
-        await expect(actor.page.locator('[class~="' + `consent-toggle-${scope}` + '"]')).toBeChecked();
+        await expect(actor.page.locator(".consent-permissions-editor").getByRole("checkbox", { name: consentScopeLabels[scope], exact: true })).toBeChecked();
       }
       expect(consentExpectedCurrent(await readConsentCurrentApi(request, token, flow.user.id, peer)))
         .toEqual(extendedRevision);
 
       for (const scope of ["invite", "voice_call", "video_call", "presence"]) {
-        await actor.page.locator('[class~="' + `consent-toggle-${scope}` + '"]').uncheck();
+        await actor.page.locator(".consent-permissions-editor").getByRole("checkbox", { name: consentScopeLabels[scope], exact: true }).uncheck();
       }
       expect(JSON.parse(await input.inputValue())).toEqual([]);
       await actor.clickWithPassivePromptRetry(actor.page.locator(".consent-preview-button"));
       await expect(diff).toBeVisible();
-      expect(JSON.parse(await diff.locator("pre").nth(0).innerText())).toEqual(replacement);
-      expect(JSON.parse(await diff.locator("pre").nth(1).innerText())).toEqual([]);
+      expect(JSON.parse(await diff.locator(".preformatted").nth(0).innerText())).toEqual(replacement);
+      expect(JSON.parse(await diff.locator(".preformatted").nth(1).innerText())).toEqual([]);
       const beforeEmptyConfirmation = await readConsentCurrentApi(request, token, flow.user.id, peer);
       expect(consentPermissions(beforeEmptyConfirmation)).toEqual(replacement);
       expect(consentExpectedCurrent(beforeEmptyConfirmation)).toEqual(extendedRevision);
@@ -217,16 +222,16 @@ test.describe("complete peer Consent", () => {
       if (emptyRevision.state !== "present") {
         throw new Error("confirmed empty Consent reverted to never_written");
       }
-      expect(emptyRevision.revision.stream_position).toBeGreaterThan(extendedRevision.revision.stream_position);
+      expect(uint64Value(emptyRevision.revision.stream_position)).toBeGreaterThan(uint64Value(extendedRevision.revision.stream_position));
       expect(emptyRevision.revision.commit_id).not.toBe(extendedRevision.revision.commit_id);
       await actor.clickWithPassivePromptRetry(actor.page.locator(".consent-read-complete-button"));
       await expect(input).toBeVisible({ timeout: 30_000 });
       expect(JSON.parse(await input.inputValue())).toEqual([]);
       for (const scope of ["invite", "voice_call", "video_call", "presence"]) {
-        await expect(actor.page.locator('[class~="' + `consent-toggle-${scope}` + '"]')).not.toBeChecked();
+        await expect(actor.page.locator(".consent-permissions-editor").getByRole("checkbox", { name: consentScopeLabels[scope], exact: true })).not.toBeChecked();
       }
       // The opaque request surface contains concrete non-invite scopes only.
-      await selectProductOptionByKey(actor.page.locator(".consent-request-scope-input"), "video_call");
+      await selectProductOptionByLabel(actor.page.locator(".consent-request-scope-input"), "Video calls");
       await actor.page.locator(".consent-request-holder-input").fill(bob.id);
       await actor.page.locator(".consent-request-holder-station-input").fill(colandServiceId());
       await actor.clickWithPassivePromptRetry(actor.page.locator(".consent-request-submit-button"));
@@ -570,7 +575,7 @@ test("complete peer Consent lost outcome replays the original after cold reload 
     const input = actor.page.locator(".consent-permissions-input").locator("input, textarea");
     await expect(input).toBeVisible({ timeout: 30_000 });
     expect(JSON.parse(await input.inputValue())).toEqual([]);
-    await actor.page.locator(".consent-toggle-invite").check();
+    await actor.page.locator(".consent-permissions-editor").getByRole("checkbox", { name: "Group invites", exact: true }).check();
     await actor.clickWithPassivePromptRetry(actor.page.locator(".consent-preview-button"));
     await actor.page.route("**/_arkret/self/events", handler);
     await actor.page.route("**/_arkret/self/committed-events/*", readHandler);
@@ -709,7 +714,9 @@ test("complete peer Consent UI clears and regrants one peer while a voice reques
     expect(regranted).not.toEqual(first);
     expect(regranted).not.toEqual(empty);
     await expect(flow.page.page.locator(".consent-peer-row")).toHaveCount(1);
-    expect(JSON.parse((await flow.page.page.locator(".consent-peer-row").getAttribute("data-peer"))!)).toEqual(peer);
+    await expect(flow.page.page.locator(".consent-peer-row").getByRole("heading", {
+      name: `${peer.actor_id.account_id.principal_id} @ ${peer.actor_id.account_id.station_id}`, exact: true,
+    })).toBeVisible();
     const url = `${colandBaseUrl()}/_arkret/self/consent/request`;
     const requested = await request.post(url, {
       headers: { ...authHeaders(peerToken, "POST", url), "content-type": "application/json" },

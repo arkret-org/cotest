@@ -3,7 +3,6 @@
 // Spec: discovery/push-notifications.md §2-§4, discovery/client-preferences.md
 
 import { expect, test } from "../../helpers/arkret-test";
-import { cssStringEscape } from "../../helpers/dom";
 import { stepShot } from "../../helpers/screenshots";
 import {
   accountSubscribeDeltaApi,
@@ -34,7 +33,7 @@ import {
   selfPathHeadersForDpopSession,
   uniqueUser,
 } from "../../helpers/users";
-import { selectProductOptionByKey } from "../../helpers/product-select";
+import { selectProductOptionByLabel, selectProductOptionByReference } from "../../helpers/product-select";
 import { coauthBaseUrl, colandBaseUrl } from "../../helpers/env";
 import { registerCoauthPasswordAccount } from "../../helpers/coauth-register";
 import { serverLoginViaCoauth, submitCoauthPasswordCredentials } from "../../helpers/real-oidc-login";
@@ -182,19 +181,19 @@ test.describe("notifications", () => {
       ).toBeVisible({
         timeout: 30_000,
       });
-      await selectProductOptionByKey(
+      await selectProductOptionByReference(
         bobPage.page.locator(".realm-override-realm-select"),
         realmId,
       );
-      await selectProductOptionByKey(
+      await selectProductOptionByLabel(
         bobPage.page.locator(".realm-override-level-select"),
-        "muted",
+        "Muted",
       );
       await bobPage.page.locator(".realm-override-add").click();
       await expect(
-        bobPage.page.locator(
-          `.settings-muted-realm-row[data-realm-id="${cssStringEscape(realmId)}"]`,
-        ),
+        bobPage.page.locator(".settings-muted-realm-row").filter({
+          has: bobPage.page.getByText(realmId, { exact: true }),
+        }),
       ).toBeVisible({ timeout: 30_000 });
 
       await alicePage.sendTimelineMessage(realmId, normalMsg);
@@ -300,9 +299,9 @@ test.describe("notifications", () => {
       await bobDeviceA.checkWithPassivePromptRetry(
         bobDeviceA.page.locator(".dnd-enabled-toggle"),
       );
-      await selectProductOptionByKey(
+      await selectProductOptionByLabel(
         bobDeviceA.page.locator(".dnd-mode-select"),
-        "now",
+        "Now",
       );
       await bobDeviceA.clickWithPassivePromptRetry(
         bobDeviceA.page.locator(".save-notification-settings-button"),
@@ -595,7 +594,7 @@ test.describe("notifications", () => {
       await bobDevice2Page.page.locator(".auth-station-field input").fill(colandBaseUrl());
       await bobDevice2Page.page.locator(".auth-primary").click();
       await submitCoauthPasswordCredentials(bobDevice2Page.page, bobAccount);
-      const approve = bobDevice2Page.page.getByTestId("coauth-oauth-approve");
+      const approve = bobDevice2Page.page.locator(".login-container").getByRole("button", { name: "Allow", exact: true });
       if (await approve.waitFor({ state: "visible", timeout: 20_000 }).then(() => true).catch(() => false)) {
         await approve.click();
       }

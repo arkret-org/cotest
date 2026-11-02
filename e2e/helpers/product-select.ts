@@ -5,7 +5,8 @@ const quote = (text: string) => text.replace(/\\/g, "\\\\").replace(/"/g, '\\"')
 async function control(scope: Locator): Promise<Locator> {
   await expect(scope).toBeVisible({ timeout: 30_000 });
   if (await scope.evaluate(element => element.matches('select, .sapid-select[data-gly-combobox="select"]'))) return scope;
-  const child = scope.locator('select, .sapid-select[data-gly-combobox="select"]');
+  const trigger = scope.locator('.sapid-select[data-gly-combobox="select"]');
+  const child = await trigger.count() ? trigger : scope.locator('select:visible');
   await expect(child).toHaveCount(1);
   return child;
 }
@@ -61,5 +62,5 @@ export async function selectProductOptionByLabel(scope: Locator, label: string |
 
 export async function selectProductOptionByReference(scope: Locator, reference: string): Promise<void> {
   const escaped = reference.replace(/[^\w-]/g, "\\$&");
-  await selectProductOptionByLabel(scope, new RegExp("\\(" + escaped + "\\)$"));
+  await selectProductOptionByLabel(scope, new RegExp("(?:\\(" + escaped + "\\)| · " + escaped + ")$"));
 }

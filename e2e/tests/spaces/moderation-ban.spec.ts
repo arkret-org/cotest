@@ -8,6 +8,7 @@
 //   - §5.2 Ban via ak.member.state{membership="ban"}
 
 import { readCurrentSnapshot } from "../../helpers/direct-current-snapshot";
+import { actorRow } from "../../helpers/product-locators";
 import { expect, test, type APIRequestContext } from "../../helpers/arkret-test";
 import { colandBaseUrl, colandServiceId } from "../../helpers/env";
 import { acceptInviteViaApi } from "../../helpers/api";
@@ -376,14 +377,7 @@ test.describe("moderation and ban", () => {
     const alicePage = aliceFlow.page;
     try {
       await alicePage.gotoRealmAdminSection(realmId, "members");
-      // The roster row keys itself by `data-member-id`, whose value is the
-      // canonical ActorId key (`ActorId::to_string()` = canonical JSON), not a
-      // bare principal DID: inkson renamed the attribute and switched to the
-      // stable identity id in 6ff60d53. Match on the principal id as a
-      // substring so this does not depend on canonical key byte order.
-      const malloryRow = alicePage.page.locator(
-        `.member-row[data-member-id*="${mallory.id}"]`,
-      );
+      const malloryRow = actorRow(alicePage.page, ".member-row", accountActorId(mallory.id));
       await expect(malloryRow).toBeVisible({ timeout: 30_000 });
       // The "Recovery setup is incomplete" banner can render over the member
       // row and intercept pointer events; complete/dismiss it before banning.

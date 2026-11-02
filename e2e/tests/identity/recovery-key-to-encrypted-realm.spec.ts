@@ -55,9 +55,9 @@ test.describe("identity.recovery-key-to-encrypted-realm @fully-implemented", () 
         await page.locator(".auth-primary").click();
 
         await page.getByRole("link", { name: /create account/i }).click();
-        await page.locator('input[autocomplete="username"]').fill(user.name);
+        await page.getByLabel("Username", { exact: true }).fill(user.name);
         await page
-          .locator('input[autocomplete="email"]')
+          .getByLabel("Email address", { exact: true })
           .fill(`${user.name}@example.test`);
         const passwordFields = page.locator('input[type="password"]');
         await expect(passwordFields).toHaveCount(2);
@@ -65,9 +65,7 @@ test.describe("identity.recovery-key-to-encrypted-realm @fully-implemented", () 
         await passwordFields.nth(1).fill(password);
         await page.getByRole("button", { name: /create account/i }).click();
 
-        const verificationCode = page.locator(
-          'input[autocomplete="one-time-code"]',
-        );
+        const verificationCode = page.getByLabel("Verification code", { exact: true });
         await expect(verificationCode).toBeVisible({ timeout: 120_000 });
         const deliveredCode = await registrationEmailCode(
           request,
@@ -93,7 +91,7 @@ test.describe("identity.recovery-key-to-encrypted-realm @fully-implemented", () 
           )
           .toBe(true);
 
-        const displayName = page.locator('input[autocomplete="name"]');
+        const displayName = page.getByLabel("Display name", { exact: true });
         if (
           await displayName.isVisible({ timeout: 30_000 }).catch(() => false)
         ) {
@@ -101,7 +99,7 @@ test.describe("identity.recovery-key-to-encrypted-realm @fully-implemented", () 
           await page.getByRole("button", { name: /^continue$/i }).click();
         }
 
-        const approve = page.getByTestId("coauth-oauth-approve");
+        const approve = page.locator(".login-container").getByRole("button", { name: "Allow", exact: true });
         await expect(approve).toBeVisible({ timeout: 120_000 });
         await approve.click();
 

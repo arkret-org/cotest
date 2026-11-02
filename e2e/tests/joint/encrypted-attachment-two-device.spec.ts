@@ -336,7 +336,8 @@ test("encrypted attachment two-device upload/send/history/render and exact resta
     }
     await expect(alice.page.locator(".send-chat-button")).toBeEnabled({timeout: 120_000});
     await alice.page.locator(".send-chat-button").click();
-    await expect(bob.page.locator(".verified-long-text-page")).toContainText(`${marker} long text`, {timeout: 120_000});
+    await expect(alice.page.locator(".verified-long-text-viewport")).toContainText(`${marker} long text`, {timeout: 120_000});
+    await expect(bob.page.locator(".verified-long-text-viewport")).toContainText(`${marker} long text`, {timeout: 120_000});
     const textReader = bob.page.locator(".verified-long-text");
     const firstReaderNode = await textReader.elementHandle();
     if (!firstReaderNode) throw new Error("The verified long-text reader has no mounted element");
@@ -386,11 +387,11 @@ test("encrypted attachment two-device upload/send/history/render and exact resta
     let fullText: string;
     try {
       await bob.page.locator(".verified-long-text-last").click();
-      await expect(bob.page.locator(".verified-long-text-page")).toContainText("long-text-final-验收");
+      await expect(bob.page.locator(".verified-long-text-viewport")).toContainText("long-text-final-验收");
       // Let ResizeObserver/virtual-window feedback settle; paging must keep the
       // same mounted verified artifact, rather than recreating a revoked URL.
       await bob.page.evaluate(() => new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
-      await expect(bob.page.locator(".verified-long-text-page")).toContainText("long-text-final-验收");
+      await expect(bob.page.locator(".verified-long-text-viewport")).toContainText("long-text-final-验收");
       await expect.poll(() => textReader.evaluate((element, original) => element === original, firstReaderNode)).toBe(true);
       const nextDownloadPromise = bob.page.waitForEvent("download");
       await textLink.click();
@@ -472,7 +473,7 @@ test("encrypted attachment two-device upload/send/history/render and exact resta
     await scrollTimeline(bob.page, "oldest");
     await expect(bob.page.getByRole("img", {name: "private-image.png", exact: true})).toBeVisible({timeout: 120_000});
     await scrollTimeline(bob.page, "latest");
-    await expect(bob.page.locator(".verified-long-text-page")).toContainText(`${marker} long text`, {timeout: 120_000});
+    await expect(bob.page.locator(".verified-long-text-viewport")).toContainText(`${marker} long text`, {timeout: 120_000});
     await bob.page.reload({waitUntil: "domcontentloaded"});
     await bob.gotoTimelineRealm(realm);
     await scrollTimeline(bob.page, "oldest");

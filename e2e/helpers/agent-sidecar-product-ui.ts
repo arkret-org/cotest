@@ -1,4 +1,5 @@
 import { accountActorId } from "./coland-api";
+import { addBoardList } from "./kanban-product-ui";
 import { accountRow, actorRow } from "./product-locators";
 // Shared product UI actions; no session or protocol outcome is injected.
 import { expect, type Page, type Route, type Request, type TestInfo, type Locator } from './arkret-test';
@@ -18,7 +19,7 @@ export async function openSavfoxArkretChannel(
   savfoxToken: string,
 ): Promise<void> {
   await savfox.goto(`${savfoxBaseUrl}/channels/edit/arkret`);
-  const tokenInput = savfox.getByPlaceholder("Gateway token", { exact: true });
+  const tokenInput = savfox.getByLabel("Gateway token", { exact: true });
   const configureHeading = savfox.getByRole("heading", {
     name: "Configure Arkret",
   });
@@ -47,10 +48,7 @@ export async function startSavfoxPairing(
   savfox: Page,
   pairingLink: string,
 ): Promise<void> {
-  const pairingInput = savfox.getByPlaceholder(
-    "https://arkret.example.org/_arkret/open/agent-pairing/resolve#token=...",
-    { exact: true },
-  );
+  const pairingInput = savfox.getByLabel("Inkson pairing link", { exact: true });
   if ((await pairingInput.count()) === 0) {
     await savfox
       .getByRole("button", { name: "Disconnect agent…", exact: true })
@@ -219,23 +217,12 @@ export async function addAgentToRealm(
   }
   const agentRow = actorRow(page, ".member-self-agent-row", accountActorId(agentId));
   await expect(agentRow).toBeVisible({ timeout: 120_000 });
-  const reply = agentRow.locator(".member-agent-reply-toggle");
-  const mention = agentRow.locator(".member-agent-mention-toggle");
-  if ((await reply.getAttribute("aria-checked")) !== "true") {
-    await reply.click();
-  }
-  if ((await mention.getAttribute("aria-checked")) !== "true") {
-    await mention.click();
-  }
-  await expect
-    .poll(
-      async () => [
-        await reply.getAttribute("aria-checked"),
-        await mention.getAttribute("aria-checked"),
-      ],
-      { timeout: 120_000 },
-    )
-    .toEqual(["true", "true"]);
+  const reply = agentRow.getByRole("checkbox", { name: "Reply as agent", exact: true });
+  const mention = agentRow.getByRole("checkbox", { name: "Accept @mentions", exact: true });
+  if (!await reply.isChecked()) await reply.check();
+  await expect(reply).toBeChecked({ timeout: 120_000 });
+  if (!await mention.isChecked()) await mention.check();
+  await expect(mention).toBeChecked({ timeout: 120_000 });
 }
 
 
@@ -364,11 +351,7 @@ export async function createSidecarSourceCard(
   const boardPicker = page.locator(".board-space-select-button");
   if (await boardPicker.getAttribute("aria-expanded") === "true") await boardPicker.click();
   await expect(page.locator(".board-popover-scrim")).toHaveCount(0);
-  await page.locator(".new-column-input").fill("Work");
-  await expect(page.locator(".new-column-input")).toHaveValue("Work");
-  await page.locator(".add-column-button").click();
-  const column = page.locator(".kanban-column").filter({ hasText: "Work" });
-  await expect(column).toBeVisible({ timeout: 120_000 });
+  const column = await addBoardList(page, "Work");
   await column.locator(".add-card-button").click();
   await column.locator(".new-card-title-input").fill(title);
   await column.locator(".save-card-button").click();

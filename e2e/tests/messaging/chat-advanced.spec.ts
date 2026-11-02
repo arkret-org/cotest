@@ -7,7 +7,9 @@
 //   - discovery/push-notifications.md §4.3.1, §4.5
 
 import { expect, test, type APIRequestContext } from "../../helpers/arkret-test";
-import { cssStringEscape } from "../../helpers/dom";
+import { eventIdFromMessage } from "../../helpers/message-evidence";
+import { submitOrdinaryComposerDraft } from "../../helpers/composer-handoff";
+import { decodeIngressEvents } from "../../helpers/event-ingress";
 import { colandBaseUrl } from "../../helpers/env";
 import {
   acceptInviteViaApi,
@@ -19,6 +21,7 @@ import { createTwoUserMessagingRealm } from "../../helpers/messaging-fixtures";
 import { stepShot } from "../../helpers/screenshots";
 import {
   accountActorId,
+  assertAuthoritySubmitOutcome,
   accountSubscribeRealmFramesApi,
   authHeaders,
   canonicalJson,
@@ -27,6 +30,7 @@ import {
   grantCapabilityEventApi,
   joinRealmMemberByInviteApi,
   resolveDefaultStrandId,
+  sdkEventDerivedIds,
   rawSubmitSignedEventApi,
   readCommitStreamHeadApi,
   wireErrCode,
@@ -53,7 +57,7 @@ import {
 test.describe.configure({ mode: "serial" });
 
 async function gotoChat(page: JointUserPage, realmId: string) {
-  if (!page.page.url().includes(`/chat/${realmId}`)) {
+  if (decodeURIComponent(new URL(page.page.url()).pathname) !== `/chat/${realmId}`) {
     await page.gotoTimelineRealm(realmId);
   }
   await expect(page.page.locator(".chat-panel")).toBeVisible({
@@ -69,11 +73,24 @@ async function gotoChat(page: JointUserPage, realmId: string) {
 
 async function sendChat(page: JointUserPage, realmId: string, body: string) {
   await gotoChat(page, realmId);
-  await page.page.locator(".chat-input").fill(body);
-  await page.clickWithPassivePromptRetry(page.page.locator(".send-chat-button"));
+  await page.fillWithPassivePromptRetry(page.page.locator(".chat-input"), body);
+  const [response] = await Promise.all([
+    page.page.waitForResponse(response => response.request().method() === "POST"
+      && new URL(response.url()).pathname === "/_arkret/self/events"
+      && decodeIngressEvents(response.request().postData()).some(event => event.kind === "ak.message.create"),
+      { timeout: 90_000 }),
+    submitOrdinaryComposerDraft(page.page, body),
+  ]);
+  const original = decodeIngressEvents(response.request().postData()).find(event => event.kind === "ak.message.create")!;
+  expect(response.ok()).toBe(true);
+  expect(original.realm_id).toBe(realmId);
+  const outcome = await response.json() as Record<string, unknown>;
+  expect(outcome.status).toBe("committed");
+  assertAuthoritySubmitOutcome(outcome, original, "ordinary chat interaction");
   await expect(
     page.page.locator(".chat-message").filter({ hasText: body }),
   ).toBeVisible({ timeout: 30_000 });
+  return original;
 }
 
 // Local holder diagnostics only; never substitute these for authority proof.
@@ -668,7 +685,7 @@ test.describe("chat advanced", () => {
         );
       }
 
-      await sendChat(alicePage, realmId, m1);
+      const firstOriginal = await sendChat(alicePage, realmId, m1);
 
       await gotoChat(bobPage, realmId);
       const bobOnM1 = bobPage.page
@@ -725,12 +742,16 @@ test.describe("chat advanced", () => {
       await gotoChat(bobPage, realmId);
       await bobPage.clickTimelineReply(m1);
       await expect(bobPage.page.locator(".chat-reply-banner")).toBeVisible();
-      await sendChat(bobPage, realmId, m2);
+      const replyOriginal = await sendChat(bobPage, realmId, m2);
+      const replyTarget = sdkEventDerivedIds(firstOriginal).object_id;
+      expect(replyTarget).toMatch(/^ak:message:/);
+      expect(replyOriginal.payload?.reply_to_id).toBe(replyTarget);
       const bobOnM2 = bobPage.page
         .locator(".chat-message")
         .filter({ hasText: m2 })
         .first();
       await expect(bobOnM2.locator(".chat-reply-indicator")).toBeVisible();
+      await expect(bobOnM2.locator(".chat-reply-indicator")).toContainText(m1);
       await stepShot(bobPage.page, testInfo, "reply-chain");
     } finally {
       if (diagnosticRealmId) {
@@ -918,13 +939,30 @@ test.describe("chat advanced", () => {
         .locator(".poll-option-input")
         .nth(1)
         .fill(optionB);
-      await alicePage.page.locator(".send-poll-button").click();
+      const [submittedPoll] = await Promise.all([
+        alicePage.page.waitForResponse(response => response.request().method() === "POST"
+          && new URL(response.url()).pathname === "/_arkret/self/events"
+          && decodeIngressEvents(response.request().postData()).some(event => event.kind === "ak.message.create"),
+          { timeout: 60_000 }),
+        alicePage.page.locator(".send-poll-button").click(),
+      ]);
+      const originalPoll = decodeIngressEvents(submittedPoll.request().postData())
+        .find(event => event.kind === "ak.message.create")!;
+      expect(submittedPoll.ok()).toBe(true);
+      const pollOutcome = await submittedPoll.json() as Record<string, unknown>;
+      expect(pollOutcome.status).toBe("committed");
+      assertAuthoritySubmitOutcome(pollOutcome, originalPoll, "ordinary poll authoring");
       const poll = alicePage.page
         .locator(".poll-card")
         .filter({ hasText: question })
         .first();
       await expect(poll).toBeVisible({ timeout: 30_000 });
-      await expect(poll).toHaveAttribute("data-poll-id", /^ak:message:/, { timeout: 60_000 });
+      const pollMessage = alicePage.page.locator(".chat-message").filter({
+        has: alicePage.page.locator(".poll-card").filter({ hasText: question }),
+      });
+      const pollEvent = await eventIdFromMessage(pollMessage);
+      expect(pollEvent).toBe(originalPoll.event_id);
+      expect(sdkEventDerivedIds(originalPoll).object_id).toMatch(/^ak:message:/);
       await stepShot(alicePage.page, testInfo, "poll-created");
 
       await gotoChat(bobPage, realmId);
@@ -1030,16 +1068,24 @@ test.describe("chat advanced", () => {
       // Bidirectional encrypted presence proves both Signal receivers and
       // current MLS key material are ready before measuring a typing burst.
       for (const [page, peer] of [[alicePage, bob], [bobPage, alice]] as const) {
-        await expect(page.page.locator(
-          `.presence-row[data-actor-id=${JSON.stringify(canonicalJson(accountActorId(peer.id)))}]`,
-        )).toContainText(/online/i, { timeout: 90_000 });
+        await expect(page.page.locator(".presence-row").filter({
+          has: page.page.getByLabel(canonicalJson(accountActorId(peer.id)), { exact: true }),
+        })).toHaveClass(/\bpresence-row-online\b/, { timeout: 90_000 });
       }
       await alicePage.page.locator(".chat-input").fill(`draft ${stamp}`);
-      const aliceTypingIndicator = bobPage.page.locator(
-        `.typing-indicator[data-typing-actors*="${cssStringEscape(alice.id)}"]`,
-      );
+      const aliceTypingIndicator = bobPage.page.locator(".typing-indicator");
       try {
         await expect(aliceTypingIndicator).toBeVisible({ timeout: 5_000 });
+        await expect.poll(async () => {
+          const rows: Array<Record<string, unknown>> = await bobPage.page.evaluate(() => {
+            const read = (window as unknown as Record<string, unknown>).__inkson_signal_receiver_evidence;
+            return typeof read === "function" ? JSON.parse((read as (command: string) => string)("read")) : [];
+          });
+          return rows.some(row => row.typing === true && row.sender_actor_id
+            && canonicalJson(row.sender_actor_id) === canonicalJson(accountActorId(alice.id))
+            && row.admitted_and_decrypted === true && row.target_scope_matches === true
+            && row.live_applied === true && Number(row.visible_count) > 0);
+        }, { timeout: 5_000 }).toBe(true);
       } finally {
         const receiverEvidence = await bobPage.page.evaluate(() => {
           const read = (window as unknown as {
@@ -1103,9 +1149,9 @@ test.describe("chat advanced", () => {
         gotoChat(bobPage, realmId),
       ]);
 
-      const bobPresenceRow = alicePage.page.locator(
-        `.presence-row[data-actor-id=${JSON.stringify(canonicalJson(accountActorId(bob.id)))}]`,
-      );
+      const bobPresenceRow = alicePage.page.locator(".presence-row").filter({
+        has: alicePage.page.getByLabel(canonicalJson(accountActorId(bob.id)), { exact: true }),
+      });
       await expect(bobPresenceRow).toContainText(/online/i, { timeout: 30_000 });
       await stepShot(alicePage.page, testInfo, "presence-online");
 

@@ -26,12 +26,12 @@ async function currentAccount(page: Page): Promise<SavedAccount> {
 async function authorize(page: Page, account: RealOidcAccount): Promise<void> {
   await page.locator(".auth-station-field input").fill(colandBaseUrl());
   await page.locator(".auth-primary").click();
-  await expect(page.locator("#login-handle").or(page.locator("#login-password")))
+  await expect(page.getByLabel("Username", { exact: true }).or(page.getByLabel("Password", { exact: true })))
     .toBeVisible({ timeout: 30_000 });
-  const changeAccount = page.getByTestId("coauth-login-change-identifier");
+  const changeAccount = page.locator(".login-container").getByRole("button", { name: "Use another account", exact: true });
   if (await changeAccount.isVisible()) await changeAccount.click();
   await submitCoauthPasswordCredentials(page, account);
-  const approve = page.getByTestId("coauth-oauth-approve");
+  const approve = page.locator(".login-container").getByRole("button", { name: "Allow", exact: true });
   const inkson = page.locator(".auth-shell").or(page.locator(".shell.app"));
   await expect(approve.or(inkson)).toBeVisible({ timeout: 30_000 });
   if (await approve.isVisible()) await approve.click();

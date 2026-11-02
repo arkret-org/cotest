@@ -1,3 +1,4 @@
+import { addBoardList } from "../../helpers/kanban-product-ui";
 import { restartRunnerStation } from "../../helpers/station-runtime";
 import { proveKanbanHistoryTail, seedKanbanHistory } from "../../helpers/kanban-history";
 import { observeRequestCost } from "../../helpers/request-cost";
@@ -52,7 +53,7 @@ import {
   type Page,
 } from "../../helpers/arkret-test";
 import { colandBaseUrl } from "../../helpers/env";
-import { assertAuthoritySubmitOutcome, canonicalJson, grantCapabilityEventApi, queryRealmEventsApi, retypeEventDerivedId, signedEventEnvelope, submitSignedEventApi } from "../../helpers/coland-api";
+import { assertAuthoritySubmitOutcome, canonicalJson, grantCapabilityEventApi, queryRealmEventsApi, retypeEventDerivedId, scanRealmStreamApi, sdkEventDerivedObjectId, signedEventEnvelope, submitSignedEventApi } from "../../helpers/coland-api";
 import { grantInviteConsentArkret } from "../../helpers/contact-api";
 import { stepShot } from "../../helpers/screenshots";
 import { selfPathGrantHeaders } from "../../helpers/session-grant-dpop";
@@ -71,6 +72,16 @@ import {
 } from "../../helpers/users";
 
 test.describe.configure({ mode: "serial" });
+
+async function selectBoard(page: Page, realm: string, board: string, title: string): Promise<void> {
+  await page.locator(".board-space-select-button").click();
+  const menu = page.locator(".board-select-menu-panel");
+  await expect(menu).toBeVisible();
+  await menu.getByRole("button", { name: title, exact: true }).click();
+  await expect.poll(() => decodeURIComponent(new URL(page.url()).pathname))
+    .toBe(`/kanban/${realm}/board/${board}`);
+  await expect(menu).toHaveCount(0);
+}
 
 type E2eeStorageEvidence = {
   secureEntryKeys: string[];
@@ -443,8 +454,7 @@ async function buildEncryptedBoardListCard(
   );
   expect(boardId, `board id from url ${page.url()}`).toMatch(/^ak:space:/);
 
-  await page.locator("input.new-column-input").fill(listTitle);
-  await page.locator(".add-column-button").click();
+  await addBoardList(page, listTitle);
   const column = page
     .locator(".kanban-column")
     .filter({ hasText: listTitle })
@@ -1643,7 +1653,7 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
           assertAuthoritySubmitOutcome(await listResponse.json(), listEvent, "pre-join retained List");
           const listId = retypeEventDerivedId(String(listEvent.event_id), "space");
           expect(listId).toMatch(/^ak:space:/);
-          await expect(alicePage.page.getByRole("button", { name: `Retained list ${stamp} (${listId})`, exact: true })).toBeVisible();
+          await expect(alicePage.page.getByRole("button", { name: `Retained list ${stamp}`, exact: true })).toBeVisible();
           retainedBoard = { boardId, listId: listId!, eventId: String(event.event_id), streamPosition: Number(outcome.commit.stream_position) };
         }
         await grantInviteConsentArkret(
@@ -1823,7 +1833,7 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
           await openReaderBoard(bobPage, realmId, retainedBoard!.boardId);
           await expect(bobPage.page.locator(".kanban-column")).toHaveCount(1);
           await expect(bobPage.page.locator(".kanban-column").first().locator(".add-card-button")).toBeEnabled();
-          await expect(bobPage.page.getByRole("button", { name: `Retained list ${stamp} (${retainedBoard!.listId})`, exact: true })).toBeVisible();
+          await expect(bobPage.page.getByRole("button", { name: `Retained list ${stamp}`, exact: true })).toBeVisible();
           await testInfo.attach("kanban-history-fresh-reader.json", { contentType: "application/json",
             body: JSON.stringify({ reader_closed_before_seed: true, fresh_context_after_card_commit: true,
               no_product_current_or_history_cache_copied: true,
@@ -1882,7 +1892,15 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
           const committedList = bobPage.page.locator(".kanban-column");
           await expect(committedList).toHaveCount(1, { timeout: 90_000 });
           await expect(committedList).toBeVisible({ timeout: 90_000 });
-          await expect(committedList.locator(".add-card-button")).toBeEnabled();
+          const acceptedStructure = await scanRealmStreamApi(request, bobSession.grantJwt, realmId, { limit: 1000 });
+          expect(acceptedStructure.truncated).toBe(false);
+          const acceptedLists = acceptedStructure.events.filter(event => {
+            const object = (event.payload as { object?: { kind?: string; parent_space_id?: string } } | undefined)?.object;
+            return event.kind === "ak.space.create" && object?.kind === "list" && object.parent_space_id === boardId;
+          });
+          expect(acceptedLists).toHaveLength(1);
+          expect(sdkEventDerivedObjectId(acceptedLists[0])).toMatch(/^ak:space:/);
+          expect(decodeURIComponent(new URL(bobPage.page.url()).pathname)).toBe(`/kanban/${realmId}/board/${boardId}`);
           await expect(committedList).not.toContainText(listTitle);
           await expect(bobPage.page.locator(".kanban-panel")).not.toContainText(boardTitle);
           await expect(bobPage.page.locator(".kanban-panel")).not.toContainText(aliceCard);
@@ -2226,14 +2244,16 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
             body: JSON.stringify({ ...subscriptionCut!.proof(), accepted_lifecycle_events: accepted,
               delivered, http_stream_cost: deliveredHttpCost, final_original_card_decrypts: true }) });
           const otherCard = `Other board card ${stamp}`;
+          const otherBoardTitle = `Other board ${stamp}`;
           const otherBoardId = await buildEncryptedBoardListCard(alicePage.page, realmId,
-            `Other board ${stamp}`, `Other list ${stamp}`, otherCard);
+            otherBoardTitle, `Other list ${stamp}`, otherCard);
           const switchingStart = cost.mark();
           for (let index = 0; index < 20; index += 1) {
-            await selectProductOptionByKey(alicePage.page.locator(".board-space-select"),
-              index % 2 === 0 ? boardId : otherBoardId);
+            await selectBoard(alicePage.page, realmId,
+              index % 2 === 0 ? boardId : otherBoardId,
+              index % 2 === 0 ? boardTitle : otherBoardTitle);
           }
-          await selectProductOptionByKey(alicePage.page.locator(".board-space-select"), boardId);
+          await selectBoard(alicePage.page, realmId, boardId, boardTitle);
           await expect(alicePage.page.locator(".kanban-card").filter({ hasText: aliceCard })).toBeVisible();
           await expect(alicePage.page.locator(".kanban-card").filter({ hasText: otherCard })).toHaveCount(0);
           await assertCardDecrypts(alicePage, aliceCard, aliceDescription);

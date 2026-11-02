@@ -3946,6 +3946,7 @@ $flagonIdentity = $null
 $provisionCustodyRoot = $null
 $previousProvisionCustodyRoot = $env:COTEST_PROVISION_CUSTODY_ROOT
 $previousReadonlyDatabaseControls = $env:COTEST_READONLY_DATABASE_CONTROLS
+$previousPythonExecutable = $env:COTEST_PYTHON_EXECUTABLE
 $previousSdkTlsRoots = $env:SSL_CERT_FILE
 $startedAt = Get-Date
 $generatedColandCommand = $false
@@ -5616,6 +5617,7 @@ try {
     $topology | ConvertTo-Json -Depth 12 | Set-Content -LiteralPath $topologyPath -Encoding utf8NoBOM
     Remove-Item -LiteralPath $topologyCandidatePath -ErrorAction SilentlyContinue
     $env:COTEST_TOPOLOGY_PATH = $topologyPath
+    $env:COTEST_PYTHON_EXECUTABLE = Get-PythonExecutable
     if ($CoauthBaseUrl) {
         Assert-CoauthDpopGrantSeamReady -BaseUrl $CoauthBaseUrl
         $env:COTEST_COAUTH_BASE_URL = $CoauthBaseUrl.TrimEnd("/")
@@ -6163,6 +6165,12 @@ finally {
         Remove-Item Env:COTEST_READONLY_DATABASE_CONTROLS -ErrorAction SilentlyContinue
     } else {
         $env:COTEST_READONLY_DATABASE_CONTROLS = $previousReadonlyDatabaseControls
+    }
+
+    if ($null -eq $previousPythonExecutable) {
+        Remove-Item Env:COTEST_PYTHON_EXECUTABLE -ErrorAction SilentlyContinue
+    } else {
+        $env:COTEST_PYTHON_EXECUTABLE = $previousPythonExecutable
     }
 
     foreach ($containerName in $storeDumpFailures) {
