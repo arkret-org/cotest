@@ -43,7 +43,7 @@ test("AV-UI-BOUND real WASM cold history keeps 256 variable-height messages reac
         for (const entry of list.getEntries()) evidence.longTasks.push(entry.duration);
       }).observe({ type: "longtask", buffered: true });
       new MutationObserver(() => {
-        const feed = document.querySelector<HTMLElement>('[data-testid="message-list"]');
+        const feed = document.querySelector<HTMLElement>('.message-list');
         const mounted = feed?.querySelectorAll('[data-virtual-index]') ?? [];
         evidence.peakRows = Math.max(evidence.peakRows, mounted.length);
         const indices = Array.from(mounted).flatMap(row => {

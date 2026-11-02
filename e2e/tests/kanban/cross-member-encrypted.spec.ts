@@ -2108,7 +2108,7 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
           const assertClosed = async () => {
             await expect(bobPage!.page.getByText(aliceDescription, { exact: false })).toHaveCount(0, { timeout: 90_000 });
             await expect(bobPage!.page.locator(".kanban-card").filter({ hasText: aliceCard })).toHaveCount(0);
-            await expect(bobPage!.page.locator('[data-testid="kanban-panel"] [data-testid="add-card-button"]:enabled')).toHaveCount(0);
+            await expect(bobPage!.page.locator('.kanban-panel .add-card-button:enabled')).toHaveCount(0);
           };
           await assertClosed();
           await bobPage.page.addInitScript(({ description, title }) => {
@@ -2116,10 +2116,10 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
             (window as unknown as { __cotestRevocationProbe: typeof probe }).__cotestRevocationProbe = probe;
             const check = () => {
               if (document.body?.innerText.includes(description)
-                  || Array.from(document.querySelectorAll('[data-testid="kanban-card"]')).some(card => card.textContent?.includes(title))) {
+                  || Array.from(document.querySelectorAll('.kanban-card')).some(card => card.textContent?.includes(title))) {
                 probe.private_content_observed = true;
               }
-              if (document.querySelector('[data-testid="kanban-panel"] [data-testid="add-card-button"]:enabled')) {
+              if (document.querySelector('.kanban-panel .add-card-button:enabled')) {
                 probe.enabled_write_observed = true;
               }
             };

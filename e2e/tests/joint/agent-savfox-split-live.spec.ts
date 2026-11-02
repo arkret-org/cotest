@@ -741,7 +741,7 @@ jointTest.describe("Agent Savfox split live @fully-implemented", () => {
         );
         await sourceCard.locator(".card-detail-sidebar-tab-members").click();
         const sourceAgent = sourceCard.locator(
-          `[data-testid="card-detail-agent-row"][data-agent-id="${firstPairing.agentId}"]`,
+          `.card-detail-agent-row[data-agent-id="${firstPairing.agentId}"]`,
         );
         await expect(sourceAgent).toBeVisible({ timeout: 120_000 });
         const sidecarPrompt = "请在私有 Sidecar 中只回复 pong";
@@ -759,7 +759,7 @@ jointTest.describe("Agent Savfox split live @fully-implemented", () => {
             enabled: await sourceCard.locator(".send-chat-button").isEnabled(),
             route: await sourceCard.locator(".composer-send-scope").getAttribute("data-send-route"),
             boundAgent: await sourceCard.locator(
-              `[data-testid="mention-chip"][data-mention-principal-id="${firstPairing.agentId}"]`,
+              `.mention-chip[data-mention-principal-id="${firstPairing.agentId}"]`,
             ).count(),
           }), { timeout: 30_000 }).toEqual({ enabled: true, route: "Sidecar", boundAgent: 1 });
         } catch (error) {
@@ -1068,7 +1068,7 @@ jointTest.describe("Agent Savfox split live @fully-implemented", () => {
           .locator(".card-detail-sidebar-tab-members")
           .click();
         const addressedAgentRow = privacyCard.locator(
-          `[data-testid="card-detail-agent-row"][data-agent-id="${firstPairing.agentId}"]`,
+          `.card-detail-agent-row[data-agent-id="${firstPairing.agentId}"]`,
         );
         await expect(addressedAgentRow).toBeVisible({ timeout: 120_000 });
         // This source already has an accepted Sidecar mapping. Reopening it
@@ -1225,7 +1225,7 @@ jointTest.describe("Agent Savfox split live @fully-implemented", () => {
         const blockedPrompt = `paused runtime must not execute ${Date.now()}`;
         await resumedCard.locator(".card-detail-sidebar-tab-members").click();
         const pausedAgentRow = resumedCard.locator(
-          `[data-testid="card-detail-agent-row"][data-agent-id="${firstPairing.agentId}"]`,
+          `.card-detail-agent-row[data-agent-id="${firstPairing.agentId}"]`,
         );
         await expect(pausedAgentRow).toBeVisible({ timeout: 120_000 });
         await composeSourceAgentMention(
@@ -1545,7 +1545,7 @@ nativePublicReplyTest.describe("Native public fixed reply @native-public-reply",
               && eventSubmissions(outgoing.postData()).some(event => event.kind === "ak.agent.interaction.set"
                 && event.payload?.interaction_mode === "public");
           }, { timeout: 180_000 });
-          const row = controller.locator(`[data-testid="member-self-agent-row"][data-agent-id="${pairing.agentId}"]`);
+          const row = controller.locator(`.member-self-agent-row[data-agent-id="${pairing.agentId}"]`);
           await row.locator(".member-agent-interaction-mode").getByRole("button", { name: /^(公开|Public)$/ }).click();
           const response = await publicResponse;
           expect(response.ok()).toBe(true);
@@ -1652,7 +1652,7 @@ async function confirmNativePublicStrandAuthority(page: Page, realm: JointRealmF
   await page.goto(`/realms/${realm.realmId}/members`, { waitUntil: "domcontentloaded" });
   await expect(page.locator(".realm-members-panel")).toBeVisible({ timeout: 120_000 });
   await page.getByRole("button", { name: "My agents", exact: true }).click();
-  const row = page.locator(`[data-testid="member-self-agent-row"][data-agent-id="${agentId}"]`);
+  const row = page.locator(`.member-self-agent-row[data-agent-id="${agentId}"]`);
   const panel = row.locator(".member-agent-authority");
   await expect(panel.locator(".owned-agent-scope")).toBeVisible({ timeout: 120_000 });
   await panel.locator(".owned-agent-scope").selectOption(strand);
@@ -1748,13 +1748,13 @@ async function nativePublicMentionAndReply(page: Page, card: Locator, request: A
   const composer = card.locator(".chat-input");
   await composer.fill("@");
   const candidate = card.locator(
-    `button[data-testid="mention-suggestion"][data-mention-principal-id="${agentId}"][data-mention-station-id="${stationId}"]`,
+    `button.mention-suggestion[data-mention-principal-id="${agentId}"][data-mention-station-id="${stationId}"]`,
   );
   await expect(candidate).toBeVisible({ timeout: 120_000 });
   await expect(candidate.locator(".mention-suggestion-agent-badge")).toBeVisible();
   await candidate.click();
   const chip = card.locator(
-    `[data-testid="mention-chip"][data-mention-principal-id="${agentId}"][data-mention-station-id="${stationId}"]`,
+    `.mention-chip[data-mention-principal-id="${agentId}"][data-mention-station-id="${stationId}"]`,
   );
   await expect(chip).toBeVisible({ timeout: 30_000 });
   const mention = (await chip.locator("span").first().innerText()).trim();
@@ -2001,7 +2001,7 @@ async function sidecarEchoProjection(
     const body = (
       await message
         .locator(
-          '[data-testid="content-block-text"], [data-testid="content-block-markdown"]',
+          '.content-block-text, .content-block-markdown',
         )
         .allInnerTexts()
     )
@@ -2535,7 +2535,7 @@ async function assertSidecarLocalSearchPrivacy(
       await panel.locator(".global-search-input").fill(query);
       await panel.locator(".global-search-submit").click();
       if (query === "pong") {
-        await expect(panel.locator(`[data-testid="global-search-result-item"][data-event-id="${sharedEventId}"]`))
+        await expect(panel.locator(`.global-search-result-item[data-event-id="${sharedEventId}"]`))
           .toHaveCount(1);
       } else if (query === privateBody) {
         await expect(panel.locator(".global-search-results-no-results")).toBeVisible();

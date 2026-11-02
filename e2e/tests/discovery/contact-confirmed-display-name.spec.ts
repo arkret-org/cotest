@@ -1,3 +1,4 @@
+import { accountRow } from "../../helpers/product-locators";
 // Contact identity confirmation: authorized profile resolve → first explicit
 // confirmation → rename notice with the old confirmed value → explicit refresh.
 // Contract: e2e/scenarios/discovery/contact-confirmed-display-name.md
@@ -158,9 +159,7 @@ test.describe("contact confirmed display name", () => {
           bobPage.completeRecoveryKeySetupIfPrompted(30_000),
         ]);
         await bobPage.page.getByRole("button", { name: "Contacts", exact: true }).click();
-        const aliceRow = bobPage.page.locator(
-          `[data-testid="direct-conversation-row"][data-peer=${JSON.stringify(canonicalJson(accountActorId(alice.id)))}]`,
-        );
+        const aliceRow = accountRow(bobPage.page, ".direct-conversation-row", accountActorId(alice.id).account_id);
         await expect(async () => {
           if (!new URL(bobPage.page.url()).pathname.startsWith("/direct/")) {
             await aliceRow.click();
@@ -173,9 +172,7 @@ test.describe("contact confirmed display name", () => {
         // The recipient opens the same conversation to demand its verified
         // scope current before installing and acknowledging the Welcome.
         await alicePage.page.getByRole("button", { name: "Contacts", exact: true }).click();
-        const bobRow = alicePage.page.locator(
-          `[data-testid="direct-conversation-row"][data-peer=${JSON.stringify(canonicalJson(accountActorId(bob.id)))}]`,
-        );
+        const bobRow = accountRow(alicePage.page, ".direct-conversation-row", accountActorId(bob.id).account_id);
         await bobRow.click();
         await expect(alicePage.page).toHaveURL(/\/direct\/ak:realm:.*\/ak:strand:/, { timeout: 180_000 });
         expect(new URL(alicePage.page.url()).pathname).toBe(new URL(bobPage.page.url()).pathname);
@@ -244,9 +241,8 @@ test.describe("contact confirmed display name", () => {
       );
 
       // The petname editor lives on the advanced Contacts settings surface.
-      await alicePage.gotoAppPanel("/settings/contacts", "settings-panel");
-      const peerSelector = `[data-testid="contact-row"][data-peer=${JSON.stringify(canonicalJson(accountActorId(bob.id)))}]`;
-      const row = alicePage.page.locator(peerSelector);
+      await alicePage.gotoAppPanel("/settings/contacts", ".settings-page");
+      const row = accountRow(alicePage.page, ".contact-row", accountActorId(bob.id).account_id);
       await expect(row).toBeVisible({ timeout: 60_000 });
       // The live verified Profile display arrives through the authorized
       // resolve, not through the Contact row itself.
@@ -255,17 +251,17 @@ test.describe("contact confirmed display name", () => {
 
       // First explicit confirmation. Accept could not have made one: the pair
       // had no shared Realm when Alice sent the request.
-      const confirm = row.locator("[class^=\"contact-confirm-name-\"], [class*=\" contact-confirm-name-\"]");
+      const confirm = row.locator(".contact-confirm-name");
       await expect(confirm).toBeVisible({ timeout: 60_000 });
       await confirm.click();
-      await expect(row.locator("[class^=\"contact-confirm-identity-\"], [class*=\" contact-confirm-identity-\"]")).toBeHidden({
+      await expect(row.locator(".contact-confirm-identity")).toBeHidden({
         timeout: 60_000,
       });
 
       // A petname is holder-authored and must survive everything below.
       const petname = `Bee ${stamp}`;
-      await row.locator("[class^=\"contact-petname-\"], [class*=\" contact-petname-\"]").first().fill(petname);
-      await row.locator("[class^=\"contact-petname-save-\"], [class*=\" contact-petname-save-\"]").click();
+      await row.locator(".contact-petname").fill(petname);
+      await row.locator(".contact-petname-save").click();
       await expect(row).toContainText(petname, { timeout: 60_000 });
 
       const updateEnvelope = signedEventEnvelope({
@@ -288,11 +284,11 @@ test.describe("contact confirmed display name", () => {
 
       // The cached row is only refreshed on its own freshness window, so the
       // notice is asserted after a fresh page load rather than in place.
-      await alicePage.gotoAppPanel("/settings/contacts", "settings-panel");
+      await alicePage.gotoAppPanel("/settings/contacts", ".settings-page");
       await alicePage.page.reload();
       await expect(alicePage.page.locator(".settings-panel")).toBeVisible({ timeout: 60_000 });
-      const renamedRow = alicePage.page.locator(peerSelector);
-      const notice = renamedRow.locator("[class^=\"contact-display-name-changed-\"], [class*=\" contact-display-name-changed-\"]");
+      const renamedRow = accountRow(alicePage.page, ".contact-row", accountActorId(bob.id).account_id);
+      const notice = renamedRow.locator(".contact-display-name-changed");
       await expect(notice).toBeVisible({ timeout: 120_000 });
       await expect(notice).toContainText(firstDisplay);
       await expect(notice).toContainText(renamedDisplay);
@@ -301,11 +297,11 @@ test.describe("contact confirmed display name", () => {
 
       // Only an explicit confirmation refreshes the baseline, and it leaves the
       // petname exactly as the holder wrote it.
-      await notice.locator("[class^=\"contact-confirm-name-\"], [class*=\" contact-confirm-name-\"]").click();
+      await notice.locator(".contact-confirm-name").click();
       await expect(notice).toBeHidden({ timeout: 60_000 });
       await expect(renamedRow).toContainText(petname);
       await expect(
-        renamedRow.locator("[class^=\"contact-petname-\"], [class*=\" contact-petname-\"]").first(),
+        renamedRow.locator(".contact-petname"),
       ).toHaveValue(petname);
     } finally {
       await alicePage.close();

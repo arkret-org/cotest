@@ -1,15 +1,19 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { once } from "node:events";
+import { fileURLToPath } from "node:url";
 import test from "node:test";
 
 test("recipient-scoped actual 503 preserves private attempted inbox and normal mail", async () => {
-  const child = spawn(process.execPath, [new URL("./mock-email.mjs", import.meta.url).pathname], {
+  const child = spawn(process.execPath, [fileURLToPath(new URL("./mock-email.mjs", import.meta.url))], {
     env: { ...process.env, MOCK_EMAIL_PORT: "0" }, stdio: ["ignore", "pipe", "pipe"],
   });
   let output = "";
   const base = await new Promise((resolve, reject) => {
-    const deadline = setTimeout(() => reject(new Error("mock startup timeout")), 10_000);
+    const deadline = setTimeout(() => {
+      child.kill("SIGTERM");
+      reject(new Error("mock startup timeout"));
+    }, 10_000);
     child.stdout.on("data", bytes => { output += bytes.toString(); });
     child.stderr.on("data", bytes => {
       output += bytes.toString();
@@ -17,6 +21,10 @@ test("recipient-scoped actual 503 preserves private attempted inbox and normal m
       if (match) { clearTimeout(deadline); resolve(match[1]); }
     });
     child.once("error", error => { clearTimeout(deadline); reject(error); });
+    child.once("exit", (code, signal) => {
+      clearTimeout(deadline);
+      reject(new Error(`mock exited before readiness: code=${code}; signal=${signal}`));
+    });
   });
   const request = async (path, body, method = "POST") => fetch(`${base}${path}`, {
     method, headers: { "content-type": "application/json" },

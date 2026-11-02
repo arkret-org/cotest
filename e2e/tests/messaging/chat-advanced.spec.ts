@@ -1031,12 +1031,12 @@ test.describe("chat advanced", () => {
       // current MLS key material are ready before measuring a typing burst.
       for (const [page, peer] of [[alicePage, bob], [bobPage, alice]] as const) {
         await expect(page.page.locator(
-          `[data-testid="presence-row"][data-actor-id=${JSON.stringify(canonicalJson(accountActorId(peer.id)))}]`,
+          `.presence-row[data-actor-id=${JSON.stringify(canonicalJson(accountActorId(peer.id)))}]`,
         )).toContainText(/online/i, { timeout: 90_000 });
       }
       await alicePage.page.locator(".chat-input").fill(`draft ${stamp}`);
       const aliceTypingIndicator = bobPage.page.locator(
-        `[data-testid="typing-indicator"][data-typing-actors*="${cssStringEscape(alice.id)}"]`,
+        `.typing-indicator[data-typing-actors*="${cssStringEscape(alice.id)}"]`,
       );
       try {
         await expect(aliceTypingIndicator).toBeVisible({ timeout: 5_000 });
@@ -1104,7 +1104,7 @@ test.describe("chat advanced", () => {
       ]);
 
       const bobPresenceRow = alicePage.page.locator(
-        `[data-testid="presence-row"][data-actor-id=${JSON.stringify(canonicalJson(accountActorId(bob.id)))}]`,
+        `.presence-row[data-actor-id=${JSON.stringify(canonicalJson(accountActorId(bob.id)))}]`,
       );
       await expect(bobPresenceRow).toContainText(/online/i, { timeout: 30_000 });
       await stepShot(alicePage.page, testInfo, "presence-online");

@@ -533,8 +533,9 @@ test.describe("applet bridge", () => {
       const installed = await rawInstallApplet(request, token, signed, realmId, `configuration-${stamp}`, undefined, { exerciseAuthoringKats: false });
       expect(installed.response.status(), await installed.response.text()).toBe(201);
       await client.gotoTimelineRealm(realmId);
-      await client.gotoAppPanel("/applets", "applets-panel");
-      const row = client.page.locator(`[data-testid="applet-row"][data-applet-id="${signed.applet_package.applet_id}"][data-service-id="${signed.applet_package.service_id}"]`);
+      await client.gotoAppPanel("/applets", ".applets-panel");
+      const row = client.page.locator(".applet-row");
+      await expect(row).toHaveCount(1);
       await expect(row).toBeVisible({ timeout: 60_000 });
       const name = row.locator(".applet-bot-name").locator("input, textarea");
       const create = row.locator(".applet-create-bot");
@@ -558,7 +559,7 @@ test.describe("applet bridge", () => {
       await expect(create).toBeDisabled();
       await client.page.reload({ waitUntil: "domcontentloaded" });
       await client.gotoTimelineRealm(realmId);
-      await client.gotoAppPanel("/applets", "applets-panel");
+      await client.gotoAppPanel("/applets", ".applets-panel");
       await expect(name).toHaveValue(`Durable Bot ${stamp}`, { timeout: 30_000 });
       await expect(name).toBeDisabled();
       await expect(create).toBeDisabled();

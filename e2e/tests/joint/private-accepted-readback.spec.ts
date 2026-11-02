@@ -54,7 +54,7 @@ test.describe("Private accepted readback real UI @fully-implemented", () => {
         page.locator(".content-block-text").filter({ hasText: /^pong(?:\r?\n|$)/ }) });
       for (let index = 0; index < 3; index += 1) {
         await card.locator(".card-detail-sidebar-tab-members").click();
-        const member = card.locator(`[data-testid="card-detail-agent-row"][data-agent-id="${pairing.agentId}"]`);
+        const member = card.locator(`.card-detail-agent-row[data-agent-id="${pairing.agentId}"]`);
         await expect(member).toBeVisible({ timeout: 120_000 });
         const prompt = `Readback ${index + 1}: please reply only pong`;
         await composeSourceAgentMention(card, member, pairing.agentId, prompt);

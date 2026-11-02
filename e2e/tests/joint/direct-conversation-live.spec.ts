@@ -1,3 +1,4 @@
+import { accountRow } from "../../helpers/product-locators";
 import { openAndPairSecondController } from "../../helpers/paired-controller";
 import { test, expect, type JointUsersFixture } from "../../helpers/joint-fixture";
 import type { APIRequestContext, Browser, Page, Response } from "@playwright/test";
@@ -242,7 +243,7 @@ return async ({ jointUsers, request, browser }: { jointUsers: JointUsersFixture;
   for (const [page, peer] of [[alice, bobSession.user.id], [bob, aliceSession.user.id]] as const) {
     phase(page === alice ? "alice_direct_open_start" : "bob_direct_open_start");
     await page.getByRole("button", { name: "Contacts", exact: true }).click();
-    const row = page.locator(`[data-testid="direct-conversation-row"][data-peer=${JSON.stringify(canonicalJson(accountActorId(peer, peer === bobSession.user.id && remoteBob ? "server2" : "default")))}]`);
+    const row = accountRow(page, ".direct-conversation-row", accountActorId(peer, peer === bobSession.user.id && remoteBob ? "server2" : "default").account_id);
     // The API receipt can precede the remote Contact projection. A pending
     // row is clickable but intentionally cannot start a Direct resolver.
     await expect(row).toHaveAttribute("data-state", "accepted", { timeout: 90_000 });
@@ -406,7 +407,7 @@ return async ({ jointUsers, request, browser }: { jointUsers: JointUsersFixture;
     await expect(async () => {
       if (!new URL(page.url()).pathname.startsWith("/direct/")) {
         await page.getByRole("button", { name: "Contacts", exact: true }).click();
-        const row = page.locator(`[data-testid="direct-conversation-row"][data-peer=${JSON.stringify(canonicalJson(accountActorId(peer, peer === bobSession.user.id && remoteBob ? "server2" : "default")))}]`);
+        const row = accountRow(page, ".direct-conversation-row", accountActorId(peer, peer === bobSession.user.id && remoteBob ? "server2" : "default").account_id);
         // The API receipt can precede the remote Contact projection. A pending
         // row is clickable but intentionally cannot start a Direct resolver.
         await expect(row).toHaveAttribute("data-state", "accepted", { timeout: 90_000 });
@@ -578,7 +579,7 @@ return async ({ jointUsers, request, browser }: { jointUsers: JointUsersFixture;
     }
   }
   for (const [page, peer] of [[alice, bobSession.user.id], [bob, aliceSession.user.id]] as const) {
-    const presence = page.locator(`[data-testid="presence-row"][data-actor-id=${JSON.stringify(canonicalJson(accountActorId(peer, peer === bobSession.user.id && remoteBob ? "server2" : "default")))}]`);
+    const presence = page.locator(`.presence-row[data-actor-id=${JSON.stringify(canonicalJson(accountActorId(peer, peer === bobSession.user.id && remoteBob ? "server2" : "default")))}]`);
     await expect.soft(presence).toHaveAttribute("data-presence-state", "online", { timeout: 90_000 });
   }
   if (mode === "lost") {

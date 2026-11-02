@@ -622,7 +622,7 @@ export async function agentTopicChats(page: Page, receiptPath: string, proof: Di
         const rows = Array.from(element.querySelectorAll<HTMLElement>('[data-message-id][data-virtual-index]'));
         return {
           top: element.scrollTop, height: element.clientHeight, total: element.scrollHeight,
-          replies: rows.filter(row => Array.from(row.querySelectorAll('[data-testid="content-block-text"]'))
+          replies: rows.filter(row => Array.from(row.querySelectorAll('.content-block-text'))
             .some(block => /^pong(?:\r?\n|$)/.test(block.textContent ?? "")))
             .map(row => row.dataset.messageId!),
         };
@@ -713,12 +713,12 @@ export async function agentTopicChats(page: Page, receiptPath: string, proof: Di
         viewport: feed.clientHeight,
         scrollHeight: feed.scrollHeight,
         scrollTop: feed.scrollTop,
-        mountedRows: feed.querySelectorAll('[data-testid="chat-message"]').length,
+        mountedRows: feed.querySelectorAll('.chat-message').length,
         indexes: Array.from(feed.querySelectorAll('[data-virtual-index]')).map(row =>
           Number((row as HTMLElement).dataset.virtualIndex)),
         rows: Array.from(feed.querySelectorAll<HTMLElement>('[data-virtual-index]')).map(row => ({
           index: Number(row.dataset.virtualIndex), crypto: row.dataset.cryptoState,
-          pong: Array.from(row.querySelectorAll('[data-testid="content-block-text"]'))
+          pong: Array.from(row.querySelectorAll('.content-block-text'))
             .some(block => /^pong(?:\r?\n|$)/.test(block.textContent ?? "")),
         })),
       })).catch(() => null);
@@ -751,7 +751,7 @@ export async function agentTopicChats(page: Page, receiptPath: string, proof: Di
   // The controller's ordinary registered administration UI changes the
   // actual lifecycle; the rejected writes keep the previously valid binding.
   expect(selectedAgent, "pause negative requires the exact Direct Agent").not.toBe("");
-  await page.locator(`[data-testid="agent-admin-row"][data-agent-id=${JSON.stringify(selectedAgent)}]`).click();
+  await page.locator(`.agent-admin-row[data-agent-id=${JSON.stringify(selectedAgent)}]`).click();
   await page.locator(".agent-admin-enabled-switch").click();
   await expect(page.locator(".agent-admin .write-status")).toContainText("Paused", { timeout: 180_000 });
   try {

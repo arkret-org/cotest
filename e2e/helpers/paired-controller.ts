@@ -99,7 +99,7 @@ export async function openAndPairSecondController(
         return {
           held: writerLocks(snapshot.held),
           pending: writerLocks(snapshot.pending),
-          follower: document.querySelector('[data-testid="web-leader-follower"]') !== null,
+          follower: document.querySelector('.web-leader-follower') !== null,
           navigationType: (performance.getEntriesByType("navigation")[0] as PerformanceNavigationTiming | undefined)?.type,
         };
       });

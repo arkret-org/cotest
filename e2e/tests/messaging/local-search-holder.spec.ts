@@ -67,7 +67,7 @@ async function runHolderRevocation(
         expect(policy.status()).toBe(200);
         const activePolicy = (await policy.json()).active_policy;
         if (activePolicy === null) {
-          await flow.page.gotoAppPanel("/settings/recovery", "recovery-panel");
+          await flow.page.gotoAppPanel("/settings/recovery", ".recovery-panel");
           const page = flow.page.page;
           await page.locator(".recovery-key-regenerate").click();
           const generated = (await page.locator(".recovery-key-current").textContent())!.trim();
@@ -200,7 +200,7 @@ async function runHolderRevocation(
       expect(owner.recoveryKey?.trim().split(/\s+/).length).toBe(24);
       const ownerPage = flows[0]!.page.page;
       await ownerPage.goto(new URL("/settings/devices", ownerPage.url()).toString());
-      const target = ownerPage.locator(`[data-testid="device-row"][data-device-id="${sibling.user.deviceId}"]`);
+      const target = ownerPage.locator(`.device-row[data-device-id="${sibling.user.deviceId}"]`);
       await expect(target).toBeVisible({ timeout: 120_000 });
       await target.locator(".device-revoke-button").click();
       // Deliver the ordinary input event without putting Recovery Key words

@@ -77,7 +77,7 @@ async function members(page: Page, realm: string, agent: string): Promise<Locato
   await page.goto(`/realms/${realm}/members`, { waitUntil: "domcontentloaded" });
   await expect(page.locator(".realm-members-panel")).toBeVisible({ timeout: 120_000 });
   await page.getByRole("button", { name: "My agents", exact: true }).click();
-  return page.locator(`[data-testid="member-self-agent-row"][data-agent-id="${agent}"]`);
+  return page.locator(`.member-self-agent-row[data-agent-id="${agent}"]`);
 }
 
 async function confirm(page: Page, panel: Locator, realm: string, account: unknown, agent: unknown, strand: string,
@@ -114,7 +114,7 @@ async function confirm(page: Page, panel: Locator, realm: string, account: unkno
   expect(sources[0].agent_join_event_id).toMatch(/^ak:event:/);
   expect(sources[0].controller_join_event_id).not.toBe(sources[0].agent_join_event_id);
   const id = retypeEventDerivedId(event.event_id!, "grant");
-  await expect(panel.locator(`[data-testid="owned-agent-accepted-grant"][data-grant-id="${id}"]`))
+  await expect(panel.locator(`.owned-agent-accepted-grant[data-grant-id="${id}"]`))
     .toContainText("Active", { timeout: 180_000 });
   return id;
 }
@@ -153,7 +153,7 @@ test("ordinary member explicitly grants, withdraws cold and confirms a new owned
   const agentId = await provisionOwnedAgent(jointRealm.bobPage);
   const row = await members(bob, realm, agentId);
   await bob.locator(".open-add-realm-agent-modal-button").click();
-  const available = bob.locator(`[data-testid="available-realm-agent-row"][data-agent-id="${agentId}"]`);
+  const available = bob.locator(`.available-realm-agent-row[data-agent-id="${agentId}"]`);
   await expect(available).toBeVisible({ timeout: 120_000 });
   await available.locator(".confirm-add-agent-to-realm").click();
   await expect(row).toBeVisible({ timeout: 180_000 });
@@ -534,7 +534,7 @@ test("normal administrator default denial admits an exact controller exception a
   await assertPolicyCurrent(request, jointRealm.aliceSession, realm, await savePolicyEditor(user, editor, realm));
   await members(user.page, realm, agent);
   await user.page.locator(".open-add-realm-agent-modal-button").click();
-  const available = user.page.locator(`[data-testid="available-realm-agent-row"][data-agent-id="${agent}"]`);
+  const available = user.page.locator(`.available-realm-agent-row[data-agent-id="${agent}"]`);
   await expect(available).toBeVisible({ timeout: 120_000 });
   const joining = user.page.waitForResponse(response => response.request().method() === "POST"
     && new URL(response.url()).pathname === "/_arkret/self/events"
@@ -543,12 +543,12 @@ test("normal administrator default denial admits an exact controller exception a
         principal_id: agent, station_id: jointRealm.aliceSession.accountId.station_id } })));
   await available.locator(".confirm-add-agent-to-realm").click();
   expect((await joining).status()).toBe(200);
-  await expect(user.page.locator(`[data-testid="member-self-agent-row"][data-agent-id="${agent}"]`)).toBeVisible({ timeout: 120_000 });
+  await expect(user.page.locator(`.member-self-agent-row[data-agent-id="${agent}"]`)).toBeVisible({ timeout: 120_000 });
 
   const other = await provisionOwnedAgent(jointRealm.bobPage);
   await members(jointRealm.bobPage.page, realm, other);
   await jointRealm.bobPage.page.locator(".open-add-realm-agent-modal-button").click();
-  const denied = jointRealm.bobPage.page.locator(`[data-testid="available-realm-agent-row"][data-agent-id="${other}"]`);
+  const denied = jointRealm.bobPage.page.locator(`.available-realm-agent-row[data-agent-id="${other}"]`);
   await expect(denied).toBeVisible({ timeout: 120_000 });
   const beforeJoin = await footprint(realm, jointRealm.bobSession.accountId.station_id);
   const refusing = jointRealm.bobPage.page.waitForResponse(response => response.request().method() === "POST"
@@ -728,7 +728,7 @@ async function switchReviewRealmAndReload(user: JointUserPage, originalRealm: st
   for (const realm of [otherRealm, originalRealm]) {
     // Keep the same authenticated document and traverse the real application
     // router, so a cold reload cannot hide a missing Realm component key.
-    await user.gotoAppPanel(`/realms/${encodeURIComponent(realm)}/settings/access`, "realm-admin-panel");
+    await user.gotoAppPanel(`/realms/${encodeURIComponent(realm)}/settings/access`, ".realm-settings");
     await expect.poll(() => new URL(page.url()).pathname).toBe(`/realms/${encodeURIComponent(realm)}/settings/access`);
     await expect.poll(async () => {
       const href = await page.locator(".realm-admin-nav-item-access").getAttribute("href");

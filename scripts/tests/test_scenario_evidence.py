@@ -47,8 +47,8 @@ class ScenarioEvidenceTests(unittest.TestCase):
                                       'await '
                                       'page.locator(".registration-panel").getByRole("button", { '
                                       'name: "Continue", exact: true }).click();',
-         'legacy-registration-form': 'await '
-                                     'page.getByTestId("register-open-account-authority").click();',
+         'class-registration-form': 'await '
+                                     'page.locator(".register-open-account-authority").click();',
          'registration-label-only': 'page.getByLabel("Station", { exact: true });',
          'registration-query-only': 'await page.goto("/register");\n'
                                     'await page.getByLabel("Station", { exact: true '
@@ -73,7 +73,7 @@ class ScenarioEvidenceTests(unittest.TestCase):
                                      '}).fill(colandBaseUrl());\\nawait '
                                      'page.locator(\\".registration-panel\\").getByRole(\\"button\\", '
                                      '{ name: \\"Continue\\", exact: true }).click();";',
-         'legacy-registration-query-only': 'page.getByTestId("register-open-account-authority");',
+         'class-registration-query-only': 'page.locator(".register-open-account-authority");',
          'current-direct-onboarding': 'await joint.gotoLogin();\n'
                                       'await submitCoauthPasswordCredentials(page, account);\n'
                                       'await '
@@ -85,11 +85,11 @@ class ScenarioEvidenceTests(unittest.TestCase):
                                       'page.locator(".login-container").getByRole("button", { '
                                       'name: "Allow", exact: true });\n'
                                       'await approve.click();',
-         'legacy-direct-onboarding': 'await joint.gotoLogin(); await '
+         'class-direct-onboarding': 'await joint.gotoLogin(); await '
                                      'submitCoauthPasswordCredentials(page, account);\n'
-                                     'await page.getByTestId("choose-new-identity").click();\n'
+                                     'await page.locator(".choose-new-identity").click();\n'
                                      'await '
-                                     'page.getByTestId("onboarding-bind-identity").click();\n'
+                                     'page.locator(".onboarding-bind-identity").click();\n'
                                      'const approve = page.getByTestId("coauth-oauth-approve"); '
                                      'await approve.click();',
          'direct-onboarding-comment-only': '// await joint.gotoLogin();\n'
@@ -219,20 +219,20 @@ class ScenarioEvidenceTests(unittest.TestCase):
 
 
     def test_direct_identity_ui_does_not_claim_coauth_registration_ui(self) -> None:
-        for key in ("identity/oidc-login-flow", "legacy-direct-onboarding", "current-direct-onboarding"):
+        for key in ("identity/oidc-login-flow", "class-direct-onboarding", "current-direct-onboarding"):
             with self.subTest(scenario=key):
                 self.assertEqual(self.scenarios[key]["identity_establishment"], [
                     "inkson_identity_onboarding_ui", "oauth_authorization_ui",
                 ])
 
-    def test_current_and_legacy_actual_registration_actions_remain_ui(self) -> None:
-        for key in ("current-registration-form", "legacy-registration-form"):
+    def test_semantic_and_class_registration_actions_remain_ui(self) -> None:
+        for key in ("current-registration-form", "class-registration-form"):
             with self.subTest(scenario=key):
                 self.assertIn("inkson_product_client", self.scenarios[key]["protocol_object_producers"])
                 self.assertEqual(self.scenarios[key]["identity_establishment"], ["fixture_or_not_applicable"])
 
     def test_registration_labels_queries_comments_and_examples_are_not_actions(self) -> None:
-        for key in ("registration-label-only", "registration-query-only", "registration-comment-only", "registration-template-only", "registration-quoted-only", "legacy-registration-query-only"):
+        for key in ("registration-label-only", "registration-query-only", "registration-comment-only", "registration-template-only", "registration-quoted-only", "class-registration-query-only"):
             with self.subTest(scenario=key):
                 self.assertNotIn("inkson_product_client", self.scenarios[key]["protocol_object_producers"])
                 self.assertEqual(self.scenarios[key]["identity_establishment"], ["fixture_or_not_applicable"])

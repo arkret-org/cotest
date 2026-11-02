@@ -331,7 +331,7 @@ test.describe("cross-server federation", () => {
       // `data-member-id` holding the canonical ActorId key, so match the
       // principal id as a substring.
       const aliceInviteRow = alicePage.page.locator(
-        `[data-testid="pending-invite-row"][data-member-id*="${bob.id}"]`,
+        `.pending-invite-row[data-member-id*="${bob.id}"]`,
       );
       await expect(aliceInviteRow).toBeVisible({ timeout: 30_000 });
     } finally {

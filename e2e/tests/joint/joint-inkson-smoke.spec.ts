@@ -208,7 +208,7 @@ test.describe("joint-inkson smoke @fully-implemented", () => {
       });
       await expect(
         jointRealm.alicePage.page.locator(
-          `[data-testid="participant-agent-group"][data-controller-principal-id="${jointRealm.alice.id}"]`,
+          `.participant-agent-group[data-controller-principal-id="${jointRealm.alice.id}"]`,
         ),
       ).toHaveCount(0);
 

@@ -382,7 +382,7 @@ test.describe("moderation and ban", () => {
       // stable identity id in 6ff60d53. Match on the principal id as a
       // substring so this does not depend on canonical key byte order.
       const malloryRow = alicePage.page.locator(
-        `[data-testid="member-row"][data-member-id*="${mallory.id}"]`,
+        `.member-row[data-member-id*="${mallory.id}"]`,
       );
       await expect(malloryRow).toBeVisible({ timeout: 30_000 });
       // The "Recovery setup is incomplete" banner can render over the member

@@ -193,7 +193,7 @@ test.describe("notifications", () => {
       await bobPage.page.locator(".realm-override-add").click();
       await expect(
         bobPage.page.locator(
-          `[data-testid="settings-muted-realm-row"][data-realm-id="${cssStringEscape(realmId)}"]`,
+          `.settings-muted-realm-row[data-realm-id="${cssStringEscape(realmId)}"]`,
         ),
       ).toBeVisible({ timeout: 30_000 });
 
@@ -624,7 +624,7 @@ test.describe("notifications", () => {
       await expect(bobDevice2Page.page.locator(".shell.app")).toBeVisible({ timeout: 120_000 });
       await bobDevice2Page.completeRecoveryKeySetupIfPrompted();
       const unlockPrompt = bobDevice2Page.page.locator(
-        '[data-testid="mls-unlock-modal"], [data-testid="mls-unlock-banner"]',
+        '.mls-unlock-dialog, .mls-unlock-dialog',
       ).last();
       if (await unlockPrompt.isVisible()) {
         const recoveryKey = bobDevice1Session.session.recoveryKey;

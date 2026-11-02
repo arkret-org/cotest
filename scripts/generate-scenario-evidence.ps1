@@ -42,8 +42,8 @@ foreach ($file in Get-ChildItem -LiteralPath $testsRoot -Recurse -File -Filter "
     })
     $usesRegisteredUi = $uiSource -match '\bopenRegisteredUserPage\s*\('
     # Opening the actual registration authority is UI coverage, never proof of
-    # completed identity establishment. Retain the legacy click as well.
-    $usesRegistrationFormUi = (Test-UiEvidenceCall $uiSource $uiCodeMask '\.getByTestId\(\s*["'']register-open-account-authority["'']\s*\)\s*\.click\s*\(') -or (
+    # completed identity establishment.
+    $usesRegistrationFormUi = (Test-UiEvidenceCall $uiSource $uiCodeMask '\.locator\(\s*["'']\.register-open-account-authority["'']\s*\)\s*\.click\s*\(') -or (
         (Test-UiEvidenceCall $uiSource $uiCodeMask '\.goto\(\s*["'']/register["'']\s*\)') -and
         (Test-UiEvidenceCall $uiSource $uiCodeMask '\.getByLabel\(\s*["'']Station["'']\s*,\s*\{\s*exact\s*:\s*true\s*\}\s*\)\s*\.fill\(\s*colandBaseUrl\(\)\s*\)') -and
         (Test-UiEvidenceCall $uiSource $uiCodeMask '\.locator\(\s*["'']\.registration-panel["'']\s*\)\s*\.getByRole\(\s*["'']button["'']\s*,\s*\{\s*name\s*:\s*["'']Continue["'']\s*,\s*exact\s*:\s*true\s*\}\s*\)\s*\.click\s*\(')
@@ -73,8 +73,8 @@ foreach ($file in Get-ChildItem -LiteralPath $testsRoot -Recurse -File -Filter "
     $identity = New-Object System.Collections.Generic.List[string]
     $usesDirectIdentityUi = (
         (
-            (Test-UiEvidenceCall $uiSource $uiCodeMask '\.getByTestId\(\s*["'']choose-new-identity["'']\s*\)\s*\.click\s*\(') -and
-            (Test-UiEvidenceCall $uiSource $uiCodeMask '\.getByTestId\(\s*["'']onboarding-bind-identity["'']\s*\)\s*\.click\s*\(') -and
+            (Test-UiEvidenceCall $uiSource $uiCodeMask '\.locator\(\s*["'']\.choose-new-identity["'']\s*\)\s*\.click\s*\(') -and
+            (Test-UiEvidenceCall $uiSource $uiCodeMask '\.locator\(\s*["'']\.onboarding-bind-identity["'']\s*\)\s*\.click\s*\(') -and
             (Test-UiEvidenceCall $uiSource $uiCodeMask '\.getByTestId\(\s*["'']coauth-oauth-approve["'']\s*\)')
         ) -or (
             (Test-UiEvidenceCall $uiSource $uiCodeMask '\.locator\(\s*["'']\.identity-choice-card["'']\s*\)\s*\.getByRole\(\s*["'']button["'']\s*,\s*\{\s*name\s*:\s*["'']Continue["'']\s*,\s*exact\s*:\s*true\s*\}\s*\)\s*\.click\s*\(') -and

@@ -121,7 +121,7 @@ export async function provisionAgent(
   const remainingPairingBudget = () => Math.max(1, pairingDeadline - Date.now());
   await expect(
     inkson.locator(
-      `[data-testid="agent-admin-row"][data-agent-id=${JSON.stringify(body.agent_id)}]`,
+      `.agent-admin-row[data-agent-id=${JSON.stringify(body.agent_id)}]`,
     ),
   ).toHaveAttribute("aria-pressed", "true", { timeout: remainingPairingBudget() });
   await expect(inkson.locator(".agent-admin-slug-title")).toHaveText(agentSlug, {
@@ -190,12 +190,12 @@ export async function addAgentToRealm(
   });
   await page.getByRole("button", { name: "My agents", exact: true }).click();
   const existing = page.locator(
-    `[data-testid="member-self-agent-row"][data-agent-id="${agentId}"]`,
+    `.member-self-agent-row[data-agent-id="${agentId}"]`,
   );
   if ((await existing.count()) === 0) {
     await page.locator(".open-add-realm-agent-modal-button").click();
     const available = page.locator(
-      `[data-testid="available-realm-agent-row"][data-agent-id="${agentId}"]`,
+      `.available-realm-agent-row[data-agent-id="${agentId}"]`,
     );
     await expect(available).toBeVisible({ timeout: 120_000 });
     const isTargetJoin = (event: SubmittedEvent) => {
@@ -222,7 +222,7 @@ export async function addAgentToRealm(
     );
   }
   const agentRow = page.locator(
-    `[data-testid="member-self-agent-row"][data-agent-id="${agentId}"]`,
+    `.member-self-agent-row[data-agent-id="${agentId}"]`,
   );
   await expect(agentRow).toBeVisible({ timeout: 120_000 });
   const reply = agentRow.locator(".member-agent-reply-toggle");
@@ -313,7 +313,7 @@ export async function composeSourceAgentMention(
   expect(actor.account_id.principal_id).toBe(agentId);
   await agentRow.locator(".card-detail-member-mention-button").click();
   const chip = card.locator(
-    `[data-testid="mention-chip"][data-mention-principal-id="${actor.account_id.principal_id}"][data-mention-station-id="${actor.account_id.station_id}"]`,
+    `.mention-chip[data-mention-principal-id="${actor.account_id.principal_id}"][data-mention-station-id="${actor.account_id.station_id}"]`,
   );
   await expect(chip).toBeVisible({ timeout: 30_000 });
   const composer = card.locator(".chat-input");

@@ -174,7 +174,7 @@ test.describe("personal blocklist", () => {
       page
         .locator(".blocked-user-row")
         .filter({ has: page.locator(`[data-actor-id*="${bob.id}"]`) })
-        .or(page.locator(`[data-testid="blocked-user-row"][data-actor-id*="${bob.id}"]`));
+        .or(page.locator(`.blocked-user-row[data-actor-id*="${bob.id}"]`));
     const apiActorSeq = 8_000_000_200_000_000 + (stamp % 100_000);
 
     try {

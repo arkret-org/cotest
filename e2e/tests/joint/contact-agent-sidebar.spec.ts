@@ -90,7 +90,7 @@ jointTest.describe("Contacts agent hierarchy @fully-implemented", () => {
       );
       await expect(
         aliceSelfGroup.locator(
-          `[data-testid="contact-sidebar-agent-row"][data-agent="${pendingAgentId}"]`,
+          `.contact-sidebar-agent-row[data-agent="${pendingAgentId}"]`,
         ),
       ).toHaveCount(0);
       await expect(aliceSelfGroup).not.toContainText("Agents");

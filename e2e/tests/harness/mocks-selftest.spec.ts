@@ -126,19 +126,14 @@ test.describe("harness mocks selftest @fully-implemented", () => {
     const claim = await request.post(`${baseUrl}/mock/email/verification/claim`, {
       data: { token: goodToken, did: "did:web:alice.selftest" },
     });
-    expect(claim.status()).toBe(200);
-    const claimBody = await claim.json();
-    expect(typeof claimBody.binding_proof).toBe("string");
-    expect(claimBody.token_commitment.startsWith("sha256:")).toBe(true);
-
-    const inspect = await (await request.get(`${baseUrl}/inspect`)).json();
-    const tokens = inspect.tokens as Array<{ token: string; consumed: boolean }>;
-    const goodEntry = tokens.find((t) => t.token === goodToken);
-    expect(goodEntry?.consumed).toBe(true);
+    expect(claim.status()).toBe(404);
+    expect((await claim.json()).error).toBe("not_found");
     const replay = await request.post(`${baseUrl}/mock/email/verification/claim`, {
       data: { token: goodToken, did: "did:web:alice.selftest" },
     });
-    expect(replay.status()).toBe(409);
+    expect(replay.status()).toBe(404);
+    const retained = await request.get(`${baseUrl}/mock/email/verification/inbox?to=${encodeURIComponent(to)}`);
+    expect((await retained.json()).messages.filter((message: { token?: string }) => message.token === goodToken)).toHaveLength(1);
   });
 
   test("mock-witness: chain validation, monotonicity, stale rejection", async ({ request }) => {

@@ -144,7 +144,7 @@ test.describe("complete peer Consent", () => {
     };
     await replaceConsentScopeApi(request, token, flow.user.id, peer, "invite", preserved);
     try {
-      await actor.gotoAppPanel("/settings/consent", "consent-settings-panel");
+      await actor.gotoAppPanel("/settings/consent", ".consent-settings-panel");
       await actor.page.locator(".consent-peer-input").locator("input, textarea").fill(bob.id);
       await actor.page.locator(".consent-peer-station-input").locator("input, textarea").fill(colandServiceId());
       await actor.clickWithPassivePromptRetry(actor.page.locator(".consent-read-complete-button"));
@@ -182,7 +182,7 @@ test.describe("complete peer Consent", () => {
       // A page reload must retain the complete authenticated set, including
       // inactive permissions and the presence of every optional member.
       await actor.page.reload();
-      await actor.gotoAppPanel("/settings/consent", "consent-settings-panel");
+      await actor.gotoAppPanel("/settings/consent", ".consent-settings-panel");
       await actor.page.locator(".consent-peer-input").locator("input, textarea").fill(bob.id);
       await actor.page.locator(".consent-peer-station-input").locator("input, textarea").fill(colandServiceId());
       await actor.clickWithPassivePromptRetry(actor.page.locator(".consent-read-complete-button"));
@@ -564,7 +564,7 @@ test("complete peer Consent lost outcome replays the original after cold reload 
     await actor.page.locator(".consent-peer-station-input").locator("input, textarea").fill(colandServiceId());
   };
   try {
-    await actor.gotoAppPanel("/settings/consent", "consent-settings-panel");
+    await actor.gotoAppPanel("/settings/consent", ".consent-settings-panel");
     await selectPeer();
     await actor.clickWithPassivePromptRetry(actor.page.locator(".consent-read-complete-button"));
     const input = actor.page.locator(".consent-permissions-input").locator("input, textarea");
@@ -594,7 +594,7 @@ test("complete peer Consent lost outcome replays the original after cold reload 
     await expect(actor.page.locator(".consent-confirm-replace-button")).toHaveCount(0);
     const beforeReload = bytes.length;
     await actor.page.reload();
-    await actor.gotoAppPanel("/settings/consent", "consent-settings-panel");
+    await actor.gotoAppPanel("/settings/consent", ".consent-settings-panel");
     await selectPeer();
     await actor.clickWithPassivePromptRetry(actor.page.locator(".consent-recover-original-button"));
     await expect.poll(() => bytes.length, { timeout: 60_000 }).toBeGreaterThan(beforeReload);
@@ -627,7 +627,7 @@ test("complete peer Consent lost outcome replays the original after cold reload 
 type ConsentActor = NonNullable<Awaited<ReturnType<typeof openDpopUserPage>>>["page"];
 
 async function openCompletePeer(actor: ConsentActor, peerId: string) {
-  await actor.gotoAppPanel("/settings/consent", "consent-settings-panel");
+  await actor.gotoAppPanel("/settings/consent", ".consent-settings-panel");
   await actor.page.locator(".consent-peer-input").locator("input, textarea").fill(peerId);
   await actor.page.locator(".consent-peer-station-input").locator("input, textarea").fill(colandServiceId());
   await actor.clickWithPassivePromptRetry(actor.page.locator(".consent-read-complete-button"));
@@ -735,7 +735,7 @@ test("complete peer Consent remains never_written when the real contacts modal s
   try {
     if (!holder || !requester) throw new Error("Contact/Consent UI acceptance requires two real DPoP sessions");
     const actor = requester.page;
-    await actor.gotoAppPanel("/contacts", "contacts-panel");
+    await actor.gotoAppPanel("/contacts", ".contacts-panel");
     await actor.clickWithPassivePromptRetry(actor.page.locator(".add-contact-button"));
     await expect(actor.page.locator(".contact-request-panel")).toBeVisible({ timeout: 30_000 });
     await actor.fillWithPassivePromptRetry(actor.page.locator(".contact-target-input input, .contact-target-input textarea"),

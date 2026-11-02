@@ -250,7 +250,7 @@ test.describe("account recovery", () => {
       // which generates the 24-word Recovery Key and uploads the
       // recovery_public_key envelope before it returns. Verify the durable
       // result rather than waiting for an already-completed browser request.
-      await page.gotoAppPanel("/settings/recovery", "recovery-panel");
+      await page.gotoAppPanel("/settings/recovery", ".recovery-panel");
       await expect(page.page.locator(".recovery-key-section")).toBeVisible({
         timeout: 120_000,
       });

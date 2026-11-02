@@ -386,7 +386,7 @@ export class JointUserPage {
     // Preserve Inkson's authenticated in-memory session. A document reload can
     // race secure-store restoration and leave the router on its transient
     // login/home surface even though the injected grant is valid.
-    await this.gotoAppPanel("/directory", "directory-panel");
+    await this.gotoAppPanel("/directory", ".directory-panel");
     await this.dismissCreateRealmBlockingPrompts({
       completeRecoveryKeySetup: true,
       allowPassivePromptDismissal: true,
@@ -394,17 +394,17 @@ export class JointUserPage {
   }
 
   async gotoSettings() {
-    await this.gotoAppPanel("/settings", "settings-panel", this.page.locator(".settings-page"));
+    await this.gotoAppPanel("/settings", ".settings-page", this.page.locator(".settings-page"));
   }
 
   async gotoNotifications() {
-    await this.gotoAppPanel("/notifications", "notifications-panel", this.page.locator(".notifications-panel"));
+    await this.gotoAppPanel("/notifications", ".notifications-panel", this.page.locator(".notifications-panel"));
   }
 
   async gotoNotificationSettings() {
     await this.gotoAppPanel(
       "/notifications/settings",
-      "notification-settings-panel",
+      ".settings-page",
     );
   }
 
@@ -485,8 +485,8 @@ export class JointUserPage {
     }, path);
   }
 
-  async gotoAppPanel(path: string, testId: string, panelLocator?: Locator) {
-    const panel = panelLocator ?? this.page.locator('[class~="' + testId + '"]');
+  async gotoAppPanel(path: string, panelSelector: string, panelLocator?: Locator) {
+    const panel = panelLocator ?? this.page.locator(panelSelector);
     for (let attempt = 0; attempt < 3; attempt += 1) {
       await this.navigateWithinApp(path);
       if (
@@ -1336,7 +1336,7 @@ export class JointUserPage {
     const escapeAttr = (value: string) =>
       value.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
     const suggestion = this.page.locator(
-      `[data-testid="mention-suggestion"][data-mention-principal-id="${escapeAttr(principalId)}"][data-mention-station-id="${escapeAttr(stationId)}"]`,
+      `.mention-suggestion[data-mention-principal-id="${escapeAttr(principalId)}"][data-mention-station-id="${escapeAttr(stationId)}"]`,
     );
     await expect(suggestion).toBeVisible({ timeout: 30_000 });
     await suggestion.click();
@@ -2472,10 +2472,10 @@ export async function approvePairingLinkOnAuthorizedDevice(
   expect(pairingLink).toContain("/_arkret/open/device-pairing/resolve#token=");
   await authorizingDevice.gotoAppPanel(
     "/settings/devices/pair",
-    "settings-devices-panel",
+    ".settings-devices-panel",
   );
   await expect(
-    authorizingDevice.page.locator(".accept-pairing-card"),
+    authorizingDevice.page.locator(".accept-pairing-input").locator("input, textarea"),
   ).toBeVisible({ timeout: 60_000 });
   await authorizingDevice.fillWithPassivePromptRetry(
     authorizingDevice.page.locator(".accept-pairing-input").locator("input, textarea"),

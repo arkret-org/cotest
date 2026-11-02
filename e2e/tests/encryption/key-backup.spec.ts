@@ -132,7 +132,7 @@ test.describe("key backup + restore", () => {
         await device.completeRecoveryKeySetupIfPrompted(120_000);
       const firstKey = promptedKey ?? session.recoveryKey ?? "";
       expect(firstKey.split(/\s+/)).toHaveLength(24);
-      await device.gotoAppPanel("/settings/recovery", "recovery-panel");
+      await device.gotoAppPanel("/settings/recovery", ".recovery-panel");
       await expect(device.page.locator(".recovery-key-section")).toBeVisible(
         {
           timeout: 120_000,
@@ -701,7 +701,7 @@ test.describe("key backup + restore", () => {
         .click();
       await expect(
         deviceA.page
-          .locator('[data-testid="card-description-panel"]:visible')
+          .locator('.card-description-panel:visible')
           .filter({ hasText: restoredDescription })
           .first(),
       ).toBeVisible({ timeout: 90_000 });
@@ -1236,11 +1236,11 @@ async function sendTimelineMessageAndWaitForPrivateBackup(
 async function unlockMlsAccountSecret(page: Page, recoveryKey: string) {
   const unlockPrompt = page
     .locator(
-      '[data-testid="mls-unlock-modal"], [data-testid="mls-unlock-banner"]',
+      '.mls-unlock-dialog, .mls-unlock-dialog',
     )
     .last();
   const visibleUnlockStatus = page.locator(
-    '[data-testid="mls-unlock-status"]:visible',
+    '.mls-unlock-status:visible',
   );
 
   await expect(unlockPrompt).toBeVisible({
