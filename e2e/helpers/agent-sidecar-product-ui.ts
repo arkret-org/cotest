@@ -1,3 +1,5 @@
+import { accountActorId } from "./coland-api";
+import { accountRow, actorRow } from "./product-locators";
 // Shared product UI actions; no session or protocol outcome is injected.
 import { expect, type Page, type Route, type Request, type TestInfo, type Locator } from './arkret-test';
 import { assertAuthoritySubmitOutcome, wireErrCode } from './coland-api';
@@ -120,9 +122,7 @@ export async function provisionAgent(
   const pairingDeadline = Date.now() + 180_000;
   const remainingPairingBudget = () => Math.max(1, pairingDeadline - Date.now());
   await expect(
-    inkson.locator(
-      `.agent-admin-row[data-agent-id=${JSON.stringify(body.agent_id)}]`,
-    ),
+    actorRow(inkson, ".agent-admin-row", accountActorId(body.agent_id)),
   ).toHaveAttribute("aria-pressed", "true", { timeout: remainingPairingBudget() });
   await expect(inkson.locator(".agent-admin-slug-title")).toHaveText(agentSlug, {
     timeout: remainingPairingBudget(),
@@ -189,14 +189,10 @@ export async function addAgentToRealm(
     timeout: 120_000,
   });
   await page.getByRole("button", { name: "My agents", exact: true }).click();
-  const existing = page.locator(
-    `.member-self-agent-row[data-agent-id="${agentId}"]`,
-  );
+  const existing = actorRow(page, ".member-self-agent-row", accountActorId(agentId));
   if ((await existing.count()) === 0) {
     await page.locator(".open-add-realm-agent-modal-button").click();
-    const available = page.locator(
-      `.available-realm-agent-row[data-agent-id="${agentId}"]`,
-    );
+    const available = actorRow(page.locator(".add-realm-agent-modal"), ".member-self-agent-row", accountActorId(agentId));
     await expect(available).toBeVisible({ timeout: 120_000 });
     const isTargetJoin = (event: SubmittedEvent) => {
       const member = event.payload?.member_id as { kind?: string; account_id?: AccountId } | undefined;
@@ -209,7 +205,7 @@ export async function addAgentToRealm(
       return outgoing.method() === "POST" && new URL(response.url()).pathname === EVENTS_SUBMIT_PATH
         && eventSubmissions(outgoing.postData()).some(isTargetJoin);
     }, { timeout: 180_000 });
-    await available.locator(".confirm-add-agent-to-realm").click();
+    await available.locator(".member-agent-add-to-realm").click();
     const joinResponse = await submittedJoin;
     const joinOutcome = await joinResponse.json() as Record<string, unknown>;
     expect(joinResponse.ok(), `Agent join HTTP ${joinResponse.status()}: ${String(joinOutcome.detail ?? "missing Problem detail")}`)
@@ -221,9 +217,7 @@ export async function addAgentToRealm(
       { timeout: 180_000 },
     );
   }
-  const agentRow = page.locator(
-    `.member-self-agent-row[data-agent-id="${agentId}"]`,
-  );
+  const agentRow = actorRow(page, ".member-self-agent-row", accountActorId(agentId));
   await expect(agentRow).toBeVisible({ timeout: 120_000 });
   const reply = agentRow.locator(".member-agent-reply-toggle");
   const mention = agentRow.locator(".member-agent-mention-toggle");
@@ -305,19 +299,17 @@ export async function composeSourceAgentMention(
   agentId: string,
   prompt: string,
 ): Promise<void> {
-  const memberId = await agentRow.getAttribute("data-member-id");
-  expect(memberId, "the source member supplies its complete ActorId").not.toBeNull();
-  const actor = JSON.parse(memberId!) as ActorId;
-  expect(actor.kind).toBe("account");
-  if (actor.kind !== "account") throw new Error("Agent member must be an Account");
-  expect(actor.account_id.principal_id).toBe(agentId);
+  const identity = await agentRow.locator(".card-detail-member-identity").innerText();
+  const match = /^Agent: (\S+) · Principal: (\S+) · Station: (\S+)$/.exec(identity);
+  expect(match, "the source member supplies its complete Account identity").not.toBeNull();
+  expect(match![1]).toBe(agentId);
+  expect(match![2]).toBe(agentId);
+  const account: AccountId = { principal_id: match![2], station_id: match![3] };
   await agentRow.locator(".card-detail-member-mention-button").click();
-  const chip = card.locator(
-    `.mention-chip[data-mention-principal-id="${actor.account_id.principal_id}"][data-mention-station-id="${actor.account_id.station_id}"]`,
-  );
+  const chip = accountRow(card, ".mention-chip", account);
   await expect(chip).toBeVisible({ timeout: 30_000 });
   const composer = card.locator(".chat-input");
-  const mention = (await chip.locator("span").first().innerText()).trim();
+  const mention = (await chip.locator(".mention-chip-label").innerText()).trim();
   expect(mention).toMatch(/^@/);
   await expect(composer).toHaveValue(`${mention} `);
   // Keep the actual picker insertion so the composer retains the structured
@@ -382,7 +374,7 @@ export async function createSidecarSourceCard(
   await column.locator(".save-card-button").click();
   const card = page.locator(".kanban-card").filter({ hasText: title });
   await expect(card).toBeVisible({ timeout: 120_000 });
-  await expect(card).toHaveAttribute("data-card-draft", "false", { timeout: 120_000 });
+  await expect(card).not.toHaveClass(/\bis-draft\b/, { timeout: 120_000 });
   await card.click();
   const detail = page.locator(".card-detail-modal");
   await expect(detail).toBeVisible({ timeout: 30_000 });
@@ -390,16 +382,7 @@ export async function createSidecarSourceCard(
 }
 
 
-export async function eventIdFromMessage(message: ReturnType<Page["getByTestId"]>) {
-  return message.evaluate((element) => {
-    const candidates = [
-      element.getAttribute("data-event-id"),
-      element.id.replace(/^chat-msg-/, ""),
-      element.querySelector("[data-event-id]")?.getAttribute("data-event-id"),
-    ];
-    return candidates.find((value) => value?.startsWith("ak:event:")) ?? "";
-  });
-}
+export { eventIdFromMessage } from "./message-evidence";
 
 
 // Observe authentic sockets from page startup, then suppress live data while

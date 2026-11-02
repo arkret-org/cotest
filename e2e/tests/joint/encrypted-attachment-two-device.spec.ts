@@ -292,8 +292,14 @@ test("encrypted attachment two-device upload/send/history/render and exact resta
       return trace.sizes as number[];
     });
     expect(sourceReads.reduce((sum, size) => sum + size, 0)).toBe(large.length);
-    expect(Math.max(...sourceReads)).toBeLessThanOrEqual(262_144);
-    expect(sourceReads.length).toBe(Math.ceil(large.length / 262_144));
+    // Native File leases subdivide each crypto segment into bounded 64 KiB pulls.
+    const nativeReadBytes = 65_536;
+    expect(Math.max(...sourceReads)).toBeLessThanOrEqual(nativeReadBytes);
+    expect(sourceReads.length).toBe(Math.ceil(large.length / nativeReadBytes));
+    const largeObject = (await holderAttachments(alice.page)).find(o => o.filename === "large-private.bin")!;
+    expect(largeObject.descriptor).toMatchObject({
+      scheme: "ak.blob.stream_aead.v1", segment_bytes: 262_144, size_bytes: large.length,
+    });
     await alice.sendTimelineMessage(realm, `${marker} fresh and segmented`);
     await expect(bob.page.getByRole("img", {name: "fresh-private-image.png", exact: true})).toBeVisible({timeout: 120_000});
     const largeLink = bob.page.getByRole("button", {name: "large-private.bin", exact: true});

@@ -260,7 +260,7 @@ test.describe("workflow: sprint planning", () => {
         const card = backlogColumn
           .locator(".kanban-card")
           .filter({ hasText: story });
-        await expect(card).toHaveAttribute("data-card-draft", "false", {
+        await expect(card).not.toHaveClass(/\bis-draft\b/, {
           timeout: 90_000,
         });
       }
@@ -620,7 +620,7 @@ test.describe("workflow: sprint planning", () => {
           .locator(".kanban-card")
           .filter({ hasText: card });
         await expect(cardLocator).toBeVisible({ timeout: 30_000 });
-        await expect(cardLocator).toHaveAttribute("data-card-draft", "false", {
+        await expect(cardLocator).not.toHaveClass(/\bis-draft\b/, {
           timeout: 90_000,
         });
       }

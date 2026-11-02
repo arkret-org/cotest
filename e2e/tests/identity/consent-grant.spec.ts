@@ -19,7 +19,7 @@ import {
   assertJointStackNotRequired, ensureRegistered, issueUserSession,
   openDpopUserPage, uniqueUser,
 } from "../../helpers/users";
-import { selectDxcOption } from "../../helpers/dxc-select";
+import { selectProductOptionByKey } from "../../helpers/product-select";
 import { createMimiProvider, postSignedMimiProviderRequest } from "../../helpers/mimi-provider";
 import { contactRow, requestContactArkret } from "../../helpers/contact-api";
 
@@ -226,7 +226,7 @@ test.describe("complete peer Consent", () => {
         await expect(actor.page.locator('[class~="' + `consent-toggle-${scope}` + '"]')).not.toBeChecked();
       }
       // The opaque request surface contains concrete non-invite scopes only.
-      await selectDxcOption(actor.page.locator(".consent-request-scope-input"), "video_call");
+      await selectProductOptionByKey(actor.page.locator(".consent-request-scope-input"), "video_call");
       await actor.page.locator(".consent-request-holder-input").fill(bob.id);
       await actor.page.locator(".consent-request-holder-station-input").fill(colandServiceId());
       await actor.clickWithPassivePromptRetry(actor.page.locator(".consent-request-submit-button"));

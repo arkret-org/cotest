@@ -1,3 +1,8 @@
+import { accountRow } from "../../helpers/product-locators";
+import { expectPlaintextMessage } from "../../helpers/message-evidence";
+import { accountActorId } from "../../helpers/coland-api";
+import { agentMemberRow } from "../../helpers/product-locators";
+import { actorRow } from "../../helpers/product-locators";
 import { openSavfoxArkretChannel, startSavfoxPairing, saveSavfoxChannel, provisionAgent, pairManagedSavfoxAgent, addAgentToRealm, composeSourceAgentMention, createSidecarSourceCard, waitForSidecarEnsureAcceptance, eventIdFromMessage, displayPairingCode } from "../../helpers/agent-sidecar-product-ui";
 import { observeNativeSearch } from "../../helpers/native-search";
 import { openAndPairSecondController } from "../../helpers/paired-controller";
@@ -584,10 +589,7 @@ jointTest.describe("Agent Savfox split live @fully-implemented", () => {
           .filter({ has: pongBody });
         await expect(pongMessage).toBeVisible({ timeout: 180_000 });
         expect((await pongBody.innerText()).split(/\r?\n/, 1)[0]).toBe("pong");
-        await expect(pongMessage).toHaveAttribute(
-          "data-crypto-state",
-          "plaintext",
-        );
+        await expectPlaintextMessage(pongMessage);
         await expect(
           pongMessage.locator(".member-badge-agent"),
         ).toBeVisible();
@@ -608,7 +610,7 @@ jointTest.describe("Agent Savfox split live @fully-implemented", () => {
           await expect.poll(accountOutage.blockedCount, { timeout: 30_000 }).toBeGreaterThan(0);
           await expect(pongMessage).toBeVisible({ timeout: 180_000 });
           expect(await eventIdFromMessage(pongMessage)).toBe(acceptedReplyId);
-          await expect(pongMessage).toHaveAttribute("data-crypto-state", "plaintext");
+          await expectPlaintextMessage(pongMessage);
           await expect(pongMessage.locator(".member-badge-agent")).toBeVisible();
           await expect(pongMessage.locator(".crypto-status-needs-verification")).toHaveCount(0);
           await expect(inkson.getByText(/GroupStateError\(PendingCommit\)/)).toHaveCount(0);
@@ -644,7 +646,7 @@ jointTest.describe("Agent Savfox split live @fully-implemented", () => {
               .last();
             await expect(historicalMessage).toBeVisible({ timeout: 180_000 });
             expect(await eventIdFromMessage(historicalMessage)).toBe(responseEventId);
-            await expect(historicalMessage).toHaveAttribute("data-crypto-state", "plaintext");
+            await expectPlaintextMessage(historicalMessage);
             await expect(
               historicalMessage.locator(".member-badge-agent"),
             ).toBeVisible();
@@ -740,9 +742,7 @@ jointTest.describe("Agent Savfox split live @fully-implemented", () => {
           `Sidecar source ${Date.now().toString(36)}`,
         );
         await sourceCard.locator(".card-detail-sidebar-tab-members").click();
-        const sourceAgent = sourceCard.locator(
-          `.card-detail-agent-row[data-agent-id="${firstPairing.agentId}"]`,
-        );
+        const sourceAgent = agentMemberRow(sourceCard, accountActorId(firstPairing.agentId).account_id);
         await expect(sourceAgent).toBeVisible({ timeout: 120_000 });
         const sidecarPrompt = "请在私有 Sidecar 中只回复 pong";
         await composeSourceAgentMention(
@@ -757,11 +757,9 @@ jointTest.describe("Agent Savfox split live @fully-implemented", () => {
         try {
           await expect.poll(async () => ({
             enabled: await sourceCard.locator(".send-chat-button").isEnabled(),
-            route: await sourceCard.locator(".composer-send-scope").getAttribute("data-send-route"),
-            boundAgent: await sourceCard.locator(
-              `.mention-chip[data-mention-principal-id="${firstPairing.agentId}"]`,
-            ).count(),
-          }), { timeout: 30_000 }).toEqual({ enabled: true, route: "Sidecar", boundAgent: 1 });
+            privateSidecar: (await sourceCard.locator(".composer-send-scope").innerText()).startsWith("Private Sidecar:"),
+            boundAgent: await accountRow(sourceCard, ".mention-chip", { principal_id: firstPairing.agentId, station_id: jointRealm.aliceSession.accountId.station_id }).count(),
+          }), { timeout: 30_000 }).toEqual({ enabled: true, privateSidecar: true, boundAgent: 1 });
         } catch (error) {
           await testInfo.attach("source-card-send-blockers", {
             body: Buffer.from(JSON.stringify({
@@ -836,8 +834,7 @@ jointTest.describe("Agent Savfox split live @fully-implemented", () => {
         await expect(sourceCard.locator(".chat-input")).toHaveValue("", {
           timeout: 30_000,
         });
-        await expect(sourceCard.locator(".composer-send-scope"))
-          .toHaveAttribute("data-send-route", "Shared");
+        await expect(sourceCard.locator(".composer-send-scope")).toContainText(/^(Original Strand|Circle discussion|Direct conversation):/);
 
         const requestMessage = sourceCard
           .locator(".chat-message")
@@ -1067,9 +1064,7 @@ jointTest.describe("Agent Savfox split live @fully-implemented", () => {
         await privacyCard
           .locator(".card-detail-sidebar-tab-members")
           .click();
-        const addressedAgentRow = privacyCard.locator(
-          `.card-detail-agent-row[data-agent-id="${firstPairing.agentId}"]`,
-        );
+        const addressedAgentRow = agentMemberRow(privacyCard, accountActorId(firstPairing.agentId).account_id);
         await expect(addressedAgentRow).toBeVisible({ timeout: 120_000 });
         // This source already has an accepted Sidecar mapping. Reopening it
         // restores that private target and converges its native MLS roster;
@@ -1224,9 +1219,7 @@ jointTest.describe("Agent Savfox split live @fully-implemented", () => {
         inkson.on("request", capturePostPauseSubmissions);
         const blockedPrompt = `paused runtime must not execute ${Date.now()}`;
         await resumedCard.locator(".card-detail-sidebar-tab-members").click();
-        const pausedAgentRow = resumedCard.locator(
-          `.card-detail-agent-row[data-agent-id="${firstPairing.agentId}"]`,
-        );
+        const pausedAgentRow = agentMemberRow(resumedCard, accountActorId(firstPairing.agentId).account_id);
         await expect(pausedAgentRow).toBeVisible({ timeout: 120_000 });
         await composeSourceAgentMention(
           resumedCard,
@@ -1283,8 +1276,7 @@ jointTest.describe("Agent Savfox split live @fully-implemented", () => {
         expect(publishStrandId).toMatch(/^ak:strand:[A-Za-z0-9_-]+$/);
         expect(publishUrl.searchParams.get("tab")).toBe("discussion");
         await publishCard.locator(".chat-input").fill(sharedBody);
-        await expect(publishCard.locator(".composer-send-scope"))
-          .toHaveAttribute("data-send-route", "Shared");
+        await expect(publishCard.locator(".composer-send-scope")).toContainText(/^(Original Strand|Circle discussion|Direct conversation):/);
         await expect(inkson.locator(".sidecar-security-state")).toHaveCount(0);
         await expect(publishCard.locator(".send-chat-button")).toBeEnabled({ timeout: 30_000 });
         const publishResponsePromise = inkson.waitForResponse(
@@ -1454,7 +1446,7 @@ jointTest("fresh Agent pairing gates the first send until binding and answers on
     const pongBody = inkson.locator(".content-block-text").filter({ hasText: /^pong(?:\r?\n|$)/ });
     const pong = inkson.locator(".chat-message").filter({ has: pongBody });
     await expect(pong).toBeVisible({ timeout: 180_000 });
-    await expect(pong).toHaveAttribute("data-crypto-state", "plaintext");
+    await expectPlaintextMessage(pong);
     await expect(pong.locator(".member-badge-agent")).toBeVisible();
     await expect(pong.locator(".crypto-status-needs-verification")).toHaveCount(0);
     await expect(pong).toHaveCount(1);
@@ -1545,7 +1537,7 @@ nativePublicReplyTest.describe("Native public fixed reply @native-public-reply",
               && eventSubmissions(outgoing.postData()).some(event => event.kind === "ak.agent.interaction.set"
                 && event.payload?.interaction_mode === "public");
           }, { timeout: 180_000 });
-          const row = controller.locator(`.member-self-agent-row[data-agent-id="${pairing.agentId}"]`);
+          const row = actorRow(controller, ".member-self-agent-row", accountActorId(pairing.agentId));
           await row.locator(".member-agent-interaction-mode").getByRole("button", { name: /^(公开|Public)$/ }).click();
           const response = await publicResponse;
           expect(response.ok()).toBe(true);
@@ -1612,7 +1604,7 @@ nativePublicReplyTest.describe("Native public fixed reply @native-public-reply",
           });
           await expect(restored).toHaveCount(1, { timeout: 180_000 });
           expect(await eventIdFromMessage(restored)).toBe(first.replyId);
-          await expect(restored).toHaveAttribute("data-crypto-state", "plaintext");
+          await expectPlaintextMessage(restored);
           await assertNativeProviderCountStable(receipts, before + 1);
           // A fresh accepted source proves the same restarted Main resumed its
           // original listener/MLS/ledger, rather than a dead process merely
@@ -1652,8 +1644,8 @@ async function confirmNativePublicStrandAuthority(page: Page, realm: JointRealmF
   await page.goto(`/realms/${realm.realmId}/members`, { waitUntil: "domcontentloaded" });
   await expect(page.locator(".realm-members-panel")).toBeVisible({ timeout: 120_000 });
   await page.getByRole("button", { name: "My agents", exact: true }).click();
-  const row = page.locator(`.member-self-agent-row[data-agent-id="${agentId}"]`);
-  const panel = row.locator(".member-agent-authority");
+  const row = actorRow(page, ".member-self-agent-row", accountActorId(agentId));
+  const panel = row.locator(".event:has(> .event-head :text-is(\"明确授权自有 Agent\"))");
   await expect(panel.locator(".owned-agent-scope")).toBeVisible({ timeout: 120_000 });
   await panel.locator(".owned-agent-scope").selectOption(strand);
   for (const label of ["发送消息", "读取 Strand", "读取事件", "读取对象"]) {
@@ -1747,21 +1739,19 @@ async function nativePublicMentionAndReply(page: Page, card: Locator, request: A
   const stationId = realm.aliceSession.accountId.station_id;
   const composer = card.locator(".chat-input");
   await composer.fill("@");
-  const candidate = card.locator(
-    `button.mention-suggestion[data-mention-principal-id="${agentId}"][data-mention-station-id="${stationId}"]`,
-  );
+  const account = { principal_id: agentId, station_id: stationId };
+  const identity = canonicalJson(account);
+  const candidate = card.getByRole("button", { name: new RegExp(` — ${identity.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`) });
   await expect(candidate).toBeVisible({ timeout: 120_000 });
   await expect(candidate.locator(".mention-suggestion-agent-badge")).toBeVisible();
   await candidate.click();
-  const chip = card.locator(
-    `.mention-chip[data-mention-principal-id="${agentId}"][data-mention-station-id="${stationId}"]`,
-  );
+  const chip = accountRow(card, ".mention-chip", account);
   await expect(chip).toBeVisible({ timeout: 30_000 });
-  const mention = (await chip.locator("span").first().innerText()).trim();
+  const mention = (await chip.locator(".mention-chip-label").innerText()).trim();
   expect(mention).toMatch(/^@/);
   await expect(composer).toHaveValue(`${mention} `);
   await composer.fill(`${mention} ${prompt}`);
-  await expect(card.locator(".composer-send-scope")).toHaveAttribute("data-send-route", "Shared");
+  await expect(card.locator(".composer-send-scope")).toContainText(/^(Original Strand|Circle discussion|Direct conversation):/);
   const sourceResponse = page.waitForResponse(response => {
     const request = response.request();
     return request.method() === "POST" && new URL(response.url()).pathname === EVENTS_SUBMIT_PATH
@@ -1782,7 +1772,7 @@ async function nativePublicMentionAndReply(page: Page, card: Locator, request: A
   });
   await expect(pong).toHaveCount(expectedReplies, { timeout: 180_000 });
   const reply = pong.last();
-  await expect(reply).toHaveAttribute("data-crypto-state", "plaintext");
+  await expectPlaintextMessage(reply);
   await expect(reply.locator(".member-badge-agent")).toBeVisible();
   await expect(reply.locator(".crypto-status-needs-verification")).toHaveCount(0);
   const replyId = await eventIdFromMessage(reply);

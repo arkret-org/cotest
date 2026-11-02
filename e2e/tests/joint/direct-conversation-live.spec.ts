@@ -1,3 +1,5 @@
+import { uint64Decimal, uint64Value } from "../../helpers/uint64-decimal";
+import { submitOrdinaryComposerDraft } from "../../helpers/composer-handoff";
 import { accountRow } from "../../helpers/product-locators";
 import { openAndPairSecondController } from "../../helpers/paired-controller";
 import { test, expect, type JointUsersFixture } from "../../helpers/joint-fixture";
@@ -39,18 +41,18 @@ return async ({ jointUsers, request, browser }: { jointUsers: JointUsersFixture;
     ? "**/_arkret/self/keys/keypackages/claim"
     : "**/_arkret/self/keys/keypackages/consume";
   const interruptedPreparationRequests = new Map<string, number>();
-  const interruptedWelcomeEpochs = new Map<string, number>();
+  const interruptedWelcomeEpochs = new Map<string, string>();
   for (const page of interruptPreparation ? [alice, bob] : []) {
     await page.route(preparationPath, async (route) => {
       const body = route.request().postDataJSON() as {
         intended_realm_id?: string;
-        recipient_durable_receipt?: { realm_id: string; mls_epoch: number };
+        recipient_durable_receipt?: { realm_id: string; mls_epoch: string };
       };
       const realm = mode === "offline" ? body.intended_realm_id : body.recipient_durable_receipt?.realm_id;
       expect(typeof realm, "interrupted request must identify its exact Realm").toBe("string");
       interruptedPreparationRequests.set(realm!, (interruptedPreparationRequests.get(realm!) ?? 0) + 1);
       if (body.recipient_durable_receipt) {
-        interruptedWelcomeEpochs.set(realm!, body.recipient_durable_receipt.mls_epoch);
+        interruptedWelcomeEpochs.set(realm!, uint64Decimal(body.recipient_durable_receipt.mls_epoch));
       }
       await route.abort("failed");
     });
@@ -246,7 +248,7 @@ return async ({ jointUsers, request, browser }: { jointUsers: JointUsersFixture;
     const row = accountRow(page, ".direct-conversation-row", accountActorId(peer, peer === bobSession.user.id && remoteBob ? "server2" : "default").account_id);
     // The API receipt can precede the remote Contact projection. A pending
     // row is clickable but intentionally cannot start a Direct resolver.
-    await expect(row).toHaveAttribute("data-state", "accepted", { timeout: 90_000 });
+    await expect(row.locator(".contact-sidebar-state")).toHaveText("accepted", { timeout: 90_000 });
     await expect(row).not.toHaveClass(/\bis-dim\b/, { timeout: 90_000 });
     await row.click();
     phase(page === alice ? "alice_direct_open_finished" : "bob_direct_open_finished");
@@ -282,7 +284,7 @@ return async ({ jointUsers, request, browser }: { jointUsers: JointUsersFixture;
     expect(founder).toBeDefined();
     await expect(founder!).toHaveURL(/\/direct\/ak:realm:.*\/ak:strand:/, { timeout: 15_000 });
     await expect(founder!.locator(".chat-panel")).toBeVisible();
-    await expect(founder!.locator(".chat-panel")).toHaveAttribute("data-chat-mode", "direct");
+    await expect(founder!.locator(".chat-panel")).toHaveClass(/\bdirect-mode\b/);
     const acceptedToVisibleMs = Date.now() - acceptedAt;
     test.info().annotations.push({ type: "founding-navigation-ms", description: String(acceptedToVisibleMs) });
     await founder!.locator(".chat-input").fill("held-second-resolve-send-probe");
@@ -410,7 +412,7 @@ return async ({ jointUsers, request, browser }: { jointUsers: JointUsersFixture;
         const row = accountRow(page, ".direct-conversation-row", accountActorId(peer, peer === bobSession.user.id && remoteBob ? "server2" : "default").account_id);
         // The API receipt can precede the remote Contact projection. A pending
         // row is clickable but intentionally cannot start a Direct resolver.
-        await expect(row).toHaveAttribute("data-state", "accepted", { timeout: 90_000 });
+        await expect(row.locator(".contact-sidebar-state")).toHaveText("accepted", { timeout: 90_000 });
         await expect(row).not.toHaveClass(/\bis-dim\b/, { timeout: 90_000 });
         await row.click();
       }
@@ -425,7 +427,7 @@ return async ({ jointUsers, request, browser }: { jointUsers: JointUsersFixture;
     const directRealm = decodeURIComponent(path.split("/")[2]);
     await expect.poll(() => interruptedPreparationRequests.get(directRealm) ?? 0, { timeout: 120_000 }).toBeGreaterThan(0);
     if (mode === "interrupted") {
-      await expect.poll(() => interruptedWelcomeEpochs.get(directRealm) ?? 0, { timeout: 120_000 }).toBeGreaterThan(0);
+      await expect.poll(() => uint64Value(interruptedWelcomeEpochs.get(directRealm) ?? "0"), { timeout: 120_000 }).toBeGreaterThan(0n);
       // The peer can observe Welcome before the founder has replayed the
       // covering MLS Commit. Reopen the founder while consume stays blocked;
       // its durable admission must restore the post-Add sending state.
@@ -446,7 +448,7 @@ return async ({ jointUsers, request, browser }: { jointUsers: JointUsersFixture;
       return ingressEvents(decodeEventIngressBody(observed.postDataJSON()))
         .some(event => event.kind === "ak.message.create");
     }, { timeout: 90_000 });
-    await bob.locator(".send-chat-button").click();
+    await submitOrdinaryComposerDraft(bob, provisional);
     const response = await submitted;
     expect(response.ok(), await response.text()).toBeTruthy();
     const sentEvent = ingressEvents(decodeEventIngressBody(response.request().postDataJSON()))
@@ -462,12 +464,12 @@ return async ({ jointUsers, request, browser }: { jointUsers: JointUsersFixture;
     await rejectDirectStructureEvent({ request, token: bobSession.grantJwt }, sentEvent!,
       `provisional-${mode}-structure`, "ak.strand.create", { object: (mainCreate!.payload as Record<string, unknown>).object },
       "direct_conversation_participant_authority_denied");
-    const envelope = sentEvent?.payload?.encrypted_content as { encryption_context?: { epoch?: number } } | undefined;
+    const envelope = sentEvent?.payload?.encrypted_content as { encryption_context?: { epoch?: string } } | undefined;
     if (mode === "offline") {
-      expect(envelope?.encryption_context?.epoch).toBe(0);
+      expect(uint64Value(envelope?.encryption_context?.epoch)).toBe(0n);
       preJoinMessage = provisional;
     } else {
-      expect(envelope?.encryption_context?.epoch).toBeGreaterThan(0);
+      expect(uint64Value(envelope?.encryption_context?.epoch)).toBeGreaterThan(0n);
       messages.push(provisional);
     }
     if (mode === "offline") await alice.context().setOffline(false);
@@ -495,7 +497,7 @@ return async ({ jointUsers, request, browser }: { jointUsers: JointUsersFixture;
       && new URL(response.url()).pathname === "/_arkret/self/events"
       && ingressEvents(decodeEventIngressBody(response.request().postDataJSON()))
         .some(event => event.kind === "ak.message.create"), { timeout: 90_000 });
-    await bob.locator(".send-chat-button").click();
+    await submitOrdinaryComposerDraft(bob, offlineMessage);
     const offlineResponse = await offlineSubmission;
     expect(offlineResponse.ok(), await offlineResponse.text()).toBeTruthy();
     const offlineEvent = ingressEvents(decodeEventIngressBody(offlineResponse.request().postDataJSON()))
@@ -504,8 +506,8 @@ return async ({ jointUsers, request, browser }: { jointUsers: JointUsersFixture;
     expect(offlineEvent, "the offline submission carries its message").toBeTruthy();
     expect(offlineOutcome.status, `post-join outcome reason: ${String(offlineOutcome.reason_code ?? "none")}`).toBe("committed");
     assertAuthoritySubmitOutcome(offlineOutcome, offlineEvent!, "post-join offline Direct message");
-    const offlineEnvelope = offlineEvent?.payload?.encrypted_content as { encryption_context?: { epoch?: number } } | undefined;
-    expect(offlineEnvelope?.encryption_context?.epoch).toBeGreaterThan(0);
+    const offlineEnvelope = offlineEvent?.payload?.encrypted_content as { encryption_context?: { epoch?: string } } | undefined;
+    expect(uint64Value(offlineEnvelope?.encryption_context?.epoch)).toBeGreaterThan(0n);
     await expect(bob.locator(".chat-message").filter({ hasText: offlineMessage })).toBeVisible();
     await alice.context().setOffline(false);
     await alice.reload();
@@ -517,7 +519,7 @@ return async ({ jointUsers, request, browser }: { jointUsers: JointUsersFixture;
   messages.push(...exchange);
   for (const [sender, recipient, message] of [[alice, bob, exchange[0]], [bob, alice, exchange[1]]] as const) {
     await sender.locator(".chat-input").fill(message);
-    await sender.locator(".send-chat-button").click();
+    await submitOrdinaryComposerDraft(sender, message);
     await expect(recipient.locator(".chat-message").filter({ hasText: message })).toBeVisible({ timeout: 90_000 });
   }
   await Promise.all([alice.reload(), bob.reload()]);
@@ -532,7 +534,7 @@ return async ({ jointUsers, request, browser }: { jointUsers: JointUsersFixture;
   }
   const afterReload = `direct-after-reload-${Date.now()}`;
   await bob.locator(".chat-input").fill(afterReload);
-  await bob.locator(".send-chat-button").click();
+  await submitOrdinaryComposerDraft(bob, afterReload);
   await expect(alice.locator(".chat-message").filter({ hasText: afterReload })).toBeVisible({ timeout: 90_000 });
   if (mode === "withdrawal" || mode === "leave") {
     await directStructureLifecycleGate(alice, bob, { request, token: aliceSession.grantJwt,

@@ -1,3 +1,5 @@
+import { accountActorId } from "./coland-api";
+import { actorRow } from "./product-locators";
 import { expect, test, operationSelector, isDirectAdmissionOutcomeReason } from "./arkret-test";
 import type { Page, Response, Request, APIRequestContext } from "@playwright/test";
 import { assertAuthoritySubmitOutcome, authHeaders, canonicalJson, readCommitStreamHeadApi, scanRealmStreamApi, sdkEventDerivedIds, sha256CanonicalJson, signedEventEnvelope, wireErrCode } from "./coland-api";
@@ -751,7 +753,7 @@ export async function agentTopicChats(page: Page, receiptPath: string, proof: Di
   // The controller's ordinary registered administration UI changes the
   // actual lifecycle; the rejected writes keep the previously valid binding.
   expect(selectedAgent, "pause negative requires the exact Direct Agent").not.toBe("");
-  await page.locator(`.agent-admin-row[data-agent-id=${JSON.stringify(selectedAgent)}]`).click();
+  await actorRow(page, ".agent-admin-row", accountActorId(selectedAgent)).click();
   await page.locator(".agent-admin-enabled-switch").click();
   await expect(page.locator(".agent-admin .write-status")).toContainText("Paused", { timeout: 180_000 });
   try {

@@ -5,6 +5,7 @@
 import { expect, test, type APIRequestContext } from "../../helpers/arkret-test";
 import { colandBaseUrl } from "../../helpers/env";
 import { stepShot } from "../../helpers/screenshots";
+import { actorRow } from "../../helpers/product-locators";
 import {
   accountActorId,
   joinRealmMemberByInviteApi,
@@ -167,15 +168,9 @@ test.describe("personal blocklist", () => {
     const bobToken = await issueUserSession(request, bob);
     const aliceSubscribeOpts = () =>
       accountSubscribeDpopOpts(aliceFlow.session);
-    // The row identifies its target by `data-actor-id` (the canonical ActorId
-    // key). Its *visible* text truncates that value in the middle, so asserting
-    // on rendered text cannot see the principal id at all — match the attribute.
+    // Bind the complete target through its accessible identity, including Station.
     const bobBlockedRow = (page: typeof alicePage.page) =>
-      page
-        .locator(".blocked-user-row")
-        .filter({ has: page.locator(`[data-actor-id*="${bob.id}"]`) })
-        .or(page.locator(`.blocked-user-row[data-actor-id*="${bob.id}"]`));
-    const apiActorSeq = 8_000_000_200_000_000 + (stamp % 100_000);
+      actorRow(page, ".blocked-user-row", accountActorId(bob.id));
 
     try {
       const realmId = await alicePage.createRealm({
@@ -208,7 +203,7 @@ test.describe("personal blocklist", () => {
         waitUntil: "domcontentloaded",
       });
       await expect(
-        alicePage.page.locator(".blocked-users-panel"),
+        alicePage.page.locator(".event:has(> .event-head :text-is(\"Personal blocklist\"))"),
       ).toBeVisible({
         timeout: 30_000,
       });

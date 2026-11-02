@@ -1,3 +1,4 @@
+import { accountRow } from "../../helpers/product-locators";
 import type { ContactView } from "../../helpers/generated/spec-wire-objects";
 import { expect, type APIRequestContext } from "../../helpers/arkret-test";
 import {
@@ -65,14 +66,8 @@ jointTest.describe("Contacts agent hierarchy @fully-implemented", () => {
 
       const aliceGroups = alicePage.locator(".contact-sidebar-group");
       const aliceSelfGroup = alicePage.locator(".contact-sidebar-self-group");
-      await expect(aliceGroups.first()).toHaveAttribute(
-        "data-testid",
-        "contact-sidebar-self-group",
-      );
-      await expect(aliceSelfGroup.locator(".contact-sidebar-self-row")).toHaveAttribute(
-        "data-peer",
-        jointRealm.alice.id,
-      );
+      await expect(aliceGroups.first()).toHaveClass(/\bcontact-sidebar-self-group\b/);
+      await expect(accountRow(aliceSelfGroup, ".contact-sidebar-self-row", jointRealm.aliceSession.accountId)).toBeVisible();
       await expect(aliceSelfGroup).toContainText("ME");
 
       // The Contacts sidebar is a chat surface: only agents that ever became
@@ -82,16 +77,13 @@ jointTest.describe("Contacts agent hierarchy @fully-implemented", () => {
       // it remains manageable in Settings → My Agents. Wait for Bob's
       // contact row first — contacts and own agents land from the same
       // sidebar load, so this guards against asserting before data arrives.
-      const bobContact = alicePage.locator(".direct-conversation-row").first();
+      const bobContact = accountRow(alicePage, ".direct-conversation-row", jointRealm.bobSession.accountId);
       await expect(bobContact).toBeVisible({ timeout: 30_000 });
-      await expect(bobContact).toHaveAttribute(
-        "data-peer",
-        canonicalJson(accountActorId(jointRealm.bob.id)),
-      );
+      await expect(bobContact).toHaveCount(1);
       await expect(
         aliceSelfGroup.locator(
-          `.contact-sidebar-agent-row[data-agent="${pendingAgentId}"]`,
-        ),
+          ".contact-sidebar-agent-row",
+        ).filter({ has: alicePage.getByText(`Agent: ${pendingAgentId} · Controller: ${jointRealm.alice.id}`, { exact: true }) }),
       ).toHaveCount(0);
       await expect(aliceSelfGroup).not.toContainText("Agents");
 
@@ -148,16 +140,10 @@ jointTest.describe("Contacts agent hierarchy @fully-implemented", () => {
         await bobPage.reload();
         await bobPage.getByRole("button", { name: "Contacts", exact: true }).click();
         const bobGroups = bobPage.locator(".contact-sidebar-group");
-        await expect(bobGroups.first()).toHaveAttribute(
-          "data-testid",
-          "contact-sidebar-self-group",
-        );
-        const aliceContact = bobPage.locator(".direct-conversation-row").first();
+        await expect(bobGroups.first()).toHaveClass(/\bcontact-sidebar-self-group\b/);
+        const aliceContact = accountRow(bobPage, ".direct-conversation-row", jointRealm.aliceSession.accountId);
         await expect(aliceContact).toBeVisible({ timeout: 30_000 });
-        await expect(aliceContact).toHaveAttribute(
-          "data-peer",
-          canonicalJson(accountActorId(jointRealm.alice.id)),
-        );
+        await expect(aliceContact).toHaveCount(1);
         const aliceGroup = bobPage
           .locator(".contact-sidebar-group")
           .filter({ has: aliceContact });
@@ -168,10 +154,7 @@ jointTest.describe("Contacts agent hierarchy @fully-implemented", () => {
           .locator(".contact-sidebar-agent-row")
           .filter({ hasText: allowedAgent.display_name });
         await expect(allowedAgentRow).toBeVisible();
-        await expect(allowedAgentRow).toHaveAttribute(
-          "data-controller",
-          canonicalJson(jointRealm.aliceSession.accountId),
-        );
+        await expect(allowedAgentRow.getByText(`Agent: ${canonicalJson(allowedAgent.actor_id)} · Controller: ${canonicalJson(jointRealm.aliceSession.accountId)}`, { exact: true })).toHaveCount(1);
         await allowedAgentRow.click();
         await expect
           .poll(() => new URL(bobPage.url()).pathname)

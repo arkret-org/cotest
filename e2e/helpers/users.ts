@@ -1,4 +1,6 @@
 import fs from "node:fs";
+import { observeMessageReferences } from "./message-evidence";
+import { submitOrdinaryComposerDraft } from "./composer-handoff";
 import path from "node:path";
 import { generateKeyPairSync, randomBytes, randomUUID } from "node:crypto";
 import {
@@ -19,7 +21,7 @@ import {
   colandServiceDid,
   colandServiceId,
 } from "./env";
-import { selectDxcOption } from "./dxc-select";
+import { selectProductOptionByKey } from "./product-select";
 import type { AccountId, PublicPrincipalResolution, RealmObject } from "./generated/spec-wire-objects";
 import {
   accountHandoffHeaders,
@@ -246,6 +248,7 @@ export class JointUserPage {
   private readonly browserRefresh?: ReturnType<typeof observeBrowserSessionRefresh>;
 
   constructor(user: JointUser, session: UserSession) {
+    observeMessageReferences(session.page);
     this.user = user;
     this.session = session;
     const grant = session.grant;
@@ -677,7 +680,7 @@ export class JointUserPage {
     for (let attempt = 0; attempt < 4; attempt += 1) {
       await this.dismissCreateRealmBlockingPrompts(promptHandling);
       try {
-        await selectDxcOption(locator, value);
+        await selectProductOptionByKey(locator, value);
         return;
       } catch (error) {
         lastError = error;
@@ -1311,10 +1314,9 @@ export class JointUserPage {
     await this.page.locator(".chat-input").fill(body);
     // A restored history can render before the verified current cut opens the
     // send gate. Wait for the actual gate, then retain the ordinary click.
-    await expect(this.page.locator(".send-chat-button")).toBeEnabled({ timeout: 90_000 });
-    await this.clickWithPassivePromptRetry(
-      this.page.locator(".send-chat-button"),
-    );
+    await submitOrdinaryComposerDraft(this.page, body, {
+      click: () => this.clickWithPassivePromptRetry(this.page.locator(".send-chat-button")),
+    });
     await this.waitForTimelineEventSettled(body);
   }
 
@@ -2817,6 +2819,7 @@ export async function openUser(
     },
   );
   const page = context.pages()[0] ?? await context.newPage();
+  observeMessageReferences(page);
   await opts.beforeNavigate?.(page);
   // With real-grant injection enabled, device enrollment triggers inkson's
   // mandatory "Set up your 24-word Recovery Key" modal ("required before

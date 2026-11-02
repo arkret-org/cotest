@@ -519,7 +519,7 @@ async function addEncryptedDescription(
     .locator(".kanban-card")
     .filter({ hasText: cardTitle })
     .first();
-  await expect(card).toHaveAttribute("data-card-draft", "false", { timeout: 45_000 });
+  await expect(card).not.toHaveClass(/\bis-draft\b/, { timeout: 45_000 });
   await card.click();
   await expect(page.locator(".card-detail-modal")).toBeVisible({
     timeout: 45_000,

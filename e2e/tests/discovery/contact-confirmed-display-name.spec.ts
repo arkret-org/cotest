@@ -251,7 +251,7 @@ test.describe("contact confirmed display name", () => {
 
       // First explicit confirmation. Accept could not have made one: the pair
       // had no shared Realm when Alice sent the request.
-      const confirm = row.locator(".contact-confirm-name");
+      const confirm = row.getByRole("button", { name: "Confirm the new display name", exact: true });
       await expect(confirm).toBeVisible({ timeout: 60_000 });
       await confirm.click();
       await expect(row.locator(".contact-confirm-identity")).toBeHidden({

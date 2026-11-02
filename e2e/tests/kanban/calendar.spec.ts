@@ -8,7 +8,7 @@ import {
   type Locator,
   type Response,
 } from "../../helpers/arkret-test";
-import { selectDxcOption } from "../../helpers/dxc-select";
+import { selectProductOptionByLabel } from "../../helpers/product-select";
 import {
   assertJointStackNotRequired,
   openDpopUserPage,
@@ -99,17 +99,17 @@ test("@fully-implemented calendar schedule and RSVP survive the canonical Strand
     await calendar.locator(".card-detail-calendar-edit").click();
     const editor = page.page.locator(".card-detail-calendar-editor-dialog");
     await expect(editor).toBeVisible({ timeout: 30_000 });
-    await editor.locator(".card-detail-calendar-start-input").fill(start);
-    await editor.locator(".card-detail-calendar-end-input").fill(end);
+    await editor.locator(".card-detail-calendar-start-input").locator("input, textarea").fill(start);
+    await editor.locator(".card-detail-calendar-end-input").locator("input, textarea").fill(end);
     await editor
-      .locator(".card-detail-calendar-timezone-input")
+      .locator(".card-detail-calendar-timezone-input").locator("input, textarea")
       .fill(timezone);
     await editor
-      .locator(".card-detail-calendar-location-input")
+      .locator(".card-detail-calendar-location-input").locator("input, textarea")
       .fill(location);
-    await selectDxcOption(
+    await selectProductOptionByLabel(
       editor.locator(".card-detail-calendar-recurrence-select"),
-      "weekly",
+      "Weekly",
     );
 
     const schedulePredicate = (response: Response) =>
@@ -212,16 +212,16 @@ test("@fully-implemented calendar schedule and RSVP survive the canonical Strand
     await calendar.locator(".card-detail-calendar-edit").click();
     await expect(editor).toBeVisible({ timeout: 30_000 });
     await expect(
-      editor.locator(".card-detail-calendar-start-input"),
+      editor.locator(".card-detail-calendar-start-input").locator("input, textarea"),
     ).toHaveValue(start);
     await expect(
-      editor.locator(".card-detail-calendar-end-input"),
+      editor.locator(".card-detail-calendar-end-input").locator("input, textarea"),
     ).toHaveValue(end);
     await expect(
-      editor.locator(".card-detail-calendar-timezone-input"),
+      editor.locator(".card-detail-calendar-timezone-input").locator("input, textarea"),
     ).toHaveValue(timezone);
     await expect(
-      editor.locator(".card-detail-calendar-location-input"),
+      editor.locator(".card-detail-calendar-location-input").locator("input, textarea"),
     ).toHaveValue(location);
   } finally {
     await page.close();

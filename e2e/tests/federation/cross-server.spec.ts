@@ -26,6 +26,7 @@ import {
   colandServiceId,
 } from "../../helpers/env";
 import { stepShot } from "../../helpers/screenshots";
+import { actorRow } from "../../helpers/product-locators";
 import {
   acceptPreparedInviteApi,
   waitForInviteDeliveryApi,
@@ -330,9 +331,7 @@ test.describe("cross-server federation", () => {
       // Same attribute rename as spaces/moderation-ban: the row carries
       // `data-member-id` holding the canonical ActorId key, so match the
       // principal id as a substring.
-      const aliceInviteRow = alicePage.page.locator(
-        `.pending-invite-row[data-member-id*="${bob.id}"]`,
-      );
+      const aliceInviteRow = actorRow(alicePage.page, ".pending-invite-row", accountActorId(bob.id, "server2"));
       await expect(aliceInviteRow).toBeVisible({ timeout: 30_000 });
     } finally {
       await alicePage.close();

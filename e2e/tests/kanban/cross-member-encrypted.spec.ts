@@ -58,7 +58,7 @@ import { stepShot } from "../../helpers/screenshots";
 import { selfPathGrantHeaders } from "../../helpers/session-grant-dpop";
 import { activateRealmMlsApi, readScopeMlsGroupCurrentApi } from "../../helpers/coland-api/mls";
 import { installMlsOutboundFault } from "../../helpers/mls-outbound-fault";
-import { selectDxcOption } from "../../helpers/dxc-select";
+import { selectProductOptionByKey } from "../../helpers/product-select";
 import {
   assertJointStackNotRequired,
   createDpopUserSession,
@@ -1066,10 +1066,10 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
         }
         await title.fill(createOptions.title);
         await wizard.locator(".new-realm-next-button").first().click();
-        await selectDxcOption(wizard.locator(".realm-discoverability-input"), createOptions.discoverability);
-        await selectDxcOption(wizard.locator(".realm-policy-join-rule-input"), createOptions.joinRule);
-        await selectDxcOption(wizard.locator(".realm-policy-history-access-input"), createOptions.historyAccess);
-        await selectDxcOption(wizard.locator(".realm-mls-activation-input"), "after_create");
+        await selectProductOptionByKey(wizard.locator(".realm-discoverability-input"), createOptions.discoverability);
+        await selectProductOptionByKey(wizard.locator(".realm-policy-join-rule-input"), createOptions.joinRule);
+        await selectProductOptionByKey(wizard.locator(".realm-policy-history-access-input"), createOptions.historyAccess);
+        await selectProductOptionByKey(wizard.locator(".realm-mls-activation-input"), "after_create");
         await wizard.locator(".new-realm-next-button").first().click();
         await wizard.locator(".create-realm-button").click();
         if (failLocalPublication) {
@@ -1624,6 +1624,12 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
             const event = request.postDataJSON()?.event;
             return event?.realm_id === realmId && event?.kind === "ak.space.create" && event.payload?.object?.kind === "board";
           }, { timeout: 120_000 });
+          const listReceipt = alicePage.page.waitForResponse(response => {
+            const request = response.request();
+            if (request.method() !== "POST" || new URL(request.url()).pathname !== "/_arkret/self/events") return false;
+            const event = request.postDataJSON()?.event;
+            return event?.realm_id === realmId && event?.kind === "ak.space.create" && event.payload?.object?.kind === "list";
+          }, { timeout: 120_000 });
           const boardId = await buildEncryptedBoardListCard(alicePage.page, realmId,
             `Retained board ${stamp}`, `Retained list ${stamp}`, "unused", false);
           await expect(alicePage.page.locator(".kanban-column").first().locator(".add-card-button")).toBeEnabled();
@@ -1632,9 +1638,12 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
           const outcome = await response.json();
           assertAuthoritySubmitOutcome(outcome, event, "pre-join retained Board");
           expect(retypeEventDerivedId(String(event.event_id), "space")).toBe(boardId);
-          const listId = await alicePage.page.locator(".kanban-column").first()
-            .locator(".list-archive-button").getAttribute("data-space-container-id");
+          const listResponse = await listReceipt;
+          const listEvent = listResponse.request().postDataJSON().event as Record<string, unknown>;
+          assertAuthoritySubmitOutcome(await listResponse.json(), listEvent, "pre-join retained List");
+          const listId = retypeEventDerivedId(String(listEvent.event_id), "space");
           expect(listId).toMatch(/^ak:space:/);
+          await expect(alicePage.page.getByRole("button", { name: `Retained list ${stamp} (${listId})`, exact: true })).toBeVisible();
           retainedBoard = { boardId, listId: listId!, eventId: String(event.event_id), streamPosition: Number(outcome.commit.stream_position) };
         }
         await grantInviteConsentArkret(
@@ -1814,8 +1823,7 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
           await openReaderBoard(bobPage, realmId, retainedBoard!.boardId);
           await expect(bobPage.page.locator(".kanban-column")).toHaveCount(1);
           await expect(bobPage.page.locator(".kanban-column").first().locator(".add-card-button")).toBeEnabled();
-          await expect(bobPage.page.locator(".kanban-column").first().locator(".list-archive-button"))
-            .toHaveAttribute("data-space-container-id", retainedBoard!.listId);
+          await expect(bobPage.page.getByRole("button", { name: `Retained list ${stamp} (${retainedBoard!.listId})`, exact: true })).toBeVisible();
           await testInfo.attach("kanban-history-fresh-reader.json", { contentType: "application/json",
             body: JSON.stringify({ reader_closed_before_seed: true, fresh_context_after_card_commit: true,
               no_product_current_or_history_cache_copied: true,
@@ -2222,10 +2230,10 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
             `Other board ${stamp}`, `Other list ${stamp}`, otherCard);
           const switchingStart = cost.mark();
           for (let index = 0; index < 20; index += 1) {
-            await selectDxcOption(alicePage.page.locator(".board-space-select"),
+            await selectProductOptionByKey(alicePage.page.locator(".board-space-select"),
               index % 2 === 0 ? boardId : otherBoardId);
           }
-          await selectDxcOption(alicePage.page.locator(".board-space-select"), boardId);
+          await selectProductOptionByKey(alicePage.page.locator(".board-space-select"), boardId);
           await expect(alicePage.page.locator(".kanban-card").filter({ hasText: aliceCard })).toBeVisible();
           await expect(alicePage.page.locator(".kanban-card").filter({ hasText: otherCard })).toHaveCount(0);
           await assertCardDecrypts(alicePage, aliceCard, aliceDescription);

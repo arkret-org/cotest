@@ -220,12 +220,12 @@ test.describe("workflow: async daily standup", () => {
       const queuedRow = patPage
         .timelineEvent(offlinePost)
         .locator(".message-send-status");
-      await expect(queuedRow).toHaveAttribute("data-send-state", "queued_offline", {
+      await expect(queuedRow).toHaveClass(/\bis-queued-offline\b/, {
         timeout: 30_000,
       });
       const banner = patPage.page.locator(".chat-outbox-banner");
       await expect(banner).toBeVisible({ timeout: 30_000 });
-      await expect(banner).toHaveAttribute("data-online", "false");
+      await expect(banner).toContainText(/offline/i);
       await expect(
         patPage.page.locator(".chat-outbox-count"),
       ).toContainText("1", { timeout: 30_000 });

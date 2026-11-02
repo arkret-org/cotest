@@ -1337,7 +1337,7 @@ async function createKanbanBoardListAndCard(
   const createdCard = column.locator(".kanban-card").filter({ hasText: cardTitle });
   await expect(createdCard).toBeVisible({ timeout: 45_000 });
   // Editing requires the accepted Strand, not its optimistic queued draft.
-  await expect(createdCard).toHaveAttribute("data-card-draft", "false", {
+  await expect(createdCard).not.toHaveClass(/\bis-draft\b/, {
     timeout: 120_000,
   });
   return boardId;

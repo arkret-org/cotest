@@ -1,3 +1,6 @@
+import { submitOrdinaryComposerDraft } from "../../helpers/composer-handoff";
+import { decodeIngressEvents } from "../../helpers/event-ingress";
+import { assertAuthoritySubmitOutcome } from "../../helpers/coland-api";
 import { accountRow } from "../../helpers/product-locators";
 // Contact graph across Stations (server1/server2 federation).
 //
@@ -60,18 +63,24 @@ test.describe.configure({ mode: "serial" });
 
 async function sendCrossStationEncrypted(page: Page, message: string) {
   await page.locator(".chat-input").fill(message);
-  const deadline = Date.now() + 30_000;
-  const remaining = () => Math.max(1, deadline - Date.now());
-  const send = page.locator(".send-chat-button");
-  // A newly installed Welcome can offer optional history backup after navigation.
-  // Dismiss that offer through the UI; required key restoration remains untouched.
-  await expect.poll(async () => {
-    if (await page.getByRole("dialog", { name: "Back up encrypted history", exact: true }).isVisible()) {
-      await page.getByRole("button", { name: "Remind me later", exact: true }).click({ timeout: remaining() });
-    }
-    return send.isEnabled();
-  }, { timeout: remaining(), intervals: [250, 500, 1_000] }).toBe(true);
-  await send.click({ timeout: remaining() });
+  if (await page.getByRole("dialog", { name: "Back up encrypted history", exact: true }).isVisible()) {
+    await page.getByRole("button", { name: "Remind me later", exact: true }).click();
+  }
+  const realm = new URL(page.url()).pathname.split("/").map(decodeURIComponent).find(value => value.startsWith("ak:realm:"));
+  expect(realm).toBeTruthy();
+  const isOriginal = (event: { kind?: string; realm_id?: string }) => event.kind === "ak.message.create" && event.realm_id === realm;
+  const submitted = page.waitForResponse(response => {
+    const outgoing = response.request();
+    return outgoing.method() === "POST" && new URL(response.url()).pathname === "/_arkret/self/events"
+      && decodeIngressEvents(outgoing.postData(), { context: "cross-Station Direct original" }).some(isOriginal);
+  }, { timeout: 90_000 });
+  await submitOrdinaryComposerDraft(page, message, { timeout: 90_000 });
+  const response = await submitted;
+  const original = decodeIngressEvents(response.request().postData(), { context: "cross-Station Direct original" }).find(isOriginal)!;
+  expect(original.payload?.encrypted_content).toBeTruthy();
+  expect(response.ok(), `Direct submission HTTP ${response.status()}`).toBe(true);
+  assertAuthoritySubmitOutcome(await response.json(), original, "cross-Station encrypted Direct send");
+  await expect(page.locator(".chat-message").filter({ hasText: message })).toBeVisible({ timeout: 90_000 });
 }
 
 test.beforeEach(() => {

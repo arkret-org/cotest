@@ -235,15 +235,15 @@ test.describe("workflow: support escalation", () => {
       const archiveButton = card.locator(".card-archive-button");
       const draftBadge = card.locator(".kanban-card-draft-badge");
       if (await draftBadge.isVisible({ timeout: 1_000 }).catch(() => false)) {
-        await expect(card).toHaveAttribute("data-card-draft", "true");
-        await expect(archiveButton).toHaveAttribute("data-cap-gate", "draft");
+        await expect(card).toHaveClass(/\bis-draft\b/);
+        await expect(archiveButton).toBeDisabled();
       }
       await stepShot(alexPage.page, testInfo, "kanban-A-draft");
 
       // Once coland acks the card create, the draft state clears: the badge
       // disappears and archive unblocks. This is the gate the promote pattern
       // was waiting on.
-      await expect(card).toHaveAttribute("data-card-draft", "false", {
+      await expect(card).not.toHaveClass(/\bis-draft\b/, {
         timeout: 60_000,
       });
       await expect(draftBadge).toHaveCount(0, { timeout: 30_000 });

@@ -592,7 +592,7 @@ async function submitSignedAppletTransaction({
     `"source-service-id": ${packageInfo.serviceId}\n` +
     `"destination-service-id": ${destinationServiceId}\n` +
     `"idempotency-key": ${idempotencyKey}\n` +
-    `"@signature-parameters": ${signatureParams}`;
+    `"@signature-params": ${signatureParams}`;
   const signature = sign(
     null,
     Buffer.from(signatureBase, "utf8"),

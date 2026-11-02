@@ -1,3 +1,6 @@
+import { expectPlaintextMessage } from "../../helpers/message-evidence";
+import { accountActorId } from "../../helpers/coland-api";
+import { agentMemberRow } from "../../helpers/product-locators";
 import { test, expect, type Page, type APIRequestContext } from "../../helpers/arkret-test";
 import { colandBaseUrl } from "../../helpers/env";
 import { registrationEmailCode } from "../../helpers/coauth-register";
@@ -54,11 +57,11 @@ test.describe("Private accepted readback real UI @fully-implemented", () => {
         page.locator(".content-block-text").filter({ hasText: /^pong(?:\r?\n|$)/ }) });
       for (let index = 0; index < 3; index += 1) {
         await card.locator(".card-detail-sidebar-tab-members").click();
-        const member = card.locator(`.card-detail-agent-row[data-agent-id="${pairing.agentId}"]`);
+        const member = agentMemberRow(card, accountActorId(pairing.agentId).account_id);
         await expect(member).toBeVisible({ timeout: 120_000 });
         const prompt = `Readback ${index + 1}: please reply only pong`;
         await composeSourceAgentMention(card, member, pairing.agentId, prompt);
-        await expect(card.locator(".composer-send-scope")).toHaveAttribute("data-send-route", "Sidecar");
+        await expect(card.locator(".composer-send-scope")).toContainText(/^Private Sidecar:/);
         await expect(card.locator(".send-chat-button")).toBeEnabled({ timeout: 120_000 });
         if (index === 0) await hints.suppress();
         const ensure = index === 0 ? waitForSidecarEnsureAcceptance(page, info) : undefined;
@@ -77,10 +80,10 @@ test.describe("Private accepted readback real UI @fully-implemented", () => {
         assertAuthoritySubmitOutcome(await accepted.json(), original, "real private UI accepted write");
         const authored = card.locator(".chat-message").filter({ hasText: prompt }).last();
         await expect(authored).toBeVisible({ timeout: 120_000 });
-        await expect(authored).toHaveAttribute("data-crypto-state", "plaintext");
+        await expectPlaintextMessage(authored);
         await expect(replies).toHaveCount(index + 1, { timeout: 180_000 });
         const reply = replies.last();
-        await expect(reply).toHaveAttribute("data-crypto-state", "plaintext");
+        await expectPlaintextMessage(reply);
         await expect(reply.locator(".member-badge-agent")).toBeVisible();
         await expect(reply.locator(".message-private-sidecar-badge")).toBeVisible();
         const requestId = await eventIdFromMessage(authored);

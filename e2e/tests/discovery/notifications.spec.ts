@@ -34,7 +34,7 @@ import {
   selfPathHeadersForDpopSession,
   uniqueUser,
 } from "../../helpers/users";
-import { selectDxcOption } from "../../helpers/dxc-select";
+import { selectProductOptionByKey } from "../../helpers/product-select";
 import { coauthBaseUrl, colandBaseUrl } from "../../helpers/env";
 import { registerCoauthPasswordAccount } from "../../helpers/coauth-register";
 import { serverLoginViaCoauth, submitCoauthPasswordCredentials } from "../../helpers/real-oidc-login";
@@ -182,11 +182,11 @@ test.describe("notifications", () => {
       ).toBeVisible({
         timeout: 30_000,
       });
-      await selectDxcOption(
+      await selectProductOptionByKey(
         bobPage.page.locator(".realm-override-realm-select"),
         realmId,
       );
-      await selectDxcOption(
+      await selectProductOptionByKey(
         bobPage.page.locator(".realm-override-level-select"),
         "muted",
       );
@@ -300,7 +300,7 @@ test.describe("notifications", () => {
       await bobDeviceA.checkWithPassivePromptRetry(
         bobDeviceA.page.locator(".dnd-enabled-toggle"),
       );
-      await selectDxcOption(
+      await selectProductOptionByKey(
         bobDeviceA.page.locator(".dnd-mode-select"),
         "now",
       );

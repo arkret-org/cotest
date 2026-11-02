@@ -244,7 +244,7 @@ test.describe("workflow: team onboarding", () => {
         .timelineEvent(welcomeV2)
         .locator(".message-write-status");
       await expect(afterFirst).toBeVisible({ timeout: 30_000 });
-      await expect(afterFirst).toHaveAttribute("data-revision-count", "1");
+      await expect(afterFirst).toHaveText(/\(1\)$/);
 
       // Second edit -> revision count 2.
       await meiPage.clickTimelineEdit(welcomeV2);
@@ -258,7 +258,7 @@ test.describe("workflow: team onboarding", () => {
         .timelineEvent(welcomeV3)
         .locator(".message-write-status");
       await expect(afterSecond).toBeVisible({ timeout: 30_000 });
-      await expect(afterSecond).toHaveAttribute("data-revision-count", "2");
+      await expect(afterSecond).toHaveText(/\(2\)$/);
       await expect(afterSecond).toContainText("2");
       await stepShot(meiPage.page, testInfo, "E2-revision-count");
     } finally {
