@@ -149,10 +149,10 @@ export async function pairManagedSavfoxAgent(
   const approvalModal = inkson.locator(".agent-runtime-approval-dialog");
   await startSavfoxPairing(savfox, pairing.pairingLink);
   await expect(approvalModal).toBeVisible({ timeout: 120_000 });
-  await expect(inkson.locator(".agent-runtime-approval-code")).toHaveText(
+  await expect(inkson.locator(".device-pair-approval-code")).toHaveText(
     displayPairingCode(pairing.pairingCode),
   );
-  await inkson.locator(".agent-runtime-approval-approve").click();
+  await inkson.locator(".agent-runtime-approval-dialog").getByRole("button", { name: "Approve", exact: true }).click();
   await expect(approvalModal).toHaveCount(0, { timeout: 180_000 });
   await expect(
     savfox.getByText("Agent paired and channel saved.", { exact: true }),

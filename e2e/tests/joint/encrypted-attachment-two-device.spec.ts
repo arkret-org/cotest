@@ -244,7 +244,10 @@ test("encrypted attachment two-device upload/send/history/render and exact resta
     await drop(alice.page, targetAbaPath);
     await expect.poll(() => abaAccepted, {timeout: 60_000}).toBe(true);
     await alice.page.getByRole("textbox", { name: "Message", exact: true }).fill("temporary changed target draft");
+    // Acknowledge both states in the application, rather than coalesced DOM input.
+    await expect(alice.page.locator(".chat-input-hint")).toHaveCount(0);
     await alice.page.getByRole("textbox", { name: "Message", exact: true }).fill("");
+    await expect(alice.page.locator(".chat-input-hint")).toBeVisible();
     await expect(alice.page.locator(".compose-upload-progress")).toContainText(/target changed/, {timeout: 30_000});
     releaseAba();
     await alice.page.unroute(uploadPattern);

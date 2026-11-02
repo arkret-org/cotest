@@ -60,9 +60,9 @@ test.describe("joint-inkson smoke @fully-implemented", () => {
     );
 
     const selfParticipant = jointRealm.alicePage.page
-      .locator(".discussion-user-row")
+      .locator(".participant-row")
       .filter({
-        has: jointRealm.alicePage.page.locator(".participant-self-badge"),
+        has: jointRealm.alicePage.page.locator(".actor-identity-self-badge"),
       });
     await expect(selfParticipant).toContainText(principalHandle);
 
@@ -213,7 +213,7 @@ test.describe("joint-inkson smoke @fully-implemented", () => {
       ).toHaveCount(0);
 
       const participantRow = jointRealm.alicePage.page
-        .locator(".discussion-user-row")
+        .locator(".participant-row")
         .filter({
           // A dev-login display name is not an authoritative profile label.
           // Select the human row by the canonical full Account ActorId kept

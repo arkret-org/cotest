@@ -390,7 +390,7 @@ async function waitForOriginalCreatorReady(
     if (!entries.length) return "current:genesis_pending";
     const current = entries[0].value;
     expect(canonicalJson(current.effective_scope) === canonicalJson(scope)).toBe(true);
-    expect(current.epoch).toBe(0);
+    expect(current.epoch).toBe("0");
     expect(current.genesis_event_ref === genesis.event_id).toBe(true);
     expect(current.current_mls_commit_event_ref === genesis.event_id).toBe(true);
     return "ready";
@@ -744,7 +744,7 @@ async function openPendingTimeline(reader: JointUserPage, realmId: string): Prom
   await reader.page.goto(`/chat/${encodeURIComponent(realmId)}`, { waitUntil: "domcontentloaded" });
   await expect(reader.page.locator(".chat-panel")).toBeVisible({ timeout: 120_000 });
   await expect(reader.page.locator(".message-list")).toBeVisible({ timeout: 120_000 });
-  await expect(reader.page.locator(".chat-panel")).toHaveAttribute("data-initial-sync", "pending");
+  await expect(reader.page.locator(".chat-panel")).toHaveClass(/\binitial-sync-pending\b/);
 }
 
 test.describe("cross-member encrypted kanban @fully-implemented", () => {
@@ -1626,7 +1626,7 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
           }, { timeout: 120_000 });
           const boardId = await buildEncryptedBoardListCard(alicePage.page, realmId,
             `Retained board ${stamp}`, `Retained list ${stamp}`, "unused", false);
-          await expect(alicePage.page.locator(".kanban-column").first()).toHaveAttribute("data-column-draft", "false");
+          await expect(alicePage.page.locator(".kanban-column").first().locator(".add-card-button")).toBeEnabled();
           const response = await receipt;
           const event = response.request().postDataJSON().event as Record<string, unknown>;
           const outcome = await response.json();
@@ -1813,7 +1813,7 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
           expect(retainedBoard).toBeTruthy();
           await openReaderBoard(bobPage, realmId, retainedBoard!.boardId);
           await expect(bobPage.page.locator(".kanban-column")).toHaveCount(1);
-          await expect(bobPage.page.locator(".kanban-column").first()).toHaveAttribute("data-column-draft", "false");
+          await expect(bobPage.page.locator(".kanban-column").first().locator(".add-card-button")).toBeEnabled();
           await expect(bobPage.page.locator(".kanban-column").first().locator(".list-archive-button"))
             .toHaveAttribute("data-space-container-id", retainedBoard!.listId);
           await testInfo.attach("kanban-history-fresh-reader.json", { contentType: "application/json",
@@ -1874,16 +1874,16 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
           const committedList = bobPage.page.locator(".kanban-column");
           await expect(committedList).toHaveCount(1, { timeout: 90_000 });
           await expect(committedList).toBeVisible({ timeout: 90_000 });
-          await expect(committedList).toHaveAttribute("data-column-draft", "false");
+          await expect(committedList.locator(".add-card-button")).toBeEnabled();
           await expect(committedList).not.toContainText(listTitle);
           await expect(bobPage.page.locator(".kanban-panel")).not.toContainText(boardTitle);
           await expect(bobPage.page.locator(".kanban-panel")).not.toContainText(aliceCard);
           await expect(committedList.locator(".add-card-button")).toBeDisabled();
           await openPendingTimeline(bobPage, realmId);
-          await expect(bobPage.page.locator(".chat-panel")).toHaveAttribute("data-initial-sync", "pending");
+          await expect(bobPage.page.locator(".chat-panel")).toHaveClass(/\binitial-sync-pending\b/);
           holdPrivateState = false;
           await bobPage.page.unroute(privateClaimQuery);
-          await expect(bobPage.page.locator(".chat-panel")).toHaveAttribute("data-initial-sync", "complete", { timeout: 120_000 });
+          await expect(bobPage.page.locator(".chat-panel")).toHaveClass(/\binitial-sync-complete\b/, { timeout: 120_000 });
           await openReaderBoard(bobPage, realmId, boardId);
         }
         await assertCardDecrypts(bobPage, aliceCard, aliceDescription);

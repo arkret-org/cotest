@@ -143,14 +143,12 @@ async function buildEncryptedBoardAndCard(
   await page.locator(".new-column-input").fill(columnName);
   await page.locator(".add-column-button").click();
   const column = page.locator(".kanban-column").filter({ hasText: columnName }).first();
-  await expect(column).toHaveAttribute("data-column-draft", "false", { timeout: 45_000 });
+  await expect(column.locator(".add-card-button")).toBeEnabled({ timeout: 45_000 });
   await addCardThroughColumn(column, cardTitle);
   await expect(column.locator(".kanban-card").filter({ hasText: cardTitle })).toBeVisible({
     timeout: 45_000,
   });
-  await expect(column.locator(".kanban-card").filter({ hasText: cardTitle })).toHaveAttribute(
-    "data-card-draft", "false", { timeout: 45_000 },
-  );
+  await expect(column.locator(".kanban-card").filter({ hasText: cardTitle })).not.toHaveClass(/\bis-draft\b/, { timeout: 45_000 });
 }
 
 // Drive the visible editor and verify its product bridge updates the fallback
@@ -319,7 +317,7 @@ test.describe("kanban end-to-end", () => {
         .locator(".kanban-card")
         .filter({ hasText: cardA })
         .first();
-      await expect(cardALocator).toHaveAttribute("data-card-draft", "false", {
+      await expect(cardALocator).not.toHaveClass(/\bis-draft\b/, {
         timeout: 120_000,
       });
       await cardALocator.hover();
@@ -691,20 +689,18 @@ test.describe("kanban end-to-end", () => {
       for (const columnName of [first, second, third]) {
         await alicePage.page.locator(".new-column-input").fill(columnName);
         await alicePage.page.locator(".add-column-button").click();
-        await expect(
-          alicePage.page.locator(".kanban-column").filter({ hasText: columnName }),
-        ).toHaveAttribute("data-column-draft", "false", { timeout: 30_000 });
+        await expect(alicePage.page.locator(".kanban-column").filter({ hasText: columnName }).locator(".add-card-button")).toBeEnabled({ timeout: 30_000 });
       }
 
       const firstColumn = alicePage.page.locator(".kanban-column").filter({ hasText: first });
       const thirdColumn = alicePage.page.locator(".kanban-column").filter({ hasText: third });
-      await expect(firstColumn.locator(".column-drop-target-before")).toHaveCount(1);
+      await expect(firstColumn.locator(".board-column-title")).toHaveCount(1);
       await expect(thirdColumn.locator(".column-drag-handle")).toBeVisible();
       await expect(thirdColumn.locator(".column-drag-handle")).toBeEnabled({ timeout: 45_000 });
 
       await thirdColumn
         .locator(".column-drag-handle")
-        .dragTo(firstColumn.locator(".column-drop-target-before"), { force: true });
+        .dragTo(firstColumn.locator(".board-column-title"), { force: true });
       await stepShot(alicePage.page, testInfo, "column-handles-reordered");
 
       await expect(alicePage.page.locator(".kanban-column-title")).toHaveText(
@@ -762,16 +758,14 @@ test.describe("kanban end-to-end", () => {
       for (const columnName of [first, second, third]) {
         await alicePage.page.locator(".new-column-input").fill(columnName);
         await alicePage.page.locator(".add-column-button").click();
-        await expect(
-          alicePage.page.locator(".kanban-column").filter({ hasText: columnName }),
-        ).toHaveAttribute("data-column-draft", "false", { timeout: 30_000 });
+        await expect(alicePage.page.locator(".kanban-column").filter({ hasText: columnName }).locator(".add-card-button")).toBeEnabled({ timeout: 30_000 });
       }
 
       const firstColumn = alicePage.page.locator(".kanban-column").filter({ hasText: first });
       const thirdColumn = alicePage.page.locator(".kanban-column").filter({ hasText: third });
       await expect(thirdColumn.locator(".column-drag-handle")).toBeEnabled({ timeout: 45_000 });
       await thirdColumn.locator(".column-drag-handle").dragTo(
-        firstColumn.locator(".column-drop-target-before"),
+        firstColumn.locator(".board-column-title"),
         { force: true },
       );
       await stepShot(alicePage.page, testInfo, "columns-reordered");
@@ -902,7 +896,7 @@ test.describe("kanban end-to-end", () => {
         .filter({ hasText: cardTitle })
         .first();
       await expect(cardLocator).toBeVisible({ timeout: 45_000 });
-      await expect(cardLocator).toHaveAttribute("data-card-draft", "false", { timeout: 45_000 });
+      await expect(cardLocator).not.toHaveClass(/\bis-draft\b/, { timeout: 45_000 });
       await stepShot(alicePage.page, testInfo, "A-encrypted-card-created");
 
       // Open the card → Description tab → add a description through the UI.

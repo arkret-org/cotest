@@ -271,7 +271,7 @@ jointTest.describe("Agent Savfox split live @fully-implemented", () => {
         }
 
         const inksonCode = (
-          await inkson.locator(".agent-runtime-approval-code").innerText()
+          await inkson.locator(".device-pair-approval-code").innerText()
         ).trim();
         const groupedPairingCode = displayPairingCode(firstPairing.pairingCode);
         expect(inksonCode).toBe(groupedPairingCode);
@@ -285,7 +285,7 @@ jointTest.describe("Agent Savfox split live @fully-implemented", () => {
         ).toBeVisible({ timeout: 30_000 });
 
         // ── Phase 3: approve and record the first authorized binding ──
-        await inkson.locator(".agent-runtime-approval-approve").click();
+        await inkson.locator(".agent-runtime-approval-dialog").getByRole("button", { name: "Approve", exact: true }).click();
         await expect(approvalModal).toHaveCount(0, {
           timeout: 180_000,
         });
@@ -454,12 +454,12 @@ jointTest.describe("Agent Savfox split live @fully-implemented", () => {
         await expect(approvalModal).toContainText("replaces the runtime key");
         expect(
           (
-            await inkson.locator(".agent-runtime-approval-code").innerText()
+            await inkson.locator(".device-pair-approval-code").innerText()
           ).trim(),
         ).toBe(displayPairingCode(replacementPairing.pairingCode));
 
         // ── Phase 6: approving the replacement supersedes the old binding ──
-        await inkson.locator(".agent-runtime-approval-approve").click();
+        await inkson.locator(".agent-runtime-approval-dialog").getByRole("button", { name: "Approve", exact: true }).click();
         await expect(approvalModal).toHaveCount(0, { timeout: 180_000 });
         await expect(
           savfox.getByText("Agent paired and channel saved.", { exact: true }),
@@ -1693,8 +1693,8 @@ async function pairNativeManagedSavfoxAgent(
 ): Promise<void> {
   await startSavfoxPairing(savfox, pairing.pairingLink);
   await expect(controller.locator(".agent-runtime-approval-dialog")).toBeVisible({ timeout: 120_000 });
-  expect((await controller.locator(".agent-runtime-approval-code").innerText()).trim() === displayPairingCode(pairing.pairingCode)).toBe(true);
-  await controller.locator(".agent-runtime-approval-approve").click();
+  expect((await controller.locator(".device-pair-approval-code").innerText()).trim() === displayPairingCode(pairing.pairingCode)).toBe(true);
+  await controller.locator(".agent-runtime-approval-dialog").getByRole("button", { name: "Approve", exact: true }).click();
   await expect(controller.locator(".agent-runtime-approval-dialog")).toHaveCount(0, { timeout: 180_000 });
   const saved = savfox.getByText("Agent paired and channel saved.", { exact: true });
   const deadline = Date.now() + 180_000;

@@ -91,7 +91,7 @@ test("Circle poll survives readback, replacement, a new browser process and anot
   await page.locator(".open-channel-dialog").click();
   await expect(page.locator(".channel-create-modal")).toBeVisible();
   await page.locator(".new-channel-name").fill(strandTitle);
-  const picker = page.locator(".new-channel-circle-scope");
+  const picker = page.locator(".circle-scope-picker");
   await picker.locator('button[aria-haspopup="listbox"]').click();
   await picker.locator(`[role="option"][data-value="${circleId}"]`).click();
   await expect(picker.locator('button[aria-haspopup="listbox"]')).toContainText(circleTitle);

@@ -554,7 +554,7 @@ test.describe("project simulation", () => {
         .locator(".kanban-card")
         .filter({ hasText: overdueTitle })
         .first();
-      await expect(overdueCard).toHaveAttribute("data-card-draft", "false", {
+      await expect(overdueCard).not.toHaveClass(/\bis-draft\b/, {
         timeout: 45_000,
       });
       await overdueCard.click();
@@ -563,7 +563,7 @@ test.describe("project simulation", () => {
       await detail.getByRole("button", { name: "Add due date" }).click();
       const duePicker = detail.locator(".card-detail-due-picker");
       await duePicker
-        .locator(".card-detail-due-inline-input")
+        .locator(".card-detail-due-value input")
         .fill("2020-01-01");
       await duePicker.getByRole("button", { name: "Save" }).click();
       await expect(duePicker).toBeHidden({ timeout: 45_000 });
@@ -579,9 +579,7 @@ test.describe("project simulation", () => {
       ).toBeVisible({
         timeout: 45_000,
       });
-      await expect(
-        overdueCardAfterSave.locator(".kanban-card-due"),
-      ).toHaveAttribute("data-overdue", "true");
+      await expect(overdueCardAfterSave.locator(".kanban-card-due")).toHaveClass(/\bboard-card-due-overdue\b/);
       await stepShot(alicePage.page, testInfo, "A-overdue-badge");
 
       // The on-track card (no due_date) must NOT show the overdue badge.

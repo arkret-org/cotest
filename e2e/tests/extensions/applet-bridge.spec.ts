@@ -10,6 +10,7 @@ import {
   verify,
   type KeyObject,
 } from "node:crypto";
+import { uint64Value } from "../../helpers/uint64-decimal";
 import { encodeEd25519PubkeyMultibase, ed25519PrivateKeySeedB64url } from "../../helpers/encoding";
 import {
   expect,
@@ -35,6 +36,7 @@ import {
   sdkEventDerivedIds,
   sdkEventEnvelopeProof,
   createRealmApi,
+  sendMessageApi,
   discoverRealmAuthorityRootRef,
   currentActorIdApi,
   queryRealmEventsApi,
@@ -357,7 +359,7 @@ async function grantManagedActorActions(request: APIRequestContext, token: strin
   for (const current of material.current_states) {
     expect(current.status).toBe("present");
     expect(current.realm_id).toBe(realmId);
-    expect(current.governance_generation).toBeGreaterThanOrEqual(0);
+    expect(uint64Value(current.governance_generation)).toBeGreaterThanOrEqual(0n);
     expect(current.effective_stream_head.stream_ref).toEqual(effectiveScope);
     expect(current.current_state.source_stream_ref).toEqual(effectiveScope);
     expect(current.current_state.selector.kind).toBe("capability_grant");
@@ -540,8 +542,15 @@ test.describe("applet bridge", () => {
       const name = row.locator(".applet-bot-name").locator("input, textarea");
       const create = row.locator(".applet-create-bot");
       await expect(create).toBeEnabled({ timeout: 30_000 });
-      const before = await queryRealmEventsApi(request, token, realmId);
       await name.fill(`Durable Bot ${stamp}`);
+      const cursor = client.page.locator(".connection-status .sync-cursor");
+      await expect(cursor).toContainText("ak:cursor:", { timeout: 90_000 });
+      const previousCursor = await cursor.textContent();
+      await resolveDefaultStrandId(request, token, realmId, { authorityRootController: user.id });
+      await sendMessageApi(request, token, realmId, `configuration background frame ${stamp}`);
+      await expect(cursor).not.toHaveText(previousCursor!, { timeout: 90_000 });
+      await expect(name).toHaveValue(`Durable Bot ${stamp}`);
+      const before = await queryRealmEventsApi(request, token, realmId);
       const endpoint = `/_arkret/self/applets/${signed.applet_package.applet_id}/configuration`;
       const responseForClick = async (testId: string) => {
         const received = client.page.waitForResponse(response => decodeURIComponent(new URL(response.url()).pathname) === endpoint && response.request().method() === "POST");

@@ -18,9 +18,7 @@ async function addCard(column: Locator, title: string): Promise<void> {
   await column.locator(".add-card-button").click();
   await column.locator(".new-card-title-input").fill(title);
   await column.locator(".save-card-button").click();
-  await expect(
-    column.locator(".kanban-card").filter({ hasText: title }).first(),
-  ).toHaveAttribute("data-card-draft", "false", { timeout: 45_000 });
+  await expect(column.locator(".kanban-card").filter({ hasText: title }).first()).not.toHaveClass(/\bis-draft\b/, { timeout: 45_000 });
 }
 
 test("@fully-implemented calendar schedule and RSVP survive the canonical Strand event flow", async ({
@@ -98,7 +96,7 @@ test("@fully-implemented calendar schedule and RSVP survive the canonical Strand
     }
     await expect(detail).toBeVisible({ timeout: 45_000 });
     const calendar = detail.locator(".card-detail-calendar");
-    await calendar.locator(".card-detail-edit-calendar-button").click();
+    await calendar.locator(".card-detail-calendar-edit").click();
     const editor = page.page.locator(".card-detail-calendar-editor-dialog");
     await expect(editor).toBeVisible({ timeout: 30_000 });
     await editor.locator(".card-detail-calendar-start-input").fill(start);
@@ -211,7 +209,7 @@ test("@fully-implemented calendar schedule and RSVP survive the canonical Strand
       "1 yes",
     );
 
-    await calendar.locator(".card-detail-edit-calendar-button").click();
+    await calendar.locator(".card-detail-calendar-edit").click();
     await expect(editor).toBeVisible({ timeout: 30_000 });
     await expect(
       editor.locator(".card-detail-calendar-start-input"),

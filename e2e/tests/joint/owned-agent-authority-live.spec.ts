@@ -169,7 +169,7 @@ test("ordinary member explicitly grants, withdraws cold and confirms a new owned
     }
     await expect(confirmButton).toBeVisible({ timeout: 1_000 });
   }).toPass({ timeout: 120_000, intervals: [1_000, 2_000, 5_000] }).catch(async error => {
-    const status = await panel.locator(".owned-agent-authority-status").textContent().catch(() => null);
+    const status = await panel.locator(".write-status").textContent().catch(() => null);
     const safeStatus = status && !/Bearer|eyJ[A-Za-z0-9_-]{20}|recovery.key|private.key/i.test(status)
       ? status.slice(0, 1_000) : "status unavailable";
     await test.info().attach("owned-agent-authority-join-status", {
@@ -302,7 +302,7 @@ const managementOperations = ["join", "authorize", "execute", "read", "deliver",
 
 async function policyEditor(user: JointUserPage, realm: string): Promise<Locator> {
   await user.gotoRealmAdminSection(realm, "access");
-  const editor = user.page.locator(".agent-policy-editor");
+  const editor = user.page.locator(".event:has(> .event-head :text-is(\"Agent management Policy\"))");
   await expect(editor).toBeVisible({ timeout: 120_000 });
   return editor;
 }
@@ -311,7 +311,7 @@ async function loadPolicyEditor(user: JointUserPage, realm: string, id?: string)
   const editor = await policyEditor(user, realm);
   if (id) await editor.getByLabel("Exact Policy id", { exact: true }).fill(id);
   await editor.locator(".agent-policy-read-current").click();
-  await expect(editor.locator(".agent-policy-status"))
+  await expect(editor.locator(".write-status"))
     .toContainText(/Accepted current|Authoritative never_written/, { timeout: 120_000 });
   return editor;
 }
@@ -353,7 +353,7 @@ async function savePolicyEditor(user: JointUserPage, editor: Locator, realm: str
   const event = decodeIngressEvents(observed.request().postData()).find(event => event.payload?.policy_id === id)!;
   expect(typeof event.producer_proof === "object").toBe(true);
   expect(outcome.commit?.event_ref).toBe(event.event_id);
-  await expect(editor.locator(".agent-policy-status"))
+  await expect(editor.locator(".write-status"))
     .toContainText("Policy committed and exact current confirmed", { timeout: 180_000 });
   return { event, outcome };
 }
@@ -387,7 +387,7 @@ test("administrator configures all Realm operations and Circle operations with e
     const id = await editor.getByLabel("Exact Policy id", { exact: true }).inputValue();
     let previous: Record<string, unknown> | null = null;
     for (const operation of managementOperations.filter(op => !circleId || op !== "publish")) {
-      const rule = editor.locator(".agent-policy-rule");
+      const rule = editor.locator(".agent-policy-rules > .event");
       await chooseManagementOperations(rule, [operation]);
       await rule.getByLabel("Effect", { exact: true }).selectOption("deny");
       const write = await savePolicyEditor(user, editor, realm);
@@ -399,13 +399,13 @@ test("administrator configures all Realm operations and Circle operations with e
       // A reload must re-read accepted exact current, not reuse the form as proof.
       await user.page.reload({ waitUntil: "domcontentloaded" });
       editor = await loadPolicyEditor(user, realm, id);
-      await expect(editor.locator(".agent-policy-rule").getByRole("checkbox", { name: operation, exact: true })).toBeChecked();
+      await expect(editor.locator(".agent-policy-rules > .event").getByRole("checkbox", { name: operation, exact: true })).toBeChecked();
       await expect(editor.getByLabel("Scope Circle id (blank means this Realm)", { exact: true })).toHaveValue(circleId ?? "");
     }
     if (circleId) {
       // This is only a legal Policy value. Public interaction still has its
       // single Realm producer; this write is not Circle publish effectiveness.
-      const rule = editor.locator(".agent-policy-rule");
+      const rule = editor.locator(".agent-policy-rules > .event");
       await chooseManagementOperations(rule, ["publish"]);
       const publish = await savePolicyEditor(user, editor, realm);
       await assertPolicyCurrent(request, jointRealm.aliceSession, realm, publish);
@@ -449,7 +449,7 @@ test("administrator Policy stale CAS and ordinary member edits refuse without ef
   });
   try {
     const staleEditor = await loadPolicyEditor(sibling!.page, realm, id);
-    await staleEditor.locator(".agent-policy-rule").getByLabel("Effect", { exact: true }).selectOption("allow");
+    await staleEditor.locator(".agent-policy-rules > .event").getByLabel("Effect", { exact: true }).selectOption("allow");
     const staleResponse = sibling!.page.page.waitForResponse(response =>
       response.request().method() === "POST" && new URL(response.url()).pathname === "/_arkret/self/events"
       && decodeIngressEvents(response.request().postData()).some(event => event.payload?.policy_id === id));
@@ -471,7 +471,7 @@ test("administrator Policy stale CAS and ordinary member edits refuse without ef
     expect(refusal.status(), "stale null revision must not overwrite the accepted Policy").toBe(409);
     expect(wireErrCode(body) ?? body.reason_code).toBe("failed_precondition");
     expect(body.commit === undefined && body.commits === undefined).toBe(true);
-    await expect(staleEditor.locator(".agent-policy-status")).toContainText("The original Policy was rejected", { timeout: 120_000 });
+    await expect(staleEditor.locator(".write-status")).toContainText("The original Policy was rejected", { timeout: 120_000 });
     expect(canonicalJson((await footprint(realm, jointRealm.aliceSession.accountId.station_id)).tables) === canonicalJson(before.tables)).toBe(true);
     const unchanged = await exactPolicy(request, jointRealm.aliceSession, realm, id);
     expect(canonicalJson(unchanged.entry) === canonicalJson(accepted.entry)).toBe(true);
@@ -495,7 +495,7 @@ test("administrator Policy stale CAS and ordinary member edits refuse without ef
     && response.request().postDataJSON()?.selector?.policy_id === id);
   await memberEditor.locator(".agent-policy-read-current").click();
   expect((await read).status()).toBe(404);
-  await expect(memberEditor.locator(".agent-policy-status")).toContainText("creation remains blocked", { timeout: 120_000 });
+  await expect(memberEditor.locator(".write-status")).toContainText("creation remains blocked", { timeout: 120_000 });
   await expect(memberEditor.locator(".agent-policy-save")).toBeDisabled();
   const accepted = await exactPolicy(request, jointRealm.aliceSession, realm, id);
   const event = signedEventEnvelope({ actorId: jointRealm.bob.id, realmId: realm, kind: "ak.policy.set",
@@ -525,7 +525,7 @@ test("normal administrator default denial admits an exact controller exception a
   let editor = await loadPolicyEditor(user, realm);
   const id = await editor.getByLabel("Exact Policy id", { exact: true }).inputValue();
   await editor.getByLabel("Default effect", { exact: true }).selectOption("deny");
-  let rule = editor.locator(".agent-policy-rule");
+  let rule = editor.locator(".agent-policy-rules > .event");
   await chooseManagementOperations(rule, ["join"]);
   await rule.getByLabel("Effect", { exact: true }).selectOption("allow");
   await rule.getByLabel("Agent selector", { exact: true }).selectOption("controller");
@@ -570,14 +570,14 @@ test("normal administrator default denial admits an exact controller exception a
   })).status()).toBe(200);
   editor = await loadPolicyEditor(user, realm, id);
   await editor.getByLabel("Default effect", { exact: true }).selectOption("allow");
-  rule = editor.locator(".agent-policy-rule");
+  rule = editor.locator(".agent-policy-rules > .event");
   await chooseManagementOperations(rule, ["authorize"]);
   await rule.getByLabel("Effect", { exact: true }).selectOption("deny");
   await savePolicyEditor(user, editor, realm);
   const child = await loadPolicyEditor(user, realm);
   await child.getByLabel("Scope Circle id (blank means this Realm)", { exact: true }).fill(circle.circle_id);
-  await chooseManagementOperations(child.locator(".agent-policy-rule"), ["authorize"]);
-  await child.locator(".agent-policy-rule").getByLabel("Effect", { exact: true }).selectOption("allow");
+  await chooseManagementOperations(child.locator(".agent-policy-rules > .event"), ["authorize"]);
+  await child.locator(".agent-policy-rules > .event").getByLabel("Effect", { exact: true }).selectOption("allow");
   await assertPolicyCurrent(request, jointRealm.aliceSession, realm, await savePolicyEditor(user, child, realm));
   // Grant admission consumes the accepted immutable provision/key custody.
   // Establish it before testing the parent authorize policy, then keep the
@@ -606,7 +606,7 @@ test("normal administrator default denial admits an exact controller exception a
   expect(body.commit === undefined && body.commits === undefined).toBe(true);
   expect(canonicalJson(await footprint(realm, jointRealm.aliceSession.accountId.station_id, String(built.envelope.event_id))) === canonicalJson(before)).toBe(true);
   editor = await loadPolicyEditor(user, realm, id);
-  await editor.locator(".agent-policy-rule").getByLabel("Effect", { exact: true }).selectOption("allow");
+  await editor.locator(".agent-policy-rules > .event").getByLabel("Effect", { exact: true }).selectOption("allow");
   await savePolicyEditor(user, editor, realm);
   const accepted = await rawSubmitSignedEventApi(request, jointRealm.aliceToken, built.envelope);
   expect(accepted.status(), "removing the parent denial admits the same narrow original grant").toBe(200);
@@ -617,7 +617,7 @@ test("normal administrator default denial admits an exact controller exception a
 
 async function reviewPanel(user: JointUserPage, realm: string) {
   await user.gotoRealmAdminSection(realm, "access");
-  const panel = user.page.locator(".management-review-panel");
+  const panel = user.page.locator(".event:has(> .event-head :text-is(\"Agent 管理审批\"))");
   await expect(panel).toBeVisible({ timeout: 120_000 });
   return panel;
 }
@@ -706,7 +706,7 @@ async function loseAcceptedReviewResponse(page: Page, operation: "requests" | "d
   try {
     await click();
     const value = await observed;
-    await expect(page.locator(".management-review-status")).toContainText("操作被拒绝或当前证据不可用", { timeout: 180_000 });
+    await expect(page.locator(".write-status")).toContainText("操作被拒绝或当前证据不可用", { timeout: 180_000 });
     return value;
   } finally { await page.unroute(pattern); }
 }
@@ -714,7 +714,7 @@ async function loseAcceptedReviewResponse(page: Page, operation: "requests" | "d
 async function sharedReview(panel: Locator, candidate: Record<string, any>) {
   const summary = panel.getByText("分享原审批请求", { exact: false });
   if (await summary.locator("..").getAttribute("open") === null) await summary.click();
-  const json = await panel.locator(".management-review-share-json").locator("input, textarea").inputValue();
+  const json = await panel.getByRole("textbox", { name: "分享原审批请求（复制给管理员或原请求者）", exact: true }).inputValue();
   // Both sides retain the complete signed candidate. Boolean equality keeps
   // unexpected producer signatures out of Playwright diagnostics.
   expect(canonicalJson(JSON.parse(json)) === canonicalJson(candidate)).toBe(true);
@@ -734,18 +734,18 @@ async function switchReviewRealmAndReload(user: JointUserPage, originalRealm: st
       const href = await page.locator(".realm-admin-nav-item-access").getAttribute("href");
       return href !== null && decodeURIComponent(new URL(href, page.url()).pathname.split("/")[2] ?? "") === realm;
     }, { message: "rendered Realm navigation matches the requested Realm" }).toBe(true);
-    const panel = page.locator(".management-review-panel");
+    const panel = page.locator(".event:has(> .event-head :text-is(\"Agent 管理审批\"))");
     await expect(panel).toBeVisible({ timeout: 120_000 });
     await expect(panel.locator(".management-review-frozen-candidate")).toHaveCount(0);
-    await expect(panel.locator(".management-review-share-json").locator("input, textarea")).toHaveCount(0);
+    await expect(panel.getByRole("textbox", { name: "分享原审批请求（复制给管理员或原请求者）", exact: true })).toHaveCount(0);
     await expect(panel.locator(".management-review-request-json").locator("input, textarea")).toHaveValue("");
-    await expect(panel.locator(".management-review-recovery-key").locator("input, textarea")).toHaveCount(0);
+    await expect(panel.getByLabel("身份控制 Recovery Key（仅本次签署，不保存）", { exact: true })).toHaveCount(0);
     await expect(panel.locator(".management-review-retry-decision")).toHaveCount(0);
     await expect(panel.locator(".management-review-submit")).toHaveCount(0);
     await expect(panel.locator(".management-review-request")).toHaveText("冻结候选并请求审批（不提交业务）");
     expect(await page.evaluate(() => performance.timeOrigin), "Realm switch keeps the original document").toBe(documentOrigin);
   }
-  const panel = page.locator(".management-review-panel");
+  const panel = page.locator(".event:has(> .event-head :text-is(\"Agent 管理审批\"))");
   await panel.locator(".management-review-request-json").locator("input, textarea").fill(share);
   const request = JSON.parse(share);
   const loaded = await reviewResponse(page, "status",
@@ -803,7 +803,7 @@ test("normal controller requests join and public review, distinct administrator 
   expect(otherRealm).not.toBe(realm);
   const editor = await loadPolicyEditor(jointRealm.alicePage, realm);
   await editor.getByLabel("Default effect", { exact: true }).selectOption("allow");
-  const rule = editor.locator(".agent-policy-rule");
+  const rule = editor.locator(".agent-policy-rules > .event");
   await chooseManagementOperations(rule, ["join", "publish"]);
   await rule.getByLabel("Agent selector", { exact: true }).selectOption("controller");
   await rule.getByLabel("Complete Account: principal_id", { exact: true }).fill(jointRealm.bobSession.accountId.principal_id);
@@ -828,7 +828,7 @@ test("normal controller requests join and public review, distinct administrator 
         () => controller.locator(".management-review-request").click());
       lostRequest = lost.body;
       expect(lost.outcome.status).toBe("pending");
-      await expect(controller.locator(".management-review-status")).toContainText("操作被拒绝或当前证据不可用");
+      await expect(controller.locator(".write-status")).toContainText("操作被拒绝或当前证据不可用");
       await expect(controller.locator(".management-review-request")).toHaveText("重试原审批请求（保留原候选）");
     }
     const response = await reviewResponse(jointRealm.bobPage.page, "requests",
@@ -897,14 +897,14 @@ test("normal controller requests join and public review, distinct administrator 
     // This accepted principal's Recovery Key is typed into the normal password
     // form. The browser resolves and verifies native history, then derives and
     // signs with its effective update key; no Device/registration VM substitute.
-    await administrator.locator(".management-review-recovery-key").locator("input, textarea").fill(
+    await administrator.getByLabel("身份控制 Recovery Key（仅本次签署，不保存）", { exact: true }).fill(
       registeredSubjectIdentityControl(jointRealm.alice).recoveryKey);
     if (operation === "join") {
-      expect((await administrator.locator(".management-review-recovery-key").locator("input, textarea").inputValue()).length > 0).toBe(true);
+      expect((await administrator.getByLabel("身份控制 Recovery Key（仅本次签署，不保存）", { exact: true }).inputValue()).length > 0).toBe(true);
       await switchReviewRealmAndReload(jointRealm.alicePage, realm, otherRealm, share, "pending");
-      await expect(administrator.locator(".management-review-recovery-key").locator("input, textarea")).toHaveValue("");
+      await expect(administrator.getByLabel("身份控制 Recovery Key（仅本次签署，不保存）", { exact: true })).toHaveValue("");
       await confirmReview(administrator);
-      await administrator.locator(".management-review-recovery-key").locator("input, textarea").fill(
+      await administrator.getByLabel("身份控制 Recovery Key（仅本次签署，不保存）", { exact: true }).fill(
         registeredSubjectIdentityControl(jointRealm.alice).recoveryKey);
     }
     let approved: Record<string, any>;
@@ -912,7 +912,7 @@ test("normal controller requests join and public review, distinct administrator 
       const lost = await loseAcceptedReviewResponse(jointRealm.alicePage.page, "decisions",
         () => administrator.locator(".management-review-approve").click());
       expect(lost.outcome.status).toBe("approved");
-      await expect(administrator.locator(".management-review-status")).toContainText("操作被拒绝或当前证据不可用");
+      await expect(administrator.locator(".write-status")).toContainText("操作被拒绝或当前证据不可用");
       await expect(administrator.locator(".management-review-approve")).toHaveCount(0);
       await confirmReview(administrator);
       const reconciled = await reviewResponse(jointRealm.alicePage.page, "status",
@@ -936,7 +936,7 @@ test("normal controller requests join and public review, distinct administrator 
     expect(signature.input.approval_context.request_id).toBe(candidate.request_id);
     expect(signature.input.approval_target.event_id).toBe(event.event_id);
     expect(signature.input.request_canonical_digest).toBe(pending.target_digest);
-    await expect(administrator.locator(".management-review-recovery-key").locator("input, textarea")).toHaveCount(0);
+    await expect(administrator.getByLabel("身份控制 Recovery Key（仅本次签署，不保存）", { exact: true })).toHaveCount(0);
     const stillInactive = await footprint(realm, station, event.event_id);
     expect(canonicalJson(stillInactive) === canonicalJson(inactive)).toBe(true);
     const refresh = await reviewResponse(jointRealm.bobPage.page, "status",
@@ -958,7 +958,7 @@ test("normal controller requests join and public review, distinct administrator 
     const outcome = await submitted.json();
     expect(outcome.status).toBe("committed");
     expect(outcome.commit?.event_ref).toBe(event.event_id);
-    await expect(controller.locator(".management-review-status")).toContainText("原候选业务已提交", { timeout: 180_000 });
+    await expect(controller.locator(".write-status")).toContainText("原候选业务已提交", { timeout: 180_000 });
     const lookupUrl = `${colandBaseUrl()}/_arkret/self/management-reviews/status`;
     const consumed = await request.post(lookupUrl, { headers: selfPathHeadersForDpopSession(jointRealm.bobSession, "POST", lookupUrl),
       data: canonicalJson({ request_id: candidate.request_id }) });
