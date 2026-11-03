@@ -300,23 +300,22 @@ jointTest.describe("Agent Savfox split live @fully-implemented", () => {
           .locator(".channels-card")
           .filter({ hasText: "Arkret" });
         await expect(arkretCard).toHaveCount(1);
-        await expect(arkretCard).toContainText(/Pairing\s*Paired/, {
+        await arkretCard.getByRole("button", { name: "Channel actions", exact: true }).click();
+        await arkretCard.getByRole("button", { name: "Health", exact: true }).click();
+        await expect(savfox).toHaveURL(url => /^\/channels\/health\/arkret(?:-|$)/.test(url.pathname));
+        const health = savfox.getByText(/Runtime_pairing_state:/);
+        await expect.poll(async () => {
+          await savfox.getByRole("button", { name: "Refresh", exact: true }).click({ timeout: 5_000 });
+          const status = await health.textContent({ timeout: 2_000 }).catch(() => "");
+          return {
+            paired: /Runtime_pairing_state:\s*paired\b/.test(status ?? ""),
+            listening: /Runtime_phase:\s*Listening\b/.test(status ?? ""),
+          };
+        }, {
           timeout: 120_000,
-        });
-        await expect
-          .poll(
-            async () => {
-              await savfox.reload();
-              await expect(arkretCard).toHaveCount(1);
-              return (await arkretCard.textContent()) ?? "";
-            },
-            {
-              timeout: 120_000,
-              intervals: [1_000, 2_000, 5_000],
-              message: "Savfox should surface the live Arkret session",
-            },
-          )
-          .toMatch(/Runtime\s*Listening/);
+          intervals: [1_000, 2_000, 5_000],
+          message: "the saved Arkret channel health reports a paired and listening runtime",
+        }).toEqual({ paired: true, listening: true });
 
         const firstBinding = await runtimeKeyRequestStatus(
           request,

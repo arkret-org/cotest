@@ -1071,6 +1071,21 @@ test.describe("chat advanced", () => {
         })).toHaveClass(/\bpresence-row-online\b/, { timeout: 90_000 });
       }
       const aliceTypingIndicator = bobPage.page.locator(".typing-indicator");
+      const submittedSignals = new Map<string, { recipients?: number }>();
+      const captureSignal = async (response: import("@playwright/test").Response) => {
+        if (response.request().method() !== "POST" || response.status() !== 200
+          || new URL(response.url()).pathname !== "/_arkret/self/signal") return;
+        const receipt = await response.json().catch(() => null);
+        if (receipt?.accepted === true && receipt.realm_id === realmId
+          && /^sha256:[0-9a-f]{64}$/.test(receipt.envelope_digest)
+          && submittedSignals.size < 20) {
+          submittedSignals.set(receipt.envelope_digest, {
+            recipients: typeof receipt.dispatched_recipient_count === "number"
+              ? receipt.dispatched_recipient_count : undefined,
+          });
+        }
+      };
+      alicePage.page.on("response", captureSignal);
       try {
         await alicePage.page.bringToFront();
         const input = alicePage.page.locator(".chat-input");
@@ -1091,6 +1106,7 @@ test.describe("chat advanced", () => {
             && row.live_applied === true && Number(row.visible_count) > 0);
         }, { timeout: 5_000 }).toBe(true);
       } finally {
+        alicePage.page.off("response", captureSignal);
         const receiverEvidence = await bobPage.page.evaluate(() => {
           const read = (window as unknown as {
             __inkson_signal_receiver_evidence?: (command: string) => string;
@@ -1099,6 +1115,11 @@ test.describe("chat advanced", () => {
         });
         await testInfo.attach("typing-receiver-evidence.json", {
           body: receiverEvidence,
+          contentType: "application/json",
+        });
+        await testInfo.attach("typing-station-receipts.json", {
+          body: JSON.stringify([...submittedSignals].map(([envelope_digest, receipt]) =>
+            ({ envelope_digest, dispatched_recipient_count: receipt.recipients }))),
           contentType: "application/json",
         });
       }

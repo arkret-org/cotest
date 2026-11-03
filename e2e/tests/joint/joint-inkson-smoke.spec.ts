@@ -271,26 +271,54 @@ test.describe("joint-inkson smoke @fully-implemented", () => {
     const bob = bobFlow.user;
     const alicePage = aliceFlow.page;
     const bobPage = bobFlow.page;
-    const subscribeFailures: string[] = [];
-    // Count every account-subscribe response (success or failure) so the
-    // assertion below can wait for at least one FRESH re-poll after the join
-    // instead of sleeping a fixed margin — that re-poll is exactly the request
-    // that would carry the poisoned cursor if the regression reappeared.
-    let subscribeResponses = 0;
+    let cursorRefusals = 0;
+    let reloadStartedAt: number | undefined;
+    let reloadCommitted = false;
+    let acceptedResume = false;
+    const cursorRefused = /cursor_integrity_invalid|cursor principal does not match request actor/;
+    alicePage.page.on("framenavigated", frame => {
+      if (reloadStartedAt !== undefined && frame === alicePage.page.mainFrame()) reloadCommitted = true;
+    });
 
     for (const observedPage of [alicePage.page, bobPage.page]) {
       observedPage.on("response", async (response) => {
-        if (!response.url().includes("/_arkret/self/account/subscribe")) {
-          return;
+        const url = new URL(response.url());
+        if (url.pathname !== "/_arkret/self/account/subscribe") return;
+        if (response.status() >= 400) {
+          if (cursorRefused.test(await response.text().catch(() => ""))) cursorRefusals++;
+        } else if (observedPage === alicePage.page && reloadStartedAt !== undefined
+          && response.request().timing().startTime >= reloadStartedAt
+          && response.status() === 200 && url.searchParams.get("after")?.startsWith("ak:cursor:")) {
+          acceptedResume = true;
         }
-        subscribeResponses += 1;
-        if (response.status() < 400) {
-          return;
-        }
-        const body = await response.text().catch(() => "");
-        subscribeFailures.push(
-          `${response.status()} ${response.url()} ${body}`,
-        );
+      });
+      observedPage.on("websocket", socket => {
+        if (!new URL(socket.url()).pathname.startsWith("/_arkret/")) return;
+        const afterReload = observedPage === alicePage.page && reloadCommitted;
+        const accountChannels = new Map<string, boolean>();
+        socket.on("framesent", ({ payload }) => {
+          try {
+            const frame = JSON.parse(payload.toString());
+            if (frame.kind === "open" && frame.operation_id === "ak.self.account.stream.subscribe.v1") {
+              accountChannels.set(frame.channel_id, typeof frame.parameters?.after === "string"
+                && frame.parameters.after.startsWith("ak:cursor:"));
+            }
+          } catch { /* Non-JSON frames do not prove a subscription. */ }
+        });
+        socket.on("framereceived", ({ payload }) => {
+          try {
+            const frame = JSON.parse(payload.toString());
+            if (!accountChannels.has(frame.channel_id)) return;
+            if (frame.kind === "error" && (frame.error?.error_code === "cursor_integrity_invalid"
+              || cursorRefused.test(frame.error?.message ?? ""))) cursorRefusals++;
+            if (afterReload && accountChannels.get(frame.channel_id)
+              && ((frame.kind === "data" && frame.payload?.kind === "delta")
+                || (frame.kind === "control" && ["checkpoint", "catchup_complete", "heartbeat"].includes(frame.payload?.kind)))) {
+              acceptedResume = true;
+            }
+            if (frame.kind === "closed") accountChannels.delete(frame.channel_id);
+          } catch { /* Only decoded Account frames count as evidence. */ }
+        });
       });
     }
 
@@ -381,27 +409,12 @@ test.describe("joint-inkson smoke @fully-implemented", () => {
       await bobPage.expectTimelineEventVisible(aliceAfterJoin, 30_000);
       await expect(bobPage.timelineEvent(beforeJoin)).toHaveCount(0);
 
-      // Force alice's page to re-establish its account-subscribe stream after
-      // the invite/join settled, then wait (bounded) for that fresh re-poll to
-      // land. If the write path poisoned the cursor, this is the request that
-      // would return cursor_integrity_invalid.
-      const baselineResponses = subscribeResponses;
+      // Resume from Alice's saved cursor in a new document on whichever
+      // advertised binding the product selects.
+      reloadStartedAt = Date.now();
       await alicePage.page.reload({ waitUntil: "domcontentloaded" });
-      await expect
-        .poll(() => subscribeResponses, {
-          timeout: 30_000,
-          intervals: [250, 500, 1_000],
-        })
-        .toBeGreaterThan(baselineResponses);
-
-      expect(
-        subscribeFailures.filter(
-          (failure) =>
-            failure.includes("cursor_integrity_invalid") ||
-            failure.includes("cursor principal does not match request actor"),
-        ),
-        subscribeFailures.join("\n"),
-      ).toEqual([]);
+      await expect.poll(() => acceptedResume, { timeout: 30_000 }).toBe(true);
+      expect(cursorRefusals, "neither participant may submit a poisoned Account cursor").toBe(0);
     } finally {
       await Promise.allSettled([bobPage.close(), alicePage.close()]);
     }

@@ -2,7 +2,8 @@ import { addBoardList, fillCardNarrative } from "../../helpers/kanban-product-ui
 import { restartRunnerStation } from "../../helpers/station-runtime";
 import { proveKanbanHistoryTail, seedKanbanHistory } from "../../helpers/kanban-history";
 import { observeRequestCost } from "../../helpers/request-cost";
-import { installSubscriptionCut } from "../../helpers/subscription-cut";
+import { decodeIngressEvents } from "../../helpers/event-ingress";
+import { installSubscriptionCut, isHttpSubscriptionPath } from "../../helpers/subscription-cut";
 import os from "node:os";
 import { readFileSync } from "node:fs";
 import path from "node:path";
@@ -447,9 +448,15 @@ async function buildEncryptedBoardListCard(
   await expect(boardDraft).toHaveValue(boardTitle, { timeout: remaining() });
   await expect(boardComposer.locator(".input-empty-prompt")).toHaveCount(0, { timeout: remaining() });
   await expect(page.locator(".create-board-space-button")).toBeEnabled({ timeout: remaining() });
+  const previousBoardPath = decodeURIComponent(new URL(page.url()).pathname);
   await page.locator(".create-board-space-button").click({ timeout: remaining() });
-  await expect(page).toHaveURL(url => decodeURIComponent(url.pathname)
-    .startsWith(`/kanban/${realmId}/board/ak:space:`), { timeout: remaining() });
+  await expect(page).toHaveURL(url => {
+    const currentPath = decodeURIComponent(url.pathname);
+    return currentPath !== previousBoardPath && currentPath.startsWith(`/kanban/${realmId}/board/ak:space:`);
+  }, { timeout: remaining() });
+  await expect(page.getByRole("button", { name: "Switch board", exact: true })).toContainText(boardTitle, {
+    timeout: remaining(),
+  });
   await expect(page.locator(".kanban-empty-board")).toContainText(
     /No lists yet/,
     {
@@ -520,19 +527,22 @@ async function addEncryptedDescription(
 
   const responseDeadline = Date.now() + 120_000;
   let response: Awaited<ReturnType<Page["waitForResponse"]>> | undefined;
+  const descriptionUpdate = (request: import("@playwright/test").Request) =>
+    request.method() === "POST" && new URL(request.url()).pathname === "/_arkret/self/events"
+    && decodeIngressEvents(request.postData()).some(event =>
+      event.kind === "ak.strand.update" && event.payload?.target_ref === taskId);
   // Keep one observer through checkpoint recovery so an asynchronous save
   // cannot fall between short-lived response listeners.
   const strandUpdate = page.waitForResponse(
-    (candidate) =>
-      candidate.url().includes("/_arkret/self/events") &&
-      candidate.request().method() === "POST" &&
-      (candidate.request().postData() ?? "").includes("ak.strand.update"),
+    (candidate) => descriptionUpdate(candidate.request()),
     { timeout: 120_000 },
   ).catch(() => undefined);
   let ingressObserved = false;
   let preAuthoringRetries = 0;
+  let sawSaveProgress = false;
+  let sawCurrentCardWait = false;
   const captureRequest = (request: import("@playwright/test").Request) => {
-    if (request.method() === "POST" && new URL(request.url()).pathname === "/_arkret/self/events") ingressObserved = true;
+    if (descriptionUpdate(request)) ingressObserved = true;
   };
   page.on("request", captureRequest);
   try {
@@ -548,25 +558,31 @@ async function addEncryptedDescription(
         (
           await form.locator(".card-detail-edit-status").textContent({ timeout: 1_000 }).catch(() => null)
         )?.trim() ?? "";
-      if (!status) continue;
+      if (status === "Saving...") sawSaveProgress = true;
+      if (status === "Waiting for the current card before saving...") sawCurrentCardWait = true;
+      if (!status || status === "Saving...") continue;
       // A checkpoint read refusal precedes Event authoring. Never retry ingress.
-      const checkpointRefused = /^encrypted card write is not ready: (?:MLS send gate is not ready: )?account checkpoint changed (?:before|during) committed read$/.test(status);
+      const checkpointRefused = /^(?:encrypted card write is not ready: )?(?:MLS send gate is not ready: )?(?:account checkpoint changed (?:before|during) committed read|MLS checkpoint repeatedly changed during committed read)$/.test(status);
       expect(
         checkpointRefused || status.includes("encryption_transition_pending")
-          || status === "Restoring encrypted Realm state before saving...",
+          || status === "Restoring encrypted Realm state before saving..."
+          || status === "Waiting for the current card before saving...",
         `description save failed before submission: ${status}`,
       ).toBe(true);
       if (!ingressObserved && Date.now() < responseDeadline
-        && ((checkpointRefused && preAuthoringRetries < 3) || status.includes("encryption_transition_pending"))
+        && preAuthoringRetries < 3
+        && (checkpointRefused || status.includes("encryption_transition_pending")
+          || status === "Waiting for the current card before saving...")
         && await save.isEnabled()) {
-        if (checkpointRefused) preAuthoringRetries++;
+        preAuthoringRetries++;
         await save.click();
       }
     }
   } finally {
     page.off("request", captureRequest);
     await test.info().attach("creator-description-pre-authoring-retries", {
-      body: JSON.stringify({ pre_authoring_retries: preAuthoringRetries, ingress_observed: ingressObserved }),
+      body: JSON.stringify({ pre_authoring_retries: preAuthoringRetries, ingress_observed: ingressObserved,
+        saw_save_progress: sawSaveProgress, saw_current_card_wait: sawCurrentCardWait }),
       contentType: "application/json",
     });
   }
@@ -1601,6 +1617,8 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
       let outboundFault: Awaited<ReturnType<typeof installMlsOutboundFault>> | undefined;
       let cardFault: Awaited<ReturnType<typeof installCardPlacementFault>> | undefined;
       const privateClaimQuery = /\/_arkret\/self\/keys\/keypackages\/claims\/query(?:\?.*)?$/;
+      let privateClaimRouteOwner: Page | undefined;
+      let historyStage = "before-seed";
       let holdPrivateState = fault === "private-state-blocked";
       let privateReadCuts = 0;
 
@@ -1736,6 +1754,7 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
               await route.continue();
             }
           });
+          privateClaimRouteOwner = bobPage.page;
         }
         await bobPage.acceptInvite(realmId);
         if (outboundFault) {
@@ -1763,9 +1782,12 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
           // A later empty browser must recover current/history; consuming 501
           // live deltas beforehand would not exercise this boundary.
           await bobPage.close();
+          bobPage = undefined;
+          historyStage = "seed";
           const proof = await seedKanbanHistory(request, aliceSession, realmId);
           await testInfo.attach("kanban-501-real-history-seed.json", {
             contentType: "application/json", body: JSON.stringify(proof) });
+          historyStage = "create-board-list-card";
         }
         let latestCardEventId: string | undefined;
         let historyTailAfterPosition: number | null = null;
@@ -1810,14 +1832,17 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
         );
         alicePage.page.off("request", observeCard);
         if (fault === "history-after-501") {
+          historyStage = "capture-card-event";
           expect(typeof latestCardEventId).toBe("string");
           for (const reader of [aliceSession, bobSession]) {
+            historyStage = reader === bobSession ? "bob-history-tail" : "alice-history-tail";
             const proof = await proveKanbanHistoryTail(request, reader, realmId, latestCardEventId!,
               reader === bobSession ? retainedBoard : undefined);
             if (reader === bobSession) historyTailAfterPosition = proof.next_page_after_position;
             await testInfo.attach(`kanban-history-tail-${reader === aliceSession ? "alice" : "bob"}.json`, {
               contentType: "application/json", body: JSON.stringify(proof) });
           }
+          historyStage = "write-encrypted-description";
         }
         if (cardFault) {
           await expect(alicePage.page.locator(".kanban-card").filter({ hasText: aliceCard })).toHaveCount(1);
@@ -1829,6 +1854,7 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
           aliceDescription,
         );
         if (fault === "history-after-501") {
+          historyStage = "open-cold-reader";
           const fresh = await openDpopUserPageFromSession(browser, bobSession,
             { beforeNavigate: async page => { costs.push({ reader: "bob", cost: observeRequestCost(page) }); } });
           expect(fresh).toBeTruthy();
@@ -1837,6 +1863,7 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
           await bobPage.acknowledgeRecommendedEncryptionPromptIfVisible();
           await bobPage.completeMlsAccountRecoveryIfPrompted(bobSession.recoveryKey!);
           expect(retainedBoard).toBeTruthy();
+          historyStage = "verify-retained-board";
           await openReaderBoard(bobPage, realmId, retainedBoard!.boardId);
           await expect(bobPage.page.locator(".kanban-column")).toHaveCount(1);
           await expect(bobPage.page.locator(".kanban-column").first().locator(".add-card-button")).toBeEnabled();
@@ -1846,6 +1873,8 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
               no_product_current_or_history_cache_copied: true,
               pre_join_board_and_list_retained_by_current: true, pre_join_board_id: retainedBoard!.boardId }) });
         }
+        if (!bobPage) throw new Error("reader did not open after encrypted Card creation");
+        historyStage = "verify-delivery-and-decrypt";
         await stepShot(alicePage.page, testInfo, "A-alice-encrypted-card");
 
         // 4b) Cross-member DELIVERY gate (isolates coland delivery from inkson
@@ -1916,6 +1945,7 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
           await expect(bobPage.page.locator(".chat-panel")).toHaveClass(/\binitial-sync-pending\b/);
           holdPrivateState = false;
           await bobPage.page.unroute(privateClaimQuery);
+          privateClaimRouteOwner = undefined;
           await expect(bobPage.page.locator(".chat-panel")).toHaveClass(/\binitial-sync-complete\b/, { timeout: 120_000 });
           await openReaderBoard(bobPage, realmId, boardId);
         }
@@ -2177,6 +2207,9 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
               cold_start_probe: cold, remaining_member_still_decrypts: true }) });
         }
         if (requestCase) {
+          // The ordinary two-member recovery keeps its 10-minute ceiling.
+          // The subsequent workload has 40 real writes and 21 board switches.
+          testInfo.setTimeout(testInfo.timeout + 480_000);
           const cost = costs.find(entry => entry.reader === "alice")!.cost;
           const lists = (snapshot: Awaited<ReturnType<typeof cost.snapshot>>) => snapshot.http.filter(row =>
             /\/_arkret\/self\/realms\/[^/]+\/(spaces|strands)$/.test(row.path));
@@ -2202,7 +2235,7 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
             await testInfo.attach("kanban-request-same-cut-20.json", { contentType: "application/json", body: JSON.stringify(steady) });
           } else {
             expect(subscriptionCut!.proof().rejected_real_connections).toBeGreaterThan(0);
-            expect(first.http.some(row => /\/(account|events)\/subscribe$/.test(row.path))).toBe(true);
+            expect(first.http.some(row => isHttpSubscriptionPath(row.path))).toBe(true);
             expect((await subscriptionCut!.httpProof())?.successful ?? 0).toBeGreaterThan(0);
           }
           await grantCapabilityEventApi(request, aliceSession.grantJwt, {
@@ -2230,6 +2263,11 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
             ordinary.push(String(event.event_id)); ordinaryCommit = String(outcome.commit.commit_id);
           }
           expect(new Set(ordinary).size).toBe(20);
+          await testInfo.attach("kanban-request-ordinary-accepted-cut.json", {
+            contentType: "application/json",
+            body: JSON.stringify({ accepted_count: ordinary.length,
+              final_event_id: ordinary.at(-1), final_commit_id: ordinaryCommit }),
+          });
           const ordinaryDelivered = await subscriptionCut!.waitForCut(ordinary.at(-1)!, ordinaryCommit);
           const ordinaryCost = await cost.snapshot(ordinaryStart);
           expect(lists(ordinaryCost)).toHaveLength(0);
@@ -2291,6 +2329,11 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
           await testInfo.attach("card-placement-final-originals.json", { contentType: "application/json", body: JSON.stringify(cardFault.assertOneCardAndPlacement()) });
         }
       } catch (error) {
+        if (fault === "history-after-501") {
+          await testInfo.attach("kanban-history-recovery-stage.json", {
+            contentType: "application/json", body: JSON.stringify({ stage: historyStage }),
+          });
+        }
         const records = await readCreatorRecords(alicePage.page, true).catch(() => []);
         const privateFailure = (detail: unknown) => {
           if (detail === "creator private cache has another Genesis ref") return "cache-genesis-ref";
@@ -2318,7 +2361,9 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
           entry.cost.dispose();
         }
         holdPrivateState = false;
-        await bobPage?.page.unroute(privateClaimQuery);
+        if (privateClaimRouteOwner && !privateClaimRouteOwner.isClosed()) {
+          await privateClaimRouteOwner.unroute(privateClaimQuery);
+        }
         await outboundFault?.dispose();
         await cardFault?.dispose();
         await Promise.allSettled([

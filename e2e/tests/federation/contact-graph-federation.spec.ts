@@ -59,8 +59,6 @@ import {
   tombstoneContactArkret,
 } from "../../helpers/contact-api";
 
-test.describe.configure({ mode: "serial" });
-
 async function sendCrossStationEncrypted(user: JointUserPage, recoveryKey: string | undefined, message: string) {
   const page = user.page;
   await page.bringToFront();

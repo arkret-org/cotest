@@ -29,6 +29,7 @@ export function sessionGrantRotationObservation(account: DpopUserSession["accoun
   const pairs: Array<{
     previous: string; successor: string; predecessorAuthorization: string;
     successorAuthorization: string; deniedAt?: number; recoveredAt?: number;
+    pendingSubscriptions: Set<string>;
   }> = [];
   let sequence = 0;
   function pair(previous: unknown, successor: unknown) {
@@ -56,7 +57,7 @@ export function sessionGrantRotationObservation(account: DpopUserSession["accoun
         return;
       }
       pairs.push({ previous: body.previous_session_grant_id, successor: body.session_grant_id,
-        predecessorAuthorization, successorAuthorization });
+        predecessorAuthorization, successorAuthorization, pendingSubscriptions: new Set() });
     },
     viewer(status: number, authorization: string | undefined, problemCode?: string) {
       sequence += 1;
@@ -73,6 +74,22 @@ export function sessionGrantRotationObservation(account: DpopUserSession["accoun
     },
     isRetiredAuthorization(authorization: string | undefined) {
       return pairs.some(item => item.predecessorAuthorization === authorization);
+    },
+    subscription(status: number, cut: string, authorization: string | undefined, problemCode?: string) {
+      if (status === 401 && problemCode === "unauthenticated") {
+        const retired = pairs.find(item => item.predecessorAuthorization === authorization);
+        if (!retired) return false;
+        retired.pendingSubscriptions.add(cut);
+        return true;
+      }
+      if (status === 200) {
+        const current = pairs.find(item => item.successorAuthorization === authorization);
+        current?.pendingSubscriptions.delete(cut);
+      }
+      return false;
+    },
+    pendingSubscriptionRecoveries() {
+      return pairs.reduce((count, item) => count + item.pendingSubscriptions.size, 0);
     },
     matchesPredecessor(previous: unknown, successor: unknown, authorization: string | undefined) {
       const item = pair(previous, successor);

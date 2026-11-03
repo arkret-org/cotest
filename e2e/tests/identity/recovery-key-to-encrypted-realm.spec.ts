@@ -459,16 +459,14 @@ test.describe("identity.recovery-key-to-encrypted-realm @fully-implemented", () 
 
       await test.step("manual recovery preserves a healthy bounded inventory", async () => {
         await jointPage.gotoSettings();
-        await page.locator(".settings-nav-item-encryption").click();
-        await expect(page.locator(".encryption-settings")).toBeVisible();
-        await page
-          .locator(".settings-mls-keypackages-refill-button")
-          .click();
+        await page.getByRole("link", { name: "Security", exact: true }).click();
+        await expect(page).toHaveURL(url => url.pathname === "/settings/encryption");
+        await expect(page.getByRole("heading", { name: "Security", exact: true })).toBeVisible();
+        const recovery = page.locator(".settings-mls-recovery");
+        await recovery.getByRole("button", { name: "Check and replenish KeyPackages", exact: true }).click();
         await expect(
-          page.locator(".settings-mls-keypackages-refill-status"),
-        ).toContainText(/published:\s*0|已发布[^0-9]*0|补充[^0-9]*0/, {
-          timeout: 120_000,
-        });
+          recovery.getByText(/^KeyPackage maintenance complete; published:\s*0$/),
+        ).toBeVisible({ timeout: 120_000 });
 
         // The fresh device still owns its full initial batch.  Replenishment
         // is threshold based, so the explicit maintenance action is a no-op;

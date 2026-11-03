@@ -39,6 +39,13 @@ const test = jointTest.extend<{ agentClient: PersistentAgentClient }>({
 test.use({ trace: "off", screenshot: "off", video: "off" });
 test.setTimeout(720_000);
 
+async function openAgentSettings(user: JointUserPage) {
+  await user.gotoSettings();
+  await user.page.getByRole("link", { name: "My Agents", exact: true }).click();
+  await expect(user.page).toHaveURL(url => url.pathname === "/settings/agents");
+  await expect(user.page.locator(".agent-admin")).toBeVisible();
+}
+
 const avatarPng = Buffer.from(
   "iVBORw0KGgoAAAANSUhEUgAAAAwAAAAICAYAAADN5B7xAAAAy0lEQVR4nBXLIRXEMBBAwRURHBwRK6I4OCJWRHFwRXwRxcH18u/d8IkIbIEjMAOvwBVYgXfgE0jgG/gFRnRsHUfH7Hh1XB2r493x6UjHt+PX/yGxJY7ETLwSV2Il3olPIolv4pf/MLFNHBNz4jVxTayJ98RnIhPfid/8h8JWOAqz8CpchVV4Fz6FFL6FX/3DxrZxbMyN18a1sTbeG5+NbHw3fvsfwAYOMMELXGCBN/iAgC/48Q8H28FxMA9eB9fBOngffA5y8D34HfwBl3vzwZTfUBgAAAAASUVORK5CYII=",
   "base64",
@@ -134,8 +141,7 @@ for (const mode of ["avatar", "lost-responses", "retryable-profile", "account-sw
       });
     };
     await installRoutes(page);
-    await user.gotoSettings();
-    await page.locator(".settings-nav-item-agents").click();
+    await openAgentSettings(user);
     await page.locator(".agent-admin-create-open-button").click();
     await page.locator(".agent-admin-provision-agent-slug").locator("input, textarea").fill(slug);
     if (mode !== "no-avatar") {
@@ -195,8 +201,7 @@ for (const mode of ["avatar", "lost-responses", "retryable-profile", "account-sw
       page = user.page;
       await expect.poll(() => profileConfirmed, { timeout: 180_000 }).toBe(true);
       expect(profileAttempts).toBeGreaterThan(1);
-      await user.gotoSettings();
-      await page.locator(".settings-nav-item-agents").click();
+      await openAgentSettings(user);
     } else if (mode === "account-switch") {
       await expect(page.locator(".agent-admin .write-status")).toContainText("Agent was created; its avatar is still pending", { timeout: 180_000 });
       await page.bringToFront();
@@ -220,8 +225,7 @@ for (const mode of ["avatar", "lost-responses", "retryable-profile", "account-sw
         JSON.parse(localStorage.getItem("inkson.config.v1") ?? "{}").active_account?.profile_id,
       )).toBe(originalProfile);
       await expect.poll(() => profileConfirmed, { timeout: 180_000 }).toBe(true);
-      await user.gotoSettings();
-      await page.locator(".settings-nav-item-agents").click();
+      await openAgentSettings(user);
     } else if (mode === "retryable-profile") {
       await expect(page.locator(".agent-admin .write-status")).toContainText("Agent was created; its avatar is still pending", { timeout: 180_000 });
       await expect(page.locator(".agent-admin-provision-agent-slug").locator("input, textarea")).toHaveValue(slug);
@@ -245,6 +249,7 @@ for (const mode of ["avatar", "lost-responses", "retryable-profile", "account-sw
         && new URL(response.url()).pathname === "/_arkret/self/agents")
         .then(response => response.json());
       await page.reload({ waitUntil: "domcontentloaded" });
+      await expect(page).toHaveURL(url => url.pathname === "/settings/agents");
       const directory = await listed;
       const matching = directory.agents.filter((row: { agent_id: string }) => row.agent_id === agent);
       expect(matching).toHaveLength(1);
@@ -280,15 +285,13 @@ for (const mode of ["avatar", "lost-responses", "retryable-profile", "account-sw
     const directoryRead = cold.page.waitForResponse(response => response.request().method() === "GET"
       && new URL(response.url()).pathname === "/_arkret/self/agents")
       .then(response => response.json());
-    await cold.gotoSettings();
-    await cold.page.locator(".settings-nav-item-agents").click();
+    await openAgentSettings(cold);
     const coldDirectory = await directoryRead;
     expect(coldDirectory.agents.filter((row: { agent_id: string }) => row.agent_id === agent)).toHaveLength(1);
     expect(coldDirectory.agents.find((row: { agent_id: string }) => row.agent_id === agent).avatar_blob_ref)
       .toBe(mode === "profile-rejected" ? undefined : avatar);
     await expect(cold.page.locator(".agent-admin-row").filter({ hasText: slug })).toHaveCount(1);
-    await jointUsers.bobPage.gotoSettings();
-    await jointUsers.bobPage.page.locator(".settings-nav-item-agents").click();
+    await openAgentSettings(jointUsers.bobPage);
     await expect(jointUsers.bobPage.page.locator(".agent-admin-row").filter({ hasText: slug })).toHaveCount(0);
   });
 }

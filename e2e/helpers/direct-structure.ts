@@ -450,21 +450,21 @@ async function assertWrongPlaintextStrand(alice: Page, bob: Page, realm: string,
   const positive = await realTyping(alice, realm, chat, true);
   expect(positive.accepted, "same-group positive Typing must reach the actual Station").toBe(true);
   expect(positive.dispatched_recipient_count ?? 0).toBeGreaterThan(0);
-  await expect.poll(async () => (await realSignalReceiver(bob))
-    .filter(row => isDeepStrictEqual(row.sender_actor_id, positive.sender_actor_id)
-      && row.sender_endpoint?.device_id === positive.sender_device_id)
-    .map(row => ({
-      typing: row.typing === true,
-      strandMatches: row.strand_id === chat,
-      admittedAndDecrypted: row.admitted_and_decrypted === true,
-      targetScopeMatches: row.target_scope_matches === true,
-      targetReadFailed: typeof row.target_scope_error === "string",
-      liveApplied: row.live_applied === true,
-      visible: row.visible_count > 0,
-    })), { timeout: 15_000 }).toContainEqual({
-      typing: true, strandMatches: true, admittedAndDecrypted: true, targetScopeMatches: true,
-      targetReadFailed: false, liveApplied: true, visible: true,
-    });
+  await expect.poll(async () => {
+    const evidence = await realSignalReceiver(bob);
+    const stages = evidence.filter(row => row.envelope_digest === positive.envelope_digest)
+      .map(row => row.receive_stage);
+    const applied = evidence.some(row => isDeepStrictEqual(row.sender_actor_id, positive.sender_actor_id)
+      && row.sender_endpoint?.device_id === positive.sender_device_id
+      && row.typing === true && row.strand_id === chat
+      && row.admitted_and_decrypted === true && row.target_scope_matches === true
+      && typeof row.target_scope_error !== "string"
+      && row.live_applied === true && row.visible_count > 0);
+    return { stages, applied };
+  }, { timeout: 15_000 }).toMatchObject({
+    stages: expect.arrayContaining(["frame_received", "admitted"]),
+    applied: true,
+  });
   await expect(bob.locator(".typing-indicator")).toHaveCount(1);
   const negative = await realTyping(alice, realm, target!, true);
   expect(negative.accepted, "wrong plaintext target must still have a legal encrypted outer Signal").toBe(true);
@@ -499,13 +499,23 @@ async function assertWrongPlaintextStrand(alice: Page, bob: Page, realm: string,
 }
 
 export async function structureWrite(page: Page, action: string, kind: string, title?: string, topic?: string, refusal?: string): Promise<IngressEvent> {
+  await page.bringToFront();
   const panel = page.locator(".direct-structure");
   await expect(panel).toBeVisible();
   if (!await panel.getByRole("combobox", { name: "Action", exact: true }).isVisible()) {
     await panel.getByRole("button", { name: "Manage chats and topics" }).click();
   }
   await panel.getByRole("combobox", { name: "Action", exact: true }).selectOption(action);
-  if (title) await panel.getByRole("textbox", { name: "Title", exact: true }).fill(title);
+  if (title) {
+    const input = panel.getByRole("textbox", { name: "Title", exact: true });
+    const field = panel.locator(".direct-title-field");
+    await input.click();
+    await input.fill("");
+    await expect(field).not.toHaveClass(/\bhas-value\b/);
+    await input.pressSequentially(title);
+    await expect(input).toHaveValue(title);
+    await expect(field).toHaveClass(/\bhas-value\b/);
+  }
   if (topic) await panel.getByRole("combobox", { name: "Topic", exact: true }).selectOption(topic);
   await expect(panel.getByRole("button", { name: "Save", exact: true })).toBeEnabled({ timeout: 180_000 });
   const boundaryProof = structuralBoundaries.get(page);

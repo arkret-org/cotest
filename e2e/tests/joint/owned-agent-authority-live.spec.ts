@@ -740,12 +740,18 @@ async function switchReviewRealmAndReload(user: JointUserPage, originalRealm: st
   share: string, expectedStatus: string) {
   const page = user.page;
   const documentOrigin = await page.evaluate(() => performance.timeOrigin);
+  await page.bringToFront();
   for (const realm of [otherRealm, originalRealm]) {
-    // Keep the same authenticated document and traverse the real application
-    // router, so a cold reload cannot hide a missing Realm component key.
+    // Switch Realm and return to Access through the visible product navigation
+    // in the original authenticated document.
     const settings = `/realms/${realm}/settings`;
     const access = `${settings}/access`;
-    await user.gotoAppPanel(`/realms/${encodeURIComponent(realm)}/settings/access`, ".realm-settings");
+    await page.locator(`a[href="/realms/${realm}"]`).first().click();
+    const realmNavigation = page.locator(".realm-context-bar");
+    await realmNavigation.locator(".realm-nav-menu-button").click();
+    await realmNavigation.locator(".realm-nav-menu-panel").getByRole("link", { name: "Settings", exact: true }).click();
+    await expect(page).toHaveURL(url => decodeURIComponent(url.pathname) === settings);
+    await page.locator(".realm-admin-nav-item-access").click();
     await expect(page).toHaveURL(url => decodeURIComponent(url.pathname) === access);
     const panel = managementReviewPanel(page);
     await expect(panel).toBeVisible({ timeout: 120_000 });
@@ -756,8 +762,7 @@ async function switchReviewRealmAndReload(user: JointUserPage, originalRealm: st
     await expect(panel.locator(".management-review-retry-decision")).toHaveCount(0);
     await expect(panel.locator(".management-review-submit")).toHaveCount(0);
     await expect(panel.locator(".management-review-request")).toHaveText("冻结候选并请求审批（不提交业务）");
-    // Check the Realm captured by the mounted navigation buttons after the
-    // state isolation assertions, before changing the section can remount it.
+    // Check the Realm captured by the mounted navigation buttons.
     await page.locator(".realm-admin-nav-item-overview").click();
     await expect(page).toHaveURL(url => decodeURIComponent(url.pathname) === settings);
     await page.locator(".realm-admin-nav-item-access").click();

@@ -112,7 +112,7 @@ test("real saved sessions survive add-account, switch both ways and require Coau
     await page.goto("/login");
     await expect(page.locator(".auth-panel")).toBeVisible();
     await expect(page.locator(".account-switcher")).toHaveCount(0);
-    await authorize(page, first);
+    await test.step("authorize the first saved account", () => authorize(page, first));
     await completeNewIdentity(page);
     const firstAccount = await currentAccount(page);
     await page.reload();
@@ -137,7 +137,7 @@ test("real saved sessions survive add-account, switch both ways and require Coau
     expect(authorizationRequests).toHaveLength(0);
 
     await addAccount(page);
-    await authorize(page, second);
+    await test.step("reauthenticate to add the second account", () => authorize(page, second));
     await completeNewIdentity(page);
     const secondAccount = await currentAccount(page);
     expect(secondAccount.authority.principal_id).not.toBe(firstAccount.authority.principal_id);
@@ -170,7 +170,7 @@ test("real saved sessions survive add-account, switch both ways and require Coau
     await expect(page.locator(".account-switcher")).toHaveCount(0);
     await expect(page.locator(".shell.app")).toHaveCount(0);
     await expect(page.locator(".auth-station-field input")).toHaveValue(firstAccount.server_url);
-    await authorize(page, first);
+    await test.step("reauthenticate the logged-out account", () => authorize(page, first));
     await expect(page.locator(".shell.app")).toBeVisible({ timeout: 30_000 });
     expect(await currentAccount(page)).toEqual(firstAccount);
     const returningRequest = authorizationRequests.at(-1)!;

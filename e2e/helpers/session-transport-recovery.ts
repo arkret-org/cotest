@@ -22,6 +22,7 @@ export function accountTransportRotationProbe(page: Page, request: APIRequestCon
   const rotation = sessionGrantRotationObservation(session.accountId);
   let latestGrant = session.grantJwt;
   const failures: string[] = [];
+  const retiredSubscriptionResponses = new WeakSet<Response>();
   const observations = orderedResponseObservation<Response>(observe, () => {
     failures.push("transport observation failed");
   });
@@ -30,6 +31,7 @@ export function accountTransportRotationProbe(page: Page, request: APIRequestCon
     const url = new URL(response.url());
     if (!armed || url.origin !== stationOrigin || response.status() !== 401 || !retiredReads.has(url.pathname)) return false;
     await observations.observed(response);
+    if (url.pathname === "/_arkret/self/account/subscribe") return retiredSubscriptionResponses.has(response);
     const evidence = await hookEvidence();
     if (evidence?.phase !== "rotated_before_request" || wireErrCode(await response.json()) !== "unauthenticated") return false;
     return rotation.matchesPredecessor(evidence.predecessor_grant_id, evidence.successor_grant_id,
@@ -63,6 +65,17 @@ export function accountTransportRotationProbe(page: Page, request: APIRequestCon
       const code = response.status() === 401 ? wireErrCode(await response.json()) : undefined;
       rotation.viewer(response.status(), authorization, code);
     }
+    if (armed && path === "/_arkret/self/account/subscribe" && response.request().method() === "GET") {
+      const url = new URL(response.url());
+      // Reconnecting installs the same demand as a replacement. Keep the
+      // cursor, catch-up mode and complete filter in the recovery identity.
+      url.searchParams.delete("replace_filter");
+      url.searchParams.sort();
+      const code = response.status() === 401 ? wireErrCode(await response.json()) : undefined;
+      if (rotation.subscription(response.status(), url.href, authorization, code)) {
+        retiredSubscriptionResponses.add(response);
+      }
+    }
   }
 
   async function hookEvidence() {
@@ -84,6 +97,12 @@ export function accountTransportRotationProbe(page: Page, request: APIRequestCon
   return {
     expectedRetiredRead,
     read,
+    async assertSubscriptionRecovery() {
+      await observations.settled();
+      expect(failures).toEqual([]);
+      expect(rotation.pendingSubscriptionRecoveries(),
+        "each denied predecessor subscription must recover on its own successor and exact demand").toBe(0);
+    },
     async arm() {
       expect(armed).toBe(false);
       armed = true;

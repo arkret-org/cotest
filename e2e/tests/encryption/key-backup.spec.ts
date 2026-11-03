@@ -49,7 +49,7 @@ import {
   submitCoauthPasswordCredentials,
 } from "../../helpers/real-oidc-login";
 
-test.describe.configure({ mode: "serial" });
+test.use({ trace: "off", video: "off", screenshot: "off" });
 
 test.describe("key backup + restore", () => {
   test("backup endpoint exists; listing exposes metadata only (no plaintext)", async ({
@@ -324,6 +324,7 @@ test.describe("key backup + restore", () => {
       );
       await expect(deviceB.timelineEvent(deviceACard)).toBeVisible({ timeout: 90_000 });
       assertOriginalAcceptedMlsRows(originalAcceptedRows, await transportRecovery.read(realmId));
+      await transportRecovery.assertSubscriptionRecovery();
       await testInfo.attach("a1-real-successor-transport-recovery", {
         contentType: "application/json",
         body: JSON.stringify(recoveryEvidence),
@@ -1064,7 +1065,7 @@ function collectA1ProtocolFailures(
         url,
       )
     ) {
-      failures.push(`requestfailed:${request.method()} ${url} ${errorText}`);
+      failures.push(`requestfailed:${request.method()} ${new URL(url).pathname} ${errorText}`);
     }
   });
   page.on("response", async (response) => {
@@ -1076,7 +1077,7 @@ function collectA1ProtocolFailures(
         url,
       )
     ) {
-      const entry = `http:${response.status()} ${response.request().method()} ${url}`;
+      const entry = `http:${response.status()} ${response.request().method()} ${new URL(url).pathname}`;
       failures.push(entry);
       if (/\/(?:api\/v1|_arkret\/self)\/events/.test(url)) {
         void response

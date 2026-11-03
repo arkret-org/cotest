@@ -2,6 +2,7 @@ import { accountActorId } from "./coland-api";
 import { selectProductOptionByLabel } from "./product-select";
 import { addBoardList } from "./kanban-product-ui";
 import { accountRow, actorRow } from "./product-locators";
+import { enterSecretText } from "./secret-input";
 // Shared product UI actions; no session or protocol outcome is injected.
 import { expect, type Page, type Route, type Request, type TestInfo, type Locator } from './arkret-test';
 import { assertAuthoritySubmitOutcome, wireErrCode } from './coland-api';
@@ -72,12 +73,16 @@ export async function startSavfoxPairing(
     name: "Start pairing / Check approval",
     exact: true,
   });
-  if ((await pairingInput.inputValue()).trim() && !(await startPairing.isEnabled())) {
+  await enterSecretText(savfox, pairingInput, pairingLink);
+  const savedConfiguration = new URL(savfox.url()).pathname.startsWith("/channels/edit/");
+  const ready = await expect(startPairing).toBeEnabled({ timeout: 5_000 })
+    .then(() => true, () => false);
+  if (!ready && savedConfiguration) {
     await savfox.getByRole("checkbox", { name: "Confirm disconnecting the current agent", exact: true }).check();
     await savfox.getByRole("button", { name: "Disconnect current agent", exact: true }).click();
     await expect(savfox.locator(".arkret-pairing")).toContainText("Disconnected. Paste a new Inkson pairing link to connect another agent.");
+    await enterSecretText(savfox, pairingInput, pairingLink);
   }
-  await pairingInput.fill(pairingLink, { timeout: 30_000 });
   await expect(startPairing).toBeEnabled({ timeout: 30_000 });
   await startPairing.click({ timeout: 30_000 });
   const pairingStatus = savfox.locator(".arkret-pairing");

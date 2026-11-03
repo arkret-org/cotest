@@ -212,7 +212,7 @@ async function runHolderRevocation(
       });
       await expect(target).toBeVisible({ timeout: 120_000 });
       await target.locator(".device-revoke-button").click();
-      await enterSecretText(ownerPage, ownerPage.locator(".device-revoke-passphrase input"), owner.recoveryKey!);
+      await enterSecretText(ownerPage, ownerPage.getByLabel("Recovery Key (24 words)", { exact: true }), owner.recoveryKey!);
       await ownerPage.locator(".device-revoke-confirm-button").click();
       await expect(ownerPage.locator(".device-revoke-status"))
         .toContainText("through transaction", { timeout: 180_000 });

@@ -1,5 +1,14 @@
 import { expect, type Page } from "@playwright/test";
 
+const HTTP_SUBSCRIPTION_PATHS = [
+  "/_arkret/self/account/subscribe",
+  "/_arkret/self/committed-events/subscribe",
+];
+
+export function isHttpSubscriptionPath(path: string): boolean {
+  return HTTP_SUBSCRIPTION_PATHS.includes(path);
+}
+
 // Forward authentic Station frames. A replay uses the exact incoming bytes on
 // their original live channel. No frame content is written to evidence.
 export async function installSubscriptionCut(page: Page, forceHttp: boolean) {
@@ -17,7 +26,7 @@ export async function installSubscriptionCut(page: Page, forceHttp: boolean) {
       } else if (typeof child === "object") collect(child, depth + 1);
     }
   };
-  if (forceHttp) await page.addInitScript(() => {
+  if (forceHttp) await page.addInitScript(subscriptionPaths => {
     const stats = { started: 0, successful: 0, frames: 0, decoded_body_bytes: 0, observation_errors: 0,
       refs: [] as string[] };
     (window as unknown as { __cotestSubscriptionCost: typeof stats }).__cotestSubscriptionCost = stats;
@@ -34,7 +43,7 @@ export async function installSubscriptionCut(page: Page, forceHttp: boolean) {
     window.fetch = async (...args: Parameters<typeof fetch>) => {
       const input = args[0];
       const url = new URL(typeof input === "string" ? input : input instanceof URL ? input.href : input.url, location.href);
-      const subscription = /\/_arkret\/self\/(account|events)\/subscribe$/.test(url.pathname);
+      const subscription = subscriptionPaths.includes(url.pathname);
       if (subscription) stats.started += 1;
       const response = await original(...args);
       if (subscription && response.status === 200 && response.body) {
@@ -65,7 +74,7 @@ export async function installSubscriptionCut(page: Page, forceHttp: boolean) {
       }
       return response;
     };
-  });
+  }, HTTP_SUBSCRIPTION_PATHS);
   await page.routeWebSocket(url => url.pathname.startsWith("/_arkret/"), route => {
     const server = route.connectToServer();
     let rejected = false;

@@ -198,6 +198,23 @@ test("wrong grant, wrong problem and successor before predecessor denial do not 
   assert.equal(tracker.recovered("before", "after"), true);
 });
 
+test("subscription recovery requires the exact demand and its issuer-linked successor", () => {
+  const tracker = sessionGrantRotationObservation(holder);
+  tracker.refresh("DPoP original", refreshBody("original-id", "intermediate-id", "intermediate"));
+  tracker.refresh("DPoP intermediate", refreshBody("intermediate-id", "current-id", "current"));
+  tracker.subscription(200, "demand", "DPoP current");
+  assert.equal(tracker.subscription(401, "demand", "DPoP unknown", "unauthenticated"), false);
+  assert.equal(tracker.subscription(401, "demand", "DPoP intermediate", "capability_denied"), false);
+  assert.equal(tracker.pendingSubscriptionRecoveries(), 0);
+  assert.equal(tracker.subscription(401, "demand", "DPoP intermediate", "unauthenticated"), true);
+  tracker.subscription(200, "different-demand", "DPoP current");
+  tracker.subscription(200, "demand", "DPoP intermediate");
+  tracker.subscription(503, "demand", "DPoP current");
+  assert.equal(tracker.pendingSubscriptionRecoveries(), 1);
+  tracker.subscription(200, "demand", "DPoP current");
+  assert.equal(tracker.pendingSubscriptionRecoveries(), 0);
+});
+
 test("refresh attribution rejects different complete holders, missing ids and changed opaque bindings", () => {
   for (const mutate of [
     body => { body.account_id = { ...holder, principal_id: "other" }; },

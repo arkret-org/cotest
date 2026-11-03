@@ -424,22 +424,17 @@ test.describe("notifications", () => {
         .filter({ hasText: msg });
       await expect(row).toBeVisible({ timeout: 30_000 });
       await expect(row.locator(".mark-read-button")).toBeVisible();
-      await expect(
-        bobPage.page
-          .locator(".topbar-notifications-link")
-          .locator(".topbar-notifications-badge"),
-      ).toBeVisible({ timeout: 30_000 });
+      const badge = bobPage.page.locator(
+        ".topbar-notifications-link:visible .topbar-notifications-badge",
+      );
+      await expect(badge).toBeVisible({ timeout: 30_000 });
 
       await bobPage.page.locator(".mark-all-read-button").click();
       await expect(row.locator(".mark-unread-button")).toBeVisible({
         timeout: 30_000,
       });
       await expect(row.locator(".mark-read-button")).toHaveCount(0);
-      await expect(
-        bobPage.page
-          .locator(".topbar-notifications-link")
-          .locator(".topbar-notifications-badge"),
-      ).toHaveCount(0, { timeout: 30_000 });
+      await expect(badge).toHaveCount(0, { timeout: 30_000 });
       await stepShot(bobPage.page, testInfo, "mark-all-read");
     } finally {
       await bobPage.close();
