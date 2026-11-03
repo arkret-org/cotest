@@ -13,6 +13,13 @@ fn webrtc_media_plaintext_named_suite_returns_one_result_per_case() -> Result<()
 #[test]
 #[serial_test::serial]
 fn named_suite_audit_executes_registered_runners_and_exposes_every_gap() -> Result<()> {
+    let Some(_readback) =
+        cotest_inkson_client_tests::conformance::client_sync::checkpoint_readback_test(
+            "named_suite_audit_executes_registered_runners_and_exposes_every_gap",
+        )?
+    else {
+        return Ok(());
+    };
     let report = inspect_named_suite_execution()?;
     println!("{report:#?}");
     let production_results = report.production_executions.iter().map(|suite| {

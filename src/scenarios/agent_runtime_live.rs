@@ -843,6 +843,17 @@ impl AgentRuntimeSession {
             )?;
         }
 
+        // Station activation and issuer delivery are separate durable outcomes.
+        // Every caller receiving a ready paired principal may issue a session,
+        // including negative approval probes which do not use Step 10 below.
+        if let AgentSessionIssuer::Coauth { database_url, .. } = issuer {
+            coauth_session_evidence::wait_for_issuer_authorization(
+                database_url,
+                &authorize.event_id,
+            )
+            .await?;
+        }
+
         Ok(AgentPairedPrincipal {
             controller_account: controller_account.clone(),
             agent_did,
@@ -911,11 +922,6 @@ impl AgentRuntimeSession {
                 (grant, None)
             }
             AgentSessionIssuer::Coauth { base, database_url } => {
-                coauth_session_evidence::wait_for_issuer_authorization(
-                    database_url,
-                    &key_authorization,
-                )
-                .await?;
                 let (grant, request) = coauth_session_evidence::issue_runtime_session(
                     server,
                     base,

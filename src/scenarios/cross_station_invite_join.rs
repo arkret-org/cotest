@@ -335,6 +335,8 @@ pub async fn cross_station_invite_join_run() -> Result<()> {
     let mut false_locator = preview_request.clone();
     false_locator.target.authority_locator_hints[0].service_id =
         group.server(2).service_id().clone();
+    false_locator.target.authority_locator_hints[0].endpoint_url =
+        Some(group.server(2).base_url().to_string());
     let false_started = Instant::now();
     let false_source = bob
         .post("/_arkret/self/realm-joins/preview")

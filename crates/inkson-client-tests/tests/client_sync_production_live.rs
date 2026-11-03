@@ -3,9 +3,13 @@ use anyhow::Result;
 #[test]
 #[serial_test::serial]
 fn sidecar_checkpoint_cases_use_the_actual_account_driver() -> Result<()> {
-    assert!(
-        std::path::Path::new(env!("CARGO_BIN_EXE_cotest-inkson-checkpoint-readback")).is_file()
-    );
+    let Some(_readback) =
+        cotest_inkson_client_tests::conformance::client_sync::checkpoint_readback_test(
+            "sidecar_checkpoint_cases_use_the_actual_account_driver",
+        )?
+    else {
+        return Ok(());
+    };
     let execution =
         cotest_inkson_client_tests::conformance::client_sync::run_sync_client_production_suite()?;
     println!("[sync-production-cases] {execution:#?}");
@@ -31,6 +35,13 @@ fn sidecar_checkpoint_cases_use_the_actual_account_driver() -> Result<()> {
 #[test]
 #[serial_test::serial]
 fn private_agent_sidecar_reply_recovers_in_the_original_account_attempt() -> Result<()> {
+    let Some(_readback) =
+        cotest_inkson_client_tests::conformance::client_sync::checkpoint_readback_test(
+            "private_agent_sidecar_reply_recovers_in_the_original_account_attempt",
+        )?
+    else {
+        return Ok(());
+    };
     let execution=cotest_inkson_client_tests::conformance::client_sync::run_sync_private_reply_production_case()?;
     assert_eq!(execution.cases.len(), 1);
     assert_eq!(

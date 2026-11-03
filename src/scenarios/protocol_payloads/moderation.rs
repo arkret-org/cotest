@@ -3,6 +3,8 @@
 use anyhow::{Context as _, Result};
 use arkret_models_collaboration::governance::moderation_queue::ModerationQueueItem;
 use arkret_wire::ScopeRef;
+use coland_storage::ModerationStore as _;
+use coland_storage_postgres::{Db, PgModerationStore, PoolTuning};
 use reqwest::StatusCode;
 
 use crate::harness::{
@@ -58,17 +60,19 @@ pub async fn run(
         .as_str()
         .context("report outcome carries report_id")?
         .replacen("ak:report:", "ak:moderation_queue_item:", 1);
-    // The Realm root controller reads it over its standard DPoP session: the
-    // admin gate authenticates the request and consumes its proof once.
-    let queue = expect_json(
-        actor.authorize(
-            server
-                .http()
-                .get(server.url("/_coland/admin/moderation/queue")),
-        ),
-        StatusCode::OK,
-    )
-    .await?;
+    // The queue is a production read-side View, not an Arkret admin API.
+    // Read the real SUT store with the exact Actor, preserving its capability
+    // checks and same-cut fold without granting deployment operator privileges.
+    let db = Db::connect(server.configured_database_url(), PoolTuning::default()).await?;
+    let store = PgModerationStore {
+        pool: db.pool.context("moderation View pool")?,
+    };
+    let actor_id = request.report_event.event.actor_id.clone();
+    let read_queue = || async {
+        let items = store.queue_view_for_actor(&actor_id, None).await?;
+        Ok::<_, anyhow::Error>(serde_json::json!({"items": items}))
+    };
+    let queue = read_queue().await?;
     let items = queue["items"]
         .as_array()
         .context("moderation queue carries items")?
@@ -102,50 +106,7 @@ pub async fn run(
         .await
         .context("moderation dismiss decision")?;
     assert_eq!(dismissed["status"], "committed", "{dismissed}");
-    let queue = expect_json(
-        actor.authorize(
-            server
-                .http()
-                .get(server.url("/_coland/admin/moderation/queue")),
-        ),
-        StatusCode::OK,
-    )
-    .await?;
-    let resolved = queue["items"]
-        .as_array()
-        .context("moderation queue carries items")?
-        .iter()
-        .filter(|item| item["id"] == queue_item_id.as_str())
-        .collect::<Vec<_>>();
-    assert_eq!(resolved.len(), 1, "{queue}");
-    assert_eq!(resolved[0]["status"], "resolved", "{queue}");
-
-    // A committed dismiss naming the report Event writes its moderation_state
-    // assertion; the same View now folds the item to resolved.
-    let issuer = crate::harness::actor_core_id(&actor.actor)?;
-    let dismissed = actor
-        .submit_event(
-            target_realm_id,
-            "ak.moderation.decision",
-            serde_json::json!({
-                "target_ref": request.report_event.event.event_id,
-                "decision": "dismiss",
-                "issuer_id": issuer,
-                "request_canonical_digest": format!("sha256:{}", "0".repeat(64)),
-            }),
-        )
-        .await
-        .context("moderation dismiss decision")?;
-    assert_eq!(dismissed["status"], "committed", "{dismissed}");
-    let queue = expect_json(
-        actor.authorize(
-            server
-                .http()
-                .get(server.url("/_coland/admin/moderation/queue")),
-        ),
-        StatusCode::OK,
-    )
-    .await?;
+    let queue = read_queue().await?;
     let resolved = queue["items"]
         .as_array()
         .context("moderation queue carries items")?

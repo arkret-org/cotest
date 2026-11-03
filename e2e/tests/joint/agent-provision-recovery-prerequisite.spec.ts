@@ -29,7 +29,23 @@ test("Agent creation checks recovery before generating or publishing its DID @ag
     await page.locator(".settings-nav-item-agents").click();
     await expect(page.locator(".agent-admin")).toBeVisible();
     await page.locator(".agent-admin-create-open-button").click();
-    await page.locator(".agent-admin-provision-agent-slug").locator("input, textarea").fill("recovery-required");
+    const slug = page.locator(".agent-admin-provision-agent-slug").locator("input, textarea");
+    await slug.fill("recovery-required");
+    await expect(page.locator(".agent-admin-provision-button")).toBeEnabled();
+    const originalInput = await slug.elementHandle();
+    expect(originalInput).not.toBeNull();
+    const refreshed = page.waitForResponse(response => response.status() === 200
+      && response.request().method() === "GET"
+      && new URL(response.url()).pathname === "/_arkret/self/agents");
+    await page.locator(".agent-admin-refresh-button").click();
+    await (await refreshed).finished();
+    await page.evaluate(() => new Promise<void>(resolve => {
+      requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+    }));
+    expect(await originalInput!.evaluate(input => input.isConnected),
+      "directory refresh preserves the mounted creation input").toBe(true);
+    await expect(slug).toHaveValue("recovery-required");
+    await expect(page.locator(".agent-admin-provision-button")).toBeEnabled();
     const agentKeyCount = () => page.evaluate(async () => {
       let count = 0;
       for (const info of await indexedDB.databases()) {
@@ -182,7 +198,22 @@ for (const cut of ["inception", "provision", "did-binding"] as const) {
         await route.abort("failed");
         releaseCut();
       });
-      await page.locator(".agent-admin-provision-button").click();
+      try {
+        await page.locator(".agent-admin-provision-button").click();
+      } catch (error) {
+        const slug = page.locator(".agent-admin-provision-agent-slug").locator("input, textarea");
+        console.error("[agent-provision-create-state]", JSON.stringify({
+          cut,
+          slug: await slug.inputValue({ timeout: 1_000 }).catch(() => null),
+          slugEnabled: await slug.isEnabled({ timeout: 1_000 }).catch(() => null),
+          createEnabled: await page.locator(".agent-admin-provision-button").isEnabled({ timeout: 1_000 }).catch(() => null),
+          observedCut,
+          didCalls,
+          commitRequests: commitHashes.length,
+          acceptedStage,
+        }));
+        throw error;
+      }
       await cutReached;
       expect(acceptedStage).toBe(cut === "provision" ? "awaiting_pcr_genesis" : "accepted");
       await expect(page.locator(".agent-admin .write-status")).toContainText("remains recoverable");

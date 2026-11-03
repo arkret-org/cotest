@@ -13,10 +13,8 @@ $definitions = foreach ($name in @('Add-RawLogLine', 'ConvertTo-NativeCommandLin
     if (-not $definition) { throw "Missing production function $name" }
     $definition.Extent.Text
 }
-$tempRoot = [IO.Path]::GetFullPath([IO.Path]::GetTempPath()).TrimEnd('\', '/')
-if (-not $tempRoot.StartsWith('D:\', [StringComparison]::OrdinalIgnoreCase) -and -not $tempRoot.StartsWith('D:/', [StringComparison]::OrdinalIgnoreCase)) {
-    throw 'This tool test requires an explicit D: TEMP'
-}
+$tempRoot = [IO.Path]::GetFullPath((Join-Path $RepoRoot 'artifacts/tool-tests')).TrimEnd('\', '/')
+$null = New-Item -ItemType Directory -Path $tempRoot -Force
 $scratch = Join-Path $tempRoot ('cotest-native-invocation-' + [Guid]::NewGuid().ToString('N'))
 $null = New-Item -ItemType Directory -Path (Join-Path $scratch 'scripts')
 try {
@@ -37,6 +35,11 @@ function Get-Command {
     # executable. No executable is launched: Start-Process below is a mock.
     [pscustomobject]@{ Source = (Join-Path $PSScriptRoot "tools with spaces/$Name.exe") }
     [pscustomobject]@{ Source = (Join-Path $PSScriptRoot "unselected/$Name.exe") }
+}
+function Resolve-ConformancePython {
+    param([AllowNull()][string]$ExplicitPath)
+    # Interpreter preparation is independent of this argv transport regression.
+    return (Get-Command python -CommandType Application -ErrorAction Stop | Select-Object -First 1).Source
 }
 function Start-Process {
     param($FilePath, $ArgumentList, $WorkingDirectory, [switch]$NoNewWindow, [switch]$PassThru, $RedirectStandardOutput, $RedirectStandardError)
@@ -83,6 +86,7 @@ Write-Host 'native-conformance-invocation.tests.ps1: PASS (mocked process argv/r
     if ($LASTEXITCODE -ne 0) { throw 'Native invocation production-function regression failed' }
 } finally {
     $resolved = [IO.Path]::GetFullPath($scratch)
-    if (-not $resolved.StartsWith($tempRoot + [IO.Path]::DirectorySeparatorChar, [StringComparison]::OrdinalIgnoreCase)) { throw 'Scratch cleanup escaped its D: TEMP' }
+    $comparison = if ($IsWindows) { [StringComparison]::OrdinalIgnoreCase } else { [StringComparison]::Ordinal }
+    if (-not $resolved.StartsWith($tempRoot + [IO.Path]::DirectorySeparatorChar, $comparison)) { throw 'Scratch cleanup escaped its owned artifact root' }
     Remove-Item -LiteralPath $resolved -Recurse -Force
 }

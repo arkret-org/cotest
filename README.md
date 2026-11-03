@@ -98,13 +98,30 @@ Recommended entrypoints:
 .\scripts\run-server-conformance.ps1 -Runtime process -Profile services-live
 ```
 
-- `process` mode is the fast local path and spawns a pre-built SUT binary
-  (`COLAND_BIN`, or the coland binary the runner script built); test execution
-  never compiles the SUT itself. Without `COLAND_BIN`, lookup walks the Cargo
-  target directory this run was built into and then `../coland/target/debug/`,
-  so it works whether the workspace shares one `build.target-dir` or each repo
-  keeps its own `target/`. Never hard-code either layout: ask
-  `cargo metadata --format-version 1 --no-deps` for `target_directory`.
+Native `all` and `full-nightly` runs prepare Coauth with Cedar, the stamped
+Directory binary, the sealed SDK artifacts, and the actual Savfox binding worker
+before selected tests execute. Browser-backed provisioning vectors prepare their
+native tools through the joint runner's preflight. An explicit artifact override
+must name the real executable or sealed manifest used for this run.
+
+Select Python 3.11 or newer with `COTEST_PYTHON_BIN`. Missing Spec-tool packages
+are installed from the sibling Spec's `tools/requirements.txt` into a run-owned
+virtual environment. Native media selections additionally require actual
+`COLAND_TEST_SFU_PYTHON` and `COLAND_TEST_LIVEKIT_BIN` executable paths; the former
+must import LiveKit RTC. Missing prerequisites fail before test execution.
+
+Without a configured conformance database, the runner starts its isolated Docker
+PostgreSQL. To use an existing native test cluster, pass `-PostgresAdminUrl`,
+`-PostgresDataDirectory`, and optionally `-PostgresToolsDirectory`. The runner
+verifies `SHOW data_directory`, creates separate run-owned stores, and removes
+children before their administrative database. Parallel storage selections need
+`max_locks_per_transaction >= 1024`; the runner does not restart external clusters.
+Use `-DnsSuffix localhost` when that is the selected browser topology.
+
+- `process` mode spawns a prepared SUT binary (`COLAND_BIN`, or the Coland
+  executable built by the runner); test execution never compiles the SUT itself.
+  The runner asks `cargo metadata --format-version 1 --no-deps` for
+  `target_directory`, supporting both shared and separate Cargo target layouts.
 - `.\scripts\run-compose.ps1` runs the process-mode `compose` profile and can
   attach live `coauth`, `floria`, `codmin`, `inkson`, or `flagon` services
   through base URLs or managed service commands.
