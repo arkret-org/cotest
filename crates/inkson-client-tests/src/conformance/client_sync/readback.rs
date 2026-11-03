@@ -22,10 +22,10 @@ struct Request {
 pub struct CheckpointReadbackScope(&'static str);
 impl Drop for CheckpointReadbackScope {
     fn drop(&mut self) {
-        if let Ok(mut target) = TARGET.lock() {
-            if *target == Some(self.0) {
-                *target = None;
-            }
+        if let Ok(mut target) = TARGET.lock()
+            && *target == Some(self.0)
+        {
+            *target = None;
         }
     }
 }
@@ -149,7 +149,7 @@ pub(super) fn output(reader: &Path, state_path: &Path, evidence_path: &Path) -> 
 }
 
 fn readback(state_path: &Path, evidence_path: &Path) -> Result<()> {
-    let evidence: serde_json::Value = serde_json::from_slice(&std::fs::read(&evidence_path)?)?;
+    let evidence: serde_json::Value = serde_json::from_slice(&std::fs::read(evidence_path)?)?;
     if evidence.is_object() {
         let account = serde_json::from_value(evidence["account"].clone())?;
         let realm = serde_json::from_value(evidence["realm"].clone())?;

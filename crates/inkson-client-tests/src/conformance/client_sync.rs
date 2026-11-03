@@ -2822,7 +2822,7 @@ impl Probe {
                 "stream_anchors":partial["verified_commit_stream_anchors"]
             }))?,
         )?;
-        let output = readback::output(&self.reader, &path, &evidence)?;
+        let output = readback::output(&self.reader, path, &evidence)?;
         ensure!(
             output.status.success(),
             "partial stream progress was not durable across a new process: {}",
@@ -2866,7 +2866,7 @@ impl Probe {
                 "stream_anchors":after["verified_commit_stream_anchors"]
             }))?,
         )?;
-        let output = readback::output(&self.reader, &path, &evidence)?;
+        let output = readback::output(&self.reader, path, &evidence)?;
         ensure!(
             output.status.success(),
             "recovered Circle cut failed new-process readback: {}",
