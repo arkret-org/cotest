@@ -90,7 +90,7 @@ Recommended entrypoints:
 .\scripts\demote-test.ps1 -SpecPath e2e\tests\path\spec.ts:42 -Reason "GAP-Px-yyy blocked by backing feature"
 .\scripts\promote-fixme.ps1 -SpecPath e2e\tests\path\spec.ts:42 -FeatureId cotest#local-feature `
   -PassedSpecCommand "npx playwright test --config playwright.config.ts --project chromium --grep name" `
-  -EvidencePath artifacts\latest\joint-e2e\playwright-report -NewBody $body
+  -EvidencePath "$((Get-Content artifacts/latest/joint-e2e/run-location.json -Raw | ConvertFrom-Json).authoritative_run)/playwright-report" -NewBody $body
 .\scripts\run-compose.ps1
 .\scripts\build-coland-image.ps1
 .\scripts\run-server-conformance.ps1 -Runtime docker -SutImage cotest-coland:latest
@@ -175,7 +175,7 @@ easy to find:
 ```
 artifacts/
   runs/
-    cotest/<timestamp>-<profile>[-selection]/ # run-server-conformance.ps1 authoritative outputs
+    server-conformance/<timestamp>-<profile>[-selection]/ # run-server-conformance.ps1 authoritative outputs
       summary.*, junit.xml, ...
       services/
       joint-smoke/ | joint/ | ...   # embedded joint gate outputs
@@ -184,8 +184,8 @@ artifacts/
     cargo-adhoc/                    # bare `cargo test` reports
   latest/
     README.md                       # generated index of stable channels
-    full/                           # latest unfiltered complete cotest run
-    joint-e2e/                      # latest non-targeted joint suite
+    server-conformance/             # latest unfiltered complete cotest run
+    joint-e2e/                      # summaries and pointer to the latest non-targeted joint suite
   hygiene/<timestamp>/              # run-hygiene.ps1 (separate gate, own family)
   compose/                          # run-compose.ps1 live-stack service logs
 ```
@@ -204,7 +204,7 @@ Rules:
   stable joint result except for the dedicated `run-server-conformance.ps1 -Profile joint`
   suite. The targeted `multi-server` and `release-gate` legs never replace it.
 - Both scripts keep the newest 20 runs in their own family (`-KeepRuns`, `0`
-  disables), so cotest and joint-e2e retention cannot prune one another.
+  disables), plus any older run referenced by a stable channel.
 - CI sets `COTEST_JOINT_RUN_DIR` to fixed names under `runs/` (e.g.
   `runs/integration-playwright/joint-e2e`).
 
@@ -310,17 +310,18 @@ own database. This supports `-ServerCount 3 -DualCoauth` without Docker. The
 administrative URL is never used as an application database; an explicitly
 provided `-ColandDatabaseUrl` still cannot be shared across Stations.
 
-Evidence lands in `artifacts/runs/joint-e2e/<ts>-<profile>/`:
-`playwright-report/` (HTML with trace/video/failure screenshot),
-`screenshots/` (your `stepShot` captures), and `diagnostics/` (console +
-network HAR). Runner-owned service data uses explicit topology names: each
-Coauth authority has a `coauth-serverN/` directory, while Coland configuration,
-object, state, and store-dump artifacts use `coland-serverN-*` names. Open a
-failure's trace for a step-by-step replay of DOM, network, and screenshots:
+Start with `summary.md` in `artifacts/runs/joint-e2e/<ts>-<profile>/`.
+The same directory contains `environment/`, `build-evidence/`, `junit.xml`,
+`failures.md`, `playwright.log` (combined console output), and
+`playwright-report/index.html`. Browser attachments, step screenshots, service
+logs and store dumps stay in the authoritative run. The latest channel keeps
+only the summaries and `run-location.json`. Trace capture is disabled for
+joint runs because traces can include credentials.
 
-```powershell
-npx playwright show-trace artifacts\latest\joint-e2e\playwright-report\<...>\trace.zip
-```
+The runner removes its copied executables, served Inkson bundle, and Savfox
+working directories on teardown. It retains build stamps and checksums in
+`build-evidence/`. `-KeepServices` retains the working files for live debugging;
+`-NativeToolsEnvironmentFile` retains the exported tools for the caller.
 
 ### 4. (Optional) pin the visual with a screenshot assertion
 
