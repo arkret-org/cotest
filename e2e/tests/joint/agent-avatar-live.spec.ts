@@ -199,9 +199,16 @@ for (const mode of ["avatar", "lost-responses", "retryable-profile", "account-sw
       await page.locator(".settings-nav-item-agents").click();
     } else if (mode === "account-switch") {
       await expect(page.locator(".agent-admin .write-status")).toContainText("Agent was created; its avatar is still pending", { timeout: 180_000 });
-      await page.locator(".account-menu-button").click();
-      await page.locator(".account-menu").locator(".account-picker__add").click();
+      await page.bringToFront();
+      await page.getByRole("button", { name: "Account menu", exact: true }).click();
+      const menu = page.locator(".account-menu");
+      const picker = menu.getByRole("combobox", { name: "Switch account", exact: true });
+      await expect(picker).toBeVisible();
+      const originalProfile = await picker.inputValue();
+      expect(originalProfile).not.toBe("");
+      await menu.getByRole("button", { name: "Sign in to another account", exact: true }).click();
       await expect(page.locator(".auth-panel")).toBeVisible();
+      await expect(page.locator(".shell.app")).toHaveCount(0);
       await page.waitForTimeout(500);
       const beforeSwitch = profileAttempts;
       holdProfile = false;
@@ -209,6 +216,9 @@ for (const mode of ["avatar", "lost-responses", "retryable-profile", "account-sw
       expect(profileAttempts).toBe(beforeSwitch);
       await page.getByRole("button", { name: "Back to previous account", exact: true }).click();
       await expect(page.locator(".shell.app")).toBeVisible({ timeout: 120_000 });
+      await expect.poll(() => page.evaluate(() =>
+        JSON.parse(localStorage.getItem("inkson.config.v1") ?? "{}").active_account?.profile_id,
+      )).toBe(originalProfile);
       await expect.poll(() => profileConfirmed, { timeout: 180_000 }).toBe(true);
       await user.gotoSettings();
       await page.locator(".settings-nav-item-agents").click();
@@ -245,9 +255,10 @@ for (const mode of ["avatar", "lost-responses", "retryable-profile", "account-sw
       const image = row.locator(".agent-admin-row-avatar");
       if (acceptedAvatar) await expect(image).toHaveAttribute("src", /^data:image\//, { timeout: 120_000 });
       else await expect(image).toHaveClass(/generated-avatar/);
-      const bounds = await image.boundingBox();
-      expect(bounds?.width).toBe(36);
-      expect(bounds?.height).toBe(36);
+      await expect.poll(async () => {
+        const bounds = await image.boundingBox({ timeout: 1_000 }).catch(() => null);
+        return bounds && { width: bounds.width, height: bounds.height };
+      }, { timeout: 30_000 }).toEqual({ width: 36, height: 36 });
       const details = page.waitForResponse(response => response.request().method() === "GET"
         && decodeURIComponent(new URL(response.url()).pathname).endsWith(`/_arkret/self/agents/${agent}`))
         .then(response => response.json());

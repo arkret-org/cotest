@@ -54,8 +54,6 @@ import {
   signalPlaintext,
 } from "../../helpers/webrtc";
 
-test.describe.configure({ mode: "serial" });
-
 async function gotoChat(page: JointUserPage, realmId: string) {
   if (decodeURIComponent(new URL(page.page.url()).pathname) !== `/chat/${realmId}`) {
     await page.gotoTimelineRealm(realmId);
@@ -1072,9 +1070,15 @@ test.describe("chat advanced", () => {
           has: page.page.getByLabel(canonicalJson(accountActorId(peer.id)), { exact: true }),
         })).toHaveClass(/\bpresence-row-online\b/, { timeout: 90_000 });
       }
-      await alicePage.page.locator(".chat-input").fill(`draft ${stamp}`);
       const aliceTypingIndicator = bobPage.page.locator(".typing-indicator");
       try {
+        await alicePage.page.bringToFront();
+        const input = alicePage.page.locator(".chat-input");
+        const draft = `draft ${stamp}`;
+        await alicePage.clickWithPassivePromptRetry(input);
+        await input.pressSequentially(draft);
+        await expect(input).toHaveValue(draft);
+        await expect(alicePage.page.locator(".chat-input-hint")).toHaveCount(0);
         await expect(aliceTypingIndicator).toBeVisible({ timeout: 5_000 });
         await expect.poll(async () => {
           const rows: Array<Record<string, unknown>> = await bobPage.page.evaluate(() => {

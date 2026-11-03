@@ -1,10 +1,9 @@
-import { expect, type Page, type WebSocketRoute } from "@playwright/test";
+import { expect, type Page } from "@playwright/test";
 
-// Forward authentic Station frames and retain one account delta in memory.
-// The duplication cut replays exact already-observed bytes, never a fabricated
-// snapshot, cursor, Event or Commit. No frame content is written to evidence.
+// Forward authentic Station frames. A replay uses the exact incoming bytes on
+// their original live channel. No frame content is written to evidence.
 export async function installSubscriptionCut(page: Page, forceHttp: boolean) {
-  let lastDelta: { route: WebSocketRoute; channel: string; message: string | Buffer } | undefined;
+  let repeatAccountDataKey: string | undefined;
   let rejectedConnections = 0;
   let duplicatedFrames = 0;
   const receivedRefs = new Set<string>();
@@ -70,24 +69,21 @@ export async function installSubscriptionCut(page: Page, forceHttp: boolean) {
   await page.routeWebSocket(url => url.pathname.startsWith("/_arkret/"), route => {
     const server = route.connectToServer();
     let rejected = false;
-    const opened = new Set<string>();
+    const opened = new Map<string, string>();
     const cost = { path: new URL(route.url()).pathname, real_server_frames: 0, real_server_bytes: 0,
       client_frames: 0, client_bytes: 0, opened_channels: [] as Array<{ channel_id: string; operation_id: string }> };
     sockets.push(cost);
-    const invalidate = () => { if (lastDelta?.route === route) lastDelta = undefined; };
     route.onClose((code, reason) => {
-      invalidate();
       // The backing browser WebSocket may actively send only 1000 or 3xxx/4xxx.
       const allowed = code === 1000 || code !== undefined && code >= 3000 && code <= 4999;
       void server.close({ code: allowed ? code : 1000, reason }).catch(() => {});
     });
-    server.onClose((code, reason) => { invalidate(); void route.close({ code, reason }).catch(() => {}); });
+    server.onClose((code, reason) => { void route.close({ code, reason }).catch(() => {}); });
     route.onMessage(message => {
       try {
         const frame = JSON.parse(message.toString());
         if (frame.kind === "close" && typeof frame.channel_id === "string") {
           opened.delete(frame.channel_id);
-          if (lastDelta?.route === route && lastDelta.channel === frame.channel_id) lastDelta = undefined;
         }
       } catch { /* Forward every client frame without changing its bytes. */ }
       cost.client_frames += 1; cost.client_bytes += Buffer.byteLength(message); server.send(message);
@@ -107,27 +103,43 @@ export async function installSubscriptionCut(page: Page, forceHttp: boolean) {
         const frame = JSON.parse(message.toString());
         collect(frame);
         if (frame.kind === "opened" && typeof frame.channel_id === "string" && typeof frame.operation_id === "string") {
-          opened.add(frame.channel_id);
+          opened.set(frame.channel_id, frame.operation_id);
           cost.opened_channels.push({ channel_id: frame.channel_id, operation_id: frame.operation_id });
         }
         if (frame.kind === "closed" && typeof frame.channel_id === "string") {
           opened.delete(frame.channel_id);
-          if (lastDelta?.route === route && lastDelta.channel === frame.channel_id) lastDelta = undefined;
         }
-        if (frame.kind === "data" && frame.payload?.kind === "delta" && opened.has(frame.channel_id)) {
-          lastDelta = { route, channel: frame.channel_id, message };
+        if (repeatAccountDataKey && frame.kind === "data" && frame.payload?.kind === "delta"
+            && opened.get(frame.channel_id) === "ak.self.account.stream.subscribe.v1"
+            && Object.keys(frame.payload.realms ?? {}).length === 0
+            && frame.payload.account_data?.events?.some(
+              (event: { kind?: string; payload?: { key?: string } }) =>
+                event.kind === "ak.account_data.set" && event.payload?.key === repeatAccountDataKey,
+            )) {
+          repeatAccountDataKey = undefined;
+          // A non-catchup Account read releases its channel after one delta.
+          // Forward the copies before that channel can close.
+          for (let index = 0; index < 20; index += 1) {
+            route.send(message);
+            duplicatedFrames += 1;
+          }
         }
       } catch { /* Non-data and binary frames are forwarded unchanged. */ }
     });
   });
   return {
-    async repeatSameCut() {
+    async repeatSameCut(accountDataKey: string, publish: () => Promise<unknown>) {
       expect(forceHttp).toBe(false);
-      await expect.poll(() => Boolean(lastDelta), { timeout: 90_000 }).toBe(true);
-      const original = lastDelta!;
-      for (let index = 0; index < 20; index += 1) {
-        original.route.send(original.message);
-        duplicatedFrames += 1;
+      expect(repeatAccountDataKey).toBeUndefined();
+      const before = duplicatedFrames;
+      repeatAccountDataKey = accountDataKey;
+      try {
+        await Promise.all([
+          publish(),
+          expect.poll(() => duplicatedFrames - before, { timeout: 90_000 }).toBe(20),
+        ]);
+      } finally {
+        repeatAccountDataKey = undefined;
       }
     },
     async httpProof() {

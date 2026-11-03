@@ -423,13 +423,17 @@ async function assertStructureBoundary(proof: DirectStructureProof, realm: strin
 
 // Existing test-feature hook: actual Device/MLS sender; no private material crosses JS.
 async function realTyping(page: Page, realm: string, strand: string, typing: boolean) {
+  await page.bringToFront();
   await expect.poll(() => page.evaluate(() => typeof (window as any).__inkson_signal_sender_evidence),
     { timeout: 30_000 }).toBe("function");
-  return page.evaluate(async ({ realm, strand, typing }) => JSON.parse(await
-    (window as any).__inkson_signal_sender_evidence(realm, strand, typing)), { realm, strand, typing }) as Promise<{
+  const result = await page.evaluate(async ({ realm, strand, typing }) => JSON.parse(await
+    (window as any).__inkson_signal_sender_evidence(realm, strand, typing)), { realm, strand, typing }) as {
       accepted: boolean; dispatched_recipient_count?: number; envelope_digest: string;
       group_id: string; epoch: number; sender_actor_id: unknown; sender_device_id: string;
-    }>;
+    };
+  expect(result, "actual Signal producer must pass its local gates and complete the authenticated send")
+    .toMatchObject({ accepted: true });
+  return result;
 }
 async function realSignalReceiver(page: Page, clear = false): Promise<Array<Record<string, any>>> {
   await expect.poll(() => page.evaluate(() => typeof (window as any).__inkson_signal_receiver_evidence),
@@ -446,11 +450,21 @@ async function assertWrongPlaintextStrand(alice: Page, bob: Page, realm: string,
   const positive = await realTyping(alice, realm, chat, true);
   expect(positive.accepted, "same-group positive Typing must reach the actual Station").toBe(true);
   expect(positive.dispatched_recipient_count ?? 0).toBeGreaterThan(0);
-  await expect.poll(async () => (await realSignalReceiver(bob)).some(row => row.strand_id === chat
-    && isDeepStrictEqual(row.sender_actor_id, positive.sender_actor_id)
-    && row.sender_endpoint?.device_id === positive.sender_device_id
-    && row.admitted_and_decrypted === true && row.target_scope_matches === true
-    && row.live_applied === true && row.visible_count > 0), { timeout: 15_000 }).toBe(true);
+  await expect.poll(async () => (await realSignalReceiver(bob))
+    .filter(row => isDeepStrictEqual(row.sender_actor_id, positive.sender_actor_id)
+      && row.sender_endpoint?.device_id === positive.sender_device_id)
+    .map(row => ({
+      typing: row.typing === true,
+      strandMatches: row.strand_id === chat,
+      admittedAndDecrypted: row.admitted_and_decrypted === true,
+      targetScopeMatches: row.target_scope_matches === true,
+      targetReadFailed: typeof row.target_scope_error === "string",
+      liveApplied: row.live_applied === true,
+      visible: row.visible_count > 0,
+    })), { timeout: 15_000 }).toContainEqual({
+      typing: true, strandMatches: true, admittedAndDecrypted: true, targetScopeMatches: true,
+      targetReadFailed: false, liveApplied: true, visible: true,
+    });
   await expect(bob.locator(".typing-indicator")).toHaveCount(1);
   const negative = await realTyping(alice, realm, target!, true);
   expect(negative.accepted, "wrong plaintext target must still have a legal encrypted outer Signal").toBe(true);
@@ -1211,6 +1225,15 @@ async function runFlatTopicChats(alice: Page, bob: Page, mainMessages: string[],
     for (const message of mainMessages) await expect(page.locator(".chat-message").filter({ hasText: message })).toHaveCount(0);
   }
   const bobWatch = await ownWatchTransitions(bob, [alice, ...extraDevices], chatId);
+  // The watch UI can reappear before the cursorless Signal rail reconnects.
+  // Encrypted presence from each accepted peer proves the live path is ready.
+  for (const [page, peer] of [[alice, bobWatch.actor_id], [bob, chat.actor_id]] as const) {
+    expect(peer).toBeDefined();
+    const presence = page.locator(".presence-row").filter({
+      has: page.getByLabel(canonicalJson(peer), { exact: true }),
+    });
+    await expect(presence).toHaveClass(/\bpresence-row-online\b/, { timeout: 90_000 });
+  }
   await assertWrongPlaintextStrand(alice, bob, chat.realm_id!, chatId, proof!);
   const classified = await structureWrite(alice, "place", "ak.strand.update", undefined, topicId);
   expect(classified.payload?.target_ref).toBe(chatId);

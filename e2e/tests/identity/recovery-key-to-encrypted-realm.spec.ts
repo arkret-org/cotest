@@ -22,8 +22,6 @@ type ProtocolHit = {
   errorCode?: string;
 };
 
-test.describe.configure({ mode: "serial" });
-
 test.describe("identity.recovery-key-to-encrypted-realm @fully-implemented", () => {
   for (const cut of ["none", "accepted_create_response_loss", "accepted_discussion_response_loss", "accepted_default_selection_response_loss"] as const) {
   test("fresh browser registration creates, writes, and reloads plaintext and encrypted Realms; " + cut, async ({
@@ -119,15 +117,12 @@ test.describe("identity.recovery-key-to-encrypted-realm @fully-implemented", () 
         expect(recoveryKey.split(/\s+/)).toHaveLength(24);
         await enterSecretText(page, page.getByLabel("Re-enter the 24 words", { exact: true }), recoveryKey);
         await page.locator(".onboarding-bind-identity").click();
+        const continueSetup = page.locator(".onboarding-continue")
+          .and(page.getByRole("button", { name: "Continue", exact: true }));
         await expect
           .poll(
             async () => {
-              if (
-                await page
-                  .locator(".onboarding-complete")
-                  .isVisible()
-                  .catch(() => false)
-              ) {
+              if (await continueSetup.isVisible().catch(() => false)) {
                 return "complete";
               }
               if (new URL(page.url()).pathname === "/login") {
@@ -138,13 +133,7 @@ test.describe("identity.recovery-key-to-encrypted-realm @fully-implemented", () 
             { timeout: 240_000 },
           )
           .toBe("complete");
-        await expect(page.locator(".onboarding-complete")).toContainText(
-          "Identity ready",
-        );
-        await page
-          .locator(".onboarding-complete")
-          .getByRole("link", { name: "Continue" })
-          .click();
+        await continueSetup.click();
         await expect(page.locator(".shell.app")).toBeVisible({
           timeout: 120_000,
         });

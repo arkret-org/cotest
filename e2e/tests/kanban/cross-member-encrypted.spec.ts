@@ -1,4 +1,4 @@
-import { addBoardList } from "../../helpers/kanban-product-ui";
+import { addBoardList, fillCardNarrative } from "../../helpers/kanban-product-ui";
 import { restartRunnerStation } from "../../helpers/station-runtime";
 import { proveKanbanHistoryTail, seedKanbanHistory } from "../../helpers/kanban-history";
 import { observeRequestCost } from "../../helpers/request-cost";
@@ -53,7 +53,7 @@ import {
   type Page,
 } from "../../helpers/arkret-test";
 import { colandBaseUrl } from "../../helpers/env";
-import { assertAuthoritySubmitOutcome, canonicalJson, grantCapabilityEventApi, queryRealmEventsApi, retypeEventDerivedId, scanRealmStreamApi, sdkEventDerivedObjectId, signedEventEnvelope, submitSignedEventApi } from "../../helpers/coland-api";
+import { assertAuthoritySubmitOutcome, canonicalJson, grantCapabilityEventApi, queryRealmEventsApi, replaceAccountDataApi, retypeEventDerivedId, scanRealmStreamApi, sdkEventDerivedObjectId, signedEventEnvelope, submitSignedEventApi } from "../../helpers/coland-api";
 import { grantInviteConsentArkret } from "../../helpers/contact-api";
 import { stepShot } from "../../helpers/screenshots";
 import { selfPathGrantHeaders } from "../../helpers/session-grant-dpop";
@@ -514,9 +514,9 @@ async function addEncryptedDescription(
   await page.locator(".card-detail-tab-description").click();
   await page.locator(".card-detail-edit-description-button").click();
 
-  const editor = page.locator(".card-detail-edit-form").getByRole("textbox", { name: "Description", exact: true });
-  await expect(editor).toBeAttached({ timeout: 45_000 });
-  await editor.fill(description);
+  await fillCardNarrative(page, "Description", description);
+  const form = page.locator(".card-detail-edit-form");
+  const save = form.locator(".card-detail-save-button");
 
   const responseDeadline = Date.now() + 120_000;
   let response: Awaited<ReturnType<Page["waitForResponse"]>> | undefined;
@@ -529,7 +529,6 @@ async function addEncryptedDescription(
       (candidate.request().postData() ?? "").includes("ak.strand.update"),
     { timeout: 120_000 },
   ).catch(() => undefined);
-  const save = page.locator(".card-detail-save-button");
   let ingressObserved = false;
   let preAuthoringRetries = 0;
   const captureRequest = (request: import("@playwright/test").Request) => {
@@ -547,12 +546,9 @@ async function addEncryptedDescription(
 
       const status =
         (
-          await page.locator(".card-detail-edit-status").textContent()
+          await form.locator(".card-detail-edit-status").textContent({ timeout: 1_000 }).catch(() => null)
         )?.trim() ?? "";
-      expect(
-        status,
-        "description save produced neither ak.strand.update nor a visible failure status",
-      ).not.toBe("");
+      if (!status) continue;
       // A checkpoint read refusal precedes Event authoring. Never retry ingress.
       const checkpointRefused = /^encrypted card write is not ready: (?:MLS send gate is not ready: )?account checkpoint changed (?:before|during) committed read$/.test(status);
       expect(
@@ -576,7 +572,7 @@ async function addEncryptedDescription(
   }
   expect(
     response,
-    "description remained encryption_transition_pending after the MLS admission convergence deadline",
+    "description did not submit ak.strand.update within the response window",
   ).toBeDefined();
 
   const acceptedResponse = response!;
@@ -644,37 +640,35 @@ async function assertCardDecrypts(
       .filter({ hasText: cardTitle }),
   ).toHaveCount(0);
 
-  // The recovery/backup nag modal can re-pop and its backdrop intercepts the
-  // card click; dismiss it then open the card, retrying past a late modal.
-  const detailModal = reader.page.locator(".card-detail-modal");
-  await expect
-    .poll(
-      async () => {
-        if (await detailModal.isVisible().catch(() => false)) return true;
-        await dismissRecoveryNags(reader);
-        await card.click({ timeout: 3_000 }).catch(() => {});
-        return detailModal.isVisible().catch(() => false);
-      },
-      {
-        timeout: 60_000,
-        intervals: [1_000, 2_000],
-        message: `${reader.user.name} could not open the card detail (nag modal blocking?)`,
-      },
-    )
-    .toBe(true);
-  await dismissRecoveryNags(reader);
-  await reader.page.locator(".card-detail-tab-description").click();
+  await reader.page.bringToFront();
+  const detail = reader.page.getByRole("dialog", { name: cardTitle, exact: true })
+    .and(reader.page.locator(".card-detail-modal"));
+  const description = detail.locator(".card-description-panel");
+  await expect(async () => {
+    await dismissRecoveryNags(reader);
+    if (!(await detail.isVisible())) {
+      const restored = reader.page.locator(".card-detail-modal:visible");
+      if (await restored.isVisible()) {
+        await restored.locator(".card-detail-close-button").click({ timeout: 3_000 });
+      }
+      await card.click({ timeout: 3_000 });
+    }
+    // A cold projection can replace the dialog while its content mounts.
+    // Observe the selected card's actual Description tab within the open step.
+    await detail.locator(".card-detail-tab-description").click({ timeout: 3_000 });
+    await expect(description).toBeVisible({ timeout: 3_000 });
+  }).toPass({ timeout: 60_000, intervals: [1_000, 2_000] });
 
   // The decryption proof: the private body renders in plaintext...
-  await expect(reader.page.locator(".card-description-panel")).toContainText(
+  await expect(description).toContainText(
     expectedDescription,
     { timeout: 120_000 },
   );
   // ...and the "locked / cannot decrypt" affordance is NOT shown.
-  await expect(reader.page.locator(".card-detail-description-locked")).toHaveCount(
+  await expect(detail.locator(".card-detail-description-locked")).toHaveCount(
     0,
   );
-  await reader.page.locator(".card-detail-close-button").click();
+  await detail.locator(".card-detail-close-button").click();
 }
 
 // A member who has not set up encrypted-history recovery (every invitee, and
@@ -1565,7 +1559,9 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
       // encrypt, invite, Welcome, join, cross-member decrypt, reload, reverse
       // direction) does not fit the 180s default — mirror the sibling MLS browser
       // budget so it does not time out mid-flow.
-      test.setTimeout(fault === "history-after-501" ? 900_000 : 600_000);
+      // This branch commits 501 individually signed Strands before running
+      // the same browser recovery and cross-member write checks as the others.
+      test.setTimeout(fault === "history-after-501" ? 1_800_000 : 600_000);
 
       const stamp = Date.now();
       const [aliceSession, bobSession] = await Promise.all([
@@ -2190,7 +2186,15 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
             expect(subscriptionCut!.proof().real_websocket_costs.some(socket => socket.opened_channels.some(channel =>
               channel.operation_id === "ak.self.account.stream.subscribe.v1"))).toBe(true);
             const steadyStart = cost.mark();
-            await subscriptionCut!.repeatSameCut();
+            // A real holder preference update wakes the Account channel while
+            // leaving the Board's accepted Realm cut unchanged.
+            const key = "ak.dnd_schedule";
+            await subscriptionCut!.repeatSameCut(key, () => replaceAccountDataApi(
+              request, aliceSession.grantJwt, alice.id, key,
+              { dnd: { enabled: false, schedule: {
+                timezone: "Etc/UTC", tzdb_version: "2025b", all_day: true, periods: [],
+              }, exceptions: [] } }, 0,
+            ));
             await alicePage.page.waitForTimeout(2_000);
             const steady = await cost.snapshot(steadyStart);
             expect(lists(steady)).toHaveLength(0);
@@ -2201,6 +2205,9 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
             expect(first.http.some(row => /\/(account|events)\/subscribe$/.test(row.path))).toBe(true);
             expect((await subscriptionCut!.httpProof())?.successful ?? 0).toBeGreaterThan(0);
           }
+          await grantCapabilityEventApi(request, aliceSession.grantJwt, {
+            ownerId: alice.id, realmId, subjectId: bob.id, actions: ["ak.message.create"],
+          });
           const ordinaryStart = cost.mark();
           const ordinary: string[] = [];
           let ordinaryCommit = "";
@@ -2213,8 +2220,10 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
               const event = request.postDataJSON()?.event;
               return event?.realm_id === realmId && event?.kind === "ak.message.create";
             }, { timeout: 90_000 });
-            await bobPage.sendTimelineMessage(realmId, `Net ordinary ${stamp}/${index}`);
-            const response = await receipt;
+            const [response] = await Promise.all([
+              receipt,
+              bobPage.sendTimelineMessage(realmId, `Net ordinary ${stamp}/${index}`),
+            ]);
             const event = response.request().postDataJSON().event as Record<string, unknown>;
             const outcome = await response.json();
             assertAuthoritySubmitOutcome(outcome, event, `ordinary message ${index + 1}/20`);

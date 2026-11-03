@@ -24,7 +24,6 @@ import { accountRow } from "../../helpers/product-locators";
 // its OWN consent cells. S4-fed exercises that real cross-PS path end to end.
 
 import { createDirectBoundaryCircleStrand, flatTopicChats } from "../../helpers/direct-structure";
-import type { Page } from "@playwright/test";
 import { expect, test } from "../../helpers/arkret-test";
 import {
   assertServerCountNotRequired,
@@ -48,6 +47,7 @@ import {
   createDpopUserSession,
   openUserPage,
   uniqueUser,
+  type JointUserPage,
 } from "../../helpers/users";
 import {
   contactRow,
@@ -61,11 +61,16 @@ import {
 
 test.describe.configure({ mode: "serial" });
 
-async function sendCrossStationEncrypted(page: Page, message: string) {
-  if (await page.getByRole("dialog", { name: "Back up encrypted history", exact: true }).isVisible()) {
-    await page.getByRole("button", { name: "Remind me later", exact: true }).click();
-  }
-  await page.locator(".chat-input").fill(message);
+async function sendCrossStationEncrypted(user: JointUserPage, recoveryKey: string | undefined, message: string) {
+  const page = user.page;
+  await page.bringToFront();
+  expect(recoveryKey?.trim().split(/\s+/).length === 24,
+    "the actual confirmed account Recovery Key is required for encrypted entry").toBe(true);
+  // Device approval does not restore account keys. Complete the product's
+  // normal recovery flow before observing the original message submission.
+  await user.completeMlsAccountRecoveryIfPrompted(recoveryKey!);
+  await user.fillWithPassivePromptRetry(page.locator(".chat-input"), message);
+  await expect(page.locator(".send-chat-button")).toBeEnabled({ timeout: 90_000 });
   const realm = new URL(page.url()).pathname.split("/").map(decodeURIComponent).find(value => value.startsWith("ak:realm:"));
   expect(realm).toBeTruthy();
   const isOriginal = (event: { kind?: string; realm_id?: string }) => event.kind === "ak.message.create" && event.realm_id === realm;
@@ -76,7 +81,8 @@ async function sendCrossStationEncrypted(page: Page, message: string) {
   }, { timeout: 90_000 });
   const [response] = await Promise.all([
     submitted,
-    submitOrdinaryComposerDraft(page, message, { timeout: 90_000 }),
+    submitOrdinaryComposerDraft(page, message, { timeout: 90_000,
+      click: () => user.clickWithPassivePromptRetry(page.locator(".send-chat-button")) }),
   ]);
   const original = decodeIngressEvents(response.request().postData(), { context: "cross-Station Direct original" }).find(isOriginal)!;
   expect(original.payload?.encrypted_content).toBeTruthy();
@@ -437,13 +443,13 @@ test.describe("contact graph federation (server1/server2)", () => {
       }).toPass({ timeout: 120_000, intervals: [2_000] });
 
       const aliceMessage = `cross-ps alice ${Date.now()}`;
-      await sendCrossStationEncrypted(alicePage.page, aliceMessage);
+      await sendCrossStationEncrypted(alicePage, aliceFlow.session.recoveryKey, aliceMessage);
       await expect(
         bobPage.page.locator(".chat-message").filter({ hasText: aliceMessage }),
       ).toBeVisible({ timeout: 90_000 });
 
       const bobMessage = `cross-ps bob ${Date.now()}`;
-      await sendCrossStationEncrypted(bobPage.page, bobMessage);
+      await sendCrossStationEncrypted(bobPage, bobFlow.session.recoveryKey, bobMessage);
       await expect(
         alicePage.page.locator(".chat-message").filter({ hasText: bobMessage }),
       ).toBeVisible({ timeout: 90_000 });

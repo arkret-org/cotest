@@ -1,4 +1,4 @@
-import { addBoardList } from "../../helpers/kanban-product-ui";
+import { addBoardList, fillCardNarrative } from "../../helpers/kanban-product-ui";
 // Kanban end-to-end
 // Contract: e2e/scenarios/kanban/end-to-end.md
 // Spec refs:
@@ -39,8 +39,6 @@ import {
   selfPathHeadersForDpopSession,
   uniqueUser,
 } from "../../helpers/users";
-
-test.describe.configure({ mode: "serial" });
 
 // ---------------------------------------------------------------------------
 // Shared rig for the "creator device, encrypted Realm" regression trio
@@ -149,15 +147,6 @@ async function buildEncryptedBoardAndCard(
     timeout: 45_000,
   });
   await expect(column.locator(".kanban-card").filter({ hasText: cardTitle })).not.toHaveClass(/\bis-draft\b/, { timeout: 45_000 });
-}
-
-// Both slots use the visible product editor; only one edit form is mounted at a time.
-async function setCardDetailEditorValue(page: Page, value: string): Promise<void> {
-  const editor = page.locator(".card-detail-edit-form")
-    .getByRole("textbox", { name: "Description", exact: true });
-  await expect(editor).toBeVisible({ timeout: 45_000 });
-  await editor.fill(value);
-  await expect(editor).toHaveText(value);
 }
 
 // API-level Card creation that mirrors kanban/project-simulation's active
@@ -899,7 +888,7 @@ test.describe("kanban end-to-end", () => {
       await alicePage.page.locator(".card-detail-tab-description").click();
       await alicePage.page.locator(".card-detail-edit-description-button").click();
 
-      await setCardDetailEditorValue(alicePage.page, description);
+      await fillCardNarrative(alicePage.page, "Description", description);
 
       // The encrypted ak.strand.update submit must reach coland and be accepted,
       // not bounced by the content-encryption floor.
@@ -986,7 +975,7 @@ test.describe("kanban end-to-end", () => {
       await expect(alicePage.page.locator(".card-detail-modal")).toBeVisible({ timeout: 45_000 });
       await alicePage.page.locator(".card-detail-tab-synthesis").click();
       await alicePage.page.locator(".card-detail-new-synthesis-button").click();
-      await setCardDetailEditorValue(alicePage.page, synthesis);
+      await fillCardNarrative(alicePage.page, "Synthesis", synthesis);
 
       const strandUpdate = alicePage.page.waitForResponse(
         (response) =>

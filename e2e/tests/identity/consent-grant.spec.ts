@@ -23,7 +23,7 @@ import { selectProductOptionByLabel } from "../../helpers/product-select";
 import { createMimiProvider, postSignedMimiProviderRequest } from "../../helpers/mimi-provider";
 import { contactRow, requestContactArkret } from "../../helpers/contact-api";
 
-test.describe.configure({ mode: "serial" });
+test.describe.configure({ mode: "default" });
 
 const consentScopeLabels: Record<string, string> = {
   invite: "Group invites", voice_call: "Voice calls", video_call: "Video calls", presence: "Presence",
@@ -645,9 +645,22 @@ async function openCompletePeer(actor: ConsentActor, peerId: string) {
 }
 
 async function confirmPermissions(actor: ConsentActor, permissions: ConsentPermission[]) {
-  await actor.page.locator(".consent-permissions-input").locator("input, textarea").fill(canonicalJson(permissions));
+  await actor.page.bringToFront();
+  const input = actor.page.locator(".consent-permissions-input").locator("input, textarea");
+  await actor.clickWithPassivePromptRetry(input);
+  await actor.fillWithPassivePromptRetry(input, canonicalJson(permissions));
+  // Observe the editor's derived state before previewing the replacement.
+  // A DOM value alone does not acknowledge the application input event.
+  for (const [scope, label] of Object.entries(consentScopeLabels)) {
+    await expect(actor.page.locator(".consent-permissions-editor").getByRole("checkbox", {
+      name: label, exact: true,
+    })).toBeChecked({ checked: permissions.some(permission => permission.consent_scope === scope) });
+  }
+  await expect.poll(async () => JSON.parse(await input.inputValue())).toEqual(permissions);
   await actor.clickWithPassivePromptRetry(actor.page.locator(".consent-preview-button"));
-  await expect(actor.page.locator(".consent-replacement-diff")).toBeVisible();
+  const diff = actor.page.locator(".consent-replacement-diff");
+  await expect(diff).toBeVisible();
+  expect(JSON.parse(await diff.locator(".preformatted").nth(1).innerText())).toEqual(permissions);
   await actor.clickWithPassivePromptRetry(actor.page.locator(".consent-confirm-replace-button"));
 }
 

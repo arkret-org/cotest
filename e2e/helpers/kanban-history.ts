@@ -29,6 +29,9 @@ export async function seedKanbanHistory(
     expect(position).toBeGreaterThan(lastPosition);
     lastPosition = position;
     eventIds.add(String(event.event_id));
+    if (eventIds.size % 100 === 0 || eventIds.size === 501) {
+      console.info(`Kanban history seed accepted ${eventIds.size}/501 Events`);
+    }
   }
   expect(eventIds.size).toBe(501);
   return { inserted_events: eventIds.size, last_seed_position: lastPosition };

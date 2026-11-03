@@ -334,9 +334,9 @@ test.describe("joint-inkson smoke @fully-implemented", () => {
       await bobPage.page.goto("/notifications", {
         waitUntil: "domcontentloaded",
       });
-      const inviteCard = bobPage.page.locator(".notification-item").filter({
-        has: bobPage.page.locator(`[title="${realmId}"]`),
-      });
+      const inviteCard = bobPage.page
+        .getByRole("group", { name: realmId, exact: true })
+        .and(bobPage.page.locator(".notification-item"));
       await expect(inviteCard).toHaveCount(1, { timeout: 30_000 });
       await expect(inviteCard).toContainText("Realm invite");
       await expect(inviteCard).toContainText("You were invited to join");

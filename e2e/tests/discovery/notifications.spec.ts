@@ -38,7 +38,7 @@ import { coauthBaseUrl, colandBaseUrl } from "../../helpers/env";
 import { registerCoauthPasswordAccount } from "../../helpers/coauth-register";
 import { serverLoginViaCoauth, submitCoauthPasswordCredentials } from "../../helpers/real-oidc-login";
 
-test.describe.configure({ mode: "serial" });
+test.describe.configure({ mode: "default" });
 
 test.describe("notifications", () => {
   test("watch-all notification: alice sends, bob sees the message in /notifications", async ({

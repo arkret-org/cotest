@@ -1,4 +1,5 @@
 import { accountActorId } from "./coland-api";
+import { selectProductOptionByLabel } from "./product-select";
 import { addBoardList } from "./kanban-product-ui";
 import { accountRow, actorRow } from "./product-locators";
 // Shared product UI actions; no session or protocol outcome is injected.
@@ -35,10 +36,26 @@ export async function openSavfoxArkretChannel(
     await connect.click();
   }
   await expect(configureHeading).toBeVisible({ timeout: 30_000 });
+  const missingConfiguration = savfox.locator(".error-message").filter({
+    hasText: "Channel configuration was not found",
+  });
+  const deliveryMode = savfox.getByRole("combobox", { name: "Delivery mode", exact: true });
+  await expect.poll(async () => {
+    if (await missingConfiguration.isVisible()) return "missing";
+    return await deliveryMode.isEnabled() ? "loaded" : "loading";
+  }, { timeout: 30_000 }).not.toBe("loading");
+  if (await missingConfiguration.isVisible()) {
+    // An isolated gateway has no saved channel yet. Use the product's add
+    // form instead of attempting to edit a nonexistent configuration.
+    await savfox.goto(`${savfoxBaseUrl}/channels/add`);
+    await expect(configureHeading).toBeVisible({ timeout: 30_000 });
+    await selectProductOptionByLabel(savfox.getByRole("combobox", {
+      name: "Messaging platform", exact: true,
+    }), "Arkret");
+  }
   await expect(savfox.getByRole("combobox", { name: "Messaging platform", exact: true })).toHaveText("Arkret");
   // Fresh pairing must provide ordinary replies without a test-only mode fix.
   // Explicit task delivery remains a separate checkpoint workflow.
-  const deliveryMode = savfox.getByRole("combobox", { name: "Delivery mode", exact: true });
   await expect(deliveryMode).toBeEnabled({ timeout: 30_000 });
   await expect(deliveryMode).toHaveText("interactive_chat");
 }

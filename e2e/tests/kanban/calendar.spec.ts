@@ -3,6 +3,7 @@
 // Spec: models/calendar-event.md, models/strand-and-message.md
 
 import { addBoardList } from "../../helpers/kanban-product-ui";
+import { assertAuthoritySubmitOutcome } from "../../helpers/coland-api";
 import {
   expect,
   test,
@@ -139,6 +140,7 @@ test("@fully-implemented calendar schedule and RSVP survive the canonical Strand
     expect(scheduleWire).not.toContain(end);
     expect(scheduleWire).not.toContain(location);
     const scheduleEvent = JSON.parse(scheduleWire).event;
+    assertAuthoritySubmitOutcome(JSON.parse(scheduledText), scheduleEvent, "calendar schedule");
     const metadataEnvelope = scheduleEvent?.payload?.patch?.encrypted_metadata?.value;
     expect(metadataEnvelope?.content_type).toBe("application/json");
     expect(metadataEnvelope?.ciphertext).toBeTruthy();
@@ -193,13 +195,14 @@ test("@fully-implemented calendar schedule and RSVP survive the canonical Strand
     const acceptedText = await accepted.text();
     expect(accepted.status(), acceptedText).toBeLessThan(400);
     const acceptedWire = JSON.parse(accepted.request().postData() ?? "{}");
+    assertAuthoritySubmitOutcome(JSON.parse(acceptedText), acceptedWire.event, "calendar RSVP");
     const encryptedResponse = acceptedWire.event?.payload?.entry?.encrypted_response;
     expect(encryptedResponse?.content_type).toBe(
       "application/vnd.arkret.calendar-rsvp-response+json",
     );
     expect(encryptedResponse?.ciphertext).toBeTruthy();
     await expect(calendar.locator(".card-detail-rsvp-own")).toHaveText(
-      "You: accepted",
+      "accepted",
       { timeout: 90_000 },
     );
     await expect(calendar.locator(".card-detail-rsvp-counts")).toContainText(

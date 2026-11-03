@@ -294,11 +294,17 @@ test.describe("workflow: incident response", () => {
         waitUntil: "domcontentloaded",
       });
       const blocked = `Public update: root cause leaked token ${stamp}`;
-      await commanderPage.page.locator(".chat-input").fill(blocked);
-      await commanderPage.page.locator(".send-chat-button").click();
-      await expect(commanderPage.page.locator(".chat-status")).toContainText(
-        /public update blocked|public_update_blocked|Message send failed/i,
-      );
+      await commanderPage.page.bringToFront();
+      const input = commanderPage.page.locator(".chat-input");
+      await commanderPage.clickWithPassivePromptRetry(input);
+      await commanderPage.fillWithPassivePromptRetry(input, blocked);
+      await expect(input).toHaveValue(blocked);
+      await expect(commanderPage.page.locator(".chat-input-hint")).toHaveCount(0);
+      const send = commanderPage.page.locator(".send-chat-button");
+      await expect(send).toBeEnabled({ timeout: 90_000 });
+      await commanderPage.clickWithPassivePromptRetry(send);
+      await expect(commanderPage.page.locator(".chat-status")).toContainText("public_update_blocked");
+      await expect(input).toHaveValue(blocked);
       const blockedRow = commanderPage.timelineEvent(blocked);
       await expect(blockedRow).toBeVisible();
       await expect(blockedRow.locator(".message-send-status")).toHaveClass(/\bis-failed\b/);

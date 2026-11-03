@@ -47,8 +47,9 @@ async function completeNewIdentity(page: Page): Promise<void> {
   const recoveryKey = (await words.allTextContents()).map((word) => word.trim()).join(" ");
   await enterSecretText(page, page.getByLabel("Re-enter the 24 words", { exact: true }), recoveryKey);
   await page.locator(".onboarding-bind-identity").click();
-  await expect(page.locator(".onboarding-complete")).toBeVisible({ timeout: 120_000 });
-  await page.locator(".onboarding-complete").getByRole("link", { name: "Continue", exact: true }).click();
+  await page.locator(".onboarding-continue")
+    .and(page.getByRole("button", { name: "Continue", exact: true }))
+    .click({ timeout: 120_000 });
   await expect(page.locator(".shell.app")).toBeVisible({ timeout: 30_000 });
 }
 

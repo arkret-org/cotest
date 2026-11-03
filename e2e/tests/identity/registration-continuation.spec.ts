@@ -181,7 +181,7 @@ for (const scenario of ["fresh browser", "handoff response loss", "stale busy ch
           await page.locator(".onboarding-bind-identity").click();
           await expect.poll(() => pointerResponseLost, { timeout: 90_000 }).toBe(true);
           expect(originalPointer).toBeDefined();
-          await expect(page.locator(".onboarding-complete")).toHaveCount(0);
+          await expect(page.locator(".onboarding-continue")).toHaveCount(0);
           await jointPage.close();
           jointPage = await openUserPage(browser, user, {
             persistentUserDataDir: profile,
@@ -198,7 +198,7 @@ for (const scenario of ["fresh browser", "handoff response loss", "stale busy ch
           if (event?.kind !== "ak.key_backup.active_series") return false;
           pointerEventId = event.event_id;
           return true;
-        });
+        }, { timeout: 90_000 });
         const historicalLookup = page.waitForRequest((request) => {
           if (!new URL(request.url()).pathname.endsWith("/_arkret/self/signer-keys/query")) return false;
           return request.postDataJSON()?.queries?.some((selector: Record<string, unknown>) =>
@@ -206,30 +206,32 @@ for (const scenario of ["fresh browser", "handoff response loss", "stale busy ch
             && pointerEventId !== undefined
             && (selector.committed_event_ref as { event_id?: string } | undefined)?.event_id === pointerEventId,
           ) === true;
-        });
-        if (losePointerResponse) {
-          await page.goto("/onboarding");
-          // Restart may restore custody and ask for the same explicit confirmation.
-          const confirm = page.getByLabel("Re-enter the 24 words", { exact: true });
-          await expect(page.locator(".onboarding-complete").or(confirm)).toBeVisible({ timeout: 90_000 });
-          if (await confirm.isVisible()) {
-            const restoredWords = await page.locator(".onboarding-recovery-key-display .rk-word").allTextContents();
-            expect(restoredWords.map(word => word.trim()).join(" ") === recoveryKey,
-              "restart must retain the original recovery authority").toBe(true);
-            await enterSecretText(page, confirm, recoveryKey);
+        }, { timeout: 90_000 });
+        const connectCompletedIdentity = async () => {
+          const continueSetup = page.locator(".onboarding-continue")
+            .and(page.getByRole("button", { name: "Continue", exact: true }));
+          if (losePointerResponse) {
+            await page.goto("/onboarding");
+            // Restart may restore custody and ask for the same explicit confirmation.
+            const confirm = page.getByLabel("Re-enter the 24 words", { exact: true });
+            await expect(continueSetup.or(confirm)).toBeVisible({ timeout: 90_000 });
+            if (await confirm.isVisible()) {
+              const restoredWords = await page.locator(".onboarding-recovery-key-display .rk-word").allTextContents();
+              expect(restoredWords.map(word => word.trim()).join(" ") === recoveryKey,
+                "restart must retain the original recovery authority").toBe(true);
+              await enterSecretText(page, confirm, recoveryKey);
+              await page.locator(".onboarding-bind-identity").click();
+            }
+          } else {
             await page.locator(".onboarding-bind-identity").click();
           }
-          // The durable outbound drain starts with the connected client, not
-          // while the completion page still owns the handoff continuation.
-          await expect(page.locator(".onboarding-complete")).toContainText("Identity ready", {
-            timeout: 90_000,
-          });
-          await page.locator(".onboarding-complete").getByRole("link", { name: "Continue" }).click();
+          // Connecting the completed identity starts its durable outbound drain.
+          await continueSetup.click({ timeout: 90_000 });
           await expect(page.locator(".shell.app")).toBeVisible();
-        } else {
-          await page.locator(".onboarding-bind-identity").click();
-        }
-        const accepted = await pointerAcceptance;
+        };
+        const [accepted, lookupRequest] = await Promise.all([
+          pointerAcceptance, historicalLookup, connectCompletedIdentity(),
+        ]);
         expect(accepted.ok()).toBe(true);
         const event = accepted.request().postDataJSON().event;
         const outcome = await accepted.json();
@@ -245,14 +247,7 @@ for (const scenario of ["fresh browser", "handoff response loss", "stale busy ch
         }
         expect(outcome.commit.event_ref).toBe(event.event_id);
         expect(outcome.commit).not.toHaveProperty("producer_signer_fact_digest");
-        if (!losePointerResponse) {
-          await expect(page.locator(".onboarding-complete")).toContainText("Identity ready", {
-            timeout: 90_000,
-          });
-          await page.locator(".onboarding-complete").getByRole("link", { name: "Continue" }).click();
-          await expect(page.locator(".shell.app")).toBeVisible();
-        }
-        const lookup = (await historicalLookup).postDataJSON();
+        const lookup = lookupRequest.postDataJSON();
         expect(lookup.recipient_account_id).toEqual(event.actor_id.account_id);
         expect(lookup.queries).toContainEqual({
           verification_mode: "historical_event", sender_kind: "account_device",

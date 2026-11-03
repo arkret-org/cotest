@@ -1,5 +1,20 @@
 import { expect, type Locator, type Page } from "@playwright/test";
 
+export async function fillCardNarrative(
+  page: Page,
+  name: "Description" | "Synthesis",
+  value: string,
+): Promise<void> {
+  const form = page.locator(".card-detail-edit-form");
+  const editor = form.getByRole("textbox", { name, exact: true });
+  await page.bringToFront();
+  await expect(editor).toBeVisible({ timeout: 45_000 });
+  await editor.click();
+  await editor.fill(value);
+  await expect(form.locator(".card-rich-editor-preview")).toHaveText(value);
+  await expect(form.locator(".card-detail-save-button")).toBeEnabled({ timeout: 45_000 });
+}
+
 /** Author one List through the accepted Board's ordinary product composer. */
 export async function addBoardList(page: Page, title: string): Promise<Locator> {
   await expect(page).toHaveURL(url => /^\/kanban\/ak:realm:[^/]+\/board\/ak:space:[^/]+$/

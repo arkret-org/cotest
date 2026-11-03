@@ -4,6 +4,7 @@ import { selfPathHeadersForDpopSession, type DpopUserSession } from "./users";
 import { assertAcceptedRealmScanAlignment, orderedResponseObservation, sessionGrantRotationObservation } from "./session-transport-observation";
 
 import { colandBaseUrl, colandServiceId } from "./env";
+import { uint64Decimal } from "./uint64-decimal";
 
 const hook = "__inkson_captured_transport_rotation_v1";
 const retiredReads = new Set([
@@ -125,6 +126,8 @@ export function assertOriginalAcceptedMlsRows(
   const newAdds = after.events.filter(event => event?.kind === "ak.mls.commit"
     && !before.events.some(old => old?.event_id === event.event_id));
   expect(newAdds, "one newly paired endpoint produces one accepted Add, never a re-authored duplicate").toHaveLength(1);
-  expect(newAdds[0]!.payload).toMatchObject({ previous_epoch: 0, next_epoch: 1 });
+  const addedEpoch = newAdds[0]!.payload as Record<string, unknown>;
+  expect(uint64Decimal(addedEpoch.previous_epoch)).toBe("0");
+  expect(uint64Decimal(addedEpoch.next_epoch)).toBe("1");
   expect(after.events.filter(event => event?.kind === "ak.message.create")).toHaveLength(5);
 }

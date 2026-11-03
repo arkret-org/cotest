@@ -1,4 +1,4 @@
-import { addBoardList } from "../../helpers/kanban-product-ui";
+import { addBoardList, fillCardNarrative } from "../../helpers/kanban-product-ui";
 // Sprint planning workflow — tech lead + two engineers commit to stories
 // Contract: e2e/scenarios/workflows/sprint-planning.md
 // Spec refs:
@@ -24,8 +24,6 @@ import {
   selfPathHeadersForDpopSession,
   type DpopUserSession,
 } from "../../helpers/users";
-
-test.describe.configure({ mode: "serial" });
 
 test.describe("workflow: sprint planning", () => {
   test("mei kicks off sprint, bob + carol claim their stories via reply chain", async ({
@@ -423,7 +421,7 @@ test.describe("workflow: sprint planning", () => {
       await meiPage.page
         .locator(".card-detail-edit-description-button")
         .click();
-      await setCardDetailEditorValue(meiPage.page, detailDescription);
+      await fillCardNarrative(meiPage.page, "Description", detailDescription);
       await meiPage.page.locator(".card-detail-save-button").click();
       await expect(
         meiPage.page.locator(".card-description-panel"),
@@ -436,7 +434,7 @@ test.describe("workflow: sprint planning", () => {
       await meiPage.page
         .locator(".card-detail-new-synthesis-button")
         .click();
-      await setCardDetailEditorValue(meiPage.page, synthesisNote);
+      await fillCardNarrative(meiPage.page, "Synthesis", synthesisNote);
       await meiPage.page.locator(".card-detail-save-button").click();
       await expect(
         meiPage.page.locator(".card-synthesis-panel"),
@@ -691,15 +689,4 @@ async function strandTitlesForBoard(
     .map((strand: { title?: string }) => strand.title)
     .filter((title: unknown): title is string => typeof title === "string")
     .sort();
-}
-
-async function setCardDetailEditorValue(
-  page: Page,
-  value: string,
-): Promise<void> {
-  const editor = page.locator(".card-detail-edit-form")
-    .getByRole("textbox", { name: "Description", exact: true });
-  await expect(editor).toBeVisible({ timeout: 45_000 });
-  await editor.fill(value);
-  await expect(editor).toHaveText(value);
 }

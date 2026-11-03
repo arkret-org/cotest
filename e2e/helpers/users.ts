@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import { observeMessageReferences } from "./message-evidence";
 import { submitOrdinaryComposerDraft } from "./composer-handoff";
+import { enterSecretText } from "./secret-input";
 import path from "node:path";
 import { generateKeyPairSync, randomBytes, randomUUID } from "node:crypto";
 import {
@@ -857,7 +858,7 @@ export class JointUserPage {
     if (await showRecoveryKey.isVisible().catch(() => false)) {
       await showRecoveryKey.click();
     }
-    await unlockPrompt.getByLabel("24-word recovery key", { exact: true }).fill(recoveryKey);
+    await enterSecretText(this.page, unlockPrompt.getByLabel("24-word recovery key", { exact: true }), recoveryKey);
     await unlockPrompt.getByRole("button", { name: "Unlock with key", exact: true }).click();
     await expect(unlockPrompt).not.toBeVisible({ timeout: 120_000 });
   }
@@ -2765,33 +2766,26 @@ export async function openUser(
     // SecurityError and can make session injection nondeterministic.
   };
   const origin = new URL(inksonBaseUrl(opts.server)).origin;
+  const storageState = { cookies: [], origins: [{ origin, localStorage }] };
   const context = opts.persistentUserDataDir
     ? await browser.browserType().launchPersistentContext(opts.persistentUserDataDir, contextOptions)
-    : await browser.newContext({
-        ...contextOptions,
-        storageState: { cookies: [], origins: [{ origin, localStorage }] },
-      });
-  if (opts.persistentUserDataDir && !opts.resumePersistentProfile) {
-    // Seed only the first launch. A resumed profile must use its own durable
-    // localStorage and IndexedDB, including newer recovery-policy evidence.
-    await context.addInitScript(({ origin, entries }) => {
-      if (window.location.origin !== origin) return;
-      for (const { name, value } of entries) {
-        if (window.localStorage.getItem(name) === null) {
-          window.localStorage.setItem(name, value);
-        }
+    : await browser.newContext({ ...contextOptions, storageState });
+  if (!opts.persistentUserDataDir || !opts.resumePersistentProfile) {
+    try {
+      // Apply the initial state once. An init script would reinsert consumed
+      // handoffs on reload and during the account add/sign-in journey.
+      if (opts.persistentUserDataDir) await context.setStorageState(storageState);
+      const seededStorageState = await context.storageState();
+      const seededOrigin = seededStorageState.origins.find(({ origin: saved }) => saved === origin);
+      const seededNames = new Set(seededOrigin?.localStorage.map(({ name }) => name) ?? []);
+      if (!seededNames.has("inkson.config.v1") ||
+          (sessionInjection && !seededNames.has("inkson.test.session_injection.v1")) ||
+          (sessionInjection && initialAccount && !seededNames.has("inkson.profiles.v1"))) {
+        throw new Error("Inkson browser context is missing its seeded session config");
       }
-    }, { origin, entries: localStorage });
-  }
-  if (!opts.persistentUserDataDir) {
-    const seededStorageState = await context.storageState();
-    const seededOrigin = seededStorageState.origins.find(({ origin: saved }) => saved === origin);
-    const seededNames = new Set(seededOrigin?.localStorage.map(({ name }) => name) ?? []);
-    if (!seededNames.has("inkson.config.v1") ||
-        (sessionInjection && !seededNames.has("inkson.test.session_injection.v1")) ||
-        (sessionInjection && initialAccount && !seededNames.has("inkson.profiles.v1"))) {
+    } catch (error) {
       await context.close();
-      throw new Error("Inkson browser context is missing its seeded session config");
+      throw error;
     }
   }
   // Hide dioxus-cli's dev-mode rebuild toast (`#__dx-toast`). When dx serve's

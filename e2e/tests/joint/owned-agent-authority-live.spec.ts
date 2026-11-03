@@ -743,12 +743,10 @@ async function switchReviewRealmAndReload(user: JointUserPage, originalRealm: st
   for (const realm of [otherRealm, originalRealm]) {
     // Keep the same authenticated document and traverse the real application
     // router, so a cold reload cannot hide a missing Realm component key.
+    const settings = `/realms/${realm}/settings`;
+    const access = `${settings}/access`;
     await user.gotoAppPanel(`/realms/${encodeURIComponent(realm)}/settings/access`, ".realm-settings");
-    await expect.poll(() => new URL(page.url()).pathname).toBe(`/realms/${encodeURIComponent(realm)}/settings/access`);
-    await expect.poll(async () => {
-      const href = await page.locator(".realm-admin-nav-item-access").getAttribute("href");
-      return href !== null && decodeURIComponent(new URL(href, page.url()).pathname.split("/")[2] ?? "") === realm;
-    }, { message: "rendered Realm navigation matches the requested Realm" }).toBe(true);
+    await expect(page).toHaveURL(url => decodeURIComponent(url.pathname) === access);
     const panel = managementReviewPanel(page);
     await expect(panel).toBeVisible({ timeout: 120_000 });
     await expect(panel.locator(".management-review-frozen-candidate")).toHaveCount(0);
@@ -758,6 +756,12 @@ async function switchReviewRealmAndReload(user: JointUserPage, originalRealm: st
     await expect(panel.locator(".management-review-retry-decision")).toHaveCount(0);
     await expect(panel.locator(".management-review-submit")).toHaveCount(0);
     await expect(panel.locator(".management-review-request")).toHaveText("冻结候选并请求审批（不提交业务）");
+    // Check the Realm captured by the mounted navigation buttons after the
+    // state isolation assertions, before changing the section can remount it.
+    await page.locator(".realm-admin-nav-item-overview").click();
+    await expect(page).toHaveURL(url => decodeURIComponent(url.pathname) === settings);
+    await page.locator(".realm-admin-nav-item-access").click();
+    await expect(page).toHaveURL(url => decodeURIComponent(url.pathname) === access);
     expect(await page.evaluate(() => performance.timeOrigin), "Realm switch keeps the original document").toBe(documentOrigin);
   }
   const panel = managementReviewPanel(page);

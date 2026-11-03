@@ -207,8 +207,9 @@ async function registerController(owner: JointUserPage, request: APIRequestConte
   const key = (await words.allTextContents()).map(value => value.trim()).join(" ");
   await enterSecretText(page, page.getByLabel("Re-enter the 24 words", { exact: true }), key);
   await page.locator(".onboarding-bind-identity").click();
-  await expect(page.locator(".onboarding-complete")).toContainText("Identity ready", { timeout: 240_000 });
-  await page.locator(".onboarding-complete").getByRole("link", { name: "Continue" }).click();
+  await page.locator(".onboarding-continue")
+    .and(page.getByRole("button", { name: "Continue", exact: true }))
+    .click({ timeout: 240_000 });
   await expect(page.locator(".shell.app")).toBeVisible({ timeout: 120_000 });
   const identity = await page.evaluate(() => JSON.parse(localStorage.getItem("inkson.config.v1")!).active_account);
   expect(identity.authority.principal_id).toMatch(/^ak:did_core:/);

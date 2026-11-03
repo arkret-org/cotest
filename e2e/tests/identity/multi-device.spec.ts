@@ -25,8 +25,10 @@ import {
   uniqueUser,
 } from "../../helpers/users";
 import { canonicalJson, typedId } from "../../helpers/coland-api";
+import { enterSecretText } from "../../helpers/secret-input";
 
-test.describe.configure({ mode: "serial" });
+test.use({ trace: "off", video: "off", screenshot: "off" });
+test.describe.configure({ mode: "default" });
 
 test.describe("fresh-browser device entry paths @fully-implemented", () => {
   test("a second-device login stays unauthorized until the first device explicitly approves it", async ({
@@ -238,9 +240,8 @@ test.describe("fresh-browser device entry paths @fully-implemented", () => {
       await expect(recoveryPanel).toContainText(
         "No approval from another device or administrator is required.",
       );
-      await recoveryPanel
-        .getByRole("textbox", { name: "Recovery Key (24 words)", exact: true })
-        .fill(activeRecoveryKey!);
+      await enterSecretText(replacement.page, recoveryPanel
+        .getByRole("textbox", { name: "Recovery Key (24 words)", exact: true }), activeRecoveryKey!);
       await recoveryPanel
         .getByRole("button", { name: "Authorize this device" })
         .click();
@@ -255,7 +256,7 @@ test.describe("fresh-browser device entry paths @fully-implemented", () => {
         await replacement.page.reload({ waitUntil: "domcontentloaded" });
         await expect(replacement.page.locator(".device-setup-required")).toBeVisible({ timeout: 120_000 });
         await replacement.page.locator(".device-setup-use-recovery-key").click();
-        await recoveryPanel.getByRole("textbox", { name: "Recovery Key (24 words)", exact: true }).fill(activeRecoveryKey!);
+        await enterSecretText(replacement.page, recoveryPanel.getByRole("textbox", { name: "Recovery Key (24 words)", exact: true }), activeRecoveryKey!);
         await recoveryPanel.getByRole("button", { name: "Authorize this device" }).click();
       }
 
