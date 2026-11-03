@@ -27,6 +27,7 @@ for name in (
         "diff_sha256": hashlib.sha256(git("diff", "--binary", "HEAD")).hexdigest(),
         "changed_file_sha256": {
             path: hashlib.sha256((repo / path).read_bytes()).hexdigest()
+            if (repo / path).is_file() else None
             for path in sorted(set(paths))
         },
     }

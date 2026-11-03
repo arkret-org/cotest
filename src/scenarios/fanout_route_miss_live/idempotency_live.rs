@@ -36,9 +36,31 @@ pub(super) async fn manual_current_origin_fixture_with_successor(
         }
         environments.push(environment);
     }
-    let group = TestServerGroup::try_multi_external_with_node_envs(name, &environments)
+    let mut group = TestServerGroup::try_multi_external_with_node_envs(name, &environments)
         .await?
         .context("independent actual Coland processes required")?;
+    if successor.is_some() {
+        // The receiver starts before its future governor. An endpoint-only
+        // discovery retry may not yet have learned that governor's identity.
+        // Configure the now-live exact peer locators before the test authors
+        // anything; normal DID/Describe verification still decides trust.
+        let peers = [0, 2]
+            .into_iter()
+            .map(|index| {
+                let peer = group.server(index);
+                format!(
+                    "{}|{}|{}",
+                    peer.base_url(),
+                    peer.service_id(),
+                    peer.trust_domain()
+                )
+            })
+            .collect::<Vec<_>>();
+        group
+            .server_mut(1)
+            .restart_with_federation_peers(&peers)
+            .await?;
+    }
     let (alice, alice_account) =
         standard_client(group.server(0), &coauth, "replay-alice", ALICE_DEVICE).await?;
     let (bob, bob_account) =

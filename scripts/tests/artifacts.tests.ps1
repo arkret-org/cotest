@@ -89,6 +89,19 @@ try {
     Remove-StaleArtifactRuns -OutputRoot $testRoot -Family "server-conformance" -KeepRuns 1
     Assert-True (Test-Path -LiteralPath $joint) "server-conformance retention crossed into the joint-e2e family"
 
+    Set-Content -LiteralPath (Join-Path $joint "summary.md") -Value "joint result"
+    Set-Content -LiteralPath (Join-Path $joint "summary.json") -Value '{"suite_kind":"joint-e2e"}'
+    Set-Content -LiteralPath (Join-Path $joint "playwright.log") -Value "authoritative evidence"
+    Publish-ArtifactMirror -SourceDirectory $joint -OutputRoot $testRoot -Channel "joint-e2e"
+    $jointLatest = Join-Path $testRoot "latest/joint-e2e"
+    $jointLocation = Get-Content -Raw -LiteralPath (Join-Path $jointLatest "run-location.json") | ConvertFrom-Json
+    Assert-True ($jointLocation.authoritative_run -eq $joint) "joint latest does not identify the authoritative run"
+    Assert-True (Test-Path -LiteralPath (Join-Path $jointLatest "summary.md")) "joint latest is missing its summary"
+    Assert-True (-not (Test-Path -LiteralPath (Join-Path $jointLatest "playwright.log"))) "joint latest duplicated raw evidence"
+    $null = New-ArtifactRunDirectory -OutputRoot $testRoot -Family "joint-e2e" -Label "selection" -Timestamp "20260730-120001"
+    Remove-StaleArtifactRuns -OutputRoot $testRoot -Family "joint-e2e" -KeepRuns 1
+    Assert-True (Test-Path -LiteralPath (Join-Path $joint "playwright.log")) "retention broke the joint latest pointer"
+
     $untypedReport = Join-Path $testRoot "latest\untyped"
     $null = New-Item -ItemType Directory -Force -Path $untypedReport
     Set-Content -LiteralPath (Join-Path $untypedReport "summary.json") -Value '{"status":"success"}' -Encoding UTF8

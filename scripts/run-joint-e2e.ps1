@@ -621,6 +621,7 @@ function New-ManagedSavfoxProbe {
     param(
         [Parameter(Mandatory = $true)][string]$Name,
         [Parameter(Mandatory = $true)][string]$JointDirectory,
+        [Parameter(Mandatory = $true)][string]$RuntimeDirectory,
         [Parameter(Mandatory = $true)][string]$MocksRoot,
         [Parameter(Mandatory = $true)][string]$LogDirectory,
         [Parameter(Mandatory = $true)][string]$BaseUrl,
@@ -631,7 +632,7 @@ function New-ManagedSavfoxProbe {
         [Parameter(Mandatory = $true)][System.Collections.IList]$ManagedServices
     )
 
-    $probeHome = Join-Path $JointDirectory "$Name-home"
+    $probeHome = Join-Path $RuntimeDirectory "$Name-home"
     New-Item -ItemType Directory -Path $probeHome -Force | Out-Null
     $receiptPath = Join-Path $JointDirectory "$Name-model-receipts.jsonl"
     # The deterministic provider's reply bytes are the fixture payload.
@@ -3430,13 +3431,33 @@ $runnerLockRoot = if ($IsWindows) {
 }
 $jointRunnerLock = Open-ExclusiveRunnerLock `
     -Path (Join-Path $runnerLockRoot "cotest/joint-e2e-run.lock") -Wait
+$jointRuntimeRoot = $null
 try {
-$environmentOutputDirectory = if ($JointDir) {
-    Join-Path ([System.IO.Path]::GetFullPath($JointDir)) "environment"
-} else {
-    $environmentRoot = if ($OutputRoot) { [System.IO.Path]::GetFullPath($OutputRoot) } else { Join-Path $repoRoot "artifacts" }
-    Join-Path $environmentRoot ("environment\" + (Get-Date -Format "yyyyMMdd-HHmmss"))
+if (-not $OutputRoot) {
+    $OutputRoot = Join-Path $repoRoot "artifacts"
 }
+$OutputRoot = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($OutputRoot)
+$timestamp = Get-Date -Format "yyyyMMdd-HHmmss"
+# PowerShell treats $JointDir and $jointDir as the same variable.
+# Record whether the caller supplied a path before assigning the resolved path.
+$isStandaloneJointRun = -not [bool]$JointDir
+if (-not $isStandaloneJointRun) {
+    $jointDir = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($JointDir)
+} else {
+    $jointRunLabel = if ($RunProfile) { $RunProfile } else { "custom" }
+    if ($Grep) {
+        $jointRunLabel += "-selection"
+    } elseif ($PreflightOnly) {
+        $jointRunLabel += "-preflight"
+    }
+    $jointDir = New-ArtifactRunDirectory `
+        -OutputRoot $OutputRoot `
+        -Family "joint-e2e" `
+        -Label $jointRunLabel `
+        -Timestamp $timestamp
+    Remove-StaleArtifactRuns -OutputRoot $OutputRoot -Family "joint-e2e" -KeepRuns $KeepRuns
+}
+$environmentOutputDirectory = Join-Path $jointDir "environment"
 $environmentArgs = @(
     "-NoProfile",
     "-File", (Join-Path $PSScriptRoot "initialize-joint-e2e-environment.ps1"),
@@ -3463,10 +3484,6 @@ if ($IsWindows) {
     $env:PATH = Get-CotestWindowsProcessPath -InheritedPath $env:PATH -MachinePath $machinePath -UserPath $userPath
 }
 
-if (-not $OutputRoot) {
-    $OutputRoot = Join-Path $repoRoot "artifacts"
-}
-$OutputRoot = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($OutputRoot)
 if (-not $SutManifest) {
     $SutManifest = Join-Path $workspaceRoot "coland\Cargo.toml"
 }
@@ -3517,24 +3534,9 @@ function Get-JointServerArtifactLayout {
     }
 }
 
-$timestamp = Get-Date -Format "yyyyMMdd-HHmmss"
-if ($JointDir) {
-    $jointDir = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($JointDir)
-} else {
-    $jointRunLabel = if ($RunProfile) { $RunProfile } else { "custom" }
-    if ($Grep) {
-        $jointRunLabel += "-selection"
-    } elseif ($PreflightOnly) {
-        $jointRunLabel += "-preflight"
-    }
-    $jointDir = New-ArtifactRunDirectory `
-        -OutputRoot $OutputRoot `
-        -Family "joint-e2e" `
-        -Label $jointRunLabel `
-        -Timestamp $timestamp
-    Remove-StaleArtifactRuns -OutputRoot $OutputRoot -Family "joint-e2e" -KeepRuns $KeepRuns
-}
+$jointRuntimeRoot = Join-Path $jointDir ("runtime-" + [guid]::NewGuid().ToString("N"))
 $serviceLogDir = Join-Path $jointDir "services"
+$playwrightLog = Join-Path $jointDir "playwright.log"
 $screenshotDir = Join-Path $jointDir "screenshots"
 $visualBaselineDir = Join-Path $jointDir "visual-baselines"
 $null = New-Item -ItemType Directory -Force -Path $serviceLogDir
@@ -4341,7 +4343,12 @@ try {
     # Cargo's live provisioning tests can replace target/debug native bins.
     # Freeze before preflight returns as well: a subsequent cargo test can
     # replace these bins before its first browser conjunction starts.
-    $nativeRuntimeRoot = Join-Path $jointDir "tools"
+    # Exported tools outlive a preflight-only child process (for example GITHUB_ENV).
+    $nativeRuntimeRoot = if ($NativeToolsEnvironmentFile) {
+        Join-Path $jointDir "tools"
+    } else {
+        Join-Path $jointRuntimeRoot "tools"
+    }
     $nativeBuildRoots = @($repoRoot, (Join-Path $workspaceRoot "arkret-rust-sdk"))
     $callerProvidedWire = [bool]$env:COTEST_WIRE_BIN
     $selectedWireBinary = if ($callerProvidedWire) { $env:COTEST_WIRE_BIN } else {
@@ -4380,6 +4387,13 @@ try {
             -DestinationRoot $nativeRuntimeRoot -RepositoryStates $observerStates -CallerProvided:$callerProvidedObserver
     }
 
+    $buildEvidenceDir = Join-Path $jointDir "build-evidence"
+    if (Test-Path -LiteralPath $nativeRuntimeRoot -PathType Container) {
+        $null = New-Item -ItemType Directory -Force -Path $buildEvidenceDir
+        Get-ChildItem -LiteralPath $nativeRuntimeRoot -File |
+            Where-Object Name -Match '\.cotest-(build-input|runtime-source)\.json$' |
+            Copy-Item -Destination $buildEvidenceDir
+    }
     if ($NativeToolsEnvironmentFile) {
         $toolPaths = @{
             COTEST_WIRE_BIN = $env:COTEST_WIRE_BIN
@@ -4389,14 +4403,14 @@ try {
         Write-RunScopedNativeToolEnvironment -Tools $toolPaths -Path $NativeToolsEnvironmentFile
     }
     if ($PreflightOnly) {
-        Write-Host "Preflight completed; verified native tools were frozen and no services were started."
+        Write-Host "Preflight completed; verified native tools and did not start any services."
         exit 0
     }
 
     # Serve an immutable, run-scoped copy of the content-verified Glory bundle.
     # A separate development build must not replace files during a joint run.
     if ($willStartDefaultInkson) {
-        $inksonRuntimeRoot = Join-Path $jointDir "inkson-web"
+        $inksonRuntimeRoot = Join-Path $jointRuntimeRoot "inkson-web"
         New-Item -ItemType Directory -Path $inksonRuntimeRoot -Force | Out-Null
         $verifiedBundle = Get-ArtifactContentIdentity -ArtifactPath $inksonStaticIndex -ArtifactRoot $inksonStaticRoot -RequiredArtifactPaths @(Get-JointInksonRequiredArtifactPaths)
         $verifiedStamp = Get-Content -Raw -LiteralPath (Get-ArtifactBuildStampPath -ArtifactPath $inksonStaticIndex) | ConvertFrom-Json
@@ -4415,6 +4429,11 @@ try {
         if (Test-BinaryContainsAsciiMarker -Path $runtimeWasm -Marker "/_dioxus") {
             throw "run-scoped inkson bundle unexpectedly embeds Dioxus devtools: $runtimeWasm"
         }
+        $null = New-Item -ItemType Directory -Force -Path $buildEvidenceDir
+        Copy-Item -LiteralPath (Get-ArtifactBuildStampPath -ArtifactPath $inksonStaticIndex) `
+            -Destination (Join-Path $buildEvidenceDir "inkson-web.cotest-build-input.json")
+        Copy-Item -LiteralPath (Join-Path $inksonRuntimeRoot "ui-build-info.json") `
+            -Destination (Join-Path $buildEvidenceDir "inkson-ui-build-info.json")
         $inksonStaticRoot = $inksonRuntimeRoot
     }
 
@@ -4623,6 +4642,7 @@ try {
         $savfoxAddressedProbe = New-ManagedSavfoxProbe `
             -Name "savfox" `
             -JointDirectory $jointDir `
+            -RuntimeDirectory $jointRuntimeRoot `
             -MocksRoot $mocksRoot `
             -LogDirectory $serviceLogDir `
             -BaseUrl $SavfoxBaseUrl `
@@ -4634,6 +4654,7 @@ try {
         $savfoxUnaddressedProbe = New-ManagedSavfoxProbe `
             -Name "savfox-unaddressed" `
             -JointDirectory $jointDir `
+            -RuntimeDirectory $jointRuntimeRoot `
             -MocksRoot $mocksRoot `
             -LogDirectory $serviceLogDir `
             -BaseUrl $savfoxUnaddressedBaseUrl `
@@ -5962,8 +5983,6 @@ try {
         if ($grepInvertPatterns.Count -gt 0) {
             $playwrightArgs += @("--grep-invert", ($grepInvertPatterns -join "|"))
         }
-        $playwrightStdout = Join-Path $jointDir "playwright.stdout.log"
-        $playwrightStderr = Join-Path $jointDir "playwright.stderr.log"
         $playwrightCli = Resolve-PlaywrightCliInvocation -E2eRoot $e2eRoot
         if (-not $playwrightCli) {
             throw "Playwright CLI is required"
@@ -5985,7 +6004,7 @@ try {
             $previousErrorActionPreference = $ErrorActionPreference
             $ErrorActionPreference = "Continue"
             $playwrightWriter = [System.IO.StreamWriter]::new(
-                $playwrightStdout,
+                $playwrightLog,
                 $false,
                 [System.Text.UTF8Encoding]::new($false)
             )
@@ -6001,7 +6020,6 @@ try {
                 Write-Host $safeLine
             }
             $exitCode = $LASTEXITCODE
-            "" | Set-Content -Path $playwrightStderr -Encoding UTF8
         }
         finally {
             if ($playwrightWriter) {
@@ -7026,8 +7044,7 @@ $summary = [pscustomobject]@{
     visual_baselines = $visualBaselineDir
     diagnostics = Join-Path $jointDir "diagnostics"
     playwright_report = Join-Path $jointDir "playwright-report"
-    playwright_stdout = Join-Path $jointDir "playwright.stdout.log"
-    playwright_stderr = Join-Path $jointDir "playwright.stderr.log"
+    playwright_log = $playwrightLog
     preflight_json = $preflightJson
     preflight_md = $preflightMd
     preflight_source_heads_json = $preflightSourceHeadsJson
@@ -7091,8 +7108,7 @@ $summary | ConvertTo-Json -Depth 6 | Set-Content -Path $summaryJson -Encoding UT
 - visual_baselines: $($summary.visual_baselines)
 - diagnostics: $($summary.diagnostics)
 - playwright_report: $($summary.playwright_report)
-- playwright_stdout: $($summary.playwright_stdout)
-- playwright_stderr: $($summary.playwright_stderr)
+- playwright_log: $($summary.playwright_log)
 - preflight_json: $($summary.preflight_json)
 - preflight_md: $($summary.preflight_md)
 - preflight_source_heads_json: $($summary.preflight_source_heads_json)
@@ -7114,7 +7130,7 @@ $summary | ConvertTo-Json -Depth 6 | Set-Content -Path $summaryJson -Encoding UT
 "@ | Set-Content -Path $summaryMd -Encoding UTF8
 
 $isStandaloneJointSuite = Test-IsStandaloneJointSuite `
-    -IsStandalone (-not [bool]$JointDir) `
+    -IsStandalone $isStandaloneJointRun `
     -Grep $Grep `
     -PreflightOnly ([bool]$PreflightOnly)
 if ($isStandaloneJointSuite) {
@@ -7185,5 +7201,12 @@ if ($isStandaloneJointSuite) {
 exit $exitCode
 }
 finally {
-    $jointRunnerLock.Dispose()
+    try {
+        if (-not $KeepServices -and $jointRuntimeRoot -and (Test-Path -LiteralPath $jointRuntimeRoot)) {
+            Remove-Item -LiteralPath $jointRuntimeRoot -Recurse -Force
+        }
+    }
+    finally {
+        $jointRunnerLock.Dispose()
+    }
 }

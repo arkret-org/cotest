@@ -2,6 +2,8 @@ use anyhow::{Context, Result, anyhow};
 use arkret_canonical::canonical_sha256;
 use arkret_models_collaboration::governance::invite_addressing::IntroductionEvidence;
 use arkret_wire::{CommitStreamRef, RealmId};
+use coland_storage::AuditStore as _;
+use coland_storage_postgres::{Db, PgAuditStore, PoolTuning};
 use reqwest::StatusCode;
 use serde_json::json;
 
@@ -14,7 +16,7 @@ use crate::scenarios::agent_runtime_live::coauth_session_evidence::{
 };
 
 pub async fn contacts_invites_listing_export_and_audit_work() -> Result<()> {
-    let mut deployment = actual_agent_deployment("directory-workflow").await?;
+    let deployment = actual_agent_deployment("directory-workflow").await?;
     let alice = deployment.controller.clone();
     let bob = additional_controller(
         &deployment,
@@ -22,11 +24,6 @@ pub async fn contacts_invites_listing_export_and_audit_work() -> Result<()> {
         "ak:device:01904100-0000-7000-8000-0000000000b0",
     )
     .await?;
-    let administrator = deployment.account.principal_id.clone();
-    deployment
-        .station
-        .restart_with_registry_administrators(&[administrator])
-        .await?;
     let server = &deployment.station;
     alice
         .request_contact(&bob.actor)
@@ -153,15 +150,24 @@ pub async fn contacts_invites_listing_export_and_audit_work() -> Result<()> {
         "committed Realm scan did not include submitted message Event"
     );
 
-    let audit_events = expect_json(
-        alice.get("/_coland/admin/audit/events?limit=20"),
-        StatusCode::OK,
-    )
-    .await?;
-    // The local admin audit log records administrative session/account
-    // actions. Realm Events are proven by their signed Commit stream above.
+    // Ordinary account grants do not confer deployment operator privileges.
+    // Observe the actual Station's actor-scoped audit store independently of
+    // its operator API; Realm effects are proven by the signed scan above.
+    let db = Db::connect(server.configured_database_url(), PoolTuning::default()).await?;
+    let store = PgAuditStore {
+        pool: db.pool.context("Station audit pool")?,
+    };
+    let actor = deployment.account.principal_id.as_str();
+    let entries = store.list_for_actor(actor).await?;
+    assert!(entries.iter().all(|entry| entry["actor"] == actor));
+    let audit_events = json!({"events": entries});
     let _ = expect_audit_action(&audit_events, "account.register")?;
 
+    expect_status(
+        alice.get("/_coland/admin/audit/events?limit=20"),
+        StatusCode::FORBIDDEN,
+    )
+    .await?;
     expect_status(
         alice.get(&format!("/_coland/admin/audit/events?actor={}", bob.actor)),
         StatusCode::FORBIDDEN,

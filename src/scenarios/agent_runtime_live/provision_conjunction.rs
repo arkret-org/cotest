@@ -8,7 +8,9 @@ use super::*;
 use crate::conformance::{CaseExecutionResult, SuiteExecutionResult};
 
 fn capture_inputs(root: &Path, output: &Path) -> Result<serde_json::Value> {
-    let status = Command::new("python")
+    let python = std::env::var_os("COTEST_PYTHON_BIN")
+        .unwrap_or_else(|| std::ffi::OsString::from("python3"));
+    let status = Command::new(python)
         .args(["-X", "utf8"])
         .arg(root.join("cotest/scripts/record-security-source-inputs.py"))
         .arg(root)
@@ -85,6 +87,12 @@ pub async fn run_agent_provision_production() -> Result<SuiteExecutionResult> {
     let coauth = std::env::var("COAUTH_BIN").context("current Coauth binary")?;
     let joint = output.join("browser");
     let log = fs::File::create(output.join("browser-runner.log"))?;
+    let dns_suffix =
+        std::env::var("COTEST_BROWSER_DNS_SUFFIX").unwrap_or_else(|_| "local.host".to_owned());
+    ensure!(
+        matches!(dns_suffix.as_str(), "local.host" | "localhost"),
+        "unsupported native browser DNS suffix"
+    );
     let status = Command::new("pwsh")
         .args(["-NoProfile", "-File"])
         .arg(repo.join("scripts/run-joint-e2e.ps1"))
@@ -105,7 +113,7 @@ pub async fn run_agent_provision_production() -> Result<SuiteExecutionResult> {
         .args([
             "-StartMockEmail",
             "-DnsSuffix",
-            "local.host",
+            dns_suffix.as_str(),
             "-RunProfile",
             "joint-full",
             "-PlaywrightProject",

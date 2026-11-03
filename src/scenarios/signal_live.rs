@@ -24,15 +24,22 @@ pub async fn run() -> Result<()> {
 }
 
 pub async fn run_ban() -> Result<()> {
-    super::message_mls_cross_station_live::run_with_signal_boundary(true, emission::Boundary::Ban)
-        .await
+    crate::harness::heap_future(|| {
+        super::message_mls_cross_station_live::run_with_signal_boundary(
+            true,
+            emission::Boundary::Ban,
+        )
+    })
+    .await
 }
 
 pub async fn run_terminal() -> Result<()> {
-    super::message_mls_cross_station_live::run_with_signal_boundary(
-        true,
-        emission::Boundary::Tombstone,
-    )
+    crate::harness::heap_future(|| {
+        super::message_mls_cross_station_live::run_with_signal_boundary(
+            true,
+            emission::Boundary::Tombstone,
+        )
+    })
     .await
 }
 

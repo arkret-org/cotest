@@ -84,12 +84,27 @@ function Remove-StaleArtifactRuns {
         [System.IO.Path]::DirectorySeparatorChar,
         [System.IO.Path]::AltDirectorySeparatorChar
     ) + [System.IO.Path]::DirectorySeparatorChar
+    # The latest channel may point to an older run after many targeted runs.
+    # Keep the containing run even when that channel points to an embedded gate.
+    $protectedRuns = @(
+        foreach ($channel in @("joint-e2e", "server-conformance")) {
+            $location = Join-Path $OutputRoot "latest/$channel/run-location.json"
+            if (Test-Path -LiteralPath $location -PathType Leaf) {
+                $published = Get-Content -Raw -LiteralPath $location | ConvertFrom-Json
+                if ([string]$published.authoritative_run -and
+                    $published.authoritative_run.StartsWith($familyPrefix, [System.StringComparison]::OrdinalIgnoreCase)) {
+                    ($published.authoritative_run.Substring($familyPrefix.Length) -split '[/\\]')[0]
+                }
+            }
+        }
+    )
     $staleRuns = @(
         Get-ChildItem -LiteralPath $resolvedFamilyRoot -Directory |
             Sort-Object Name -Descending |
             Select-Object -Skip $KeepRuns
     )
     foreach ($directory in $staleRuns) {
+        if ($directory.Name -in $protectedRuns) { continue }
         $resolvedDirectory = [System.IO.Path]::GetFullPath($directory.FullName)
         if (-not $resolvedDirectory.StartsWith(
                 $familyPrefix,
@@ -222,7 +237,25 @@ function Publish-ArtifactMirror {
 
     $staging = Join-Path $resolvedLatestRoot ".$channelSegment-$([guid]::NewGuid().ToString('N')).tmp"
     try {
-        Copy-Item -LiteralPath $resolvedSourceDirectory -Destination $staging -Recurse -Force
+        if ($Channel -eq "joint-e2e") {
+            $null = New-Item -ItemType Directory -Path $staging
+            foreach ($name in @("summary.md", "summary.json")) {
+                $report = Join-Path $resolvedSourceDirectory $name
+                if (Test-Path -LiteralPath $report -PathType Leaf) {
+                    Copy-Item -LiteralPath $report -Destination $staging
+                }
+            }
+            $reportPath = (Join-Path $resolvedSourceDirectory "summary.md")
+            @(
+                "# Latest joint E2E run"
+                ""
+                "Authoritative run: ``$resolvedSourceDirectory``"
+                ""
+                "Open ``$reportPath`` for the report and links to logs, JUnit and browser evidence."
+            ) | Set-Content -LiteralPath (Join-Path $staging "README.md") -Encoding UTF8
+        } else {
+            Copy-Item -LiteralPath $resolvedSourceDirectory -Destination $staging -Recurse -Force
+        }
         [pscustomobject]@{
             channel           = $channelSegment
             published_at      = (Get-Date).ToString("o")

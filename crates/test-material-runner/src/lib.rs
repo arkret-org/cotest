@@ -942,9 +942,12 @@ pub fn run_test_material_rejection_suite_with_coverage() -> Result<TestMaterialR
 /// The database must be an independently migrated scratch database.
 pub fn run_test_material_rejection_suite_with_pg_coverage() -> Result<TestMaterialRejectionCoverage>
 {
+    let database_url = std::env::var("COTEST_COAUTH_ROUTE_DATABASE_URL")
+        .or_else(|_| std::env::var("DATABASE_URL"))
+        .context("COTEST_COAUTH_ROUTE_DATABASE_URL or DATABASE_URL must name an independently migrated Coauth scratch database")?;
     ensure!(
-        std::env::var("DATABASE_URL").is_ok_and(|url| !url.trim().is_empty()),
-        "DATABASE_URL must name a migrated scratch database for Coauth route evidence"
+        !database_url.trim().is_empty(),
+        "Coauth route evidence database is empty"
     );
     let mut coverage = run_test_material_rejection_suite_with_coverage()?;
     let manifest = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../coauth/Cargo.toml");
@@ -967,6 +970,7 @@ pub fn run_test_material_rejection_suite_with_pg_coverage() -> Result<TestMateri
                 "--exact",
                 "--nocapture",
             ])
+            .env("DATABASE_URL", &database_url)
             .env_remove("COAUTH_SKIP_POSTGRES_TESTS")
             .env_remove("CARGO_MAKEFLAGS")
             .env_remove("MAKEFLAGS")

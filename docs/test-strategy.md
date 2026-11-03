@@ -222,7 +222,7 @@ The joint E2E runner currently targets the first live-product slice:
 - save step screenshots, traces, videos, HAR, console/network JSONL, JUnit,
   HTML report, and service logs under
   `artifacts/runs/joint-e2e/<timestamp>-<profile>/`
-- copy the latest non-targeted suite to `artifacts/latest/joint-e2e/`;
+- publish summaries and a run pointer for the latest non-targeted suite under `artifacts/latest/joint-e2e/`;
   `run-server-conformance.ps1 -Profile joint` updates the same channel, while `-Grep`
   selections remain only in their timestamped authoritative directory
 

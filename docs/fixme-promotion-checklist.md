@@ -32,7 +32,7 @@ Example:
   -SpecPath e2e\tests\extensions\mimi-federation.spec.ts:57 `
   -FeatureId cotest#mimi-facade `
   -PassedSpecCommand 'npx playwright test --config playwright.config.ts --project chromium --grep "mock-mimi-facade"' `
-  -EvidencePath artifacts\latest\joint-e2e\playwright-report `
+  -EvidencePath "$((Get-Content artifacts/latest/joint-e2e/run-location.json -Raw | ConvertFrom-Json).authoritative_run)/playwright-report" `
   -NewBody @'
 async ({ page, request }) => {
   // promoted body

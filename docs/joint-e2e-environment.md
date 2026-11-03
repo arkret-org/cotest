@@ -73,4 +73,6 @@ Reserve at least 8 GiB of available RAM, 4 CPU cores, 10 GiB of free disk, 13 fr
 
 ## Reports and cleanup
 
-Every run writes `summary.md`, `summary.json`, `topology.json`, `junit.xml`, the Playwright HTML report and output directory, per-service logs, `scenarios.md`, TLS evidence, managed-service failures, PostgreSQL dumps, and the secret scan under one absolute run directory. Normal completion, test failure, and Ctrl+C all pass through the same cleanup block unless `-KeepServices` is explicitly selected for debugging.
+The initializer writes under the run’s `environment/` directory, even when it blocks startup. A run that reaches report finalization writes `summary.md`, `summary.json`, `topology.json`, `junit.xml`, the Playwright HTML report and output directory, per-service logs, `scenarios.md`, TLS evidence, managed-service failures, PostgreSQL dumps, and the secret scan under one absolute run directory. Normal completion, test failure, and Ctrl+C all pass through the same cleanup block unless `-KeepServices` is explicitly selected for debugging.
+
+Temporary native tools, the served Inkson bundle and Savfox working directories are removed during normal teardown. Build receipts remain in `build-evidence/`; `latest/joint-e2e/` keeps only summaries and a pointer to the authoritative run.

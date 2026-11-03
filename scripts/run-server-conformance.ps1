@@ -40,6 +40,7 @@ $ErrorActionPreference = "Stop"
 Set-StrictMode -Version Latest
 
 . (Join-Path $PSScriptRoot "lib\artifacts.ps1")
+. (Join-Path $PSScriptRoot "lib\conformance-prerequisites.ps1")
 
 function Repair-ProcessPathEnvironment {
     # PATH is case-sensitive on Unix. Only Windows child-process setup needs
@@ -697,7 +698,7 @@ function Invoke-CargoTestInvocation {
     $process = $null
     try {
         $cargo = (Get-Command cargo -CommandType Application -ErrorAction Stop | Select-Object -First 1).Source
-        $python = (Get-Command python -CommandType Application -ErrorAction Stop | Select-Object -First 1).Source
+        $python = Resolve-ConformancePython -ExplicitPath $env:COTEST_PYTHON_BIN
         $nativeWrapper = Join-Path $PSScriptRoot "run-native-rust-tests.py"
         if (-not (Test-Path -LiteralPath $nativeWrapper -PathType Leaf)) {
             throw "Native Rust TLS wrapper is missing: $nativeWrapper"
@@ -2380,10 +2381,10 @@ if ($Runtime -eq "process" -and -not $env:COLAND_BIN) {
 # same reason the SUT is: a stale sibling binary embeds an older SDK/spec
 # snapshot and then rejects envelopes the current cotest authors. An explicit
 # COAUTH_BIN / FLAGON_BIN stays an intentional immutable-binary override.
-$servicesLiveProfile = $Profile -eq "services-live"
 $clientLiveProfile = $Profile -eq "inkson-client-live"
+$nativeRequirements = Get-ConformanceNativeRequirements -Profile $Profile -Package $CargoTestPackage -Target $CargoTestTarget
 $servicesLiveBinaries = @{}
-if ($servicesLiveProfile -and -not $delegatedProfile -and -not $PlanOnly -and -not $ValidateProfile) {
+if ($nativeRequirements.Services -and -not $delegatedProfile -and -not $PlanOnly -and -not $ValidateProfile) {
     $workspaceRoot = (Resolve-Path (Join-Path $repoRoot "..")).Path
     # `BinTarget` is the Cargo bin target, which is not always the service name:
     # flagon's server crate is `server`, so it builds and installs as
@@ -2403,10 +2404,18 @@ if ($servicesLiveProfile -and -not $delegatedProfile -and -not $PlanOnly -and -n
         }
         $manifest = Join-Path $workspaceRoot "$($sibling.Service)\Cargo.toml"
         if (-not (Test-Path $manifest)) {
-            throw "Profile services-live needs the sibling $($sibling.Service) checkout at $manifest, or an explicit $($sibling.BinEnv)"
+            throw "Profile $Profile needs the sibling $($sibling.Service) checkout at $manifest, or an explicit $($sibling.BinEnv)"
         }
         Add-RawLogLine -Path $rawLog -Value "=== prepare $($sibling.Service) ==="
-        $buildOutput = @(& cargo build --manifest-path $manifest --bin $sibling.BinTarget 2>&1)
+        if ($sibling.Service -eq 'flagon') {
+            $preparedDirectory = @(& (Join-Path $PSScriptRoot 'prepare-cargo-artifact.ps1') -ManifestPath $manifest -PackageName server -BinaryName server -RepositoryRoots @((Join-Path $workspaceRoot 'arkret-rust-sdk')))
+            if ($preparedDirectory.Count -ne 1) { throw 'Expected one prepared Directory executable' }
+            $servicesLiveBinaries[$sibling.BinEnv] = $preparedDirectory[0].ArtifactPath
+            continue
+        }
+        $buildArgs = @('build', '--locked', '--manifest-path', $manifest, '--bin', $sibling.BinTarget)
+        if ($sibling.Service -eq 'coauth') { $buildArgs += @('--features', 'cedar') }
+        $buildOutput = @(& cargo @buildArgs 2>&1)
         $buildExitCode = $LASTEXITCODE
         foreach ($line in $buildOutput) {
             $text = [string]$line
@@ -2428,7 +2437,7 @@ if ($servicesLiveProfile -and -not $delegatedProfile -and -not $PlanOnly -and -n
 }
 
 $originalEnv = @()
-foreach ($name in "COTEST_SUT_MODE", "COTEST_SUT_MANIFEST", "COTEST_SUT_IMAGE", "COTEST_ARTIFACT_DIR", "COTEST_SERVICE_LOG_DIR", "COTEST_TRANSCRIPT_PATH", "COLAND_BIN", "COAUTH_BIN", "FLAGON_BIN", "COTEST_COLAND_DATABASE_URL", "COTEST_COAUTH_DATABASE_URL", "DATABASE_URL", "COTEST_REQUIRE_LIVE_SERVICES", "COLAND_TEST_DATABASE_URL") {
+foreach ($name in "COTEST_SUT_MODE", "COTEST_SUT_MANIFEST", "COTEST_SUT_IMAGE", "COTEST_ARTIFACT_DIR", "COTEST_SERVICE_LOG_DIR", "COTEST_TRANSCRIPT_PATH", "COLAND_BIN", "COAUTH_BIN", "FLAGON_BIN", "FLAGON_DATABASE_URL", "FLAGON_METRICS_BIND", "COTEST_COLAND_DATABASE_URL", "COTEST_COAUTH_DATABASE_URL", "COTEST_COAUTH_ROUTE_DATABASE_URL", "COTEST_FLAGON_DATABASE_URL", "DATABASE_URL", "COTEST_REQUIRE_LIVE_SERVICES", "COLAND_TEST_DATABASE_URL", "COTEST_SDK_ARTIFACT_MANIFEST", "COTEST_SAVFOX_BINDING_WORKER", "COTEST_PYTHON_BIN", "COTEST_BROWSER_DNS_SUFFIX", "COTEST_WIRE_BIN", "COTEST_PROVISION_BIN", "INKSON_WIRE_BIN") {
     $originalEnv += [pscustomobject]@{
         Name   = $name
         Exists = Test-Path "Env:$name"
@@ -2449,6 +2458,8 @@ $profileReport = [pscustomobject]@{
 }
 $exitCode = 1
 $testPostgres = $null
+$serviceDatabases = @()
+$conformancePython = $null
 
 try {
     $env:COTEST_SUT_MODE = $Runtime
@@ -2468,16 +2479,22 @@ try {
 
     if ($Profile -in @("all", "full-nightly", "services-live", "inkson-client-live") -and -not $env:COTEST_COLAND_DATABASE_URL) {
         Add-RawLogLine -Path $rawLog -Value "=== prepare conformance test PostgreSQL ==="
-        $testPostgres = Start-CotestTestPostgres
-        $env:COTEST_COLAND_DATABASE_URL = $testPostgres.Url
-        Add-RawLogLine -Path $rawLog -Value "conformance test PostgreSQL: $($testPostgres.ContainerName)"
+        if ($PostgresAdminUrl) {
+            $nativeDatabase = New-NativeConformanceDatabase -AdminUrl $PostgresAdminUrl -ExpectedDataDirectory $PostgresDataDirectory -OutputDirectory $runDir -PostgresToolsDirectory $PostgresToolsDirectory
+            $serviceDatabases += $nativeDatabase
+            $env:COTEST_COLAND_DATABASE_URL = $nativeDatabase.Url
+        } else {
+            $testPostgres = Start-CotestTestPostgres
+            $env:COTEST_COLAND_DATABASE_URL = $testPostgres.Url
+            Add-RawLogLine -Path $rawLog -Value "conformance test PostgreSQL: $($testPostgres.ContainerName)"
+        }
     }
 
     if ($clientLiveProfile) {
         $env:COTEST_REQUIRE_LIVE_SERVICES = "1"
         Add-RawLogLine -Path $rawLog -Value "inkson-client-live: original production client prerequisites required (fail-closed)"
     }
-    if ($servicesLiveProfile) {
+    if ($nativeRequirements.Services) {
         foreach ($binEnv in $servicesLiveBinaries.Keys) {
             [Environment]::SetEnvironmentVariable($binEnv, $servicesLiveBinaries[$binEnv])
         }
@@ -2488,14 +2505,11 @@ try {
         if (-not $env:COTEST_COAUTH_DATABASE_URL -and $env:COTEST_COLAND_DATABASE_URL) {
             $env:COTEST_COAUTH_DATABASE_URL = $env:COTEST_COLAND_DATABASE_URL
         }
-        if (-not $env:DATABASE_URL -and $env:COTEST_COLAND_DATABASE_URL) {
-            $env:DATABASE_URL = $env:COTEST_COLAND_DATABASE_URL
-        }
         # Declare the live stack present. Without this the selected scenarios
         # soft-skip on a missing binary, database or Docker daemon and the lane
         # reports a green run in which no service was ever started.
         $env:COTEST_REQUIRE_LIVE_SERVICES = "1"
-        Add-RawLogLine -Path $rawLog -Value "services-live: live prerequisites declared present (fail-closed)"
+        Add-RawLogLine -Path $rawLog -Value "${Profile}: live prerequisites declared present (fail-closed)"
     }
 
     $colandTestDatabaseUrl = Resolve-ColandTestDatabaseUrl `
@@ -2509,6 +2523,64 @@ try {
         Add-RawLogLine -Path $rawLog -Value "in-process storage leases: conformance PostgreSQL"
     }
 
+    if ($nativeRequirements.Services) {
+        $python = Resolve-ConformancePython -ExplicitPath $env:COTEST_PYTHON_BIN
+        $conformancePython = Initialize-ConformancePython -Python $python -SpecRoot (Join-Path $repoRoot '../arkret-spec') -OutputDirectory $runDir
+        $env:COTEST_PYTHON_BIN = $conformancePython
+        if ($nativeRequirements.StorageLocks) {
+            Assert-ConformanceDatabaseCapacity -AdminUrl $env:COTEST_COLAND_DATABASE_URL -PostgresToolsDirectory $PostgresToolsDirectory
+        }
+        if (-not $env:COTEST_FLAGON_DATABASE_URL) {
+            $env:COTEST_FLAGON_DATABASE_URL = $env:COTEST_COLAND_DATABASE_URL
+        }
+        if (-not $env:FLAGON_DATABASE_URL) {
+            $directory = New-ConformanceServiceDatabase -AdminUrl $env:COTEST_COLAND_DATABASE_URL -Service directory -OutputDirectory $runDir -PostgresToolsDirectory $PostgresToolsDirectory
+            $serviceDatabases += $directory
+            $env:FLAGON_DATABASE_URL = $directory.Url
+        }
+        if (-not $env:FLAGON_METRICS_BIND) { $env:FLAGON_METRICS_BIND = '127.0.0.1:0' }
+        if ($nativeRequirements.RouteEvidence -and -not $env:COTEST_COAUTH_ROUTE_DATABASE_URL) {
+            $route = New-ConformanceServiceDatabase -AdminUrl $env:COTEST_COAUTH_DATABASE_URL -Service coauth -OutputDirectory $runDir -PostgresToolsDirectory $PostgresToolsDirectory -Migration (Join-Path $repoRoot '../coauth/crates/storage-postgres/migrations/00000000000000_initial/up.sql')
+            $serviceDatabases += $route
+            $env:COTEST_COAUTH_ROUTE_DATABASE_URL = $route.Url
+        }
+        if ($nativeRequirements.Media) {
+            foreach ($name in @('COLAND_TEST_SFU_PYTHON', 'COLAND_TEST_LIVEKIT_BIN')) {
+                $path = [Environment]::GetEnvironmentVariable($name)
+                if (-not $path -or -not (Test-Path -LiteralPath $path -PathType Leaf)) {
+                    throw "Native media prerequisite $name is missing; prepare the actual RTC runtime before executing the suite"
+                }
+            }
+            & $env:COLAND_TEST_SFU_PYTHON -I -c 'from livekit import rtc; assert rtc.Room and rtc.AudioSource and rtc.VideoSource'
+            if ($LASTEXITCODE -ne 0) { throw 'Native media RTC interpreter is unusable' }
+        }
+        if ($nativeRequirements.Sdk -or $nativeRequirements.Binding) {
+            $prepared = Join-Path $runDir 'native-prerequisites'
+            $prepareArgs = @((Join-Path $PSScriptRoot 'prepare-native-conformance.py'), '--repo', $repoRoot, '--output', $prepared)
+            if ($nativeRequirements.Sdk) { $prepareArgs += '--sdk' }
+            if ($nativeRequirements.Binding) { $prepareArgs += '--binding' }
+            & $env:COTEST_PYTHON_BIN @prepareArgs
+            if ($LASTEXITCODE -ne 0) { throw 'Native conformance artifact preparation failed' }
+            $preparedEnvironment = Get-Content -Raw (Join-Path $prepared 'environment.json') | ConvertFrom-Json -AsHashtable
+            foreach ($name in $preparedEnvironment.Keys) { [Environment]::SetEnvironmentVariable($name, $preparedEnvironment[$name]) }
+        }
+        if ($nativeRequirements.Browser) {
+            $tools = Join-Path $runDir 'browser-tools.env'
+            $browserPreparation = Join-Path $runDir 'browser-preparation'
+            & (Join-Path $PSScriptRoot 'run-joint-e2e.ps1') -PreflightOnly -NativeToolsEnvironmentFile $tools -JointDir $browserPreparation `
+                -ColandBin $env:COLAND_BIN -StartCoauth -CoauthBin $env:COAUTH_BIN -StartMockEmail -DnsSuffix $DnsSuffix `
+                -RunProfile joint-full -PlaywrightProject joint-inkson -Grep '@agent-provision-(recovery-prerequisite|durable-recovery)' `
+                -RequireScenario 'joint/agent-provision-recovery-prerequisite' -ForbidSkippedTests
+            if ($LASTEXITCODE -ne 0) { throw 'Native provision browser preparation failed' }
+            foreach ($line in Get-Content -LiteralPath $tools) {
+                $entry = $line.Split('=', 2)
+                if ($entry.Count -ne 2 -or $entry[0] -notin @('COTEST_WIRE_BIN', 'COTEST_PROVISION_BIN', 'INKSON_WIRE_BIN')) { throw 'Unexpected native browser tool export' }
+                [Environment]::SetEnvironmentVariable($entry[0], $entry[1])
+            }
+            $env:COTEST_BROWSER_DNS_SUFFIX = $DnsSuffix
+        }
+    }
+
     $exitCode = 0
     foreach ($invocation in $invocations) {
         $invocationExitCode = Invoke-CargoTestInvocation -CargoArgs @($invocation.cargo_args) -RawLog $rawLog -Label $invocation.label -AllowEmpty:($invocation.selection_mode -eq "broad-scan")
@@ -2518,6 +2590,11 @@ try {
     }
 }
 finally {
+    # Child databases use the run-owned conformance database as their admin URL.
+    # Remove those children before closing that final administrative connection.
+    for ($index = $serviceDatabases.Count - 1; $index -ge 0; $index--) {
+        Remove-ConformanceServiceDatabase $serviceDatabases[$index]
+    }
     if ($testPostgres) {
         Stop-CotestTestPostgres -ContainerName $testPostgres.ContainerName
     }
@@ -2576,7 +2653,7 @@ if ($specArtifactsRoot -and (Test-Path (Join-Path $repoRoot "config/coverage-pro
 
 # Spec artifact sync gate
 $specRoot = Join-Path $repoRoot ".." | Join-Path -ChildPath "arkret-spec"
-$specSyncResult = Test-SpecArtifactSync -SpecRoot $specRoot
+$specSyncResult = Test-SpecArtifactSync -SpecRoot $specRoot -PythonExe $conformancePython
 $sutDescribeAlignment = [pscustomobject]@{
     status               = "skipped"
     reason               = "no SUT base URL configured"

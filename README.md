@@ -90,7 +90,7 @@ Recommended entrypoints:
 .\scripts\demote-test.ps1 -SpecPath e2e\tests\path\spec.ts:42 -Reason "GAP-Px-yyy blocked by backing feature"
 .\scripts\promote-fixme.ps1 -SpecPath e2e\tests\path\spec.ts:42 -FeatureId cotest#local-feature `
   -PassedSpecCommand "npx playwright test --config playwright.config.ts --project chromium --grep name" `
-  -EvidencePath artifacts\latest\joint-e2e\playwright-report -NewBody $body
+  -EvidencePath "$((Get-Content artifacts/latest/joint-e2e/run-location.json -Raw | ConvertFrom-Json).authoritative_run)/playwright-report" -NewBody $body
 .\scripts\run-compose.ps1
 .\scripts\build-coland-image.ps1
 .\scripts\run-server-conformance.ps1 -Runtime docker -SutImage cotest-coland:latest
@@ -98,13 +98,30 @@ Recommended entrypoints:
 .\scripts\run-server-conformance.ps1 -Runtime process -Profile services-live
 ```
 
-- `process` mode is the fast local path and spawns a pre-built SUT binary
-  (`COLAND_BIN`, or the coland binary the runner script built); test execution
-  never compiles the SUT itself. Without `COLAND_BIN`, lookup walks the Cargo
-  target directory this run was built into and then `../coland/target/debug/`,
-  so it works whether the workspace shares one `build.target-dir` or each repo
-  keeps its own `target/`. Never hard-code either layout: ask
-  `cargo metadata --format-version 1 --no-deps` for `target_directory`.
+Native `all` and `full-nightly` runs prepare Coauth with Cedar, the stamped
+Directory binary, the sealed SDK artifacts, and the actual Savfox binding worker
+before selected tests execute. Browser-backed provisioning vectors prepare their
+native tools through the joint runner's preflight. An explicit artifact override
+must name the real executable or sealed manifest used for this run.
+
+Select Python 3.11 or newer with `COTEST_PYTHON_BIN`. Missing Spec-tool packages
+are installed from the sibling Spec's `tools/requirements.txt` into a run-owned
+virtual environment. Native media selections additionally require actual
+`COLAND_TEST_SFU_PYTHON` and `COLAND_TEST_LIVEKIT_BIN` executable paths; the former
+must import LiveKit RTC. Missing prerequisites fail before test execution.
+
+Without a configured conformance database, the runner starts its isolated Docker
+PostgreSQL. To use an existing native test cluster, pass `-PostgresAdminUrl`,
+`-PostgresDataDirectory`, and optionally `-PostgresToolsDirectory`. The runner
+verifies `SHOW data_directory`, creates separate run-owned stores, and removes
+children before their administrative database. Parallel storage selections need
+`max_locks_per_transaction >= 1024`; the runner does not restart external clusters.
+Use `-DnsSuffix localhost` when that is the selected browser topology.
+
+- `process` mode spawns a prepared SUT binary (`COLAND_BIN`, or the Coland
+  executable built by the runner); test execution never compiles the SUT itself.
+  The runner asks `cargo metadata --format-version 1 --no-deps` for
+  `target_directory`, supporting both shared and separate Cargo target layouts.
 - `.\scripts\run-compose.ps1` runs the process-mode `compose` profile and can
   attach live `coauth`, `floria`, `codmin`, `inkson`, or `flagon` services
   through base URLs or managed service commands.
@@ -158,7 +175,7 @@ easy to find:
 ```
 artifacts/
   runs/
-    cotest/<timestamp>-<profile>[-selection]/ # run-server-conformance.ps1 authoritative outputs
+    server-conformance/<timestamp>-<profile>[-selection]/ # run-server-conformance.ps1 authoritative outputs
       summary.*, junit.xml, ...
       services/
       joint-smoke/ | joint/ | ...   # embedded joint gate outputs
@@ -167,8 +184,8 @@ artifacts/
     cargo-adhoc/                    # bare `cargo test` reports
   latest/
     README.md                       # generated index of stable channels
-    full/                           # latest unfiltered complete cotest run
-    joint-e2e/                      # latest non-targeted joint suite
+    server-conformance/             # latest unfiltered complete cotest run
+    joint-e2e/                      # summaries and pointer to the latest non-targeted joint suite
   hygiene/<timestamp>/              # run-hygiene.ps1 (separate gate, own family)
   compose/                          # run-compose.ps1 live-stack service logs
 ```
@@ -187,7 +204,7 @@ Rules:
   stable joint result except for the dedicated `run-server-conformance.ps1 -Profile joint`
   suite. The targeted `multi-server` and `release-gate` legs never replace it.
 - Both scripts keep the newest 20 runs in their own family (`-KeepRuns`, `0`
-  disables), so cotest and joint-e2e retention cannot prune one another.
+  disables), plus any older run referenced by a stable channel.
 - CI sets `COTEST_JOINT_RUN_DIR` to fixed names under `runs/` (e.g.
   `runs/integration-playwright/joint-e2e`).
 
@@ -293,17 +310,18 @@ own database. This supports `-ServerCount 3 -DualCoauth` without Docker. The
 administrative URL is never used as an application database; an explicitly
 provided `-ColandDatabaseUrl` still cannot be shared across Stations.
 
-Evidence lands in `artifacts/runs/joint-e2e/<ts>-<profile>/`:
-`playwright-report/` (HTML with trace/video/failure screenshot),
-`screenshots/` (your `stepShot` captures), and `diagnostics/` (console +
-network HAR). Runner-owned service data uses explicit topology names: each
-Coauth authority has a `coauth-serverN/` directory, while Coland configuration,
-object, state, and store-dump artifacts use `coland-serverN-*` names. Open a
-failure's trace for a step-by-step replay of DOM, network, and screenshots:
+Start with `summary.md` in `artifacts/runs/joint-e2e/<ts>-<profile>/`.
+The same directory contains `environment/`, `build-evidence/`, `junit.xml`,
+`failures.md`, `playwright.log` (combined console output), and
+`playwright-report/index.html`. Browser attachments, step screenshots, service
+logs and store dumps stay in the authoritative run. The latest channel keeps
+only the summaries and `run-location.json`. Trace capture is disabled for
+joint runs because traces can include credentials.
 
-```powershell
-npx playwright show-trace artifacts\latest\joint-e2e\playwright-report\<...>\trace.zip
-```
+The runner removes its copied executables, served Inkson bundle, and Savfox
+working directories on teardown. It retains build stamps and checksums in
+`build-evidence/`. `-KeepServices` retains the working files for live debugging;
+`-NativeToolsEnvironmentFile` retains the exported tools for the caller.
 
 ### 4. (Optional) pin the visual with a screenshot assertion
 

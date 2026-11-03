@@ -857,10 +857,7 @@ impl SidecarSyncObserver for PrivateReplyProbe {
             }))?,
         )?;
         drop(host);
-        let output = std::process::Command::new(&self.reader)
-            .arg(&path)
-            .arg(&evidence)
-            .output()?;
+        let output = super::readback::output(&self.reader, &path, &evidence)?;
         ensure!(
             output.status.success(),
             "fresh-process private reply readback: {}",

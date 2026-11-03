@@ -27,7 +27,9 @@ pub fn run_sdk_event_type_axes_suite() -> Result<SuiteExecutionResult> {
         std::process::id(),
         SystemTime::now().duration_since(UNIX_EPOCH)?.as_nanos()
     ));
-    let run = Command::new("python")
+    let python = std::env::var_os("COTEST_PYTHON_BIN")
+        .unwrap_or_else(|| std::ffi::OsString::from("python3"));
+    let run = Command::new(python)
         .args(["-X", "utf8"])
         .arg(root.join("scripts/sdk_event_type_axes.py"))
         .arg("--artifacts")

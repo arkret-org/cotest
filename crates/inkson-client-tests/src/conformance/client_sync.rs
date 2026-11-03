@@ -13,6 +13,8 @@ use inkson::sync_engine::NativeAccountHost;
 use serde_json::Value;
 
 mod private_reply;
+mod readback;
+pub use readback::{CheckpointReadbackScope, checkpoint_readback_test};
 mod recovery;
 mod window_dependencies;
 
@@ -109,15 +111,7 @@ fn run_native_sync(private_only: bool) -> Result<super::SuiteExecutionResult> {
             } else {
                 parent
             };
-            let reader = directory.join(format!(
-                "cotest-inkson-checkpoint-readback{}",
-                std::env::consts::EXE_SUFFIX
-            ));
-            ensure!(
-                reader.is_file(),
-                "Sync fresh-process readback executable is missing: {}",
-                reader.display()
-            );
+            let reader = readback::executable()?;
             let _transcript = cotest::transcripts::init_transcript_writer(
                 "sidecar-checkpoint-production",
                 Some(&directory.join("conformance-transcripts")),
@@ -1060,10 +1054,7 @@ impl Probe {
                     &evidence,
                     serde_json::to_vec(&(&genesis.scope_ref, snapshot, history, cursor))?,
                 )?;
-                let output = std::process::Command::new(&self.reader)
-                    .arg(&path)
-                    .arg(evidence)
-                    .output()?;
+                let output = readback::output(&self.reader, &path, &evidence)?;
                 ensure!(
                     output.status.success(),
                     "{name}: cursor fresh-process readback failed: {}",
@@ -1388,10 +1379,11 @@ impl SidecarSyncObserver for Probe {
             &evidence,
             serde_json::to_vec(&(&genesis.scope_ref, &snapshot, &history, &cursor))?,
         )?;
-        let output = std::process::Command::new(&self.reader)
-            .arg(self.directory.path().join("state.json"))
-            .arg(&evidence)
-            .output()?;
+        let output = readback::output(
+            &self.reader,
+            &self.directory.path().join("state.json"),
+            &evidence,
+        )?;
         ensure!(
             output.status.success(),
             "fresh-process cut readback failed: {}",
@@ -1684,10 +1676,7 @@ impl Probe {
                 "stream_key":stream_key, "head":head, "anchor":anchor
             }))?,
         )?;
-        let output = std::process::Command::new(&self.reader)
-            .arg(path)
-            .arg(evidence)
-            .output()?;
+        let output = readback::output(&self.reader, &path, &evidence)?;
         ensure!(
             output.status.success(),
             "fresh-process Realm current readback failed: {}",
@@ -1845,10 +1834,7 @@ impl Probe {
                 "stream_anchors":before["verified_commit_stream_anchors"]
             }))?,
         )?;
-        let output = std::process::Command::new(&self.reader)
-            .arg(&path)
-            .arg(failed_evidence)
-            .output()?;
+        let output = readback::output(&self.reader, &path, &failed_evidence)?;
         ensure!(
             output.status.success(),
             "failed projection fresh-process readback failed: {}",
@@ -1912,10 +1898,7 @@ impl Probe {
         )?;
         drop(host);
         drop(database);
-        let output = std::process::Command::new(&self.reader)
-            .arg(path)
-            .arg(evidence)
-            .output()?;
+        let output = readback::output(&self.reader, &path, &evidence)?;
         ensure!(
             output.status.success(),
             "ordering fresh-process readback failed: {}",
@@ -2268,10 +2251,7 @@ impl Probe {
             "private_sidecar_scope":private_scope, "private_sidecar_cut":private_cut }))?,
         )?;
         drop(host);
-        let output = std::process::Command::new(&self.reader)
-            .arg(path)
-            .arg(evidence)
-            .output()?;
+        let output = readback::output(&self.reader, &path, &evidence)?;
         ensure!(
             output.status.success(),
             "row gap fresh-process readback failed: {}",
@@ -2484,10 +2464,7 @@ impl Probe {
                 "stream_anchors":after["verified_commit_stream_anchors"]
             }))?,
         )?;
-        let output = std::process::Command::new(&self.reader)
-            .arg(&path)
-            .arg(evidence)
-            .output()?;
+        let output = readback::output(&self.reader, &path, &evidence)?;
         ensure!(
             output.status.success(),
             "fresh-process Circle cut readback failed: {}",
@@ -2685,10 +2662,7 @@ impl Probe {
             "stream_heads":after["verified_commit_stream_cursors"],
             "stream_anchors":after["verified_commit_stream_anchors"] }))?,
         )?;
-        let output = std::process::Command::new(&self.reader)
-            .arg(path)
-            .arg(expected)
-            .output()?;
+        let output = readback::output(&self.reader, &path, &expected)?;
         ensure!(
             output.status.success(),
             "fresh-process recovered tail differs: {}",
@@ -2848,10 +2822,7 @@ impl Probe {
                 "stream_anchors":partial["verified_commit_stream_anchors"]
             }))?,
         )?;
-        let output = std::process::Command::new(&self.reader)
-            .arg(path)
-            .arg(&evidence)
-            .output()?;
+        let output = readback::output(&self.reader, &path, &evidence)?;
         ensure!(
             output.status.success(),
             "partial stream progress was not durable across a new process: {}",
@@ -2895,10 +2866,7 @@ impl Probe {
                 "stream_anchors":after["verified_commit_stream_anchors"]
             }))?,
         )?;
-        let output = std::process::Command::new(&self.reader)
-            .arg(path)
-            .arg(&evidence)
-            .output()?;
+        let output = readback::output(&self.reader, &path, &evidence)?;
         ensure!(
             output.status.success(),
             "recovered Circle cut failed new-process readback: {}",
