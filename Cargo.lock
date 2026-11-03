@@ -166,7 +166,7 @@ checksum = "330a5ed07fa54e4702c9d6c4174f74427fc0ef6e214bbd677ae50a5099946470"
 [[package]]
 name = "apace-dom"
 version = "0.3.0"
-source = "git+https://github.com/glory-rs/apace?rev=191c48adf6d7deb120c9d3ee1b098d7dc020891f#191c48adf6d7deb120c9d3ee1b098d7dc020891f"
+source = "git+https://github.com/glory-rs/apace?rev=a2407c3b2c1d6e25b7fd2ce1421daffff266e584#a2407c3b2c1d6e25b7fd2ce1421daffff266e584"
 dependencies = [
  "apace-traits",
  "apace_debug_timer",
@@ -209,7 +209,7 @@ dependencies = [
 [[package]]
 name = "apace-traits"
 version = "0.3.0"
-source = "git+https://github.com/glory-rs/apace?rev=191c48adf6d7deb120c9d3ee1b098d7dc020891f#191c48adf6d7deb120c9d3ee1b098d7dc020891f"
+source = "git+https://github.com/glory-rs/apace?rev=a2407c3b2c1d6e25b7fd2ce1421daffff266e584#a2407c3b2c1d6e25b7fd2ce1421daffff266e584"
 dependencies = [
  "atomic_refcell",
  "bitflags 2.13.2",
@@ -225,7 +225,7 @@ dependencies = [
 [[package]]
 name = "apace_debug_timer"
 version = "0.1.4"
-source = "git+https://github.com/glory-rs/apace?rev=191c48adf6d7deb120c9d3ee1b098d7dc020891f#191c48adf6d7deb120c9d3ee1b098d7dc020891f"
+source = "git+https://github.com/glory-rs/apace?rev=a2407c3b2c1d6e25b7fd2ce1421daffff266e584#a2407c3b2c1d6e25b7fd2ce1421daffff266e584"
 
 [[package]]
 name = "app_units"
@@ -259,7 +259,7 @@ dependencies = [
  "objc2-foundation",
  "parking_lot 0.12.5",
  "percent-encoding",
- "windows-sys 0.61.2",
+ "windows-sys 0.59.0",
  "x11rb",
 ]
 
@@ -4106,7 +4106,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "39cab71617ae0d63f51a36d69f866391735b51691dbda63cf6f96d042b63efeb"
 dependencies = [
  "libc",
- "windows-sys 0.61.2",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -4770,7 +4770,7 @@ dependencies = [
 [[package]]
 name = "glory"
 version = "0.6.1"
-source = "git+https://github.com/glory-rs/glory.git?branch=main#16b5fd35b6107388c9808294cc99a0772a5bbb25"
+source = "git+https://github.com/glory-rs/glory.git?branch=main#04a7095a938e7758d0f80ef1b5470719aed7095c"
 dependencies = [
  "glory-apace",
  "glory-core",
@@ -4785,7 +4785,7 @@ dependencies = [
 [[package]]
 name = "glory-apace"
 version = "0.6.1"
-source = "git+https://github.com/glory-rs/glory.git?branch=main#16b5fd35b6107388c9808294cc99a0772a5bbb25"
+source = "git+https://github.com/glory-rs/glory.git?branch=main#04a7095a938e7758d0f80ef1b5470719aed7095c"
 dependencies = [
  "apace-dom",
  "apace-traits",
@@ -4799,7 +4799,7 @@ dependencies = [
 [[package]]
 name = "glory-core"
 version = "0.6.1"
-source = "git+https://github.com/glory-rs/glory.git?branch=main#16b5fd35b6107388c9808294cc99a0772a5bbb25"
+source = "git+https://github.com/glory-rs/glory.git?branch=main#04a7095a938e7758d0f80ef1b5470719aed7095c"
 dependencies = [
  "glory-render",
 ]
@@ -4807,7 +4807,7 @@ dependencies = [
 [[package]]
 name = "glory-html"
 version = "0.6.1"
-source = "git+https://github.com/glory-rs/glory.git?branch=main#16b5fd35b6107388c9808294cc99a0772a5bbb25"
+source = "git+https://github.com/glory-rs/glory.git?branch=main#04a7095a938e7758d0f80ef1b5470719aed7095c"
 dependencies = [
  "glory-render",
  "glory-style",
@@ -4816,7 +4816,7 @@ dependencies = [
 [[package]]
 name = "glory-render"
 version = "0.6.1"
-source = "git+https://github.com/glory-rs/glory.git?branch=main#16b5fd35b6107388c9808294cc99a0772a5bbb25"
+source = "git+https://github.com/glory-rs/glory.git?branch=main#04a7095a938e7758d0f80ef1b5470719aed7095c"
 dependencies = [
  "glory-style",
 ]
@@ -4824,7 +4824,7 @@ dependencies = [
 [[package]]
 name = "glory-ssr"
 version = "0.6.1"
-source = "git+https://github.com/glory-rs/glory.git?branch=main#16b5fd35b6107388c9808294cc99a0772a5bbb25"
+source = "git+https://github.com/glory-rs/glory.git?branch=main#04a7095a938e7758d0f80ef1b5470719aed7095c"
 dependencies = [
  "glory-core",
  "glory-html",
@@ -4835,7 +4835,7 @@ dependencies = [
 [[package]]
 name = "glory-style"
 version = "0.6.1"
-source = "git+https://github.com/glory-rs/glory.git?branch=main#16b5fd35b6107388c9808294cc99a0772a5bbb25"
+source = "git+https://github.com/glory-rs/glory.git?branch=main#04a7095a938e7758d0f80ef1b5470719aed7095c"
 dependencies = [
  "cssparser",
 ]
@@ -4843,7 +4843,7 @@ dependencies = [
 [[package]]
 name = "glory-ui"
 version = "0.6.1"
-source = "git+https://github.com/glory-rs/glory.git?branch=main#16b5fd35b6107388c9808294cc99a0772a5bbb25"
+source = "git+https://github.com/glory-rs/glory.git?branch=main#04a7095a938e7758d0f80ef1b5470719aed7095c"
 dependencies = [
  "glory-core",
  "glory-render",
@@ -4853,7 +4853,7 @@ dependencies = [
 [[package]]
 name = "glory-wry"
 version = "0.6.1"
-source = "git+https://github.com/glory-rs/glory.git?branch=main#16b5fd35b6107388c9808294cc99a0772a5bbb25"
+source = "git+https://github.com/glory-rs/glory.git?branch=main#04a7095a938e7758d0f80ef1b5470719aed7095c"
 dependencies = [
  "glory-core",
  "glory-html",
@@ -7163,7 +7163,7 @@ version = "0.50.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7957b9740744892f114936ab4a57b3f487491bbeafaf8083688b16841a4240e5"
 dependencies = [
- "windows-sys 0.61.2",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -8912,7 +8912,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b570b25f7617e43d59005d0990ccb79e950a423952cea19671b7a876da390adf"
 dependencies = [
  "anyhow",
- "itertools 0.14.0",
+ "itertools 0.13.0",
  "proc-macro2",
  "quote",
  "syn 2.0.117",
@@ -9722,7 +9722,7 @@ dependencies = [
  "errno",
  "libc",
  "linux-raw-sys",
- "windows-sys 0.61.2",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -9781,7 +9781,7 @@ dependencies = [
  "security-framework",
  "security-framework-sys",
  "webpki-root-certs",
- "windows-sys 0.61.2",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -10053,7 +10053,7 @@ dependencies = [
 [[package]]
 name = "sapid"
 version = "0.6.1"
-source = "git+https://github.com/sapid-ui/sapid.git?branch=main#ec8f74828565264091a31c5c39f703918206e987"
+source = "git+https://github.com/sapid-ui/sapid.git?branch=main#f13004b6f6a8b9578945944801380faa78e751e9"
 dependencies = [
  "glory",
  "serde_json",
@@ -10212,8 +10212,9 @@ dependencies = [
 
 [[package]]
 name = "selectors"
-version = "0.41.0"
-source = "git+https://github.com/nicoburns/stylo?rev=78734bf554bb40af9dc11c0eedbe724f6055697c#78734bf554bb40af9dc11c0eedbe724f6055697c"
+version = "0.42.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "284ac2879477575f13b22201f7e98aa33aacc765b790536808cf580fd79339f1"
 dependencies = [
  "bitflags 2.13.2",
  "cssparser",
@@ -10576,8 +10577,9 @@ dependencies = [
 
 [[package]]
 name = "servo_arc"
-version = "0.5.0"
-source = "git+https://github.com/nicoburns/stylo?rev=78734bf554bb40af9dc11c0eedbe724f6055697c#78734bf554bb40af9dc11c0eedbe724f6055697c"
+version = "0.6.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9f121f129345b5201873a0e253f630413d750b9d799613e2873fb768e592c2a7"
 dependencies = [
  "serde",
  "stable_deref_trait",
@@ -10819,7 +10821,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c3d1e2c7f27f8d4cb10542a02c49005dbd6e93095799d6f3be745fae9f8fedd4"
 dependencies = [
  "libc",
- "windows-sys 0.61.2",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -10972,8 +10974,9 @@ dependencies = [
 
 [[package]]
 name = "stylo"
-version = "0.22.0"
-source = "git+https://github.com/nicoburns/stylo?rev=78734bf554bb40af9dc11c0eedbe724f6055697c#78734bf554bb40af9dc11c0eedbe724f6055697c"
+version = "0.23.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "84fe6be1e185e318b93be8f1e025667c196584a9bc9d5b7aca34bba4a07fb488"
 dependencies = [
  "app_units",
  "arrayvec",
@@ -11030,8 +11033,9 @@ dependencies = [
 
 [[package]]
 name = "stylo_atoms"
-version = "0.22.0"
-source = "git+https://github.com/nicoburns/stylo?rev=78734bf554bb40af9dc11c0eedbe724f6055697c#78734bf554bb40af9dc11c0eedbe724f6055697c"
+version = "0.23.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cf5f78e379ca000ebacf94d1eaa3ce4c72a1b14b0fd8c5547a6fb3fe0d767c62"
 dependencies = [
  "string_cache",
  "string_cache_codegen",
@@ -11039,8 +11043,9 @@ dependencies = [
 
 [[package]]
 name = "stylo_derive"
-version = "0.22.0"
-source = "git+https://github.com/nicoburns/stylo?rev=78734bf554bb40af9dc11c0eedbe724f6055697c#78734bf554bb40af9dc11c0eedbe724f6055697c"
+version = "0.23.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d7fdb4416be784fd22b2bc3d1c7be82f6bb55e58af99b0e1e7e975b5575be8bb"
 dependencies = [
  "darling 0.20.11",
  "proc-macro2",
@@ -11051,8 +11056,9 @@ dependencies = [
 
 [[package]]
 name = "stylo_dom"
-version = "0.22.0"
-source = "git+https://github.com/nicoburns/stylo?rev=78734bf554bb40af9dc11c0eedbe724f6055697c#78734bf554bb40af9dc11c0eedbe724f6055697c"
+version = "0.23.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "137701caa61df2cbba072468a322b92729bb9e4838b5d6e3890360ea3e74a9e9"
 dependencies = [
  "bitflags 2.13.2",
  "stylo_malloc_size_of",
@@ -11060,8 +11066,9 @@ dependencies = [
 
 [[package]]
 name = "stylo_malloc_size_of"
-version = "0.22.0"
-source = "git+https://github.com/nicoburns/stylo?rev=78734bf554bb40af9dc11c0eedbe724f6055697c#78734bf554bb40af9dc11c0eedbe724f6055697c"
+version = "0.23.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e1f70f5473f53bfd468197313daa6fc944cdef0fe39e03e5179c54e7b5d7f72a"
 dependencies = [
  "app_units",
  "cssparser",
@@ -11079,8 +11086,9 @@ dependencies = [
 
 [[package]]
 name = "stylo_static_prefs"
-version = "0.22.0"
-source = "git+https://github.com/nicoburns/stylo?rev=78734bf554bb40af9dc11c0eedbe724f6055697c#78734bf554bb40af9dc11c0eedbe724f6055697c"
+version = "0.23.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8e06c605a1d428d159798ebfed3f81f3a145f1838872360ebb24ec6d85993fe1"
 dependencies = [
  "toml 1.1.8+spec-1.1.0",
 ]
@@ -11088,7 +11096,7 @@ dependencies = [
 [[package]]
 name = "stylo_takia"
 version = "0.3.0"
-source = "git+https://github.com/glory-rs/apace?rev=191c48adf6d7deb120c9d3ee1b098d7dc020891f#191c48adf6d7deb120c9d3ee1b098d7dc020891f"
+source = "git+https://github.com/glory-rs/apace?rev=a2407c3b2c1d6e25b7fd2ce1421daffff266e584#a2407c3b2c1d6e25b7fd2ce1421daffff266e584"
 dependencies = [
  "bitflags 2.13.2",
  "stylo",
@@ -11098,8 +11106,9 @@ dependencies = [
 
 [[package]]
 name = "stylo_traits"
-version = "0.22.0"
-source = "git+https://github.com/nicoburns/stylo?rev=78734bf554bb40af9dc11c0eedbe724f6055697c#78734bf554bb40af9dc11c0eedbe724f6055697c"
+version = "0.23.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3bfa703936a384ea36c9257e9263021a37963e3f9aee51bc515fb331ee4dbfb1"
 dependencies = [
  "app_units",
  "bitflags 2.13.2",
@@ -11174,7 +11183,7 @@ checksum = "7b2093cf4c8eb1e67749a6762251bc9cd836b6fc171623bd0a9d324d37af2417"
 [[package]]
 name = "takia"
 version = "0.15.1"
-source = "git+https://github.com/glory-rs/takia?rev=ed436701c22b565baa127f2a5bf543ebbd1b2b90#ed436701c22b565baa127f2a5bf543ebbd1b2b90"
+source = "git+https://github.com/glory-rs/takia?rev=c7dfdfa0ca7fc94cad5c57e2f5e93b1d91b3de03#c7dfdfa0ca7fc94cad5c57e2f5e93b1d91b3de03"
 dependencies = [
  "serde",
  "slotmap",
@@ -11191,7 +11200,7 @@ dependencies = [
  "getrandom 0.4.3",
  "once_cell",
  "rustix",
- "windows-sys 0.61.2",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -11405,8 +11414,9 @@ dependencies = [
 
 [[package]]
 name = "to_shmem"
-version = "0.6.0"
-source = "git+https://github.com/nicoburns/stylo?rev=78734bf554bb40af9dc11c0eedbe724f6055697c#78734bf554bb40af9dc11c0eedbe724f6055697c"
+version = "0.7.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2124b7c691cfffe4c3607ba502b898076f4c281eb80c1aa633c40b1711a319c1"
 dependencies = [
  "cssparser",
  "hashbrown 0.17.1",
@@ -11419,8 +11429,9 @@ dependencies = [
 
 [[package]]
 name = "to_shmem_derive"
-version = "0.2.0"
-source = "git+https://github.com/nicoburns/stylo?rev=78734bf554bb40af9dc11c0eedbe724f6055697c#78734bf554bb40af9dc11c0eedbe724f6055697c"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "41fef02c6bedb48041c2d9c9883cfd677afb3bc026435bf6828b74e9db30068d"
 dependencies = [
  "darling 0.20.11",
  "proc-macro2",
@@ -11883,7 +11894,7 @@ checksum = "f2f6fb2847f6742cd76af783a2a2c49e9375d0a111c7bef6f71cd9e738c72d6e"
 dependencies = [
  "memoffset",
  "tempfile",
- "windows-sys 0.61.2",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -12505,7 +12516,7 @@ version = "0.1.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c2a7b1c03c876122aa43f3020e6c3c3ee5c05081c9a00739faf7503aeba10d22"
 dependencies = [
- "windows-sys 0.61.2",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -13250,19 +13261,19 @@ dependencies = [
 [[patch.unused]]
 name = "apace-paint"
 version = "0.3.0"
-source = "git+https://github.com/glory-rs/apace?rev=191c48adf6d7deb120c9d3ee1b098d7dc020891f#191c48adf6d7deb120c9d3ee1b098d7dc020891f"
+source = "git+https://github.com/glory-rs/apace?rev=a2407c3b2c1d6e25b7fd2ce1421daffff266e584#a2407c3b2c1d6e25b7fd2ce1421daffff266e584"
 
 [[patch.unused]]
 name = "apace-shell"
 version = "0.3.0"
-source = "git+https://github.com/glory-rs/apace?rev=191c48adf6d7deb120c9d3ee1b098d7dc020891f#191c48adf6d7deb120c9d3ee1b098d7dc020891f"
+source = "git+https://github.com/glory-rs/apace?rev=a2407c3b2c1d6e25b7fd2ce1421daffff266e584#a2407c3b2c1d6e25b7fd2ce1421daffff266e584"
 
 [[patch.unused]]
 name = "apace_accesskit"
 version = "0.2.2"
-source = "git+https://github.com/glory-rs/apace?rev=191c48adf6d7deb120c9d3ee1b098d7dc020891f#191c48adf6d7deb120c9d3ee1b098d7dc020891f"
+source = "git+https://github.com/glory-rs/apace?rev=a2407c3b2c1d6e25b7fd2ce1421daffff266e584#a2407c3b2c1d6e25b7fd2ce1421daffff266e584"
 
 [[patch.unused]]
 name = "wingy"
 version = "0.31.1"
-source = "git+https://github.com/glory-rs/wingy?rev=2d1f938cf3c1e257aa85b3fa7301c80ad6c19d6e#2d1f938cf3c1e257aa85b3fa7301c80ad6c19d6e"
+source = "git+https://github.com/glory-rs/wingy?rev=d6613df82dbdf2409d9bfa8762ef431639e42fdc#d6613df82dbdf2409d9bfa8762ef431639e42fdc"
