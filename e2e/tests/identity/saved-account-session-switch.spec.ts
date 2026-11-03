@@ -3,6 +3,7 @@ import { coauthBaseUrl, colandBaseUrl, inksonBaseUrl, optionalEnv } from "../../
 import { registerUnboundCoauthPasswordAccount } from "../../helpers/coauth-register";
 import { submitCoauthPasswordCredentials, type RealOidcAccount } from "../../helpers/real-oidc-login";
 import { assertJointStackNotRequired } from "../../helpers/users";
+import { enterSecretText } from "../../helpers/secret-input";
 
 // These scenarios handle recovery material. Never persist UI traces or captures.
 test.use({ trace: "off", video: "off", screenshot: "off" });
@@ -41,10 +42,10 @@ async function authorize(page: Page, account: RealOidcAccount): Promise<void> {
 async function completeNewIdentity(page: Page): Promise<void> {
   await page.locator(".choose-new-identity").click();
   await expect(page.locator(".account-switcher")).toHaveCount(0);
-  const words = page.locator(".onboarding-recovery-key-display").locator("li");
+  const words = page.locator(".onboarding-recovery-key-display .rk-word");
   await expect(words).toHaveCount(24);
   const recoveryKey = (await words.allTextContents()).map((word) => word.trim()).join(" ");
-  await page.locator(".onboarding-recovery-key-confirm").fill(recoveryKey);
+  await enterSecretText(page, page.getByLabel("Re-enter the 24 words", { exact: true }), recoveryKey);
   await page.locator(".onboarding-bind-identity").click();
   await expect(page.locator(".onboarding-complete")).toBeVisible({ timeout: 120_000 });
   await page.locator(".onboarding-complete").getByRole("link", { name: "Continue", exact: true }).click();
@@ -79,7 +80,7 @@ async function selectSavedAccount(page: Page, account: SavedAccount): Promise<vo
       throw error;
     }
   });
-  await page.locator(".account-picker__select").selectOption(account.profile_id);
+  await page.getByRole("combobox", { name: "Switch account", exact: true }).selectOption(account.profile_id);
   const result = await (await viewer).json();
   expect(result.principal_id).toBe(account.authority.principal_id);
   expect(result.primary_handle_claim.claim.subject_account_id).toEqual(account.authority);

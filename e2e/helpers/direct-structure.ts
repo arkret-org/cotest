@@ -2,6 +2,7 @@ import { accountActorId } from "./coland-api";
 import { actorRow } from "./product-locators";
 import { selectProductOptionByLabel } from "./product-select";
 import { getCircleArkret } from "./circle-api";
+import type { JointUserPage } from "./users";
 import { expect, test, operationSelector, isDirectAdmissionOutcomeReason } from "./arkret-test";
 import type { Page, Response, Request, APIRequestContext } from "@playwright/test";
 import { assertAuthoritySubmitOutcome, authHeaders, canonicalJson, readCommitStreamHeadApi, scanRealmStreamApi, sdkEventDerivedIds, sha256CanonicalJson, signedEventEnvelope, wireErrCode } from "./coland-api";
@@ -21,14 +22,28 @@ import type { ActorId } from "./generated/spec-wire-objects";
 // Negative structure targets must exist outside Direct's protected Realm.
 // Circle creation does not create a Strand: author it with an explicit scope.
 export async function createDirectBoundaryCircleStrand(
-  page: Page, request: APIRequestContext, token: string, realmId: string, title: string,
+  user: JointUserPage, request: APIRequestContext, token: string, realmId: string, title: string,
 ): Promise<string> {
+  const page = user.page;
+  await page.bringToFront();
   await page.goto(`/realms/${encodeURIComponent(realmId)}/circles`, { waitUntil: "domcontentloaded" });
-  await page.locator(".circles-new").click();
-  await page.locator(".circle-create-title input, .circle-create-title textarea").fill(title);
+  await user.clickWithPassivePromptRetry(page.locator(".circles-new"));
+  await user.fillWithPassivePromptRetry(page.locator(".circle-create-title input, .circle-create-title textarea"), title);
   await expect(page.locator(".circle-encrypted")).not.toBeChecked();
-  await page.locator(".circle-create").click();
-  await expect(page).toHaveURL(/\/realms\/[^/]+\/circles\/[^/]+$/);
+  await user.clickWithPassivePromptRetry(page.locator(".circle-create"));
+  await expect(page).toHaveURL(/\/realms\/[^/]+\/circles\/[^/]+$/, { timeout: 180_000 }).catch(async error => {
+    const statuses = await page.getByRole("status").allTextContents().catch(() => []);
+    await test.info().attach("safe-outside-circle-create", {
+      contentType: "application/json",
+      body: JSON.stringify({
+        creating: statuses.some(status => status.includes("Creating Circle and establishing initial membership")),
+        createEnabled: await page.locator(".circle-create").isEnabled().catch(() => false),
+        titleMatches: await page.locator(".circle-create-title input, .circle-create-title textarea").inputValue()
+          .then(value => value === title).catch(() => false),
+      }),
+    });
+    throw error;
+  });
   const circleId = decodeURIComponent(new URL(page.url()).pathname.split("/").at(-1)!);
   expect(circleId).toMatch(/^ak:circle:/);
   await expect.poll(async () => {
@@ -39,14 +54,14 @@ export async function createDirectBoundaryCircleStrand(
     return circle.viewer_membership;
   }, { timeout: 90_000 }).toBe("join");
 
-  await page.goto(`/chat/${encodeURIComponent(realmId)}`, { waitUntil: "domcontentloaded" });
-  await page.locator(".open-channel-dialog").click();
+  await user.gotoTimelineRealm(realmId);
+  await user.clickWithPassivePromptRetry(page.locator(".open-channel-dialog"));
   await expect(page.getByRole("dialog", { name: "New Strand", exact: true })).toBeVisible();
-  await page.locator(".new-channel-name").fill(`${title} Strand`);
+  await user.fillWithPassivePromptRetry(page.locator(".new-channel-name"), `${title} Strand`);
   const picker = page.locator(".circle-scope-picker");
   await selectProductOptionByLabel(picker, new RegExp("^" + title.replace(/[^\w-]/g, "\\$&") + " \\(\\d+ members\\)$"));
   await expect(picker.locator('button[aria-haspopup="listbox"]')).toContainText(title);
-  await page.locator(".create-channel-button").click();
+  await user.clickWithPassivePromptRetry(page.locator(".create-channel-button"));
   const channel = page.locator(".channel-item").filter({ hasText: `${title} Strand` });
   // The joined Circle can appear in the picker before its signed current cut
   // is installed. Only retry this known pre-authoring refusal; an unknown
@@ -55,10 +70,31 @@ export async function createDirectBoundaryCircleStrand(
     if (await channel.isVisible()) return;
     const status = await page.locator(".chat-status").textContent();
     if (status === "Strand create failed: MLS send gate is not ready: Circle send requires a verified Circle member current") {
-      await page.locator(".create-channel-button").click();
+      await expect(page.locator(".new-channel-name")).toHaveValue(`${title} Strand`);
+      await expect(picker.locator('button[aria-haspopup="listbox"]')).toContainText(title);
+      await user.clickWithPassivePromptRetry(page.locator(".create-channel-button"));
     }
     await expect(channel).toBeVisible({ timeout: 1_000 });
-  }).toPass({ timeout: 60_000, intervals: [1_000, 2_000, 5_000] });
+  }).toPass({ timeout: 60_000, intervals: [1_000, 2_000, 5_000] }).catch(async error => {
+    const status = await page.locator(".chat-status").textContent().catch(() => "");
+    const reasons = [
+      ["missing-circle-current", "Circle send requires a verified Circle member current"],
+      ["missing-parent-current", "Circle send requires a verified parent member current"],
+      ["incomplete-cut", "complete authorized-stream coverage"],
+      ["creating", "Creating Strand"],
+      ["created", "Strand created"],
+    ] as const;
+    await test.info().attach("safe-outside-circle-boundary", {
+      contentType: "application/json",
+      body: JSON.stringify({
+        status: reasons.find(([, copy]) => status?.includes(copy))?.[0] ?? "unclassified",
+        createDialogVisible: await page.getByRole("dialog", { name: "New Strand", exact: true }).isVisible().catch(() => false),
+        backupPromptVisible: await page.getByRole("dialog", { name: "Back up encrypted history", exact: true }).isVisible().catch(() => false),
+        channelCount: await channel.count(),
+      }),
+    });
+    throw error;
+  });
 
   let strandId: string | undefined;
   await expect.poll(async () => {
@@ -914,9 +950,11 @@ async function ownWatchTransitions(page: Page, otherPages: Page[], strandId: str
   let previous: Record<string, unknown> | null | undefined;
   let last: IngressEvent | undefined;
   const writes: Array<{ event_id: string | undefined; level: string | null; expected_value: unknown }> = [];
-  for (const level of ["all", "muted", "mentions_only", "participating", "default", "all"]) {
+  const labels = { all: "All activity", muted: "Muted", mentions_only: "Mentions only",
+    participating: "Participating and @mentions", default: "Use default (mentions only)" };
+  for (const level of ["all", "muted", "mentions_only", "participating", "default", "all"] as const) {
     await page.locator(".watch-level-toggle").click();
-    const option = page.locator(".watch-level-menu").locator(`[data-watch-level="${level}"]`);
+    const option = page.locator(".watch-level-menu").getByRole("menuitem", { name: labels[level], exact: true });
     await expect(option, "the actual self current must enable this choice before observing its write").toBeEnabled({ timeout: 30_000 });
     const [response] = await Promise.all([
       page.waitForResponse(response => response.request().method() === "POST"
@@ -955,6 +993,54 @@ async function ownWatchTransitions(page: Page, otherPages: Page[], strandId: str
   return last!;
 }
 
+async function fillDurableComposerDraft(page: Page, draft: string) {
+  await page.bringToFront();
+  const input = page.locator(".chat-input");
+  if (await input.inputValue() === draft) {
+    await page.reload({ waitUntil: "domcontentloaded" });
+    await expect(input).toHaveValue(draft, { timeout: 90_000 });
+    return;
+  }
+  await page.evaluate(() => {
+    const target = window as typeof window & { __directDraftReceipt?: {
+      attempted: number; completed: number; aborted: number; dispose: () => void;
+    } };
+    if (target.__directDraftReceipt) throw new Error("draft receipt observer already installed");
+    const original = IDBObjectStore.prototype.put;
+    const seen = new WeakSet<IDBTransaction>();
+    const receipt = { attempted: 0, completed: 0, aborted: 0, dispose: () => {
+      if (IDBObjectStore.prototype.put === observe) IDBObjectStore.prototype.put = original;
+      delete target.__directDraftReceipt;
+    } };
+    const observe: typeof original = function (this: IDBObjectStore, value, key) {
+      const request = original.call(this, value, key);
+      if (this.name === "entries" && this.transaction.db.name === "inkson.secret.inkson"
+        && typeof key === "string" && key.startsWith("inkson.e2ee_plaintext_cache.v1.")
+        && !seen.has(this.transaction)) {
+        seen.add(this.transaction);
+        receipt.attempted++;
+        this.transaction.addEventListener("complete", () => { receipt.completed++; }, { once: true });
+        this.transaction.addEventListener("abort", () => { receipt.aborted++; }, { once: true });
+      }
+      return request;
+    };
+    target.__directDraftReceipt = receipt;
+    IDBObjectStore.prototype.put = observe;
+  });
+  try {
+    await input.fill(draft);
+    await expect(input).toHaveValue(draft);
+    await expect(page.locator(".chat-input-hint")).toHaveCount(0);
+    await expect.poll(() => page.evaluate(() => (window as typeof window & {
+      __directDraftReceipt?: { completed: number };
+    }).__directDraftReceipt?.completed ?? 0), { timeout: 90_000 }).toBeGreaterThan(0);
+  } finally {
+    await page.evaluate(() => (window as typeof window & {
+      __directDraftReceipt?: { dispose: () => void };
+    }).__directDraftReceipt?.dispose()).catch(() => {});
+  }
+}
+
 // A keepalive request holds a real IndexedDB transaction until the test aborts
 // it. No secret backend or durability acknowledgement is replaced. Router
 // navigation keeps this document alive while unmounting the settings component.
@@ -962,8 +1048,7 @@ async function indexedDbClearRecovery(page: Page, mainId: string, chatId: string
   const input = page.locator(".chat-input");
   const choose = page.locator(".direct-structure").getByRole("combobox", { name: "Chat", exact: true });
   await choose.selectOption(mainId);
-  await input.fill(oldDraft);
-  await expect(input).toHaveAttribute("data-draft-storage", "saved");
+  await fillDurableComposerDraft(page, oldDraft);
   await page.evaluate(() => {
     type Barrier = {
       held: number; aborted: number; committed: number; armed: boolean;
@@ -1042,23 +1127,27 @@ async function indexedDbClearRecovery(page: Page, mainId: string, chatId: string
       await expect(choose).toBeVisible();
       await choose.selectOption(chatId);
       const newer = `${oldDraft}-new-chat`;
+      const beforeDraft = await barrier();
       await input.fill(newer);
-      await expect(input).toHaveAttribute("data-draft-storage", "saving");
+      await expect(input).toHaveValue(newer);
+      await expect(page.locator(".chat-input-hint")).toHaveCount(0);
+      const heldDraft = await barrier();
+      expect(heldDraft.held).toBe(1);
+      expect(heldDraft.aborted).toBe(0);
+      expect(heldDraft.committed, "the held native write transaction prevents a draft commit").toBe(beforeDraft.committed);
       await page.evaluate(() => { (window as any).__directCacheBarrier.release(); });
       await expect.poll(async () => (await barrier()).aborted).toBe(1);
-      await expect(input).toHaveAttribute("data-draft-storage", "saved");
-      await expect.poll(async () => (await barrier()).committed).toBeGreaterThan(0);
+      await expect.poll(async () => (await barrier()).committed).toBeGreaterThan(beforeDraft.committed);
       await page.reload();
       await expect(input).toHaveValue(newer, { timeout: 90_000 });
       await choose.selectOption(mainId);
       await expect(input).toHaveValue(oldDraft);
       await choose.selectOption(chatId);
       await input.fill("");
-      await expect(input).toHaveAttribute("data-draft-storage", "saved");
     } else {
       await page.evaluate(() => { (window as any).__directCacheBarrier.release(); });
       await expect.poll(async () => (await barrier()).aborted).toBe(1);
-      await expect(page.locator(".e2ee-plaintext-cache").getByRole("status")).toContainText("cleanup failed");
+      await expect(page.locator(".e2ee-plaintext-cache .write-status")).toContainText("cleanup failed");
       await expect.poll(async () => (await barrier()).committed).toBeGreaterThan(0);
       await page.goBack();
       await page.goBack();
@@ -1227,14 +1316,12 @@ async function runFlatTopicChats(alice: Page, bob: Page, mainMessages: string[],
   await expect(chooseAlice).toHaveValue(chatId);
   const chatDraft = `draft-chat-${suffix}`;
   const mainDraft = `draft-main-${suffix}`;
-  await alice.locator(".chat-input").fill(chatDraft);
+  await fillDurableComposerDraft(alice, chatDraft);
   await chooseAlice.selectOption(mainId);
   await expect(alice.locator(".chat-input")).toHaveValue("");
-  await alice.locator(".chat-input").fill(mainDraft);
-  await expect(alice.locator(".chat-input")).toHaveAttribute("data-draft-storage", "saved");
+  await fillDurableComposerDraft(alice, mainDraft);
   await chooseAlice.selectOption(chatId);
   await expect(alice.locator(".chat-input")).toHaveValue(chatDraft);
-  await expect(alice.locator(".chat-input")).toHaveAttribute("data-draft-storage", "saved");
   // Both drafts are nonempty at process restart. Storage must isolate the
   // actual Strand and device rather than merely preserve mounted Signals.
   await expect(alice).toHaveURL(url => {
@@ -1280,10 +1367,9 @@ async function runFlatTopicChats(alice: Page, bob: Page, mainMessages: string[],
           selector_matches_selected_chat: await senderSelection.inputValue().then(value => value === chatId).catch(() => false),
           input_matches_marker: await sender.locator(".chat-input").inputValue().then(value => value === text).catch(() => false),
           send_enabled: await sendButton.isEnabled().catch(() => false),
-          mls_binding_pending: await sendButton.getAttribute("data-mls-binding-pending").then(value => value === null ? null : value === "true").catch(() => null),
-          creator_bootstrap_pending: await sendButton.getAttribute("data-creator-bootstrap-pending").then(value => value === null ? null : value === "true").catch(() => null),
-          readiness_checking: await sendButton.getAttribute("data-readiness-checking").then(value => value === null ? null : value === "true").catch(() => null),
-          blocker_diagnostic_present: await sendButton.getAttribute("data-send-blockers").then(Boolean).catch(() => false) }), contentType: "application/json",
+          draft_hint_visible: await sender.locator(".chat-input-hint").isVisible().catch(() => false),
+          backup_prompt_visible: await sender.getByRole("dialog", { name: "Back up encrypted history", exact: true }).isVisible().catch(() => false),
+          restore_prompt_visible: await sender.getByRole("dialog", { name: "Restore encryption keys", exact: true }).isVisible().catch(() => false) }), contentType: "application/json",
       });
       throw error;
     }

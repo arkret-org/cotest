@@ -9,10 +9,13 @@ import { registrationEmailCode } from "../../helpers/coauth-register";
 import { openUserPage, uniqueUser, type JointUserPage } from "../../helpers/users";
 import { decodeIngressEvents, type IngressEvent } from "../../helpers/event-ingress";
 import { assertAuthoritySubmitOutcome } from "../../helpers/coland-api";
+import { enterSecretText } from "../../helpers/secret-input";
 import { openSavfoxArkretChannel, provisionAgent, pairManagedSavfoxAgent,
   addAgentToRealm, createSidecarSourceCard, composeSourceAgentMention,
   waitForSidecarEnsureAcceptance, eventIdFromMessage, controlPrivateLiveHints,
 } from "../../helpers/agent-sidecar-product-ui";
+
+test.use({ trace: "off", video: "off", screenshot: "off" });
 
 test.describe("Private accepted readback real UI @fully-implemented", () => {
   test("three private writes recover without live hints and survive a real reload", async ({ browser, request }, info) => {
@@ -185,25 +188,24 @@ async function registerController(owner: JointUserPage, request: APIRequestConte
   await expect(code).toBeVisible({ timeout: 120_000 });
   await code.fill(await registrationEmailCode(request, `${user.name}@example.test`));
   await page.getByRole("button", { name: /^verify$/i }).click();
-  const display = page.getByLabel("Display name", { exact: true });
+  const display = page.getByLabel("Display Name", { exact: true });
   const approve = page.locator(".login-container").getByRole("button", { name: "Allow", exact: true });
+  const finishRegistration = page.getByRole("button", { name: /^create account$/i });
   // Visibility queries are immediate; wait for the actual post-verification
   // branch before deciding whether this new account needs its profile form.
-  await expect(display.or(approve)).toBeVisible({ timeout: 120_000 });
+  await expect(display.or(approve).or(finishRegistration)).toBeVisible({ timeout: 120_000 });
   if (await display.isVisible()) {
     await display.fill(user.displayName);
     await page.getByRole("button", { name: /^continue$/i }).click();
   }
+  await expect(approve.or(finishRegistration)).toBeVisible({ timeout: 120_000 });
+  if (await finishRegistration.isVisible()) await finishRegistration.click();
   await approve.click({ timeout: 120_000 });
   await page.locator(".choose-new-identity").click();
-  const words = page.locator(".onboarding-recovery-key-display").locator("li");
+  const words = page.locator(".onboarding-recovery-key-display .rk-word");
   await expect(words).toHaveCount(24, { timeout: 120_000 });
   const key = (await words.allTextContents()).map(value => value.trim()).join(" ");
-  await page.locator(".onboarding-recovery-key-confirm").evaluate((element, key) => {
-    const prototype = element instanceof HTMLTextAreaElement ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;
-    Object.getOwnPropertyDescriptor(prototype, "value")!.set!.call(element, key);
-    element.dispatchEvent(new Event("input", { bubbles: true }));
-  }, key);
+  await enterSecretText(page, page.getByLabel("Re-enter the 24 words", { exact: true }), key);
   await page.locator(".onboarding-bind-identity").click();
   await expect(page.locator(".onboarding-complete")).toContainText("Identity ready", { timeout: 240_000 });
   await page.locator(".onboarding-complete").getByRole("link", { name: "Continue" }).click();

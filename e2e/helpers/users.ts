@@ -1170,11 +1170,11 @@ export class JointUserPage {
         },
       });
     }
-    // Members is a supported Realm route. Keep the authenticated app mounted
-    // through the existing native history navigation instead of relying on a
-    // responsive context-menu link that is removed when its menu closes.
+    // Members is a supported deep link. Use the existing canonical navigation
+    // rather than unbounded back/forward waits immediately after the wizard's
+    // Open Realm link has replaced its own browser-history entry.
     const membersPath = `/realms/${realmId}/members`;
-    await this.navigateWithinApp(membersPath);
+    await this.gotoRealmAdminSection(realmId, "members");
     await expect
       .poll(() => decodeURIComponent(new URL(this.page.url()).pathname), { timeout: 30_000 })
       .toBe(membersPath);
@@ -2711,24 +2711,23 @@ export async function openUser(
       await lookup.dispose();
     }
   }
+  const initialAccount = opts.neutralLoginConfig ? null : {
+    profile_id: `ak:profile:${randomUUID()}`,
+    authority: {
+      principal_id: user.id,
+      station_id: colandServiceId(opts.server),
+    },
+    principal_control_realm_id: opts.principalControlRealmId,
+    resolution,
+    device_id: user.deviceId,
+    server_url: serverUrl,
+  };
   const localStorage = [
     {
       name: "inkson.config.v1",
       value: JSON.stringify({
         stations: [serverUrl],
-        active_account: opts.neutralLoginConfig
-          ? null
-          : {
-              profile_id: `ak:profile:${randomUUID()}`,
-              authority: {
-                principal_id: user.id,
-                station_id: colandServiceId(opts.server),
-              },
-              principal_control_realm_id: opts.principalControlRealmId,
-              resolution,
-              device_id: user.deviceId,
-              server_url: serverUrl,
-            },
+        active_account: initialAccount,
         session_credential: opts.neutralLoginConfig ? "" : sessionCredential,
       }),
     },
@@ -2738,6 +2737,18 @@ export async function openUser(
       name: "inkson.test.session_injection.v1",
       value: JSON.stringify(sessionInjection),
     });
+    if (initialAccount) {
+      // This accepted-device fixture starts after real principal registration.
+      // Seed the existing metadata-only profile index as well as its active
+      // view; credentials and private device material stay in the secure seam.
+      localStorage.push({
+        name: "inkson.profiles.v1",
+        value: JSON.stringify({
+          active_profile_id: initialAccount.profile_id,
+          profiles: [{ ...initialAccount, label: "" }],
+        }),
+      });
+    }
   }
   const contextOptions = {
     baseURL: inksonBaseUrl(opts.server),
@@ -2777,7 +2788,8 @@ export async function openUser(
     const seededOrigin = seededStorageState.origins.find(({ origin: saved }) => saved === origin);
     const seededNames = new Set(seededOrigin?.localStorage.map(({ name }) => name) ?? []);
     if (!seededNames.has("inkson.config.v1") ||
-        (sessionInjection && !seededNames.has("inkson.test.session_injection.v1"))) {
+        (sessionInjection && !seededNames.has("inkson.test.session_injection.v1")) ||
+        (sessionInjection && initialAccount && !seededNames.has("inkson.profiles.v1"))) {
       await context.close();
       throw new Error("Inkson browser context is missing its seeded session config");
     }

@@ -384,9 +384,10 @@ test.describe("moderation and ban", () => {
       await alicePage.clickWithPassivePromptRetry(
         malloryRow.locator(".ban-member-button"),
       );
-      await expect(alicePage.page.locator("main")).toContainText(/banned/i, {
+      await expect(alicePage.page.locator(".realm-members-panel")).toContainText(/banned/i, {
         timeout: 30_000,
       });
+      await expect(malloryRow).toHaveCount(0);
 
       const realm = await request.get(
         `${colandBaseUrl()}/_arkret/self/realms/${encodeURIComponent(realmId)}`,

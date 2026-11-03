@@ -462,7 +462,7 @@ test.describe("contact graph federation (server1/server2)", () => {
       });
       const outsideStrand = await resolveDefaultStrandId(request, aliceFlow.session.grantJwt, outsideRealm);
       const control = alicePage.page;
-      const circleStrand = await createDirectBoundaryCircleStrand(control, request,
+      const circleStrand = await createDirectBoundaryCircleStrand(alicePage, request,
         aliceFlow.session.grantJwt, outsideRealm, `Cross-PS boundary Circle ${stamp}`);
       const third = await createDpopUserSession(request, `cgf-direct-outsider-${stamp}`, { server: "server1" });
       expect(third, "negative author is a real registered principal and device").toBeDefined();

@@ -1235,50 +1235,25 @@ async function sendTimelineMessageAndWaitForPrivateBackup(
 }
 
 async function unlockMlsAccountSecret(page: Page, recoveryKey: string) {
-  const unlockPrompt = page
-    .locator(
-      '.mls-unlock-dialog, .mls-unlock-dialog',
-    )
-    .last();
-  const visibleUnlockStatus = page.locator(
-    '.mls-unlock-status:visible',
-  );
+  const unlockPrompt = page.getByRole("dialog", { name: "Restore encryption keys", exact: true });
 
   await expect(unlockPrompt).toBeVisible({
     timeout: 90_000,
   });
-  await expect(unlockPrompt).toHaveAttribute("role", /^(?:dialog|region)$/);
-  if ((await unlockPrompt.getAttribute("role")) === "dialog") {
-    await expect(unlockPrompt).toHaveAttribute("aria-modal", "true");
-  }
-  // `mls-unlock-passphrase` is the historical testid of the unlock input;
-  // since the Recovery Key convergence it accepts only the 24-word key.
-  const showRecoveryKey = page.getByRole("button", { name: "Use recovery key instead", exact: true });
+  await expect(unlockPrompt).toHaveCount(1);
+  await expect(unlockPrompt).toHaveAttribute("role", "dialog");
+  await expect(unlockPrompt).toHaveAttribute("aria-modal", "true");
+  const showRecoveryKey = unlockPrompt.getByRole("button", { name: "Use recovery key instead", exact: true });
   if (await showRecoveryKey.isVisible().catch(() => false)) {
     await showRecoveryKey.click();
   }
-  await expect(page.getByRole("textbox", { name: "24-word recovery key", exact: true })).toBeVisible({
+  await expect(unlockPrompt.getByRole("textbox", { name: "24-word recovery key", exact: true })).toBeVisible({
     timeout: 30_000,
   });
-  await page.getByRole("textbox", { name: "24-word recovery key", exact: true }).fill(recoveryKey);
-  await page.getByRole("button", { name: "Unlock with key", exact: true }).click();
-  await expect
-    .poll(
-      async () => {
-        if (!(await unlockPrompt.isVisible().catch(() => false))) {
-          return "closed";
-        }
-        const status = await visibleUnlockStatus.textContent().catch(() => "");
-        if (/restored/i.test(status ?? "")) {
-          return "restored";
-        }
-        return status ?? "";
-      },
-      { timeout: 120_000 },
-    )
-    .toMatch(/^(?:restored|closed)$/);
+  await unlockPrompt.getByRole("textbox", { name: "24-word recovery key", exact: true }).fill(recoveryKey);
+  await unlockPrompt.getByRole("button", { name: "Unlock with key", exact: true }).click();
   await expect(unlockPrompt).not.toBeVisible({
-    timeout: 30_000,
+    timeout: 120_000,
   });
 }
 

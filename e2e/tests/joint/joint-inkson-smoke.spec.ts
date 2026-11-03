@@ -207,9 +207,8 @@ test.describe("joint-inkson smoke @fully-implemented", () => {
         timeout: 30_000,
       });
       await expect(
-        jointRealm.alicePage.page.locator(
-          `.participant-agent-group[data-controller-principal-id="${jointRealm.alice.id}"]`,
-        ),
+        // This isolated Realm contains only its three human participants.
+        jointRealm.alicePage.page.locator(".participant-agent-group"),
       ).toHaveCount(0);
 
       const participantRow = jointRealm.alicePage.page
@@ -217,9 +216,9 @@ test.describe("joint-inkson smoke @fully-implemented", () => {
         .filter({
           // A dev-login display name is not an authoritative profile label.
           // Select the human row by the canonical full Account ActorId kept
-          // in the identity label's title; visible copy may be a handle.
-          has: jointRealm.alicePage.page.locator(
-            `xpath=.//*[@data-testid='participant-identity' and @title='${canonicalJson(accountActorId(participantId))}']`,
+          // in the identity label's accessible name; visible copy may be a handle.
+          has: jointRealm.alicePage.page.getByLabel(
+            canonicalJson(accountActorId(participantId)), { exact: true },
           ),
         });
       await expect(participantRow).toBeVisible({ timeout: 60_000 });

@@ -234,18 +234,19 @@ test.describe("fresh-browser device entry paths @fully-implemented", () => {
         .click();
       const recoveryPanel = replacement.page.locator(".pcr-policy-device-recovery");
       await expect(recoveryPanel).toBeVisible();
+      const recoveryStatus = recoveryPanel.locator(":scope > p:last-child");
       await expect(recoveryPanel).toContainText(
         "No approval from another device or administrator is required.",
       );
       await recoveryPanel
-        .locator("#root-recovery-words")
+        .getByRole("textbox", { name: "Recovery Key (24 words)", exact: true })
         .fill(activeRecoveryKey!);
       await recoveryPanel
         .getByRole("button", { name: "Authorize this device" })
         .click();
 
       if (cut !== "none") {
-        await expect(recoveryPanel.getByRole("status")).toContainText(
+        await expect(recoveryStatus).toContainText(
           cut === "completion_grant_response_loss"
             ? "Recovery could not finish:"
             : "Recovered device could not be committed:", { timeout: 300_000 },
@@ -254,13 +255,12 @@ test.describe("fresh-browser device entry paths @fully-implemented", () => {
         await replacement.page.reload({ waitUntil: "domcontentloaded" });
         await expect(replacement.page.locator(".device-setup-required")).toBeVisible({ timeout: 120_000 });
         await replacement.page.locator(".device-setup-use-recovery-key").click();
-        await recoveryPanel.locator("#root-recovery-words").fill(activeRecoveryKey!);
+        await recoveryPanel.getByRole("textbox", { name: "Recovery Key (24 words)", exact: true }).fill(activeRecoveryKey!);
         await recoveryPanel.getByRole("button", { name: "Authorize this device" }).click();
       }
 
       const shell = replacement.page.locator(".shell.app");
-      const terminalFailure = recoveryPanel
-        .getByRole("status")
+      const terminalFailure = recoveryStatus
         .filter({ hasText: "Recovery could not finish:" });
       await Promise.race([
         expect(shell).toBeVisible({ timeout: 300_000 }),

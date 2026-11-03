@@ -4,9 +4,12 @@ import { coauthBaseUrl, colandBaseUrl } from "../../helpers/env";
 import { registrationEmailCode } from "../../helpers/coauth-register";
 import { openUserPage, uniqueUser } from "../../helpers/users";
 import { assertAuthoritySubmitOutcome } from "../../helpers/coland-api";
+import { enterSecretText } from "../../helpers/secret-input";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+
+test.use({ trace: "off", video: "off", screenshot: "off" });
 
 type ProtocolHit = {
   method: string;
@@ -91,30 +94,30 @@ test.describe("identity.recovery-key-to-encrypted-realm @fully-implemented", () 
           )
           .toBe(true);
 
-        const displayName = page.getByLabel("Display name", { exact: true });
-        if (
-          await displayName.isVisible({ timeout: 30_000 }).catch(() => false)
-        ) {
+        const displayName = page.getByLabel("Display Name", { exact: true });
+        const approve = page.locator(".login-container").getByRole("button", { name: "Allow", exact: true });
+        const finishRegistration = page.getByRole("button", { name: /^create account$/i });
+        await expect(displayName.or(approve).or(finishRegistration)).toBeVisible({ timeout: 120_000 });
+        if (await displayName.isVisible()) {
           await displayName.fill(user.displayName);
           await page.getByRole("button", { name: /^continue$/i }).click();
         }
 
-        const approve = page.locator(".login-container").getByRole("button", { name: "Allow", exact: true });
+        await expect(approve.or(finishRegistration)).toBeVisible({ timeout: 120_000 });
+        if (await finishRegistration.isVisible()) await finishRegistration.click();
         await expect(approve).toBeVisible({ timeout: 120_000 });
         await approve.click();
 
         await page.locator(".choose-new-identity").click();
         const words = page
           .locator(".onboarding-recovery-key-display")
-          .locator("li");
+          .locator(".rk-word");
         await expect(words).toHaveCount(24, { timeout: 120_000 });
         const recoveryKey = (await words.allTextContents())
           .map((word) => word.trim())
           .join(" ");
         expect(recoveryKey.split(/\s+/)).toHaveLength(24);
-        await page
-          .locator(".onboarding-recovery-key-confirm")
-          .fill(recoveryKey);
+        await enterSecretText(page, page.getByLabel("Re-enter the 24 words", { exact: true }), recoveryKey);
         await page.locator(".onboarding-bind-identity").click();
         await expect
           .poll(

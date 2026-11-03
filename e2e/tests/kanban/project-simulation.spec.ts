@@ -560,12 +560,13 @@ test.describe("project simulation", () => {
       await overdueCard.click();
       const detail = alicePage.page.locator(".card-detail-modal");
       await expect(detail).toBeVisible({ timeout: 45_000 });
-      await detail.getByRole("button", { name: "Add due date" }).click();
-      const duePicker = detail.locator(".card-detail-due-picker");
+      await detail.getByRole("button", { name: "Add due date", exact: true }).click();
+      const duePicker = alicePage.page.getByRole("dialog", { name: "Due date calendar", exact: true });
+      await expect(duePicker).toBeVisible();
       await duePicker
         .locator(".card-detail-due-value input")
         .fill("2020-01-01");
-      await duePicker.getByRole("button", { name: "Save" }).click();
+      await duePicker.getByRole("button", { name: "Save", exact: true }).click();
       await expect(duePicker).toBeHidden({ timeout: 45_000 });
       await detail.locator(".card-detail-close-button").click();
 

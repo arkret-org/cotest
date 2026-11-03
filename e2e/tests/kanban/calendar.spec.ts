@@ -180,7 +180,7 @@ test("@fully-implemented calendar schedule and RSVP survive the canonical Strand
       calendar.locator(".card-detail-calendar-agenda-unresolved"),
     ).toHaveCount(0, { timeout: 90_000 });
 
-    await calendar.getByRole("button", { name: "Series", exact: true }).click();
+    await calendar.getByRole("button", { name: "Entire series", exact: true }).click();
     const rsvpWrite = page.page.waitForResponse(
       (response) =>
         response.url().includes("/_arkret/self/events") &&

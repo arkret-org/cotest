@@ -1,6 +1,7 @@
 // Real accepted Device roots and issuer-backed holder sessions for both readers.
 import { expect, test } from "../../helpers/arkret-test";
-import type { PlaywrightTestArgs, PlaywrightWorkerArgs, TestInfo } from "@playwright/test";
+import type { PlaywrightTestArgs, PlaywrightWorkerArgs, TestInfo, Page } from "@playwright/test";
+import { enterSecretText } from "../../helpers/secret-input";
 import { createRealmViaApi, sendPlaintextMessageViaApi } from "../../helpers/api";
 import { authHeaders, resolveDefaultStrandId } from "../../helpers/coland-api";
 import { coauthBaseUrl, colandBaseUrl } from "../../helpers/env";
@@ -8,6 +9,9 @@ import { observeNativeSearch } from "../../helpers/native-search";
 import { postponeSearchEncryptionPrompts } from "../../helpers/local-search";
 import { createDpopUserSession, issueUserSession, openDpopUserPageFromSession,
   pairSiblingDeviceSession, selfPathHeadersForDpopSession, type DpopUserSession } from "../../helpers/users";
+
+// Custody words are visible only during the actual first-policy ceremony.
+test.use({ trace: "off", video: "off", screenshot: "off" });
 
 test("0540 real local search binds paired Devices and withdraws a revoked Device holder", async ({ browser, request }, testInfo) => {
   await runHolderRevocation({ browser, request }, testInfo, "Device");
@@ -69,13 +73,14 @@ async function runHolderRevocation(
         if (activePolicy === null) {
           await flow.page.gotoAppPanel("/settings/recovery", ".recovery-panel");
           const page = flow.page.page;
+          await page.bringToFront();
           await page.locator(".recovery-key-regenerate").click();
-          const generated = (await page.locator(".recovery-key-current").textContent())!.trim();
+          const words = page.locator(".recovery-key-current .rk-word");
+          await expect(words, "the actual generated custody material must be ready before reading it").toHaveCount(24);
+          const generated = (await words.allTextContents()).map(word => word.trim()).join(" ");
           expect(generated.split(/\s+/).length).toBe(24);
-          await page.locator(".recovery-key-confirm-input").locator("input, textarea").evaluate((element, secret) => {
-            Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")!.set!.call(element, secret);
-            element.dispatchEvent(new Event("input", { bubbles: true }));
-          }, generated);
+          const confirmation = page.locator(".recovery-key-confirm-input").locator("input, textarea");
+          await enterSecretText(page, confirmation, generated);
           await page.locator(".recovery-key-clear-live").click();
           await expect(page.locator(".recovery-key-confirm-form")).toHaveCount(0, { timeout: 120_000 });
           await expect(page.locator(".recovery-key-regenerate")).toBeDisabled();
@@ -160,8 +165,10 @@ async function runHolderRevocation(
     }).holderSearchReadBarrier.observed)).toBeGreaterThan(0);
     await expect(replacingPage.locator(".global-search-results-loading")).toBeVisible();
     await replacingPage.locator(".account-menu-button").click();
-    const picker = replacingPage.locator(".account-menu").locator(".account-picker__select");
-    const savedProfile = await picker.inputValue();
+    const picker = replacingPage.locator(".account-menu").getByRole("combobox", { name: "Switch account", exact: true });
+    await expect(picker).toBeVisible();
+    const savedProfile = await replacingPage.evaluate(() =>
+      JSON.parse(localStorage.getItem("inkson.config.v1") ?? "{}").active_account?.profile_id ?? "");
     expect(savedProfile).not.toBe("");
     await replacingPage.locator(".account-menu").locator(".account-picker__add").click();
     await expect(replacingPage.locator(".auth-panel")).toBeVisible({ timeout: 120_000 });
@@ -205,12 +212,7 @@ async function runHolderRevocation(
       });
       await expect(target).toBeVisible({ timeout: 120_000 });
       await target.locator(".device-revoke-button").click();
-      // Deliver the ordinary input event without putting Recovery Key words
-      // into a locator.fill failure's reporter-visible call log.
-      await ownerPage.locator(".device-revoke-passphrase input").evaluate((element, secret) => {
-        Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(element, secret);
-        element.dispatchEvent(new Event("input", { bubbles: true }));
-      }, owner.recoveryKey!);
+      await enterSecretText(ownerPage, ownerPage.locator(".device-revoke-passphrase input"), owner.recoveryKey!);
       await ownerPage.locator(".device-revoke-confirm-button").click();
       await expect(ownerPage.locator(".device-revoke-status"))
         .toContainText("through transaction", { timeout: 180_000 });

@@ -71,7 +71,10 @@ import {
   type JointUserPage,
 } from "../../helpers/users";
 
-test.describe.configure({ mode: "serial" });
+// Every variant owns fresh principals and browser contexts, with no shared
+// lifecycle hooks. Preserve ordinary sequential scheduling while allowing the
+// remaining independent fault cuts to run after a preceding failure.
+test.describe.configure({ mode: "default" });
 
 async function selectBoard(page: Page, realm: string, board: string, title: string): Promise<void> {
   await page.locator(".board-space-select-button").click();
@@ -432,14 +435,21 @@ async function buildEncryptedBoardListCard(
   await expect(page.locator(".kanban-panel")).toBeVisible({ timeout: remaining() });
   if (creatorRecoveryProof) {
     await waitForOriginalCreatorReady(page, realmId, creatorRecoveryProof, remaining);
-    await page.locator(".new-board-toggle").click({ timeout: remaining() });
-    await page.locator(".new-board-title-input :is(input,textarea)").fill(boardTitle, { timeout: remaining() });
-    await expect(page.locator(".create-board-space-button")).toBeEnabled({ timeout: remaining() });
-  } else {
-    await page.locator(".new-board-toggle").click();
-    await page.locator(".new-board-title-input :is(input,textarea)").fill(boardTitle);
   }
-  await page.locator(".create-board-space-button").click();
+  await page.locator(".new-board-toggle").click({ timeout: remaining() });
+  const boardDraft = page.locator(".new-board-title-input :is(input,textarea)");
+  const boardComposer = page.locator(".board-create-popover");
+  // Observe the actual empty-to-nonempty app binding before authoring; the
+  // browser's edited DOM value alone does not acknowledge the proposed title.
+  await boardDraft.fill("", { timeout: remaining() });
+  await expect(boardComposer.locator(".input-empty-prompt")).toBeVisible({ timeout: remaining() });
+  await boardDraft.fill(boardTitle, { timeout: remaining() });
+  await expect(boardDraft).toHaveValue(boardTitle, { timeout: remaining() });
+  await expect(boardComposer.locator(".input-empty-prompt")).toHaveCount(0, { timeout: remaining() });
+  await expect(page.locator(".create-board-space-button")).toBeEnabled({ timeout: remaining() });
+  await page.locator(".create-board-space-button").click({ timeout: remaining() });
+  await expect(page).toHaveURL(url => decodeURIComponent(url.pathname)
+    .startsWith(`/kanban/${realmId}/board/ak:space:`), { timeout: remaining() });
   await expect(page.locator(".kanban-empty-board")).toContainText(
     /No lists yet/,
     {
@@ -1375,7 +1385,8 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
         listTitle,
         cardTitle,
         true,
-        loseCreateResponse ? { request, session: creatorSession, originalIntent: intentAtCut!,
+        (loseCreateResponse || loseDeviceEvidence || loseBlobResponse || loseGenesisResponse || failLocalPublication)
+          ? { request, session: creatorSession, originalIntent: intentAtCut!,
           submittedCreateIds, submittedGenesisIds } : undefined,
       );
       await addEncryptedDescription(

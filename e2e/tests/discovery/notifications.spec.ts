@@ -296,6 +296,9 @@ test.describe("notifications", () => {
       ).toBeVisible({
         timeout: 30_000,
       });
+      const dndCard = bobDeviceA.page.locator(".settings-page .event")
+        .filter({ has: bobDeviceA.page.locator(".dnd-enabled-toggle") });
+      await expect(dndCard).toHaveCount(1);
       await bobDeviceA.checkWithPassivePromptRetry(
         bobDeviceA.page.locator(".dnd-enabled-toggle"),
       );
@@ -307,7 +310,7 @@ test.describe("notifications", () => {
         bobDeviceA.page.locator(".save-notification-settings-button"),
       );
       await expect(
-        bobDeviceA.page.locator(".settings-page .write-status"),
+        dndCard.locator(":scope > .write-status"),
       ).toContainText(/do not disturb|dnd/i, { timeout: 30_000 });
 
       const accountDataUrl = `${colandBaseUrl()}/_arkret/self/account_data/${encodeURIComponent("ak.dnd_schedule")}`;
@@ -353,7 +356,7 @@ test.describe("notifications", () => {
         bobDeviceA.page.locator(".save-notification-settings-button"),
       );
       await expect(
-        bobDeviceA.page.locator(".settings-page .write-status"),
+        dndCard.locator(":scope > .write-status"),
       ).toContainText(/dnd disabled/i, { timeout: 30_000 });
       resumedMsg = resumedSuffix;
       await sendMessageApi(request, aliceToken, realmId, resumedMsg, {

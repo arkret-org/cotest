@@ -301,10 +301,7 @@ test.describe("workflow: incident response", () => {
       );
       const blockedRow = commanderPage.timelineEvent(blocked);
       await expect(blockedRow).toBeVisible();
-      await expect(blockedRow.locator(".message-send-status")).toHaveAttribute(
-        "title",
-        "Message send failed",
-      );
+      await expect(blockedRow.locator(".message-send-status")).toHaveClass(/\bis-failed\b/);
       await expect(blockedRow.locator(".chat-message-error")).toContainText(
         "public_update_blocked",
       );

@@ -521,7 +521,7 @@ async function addEncryptedDescription(
     .getByRole("textbox", { name: "Description", exact: true });
   await expect(richEditor).toBeVisible({ timeout: 45_000 });
   await richEditor.fill(description);
-  await expect(richEditor).toHaveValue(
+  await expect(richEditor).toHaveText(
     description,
   );
 

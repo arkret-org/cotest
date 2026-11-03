@@ -281,13 +281,11 @@ jointTest.describe("Agent Savfox split live @fully-implemented", () => {
         const groupedPairingCode = displayPairingCode(firstPairing.pairingCode);
         expect(inksonCode).toBe(groupedPairingCode);
         await expect(
-          savfox.getByText(groupedPairingCode, { exact: true }),
-        ).toBeVisible();
+          savfox.locator(".arkret-pairing"),
+        ).toContainText(`Pairing code: ${groupedPairingCode}`);
         await expect(
-          savfox.getByText(
-            `Waiting for Inkson approval... Compare pairing code ${firstPairing.pairingCode} with the Inkson prompt.`,
-          ),
-        ).toBeVisible({ timeout: 30_000 });
+          savfox.locator(".arkret-pairing"),
+        ).toContainText(`Waiting for Inkson approval... Compare pairing code ${firstPairing.pairingCode} with the Inkson prompt.`, { timeout: 30_000 });
 
         // ── Phase 3: approve and record the first authorized binding ──
         await inkson.locator(".agent-runtime-approval-dialog").getByRole("button", { name: "Approve", exact: true }).click();
@@ -295,8 +293,8 @@ jointTest.describe("Agent Savfox split live @fully-implemented", () => {
           timeout: 180_000,
         });
         await expect(
-          savfox.getByText("Agent paired and channel saved.", { exact: true }),
-        ).toBeVisible({ timeout: 180_000 });
+          savfox.locator(".arkret-pairing"),
+        ).toContainText("Agent paired and channel saved", { timeout: 180_000 });
         await saveSavfoxChannel(savfox);
         const arkretCard = savfox
           .locator(".channels-card")
@@ -467,8 +465,8 @@ jointTest.describe("Agent Savfox split live @fully-implemented", () => {
         await inkson.locator(".agent-runtime-approval-dialog").getByRole("button", { name: "Approve", exact: true }).click();
         await expect(approvalModal).toHaveCount(0, { timeout: 180_000 });
         await expect(
-          savfox.getByText("Agent paired and channel saved.", { exact: true }),
-        ).toBeVisible({ timeout: 180_000 });
+          savfox.locator(".arkret-pairing"),
+        ).toContainText("Agent paired and channel saved", { timeout: 180_000 });
         await saveSavfoxChannel(savfox);
         const replacementBinding = await runtimeKeyRequestStatus(
           request,
@@ -1684,11 +1682,12 @@ async function pairNativeManagedSavfoxAgent(
   controller: Page, savfox: Page, pairing: PairingHandle & { pairingLink: string },
 ): Promise<void> {
   await startSavfoxPairing(savfox, pairing.pairingLink);
+  const retainedPairingInput = await savfox.getByLabel("Inkson pairing link", { exact: true }).inputValue();
   await expect(controller.locator(".agent-runtime-approval-dialog")).toBeVisible({ timeout: 120_000 });
   expect((await controller.locator(".device-pair-approval-code").innerText()).trim() === displayPairingCode(pairing.pairingCode)).toBe(true);
   await controller.locator(".agent-runtime-approval-dialog").getByRole("button", { name: "Approve", exact: true }).click();
   await expect(controller.locator(".agent-runtime-approval-dialog")).toHaveCount(0, { timeout: 180_000 });
-  const saved = savfox.getByText("Agent paired and channel saved.", { exact: true });
+  const saved = savfox.locator(".arkret-pairing").filter({ hasText: "Agent paired and channel saved" });
   const deadline = Date.now() + 180_000;
   while (Date.now() < deadline) {
     const completed = await saved.waitFor({
@@ -1698,15 +1697,14 @@ async function pairNativeManagedSavfoxAgent(
       throw error;
     });
     if (completed) break;
-    const retry = savfox.getByRole("button", { name: "Retry saving", exact: true });
+    const retry = savfox.getByRole("button", { name: "Start pairing / Check approval", exact: true });
     if (await retry.isVisible() && await retry.isEnabled()) {
       // The original approval can precede issuer reconciliation. Retry only
       // the same retained UI candidate, without re-pairing or new authority.
-      await expect(savfox.getByLabel("Inkson pairing link", { exact: true })).toHaveValue(pairing.pairingLink, {
-        timeout: Math.max(1, Math.min(10_000, deadline - Date.now())),
-      });
-      await expect(savfox.getByText(displayPairingCode(pairing.pairingCode), { exact: true }))
-        .toBeVisible({ timeout: Math.max(1, Math.min(10_000, deadline - Date.now())) });
+      expect(await savfox.getByLabel("Inkson pairing link", { exact: true }).inputValue() === retainedPairingInput,
+        "saving retries preserve the exact resolved original pairing input").toBe(true);
+      await expect(savfox.locator(".arkret-pairing"))
+        .toContainText(`Pairing code: ${displayPairingCode(pairing.pairingCode)}`, { timeout: Math.max(1, Math.min(10_000, deadline - Date.now())) });
       if (Date.now() >= deadline) break;
       await retry.click({ timeout: Math.max(1, Math.min(10_000, deadline - Date.now())) });
     }

@@ -2,11 +2,14 @@ import { expect, test, type Page } from "../../helpers/arkret-test";
 import { coauthBaseUrl, colandBaseUrl } from "../../helpers/env";
 import { registrationEmailCode } from "../../helpers/coauth-register";
 import { submitCoauthPasswordCredentials } from "../../helpers/real-oidc-login";
+import { enterSecretText } from "../../helpers/secret-input";
 import { openUserPage, uniqueUser } from "../../helpers/users";
 import { assertAuthoritySubmitOutcome } from "../../helpers/coland-api";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+
+test.use({ trace: "off", video: "off", screenshot: "off" });
 
 for (const scenario of ["fresh browser", "handoff response loss", "stale busy checkpoint", "active-series response loss"]) {
   const loseHandoffResponse = scenario === "handoff response loss";
@@ -71,10 +74,15 @@ for (const scenario of ["fresh browser", "handoff response loss", "stale busy ch
       await page.locator(".register-open-account-authority").click();
       await page.getByLabel("Username", { exact: true }).fill(account.handle);
       await page.getByLabel("Email address", { exact: true }).fill(email);
+      await expect(page.getByLabel("Email address", { exact: true })).toBeFocused();
+      await expect(page.getByLabel("Email address", { exact: true })).toHaveValue(email);
+      await expect(page.getByLabel("Username", { exact: true })).toHaveValue(account.handle);
       const passwords = page.locator('input[type="password"]');
       await expect(passwords).toHaveCount(2);
       await passwords.nth(0).fill(account.password);
       await passwords.nth(1).fill(account.password);
+      await expect(page.getByLabel("Email address", { exact: true })).toHaveValue(email);
+      await expect(page.getByLabel("Username", { exact: true })).toHaveValue(account.handle);
       await page.getByRole("button", { name: /create account/i }).click();
       const codeInput = page.getByLabel("Verification code", { exact: true });
       await expect(codeInput).toBeVisible();
@@ -85,7 +93,7 @@ for (const scenario of ["fresh browser", "handoff response loss", "stale busy ch
         await page.getByRole("button", { name: /^verify$/i }).click();
         return !(await codeInput.isVisible());
       }, { timeout: 30_000, intervals: [500] }).toBe(true);
-      const displayName = page.getByLabel("Display name", { exact: true });
+      const displayName = page.getByLabel("Display Name", { exact: true });
       await expect(displayName).toBeVisible();
       await displayName.fill(user.displayName);
       await page.getByRole("button", { name: /^continue$/i }).click();
@@ -134,10 +142,10 @@ for (const scenario of ["fresh browser", "handoff response loss", "stale busy ch
         // Reach the actual Human PCR successor and durable completion. The
         // identity chooser alone cannot detect a failed first backup pointer.
         await page.locator(".choose-new-identity").click();
-        const words = page.locator(".onboarding-recovery-key-display").locator("li");
+        const words = page.locator(".onboarding-recovery-key-display .rk-word");
         await expect(words).toHaveCount(24);
         const recoveryKey = (await words.allTextContents()).map((word) => word.trim()).join(" ");
-        await page.locator(".onboarding-recovery-key-confirm").fill(recoveryKey);
+        await enterSecretText(page, page.getByLabel("Re-enter the 24 words", { exact: true }), recoveryKey);
         let pointerEventId: string | undefined;
         let originalPointer: Record<string, unknown> | undefined;
         let originalOutcome: Record<string, unknown> | undefined;
@@ -202,13 +210,13 @@ for (const scenario of ["fresh browser", "handoff response loss", "stale busy ch
         if (losePointerResponse) {
           await page.goto("/onboarding");
           // Restart may restore custody and ask for the same explicit confirmation.
-          const confirm = page.locator(".onboarding-recovery-key-confirm");
+          const confirm = page.getByLabel("Re-enter the 24 words", { exact: true });
           await expect(page.locator(".onboarding-complete").or(confirm)).toBeVisible({ timeout: 90_000 });
           if (await confirm.isVisible()) {
-            const restoredWords = await page.locator(".onboarding-recovery-key-display").locator("li").allTextContents();
+            const restoredWords = await page.locator(".onboarding-recovery-key-display .rk-word").allTextContents();
             expect(restoredWords.map(word => word.trim()).join(" ") === recoveryKey,
               "restart must retain the original recovery authority").toBe(true);
-            await confirm.fill(recoveryKey);
+            await enterSecretText(page, confirm, recoveryKey);
             await page.locator(".onboarding-bind-identity").click();
           }
           // The durable outbound drain starts with the connected client, not

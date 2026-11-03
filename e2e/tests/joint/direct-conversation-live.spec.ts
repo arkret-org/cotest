@@ -1,11 +1,12 @@
 import { uint64Decimal, uint64Value } from "../../helpers/uint64-decimal";
 import { submitOrdinaryComposerDraft } from "../../helpers/composer-handoff";
+import { readCreatorRecords } from "../../helpers/creator-bootstrap";
 import { accountRow } from "../../helpers/product-locators";
 import { openAndPairSecondController } from "../../helpers/paired-controller";
 import { test, expect, type JointUsersFixture } from "../../helpers/joint-fixture";
 import type { APIRequestContext, Browser, Page, Response } from "@playwright/test";
 import { requestContactArkret, respondContactArkret, resolvePrincipalLocator, tombstoneContactArkret } from "../../helpers/contact-api";
-import { accountActorId, assertAuthoritySubmitOutcome, canonicalJson, createRealmApi, resolveDefaultStrandId, scanRealmStreamApi, signedEventEnvelope, submitSignedEventApi } from "../../helpers/coland-api";
+import { accountActorId, assertAuthoritySubmitOutcome, canonicalJson, createRealmApi, resolveDefaultStrandId, scanRealmStreamApi, sdkEventDerivedObjectId, signedEventEnvelope, submitSignedEventApi } from "../../helpers/coland-api";
 import { decodeEventIngressBody, ingressEvents } from "../../helpers/event-ingress";
 import { readScopeMlsGroupCurrentApi } from "../../helpers/coland-api/mls";
 
@@ -28,11 +29,18 @@ return async ({ jointUsers, request, browser }: { jointUsers: JointUsersFixture;
   const phase = (stage: string) => {
     if (remoteBob) console.info("Cross-station Direct preparation", JSON.stringify({ stage, mode }));
   };
+  const recoveryKeys = new Map<Page, string>();
   const resolveObservations = new Map<Page, string>();
   phase("recovery_start");
   await Promise.all([
-    alicePage.completeRecoveryKeySetupIfPrompted(30_000).then(() => phase("alice_recovery_finished")),
-    bobPage.completeRecoveryKeySetupIfPrompted(30_000).then(() => phase("bob_recovery_finished")),
+    alicePage.completeRecoveryKeySetupIfPrompted(30_000).then(key => {
+      if (key) recoveryKeys.set(alice, key);
+      phase("alice_recovery_finished");
+    }),
+    bobPage.completeRecoveryKeySetupIfPrompted(30_000).then(key => {
+      if (key) recoveryKeys.set(bob, key);
+      phase("bob_recovery_finished");
+    }),
   ]);
 
   // Claim blocking fixes the pre-join boundary at epoch 0; since_join forbids
@@ -122,6 +130,17 @@ return async ({ jointUsers, request, browser }: { jointUsers: JointUsersFixture;
         }
         originalUnit = raw;
         founder = page;
+        const create = route.request().postDataJSON().events[0].event;
+        const realm = sdkEventDerivedObjectId(create);
+        const records = (await readCreatorRecords(page)).filter(record =>
+          record.intent.effective_scope.kind === "realm" && record.intent.effective_scope.realm_id === realm);
+        expect(records.length, "the original Direct creator intent must precede its first network write").toBe(1);
+        expect(records[0].state).toBe("genesis_intent_persisted");
+        expect(canonicalJson(records[0].intent.signed_scope_create_unit) === canonicalJson(route.request().postDataJSON()),
+          "the durable intent retains the exact four-Event unit").toBe(true);
+        expect(records[0].intent.creator_device_id === (page === alice ? aliceSession : bobSession).user.deviceId,
+          "the original accepted Device owns the creator intent").toBe(true);
+        expect(Boolean(records[0].epoch_zero), "founding admission precedes epoch-zero material").toBe(false);
         const response = await route.fetch();
         expect(response.ok(), await response.text()).toBe(true);
         const outcome = await response.json() as { unit_kind: string; status: string; commits: Array<Record<string, unknown>> };
@@ -256,8 +275,14 @@ return async ({ jointUsers, request, browser }: { jointUsers: JointUsersFixture;
   }
   if (remoteBob) {
     await Promise.all([
-      alicePage.completeRecoveryKeySetupIfPrompted(2_000).then(() => phase("alice_direct_recovery_finished")),
-      bobPage.completeRecoveryKeySetupIfPrompted(2_000).then(() => phase("bob_direct_recovery_finished")),
+      alicePage.completeRecoveryKeySetupIfPrompted(2_000).then(key => {
+        if (key) recoveryKeys.set(alice, key);
+        phase("alice_direct_recovery_finished");
+      }),
+      bobPage.completeRecoveryKeySetupIfPrompted(2_000).then(key => {
+        if (key) recoveryKeys.set(bob, key);
+        phase("bob_direct_recovery_finished");
+      }),
     ]);
   }
   if (mode === "lost") {
@@ -480,9 +505,40 @@ return async ({ jointUsers, request, browser }: { jointUsers: JointUsersFixture;
     await Promise.all([alice.unroute(preparationPath), bob.unroute(preparationPath)]);
     await Promise.all([alice.reload(), bob.reload()]);
   }
-  for (const page of [alice, bob]) {
-    await page.locator(".chat-input").fill("preparation probe");
-    await expect(page.locator(".send-chat-button")).toBeEnabled({ timeout: 180_000 });
+  for (const [user, session, server] of [[alicePage, aliceSession, "default"],
+    [bobPage, bobSession, remoteBob ? "server2" : "default"]] as const) {
+    const page = user.page;
+    await page.bringToFront();
+    const restore = page.getByRole("dialog", { name: "Restore encryption keys", exact: true });
+    const recoveryKey = recoveryKeys.get(page) ?? session.recoveryKey;
+    if (await restore.waitFor({ state: "visible", timeout: 2_000 }).then(() => true).catch(() => false)) {
+      if (!recoveryKey) throw new Error("Direct readiness requires this holder's actual accepted Recovery Key");
+      await user.unlockMlsAccountSecret(recoveryKey);
+    }
+    await user.fillWithPassivePromptRetry(page.locator(".chat-input"), "preparation probe");
+    await expect(page.locator(".chat-input")).toHaveValue("preparation probe");
+    await expect(page.locator(".chat-input-hint")).toHaveCount(0);
+    await expect(page.locator(".send-chat-button")).toBeEnabled({ timeout: 180_000 }).catch(async error => {
+      const realm = decodeURIComponent(new URL(page.url()).pathname.split("/")[2] ?? "");
+      let currentReadFailed = false;
+      const current = await readScopeMlsGroupCurrentApi(request, session.grantJwt, realm,
+        { kind: "realm", realm_id: realm }, server).catch(() => { currentReadFailed = true; return undefined; });
+      let creatorProbeFailed = false;
+      const creatorRecords = await readCreatorRecords(page, true).catch(() => { creatorProbeFailed = true; return []; });
+      await test.info().attach("safe-direct-preparation-readiness", {
+        contentType: "application/json",
+        body: JSON.stringify({ mode, server,
+          draftMatches: await page.locator(".chat-input").inputValue().then(value => value === "preparation probe").catch(() => false),
+          checking: await page.locator(".send-chat-button").getAttribute("aria-busy").catch(() => null),
+          restoreVisible: await restore.isVisible().catch(() => false),
+          backupVisible: await page.getByRole("dialog", { name: "Back up encrypted history", exact: true }).isVisible().catch(() => false),
+          actualRecoveryKeyKnown: Boolean(recoveryKey), currentEpoch: current?.epoch ?? null, currentReadFailed,
+          creatorProbeFailed, creatorRecords: creatorRecords.map(record => ({ state: record.state,
+            scope: record.intent.effective_scope, acceptedGenesis: Boolean(record.accepted_genesis),
+            invariant: record.diagnostic?.invariant, lastState: record.diagnostic?.last_state })) }),
+      });
+      throw error;
+    });
     expect(new URL(page.url()).pathname).toBe(path);
   }
   if (mode === "offline") {
@@ -594,15 +650,16 @@ return async ({ jointUsers, request, browser }: { jointUsers: JointUsersFixture;
     try {
       await alice.goto(path, { waitUntil: "domcontentloaded" });
       await paired.page.page.goto(path, { waitUntil: "domcontentloaded" });
-      expect(jointUsers.aliceSession.recoveryKey).toBeTruthy();
-      await paired.page.unlockMlsAccountSecret(jointUsers.aliceSession.recoveryKey!);
+      const actualRecoveryKey = recoveryKeys.get(alice) ?? jointUsers.aliceSession.recoveryKey;
+      expect(Boolean(actualRecoveryKey), "the paired holder retains its actual accepted recovery material").toBe(true);
+      await paired.page.unlockMlsAccountSecret(actualRecoveryKey!);
       await expect(paired.page.page.locator(".send-chat-button")).toBeEnabled({ timeout: 180_000 });
       const outsideRealm = await createRealmApi(request, aliceSession.grantJwt, {
         title: `DM boundary outside ${Date.now()}`, mls_activated: false,
       });
       const outsideStrand = await resolveDefaultStrandId(request, aliceSession.grantJwt, outsideRealm);
       const control = paired.page.page;
-      const circleStrand = await createDirectBoundaryCircleStrand(control, request,
+      const circleStrand = await createDirectBoundaryCircleStrand(paired.page, request,
         aliceSession.grantJwt, outsideRealm, `DM boundary Circle ${Date.now()}`);
       const third = await createDpopUserSession(request, "direct-outsider", {});
       expect(third, "negative author must be a real registered principal/device").toBeDefined();
@@ -623,6 +680,14 @@ return async ({ jointUsers, request, browser }: { jointUsers: JointUsersFixture;
   if (mode === "lost") {
     expect(unchangedUnit, "all founding submissions after restart preserve the original signed bytes").toBe(true);
     expect(new Set(foundingIds.map(ids => canonicalJson(ids))).size).toBe(1);
+    const realm = decodeURIComponent(path.split("/")[2]);
+    const records = (await readCreatorRecords(founder!)).filter(record =>
+      record.intent.effective_scope.kind === "realm" && record.intent.effective_scope.realm_id === realm);
+    expect(records.length, "cold recovery retains one original Direct creator transaction").toBe(1);
+    expect(records[0].state).toBe("ready");
+    expect(canonicalJson(records[0].intent.signed_scope_create_unit) === canonicalJson(JSON.parse(originalUnit!)),
+      "the ready transaction retains the original founding bytes").toBe(true);
+    expect(records[0].ready_receipt.accepted_genesis_event_id).toBe(records[0].accepted_genesis.accepted.event.event_id);
     await test.info().attach("founding-acceptance-lost-cold-resume", {
       body: Buffer.from(JSON.stringify({ submitted_event_ids: foundingIds, original_commit_ids: originalCommits,
         first_response_lost_after_actual_commit: true, process_restarted: true, unique_founding_unit: true })),

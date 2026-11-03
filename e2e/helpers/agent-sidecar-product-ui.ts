@@ -21,7 +21,7 @@ export async function openSavfoxArkretChannel(
   await savfox.goto(`${savfoxBaseUrl}/channels/edit/arkret`);
   const tokenInput = savfox.getByLabel("Gateway token", { exact: true });
   const configureHeading = savfox.getByRole("heading", {
-    name: "Configure Arkret",
+    name: "Configure channel", exact: true,
   });
   // The Dioxus shell can render after `goto` resolves. Wait for the actual
   // authenticated-or-login branch before deciding whether a token is needed.
@@ -35,12 +35,12 @@ export async function openSavfoxArkretChannel(
     await connect.click();
   }
   await expect(configureHeading).toBeVisible({ timeout: 30_000 });
+  await expect(savfox.getByRole("combobox", { name: "Messaging platform", exact: true })).toHaveText("Arkret");
   // Fresh pairing must provide ordinary replies without a test-only mode fix.
   // Explicit task delivery remains a separate checkpoint workflow.
-  const deliveryMode = savfox.locator("select").filter({
-    has: savfox.locator('option[value="interactive_chat"]'),
-  });
-  await expect(deliveryMode).toHaveValue("interactive_chat");
+  const deliveryMode = savfox.getByRole("combobox", { name: "Delivery mode", exact: true });
+  await expect(deliveryMode).toBeEnabled({ timeout: 30_000 });
+  await expect(deliveryMode).toHaveText("interactive_chat");
 }
 
 
@@ -49,26 +49,21 @@ export async function startSavfoxPairing(
   pairingLink: string,
 ): Promise<void> {
   const pairingInput = savfox.getByLabel("Inkson pairing link", { exact: true });
-  if ((await pairingInput.count()) === 0) {
-    await savfox
-      .getByRole("button", { name: "Disconnect agent…", exact: true })
-      .click({ timeout: 30_000 });
-    await expect(
-      savfox.getByText("Disconnect this agent?", { exact: true }),
-    ).toBeVisible({ timeout: 30_000 });
-    await savfox
-      .getByRole("button", { name: "Disconnect agent", exact: true })
-      .click({ timeout: 30_000 });
-  }
   await expect(pairingInput).toBeVisible({ timeout: 120_000 });
-  await pairingInput.fill(pairingLink, { timeout: 30_000 });
+  await expect(pairingInput).toBeEnabled({ timeout: 120_000 });
   const startPairing = savfox.getByRole("button", {
-    name: "Start pairing",
+    name: "Start pairing / Check approval",
     exact: true,
   });
+  if ((await pairingInput.inputValue()).trim() && !(await startPairing.isEnabled())) {
+    await savfox.getByRole("checkbox", { name: "Confirm disconnecting the current agent", exact: true }).check();
+    await savfox.getByRole("button", { name: "Disconnect current agent", exact: true }).click();
+    await expect(savfox.locator(".arkret-pairing")).toContainText("Disconnected. Paste a new Inkson pairing link to connect another agent.");
+  }
+  await pairingInput.fill(pairingLink, { timeout: 30_000 });
   await expect(startPairing).toBeEnabled({ timeout: 30_000 });
   await startPairing.click({ timeout: 30_000 });
-  const pairingStatus = savfox.locator(".arkret-pairing-status");
+  const pairingStatus = savfox.locator(".arkret-pairing");
   await expect(pairingStatus).toBeVisible({ timeout: 30_000 });
   await expect(pairingStatus).toContainText("Waiting for Inkson approval", {
     timeout: 30_000,
@@ -78,10 +73,12 @@ export async function startSavfoxPairing(
 
 export async function saveSavfoxChannel(savfox: Page): Promise<void> {
   await savfox
-    .getByRole("button", { name: "Save changes", exact: true })
+    .getByRole("button", { name: "Save channel", exact: true })
     .click();
+  await expect(savfox.locator(".error-message")).toHaveText("Channel saved", { timeout: 120_000 });
+  await savfox.getByRole("button", { name: "Back to channels", exact: true }).click();
   await expect(
-    savfox.getByRole("heading", { name: "Configure Arkret" }),
+    savfox.getByRole("heading", { name: "Configure channel", exact: true }),
   ).toHaveCount(0, { timeout: 120_000 });
 }
 
@@ -153,8 +150,8 @@ export async function pairManagedSavfoxAgent(
   await inkson.locator(".agent-runtime-approval-dialog").getByRole("button", { name: "Approve", exact: true }).click();
   await expect(approvalModal).toHaveCount(0, { timeout: 180_000 });
   await expect(
-    savfox.getByText("Agent paired and channel saved.", { exact: true }),
-  ).toBeVisible({ timeout: 180_000 });
+    savfox.locator(".arkret-pairing"),
+  ).toContainText("Agent paired and channel saved", { timeout: 180_000 });
   await saveSavfoxChannel(savfox);
   const arkretCard = savfox
     .locator(".channels-card")

@@ -844,7 +844,9 @@ test("normal controller requests join and public review, distinct administrator 
       lostRequest = lost.body;
       expect(lost.outcome.status).toBe("pending");
       await expect(controller.locator(":scope > .write-status")).toContainText("操作被拒绝或当前证据不可用");
-      await expect(controller.locator(".management-review-request")).toHaveText("重试原审批请求（保留原候选）");
+      await expect(controller.locator(".management-review-request")).toBeEnabled();
+      await expect(controller.getByLabel("Agent Account: principal_id", { exact: true })).toBeDisabled();
+      await expect(controller.getByLabel("Agent Account: station_id", { exact: true })).toBeDisabled();
     }
     const response = await reviewResponse(jointRealm.bobPage.page, "requests",
       () => controller.locator(".management-review-request").click());

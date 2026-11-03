@@ -287,7 +287,7 @@ test.describe("workflow: kanban week-in-review", () => {
       const archiveResponse = await archiveWrite;
       expect(archiveResponse.status(), await archiveResponse.text()).toBeLessThan(400);
       const archivedLists = patPage.page.locator(".kanban-archived-lists");
-      await archivedLists.locator("summary").click();
+      await archivedLists.getByRole("button", { name: /^Archived lists \(\d+\)$/ }).click();
       await expect(
         patPage.page.locator(".kanban-archived-list-row").filter({ hasText: todayList }),
       ).toBeVisible({ timeout: 30_000 });

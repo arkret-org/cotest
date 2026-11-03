@@ -701,5 +701,5 @@ async function setCardDetailEditorValue(
     .getByRole("textbox", { name: "Description", exact: true });
   await expect(editor).toBeVisible({ timeout: 45_000 });
   await editor.fill(value);
-  await expect(editor).toHaveValue(value);
+  await expect(editor).toHaveText(value);
 }
