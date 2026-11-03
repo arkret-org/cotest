@@ -926,6 +926,7 @@ function Invoke-JointE2ePreflight {
     param(
         [Parameter(Mandatory = $true)][string]$RepoRoot,
         [Parameter(Mandatory = $true)][string]$WorkspaceRoot,
+        [Parameter(Mandatory = $true)][string]$ColandRepositoryRoot,
         [Parameter(Mandatory = $true)][string]$E2eRoot,
         [Parameter(Mandatory = $true)][string[]]$PlaywrightProjects,
         [Parameter(Mandatory = $true)][bool]$StartCoauth,
@@ -1045,14 +1046,14 @@ function Invoke-JointE2ePreflight {
             Add-PreflightResult $results "coland runtime" "pass" "docker"
         } else {
             try {
-                $colandBinary = Resolve-ColandBinary -ExplicitPath $ColandBin -WorkspaceRoot $WorkspaceRoot
+                $colandBinary = Resolve-ColandBinary -ExplicitPath $ColandBin -RepositoryRoot $ColandRepositoryRoot
                 Add-PreflightResult $results "coland binary" "pass" $colandBinary
                 Add-BinaryFreshnessPreflight `
                     -Results $results `
                     -Name "coland binary freshness" `
                     -BinaryPath $colandBinary `
                     -RepositoryRoots @(
-                        (Join-Path $WorkspaceRoot "coland"),
+                        $ColandRepositoryRoot,
                         (Join-Path $WorkspaceRoot "arkret-rust-sdk")
                     ) `
                     -RequireBuildStamp (-not [bool]$ColandBin)
@@ -1997,13 +1998,13 @@ function Resolve-CoauthBinary {
 function Resolve-ColandBinary {
     param(
         [string]$ExplicitPath,
-        [Parameter(Mandatory = $true)][string]$WorkspaceRoot
+        [Parameter(Mandatory = $true)][string]$RepositoryRoot
     )
 
     $candidates = @()
     if ($ExplicitPath) { $candidates += $ExplicitPath }
     if ($env:COLAND_BIN) { $candidates += $env:COLAND_BIN }
-    $targetDirectory = Get-CargoTargetDirectory -RepositoryRoot (Join-Path $WorkspaceRoot "coland")
+    $targetDirectory = Get-CargoTargetDirectory -RepositoryRoot $RepositoryRoot
     $candidates += (Join-Path $targetDirectory ("debug/" + (Get-NativeExecutableName -Name "coland")))
     $candidates += (Join-Path $targetDirectory ("release/" + (Get-NativeExecutableName -Name "coland")))
 
@@ -3488,6 +3489,7 @@ if (-not $SutManifest) {
     $SutManifest = Join-Path $workspaceRoot "coland\Cargo.toml"
 }
 $SutManifest = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($SutManifest)
+$colandRepositoryRoot = Split-Path -Parent $SutManifest
 $inksonTargetDirectory = $null
 if ($requiresInkson) {
     if (-not $InksonRoot) {
@@ -3504,7 +3506,7 @@ $selectedInksonWireBinary = if ($requiresInkson) {
     }
 } else { $null }
 $cotestTargetDirectory = Get-CargoTargetDirectory -RepositoryRoot $repoRoot
-$colandTargetDirectory = Get-CargoTargetDirectory -RepositoryRoot (Split-Path -Parent $SutManifest)
+$colandTargetDirectory = Get-CargoTargetDirectory -RepositoryRoot $colandRepositoryRoot
 $coauthTargetDirectory = Get-CargoTargetDirectory -RepositoryRoot (Join-Path $workspaceRoot "coauth")
 if (-not $SavfoxRoot) {
     $SavfoxRoot = Join-Path (Split-Path -Parent $workspaceRoot) "savfox-ai\savfox"
@@ -3977,7 +3979,7 @@ if ($requiresInkson) {
 try {
     $preflightSourceHeads = Get-JointSourceHeads -RepositoryPaths ([ordered]@{
         cotest = $repoRoot
-        coland = (Split-Path -Parent $SutManifest)
+        coland = $colandRepositoryRoot
         coauth = (Join-Path $workspaceRoot "coauth")
         "arkret-spec" = (Join-Path $workspaceRoot "arkret-spec")
         "arkret-rust-sdk" = (Join-Path $workspaceRoot "arkret-rust-sdk")
@@ -4029,7 +4031,7 @@ try {
         $freshness = Get-ArtifactFreshness `
             -ArtifactPath $defaultColandBinary `
             -RepositoryRoots @(
-                (Join-Path $workspaceRoot "coland"),
+                $colandRepositoryRoot,
                 (Join-Path $workspaceRoot "arkret-rust-sdk")
             )
         $colandConformanceHarnessPresent = Test-BinaryContainsAsciiMarker `
@@ -4048,13 +4050,13 @@ try {
             # earlier placement dispatched `Start-ManagedCommand -Name` alone
             # and every stale-binary run died on "missing mandatory parameters:
             # Command WorkingDirectory LogDirectory" instead of rebuilding.
-            $preBuildStates = @(Get-ArtifactBuildRepositoryStates -ArtifactPath $defaultColandBinary -RepositoryRoots @((Join-Path $workspaceRoot "coland"), (Join-Path $workspaceRoot "arkret-rust-sdk")))
+            $preBuildStates = @(Get-ArtifactBuildRepositoryStates -ArtifactPath $defaultColandBinary -RepositoryRoots @($colandRepositoryRoot, (Join-Path $workspaceRoot "arkret-rust-sdk")))
             $service = Start-ManagedCommand `
                 -Name "prepare-coland" `
                 -Command ("cargo build --manifest-path {0} -p coland --bin coland --features conformance-harness" -f (Quote-PsLiteral $SutManifest)) `
                 -WorkingDirectory (Split-Path -Parent $SutManifest) `
                 -LogDirectory $serviceLogDir
-            $preparationTasks.Add([pscustomobject]@{ Name = "coland"; BuildInputsBefore = $preBuildStates; Service = $service; Started = $started; Artifact = $defaultColandBinary; AllowUnchangedArtifact = $true; RepositoryRoots = @((Join-Path $workspaceRoot "coland"), (Join-Path $workspaceRoot "arkret-rust-sdk")) })
+            $preparationTasks.Add([pscustomobject]@{ Name = "coland"; BuildInputsBefore = $preBuildStates; Service = $service; Started = $started; Artifact = $defaultColandBinary; AllowUnchangedArtifact = $true; RepositoryRoots = @($colandRepositoryRoot, (Join-Path $workspaceRoot "arkret-rust-sdk")) })
         } else {
             $preparationTimings.Add([pscustomobject]@{ name = "coland"; status = "cache-hit"; duration_seconds = 0; detail = $freshness.Detail })
         }
@@ -4310,6 +4312,7 @@ try {
     Invoke-JointE2ePreflight `
         -RepoRoot $repoRoot `
         -WorkspaceRoot $workspaceRoot `
+        -ColandRepositoryRoot $colandRepositoryRoot `
         -E2eRoot $e2eRoot `
         -PlaywrightProjects $playwrightProjects `
         -StartCoauth ([bool]$StartCoauth) `
@@ -5091,7 +5094,7 @@ try {
     }
     if (-not $ColandCommand -and $colandPort -and $ColandRuntime -eq "process") {
         $generatedColandCommand = $true
-        $colandBinary = Resolve-ColandBinary -ExplicitPath $ColandBin -WorkspaceRoot $workspaceRoot
+        $colandBinary = Resolve-ColandBinary -ExplicitPath $ColandBin -RepositoryRoot $colandRepositoryRoot
         $server1Peer = @($allColandBaseUrls | Where-Object { $_ -ne $ColandBaseUrl }) -join ","
         $colandMetricsPort = Get-FreeTcpPort
         # DID-P1-C02 — process runtime binds the metrics listener on loopback,
@@ -5892,7 +5895,7 @@ try {
 
     if ($runNativeApiMigrations) {
         Write-Host "=== Migrated native API coverage (canonical deployment and isolated Stations) ==="
-        $env:COLAND_BIN = Resolve-ColandBinary -ExplicitPath $ColandBin -WorkspaceRoot $workspaceRoot
+        $env:COLAND_BIN = Resolve-ColandBinary -ExplicitPath $ColandBin -RepositoryRoot $colandRepositoryRoot
         $nativeDatabaseAllocators = Resolve-NativeApiDatabaseAllocators `
             -AdministrativeUrl $PostgresAdminUrl -ExplicitColandUrl $ColandDatabaseUrl
         foreach ($binding in $nativeDatabaseAllocators.GetEnumerator()) {

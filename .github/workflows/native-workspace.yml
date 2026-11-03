@@ -115,7 +115,7 @@ jobs:
         components: rustfmt
     - uses: dtolnay/rust-toolchain@master
       with:
-        toolchain: 1.98
+        toolchain: 1.99.0
         components: rustfmt, clippy
     - name: Freeze and validate dependency cache lock inputs
       id: native_dependency_cache_inputs

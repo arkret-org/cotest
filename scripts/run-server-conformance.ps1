@@ -2570,7 +2570,8 @@ try {
             & (Join-Path $PSScriptRoot 'run-joint-e2e.ps1') -PreflightOnly -NativeToolsEnvironmentFile $tools -JointDir $browserPreparation `
                 -ColandBin $env:COLAND_BIN -StartCoauth -CoauthBin $env:COAUTH_BIN -StartMockEmail -DnsSuffix $DnsSuffix `
                 -RunProfile joint-full -PlaywrightProject joint-inkson -Grep '@agent-provision-(recovery-prerequisite|durable-recovery)' `
-                -RequireScenario 'joint/agent-provision-recovery-prerequisite' -ForbidSkippedTests
+                -RequireScenario 'joint/agent-provision-recovery-prerequisite' -ForbidSkippedTests `
+                -PostgresAdminUrl $PostgresAdminUrl -PostgresToolsDirectory $PostgresToolsDirectory -PostgresDataDirectory $PostgresDataDirectory
             if ($LASTEXITCODE -ne 0) { throw 'Native provision browser preparation failed' }
             foreach ($line in Get-Content -LiteralPath $tools) {
                 $entry = $line.Split('=', 2)

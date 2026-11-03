@@ -75,7 +75,7 @@ jobs:
       fail-fast: false
       matrix:
         toolchain:
-        - '1.98'
+        - '1.99.0'
         lane:
         - checks
         - authority
@@ -143,6 +143,14 @@ jobs:
     - uses: Swatinem/rust-cache@v2
       with:
         workspaces: cotest
+    - name: Runner source, native PostgreSQL forwarding and cleanup regressions
+      if: matrix.lane == 'checks'
+      working-directory: cotest
+      shell: pwsh
+      run: |
+        ./scripts/tests/joint-coland-source-selection.tests.ps1
+        ./scripts/tests/joint-early-failure.tests.ps1
+        ./scripts/tests/server-conformance-browser-postgres.tests.ps1
     - name: Migrate isolated Coauth route-evidence database
       run: psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f coauth/crates/storage-postgres/migrations/00000000000000_initial/up.sql
     - name: fmt
@@ -253,7 +261,7 @@ jobs:
           python-version: "3.13"
       - uses: dtolnay/rust-toolchain@master
         with:
-          toolchain: "1.98"
+          toolchain: "1.99.0"
       - name: generator unit tests
         # The artifact-capture regression compiles a small offline Cargo graph
         # with separate host/runtime units using the SDK023 lane's compiler.
@@ -427,7 +435,7 @@ jobs:
 
       - uses: dtolnay/rust-toolchain@master
         with:
-          toolchain: "1.98"
+          toolchain: "1.99.0"
       - uses: actions/setup-python@v5
         with:
           python-version: "3.13"
@@ -705,7 +713,7 @@ jobs:
 
       - uses: dtolnay/rust-toolchain@master
         with:
-          toolchain: "1.98"
+          toolchain: "1.99.0"
           targets: wasm32-unknown-unknown
       - uses: Swatinem/rust-cache@v2
         with:
@@ -761,8 +769,8 @@ jobs:
           -StartCoauth
           -RunProfile joint-smoke
           -PlaywrightProject joint-collaboration
-          -Grep "@community-collaboration-gate"
-          -RequireScenario "messaging/triad-collaboration.spec.ts,kanban/cross-member-encrypted.spec.ts,joint/encrypted-attachment-two-device.spec.ts"
+          -Grep "@community-collaboration-gate|@community-event-gate"
+          -RequireScenario "messaging/triad-collaboration.spec.ts,kanban/cross-member-encrypted.spec.ts,joint/encrypted-attachment-two-device.spec.ts,workflows/community-event.spec.ts"
           -ForbidSkippedTests
 
       - name: Restore Linux hosts permissions

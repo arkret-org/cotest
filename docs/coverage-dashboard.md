@@ -10,7 +10,7 @@ This static inventory does not claim runtime verification; use an Arkret Joint P
 | UJ-C - Daily messaging, edits, reactions, receipts, and mentions | 27 | 27 | 100.0% | 0 |
 | UJ-D - Encrypted realm lifecycle and cross-device decrypt | 5 | 5 | 100.0% | 0 |
 | UJ-E - Federation and cross-domain collaboration | 20 | 20 | 100.0% | 0 |
-| UJ-F - Kanban collaboration and concurrent work | 36 | 36 | 100.0% | 0 |
+| UJ-F - Kanban collaboration and concurrent work | 37 | 37 | 100.0% | 0 |
 | UJ-G - Privacy rights, governance, and GDPR | 19 | 19 | 100.0% | 0 |
 | UJ-H - Calls, push, and cross-platform sync | 2 | 2 | 100.0% | 0 |
 
@@ -78,6 +78,7 @@ This static inventory does not claim runtime verification; use an Arkret Joint P
 | kanban/cross-member-encrypted | domain-fallback | 2 | 2 | 0 |
 | kanban/end-to-end | domain-fallback | 9 | 9 | 0 |
 | kanban/project-simulation | domain-fallback | 7 | 7 | 0 |
+| workflows/community-event | domain-fallback | 1 | 1 | 0 |
 | workflows/daily-standup | domain-fallback | 3 | 3 | 0 |
 | workflows/incident-response | domain-fallback | 3 | 3 | 0 |
 | workflows/kanban-week | domain-fallback | 1 | 1 | 0 |

@@ -10,10 +10,14 @@ after(async () => { await browser?.close(); });
 
 const layoutSource = readFileSync(new URL("../../../inkson/src/views/chat/timeline_window.js", import.meta.url), "utf8");
 
+async function loadLayout(page) {
+  await page.addScriptTag({ type: "module", content: `${layoutSource}\nglobalThis.TimelineLayout = TimelineLayout;` });
+}
+
 async function fixture(page) {
-  await page.setContent(`<div data-testid="message-list" style="height:200px;overflow:auto">
+  await page.setContent(`<div class="message-list" data-testid="message-list" style="height:200px;overflow:auto">
     <div id="rows" style="position:relative"></div></div>`);
-  await page.addScriptTag({ content: layoutSource });
+  await loadLayout(page);
   await page.evaluate(() => {
     const keys = Array.from({ length: 30 }, (_, index) => `row-${index}`);
     const layout = new TimelineLayout(keys, new Map(keys.map(key => [key, 400])));
@@ -25,6 +29,7 @@ async function fixture(page) {
       rows.replaceChildren();
       for (let index = window.start; index < window.end; index++) {
         const row = document.createElement("div");
+        row.className = "chat-message";
         row.dataset.testid = "chat-message";
         row.textContent = keys[index];
         row.style.cssText = `position:absolute;top:${layout.prefix(index)}px;height:400px`;
@@ -73,9 +78,9 @@ test("missing messages remain a failure within the supplied budget", async () =>
 test("sampling advances within the viewport instead of jumping over a provisional overscan tail", async () => {
   const page = await browser.newPage();
   try {
-    await page.setContent(`<div data-testid="message-list" style="height:91px;overflow:auto;overflow-anchor:none">
+    await page.setContent(`<div class="message-list" data-testid="message-list" style="height:91px;overflow:auto;overflow-anchor:none">
       <div id="rows" style="position:relative;overflow-anchor:none"></div></div>`);
-    await page.addScriptTag({ content: layoutSource });
+    await loadLayout(page);
     await page.evaluate(() => {
       const keys = Array.from({ length: 256 }, (_, index) => `row-${index}`);
       const layout = new TimelineLayout(keys);
@@ -84,12 +89,11 @@ test("sampling advances within the viewport instead of jumping over a provisiona
       let frame = 0;
       const render = () => {
         frame = 0;
-        const anchor = layout.at(feed.scrollTop);
-        const within = feed.scrollTop - layout.prefix(anchor);
         const window = layout.window(feed.scrollTop, feed.clientHeight);
         rows.replaceChildren();
         for (let index = window.start; index < window.end; index++) {
           const row = document.createElement("div");
+          row.className = "chat-message";
           row.dataset.virtualIndex = `${index}`;
           row.textContent = keys[index];
           row.style.cssText = `position:absolute;top:${layout.prefix(index)}px;height:${100 + index % 17 * 35}px`;
@@ -98,6 +102,10 @@ test("sampling advances within the viewport instead of jumping over a provisiona
         // Simulate the production bridge's provisional window before its next
         // measurement frame, not an already fully measured fixed-height list.
         requestAnimationFrame(() => {
+          // Match the bridge's measurement boundary: preserve the reader's
+          // current position, including a scroll since the render frame.
+          const anchor = layout.at(feed.scrollTop);
+          const within = feed.scrollTop - layout.prefix(anchor);
           for (const row of rows.children) layout.measure(Number(row.dataset.virtualIndex), row.getBoundingClientRect().height);
           rows.style.height = `${layout.total()}px`;
           for (const row of rows.children) row.style.top = `${layout.prefix(Number(row.dataset.virtualIndex))}px`;

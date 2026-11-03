@@ -27,7 +27,7 @@ $summaryWrite = @($ast.FindAll({param($node)
 if ($summaryWrite.Count -ne 1) { throw 'Expected the actual summary JSON write' }
 $defaults = @($ast.FindAll({param($node)
     $node -is [Management.Automation.Language.AssignmentStatementAst] -and
-    $node.Left.Extent.Text -in @('$flagonIdentity', '$flagonIdentityDirectory') -and
+    $node.Left.Extent.Text -in @('$flagonIdentity', '$flagonIdentityDirectory', '$previousProvisionCustodyRoot', '$previousReadonlyDatabaseControls', '$previousPythonExecutable', '$previousSdkTlsRoots') -and
     $node.Extent.EndOffset -lt $lifecycle.Extent.StartOffset
 }, $true))
 foreach ($name in @('Write-ManagedServiceFailureReport')) {
@@ -48,6 +48,10 @@ function Get-JointTopologyHealthFailures { param($TopologyPath, $ManagedServices
 function Stop-ManagedCommand { param($Service) $script:stoppedNames += $Service.Name }
 
 function Invoke-EarlyFailureCase([string]$Name, [bool]$OwnedFlagon, [bool]$IdentityReady) {
+    $env:COTEST_PYTHON_EXECUTABLE = if ($OwnedFlagon) { "fixture-python-$Name" } else { $null }
+    $env:SSL_CERT_FILE = if ($IdentityReady) { "fixture-ca-$Name" } else { $null }
+    $expectedPython = $env:COTEST_PYTHON_EXECUTABLE
+    $expectedTlsRoots = $env:SSL_CERT_FILE
     # Supply irrelevant report fields, but deliberately never seed either
     # identity variable: their real pre-try initializers are the tested fix.
     foreach ($variable in $summaryAssignment.FindAll({param($node)
@@ -75,7 +79,7 @@ function Invoke-EarlyFailureCase([string]$Name, [bool]$OwnedFlagon, [bool]$Ident
     $ephemeralColandPostgres = $null; $ephemeralColandServer2Postgres = $null
     $additionalServers = @(); $storeDumpFailures = @()
     $jointTlsEnabled = $false; $mockAppletRegistryStateKeyFile = $null
-    $provisionCustodyRoot = $null; $previousReadonlyDatabaseControls = $null
+    $provisionCustodyRoot = $null
     $exitCode = 1; $runnerError = $null
     $startedAt = Get-Date; $finishedAt = $startedAt
     $totals = [pscustomobject]@{passed=0;failed=0;skipped=0;fixme=0}
@@ -84,8 +88,12 @@ function Invoke-EarlyFailureCase([string]$Name, [bool]$OwnedFlagon, [bool]$Ident
     foreach ($initialization in $defaults) { Invoke-Expression $initialization.Extent.Text }
     $acceptedIdentity = [pscustomobject]@{did='did:web:flagon.fixture.invalid';method_history_head='fixture-head'}
     if ($IdentityReady) { $flagonIdentity = $acceptedIdentity }
+    $env:COTEST_PYTHON_EXECUTABLE = 'temporary-run-python'
     $failure = "try { Start-ManagedCommand -Name 'prepare-savfox' } catch $($lifecycle.CatchClauses[0].Body.Extent.Text) finally $($lifecycle.Finally.Extent.Text)"
     Invoke-Expression $failure
+    if ($env:COTEST_PYTHON_EXECUTABLE -cne $expectedPython -or $env:SSL_CERT_FILE -cne $expectedTlsRoots) {
+        throw 'Early failure must restore the actual prior Python and TLS environment'
+    }
     Invoke-Expression $summaryAssignment.Extent.Text
     $summaryJson = Join-Path $jointDir 'summary.json'
     Invoke-Expression $summaryWrite[0].Extent.Text
@@ -110,6 +118,8 @@ function Invoke-EarlyFailureCase([string]$Name, [bool]$OwnedFlagon, [bool]$Ident
     Write-Host "PASS $Name (original failure, owned cleanup and actual summary JSON)"
 }
 
+$testPreviousPython = $env:COTEST_PYTHON_EXECUTABLE
+$testPreviousTlsRoots = $env:SSL_CERT_FILE
 $tempBase = [IO.Path]::GetFullPath([IO.Path]::GetTempPath())
 $temporary = Join-Path $tempBase ('cotest-early-failure-' + [guid]::NewGuid().ToString('N'))
 $null = New-Item -ItemType Directory -Path $temporary
@@ -119,6 +129,8 @@ try {
     Invoke-EarlyFailureCase 'retains-already-obtained-identity' $true $true
     Write-Host 'joint-early-failure.tests.ps1: PASS (3 lifecycle cases; no real services)'
 } finally {
+    $env:COTEST_PYTHON_EXECUTABLE = $testPreviousPython
+    $env:SSL_CERT_FILE = $testPreviousTlsRoots
     $resolved = [IO.Path]::GetFullPath($temporary)
     if (-not $resolved.StartsWith($tempBase.TrimEnd('\','/') + [IO.Path]::DirectorySeparatorChar, [StringComparison]::OrdinalIgnoreCase) -or
         [IO.Path]::GetFileName($resolved) -notlike 'cotest-early-failure-*') { throw 'Test cleanup escaped its unique temporary directory' }

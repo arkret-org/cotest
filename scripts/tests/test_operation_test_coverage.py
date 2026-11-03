@@ -58,7 +58,7 @@ def directory_link(link: Path, target: Path) -> None:
 class OperationTestCoverageTests(unittest.TestCase):
     def setUp(self) -> None:
         self.temp = tempfile.TemporaryDirectory()
-        self.root = Path(self.temp.name)
+        self.root = Path(self.temp.name).resolve()
         self.write(
             "arkret-spec/spec/v1/artifacts/registry/operation-registry.json",
             json.dumps(
@@ -501,7 +501,7 @@ fn typed_operation() {
 class AcceptanceTraceabilityTests(unittest.TestCase):
     def setUp(self) -> None:
         self.temp = tempfile.TemporaryDirectory()
-        self.root = Path(self.temp.name)
+        self.root = Path(self.temp.name).resolve()
         self.active = self.root / "arkret-work/tasks/impl-active"
         self.active.mkdir(parents=True)
         self.task = self.active / "owner.md"

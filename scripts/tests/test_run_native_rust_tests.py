@@ -20,7 +20,7 @@ class NativeChildTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory(prefix="cotest-native-adapter-test-")
         self.addCleanup(self.temp.cleanup)
-        self.root = Path(self.temp.name)
+        self.root = Path(self.temp.name).resolve()
         self.raw = self.root / "raw"
         env = os.environ.copy()
         for name in (runner.PROVISION_EVIDENCE, runner.SERVICE_LOGS, runner.CLIENT_CONFIG_SCOPE, "INKSON_CONFIG_PATH"):
@@ -195,6 +195,21 @@ class NativeChildTests(unittest.TestCase):
         self.assertFalse(Path(env[runner.PROVISION_EVIDENCE]).exists())
         self.assertEqual(runner.provision_binary("agent_vectors_production-deadbeef.exe"), "agent_vectors_production")
         self.assertIsNone(runner.provision_binary("prefix-agent_vectors_production-deadbeef"))
+
+    @unittest.skipUnless(os.name == "posix", "Directory symlinks require platform privileges on Windows")
+    def test_linked_evidence_root_is_rejected_before_launch_or_writes(self):
+        target = self.root / "retained"
+        target.mkdir()
+        marker = target / "keep.txt"
+        marker.write_text("retained evidence")
+        linked = self.root / "linked"
+        linked.symlink_to(target, target_is_directory=True)
+        with patch.object(subprocess, "run") as child:
+            with self.assertRaisesRegex(RuntimeError, "linked directory"):
+                runner.native_child([sys.executable], artifact_root=linked / "raw")
+            child.assert_not_called()
+        self.assertEqual(list(target.iterdir()), [marker])
+        self.assertEqual(marker.read_text(), "retained evidence")
 
 
 if __name__ == "__main__":

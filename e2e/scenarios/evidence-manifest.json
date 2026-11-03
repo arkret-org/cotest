@@ -1830,6 +1830,35 @@
       "claims_excluded": []
     },
     {
+      "scenario_key": "workflows/community-event",
+      "suite_kind": "joint-e2e",
+      "realism_level": "fixture-only",
+      "evidence_class": "fixture-only",
+      "real_services": [
+        "coauth",
+        "coland",
+        "inkson"
+      ],
+      "mocks": [
+        "email"
+      ],
+      "identity_establishment": [
+        "coauth_registration_ui",
+        "inkson_identity_onboarding_ui",
+        "oauth_authorization_ui"
+      ],
+      "protocol_object_producers": [
+        "cotest_wire_oracle",
+        "inkson_product_client"
+      ],
+      "declared_test_bypasses": [
+        "create_realm_passive_prompt_dismissal"
+      ],
+      "claims_excluded": [
+        "mls_backup_unlock_and_missing_recovery_prompt_behavior"
+      ]
+    },
+    {
       "scenario_key": "workflows/daily-standup",
       "suite_kind": "joint-e2e",
       "realism_level": "fixture-only",

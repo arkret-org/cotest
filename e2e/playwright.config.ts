@@ -91,6 +91,7 @@ export default defineConfig({
         "messaging/triad-collaboration.spec.ts",
         "kanban/cross-member-encrypted.spec.ts",
         "joint/encrypted-attachment-two-device.spec.ts",
+        "workflows/community-event.spec.ts",
       ],
       use: { ...devices["Desktop Chrome"], baseURL },
     },

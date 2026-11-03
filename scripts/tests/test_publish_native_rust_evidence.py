@@ -20,7 +20,7 @@ class PublisherTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory(prefix="cotest-native-public-test-")
         self.addCleanup(self.temp.cleanup)
-        self.root = Path(self.temp.name)
+        self.root = Path(self.temp.name).resolve()
         self.raw = self.root / "private"
         self.run = self.raw / "123-2"
         self.run.mkdir(parents=True)

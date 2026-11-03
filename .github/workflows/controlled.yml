@@ -123,7 +123,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@master
         if: inputs.lane == 'mls-data-plane'
         with:
-          toolchain: "1.98"
+          toolchain: "1.99.0"
           targets: wasm32-unknown-unknown
       - name: Validate controlled-lane preconditions
         working-directory: cotest

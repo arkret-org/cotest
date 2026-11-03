@@ -12,10 +12,10 @@ const key = Array(24).fill("fixture").join(" ");
 async function prompt(page, retryFirst = false, publicationDelayMs = 0) {
   page.setDefaultTimeout(10_000);
   await page.setContent(`
-    <div data-testid="recovery-key-setup-banner">
-      <textarea data-testid="recovery-key-setup-generated-key" readonly>${key}</textarea>
-      <textarea data-testid="recovery-key-setup-confirm-key"></textarea>
-      <button data-testid="recovery-key-setup-saved">Save</button>
+    <div role="dialog" aria-label="Set up your recovery key" data-testid="recovery-key-setup-banner">
+      <textarea aria-label="Recovery key (24 words)" data-testid="recovery-key-setup-generated-key" readonly>${key}</textarea>
+      <textarea aria-label="Re-enter the saved recovery key" data-testid="recovery-key-setup-confirm-key"></textarea>
+      <button data-testid="recovery-key-setup-saved">Confirm saved key</button>
     </div>
     <button data-testid="outside">Continue</button>
     <script>

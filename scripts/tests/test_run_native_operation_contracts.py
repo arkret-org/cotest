@@ -26,7 +26,7 @@ class FrozenProductTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory(prefix="cotest-native-product-copy-")
         self.addCleanup(self.temp.cleanup)
-        self.root = Path(self.temp.name)
+        self.root = Path(self.temp.name).resolve()
         self.output = self.root / "evidence"
         self.output.mkdir()
         self.source = self.root / "target/coland"
