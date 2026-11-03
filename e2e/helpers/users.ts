@@ -1180,7 +1180,6 @@ export class JointUserPage {
       .poll(() => decodeURIComponent(new URL(this.page.url()).pathname), { timeout: 30_000 })
       .toBe(membersPath);
     const members = this.page.locator(".realm-members-panel");
-    await expect(members).toBeVisible({ timeout: 120_000 });
     await members.locator(".open-invite-modal-button").click();
     const invite = this.page.locator(".invite-member-modal");
     await expect(invite).toBeVisible({ timeout: 30_000 });
