@@ -2755,11 +2755,8 @@ export async function openUser(
     // Opt-in for running against a live Caddy stack whose TLS is `tls internal`
     // (self-signed). Default off so CI/headless harness runs are unaffected.
     ignoreHTTPSErrors: process.env.COTEST_IGNORE_HTTPS === "1",
-    recordHar: {
-      path: path.join(diagnosticsDir, "network.har"),
-      mode: "minimal" as const,
-      content: "omit" as const,
-    },
+    // Raw HAR retains authentication headers, cookies and request bodies even
+    // with response content omitted. Keep only the safe session diagnostics.
     // Seed the Inkson origin directly. An init script also runs once against
     // the initial opaque about:blank document, where localStorage access throws
     // SecurityError and can make session injection nondeterministic.

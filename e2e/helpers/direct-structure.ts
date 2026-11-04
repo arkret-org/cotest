@@ -8,7 +8,7 @@ import type { Page, Response, Request, APIRequestContext } from "@playwright/tes
 import { assertAuthoritySubmitOutcome, authHeaders, canonicalJson, readCommitStreamHeadApi, readCommitStreamCutApi, scanRealmStreamApi, sdkEventDerivedIds, sha256CanonicalJson, signedEventEnvelope, wireErrCode } from "./coland-api";
 import { decodeEventIngressBody, ingressEvents, type IngressEvent } from "./event-ingress";
 import { readFile, writeFile, rename, rm } from "node:fs/promises";
-import { randomBytes, randomUUID } from "node:crypto";
+import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
 import { colandBaseUrl, colandServiceDid, colandServiceId, colandServiceResolution, configuredServerKeys, type ColandKey } from "./env";
 import { cotestWire } from "./coland-api/wire-client";
@@ -1161,6 +1161,16 @@ async function runFlatTopicChats(alice: Page, bob: Page, mainMessages: string[],
     for (const message of mainMessages) await expect(page.locator(".chat-message").filter({ hasText: message })).toHaveCount(0);
   }
   const { event: bobWatch, acceptedCut: watchCut } = await ownWatchTransitions(bob, [alice, ...extraDevices], chatId);
+  // Qualify the accepted Watch on each actual Station before consuming its
+  // ephemeral frames. Presence cannot serve as a persistent replication fence.
+  const watchViewers = [{ token: proof!.token, server: undefined }, ...(proof!.peer ? [proof!.peer] : [])];
+  const observedWatchCuts = await Promise.all(watchViewers.map(viewer =>
+    waitForAcceptedDirectCut(() => readCommitStreamCutApi(
+      proof!.request, viewer.token, chat.realm_id!, watchCut.commit_id, { server: viewer.server }), watchCut)));
+  await test.info().attach("signal-baseline-after-accepted-watch", {
+    body: JSON.stringify({ watch_event_id: bobWatch.event_id, observed_cuts: observedWatchCuts,
+      acknowledged_cut_observed: true }), contentType: "application/json",
+  });
   // The watch UI can reappear before the cursorless Signal rail reconnects.
   // Encrypted presence from each accepted peer proves the live path is ready.
   for (const [page, peer] of [[alice, bobWatch.actor_id], [bob, chat.actor_id]] as const) {
@@ -1168,17 +1178,21 @@ async function runFlatTopicChats(alice: Page, bob: Page, mainMessages: string[],
     const presence = page.locator(".presence-row").filter({
       has: page.getByLabel(canonicalJson(peer), { exact: true }),
     });
-    await expect(presence).toHaveClass(/\bpresence-row-online\b/, { timeout: 90_000 });
+    await expect(presence).toHaveClass(/\bpresence-row-online\b/, { timeout: 90_000 }).catch(async error => {
+      const rows = await realSignalReceiver(page).catch(() => []);
+      // Deliberately select public stage metadata, never arbitrary Signal bodies.
+      const allowedStages = new Set(["frame_received", "admitted", "expired", "stale_sequence", "rejected"]);
+      const stages = rows.filter(row => allowedStages.has(row.receive_stage))
+        .map(row => ({ stage: row.receive_stage, envelope_digest_hash: typeof row.envelope_digest === "string"
+          ? createHash("sha256").update(row.envelope_digest).digest("hex") : null }));
+      const file = test.info().outputPath(`direct-presence-stages-${randomUUID()}.json`);
+      const classes = await presence.getAttribute("class").catch(() => "");
+      await writeFile(file, JSON.stringify({ peer_actor_hash: createHash("sha256").update(canonicalJson(peer)).digest("hex"), stages,
+        online: /\bpresence-row-online\b/.test(classes ?? ""), offline: /\bpresence-row-offline\b/.test(classes ?? "") }));
+      await test.info().attach("direct-presence-stages", { path: file, contentType: "application/json" });
+      throw error;
+    });
   }
-  // Presence is ephemeral and does not prove this observer has installed the
-  // peer's preceding accepted Watch. Bind the no-write baseline to its exact
-  // acknowledged Commit before comparing the Signal interval's unchanged head.
-  const observedWatch = await waitForAcceptedDirectCut(() => readCommitStreamCutApi(
-    proof!.request, proof!.token, chat.realm_id!, watchCut.commit_id), watchCut);
-  await test.info().attach("signal-baseline-after-accepted-watch", {
-    body: JSON.stringify({ watch_event_id: bobWatch.event_id, observed_cut: observedWatch,
-      acknowledged_cut_observed: true }), contentType: "application/json",
-  });
   await assertWrongPlaintextStrand(alice, bob, chat.realm_id!, chatId, proof!);
   const classified = await structureWrite(alice, "place", "ak.strand.update", undefined, topicId);
   expect(classified.payload?.target_ref).toBe(chatId);
@@ -1354,14 +1368,19 @@ async function runFlatTopicChats(alice: Page, bob: Page, mainMessages: string[],
     if (sender === alice) {
       await expect(bob.locator(".direct-structure").getByRole("combobox", { name: "Chat", exact: true })
         .locator(`option[value=${JSON.stringify(chatId)}]`)).toContainText(/\d+ unread/, { timeout: 90_000 });
-      await bob.locator(".topbar-notifications-link").click();
-      const notification = bob.locator(".notification-item").filter({
-        has: bob.locator(`a[href$=${JSON.stringify(`/${chatId}`)}]`),
-      }).first();
-      await expect(notification).toBeVisible({ timeout: 90_000 });
+      const notificationsButton = bob.locator(".topbar-notifications-link:visible");
+      await expect(notificationsButton).toHaveCount(1);
+      await notificationsButton.click();
+      const panel = bob.locator(".notifications-drawer-panel");
+      await expect(panel).toBeVisible();
+      const notification = panel.locator(`.notification-item:not(.notification-read)[aria-label=${JSON.stringify(chat.realm_id!)}]`)
+        .filter({ has: bob.locator(".notification-open-chat") });
+      await expect(notification).toHaveCount(1, { timeout: 90_000 });
+      await expect(notification).toBeVisible();
       await notification.locator(".notification-open-chat").click();
-      await expect(bob.locator(".notifications-drawer")).toHaveCount(0);
-      await expect(bob).toHaveURL(new RegExp(`/direct/.*/${chatId}$`));
+      await expect(panel).toHaveCount(0);
+      await expect.poll(() => new URL(bob.url()).pathname.split("/").map(decodeURIComponent))
+        .toEqual(["", "direct", chat.realm_id!, chatId]);
       await expect(bob.locator(".direct-structure").getByRole("combobox", { name: "Chat", exact: true })).toHaveValue(chatId);
       await expect(bob.locator(".direct-structure").getByRole("combobox", { name: "Chat", exact: true })
         .locator(`option[value=${JSON.stringify(chatId)}]`)).not.toContainText("unread", { timeout: 90_000 });

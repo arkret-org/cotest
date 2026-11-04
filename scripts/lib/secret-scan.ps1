@@ -276,8 +276,7 @@ function Add-SecretLeaksFromReader {
     )
 
     $lineNo = 0
-    while (-not $Reader.EndOfStream) {
-        $line = $Reader.ReadLine()
+    while ($null -ne ($line = $Reader.ReadLine())) {
         $lineNo += 1
         foreach ($pattern in $Patterns) {
             if ($line -match $pattern.pattern) {
@@ -294,6 +293,128 @@ function Add-SecretLeaksFromReader {
                         preview        = ConvertTo-SecretPreview -Line $line
                     })
             }
+        }
+    }
+}
+
+
+# HAR serializes credentials as separate name/value members. Scan its typed
+# transport fields and decoded bodies in addition to the ordinary text view.
+function Add-HarSecretLeaksFromReader {
+    param($Reader, [string]$DisplayPath, [string]$ArtifactClass, $Patterns, $Leaks)
+    $text = $Reader.ReadToEnd()
+    $rawReader = [System.IO.StringReader]::new($text)
+    try { Add-SecretLeaksFromReader -Reader $rawReader -DisplayPath $DisplayPath -ArtifactClass $ArtifactClass -Patterns $Patterns -Leaks $Leaks }
+    finally { $rawReader.Dispose() }
+    $pattern = $null
+    $decoded = [System.Collections.Generic.List[string]]::new()
+    try {
+        $document = ConvertFrom-Json -InputObject $text -AsHashtable -Depth 100 -ErrorAction Stop
+        if ($document -isnot [System.Collections.IDictionary] -or
+            -not $document.Contains('log') -or $document.log -isnot [System.Collections.IDictionary] -or
+            -not $document.log.Contains('entries')) { throw 'Unrecognized HAR document' }
+        foreach ($entry in @($document.log.entries)) {
+            foreach ($side in @('request', 'response')) {
+                if ($entry -isnot [System.Collections.IDictionary] -or -not $entry.Contains($side)) { continue }
+                $message = $entry[$side]
+                if ($message -isnot [System.Collections.IDictionary]) { continue }
+                foreach ($collection in @('headers', 'cookies')) {
+                    if (-not $message.Contains($collection)) { continue }
+                    foreach ($field in @($message[$collection])) {
+                        if ($field -isnot [System.Collections.IDictionary] -or -not $field.Contains('value')) { continue }
+                        $value = [string]$field.value
+                        $name = if ($field.Contains('name')) { [string]$field.name } else { '' }
+                        if (($collection -eq 'cookies' -or $name -match '^(?i:authorization|proxy-authorization|dpop|cookie|set-cookie)$') -and
+                            -not [string]::IsNullOrWhiteSpace($value) -and
+                            $value.Trim() -notmatch "^(?i:(?:Bearer|DPoP|Basic)\s+)?$($script:RedactedValuePattern)$") {
+                            $pattern = 'har_credential_transport_field'
+                        }
+                    }
+                }
+                foreach ($field in @('url', 'redirectURL')) {
+                    if ($message.Contains($field) -and $message[$field] -is [string]) { $decoded.Add($message[$field]) }
+                }
+                if ($message.Contains('postData') -and $message.postData -is [System.Collections.IDictionary]) {
+                    if ($message.postData.Contains('text') -and $message.postData.text -is [string]) { $decoded.Add($message.postData.text) }
+                    if ($message.postData.Contains('params')) {
+                        foreach ($parameter in @($message.postData.params)) {
+                            if ($parameter -is [System.Collections.IDictionary] -and $parameter.Contains('name') -and $parameter.Contains('value')) {
+                                $decoded.Add((ConvertTo-Json -InputObject @{ ([string]$parameter.name) = $parameter.value } -Compress -Depth 10))
+                            }
+                        }
+                    }
+                }
+                if ($message.Contains('queryString')) {
+                    foreach ($parameter in @($message.queryString)) {
+                        if ($parameter -is [System.Collections.IDictionary] -and $parameter.Contains('name') -and $parameter.Contains('value')) {
+                            $decoded.Add((ConvertTo-Json -InputObject @{ ([string]$parameter.name) = $parameter.value } -Compress -Depth 10))
+                        }
+                    }
+                }
+            }
+        }
+    } catch { $pattern = 'har_uninspectable_capture' }
+    if ($pattern) {
+        $Leaks.Add([pscustomobject]@{
+            path = $DisplayPath; line = 1; pattern = $pattern
+            category = $script:SecretCategoryCredential; artifact_class = $ArtifactClass
+            verdict = Get-SecretLeakVerdict -Category $script:SecretCategoryCredential -ArtifactClass $ArtifactClass
+            preview = 'HAR transport capture contains unredacted credentials or cannot be inspected; values omitted.'
+        })
+    }
+    foreach ($body in $decoded) {
+        $bodyReader = [System.IO.StringReader]::new($body)
+        try { Add-SecretLeaksFromReader -Reader $bodyReader -DisplayPath $DisplayPath -ArtifactClass $ArtifactClass -Patterns $Patterns -Leaks $Leaks }
+        finally { $bodyReader.Dispose() }
+    }
+}
+
+
+# Built-in Playwright HTML stores API fill arguments in an embedded ZIP.
+# Inspect members in memory without extracting any credential-bearing bytes.
+function Add-HtmlReportSecretLeaksFromReader {
+    param($Reader, [string]$DisplayPath, [string]$ArtifactClass, $Patterns, $Leaks)
+    $text = $Reader.ReadToEnd()
+    $rawReader = [IO.StringReader]::new($text)
+    try { Add-SecretLeaksFromReader -Reader $rawReader -DisplayPath $DisplayPath -ArtifactClass $ArtifactClass -Patterns $Patterns -Leaks $Leaks }
+    finally { $rawReader.Dispose() }
+    if (-not $text.Contains('playwrightReportBase64')) { return }
+    $encodedReports = [regex]::Matches($text, 'data:application/zip;base64,([A-Za-z0-9+/=]+)')
+    if ($encodedReports.Count -eq 0) {
+        $Leaks.Add([pscustomobject]@{
+            path = "$DisplayPath!embedded-playwright-report"; line = 1; pattern = 'uninspectable_embedded_report'
+            category = $script:SecretCategoryCredential; artifact_class = $ArtifactClass
+            verdict = Get-SecretLeakVerdict -Category $script:SecretCategoryCredential -ArtifactClass $ArtifactClass
+            preview = 'Playwright embedded report format is unavailable; whole-capture disposal is required.'
+        })
+        return
+    }
+    foreach ($match in $encodedReports) {
+        try {
+            $stream = [IO.MemoryStream]::new([Convert]::FromBase64String($match.Groups[1].Value))
+            try {
+                $archive = [IO.Compression.ZipArchive]::new($stream, [IO.Compression.ZipArchiveMode]::Read)
+                try {
+                    foreach ($entry in $archive.Entries) {
+                        if ($entry.Length -eq 0) { continue }
+                        if ($entry.Length -gt 64MB) { throw 'Embedded report member exceeds inspection limit' }
+                        $entryStream = $entry.Open()
+                        $entryReader = [IO.StreamReader]::new($entryStream, $true)
+                        try {
+                            $memberScanner = if ([IO.Path]::GetExtension($entry.FullName) -ieq '.har') { 'Add-HarSecretLeaksFromReader' } else { 'Add-SecretLeaksFromReader' }
+                            & $memberScanner -Reader $entryReader -DisplayPath "$DisplayPath!embedded-playwright-report!$($entry.FullName)" `
+                                -ArtifactClass $ArtifactClass -Patterns $Patterns -Leaks $Leaks
+                        } finally { $entryReader.Dispose(); $entryStream.Dispose() }
+                    }
+                } finally { $archive.Dispose() }
+            } finally { $stream.Dispose() }
+        } catch {
+            $Leaks.Add([pscustomobject]@{
+                path = "$DisplayPath!embedded-playwright-report"; line = 1; pattern = 'uninspectable_embedded_report'
+                category = $script:SecretCategoryCredential; artifact_class = $ArtifactClass
+                verdict = Get-SecretLeakVerdict -Category $script:SecretCategoryCredential -ArtifactClass $ArtifactClass
+                preview = 'Embedded Playwright archive could not be inspected; whole-capture disposal is required.'
+            })
         }
     }
 }
@@ -342,12 +463,9 @@ function Find-SecretLeaks {
                             $stream = $entry.Open()
                             $reader = New-Object System.IO.StreamReader($stream, $true)
                             try {
-                                Add-SecretLeaksFromReader `
-                                    -Reader $reader `
-                                    -DisplayPath "$($file.FullName)!$($entry.FullName)" `
-                                    -ArtifactClass $artifactClass `
-                                    -Patterns $patterns `
-                                    -Leaks $leaks
+                                $scanReader = if ([IO.Path]::GetExtension($entry.FullName) -ieq '.har') { 'Add-HarSecretLeaksFromReader' } elseif ([IO.Path]::GetExtension($entry.FullName) -in @('.html', '.htm')) { 'Add-HtmlReportSecretLeaksFromReader' } else { 'Add-SecretLeaksFromReader' }
+                                & $scanReader -Reader $reader -DisplayPath "$($file.FullName)!$($entry.FullName)" `
+                                    -ArtifactClass $artifactClass -Patterns $patterns -Leaks $leaks
                             }
                             finally {
                                 $reader.Dispose()
@@ -369,12 +487,9 @@ function Find-SecretLeaks {
                 $stream = [System.IO.File]::OpenRead($file.FullName)
                 $reader = New-Object System.IO.StreamReader($stream, $true)
                 try {
-                    Add-SecretLeaksFromReader `
-                        -Reader $reader `
-                        -DisplayPath $file.FullName `
-                        -ArtifactClass $artifactClass `
-                        -Patterns $patterns `
-                        -Leaks $leaks
+                    $scanReader = if ($file.Extension -ieq '.har') { 'Add-HarSecretLeaksFromReader' } elseif ($file.Extension -in @('.html', '.htm')) { 'Add-HtmlReportSecretLeaksFromReader' } else { 'Add-SecretLeaksFromReader' }
+                    & $scanReader -Reader $reader -DisplayPath $file.FullName `
+                        -ArtifactClass $artifactClass -Patterns $patterns -Leaks $leaks
                 }
                 finally {
                     $reader.Dispose()
@@ -416,6 +531,17 @@ function Protect-SecretBearingFile {
 
     if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) {
         return 0
+    }
+    if ([IO.Path]::GetExtension($Path) -ieq '.har') {
+        # Whole-capture disposal also removes opaque cookies, escaped request
+        # bodies and future HAR fields that a partial rewrite could overlook.
+        $hash = (Get-FileHash -LiteralPath $Path -Algorithm SHA256).Hash.ToLowerInvariant()
+        $bytes = (Get-Item -LiteralPath $Path).Length
+        [ordered]@{
+            log = [ordered]@{ version = '1.2'; creator = @{ name = 'Arkret safe diagnostic receipt'; version = '1' }; entries = @() }
+            arkret_redaction_receipt = [ordered]@{ original_sha256 = $hash; original_bytes = $bytes; reason = 'Unsafe HAR capture discarded; no HTTP fields retained.' }
+        } | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $Path -Encoding utf8
+        return 1
     }
     $lines = [System.IO.File]::ReadAllLines($Path)
     $changed = 0

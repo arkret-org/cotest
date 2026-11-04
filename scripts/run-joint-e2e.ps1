@@ -6941,7 +6941,7 @@ if (Test-Path -LiteralPath $serviceLogDir) {
     $secretScanRoots.Add($serviceLogDir)
 }
 foreach ($directory in Get-ChildItem -LiteralPath $jointDir -Directory -ErrorAction SilentlyContinue) {
-    if ($directory.Name -eq 'third-party-invites' -or $directory.Name -match '(?i)(state|objects|diagnostic|test-results|playwright-output|crash|checkpoint|telemetry)') {
+    if ($directory.Name -eq 'third-party-invites' -or $directory.Name -match '(?i)(state|objects|diagnostic|test-results|playwright-output|playwright-report|crash|checkpoint|telemetry)') {
         if ($directory.Name -match '(?i)^coland(?:-[a-z0-9_-]+)?-state$') {
             # The service identity bundle is a durable restore store whose
             # signed registration receipts and WebVH operations necessarily

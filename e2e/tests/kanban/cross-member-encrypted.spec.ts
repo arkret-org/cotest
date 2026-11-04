@@ -1,3 +1,4 @@
+import { observeCardSaveAction } from "../../helpers/action-evidence";
 import { addBoardList, fillCardNarrative } from "../../helpers/kanban-product-ui";
 import { restartRunnerStation } from "../../helpers/station-runtime";
 import { proveKanbanHistoryTail, seedKanbanHistory } from "../../helpers/kanban-history";
@@ -545,6 +546,7 @@ async function addEncryptedDescription(
     if (descriptionUpdate(request)) ingressObserved = true;
   };
   page.on("request", captureRequest);
+  const finishActionTrace = await observeCardSaveAction(page);
   try {
     await save.click();
     while (Date.now() < responseDeadline) {
@@ -580,6 +582,9 @@ async function addEncryptedDescription(
     }
   } finally {
     page.off("request", captureRequest);
+    await finishActionTrace(test.info(), { pre_authoring_retries: preAuthoringRetries,
+      ingress_observed: ingressObserved, saw_save_progress: sawSaveProgress,
+      saw_current_card_wait: sawCurrentCardWait }).catch(() => console.info("Card action diagnostic unavailable"));
     await test.info().attach("creator-description-pre-authoring-retries", {
       body: JSON.stringify({ pre_authoring_retries: preAuthoringRetries, ingress_observed: ingressObserved,
         saw_save_progress: sawSaveProgress, saw_current_card_wait: sawCurrentCardWait }),

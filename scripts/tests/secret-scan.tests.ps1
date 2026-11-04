@@ -303,6 +303,7 @@ try {
     Assert-True ($canaryAfter.Count -eq 0) "a re-scan of the redacted artifact must be clean; got: $(@($canaryAfter | ForEach-Object { $_.pattern }) -join ', ')"
     $runnerSource = Get-Content -LiteralPath (Join-Path $PSScriptRoot '..\run-joint-e2e.ps1') -Raw
     Assert-True ($runnerSource.Contains("`$directory.Name -eq 'third-party-invites'")) "provider results, JUnit and summary must be included in strict artifact scanning"
+    Assert-True ($runnerSource.Contains('playwright-output|playwright-report')) 'the actual collected scan roots must include the browser report, not only failure outputs'
 
     # Native child streams remain published beside raw.log; scan and redact
     # those originals too, even if the merged log was already sanitized.
@@ -334,6 +335,90 @@ try {
     $deviceSource = Get-Content -LiteralPath (Join-Path $PSScriptRoot '..\..\e2e\tests\identity\device-key-lifecycle.spec.ts') -Raw
     Assert-True ($deviceSource.Contains('test.use({ trace: "off", video: "off", screenshot: "off" });')) 'device key pairing must not retain private fragment or QR captures'
 
+
+    # Actual HAR shape: multiline/reordered name/value members, cookies and
+    # escaped request bodies must not bypass the line-oriented detectors.
+    $harRoot = Join-Path $scanRoot 'har-capture'
+    $null = New-Item -ItemType Directory -Path $harRoot
+    $harPath = Join-Path $harRoot 'network.har'
+    $harCredential = 'synthetic-har-auth-AAAABBBBCCCCDDDD'
+    $harCookie = 'synthetic-har-cookie-EEEEFFFFGGGGHHHH'
+    $harPrivate = 'synthetic-har-private-IIIIJJJJKKKKLLLL'
+    $har = [ordered]@{ log = [ordered]@{ version = '1.2'; entries = @(@{
+        request = @{
+            url = 'https://example.invalid/resource'
+            headers = @(@{ value = "Bearer $harCredential"; name = 'AUTHORIZATION' }, @{ name = 'dPoP'; value = $harCredential })
+            cookies = @(@{ name = 'session'; value = $harCookie })
+            postData = @{ text = "{`"root_seed`":`"$harPrivate`"}" }
+        }
+        response = @{ headers = @(@{ name = 'Set-Cookie'; value = "session=$harCookie" }) }
+    }) } }
+    $har | ConvertTo-Json -Depth 12 | Set-Content -LiteralPath $harPath -Encoding utf8
+    $harOriginalHash = (Get-FileHash -LiteralPath $harPath -Algorithm SHA256).Hash.ToLowerInvariant()
+    $harLeaks = @(Find-SecretLeaks -ScanRoots @($harPath))
+    Assert-True (@($harLeaks | Where-Object pattern -eq 'har_credential_transport_field').Count -gt 0) 'HAR header/cookie name-value pairs must be detected independently of JSON order and newlines'
+    Assert-True (@($harLeaks | Where-Object category -eq 'recovery_private_material').Count -gt 0) 'decoded HAR request bodies must retain the private-material verdict'
+    $harStoreLeaks = @(Find-SecretLeaks -ScanRoots @(@{path=$harPath;artifact_class='durable_protocol_store'}))
+    Assert-True (@($harStoreLeaks | Where-Object { $_.category -eq 'recovery_private_material' -and $_.verdict -eq 'fail' }).Count -gt 0) 'HAR private bodies cannot inherit a durable credential allowance'
+    $harPreviews = ($harLeaks | ConvertTo-Json -Depth 6)
+    foreach ($secret in @($harCredential,$harCookie,$harPrivate)) {
+        Assert-True (-not $harPreviews.Contains($secret)) 'HAR findings must never publish credential or private body bytes'
+    }
+    $harRedaction = Protect-SecretBearingArtifacts -Leaks $harLeaks
+    Assert-True (@($harRedaction.redacted_files).Count -eq 1) 'an unsafe HAR must be replaced by one safe whole-capture receipt'
+    $harReceiptText = Get-Content -LiteralPath $harPath -Raw
+    $harReceipt = $harReceiptText | ConvertFrom-Json
+    Assert-True ($harReceipt.arkret_redaction_receipt.original_sha256 -ceq $harOriginalHash) 'receipt must bind the exact discarded HAR bytes'
+    Assert-True (@($harReceipt.log.entries).Count -eq 0) 'a receipt must retain no opaque HTTP capture fields'
+    foreach ($secret in @($harCredential,$harCookie,$harPrivate)) {
+        Assert-True (-not $harReceiptText.Contains($secret)) 'no credential, cookie or private request body may remain in the receipt'
+    }
+    Assert-True (@(Find-SecretLeaks -ScanRoots @($harPath)).Count -eq 0) 'the HAR disposal receipt must rescan clean'
+
+    $safeHarPath = Join-Path $harRoot 'safe.har'
+    $safeHar = @{log=@{entries=@(@{request=@{
+        url='https://example.invalid/public?sort=asc'
+        headers=@(@{name='Authorization';value='Bearer [redacted]'},@{name='X-Request-Id';value='public-request-id'})
+        cookies=@(@{name='session';value='[redacted]'})
+        postData=@{text='{"token":"[redacted]"}'}
+    }})}}
+    $safeHar | ConvertTo-Json -Depth 10 | Set-Content -LiteralPath $safeHarPath -Encoding utf8
+    Assert-True (@(Find-SecretLeaks -ScanRoots @($safeHarPath)).Count -eq 0) 'public and exactly redacted HAR fields must remain admissible'
+    $safeHar.log.entries[0].request.headers[0].value = 'Bearer [redacted]unsafe-tail'
+    $safeHar | ConvertTo-Json -Depth 10 | Set-Content -LiteralPath $safeHarPath -Encoding utf8
+    Assert-True (@(Find-SecretLeaks -ScanRoots @($safeHarPath)).Count -gt 0) 'a HAR redaction marker with a private suffix must still fail'
+
+    $invalidHarPath = Join-Path $harRoot 'invalid.har'
+    Set-Content -LiteralPath $invalidHarPath -Value '{invalid-json'
+    Assert-True (@(Find-SecretLeaks -ScanRoots @($invalidHarPath) | Where-Object pattern -eq 'har_uninspectable_capture').Count -gt 0) 'an unreadable HAR must fail closed'
+
+    $harZip = Join-Path $harRoot 'capture.zip'
+    $har | ConvertTo-Json -Depth 12 | Set-Content -LiteralPath $harPath -Encoding utf8
+    Add-Type -AssemblyName System.IO.Compression.FileSystem
+    $archive = [IO.Compression.ZipFile]::Open($harZip,[IO.Compression.ZipArchiveMode]::Create)
+    try { $null = [IO.Compression.ZipFileExtensions]::CreateEntryFromFile($archive,$harPath,'nested/network.har') }
+    finally { $archive.Dispose() }
+    $harZipLeaks = @(Find-SecretLeaks -ScanRoots @($harZip))
+    Assert-True (@($harZipLeaks | Where-Object pattern -eq 'har_credential_transport_field').Count -gt 0) 'nested archive HAR credentials require the same structural scan'
+    Assert-True (@($harZipLeaks | Where-Object category -eq 'recovery_private_material').Count -gt 0) 'nested archive decoded HAR bodies must retain the private-material detector'
+    $harZipRedaction = Protect-SecretBearingArtifacts -Leaks $harZipLeaks
+    Assert-True (@($harZipRedaction.not_redacted).Count -gt 0) 'unsafe archives must be reported for whole-archive disposal, never claimed redacted'
+    $embeddedReport = Join-Path $harRoot 'legacy-playwright-report.html'
+    $embeddedBytes = [Convert]::ToBase64String([IO.File]::ReadAllBytes($harZip))
+    Set-Content -LiteralPath $embeddedReport -Value "<script>window.playwrightReportBase64 = 'data:application/zip;base64,$embeddedBytes';</script>"
+    $embeddedHash = (Get-FileHash -LiteralPath $embeddedReport -Algorithm SHA256).Hash
+    $embeddedLeaks = @(Find-SecretLeaks -ScanRoots @($embeddedReport))
+    Assert-True (@($embeddedLeaks | Where-Object category -eq 'recovery_private_material').Count -gt 0) 'base64 embedded Playwright archives must not conceal private material'
+    Assert-True (@($embeddedLeaks | Where-Object pattern -eq 'har_credential_transport_field').Count -gt 0) 'an embedded archive must use the structural HAR scanner too'
+    $embeddedRedaction = Protect-SecretBearingArtifacts -Leaks $embeddedLeaks
+    Assert-True (@($embeddedRedaction.not_redacted).Count -gt 0) 'encoded archives require explicit whole-capture disposal, not a claimed partial redaction'
+    Assert-True ((Get-FileHash -LiteralPath $embeddedReport -Algorithm SHA256).Hash -ceq $embeddedHash) 'report the original encoded capture unchanged until whole-capture disposal'
+    $unknownEmbeddedReport = Join-Path $harRoot 'unknown-report-format.html'
+    Set-Content -LiteralPath $unknownEmbeddedReport -Value '<script>window.playwrightReportBase64 = "unknown-format";</script>'
+    Assert-True (@(Find-SecretLeaks -ScanRoots @($unknownEmbeddedReport) | Where-Object pattern -eq 'uninspectable_embedded_report').Count -gt 0) 'a changed or incomplete encoded report format must fail closed'
+    $usersSource = Get-Content -LiteralPath (Join-Path $PSScriptRoot '../../e2e/helpers/users.ts') -Raw
+    Assert-True ($usersSource -notmatch 'recordHar\s*:') 'authenticated browser fixtures must never persist raw HAR before sanitization'
+
     # Wordlist sanity: exactly the standard 2048-entry BIP-39 English list.
     $dpopPattern = Get-SecretLeakPatterns | Where-Object name -eq "dpop_header"
     Assert-True (-not (& $dpopPattern.validate '  265 |     dpop: mintDpopProof({')) "numbered source invocation must not be mistaken for a DPoP credential"
@@ -350,6 +435,9 @@ try {
     # default on the joint runner.
     $playwrightConfig = Get-Content -LiteralPath (Join-Path $PSScriptRoot "..\..\e2e\playwright.config.ts") -Raw
     Assert-True ($playwrightConfig -match 'trace:\s*"off"') "Playwright trace persistence must remain disabled"
+    Assert-True ($playwrightConfig.Contains('./reporters/safe-summary.ts')) 'browser reporting must use metadata-only output instead of persisting private API fill arguments'
+    Assert-True ($playwrightConfig -notmatch '\["html"\s*,') 'the built-in encoded HTML report cannot retain joint credential ceremonies'
+
     Assert-True ($playwrightConfig -notmatch 'trace:\s*"retain-on-failure"') "retain-on-failure traces persist joint test secrets"
 } finally {
     Remove-Item -Recurse -Force $scanRoot -ErrorAction SilentlyContinue

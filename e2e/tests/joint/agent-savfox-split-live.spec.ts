@@ -4,12 +4,14 @@ import { accountActorId } from "../../helpers/coland-api";
 import { agentMemberRow } from "../../helpers/product-locators";
 import { actorRow } from "../../helpers/product-locators";
 import { openSavfoxArkretChannel, startSavfoxPairing, saveSavfoxChannel, provisionAgent, pairManagedSavfoxAgent, addAgentToRealm, composeSourceAgentMention, createSidecarSourceCard, waitForSidecarEnsureAcceptance, eventIdFromMessage, displayPairingCode } from "../../helpers/agent-sidecar-product-ui";
+import { uint64Decimal } from "../../helpers/uint64-decimal";
 import { observeNativeSearch } from "../../helpers/native-search";
 import { openAndPairSecondController } from "../../helpers/paired-controller";
 import { agentTopicChats } from "../../helpers/direct-structure";
 import { revealTimelineEvent } from "../../helpers/timeline-visibility";
 import {
   expect,
+  operationSelector,
   type APIRequestContext,
   type Browser,
   type BrowserContext,
@@ -554,7 +556,7 @@ privatePairingTest.describe("Agent Savfox split live @fully-implemented", () => 
           contentType: "application/json",
         });
         expect(
-          mlsSubmissions.distinctEventIds("ak.mls.commit", 1),
+          mlsSubmissions.distinctEventIds("ak.mls.commit", "1"),
           "a resumed materialization must not author a second epoch-1 Commit",
         ).toHaveLength(1);
         expect(
@@ -2261,22 +2263,48 @@ async function dropAccountSubscribeStream(
   restore: () => Promise<void>;
 }> {
   let blocked = 0;
+  let active = true;
+  const accountOperation = operationSelector("GET", "/_arkret/self/account/subscribe");
+  expect(accountOperation, "Account channel must be a registered operation").toBeDefined();
+  const reconnect = new Set<() => Promise<void>>();
   const handler = async (route: Route) => {
     blocked += 1;
     await route.abort("connectionfailed");
   };
   await page.route(isAccountSubscribe, handler);
-  // Routing only affects new requests. Terminate the already-open stream,
-  // restore ordinary transport, and prove its reconnect reached the cut.
+  await page.routeWebSocket(url => url.pathname.startsWith("/_arkret/"), route => {
+    const server = route.connectToServer();
+    const operations = new Map<string, string>();
+    reconnect.add(() => route.close({ code: 1000, reason: "cotest Account cut restored" }));
+    server.onMessage(message => {
+      let accountData = false;
+      try {
+        const frame = JSON.parse(message.toString());
+        if (frame.kind === "opened" && typeof frame.channel_id === "string") {
+          operations.set(frame.channel_id, frame.operation_id);
+        }
+        accountData = frame.kind === "data" && operations.get(frame.channel_id) === accountOperation;
+        if (frame.kind === "closed") operations.delete(frame.channel_id);
+      } catch { /* Preserve authentic non-JSON bytes for the product verifier. */ }
+      if (active && accountData) { blocked += 1; return; }
+      // Realm and Signal frames, handshakes and controls retain their bytes.
+      route.send(message);
+    });
+  });
+  // New routing cannot affect the old shared socket. A real reload retires it
+  // and proves a fresh Account request/frame actually reached the cut.
   if (options.disconnectExisting !== false) {
-    await page.context().setOffline(true);
-    await page.context().setOffline(false);
+    await page.reload();
     await expect.poll(() => blocked, { timeout: 60_000 }).toBeGreaterThan(0);
   }
   return {
     blockedCount: () => blocked,
     restore: async () => {
+      active = false;
       await page.unroute(isAccountSubscribe, handler);
+      // Dropped Account frames were never acknowledged. Reconnect through the
+      // original durable cursor instead of waiting behind their credit window.
+      await Promise.all([...reconnect].map(close => close().catch(() => {})));
     },
   };
 }
@@ -2284,7 +2312,7 @@ async function dropAccountSubscribeStream(
 type MlsTransactionEvent = {
   kind: string;
   eventId: string;
-  nextEpoch?: number;
+  nextEpoch?: string;
   governanceMetadata?: Record<string, unknown>;
 };
 /// The signed Event carried by an `EventInitialSubmission`; the shared decoder
@@ -2312,7 +2340,7 @@ function mlsTransactionEvents(postData: string | null): MlsTransactionEvent[] {
       return {
         kind: event.kind!,
         eventId: event.event_id!,
-        nextEpoch: typeof nextEpoch === "number" ? nextEpoch : undefined,
+        nextEpoch: nextEpoch === undefined ? undefined : uint64Decimal(nextEpoch),
         governanceMetadata: typeof governanceBinding === "object" && governanceBinding !== null
           ? Object.fromEntries([
               "effective_scope", "base_group_state_ref", "previous_epoch",
@@ -2337,7 +2365,7 @@ async function receiptCount(path: string): Promise<number> {
 /// materialization can be compared against the one that was cut.
 function trackMlsSubmissions(page: Page): {
   all: () => MlsTransactionEvent[][];
-  distinctEventIds: (kind: string, nextEpoch?: number) => string[];
+  distinctEventIds: (kind: string, nextEpoch?: string) => string[];
   diagnostics: () => unknown;
 } {
   const submitted: MlsTransactionEvent[][] = [];

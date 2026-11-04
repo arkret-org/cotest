@@ -23,6 +23,7 @@
   "include": [
     "config/**/*.ts",
     "helpers/**/*.ts",
+    "reporters/**/*.ts",
     "setup/**/*.ts",
     "tests/**/*.ts",
     "playwright.config.ts"
