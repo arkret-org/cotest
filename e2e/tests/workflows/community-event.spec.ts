@@ -35,6 +35,13 @@ async function assertAssigned(page: Page, principalId: string): Promise<void> {
   await detail.locator(".card-detail-assignee-cancel").click();
 }
 
+async function closeProjectCard(page: Page, boardPath: string): Promise<void> {
+  const detail = page.locator(".card-detail-modal");
+  await detail.locator(".card-detail-close-button").click();
+  await expect(detail).toHaveCount(0);
+  await expect(page).toHaveURL(url => url.pathname === boardPath);
+}
+
 // Retry only a UI activation that has not handed off its exact draft. The
 // product clears this field synchronously when it enqueues the original.
 async function submitProjectCard(column: Locator, title: string): Promise<void> {
@@ -211,8 +218,7 @@ test("three browser-owned members deliver a community event through encrypted di
       assignmentIds.set(task.title, sdkEventDerivedObjectId(assignment));
       acceptedAssignmentIds.add(sdkEventDerivedObjectId(assignment));
       await assertAssigned(alice.page.page, task.owner.user.id);
-      await detail.locator(".card-detail-close-button").click();
-      await expect(detail).toHaveCount(0);
+      await closeProjectCard(alice.page.page, boardPath!);
       checkpoint(`accepted encrypted deliverable and reopened assignee: ${task.title}`);
     }
     checkpoint("three deliverables accepted with encrypted descriptions and explicit assignees");
@@ -227,7 +233,7 @@ test("three browser-owned members deliver a community event through encrypted di
         await expect(detail.locator(".card-description-panel")).toContainText(task.body, { timeout: 120_000 });
         await expect(detail.locator(".card-detail-description-locked")).toHaveCount(0);
         await assertAssigned(member.page.page, task.owner.user.id);
-        await detail.locator(".card-detail-close-button").click();
+        await closeProjectCard(member.page.page, boardPath!);
       }
     }
     checkpoint("all three members decrypt each deliverable and see its assignee");
@@ -286,7 +292,7 @@ test("three browser-owned members deliver a community event through encrypted di
         await expect(detail.locator(".card-description-panel")).toContainText(task.body, { timeout: 120_000 });
         await assertAssigned(member.page.page, task.owner.user.id);
         await expect(detail.locator(".card-detail-description-locked")).toHaveCount(0);
-        await detail.locator(".card-detail-close-button").click();
+        await closeProjectCard(member.page.page, boardPath!);
       }
     }
     checkpoint("all three members retain the accepted discussion and assigned encrypted deliverables after document reload");
@@ -327,7 +333,7 @@ test("three browser-owned members deliver a community event through encrypted di
       expect(acceptedAssignmentIds.has(nextRelationId), "a handover never reuses any previously accepted RelationId").toBe(false);
       acceptedAssignmentIds.add(nextRelationId);
       assignmentIds.set(handoverTask.title, nextRelationId);
-      await detail.locator(".card-detail-close-button").click();
+      await closeProjectCard(page, boardPath!);
       for (const member of flows) {
         await member.page.page.reload({ waitUntil: "domcontentloaded" });
         const card = member.page.page.locator(".kanban-card").filter({ hasText: handoverTask.title });
@@ -336,7 +342,7 @@ test("three browser-owned members deliver a community event through encrypted di
         const reopened = member.page.page.locator(".card-detail-modal");
         await expect(reopened.locator(".card-description-panel")).toContainText(handoverTask.body, { timeout: 120_000 });
         await assertAssigned(member.page.page, nextOwner.user.id);
-        await reopened.locator(".card-detail-close-button").click();
+        await closeProjectCard(member.page.page, boardPath!);
       }
       checkpoint(`assignment handover accepted and retained by all members: ${previousOwner.user.name} to ${nextOwner.user.name}`);
       previousOwner = nextOwner;
