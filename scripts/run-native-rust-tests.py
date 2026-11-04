@@ -230,7 +230,7 @@ def run(command: list[str], *, cargo_messages: Path | None = None,
     if executable is None:
         raise RuntimeError("openssl is required to create native test TLS credentials")
     with tempfile.TemporaryDirectory(prefix="cotest-native-tls-") as scratch:
-        directory = Path(scratch)
+        directory = Path(scratch).resolve()
         ca = directory / "ca.pem"
         ca_key = directory / "ca-key.pem"
         key = directory / "server-key.pem"

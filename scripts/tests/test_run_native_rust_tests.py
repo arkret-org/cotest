@@ -232,6 +232,38 @@ class NativeChildTests(unittest.TestCase):
                 child.assert_not_called()
         self.assertEqual(list(reports.iterdir()), [])
 
+    @unittest.skipUnless(os.name == "posix", "Directory aliases require symlinks")
+    def test_owned_libtest_directory_resolves_temporary_parent_alias(self):
+        actual = self.root / "actual-tls"
+        actual.mkdir()
+        alias = self.root / "temporary-alias"
+        alias.symlink_to(actual, target_is_directory=True)
+        report = self.root / "native-results.json"
+
+        def fake_openssl(_executable, *arguments):
+            for option in ("-out", "-keyout"):
+                if option in arguments:
+                    Path(arguments[arguments.index(option) + 1]).write_text("fixture")
+
+        def cargo(_command, *, env, **_kwargs):
+            reports = Path(env[runner.LIBTEST_REPORT_ROOT])
+            self.assertEqual(reports, actual / "libtest")
+            self.assertEqual(reports.resolve(), reports)
+            self.assertTrue(reports.is_dir())
+            (reports / "child.json").write_text(json.dumps({
+                "binary": str(self.root / "fixture"), "tests": [], "exit_code": 0,
+            }))
+            return subprocess.CompletedProcess(_command, 0)
+
+        with patch.object(runner.tempfile, "TemporaryDirectory") as temporary, \
+                patch.object(runner, "openssl", side_effect=fake_openssl), \
+                patch.object(runner.shutil, "which", return_value="openssl"), \
+                patch.object(runner, "cargo_native_runner", side_effect=lambda command, _root: command), \
+                patch.object(subprocess, "run", side_effect=cargo):
+            temporary.return_value.__enter__.return_value = str(alias)
+            self.assertEqual(runner.run(["cargo", "test"], libtest_report=report), 0)
+        self.assertEqual(json.loads(report.read_text())["cargo_exit_code"], 0)
+
     def test_libtest_report_rejects_overwrite_and_non_cargo_commands_before_launch(self):
         report = self.root / "retained.json"
         report.write_text("retained")
