@@ -32,3 +32,12 @@ test("MLS diagnostics discard unknown messages and malformed public values", () 
   assert.deepEqual(result.fields, {});
   assert.equal(result.code, "MLS send readiness dependencies observed");
 });
+
+
+test("Realm follow diagnostics retain only fixed failure reasons", () => {
+  const result = publicMlsRuntimeDiagnostic('Realm stream follow interrupted; retrying reason="current cut regresses or forks the durable stream fixture-private-material Authorization=Bearer fixture-sensitive-grant"');
+  assert.equal(result.code, "Realm stream follow interrupted; retrying");
+  assert.deepEqual(result.reasons, ["current cut regresses or forks the durable stream"]);
+  assert.ok(!JSON.stringify(result).includes("fixture-private-material"));
+  assert.ok(!JSON.stringify(result).includes("fixture-sensitive-grant"));
+});

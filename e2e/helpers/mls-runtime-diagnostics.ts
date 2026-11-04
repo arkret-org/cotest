@@ -10,6 +10,8 @@ const runtimeCodes = [
   "accepted MLS artifact convergence is pending",
   "accepted MLS Welcome is not installable yet",
   "MLS send readiness dependencies observed",
+  "Realm stream follow interrupted; retrying",
+  "committed chat producer proof rejected",
 ] as const;
 
 // Only fixed code labels, booleans and public epoch counters cross this boundary.
@@ -27,6 +29,20 @@ export function publicMlsRuntimeDiagnostic(raw: string) {
     if (match) fields[field] = match[1];
   }
   const categories = ["unavailable", "fork", "session", "ratchet", "epoch", "roster", "reference", "secret", "base"].filter(word => raw.toLowerCase().includes(word));
-  return { code, fields, categories };
+  const reasons = [
+    "current cut regresses or forks the durable stream",
+    "live current route ended",
+    "live current account changed",
+    "current cut changed",
+    "read fence",
+    "superseded",
+    "generation",
+    "frozen head",
+    "floor",
+    "proof",
+    "digest",
+    "signature",
+  ].filter(reason => raw.includes(reason));
+  return { code, fields, categories, ...(reasons.length ? { reasons } : {}) };
 }
 

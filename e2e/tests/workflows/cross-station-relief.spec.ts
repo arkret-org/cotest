@@ -32,8 +32,9 @@ async function admitted(page: Page, kind: string, realm: string, action: () => P
   return event;
 }
 
-async function delivered(author: Flow, readers: Flow[], realm: string, text: string) {
+async function delivered(author: Flow, readers: Flow[], realm: string, text: string, observed?: (event: string) => void) {
   const event = await admitted(author.page.page, "ak.message.create", realm, () => author.page.sendTimelineMessage(realm, text));
+  observed?.(String(event.event_id));
   expect(JSON.stringify(event).includes(text), "project content stays encrypted on ingress").toBe(false);
   for (const reader of readers) await expect(reader.page.page.locator(".chat-message").filter({ hasText: text }), `${reader.server} decrypts the accepted report exactly once`).toHaveCount(1, { timeout: 120_000 });
   return event;
@@ -59,6 +60,10 @@ async function runReliefProject(admission: "concurrent" | "late-welcome", browse
   const flows: Flow[] = [];
   const phases: Array<{ phase: string; completed_at: string }> = [];
   const cuts = new Map<string, Cut>();
+  const reportRefs = new Set<string>();
+  const fetchedReports = new Map<ColandKey, Set<string>>();
+  const reads = new Map<ColandKey, Map<string, number>>();
+  const observedDelivery = async (author: Flow, readers: Flow[], target: string, text: string) => delivered(author, readers, target, text, event => reportRefs.add(event));
   const bobMessages: Array<{ event_id: string; digest: string }> = [];
   const failures: Array<{ server: ColandKey; method: string; path: string; status: number; code?: string }> = [];
   const transports = new Map<ColandKey, Awaited<ReturnType<typeof prepareBrowserNetworkOutage>>>();
@@ -92,9 +97,27 @@ async function runReliefProject(admission: "concurrent" | "late-welcome", browse
           const transport = await prepareBrowserNetworkOutage(page);
           transports.set(server, transport);
           if (index === 1) outage = transport;
+          const fetched = new Set<string>();
+          fetchedReports.set(server, fetched);
+          const completedReads = new Map<string, number>();
+          reads.set(server, completedReads);
           page.on("response", async response => {
             const path = new URL(response.url()).pathname;
             if (path.startsWith("/_arkret/") && response.status() >= 400) failures.push({ server, method: response.request().method(), path, status: response.status(), code: wireErrCode(await response.json().catch(() => undefined)) });
+            if (path.startsWith("/_arkret/self/") && response.status() === 200) {
+              const key = `${response.request().method()} ${path}`;
+              completedReads.set(key, (completedReads.get(key) ?? 0) + 1);
+              if (["/_arkret/self/streams/scan", "/_arkret/self/streams/event", "/_arkret/self/account/sync"].includes(path)) {
+                const body = await response.json().catch(() => undefined);
+                const visit = (value: unknown, depth: number) => {
+                  if (depth > 10 || !value || typeof value !== "object") return;
+                  const row = value as Record<string, unknown>;
+                  if (row.kind === "ak.message.create" && typeof row.event_id === "string" && /^ak:event:[A-Za-z0-9_-]{44}$/.test(row.event_id)) fetched.add(row.event_id);
+                  for (const child of Object.values(row)) visit(child, depth + 1);
+                };
+                visit(body, 0);
+              }
+            }
             if (index !== 0 || path !== "/_arkret/self/realm-state-snapshot/head" || response.status() !== 200) return;
             const body = await response.json().catch(() => undefined);
             const entries = body?.current_state_entries;
@@ -160,11 +183,11 @@ async function runReliefProject(admission: "concurrent" | "late-welcome", browse
       await bob.page.gotoTimelineRealm(realm);
     }
     const kickoff = `Relief approved: 120 water packs, three trucks and an audited delivery window. ${stamp}`;
-    const kickoffEvent = await delivered(alice, flows, realm, kickoff);
+    const kickoffEvent = await observedDelivery(alice, flows, realm, kickoff);
     await expect.poll(() => transports.get("server3")!.hasReceivedEvent(String(kickoffEvent.event_id)), { timeout: 120_000,
       message: "the departed-Station transport observer must first observe a real authorized project Event" }).toBe(true);
-    await delivered(bob, flows, realm, `Logistics confirms three trucks and driver assignments. ${stamp}`);
-    await delivered(carol, flows, realm, `Audit confirms the sealed supply manifest. ${stamp}`);
+    await observedDelivery(bob, flows, realm, `Logistics confirms three trucks and driver assignments. ${stamp}`);
+    await observedDelivery(carol, flows, realm, `Audit confirms the sealed supply manifest. ${stamp}`);
     checkpoint("all three Stations exchange and decrypt encrypted project reports");
     auditRealm = await carol.page.createRealm({ title: `Independent relief audit archive ${stamp}`, summary: "The auditor retains an independent encrypted workspace after leaving the shared operation.", joinRule: "invite", mlsActivated: true });
     await carol.page.gotoTimelineRealm(realm);
@@ -182,7 +205,7 @@ async function runReliefProject(admission: "concurrent" | "late-welcome", browse
       await submitOrdinaryComposerDraft(bob.page.page, queued);
       await expect(bob.page.page.locator(".chat-input")).toHaveValue("");
       await expect(bob.page.page.locator(".chat-outbox-count")).toHaveText("1", { timeout: 60_000 });
-      await delivered(alice, [alice, carol], realm!, missed);
+      await observedDelivery(alice, [alice, carol], realm!, missed);
       await expect(bob.page.page.locator(".chat-message").filter({ hasText: missed })).toHaveCount(0);
       await expect(alice.page.page.locator(".chat-message").filter({ hasText: queued })).toHaveCount(0);
       await expect(carol.page.page.locator(".chat-message").filter({ hasText: queued })).toHaveCount(0);
@@ -237,7 +260,7 @@ async function runReliefProject(admission: "concurrent" | "late-welcome", browse
     expect(wireErrCode(await denied.json())).toBe("capability_denied");
     await alice.page.gotoTimelineRealm(realm);
     const afterRevoke = `Coordinator publishes the final route; logistics now has read-only access. ${stamp}`;
-    await delivered(alice, flows, realm, afterRevoke);
+    await observedDelivery(alice, flows, realm, afterRevoke);
     for (const reader of [alice, carol]) await expect(reader.page.page.locator(".chat-message").filter({ hasText: forbiddenReport })).toHaveCount(0);
     // A signed EventId is canonical before admission too. Its failed intent
     // remains local; the send-status marker distinguishes it from accepted history.
@@ -262,7 +285,7 @@ async function runReliefProject(admission: "concurrent" | "late-welcome", browse
         && BigInt(cut.epoch) > BigInt(initialCut.epoch) && cut.revision !== initialCut.revision;
     }, { timeout: 180_000 }).toBe(true);
     const final = `Relief operation completed after auditor departure; remaining Stations retain authorized access. ${stamp}`;
-    const finalEvent = await delivered(alice, [alice, bob], realm, final);
+    const finalEvent = await observedDelivery(alice, [alice, bob], realm, final);
     checkpoint("auditor leaves through Station three; remaining members cover the new membership with a later MLS epoch and continue delivery");
     for (const member of [alice, bob]) {
       await member.page.page.reload({ waitUntil: "domcontentloaded" });
@@ -282,7 +305,7 @@ async function runReliefProject(admission: "concurrent" | "late-welcome", browse
     }
     await carol.page.gotoTimelineRealm(auditRealm);
     await expect(carol.page.page.locator(".connection-status .status-label")).toHaveText("Online", { timeout: 120_000 });
-    const auditEvent = await delivered(carol, [carol], auditRealm, `Auditor archives the completed relief manifest after departing the shared operation. ${stamp}`);
+    const auditEvent = await observedDelivery(carol, [carol], auditRealm, `Auditor archives the completed relief manifest after departing the shared operation. ${stamp}`);
     checkpoint("departed auditor stays authorized and commits an encrypted report in the independent audit Realm");
     await carol.page.page.goto(`/chat/${encodeURIComponent(realm)}`);
     await carol.page.page.reload({ waitUntil: "domcontentloaded" });
@@ -308,6 +331,9 @@ async function runReliefProject(admission: "concurrent" | "late-welcome", browse
           send_buttons: await flow.page.page.locator(".send-chat-button").evaluateAll(nodes => nodes.map(node => ({ disabled: (node as HTMLButtonElement).disabled }))),
           connection: await flow.page.page.locator(".connection-status .status-label").allTextContents(),
           convergence: await flow.page.page.locator(".connection-status .last-error, .epoch-update-required-banner").allTextContents(),
+          accepted_project_events: [...reportRefs].map(event => ({ event_id: event, fetched_over_http: fetchedReports.get(flow.server)?.has(event) ?? false, observed_over_websocket: transports.get(flow.server)?.hasReceivedEvent(event) ?? false })),
+          completed_reads: Object.fromEntries(reads.get(flow.server) ?? []),
+          active_discussions: await flow.page.page.locator(".channel-item.active").allTextContents(),
           mls_runtime: [...(runtimeDiagnostics.get(flow.server)?.values() ?? [])],
           message_states: await flow.page.page.locator(".chat-message-row").evaluateAll(nodes => nodes.map(node => ({ id: node.id, class: node.className,
             crypto_classes: Array.from(node.querySelectorAll(".crypto-status-row")).map(child => child.className),
