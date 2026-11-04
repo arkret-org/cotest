@@ -158,6 +158,37 @@ Assert-Equal 0 $parsed.footer_totals.failed "compile failure is not a failed tes
 Assert-Equal "passed" $parsed.integrity "compile failure counts reconcile"
 Remove-Item -LiteralPath $log -Force
 
+$nativeReport = @{
+    schema_version = 1
+    cargo_exit_code = 101
+    invocations = @(
+        @{ binary = 'target/debug/deps/first-1'; exit_code = 0; tests = @(@{ name = 'same_name'; status = 'passed' }) },
+        @{ binary = 'target/debug/deps/second-2'; exit_code = 101; tests = @(@{ name = 'same_name'; status = 'failed' }) }
+    )
+}
+$nativeLines = @(
+    '=== cotest invocation: cotest/all-tests// ===',
+    '     Running tests/first.rs (target/debug/deps/first-1)',
+    'test same_name ... okparallel stdout diagnostic',
+    'test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out',
+    '     Running tests/second.rs (target/debug/deps/second-2)',
+    'test same_name ... FAILEDparallel stderr diagnostic',
+    'test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out'
+)
+$log = New-TempLog ($nativeLines + "=== cotest native results: $($nativeReport | ConvertTo-Json -Depth 10 -Compress) ===")
+$parsed = Parse-CotestLog -LogPath $log
+Assert-Equal 'passed' $parsed.integrity 'native results survive interleaved diagnostic text'
+Assert-Equal 2 $parsed.tests.Count 'native same-named test results retained'
+Assert-Equal 2 @($parsed.tests.invocation | Sort-Object -Unique).Count 'native binary identities retained'
+Assert-Equal 'failed' $parsed.tests[1].status 'native original failure retained'
+Remove-Item -LiteralPath $log -Force
+
+$nativeReport.invocations[1].tests = @()
+$log = New-TempLog ($nativeLines + "=== cotest native results: $($nativeReport | ConvertTo-Json -Depth 10 -Compress) ===")
+$parsed = Parse-CotestLog -LogPath $log
+Assert-Equal 'failed' $parsed.integrity 'incomplete native results fail independent footer reconciliation'
+Remove-Item -LiteralPath $log -Force
+
 [int]$failureCount = $failures.Count
 if ($failureCount -gt 0) {
     foreach ($failure in $failures) {

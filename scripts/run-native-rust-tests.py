@@ -18,6 +18,7 @@ import uuid
 CLIENT_CONFIG_SCOPE = "COTEST_NATIVE_CLIENT_CONFIG_ROOT"
 PROVISION_EVIDENCE = "COTEST_AGENT_PROVISION_JOINT_DIR"
 SERVICE_LOGS = "COTEST_SERVICE_LOG_DIR"
+LIBTEST_REPORT_ROOT = "COTEST_NATIVE_LIBTEST_REPORT_ROOT"
 EVIDENCE_ROOT = Path(__file__).resolve().parents[1] / "artifacts" / "native-rust"
 PROVISION_BINARIES = ("agent_provision_production", "agent_vectors_production")
 
@@ -85,7 +86,7 @@ def invoke_native_child(command: list[str], environment: dict[str, str],
 
     save()
     try:
-        result = subprocess.run(command, env=environment, check=False)
+        result = run_native_command(command, environment)
     except BaseException:
         record["status"] = "launch_failed"
         save()
@@ -93,6 +94,38 @@ def invoke_native_child(command: list[str], environment: dict[str, str],
     record.update(status="completed", exit_code=result.returncode)
     save()
     return result.returncode
+
+
+def run_native_command(command: list[str], environment: dict[str, str]):
+    report_root = environment.get(LIBTEST_REPORT_ROOT)
+    if report_root is None:
+        return subprocess.run(command, env=environment, check=False)
+    root = Path(report_root)
+    if not root.is_absolute() or root.resolve() != root or not root.is_dir():
+        raise RuntimeError("native libtest reports require an owned absolute directory")
+    if any(argument == "--logfile" or argument.startswith("--logfile=") for argument in command[1:]):
+        raise RuntimeError("native libtest reports cannot replace an explicit logfile")
+    identifier = uuid.uuid4().hex
+    ledger = root / f"{identifier}.log"
+    # Stable libtest's own result file is separate from concurrent test-body
+    # diagnostics. Its JSON stdout format still requires a nightly compiler.
+    child_environment = environment.copy()
+    child_environment.pop(LIBTEST_REPORT_ROOT)
+    result = subprocess.run([*command, "--logfile", str(ledger)], env=child_environment, check=False)
+    tests = []
+    for line in ledger.read_text(encoding="utf-8").splitlines():
+        ignored = re.fullmatch(r"ignored: (.*) (\S+)", line)
+        if ignored is not None:
+            tests.append({"name": ignored[2], "status": "ignored", "reason": ignored[1]})
+            continue
+        match = re.fullmatch(r"(ok|failed|ignored) (.+)", line, flags=re.IGNORECASE)
+        if match is None:
+            raise RuntimeError("unrecognized native libtest result record")
+        tests.append({"name": match[2], "status": {"ok": "passed", "failed": "failed",
+                      "ignored": "ignored"}[match[1].lower()]})
+    record = {"binary": str(Path(command[0]).resolve()), "tests": tests, "exit_code": result.returncode}
+    (root / f"{identifier}.json").write_text(json.dumps(record) + "\n", encoding="utf-8")
+    return result
 
 
 def native_child(command: list[str], *, artifact_root: Path = EVIDENCE_ROOT) -> int:
@@ -182,7 +215,17 @@ def openssl(executable: str, *arguments: str) -> None:
     )
 
 
-def run(command: list[str], *, cargo_messages: Path | None = None) -> int:
+def run(command: list[str], *, cargo_messages: Path | None = None,
+        libtest_report: Path | None = None) -> int:
+    if libtest_report is not None:
+        if (cargo_messages is not None or not libtest_report.is_absolute()
+                or libtest_report.parent.resolve() != libtest_report.parent
+                or os.path.lexists(libtest_report)
+                or LIBTEST_REPORT_ROOT in os.environ):
+            raise RuntimeError("native libtest report requires a fresh absolute unlinked path")
+        offset = 2 if len(command) > 1 and command[1].startswith("+") else 1
+        if Path(command[0]).stem.lower() != "cargo" or command[offset:offset + 1] != ["test"]:
+            raise RuntimeError("native libtest reports require a Cargo test invocation")
     executable = shutil.which("openssl")
     if executable is None:
         raise RuntimeError("openssl is required to create native test TLS credentials")
@@ -237,6 +280,10 @@ def run(command: list[str], *, cargo_messages: Path | None = None) -> int:
             "INKSON_CONFIG_PATH": str(directory / "inkson" / "config.json"),
         })
         environment.pop(CLIENT_CONFIG_SCOPE, None)
+        if libtest_report is not None:
+            reports = directory / "libtest"
+            reports.mkdir(mode=0o700)
+            environment[LIBTEST_REPORT_ROOT] = str(reports)
         if "COTEST_NATIVE_WORKSPACE_PLAN" in environment:
             from native_workspace_execution import configure_environment
             configure_environment(environment)
@@ -244,9 +291,18 @@ def run(command: list[str], *, cargo_messages: Path | None = None) -> int:
         if cargo_messages is None:
             # Preserve Cargo target headers and libtest records in execution
             # order on the caller's inherited stdout, without adding a pipe.
-            return subprocess.run(
+            result = subprocess.run(
                 command, env=environment, stderr=subprocess.STDOUT, check=False,
-            ).returncode
+            )
+            if libtest_report is not None:
+                records = [json.loads(path.read_text(encoding="utf-8"))
+                           for path in sorted(reports.glob("*.json"))]
+                with libtest_report.open("x", encoding="utf-8") as output:
+                    json.dump({"schema_version": 1, "invocations": records,
+                               "cargo_exit_code": result.returncode}, output)
+                if os.name != "nt":
+                    libtest_report.chmod(0o600)
+            return result.returncode
         if (not cargo_messages.is_absolute()
                 or cargo_messages.parent.resolve() != cargo_messages.parent):
             raise RuntimeError("Cargo message output requires a fresh absolute unlinked path")
@@ -272,6 +328,13 @@ def main() -> int:
     if command[:1] == ["--"]:
         command = command[1:]
     cargo_messages = None
+    libtest_report = None
+    if command[:1] == ["--libtest-report"]:
+        if len(command) < 4:
+            print("Native libtest report requires an output and Cargo command", file=sys.stderr)
+            return 2
+        libtest_report = Path(command[1])
+        command = command[2:]
     if command[:1] == ['--cargo-messages']:
         if len(command) < 4:
             print('Cargo message capture requires an output and full no-run Cargo command', file=sys.stderr)
@@ -286,7 +349,9 @@ def main() -> int:
         print("usage: run-native-rust-tests.py [--] command [arguments ...]", file=sys.stderr)
         return 2
     try:
-        return run(command, cargo_messages=cargo_messages)
+        if libtest_report is None:
+            return run(command, cargo_messages=cargo_messages)
+        return run(command, cargo_messages=cargo_messages, libtest_report=libtest_report)
     except (OSError, RuntimeError, ValueError, subprocess.CalledProcessError) as error:
         print(f"native test TLS setup failed: {error}", file=sys.stderr)
         return 1

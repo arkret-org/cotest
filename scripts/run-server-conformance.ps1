@@ -706,12 +706,13 @@ function Invoke-CargoTestInvocation {
         # One wrapper per invocation owns its CA and Cargo native-child scope.
         # Never export a runner to the mandatory joint child: its isolated
         # migration cases create their own native scopes and reject overrides.
-        $nativeCommandArguments = @("-B", $nativeWrapper, $cargo) + $CargoArgs
+        $logStem = ($Label -replace '[^A-Za-z0-9_.-]', '_')
+        $logRoot = Split-Path -Parent $RawLog
+        $nativeReportPath = Join-Path $logRoot "$logStem.$([guid]::NewGuid().ToString('N')).libtest.json"
+        $nativeCommandArguments = @("-B", $nativeWrapper, "--libtest-report", $nativeReportPath, $cargo) + $CargoArgs
         $nativeArguments = (($nativeCommandArguments | ForEach-Object {
                     ConvertTo-NativeCommandLineArgument -Argument $_
                 }) -join ' ')
-        $logStem = ($Label -replace '[^A-Za-z0-9_.-]', '_')
-        $logRoot = Split-Path -Parent $RawLog
         $stdoutPath = Join-Path $logRoot "$logStem.cargo.stdout.log"
         $stderrPath = Join-Path $logRoot "$logStem.cargo.stderr.log"
 
@@ -747,6 +748,16 @@ function Invoke-CargoTestInvocation {
                 Write-Host $line
             }
         }
+        if (-not (Test-Path -LiteralPath $nativeReportPath -PathType Leaf)) {
+            Add-RawLogLine -Path $RawLog -Value "Native libtest report is missing: $Label"
+            return $(if ($invocationExitCode -ne 0) { [int]$invocationExitCode } else { 1 })
+        }
+        $nativeReport = Get-Content -LiteralPath $nativeReportPath -Raw | ConvertFrom-Json -ErrorAction Stop
+        if ($nativeReport.cargo_exit_code -ne $invocationExitCode) {
+            throw "Native libtest report exit differs from Cargo: $Label"
+        }
+        $nativeJson = $nativeReport | ConvertTo-Json -Depth 20 -Compress
+        Add-RawLogLine -Path $RawLog -Value "=== cotest native results: $nativeJson ==="
         if ($invocationExitCode -eq 0 -and -not $AllowEmpty) {
             $executed = 0
             foreach ($match in [regex]::Matches($stdout, 'test result:.*? (\d+) passed; (\d+) failed;')) { $executed += [int]$match.Groups[1].Value + [int]$match.Groups[2].Value }
@@ -788,7 +799,27 @@ function Parse-CotestLog {
     $splitResultConsumed = $false
     $framingFailed = $false
 
-    foreach ($line in Get-Content $LogPath) {
+    $lines = @(Get-Content -LiteralPath $LogPath)
+    $nativeReports = @{}
+    $section = -1
+    foreach ($line in $lines) {
+        if ($line -match '^=== cotest invocation: cotest(?:-inkson-client-tests)?/.+ ===$') {
+            $section++
+        } elseif ($line -cmatch '^=== cotest native results: (?<payload>.+) ===$') {
+            if ($section -lt 0 -or $nativeReports.ContainsKey($section)) {
+                throw 'Native libtest report has no unique Cargo invocation'
+            }
+            $report = $Matches.payload | ConvertFrom-Json -ErrorAction Stop
+            if ($report.schema_version -ne 1 -or $null -eq $report.cargo_exit_code -or
+                'invocations' -notin $report.PSObject.Properties.Name) {
+                throw 'Invalid native libtest report schema'
+            }
+            $nativeReports[$section] = $report
+        }
+    }
+    $section = -1
+    $useNativeResults = $false
+    foreach ($line in $lines) {
         # Cargo can force SGR styling even on redirected output.
         $line = [regex]::Replace($line, '\x1B\[[0-9;:]*m', '')
         if ($line -match '^=== cotest invocation: (?<selection>(?<package>cotest(?:-inkson-client-tests)?)/.+) ===$') {
@@ -796,6 +827,29 @@ function Parse-CotestLog {
             $splitResultConsumed = $false
             $package = $Matches.package
             $selection = $Matches.selection
+            $section++
+            $useNativeResults = $nativeReports.ContainsKey($section)
+            if ($useNativeResults) {
+                foreach ($nativeInvocation in $nativeReports[$section].invocations) {
+                    if (-not $nativeInvocation.binary -or $null -eq $nativeInvocation.exit_code -or
+                        'tests' -notin $nativeInvocation.PSObject.Properties.Name) {
+                        throw 'Native libtest binary identity or results are missing'
+                    }
+                    foreach ($test in $nativeInvocation.tests) {
+                        if (-not $test.name -or $test.status -cnotin @('passed', 'failed', 'ignored')) {
+                            throw 'Invalid native libtest result'
+                        }
+                        $tests.Add([pscustomobject]@{
+                            name = $test.name
+                            status = $test.status
+                            reason = if ('reason' -in $test.PSObject.Properties.Name) { $test.reason } else { $null }
+                            invocation = $nativeInvocation.binary
+                            package = $package
+                            selection = $selection
+                        })
+                    }
+                }
+            }
             continue
         }
         if ($line -cmatch '^\s*Running (?<target>.+)$') {
@@ -808,6 +862,9 @@ function Parse-CotestLog {
             if ($null -ne $pendingTest) { $framingFailed = $true; $pendingTest = $null }
             $splitResultConsumed = $false
             $invocation = "doc-tests " + $Matches.target.Trim()
+            continue
+        }
+        if ($useNativeResults -and $line -notmatch '^test result: ') {
             continue
         }
         $wasSplitResult = $false

@@ -47,6 +47,9 @@ fn concurrent_noise() {
         std::thread::yield_now();
     }
 }
+#[test]
+#[ignore = "native fixture reason"]
+fn ignored_case() {}
 '@)
     Copy-Item -LiteralPath (Join-Path $RepoRoot 'scripts/run-native-rust-tests.py') -Destination (Join-Path $scratch 'scripts/run-native-rust-tests.py')
     $body = @'
@@ -93,8 +96,11 @@ foreach ($threads in @(1, 2)) {
             throw 'Two real same-named tests must retain their separate binary identity'
         }
         if ($parsed.integrity -cne 'passed' -or $parsed.footer_totals.passed -ne (4 - [int]$negative) -or
-            $parsed.footer_totals.failed -ne [int]$negative -or $parsed.footer_totals.ignored -ne 0) {
+            $parsed.footer_totals.failed -ne [int]$negative -or $parsed.footer_totals.ignored -ne 2) {
             throw 'Real libtest results and footer counts must reconcile without hiding a failure'
+        }
+        if (@($parsed.tests | Where-Object { $_.status -ceq 'ignored' -and $_.reason -ceq 'native fixture reason' }).Count -ne 2) {
+            throw 'Real ignored tests must retain their reasons and binary identity'
         }
     }
 }

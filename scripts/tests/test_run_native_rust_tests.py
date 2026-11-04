@@ -23,7 +23,8 @@ class NativeChildTests(unittest.TestCase):
         self.root = Path(self.temp.name).resolve()
         self.raw = self.root / "raw"
         env = os.environ.copy()
-        for name in (runner.PROVISION_EVIDENCE, runner.SERVICE_LOGS, runner.CLIENT_CONFIG_SCOPE, "INKSON_CONFIG_PATH"):
+        for name in (runner.PROVISION_EVIDENCE, runner.SERVICE_LOGS, runner.CLIENT_CONFIG_SCOPE,
+                     runner.LIBTEST_REPORT_ROOT, "INKSON_CONFIG_PATH"):
             env.pop(name, None)
         env.update(GITHUB_RUN_ID="123", GITHUB_RUN_ATTEMPT="2")
         self.environment = patch.dict(os.environ, env, clear=True)
@@ -195,6 +196,53 @@ class NativeChildTests(unittest.TestCase):
         self.assertFalse(Path(env[runner.PROVISION_EVIDENCE]).exists())
         self.assertEqual(runner.provision_binary("agent_vectors_production-deadbeef.exe"), "agent_vectors_production")
         self.assertIsNone(runner.provision_binary("prefix-agent_vectors_production-deadbeef"))
+
+    def test_libtest_channel_retains_results_and_does_not_escape_into_nested_children(self):
+        reports = self.root / "libtest"
+        reports.mkdir()
+        program = (
+            "import os,pathlib,sys; "
+            f"assert {runner.LIBTEST_REPORT_ROOT!r} not in os.environ; "
+            "pathlib.Path(sys.argv[-1]).write_text('ok passed_case\\nfailed failed_case\\n"
+            "ignored: recorded native reason ignored_case\\n'); "
+            "print('test diagnostics ... oknot_a_result'); sys.exit(101)"
+        )
+        result = runner.run_native_command([sys.executable, "-c", program],
+                                          {**os.environ, runner.LIBTEST_REPORT_ROOT: str(reports)})
+        self.assertEqual(result.returncode, 101)
+        records = list(reports.glob("*.json"))
+        self.assertEqual(len(records), 1)
+        record = json.loads(records[0].read_text())
+        self.assertEqual(record["binary"], str(Path(sys.executable).resolve()))
+        self.assertEqual(record["exit_code"], 101)
+        self.assertEqual(record["tests"], [
+            {"name": "passed_case", "status": "passed"},
+            {"name": "failed_case", "status": "failed"},
+            {"name": "ignored_case", "status": "ignored", "reason": "recorded native reason"},
+        ])
+
+    def test_libtest_channel_rejects_caller_logfile_before_launch(self):
+        reports = self.root / "libtest"
+        reports.mkdir()
+        for arguments in (["--logfile", "retained"], ["--logfile=retained"]):
+            with self.subTest(arguments=arguments), patch.object(subprocess, "run") as child:
+                with self.assertRaisesRegex(RuntimeError, "explicit logfile"):
+                    runner.run_native_command([sys.executable, *arguments],
+                                              {runner.LIBTEST_REPORT_ROOT: str(reports)})
+                child.assert_not_called()
+        self.assertEqual(list(reports.iterdir()), [])
+
+    def test_libtest_report_rejects_overwrite_and_non_cargo_commands_before_launch(self):
+        report = self.root / "retained.json"
+        report.write_text("retained")
+        for command, path in ((["cargo", "test"], report),
+                              ([sys.executable], self.root / "fresh.json")):
+            with self.subTest(command=command), patch.object(subprocess, "run") as child:
+                with self.assertRaises(RuntimeError):
+                    runner.run(command, libtest_report=path)
+                child.assert_not_called()
+        self.assertEqual(report.read_text(), "retained")
+        self.assertFalse((self.root / "fresh.json").exists())
 
     @unittest.skipUnless(os.name == "posix", "Directory symlinks require platform privileges on Windows")
     def test_linked_evidence_root_is_rejected_before_launch_or_writes(self):
