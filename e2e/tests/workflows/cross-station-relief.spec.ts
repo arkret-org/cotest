@@ -9,11 +9,14 @@ import { prepareBrowserNetworkOutage } from "../../helpers/browser-network-outag
 import { openRegisteredUserPage } from "../../helpers/users";
 import { uint64Decimal } from "../../helpers/uint64-decimal";
 import { submitOrdinaryComposerDraft } from "../../helpers/composer-handoff";
+import { revealTimelineEvent } from "../../helpers/timeline-visibility";
+import { publicMlsRuntimeDiagnostic } from "../../helpers/mls-runtime-diagnostics";
 
 test.use({ trace: "off", video: "off", screenshot: "off" });
 
 type Flow = Awaited<ReturnType<typeof openRegisteredUserPage>> & { server: ColandKey };
 type Cut = { members: Set<string>; covered: boolean; epoch: string; revision: string };
+
 
 async function admitted(page: Page, kind: string, realm: string, action: () => Promise<unknown>) {
   const pending = page.waitForResponse(response => response.request().method() === "POST"
@@ -59,6 +62,7 @@ async function runReliefProject(admission: "concurrent" | "late-welcome", browse
   const bobMessages: Array<{ event_id: string; digest: string }> = [];
   const failures: Array<{ method: string; path: string; status: number; code?: string }> = [];
   const transports = new Map<ColandKey, Awaited<ReturnType<typeof prepareBrowserNetworkOutage>>>();
+  const runtimeDiagnostics = new Map<ColandKey, Map<string, { sample: ReturnType<typeof publicMlsRuntimeDiagnostic>; count: number }>>();
   let outage: Awaited<ReturnType<typeof prepareBrowserNetworkOutage>> | undefined;
   let releaseHeld: ((forward: boolean) => void) | undefined;
   let realm: string | undefined;
@@ -74,6 +78,16 @@ async function runReliefProject(admission: "concurrent" | "late-welcome", browse
       const flow = await openRegisteredUserPage(browser, request, `relief-${role}`, {
         server,
         beforeNavigate: async page => {
+          const observations = new Map<string, { sample: ReturnType<typeof publicMlsRuntimeDiagnostic>; count: number }>();
+          runtimeDiagnostics.set(server, observations);
+          page.on("console", message => {
+            const sample = publicMlsRuntimeDiagnostic(message.text());
+            if (!sample) return;
+            const key = JSON.stringify(sample);
+            const previous = observations.get(key);
+            if (previous) previous.count++;
+            else if (observations.size < 64) observations.set(key, { sample, count: 1 });
+          });
           const transport = await prepareBrowserNetworkOutage(page);
           transports.set(server, transport);
           if (index === 1) outage = transport;
@@ -248,9 +262,15 @@ async function runReliefProject(admission: "concurrent" | "late-welcome", browse
     checkpoint("auditor leaves through Station three; remaining members cover the new membership with a later MLS epoch and continue delivery");
     for (const member of [alice, bob]) {
       await member.page.page.reload({ waitUntil: "domcontentloaded" });
-      for (const body of [kickoff, queued, missed, afterRevoke, final]) await expect(member.page.page.locator(".chat-message").filter({ hasText: body })).toHaveCount(1, { timeout: 120_000 });
+      for (const body of [kickoff, queued, missed, afterRevoke, final]) {
+        const deadline = Date.now() + 120_000;
+        await revealTimelineEvent(member.page.page, member.page.timelineEvent(body), 120_000);
+        await expect(member.page.page.locator(".chat-message").filter({ hasText: body }), `${member.server} retains accepted history after departure and cold reload`).toHaveCount(1, { timeout: Math.max(1, deadline - Date.now()) });
+      }
       if (member === bob) {
-        await expect(member.page.timelineEvent(forbiddenReport).locator(".message-send-status")).toHaveClass(/\bis-failed\b/, { timeout: 120_000 });
+        const deadline = Date.now() + 120_000;
+        await revealTimelineEvent(member.page.page, member.page.timelineEvent(forbiddenReport), 120_000);
+        await expect(member.page.timelineEvent(forbiddenReport).locator(".message-send-status")).toHaveClass(/\bis-failed\b/, { timeout: Math.max(1, deadline - Date.now()) });
         await expect(member.page.timelineEvent(forbiddenReport).locator(".message-send-status.is-pending")).toHaveCount(0);
       } else {
         await expect(member.page.timelineEvent(forbiddenReport)).toHaveCount(0);
@@ -274,7 +294,11 @@ async function runReliefProject(admission: "concurrent" | "late-welcome", browse
           send_buttons: await flow.page.page.locator(".send-chat-button").evaluateAll(nodes => nodes.map(node => ({ disabled: (node as HTMLButtonElement).disabled }))),
           connection: await flow.page.page.locator(".connection-status .status-label").allTextContents(),
           convergence: await flow.page.page.locator(".connection-status .last-error, .epoch-update-required-banner").allTextContents(),
-          message_states: await flow.page.page.locator(".chat-message-row").evaluateAll(nodes => nodes.map(node => ({ id: node.id, class: node.className }))),
+          mls_runtime: [...(runtimeDiagnostics.get(flow.server)?.values() ?? [])],
+          message_states: await flow.page.page.locator(".chat-message-row").evaluateAll(nodes => nodes.map(node => ({ id: node.id, class: node.className,
+            crypto_classes: Array.from(node.querySelectorAll(".crypto-status-row")).map(child => child.className),
+            project_body: (node.querySelector(".event-body")?.textContent ?? "").slice(0, 768),
+          }))),
         }, null, 2));
       } catch { /* Preserve the original business failure when a page has closed. */ }
     }
