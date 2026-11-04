@@ -2,10 +2,14 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { createServer } from "node:http";
 import { test } from "node:test";
+import { readFileSync } from "node:fs";
 import { chromium } from "@playwright/test";
 import { cutAccountStream, prepareAccountStreamOutage } from "../helpers/account-stream-outage.ts";
 
 const operation = "ak.self.account.stream.subscribe.v1";
+const frameSchema = JSON.parse(readFileSync(new URL("../../../arkret-spec/spec/v1/artifacts/schemas/websocket-frame.schema.json", import.meta.url), "utf8"));
+const controlKind = frameSchema.$defs.channel_control.properties.kind.const;
+const channelScope = frameSchema.$defs.channel_control.properties.frame_scope.const;
 function frame(value) {
   const body = Buffer.from(JSON.stringify(value));
   const head = Buffer.alloc(body.length < 126 ? 2 : 4);
@@ -23,6 +27,7 @@ async function streamServer() {
     current++;
     for (const send of clients.values()) {
       send({ kind: "data", channel_id: "account", body: current });
+      send({ kind: controlKind, frame_scope: channelScope, channel_id: "account", payload: { kind: "checkpoint", cursor: current } });
       send({ kind: "data", channel_id: "signal", body: current });
     }
   }, 30);
@@ -35,6 +40,7 @@ function connect() {
   const ws = new WebSocket(location.origin.replace('http:', 'ws:') + '/_arkret/ws?after=' + window.cursor);
   ws.onmessage = event => {
     const frame = JSON.parse(event.data);
+    if (frame.kind === ${JSON.stringify(controlKind)} && frame.frame_scope === ${JSON.stringify(channelScope)} && frame.channel_id === 'account') { window.cursor = frame.payload.cursor; return; }
     if (frame.kind !== 'data') return;
     if (frame.channel_id === 'account') { window.account.push(frame.body); window.cursor = frame.body; }
     else window.signals.push(frame.body);

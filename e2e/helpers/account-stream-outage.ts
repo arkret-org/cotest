@@ -31,14 +31,17 @@ export async function prepareAccountStreamOutage(page: Page, accountOperation: s
     } };
     connections.add(connection);
     server.onMessage(message => {
-      let accountData = false;
+      let accountPayload = false;
       try {
         const frame = JSON.parse(message.toString());
         if (frame.kind === "opened" && typeof frame.channel_id === "string") operations.set(frame.channel_id, frame.operation_id);
-        accountData = frame.kind === "data" && operations.get(frame.channel_id) === accountOperation;
+        // Checkpoints and catchup controls carry the durable cursor too.
+        // Letting them pass a dropped Delta would manufacture a resume gap.
+        accountPayload = (frame.kind === "data" || (frame.kind === "control" && frame.frame_scope === "channel"))
+          && operations.get(frame.channel_id) === accountOperation;
         if (frame.kind === "closed") operations.delete(frame.channel_id);
       } catch { /* Forward authentic bytes without inventing a protocol frame. */ }
-      if ((active || retired) && accountData) { blockedWebSocket++; return; }
+      if ((active || retired) && accountPayload) { blockedWebSocket++; return; }
       route.send(message);
     });
   });

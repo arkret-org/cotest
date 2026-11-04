@@ -1,3 +1,4 @@
+import { prepareDirectStructureForm } from "./direct-structure-form";
 import { openDirectChatNotification } from "./direct-notification";
 import { accountActorId } from "./coland-api";
 import { actorRow } from "./product-locators";
@@ -459,10 +460,7 @@ export async function structureWrite(page: Page, action: string, kind: string, t
   await page.bringToFront();
   const panel = page.locator(".direct-structure");
   await expect(panel).toBeVisible();
-  if (!await panel.getByRole("combobox", { name: "Action", exact: true }).isVisible()) {
-    await panel.getByRole("button", { name: "Manage chats and topics" }).click();
-  }
-  await panel.getByRole("combobox", { name: "Action", exact: true }).selectOption(action);
+  await prepareDirectStructureForm(page, action, topic);
   if (title) {
     const input = panel.getByRole("textbox", { name: "Title", exact: true });
     const field = panel.locator(".direct-title-field");
@@ -473,7 +471,6 @@ export async function structureWrite(page: Page, action: string, kind: string, t
     await expect(input).toHaveValue(title);
     await expect(field).toHaveClass(/\bhas-value\b/);
   }
-  if (topic) await panel.getByRole("combobox", { name: "Topic", exact: true }).selectOption(topic);
   await expect(panel.getByRole("button", { name: "Save", exact: true })).toBeEnabled({ timeout: 180_000 });
   const boundaryProof = structuralBoundaries.get(page);
   const boundaryRealm = decodeURIComponent(new URL(page.url()).pathname.split("/")[2] ?? "");
