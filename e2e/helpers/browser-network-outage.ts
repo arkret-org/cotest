@@ -49,7 +49,7 @@ export async function prepareBrowserNetworkOutage(page: Page) {
     });
   });
   return {
-    stats: () => ({ offline, retired_sockets: retiredSockets, blocked_sockets: blockedSockets }),
+    stats: () => ({ offline, active_sockets: connections.size, retired_sockets: retiredSockets, blocked_sockets: blockedSockets }),
     hasReceivedEvent: (eventId: string) => receivedEvents.has(eventId),
     async disconnect() {
       if (offline) throw new Error("browser is already offline");

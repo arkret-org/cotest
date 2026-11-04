@@ -41,8 +41,10 @@ connect();
     const outage = await prepareBrowserNetworkOutage(page);
     await page.goto(`http://127.0.0.1:${server.address().port}`);
     await expect.poll(() => page.evaluate(() => window.received)).toBeGreaterThan(2);
+    assert.ok(outage.stats().active_sockets > 0);
     await outage.disconnect();
     assert.ok(outage.stats().retired_sockets > 0);
+    await expect.poll(() => outage.stats().active_sockets).toBe(0);
     assert.equal(await page.evaluate(() => fetch('/probe').then(() => 'online').catch(() => 'offline')), 'offline');
     assert.equal(probeRequests, 0);
     await page.waitForTimeout(100);
@@ -52,6 +54,7 @@ connect();
     await outage.reconnect();
     assert.equal(await page.evaluate(() => fetch('/probe').then(response => response.text())), 'online');
     await expect.poll(() => page.evaluate(() => window.received)).toBeGreaterThan(before);
+    assert.ok(outage.stats().active_sockets > 0);
     assert.equal(await page.evaluate(() => window.loads), 1);
   } finally {
     clearInterval(timer);

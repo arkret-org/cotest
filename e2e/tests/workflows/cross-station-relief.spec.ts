@@ -60,16 +60,17 @@ async function runReliefProject(admission: "concurrent" | "late-welcome", browse
   const phases: Array<{ phase: string; completed_at: string }> = [];
   const cuts = new Map<string, Cut>();
   const bobMessages: Array<{ event_id: string; digest: string }> = [];
-  const failures: Array<{ method: string; path: string; status: number; code?: string }> = [];
+  const failures: Array<{ server: ColandKey; method: string; path: string; status: number; code?: string }> = [];
   const transports = new Map<ColandKey, Awaited<ReturnType<typeof prepareBrowserNetworkOutage>>>();
   const runtimeDiagnostics = new Map<ColandKey, Map<string, { sample: ReturnType<typeof publicMlsRuntimeDiagnostic>; count: number }>>();
   let outage: Awaited<ReturnType<typeof prepareBrowserNetworkOutage>> | undefined;
   let releaseHeld: ((forward: boolean) => void) | undefined;
   let realm: string | undefined;
+  let auditRealm: string | undefined;
   let twoMemberEpoch: string | undefined;
   const checkpoint = (phase: string) => {
     phases.push({ phase, completed_at: new Date().toISOString() });
-    writeFileSync(testInfo.outputPath("relief-progress.json"), JSON.stringify({ realm, admission, phases }, null, 2));
+    writeFileSync(testInfo.outputPath("relief-progress.json"), JSON.stringify({ realm, audit_realm: auditRealm, admission, phases }, null, 2));
   };
   checkpoint("project started");
   try {
@@ -93,7 +94,7 @@ async function runReliefProject(admission: "concurrent" | "late-welcome", browse
           if (index === 1) outage = transport;
           page.on("response", async response => {
             const path = new URL(response.url()).pathname;
-            if (path.startsWith("/_arkret/") && response.status() >= 400) failures.push({ method: response.request().method(), path, status: response.status(), code: wireErrCode(await response.json().catch(() => undefined)) });
+            if (path.startsWith("/_arkret/") && response.status() >= 400) failures.push({ server, method: response.request().method(), path, status: response.status(), code: wireErrCode(await response.json().catch(() => undefined)) });
             if (index !== 0 || path !== "/_arkret/self/realm-state-snapshot/head" || response.status() !== 200) return;
             const body = await response.json().catch(() => undefined);
             const entries = body?.current_state_entries;
@@ -165,6 +166,9 @@ async function runReliefProject(admission: "concurrent" | "late-welcome", browse
     await delivered(bob, flows, realm, `Logistics confirms three trucks and driver assignments. ${stamp}`);
     await delivered(carol, flows, realm, `Audit confirms the sealed supply manifest. ${stamp}`);
     checkpoint("all three Stations exchange and decrypt encrypted project reports");
+    auditRealm = await carol.page.createRealm({ title: `Independent relief audit archive ${stamp}`, summary: "The auditor retains an independent encrypted workspace after leaving the shared operation.", joinRule: "invite", mlsActivated: true });
+    await carol.page.gotoTimelineRealm(realm);
+    checkpoint("auditor creates an independent encrypted audit Realm at Station three");
 
     const beforeOffline = bobMessages.length;
     const queued = `Offline logistics report: truck 2 loaded and awaiting dispatch. ${stamp}`;
@@ -276,14 +280,24 @@ async function runReliefProject(admission: "concurrent" | "late-welcome", browse
         await expect(member.page.timelineEvent(forbiddenReport)).toHaveCount(0);
       }
     }
+    await carol.page.gotoTimelineRealm(auditRealm);
+    await expect(carol.page.page.locator(".connection-status .status-label")).toHaveText("Online", { timeout: 120_000 });
+    const auditEvent = await delivered(carol, [carol], auditRealm, `Auditor archives the completed relief manifest after departing the shared operation. ${stamp}`);
+    checkpoint("departed auditor stays authorized and commits an encrypted report in the independent audit Realm");
     await carol.page.page.goto(`/chat/${encodeURIComponent(realm)}`);
     await carol.page.page.reload({ waitUntil: "domcontentloaded" });
     await expect(carol.page.page.locator(".shell.app")).toBeVisible({ timeout: 120_000 });
+    await expect(carol.page.page.locator(".connection-status .status-label")).toHaveText("Online", { timeout: 120_000 });
     await expect(carol.page.page.locator(".connection-status .sync-cursor")).toContainText("ak:cursor:", { timeout: 120_000 });
+    await expect.poll(() => transports.get("server3")!.stats().active_sockets, { timeout: 120_000 }).toBeGreaterThan(0);
     await expect(carol.page.page.locator(".send-chat-button:enabled")).toHaveCount(0);
     await expect(carol.page.page.locator(".chat-message").filter({ hasText: final })).toHaveCount(0);
-    expect(transports.get("server3")!.hasReceivedEvent(String(finalEvent.event_id)), "the departed Station's client receives no post-leave Event, even as undecryptable ciphertext").toBe(false);
-    writeFileSync(testInfo.outputPath("relief-security.json"), JSON.stringify({ denied_event_id: heldEvent!.event_id, denied_status: denied.status(), denied_code: "capability_denied", initial_epoch: initialCut.epoch, final_epoch: cuts.get(realm)!.epoch, departed_received_post_leave_event: false, outage: outage!.stats() }, null, 2));
+    expect(transports.get("server3")!.hasReceivedEvent(String(finalEvent.event_id)), "the departed client's observed WebSocket rails expose no post-leave Event, even as undecryptable ciphertext").toBe(false);
+    await expect(carol.page.page.locator(".connection-status .status-label")).toHaveText("Online");
+    writeFileSync(testInfo.outputPath("relief-security.json"), JSON.stringify({ denied_event_id: heldEvent!.event_id, denied_status: denied.status(), denied_code: "capability_denied", initial_epoch: initialCut.epoch, final_epoch: cuts.get(realm)!.epoch, departed_received_post_leave_event: false,
+      departed_account_online: true, departed_active_sockets: transports.get("server3")!.stats().active_sockets,
+      departed_archive_write_committed: true, audit_realm: auditRealm, audit_event_id: auditEvent.event_id,
+      outage: outage!.stats() }, null, 2));
     checkpoint("cold readers retain accepted history exactly once, rejected content stays absent, and the departed member cannot send or see post-leave content");
   } catch (error) {
     for (const flow of flows) {
