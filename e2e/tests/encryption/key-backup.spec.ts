@@ -1,4 +1,4 @@
-import { addBoardList } from "../../helpers/kanban-product-ui";
+import { addBoardList, fillCardNarrative } from "../../helpers/kanban-product-ui";
 import { authHeaders } from "../../helpers/coland-api";
 import { readCreatorRecords } from "../../helpers/creator-bootstrap";
 import { accountTransportRotationProbe, assertOriginalAcceptedMlsRows } from "../../helpers/session-transport-recovery";
@@ -1333,7 +1333,7 @@ async function updateCardDescription(
     timeout: 45_000,
   });
   await page.locator(".card-detail-edit-description-button").click();
-  await setCardDetailEditorValue(page, description);
+  await fillCardNarrative(page, "Description", description);
   const save = page.locator(".card-detail-save-button");
   const panel = page.locator(".card-description-panel");
   let ingressObserved = false;
@@ -1372,25 +1372,6 @@ async function updateCardDescription(
       contentType: "application/json",
     });
   }
-}
-
-async function setCardDetailEditorValue(
-  page: Page,
-  value: string,
-): Promise<void> {
-  const input = page.locator(".card-detail-description-input");
-  await expect(input).toBeAttached({ timeout: 45_000 });
-  await input.evaluate((node, nextValue) => {
-    const textarea = node as HTMLTextAreaElement;
-    textarea.value = nextValue;
-    textarea.dispatchEvent(
-      new InputEvent("input", {
-        bubbles: true,
-        inputType: "insertText",
-        data: nextValue,
-      }),
-    );
-  }, value);
 }
 
 async function expectEncryptedKanbanSaveErrorsAbsent(page: Page) {

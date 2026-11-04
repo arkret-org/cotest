@@ -1055,6 +1055,13 @@ test.describe("chat advanced", () => {
         seedMembers: [bob.id],
         mlsActivated: true,
       });
+      // Typing is a non-Event action and requires its own accepted grant.
+      await grantCapabilityEventApi(request, aliceFlow.session.grantJwt, {
+        ownerId: alice.id,
+        realmId,
+        subjectId: alice.id,
+        actions: ["ak.typing.broadcast"],
+      });
       await alicePage.completeMlsAccountRecoveryIfPrompted(aliceFlow.session.recoveryKey!);
       await bobPage.acceptInvite(realmId);
       await bobPage.completeMlsAccountRecoveryIfPrompted(bobFlow.session.recoveryKey!);
