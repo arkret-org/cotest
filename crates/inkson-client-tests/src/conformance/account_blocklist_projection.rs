@@ -1851,13 +1851,13 @@ pub async fn contact_first_dm_cross_station_private_boundary_live() -> Result<()
         "private unblock revision appeared in the Contact sender Station"
     );
     eprintln!(
-        "blocklist first-DM Contact peer relay: exact_event={}, initial_status={}, initial_ns={}, replay_status={}, replay_protocol={}, response_shape={}, blocked_replay_ns={}, unblocked_replay_ns={}; durations are regression observations",
+        "blocklist first-DM Contact peer relay: exact_event={}, initial_status={}, initial_ns={}, replay_status={}, replay_protocol={}, response_shape_digest={}, blocked_replay_ns={}, unblocked_replay_ns={}; durations are regression observations",
         event_ref,
         initial_status,
         initial_elapsed.as_nanos(),
         replays[0].0,
         replays[0].1,
-        replays[0].3,
+        arkret_canonical::sha256_digest(&arkret_canonical::canonical_json_bytes(&replays[0].3)?),
         replays[0].4.as_nanos(),
         replays[1].4.as_nanos()
     );

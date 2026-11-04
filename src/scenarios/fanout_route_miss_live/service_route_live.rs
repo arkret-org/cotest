@@ -696,7 +696,7 @@ pub async fn method_faults() -> Result<()> {
     ensure!(stored_counts(&fixture._member_database.connect_url, &event.event_id).await? == (0, 0));
     ensure!(route_rows(&source, fixture.group.server(1).service_id()).await? == after);
     eprintln!(
-        "service route case=valid_native_fork signature=verified quarantine=durable restart=refused original_intent=preserved"
+        "service route case=valid_native_fork signature_verified=1 quarantine=durable restart=refused original_intent=preserved"
     );
     Ok(())
 }

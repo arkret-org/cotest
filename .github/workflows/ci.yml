@@ -88,6 +88,7 @@ jobs:
       with:
         refs: ${{ needs.native-sources.outputs.refs }}
         token: ${{ secrets.CI_REPO_TOKEN || github.token }}
+    - uses: ./cotest/.github/actions/reclaim-hosted-runner-space
     - name: Install Linux desktop dependencies
       run: |
         sudo apt-get update
@@ -151,6 +152,9 @@ jobs:
         ./scripts/tests/joint-coland-source-selection.tests.ps1
         ./scripts/tests/joint-early-failure.tests.ps1
         ./scripts/tests/server-conformance-browser-postgres.tests.ps1
+        ./scripts/tests/log-parser.tests.ps1
+        ./scripts/tests/native-conformance-stream-order.tests.ps1
+        ./scripts/tests/secret-scan.tests.ps1
     - name: Migrate isolated Coauth route-evidence database
       run: psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f coauth/crates/storage-postgres/migrations/00000000000000_initial/up.sql
     - name: fmt
@@ -203,6 +207,7 @@ jobs:
       if: always()
       run: |
         df -h .
+        df -i .
         free -h
 
   workspace:

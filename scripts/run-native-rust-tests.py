@@ -242,7 +242,11 @@ def run(command: list[str], *, cargo_messages: Path | None = None) -> int:
             configure_environment(environment)
         command = cargo_native_runner(command, directory)
         if cargo_messages is None:
-            return subprocess.run(command, env=environment, check=False).returncode
+            # Preserve Cargo target headers and libtest records in execution
+            # order on the caller's inherited stdout, without adding a pipe.
+            return subprocess.run(
+                command, env=environment, stderr=subprocess.STDOUT, check=False,
+            ).returncode
         if (not cargo_messages.is_absolute()
                 or cargo_messages.parent.resolve() != cargo_messages.parent):
             raise RuntimeError("Cargo message output requires a fresh absolute unlinked path")

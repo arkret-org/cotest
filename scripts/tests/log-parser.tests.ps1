@@ -56,13 +56,15 @@ function New-TempLog {
 
 # ── 1. Synthetic: plain / ASCII reason / Unicode reason, two invocations ─────
 $log = New-TempLog @(
-    "     Running unittests src/lib.rs (target/debug/deps/alpha-1)",
+    "$([char]27)[1;32m     Running unittests src/lib.rs (target/debug/deps/alpha-1)$([char]27)[0m",
+    "running 4 tests",
     "test alpha::same_name ... ok",
     "test alpha::plain ... ignored",
     "test alpha::ascii ... ignored, needs a live server",
     "test alpha::unicode ... ignored, 需要真实服务器",
     "test result: ok. 1 passed; 0 failed; 3 ignored; 0 measured; 0 filtered out",
     "     Running tests/beta.rs (target/debug/deps/beta-2)",
+    "running 1 test",
     "test alpha::same_name ... FAILED",
     "test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out"
 )
@@ -91,6 +93,37 @@ $invocations = @($sameName | ForEach-Object { $_.invocation } | Sort-Object -Uni
 [int]$invocationCount = $invocations.Count
 Assert-Equal 2 $invocationCount "same-named tests have distinct invocations"
 Remove-Item -LiteralPath $log -Force
+
+# Serial nocapture keeps a name prefix open while the test emits diagnostics.
+$log = New-TempLog @(
+    "     Running tests/serial.rs (target/debug/deps/serial-3)",
+    "running 3 tests",
+    "test serial::success ... body stdout",
+    "body stderr",
+    "ok",
+    "test serial::failure ... body stdout",
+    "thread panicked: expected negative fixture",
+    "FAILED",
+    "test serial::ignored ...",
+    "ignored, needs native service",
+    "test result: FAILED. 1 passed; 1 failed; 1 ignored; 0 measured; 0 filtered out"
+)
+$parsed = Parse-CotestLog -LogPath $log
+Assert-Equal "passed" $parsed.integrity "serial framing and counts reconcile"
+Assert-Equal 3 $parsed.tests.Count "serial names retained"
+Assert-Equal "needs native service" $parsed.tests[2].reason "serial ignore reason retained"
+Assert-Equal "failed" $parsed.tests[1].status "serial actual failure retained"
+Remove-Item -LiteralPath $log -Force
+
+foreach ($lines in @(
+    ,@("test unfinished ... diagnostics", "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out"),
+    ,@("test ambiguous ... diagnostics", "ok", "FAILED", "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out")
+)) {
+    $log = New-TempLog -Lines $lines
+    $parsed = Parse-CotestLog -LogPath $log
+    Assert-Equal "failed" $parsed.integrity "unfinished or ambiguous serial framing fails closed"
+    Remove-Item -LiteralPath $log -Force
+}
 
 # ── 3. Reconciliation fails closed on a doctored per-test list ───────────────
 $log = New-TempLog @(

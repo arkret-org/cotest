@@ -7,14 +7,7 @@ inputs:
 runs:
   using: composite
   steps:
-    - name: Reclaim unused hosted-runner software for joint builds
-      if: ${{ runner.environment == 'github-hosted' && runner.os == 'Linux' }}
-      shell: bash
-      run: |
-        set -euo pipefail
-        df -h .
-        sudo rm -rf -- /usr/local/lib/android /usr/share/dotnet /opt/ghc /opt/hostedtoolcache/CodeQL
-        df -h .
+    - uses: ./cotest/.github/actions/reclaim-hosted-runner-space
     - name: Install native Wayland development dependency
       if: ${{ runner.os == 'Linux' }}
       shell: bash

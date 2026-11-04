@@ -89,12 +89,27 @@ fn retain_observation(path: &Path, boundary: Boundary, phase: &str) -> Result<()
     let root = std::path::PathBuf::from(root).join(format!("signal-emission-{boundary:?}"));
     std::fs::create_dir_all(&root)?;
     for extension in ["reached.json", "outcome.json"] {
-        std::fs::copy(
-            path.with_extension(extension),
+        let bytes = std::fs::read(path.with_extension(extension))?;
+        std::fs::write(
             root.join(format!("{phase}-{extension}")),
+            retained_observation_bytes(extension, &bytes)?,
         )?;
     }
     Ok(())
+}
+
+fn retained_observation_bytes(extension: &str, bytes: &[u8]) -> Result<Vec<u8>> {
+    if extension != "reached.json" {
+        return Ok(bytes.to_vec());
+    }
+    // The live reached() gate compares the complete original SDK envelope.
+    // Published telemetry retains its exact-byte receipt, not its signed proof.
+    arkret_canonical::canonical_json_bytes(&json!({
+        "artifact_kind": "queued_signal_observation_digest",
+        "sha256": arkret_canonical::sha256_digest(bytes),
+        "byte_length": bytes.len(),
+    }))
+    .map_err(Into::into)
 }
 
 async fn observation(path: &Path) -> Result<serde_json::Value> {
@@ -445,5 +460,34 @@ async fn wait_for_delivery(url: &str, commit: &arkret_wire::RealmCommit) -> Resu
             "departure fanout settled before the read-only observation"
         );
         tokio::time::sleep(Duration::from_millis(20)).await;
+    }
+}
+
+#[cfg(test)]
+mod retained_observation_tests {
+    use super::*;
+
+    #[test]
+    fn reached_receipt_binds_exact_bytes_without_publishing_signed_material() -> Result<()> {
+        let original = br#"{"proof":{"jws":"synthetic.signed.proof"},"encrypted_payload":{"ciphertext":"opaque"}}"#;
+        let retained = retained_observation_bytes("reached.json", original)?;
+        let receipt: serde_json::Value = serde_json::from_slice(&retained)?;
+        ensure!(receipt["sha256"] == arkret_canonical::sha256_digest(original).as_str());
+        ensure!(receipt["byte_length"] == original.len());
+        ensure!(receipt.as_object().context("receipt")?.len() == 3);
+        ensure!(!String::from_utf8(retained.clone())?.contains("synthetic.signed.proof"));
+        ensure!(!String::from_utf8(retained)?.contains("ciphertext"));
+        let changed = retained_observation_bytes("reached.json", b"different exact bytes")?;
+        let changed: serde_json::Value = serde_json::from_slice(&changed)?;
+        ensure!(receipt["sha256"] != changed["sha256"]);
+        Ok(())
+    }
+
+    #[test]
+    fn final_gate_outcome_retains_its_complete_diagnostic() -> Result<()> {
+        let original =
+            br#"{"admitted":false,"error_code":"signal_class_denied","observed_at":"exact-time"}"#;
+        ensure!(retained_observation_bytes("outcome.json", original)? == original);
+        Ok(())
     }
 }

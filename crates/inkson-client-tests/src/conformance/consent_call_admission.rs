@@ -1235,7 +1235,7 @@ fn run_call_cases<'a>(
                 .await?;
             }
             eprintln!(
-                "[consent-call] video={video} product=1 ringing=1 token=1 revoked_ring=0 revoked_token=0 unestablished_refresh=0 established_refresh=1 full_actor_roster=1 revoked_refresh=1 voluntary=1"
+                "[consent-call] video={video} product=1 ringing=1 media_token_issued=1 revoked_ring=0 revoked_token=0 unestablished_refresh=0 established_refresh=1 full_actor_roster=1 revoked_refresh=1 voluntary=1"
             );
         }
         Ok(refreshes)

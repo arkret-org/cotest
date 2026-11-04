@@ -49,7 +49,13 @@ function Initialize-Source([string]$Directory, [string]$Name, [bool]$Binary) {
     $null = New-Item -ItemType Directory -Path (Join-Path $Directory '.cargo') -Force
     Set-Content -LiteralPath (Join-Path $Directory '.gitignore') -Value '/cargo-output/'
     Set-Content -LiteralPath (Join-Path $Directory '.cargo/config.toml') -Value "[build]`ntarget-dir = 'cargo-output'"
-    Set-Content -LiteralPath (Join-Path $Directory 'Cargo.toml') -Value "[package]`nname = '$Name'`nversion = '0.1.0'`nedition = '2021'`n[workspace]"
+    Set-Content -LiteralPath (Join-Path $Directory 'Cargo.toml') -Value @"
+[package]
+name = '$Name'
+version = '0.1.0'
+edition = '2021'
+[workspace]
+"@
     $source = if ($Binary) { 'main.rs' } else { 'lib.rs' }
     Set-Content -LiteralPath (Join-Path $Directory "src/$source") -Value $(if ($Binary) { 'fn main() { println!("default"); }' } else { 'pub fn fixture() {}' })
     $null = Invoke-BuildInputNative -FilePath (Get-Command cargo).Source -WorkingDirectory $Directory -Arguments @('generate-lockfile', '--offline')

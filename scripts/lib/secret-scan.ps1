@@ -100,6 +100,16 @@ $script:SecretCategoryCredential = "credential_exposure"
 $script:ArtifactClassLog = "log_or_telemetry"
 $script:ArtifactClassDurableStore = "durable_protocol_store"
 
+function Get-NativeInvocationScanRoots {
+    param([Parameter(Mandatory = $true)][string]$RunDirectory)
+
+    foreach ($file in Get-ChildItem -LiteralPath $RunDirectory -File) {
+        if ($file.Name -cmatch '\.cargo\.(stdout|stderr)\.log$') {
+            [pscustomobject]@{ path = $file.FullName; artifact_class = $script:ArtifactClassLog }
+        }
+    }
+}
+
 function Get-Bip39WordSet {
     if ($null -eq $script:Bip39WordSet) {
         $wordlistPath = Join-Path $PSScriptRoot "bip39-english.txt"

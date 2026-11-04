@@ -59,6 +59,7 @@ jobs:
       with:
         refs: ${{ inputs.source_refs }}
         token: ${{ secrets.CI_REPO_TOKEN || github.token }}
+    - uses: ./cotest/.github/actions/reclaim-hosted-runner-space
     - name: Install Linux desktop dependencies
       run: |
         sudo apt-get update
@@ -413,6 +414,7 @@ jobs:
       if: always()
       run: |
         df -h .
+        df -i .
         free -h
   workspace-coverage:
     name: complete workspace execution coverage

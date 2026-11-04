@@ -1,0 +1,15 @@
+name: Reclaim unused hosted-runner software
+description: Free preinstalled unrelated SDKs before heavy native Rust compilation.
+runs:
+  using: composite
+  steps:
+    - name: Reclaim unused hosted-runner software
+      if: ${{ runner.environment == 'github-hosted' && runner.os == 'Linux' }}
+      shell: bash
+      run: |
+        set -euo pipefail
+        df -h .
+        df -i .
+        sudo rm -rf -- /usr/local/lib/android /usr/share/dotnet /opt/ghc /opt/hostedtoolcache/CodeQL
+        df -h .
+        df -i .

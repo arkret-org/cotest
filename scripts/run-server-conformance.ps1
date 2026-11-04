@@ -784,22 +784,49 @@ function Parse-CotestLog {
     $invocation = "unknown"
     $package = "unknown"
     $selection = "unknown"
+    $pendingTest = $null
+    $splitResultConsumed = $false
+    $framingFailed = $false
 
     foreach ($line in Get-Content $LogPath) {
+        # Cargo can force SGR styling even on redirected output.
+        $line = [regex]::Replace($line, '\x1B\[[0-9;:]*m', '')
         if ($line -match '^=== cotest invocation: (?<selection>(?<package>cotest(?:-inkson-client-tests)?)/.+) ===$') {
+            if ($null -ne $pendingTest) { $framingFailed = $true; $pendingTest = $null }
+            $splitResultConsumed = $false
             $package = $Matches.package
             $selection = $Matches.selection
             continue
         }
-        if ($line -match '^\s*Running (?<target>.+)$') {
+        if ($line -cmatch '^\s*Running (?<target>.+)$') {
+            if ($null -ne $pendingTest) { $framingFailed = $true; $pendingTest = $null }
+            $splitResultConsumed = $false
             $invocation = $Matches.target.Trim()
             continue
         }
-        if ($line -match '^\s*Doc-tests (?<target>.+)$') {
+        if ($line -cmatch '^\s*Doc-tests (?<target>.+)$') {
+            if ($null -ne $pendingTest) { $framingFailed = $true; $pendingTest = $null }
+            $splitResultConsumed = $false
             $invocation = "doc-tests " + $Matches.target.Trim()
             continue
         }
+        $wasSplitResult = $false
+        if ($line -cmatch '^(ok|FAILED|ignored)(?:, .*)?$') {
+            if ($null -ne $pendingTest) {
+                # Serial nocapture emits its name before arbitrary diagnostics,
+                # then writes the result on a separate line.
+                $line = "test $pendingTest ... $line"
+                $pendingTest = $null
+                $wasSplitResult = $true
+            } elseif ($splitResultConsumed) {
+                # Two result-shaped lines are ambiguous, never a guessed pass.
+                $framingFailed = $true
+                continue
+            }
+        }
         if ($line -match '^test (?<name>.+?) \.\.\. (?<status>ok|FAILED|ignored)(?:, (?<reason>.*))?$') {
+            if ($null -ne $pendingTest) { $framingFailed = $true; $pendingTest = $null }
+            $splitResultConsumed = $wasSplitResult
             $status = switch ($Matches.status) {
                 "ok" { "passed" }
                 "FAILED" { "failed" }
@@ -815,7 +842,15 @@ function Parse-CotestLog {
                 })
             continue
         }
+        if ($line -match '^test (?<name>.+?) \.\.\.(?: .*)?$') {
+            if ($null -ne $pendingTest) { $framingFailed = $true }
+            $pendingTest = $Matches.name
+            $splitResultConsumed = $false
+            continue
+        }
         if ($line -match '^test result: \w+\. (?<passed>\d+) passed; (?<failed>\d+) failed; (?<ignored>\d+) ignored') {
+            if ($null -ne $pendingTest) { $framingFailed = $true; $pendingTest = $null }
+            $splitResultConsumed = $false
             $footers.Add([pscustomobject]@{
                     invocation = $invocation
                     package = $package
@@ -843,6 +878,7 @@ function Parse-CotestLog {
         $footerTotals.ignored += $footer.ignored
     }
     $integrity = if (
+        -not $framingFailed -and $null -eq $pendingTest -and
         $perTest.passed -eq $footerTotals.passed -and
         $perTest.failed -eq $footerTotals.failed -and
         $perTest.ignored -eq $footerTotals.ignored
@@ -2621,7 +2657,7 @@ $ignored = $parsedLog.footer_totals.ignored
 $reportIntegrity = $parsedLog.integrity
 if ($passed + $failed -eq 0) { $exitCode = 1; Write-Host "EMPTY SELECTION: no selected tests executed" }
 if ($reportIntegrity -ne "passed") {
-    Write-Host "report_integrity=failed: per-test lines ($($parsedLog.per_test.passed)/$($parsedLog.per_test.failed)/$($parsedLog.per_test.ignored)) disagree with Cargo footers ($passed/$failed/$ignored)"
+    Write-Host "report_integrity=failed: test log framing or per-test counts ($($parsedLog.per_test.passed)/$($parsedLog.per_test.failed)/$($parsedLog.per_test.ignored)) do not reconcile with Cargo footers ($passed/$failed/$ignored)"
     $exitCode = 1
 }
 $coverage = Get-CoverageMatrix -RepoRoot $repoRoot
@@ -2718,7 +2754,7 @@ if ($Profile -eq "release-gate" -and -not $SkipJointSmokeGate) {
         $exitCode = 1
     }
 }
-# Every root declares what kind of artifact it is. These three are all
+# Every root declares what kind of artifact it is. These roots are all
 # log/telemetry, where a credential is as much a leak as a seed. A durable
 # protocol store (a PostgreSQL dump, a typed export) would be declared
 # `durable_protocol_store` so the signed authorization evidence the spec
@@ -2729,6 +2765,7 @@ $scanRootDescriptors = @(
     [pscustomobject]@{ path = $transcriptNdjson; artifact_class = "log_or_telemetry" },
     [pscustomobject]@{ path = $serviceLogDir; artifact_class = "log_or_telemetry" }
 )
+$scanRootDescriptors += @(Get-NativeInvocationScanRoots -RunDirectory $runDir)
 $scanRoots = @($scanRootDescriptors | ForEach-Object { $_.path })
 $scanFiles = 0
 foreach ($root in $scanRoots) {

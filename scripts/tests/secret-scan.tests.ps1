@@ -60,6 +60,8 @@ try {
         [pscustomobject]@{ name = "json-pepper.log"; line = "{`"pepper`":`"$hexSecret`"}"; pattern = "recovery_private_material_field" },
         [pscustomobject]@{ name = "json-signing-seed.log"; line = "{`"signing_seed`":[$privateBytes]}"; pattern = "private_material_byte_array" },
         [pscustomobject]@{ name = "query-invite-code.log"; line = "GET /present?oob_code=$lookupCode"; pattern = "query_secret_field" },
+        [pscustomobject]@{ name = "query-token.log"; line = "token=$bearer"; pattern = "query_secret_field" },
+        [pscustomobject]@{ name = "query-signature.log"; line = "signature=$dpop"; pattern = "query_secret_field" },
         [pscustomobject]@{ name = "delivered-offline-code.log"; line = "Your invitation code is $inviteCode."; pattern = "invite_delivery_code" },
         [pscustomobject]@{ name = "delivered-lookup-code.log"; line = "Your invitation code is $lookupCode."; pattern = "invite_delivery_code" },
         [pscustomobject]@{ name = "invite-token-url-path.log"; line = "POST /_arkret/open/third-party-invites/present/$inviteCode status=404"; pattern = "invite_token_in_path" },
@@ -109,6 +111,9 @@ try {
         '{"status":"ok","principal_id":"ak:did_core:webvh:QmExample"}',
         '{"pepper_id":"pepper-public-id","token_salt_id":"salt-public-id","oob_code_kind":"offline_token"}',
         'INFO completed request in 42ms path=/_arkret/describe',
+        'service route signature_verified=1 original_intent=preserved',
+        '[consent-call] media_token_issued=1 revoked_token=0',
+        '{"artifact_kind":"queued_signal_observation_digest","sha256":"sha256:public-digest","byte_length":1234}',
         # A table whose name merely starts with a private-material word is not a
         # private-material column: `\bseed\b` must not match `seed_catalog`.
         "INSERT INTO public.seed_catalog (id, label) VALUES (3, 'harmless');",
@@ -281,6 +286,27 @@ try {
     Assert-True ($canaryAfter.Count -eq 0) "a re-scan of the redacted artifact must be clean; got: $(@($canaryAfter | ForEach-Object { $_.pattern }) -join ', ')"
     $runnerSource = Get-Content -LiteralPath (Join-Path $PSScriptRoot '..\run-joint-e2e.ps1') -Raw
     Assert-True ($runnerSource.Contains("`$directory.Name -eq 'third-party-invites'")) "provider results, JUnit and summary must be included in strict artifact scanning"
+
+    # Native child streams remain published beside raw.log; scan and redact
+    # those originals too, even if the merged log was already sanitized.
+    $nativeRoot = Join-Path $scanRoot 'native-invocations'
+    New-Item -ItemType Directory -Path $nativeRoot | Out-Null
+    $nativeStdout = Join-Path $nativeRoot 'cotest_all.cargo.stdout.log'
+    $nativeStderr = Join-Path $nativeRoot 'cotest_all.cargo.stderr.log'
+    Set-Content -LiteralPath $nativeStdout -Value "token=$bearer" -Encoding utf8
+    Set-Content -LiteralPath $nativeStderr -Value "{`"root_private_key`":`"$hexSecret`"}" -Encoding utf8
+    Set-Content -LiteralPath (Join-Path $nativeRoot 'raw.log') -Value 'already sanitized' -Encoding utf8
+    $nativeRoots = @(Get-NativeInvocationScanRoots -RunDirectory $nativeRoot)
+    Assert-True ($nativeRoots.Count -eq 2) 'both original native streams must be selected'
+    Assert-True (@($nativeRoots | Where-Object artifact_class -ne 'log_or_telemetry').Count -eq 0) 'native streams must use strict log classification'
+    $nativeLeaks = @(Find-SecretLeaks -ScanRoots $nativeRoots)
+    Assert-True (@($nativeLeaks | Where-Object path -eq $nativeStdout).Count -ge 1) 'native stdout canary must fail independently of raw.log'
+    Assert-True (@($nativeLeaks | Where-Object path -eq $nativeStderr).Count -ge 1) 'native stderr private material must fail'
+    $nativeRedaction = Protect-SecretBearingArtifacts -Leaks $nativeLeaks
+    Assert-True (@($nativeRedaction.redacted_files).Count -eq 2) 'both native source logs must be redacted'
+    Assert-True (@(Find-SecretLeaks -ScanRoots $nativeRoots).Count -eq 0) 'redacted native streams must rescan clean'
+    $nativeRunner = Get-Content -LiteralPath (Join-Path $PSScriptRoot '..\run-server-conformance.ps1') -Raw
+    Assert-True ($nativeRunner.Contains('Get-NativeInvocationScanRoots -RunDirectory $runDir')) 'production runner must include original native streams'
 
     # Wordlist sanity: exactly the standard 2048-entry BIP-39 English list.
     $dpopPattern = Get-SecretLeakPatterns | Where-Object name -eq "dpop_header"
