@@ -75,8 +75,9 @@ connect();
 
 test("real WebSocket cuts preserve the page and other channels, then resume every held item from the cursor", async () => {
   const source = await streamServer();
-  const browser = await chromium.launch();
+  let browser;
   try {
+    browser = await chromium.launch();
     const page = await browser.newPage();
     await prepareAccountStreamOutage(page, operation);
     await page.goto(source.url);
@@ -97,7 +98,10 @@ test("real WebSocket cuts preserve the page and other channels, then resume ever
       assert.equal(result.loads, 1, "outages must not reload or replace the application owner");
       assert.deepEqual(result.account, Array.from({ length: result.account.at(-1) }, (_, index) => index + 1));
     }
-  } finally { await browser.close(); await source.close(); }
+  } finally {
+    try { await browser?.close(); }
+    finally { await source.close(); }
+  }
 });
 
 test("an unprepared page cannot silently fall back to a disruptive reload", () => {
