@@ -14,7 +14,7 @@ use super::*;
 use crate::harness::{CanonicalClientRequest, TestActorClient, expect_json};
 use crate::scenarios::mls_lifecycle_live::{self as mls, Member};
 
-const SCOPE: [&str; 19] = [
+const SCOPE: [&str; 18] = [
     "ak.self.keys.keypackages.command.claim.v1",
     "ak.self.keys.keypackages.read.claim.v1",
     "ak.self.keys.keypackages.command.consume.v1",
@@ -22,7 +22,6 @@ const SCOPE: [&str; 19] = [
     "ak.open.mimi.command.update_room.v1",
     "ak.open.mimi.command.request_consent.v1",
     "ak.open.mimi.command.update_consent.v1",
-    "ak.open.mimi.command.report_abuse.v1",
     "ak.open.mimi.read.identifiers.v1",
     "ak.open.mimi.exchange.request_key_material.v1",
     "ak.peer.realm_join.read.bootstrap.v1",
@@ -200,7 +199,7 @@ async fn run_with_phase(phase: &FailurePhase) -> Result<()> {
         ensure!(revoked["revoked"]==json!([unused]),"native revoke did not remove the unused accepted package");
         let membership=mls::accepted_full_view(&bob.client,&join.event_id).await?;
         phase.mark("mimi_control", line!());
-        let mimi_control=crate::harness::heap_future(|| super::mimi_control::exercise(&deployment.station,&alice,&bob,&realm,&group_id,&membership)).await?;
+        let mimi_control=crate::harness::heap_future(|| super::mimi_control::exercise(&deployment.station,&alice,&bob,&realm,&group_id)).await?;
         phase.mark("peer_membership_reads", line!());
         let peer_reads=crate::harness::heap_future(|| super::peer_membership_reads::exercise(&deployment.station,&alice,&bob,&realm,&membership)).await?;
         phase.mark("peer_signal", line!());

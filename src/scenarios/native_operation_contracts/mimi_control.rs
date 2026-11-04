@@ -6,19 +6,16 @@ use arkret_models_collaboration::mimi_operations::*;
 use arkret_models_collaboration::objects::mimi::{
     MimiConsentPurpose, MimiIdentifier, MimiIdentifierKind,
 };
-use arkret_wire::{
-    CommittedEventRef, EventAdmissionSubmission, EventKind, Hash, UnsignedPayloadProof,
-};
+use arkret_wire::{EventAdmissionSubmission, EventKind, Hash, UnsignedPayloadProof};
 
 use super::*;
 use crate::harness::ArkretServer;
 use crate::scenarios::mls_lifecycle_live::{self as mls, Member};
 
-pub(super) const SCOPE: [&str; 5] = [
+pub(super) const SCOPE: [&str; 4] = [
     "ak.open.mimi.command.update_room.v1",
     "ak.open.mimi.command.request_consent.v1",
     "ak.open.mimi.command.update_consent.v1",
-    "ak.open.mimi.command.report_abuse.v1",
     "ak.open.mimi.read.identifiers.v1",
 ];
 async fn post<T: serde::Serialize>(
@@ -73,14 +70,6 @@ fn sign(
     .sign_detached_jws(bytes);
     Ok(proof.finalize(jws)?)
 }
-fn coordinate(view: &arkret_wire::CommittedEventFullView) -> CommittedEventRef {
-    CommittedEventRef {
-        event_id: view.event.event_id.clone(),
-        commit_id: view.commit.commit_id.clone(),
-        stream_ref: view.commit.stream_ref.clone(),
-        stream_position: view.commit.stream_position,
-    }
-}
 async fn snapshot(database: &str, realm: &arkret_wire::RealmId) -> Result<Value> {
     let database = database.to_owned();
     let realm = realm.to_string();
@@ -100,7 +89,6 @@ pub(super) async fn exercise(
     bob: &Member,
     realm: &arkret_wire::RealmId,
     group: &arkret_wire::MlsGroupId,
-    joined: &arkret_wire::CommittedEventFullView,
 ) -> Result<Value> {
     let database = server.owned_database_url().context("owned MIMI database")?;
     let directory = crate::harness::expect_json(
@@ -348,83 +336,8 @@ pub(super) async fn exercise(
         "accepted Consent replacement was not the exact original"
     );
     let after_update = snapshot(database, realm).await?;
-    let expires = arkret_canonical::normalize_timestamp_canonical(
-        chrono::Utc::now() + chrono::Duration::minutes(3),
-    );
-    let unsigned_report = json!({"reporter_authority":{"actor_id":bob.actor,"membership_ref":coordinate(joined),"room_binding_ref":coordinate(&bound_commit),"expires_at":arkret_canonical::format_timestamp_canonical(expires)},"report_claim":{"realm_id":realm,"scope_ref":{"kind":"realm","realm_id":realm},"target_ref":realm,"report_reason_code":"spam"}});
-    let proof = unsigned(
-        bob,
-        server,
-        Hash::new(arkret_canonical::canonical_sha256(&unsigned_report)?)?,
-        arkret_wire::DomainSeparationId::MIMI_REPORTER_AUTHORITY_PROOF_V1,
-    );
-    let bytes = arkret_wire::service_operation_proof_binding_bytes(
-        arkret_wire::DomainSeparationId::MIMI_REPORTER_AUTHORITY_PROOF_V1,
-        arkret_wire::ServiceOperationId::OPEN_MIMI_COMMAND_REPORT_ABUSE_V1,
-        Some(json!(bob.actor)),
-        vec![
-            ("report_claim", unsigned_report["report_claim"].clone()),
-            ("membership_ref", json!(coordinate(joined))),
-            ("room_binding_ref", json!(coordinate(&bound_commit))),
-            (
-                "expires_at",
-                unsigned_report["reporter_authority"]["expires_at"].clone(),
-            ),
-        ],
-        &proof.payload_digest,
-        &proof,
-    )?;
-    let mut value = unsigned_report;
-    value["reporter_authority"]["proof"] = serde_json::to_value(sign(bob, proof, &bytes)?)?;
-    let report: MimiReportAbuseRequestBody = serde_json::from_value(value)?;
-    report.validate()?;
-    ensure!(
-        report.reporter_authority_binding_bytes()? == bytes,
-        "producer and SDK disagree on report transcript"
-    );
-    let reported = post(
-        server,
-        provider,
-        None,
-        "/_arkret/open/mimi/report-abuse",
-        &report,
-    )
-    .await?;
-    let report_replay = post(
-        server,
-        provider,
-        None,
-        "/_arkret/open/mimi/report-abuse",
-        &report,
-    )
-    .await?;
-    ensure!(
-        reported == report_replay,
-        "report retry changed its accepted original"
-    );
-    let after_report = snapshot(database, realm).await?;
-    let reports = after_report["committed"]
-        .as_array()
-        .context("actual committed reports")?
-        .iter()
-        .filter(|row| row["event"]["kind"] == json!(EventKind::SelfModerationReport))
-        .collect::<Vec<_>>();
-    let [original] = reports.as_slice() else {
-        anyhow::bail!("native facade did not commit exactly one report")
-    };
-    let report_view: arkret_wire::CommittedEventFullView =
-        serde_json::from_value((*original).clone())?;
-    ensure!(
-        reported["report_id"]
-            == json!(arkret_wire::ReportId::from_event_id(
-                &report_view.event.event_id
-            ))
-            && report_view.event.actor_id
-                == arkret_wire::ActorId::service(server.service_id().clone()),
-        "facade report response lacks its real Service-authored accepted Event"
-    );
     Ok(
-        json!({"claim_material":claim_material,"directory":directory,"binding_request":binding_request,"bound":bound,"binding_commit":bound_commit,"receipt_request":receipt_request,"receipt":receipt,"before_receipt":before_receipt,"after_receipt":after_receipt,"identifier_request":identifier_request,"identifiers":identifiers,"consent_request":request,"correlation":correlation,"after_request":after_request,"consent_update":update,"consent_accepted":accepted,"consent_replay":replay,"consent_commit":consent_commit,"consent_current":consent_current,"after_update":after_update,"report_request":report,"reported":reported,"report_replay":report_replay,"report_commit":report_view,"after_report":after_report}),
+        json!({"claim_material":claim_material,"directory":directory,"binding_request":binding_request,"bound":bound,"binding_commit":bound_commit,"receipt_request":receipt_request,"receipt":receipt,"before_receipt":before_receipt,"after_receipt":after_receipt,"identifier_request":identifier_request,"identifiers":identifiers,"consent_request":request,"correlation":correlation,"after_request":after_request,"consent_update":update,"consent_accepted":accepted,"consent_replay":replay,"consent_commit":consent_commit,"consent_current":consent_current,"after_update":after_update}),
     )
 }
 

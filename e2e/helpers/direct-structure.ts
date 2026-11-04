@@ -10,10 +10,7 @@ import { decodeEventIngressBody, ingressEvents, type IngressEvent } from "./even
 import { readFile, writeFile, rename, rm } from "node:fs/promises";
 import { randomBytes, randomUUID } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
-import { execFile } from "node:child_process";
-import { promisify } from "node:util";
-import { fileURLToPath } from "node:url";
-import { colandBaseUrl, colandServiceDid, colandServiceId, colandServiceResolution, configuredServerKeys, requiredEnv, type ColandKey } from "./env";
+import { colandBaseUrl, colandServiceDid, colandServiceId, colandServiceResolution, configuredServerKeys, type ColandKey } from "./env";
 import { cotestWire } from "./coland-api/wire-client";
 import { orderByCanonicalKey } from "./direct-structure-order";
 import { readCurrentSnapshot } from "./direct-current-snapshot";
@@ -339,35 +336,6 @@ async function structureCut(proof: DirectStructureProof, realm: string,
   }).toPass({ timeout: 90_000 });
   return result;
 }
-async function readVerifiedDirectSuccessors(proof: DirectStructureProof, realm: string,
-  authority: Record<string, any>, beforePosition: number, endPosition: number,
-  commits: Array<Record<string, unknown>>): Promise<Array<{
-    commit: Record<string, unknown>; event_id: string; event_kind: string;
-  }>> {
-  const genesis = authority.genesis_event;
-  const fixed = genesis.payload.object;
-  expect(genesis.kind).toBe("ak.realm.create");
-  expect(fixed.purpose, "private original lookup is restricted to verified Direct Genesis").toBe("direct_conversation");
-  expect(authority.authority_transitions, "Direct has no governance transfer history").toEqual([]);
-  expect(authority.current_generation).toBe(0);
-  expect(authority.current_service_id).toBe(fixed.governance_station_id);
-  const topology = JSON.parse(await readFile(process.env.COTEST_TOPOLOGY_PATH!, "utf8"));
-  const servers = topology.servers.filter((server: { coland: { service_id: string } }) =>
-    server.coland.service_id === fixed.governance_station_id);
-  expect(servers, "verified fixed Direct governor has exactly one runner-owned lease").toHaveLength(1);
-  const directSource = { service_id: fixed.governance_station_id,
-    genesis_event_id: genesis.event_id, genesis_commit: authority.genesis_commit,
-    expected_commits: commits };
-  const script = fileURLToPath(new URL("../../scripts/realm-business-footprint.py", import.meta.url));
-  const { stdout } = await promisify(execFile)(requiredEnv("COTEST_PYTHON_EXECUTABLE"), [script, "--server", servers[0].name,
-    "--realm", realm, "--stream-after-position", String(beforePosition),
-    "--stream-end-position", String(endPosition),
-    "--verified-direct-source", JSON.stringify(directSource)], { timeout: 45_000, maxBuffer: 1_048_576 });
-  const stored = JSON.parse(stdout).stream_successors;
-  expect(Array.isArray(stored)).toBe(true);
-  expect(stored).toHaveLength(commits.length);
-  return stored;
-}
 async function assertStructureBoundary(proof: DirectStructureProof, realm: string,
   before: StructureCut[], event: IngressEvent) {
   const viewers = [undefined, ...(proof.peer ? [proof.peer] : [])];
@@ -386,38 +354,25 @@ async function assertStructureBoundary(proof: DirectStructureProof, realm: strin
     expect(end, "accepted tail reaches the exact after-Snapshot head").toBeGreaterThanOrEqual(0);
     const slots = successor.eventSlots.slice(0, end + 1);
     const commits = successor.commits.slice(0, end + 1);
-    const stored = slots.some(row => row === undefined)
-      ? await readVerifiedDirectSuccessors(proof, realm, after.authority,
-        before[index].position, after.position, commits) : [];
     const interval = slots.filter((row): row is Record<string, unknown> => row !== undefined);
     for (const [offset, commit] of successor.commits.slice(0, end + 1).entries()) {
       expect(commit.stream_position, "structure interval is a complete continuous accepted tail")
         .toBe(before[index].position + offset + 1);
       const original = slots[offset];
-      if (original === undefined) {
-        expect(isDeepStrictEqual(stored[offset].commit, commit),
-          "hidden successor retains the entire publicly disclosed accepting Commit").toBe(true);
-        expect(stored[offset].event_id === commit.event_ref).toBe(true);
-        expect(stored[offset].event_kind, "only a verified independent franking receipt may be withheld")
-          .toBe("ak.moderation.franking_proof");
-      } else {
-        expect(commit.event_ref, "each visible interval Commit binds its actual Event").toBe(original.event_id);
-      }
+      expect(original, "each accepted structural successor discloses its Event").toBeDefined();
+      expect(commit.event_ref, "each visible interval Commit binds its actual Event").toBe(original!.event_id);
     }
     expect(interval.some((row: any) => row.event_id === event.event_id)).toBe(true);
-    // Ordinary encrypted messages and their receiving-service franking
-    // proofs can finish asynchronously without changing any custody row.
-    // Never include writes beyond the exact signed after-cut in this interval.
     const unexpectedKinds = [...new Set(interval.filter((row: any) => !["ak.space.create", "ak.space.update", "ak.space.archive",
       "ak.space.restore", "ak.space.tombstone", "ak.strand.create", "ak.strand.update", "ak.strand.archive",
-      "ak.strand.restore", "ak.strand.watch.set", "ak.message.create", "ak.moderation.franking_proof"].includes(row.kind))
+      "ak.strand.restore", "ak.strand.watch.set", "ak.message.create"].includes(row.kind))
       .map(row => row.kind))];
     expect(unexpectedKinds, "structure interval cannot conceal a member/history/MLS/Realm transition").toEqual([]);
     await test.info().attach(`structure-custody-boundary-${index}-${event.event_id}`, {
       body: JSON.stringify({ realm_id: realm, viewer_station: viewers[index]?.server ?? "default",
         protected_rows: after.rows.length, groups: after.groups, history_floor_unchanged: true,
         member_and_mls_rows_exact: true, before_head: before[index].head, after_head: after.head,
-        actual_structure_event: event.event_id, accepted_successors: commits.length, withheld_franking_successors: slots.length - interval.length }), contentType: "application/json" });
+        actual_structure_event: event.event_id, accepted_successors: commits.length }), contentType: "application/json" });
   }
 }
 
@@ -884,7 +839,7 @@ export async function rejectDirectStructureEvent(proof: DirectStructureProof, te
   expect(afterHead, "refusal observer retains its actual accepted head").toBeDefined();
   expect(afterHead!.stream_ref).toEqual(beforeHead!.stream_ref);
   const unchangedRows = (entries: Array<Record<string, any>>) => orderByCanonicalKey(
-    entries.filter(row => row.selector.kind !== "moderation_franking_proof"),
+    entries,
     row => canonicalJson(row.selector),
   );
   expect(unchangedRows((await snapshot()).current_state_entries)).toEqual(unchangedRows(before));
@@ -893,48 +848,11 @@ export async function rejectDirectStructureEvent(proof: DirectStructureProof, te
   expect(after.commits.length).toBe(after.eventSlots.length);
   expect(after.events.some(row => row?.event_id === event.event_id), "refused Event never enters the accepted stream").toBe(false);
   expect(after.commits.some(commit => commit.event_ref === event.event_id), "refused Event has no accepting Commit").toBe(false);
-  let independentFrankingSuccessors = 0;
-  if (afterHead!.commit_id === beforeHead!.commit_id) {
-    expect(afterHead).toEqual(beforeHead);
-  } else {
-    const end = after.commits.findIndex(commit => commit.commit_id === afterHead!.commit_id
-      && commit.stream_position === afterHead!.stream_position);
-    expect(end, "refusal observation reaches its exact after-head").toBeGreaterThanOrEqual(0);
-    independentFrankingSuccessors = end + 1;
-    // A private receiving proof can legally be Withheld, and a departed peer
-    // cannot supply a new member read. The runner-owned readonly test oracle
-    // checks accepted kind/ID plus the same full Commit, without exposing the
-    // hidden payload or treating omission as a protocol proof.
-    let stored: Array<{ commit: Record<string, unknown>; event_id: string; event_kind: string }> = [];
-    if (after.eventSlots.slice(0, end + 1).some(row => row === undefined)) {
-      // Verify the accepted Genesis/current authority before selecting a
-      // private runner lease. Direct's governor is fixed from creation; an
-      // observer can legally hold only the same disclosed Withheld Commit.
-      const authority = await verifyStructureSnapshotAuthority(proof.request, realm, beforeSnapshot);
-      stored = await readVerifiedDirectSuccessors(proof, realm, authority,
-        beforeHead!.stream_position, afterHead!.stream_position, after.commits.slice(0, end + 1));
-    }
-    for (const [offset, commit] of after.commits.slice(0, end + 1).entries()) {
-      expect(commit.stream_position).toBe(beforeHead!.stream_position + offset + 1);
-      const original = after.eventSlots[offset];
-      if (original === undefined) {
-        expect(stored[offset].commit, "the stored original has the same entire accepting Commit").toEqual(commit);
-        expect(stored[offset].event_id).toBe(commit.event_ref);
-        expect(stored[offset].event_kind).toBe("ak.moderation.franking_proof");
-        continue;
-      }
-      expect(original, "a private omission cannot prove a successor's Event kind").toBeDefined();
-      expect(commit.event_ref).toBe(original.event_id);
-      // A delayed receiving-service receipt is independent of this refused
-      // write. It must not conceal any business or governance Event.
-      expect(original.kind, "only concurrent franking receipts may advance the refusal observation")
-        .toBe("ak.moderation.franking_proof");
-    }
-  }
+  expect(afterHead).toEqual(beforeHead);
+  expect(after.commits).toHaveLength(0);
   await test.info().attach(`direct-negative-${name}`, {
     body: Buffer.from(JSON.stringify({ event_id: event.event_id, expected_reason: reason ?? "failed_precondition",
-      stream_head: beforeHead, current_unchanged: true, refused_events: 0, accepting_commits: 0,
-      independent_franking_successors: independentFrankingSuccessors })),
+      stream_head: beforeHead, current_unchanged: true, refused_events: 0, accepting_commits: 0 })),
     contentType: "application/json",
   });
 }

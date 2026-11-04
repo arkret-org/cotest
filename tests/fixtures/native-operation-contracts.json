@@ -144,10 +144,6 @@
       "native_case": null
     },
     {
-      "operation_id": "ak.open.mimi.command.report_abuse.v1",
-      "native_case": "mls_interop"
-    },
-    {
       "operation_id": "ak.open.mimi.command.request_consent.v1",
       "native_case": "mls_interop"
     },

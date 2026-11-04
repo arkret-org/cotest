@@ -588,13 +588,6 @@ def mimi_control(evidence):
     attempts=evidence["after_update"]["mimi_consent_decision_attempts"]
     require(len(attempts)==1 and attempts[0]["consent_id"]==consent and attempts[0]["event_id"]==event["event_id"] and
             attempts[0]["submission"]==request["consent_event"],"MIMI lacks its durable exact decision/Event attempt")
-    report=evidence["report_commit"]
-    require(evidence["reported"]==evidence["report_replay"] and report["event"]["actor_id"]=={"kind":"service","service_id":evidence["directory"]["service_id"]} and
-            report["commit"]["event_ref"]==report["event"]["event_id"] and report["event"]["kind"]=="ak.self.moderation.report" and
-            len([row for row in evidence["after_report"]["committed"] if row["event"]["kind"]=="ak.self.moderation.report"])==1,
-            "MIMI report lacks its real unique Service-authored accepted native result")
-
-
 def blob_presign(evidence):
     content=evidence["content_base64url"]
     require(content==evidence["fetched_base64url"]==evidence["repeated_base64url"],"native bearer URL did not return the original stored bytes twice")

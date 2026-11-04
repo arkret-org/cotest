@@ -265,7 +265,6 @@ async fn run_lifecycle(
     let (_database, coauth, native, mut group) = if api_case.is_some() {
         use super::api_mls_migrations::MlsApiCase;
         let label = match api_case.context("native MLS case absent")? {
-            MlsApiCase::AuditedReport => "api-mls-audited-report",
             MlsApiCase::MarkerPrivacy => "api-mls-marker-privacy",
             MlsApiCase::CircleMarkers => "api-mls-circle-markers",
             MlsApiCase::Discussion => "api-mls-discussion",

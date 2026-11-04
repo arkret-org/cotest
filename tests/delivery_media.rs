@@ -28,6 +28,6 @@ async fn blob_integrity_head_range_and_missing_edges_work() -> Result<()> {
 
 #[tokio::test]
 #[serial]
-async fn push_and_moderation_edges_are_enforced() -> Result<()> {
-    cotest::scenarios::delivery_media::push_and_moderation_edges_are_enforced().await
+async fn push_edges_are_enforced() -> Result<()> {
+    cotest::scenarios::delivery_media::push_edges_are_enforced().await
 }

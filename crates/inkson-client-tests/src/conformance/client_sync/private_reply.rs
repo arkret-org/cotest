@@ -105,43 +105,6 @@ fn changed_business_components(before: &str, after: &str) -> Result<Vec<String>>
     Ok(changed)
 }
 
-async fn await_franking(
-    event: &arkret_wire::EventId,
-    realm: &arkret_wire::RealmId,
-    database_url: &str,
-) -> Result<arkret_wire::CommittedEventFullView> {
-    let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(45);
-    loop {
-        // Observe completion of the genuine publication job without requiring
-        // its private proof body to be disclosed on an ordinary Realm scan.
-        let carrier = read_database_evidence(
-            database_url,
-            "SELECT COALESCE((SELECT jsonb_build_object('event',e.envelope,'commit',c.commit_json)::text FROM moderation_franking_proof_current_states r JOIN realm_commits c ON c.commit_id=r.current_commit_id AND c.realm_id=r.realm_id AND c.stream_position=r.current_stream_position JOIN canonical_events e ON e.pk=c.event_pk WHERE r.realm_id=$1 AND r.target_event_id=$2),'null')",
-            &[&realm.as_str(), &event.as_str()],
-        )?;
-        let pending = read_database_evidence(
-            database_url,
-            "SELECT COUNT(*)::text FROM moderation_franking_jobs WHERE realm_id=$1 AND target_event_id=$2",
-            &[&realm.as_str(), &event.as_str()],
-        )?;
-        if carrier != "null" && pending == "0" {
-            let proof: arkret_wire::CommittedEventFullView = serde_json::from_str(&carrier)?;
-            proof.validate_shape()?;
-            ensure!(
-                proof.event.kind == arkret_wire::EventKind::ModerationFrankingProof
-                    && proof.event.payload["event_id"] == event.as_str(),
-                "franking target changed"
-            );
-            return Ok(proof);
-        }
-        ensure!(
-            tokio::time::Instant::now() < deadline,
-            "actual franking publication did not settle"
-        );
-        tokio::time::sleep(std::time::Duration::from_millis(200)).await;
-    }
-}
-
 impl AccountSubscribeTransport for HealingRail {
     async fn subscribe(
         &self,
@@ -442,7 +405,6 @@ impl SidecarSyncObserver for PrivateReplyProbe {
             "private request refused: {status} {outcome}"
         );
         let request_accepted = accepted_full_view(&controller.client, &request.event_id).await?;
-        await_franking(&request.event_id, realm, database_url).await?;
         let cursor_before_readback = host.state_store().sync_cursor();
         let readback_fault = self
             .relay
@@ -595,7 +557,6 @@ impl SidecarSyncObserver for PrivateReplyProbe {
             "private runtime response refused: {status} {outcome}"
         );
         let reply_accepted = accepted_full_view(&controller.client, &reply.event_id).await?;
-        let reply_franking = await_franking(&reply.event_id, realm, database_url).await?;
         ensure!(
             reply_accepted.commit.stream_ref == request_accepted.commit.stream_ref
                 && reply_accepted.commit.stream_position
@@ -804,23 +765,9 @@ impl SidecarSyncObserver for PrivateReplyProbe {
             })
             .map(|(key, _)| key)
             .collect::<std::collections::BTreeSet<_>>();
-        let healthy = heads
-            .iter()
-            .find(|(_, head)| {
-                head["stream_ref"]
-                    == serde_json::to_value(&reply_franking.commit.stream_ref).unwrap()
-            })
-            .map(|(key, _)| key)
-            .context("original healthy Realm head")?;
-        let healthy_expected = arkret_wire::CommitStreamHead {
-            stream_ref: reply_franking.commit.stream_ref.clone(),
-            stream_position: reply_franking.commit.stream_position,
-            commit_id: reply_franking.commit.commit_id.clone(),
-        };
         ensure!(
-            recovered[healthy] == serde_json::to_value(&healthy_expected)?
-                && changed == [affected, healthy].into_iter().collect(),
-            "private recovery changed heads beyond the exact reply and its already accepted franking carrier: {changed:?}"
+            changed == [affected].into_iter().collect(),
+            "private recovery changed heads beyond the exact reply: {changed:?}"
         );
         let checkpoint = host
             .state_store()
@@ -870,7 +817,6 @@ impl SidecarSyncObserver for PrivateReplyProbe {
             &serde_json::json!({"request_submissions":request_submissions,"agent_executions":agent_executions,"account_attempts":2,
                 "authenticated_scan_requests":fault.scan_requests(),"missing_scan_outcomes":fault.observations(),
                 "initial_scan_requests":*initial_scans,"automatic_recovery_scan_requests":recovery_scans,
-                "ordinary_reply_franking_head":healthy_expected,
                 "private_projection":projection,"visible_reply_digest":arkret_canonical::canonical_sha256(&serde_json::from_slice::<Value>(&visible)?)?,
                 "ack_preserved":true,"business_writes_repeated":false,"baseline_redone":false,"mls_group_preserved":true,"fresh_process_readback":true,
                 "accepted_request_independent_readback":true,"readback_account_cursor_preserved":true,"readback_exact_mls_and_durable_cut":true,

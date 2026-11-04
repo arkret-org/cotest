@@ -24,7 +24,7 @@ cargo-fuzz = true
 [workspace]
 
 [workspace.package]
-rust-version = "1.98"
+rust-version = "1.99"
 
 [[bin]]
 name = "envelope_fuzz"

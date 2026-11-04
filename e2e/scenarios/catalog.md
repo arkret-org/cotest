@@ -164,7 +164,6 @@ Static source definitions are implementation inventory, never runtime verificati
   - `conformance/encoding-vectors`
   - `conformance/profile-gates`
   - `conformance/registry-drift`
-  - `encryption/audited-e2ee`
   - `encryption/encrypted-attachments`
   - `encryption/key-backup-restore`
   - `encryption/mls-group`

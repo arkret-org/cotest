@@ -1104,9 +1104,7 @@ impl TestActorClient {
             kind,
             payload,
         );
-        if kind != arkret_wire::event_kind_str::SELF_MODERATION_REPORT {
-            self.stamp_authority(&mut event, realm_id, kind, true);
-        }
+        self.stamp_authority(&mut event, realm_id, kind, true);
         let (signing_seed, _) = event_signing_identity_for_device(&self.actor, &self.device_id);
         refresh_typed_event_proof_with_signing_seed(&mut event, signing_seed)?;
         Ok(event)

@@ -65,7 +65,6 @@ pub use federation_idempotency_production::run_federation_idempotency_production
 mod file_transfer_stream_aead;
 mod final_conformance_closure;
 mod fixture_dsl;
-mod franking_proof;
 mod handle_claim_rejection_vectors;
 mod helpers;
 mod identity_root;
@@ -301,12 +300,9 @@ pub use final_conformance_closure::{
     run_applet_transaction_delivery_authentication_record_digest_vector,
     run_calendar_rsvp_occurrence_key_vector, run_federation_timing_bucket_vector,
     run_final_conformance_closure_fixture_suite, run_mls_key_access_revision_vector,
-    run_mls_proposal_producer_binding_vector,
-    run_moderation_evidence_package_minimal_disclosure_vector,
-    run_moderation_franking_roundtrip_vector, run_moderation_review_resolution_fold_vector,
+    run_mls_proposal_producer_binding_vector, run_moderation_review_resolution_fold_vector,
     run_relation_reference_projection_indistinguishable_vector,
 };
-pub use franking_proof::{FRANKING_PROOF_ENTRYPOINT, run_franking_proof_suite};
 pub use handle_claim_rejection_vectors::{
     ALL_HANDLE_CLAIM_REJECTION_VECTOR_IDS, run_handle_claim_rejection_vector_suite,
     run_service_handle_rejected_vector, run_subject_not_principal_did_rejected_vector,

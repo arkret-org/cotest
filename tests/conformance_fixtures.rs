@@ -340,7 +340,7 @@ conformance_test!(
 conformance_test!(
     /// Discovery profile (ak.profile.discovery.v1) advertise vs
     /// core/extension tier filtering, interop_bridge handling, and post-C16
-    /// surface naming (blob_storage / realtime_media / moderation_reports).
+    /// surface naming (blob_storage / realtime_media).
     discovery_profile_fixture_suite_matches_reference_semantics,
     "discovery_profile_fixture",
     cotest::conformance::run_discovery_profile_fixture_suite,

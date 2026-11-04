@@ -658,47 +658,9 @@ async fn create_blob_access_realm(
     Ok(realm_id)
 }
 
-pub async fn push_and_moderation_edges_are_enforced() -> Result<()> {
-    let station = spawn_with_standard_grant_authority("push-moderation", &[]).await?;
+pub async fn push_edges_are_enforced() -> Result<()> {
+    let station = spawn_with_standard_grant_authority("push-edges", &[]).await?;
     let server = &station.server;
-    let alice_did = actor_did_for_service_did(server.service_did(), "alice-moderation")?;
-    let alice_bearer = server
-        .demo_client(&alice_did, "ak:device:01904100-0000-7000-8000-0000000000a1")
-        .await?;
-    let alice = alice_bearer.expect_dev_bearer().to_owned();
-    // Alice founds the fixture Realm and signs the report Event, which needs
-    // her Standard SessionGrant.
-    let alice_client = station.standard_grant_client(&alice_bearer)?;
-    let bob_did = actor_did_for_service_did(server.service_did(), "bob-delivery")?;
-    let bob = server
-        .register_client(
-            &bob_did,
-            "@bob-delivery",
-            "ak:device:01904100-0000-7000-8000-0000000000b0",
-        )
-        .await?
-        .expect_dev_bearer()
-        .to_owned();
-    let moderation_realm_create = alice_client
-        .create_realm_with(json!({
-            "title": "Moderation edge fixture",
-            "public": false,
-            "plaintext_visible_services": [alice_client.service_id()]
-        }))
-        .await?;
-    let moderation_realm = moderation_realm_create["realm_id"]
-        .as_str()
-        .ok_or_else(|| anyhow!("moderation fixture Realm create has no realm_id"))?
-        .to_owned();
-    let moderation_request = crate::harness::moderation_report_request(
-        &alice_client,
-        &moderation_realm,
-        &moderation_realm,
-        arkret_wire::ScopeRef::Realm {
-            realm_id: arkret_identifiers::RealmId::new(moderation_realm.clone())?,
-        },
-    )
-    .await?;
 
     expect_api_error(
         server
@@ -710,41 +672,5 @@ pub async fn push_and_moderation_edges_are_enforced() -> Result<()> {
         "param_invalid",
     )
     .await?;
-    expect_api_error(
-        server
-            .http()
-            .post(server.url("/_arkret/self/moderation/report"))
-            .json(&moderation_request),
-        StatusCode::UNAUTHORIZED,
-        "unauthenticated",
-    )
-    .await?;
-    let wrong_reporter = arkret_test_kit::wire_negative_from_sdk(&moderation_request, |body| {
-        body["report_event"]["event"]["payload"]["reporter_id"] =
-            json!("ak:did_core:web:bob-delivery.example");
-    })?;
-    expect_api_error(
-        server
-            .http()
-            .post(server.url("/_arkret/self/moderation/report"))
-            .bearer_auth(&alice)
-            .json(&wrong_reporter),
-        StatusCode::BAD_REQUEST,
-        "param_invalid",
-    )
-    .await?;
-    // Alice's signed report under Bob's session is an identity-binding
-    // negative; it never reaches capability admission.
-    expect_api_error(
-        server
-            .http()
-            .post(server.url("/_arkret/self/moderation/report"))
-            .bearer_auth(&bob)
-            .json(&moderation_request),
-        StatusCode::BAD_REQUEST,
-        "param_invalid",
-    )
-    .await?;
-
     Ok(())
 }

@@ -353,8 +353,6 @@ export function typedId(kind: string): string {
       "message",
       "morph",
       "relation",
-      "report",
-      "moderation_queue_item",
       "space",
       "realm",
       "view",

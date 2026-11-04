@@ -1,7 +1,7 @@
 {
   "project": "joint-api",
   "selector": null,
-  "minimum_tests": 71,
+  "minimum_tests": 70,
   "required_files": [
     "extensions/platform-live.spec.ts",
     "harness/garth-client.spec.ts",
@@ -15,13 +15,12 @@
     "cotest/e2e/tests/events/realm-genesis-commit-stream.spec.ts",
     "cotest/e2e/tests/sync/account-stream-device-message.spec.ts",
     "cotest/e2e/tests/sync/transport-negotiation.spec.ts",
-    "cotest/e2e/tests/encryption/audited-e2ee.spec.ts",
     "cotest/e2e/tests/invites/invite-addressing.spec.ts",
     "cotest/e2e/tests/messaging/discussion-upgrade.spec.ts",
     "cotest/e2e/tests/messaging/read-receipts.spec.ts",
     "cotest/e2e/tests/models/private-read-marker.spec.ts"
   ],
-  "scope": "Browserless Playwright selection plus retained mandatory native migrations. Collection credits never claim that native tests actually executed. The test floor remains unchanged; exact required sources prevent unrelated growth from hiding a missing active scenario.",
+  "scope": "Browserless Playwright selection plus retained mandatory native migrations. Collection credits never claim that native tests actually executed. The test floor excludes withdrawn scenarios; exact required sources prevent unrelated growth from hiding a missing active scenario.",
   "retirements": {
     "9f032523747d8e919822e989acd2631a4c9056e7": {
       "source": "cotest/e2e/tests/invites/third-party.spec.ts",

@@ -86,24 +86,6 @@
       ]
     },
     {
-      "source": "cotest/e2e/tests/encryption/audited-e2ee.spec.ts",
-      "target": "api_mls_migrations",
-      "symbol": "audited_e2ee_api_migration",
-      "environment": "isolated_station",
-      "legacy_case_count": 1,
-      "legacy_projects": [
-        "chrome",
-        "chromium",
-        "joint-api"
-      ],
-      "legacy_fully_implemented": false,
-      "operation_ids": [
-        "ak.self.events.command.submit.v1",
-        "ak.self.committed_event.read.scan.v1",
-        "ak.self.moderation.command.report.v1"
-      ]
-    },
-    {
       "source": "cotest/e2e/tests/invites/invite-addressing.spec.ts",
       "target": "invite_addressing_api",
       "symbol": "invite_addressing_api_migration",
@@ -481,10 +463,6 @@
           "symbol": "run_mimi_components_fixture_suite"
         },
         {
-          "file": "cotest/tests/mimi_directory_authority_closure.rs",
-          "symbol": "mimi_report_requires_closed_exact_actor_authority"
-        },
-        {
           "file": "cotest/src/conformance/wire/interop.rs",
           "symbol": "run_interop_downgrade_fixture_suite"
         }
@@ -749,17 +727,6 @@
         {
           "file": "cotest/tests/transport_negotiation_api.rs",
           "symbol": "transport_negotiation_api_migration"
-        }
-      ]
-    },
-    {
-      "source": "cotest/e2e/tests/encryption/audited-e2ee.spec.ts",
-      "disposition": "migrated",
-      "coverage_status": "live_native",
-      "replacements": [
-        {
-          "file": "cotest/tests/api_mls_migrations.rs",
-          "symbol": "audited_e2ee_api_migration"
         }
       ]
     },

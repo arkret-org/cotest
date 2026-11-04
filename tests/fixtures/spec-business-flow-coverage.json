@@ -277,8 +277,7 @@
         "realm_read",
         "realm_object_read",
         "authz_policy",
-        "consent_management",
-        "moderation_reports"
+        "consent_management"
       ],
       "operation_spine": [
         {
@@ -364,12 +363,6 @@
           "surfaces": [
             "consent_management"
           ]
-        },
-        {
-          "operation_id": "ak.self.moderation.command.report.v1",
-          "surfaces": [
-            "moderation_reports"
-          ]
         }
       ],
       "coverage": [
@@ -416,13 +409,6 @@
           "markers": [
             "ak.self.consent.command.replace.v1",
             "ak.self.consent.command.request.v1"
-          ]
-        },
-        {
-          "kind": "ordinary",
-          "path": "../coland/crates/http/src/routing/interop/moderation.rs",
-          "markers": [
-            "ak.self.moderation.command.report.v1"
           ]
         },
         {

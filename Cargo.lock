@@ -2673,7 +2673,6 @@ dependencies = [
  "cotest-crypto-hpke-runner",
  "cotest-cursor-negative-runner",
  "cotest-detached-object-signature-runner",
- "cotest-franking-proof-runner",
  "cotest-managed-governance-runner",
  "cotest-mls-governance-binding-runner",
  "cotest-private-view-inbox-runner",
@@ -2853,18 +2852,6 @@ dependencies = [
  "arkret-models-identity",
  "arkret-wire",
  "coland-services",
-]
-
-[[package]]
-name = "cotest-franking-proof-runner"
-version = "0.3.0"
-dependencies = [
- "anyhow",
- "arkret-canonical",
- "arkret-models-collaboration",
- "arkret-signatures",
- "arkret-wire",
- "serde_json",
 ]
 
 [[package]]

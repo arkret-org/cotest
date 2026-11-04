@@ -42,7 +42,6 @@ mod device_messages;
 mod events_keys_setup;
 mod key_backup_pointer;
 mod key_backups;
-mod moderation;
 mod push;
 pub mod snapshot_head_disclosure;
 
@@ -59,7 +58,7 @@ pub use snapshot_head_disclosure::{
     narrow_snapshot_head_discloses_only_complete_creator_cut,
 };
 
-pub async fn events_keys_device_blob_push_and_moderation_surfaces_work() -> Result<()> {
+pub async fn events_keys_device_blob_push_surfaces_work() -> Result<()> {
     let coauth = MockCoauthIntrospectionServer::spawn_with_internal_secret(
         HARNESS_INTERNAL_AUTHORITY_SECRET,
     )
@@ -104,10 +103,9 @@ pub async fn events_keys_device_blob_push_and_moderation_surfaces_work() -> Resu
     )?;
     let event_client = server.client_with_founding_device_grant(principal, grant)?;
 
-    let (actor, adapter_realm_id, adapter_message_event_id) =
-        events_keys_setup::run(&server, &client, &event_client)
-            .await
-            .context("protocol payload event/key setup")?;
+    events_keys_setup::run(&server, &client, &event_client)
+        .await
+        .context("protocol payload event/key setup")?;
     device_messages::run(&server, &token, &actor_id)
         .await
         .context("protocol payload device messages")?;
@@ -131,15 +129,6 @@ pub async fn events_keys_device_blob_push_and_moderation_surfaces_work() -> Resu
     push::run(&server, &token)
         .await
         .context("protocol payload push")?;
-    moderation::run(
-        &server,
-        &actor,
-        &adapter_realm_id,
-        &adapter_message_event_id,
-    )
-    .await
-    .context("protocol payload moderation")?;
-
     Ok(())
 }
 

@@ -4,7 +4,7 @@
 
 验证 `encryption_profile=mls_rfc9420` 的 Realm 的完整加密生命周期:alice 创建 E2EE Realm → bob 通过 MLS welcome 加入 → 双向发加密消息(timeline 渲染明文,服务端只见 ciphertext)→ 增减成员触发 epoch advance → governance_binding 校验。
 
-不验证:加密附件(encryption/encrypted-attachments)、密钥备份(encryption/key-backup)、audited E2EE 反审(encryption/audited-e2ee)、跨服务器 MLS 联邦(后续 scenario)。
+不验证:加密附件(encryption/encrypted-attachments)、密钥备份(encryption/key-backup)、跨服务器 MLS 联邦(后续 scenario)。
 
 ## Spec 锚点
 

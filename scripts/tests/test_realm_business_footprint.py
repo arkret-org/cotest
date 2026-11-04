@@ -21,14 +21,14 @@ class DirectOriginalOracleTests(unittest.TestCase):
     def setUp(self):
         self.commit = {"commit_id": "ak:realm_commit:original", "realm_id": REALM,
                        "stream_ref": {"kind": "realm", "realm_id": REALM}, "stream_position": 37,
-                       "event_ref": "ak:event:franking", "signature": {"signature": "disclosed-original"}}
+                       "event_ref": "ak:event:withheld", "signature": {"signature": "disclosed-original"}}
         self.source = {"service_id": SERVICE, "genesis_event_id": GENESIS,
                        "genesis_commit": {"commit_id": "ak:realm_commit:genesis", "stream_position": 0},
                        "expected_commits": [self.commit]}
         self.origin = [{"event_id": GENESIS, "purpose": "direct_conversation",
                         "governance_station_id": SERVICE, "commit": self.source["genesis_commit"]}]
         self.rows = [{"commit": copy.deepcopy(self.commit), "event_id": self.commit["event_ref"],
-                      "event_kind": "ak.moderation.franking_proof"}]
+                      "event_kind": "ak.audit.accessed"}]
 
     def validate(self):
         oracle.validate_direct_originals(self.origin, self.rows, self.source, REALM, 36, 37)
@@ -53,17 +53,13 @@ class DirectOriginalOracleTests(unittest.TestCase):
         self.origin = []
         with self.assertRaises(ValueError): self.validate()
 
-    def test_missing_original_never_infers_franking_from_withheld_commit(self):
+    def test_missing_original_never_infers_event_from_withheld_commit(self):
         self.rows = []
         with self.assertRaisesRegex(ValueError, "incomplete"): self.validate()
 
     def test_tampered_entire_original_commit_is_rejected(self):
         self.rows[0]["commit"]["signature"]["signature"] = "changed"
         with self.assertRaisesRegex(ValueError, "disclosed Commit"): self.validate()
-
-    def test_business_event_cannot_hide_under_franking_exception(self):
-        self.rows[0]["event_kind"] = "ak.message.create"
-        with self.assertRaisesRegex(ValueError, "franking Event"): self.validate()
 
     def test_wrong_event_id_is_rejected(self):
         self.rows[0]["event_id"] = "ak:event:unrelated"

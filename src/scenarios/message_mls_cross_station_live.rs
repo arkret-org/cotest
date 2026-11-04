@@ -697,8 +697,6 @@ async fn run_at_two_stations(
             .await;
         }
         // Signal uses the accepted device/member/MLS bootstrap directly.
-        // Ordinary Message franking publication belongs to the other scenario
-        // and must not race the negative Signal zero-write observations.
         return crate::scenarios::signal_live::exercise_two_station_signal(
             &alice,
             &bob,

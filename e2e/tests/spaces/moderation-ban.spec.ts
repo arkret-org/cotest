@@ -3,13 +3,11 @@
 // Spec refs:
 //   - governance/content-moderation.md §2.5.0 (three-layer gate)
 //   - §2.5 Moderation safety commands advance confirmed sequenced state
-//   - §3 Report
 //   - §5.1 Redact requires ak.moderation.decision
 //   - §5.2 Ban via ak.member.state{membership="ban"}
 
-import { readCurrentSnapshot } from "../../helpers/direct-current-snapshot";
 import { actorRow } from "../../helpers/product-locators";
-import { expect, test, type APIRequestContext } from "../../helpers/arkret-test";
+import { expect, test } from "../../helpers/arkret-test";
 import { colandBaseUrl, colandServiceId } from "../../helpers/env";
 import { acceptInviteViaApi } from "../../helpers/api";
 import {
@@ -37,26 +35,10 @@ import {
   uniqueUser,
 } from "../../helpers/users";
 
-// Read the canonical report family through the standard authorized Snapshot.
-// Realm moderation authority does not confer deployment admin.read scope.
-async function reportCurrent(request: APIRequestContext, token: string, realm: string, eventId: string) {
-  const url = `${colandBaseUrl()}/_arkret/self/realm-state-snapshot/head?realm_id=${encodeURIComponent(realm)}`;
-  return readCurrentSnapshot(
-    timeout => request.get(url, { headers: authHeaders(token, "GET", url), timeout }),
-    async body => {
-      const snapshot = body as Record<string, any>;
-      expect(snapshot.realm_id).toBe(realm);
-      expect(Array.isArray(snapshot.current_state_entries)).toBe(true);
-      return snapshot.current_state_entries.filter((entry: Record<string, any>) =>
-        entry.selector?.kind === "moderation_report" && entry.selector.event_id === eventId);
-    },
-  );
-}
-
 test.describe.configure({ mode: "serial" });
 
 test.describe("moderation and ban", () => {
-  test("report -> ak.member.state ban -> post-ban writes rejected -> redaction filters public timeline", async ({
+  test("ak.member.state ban -> post-ban writes rejected -> redaction filters public timeline", async ({
     request,
   }) => {
     const stamp = Date.now();
@@ -120,58 +102,6 @@ test.describe("moderation and ban", () => {
     const beforeRedaction = await queryRealmEventsApi(request, aliceToken, realmId);
     expect(JSON.stringify(beforeRedaction)).toContain(abusive);
 
-    const reportDescription = "S5 abusive content posted by mallory";
-    const reportEvent = signedEventEnvelope({
-      actorId: bob.id,
-      realmId,
-      kind: "ak.self.moderation.report",
-      payload: {
-        realm_id: realmId,
-        target_ref: sent.event_id,
-        report_reason_code: "harassment",
-        description: reportDescription,
-        reporter_id: bob.id,
-        evidence_refs: [sent.event_id],
-      },
-    });
-    const reportUrl = `${colandBaseUrl()}/_arkret/self/moderation/report`;
-    const reportResp = await request.post(reportUrl, {
-      headers: {
-        ...authHeaders(bobToken, "POST", reportUrl),
-        "content-type": "application/json",
-      },
-      data: canonicalJson({ report_event: { event: reportEvent } }),
-    });
-    const reportText = await reportResp.text();
-    expect(reportResp.ok(), reportText).toBeTruthy();
-    const reportBody = JSON.parse(reportText);
-    expect(reportBody.report_id).toMatch(/^ak:report:/);
-    expect(reportBody.status).toBe("submitted");
-    // The queue is a View over the accepted report: its item id is the same
-    // report Event token retyped to moderation_queue_item.
-    const queueItemId = String(reportBody.report_id).replace(
-      /^ak:report:/,
-      "ak:moderation_queue_item:",
-    );
-
-    const reportEventId = String(reportBody.report_id).replace(/^ak:report:/, "ak:event:");
-    for (const token of [bobToken, malloryToken, carolToken, aliceToken]) {
-      const adminUrl = `${colandBaseUrl()}/_coland/admin/reports`;
-      const response = await request.get(adminUrl, { headers: authHeaders(token, "GET", adminUrl) });
-      expect(response.status(), "ordinary grants cannot read the deployment administrator queue").toBe(403);
-      const problem = await response.json();
-      expect(wireErrCode(problem)).toBe("capability_denied");
-      expect(JSON.stringify(problem)).not.toContain(queueItemId);
-      expect(JSON.stringify(problem)).not.toContain(reportDescription);
-    }
-    for (const token of [bobToken, malloryToken, carolToken]) {
-      expect(await reportCurrent(request, token, realmId, reportEventId),
-        "reporter, target and bystander receive no moderator-only report current").toEqual([]);
-    }
-    const ownerReports = await reportCurrent(request, aliceToken, realmId, reportEventId);
-    expect(ownerReports).toHaveLength(1);
-    expect(ownerReports[0].value).toEqual(reportEvent.payload);
-
     const unauthorizedBanEvent = signedEventEnvelope({
       actorId: bob.id,
       realmId,
@@ -197,10 +127,6 @@ test.describe("moderation and ban", () => {
       "capability_denied",
     );
 
-    const reports = await reportCurrent(request, aliceToken, realmId, reportEventId);
-    expect(reports).toHaveLength(1);
-    expect(reports[0].value).toEqual(reportEvent.payload);
-
     const banEvent = signedEventEnvelope({
       actorId: alice.id,
       realmId,
@@ -209,7 +135,7 @@ test.describe("moderation and ban", () => {
         realm_id: realmId,
         member_id: accountActorId(mallory.id),
         membership: "ban",
-        reason: "moderation_report_upheld",
+        reason: "moderator_ban",
       },
     });
     await submitSignedEventApi(request, aliceToken, banEvent, {

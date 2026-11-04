@@ -41,7 +41,7 @@ pub use event_builder::{
     dev_login, device_message_send_request, encrypted_envelope, event_envelope,
     event_envelope_with_signing_seed, event_envelope_with_signing_seed_and_verification_method,
     event_signing_identity_for_device, invite_create_payload,
-    message_create_text_payload_for_strand, moderation_report_request, realm_bootstrap_event_batch,
+    message_create_text_payload_for_strand, realm_bootstrap_event_batch,
     realm_bootstrap_event_batch_with_signing_seed, register_account_via_dev_login,
     register_account_with_localpart_via_dev_login, register_event_signing_identity, send_message,
     submit_event, submit_event_with_signing_seed_and_verification_method,

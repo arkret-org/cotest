@@ -16,7 +16,6 @@ use crate::scenarios::mls_lifecycle_live::Member;
 mod directory;
 mod key_material;
 mod provider_client;
-mod report_recovery;
 
 const GROUP: &str = "mimi-facade-live";
 const DEVICE: &str = "ak:device:01904100-0000-7000-8000-000000002881";
@@ -249,7 +248,7 @@ pub async fn run_evidence() -> Result<Option<(Vec<CaseExecutionResult>, Vec<Case
         HARNESS_INTERNAL_AUTHORITY_SECRET,
     )
     .await?;
-    let Some(mut group) = TestServerGroup::try_multi_external_with_node_envs(
+    let Some(group) = TestServerGroup::try_multi_external_with_node_envs(
         GROUP,
         &[station_env(&db.connect_url, &coauth)],
     )
@@ -365,101 +364,6 @@ pub async fn run_evidence() -> Result<Option<(Vec<CaseExecutionResult>, Vec<Case
         ensure!(envelope["producer_proof"]["verification_method"].is_string(),"Service Event lacks its real proof");
         Ok(())
     }).await??;
-    // A claim authenticated by the exact current PCR device becomes a local
-    // Service-authored report; a byte-identical provider retry returns its first receipt.
-    let db_url = db.connect_url.clone();
-    let realm_copy = realm.clone();
-    let actor = member.actor.to_string();
-    let room_copy = room.clone();
-    let (membership,binding)=tokio::task::spawn_blocking(move || -> Result<_> {
-        let mut db=postgres::Client::connect(&db_url,postgres::NoTls)?;
-        let member=db.query_one("SELECT c.commit_json FROM member_state_current_states m JOIN realm_commits c ON c.commit_id=m.current_commit_id WHERE m.realm_id=$1 AND m.member_id=$2 AND m.membership='join'",&[&realm_copy,&actor])?;
-        let binding=db.query_one("SELECT c.commit_json FROM mimi_room_binding_current_states m JOIN realm_commits c ON c.commit_id=m.current_commit_id WHERE m.mimi_room_uri=$1",&[&room_copy])?;
-        Ok((member.get::<_,Value>(0),binding.get::<_,Value>(0)))
-    }).await??;
-    let committed_ref = |value: Value| -> Result<Value> {
-        let c: arkret_wire::RealmCommit = serde_json::from_value(value)?;
-        Ok(
-            json!({"event_id":c.event_ref,"commit_id":c.commit_id,"stream_ref":c.stream_ref,"stream_position":c.stream_position}),
-        )
-    };
-    let now = arkret_canonical::normalize_timestamp_canonical(chrono::Utc::now());
-    let mut report: arkret_models_collaboration::mimi_operations::MimiReportAbuseRequestBody =
-        serde_json::from_value(json!({
-            "reporter_authority":{"actor_id":member.actor,"membership_ref":committed_ref(membership)?,"room_binding_ref":committed_ref(binding)?,
-                "expires_at":arkret_canonical::format_timestamp_canonical(now+chrono::Duration::seconds(240)),
-                "proof":{"kind":"detached_jws","verification_method":member.method,"payload_digest":format!("sha256:{}","0".repeat(64)),
-                    "created_at":arkret_canonical::format_timestamp_canonical(now),"domain":"ak.mimi_reporter_authority_proof.v1",
-                    "audience":server.service_id(),"jws":"placeholder"}},
-            "report_claim":{"realm_id":realm,"scope_ref":{"kind":"realm","realm_id":realm},"target_ref":realm,"report_reason_code":"spam"}
-        }))?;
-    report.reporter_authority.proof.payload_digest = report.payload_digest()?;
-    report.reporter_authority.proof.jws = arkret_signatures::jws::sign_jws_ed25519(
-        &report.reporter_authority_binding_bytes()?,
-        &member.key,
-    )
-    .map_err(anyhow::Error::msg)?;
-    let report = serde_json::to_value(report)?;
-    let before = counts(&db.connect_url, &realm).await?;
-    let first = serde_json::to_value(
-        sdk.mimi_report_abuse(&serde_json::from_value(report.clone())?)
-            .await?,
-    )?;
-    let after = counts(&db.connect_url, &realm).await?;
-    ensure!(
-        after[0] == before[0] + 1 && after[1] == before[1] + 1 && after[5] == before[5] + 1,
-        "report Event/Commit/idempotency were not one accepting effect"
-    );
-    let report_database = db.connect_url.clone();
-    let report_realm = realm.clone();
-    let report_commit: arkret_wire::RealmCommit =
-        tokio::task::spawn_blocking(move || -> Result<_> {
-            let mut database = postgres::Client::connect(&report_database, postgres::NoTls)?;
-            let row = database.query_one(
-            "SELECT c.commit_json FROM realm_commits c JOIN canonical_events e ON e.pk=c.event_pk \
-             WHERE c.realm_id=$1 AND e.kind=$2 ORDER BY c.stream_position DESC LIMIT 1",
-            &[&report_realm, &EventKind::SelfModerationReport.as_str()],
-        )?;
-            Ok(serde_json::from_value(row.get::<_, Value>(0))?)
-        })
-        .await??;
-    ensure!(
-        first["report_id"]
-            == serde_json::to_value(arkret_wire::ReportId::from_event_id(
-                &report_commit.event_ref
-            ))?,
-        "MIMI receipt report id is not derived from its actual committed Event"
-    );
-    let replay = serde_json::to_value(
-        sdk.mimi_report_abuse(&serde_json::from_value(report.clone())?)
-            .await?,
-    )?;
-    ensure!(
-        replay == first,
-        "MIMI report replay changed its first receipt"
-    );
-    ensure!(
-        counts(&db.connect_url, &realm).await? == after,
-        "MIMI report replay appended another Event or delivery"
-    );
-
-    let probe = report_recovery::exercise(
-        server,
-        &coauth,
-        &member,
-        &db.connect_url,
-        &realm,
-        &room,
-        provider,
-        &report,
-    )
-    .await?;
-    group.server_mut(0).restart_external_process().await?;
-    let server = group.server(0);
-    probe
-        .after_restart(server, &db.connect_url, &realm, &room, provider)
-        .await?;
-
     // An E2EE migration reuses a GroupInfo that the native MLS unit has
     // authenticated and committed, instead of trusting claimed group strings.
     let scope = arkret_wire::ScopeRef::Realm {

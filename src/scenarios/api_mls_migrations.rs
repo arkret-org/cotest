@@ -1,7 +1,5 @@
 //! API-only consumers of the existing real accepted-device/MLS lifecycle.
 
-use std::time::{Duration, Instant};
-
 use anyhow::{Context, Result, ensure};
 use arkret::{ArkretMlsGroup, CommitStreamRef, EventId, RealmId, ScopeRef, StreamScanResponseBody};
 use serde_json::json;
@@ -15,7 +13,6 @@ mod receipts;
 
 #[derive(Clone, Copy)]
 pub enum MlsApiCase {
-    AuditedReport,
     MarkerPrivacy,
     CircleMarkers,
     Discussion,
@@ -61,7 +58,6 @@ pub(super) async fn exercise(
         receipt_policy_probe: None,
     };
     match case {
-        MlsApiCase::AuditedReport => audited_report(&mut ctx).await,
         MlsApiCase::MarkerPrivacy => marker_privacy(&mut ctx).await,
         MlsApiCase::CircleMarkers => discussion::markers(&ctx).await,
         MlsApiCase::Discussion => discussion::run(&mut ctx).await,
@@ -99,104 +95,6 @@ pub(crate) async fn scan(
         item.validate_shape()?;
     }
     Ok(scan)
-}
-
-async fn audited_report(ctx: &mut MlsApiContext<'_>) -> Result<()> {
-    let message = super::message_mls_cross_station_live::submit_and_open(
-        ctx.source,
-        ctx.holder,
-        ctx.source_group,
-        ctx.holder_group,
-        ctx.realm,
-        ctx.strand,
-        ctx.state,
-        "ordinary report encrypted target",
-    )
-    .await?;
-    let scope = ScopeRef::Realm {
-        realm_id: ctx.realm.clone(),
-    };
-    let deadline = Instant::now() + Duration::from_secs(30);
-    let before = loop {
-        let current = scan(&ctx.source.client, &scope).await?;
-        if current
-            .committed_events
-            .iter()
-            .filter_map(arkret::CommittedEventView::reducer_input)
-            .any(|event| {
-                event.kind == arkret::EventKind::ModerationFrankingProof
-                    && event.payload["event_id"] == message.event_ref.as_str()
-            })
-        {
-            break current;
-        }
-        ensure!(
-            Instant::now() < deadline,
-            "receiving Station did not publish the franking carrier before the report baseline"
-        );
-        tokio::time::sleep(Duration::from_millis(100)).await;
-    };
-    // The reporting member is not the Realm owner or the message author.
-    let request = crate::harness::moderation_report_request(
-        &ctx.holder.client,
-        ctx.realm.as_str(),
-        message.event_ref.as_str(),
-        scope.clone(),
-    )
-    .await?;
-    let report = ctx
-        .holder
-        .client
-        .sdk()
-        .moderation_report(&ctx.holder.client.verify_publication(request)?)
-        .await?;
-    let report = serde_json::to_value(report)?;
-    ensure!(
-        report["status"] == "submitted" && report.get("routed_to_ids").is_none(),
-        "ordinary report escaped its scoped workflow"
-    );
-    let after = scan(&ctx.source.client, &scope).await?;
-    let prefix = &after.committed_events[..before
-        .committed_events
-        .len()
-        .min(after.committed_events.len())];
-    ensure!(
-        arkret_canonical::canonical_json_bytes(prefix)?
-            == arkret_canonical::canonical_json_bytes(&before.committed_events)?,
-        "report mutated the complete pre-report Commit prefix"
-    );
-    let suffix = &after.committed_events[before.committed_events.len()..];
-    ensure!(
-        suffix.len() == 1,
-        "ordinary report committed more than its own single Event"
-    );
-    let event = suffix[0]
-        .reducer_input()
-        .context("report Event withheld from its creator Realm")?;
-    let expected =
-        report["report_id"]
-            .as_str()
-            .context("report id")?
-            .replacen("ak:report:", "ak:event:", 1);
-    ensure!(
-        event.event_id.as_str() == expected
-            && event.kind.as_str() == "ak.self.moderation.report"
-            && event.payload["target_ref"] == message.event_ref.as_str()
-            && event.payload["reporter_id"] == ctx.holder.account.principal_id.as_str(),
-        "ordinary report changed its signed target, reporter or identity"
-    );
-    ensure!(
-        after
-            .committed_events
-            .iter()
-            .filter_map(arkret::CommittedEventView::reducer_input)
-            .all(|event| event.kind.as_str() != "ak.audit.accessed"),
-        "ordinary report created an audit release"
-    );
-    println!(
-        "audited_e2ee: real MLS target and non-owner reporter; franking baseline; byte-identical prefix; exactly one report Commit; zero audit-release Events"
-    );
-    Ok(())
 }
 
 async fn marker_privacy(ctx: &mut MlsApiContext<'_>) -> Result<()> {

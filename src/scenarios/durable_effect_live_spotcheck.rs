@@ -11,8 +11,8 @@
 //!   * `kind: "actor_private_event"` → the declared `ak.private.*` cell family must be reachable on
 //!     the actor-private rail, and MUST NOT surface in the shared Realm Event log.
 //!
-//! Coverage is the four operations named in the remediation: policy replace,
-//! policy delete, moderation report, and Invite create. Each spot-check
+//! Coverage exercises policy replacement, policy deletion, Invite creation,
+//! and push registration. Each spot-check
 //! resolves its expectation from `registry/operation-registry.json` at runtime,
 //! so a registry edit that drops or retargets a declaration fails here instead
 //! of silently passing.
@@ -24,7 +24,7 @@ use chrono::Duration as ChronoDuration;
 use reqwest::StatusCode;
 use serde_json::{Value, json};
 
-use crate::harness::{CanonicalJsonBody, TestActorClient, moderation_report_request};
+use crate::harness::{CanonicalJsonBody, TestActorClient};
 use crate::scenarios::identity_test_support::{
     actor_did_for_service_did, spawn_with_standard_grant_authority,
 };
@@ -117,29 +117,6 @@ async fn realm_event_kinds(client: &TestActorClient, realm_id: &str) -> Result<V
         .collect()
 }
 
-/// Assert the shared Realm log gained exactly the declared kinds.
-fn assert_event_log_effect(
-    operation_id: &str,
-    effect: &DeclaredEffect,
-    before: &[String],
-    after: &[String],
-) -> Result<Vec<String>> {
-    let DeclaredEffect::EventLog { event_kinds } = effect else {
-        return Err(anyhow!(
-            "{operation_id} was spot-checked as event_log but declares {effect:?}"
-        ));
-    };
-    let appended = appended_kinds(before, after);
-    for expected in event_kinds {
-        if !appended.contains(expected) {
-            return Err(anyhow!(
-                "{operation_id} declares durable {expected} but the Realm log gained {appended:?}"
-            ));
-        }
-    }
-    Ok(appended.into_iter().collect())
-}
-
 fn appended_kinds(before: &[String], after: &[String]) -> BTreeSet<String> {
     let mut remaining: Vec<String> = before.to_vec();
     let mut appended = BTreeSet::new();
@@ -177,51 +154,6 @@ pub async fn declared_durable_effects_match_live_producers() -> Result<()> {
         .await?;
     let realm_id = alice.create_realm("Durable Effect Spot-Check").await?;
     let mut observations = serde_json::Map::new();
-
-    // ── moderation report ─────────────────────────────────────────────────
-    let report_operation = "ak.self.moderation.command.report.v1";
-    if let Ok(report_effect) = declared_effect(&registry, report_operation) {
-        let before = realm_event_kinds(&alice, &realm_id).await?;
-        let report_request = moderation_report_request(
-            &alice,
-            &realm_id,
-            &realm_id,
-            arkret_wire::ScopeRef::Realm {
-                realm_id: arkret_identifiers::RealmId::new(realm_id.clone())?,
-            },
-        )
-        .await?;
-        let response = alice
-            .post("/_arkret/self/moderation/report")
-            .canonical_json(&report_request)?
-            .send()
-            .await?;
-        let report_status = response.status();
-        let report_body = response.json::<Value>().await.unwrap_or(Value::Null);
-        assert_eq!(
-            report_status,
-            StatusCode::OK,
-            "moderation report: {report_body}"
-        );
-        let after = realm_event_kinds(&alice, &realm_id).await?;
-        let report_appended =
-            assert_event_log_effect(report_operation, &report_effect, &before, &after)?;
-        observations.insert(
-            report_operation.to_owned(),
-            json!({"status": report_status.as_u16(), "appended_kinds": report_appended}),
-        );
-    } else {
-        // The registry is the authority on the operation id; say so rather
-        // than silently dropping this leg of the spot-check.
-        eprintln!(
-            "durable-effect spot-check: {report_operation} is absent from the registry; \
-             moderation coverage skipped"
-        );
-        observations.insert(
-            report_operation.to_owned(),
-            json!({"skipped": "operation absent from registry"}),
-        );
-    }
 
     // ── 4. push route — declared `none` (service-local edge effect only) ───
     let push_operation = "ak.edge.push.command.register_device.v1";

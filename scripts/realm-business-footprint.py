@@ -195,8 +195,8 @@ def validate_direct_originals(origin, successors, source, realm, stream_after, s
                 or commit.get("stream_ref") != {"kind": "realm", "realm_id": realm}
                 or commit.get("stream_position") != stream_after + index + 1
                 or row["event_id"] != commit.get("event_ref")
-                or row["event_kind"] != "ak.moderation.franking_proof"):
-            raise ValueError("Direct original differs from the disclosed Commit or franking Event")
+                or not isinstance(row["event_kind"], str)):
+            raise ValueError("Direct original differs from the disclosed Commit or Event")
 
 
 def summarize(output, direct_source=None, realm=None, stream_after=None, stream_end=None):
