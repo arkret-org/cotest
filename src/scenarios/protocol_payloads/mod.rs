@@ -1,7 +1,7 @@
 //! Protocol-payload scenario.
 //!
 //! One end-to-end happy path across the events / keys / device-messages /
-//! key-backups / blob / push / moderation surfaces. Each protocol phase is
+//! key-backups / blob / push surfaces. Each protocol phase is
 //! largely independent: the only state plumbed between phases is
 //! `(server, token)`, plus a handful of intra-phase locals (e.g. `blob_ref`
 //! consumed by the range GET in the same phase).
@@ -17,7 +17,6 @@
 //! - [`blob`] — `/_arkret/self/blob/{upload,get}` (sha mismatch + happy-path range).
 //! - [`push`] — `/_arkret/edge/push/{register-device,unregister-device}` fail-closed registration
 //!   against a non-onboarded Gateway plus idempotent unregistration.
-//! - [`moderation`] — `/_arkret/self/moderation/report` queueing.
 //!
 //! No private cross-phase helpers exist — every phase function takes only
 //! `(&ArkretServer, &str)` (or just `&ArkretServer` when no auth is
