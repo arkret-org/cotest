@@ -3,7 +3,7 @@
 import { createHash } from "node:crypto";
 import { writeFileSync } from "node:fs";
 import { expect, test, type Page, type Locator } from "../../helpers/arkret-test";
-import { accountActorId, canonicalJson, assertAuthoritySubmitOutcome, wireErrCode } from "../../helpers/coland-api";
+import { accountActorId, canonicalJson, assertAuthoritySubmitOutcome, sdkEventDerivedObjectId, wireErrCode } from "../../helpers/coland-api";
 import { decodeIngressEvents, type IngressEvent } from "../../helpers/event-ingress";
 import { colandServiceId } from "../../helpers/env";
 import { addBoardList, fillCardNarrative } from "../../helpers/kanban-product-ui";
@@ -182,6 +182,8 @@ test("three browser-owned members deliver a community event through encrypted di
       { title: `Event poster ${stamp}`, owner: bob, body: `Poster approved: doors open at 14:00. ${stamp}` },
       { title: `Volunteer roster ${stamp}`, owner: carol, body: `Six volunteers confirmed for reception and cleanup. ${stamp}` },
     ];
+    const assignmentIds = new Map<string, string>();
+    const acceptedAssignmentIds = new Set<string>();
     for (const task of tasks) {
       await expect(alice.page.page.locator(".card-detail-modal")).toHaveCount(0);
       await expect(alice.page.page).toHaveURL(url => url.pathname === boardPath);
@@ -210,6 +212,8 @@ test("three browser-owned members deliver a community event through encrypted di
       await expect(option).toHaveAttribute("aria-pressed", "true");
       const assignment = await committed(alice.page.page, "ak.relation.create", realm!, () => detail.locator(".card-detail-assignee-save").click());
       expect(assignment.payload?.relation).toMatchObject({ relation_kind: "assigned_to", to_ref: expectedActor });
+      assignmentIds.set(task.title, sdkEventDerivedObjectId(assignment));
+      acceptedAssignmentIds.add(sdkEventDerivedObjectId(assignment));
       await assertAssigned(alice.page.page, task.owner.user.id);
       await detail.locator(".card-detail-close-button").click();
       await expect(detail).toHaveCount(0);
@@ -290,6 +294,61 @@ test("three browser-owned members deliver a community event through encrypted di
       }
     }
     checkpoint("all three members retain the accepted discussion and assigned encrypted deliverables after document reload");
+
+    // Hand over an existing assignment, then return it to its original actor.
+    // Returning must create a live edge after that actor's prior tombstone.
+    const handoverTask = tasks[2];
+    let previousOwner = carol;
+    for (const nextOwner of [alice, carol]) {
+      const page = alice.page.page;
+      await page.locator(".kanban-card").filter({ hasText: handoverTask.title }).click();
+      const detail = page.locator(".card-detail-modal");
+      await assertAssigned(page, previousOwner.user.id);
+      await detail.locator(".card-detail-assignee-add").click();
+      const filter = detail.getByRole("textbox", { name: "Filter members", exact: true });
+      const option = detail.locator(".assignee-picker-option");
+      await filter.fill(canonicalJson(accountActorId(previousOwner.user.id)));
+      await expect(option).toHaveCount(1);
+      await expect(option).toHaveAttribute("aria-pressed", "true");
+      await option.click();
+      await expect(option).toHaveAttribute("aria-pressed", "false");
+      await filter.fill(canonicalJson(accountActorId(nextOwner.user.id)));
+      await expect(option).toHaveCount(1);
+      await expect(option).toHaveAttribute("aria-pressed", "false");
+      await option.click();
+      await expect(option).toHaveAttribute("aria-pressed", "true");
+      const commitOrder: string[] = [];
+      const [removed, added] = await Promise.all([
+        committed(page, "ak.relation.tombstone", realm!, async () => {}).then(event => {
+          commitOrder.push("ak.relation.tombstone");
+          return event;
+        }),
+        committed(page, "ak.relation.create", realm!, () => detail.locator(".card-detail-assignee-save").click()).then(event => {
+          commitOrder.push("ak.relation.create");
+          return event;
+        }),
+      ]);
+      expect(commitOrder).toEqual(["ak.relation.tombstone", "ak.relation.create"]);
+      expect(removed.payload?.relation_id).toBe(assignmentIds.get(handoverTask.title));
+      expect(added.payload?.relation).toMatchObject({ relation_kind: "assigned_to", to_ref: accountActorId(nextOwner.user.id) });
+      const nextRelationId = sdkEventDerivedObjectId(added);
+      expect(acceptedAssignmentIds.has(nextRelationId), "a handover never reuses any previously accepted RelationId").toBe(false);
+      acceptedAssignmentIds.add(nextRelationId);
+      assignmentIds.set(handoverTask.title, nextRelationId);
+      await detail.locator(".card-detail-close-button").click();
+      for (const member of flows) {
+        await member.page.page.reload({ waitUntil: "domcontentloaded" });
+        const card = member.page.page.locator(".kanban-card").filter({ hasText: handoverTask.title });
+        await expect(card).toBeVisible({ timeout: 120_000 });
+        await card.click();
+        const reopened = member.page.page.locator(".card-detail-modal");
+        await expect(reopened.locator(".card-description-panel")).toContainText(handoverTask.body, { timeout: 120_000 });
+        await assertAssigned(member.page.page, nextOwner.user.id);
+        await reopened.locator(".card-detail-close-button").click();
+      }
+      checkpoint(`assignment handover accepted and retained by all members: ${previousOwner.user.name} to ${nextOwner.user.name}`);
+      previousOwner = nextOwner;
+    }
   } catch (error) {
     await testInfo.attach("community-runtime-errors", { body: JSON.stringify(browserFailures), contentType: "application/json" });
     await testInfo.attach("community-response-statuses", { body: JSON.stringify(requests), contentType: "application/json" });
