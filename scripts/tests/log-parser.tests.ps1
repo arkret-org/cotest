@@ -172,7 +172,7 @@ $nativeLines = @(
     'test same_name ... okparallel stdout diagnostic',
     'test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out',
     '     Running tests/second.rs (target/debug/deps/second-2)',
-    'test same_name ... FAILEDparallel stderr diagnostic',
+    ('test same_name ... FAILED' + 'parallel stderr diagnostic'),
     'test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out'
 )
 $log = New-TempLog ($nativeLines + "=== cotest native results: $($nativeReport | ConvertTo-Json -Depth 10 -Compress) ===")
