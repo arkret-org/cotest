@@ -1960,10 +1960,12 @@ export async function openRegisteredUserPage(
   browser: Browser,
   request: APIRequestContext,
   prefix: string,
+  opts: { server?: ColandKey; beforeNavigate?: (page: Page) => Promise<void> } = {},
 ): Promise<{ user: JointUser; page: JointUserPage }> {
-  if (!coauthBaseUrl()) throw new Error("UI registration requires Coauth");
-  const user = uniqueUser(prefix.slice(0, 20));
+  if (!coauthBaseUrl(opts.server)) throw new Error("UI registration requires Coauth");
+  const user = uniqueUser(prefix.slice(0, 20), opts.server);
   const joint = await openUserPage(browser, user, {
+    server: opts.server,
     neutralLoginConfig: true,
     keepDeviceAuthorizationModal: true,
     autoCompleteRecoveryKeySetup: false,
@@ -1973,8 +1975,9 @@ export async function openRegisteredUserPage(
   page.setDefaultNavigationTimeout(60_000);
   const email = `ui-${randomUUID()}@example.test`;
   try {
+    await opts.beforeNavigate?.(page);
     await page.goto("/register");
-    await page.getByLabel("Station", { exact: true }).fill(colandBaseUrl());
+    await page.getByLabel("Station", { exact: true }).fill(colandBaseUrl(opts.server));
     await page.locator(".registration-panel").getByRole("button", { name: "Continue", exact: true }).click();
     await page.getByLabel("Username", { exact: true }).fill(user.name);
     await page.getByLabel("Email address", { exact: true }).fill(email);
@@ -2019,10 +2022,11 @@ export async function openRegisteredUserPage(
     const outcome = await accepted.json();
     expect(outcome.principal_id).toMatch(/^ak:did_core:/);
     expect(outcome.issued_session?.device_id).toMatch(/^ak:device:/);
+    expect(outcome.issued_session?.account_id?.station_id, "registration stays bound to the selected Station").toBe(colandServiceId(opts.server));
     user.id = outcome.principal_id;
     user.deviceId = outcome.issued_session.device_id;
-    const resolutionUrl = new URL(`${colandBaseUrl()}/_arkret/open/principals/${encodeURIComponent(user.id)}/resolution`);
-    resolutionUrl.searchParams.set("station_id", colandServiceId());
+    const resolutionUrl = new URL(`${colandBaseUrl(opts.server)}/_arkret/open/principals/${encodeURIComponent(user.id)}/resolution`);
+    resolutionUrl.searchParams.set("station_id", colandServiceId(opts.server));
     const resolutionResponse = await request.get(resolutionUrl.toString());
     expect(resolutionResponse.status()).toBe(200);
     const resolution = await resolutionResponse.json() as PublicPrincipalResolution;
