@@ -114,8 +114,11 @@ type DirectConversationBinding = {
 jointTest.describe.configure({ mode: "serial" });
 jointTest.setTimeout(1_200_000);
 
-jointTest.describe("Agent Savfox split live @fully-implemented", () => {
-  jointTest(
+// Pairing displays a private fragment URL and its QR code. Automatic failure
+// captures must not retain those credentials as pixels or browser recordings.
+const privatePairingTest = jointTest.extend({ trace: "off", screenshot: "off", video: "off" });
+privatePairingTest.describe("Agent Savfox split live @fully-implemented", () => {
+  privatePairingTest(
     "pairs, replaces the runtime key, resumes a crashed direct conversation, and answers a real message",
     async ({ browser, jointRealm, request }, testInfo) => {
       jointTest.setTimeout(1_200_000);
@@ -1324,7 +1327,7 @@ jointTest.describe("Agent Savfox split live @fully-implemented", () => {
   );
 });
 
-jointTest("fresh Agent pairing gates the first send until binding and answers once @fully-implemented", async ({ browser, jointUsers }, testInfo) => {
+privatePairingTest("fresh Agent pairing gates the first send until binding and answers once @fully-implemented", async ({ browser, jointUsers }, testInfo) => {
   const base = process.env.COTEST_SAVFOX_BASE_URL?.trim();
   const token = process.env.COTEST_SAVFOX_TOKEN?.trim();
   jointTest.skip(!base || !token, "PRECONDITION_SAVFOX_UNAVAILABLE: managed Savfox required");

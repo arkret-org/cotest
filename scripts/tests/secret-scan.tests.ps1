@@ -38,6 +38,8 @@ try {
     $mnemonic = "abandon ability able about above absent absorb abstract absurd abuse access accident account accuse achieve acid acoustic acquire across act action actor actress actual"
     $bearer = "synthetic-bearer-token-AAAABBBBCCCC"
     $dpop = "synthetic.dpop.proof-AAAABBBBCCCC"
+    $hashTail = "synthetic-private-hash-tail"
+    $hashPassword = "synthetic-password#$hashTail"
     $hexSecret = "deadbeefdeadbeefdeadbeefdeadbeef"
     $didValue = "did:webvh:QmSynthetic:host.example:webvh:alice"
     # b64url of a synthetic 32-byte seed: the exact shape a private OKP JWK's
@@ -46,7 +48,7 @@ try {
     $inviteCode = 'ABCD' * 10
     $lookupCode = 'ABCDEFGHJKLMNPQR_23456789'
     $privateBytes = (1..32) -join ','
-    $plantedSecrets = @($mnemonic, $bearer, $dpop, $hexSecret, $didValue, $jwkPrivateScalar, $inviteCode, $lookupCode, $privateBytes)
+    $plantedSecrets = @($mnemonic, $bearer, $dpop, $hexSecret, $didValue, $jwkPrivateScalar, $inviteCode, $lookupCode, $privateBytes, $hashPassword, $hashTail)
 
     # One planted secret per line; the file name documents the vector.
     $planted = @(
@@ -60,6 +62,11 @@ try {
         [pscustomobject]@{ name = "json-pepper.log"; line = "{`"pepper`":`"$hexSecret`"}"; pattern = "recovery_private_material_field" },
         [pscustomobject]@{ name = "json-signing-seed.log"; line = "{`"signing_seed`":[$privateBytes]}"; pattern = "private_material_byte_array" },
         [pscustomobject]@{ name = "query-invite-code.log"; line = "GET /present?oob_code=$lookupCode"; pattern = "query_secret_field" },
+        [pscustomobject]@{ name = "password-with-hash.log"; line = "password=$hashPassword"; pattern = "query_secret_field" },
+        [pscustomobject]@{ name = "fragment-pairing-url.md"; line = "  - textbox `"Agent pairing URL`": https://example.test/pair#token=$bearer&state=public"; pattern = "query_secret_field" },
+        [pscustomobject]@{ name = "fragment-private-seed.log"; line = "https://example.test/callback#root_seed=$hexSecret"; pattern = "query_secret_field" },
+        [pscustomobject]@{ name = "fragment-lookup.log"; line = "https://example.test/present#oob_code=$lookupCode"; pattern = "query_secret_field" },
+        [pscustomobject]@{ name = "fragment-second-field.log"; line = "https://example.test/pair#token=[redacted]#signature=$dpop"; pattern = "query_secret_field" },
         [pscustomobject]@{ name = "query-token.log"; line = "token=$bearer"; pattern = "query_secret_field" },
         [pscustomobject]@{ name = "query-signature.log"; line = "signature=$dpop"; pattern = "query_secret_field" },
         [pscustomobject]@{ name = "delivered-offline-code.log"; line = "Your invitation code is $inviteCode."; pattern = "invite_delivery_code" },
@@ -108,6 +115,9 @@ try {
     # BIP-39 candidate regex (12+ quoted lowercase 3-8 letter words) but are
     # ordinary sentences, so the wordlist validator must reject them.
     $cleanLines = @(
+        'https://example.test/pair#token=[redacted]&state=public',
+        'https://example.test/pair#token=%5Bredacted%5D#state=public',
+        'https://example.test/pair?token=[redacted]#state=public',
         '{"status":"ok","principal_id":"ak:did_core:webvh:QmExample"}',
         '{"pepper_id":"pepper-public-id","token_salt_id":"salt-public-id","oob_code_kind":"offline_token"}',
         'INFO completed request in 42ms path=/_arkret/describe',
@@ -262,6 +272,11 @@ try {
         "Your invitation code is $inviteCode.",
         "Your invitation code is $lookupCode.",
         "POST /_arkret/open/third-party-invites/present/$lookupCode status=404",
+        "  - textbox Agent pairing URL: https://example.test/pair#token=$bearer&state=public",
+        "https://example.test/pair#token=[redacted]#signature=$dpop",
+        "https://example.test/pair#token=%5Bredacted%5D#signature=$dpop",
+        "https://example.test/restore#root_seed=$hexSecret",
+        "password=$hashPassword",
         "at contact-graph.spec.ts:222"
     ) -Encoding utf8
 
@@ -277,9 +292,11 @@ try {
     $canaryText = Get-Content -LiteralPath $canaryFile -Raw
     Assert-True (-not $canaryText.Contains($bearer)) "the redacted artifact must not retain the invite token"
     Assert-True (-not $canaryText.Contains($mnemonic)) "the redacted artifact must not retain the mnemonic"
-    foreach ($secret in @($hexSecret, $privateBytes, $inviteCode, $lookupCode)) {
+    foreach ($secret in @($hexSecret, $privateBytes, $inviteCode, $lookupCode, $dpop, $hashPassword, $hashTail)) {
         Assert-True (-not $canaryText.Contains($secret)) "the redacted artifact must not retain provider private material"
     }
+    Assert-True ($canaryText.Contains('#token=[redacted]&state=public')) 'fragment redaction must preserve the non-secret surrounding query context'
+    Assert-True ($canaryText.Contains('#token=[redacted]#signature=[redacted]')) 'a second fragment credential after a safe marker must also be redacted'
     Assert-True ($canaryText.Contains("contact-graph.spec.ts:222")) "redaction must preserve the surrounding diagnostic"
 
     $canaryAfter = @(Find-SecretLeaks -ScanRoots @($canaryRoot))
@@ -307,6 +324,15 @@ try {
     Assert-True (@(Find-SecretLeaks -ScanRoots $nativeRoots).Count -eq 0) 'redacted native streams must rescan clean'
     $nativeRunner = Get-Content -LiteralPath (Join-Path $PSScriptRoot '..\run-server-conformance.ps1') -Raw
     Assert-True ($nativeRunner.Contains('Get-NativeInvocationScanRoots -RunDirectory $runDir')) 'production runner must include original native streams'
+
+    # Both ordinary Agent pairing journeys display a private fragment and QR.
+    $agentSource = Get-Content -LiteralPath (Join-Path $PSScriptRoot '..\..\e2e\tests\joint\agent-savfox-split-live.spec.ts') -Raw
+    Assert-True ($agentSource -match 'const privatePairingTest = jointTest\.extend\(\{ trace: "off", screenshot: "off", video: "off" \}\)') 'private Agent pairing must disable credential-bearing automatic captures'
+    Assert-True ($agentSource.Contains('privatePairingTest.describe("Agent Savfox split live')) 'runtime replacement must use the protected pairing fixture'
+    Assert-True ($agentSource.Contains('privatePairingTest("fresh Agent pairing gates the first send')) 'cold pairing must use the protected pairing fixture'
+
+    $deviceSource = Get-Content -LiteralPath (Join-Path $PSScriptRoot '..\..\e2e\tests\identity\device-key-lifecycle.spec.ts') -Raw
+    Assert-True ($deviceSource.Contains('test.use({ trace: "off", video: "off", screenshot: "off" });')) 'device key pairing must not retain private fragment or QR captures'
 
     # Wordlist sanity: exactly the standard 2048-entry BIP-39 English list.
     $dpopPattern = Get-SecretLeakPatterns | Where-Object name -eq "dpop_header"

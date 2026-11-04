@@ -50,10 +50,10 @@ $script:InviteTokenPathPattern = '(/_arkret/open/third-party-invites/present/)(?
 # use site are intentional: `[redacted]secret` is still a credential, while an
 # exact marker is already-safe evidence and must not fail a second scan.
 $script:RedactedValuePattern = '(?:\[redacted(?:[-_:][a-z0-9_]+)?\]|<redacted>)'
-# Query strings are commonly embedded in JSON strings and quoted log fields.
+# Query strings and private URL fragments appear in quoted log and DOM fields.
 # A quote or backslash is therefore a valid end delimiter for an already
-# redacted query value, alongside ampersand, whitespace, and end-of-line.
-$script:QueryValueDelimiterPattern = '[&\s`"\\]|$'
+# redacted value, alongside ampersand, fragment, whitespace, and end-of-line.
+$script:QueryValueDelimiterPattern = '[&#\s`"\\]|$'
 # Candidate shape only: a quoted string containing a run of 12+ short words.
 # Surrounding prose and punctuation are allowed because logs commonly embed a
 # mnemonic after text such as "recovery phrase:". Detection additionally
@@ -163,7 +163,7 @@ function ConvertTo-RedactedLine {
     $preview = $preview -replace "(?i)((?:^|\s)authorization\s*:\s*(?:bearer|dpop)\s+)(?!$($script:RedactedValuePattern)(?:\s|$))\S+", '$1[redacted]'
     $preview = $preview -replace "(?i)((?:^|\s)dpop\s*:\s*)(?!$($script:RedactedValuePattern)(?:\s|$))\S+", '$1[redacted]'
     $preview = $preview -replace "(?i)(`"($script:JsonSecretFieldNames)`"\s*:\s*`")(?!$($script:RedactedValuePattern)`")([^`"]+)(`")", '$1[redacted]$4'
-    $preview = $preview -replace "(?i)((?:^|[?&\s])($script:QuerySecretFieldNames)=)(?!$($script:RedactedValuePattern)(?:$script:QueryValueDelimiterPattern)|%5[Bb]redacted%5[Dd](?:$script:QueryValueDelimiterPattern))([^&\s`"\\]+)", '$1[redacted]'
+    $preview = $preview -replace "(?i)((?:^|[?#&\s])($script:QuerySecretFieldNames)=)(?!$($script:RedactedValuePattern)(?:$script:QueryValueDelimiterPattern)|%5[Bb]redacted%5[Dd](?:$script:QueryValueDelimiterPattern))([^&\s`"\\]+)", '$1[redacted]'
     $preview = $preview -replace $script:PrivateByteArrayPattern, '"private_material":"[redacted]"'
     $preview = $preview -replace $script:InviteDeliveryCodePattern, 'Your invitation code is [redacted].'
     $preview = $preview -replace $script:InviteTokenPathPattern, '$1[redacted]'
@@ -213,7 +213,7 @@ function Get-SecretLeakPatterns {
         [pscustomobject]@{ name = "plaintext_keybag_object"; category = $script:SecretCategoryPrivateMaterial; pattern = $script:PlaintextKeybagPattern; validate = $null },
         [pscustomobject]@{ name = "sql_private_material_column"; category = $script:SecretCategoryPrivateMaterial; pattern = $script:SqlPrivateMaterialColumnPattern; validate = $null },
         [pscustomobject]@{ name = "json_secret_field"; category = $script:SecretCategoryCredential; pattern = "(?i)`"($script:JsonSecretFieldNames)`"\s*:\s*`"(?!$($script:RedactedValuePattern)`")[^`"]+`""; validate = $null },
-        [pscustomobject]@{ name = "query_secret_field"; category = $script:SecretCategoryCredential; pattern = "(?i)(?:^|[?&\s])($script:QuerySecretFieldNames)=(?!$($script:RedactedValuePattern)(?:$script:QueryValueDelimiterPattern)|%5[Bb]redacted%5[Dd](?:$script:QueryValueDelimiterPattern))[^&\s`"\\]+"; validate = $null },
+        [pscustomobject]@{ name = "query_secret_field"; category = $script:SecretCategoryCredential; pattern = "(?i)(?:^|[?#&\s])($script:QuerySecretFieldNames)=(?!$($script:RedactedValuePattern)(?:$script:QueryValueDelimiterPattern)|%5[Bb]redacted%5[Dd](?:$script:QueryValueDelimiterPattern))[^&\s`"\\]+"; validate = $null },
         [pscustomobject]@{ name = "bip39_mnemonic_sequence"; category = $script:SecretCategoryPrivateMaterial; pattern = $script:Bip39SequencePattern; validate = { param($line) Test-Bip39MnemonicCandidate -Line $line } },
         [pscustomobject]@{ name = "did_in_token_field"; category = $script:SecretCategoryCredential; pattern = '(?i)"(token|push_key|credential)"\s*:\s*"(did:[^"]+)"'; validate = $null },
         [pscustomobject]@{ name = "private_key_block"; category = $script:SecretCategoryPrivateMaterial; pattern = '-----BEGIN (RSA |EC |OPENSSH |ENCRYPTED )?PRIVATE KEY-----'; validate = $null }

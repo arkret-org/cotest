@@ -37,6 +37,7 @@ type CapturedGrant = {
   jkt: string;
 };
 
+test.use({ trace: "off", video: "off", screenshot: "off" });
 test.describe.configure({ mode: "serial" });
 
 test.describe("holder device key lifecycle separation @fully-implemented", () => {

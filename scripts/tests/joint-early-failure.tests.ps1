@@ -27,16 +27,23 @@ $summaryWrite = @($ast.FindAll({param($node)
 if ($summaryWrite.Count -ne 1) { throw 'Expected the actual summary JSON write' }
 $defaults = @($ast.FindAll({param($node)
     $node -is [Management.Automation.Language.AssignmentStatementAst] -and
-    $node.Left.Extent.Text -in @('$flagonIdentity', '$flagonIdentityDirectory', '$previousProvisionCustodyRoot', '$previousReadonlyDatabaseControls', '$previousPythonExecutable', '$previousSdkTlsRoots') -and
+    $node.Left.Extent.Text -in @('$flagonIdentity', '$flagonIdentityDirectory', '$previousProvisionCustodyRoot', '$previousReadonlyDatabaseControls', '$previousPythonExecutable', '$previousSdkTlsRoots', '$sourceRepositoryPaths', '$sourceFreezePaths', '$sourceFreezeBefore') -and
     $node.Extent.EndOffset -lt $lifecycle.Extent.StartOffset
 }, $true))
-foreach ($name in @('Write-ManagedServiceFailureReport')) {
+foreach ($name in @('Write-ManagedServiceFailureReport', 'Complete-JointSourceFreeze')) {
     $function = @($ast.FindAll({param($node)
         $node -is [Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -eq $name
     }, $true))
     if ($function.Count -ne 1) { throw "Expected real lifecycle helper $name" }
     Invoke-Expression $function[0].Extent.Text
 }
+
+$sourceFreezeAssignments = @($ast.FindAll({param($node)
+    $node -is [Management.Automation.Language.AssignmentStatementAst] -and
+    (($node.Left.Extent.Text -eq '$sourceFreezeReport' -and $node.Right.Extent.Text.Contains('Complete-JointSourceFreeze')) -or
+     ($node.Left.Extent.Text -eq '$exitCode' -and $node.Right.Extent.Text -eq '$sourceFreezeReport.exit_code'))
+}, $true) | Sort-Object { $_.Extent.StartOffset })
+if ($sourceFreezeAssignments.Count -ne 2) { throw 'Expected the actual final source gate and exit consumption' }
 
 # Only the preparation and process boundaries are mocked. The actual catch,
 # finally, summary expression and JSON write remain the production code.
@@ -94,6 +101,7 @@ function Invoke-EarlyFailureCase([string]$Name, [bool]$OwnedFlagon, [bool]$Ident
     if ($env:COTEST_PYTHON_EXECUTABLE -cne $expectedPython -or $env:SSL_CERT_FILE -cne $expectedTlsRoots) {
         throw 'Early failure must restore the actual prior Python and TLS environment'
     }
+    foreach ($assignment in $sourceFreezeAssignments) { Invoke-Expression $assignment.Extent.Text }
     Invoke-Expression $summaryAssignment.Extent.Text
     $summaryJson = Join-Path $jointDir 'summary.json'
     Invoke-Expression $summaryWrite[0].Extent.Text
@@ -108,6 +116,10 @@ function Invoke-EarlyFailureCase([string]$Name, [bool]$OwnedFlagon, [bool]$Ident
     if (-not (Test-Path -LiteralPath $written.runner_error.diagnostic) -or
         -not (Get-Content -LiteralPath $written.runner_error.diagnostic -Raw).Contains('prepare-savfox exited with code 101')) {
         throw 'Original bounded runner diagnostic was not retained'
+    }
+    if ($written.source_stable -or $written.source_coverage -cne 'unavailable' -or
+        -not (Test-Path -LiteralPath $written.source_freeze_json)) {
+        throw 'Failure before source capture must report unavailable provenance without masking the original failure'
     }
     if ($written.test_execution -cne 'not_executed') { throw 'Preparation failure must not claim business execution' }
     if ($IdentityReady) {

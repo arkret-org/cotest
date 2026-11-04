@@ -5,7 +5,7 @@ import { getCircleArkret } from "./circle-api";
 import type { JointUserPage } from "./users";
 import { expect, test, operationSelector, isDirectAdmissionOutcomeReason } from "./arkret-test";
 import type { Page, Response, Request, APIRequestContext } from "@playwright/test";
-import { assertAuthoritySubmitOutcome, authHeaders, canonicalJson, readCommitStreamHeadApi, scanRealmStreamApi, sdkEventDerivedIds, sha256CanonicalJson, signedEventEnvelope, wireErrCode } from "./coland-api";
+import { assertAuthoritySubmitOutcome, authHeaders, canonicalJson, readCommitStreamHeadApi, readCommitStreamCutApi, scanRealmStreamApi, sdkEventDerivedIds, sha256CanonicalJson, signedEventEnvelope, wireErrCode } from "./coland-api";
 import { decodeEventIngressBody, ingressEvents, type IngressEvent } from "./event-ingress";
 import { readFile, writeFile, rename, rm } from "node:fs/promises";
 import { randomBytes, randomUUID } from "node:crypto";
@@ -14,7 +14,8 @@ import { colandBaseUrl, colandServiceDid, colandServiceId, colandServiceResoluti
 import { cotestWire } from "./coland-api/wire-client";
 import { orderByCanonicalKey } from "./direct-structure-order";
 import { readCurrentSnapshot } from "./direct-current-snapshot";
-import type { ActorId } from "./generated/spec-wire-objects";
+import type { ActorId, CommitStreamHead } from "./generated/spec-wire-objects";
+import { waitForAcceptedDirectCut } from "./direct-accepted-cut";
 
 // Negative structure targets must exist outside Direct's protected Realm.
 // Circle creation does not create a Strand: author it with an explicit scope.
@@ -891,6 +892,7 @@ export async function directStructureLifecycleGate(alice: Page, bob: Page, proof
 async function ownWatchTransitions(page: Page, otherPages: Page[], strandId: string) {
   let previous: Record<string, unknown> | null | undefined;
   let last: IngressEvent | undefined;
+  let acceptedCut: CommitStreamHead | undefined;
   const writes: Array<{ event_id: string | undefined; level: string | null; expected_value: unknown }> = [];
   const labels = { all: "All activity", muted: "Muted", mentions_only: "Mentions only",
     participating: "Participating and @mentions", default: "Use default (mentions only)" };
@@ -909,6 +911,11 @@ async function ownWatchTransitions(page: Page, otherPages: Page[], strandId: str
     const outcome = await response.json() as Record<string, unknown>;
     expect(outcome.status).toBe("committed");
     assertAuthoritySubmitOutcome(outcome, event, `watch ${level}`);
+    const commit = outcome.commit as Record<string, unknown>;
+    expect(commit.stream_ref).toEqual({ kind: "realm", realm_id: event.realm_id });
+    expect(typeof commit.commit_id).toBe("string");
+    acceptedCut = { stream_ref: commit.stream_ref as CommitStreamHead["stream_ref"],
+      stream_position: commit.stream_position as number, commit_id: commit.commit_id as string };
     last = event;
     const payload = event.payload!;
     expect(payload.strand_id).toBe(strandId);
@@ -932,7 +939,8 @@ async function ownWatchTransitions(page: Page, otherPages: Page[], strandId: str
     body: Buffer.from(JSON.stringify({ strand_id: strandId, writes, private_other_cells_unchanged: true, cold_level: "all" })),
     contentType: "application/json",
   });
-  return last!;
+  expect(acceptedCut, "watch transitions retain their exact accepted Commit cut").toBeDefined();
+  return { event: last!, acceptedCut: acceptedCut! };
 }
 
 async function fillDurableComposerDraft(page: Page, draft: string) {
@@ -1152,7 +1160,7 @@ async function runFlatTopicChats(alice: Page, bob: Page, mainMessages: string[],
     await choose.selectOption(chatId);
     for (const message of mainMessages) await expect(page.locator(".chat-message").filter({ hasText: message })).toHaveCount(0);
   }
-  const bobWatch = await ownWatchTransitions(bob, [alice, ...extraDevices], chatId);
+  const { event: bobWatch, acceptedCut: watchCut } = await ownWatchTransitions(bob, [alice, ...extraDevices], chatId);
   // The watch UI can reappear before the cursorless Signal rail reconnects.
   // Encrypted presence from each accepted peer proves the live path is ready.
   for (const [page, peer] of [[alice, bobWatch.actor_id], [bob, chat.actor_id]] as const) {
@@ -1162,6 +1170,15 @@ async function runFlatTopicChats(alice: Page, bob: Page, mainMessages: string[],
     });
     await expect(presence).toHaveClass(/\bpresence-row-online\b/, { timeout: 90_000 });
   }
+  // Presence is ephemeral and does not prove this observer has installed the
+  // peer's preceding accepted Watch. Bind the no-write baseline to its exact
+  // acknowledged Commit before comparing the Signal interval's unchanged head.
+  const observedWatch = await waitForAcceptedDirectCut(() => readCommitStreamCutApi(
+    proof!.request, proof!.token, chat.realm_id!, watchCut.commit_id), watchCut);
+  await test.info().attach("signal-baseline-after-accepted-watch", {
+    body: JSON.stringify({ watch_event_id: bobWatch.event_id, observed_cut: observedWatch,
+      acknowledged_cut_observed: true }), contentType: "application/json",
+  });
   await assertWrongPlaintextStrand(alice, bob, chat.realm_id!, chatId, proof!);
   const classified = await structureWrite(alice, "place", "ak.strand.update", undefined, topicId);
   expect(classified.payload?.target_ref).toBe(chatId);
@@ -1222,7 +1239,7 @@ async function runFlatTopicChats(alice: Page, bob: Page, mainMessages: string[],
     const manage = page.locator(".direct-structure");
     if (!await manage.getByRole("combobox", { name: "Action", exact: true }).isVisible()) await manage.getByRole("button", { name: "Manage chats and topics" }).click();
     await manage.getByRole("combobox", { name: "Action", exact: true }).selectOption("reorder_topic");
-    await expect.poll(async () => await manage.getByRole("combobox", { name: "Topic", exact: true }).locator("option").evaluateAll(options => options.map(option => (option as HTMLOptionElement).value))).toEqual(["", secondTopicId, topicId]);
+    await expect.poll(async () => await manage.getByRole("combobox", { name: "Topic", exact: true }).locator("option:not([data-gly-placeholder])").evaluateAll(options => options.map(option => (option as HTMLOptionElement).value))).toEqual(["", secondTopicId, topicId]);
   }
   const migrated = await structureWrite(alice, "place", "ak.strand.update", undefined, secondTopicId);
   expect(migrated.payload?.target_ref).toBe(chatId);

@@ -156,6 +156,7 @@ jobs:
         ./scripts/tests/log-parser.tests.ps1
         ./scripts/tests/native-conformance-stream-order.tests.ps1
         ./scripts/tests/secret-scan.tests.ps1
+        ./scripts/tests/joint-source-freeze.tests.ps1
     - name: Migrate isolated Coauth route-evidence database
       run: psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f coauth/crates/storage-postgres/migrations/00000000000000_initial/up.sql
     - name: fmt
@@ -331,6 +332,9 @@ jobs:
       - name: request cost evidence privacy
         working-directory: cotest/e2e
         run: node --test scripts/request-cost.test.mjs
+      - name: Direct accepted cut readiness regression
+        working-directory: cotest/e2e
+        run: node --test scripts/direct-accepted-cut.test.mjs
       - name: Check joint scenario manifests before service builds
         shell: pwsh
         run: |

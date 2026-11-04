@@ -830,6 +830,97 @@ function Get-JointSourceHeads {
 # write the same target/debug/coland executable.
 $colandConformanceHarnessMarker = "org.arkret.coland.conformance.encode"
 
+function Select-JointSourceFreezePaths {
+    param(
+        [Parameter(Mandatory = $true)][System.Collections.IDictionary]$RepositoryPaths,
+        [Parameter(Mandatory = $true)][bool]$RequiresInkson
+    )
+    $selected = [ordered]@{}
+    foreach ($name in $RepositoryPaths.Keys) {
+        # The browserless lane records optional HEAD telemetry, but does not
+        # inventory or hash an unused Inkson checkout.
+        if (-not $RequiresInkson -and $name -eq 'inkson') { continue }
+        $selected[$name] = $RepositoryPaths[$name]
+    }
+    return $selected
+}
+
+function Get-JointSourceFreezeState {
+    param(
+        [Parameter(Mandatory = $true)][System.Collections.IDictionary]$RepositoryPaths,
+        [Parameter(Mandatory = $true)][string]$ArtifactDirectory
+    )
+    $heads = Get-JointSourceHeads -RepositoryPaths $RepositoryPaths
+    $states = [System.Collections.Generic.List[object]]::new()
+    $unknown = [System.Collections.Generic.List[string]]::new()
+    foreach ($name in $RepositoryPaths.Keys) {
+        if ($heads.repository_heads[$name].status -ne 'recorded') {
+            $unknown.Add([string]$name)
+            continue
+        }
+        $state = Get-RepositoryBuildInputState -RepositoryRoot $RepositoryPaths[$name] `
+            -BinaryPath (Join-Path $ArtifactDirectory 'source-freeze-anchor') -ArtifactRoot $ArtifactDirectory
+        if ($state.Head -cne $heads.repository_heads[$name].head) {
+            throw 'Source identity changed while its entry snapshot was being collected'
+        }
+        $states.Add($state)
+    }
+    return [pscustomobject]@{ States = @($states.ToArray()); Unknown = @($unknown.ToArray()) }
+}
+
+function Complete-JointSourceFreeze {
+    param(
+        $Before,
+        [System.Collections.IDictionary]$RepositoryPaths,
+        [Parameter(Mandatory = $true)][string]$ArtifactDirectory,
+        [Parameter(Mandatory = $true)][int]$ExitCode
+    )
+    $after = $null
+    $stable = $false
+    $status = 'unavailable'
+    try {
+        if ($null -eq $Before -or $null -eq $RepositoryPaths -or @($Before.States).Count -eq 0) {
+            throw 'No original local source capture is available'
+        }
+        $after = Get-JointSourceFreezeState -RepositoryPaths $RepositoryPaths -ArtifactDirectory $ArtifactDirectory
+        Assert-BuildInputStatesUnchanged -Before @($Before.States) -After @($after.States) `
+            -DiagnosticPath (Join-Path $ArtifactDirectory 'source-freeze-mismatch.json')
+        $stable = $true
+        $status = 'passed'
+    } catch {
+        # The original process failure remains the primary exit. A successful
+        # child can never authorize changed or unavailable local source inputs.
+        if ($ExitCode -eq 0) { $ExitCode = 1 }
+        if ($null -ne $Before) { $status = 'changed' }
+    }
+    $unknown = @(if ($null -ne $after) { $after.Unknown } elseif ($null -ne $Before) { $Before.Unknown })
+    $inputs = @(if ($null -ne $after) {
+        $after.States | ForEach-Object {
+            [ordered]@{
+                repository = Split-Path -Leaf $_.RepositoryRoot
+                source_id = Get-BuildInputDigest -Value $_.RepositoryRoot
+                head = $_.Head
+                source_sha256 = $_.SourceSha256
+                dirty_sha256 = $_.DirtySha256
+                input_count = $_.BuildInputCount
+            }
+        }
+    })
+    $report = [pscustomobject]@{
+        status = $status
+        source_stable = $stable
+        source_coverage = if ($inputs.Count -eq 0) { 'unavailable' } elseif ($unknown.Count -gt 0) { 'partial' } else { 'complete' }
+        recorded_repositories = $inputs.Count
+        unknown_repositories = $unknown
+        exit_code = $ExitCode
+        boundary = 'Before/after selected local repository HEAD, tracked/nonignored content and Cargo configuration identity. Unknown checkouts remain unknown; no source contents or private absolute roots are published.'
+        inputs = $inputs
+    }
+    $report | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath (Join-Path $ArtifactDirectory 'source-freeze.json') -Encoding UTF8
+    return $report
+}
+
+
 function Resolve-PlaywrightCliInvocation {
     param([Parameter(Mandatory = $true)][string]$E2eRoot)
 
@@ -3965,6 +4056,9 @@ $preflightJson = Join-Path $jointDir "preflight.json"
 $preflightMd = Join-Path $jointDir "preflight.md"
 $preflightSourceHeadsJson = Join-Path $jointDir "preflight-source-heads.json"
 $preflightSourceHeads = $null
+$sourceRepositoryPaths = $null
+$sourceFreezePaths = $null
+$sourceFreezeBefore = $null
 $managedServiceFailuresJson = Join-Path $jointDir "managed-service-failures.json"
 $managedServiceFailuresMd = Join-Path $jointDir "managed-service-failures.md"
 # Build and serve Inkson's official Glory bundle from its actual Cargo target.
@@ -3977,7 +4071,7 @@ if ($requiresInkson) {
 }
 
 try {
-    $preflightSourceHeads = Get-JointSourceHeads -RepositoryPaths ([ordered]@{
+    $sourceRepositoryPaths = [ordered]@{
         cotest = $repoRoot
         coland = $colandRepositoryRoot
         coauth = (Join-Path $workspaceRoot "coauth")
@@ -3985,11 +4079,15 @@ try {
         "arkret-rust-sdk" = (Join-Path $workspaceRoot "arkret-rust-sdk")
         garth = (Join-Path $workspaceRoot "garth")
         chime = (Join-Path $workspaceRoot "chime")
+        bridges = (Join-Path $workspaceRoot "bridges")
         inkson = $(if ($InksonRoot) { $InksonRoot } else { Join-Path $workspaceRoot "inkson" })
         floria = (Join-Path $workspaceRoot "floria")
         flagon = (Join-Path $workspaceRoot "flagon")
         savfox = $SavfoxRoot
-    })
+    }
+    $preflightSourceHeads = Get-JointSourceHeads -RepositoryPaths $sourceRepositoryPaths
+    $sourceFreezePaths = Select-JointSourceFreezePaths -RepositoryPaths $sourceRepositoryPaths -RequiresInkson $requiresInkson
+    $sourceFreezeBefore = Get-JointSourceFreezeState -RepositoryPaths $sourceFreezePaths -ArtifactDirectory $jointDir
     $preflightSourceHeads | ConvertTo-Json -Depth 5 |
         Set-Content -LiteralPath $preflightSourceHeadsJson -Encoding UTF8
     if ($StartCoauth) {
@@ -6987,6 +7085,10 @@ if ($secretScan.counts.findings -eq 0) {
 }
 $secretScanLines | Set-Content -LiteralPath $secretScanMd -Encoding UTF8
 
+$sourceFreezeReport = Complete-JointSourceFreeze -Before $sourceFreezeBefore `
+    -RepositoryPaths $sourceFreezePaths -ArtifactDirectory $jointDir -ExitCode $exitCode
+$exitCode = $sourceFreezeReport.exit_code
+
 $summary = [pscustomobject]@{
 
     suite_kind = "joint-e2e"
@@ -7052,6 +7154,9 @@ $summary = [pscustomobject]@{
     preflight_md = $preflightMd
     preflight_source_heads_json = $preflightSourceHeadsJson
     preflight_source_heads = $preflightSourceHeads
+    source_freeze_json = Join-Path $jointDir "source-freeze.json"
+    source_stable = $sourceFreezeReport.source_stable
+    source_coverage = $sourceFreezeReport.source_coverage
     junit_xml = Join-Path $jointDir "junit.xml"
     screenshot_index = $screenshotIndex
     visual_baseline_index = $visualBaselineIndex
@@ -7115,6 +7220,9 @@ $summary | ConvertTo-Json -Depth 6 | Set-Content -Path $summaryJson -Encoding UT
 - preflight_json: $($summary.preflight_json)
 - preflight_md: $($summary.preflight_md)
 - preflight_source_heads_json: $($summary.preflight_source_heads_json)
+- source_stable: $($summary.source_stable)
+- source_coverage: $($summary.source_coverage)
+- source_freeze_repository_count: $($sourceFreezeReport.recorded_repositories)
 - junit_xml: $($summary.junit_xml)
 - screenshot_index: $($summary.screenshot_index)
 - visual_baseline_index: $($summary.visual_baseline_index)
@@ -7197,6 +7305,7 @@ Write-Host "  visual base : $visualBaselineDir"
 Write-Host "  report      : $summaryMd"
 Write-Host "  topology    : $topologyPath"
 Write-Host "  secret scan : $($summary.secret_scan_status) ($secretScanMd)"
+Write-Host "  source freeze: $($sourceFreezeReport.status) ($($sourceFreezeReport.recorded_repositories) local repositories)"
 if ($isStandaloneJointSuite) {
     Write-Host "  latest      : $(Join-Path $OutputRoot 'latest\joint-e2e')"
 }
