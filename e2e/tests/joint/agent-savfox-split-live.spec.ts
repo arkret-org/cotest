@@ -1,3 +1,4 @@
+import { prepareAccountStreamOutage, cutAccountStream } from "../../helpers/account-stream-outage";
 import { accountRow } from "../../helpers/product-locators";
 import { expectPlaintextMessage } from "../../helpers/message-evidence";
 import { accountActorId } from "../../helpers/coland-api";
@@ -83,8 +84,6 @@ const KEYPACKAGES_CLAIM_PATH = "/_arkret/self/keys/keypackages/claim";
 const EVENTS_SUBMIT_PATH = "/_arkret/self/events";
 const MLS_TRANSACTION_KINDS = ["ak.mls.commit"];
 
-const isAccountSubscribe = ({ pathname }: URL) =>
-  pathname === ACCOUNT_SUBSCRIBE_PATH;
 const isEventsSubmit = ({ pathname }: URL) => pathname === EVENTS_SUBMIT_PATH;
 
 type PairingHandle = {
@@ -118,7 +117,13 @@ jointTest.setTimeout(1_200_000);
 
 // Pairing displays a private fragment URL and its QR code. Automatic failure
 // captures must not retain those credentials as pixels or browser recordings.
-const privatePairingTest = jointTest.extend({ trace: "off", screenshot: "off", video: "off" });
+const privatePairingTest = jointTest.extend({
+  trace: "off", screenshot: "off", video: "off",
+  prepareJointAlicePage: async ({}, use) => {
+    await use(async page => { await prepareAccountStreamOutage(page,
+      operationSelector("GET", ACCOUNT_SUBSCRIBE_PATH)); });
+  },
+});
 privatePairingTest.describe("Agent Savfox split live @fully-implemented", () => {
   privatePairingTest(
     "pairs, replaces the runtime key, resumes a crashed direct conversation, and answers a real message",
@@ -417,7 +422,7 @@ privatePairingTest.describe("Agent Savfox split live @fully-implemented", () => 
             timeout: 3 * APPROVAL_FALLBACK_POLL_MS,
           });
         } else {
-          const streamOutage = await dropAccountSubscribeStream(inkson);
+          const streamOutage = cutAccountStream(inkson);
           let listReadsDuringOutage = 0;
           const observeList = (outgoing: Request) => {
             if (outgoing.method() === "GET" &&
@@ -604,9 +609,7 @@ privatePairingTest.describe("Agent Savfox split live @fully-implemented", () => 
         const acceptedReplyId = await eventIdFromMessage(pongMessage);
         // Reload terminates the existing stream itself. Install the cut first
         // and prove the new request was blocked after that real reload.
-        const accountOutage = await dropAccountSubscribeStream(inkson, {
-          disconnectExisting: false,
-        });
+        const accountOutage = cutAccountStream(inkson);
         try {
           await inkson.reload();
           await expect.poll(accountOutage.blockedCount, { timeout: 30_000 }).toBeGreaterThan(0);
@@ -2255,59 +2258,6 @@ async function failAgentListQuery(page: Page): Promise<{
   };
 }
 
-async function dropAccountSubscribeStream(
-  page: Page,
-  options: { disconnectExisting?: boolean } = {},
-): Promise<{
-  blockedCount: () => number;
-  restore: () => Promise<void>;
-}> {
-  let blocked = 0;
-  let active = true;
-  const accountOperation = operationSelector("GET", "/_arkret/self/account/subscribe");
-  expect(accountOperation, "Account channel must be a registered operation").toBeDefined();
-  const reconnect = new Set<() => Promise<void>>();
-  const handler = async (route: Route) => {
-    blocked += 1;
-    await route.abort("connectionfailed");
-  };
-  await page.route(isAccountSubscribe, handler);
-  await page.routeWebSocket(url => url.pathname.startsWith("/_arkret/"), route => {
-    const server = route.connectToServer();
-    const operations = new Map<string, string>();
-    reconnect.add(() => route.close({ code: 1000, reason: "cotest Account cut restored" }));
-    server.onMessage(message => {
-      let accountData = false;
-      try {
-        const frame = JSON.parse(message.toString());
-        if (frame.kind === "opened" && typeof frame.channel_id === "string") {
-          operations.set(frame.channel_id, frame.operation_id);
-        }
-        accountData = frame.kind === "data" && operations.get(frame.channel_id) === accountOperation;
-        if (frame.kind === "closed") operations.delete(frame.channel_id);
-      } catch { /* Preserve authentic non-JSON bytes for the product verifier. */ }
-      if (active && accountData) { blocked += 1; return; }
-      // Realm and Signal frames, handshakes and controls retain their bytes.
-      route.send(message);
-    });
-  });
-  // New routing cannot affect the old shared socket. A real reload retires it
-  // and proves a fresh Account request/frame actually reached the cut.
-  if (options.disconnectExisting !== false) {
-    await page.reload();
-    await expect.poll(() => blocked, { timeout: 60_000 }).toBeGreaterThan(0);
-  }
-  return {
-    blockedCount: () => blocked,
-    restore: async () => {
-      active = false;
-      await page.unroute(isAccountSubscribe, handler);
-      // Dropped Account frames were never acknowledged. Reconnect through the
-      // original durable cursor instead of waiting behind their credit window.
-      await Promise.all([...reconnect].map(close => close().catch(() => {})));
-    },
-  };
-}
 
 type MlsTransactionEvent = {
   kind: string;

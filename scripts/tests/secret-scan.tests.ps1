@@ -328,7 +328,7 @@ try {
 
     # Both ordinary Agent pairing journeys display a private fragment and QR.
     $agentSource = Get-Content -LiteralPath (Join-Path $PSScriptRoot '..\..\e2e\tests\joint\agent-savfox-split-live.spec.ts') -Raw
-    Assert-True ($agentSource -match 'const privatePairingTest = jointTest\.extend\(\{ trace: "off", screenshot: "off", video: "off" \}\)') 'private Agent pairing must disable credential-bearing automatic captures'
+    Assert-True ($agentSource -match 'const privatePairingTest = jointTest\.extend\(\{\s*trace: "off",\s*screenshot: "off",\s*video: "off",') 'private Agent pairing must disable credential-bearing automatic captures'
     Assert-True ($agentSource.Contains('privatePairingTest.describe("Agent Savfox split live')) 'runtime replacement must use the protected pairing fixture'
     Assert-True ($agentSource.Contains('privatePairingTest("fresh Agent pairing gates the first send')) 'cold pairing must use the protected pairing fixture'
 

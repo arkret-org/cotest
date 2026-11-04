@@ -21,6 +21,10 @@ function adhocRunDir(): string {
     `-${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`;
   return path.resolve(process.cwd(), "..", "artifacts", "runs", "joint-e2e-adhoc", stamp);
 }
+// Disable fallback copy prompts; matcher contexts are separately discarded
+// by the private-capture reporter before retained report export.
+process.env.PLAYWRIGHT_NO_COPY_PROMPT = "1";
+
 const runDir = process.env.COTEST_JOINT_RUN_DIR ?? adhocRunDir();
 process.env.COTEST_JOINT_RUN_DIR = runDir;
 const baseURL =
@@ -58,6 +62,7 @@ export default defineConfig({
   workers,
   outputDir: path.join(runDir, "playwright-output"),
   reporter: [
+    ["./reporters/private-capture.ts", { outputFolder: path.join(runDir, "playwright-report") }],
     ["list"],
     ["junit", { outputFile: path.join(runDir, "junit.xml") }],
     // The built-in HTML reporter embeds API fill arguments (including recovery

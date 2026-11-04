@@ -1,3 +1,4 @@
+import { openDirectChatNotification } from "./direct-notification";
 import { accountActorId } from "./coland-api";
 import { actorRow } from "./product-locators";
 import { selectProductOptionByLabel } from "./product-select";
@@ -1368,22 +1369,7 @@ async function runFlatTopicChats(alice: Page, bob: Page, mainMessages: string[],
     if (sender === alice) {
       await expect(bob.locator(".direct-structure").getByRole("combobox", { name: "Chat", exact: true })
         .locator(`option[value=${JSON.stringify(chatId)}]`)).toContainText(/\d+ unread/, { timeout: 90_000 });
-      const notificationsButton = bob.locator(".topbar-notifications-link:visible");
-      await expect(notificationsButton).toHaveCount(1);
-      await notificationsButton.click();
-      const panel = bob.locator(".notifications-drawer-panel");
-      await expect(panel).toBeVisible();
-      const notification = panel.locator(`.notification-item:not(.notification-read)[aria-label=${JSON.stringify(chat.realm_id!)}]`)
-        .filter({ has: bob.locator(".notification-open-chat") });
-      await expect(notification).toHaveCount(1, { timeout: 90_000 });
-      await expect(notification).toBeVisible();
-      await notification.locator(".notification-open-chat").click();
-      await expect(panel).toHaveCount(0);
-      await expect.poll(() => new URL(bob.url()).pathname.split("/").map(decodeURIComponent))
-        .toEqual(["", "direct", chat.realm_id!, chatId]);
-      await expect(bob.locator(".direct-structure").getByRole("combobox", { name: "Chat", exact: true })).toHaveValue(chatId);
-      await expect(bob.locator(".direct-structure").getByRole("combobox", { name: "Chat", exact: true })
-        .locator(`option[value=${JSON.stringify(chatId)}]`)).not.toContainText("unread", { timeout: 90_000 });
+      await openDirectChatNotification(bob, chat.realm_id!, chatId);
     }
     await expect(recipient.locator(".chat-message").filter({ hasText: text })).toBeVisible({ timeout: 90_000 });
     for (const device of extraDevices) {

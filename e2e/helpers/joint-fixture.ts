@@ -2,6 +2,7 @@ import {
   test as base,
   type APIRequestContext,
   type Browser,
+  type Page,
 } from "./arkret-test";
 import {
   createDpopUserSession,
@@ -28,10 +29,12 @@ export type JointRealmFixture = JointUsersFixture & { realmId: string };
 export const test = base.extend<{
   jointUsers: JointUsersFixture;
   jointRealm: JointRealmFixture;
+  prepareJointAlicePage: ((page: Page) => Promise<void>) | undefined;
 }>({
-  jointUsers: async ({ browser, request }, use, testInfo) => {
+  prepareJointAlicePage: [undefined, { option: true }],
+  jointUsers: async ({ browser, request, prepareJointAlicePage }, use, testInfo) => {
     testInfo.setTimeout(Math.max(testInfo.timeout, 360_000));
-    const users = await createJointTwoUsers(browser, request);
+    const users = await createJointTwoUsers(browser, request, prepareJointAlicePage);
     try {
       await use(users);
     } finally {
@@ -58,6 +61,7 @@ export { expect } from "./arkret-test";
 async function createJointTwoUsers(
   browser: Browser,
   request: APIRequestContext,
+  beforeAliceNavigate?: (page: Page) => Promise<void>,
 ): Promise<JointUsersFixture> {
   // Principal inception is lease-fenced by the local Coauth/Coland pair.
   // Starting two independent DID inception/handoff chains concurrently can
@@ -73,6 +77,7 @@ async function createJointTwoUsers(
   const bob = bobSession.user;
   const [alicePage, bobPage] = await Promise.all([
     openUserPage(browser, alice, {
+      beforeNavigate: beforeAliceNavigate,
       grantJwt: aliceSession.grantJwt,
       dpopSeedB64url: aliceSession.dpopSeedB64url,
       eventSigningSeedB64url: aliceSession.eventSigningSeedB64url,
