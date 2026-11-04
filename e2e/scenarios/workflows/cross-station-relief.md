@@ -14,6 +14,7 @@
 
 1. 三人分别在 server1／server2／server3 通过 UI 注册；登记响应与公开 resolution 必须绑定各自 Station，三个 StationId 必须不同。
 2. 协调方创建 MLS Realm 和最多两账号使用的链接。两远端账号从各自 Station 接受，并由协调方分别显式授予消息写权限。
+   物流方接受后立即真实断网，协调方先完成两人成员 cut 的 MLS 覆盖，再让审核方加入并推进更晚 epoch；物流恢复后必须通过自己的 Welcome 与连续 tail 赶上，不能只碰巧在同一个 Add 批次入组。
 3. 完整三人 joined cut 被 MLS 覆盖后，三人各发真实加密报告，各自跨站解密且只显示一次。私有正文不得出现在 ingress Event 明文。
 4. 物流方断开真实浏览器 HTTP，同时退役已建立的所有 Arkret WebSocket；UI 排队一份物流报告。其离线期间协调方新报告在另外两端被接纳，物流方尚不可见；排队报告也不得出现在远端。
 5. 重连后排队原 Event 被接纳，原 EventId 和 canonical 字节摘要在重试中保持。物流方补齐离线缺口；再次断连／重连及文档刷新仍只有一份正式消息，outbox 清空。

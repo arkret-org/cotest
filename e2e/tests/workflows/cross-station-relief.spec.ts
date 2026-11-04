@@ -62,6 +62,7 @@ test("three Stations deliver relief supplies through offline replay, revoked wri
   let outage: Awaited<ReturnType<typeof prepareBrowserNetworkOutage>> | undefined;
   let releaseHeld: ((forward: boolean) => void) | undefined;
   let realm: string | undefined;
+  let twoMemberEpoch: string | undefined;
   const checkpoint = (phase: string) => {
     phases.push({ phase, completed_at: new Date().toISOString() });
     writeFileSync(testInfo.outputPath("relief-progress.json"), JSON.stringify({ realm, phases }, null, 2));
@@ -118,16 +119,29 @@ test("three Stations deliver relief supplies through offline replay, revoked wri
       await join.getByLabel("Paste invitation link after signing in", { exact: true }).fill(link);
       await join.locator(".realm-invite-link-confirm").click();
       await expect(join.locator(".realm-invite-link-message")).toContainText("Joined. Membership is accepted", { timeout: 120_000 });
+      if (member === bob) {
+        await outage!.disconnect();
+        await alice.page.gotoTimelineRealm(realm);
+        await expect.poll(() => {
+          const cut = cuts.get(realm!);
+          return cut?.covered && cut.members.size === 2;
+        }, { timeout: 180_000 }).toBe(true);
+        twoMemberEpoch = cuts.get(realm)!.epoch;
+        checkpoint("logistics disconnects after joining while the coordinator covers the two-member MLS group");
+      }
     }
     checkpoint("two remote members join through their own Stations using the limited invitation");
     const bobGrant = await grantWriting(alice, bob, realm);
     await grantWriting(alice, carol, realm);
-    for (const flow of flows) await flow.page.gotoTimelineRealm(realm);
+    for (const flow of [alice, carol]) await flow.page.gotoTimelineRealm(realm);
     await expect.poll(() => {
       const cut = cuts.get(realm!);
-      return cut?.covered && flows.every(flow => cut.members.has(canonicalJson(accountActorId(flow.user.id, flow.server))));
+      return cut?.covered && BigInt(cut.epoch) > BigInt(twoMemberEpoch!)
+        && flows.every(flow => cut.members.has(canonicalJson(accountActorId(flow.user.id, flow.server))));
     }, { timeout: 180_000 }).toBe(true);
     const initialCut = cuts.get(realm)!;
+    await outage!.reconnect();
+    await bob.page.gotoTimelineRealm(realm);
     const kickoff = `Relief approved: 120 water packs, three trucks and an audited delivery window. ${stamp}`;
     const kickoffEvent = await delivered(alice, flows, realm, kickoff);
     await expect.poll(() => transports.get("server3")!.hasReceivedEvent(String(kickoffEvent.event_id)), { timeout: 120_000,
@@ -140,8 +154,9 @@ test("three Stations deliver relief supplies through offline replay, revoked wri
     const queued = `Offline logistics report: truck 2 loaded and awaiting dispatch. ${stamp}`;
     const missed = `Coordinator update during logistics outage: use gate B. ${stamp}`;
     const offlineEvent = await admitted(bob.page.page, "ak.message.create", realm, async () => {
+      const retiredBefore = outage!.stats().retired_sockets;
       await outage!.disconnect();
-      expect(outage!.stats().retired_sockets, "the outage retires established WebSockets too").toBeGreaterThan(0);
+      expect(outage!.stats().retired_sockets, "this outage retires its established WebSockets too").toBeGreaterThan(retiredBefore);
       await bob.page.page.bringToFront();
       await bob.page.page.locator(".chat-input").fill(queued);
       await submitOrdinaryComposerDraft(bob.page.page, queued);
@@ -190,6 +205,7 @@ test("three Stations deliver relief supplies through offline replay, revoked wri
     await alice.page.gotoRealmAdminSection(realm, "security");
     await alice.page.page.locator(".advanced-access-toggle").click();
     await alice.page.page.locator(".cap-grant-id-input input").fill(bobGrant);
+    await alice.page.page.locator(".cap-grant-subject-input input").fill(canonicalJson({ principal_id: bob.user.id, station_id: colandServiceId("server2") }));
     const revoked = await admitted(alice.page.page, "ak.capability.revoke", realm, () => alice.page.page.locator(".cap-revoke-submit-button").click());
     expect(revoked.payload?.grant_id).toBe(bobGrant);
     const refusal = bob.page.page.waitForResponse(response => response.request().method() === "POST"
