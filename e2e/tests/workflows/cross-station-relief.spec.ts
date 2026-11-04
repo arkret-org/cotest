@@ -32,7 +32,7 @@ async function admitted(page: Page, kind: string, realm: string, action: () => P
 async function delivered(author: Flow, readers: Flow[], realm: string, text: string) {
   const event = await admitted(author.page.page, "ak.message.create", realm, () => author.page.sendTimelineMessage(realm, text));
   expect(JSON.stringify(event).includes(text), "project content stays encrypted on ingress").toBe(false);
-  for (const reader of readers) await expect(reader.page.page.locator(".chat-message").filter({ hasText: text })).toHaveCount(1, { timeout: 120_000 });
+  for (const reader of readers) await expect(reader.page.page.locator(".chat-message").filter({ hasText: text }), `${reader.server} decrypts the accepted report exactly once`).toHaveCount(1, { timeout: 120_000 });
   return event;
 }
 
@@ -246,6 +246,8 @@ test("three Stations deliver relief supplies through offline replay, revoked wri
           status: await flow.page.page.locator(".chat-status, .chat-compose-status, .write-status, .chat-outbox-count, .chat-message-error").allTextContents(),
           send_buttons: await flow.page.page.locator(".send-chat-button").evaluateAll(nodes => nodes.map(node => ({ disabled: (node as HTMLButtonElement).disabled }))),
           connection: await flow.page.page.locator(".connection-status .status-label").allTextContents(),
+          convergence: await flow.page.page.locator(".connection-status .last-error, .epoch-update-required-banner").allTextContents(),
+          message_states: await flow.page.page.locator(".chat-message-row").evaluateAll(nodes => nodes.map(node => ({ id: node.id, class: node.className }))),
         }, null, 2));
       } catch { /* Preserve the original business failure when a page has closed. */ }
     }
