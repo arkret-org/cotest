@@ -1,7 +1,7 @@
 // Contract: e2e/scenarios/workflows/cross-station-relief.md
 import { createHash } from "node:crypto";
 import { writeFileSync } from "node:fs";
-import { expect, test, type Page } from "../../helpers/arkret-test";
+import { expect, test, type Page, type Browser, type APIRequestContext, type TestInfo } from "../../helpers/arkret-test";
 import { accountActorId, assertAuthoritySubmitOutcome, canonicalJson, sdkEventDerivedObjectId, wireErrCode } from "../../helpers/coland-api";
 import { decodeIngressEvents, type IngressEvent } from "../../helpers/event-ingress";
 import { colandServiceId, configuredServerCount, type ColandKey } from "../../helpers/env";
@@ -48,7 +48,7 @@ async function grantWriting(manager: Flow, member: Flow, realm: string): Promise
   return sdkEventDerivedObjectId(event);
 }
 
-test("three Stations deliver relief supplies through offline replay, revoked writes and member departure @cross-station-relief-gate", async ({ browser, request }, testInfo) => {
+async function runReliefProject(admission: "concurrent" | "late-welcome", browser: Browser, request: APIRequestContext, testInfo: TestInfo) {
   test.setTimeout(1_800_000);
   expect(configuredServerCount(), "this project requires three independently configured Stations").toBeGreaterThanOrEqual(3);
   expect(new Set(["server1", "server2", "server3"].map(server => colandServiceId(server as ColandKey))).size).toBe(3);
@@ -65,7 +65,7 @@ test("three Stations deliver relief supplies through offline replay, revoked wri
   let twoMemberEpoch: string | undefined;
   const checkpoint = (phase: string) => {
     phases.push({ phase, completed_at: new Date().toISOString() });
-    writeFileSync(testInfo.outputPath("relief-progress.json"), JSON.stringify({ realm, phases }, null, 2));
+    writeFileSync(testInfo.outputPath("relief-progress.json"), JSON.stringify({ realm, admission, phases }, null, 2));
   };
   checkpoint("project started");
   try {
@@ -119,7 +119,7 @@ test("three Stations deliver relief supplies through offline replay, revoked wri
       await join.getByLabel("Paste invitation link after signing in", { exact: true }).fill(link);
       await join.locator(".realm-invite-link-confirm").click();
       await expect(join.locator(".realm-invite-link-message")).toContainText("Joined. Membership is accepted", { timeout: 120_000 });
-      if (member === bob) {
+      if (admission === "late-welcome" && member === bob) {
         await outage!.disconnect();
         await alice.page.gotoTimelineRealm(realm);
         await expect.poll(() => {
@@ -133,15 +133,17 @@ test("three Stations deliver relief supplies through offline replay, revoked wri
     checkpoint("two remote members join through their own Stations using the limited invitation");
     const bobGrant = await grantWriting(alice, bob, realm);
     await grantWriting(alice, carol, realm);
-    for (const flow of [alice, carol]) await flow.page.gotoTimelineRealm(realm);
+    for (const flow of admission === "concurrent" ? flows : [alice, carol]) await flow.page.gotoTimelineRealm(realm);
     await expect.poll(() => {
       const cut = cuts.get(realm!);
-      return cut?.covered && BigInt(cut.epoch) > BigInt(twoMemberEpoch!)
+      return cut?.covered && (admission === "concurrent" || BigInt(cut.epoch) > BigInt(twoMemberEpoch!))
         && flows.every(flow => cut.members.has(canonicalJson(accountActorId(flow.user.id, flow.server))));
     }, { timeout: 180_000 }).toBe(true);
     const initialCut = cuts.get(realm)!;
-    await outage!.reconnect();
-    await bob.page.gotoTimelineRealm(realm);
+    if (admission === "late-welcome") {
+      await outage!.reconnect();
+      await bob.page.gotoTimelineRealm(realm);
+    }
     const kickoff = `Relief approved: 120 water packs, three trucks and an audited delivery window. ${stamp}`;
     const kickoffEvent = await delivered(alice, flows, realm, kickoff);
     await expect.poll(() => transports.get("server3")!.hasReceivedEvent(String(kickoffEvent.event_id)), { timeout: 120_000,
@@ -219,7 +221,11 @@ test("three Stations deliver relief supplies through offline replay, revoked wri
     const afterRevoke = `Coordinator publishes the final route; logistics now has read-only access. ${stamp}`;
     await delivered(alice, flows, realm, afterRevoke);
     for (const reader of [alice, carol]) await expect(reader.page.page.locator(".chat-message").filter({ hasText: forbiddenReport })).toHaveCount(0);
-    await expect(bob.page.page.locator(".chat-message.is-canonical-message").filter({ hasText: forbiddenReport })).toHaveCount(0);
+    // A signed EventId is canonical before admission too. Its failed intent
+    // remains local; the send-status marker distinguishes it from accepted history.
+    const refusedIntent = bob.page.timelineEvent(forbiddenReport);
+    await expect(refusedIntent.locator(".message-send-status")).toHaveClass(/\bis-failed\b/);
+    await expect(refusedIntent.locator(".message-send-status.is-pending")).toHaveCount(0);
     expect(cuts.get(realm)!.members.size, "revoking writing does not remove membership or reading access").toBe(3);
     checkpoint("the authority rejects a real pre-signed delayed write after capability revocation while logistics keeps reading");
 
@@ -243,7 +249,12 @@ test("three Stations deliver relief supplies through offline replay, revoked wri
     for (const member of [alice, bob]) {
       await member.page.page.reload({ waitUntil: "domcontentloaded" });
       for (const body of [kickoff, queued, missed, afterRevoke, final]) await expect(member.page.page.locator(".chat-message").filter({ hasText: body })).toHaveCount(1, { timeout: 120_000 });
-      await expect(member.page.page.locator(".chat-message.is-canonical-message").filter({ hasText: forbiddenReport })).toHaveCount(0);
+      if (member === bob) {
+        await expect(member.page.timelineEvent(forbiddenReport).locator(".message-send-status")).toHaveClass(/\bis-failed\b/, { timeout: 120_000 });
+        await expect(member.page.timelineEvent(forbiddenReport).locator(".message-send-status.is-pending")).toHaveCount(0);
+      } else {
+        await expect(member.page.timelineEvent(forbiddenReport)).toHaveCount(0);
+      }
     }
     await carol.page.page.goto(`/chat/${encodeURIComponent(realm)}`);
     await carol.page.page.reload({ waitUntil: "domcontentloaded" });
@@ -275,4 +286,12 @@ test("three Stations deliver relief supplies through offline replay, revoked wri
     await testInfo.attach("relief-progress", { path: testInfo.outputPath("relief-progress.json"), contentType: "application/json" }).catch(() => {});
     await Promise.allSettled(flows.map(flow => flow.page.close()));
   }
+}
+
+test("three Stations deliver relief supplies through concurrent admission, offline replay, revoked writes and member departure @cross-station-relief-gate", async ({ browser, request }, testInfo) => {
+  await runReliefProject("concurrent", browser, request, testInfo);
+});
+
+test("three Stations deliver relief supplies through late Welcome, offline replay, revoked writes and member departure @cross-station-relief-gate", async ({ browser, request }, testInfo) => {
+  await runReliefProject("late-welcome", browser, request, testInfo);
 });
