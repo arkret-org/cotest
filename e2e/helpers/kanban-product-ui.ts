@@ -1,5 +1,23 @@
 import { expect, type Locator, type Page } from "@playwright/test";
 
+/** Prepare a local member filter without selecting or submitting anything. */
+export async function filterCardAssignee(page: Page, actorId: string): Promise<Locator> {
+  await page.bringToFront();
+  const detail = page.locator(".card-detail-modal");
+  const filter = detail.getByRole("textbox", { name: "Filter members", exact: true });
+  const option = detail.locator(".assignee-picker-option");
+  await expect(async () => {
+    // A pending card refresh can replace the controls during an input event.
+    // Reapply only this local query, then inspect the current controls.
+    await filter.click({ timeout: 1_000 });
+    await filter.fill("", { timeout: 1_000 });
+    await filter.fill(actorId, { timeout: 1_000 });
+    await expect(filter).toHaveValue(actorId, { timeout: 1_000 });
+    await expect(option).toHaveCount(1, { timeout: 1_000 });
+  }).toPass({ timeout: 10_000, intervals: [100, 250] });
+  return option;
+}
+
 export async function fillCardNarrative(
   page: Page,
   name: "Description" | "Synthesis",

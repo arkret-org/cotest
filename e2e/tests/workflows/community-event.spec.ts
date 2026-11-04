@@ -6,7 +6,7 @@ import { expect, test, type Page, type Locator } from "../../helpers/arkret-test
 import { accountActorId, canonicalJson, assertAuthoritySubmitOutcome, sdkEventDerivedObjectId, wireErrCode } from "../../helpers/coland-api";
 import { decodeIngressEvents, type IngressEvent } from "../../helpers/event-ingress";
 import { colandServiceId } from "../../helpers/env";
-import { addBoardList, fillCardNarrative } from "../../helpers/kanban-product-ui";
+import { addBoardList, fillCardNarrative, filterCardAssignee } from "../../helpers/kanban-product-ui";
 import { openRegisteredUserPage } from "../../helpers/users";
 
 test.use({ trace: "off", video: "off", screenshot: "off" });
@@ -30,9 +30,7 @@ async function assertAssigned(page: Page, principalId: string): Promise<void> {
   const detail = page.locator(".card-detail-modal");
   await expect(detail.locator(".assignee-chip-label")).toHaveCount(1);
   await detail.locator(".card-detail-assignee-add").click();
-  await detail.getByRole("textbox", { name: "Filter members", exact: true }).fill(canonicalJson(accountActorId(principalId)));
-  const option = detail.locator(".assignee-picker-option");
-  await expect(option).toHaveCount(1);
+  const option = await filterCardAssignee(page, canonicalJson(accountActorId(principalId)));
   await expect(option).toHaveAttribute("aria-pressed", "true");
   await detail.locator(".card-detail-assignee-cancel").click();
 }
@@ -205,9 +203,7 @@ test("three browser-owned members deliver a community event through encrypted di
         body: JSON.stringify({ expected_actor: expectedActor, labels: await detail.locator(".assignee-option-label").allTextContents() }),
         contentType: "application/json",
       });
-      await detail.getByRole("textbox", { name: "Filter members", exact: true }).fill(canonicalJson(expectedActor));
-      const option = detail.locator(".assignee-picker-option");
-      await expect(option).toHaveCount(1);
+      const option = await filterCardAssignee(alice.page.page, canonicalJson(expectedActor));
       await option.click();
       await expect(option).toHaveAttribute("aria-pressed", "true");
       const assignment = await committed(alice.page.page, "ak.relation.create", realm!, () => detail.locator(".card-detail-assignee-save").click());
@@ -305,15 +301,11 @@ test("three browser-owned members deliver a community event through encrypted di
       const detail = page.locator(".card-detail-modal");
       await assertAssigned(page, previousOwner.user.id);
       await detail.locator(".card-detail-assignee-add").click();
-      const filter = detail.getByRole("textbox", { name: "Filter members", exact: true });
-      const option = detail.locator(".assignee-picker-option");
-      await filter.fill(canonicalJson(accountActorId(previousOwner.user.id)));
-      await expect(option).toHaveCount(1);
+      const option = await filterCardAssignee(page, canonicalJson(accountActorId(previousOwner.user.id)));
       await expect(option).toHaveAttribute("aria-pressed", "true");
       await option.click();
       await expect(option).toHaveAttribute("aria-pressed", "false");
-      await filter.fill(canonicalJson(accountActorId(nextOwner.user.id)));
-      await expect(option).toHaveCount(1);
+      await filterCardAssignee(page, canonicalJson(accountActorId(nextOwner.user.id)));
       await expect(option).toHaveAttribute("aria-pressed", "false");
       await option.click();
       await expect(option).toHaveAttribute("aria-pressed", "true");
@@ -353,6 +345,13 @@ test("three browser-owned members deliver a community event through encrypted di
     await testInfo.attach("community-runtime-errors", { body: JSON.stringify(browserFailures), contentType: "application/json" });
     await testInfo.attach("community-response-statuses", { body: JSON.stringify(requests), contentType: "application/json" });
     for (const [index, flow] of flows.entries()) {
+      const filterStatePath = testInfo.outputPath(`assignee-filter-state-${index}.json`);
+      writeFileSync(filterStatePath, JSON.stringify({
+        path: new URL(flow.page.page.url()).pathname,
+        filter: await flow.page.page.getByRole("textbox", { name: "Filter members", exact: true }).evaluateAll(nodes => nodes.map(node => ({ value: (node as HTMLInputElement).value, focused: node === document.activeElement, document_focused: document.hasFocus() }))),
+        options: await flow.page.page.locator(".assignee-option-label").allTextContents(),
+      }, null, 2));
+      await testInfo.attach(`assignee-filter-state-${index}`, { path: filterStatePath, contentType: "application/json" });
       await testInfo.attach(`community-ui-state-${index}`, {
         body: JSON.stringify({
           path: new URL(flow.page.page.url()).pathname,
