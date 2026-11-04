@@ -563,19 +563,20 @@ test.describe("contact graph federation (server1/server2)", () => {
     await expect
       .poll(
         async () => {
-          const resp = await request.get(
-            `${colandBaseUrl("server2")}/_arkret/self/realms/${encodeURIComponent(realmId)}`,
-            { headers: authHeaders(bobTokenServer2, "GET", `${colandBaseUrl("server2")}/_arkret/self/realms/${encodeURIComponent(realmId)}`) },
-          );
-          if (!resp.ok()) return false;
-          const realm = await resp.json();
-          return (
-            Array.isArray(realm.member_ids) && realm.member_ids.some((member: unknown) => JSON.stringify(member) === JSON.stringify(accountActorId(bob.id, "server2")))
-          );
+          const response = await request.get(realmUrl, {
+            headers: authHeaders(bobTokenServer2, "GET", realmUrl),
+          });
+          return {
+            status: response.status(),
+            memberIds: response.ok() ? (await response.json()).member_ids : undefined,
+          };
         },
         { timeout: 30_000, intervals: [500, 1000, 2000] },
       )
-      .toBeTruthy();
+      .toMatchObject({
+        status: 200,
+        memberIds: expect.arrayContaining([accountActorId(bob.id, "server2")]),
+      });
   });
 
   // Tombstone-fed: cross-PS contact tombstone federates an `ak.contact.tombstone`

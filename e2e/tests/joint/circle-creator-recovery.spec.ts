@@ -3,6 +3,7 @@
 import { expect, test } from "../../helpers/arkret-test";
 import { createDpopUserSession, openUserPage, type JointUserPage } from "../../helpers/users";
 import { installCircleCreatorCommitFault, readCreatorRecords } from "../../helpers/creator-bootstrap";
+import { submitOrdinaryComposerDraft } from "../../helpers/composer-handoff";
 import { canonicalJson, scanRealmStreamApi } from "../../helpers/coland-api";
 import fs from "node:fs";
 import os from "node:os";
@@ -159,7 +160,10 @@ for (const cut of ["none", "create_response_loss", "public_blob_response_loss", 
         // Destroy the browser process, retain the same non-extractable key.
         await client.session.context.close();
         blocked = false;
-        client = await openUserPage(browser, session!.user, device);
+        client = await openUserPage(browser, session!.user, {
+          ...device,
+          resumePersistentProfile: true,
+        });
         page = client.page;
         watchAuthoring(page);
         await client.gotoHome();
@@ -203,7 +207,7 @@ for (const cut of ["none", "create_response_loss", "public_blob_response_loss", 
       const secret = `Circle private body ${Date.now()}`;
       await expect(page.locator(".chat-input")).toBeEnabled({ timeout: 60_000 });
       await page.locator(".chat-input").fill(secret);
-      await page.locator(".send-chat-button").click();
+      await submitOrdinaryComposerDraft(page, secret);
       await expect(page.locator(".chat-message").filter({ hasText: secret })).toBeVisible({ timeout: 60_000 });
       await expect.poll(async () => (await scanRealmStreamApi(request, session!.grantJwt, realm, { streamRef: ownStream }))
         .events.filter(event => event.kind === "ak.message.create"), { timeout: 60_000 }).toHaveLength(1);
