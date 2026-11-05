@@ -41,3 +41,11 @@ test("Realm follow diagnostics retain only fixed failure reasons", () => {
   assert.ok(!JSON.stringify(result).includes("fixture-private-material"));
   assert.ok(!JSON.stringify(result).includes("fixture-sensitive-grant"));
 });
+
+
+test("ordinary projection counters remain public decimal facts", () => {
+  const result = publicMlsRuntimeDiagnostic("Ordinary timeline projection inputs observed raw_message_rows=1 live_raw_message_rows=2 projected_message_rows=0 private_material=fixture-sensitive-private-material");
+  assert.deepEqual(result.fields, { raw_message_rows: "1", live_raw_message_rows: "2", projected_message_rows: "0" });
+  assert.deepEqual(publicMlsRuntimeDiagnostic("Ordinary timeline projection inputs observed live_raw_message_rows=2").fields, { live_raw_message_rows: "2" });
+  assert.ok(!JSON.stringify(result).includes("fixture-sensitive"));
+});

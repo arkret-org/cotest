@@ -12,6 +12,7 @@ const runtimeCodes = [
   "MLS send readiness dependencies observed",
   "Realm stream follow interrupted; retrying",
   "committed chat producer proof rejected",
+  "Ordinary timeline projection inputs observed",
   "timeline presentation host did not mount",
   "timeline presentation host failed",
   "timeline configuration could not be serialized",
@@ -24,11 +25,11 @@ export function publicMlsRuntimeDiagnostic(raw: string) {
   if (!code) return undefined;
   const fields: Record<string, boolean | string> = {};
   for (const field of ["scope_matches", "epoch_matches", "commit_matches", "key_access_covered", "checkpoint_present", "private_root_available", "current_cut_ready", "required_ready", "scope_current_known"]) {
-    const match = raw.match(new RegExp(`${field}["']?\\s*[:=]\\s*(true|false)\\b`));
+    const match = raw.match(new RegExp(`\\b${field}["']?\\s*[:=]\\s*(true|false)\\b`));
     if (match) fields[field] = match[1] === "true";
   }
-  for (const field of ["payload_epoch", "snapshot_epoch"]) {
-    const match = raw.match(new RegExp(`${field}["']?\\s*[:=]\\s*(?:Some\\()?["']?([0-9]{1,16})\\b`));
+  for (const field of ["payload_epoch", "snapshot_epoch", "raw_message_rows", "live_raw_message_rows", "projected_message_rows"]) {
+    const match = raw.match(new RegExp(`\\b${field}["']?\\s*[:=]\\s*(?:Some\\()?["']?([0-9]{1,16})\\b`));
     if (match) fields[field] = match[1];
   }
   const categories = ["unavailable", "fork", "session", "ratchet", "epoch", "roster", "reference", "secret", "base"].filter(word => raw.toLowerCase().includes(word));

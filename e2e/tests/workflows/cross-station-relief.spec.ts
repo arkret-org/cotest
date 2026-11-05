@@ -11,6 +11,7 @@ import { uint64Decimal } from "../../helpers/uint64-decimal";
 import { submitOrdinaryComposerDraft } from "../../helpers/composer-handoff";
 import { revealTimelineEvent } from "../../helpers/timeline-visibility";
 import { publicMlsRuntimeDiagnostic } from "../../helpers/mls-runtime-diagnostics";
+import { readOrdinaryHistoryDiagnostic } from "../../helpers/ordinary-history-diagnostics";
 import type { EventAdmissionSubmission } from "../../helpers/generated/spec-wire-objects";
 
 const invitationAcceptKind: EventAdmissionSubmission["event"]["kind"] = "ak.realm_invite_link.accept";
@@ -176,6 +177,7 @@ async function runReliefProject(admission: "concurrent" | "late-welcome", browse
         return status.startsWith("Joined. Membership is accepted");
       }, { timeout: 120_000, message: "an accepted join establishes its live start before the UI reports success" }).toBe(true);
       expect(joinIntents.get(member.server)!.size, "synchronization retries never author a second invitation acceptance").toBe(1);
+      writeFileSync(testInfo.outputPath(`relief-history-join-${member.server}.json`), JSON.stringify(await readOrdinaryHistoryDiagnostic(member.page.page, realm), null, 2));
       if (admission === "late-welcome" && member === bob) {
         await outage!.disconnect();
         await alice.page.gotoTimelineRealm(realm);
@@ -201,6 +203,7 @@ async function runReliefProject(admission: "concurrent" | "late-welcome", browse
       await outage!.reconnect();
       await bob.page.gotoTimelineRealm(realm);
     }
+    for (const flow of flows) writeFileSync(testInfo.outputPath(`relief-history-before-report-${flow.server}.json`), JSON.stringify(await readOrdinaryHistoryDiagnostic(flow.page.page, realm), null, 2));
     const kickoff = `Relief approved: 120 water packs, three trucks and an audited delivery window. ${stamp}`;
     const kickoffEvent = await observedDelivery(alice, flows, realm, kickoff);
     await expect.poll(() => transports.get("server3")!.hasReceivedEvent(String(kickoffEvent.event_id)), { timeout: 120_000,
@@ -350,6 +353,7 @@ async function runReliefProject(admission: "concurrent" | "late-welcome", browse
           send_buttons: await flow.page.page.locator(".send-chat-button").evaluateAll(nodes => nodes.map(node => ({ disabled: (node as HTMLButtonElement).disabled }))),
           connection: await flow.page.page.locator(".connection-status .status-label").allTextContents(),
           convergence: await flow.page.page.locator(".connection-status .last-error, .epoch-update-required-banner").allTextContents(),
+          local_history: realm ? await Promise.all([...reportRefs].map(async event => ({ event_id: event, ...await readOrdinaryHistoryDiagnostic(flow.page.page, realm!, event) }))) : [],
           accepted_project_events: [...reportRefs].map(event => ({ event_id: event, fetched_over_http: fetchedReports.get(flow.server)?.has(event) ?? false, observed_over_websocket: transports.get(flow.server)?.hasReceivedEvent(event) ?? false })),
           completed_reads: Object.fromEntries(reads.get(flow.server) ?? []),
           timeline_layout: await flow.page.page.locator(".message-list").evaluateAll(nodes => nodes.map(node => ({
