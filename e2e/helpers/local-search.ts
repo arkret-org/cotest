@@ -17,6 +17,15 @@ export async function postponeSearchEncryptionPrompts(
     prompts.push(["Set up your recovery key", "Close without publishing"],
       ["Set up your recovery key", "Not now"]);
   }
+  const pauseAttribute = "data-cotest-search-reminders-paused";
+  const reminders = [...new Set(prompts.map(([prompt]) => prompt))]
+    .map(prompt => page.locator(`html:not([${pauseAttribute}])`)
+      .getByRole("dialog", { name: prompt, exact: true }));
+  const installHandlers = async () => {
+    for (const reminder of reminders) {
+      await page.addLocatorHandler(reminder, postpone, { noWaitAfter: true });
+    }
+  };
   const frontmost = async () => {
     for (const [prompt, dismiss] of prompts) {
       const button = page.getByRole("dialog", { name: prompt, exact: true })
@@ -37,12 +46,16 @@ export async function postponeSearchEncryptionPrompts(
     if (postponing) return;
     postponing = true;
     try {
+      // Pause only the fixture's matching predicate. Unregistering an active
+      // handler discards Playwright's waiter before it can resume the action.
+      // The actual dialog and all foreground security gates stay unchanged.
+      await page.evaluate(attribute => document.documentElement.setAttribute(attribute, ""), pauseAttribute);
       for (let attempt = 0; attempt < 3; attempt++) {
         const selected = await frontmost();
         if (!selected) return;
         const dialog = page.getByRole("dialog", { name: selected.prompt, exact: true });
         try {
-          await dialog.getByRole("button", { name: selected.dismiss, exact: true }).click({ timeout: 1_000 });
+          await dialog.getByRole("button", { name: selected.dismiss, exact: true }).click();
         } catch (error) {
           // The initial setup can reveal words between hit-test and click.
           // Re-select its normal dismissal; another foreground workflow keeps
@@ -57,14 +70,17 @@ export async function postponeSearchEncryptionPrompts(
       }
       if (await frontmost()) throw new Error("search encryption reminders did not settle after three normal dismissals");
     } finally {
-      postponing = false;
+      try {
+        if (!page.isClosed()) {
+          await page.evaluate(attribute => document.documentElement.removeAttribute(attribute), pauseAttribute);
+        }
+      } finally {
+        postponing = false;
+      }
     }
   };
-  for (const prompt of new Set(prompts.map(([prompt]) => prompt))) {
-    // A covered background reminder remains visible while the real workflow
-    // is active. Waiting for it to hide here would deadlock that workflow.
-    await page.addLocatorHandler(page.getByRole("dialog", { name: prompt, exact: true }), postpone, { noWaitAfter: true });
-  }
+  // A covered reminder must not hold up the foreground security workflow.
+  await installHandlers();
   await postpone();
   return postpone;
 }
