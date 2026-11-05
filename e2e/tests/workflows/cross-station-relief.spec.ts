@@ -11,6 +11,9 @@ import { uint64Decimal } from "../../helpers/uint64-decimal";
 import { submitOrdinaryComposerDraft } from "../../helpers/composer-handoff";
 import { revealTimelineEvent } from "../../helpers/timeline-visibility";
 import { publicMlsRuntimeDiagnostic } from "../../helpers/mls-runtime-diagnostics";
+import type { EventAdmissionSubmission } from "../../helpers/generated/spec-wire-objects";
+
+const invitationAcceptKind: EventAdmissionSubmission["event"]["kind"] = "ak.realm_invite_link.accept";
 
 test.use({ trace: "off", video: "off", screenshot: "off" });
 
@@ -100,7 +103,7 @@ async function runReliefProject(admission: "concurrent" | "late-welcome", browse
           page.on("request", request => {
             if (request.method() !== "POST" || new URL(request.url()).pathname !== "/_arkret/self/events") return;
             for (const event of decodeIngressEvents(request.postData())) {
-              if (event.kind === "ak.realm.invite_link.accept" && event.realm_id === realm) invitationIntents.add(String(event.event_id));
+              if (event.kind === invitationAcceptKind && event.realm_id === realm) invitationIntents.add(String(event.event_id));
             }
           });
           const transport = await prepareBrowserNetworkOutage(page);
