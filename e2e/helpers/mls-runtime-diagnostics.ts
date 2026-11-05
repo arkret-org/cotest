@@ -12,6 +12,9 @@ const runtimeCodes = [
   "MLS send readiness dependencies observed",
   "Realm stream follow interrupted; retrying",
   "committed chat producer proof rejected",
+  "timeline presentation host did not mount",
+  "timeline presentation host failed",
+  "timeline configuration could not be serialized",
 ] as const;
 
 // Only fixed code labels, booleans and public epoch counters cross this boundary.

@@ -61,6 +61,7 @@ async function runReliefProject(admission: "concurrent" | "late-welcome", browse
   const phases: Array<{ phase: string; completed_at: string }> = [];
   const cuts = new Map<string, Cut>();
   const reportRefs = new Set<string>();
+  const joinIntents = new Map<ColandKey, Set<string>>();
   const fetchedReports = new Map<ColandKey, Set<string>>();
   const reads = new Map<ColandKey, Map<string, number>>();
   const observedDelivery = async (author: Flow, readers: Flow[], target: string, text: string) => delivered(author, readers, target, text, event => reportRefs.add(event));
@@ -93,6 +94,14 @@ async function runReliefProject(admission: "concurrent" | "late-welcome", browse
             const previous = observations.get(key);
             if (previous) previous.count++;
             else if (observations.size < 64) observations.set(key, { sample, count: 1 });
+          });
+          const invitationIntents = new Set<string>();
+          joinIntents.set(server, invitationIntents);
+          page.on("request", request => {
+            if (request.method() !== "POST" || new URL(request.url()).pathname !== "/_arkret/self/events") return;
+            for (const event of decodeIngressEvents(request.postData())) {
+              if (event.kind === "ak.realm.invite_link.accept" && event.realm_id === realm) invitationIntents.add(String(event.event_id));
+            }
           });
           const transport = await prepareBrowserNetworkOutage(page);
           transports.set(server, transport);
@@ -156,7 +165,14 @@ async function runReliefProject(admission: "concurrent" | "late-welcome", browse
       const join = member.page.page.locator(".realm-invite-links");
       await join.getByLabel("Paste invitation link after signing in", { exact: true }).fill(link);
       await join.locator(".realm-invite-link-confirm").click();
-      await expect(join.locator(".realm-invite-link-message")).toContainText("Joined. Membership is accepted", { timeout: 120_000 });
+      await expect.poll(async () => {
+        const status = await join.locator(".realm-invite-link-message").innerText();
+        if (status.startsWith("Membership is accepted, but live synchronization is pending.")) {
+          await join.locator(".realm-invite-link-confirm").click();
+        }
+        return status.startsWith("Joined. Membership is accepted");
+      }, { timeout: 120_000, message: "an accepted join establishes its live start before the UI reports success" }).toBe(true);
+      expect(joinIntents.get(member.server)!.size, "synchronization retries never author a second invitation acceptance").toBe(1);
       if (admission === "late-welcome" && member === bob) {
         await outage!.disconnect();
         await alice.page.gotoTimelineRealm(realm);
@@ -333,6 +349,11 @@ async function runReliefProject(admission: "concurrent" | "late-welcome", browse
           convergence: await flow.page.page.locator(".connection-status .last-error, .epoch-update-required-banner").allTextContents(),
           accepted_project_events: [...reportRefs].map(event => ({ event_id: event, fetched_over_http: fetchedReports.get(flow.server)?.has(event) ?? false, observed_over_websocket: transports.get(flow.server)?.hasReceivedEvent(event) ?? false })),
           completed_reads: Object.fromEntries(reads.get(flow.server) ?? []),
+          timeline_layout: await flow.page.page.locator(".message-list").evaluateAll(nodes => nodes.map(node => ({
+            height: node.clientHeight, scroll_height: node.scrollHeight,
+            virtual_height: (node.querySelector(".virtual-timeline") as HTMLElement | null)?.style.height ?? "",
+            has_empty_notice: !!node.querySelector(".discussion-empty"),
+          }))),
           active_discussions: await flow.page.page.locator(".channel-item.active").allTextContents(),
           mls_runtime: [...(runtimeDiagnostics.get(flow.server)?.values() ?? [])],
           message_states: await flow.page.page.locator(".chat-message-row").evaluateAll(nodes => nodes.map(node => ({ id: node.id, class: node.className,
