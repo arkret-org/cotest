@@ -23,8 +23,7 @@ def load(name, path):
 _HERE = Path(__file__).resolve().parent
 cli = load("run_native_workspace_cli", _HERE.parent / "run-native-workspace.py")
 fixtures = load("native_scope_cli_fixtures", _HERE / "test_native_workspace_scope.py")
-_DEFAULT_BASE = (Path("D:/BuildCache/arkret-ci-20261028/native-scope-tests")
-                 if os.name == "nt" else Path(tempfile.gettempdir()) / "cotest-native-scope-tests")
+_DEFAULT_BASE = Path(tempfile.gettempdir()) / "cotest-native-scope-tests"
 _BASE = Path(os.environ.get("COTEST_NATIVE_SCOPE_TEST_ROOT", str(_DEFAULT_BASE)))
 if not _BASE.is_absolute():
     raise ValueError("scope test root must be absolute")
