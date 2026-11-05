@@ -239,7 +239,7 @@ export async function addAgentToRealm(
     const join = eventSubmissions(joinResponse.request().postData()).find(isTargetJoin)!;
     assertAuthoritySubmitOutcome(joinOutcome, join, "normal controller-authored Agent first join");
     await expect(page.locator(".add-realm-agent-modal")).toHaveCount(0, { timeout: 180_000 });
-    await expect(page.locator(".realm-members-panel .write-status")).toContainText(
+    await expect(page.locator(".realm-members-panel > .write-status")).toContainText(
       "added agent",
       { timeout: 180_000 },
     );
@@ -248,9 +248,11 @@ export async function addAgentToRealm(
   await expect(agentRow).toBeVisible({ timeout: 120_000 });
   const reply = agentRow.getByRole("checkbox", { name: "Reply as agent", exact: true });
   const mention = agentRow.getByRole("checkbox", { name: "Accept @mentions", exact: true });
-  if (!await reply.isChecked()) await reply.check();
+  // This controlled value changes after the real server acknowledgement.
+  // Send one normal activation, then wait for the accepted value to render.
+  if (!await reply.isChecked()) await reply.click();
   await expect(reply).toBeChecked({ timeout: 120_000 });
-  if (!await mention.isChecked()) await mention.check();
+  if (!await mention.isChecked()) await mention.click();
   await expect(mention).toBeChecked({ timeout: 120_000 });
 }
 
