@@ -201,7 +201,14 @@ test.describe("workflow: support escalation", () => {
         timeout: 120_000,
       });
       await alexPage.page.locator(".new-board-toggle").click();
-      await alexPage.page.locator(".new-board-title-input input, .new-board-title-input textarea").fill(boardTitle);
+      const boardComposer = alexPage.page.locator(".board-create-popover");
+      const boardDraft = boardComposer.locator(".new-board-title-input :is(input,textarea)");
+      await boardDraft.fill("");
+      await expect(boardComposer.locator(".input-empty-prompt")).toBeVisible();
+      await boardDraft.fill(boardTitle);
+      await expect(boardDraft).toHaveValue(boardTitle);
+      await expect(boardComposer.locator(".input-empty-prompt")).toHaveCount(0);
+      await expect(alexPage.page.locator(".create-board-space-button")).toBeEnabled();
       await alexPage.page.locator(".create-board-space-button").click();
       await expect(
         alexPage.page.locator(".board-space-select-button"),

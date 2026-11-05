@@ -18,6 +18,8 @@ import { orderByCanonicalKey } from "./direct-structure-order";
 import { readCurrentSnapshot } from "./direct-current-snapshot";
 import type { ActorId, CommitStreamHead } from "./generated/spec-wire-objects";
 import { waitForAcceptedDirectCut } from "./direct-accepted-cut";
+import { waitForDurableCurrentCut } from "./durable-current-cut";
+import { observeSignalTransport } from "./signal-transport-observation";
 import { uint64Decimal } from "./uint64-decimal";
 
 // Negative structure targets must exist outside Direct's protected Realm.
@@ -386,11 +388,42 @@ async function realTyping(page: Page, realm: string, strand: string, typing: boo
   await page.bringToFront();
   await expect.poll(() => page.evaluate(() => typeof (window as any).__inkson_signal_sender_evidence),
     { timeout: 30_000 }).toBe("function");
+  const startedAt = Date.now();
+  const transports: Array<{ envelope_digest: string; sent_at: string; expires_at: string;
+    request_observed_at: number; response_observed_at?: number; status?: number;
+    request_start_at?: number }> = [];
+  const requests = new Map<Request, typeof transports[number]>();
+  const onRequest = (request: Request) => {
+    if (request.method() !== "POST" || new URL(request.url()).pathname !== "/_arkret/self/signal") return;
+    try {
+      const envelope = request.postDataJSON();
+      const digest = envelope?.proof?.envelope_digest;
+      if (envelope?.realm_id !== realm || envelope?.signal_class !== "session"
+        || !/^sha256:[a-f0-9]{64}$/.test(digest)
+        || !Number.isFinite(Date.parse(envelope.sent_at))
+        || !Number.isFinite(Date.parse(envelope.expires_at))) return;
+      // Retain only public envelope coordinates, never ciphertext or proof.
+      const row = { envelope_digest: String(digest), sent_at: String(envelope.sent_at),
+        expires_at: String(envelope.expires_at), request_observed_at: Date.now() };
+      requests.set(request, row);
+      transports.push(row);
+    } catch { /* A malformed request is not public Signal timing evidence. */ }
+  };
+  const onResponse = (response: Response) => {
+    const row = requests.get(response.request());
+    if (!row) return;
+    row.response_observed_at = Date.now();
+    row.status = response.status();
+    row.request_start_at = response.request().timing().startTime;
+  };
+  page.on("request", onRequest);
+  page.on("response", onResponse);
   let result: {
       accepted: boolean; dispatched_recipient_count?: number; envelope_digest: string;
       group_id: string; epoch: number; sender_actor_id: unknown; sender_device_id: string;
       error?: string; failure_stage?: string;
     } | undefined;
+  try {
   await expect.poll(async () => {
     result = await page.evaluate(async ({ realm, strand, typing }) => JSON.parse(await
       (window as any).__inkson_signal_sender_evidence(realm, strand, typing)), { realm, strand, typing });
@@ -403,6 +436,14 @@ async function realTyping(page: Page, realm: string, strand: string, typing: boo
   expect(result, "actual Signal producer must pass its local gates and complete the authenticated send")
     .toMatchObject({ accepted: true });
   return result;
+  } finally {
+    page.off("request", onRequest);
+    page.off("response", onResponse);
+    const file = test.info().outputPath(`signal-public-send-${randomUUID()}.json`);
+    await writeFile(file, JSON.stringify({ started_at: startedAt, finished_at: Date.now(),
+      actual_envelope_digest: result?.envelope_digest ?? null, transports }));
+    await test.info().attach("signal-public-send-timing", { path: file, contentType: "application/json" });
+  }
 }
 async function realSignalReceiver(page: Page, clear = false): Promise<Array<Record<string, any>>> {
   await expect.poll(() => page.evaluate(() => typeof (window as any).__inkson_signal_receiver_evidence),
@@ -416,7 +457,26 @@ async function assertWrongPlaintextStrand(alice: Page, bob: Page, realm: string,
   const before = await readCommitStreamHeadApi(proof.request, proof.token, realm);
   expect(before !== undefined).toBe(true);
   await realSignalReceiver(bob, true);
-  const positive = await realTyping(alice, realm, chat, true);
+  await expect(bob.locator(".typing-indicator")).toHaveCount(0);
+  await bob.evaluate(() => {
+    const target = window as any;
+    if (target.__directTypingObservation) throw new Error("Typing observer already installed");
+    const state = { edges: [] as Array<{ at: number; count: number }>, count: 0 };
+    const observer = new MutationObserver(() => {
+      const count = document.querySelectorAll(".typing-indicator").length;
+      if (count === state.count) return;
+      state.count = count;
+      if (state.edges.length < 64) state.edges.push({ at: Date.now(), count });
+    });
+    observer.observe(document, { childList: true, subtree: true });
+    target.__directTypingObservation = { state, observer };
+  });
+  const finishTransport = await observeSignalTransport(bob, realm);
+  let positiveDigest: string | null = null;
+  let positive: Awaited<ReturnType<typeof realTyping>>;
+  try {
+  positive = await realTyping(alice, realm, chat, true);
+  positiveDigest = positive.envelope_digest;
   expect(positive.accepted, "same-group positive Typing must reach the actual Station").toBe(true);
   expect(positive.dispatched_recipient_count ?? 0).toBeGreaterThan(0);
   let receiverEvidence: Array<Record<string, any>> = [];
@@ -436,12 +496,42 @@ async function assertWrongPlaintextStrand(alice: Page, bob: Page, realm: string,
     stages: expect.arrayContaining(["frame_received", "admitted"]),
     applied: true,
   }).catch(async (error: unknown) => {
+    const file = test.info().outputPath("direct-typing-positive-receiver.json");
+    await writeFile(file, JSON.stringify(receiverEvidence));
     await test.info().attach("direct-typing-positive-receiver-evidence", {
-      body: JSON.stringify(receiverEvidence), contentType: "application/json",
+      path: file, contentType: "application/json",
     });
     throw error;
   });
-  await expect(bob.locator(".typing-indicator")).toHaveCount(1);
+  const frame = receiverEvidence.find(row => row.envelope_digest === positive.envelope_digest
+    && row.receive_stage === "frame_received");
+  const receivedAt = Date.parse(frame?.received_at);
+  const expiresAt = Date.parse(frame?.expires_at);
+  expect(Number.isFinite(receivedAt) && Number.isFinite(expiresAt)).toBe(true);
+  await expect.poll(async () => {
+    const edges = await bob.evaluate(() => (window as any).__directTypingObservation.state.edges) as
+      Array<{ at: number; count: number }>;
+    return edges.some((edge, index) => edge.count === 1 && edge.at < expiresAt
+      && (edges[index + 1]?.at ?? Date.now()) >= receivedAt);
+  }, { timeout: 15_000, message: "the real Typing indicator is observed during this accepted Signal's original lifetime" }).toBe(true);
+  } finally {
+    const observed = await bob.evaluate(() => {
+      const target = window as any;
+      const value = target.__directTypingObservation;
+      value?.observer.disconnect();
+      delete target.__directTypingObservation;
+      return { public_dom_edges: value?.state.edges.length ?? 0,
+        public_maximum_indicator_count: Math.max(0, ...((value?.state.edges ?? [])
+          .map((edge: { count: number }) => edge.count))) };
+    }).catch(() => ({ public_dom_edges: 0, public_maximum_indicator_count: 0 }));
+    const file = test.info().outputPath("direct-typing-public-observation.json");
+    await writeFile(file, JSON.stringify(observed));
+    await test.info().attach("direct-typing-public-observation", { path: file, contentType: "application/json" });
+    const transportFile = test.info().outputPath(`signal-public-receive-${randomUUID()}.json`);
+    await writeFile(transportFile, JSON.stringify({ actual_envelope_digest: positiveDigest,
+      transport: await finishTransport().catch(() => ({ available: false as const })) }));
+    await test.info().attach("signal-public-receive-timing", { path: transportFile, contentType: "application/json" });
+  }
   const negative = await realTyping(alice, realm, target!, true);
   expect(negative.accepted, "wrong plaintext target must still have a legal encrypted outer Signal").toBe(true);
   expect(negative.dispatched_recipient_count ?? 0).toBeGreaterThan(0);
@@ -453,7 +543,13 @@ async function assertWrongPlaintextStrand(alice: Page, bob: Page, realm: string,
       && isDeepStrictEqual(row.sender_actor_id, negative.sender_actor_id)
       && row.sender_endpoint?.device_id === negative.sender_device_id);
     return rows.some(row => row.admitted_and_decrypted === true && row.target_scope_matches === false);
-  }, { timeout: 15_000 }).toBe(true);
+  }, { timeout: 15_000 }).toBe(true).catch(async (error: unknown) => {
+    const file = test.info().outputPath("direct-typing-negative-receiver.json");
+    await writeFile(file, JSON.stringify({ envelope_digest: negative.envelope_digest,
+      receipts: [...(await realSignalReceiver(bob)).filter(row => row.envelope_digest === negative.envelope_digest), ...rows] }));
+    await test.info().attach("direct-typing-negative-receiver", { path: file, contentType: "application/json" });
+    throw error;
+  });
   expect(rows.every(row => row.scope_ref?.kind === "realm" && row.scope_ref.realm_id === realm
     && row.strand_id === target && row.live_applied === false && row.visible_count === 0),
     "actual decrypted wrong-Strand Typing produces no live AppSink state").toBe(true);
@@ -1018,9 +1114,18 @@ async function indexedDbClearRecovery(page: Page, mainId: string, chatId: string
   const choose = page.locator(".direct-structure").getByRole("combobox", { name: "Chat", exact: true });
   await choose.selectOption(mainId);
   await fillDurableComposerDraft(page, oldDraft);
+  if (cancelSettings) {
+    // Mount the second real target before holding the entries transaction.
+    // Returning to it must not wait on the structure menu's fresh index read,
+    // which is serialized behind the physical write deliberately held below.
+    await choose.selectOption(chatId);
+    await expect(page).toHaveURL(url => decodeURIComponent(url.pathname).endsWith(`/${chatId}`));
+    await expect(input).toBeVisible();
+  }
   await page.evaluate(() => {
     type Barrier = {
       held: number; aborted: number; committed: number; armed: boolean;
+      held_at: number; aborted_at: number;
       release: () => void; dispose: () => void;
     };
     const target = window as typeof window & { __directCacheBarrier?: Barrier };
@@ -1030,6 +1135,7 @@ async function indexedDbClearRecovery(page: Page, mainId: string, chatId: string
     let heldTransaction: IDBTransaction | undefined;
     const state: Barrier = {
       held: 0, aborted: 0, committed: 0, armed: false,
+      held_at: 0, aborted_at: 0,
       release: () => {
         const transaction = heldTransaction;
         heldTransaction = undefined;
@@ -1049,8 +1155,9 @@ async function indexedDbClearRecovery(page: Page, mainId: string, chatId: string
       const transaction = store.transaction;
       if (state.armed && state.held === 0) {
         state.held += 1;
+        state.held_at = Date.now();
         heldTransaction = transaction;
-        transaction.addEventListener("abort", () => { state.aborted += 1; }, { once: true });
+        transaction.addEventListener("abort", () => { state.aborted += 1; state.aborted_at = Date.now(); }, { once: true });
         const keepAlive = () => {
           if (heldTransaction !== transaction) return;
           const read = store.get(key);
@@ -1074,10 +1181,15 @@ async function indexedDbClearRecovery(page: Page, mainId: string, chatId: string
     };
   });
   const barrier = async () => page.evaluate(() => {
-    const value = (window as typeof window & { __directCacheBarrier?: { held: number; aborted: number; committed: number } }).__directCacheBarrier;
+    const value = (window as typeof window & { __directCacheBarrier?: {
+      held: number; aborted: number; committed: number; held_at: number; aborted_at: number;
+    } }).__directCacheBarrier;
     if (!value) throw new Error("router navigation replaced the IndexedDB barrier document");
-    return { held: value.held, aborted: value.aborted, committed: value.committed };
+    return { held: value.held, aborted: value.aborted, committed: value.committed,
+      held_at: value.held_at, aborted_at: value.aborted_at, observed_at: Date.now() };
   });
+  const milestones: Array<{ stage: string; at: number }> = [];
+  const mark = (stage: string) => { milestones.push({ stage, at: Date.now() }); };
   try {
     await page.locator(".account-menu-button").click();
     await page.locator(".account-menu-settings").click();
@@ -1087,19 +1199,24 @@ async function indexedDbClearRecovery(page: Page, mainId: string, chatId: string
     await page.locator(".e2ee-cache-clear-all").click();
     await page.locator(".e2ee-cache-clear-confirm").click();
     await expect.poll(async () => (await barrier()).held).toBe(1);
+    mark("physical-clear-held");
     if (cancelSettings) {
       // Same-document back unmounts the pending settings component before the
       // real transaction fails; the independent cache completion must survive.
-      await page.goBack();
+      await page.goBack({ waitUntil: "commit" });
       await expect(page.locator(".e2ee-plaintext-cache")).toHaveCount(0);
-      await page.goBack();
-      await expect(choose).toBeVisible();
-      await choose.selectOption(chatId);
+      mark("settings-unmounted");
+      await page.goBack({ waitUntil: "commit" });
+      await expect(page).toHaveURL(url => decodeURIComponent(url.pathname).endsWith(`/${chatId}`));
+      mark("chat-route-restored");
+      await expect(input).toBeVisible();
+      mark("chat-restored");
       const newer = `${oldDraft}-new-chat`;
       const beforeDraft = await barrier();
       await input.fill(newer);
       await expect(input).toHaveValue(newer);
       await expect(page.locator(".chat-input-hint")).toHaveCount(0);
+      mark("new-draft-retained");
       const heldDraft = await barrier();
       expect(heldDraft.held).toBe(1);
       expect(heldDraft.aborted).toBe(0);
@@ -1131,7 +1248,14 @@ async function indexedDbClearRecovery(page: Page, mainId: string, chatId: string
       contentType: "application/json",
     });
   } finally {
-    await page.evaluate(() => { (window as any).__directCacheBarrier?.dispose(); });
+    try {
+      const state = await barrier().catch(() => null);
+      const file = test.info().outputPath(`indexeddb-clear-public-timing-${cancelSettings ? "cancelled-page" : "visible-error"}.json`);
+      await writeFile(file, JSON.stringify({ milestones, state }));
+      await test.info().attach("indexeddb-clear-public-timing", { path: file, contentType: "application/json" });
+    } finally {
+      await page.evaluate(() => { (window as any).__directCacheBarrier?.dispose(); });
+    }
   }
 }
 
@@ -1190,6 +1314,11 @@ async function runFlatTopicChats(alice: Page, bob: Page, mainMessages: string[],
     body: JSON.stringify({ watch_event_id: bobWatch.event_id, observed_cuts: observedWatchCuts,
       acknowledged_cut_observed: true }), contentType: "application/json",
   });
+  // The receiver's target gate consumes its durable current index. A Station
+  // receipt alone cannot establish that this browser has installed that cut.
+  for (const page of [alice, bob, ...extraDevices]) {
+    await waitForDurableCurrentCut(page, watchCut);
+  }
   // The watch UI can reappear before the cursorless Signal rail reconnects.
   // Encrypted presence from each accepted peer proves the live path is ready.
   for (const [page, peer] of [[alice, bobWatch.actor_id], [bob, chat.actor_id]] as const) {

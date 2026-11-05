@@ -313,7 +313,9 @@ test.describe("contact graph federation (server1/server2)", () => {
     browser,
     request,
   }) => {
-    test.setTimeout(480_000);
+    // This includes the complete cross-Station structure lifecycle, matching
+    // the dedicated Direct case. Individual protocol/UI deadlines stay bounded.
+    test.setTimeout(1_200_000);
     const stamp = Date.now();
     const [aliceFlow, bobFlow] = await Promise.all([
       openDpopUserPage(browser, request, `cgf-live-alice-${stamp}`, {

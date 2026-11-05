@@ -18,7 +18,9 @@ import { createDirectBoundaryCircleStrand, directStructureLifecycleGate, flatTop
 
 function directConversationCase(mode: "normal" | "interrupted" | "offline" | "lost" | "logout" | "account" | "withdrawal" | "leave", remoteBob = false) {
 return async ({ jointUsers, request, browser }: { jointUsers: JointUsersFixture; request: APIRequestContext; browser: Browser }) => {
-  test.setTimeout(mode === "normal" ? 900_000 : 480_000);
+  // The normal case includes the full structure lifecycle and physical cache
+  // recovery, matching the dedicated cross-Station case's total budget.
+  test.setTimeout(mode === "normal" ? 1_200_000 : 480_000);
   // A Contact pair must establish its own Direct Conversation without any
   // pre-existing shared Realm. Exercise only the two account prerequisites.
   const { alicePage, bobPage, aliceSession, bobSession } = jointUsers;

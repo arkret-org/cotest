@@ -18,7 +18,7 @@ import { ProvisioningBridge } from "../../helpers/provisioning-bridge";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { fileURLToPath } from "node:url";
-import { readFile } from "node:fs/promises";
+import { readFile, writeFile } from "node:fs/promises";
 
 test.use({ trace: "off", screenshot: "off", video: "off" });
 test.setTimeout(720_000);
@@ -750,7 +750,22 @@ async function switchReviewRealmAndReload(user: JointUserPage, originalRealm: st
     await expect(page).toHaveURL(url => decodeURIComponent(url.pathname) === `/realms/${realm}`);
     const realmNavigation = page.locator(".realm-context-bar");
     await realmNavigation.locator(".realm-nav-menu-button").click();
-    await realmNavigation.locator(".realm-nav-menu-panel").getByRole("link", { name: "Settings", exact: true }).click();
+    try {
+      // The canonical destination is independent of the account's UI locale.
+      await realmNavigation.locator(`.realm-nav-menu-panel a[href="${settings}"]`).click();
+    } catch (error) {
+      const publicMenu = await realmNavigation.evaluate(element => ({
+        trigger_node: element.querySelector(".realm-nav-menu-button")?.getAttribute("data-gly-node"),
+        open_hosts: element.querySelectorAll(".realm-nav-menu-host.is-open").length,
+        panels: element.querySelectorAll(".realm-nav-menu-panel").length,
+        destinations: Array.from(element.querySelectorAll<HTMLAnchorElement>(".realm-nav-menu-panel a"))
+          .map(link => ({ href: link.getAttribute("href"), label: link.textContent })),
+      })).catch(() => ({ unavailable: true }));
+      const file = test.info().outputPath(`realm-review-menu-${createHash("sha256").update(realm).digest("hex").slice(0, 12)}.json`);
+      await writeFile(file, JSON.stringify(publicMenu));
+      await test.info().attach("realm-review-public-navigation", { path: file, contentType: "application/json" });
+      throw error;
+    }
     await expect(page).toHaveURL(url => decodeURIComponent(url.pathname) === settings);
     await page.locator(".realm-admin-nav-item-access").click();
     await expect(page).toHaveURL(url => decodeURIComponent(url.pathname) === access);

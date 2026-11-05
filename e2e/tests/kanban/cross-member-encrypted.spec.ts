@@ -3,6 +3,8 @@ import { addBoardList, fillCardNarrative } from "../../helpers/kanban-product-ui
 import { restartRunnerStation } from "../../helpers/station-runtime";
 import { proveKanbanHistoryTail, seedKanbanHistory } from "../../helpers/kanban-history";
 import { observeRequestCost } from "../../helpers/request-cost";
+import { waitForDurableCurrentCut } from "../../helpers/durable-current-cut";
+import type { CommitStreamHead } from "../../helpers/generated/spec-wire-objects";
 import { decodeIngressEvents } from "../../helpers/event-ingress";
 import { installSubscriptionCut, isHttpSubscriptionPath } from "../../helpers/subscription-cut";
 import os from "node:os";
@@ -55,7 +57,7 @@ import {
   type Page,
 } from "../../helpers/arkret-test";
 import { colandBaseUrl } from "../../helpers/env";
-import { assertAuthoritySubmitOutcome, canonicalJson, grantCapabilityEventApi, queryRealmEventsApi, replaceAccountDataApi, retypeEventDerivedId, scanRealmStreamApi, sdkEventDerivedObjectId, signedEventEnvelope, submitSignedEventApi } from "../../helpers/coland-api";
+import { assertAuthoritySubmitOutcome, canonicalJson, grantCapabilityEventApi, queryRealmEventsApi, readCommitStreamHeadApi, replaceAccountDataApi, retypeEventDerivedId, scanRealmStreamApi, sdkEventDerivedObjectId, signedEventEnvelope, submitSignedEventApi } from "../../helpers/coland-api";
 import { grantInviteConsentArkret } from "../../helpers/contact-api";
 import { stepShot } from "../../helpers/screenshots";
 import { selfPathGrantHeaders } from "../../helpers/session-grant-dpop";
@@ -1544,6 +1546,23 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
         await stepShot(creator.page, testInfo, "C-quarantined-original-survives-reload-with-closed-send-gate");
       }
     } catch (error) {
+      if (cut === "quarantine_write_failure") {
+        const counters = await creator.page.evaluate(() => {
+          const value = (window as any).__creatorQuarantineWriteCut;
+          const count = (key: string) => Number.isSafeInteger(value?.[key]) && value[key] >= 0 ? value[key] : null;
+          return {
+            installed: value?.installed === true,
+            query_present: value?.queryPresent === true,
+            encrypt_calls: count("encryptCalls"),
+            vault_calls: count("vaultCalls"),
+            quarantine_calls: count("quarantineCalls"),
+            write_failed: (window as any).__creatorQuarantineWriteFailed === true,
+          };
+        }).catch(() => ({ unavailable: true }));
+        const file = testInfo.outputPath("creator-quarantine-write-counters.json");
+        await writeFile(file, JSON.stringify(counters));
+        await testInfo.attach("creator-quarantine-write-counters", { path: file, contentType: "application/json" });
+      }
       const records = await readCreatorRecords(creator.page, true).catch(() => []);
       const retryStatus = await creator.page.locator(".creator-mls-retry").allTextContents().catch(() => []);
       const safeStatus = retryStatus.filter((text) =>
@@ -1874,8 +1893,16 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
           historyStage = "verify-retained-board";
           await openReaderBoard(bobPage, realmId, retainedBoard!.boardId);
           await expect(bobPage.page.locator(".kanban-column")).toHaveCount(1);
-          await expect(bobPage.page.locator(".kanban-column").first().locator(".add-card-button")).toBeEnabled();
-          await expect(bobPage.page.getByRole("button", { name: `Retained list ${stamp} (${retainedBoard!.listId})`, exact: true })).toBeVisible();
+          // Membership restores readable current structure. The explicit card
+          // authoring grants are accepted below, after this cold read check.
+          await expect(bobPage.page.locator(".kanban-column").first().locator(".add-card-button")).toBeDisabled();
+          // Space current retains structural identity and encrypted metadata.
+          // history-visibility §4 gives a new member no pre-join MLS secrets;
+          // realm-and-space §3.2.1 forbids a plaintext title mirror.
+          const retainedList = bobPage.page.locator(".kanban-column-title")
+            .and(bobPage.page.getByRole("button", { name: new RegExp(`[(]${retainedBoard!.listId}[)]$`) }));
+          await expect(retainedList).toBeVisible();
+          await expect(retainedList).not.toHaveAccessibleName(`Retained list ${stamp} (${retainedBoard!.listId})`);
           await testInfo.attach("kanban-history-fresh-reader.json", { contentType: "application/json",
             body: JSON.stringify({ reader_closed_before_seed: true, fresh_context_after_card_commit: true,
               no_product_current_or_history_cache_copied: true,
@@ -2221,6 +2248,8 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
           const cost = costs.find(entry => entry.reader === "alice")!.cost;
           const lists = (snapshot: Awaited<ReturnType<typeof cost.snapshot>>) => snapshot.http.filter(row =>
             /\/_arkret\/self\/realms\/[^/]+\/(spaces|strands)$/.test(row.path));
+          await waitForDurableCurrentCut(alicePage.page,
+            await readCommitStreamHeadApi(request, aliceSession.grantJwt, realmId));
           const first = await cost.snapshot();
           await testInfo.attach("kanban-request-first.json", { contentType: "application/json", body: JSON.stringify(first) });
           if (fault === "requests-websocket") {
@@ -2252,6 +2281,7 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
           const ordinaryStart = cost.mark("ordinary-messages");
           const ordinary: string[] = [];
           let ordinaryCommit = "";
+          let ordinaryHead: CommitStreamHead | undefined;
           await bobPage.gotoTimelineRealm(realmId);
           for (let index = 0; index < 20; index += 1) {
             const receipt = bobPage.page.waitForResponse(response => {
@@ -2269,6 +2299,8 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
             const outcome = await response.json();
             assertAuthoritySubmitOutcome(outcome, event, `ordinary message ${index + 1}/20`);
             ordinary.push(String(event.event_id)); ordinaryCommit = String(outcome.commit.commit_id);
+            ordinaryHead = { stream_ref: outcome.commit.stream_ref,
+              stream_position: outcome.commit.stream_position, commit_id: outcome.commit.commit_id };
           }
           expect(new Set(ordinary).size).toBe(20);
           await testInfo.attach("kanban-request-ordinary-accepted-cut.json", {
@@ -2277,6 +2309,7 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
               final_event_id: ordinary.at(-1), final_commit_id: ordinaryCommit }),
           });
           const ordinaryDelivered = await subscriptionCut!.waitForCut(ordinary.at(-1)!, ordinaryCommit);
+          await waitForDurableCurrentCut(alicePage.page, ordinaryHead!);
           const ordinaryCost = await cost.snapshot(ordinaryStart);
           expect(lists(ordinaryCost)).toHaveLength(0);
           await testInfo.attach("kanban-request-ordinary-messages-20.json", { contentType: "application/json",
@@ -2286,6 +2319,7 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
           const changedStart = cost.mark("real-lifecycle");
           const accepted: string[] = [];
           let lastCommitId = "";
+          let lifecycleHead: CommitStreamHead | undefined;
           // Twenty real alternating lifecycle changes retain the same Card
           // identity and finish Active; none is a synthetic current response.
           for (let index = 0; index < 20; index += 1) {
@@ -2295,10 +2329,14 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
             const outcome = await submitSignedEventApi(request, aliceSession.grantJwt, event,
               { context: `kanban real lifecycle change ${index + 1}/20` });
             lastCommitId = String((outcome.commit as Record<string, unknown>).commit_id);
+            const commit = outcome.commit as CommitStreamHead;
+            lifecycleHead = { stream_ref: commit.stream_ref,
+              stream_position: commit.stream_position, commit_id: commit.commit_id };
             accepted.push(String(event.event_id));
           }
           expect(new Set(accepted).size).toBe(20);
           const delivered = await subscriptionCut!.waitForCut(accepted.at(-1)!, lastCommitId);
+          await waitForDurableCurrentCut(alicePage.page, lifecycleHead!);
           const deliveredHttpCost = await subscriptionCut!.httpProof();
           await openReaderBoard(alicePage, realmId, boardId);
           await assertCardDecrypts(alicePage, aliceCard, aliceDescription);
@@ -2313,6 +2351,8 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
           const otherBoardTitle = `Other board ${stamp}`;
           const otherBoardId = await buildEncryptedBoardListCard(alicePage.page, realmId,
             otherBoardTitle, `Other list ${stamp}`, otherCard);
+          await waitForDurableCurrentCut(alicePage.page,
+            await readCommitStreamHeadApi(request, aliceSession.grantJwt, realmId));
           const switchingStart = cost.mark("board-switches");
           for (let index = 0; index < 20; index += 1) {
             await selectBoard(alicePage.page, realmId,

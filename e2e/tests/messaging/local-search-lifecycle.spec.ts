@@ -6,6 +6,7 @@ import { joinRealmMemberByInviteApi, resolveDefaultStrandId, signedEventEnvelope
 import { observeNativeSearch, type NativeSearchObservation } from "../../helpers/native-search";
 import { allowExplicitInviteNotifications, createDpopUserSession, issueUserSession,
   openDpopUserPageFromSession } from "../../helpers/users";
+import { writeFile } from "node:fs/promises";
 
 test("0540 real local search rechecks late-join history and preserves revision sources through redaction", async ({
   browser, request,
@@ -50,9 +51,35 @@ test("0540 real local search rechecks late-join history and preserves revision s
       await flow.page.completeRecoveryKeySetupIfPrompted(1_000);
       if (!await panel.isVisible()) await page.keyboard.press("Control+F");
       await expect(panel).toBeVisible();
-      await panel.locator(".global-search-input").fill(query);
+      const input = panel.locator(".global-search-input");
+      const empty = panel.locator(".global-search-form .input-empty-prompt");
+      await input.fill("");
+      await expect(empty).toBeVisible();
+      await input.fill(query);
+      await expect(input).toHaveValue(query);
+      await expect(empty).toHaveCount(0);
+      await expect(panel.locator(".global-search-submit")).toBeEnabled();
       await panel.locator(".global-search-submit").click();
-      await expect(row).toHaveCount(count);
+      await expect(row).toHaveCount(count).catch(async (error: unknown) => {
+        try {
+          let control: { status: "observed"; count: number; account_matches: boolean } | { status: "unavailable" };
+          try {
+            const native = await observeNativeSearch(reader, realmId, query,
+              testInfo.outputPath("native-history-account.json"));
+            control = { status: "observed", count: native.view.results.length,
+              account_matches: native.account_id.principal_id === reader.accountId.principal_id
+                && native.account_id.station_id === reader.accountId.station_id };
+          } catch { control = { status: "unavailable" }; }
+          const file = testInfo.outputPath("local-search-ui-native-boundary.json");
+          await writeFile(file, JSON.stringify({ step, expected_count: count, native: control,
+            browser: { count: await row.count(),
+              loading: await panel.locator(".global-search-results-loading").count(),
+              failed: await panel.locator(".global-search-results-error").count(),
+              query_matches: await input.inputValue() === query } }));
+          await testInfo.attach("local-search-ui-native-boundary", { path: file, contentType: "application/json" });
+        } catch { /* A retired document cannot replace the original UI failure. */ }
+        throw error;
+      });
       let visible: Record<string, string | null> | null = null;
       if (count) {
         await expect(row.locator(".global-search-result-snippet")).toHaveText(query);
