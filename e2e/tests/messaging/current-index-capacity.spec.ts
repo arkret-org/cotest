@@ -1,5 +1,6 @@
 // Real Station metadata and durable WASM startup; no supplied current projection.
 import { expect, test } from "../../helpers/arkret-test";
+import { publicScreenshot } from "../../helpers/screenshots";
 import { createRealmViaApi, sendPlaintextMessageViaApi } from "../../helpers/api";
 import { resolveDefaultStrandId } from "../../helpers/coland-api";
 import { postponeSearchEncryptionPrompts } from "../../helpers/local-search";
@@ -139,7 +140,7 @@ test("0540 real Station 1/100/1000 Realm durable cold startup records first scre
       await testInfo.attach(`real-capacity-${count}.json`, {
         body: JSON.stringify(measurements.at(-1), null, 2), contentType: "application/json",
       });
-      await page.screenshot({ path: testInfo.outputPath(`real-capacity-${count}.png`) });
+      await publicScreenshot(page, { path: testInfo.outputPath(`real-capacity-${count}.png`) });
       expect(recoveryPolicyWrites, "plaintext startup does not publish a recovery policy").toEqual([]);
       expect(Math.max(...metrics.inputFrames), "real composer input paint under the retained dataset").toBeLessThan(1000);
     }

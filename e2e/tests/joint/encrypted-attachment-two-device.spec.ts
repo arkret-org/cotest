@@ -1,5 +1,6 @@
 // Real product attachment selection, durable preparation, upload, send and receive.
 import { createHash } from "node:crypto";
+import { publicScreenshot } from "../../helpers/screenshots";
 import { execFile } from "node:child_process";
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -331,7 +332,7 @@ test("encrypted attachment two-device upload/send/history/render and exact resta
           disabled: input.disabled, readOnly: input.readOnly, rectangle: input.getBoundingClientRect().toJSON(),
           display: getComputedStyle(input).display, visibility: getComputedStyle(input).visibility})),
       })});
-      await testInfo.attach("long-text-input-boundary.png", {contentType: "image/png", body: await alice.page.screenshot()});
+      await testInfo.attach("long-text-input-boundary.png", {contentType: "image/png", body: await publicScreenshot(alice.page)});
       throw error;
     }
     await expect(alice.page.locator(".send-chat-button")).toBeEnabled({timeout: 120_000});

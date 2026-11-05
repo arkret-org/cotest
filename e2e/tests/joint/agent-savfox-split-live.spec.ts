@@ -1,5 +1,6 @@
 import { prepareAccountStreamOutage, cutAccountStream } from "../../helpers/account-stream-outage";
 import { accountRow } from "../../helpers/product-locators";
+import { publicScreenshot } from "../../helpers/screenshots";
 import { expectPlaintextMessage } from "../../helpers/message-evidence";
 import { accountActorId } from "../../helpers/coland-api";
 import { agentMemberRow } from "../../helpers/product-locators";
@@ -1460,7 +1461,7 @@ privatePairingTest("fresh Agent pairing gates the first send until binding and a
       phases, binding: heldBinding!.event_id, firstMessage: messages[0].event_id,
       reply: await eventIdFromMessage(pong), messageSubmissions: messages.length,
     }, null, 2), contentType: "application/json" });
-    await testInfo.attach("cold-first-reply", { body: await inkson.screenshot(), contentType: "image/png" });
+    await testInfo.attach("cold-first-reply", { body: await publicScreenshot(inkson), contentType: "image/png" });
   } finally {
     releaseSecondResolve();
     releaseBinding();

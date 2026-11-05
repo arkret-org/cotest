@@ -87,8 +87,10 @@ export default defineConfig({
     // recovery and authenticated APIs, so trace persistence stays disabled
     // until Playwright provides a pre-write structured-redaction boundary.
     trace: "off",
-    video: "retain-on-failure",
-    screenshot: "only-on-failure",
+    // Automatic captures can include an unexpected recovery dialog. Binary
+    // artifact classification cannot establish that its pixels are public.
+    video: "off",
+    screenshot: "off",
   },
   projects: [
     {
