@@ -338,9 +338,9 @@ jobs:
       - name: Direct accepted cut readiness regression
         working-directory: cotest/e2e
         run: node --test scripts/direct-accepted-cut.test.mjs scripts/direct-notification.test.mjs scripts/direct-structure-form.test.mjs scripts/account-stream-outage.test.mjs
-      - name: Browser report privacy regression
+      - name: Native HTML report and private snapshot regression
         working-directory: cotest/e2e
-        run: node --test scripts/safe-summary.test.mjs scripts/private-page-snapshot.test.mjs
+        run: node --test scripts/private-page-snapshot.test.mjs
       - name: Check joint scenario manifests before service builds
         shell: pwsh
         run: |

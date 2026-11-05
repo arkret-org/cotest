@@ -65,9 +65,7 @@ export default defineConfig({
     ["./reporters/private-capture.ts", { outputFolder: path.join(runDir, "playwright-report") }],
     ["list"],
     ["junit", { outputFile: path.join(runDir, "junit.xml") }],
-    // The built-in HTML reporter embeds API fill arguments (including recovery
-    // phrases) in a base64 ZIP. Persist only explicit result metadata instead.
-    ["./reporters/safe-summary.ts", { outputFolder: path.join(runDir, "playwright-report"), sourceRoot: e2eRoot }],
+    ["html", { outputFolder: path.join(runDir, "playwright-report"), open: "never" }],
   ],
   use: {
     baseURL,

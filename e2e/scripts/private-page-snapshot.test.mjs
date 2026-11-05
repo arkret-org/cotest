@@ -3,11 +3,39 @@ import { createHash, randomUUID } from "node:crypto";
 import { mkdirSync, mkdtempSync, readFileSync, readdirSync, symlinkSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
+import { inflateRawSync } from "node:zlib";
 import test from "node:test";
 import PrivateCaptureReporter from "../reporters/private-capture.ts";
 import { fileURLToPath } from "node:url";
 
 const e2e = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+
+function nativeReportEntries(html) {
+  const encoded = html.match(/data:application\/zip;base64,([A-Za-z0-9+/=]+)/);
+  assert.ok(encoded, "the native HTML report must contain its embedded report archive");
+  const zip = Buffer.from(encoded[1], "base64");
+  const end = zip.lastIndexOf(Buffer.from([0x50, 0x4b, 0x05, 0x06]));
+  assert.ok(end >= 0, "the report archive must have a central directory");
+  let offset = zip.readUInt32LE(end + 16);
+  const entries = new Map();
+  for (let index = 0; index < zip.readUInt16LE(end + 10); index++) {
+    assert.equal(zip.readUInt32LE(offset), 0x02014b50);
+    const method = zip.readUInt16LE(offset + 10);
+    const size = zip.readUInt32LE(offset + 20);
+    const nameLength = zip.readUInt16LE(offset + 28);
+    const extraLength = zip.readUInt16LE(offset + 30);
+    const commentLength = zip.readUInt16LE(offset + 32);
+    const local = zip.readUInt32LE(offset + 42);
+    const name = zip.subarray(offset + 46, offset + 46 + nameLength).toString("utf8");
+    assert.equal(zip.readUInt32LE(local), 0x04034b50);
+    const start = local + 30 + zip.readUInt16LE(local + 26) + zip.readUInt16LE(local + 28);
+    const compressed = zip.subarray(start, start + size);
+    assert.ok(method === 0 || method === 8, "the fixture archive must use stored or deflated entries");
+    entries.set(name, (method === 8 ? inflateRawSync(compressed) : compressed).toString("utf8"));
+    offset += 46 + nameLength + extraLength + commentLength;
+  }
+  return entries;
+}
 
 test("a real failing browser run preserves failure without retaining its private page", { timeout: 45_000 }, () => {
   const root = path.join(e2e, "..", "artifacts", "tool-tests");
@@ -53,14 +81,18 @@ export default { ...base, testDir: ${JSON.stringify(fixture)}, testMatch: /captu
   }, null, 2));
   assert.equal(child.error, undefined, "the real browser child must terminate normally");
   assert.equal(child.status, 1, "the actual missing approval failure must remain CLI 1");
-  const summary = JSON.parse(readFileSync(path.join(output, "playwright-report", "safe-summary.json"), "utf8"));
-  assert.equal(summary.status, "failed");
-  assert.equal(summary.global_error_count, 0);
-  assert.equal(summary.cases.length, 1);
-  assert.equal(summary.cases[0].status, "failed");
+  const reportHtml = readFileSync(path.join(output, "playwright-report", "index.html"), "utf8");
+  assert.match(reportHtml, /<style\b/, "the native report must include its stylesheet");
+  const reportEntries = nativeReportEntries(reportHtml);
+  const summary = JSON.parse(reportEntries.get("report.json"));
+  assert.equal(summary.stats.total, 1);
+  assert.equal(summary.stats.unexpected, 1);
+  assert.equal(summary.stats.ok, false);
+  assert.equal(summary.errors.length, 0);
   const files = readdirSync(output, { recursive: true, withFileTypes: true })
     .filter(entry => entry.isFile()).map(entry => path.join(entry.parentPath, entry.name));
-  const persisted = files.map(file => readFileSync(file).toString("utf8")).join("\n") + child.stdout + child.stderr;
+  const persisted = files.map(file => readFileSync(file).toString("utf8")).join("\n")
+    + [...reportEntries.values()].join("\n") + child.stdout + child.stderr;
   assert.equal(persisted.includes(canary), false, "private page values must be absent from retained diagnostics");
   assert.equal(persisted.includes("snapshot-canary-"), false, "even a partial private value must be absent");
 });

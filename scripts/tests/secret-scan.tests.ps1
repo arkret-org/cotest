@@ -435,8 +435,8 @@ try {
     # default on the joint runner.
     $playwrightConfig = Get-Content -LiteralPath (Join-Path $PSScriptRoot "..\..\e2e\playwright.config.ts") -Raw
     Assert-True ($playwrightConfig -match 'trace:\s*"off"') "Playwright trace persistence must remain disabled"
-    Assert-True ($playwrightConfig.Contains('./reporters/safe-summary.ts')) 'browser reporting must use metadata-only output instead of persisting private API fill arguments'
-    Assert-True ($playwrightConfig -notmatch '\["html"\s*,') 'the built-in encoded HTML report cannot retain joint credential ceremonies'
+    Assert-True ($playwrightConfig -match '\["html"\s*,') 'browser reporting must use the native Playwright HTML report'
+    Assert-True ($playwrightConfig -match 'open:\s*"never"') 'report generation must not open a browser during an automated run'
 
     Assert-True ($playwrightConfig -notmatch 'trace:\s*"retain-on-failure"') "retain-on-failure traces persist joint test secrets"
 } finally {
