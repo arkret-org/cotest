@@ -178,11 +178,20 @@ export async function pairManagedSavfoxAgent(
   const arkretCard = savfox
     .locator(".channels-card")
     .filter({ hasText: "Arkret" });
+  await expect(arkretCard).toHaveCount(1);
+  await arkretCard.getByRole("button", { name: "Channel actions", exact: true }).click();
+  await arkretCard.getByRole("button", { name: "Health", exact: true }).click();
+  await expect(savfox).toHaveURL(url => /^\/channels\/health\/arkret(?:-|$)/.test(url.pathname));
+  const health = savfox.getByText(/Runtime_pairing_state:/);
   await expect
     .poll(
       async () => {
-        await savfox.reload();
-        return (await arkretCard.textContent()) ?? "";
+        await savfox.getByRole("button", { name: "Refresh", exact: true }).click({ timeout: 5_000 });
+        const status = await health.textContent({ timeout: 2_000 }).catch(() => "");
+        return {
+          paired: /Runtime_pairing_state:\s*paired\b/.test(status ?? ""),
+          listening: /Runtime_phase:\s*Listening\b/.test(status ?? ""),
+        };
       },
       {
         timeout: 120_000,
@@ -190,7 +199,7 @@ export async function pairManagedSavfoxAgent(
         message: "second Savfox runtime should enter Listening",
       },
     )
-    .toContain("Listening");
+    .toEqual({ paired: true, listening: true });
 }
 
 
@@ -229,6 +238,7 @@ export async function addAgentToRealm(
       .toBe(true);
     const join = eventSubmissions(joinResponse.request().postData()).find(isTargetJoin)!;
     assertAuthoritySubmitOutcome(joinOutcome, join, "normal controller-authored Agent first join");
+    await expect(page.locator(".add-realm-agent-modal")).toHaveCount(0, { timeout: 180_000 });
     await expect(page.locator(".realm-members-panel .write-status")).toContainText(
       "added agent",
       { timeout: 180_000 },

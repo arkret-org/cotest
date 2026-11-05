@@ -1819,13 +1819,16 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
           true,
           undefined,
           cardFault ? async () => {
-            const proof = await cardFault!.restartAtCut(profile ? async () => {
+            const proof = await cardFault!.restartAtCut(profile ? async installObserver => {
               await alicePage.close();
               alicePage = await openUserPage(browser, alice, {
                 ...canonicalSessionOptions(aliceSession),
                 persistentUserDataDir: profile,
                 resumePersistentProfile: true,
-                beforeNavigate: observeAlice,
+                beforeNavigate: async page => {
+                  await observeAlice(page);
+                  installObserver(page);
+                },
               });
               return alicePage.page;
             } : undefined);

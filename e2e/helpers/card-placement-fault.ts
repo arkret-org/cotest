@@ -54,7 +54,7 @@ export async function installCardPlacementFault(page: Page, realm: string, fault
   };
   await page.route(submit, handler);
   return {
-    async restartAtCut(restartClient?: () => Promise<Page>) {
+    async restartAtCut(restartClient?: (installObserver: (page: Page) => void) => Promise<Page>) {
       await expect.poll(() => cutId, { timeout: 120_000 }).toBeTruthy();
       expect(ids.create.size).toBe(1);
       if (fault !== "card-before-send") expect(acceptedCommit).toMatch(/^ak:realm_commit:/);
@@ -99,13 +99,18 @@ export async function installCardPlacementFault(page: Page, realm: string, fault
         const originalPage = page;
         const originalContext = page.context();
         originalPage.off("request", observe);
-        page = await restartClient();
+        let observedPage: Page | undefined;
+        page = await restartClient(candidate => {
+          if (observedPage) throw new Error("card recovery observer must own exactly one replacement Page");
+          observedPage = candidate;
+          candidate.on("request", observe);
+        });
+        expect(observedPage === page, "observe recovery before the replacement Page's first navigation").toBe(true);
         expect(originalPage.isClosed()).toBe(true);
         expect(page.context()).not.toBe(originalContext);
-        page.on("request", observe);
         active = false;
-        // The new process has not navigated yet. Observe its very first queue
-        // recovery request without reseeding or exporting its private vault.
+        // Initial navigation can already recover the queued original. Its
+        // observer stays attached through the return to the original route.
         await page.goto(url, { waitUntil: "domcontentloaded" });
         processRestarted = true;
       } else {

@@ -113,7 +113,12 @@ test("0540 real Station 1/100/1000 Realm durable cold startup records first scre
       const input = page.locator(".chat-input");
       await input.fill("unsent capacity responsiveness check");
       await expect(input).toHaveValue("unsent capacity responsiveness check");
+      await expect.poll(() => page.evaluate(() => (window as unknown as {
+        currentCapacityMetrics: { inputFrames: number[] };
+      }).currentCapacityMetrics.inputFrames.length)).toBeGreaterThanOrEqual(1);
+      await expect(input).toHaveValue("unsent capacity responsiveness check");
       await input.fill("");
+      await expect(input).toHaveValue("");
       await expect.poll(() => page.evaluate(() => (window as unknown as {
         currentCapacityMetrics: { inputFrames: number[] };
       }).currentCapacityMetrics.inputFrames.length)).toBeGreaterThanOrEqual(2);

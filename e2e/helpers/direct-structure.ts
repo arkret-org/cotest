@@ -18,6 +18,7 @@ import { orderByCanonicalKey } from "./direct-structure-order";
 import { readCurrentSnapshot } from "./direct-current-snapshot";
 import type { ActorId, CommitStreamHead } from "./generated/spec-wire-objects";
 import { waitForAcceptedDirectCut } from "./direct-accepted-cut";
+import { uint64Decimal } from "./uint64-decimal";
 
 // Negative structure targets must exist outside Direct's protected Realm.
 // Circle creation does not create a Strand: author it with an explicit scope.
@@ -203,7 +204,8 @@ async function observeSelectedHumanSend(page: Page, strandId: string) {
       const keys = ["commit_id", "realm_id", "stream_ref", "stream_position", "previous_commit_ref", "event_ref", "governance_generation", "authority_ref", "committed_at", "signature"];
       require(keys.every(key => key in commit) && Object.keys(commit).every(key => keys.includes(key) || key === "producer_signer_fact_digest"), "commit_closed_shape_mismatch");
       require(commit.realm_id === realm && commit.event_ref === event.event_id && canonicalJson(commit.stream_ref) === canonicalJson({ kind: "realm", realm_id: realm }), "accepted_scope_pairing_failed");
-      require(typeof commit.stream_position === "number" && Number.isSafeInteger(commit.stream_position) && commit.stream_position >= 0 && typeof commit.governance_generation === "number" && Number.isSafeInteger(commit.governance_generation) && commit.governance_generation >= 0, "accepted_integer_pairing_failed");
+      require(typeof commit.stream_position === "number" && Number.isSafeInteger(commit.stream_position) && commit.stream_position >= 0, "accepted_integer_pairing_failed");
+      uint64Decimal(commit.governance_generation);
       require(sdkEventDerivedIds(event).event_id === event.event_id, "event_content_id_mismatch");
       const { commit_id, signature, ...unsigned } = commit;
       const expectedId = "ak:realm_commit:" + Buffer.concat([Buffer.from([1]), Buffer.from(sha256CanonicalJson(unsigned), "hex")]).toString("base64url");
@@ -384,11 +386,20 @@ async function realTyping(page: Page, realm: string, strand: string, typing: boo
   await page.bringToFront();
   await expect.poll(() => page.evaluate(() => typeof (window as any).__inkson_signal_sender_evidence),
     { timeout: 30_000 }).toBe("function");
-  const result = await page.evaluate(async ({ realm, strand, typing }) => JSON.parse(await
-    (window as any).__inkson_signal_sender_evidence(realm, strand, typing)), { realm, strand, typing }) as {
+  let result: {
       accepted: boolean; dispatched_recipient_count?: number; envelope_digest: string;
       group_id: string; epoch: number; sender_actor_id: unknown; sender_device_id: string;
-    };
+      error?: string; failure_stage?: string;
+    } | undefined;
+  await expect.poll(async () => {
+    result = await page.evaluate(async ({ realm, strand, typing }) => JSON.parse(await
+      (window as any).__inkson_signal_sender_evidence(realm, strand, typing)), { realm, strand, typing });
+    // This gate runs before encryption or dispatch. Once send starts, retain
+    // its one actual result so an unknown outcome cannot create another Signal.
+    return !(result?.error === "real_signal_send_unavailable"
+      && result.failure_stage === "blocklist_freshness");
+  }, { timeout: 30_000 }).toBe(true);
+  if (!result) throw new Error("Signal producer did not return its actual result");
   expect(result, "actual Signal producer must pass its local gates and complete the authenticated send")
     .toMatchObject({ accepted: true });
   return result;
@@ -408,8 +419,10 @@ async function assertWrongPlaintextStrand(alice: Page, bob: Page, realm: string,
   const positive = await realTyping(alice, realm, chat, true);
   expect(positive.accepted, "same-group positive Typing must reach the actual Station").toBe(true);
   expect(positive.dispatched_recipient_count ?? 0).toBeGreaterThan(0);
+  let receiverEvidence: Array<Record<string, any>> = [];
   await expect.poll(async () => {
     const evidence = await realSignalReceiver(bob);
+    receiverEvidence = evidence;
     const stages = evidence.filter(row => row.envelope_digest === positive.envelope_digest)
       .map(row => row.receive_stage);
     const applied = evidence.some(row => isDeepStrictEqual(row.sender_actor_id, positive.sender_actor_id)
@@ -422,6 +435,11 @@ async function assertWrongPlaintextStrand(alice: Page, bob: Page, realm: string,
   }, { timeout: 15_000 }).toMatchObject({
     stages: expect.arrayContaining(["frame_received", "admitted"]),
     applied: true,
+  }).catch(async (error: unknown) => {
+    await test.info().attach("direct-typing-positive-receiver-evidence", {
+      body: JSON.stringify(receiverEvidence), contentType: "application/json",
+    });
+    throw error;
   });
   await expect(bob.locator(".typing-indicator")).toHaveCount(1);
   const negative = await realTyping(alice, realm, target!, true);
@@ -460,6 +478,10 @@ export async function structureWrite(page: Page, action: string, kind: string, t
   await page.bringToFront();
   const panel = page.locator(".direct-structure");
   await expect(panel).toBeVisible();
+  const boundaryProof = structuralBoundaries.get(page);
+  const boundaryRealm = decodeURIComponent(new URL(page.url()).pathname.split("/")[2] ?? "");
+  const boundaryBefore = boundaryProof ? await Promise.all([structureCut(boundaryProof, boundaryRealm),
+    ...(boundaryProof.peer ? [structureCut(boundaryProof, boundaryRealm, boundaryProof.peer)] : [])]) : undefined;
   await prepareDirectStructureForm(page, action, topic);
   if (title) {
     const input = panel.getByRole("textbox", { name: "Title", exact: true });
@@ -472,10 +494,6 @@ export async function structureWrite(page: Page, action: string, kind: string, t
     await expect(field).toHaveClass(/\bhas-value\b/);
   }
   await expect(panel.getByRole("button", { name: "Save", exact: true })).toBeEnabled({ timeout: 180_000 });
-  const boundaryProof = structuralBoundaries.get(page);
-  const boundaryRealm = decodeURIComponent(new URL(page.url()).pathname.split("/")[2] ?? "");
-  const boundaryBefore = boundaryProof ? await Promise.all([structureCut(boundaryProof, boundaryRealm),
-    ...(boundaryProof.peer ? [structureCut(boundaryProof, boundaryRealm, boundaryProof.peer)] : [])]) : undefined;
   const responses: Response[] = [];
   let signedRequestEmitted = false;
   let preAuthoringRetries = 0;
@@ -512,7 +530,7 @@ export async function structureWrite(page: Page, action: string, kind: string, t
         // an emitted request still follows the exact original Event checks.
         const status = await panel.locator(".direct-structure-status").textContent();
         if (!signedRequestEmitted && preAuthoringRetries < 3
-          && /^(?:MLS send gate is not ready: )?account checkpoint changed (?:before|during) committed read$/.test(status?.trim() ?? "")
+          && /^(?:(?:MLS send gate is not ready: )?account checkpoint changed (?:before|during) committed read|the Realm detail awaits a complete baseline)$/.test(status?.trim() ?? "")
           && await panel.getByRole("button", { name: "Save", exact: true }).isEnabled()
           && Date.now() < deadline) {
           preAuthoringRetries++;
@@ -626,14 +644,14 @@ export async function agentTopicChats(page: Page, receiptPath: string, proof: Di
     expect(replaced.ok(), "selected Chat participation must be accepted").toBeTruthy();
     const request = replaced.request().postDataJSON();
     expect(request.target_scope).toEqual({ kind: "strand", realm_id: created.realm_id, strand_id: id });
-    expect(request.expected_version).toBe(0);
+    expect(request.expected_version).toBe("0");
     expect(request.selection).toEqual({
       message_creation_allowed: true, reaction_addition_allowed: false, reaction_removal_allowed: false,
       third_party_mention_delivery_allowed: false, acting_on_behalf_allowed: false,
     });
     const outcome = await replaced.json();
     expect(outcome.participation_entries).toEqual(expect.arrayContaining([
-      expect.objectContaining({ target_scope: request.target_scope, selection: request.selection, version: 1 }),
+      expect.objectContaining({ target_scope: request.target_scope, selection: request.selection, version: "1" }),
     ]));
     await expect(preference.getByRole("status")).toHaveText("Reply preference saved for this Chat");
     chats.push(id);
@@ -661,6 +679,9 @@ export async function agentTopicChats(page: Page, receiptPath: string, proof: Di
         };
       }, top);
       for (const id of window.replies) ids.add(id);
+      // A pending follow-latest layout can restore the tail after this scroll.
+      // Sample the requested window before deciding that history is exhausted.
+      if (Math.abs(window.top - Math.min(top, Math.max(0, window.total - window.height))) > 1) continue;
       if (window.top + window.height >= window.total - 1) return ids;
       expect(window.height, "message timeline must have a scrollable viewport").toBeGreaterThan(0);
       top = window.top + window.height;
@@ -1181,8 +1202,18 @@ async function runFlatTopicChats(alice: Page, bob: Page, mainMessages: string[],
       // Deliberately select public stage metadata, never arbitrary Signal bodies.
       const allowedStages = new Set(["frame_received", "admitted", "expired", "stale_sequence", "rejected"]);
       const stages = rows.filter(row => allowedStages.has(row.receive_stage))
-        .map(row => ({ stage: row.receive_stage, envelope_digest_hash: typeof row.envelope_digest === "string"
-          ? createHash("sha256").update(row.envelope_digest).digest("hex") : null }));
+        .map(row => {
+          const milliseconds = (field: string) => typeof row[field] === "string" ? Date.parse(row[field]) : NaN;
+          const duration = (later: string, earlier: string) => {
+            const value = milliseconds(later) - milliseconds(earlier);
+            return Number.isFinite(value) ? value : null;
+          };
+          return { stage: row.receive_stage, envelope_digest_hash: typeof row.envelope_digest === "string"
+            ? createHash("sha256").update(row.envelope_digest).digest("hex") : null,
+            outer_ttl_ms: duration("expires_at", "sent_at"),
+            age_at_receive_ms: duration("received_at", "sent_at"),
+            outer_remaining_at_receive_ms: duration("expires_at", "received_at") };
+        });
       const file = test.info().outputPath(`direct-presence-stages-${randomUUID()}.json`);
       const classes = await presence.getAttribute("class").catch(() => "");
       await writeFile(file, JSON.stringify({ peer_actor_hash: createHash("sha256").update(canonicalJson(peer)).digest("hex"), stages,

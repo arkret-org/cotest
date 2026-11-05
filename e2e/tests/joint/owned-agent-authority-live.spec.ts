@@ -747,6 +747,7 @@ async function switchReviewRealmAndReload(user: JointUserPage, originalRealm: st
     const settings = `/realms/${realm}/settings`;
     const access = `${settings}/access`;
     await page.locator(`a[href="/realms/${realm}"]`).first().click();
+    await expect(page).toHaveURL(url => decodeURIComponent(url.pathname) === `/realms/${realm}`);
     const realmNavigation = page.locator(".realm-context-bar");
     await realmNavigation.locator(".realm-nav-menu-button").click();
     await realmNavigation.locator(".realm-nav-menu-panel").getByRole("link", { name: "Settings", exact: true }).click();
