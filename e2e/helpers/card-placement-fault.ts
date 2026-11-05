@@ -121,7 +121,9 @@ export async function installCardPlacementFault(page: Page, realm: string, fault
       return { fault, original_create: createId, original_move: durable!.move, accepted_commit: acceptedCommit ?? null,
         runtime_reloaded: true, browser_process_restarted: processRestarted };
     },
-    assertOneCardAndPlacement() {
+    async assertOneCardAndPlacement() {
+      await expect.poll(() => ids.move.size, { timeout: 90_000,
+        message: "recovery must submit the one original placement after accepting the original create" }).toBe(1);
       expect([...ids.create]).toEqual([createId]);
       expect(ids.move.size).toBe(1);
       return { creates: ids.create.size, moves: ids.move.size, exact_originals: true };

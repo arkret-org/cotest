@@ -1854,7 +1854,7 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
         }
         if (cardFault) {
           await expect(alicePage.page.locator(".kanban-card").filter({ hasText: aliceCard })).toHaveCount(1);
-          await testInfo.attach("card-placement-exact-originals.json", { contentType: "application/json", body: JSON.stringify(cardFault.assertOneCardAndPlacement()) });
+          await testInfo.attach("card-placement-exact-originals.json", { contentType: "application/json", body: JSON.stringify(await cardFault.assertOneCardAndPlacement()) });
         }
         await addEncryptedDescription(
           alicePage.page,
@@ -2334,7 +2334,7 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
         if (cardFault) {
           await expect(alicePage.page.locator(".kanban-card").filter({ hasText: aliceCard })).toHaveCount(1);
           await expect(bobPage.page.locator(".kanban-card").filter({ hasText: aliceCard })).toHaveCount(1);
-          await testInfo.attach("card-placement-final-originals.json", { contentType: "application/json", body: JSON.stringify(cardFault.assertOneCardAndPlacement()) });
+          await testInfo.attach("card-placement-final-originals.json", { contentType: "application/json", body: JSON.stringify(await cardFault.assertOneCardAndPlacement()) });
         }
       } catch (error) {
         if (fault === "history-after-501") {
