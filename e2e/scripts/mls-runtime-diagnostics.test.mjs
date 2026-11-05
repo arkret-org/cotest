@@ -47,5 +47,6 @@ test("ordinary projection counters remain public decimal facts", () => {
   const result = publicMlsRuntimeDiagnostic("Ordinary timeline projection inputs observed raw_message_rows=1 live_raw_message_rows=2 projected_message_rows=0 private_material=fixture-sensitive-private-material");
   assert.deepEqual(result.fields, { raw_message_rows: "1", live_raw_message_rows: "2", projected_message_rows: "0" });
   assert.deepEqual(publicMlsRuntimeDiagnostic("Ordinary timeline projection inputs observed live_raw_message_rows=2").fields, { live_raw_message_rows: "2" });
+  assert.deepEqual(publicMlsRuntimeDiagnostic("Ordinary live checkpoint waits for its continuous history stored_position=18 candidate_position=19").fields, { stored_position: "18", candidate_position: "19" });
   assert.ok(!JSON.stringify(result).includes("fixture-sensitive"));
 });

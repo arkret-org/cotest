@@ -13,6 +13,7 @@ const runtimeCodes = [
   "Realm stream follow interrupted; retrying",
   "committed chat producer proof rejected",
   "Ordinary timeline projection inputs observed",
+  "Ordinary live checkpoint waits for its continuous history",
   "timeline presentation host did not mount",
   "timeline presentation host failed",
   "timeline configuration could not be serialized",
@@ -28,7 +29,7 @@ export function publicMlsRuntimeDiagnostic(raw: string) {
     const match = raw.match(new RegExp(`\\b${field}["']?\\s*[:=]\\s*(true|false)\\b`));
     if (match) fields[field] = match[1] === "true";
   }
-  for (const field of ["payload_epoch", "snapshot_epoch", "raw_message_rows", "live_raw_message_rows", "projected_message_rows"]) {
+  for (const field of ["payload_epoch", "snapshot_epoch", "raw_message_rows", "live_raw_message_rows", "projected_message_rows", "stored_position", "candidate_position"]) {
     const match = raw.match(new RegExp(`\\b${field}["']?\\s*[:=]\\s*(?:Some\\()?["']?([0-9]{1,16})\\b`));
     if (match) fields[field] = match[1];
   }

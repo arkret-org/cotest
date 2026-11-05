@@ -374,6 +374,7 @@ async function runReliefProject(admission: "concurrent" | "late-welcome", browse
   } finally {
     releaseHeld?.(false);
     await outage?.reconnect().catch(() => {});
+    for (const [server, samples] of runtimeDiagnostics) writeFileSync(testInfo.outputPath(`relief-runtime-${server}.json`), JSON.stringify([...samples.values()], null, 2));
     writeFileSync(testInfo.outputPath("relief-response-failures.json"), JSON.stringify(failures, null, 2));
     await testInfo.attach("relief-progress", { path: testInfo.outputPath("relief-progress.json"), contentType: "application/json" }).catch(() => {});
     await Promise.allSettled(flows.map(flow => flow.page.close()));
