@@ -11,7 +11,7 @@ export async function publicScreenshot(page: Page, options: Parameters<Page["scr
       && getComputedStyle(element).visibility !== "hidden";
     const privateUi = () => {
       if (Array.from(document.querySelectorAll(
-        '[class*="recovery"][class*="word"], [class*="mnemonic"], '
+        '.rk-word, .recovery-key-confirm-form, [class*="recovery"][class*="word"], [class*="mnemonic"], '
         + 'textarea[aria-label*="recovery key" i], input[aria-label*="private key" i]',
       )).some(visible)) return true;
       if (Array.from(document.querySelectorAll<HTMLInputElement>('input[autocomplete="one-time-code"]'))
