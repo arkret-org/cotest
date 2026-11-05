@@ -104,23 +104,9 @@ test.describe("same-server multi-profile UI @fully-implemented", () => {
 });
 
 async function gotoChat(userPage: JointUserPage, realmId: string) {
-  // Keep the authenticated shell mounted. A browser-generated back/forward
-  // transition emits the native popstate that Dioxus consumes; directly
-  // constructing PopStateEvent does not exercise the browser history source.
-  await userPage.page.evaluate(async (nextPath) => {
-    const nextPop = () =>
-      new Promise<void>((resolve) =>
-        window.addEventListener("popstate", () => resolve(), { once: true }),
-      );
-    window.history.pushState({}, "", nextPath);
-    const back = nextPop();
-    window.history.back();
-    await back;
-    const forward = nextPop();
-    window.history.forward();
-    await forward;
-  }, `/chat/${realmId}`);
-  await expect(userPage.page.locator(".chat-panel")).toBeVisible({ timeout: 120_000 });
+  // Use the shared deep-link, prompt-settlement and initial-sync boundary
+  // before authoring through either isolated durable account context.
+  await userPage.gotoTimelineRealm(realmId);
   await expect(userPage.page.locator(".channel-item").first()).toBeVisible({ timeout: 30_000 });
 }
 
@@ -132,9 +118,9 @@ async function sendChatMessage(userPage: JointUserPage, realmId: string, body: s
   await expect(userPage.page.locator(".send-e2ee-move-button")).toBeVisible({ timeout: 30_000 });
   const finish = await observeComposerLifetime(userPage.page);
   try {
-  await userPage.page.locator(".chat-input").fill(body);
-  await submitOrdinaryComposerDraft(userPage.page, body);
-  await expect(chatMessage(userPage, body)).toBeVisible({ timeout: 30_000 });
+    await userPage.page.locator(".chat-input").fill(body);
+    await submitOrdinaryComposerDraft(userPage.page, body);
+    await expect(chatMessage(userPage, body)).toBeVisible({ timeout: 30_000 });
   } finally {
     const file = test.info().outputPath(`composer-public-lifetime-${randomUUID()}.json`);
     await writeFile(file, JSON.stringify(await finish()));
