@@ -1,3 +1,4 @@
+import { writeFile } from "node:fs/promises";
 import { expect, test, type Page } from "../../helpers/arkret-test";
 import { coauthBaseUrl, colandBaseUrl, inksonBaseUrl, optionalEnv } from "../../helpers/env";
 import { registerUnboundCoauthPasswordAccount } from "../../helpers/coauth-register";
@@ -142,7 +143,7 @@ test("real saved sessions survive add-account, switch both ways and require Coau
     const secondAccount = await currentAccount(page);
     expect(secondAccount.authority.principal_id).not.toBe(firstAccount.authority.principal_id);
     expect(secondAccount.authority.station_id).toBe(firstAccount.authority.station_id);
-    // An older installation may have saved identities without display labels.
+    // A saved identity can remain unnamed until its verified handle arrives.
     // A normal authenticated bootstrap must recover the real handle, while
     // preserving the accepted profile, device and credentials.
     await page.evaluate(() => {
@@ -150,12 +151,46 @@ test("real saved sessions survive add-account, switch both ways and require Coau
       profiles.profiles.find((profile: { profile_id: string }) => profile.profile_id === profiles.active_profile_id).label = "";
       localStorage.setItem("inkson.profiles.v1", JSON.stringify(profiles));
     });
+    await page.addInitScript(() => {
+      const owners: string[] = [];
+      Object.assign(window, { savedProfileLabelOwnerIds: owners });
+      const remember = (owner: string | null) => {
+        if (owner && !owners.includes(owner)) owners.push(owner);
+      };
+      // Observe only the public owner marker, never private DOM values.
+      new MutationObserver(records => {
+        for (const record of records) {
+          if (record.type === "attributes" && record.target === document.documentElement) {
+            remember(record.oldValue);
+          }
+        }
+        remember(document.documentElement?.getAttribute("data-inkson-app-shell") ?? null);
+      }).observe(document, {
+        childList: true, subtree: true, attributes: true,
+        attributeFilter: ["data-inkson-app-shell"], attributeOldValue: true,
+      });
+    });
     await page.reload();
-    await expect(page.locator(".shell.app")).toBeVisible({ timeout: 30_000 });
-    expect(await currentAccount(page)).toEqual(secondAccount);
-    await page.locator(".account-menu-button").click();
-    await expect(page.locator(".account-picker__select").locator(`option[value="${firstAccount.profile_id}"]`)).toContainText(first.handle);
-    await expect(page.locator(".account-picker__select").locator(`option[value="${secondAccount.profile_id}"]`)).toContainText(second.handle);
+    try {
+      await expect(page.locator(".shell.app")).toBeVisible({ timeout: 30_000 });
+      expect(await currentAccount(page)).toEqual(secondAccount);
+      await page.locator(".account-menu-button").click();
+      await expect(page.locator(".account-picker__select").locator(`option[value="${firstAccount.profile_id}"]`)).toContainText(first.handle);
+      await expect(page.locator(".account-picker__select").locator(`option[value="${secondAccount.profile_id}"]`)).toContainText(second.handle);
+      expect(await page.evaluate(() => (window as unknown as {
+        savedProfileLabelOwnerIds: string[];
+      }).savedProfileLabelOwnerIds.length), "label repair retains the authenticated account owner").toBe(1);
+    } finally {
+      const count = await page.evaluate(() => (window as unknown as {
+        savedProfileLabelOwnerIds?: string[];
+      }).savedProfileLabelOwnerIds?.length ?? null).catch(() => null);
+      // Persist only a public lifetime count, never DOM or input material.
+      const file = test.info().outputPath("saved-profile-label-owner-count.json");
+      await writeFile(file, JSON.stringify({ distinct_public_owner_count: count }));
+      await test.info().attach("saved-profile-label-owner-count", {
+        path: file, contentType: "application/json",
+      });
+    }
     const warmOrigin = await page.evaluate(() => performance.timeOrigin);
     const authorizationsBeforeSwitch = authorizationRequests.length;
     await selectSavedAccount(page, firstAccount);
