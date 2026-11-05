@@ -26,6 +26,7 @@ import {
   flagonBaseUrl,
 } from "./env";
 import { base64url } from "./encoding";
+import { postFrozenRealmBootstrap } from "./coland-api/realm-bootstrap";
 import type {
   ActorId,
   InviteObject,
@@ -759,13 +760,7 @@ export async function createRealmApi(
     events: bootstrapEvents.map((event) => ({ event })),
   };
   const eventsUrl = `${colandBaseUrl(opts.server)}/_arkret/self/events`;
-  const response = await request.post(eventsUrl, {
-    headers: {
-      ...authHeaders(token, "POST", eventsUrl),
-      "content-type": "application/json",
-    },
-    data: canonicalJson(submission),
-  });
+  const response = await postFrozenRealmBootstrap(request, token, eventsUrl, canonicalJson(submission));
   const text = await response.text();
   expect([200, 201], `create realm ${data.title}: ${response.status()}: ${text}`)
     .toContain(response.status());
