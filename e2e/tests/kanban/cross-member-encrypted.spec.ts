@@ -8,7 +8,7 @@ import { installSubscriptionCut, isHttpSubscriptionPath } from "../../helpers/su
 import os from "node:os";
 import { readFileSync } from "node:fs";
 import path from "node:path";
-import { rm } from "node:fs/promises";
+import { rm, writeFile } from "node:fs/promises";
 import { installCardPlacementFault } from "../../helpers/card-placement-fault";
 import { readCreatorRecords } from "../../helpers/creator-bootstrap";
 // Cross-member encrypted kanban
@@ -2226,7 +2226,7 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
           if (fault === "requests-websocket") {
             expect(subscriptionCut!.proof().real_websocket_costs.some(socket => socket.opened_channels.some(channel =>
               channel.operation_id === "ak.self.account.stream.subscribe.v1"))).toBe(true);
-            const steadyStart = cost.mark();
+            const steadyStart = cost.mark("same-cut");
             // A real holder preference update wakes the Account channel while
             // leaving the Board's accepted Realm cut unchanged.
             const key = "ak.dnd_schedule";
@@ -2249,7 +2249,7 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
           await grantCapabilityEventApi(request, aliceSession.grantJwt, {
             ownerId: alice.id, realmId, subjectId: bob.id, actions: ["ak.message.create"],
           });
-          const ordinaryStart = cost.mark();
+          const ordinaryStart = cost.mark("ordinary-messages");
           const ordinary: string[] = [];
           let ordinaryCommit = "";
           await bobPage.gotoTimelineRealm(realmId);
@@ -2283,7 +2283,7 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
             body: JSON.stringify({ accepted_messages: ordinary, delivered: ordinaryDelivered, browser: ordinaryCost }) });
           expect(typeof latestCardEventId).toBe("string");
           const cardId = retypeEventDerivedId(latestCardEventId!, "strand");
-          const changedStart = cost.mark();
+          const changedStart = cost.mark("real-lifecycle");
           const accepted: string[] = [];
           let lastCommitId = "";
           // Twenty real alternating lifecycle changes retain the same Card
@@ -2313,7 +2313,7 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
           const otherBoardTitle = `Other board ${stamp}`;
           const otherBoardId = await buildEncryptedBoardListCard(alicePage.page, realmId,
             otherBoardTitle, `Other list ${stamp}`, otherCard);
-          const switchingStart = cost.mark();
+          const switchingStart = cost.mark("board-switches");
           for (let index = 0; index < 20; index += 1) {
             await selectBoard(alicePage.page, realmId,
               index % 2 === 0 ? boardId : otherBoardId,
@@ -2364,9 +2364,14 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
         throw error;
       } finally {
         for (const [index, entry] of costs.entries()) {
-          await testInfo.attach(`kanban-browser-cost-${entry.reader}-${index}.json`, {
-            contentType: "application/json", body: JSON.stringify(await entry.cost.snapshot()) });
-          entry.cost.dispose();
+          try {
+            const name = `kanban-browser-cost-${entry.reader}-${index}.json`;
+            const file = testInfo.outputPath(name);
+            await writeFile(file, JSON.stringify(await entry.cost.snapshot()));
+            await testInfo.attach(name, { path: file, contentType: "application/json" });
+          } finally {
+            entry.cost.dispose();
+          }
         }
         holdPrivateState = false;
         if (privateClaimRouteOwner && !privateClaimRouteOwner.isClosed()) {

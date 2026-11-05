@@ -1,8 +1,35 @@
 import type { Page, Request, WebSocket } from "@playwright/test";
 
+type PublicScanCost = { realm: string; scope: "realm" | "circle" | "sidecar";
+  target: string; direction: "after" | "before"; position: string | null; limit: number };
+type CostPhase = "same-cut" | "ordinary-messages" | "real-lifecycle" | "board-switches";
+
+// Only a public coordinate projection leaves the observer; no raw body or
+// arbitrary property is retained, including for a malformed outgoing request.
+function publicScanCost(request: Request): PublicScanCost | null {
+  try {
+    const body = request.postDataJSON();
+    const scope = body?.stream_ref?.kind;
+    if (!["realm", "circle", "sidecar"].includes(scope)) return null;
+    const realm = body.realm_id;
+    const target = body.stream_ref[scope === "realm" ? "realm_id" : `${scope}_id`];
+    if (typeof realm !== "string" || !/^ak:realm:[A-Za-z0-9_-]{40,64}$/.test(realm)
+        || typeof target !== "string" || !new RegExp(`^ak:${scope}:[A-Za-z0-9_-]{40,64}$`).test(target)) return null;
+    const after = Object.hasOwn(body, "after_position");
+    if (after === Object.hasOwn(body, "before_position")) return null;
+    const value = body[after ? "after_position" : "before_position"];
+    const position = value === null ? null
+      : typeof value === "string" && /^(0|[1-9][0-9]{0,19})$/.test(value) ? value
+      : Number.isSafeInteger(value) && value >= 0 ? String(value) : undefined;
+    if (position === undefined || !Number.isInteger(body.limit) || body.limit < 1 || body.limit > 65535) return null;
+    return { realm, scope, target, direction: after ? "after" : "before", position, limit: body.limit };
+  } catch { return null; }
+}
+
 type HttpCost = { method: string; origin: string; path: string; started_ms: number; elapsed_ms: number | null;
   failed: boolean; response_body_bytes: number | null; response_header_bytes: number | null;
-  request_body_bytes: number | null; request_header_bytes: number | null; rows: number | null };
+  request_body_bytes: number | null; request_header_bytes: number | null; rows: number | null;
+  public_scan: PublicScanCost | null };
 type SocketCost = { origin: string; path: string; opened_ms: number; sent_frames: number; received_frames: number;
   sent_bytes: number; received_bytes: number;
   received_kinds: Record<string, number>; channel_frame_kinds: Record<string, Record<string, number>>;
@@ -23,6 +50,7 @@ export function observeRequestCost(page: Page) {
   const pending = new Set<Promise<void>>();
   const active = new Map<string, number>();
   const maximum = new Map<string, number>();
+  const phases: Array<{ phase: CostPhase; at_ms: number }> = [];
   const elapsed = () => Math.round((performance.now() - started) * 100) / 100;
   const collection = (path: string) => path.match(/\/_arkret\/self\/realms\/[^/]+\/(spaces|strands)$/)?.[1];
   const onRequest = (request: Request) => {
@@ -30,7 +58,9 @@ export function observeRequestCost(page: Page) {
     if (!path.startsWith("/_arkret/")) return;
     requests.set(request, { method: request.method(), origin, path, started_ms: elapsed(), elapsed_ms: null,
       failed: false, response_body_bytes: null, response_header_bytes: null,
-      request_body_bytes: null, request_header_bytes: null, rows: null });
+      request_body_bytes: null, request_header_bytes: null, rows: null,
+      public_scan: request.method() === "POST" && path === "/_arkret/self/streams/scan"
+        ? publicScanCost(request) : null });
     const key = collection(path);
     const scope = origin + path;
     if (key) { const count = (active.get(scope) ?? 0) + 1; active.set(scope, count);
@@ -112,10 +142,15 @@ export function observeRequestCost(page: Page) {
   page.on("requestfailed", onFailed);
   page.on("websocket", onSocket);
   return {
-    mark: () => elapsed(),
+    mark: (phase?: CostPhase) => {
+      const at = elapsed();
+      if (phase) phases.push({ phase, at_ms: at });
+      return at;
+    },
     async snapshot(since = 0) {
       await Promise.all([...pending]);
       return { observation_started_before_navigation: beforeNavigation, observed_ms: elapsed(), since_ms: since,
+        phases: phases.map(phase => ({ ...phase })),
         http: [...requests.values()].filter(row => row.started_ms >= since).map(row => ({ ...row })),
         maximum_parallel_lists: Object.fromEntries(maximum), active_lists: Object.fromEntries(active),
         websocket: structuredClone(sockets),
