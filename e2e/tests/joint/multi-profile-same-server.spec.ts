@@ -3,6 +3,9 @@
 
 import { expect, test } from "../../helpers/arkret-test";
 import { submitOrdinaryComposerDraft } from "../../helpers/composer-handoff";
+import { observeComposerLifetime } from "../../helpers/composer-lifetime-observation";
+import { writeFile } from "node:fs/promises";
+import { randomUUID } from "node:crypto";
 import {
   assertJointStackNotRequired,
   type JointUserPage,
@@ -127,9 +130,16 @@ async function sendChatMessage(userPage: JointUserPage, realmId: string, body: s
   // verified Realm current is still loading. Wait for the plaintext policy
   // selected by this scenario before authoring a message.
   await expect(userPage.page.locator(".send-e2ee-move-button")).toBeVisible({ timeout: 30_000 });
+  const finish = await observeComposerLifetime(userPage.page);
+  try {
   await userPage.page.locator(".chat-input").fill(body);
   await submitOrdinaryComposerDraft(userPage.page, body);
   await expect(chatMessage(userPage, body)).toBeVisible({ timeout: 30_000 });
+  } finally {
+    const file = test.info().outputPath(`composer-public-lifetime-${randomUUID()}.json`);
+    await writeFile(file, JSON.stringify(await finish()));
+    await test.info().attach("composer-public-lifetime", { path: file, contentType: "application/json" });
+  }
 }
 
 function chatMessage(userPage: JointUserPage, body: string) {
