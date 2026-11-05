@@ -49,8 +49,11 @@ test("a real failing browser run preserves failure without retaining its private
   writeFileSync(path.join(fixture, "capture.spec.ts"), `
 import { test, expect } from ${JSON.stringify(runtime)};
 test("retains the actual missing approval failure", async ({ page }) => {
-  await page.setContent('<h1>Approval pending</h1><input aria-label="Private pairing URL" readonly>');
+  await page.setContent('<h1>Approval pending</h1><input aria-label="Private pairing URL" readonly><input aria-label="Private recovery input">');
   await page.getByLabel("Private pairing URL").evaluate((input, value) => { input.value = value; }, process.env.COTEST_PRIVATE_PAGE_CANARY);
+  await page.getByLabel("Private recovery input").fill(process.env.COTEST_PRIVATE_PAGE_CANARY);
+  await page.getByLabel("Private recovery input").pressSequentially(process.env.COTEST_PRIVATE_PAGE_CANARY);
+  await page.keyboard.insertText(process.env.COTEST_PRIVATE_PAGE_CANARY);
   await expect(page.getByRole("heading", { name: "Missing approval", exact: true })).toBeVisible({ timeout: 100 });
 });
 `);

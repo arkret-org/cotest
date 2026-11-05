@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { lstatSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
 import path from "node:path";
-import type { FullConfig, Reporter, TestCase, TestResult } from "@playwright/test/reporter";
+import type { FullConfig, Reporter, TestCase, TestResult, TestStep } from "@playwright/test/reporter";
 
 // Playwright writes matcher page snapshots before reporter callbacks. Dispose
 // of the whole automatic context before any retained report is exported.
@@ -16,6 +16,14 @@ export default class PrivateCaptureReporter implements Reporter {
     this.roots = [...new Set(config.projects.map(project => path.resolve(project.outputDir)))];
     this.failures = 0;
     this.receipts.length = 0;
+  }
+  onStepBegin(_test: TestCase, _result: TestResult, step: TestStep) {
+    // The native HTML reporter copies titles at step begin. Input values can
+    // contain recovery material even when the later DOM snapshot is discarded.
+    // Keep the action and source location without exporting its entered value.
+    if (step.category !== "pw:api") return;
+    const input = /^(Fill|Type|Insert) "/.exec(step.title);
+    if (input) step.title = `${input[1]} input [value omitted]`;
   }
   onTestEnd(test: TestCase, result: TestResult) {
     for (const attachment of result.attachments) {
