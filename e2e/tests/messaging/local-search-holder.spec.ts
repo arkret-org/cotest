@@ -164,9 +164,8 @@ async function runHolderRevocation(
       holderSearchReadBarrier: { observed: number };
     }).holderSearchReadBarrier.observed)).toBeGreaterThan(0);
     await expect(replacingPage.locator(".global-search-results-loading")).toBeVisible();
-    await replacingPage.locator(".account-menu-button").click();
-    const picker = replacingPage.locator(".account-menu").getByRole("combobox", { name: "Switch account", exact: true });
-    await expect(picker).toBeVisible();
+    await replacingPage.locator(".account-menu-wrap .sapid-popover-trigger").click();
+    await expect(replacingPage.locator(".account-menu")).toBeVisible();
     const savedProfile = await replacingPage.evaluate(() =>
       JSON.parse(localStorage.getItem("inkson.config.v1") ?? "{}").active_account?.profile_id ?? "");
     expect(savedProfile).not.toBe("");

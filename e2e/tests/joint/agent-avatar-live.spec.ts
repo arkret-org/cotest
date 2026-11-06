@@ -207,9 +207,8 @@ for (const mode of ["avatar", "lost-responses", "retryable-profile", "account-sw
       await page.bringToFront();
       await page.getByRole("button", { name: "Account menu", exact: true }).click();
       const menu = page.locator(".account-menu");
-      const picker = menu.getByRole("combobox", { name: "Switch account", exact: true });
-      await expect(picker).toBeVisible();
-      const originalProfile = await picker.inputValue();
+      await expect(menu).toBeVisible();
+      const originalProfile = await page.evaluate(() => JSON.parse(localStorage.getItem("inkson.config.v1") ?? "{}").active_account?.profile_id ?? "");
       expect(originalProfile).not.toBe("");
       await menu.getByRole("button", { name: "Sign in to another account", exact: true }).click();
       await expect(page.locator(".auth-panel")).toBeVisible();

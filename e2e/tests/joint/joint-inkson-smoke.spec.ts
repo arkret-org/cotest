@@ -66,7 +66,7 @@ test.describe("joint-inkson smoke @fully-implemented", () => {
       });
     await expect(selfParticipant).toContainText(principalHandle);
 
-    await jointRealm.alicePage.page.locator(".account-menu-button").click();
+    await jointRealm.alicePage.page.locator(".account-menu-wrap .sapid-popover-trigger").click();
     await expect(
       jointRealm.alicePage.page.locator(".account-menu__head .who"),
     ).toHaveText(principalHandle);

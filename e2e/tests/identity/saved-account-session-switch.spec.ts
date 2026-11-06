@@ -55,7 +55,7 @@ async function completeNewIdentity(page: Page): Promise<void> {
 }
 
 async function addAccount(page: Page): Promise<void> {
-  await page.locator(".account-menu-button").click();
+  await page.locator(".account-menu-wrap .sapid-popover-trigger").click();
   await page.locator(".account-menu").locator(".account-picker__add").click();
   await expect(page.locator(".auth-panel")).toBeVisible();
   await expect(page.locator(".account-switcher")).toHaveCount(0);
@@ -63,9 +63,15 @@ async function addAccount(page: Page): Promise<void> {
   await expect(page.locator(".auth-primary")).toHaveText("Sign in to this server");
 }
 
+function accountCard(page: Page, account: SavedAccount) {
+  const station = account.server_url.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return page.locator(".account-switch-row").filter({ hasText: account.authority.principal_id })
+    .and(page.getByRole("button", { name: new RegExp(station) }));
+}
+
 async function selectSavedAccount(page: Page, account: SavedAccount): Promise<void> {
   if (!(await page.locator(".account-menu").isVisible())) {
-    await page.locator(".account-menu-button").click();
+    await page.locator(".account-menu-wrap .sapid-popover-trigger").click();
   }
   // The previous account's already-issued request may finish during retirement.
   // Require a real successful response for the selected principal as well as
@@ -82,7 +88,7 @@ async function selectSavedAccount(page: Page, account: SavedAccount): Promise<vo
       throw error;
     }
   });
-  await page.getByRole("combobox", { name: "Switch account", exact: true }).selectOption(account.profile_id);
+  await accountCard(page, account).click();
   const result = await (await viewer).json();
   expect(result.principal_id).toBe(account.authority.principal_id);
   expect(result.primary_handle_claim.claim.subject_account_id).toEqual(account.authority);
@@ -174,9 +180,12 @@ test("real saved sessions survive add-account, switch both ways and require Coau
     try {
       await expect(page.locator(".shell.app")).toBeVisible({ timeout: 30_000 });
       expect(await currentAccount(page)).toEqual(secondAccount);
-      await page.locator(".account-menu-button").click();
-      await expect(page.locator(".account-picker__select").locator(`option[value="${firstAccount.profile_id}"]`)).toContainText(first.handle);
-      await expect(page.locator(".account-picker__select").locator(`option[value="${secondAccount.profile_id}"]`)).toContainText(second.handle);
+      await page.locator(".account-menu-wrap .sapid-popover-trigger").click();
+      await expect(accountCard(page, firstAccount)).toContainText(first.handle);
+      await expect.poll(() => page.evaluate(profileId => {
+        const saved = JSON.parse(localStorage.getItem("inkson.profiles.v1") ?? "{}");
+        return saved.profiles.find((profile: { profile_id: string }) => profile.profile_id === profileId)?.label;
+      }, secondAccount.profile_id)).toBe(second.handle);
       expect(await page.evaluate(() => (window as unknown as {
         savedProfileLabelOwnerIds: string[];
       }).savedProfileLabelOwnerIds.length), "label repair retains the authenticated account owner").toBe(1);
@@ -199,8 +208,12 @@ test("real saved sessions survive add-account, switch both ways and require Coau
     expect(authorizationRequests).toHaveLength(authorizationsBeforeSwitch);
 
     await selectSavedAccount(page, firstAccount);
-    await page.locator(".account-menu-button").click();
-    await page.getByRole("button", { name: "Log out", exact: true }).click();
+    await page.locator(".account-menu-wrap .sapid-popover-trigger").click();
+    await page.getByRole("button", { name: "Sign out of this account", exact: true }).click();
+    await expect.poll(() => currentAccount(page)).toEqual(secondAccount);
+    await expect(page.locator(".shell.app")).toBeVisible();
+    await page.locator(".account-menu-wrap .sapid-popover-trigger").click();
+    await accountCard(page, firstAccount).click();
     await expect(page.locator(".auth-panel")).toBeVisible();
     await expect(page.locator(".account-switcher")).toHaveCount(0);
     await expect(page.locator(".shell.app")).toHaveCount(0);

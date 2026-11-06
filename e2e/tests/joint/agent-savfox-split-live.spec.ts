@@ -1412,7 +1412,7 @@ privatePairingTest("fresh Agent pairing gates the first send until binding and a
     const acceptedToVisibleMs = Date.now() - foundingAcceptedAt!;
     await expect(inkson.locator(".send-chat-button")).toBeDisabled();
     await expect(inkson.locator(".chat-panel")).not.toContainText("Strand not found");
-    await inkson.locator(".account-menu-button").click();
+    await inkson.locator(".account-menu-wrap .sapid-popover-trigger").click();
     await inkson.locator(".account-menu-settings").click();
     await expect(inkson.locator(".settings-content-column")).toBeVisible();
     await inkson.goBack();

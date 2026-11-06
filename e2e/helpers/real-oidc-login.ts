@@ -113,7 +113,7 @@ export async function hardLogoutViaAccountMenu(
 ): Promise<void> {
   const page = jointPage.page;
   await page.getByRole("button", { name: "Account menu", exact: true }).click();
-  await page.locator(".account-menu").getByRole("button", { name: "Log out", exact: true }).click();
+  await page.locator(".account-menu").getByRole("button", { name: "Sign out of this account", exact: true }).click();
   await expect(page.locator(".auth-panel:not(.registration-panel)")).toBeVisible({
     timeout: 60_000,
   });

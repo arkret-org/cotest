@@ -1204,7 +1204,7 @@ async function indexedDbClearRecovery(page: Page, mainId: string, chatId: string
   const milestones: Array<{ stage: string; at: number }> = [];
   const mark = (stage: string) => { milestones.push({ stage, at: Date.now() }); };
   try {
-    await page.locator(".account-menu-button").click();
+    await page.locator(".account-menu-wrap .sapid-popover-trigger").click();
     await page.locator(".account-menu-settings").click();
     await page.locator(".settings-nav-item-storage").click();
     await expect(page.locator(".e2ee-cache-clear-all")).toBeEnabled();
