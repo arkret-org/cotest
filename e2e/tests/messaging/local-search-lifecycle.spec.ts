@@ -2,7 +2,8 @@
 import { expect, test } from "../../helpers/arkret-test";
 import { createRealmViaApi, sendPlaintextMessageViaApi } from "../../helpers/api";
 import { joinRealmMemberByInviteApi, resolveDefaultStrandId, signedEventEnvelope,
-  submitSignedEventApi } from "../../helpers/coland-api";
+  scanRealmStreamApi, submitSignedEventApi } from "../../helpers/coland-api";
+import { waitForDurableCurrentCut } from "../../helpers/durable-current-cut";
 import { observeNativeSearch, type NativeSearchObservation } from "../../helpers/native-search";
 import { allowExplicitInviteNotifications, createDpopUserSession, issueUserSession,
   openDpopUserPageFromSession } from "../../helpers/users";
@@ -47,6 +48,17 @@ test("0540 real local search rechecks late-join history and preserves revision s
     await flow.page.gotoTimelineRealm(realmId);
     const panel = page.locator(".global-search-panel");
     const row = panel.locator(".global-search-result-item");
+    const waitForInstalledControl = async (eventId: string) => {
+      const accepted = await scanRealmStreamApi(request, ownerToken, realmId, { limit: 1000 });
+      expect(accepted.truncated).toBe(false);
+      const commit = accepted.commits.find(commit => commit.event_ref === eventId);
+      expect(commit, "the control must have its actual accepted Realm Commit").toBeTruthy();
+      await waitForDurableCurrentCut(page, {
+        stream_ref: { kind: "realm", realm_id: realmId },
+        stream_position: Number(commit!.stream_position),
+        commit_id: String(commit!.commit_id),
+      });
+    };
     const paired = async (step: string, query: string, count: number) => {
       await flow.page.completeRecoveryKeySetupIfPrompted(1_000);
       if (!await panel.isVisible()) await page.keyboard.press("Control+F");
@@ -130,11 +142,12 @@ test("0540 real local search rechecks late-join history and preserves revision s
       kind: "ak.message.redact", payload: { message_id: messageId, reason: "author_redaction" } });
     await submitSignedEventApi(request, ownerToken, redact, { context: "search Message terminal redaction" });
     const terminalControl = `redaction-control-${suffix}`;
-    await send(terminalControl);
+    const terminal = await send(terminalControl);
     // Local search reads installed material. Re-enter the source to demand its
     // new accepted window after the result link and global Search navigation.
     await flow.page.gotoTimelineRealm(realmId);
     await expect(page.locator(".message-list").getByText(terminalControl, { exact: true })).toBeVisible({ timeout: 120_000 });
+    await waitForInstalledControl(terminal.event_id);
     await paired("fresh-post-redaction-control", terminalControl, 1);
     await paired("redaction-hides-the-current-revision", revisedBody, 0);
     await page.reload({ waitUntil: "domcontentloaded" });
@@ -149,9 +162,13 @@ test("0540 real local search rechecks late-join history and preserves revision s
     };
     await history("all_history_for_current_members", "since_join");
     const tightControl = `history-tight-control-${suffix}`;
-    await send(tightControl);
+    const tight = await send(tightControl);
     await flow.page.gotoTimelineRealm(realmId);
     await expect(page.locator(".message-list").getByText(tightControl, { exact: true })).toBeVisible({ timeout: 120_000 });
+    // Timeline disclosure may precede the complete durable Current cut.
+    // Retain its source demand until that cut is installed before Search
+    // navigation retires it; Search is defined over installed local material.
+    await waitForInstalledControl(tight.event_id);
     await paired("fresh-post-tightening-control", tightControl, 1);
     await paired("since-join-hides-retained-prejoin-message", earlyBody, 0);
     await page.reload({ waitUntil: "domcontentloaded" });

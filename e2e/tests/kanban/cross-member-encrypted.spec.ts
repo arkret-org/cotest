@@ -1625,6 +1625,9 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
       const bob = bobSession.user;
       const profileName = `cotest-card-placement-${stamp}`;
       const profile = fault?.startsWith("card-") ? path.join(os.tmpdir(), profileName) : undefined;
+      const readerProfileName = `cotest-history-reader-${stamp}`;
+      const readerProfile = fault === "history-after-501"
+        ? path.join(os.tmpdir(), readerProfileName) : undefined;
       const costs: Array<{ reader: string; cost: ReturnType<typeof observeRequestCost> }> = [];
       let subscriptionCut: Awaited<ReturnType<typeof installSubscriptionCut>> | undefined;
       const requestCase = fault === "requests-websocket" || fault === "requests-http-fallback";
@@ -1735,8 +1738,7 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
         // This publishes his real event-signer KeyPackage after the invite already
         // exists, exercising the deferred Welcome reconciliation path.
         let bobPrejoinOriginalReads = 0;
-        const bobFlow = await openDpopUserPageFromSession(browser, bobSession,
-          { beforeNavigate: async page => {
+        const observeBob = async (page: Page) => {
             costs.push({ reader: "bob", cost: observeRequestCost(page) });
             // A since-join member recovers from signed current and its Welcome,
             // not the creator's position-zero original. Observe the real scan
@@ -1751,7 +1753,9 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
                 bobPrejoinOriginalReads += 1;
               }
             });
-          } });
+          };
+        const bobFlow = await openDpopUserPageFromSession(browser, bobSession,
+          { persistentUserDataDir: readerProfile, beforeNavigate: observeBob });
         expect(bobFlow).toBeTruthy();
         bobPage = bobFlow!.page;
         await bobPage.completeRecoveryKeySetupIfPrompted();
@@ -1803,8 +1807,15 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
         //    post-join shared content for bob.
         if (fault === "history-after-501") {
           // Keep the reader offline through the whole seed and Card creation.
-          // A later empty browser must recover current/history; consuming 501
-          // live deltas beforehand would not exercise this boundary.
+          // Restart this exact device with its own durable provider state.
+          // Account recovery cannot recreate discarded endpoint MLS secrets
+          // or give a newly admitted endpoint an earlier epoch (§10.2).
+          await bobPage.gotoTimelineRealm(realmId);
+          await expect(bobPage.page.locator(".selected-strand-security-state"))
+            .toHaveClass(/security-state-badge--encrypted/);
+          await bobPage.page.locator(".chat-input").fill("History checkpoint readiness");
+          await expect(bobPage.page.locator(".send-chat-button")).toBeEnabled({ timeout: 120_000 });
+          await bobPage.page.locator(".chat-input").fill("");
           await bobPage.close();
           bobPage = undefined;
           historyStage = "seed";
@@ -1883,7 +1894,8 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
         if (fault === "history-after-501") {
           historyStage = "open-cold-reader";
           const fresh = await openDpopUserPageFromSession(browser, bobSession,
-            { beforeNavigate: async page => { costs.push({ reader: "bob", cost: observeRequestCost(page) }); } });
+            { persistentUserDataDir: readerProfile, resumePersistentProfile: true,
+              beforeNavigate: observeBob });
           expect(fresh).toBeTruthy();
           bobPage = fresh!.page;
           await bobPage.completeRecoveryKeySetupIfPrompted();
@@ -1904,7 +1916,8 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
           await expect(retainedList).toBeVisible();
           await expect(retainedList).not.toHaveAccessibleName(`Retained list ${stamp} (${retainedBoard!.listId})`);
           await testInfo.attach("kanban-history-fresh-reader.json", { contentType: "application/json",
-            body: JSON.stringify({ reader_closed_before_seed: true, fresh_context_after_card_commit: true,
+            body: JSON.stringify({ reader_closed_before_seed: true, original_device_restarted_after_card_commit: true,
+              own_durable_mls_provider_retained: true, send_gate_ready_before_seed: true,
               no_product_current_or_history_cache_copied: true,
               pre_join_board_and_list_retained_by_current: true, pre_join_board_id: retainedBoard!.boardId }) });
         }
@@ -2429,6 +2442,13 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
             throw new Error("card profile cleanup escaped its task temp directory");
           }
           await rm(profile, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
+        }
+        if (readerProfile) {
+          if (path.dirname(path.resolve(readerProfile)) !== path.resolve(os.tmpdir())
+              || path.basename(readerProfile) !== readerProfileName) {
+            throw new Error("history reader profile cleanup escaped its task temp directory");
+          }
+          await rm(readerProfile, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
         }
       }
     });

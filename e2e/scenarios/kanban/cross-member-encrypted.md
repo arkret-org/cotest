@@ -176,9 +176,13 @@ never reappear. An empty not-yet-initialized document cannot satisfy this gate.
 `recovers history-after-501` inserts 501 distinct, SDK-signed metadata-free
 discussion Strand creates into the real Realm stream after Bob joins, then
 creates the encrypted Board, List and Card through Inkson. Bob's original browser
-is closed before the seed and an empty context opens after the Card description
-commits, using the existing real session and Recovery Key backup recovery without
-copying product current, history or private MLS cache. Both readers' formal
+first reaches its actual encrypted send gate, then closes before the seed. Its
+original persistent device profile restarts after the Card description commits,
+retaining that endpoint's own durable MLS provider state. No product current,
+history or private state is copied into the reader, and it cannot consume any
+of the 501 live deltas or Card while stopped. Device lifecycle §10.2 does not
+permit account recovery to recreate discarded endpoint epoch secrets or give a
+newly admitted device earlier group state. Both readers' formal
 500-row first scans must be truncated and exclude that Card Event; a scan after
 the last first-page stream position must contain it. These fixture reads are
 delivery oracles, not product requests or proof of the product's history coverage.
@@ -189,7 +193,7 @@ plaintext; this remains fixture-only evidence.
 
 The case also creates a real Board and List before Bob joins, retaining their
 accepted public identities and create position. Bob's historical scan must not
-disclose that pre-join create, while his empty browser must still show the exact
+disclose that pre-join create, while his restarted browser must still show the exact
 retained List under its current Board. Current structural coverage is checked
 separately from historical Event disclosure; the test does not require sharing
 pre-join MLS keys or private content.
