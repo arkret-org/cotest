@@ -12,6 +12,7 @@ export async function observeCardSaveAction(page: Page) {
   await page.evaluate(() => {
     const events: Array<Record<string, string | number | boolean>> = [];
     const replacements: Array<{ added: number; removed: number; at: number }> = [];
+    const attributes: Array<{ node: string; disabled: boolean; aria_disabled: boolean; inert: boolean; at: number }> = [];
     const root = document.querySelector(".card-detail-modal");
     const node = (element: Element | null) => {
       const id = element?.closest("[data-gly-node]")?.getAttribute("data-gly-node") ?? "";
@@ -21,26 +22,52 @@ export async function observeCardSaveAction(page: Page) {
     const receive = (event: Event) => {
       if (events.length >= 256) return;
       const element = event.target instanceof Element ? event.target : null;
+      const button = element?.closest(".card-detail-save-button") ?? null;
       const kind = element?.closest(".card-detail-save-button") ? "save-button"
         : element?.closest(".card-detail-edit-form") ? "editor" : "other";
-      events.push({ type: event.type, at: Math.round(performance.now()), trusted: event.isTrusted,
+      const observed = { type: event.type, at: Math.round(performance.now()), trusted: event.isTrusted,
         node: node(element), active_node: node(document.activeElement),
         connected: element?.isConnected ?? false, inside_modal: root?.contains(element) ?? false,
-        target_kind: kind, activation_key: event instanceof KeyboardEvent && ["Enter", " "].includes(event.key) });
+        target_kind: kind, activation_key: event instanceof KeyboardEvent && ["Enter", " "].includes(event.key),
+        disabled: button instanceof HTMLButtonElement && button.disabled,
+        aria_disabled: button?.getAttribute("aria-disabled") === "true",
+        inert: Boolean(button?.closest("[inert]")),
+        default_prevented: event.defaultPrevented, final_default_prevented: false,
+        final_disabled: false, final_connected: false,
+        primary_pointer: event instanceof PointerEvent && event.isPrimary,
+        primary_button: event instanceof MouseEvent && event.button === 0,
+        path_has_save: event.composedPath().some(item => item instanceof Element && Boolean(item.closest(".card-detail-save-button"))),
+      };
+      events.push(observed);
+      setTimeout(() => {
+        observed.final_default_prevented = event.defaultPrevented;
+        observed.final_disabled = button instanceof HTMLButtonElement && button.disabled;
+        observed.final_connected = button?.isConnected ?? false;
+      }, 0);
     };
     for (const kind of kinds) document.addEventListener(kind, receive, true);
     const observer = new MutationObserver(records => {
+      for (const record of records) {
+        if (attributes.length >= 128 || record.type !== "attributes") continue;
+        const button = record.target instanceof Element ? record.target.closest(".card-detail-save-button") : null;
+        if (!button) continue;
+        attributes.push({ node: node(button), disabled: button instanceof HTMLButtonElement && button.disabled,
+          aria_disabled: button.getAttribute("aria-disabled") === "true", inert: Boolean(button.closest("[inert]")),
+          at: Math.round(performance.now()) });
+      }
       if (replacements.length >= 128) return;
       const added = records.reduce((sum, record) => sum + record.addedNodes.length, 0);
       const removed = records.reduce((sum, record) => sum + record.removedNodes.length, 0);
       if (added || removed) replacements.push({ added, removed, at: Math.round(performance.now()) });
     });
-    if (root) observer.observe(root, { subtree: true, childList: true });
-    (window as any).__cotestCardSaveAction = () => {
+    if (root) observer.observe(root, { subtree: true, childList: true, attributes: true,
+      attributeFilter: ["disabled", "aria-disabled", "inert"] });
+    (window as any).__cotestCardSaveAction = async () => {
+      await new Promise<void>(resolve => setTimeout(resolve, 0));
       for (const kind of kinds) document.removeEventListener(kind, receive, true);
       observer.disconnect();
       delete (window as any).__cotestCardSaveAction;
-      return { events, replacements, unavailable: false };
+      return { events, replacements, attributes, unavailable: false };
     };
   });
   return async (info: TestInfo, counters: SaveCounters) => {
@@ -55,6 +82,7 @@ export async function observeCardSaveAction(page: Page) {
       saw_current_card_wait: counters.saw_current_card_wait,
       events: trace.events,
       replacements: trace.replacements,
+      attributes: trace.attributes ?? [],
       unavailable: trace.unavailable,
     }, null, 2));
     await info.attach("card-save-action", { path: file, contentType: "application/json" });
