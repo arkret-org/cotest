@@ -539,9 +539,6 @@ pub(crate) async fn exercise(
         32,
     )?;
     let fresh_probe = arm(pause_file, &fresh, &[&carol.account])?.remove(0);
-    if matches!(carol_rail, Rail::WebSocket(_)) {
-        std::fs::write(fresh_probe.with_extension("skip"), [])?;
-    }
     ensure!(alice.client.sdk().signal_send(&fresh).await?.accepted);
     reached(&fresh_probe, &fresh).await?;
     // The registered current-device lookup legitimately retains fresh signed

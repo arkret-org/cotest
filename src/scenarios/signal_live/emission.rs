@@ -67,7 +67,7 @@ fn arm(
     let mut paths = Vec::new();
     for (index, recipient) in recipients.iter().enumerate() {
         let path = path.with_extension(format!("{index}.pause"));
-        for extension in ["reached.json", "outcome.json", "skip"] {
+        for extension in ["reached.json", "outcome.json"] {
             match std::fs::remove_file(path.with_extension(extension)) {
                 Ok(()) => {}
                 Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
