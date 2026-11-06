@@ -556,10 +556,23 @@ async function assertWrongPlaintextStrand(alice: Page, bob: Page, realm: string,
   // Stop the same actual positive indicator; no fabricated final Message is involved.
   const stopped = await realTyping(alice, realm, chat, false);
   expect(stopped.accepted).toBe(true);
-  await expect.poll(async () => (await realSignalReceiver(bob)).some(row => row.strand_id === chat
-    && row.typing === false && row.target_scope_matches === true && row.live_applied === true
-    && row.visible_count === 0 && isDeepStrictEqual(row.sender_actor_id, positive.sender_actor_id)
-    && row.sender_endpoint?.device_id === positive.sender_device_id), { timeout: 15_000 }).toBe(true);
+  let stoppedRows: Array<Record<string, any>> = [];
+  await expect.poll(async () => {
+    stoppedRows = await realSignalReceiver(bob);
+    return stoppedRows.some(row => row.strand_id === chat
+      && row.typing === false && row.target_scope_matches === true && row.live_applied === true
+      && row.visible_count === 0 && isDeepStrictEqual(row.sender_actor_id, positive.sender_actor_id)
+      && row.sender_endpoint?.device_id === positive.sender_device_id);
+  }, { timeout: 15_000 }).toBe(true).catch(async (error: unknown) => {
+    const file = test.info().outputPath("direct-typing-stop-receiver.json");
+    await writeFile(file, JSON.stringify({ envelope_digest: stopped.envelope_digest,
+      receipts: stoppedRows.filter(row => row.envelope_digest === stopped.envelope_digest
+        || (row.strand_id === chat && row.typing === false
+          && isDeepStrictEqual(row.sender_actor_id, positive.sender_actor_id)
+          && row.sender_endpoint?.device_id === positive.sender_device_id)) }));
+    await test.info().attach("direct-typing-stop-receiver", { path: file, contentType: "application/json" });
+    throw error;
+  });
   await expect(bob.locator(".typing-indicator")).toHaveCount(0);
   const after = await readCommitStreamHeadApi(proof.request, proof.token, realm);
   expect(isDeepStrictEqual(after, before), "ephemeral Typing must not append Event/Commit").toBe(true);
