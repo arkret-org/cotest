@@ -11,6 +11,7 @@ import {
   type Response,
 } from "../../helpers/arkret-test";
 import { selectProductOptionByLabel } from "../../helpers/product-select";
+import { stepShot } from "../../helpers/screenshots";
 import {
   assertJointStackNotRequired,
   openDpopUserPage,
@@ -26,7 +27,7 @@ async function addCard(column: Locator, title: string): Promise<void> {
 test("@fully-implemented calendar schedule and RSVP survive the canonical Strand event flow", async ({
   browser,
   request,
-}) => {
+}, testInfo) => {
   test.setTimeout(360_000);
   const stamp = Date.now();
   const flow = await openDpopUserPage(
@@ -67,7 +68,7 @@ test("@fully-implemented calendar schedule and RSVP survive the canonical Strand
       timeout: 120_000,
     });
 
-    await page.page.locator(".new-board-toggle").click();
+    await page.page.getByRole("button", { name: "New board", exact: true }).click();
     await page.page
       .locator(".new-board-title-input input, .new-board-title-input textarea")
       .fill(`Calendar Board ${stamp}`);
@@ -109,6 +110,11 @@ test("@fully-implemented calendar schedule and RSVP survive the canonical Strand
       editor.locator(".card-detail-calendar-recurrence-select"),
       "Weekly",
     );
+    for (const [field, value] of [["start", start], ["end", end],
+      ["timezone", timezone], ["location", location]]) {
+      await expect(editor.locator(`.card-detail-calendar-${field}-input`)
+        .locator("input, textarea")).toHaveValue(value);
+    }
 
     const schedulePredicate = (response: Response) =>
       response.url().includes("/_arkret/self/events") &&
@@ -208,6 +214,7 @@ test("@fully-implemented calendar schedule and RSVP survive the canonical Strand
     await expect(calendar.locator(".card-detail-rsvp-counts")).toContainText(
       "1 yes",
     );
+    await stepShot(page.page, testInfo, "calendar-schedule-rsvp");
 
     await calendar.locator(".card-detail-calendar-edit").click();
     await expect(editor).toBeVisible({ timeout: 30_000 });
@@ -223,6 +230,7 @@ test("@fully-implemented calendar schedule and RSVP survive the canonical Strand
     await expect(
       editor.locator(".card-detail-calendar-location-input").locator("input, textarea"),
     ).toHaveValue(location);
+    await stepShot(page.page, testInfo, "calendar-editor-retained");
   } finally {
     await page.close();
   }

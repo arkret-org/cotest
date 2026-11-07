@@ -24,7 +24,8 @@ async function open(control: Locator): Promise<Locator> {
 async function choose(control: Locator, option: Locator): Promise<void> {
   await expect(option).toHaveCount(1);
   await expect(option).toBeEnabled();
-  const label = (await option.innerText()).trim();
+  const label = await option.getAttribute("aria-label");
+  if (!label) throw new Error("The product option has no accessible label");
   await option.click();
   await expect(control).toHaveAttribute("aria-expanded", "false");
   await expect(control).toContainText(label);

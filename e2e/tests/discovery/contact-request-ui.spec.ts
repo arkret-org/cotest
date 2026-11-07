@@ -88,8 +88,7 @@ test(`cold requester signs a real locator Contact request; recipient=${coldRecip
       // Inkson #32: an incoming row must not lose its action during connect.
       await bob.page.page.goto("/contacts");
     } else {
-      await bob.page.page.locator(".sidebar-scope-toggle").getByRole("button", { name: "Contacts", exact: true }).click();
-      await bob.page.page.locator(".sidebar-toolbar-action.add-contact-cta").click();
+      await bob.page.page.locator(".rail-contacts").click();
       await expect(bob.page.page.locator(".connection-status .status-label")).toHaveText(/^Online(?:$|:)/, { timeout: 90_000 });
     }
     // The cold path acts as soon as the incoming row is available. Waiting

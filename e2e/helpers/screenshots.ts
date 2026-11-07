@@ -56,7 +56,7 @@ export async function stepShot(page: Page, testInfo: TestInfo, name: string) {
   const dir = path.join(screenshotRoot(), sanitize(testInfo.titlePath.slice(1, -1).join("-")));
   fs.mkdirSync(dir, { recursive: true });
   const file = path.join(dir, `${sanitize(name)}.png`);
-  await publicScreenshot(page, { path: file, fullPage: true });
+  await publicScreenshot(page, { path: file, fullPage: true, animations: "disabled" });
   await testInfo.attach(name, { path: file, contentType: "image/png" });
   return file;
 }

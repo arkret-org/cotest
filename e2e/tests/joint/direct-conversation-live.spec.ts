@@ -5,6 +5,7 @@ import { accountRow } from "../../helpers/product-locators";
 import { openAndPairSecondController } from "../../helpers/paired-controller";
 import { test, expect, type JointUsersFixture } from "../../helpers/joint-fixture";
 import type { APIRequestContext, Browser, Page, Response } from "@playwright/test";
+import type { AccountId } from "../../helpers/generated/spec-wire-objects";
 import { requestContactArkret, respondContactArkret, resolvePrincipalLocator, tombstoneContactArkret } from "../../helpers/contact-api";
 import { accountActorId, assertAuthoritySubmitOutcome, canonicalJson, createRealmApi, resolveDefaultStrandId, scanRealmStreamApi, sdkEventDerivedObjectId, signedEventEnvelope, submitSignedEventApi } from "../../helpers/coland-api";
 import { decodeEventIngressBody, ingressEvents } from "../../helpers/event-ingress";
@@ -15,6 +16,21 @@ import { serverLoginViaCoauth, submitCoauthPasswordCredentials } from "../../hel
 import { colandBaseUrl } from "../../helpers/env";
 
 import { createDirectBoundaryCircleStrand, directStructureLifecycleGate, flatTopicChats, rejectDirectStructureEvent } from "../../helpers/direct-structure";
+
+async function openContactConversation(page: Page, account: AccountId): Promise<void> {
+  await page.locator(".rail-contacts").click();
+  const people = page.locator(".contact-list-item:not(.contact-agent-list-item)");
+  // These fresh two-account fixtures have exactly one human Contact. Verify
+  // its complete identity in the detail before activating Message.
+  await expect(people).toHaveCount(1, { timeout: 90_000 });
+  await people.click();
+  const detail = accountRow(page, ".contact-row", account);
+  await expect(detail).toBeVisible({ timeout: 90_000 });
+  // Message is available only for an accepted Contact with direct_message.
+  const message = detail.locator(".contact-message");
+  await expect(message).toBeEnabled({ timeout: 90_000 });
+  await message.click();
+}
 
 function directConversationCase(mode: "normal" | "interrupted" | "offline" | "lost" | "logout" | "account" | "withdrawal" | "leave", remoteBob = false) {
 return async ({ jointUsers, request, browser }: { jointUsers: JointUsersFixture; request: APIRequestContext; browser: Browser }) => {
@@ -266,13 +282,7 @@ return async ({ jointUsers, request, browser }: { jointUsers: JointUsersFixture;
   phase("participant_reload_finished");
   for (const [page, peer] of [[alice, bobSession.user.id], [bob, aliceSession.user.id]] as const) {
     phase(page === alice ? "alice_direct_open_start" : "bob_direct_open_start");
-    await page.getByRole("button", { name: "Contacts", exact: true }).click();
-    const row = accountRow(page, ".direct-conversation-row", accountActorId(peer, peer === bobSession.user.id && remoteBob ? "server2" : "default").account_id);
-    // The API receipt can precede the remote Contact projection. A pending
-    // row is clickable but intentionally cannot start a Direct resolver.
-    await expect(row.locator(".contact-sidebar-state")).toHaveText("accepted", { timeout: 90_000 });
-    await expect(row).not.toHaveClass(/\bis-dim\b/, { timeout: 90_000 });
-    await row.click();
+    await openContactConversation(page, accountActorId(peer, peer === bobSession.user.id && remoteBob ? "server2" : "default").account_id);
     phase(page === alice ? "alice_direct_open_finished" : "bob_direct_open_finished");
   }
   if (remoteBob) {
@@ -435,13 +445,7 @@ return async ({ jointUsers, request, browser }: { jointUsers: JointUsersFixture;
   for (const [page, peer] of [[alice, bobSession.user.id], [bob, aliceSession.user.id]] as const) {
     await expect(async () => {
       if (!new URL(page.url()).pathname.startsWith("/direct/")) {
-        await page.getByRole("button", { name: "Contacts", exact: true }).click();
-        const row = accountRow(page, ".direct-conversation-row", accountActorId(peer, peer === bobSession.user.id && remoteBob ? "server2" : "default").account_id);
-        // The API receipt can precede the remote Contact projection. A pending
-        // row is clickable but intentionally cannot start a Direct resolver.
-        await expect(row.locator(".contact-sidebar-state")).toHaveText("accepted", { timeout: 90_000 });
-        await expect(row).not.toHaveClass(/\bis-dim\b/, { timeout: 90_000 });
-        await row.click();
+        await openContactConversation(page, accountActorId(peer, peer === bobSession.user.id && remoteBob ? "server2" : "default").account_id);
       }
       await expect(page).toHaveURL(/\/direct\/ak:realm:.*\/ak:strand:/, { timeout: 5_000 });
     }).toPass({ timeout: 180_000, intervals: [2_000] });

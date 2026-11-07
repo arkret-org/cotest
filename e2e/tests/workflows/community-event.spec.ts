@@ -8,6 +8,7 @@ import { decodeIngressEvents, type IngressEvent } from "../../helpers/event-ingr
 import { colandServiceId } from "../../helpers/env";
 import { addBoardList, fillCardNarrative, filterCardAssignee } from "../../helpers/kanban-product-ui";
 import { openRegisteredUserPage } from "../../helpers/users";
+import { stepShot } from "../../helpers/screenshots";
 
 test.use({ trace: "off", video: "off", screenshot: "off" });
 
@@ -175,12 +176,14 @@ test("three browser-owned members deliver a community event through encrypted di
     for (const member of flows) await member.page.expectTimelineEventVisible(kickoff, 120_000);
     checkpoint("all accepted memberships covered by MLS and kickoff decrypts for every member");
 
+    const boardTitle = `Event deliverables ${stamp}`;
+    const listTitle = `Deliverables ${stamp}`;
     await alice.page.page.goto(`/kanban/${realm}`);
     await expect(alice.page.page.locator(".kanban-panel")).toBeVisible({ timeout: 120_000 });
-    await alice.page.page.locator(".new-board-toggle").click();
-    await committed(alice.page.page, "ak.space.create", realm!, () => submitProjectBoard(alice.page.page, `Event deliverables ${stamp}`));
+    await alice.page.page.getByRole("button", { name: "New board", exact: true }).click();
+    await committed(alice.page.page, "ak.space.create", realm!, () => submitProjectBoard(alice.page.page, boardTitle));
     await expect(alice.page.page.locator(".kanban-empty-board")).toContainText("No lists yet", { timeout: 90_000 });
-    const column = await addBoardList(alice.page.page, `Deliverables ${stamp}`);
+    const column = await addBoardList(alice.page.page, listTitle);
     boardPath = new URL(alice.page.page.url()).pathname;
     const tasks = [
       { title: `Venue booking ${stamp}`, owner: alice, body: `Venue confirmed: community hall, 60 seats. ${stamp}` },
@@ -218,6 +221,7 @@ test("three browser-owned members deliver a community event through encrypted di
       assignmentIds.set(task.title, sdkEventDerivedObjectId(assignment));
       acceptedAssignmentIds.add(sdkEventDerivedObjectId(assignment));
       await assertAssigned(alice.page.page, task.owner.user.id);
+      await stepShot(alice.page.page, testInfo, `assigned-deliverable-${tasks.indexOf(task)}`);
       await closeProjectCard(alice.page.page, boardPath!);
       checkpoint(`accepted encrypted deliverable and reopened assignee: ${task.title}`);
     }
@@ -271,6 +275,10 @@ test("three browser-owned members deliver a community event through encrypted di
       expect(createHash("sha256").update(Buffer.from(received)).digest("hex")).toBe(createHash("sha256").update(png).digest("hex"));
     }
     checkpoint("designer's encrypted poster attachment decrypts to the exact bytes for all members");
+    const presenceNames = await bob.page.page.locator(".presence-name").allTextContents();
+    expect(presenceNames.length).toBeGreaterThan(0);
+    expect(presenceNames.every(name => !name.trim().startsWith("{"))).toBe(true);
+    await stepShot(bob.page.page, testInfo, "encrypted-project-discussion");
 
     for (const member of flows) {
       await member.page.page.reload({ waitUntil: "domcontentloaded" });
@@ -286,6 +294,8 @@ test("three browser-owned members deliver a community event through encrypted di
       const coldBytes = await coldImage.evaluate(async (img: HTMLImageElement) => Array.from(new Uint8Array(await (await fetch(img.src)).arrayBuffer())));
       expect(createHash("sha256").update(Buffer.from(coldBytes)).digest("hex")).toBe(createHash("sha256").update(png).digest("hex"));
       await member.page.page.goto(boardPath);
+      await expect(member.page.page.locator(".board-select-menu-host")).toContainText(boardTitle, { timeout: 120_000 });
+      await expect(member.page.page.locator(".kanban-column-title")).toHaveText(listTitle, { timeout: 120_000 });
       for (const task of tasks) {
         await member.page.page.locator(".kanban-card").filter({ hasText: task.title }).click();
         const detail = member.page.page.locator(".card-detail-modal");
@@ -347,6 +357,44 @@ test("three browser-owned members deliver a community event through encrypted di
       checkpoint(`assignment handover accepted and retained by all members: ${previousOwner.user.name} to ${nextOwner.user.name}`);
       previousOwner = nextOwner;
     }
+    await stepShot(alice.page.page, testInfo, "delivered-project-board-desktop");
+    const mobile = carol.page.page;
+    await mobile.setViewportSize({ width: 390, height: 844 });
+    await expect(mobile.locator(".kanban-card")).toHaveCount(3);
+    await expect(mobile.locator(".board-select-menu-host")).toContainText(boardTitle);
+    await expect(mobile.locator(".kanban-column-title")).toHaveText(listTitle);
+    await stepShot(mobile, testInfo, "delivered-project-board-mobile");
+    await mobile.locator(".kanban-card").last().scrollIntoViewIfNeeded();
+    await expect(mobile.locator(".kanban-card").last()).toBeInViewport();
+    await stepShot(mobile, testInfo, "mobile-project-board-scroll-end");
+    const list = mobile.locator(".workspace-pane-list.is-visible");
+    for (const destination of ["realms", "contacts", "agents"]) {
+      await mobile.locator(`.rail-${destination}`).click();
+      await expect(list).toBeVisible();
+      await expect(list).toHaveCSS("animation-name", "none");
+      await stepShot(mobile, testInfo, `mobile-${destination}-list`);
+    }
+    await mobile.locator(".rail-account").click();
+    await expect(mobile.locator(".account-page")).toBeVisible();
+    await stepShot(mobile, testInfo, "mobile-account");
+    await mobile.locator(".account-page-settings").click();
+    const backToAccount = mobile.getByRole("button", { name: "Back to account", exact: true });
+    const backToList = mobile.getByRole("button", { name: "Back to list", exact: true });
+    await expect(backToAccount).toBeInViewport();
+    await stepShot(mobile, testInfo, "mobile-settings-list");
+    await mobile.locator(".settings-nav-item-theme").click();
+    await expect(backToList).toBeInViewport();
+    await expect(backToAccount).toBeHidden();
+    await stepShot(mobile, testInfo, "mobile-settings-theme");
+    await backToList.click();
+    await backToAccount.click();
+    await expect(mobile).toHaveURL(/\/account$/);
+    await mobile.goto("/settings");
+    await expect(backToAccount).toBeInViewport();
+    await backToAccount.click();
+    await expect(mobile).toHaveURL(/\/account$/);
+    expect(await mobile.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    checkpoint("live mobile lists, Settings return paths and direct Settings entry accepted");
   } catch (error) {
     await testInfo.attach("community-runtime-errors", { body: JSON.stringify(browserFailures), contentType: "application/json" });
     await testInfo.attach("community-response-statuses", { body: JSON.stringify(requests), contentType: "application/json" });

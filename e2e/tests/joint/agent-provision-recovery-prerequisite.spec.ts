@@ -26,7 +26,7 @@ test("Agent creation checks recovery before generating or publishing its DID @ag
       await page.getByRole("button", { name: "Close without publishing", exact: true }).click();
     });
     await page.goto("/settings", { waitUntil: "domcontentloaded" });
-    await page.locator(".settings-nav-item-agents").click();
+    await page.locator(".rail-agents").click();
     await expect(page.locator(".agent-admin")).toBeVisible();
     await page.locator(".agent-admin-create-open-button").click();
     const slug = page.locator(".agent-admin-provision-agent-slug").locator("input, textarea");
@@ -117,7 +117,7 @@ test("Agent creation continues through the four stages with an active recovery p
     const savedKey = await user.completeRecoveryKeySetupIfPrompted(120_000);
     expect(Boolean(savedKey), "the recovery policy must be saved through the product UI").toBe(true);
     await user.gotoSettings();
-    await page.locator(".settings-nav-item-agents").click();
+    await page.locator(".rail-agents").click();
     await expect(page.locator(".agent-admin")).toBeVisible();
     await page.locator(".agent-admin-create-open-button").click();
     await page.locator(".agent-admin-provision-agent-slug").locator("input, textarea").fill("recovery-ready");
@@ -172,7 +172,7 @@ for (const cut of ["inception", "provision", "did-binding"] as const) {
       await user.gotoHome();
       expect(Boolean(await user.completeRecoveryKeySetupIfPrompted(120_000))).toBe(true);
       await user.gotoSettings();
-      await page.locator(".settings-nav-item-agents").click();
+      await page.locator(".rail-agents").click();
       await page.locator(".agent-admin-create-open-button").click();
       await page.locator(".agent-admin-provision-agent-slug").locator("input, textarea").fill(`crash-${cut}`);
       await page.route("**/_arkret/**", async route => {

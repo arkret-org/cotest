@@ -12,12 +12,13 @@
 
 ## 流程与断言
 
-1. 用户通过 Inkson 创建 Realm，并由 Realm owner 经 Admin/Security 为自己授予 `ak.rsvp.set` capability。
+1. 先验证近过期 session grant 的真实刷新，再由用户通过 Inkson 创建 Realm，并由 Realm owner 经 Admin/Security 为自己授予 `ak.rsvp.set` capability。
 2. 用户创建 Board、List 与 Card。
-3. 在 Card detail 添加 start/end、`Asia/Shanghai`、location 和 weekly recurrence。
-4. 断言 Inkson 产生且 Coland 接受 `ak.strand.update`，wire 同时携带 calendar schema requirement 与 schedule 数据。
-5. 断言 UI 显示 schedule，再次打开编辑器时字段保持。
-6. 对整个 series 选择 Accept，断言携带显式 capability 的 `ak.rsvp.set` 被接受，UI 投影为 `You: accepted` 和 `1 yes`。
+3. 在 Card detail 添加 start/end、`Asia/Shanghai`、location 和 weekly recurrence；保存前逐项核对输入值。
+4. 断言 Inkson 产生且 Coland 接受 `ak.strand.update`，wire 携带 calendar schema ref 与唯一 `encrypted_metadata`，不携带时间、时区或地点明文。
+5. 断言 UI 显示 schedule，冷刷新后从正式 current 的 schedule frontier 准备 RSVP basis。
+6. 对整个 series 选择 Accept，断言携带显式 capability 与 `encrypted_response` 的 `ak.rsvp.set` 被接受，UI 投影为 `accepted` 和 `1 yes`。
+7. 再次打开编辑器时四字段保持；保存日程／回应和回读编辑器的公共截图。
 
 ## Evidence 边界
 

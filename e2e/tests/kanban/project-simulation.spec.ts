@@ -523,7 +523,7 @@ test.describe("project simulation", () => {
       await expect(alicePage.page.locator(".kanban-panel")).toBeVisible({
         timeout: 120_000,
       });
-      await alicePage.page.locator(".new-board-toggle").click();
+      await alicePage.page.getByRole("button", { name: "New board", exact: true }).click();
       await alicePage.page
         .locator(".new-board-title-input input, .new-board-title-input textarea")
         .fill(`Overdue Board ${stamp}`);

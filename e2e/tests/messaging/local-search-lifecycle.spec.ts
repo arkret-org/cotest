@@ -64,12 +64,10 @@ test("0540 real local search rechecks late-join history and preserves revision s
       if (!await panel.isVisible()) await page.keyboard.press("Control+F");
       await expect(panel).toBeVisible();
       const input = panel.locator(".global-search-input");
-      const empty = panel.locator(".global-search-form .input-empty-prompt");
       await input.fill("");
-      await expect(empty).toBeVisible();
+      await expect(input).toHaveValue("");
       await input.fill(query);
       await expect(input).toHaveValue(query);
-      await expect(empty).toHaveCount(0);
       await expect(panel.locator(".global-search-submit")).toBeEnabled();
       await panel.locator(".global-search-submit").click();
       await expect(row).toHaveCount(count).catch(async (error: unknown) => {
@@ -119,12 +117,18 @@ test("0540 real local search rechecks late-join history and preserves revision s
     const originalBody = `revision-original-${suffix}`;
     const revisedBody = `revision-replacement-${suffix}`;
     const created = await send(originalBody);
+    // Search reads installed local material. Keep the source demand active
+    // until this exact accepted write is durable before retiring it for Search.
+    await flow.page.gotoTimelineRealm(realmId);
+    await waitForInstalledControl(created.event_id);
     const original = await paired("message-create", originalBody, 1);
     const messageId = created.event_id.replace(/^ak:event:/, "ak:message:");
     const revision = signedEventEnvelope({ actorId: owner.user.id, realmId,
       kind: "ak.message.revise", payload: { message_id: messageId,
         content: { kind: "ak.content.text", body: revisedBody } } });
     await submitSignedEventApi(request, ownerToken, revision, { context: "search current Message revision" });
+    await flow.page.gotoTimelineRealm(realmId);
+    await waitForInstalledControl(String(revision.event_id));
     const revised = await paired("current-revision-has-exact-signed-carrier", revisedBody, 1);
     expect(revised.visible).toEqual(original.visible);
     expect(revised.result!.source_event_id).toBe(revision.event_id);
