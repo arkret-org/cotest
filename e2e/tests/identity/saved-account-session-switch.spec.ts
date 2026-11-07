@@ -112,6 +112,8 @@ test("real saved sessions survive add-account, switch both ways and require Coau
     ignoreHTTPSErrors: optionalEnv("COTEST_IGNORE_HTTPS") === "1",
   });
   const page = await context.newPage();
+  const browserErrors: string[] = [];
+  page.on("pageerror", error => browserErrors.push(error.stack ?? error.message));
   await page.addLocatorHandler(page.locator('#__dx-toast[aria-hidden="false"]'), async (notice) => {
     await notice.click();
   });
@@ -185,7 +187,7 @@ test("real saved sessions survive add-account, switch both ways and require Coau
       await expect.poll(() => page.evaluate(profileId => {
         const saved = JSON.parse(localStorage.getItem("inkson.profiles.v1") ?? "{}");
         return saved.profiles.find((profile: { profile_id: string }) => profile.profile_id === profileId)?.label;
-      }, secondAccount.profile_id)).toBe(second.handle);
+      }, secondAccount.profile_id)).toMatch(new RegExp(`^${second.handle}:`));
       expect(await page.evaluate(() => (window as unknown as {
         savedProfileLabelOwnerIds: string[];
       }).savedProfileLabelOwnerIds.length), "label repair retains the authenticated account owner").toBe(1);
@@ -209,15 +211,23 @@ test("real saved sessions survive add-account, switch both ways and require Coau
 
     await selectSavedAccount(page, firstAccount);
     await page.locator(".account-menu-wrap .sapid-popover-trigger").click();
+    const currentLogout = page.waitForResponse(response => new URL(response.url()).pathname === "/_arkret/gate/account/logout");
     await page.getByRole("button", { name: "Sign out of this account", exact: true }).click();
+    expect((await currentLogout).status()).toBe(200);
     await expect.poll(() => currentAccount(page)).toEqual(secondAccount);
     await expect(page.locator(".shell.app")).toBeVisible();
+    await page.reload();
+    await expect(page.locator(".shell.app")).toBeVisible();
+    expect(await currentAccount(page)).toEqual(secondAccount);
     await page.locator(".account-menu-wrap .sapid-popover-trigger").click();
     await accountCard(page, firstAccount).click();
     await expect(page.locator(".auth-panel")).toBeVisible();
     await expect(page.locator(".account-switcher")).toHaveCount(0);
     await expect(page.locator(".shell.app")).toHaveCount(0);
     await expect(page.locator(".auth-station-field input")).toHaveValue(firstAccount.server_url);
+    await page.reload();
+    await expect(page.locator(".auth-panel")).toBeVisible();
+    await expect(page.locator(".shell.app")).toHaveCount(0);
     await test.step("reauthenticate the logged-out account", () => authorize(page, first));
     await expect(page.locator(".shell.app")).toBeVisible({ timeout: 30_000 });
     expect(await currentAccount(page)).toEqual(firstAccount);
@@ -225,7 +235,74 @@ test("real saved sessions survive add-account, switch both ways and require Coau
     expect(returningRequest.searchParams.get("prompt")).toBe("login");
     expect(returningRequest.searchParams.has("login_hint")).toBe(false);
     await selectSavedAccount(page, secondAccount);
+
+    await test.step("create an encrypted Realm without trapping after acceptance", async () => {
+      const errors: string[] = [];
+      const recordError = (error: Error) => errors.push(error.message);
+      page.on("pageerror", recordError);
+      try {
+        await page.goto(`${inksonBaseUrl()}/setup/realms`);
+        await page.locator(".realm-title-input input").fill(`Saved session Realm ${Date.now()}`);
+        await page.locator(".new-realm-next-button").click();
+        await page.locator(".new-realm-next-button").click();
+        await page.locator(".create-realm-button").click();
+        await expect(page.locator(".selected-realm-id")).toBeVisible();
+        await expect(page.locator(".open-created-realm")).toBeVisible({ timeout: 90_000 });
+        await expect(page.locator(".realm-setup-done")).toContainText("MLS Genesis accepted; encryption active on this device");
+        await page.locator(".open-created-realm").click();
+        const realmUrl = page.url();
+        await page.reload();
+        await expect(page.locator(".shell.app")).toBeVisible();
+        expect(page.url()).toBe(realmUrl);
+        expect(await currentAccount(page)).toEqual(secondAccount);
+        expect(errors).toEqual([]);
+      } finally {
+        page.off("pageerror", recordError);
+      }
+    });
+
+    await test.step("sign out all saved sessions and retain the logout across cold reloads", async () => {
+      const errors: string[] = [];
+      const recordError = (error: Error) => errors.push(error.message);
+      page.on("pageerror", recordError);
+      const logouts: number[] = [];
+      const recordLogout = (response: { url(): string; status(): number }) => {
+        if (new URL(response.url()).pathname === "/_arkret/gate/account/logout") logouts.push(response.status());
+      };
+      page.on("response", recordLogout);
+      try {
+        await page.locator(".account-menu-wrap .sapid-popover-trigger").click();
+        await page.locator(".account-menu-sign-out-all").click();
+        await expect(page.locator(".auth-panel")).toBeVisible();
+        await expect.poll(() => logouts.filter(status => status === 200).length).toBe(2);
+        for (let count = 0; count < 2; count++) {
+          await page.reload();
+          await expect(page.locator(".auth-panel")).toBeVisible();
+          await expect(page.locator(".shell.app")).toHaveCount(0);
+        }
+        const cold = await context.newPage();
+        try {
+          await cold.goto(inksonBaseUrl());
+          await expect(cold.locator(".auth-panel")).toBeVisible();
+          await expect(cold.locator(".shell.app")).toHaveCount(0);
+        } finally {
+          await cold.close();
+        }
+        expect(errors).toEqual([]);
+      } finally {
+        page.off("pageerror", recordError);
+        page.off("response", recordLogout);
+      }
+    });
+    expect(browserErrors).toEqual([]);
   } finally {
+    const file = test.info().outputPath("public-browser-status.json");
+    await writeFile(file, JSON.stringify({
+      path: new URL(page.url()).pathname,
+      errors: browserErrors,
+      headings: await page.locator("h1,h2,h3").allTextContents().catch(() => []),
+      statuses: await page.locator(".auth-status,.account-handoff-status,.auth-error").allTextContents().catch(() => []),
+    }));
     await context.close();
   }
 });
