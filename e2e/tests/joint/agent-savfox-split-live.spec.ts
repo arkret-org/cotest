@@ -1413,7 +1413,7 @@ privatePairingTest("fresh Agent pairing gates the first send until binding and a
     await expect(inkson.locator(".send-chat-button")).toBeDisabled();
     await expect(inkson.locator(".chat-panel")).not.toContainText("Strand not found");
     await inkson.locator(".account-menu-wrap .sapid-popover-trigger").click();
-    await inkson.locator(".account-menu-settings").click();
+    await inkson.locator(".account-menu__qr").click();
     await expect(inkson.locator(".settings-content-column")).toBeVisible();
     await inkson.goBack();
     await expect(inkson).toHaveURL(url => url.pathname === acceptedPath);

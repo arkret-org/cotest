@@ -414,7 +414,7 @@ return async ({ jointUsers, request, browser }: { jointUsers: JointUsersFixture;
       return;
     }
     await founder!.locator(".account-menu-wrap .sapid-popover-trigger").click();
-    await founder!.locator(".account-menu-settings").click();
+    await founder!.locator(".account-menu__qr").click();
     await expect(founder!.locator(".settings-content-column")).toBeVisible();
     await founder!.goBack();
     await expect(founder!).toHaveURL(url => url.pathname === firstPath);
