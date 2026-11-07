@@ -214,6 +214,16 @@ test("@fully-implemented calendar schedule and RSVP survive the canonical Strand
     await expect(calendar.locator(".card-detail-rsvp-counts")).toContainText(
       "1 yes",
     );
+    for (const field of ["calendar-agenda-start", "calendar-agenda-end"]) {
+      const date = calendar.locator(`.${field}`).first();
+      await expect(date).toBeVisible();
+      const layout = await date.evaluate(element => ({
+        height: element.getBoundingClientRect().height,
+        lineHeight: Number.parseFloat(getComputedStyle(element).lineHeight),
+      }));
+      expect(layout.height, "a full local date and time remains readable on one line")
+        .toBeLessThanOrEqual(layout.lineHeight + 1);
+    }
     await stepShot(page.page, testInfo, "calendar-schedule-rsvp");
 
     await calendar.locator(".card-detail-calendar-edit").click();
