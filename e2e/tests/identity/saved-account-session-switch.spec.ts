@@ -55,8 +55,8 @@ async function completeNewIdentity(page: Page): Promise<void> {
 }
 
 async function addAccount(page: Page): Promise<void> {
-  await page.locator(".account-menu-wrap .sapid-popover-trigger").click();
-  await page.locator(".account-menu").locator(".account-picker__add").click();
+  await page.locator(".rail-account").click();
+  await page.locator(".account-page").locator(".account-picker__add").click();
   await expect(page.locator(".auth-panel")).toBeVisible();
   await expect(page.locator(".account-switcher")).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Back to previous account", exact: true })).toBeVisible();
@@ -70,8 +70,8 @@ function accountCard(page: Page, account: SavedAccount) {
 }
 
 async function selectSavedAccount(page: Page, account: SavedAccount): Promise<void> {
-  if (!(await page.locator(".account-menu").isVisible())) {
-    await page.locator(".account-menu-wrap .sapid-popover-trigger").click();
+  if (!(await page.locator(".account-page").isVisible())) {
+    await page.locator(".rail-account").click();
   }
   // The previous account's already-issued request may finish during retirement.
   // Require a real successful response for the selected principal as well as
@@ -128,6 +128,27 @@ test("real saved sessions survive add-account, switch both ways and require Coau
     await expect(page.locator(".shell.app")).toBeVisible({ timeout: 30_000 });
     expect(await currentAccount(page)).toEqual(firstAccount);
 
+    await test.step("open the account page and enter Settings from the mobile rail", async () => {
+      const viewport = page.viewportSize()!;
+      const avatar = page.locator(".rail-account");
+      const accountPage = page.locator(".account-page");
+      const settings = accountPage.getByRole("link", { name: "Settings", exact: true });
+      await page.setViewportSize({ width: 390, height: 844 });
+      await expect(page.locator(".rail-settings")).toBeHidden();
+      await avatar.click();
+      await expect(page).toHaveURL(/\/account$/);
+      await expect(avatar).toHaveAttribute("aria-current", "page");
+      await expect(accountPage.locator(".who")).toContainText(first.handle);
+      await settings.click();
+      await expect(page).toHaveURL(/\/settings$/);
+      await expect(page.locator(".settings-sidebar-column")).toBeVisible();
+      await page.goBack();
+      await expect(accountPage).toBeVisible();
+      await page.setViewportSize(viewport);
+      await expect(settings).toBeHidden();
+      await expect(page.locator(".rail-settings")).toBeVisible();
+    });
+
     const documentOrigin = await page.evaluate(() => performance.timeOrigin);
     const authorizationRequests: URL[] = [];
     const captureAuthorization = (incoming: { url(): string }) => {
@@ -182,7 +203,7 @@ test("real saved sessions survive add-account, switch both ways and require Coau
     try {
       await expect(page.locator(".shell.app")).toBeVisible({ timeout: 30_000 });
       expect(await currentAccount(page)).toEqual(secondAccount);
-      await page.locator(".account-menu-wrap .sapid-popover-trigger").click();
+      await page.locator(".rail-account").click();
       await expect(accountCard(page, firstAccount)).toContainText(first.handle);
       await expect.poll(() => page.evaluate(profileId => {
         const saved = JSON.parse(localStorage.getItem("inkson.profiles.v1") ?? "{}");
@@ -210,7 +231,7 @@ test("real saved sessions survive add-account, switch both ways and require Coau
     expect(authorizationRequests).toHaveLength(authorizationsBeforeSwitch);
 
     await selectSavedAccount(page, firstAccount);
-    await page.locator(".account-menu-wrap .sapid-popover-trigger").click();
+    await page.locator(".rail-account").click();
     const currentLogout = page.waitForResponse(response => new URL(response.url()).pathname === "/_arkret/gate/account/logout");
     await page.getByRole("button", { name: "Sign out of this account", exact: true }).click();
     expect((await currentLogout).status()).toBe(200);
@@ -219,7 +240,7 @@ test("real saved sessions survive add-account, switch both ways and require Coau
     await page.reload();
     await expect(page.locator(".shell.app")).toBeVisible();
     expect(await currentAccount(page)).toEqual(secondAccount);
-    await page.locator(".account-menu-wrap .sapid-popover-trigger").click();
+    await page.locator(".rail-account").click();
     await accountCard(page, firstAccount).click();
     await expect(page.locator(".auth-panel")).toBeVisible();
     await expect(page.locator(".account-switcher")).toHaveCount(0);
@@ -271,8 +292,8 @@ test("real saved sessions survive add-account, switch both ways and require Coau
       };
       page.on("response", recordLogout);
       try {
-        await page.locator(".account-menu-wrap .sapid-popover-trigger").click();
-        await page.locator(".account-menu-sign-out-all").click();
+        await page.locator(".rail-account").click();
+        await page.locator(".account-page-sign-out-all").click();
         await expect(page.locator(".auth-panel")).toBeVisible();
         await expect.poll(() => logouts.filter(status => status === 200).length).toBe(2);
         for (let count = 0; count < 2; count++) {

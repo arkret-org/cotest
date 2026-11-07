@@ -329,7 +329,7 @@ return async ({ jointUsers, request, browser }: { jointUsers: JointUsersFixture;
         expect(previousIdentity.deviceId).toMatch(/^ak:device:/);
         await actualOldResolution;
       }
-      await founder!.locator(".account-menu-wrap .sapid-popover-trigger").click();
+      await founder!.locator(".rail-account").click();
       await founder!.getByRole("button", { name: "Sign out of this account", exact: true }).click();
       await expect(founder!.locator(".auth-panel")).toBeVisible({ timeout: 60_000 });
       await expect(founder!.locator(".shell.app")).toHaveCount(0);
@@ -413,8 +413,7 @@ return async ({ jointUsers, request, browser }: { jointUsers: JointUsersFixture;
       });
       return;
     }
-    await founder!.locator(".account-menu-wrap .sapid-popover-trigger").click();
-    await founder!.locator(".account-menu__qr").click();
+    await founder!.locator(".rail-settings").click();
     await expect(founder!.locator(".settings-content-column")).toBeVisible();
     await founder!.goBack();
     await expect(founder!).toHaveURL(url => url.pathname === firstPath);

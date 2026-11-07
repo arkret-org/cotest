@@ -1204,8 +1204,7 @@ async function indexedDbClearRecovery(page: Page, mainId: string, chatId: string
   const milestones: Array<{ stage: string; at: number }> = [];
   const mark = (stage: string) => { milestones.push({ stage, at: Date.now() }); };
   try {
-    await page.locator(".account-menu-wrap .sapid-popover-trigger").click();
-    await page.locator(".account-menu__qr").click();
+    await page.locator(".rail-settings").click();
     await page.locator(".settings-nav-item-storage").click();
     await expect(page.locator(".e2ee-cache-clear-all")).toBeEnabled();
     await page.evaluate(() => { (window as any).__directCacheBarrier.armed = true; });

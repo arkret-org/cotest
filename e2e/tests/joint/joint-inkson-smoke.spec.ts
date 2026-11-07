@@ -66,15 +66,15 @@ test.describe("joint-inkson smoke @fully-implemented", () => {
       });
     await expect(selfParticipant).toContainText(principalHandle);
 
-    await jointRealm.alicePage.page.locator(".account-menu-wrap .sapid-popover-trigger").click();
+    await jointRealm.alicePage.page.locator(".rail-account").click();
     await expect(
-      jointRealm.alicePage.page.locator(".account-menu__head .who"),
+      jointRealm.alicePage.page.locator(".account-page__head .who"),
     ).toHaveText(principalHandle);
     if (accountAuthorityHandle && accountAuthorityHandle !== principalHandle) {
       for (const identitySurface of [
         message,
         selfParticipant,
-        jointRealm.alicePage.page.locator(".account-menu"),
+        jointRealm.alicePage.page.locator(".account-page"),
       ]) {
         await expect(identitySurface).not.toContainText(accountAuthorityHandle);
       }

@@ -205,8 +205,8 @@ for (const mode of ["avatar", "lost-responses", "retryable-profile", "account-sw
     } else if (mode === "account-switch") {
       await expect(page.locator(".agent-admin .write-status")).toContainText("Agent was created; its avatar is still pending", { timeout: 180_000 });
       await page.bringToFront();
-      await page.getByRole("button", { name: "Account menu", exact: true }).click();
-      const menu = page.locator(".account-menu");
+      await page.getByRole("link", { name: "Account", exact: true }).click();
+      const menu = page.locator(".account-page");
       await expect(menu).toBeVisible();
       const originalProfile = await page.evaluate(() => JSON.parse(localStorage.getItem("inkson.config.v1") ?? "{}").active_account?.profile_id ?? "");
       expect(originalProfile).not.toBe("");

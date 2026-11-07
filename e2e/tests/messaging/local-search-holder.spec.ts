@@ -164,12 +164,12 @@ async function runHolderRevocation(
       holderSearchReadBarrier: { observed: number };
     }).holderSearchReadBarrier.observed)).toBeGreaterThan(0);
     await expect(replacingPage.locator(".global-search-results-loading")).toBeVisible();
-    await replacingPage.locator(".account-menu-wrap .sapid-popover-trigger").click();
-    await expect(replacingPage.locator(".account-menu")).toBeVisible();
+    await replacingPage.locator(".rail-account").click();
+    await expect(replacingPage.locator(".account-page")).toBeVisible();
     const savedProfile = await replacingPage.evaluate(() =>
       JSON.parse(localStorage.getItem("inkson.config.v1") ?? "{}").active_account?.profile_id ?? "");
     expect(savedProfile).not.toBe("");
-    await replacingPage.locator(".account-menu").locator(".account-picker__add").click();
+    await replacingPage.locator(".account-page").locator(".account-picker__add").click();
     await expect(replacingPage.locator(".auth-panel")).toBeVisible({ timeout: 120_000 });
     await expect(replacingPage.locator(".shell.app")).toHaveCount(0);
     await replacingPage.evaluate(() => (window as unknown as {
