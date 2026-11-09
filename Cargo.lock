@@ -2679,6 +2679,7 @@ dependencies = [
  "cotest-blob-stream-aead-runner",
  "cotest-call-state-core-runner",
  "cotest-capability-relinquish-authoring-runner",
+ "cotest-content-backup-source-runner",
  "cotest-crypto-hpke-runner",
  "cotest-cursor-negative-runner",
  "cotest-detached-object-signature-runner",
@@ -2811,6 +2812,23 @@ dependencies = [
  "arkret-models-collaboration",
  "arkret-wire",
  "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "cotest-content-backup-source-runner"
+version = "0.3.0"
+dependencies = [
+ "anyhow",
+ "arkret-canonical",
+ "arkret-crypto",
+ "arkret-event-draft",
+ "arkret-models-crypto",
+ "arkret-schema-conformance",
+ "arkret-wire",
+ "chrono",
+ "ed25519-dalek 3.0.0",
+ "hex",
  "serde_json",
 ]
 

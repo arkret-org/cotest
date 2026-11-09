@@ -1,0 +1,22 @@
+[package]
+name = "cotest-content-backup-source-runner"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[dependencies]
+anyhow = { workspace = true }
+arkret-canonical = { workspace = true }
+arkret-crypto = { workspace = true, features = ["content-history"] }
+arkret-event-draft = { workspace = true }
+arkret-models-crypto = { workspace = true }
+arkret-schema-conformance = { workspace = true }
+arkret-wire = { workspace = true }
+chrono = { workspace = true }
+ed25519-dalek = { workspace = true, features = ["alloc"] }
+hex = { workspace = true }
+serde_json = { workspace = true }
+
+[lints]
+workspace = true

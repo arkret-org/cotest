@@ -42,6 +42,7 @@ mod canonical_fixture;
 mod capability;
 mod capability_relinquish_authoring;
 mod coauth_lifecycle;
+mod content_backup_source;
 mod crypto_hpke;
 mod crypto_signature;
 mod cursor_negative;
@@ -250,6 +251,9 @@ pub use capability_relinquish_authoring::{
     CAPABILITY_RELINQUISH_AUTHORING_ENTRYPOINT, run_capability_relinquish_authoring_suite,
 };
 pub use coauth_lifecycle::run_coauth_account_lifecycle_fixture_suite;
+pub use content_backup_source::{
+    CONTENT_BACKUP_SOURCE_ENTRYPOINT, run_content_backup_source_suite,
+};
 pub use crypto_hpke::{CRYPTO_HPKE_ENTRYPOINT, run_crypto_hpke_suite};
 pub use cursor_negative::{CURSOR_NEGATIVE_ENTRYPOINT, run_cursor_negative_suite};
 pub use cursor_vectors::{
