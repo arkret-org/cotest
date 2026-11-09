@@ -17,6 +17,7 @@
 #![deny(unsafe_code)]
 
 pub mod agent_runtime;
+pub mod content_crypto_fixture;
 pub mod garth_client;
 pub mod mls_wire;
 pub mod operation_observation;

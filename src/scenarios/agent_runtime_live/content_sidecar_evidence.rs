@@ -496,12 +496,15 @@ async fn advance_epoch_material(
         view.mls_context.authority_stream_head,
     )?;
     let update = group.self_update_commit_with_governance_binding(&binding)?;
-    let payload = arkret::MlsCommitPayload::new(
+    let payload = crate::scenarios::mls_lifecycle_live::commit_payload_with_public_material(
+        &controller.client,
+        group,
         base.current_mls_commit_event_ref.clone(),
         base.current_key_access_revision,
         &update,
         binding,
-    )?;
+    )
+    .await?;
     let mut event = controller
         .client
         .author_event(
@@ -526,6 +529,8 @@ async fn advance_epoch_material(
     let submission =
         arkret_models_collaboration::authority_commit::SelfAuthoritySubmitRequestBody::MlsCommit(
             arkret_wire::MlsCommitSubmission {
+                recovery_source: None,
+
                 commit_event: event.clone(),
                 welcomes: vec![],
                 idempotency_key: arkret_wire::UuidV7::new(
@@ -608,33 +613,14 @@ pub(super) async fn controller_message(
     strand: &arkret_wire::StrandId,
 ) -> Result<(Event, Vec<u8>)> {
     let scope = state.event.scope_ref.clone();
-    let header = arkret::EventContentPreEncryptionHeader::reconstruct(
-        "1.0",
-        "application/vnd.arkret.message+json",
-        arkret::EncryptedPayloadScheme::MlsRfc9420,
-        scope.clone(),
-        arkret_wire::EventKind::MessageCreate.as_str(),
-        group.epoch(),
-        state.event.event_id.clone(),
-        group.local_content_sender_domain()?,
-        arkret::EventContentRoutingContext::None,
-    )?;
-    let plaintext = arkret_canonical::canonical_json_bytes(&arkret::ContentBlock::text(
-        "Endpoint-specific actual Sidecar content",
-    ))?;
-    let sealed = arkret::MessageCrypto::encrypt(group, "sidecar-content", header, &plaintext)?;
-    let payload =
-        arkret_models_collaboration::events_payloads::MessageCreatePayload::with_encrypted_content(
-            strand.clone(),
-            "discussion",
-            arkret_models_crypto::MlsEncryptedPayload::new(sealed.payload.to_envelope()?)?,
-        );
+    let content = arkret::ContentBlock::text("Endpoint-specific actual Sidecar content");
+    let plaintext = arkret_canonical::canonical_json_bytes(&content)?;
     let mut event = controller
         .client
         .author_event(
             scope.realm_id().as_str(),
             "ak.message.create",
-            serde_json::to_value(payload)?,
+            json!({"strand_id":strand,"track_name":"discussion","content":content}),
         )
         .await?;
     event.scope_ref = scope;
@@ -642,6 +628,13 @@ pub(super) async fn controller_message(
         &mut event,
         controller.key.to_bytes(),
     )?;
+    let (event, _) = crate::harness::content::seal_device_message(
+        &controller.client,
+        group,
+        &state.event.event_id,
+        event,
+    )
+    .await?;
     crate::scenarios::human_device_producer_live::submit_and_expect_commit(
         &controller.client,
         &controller.account,
@@ -661,56 +654,45 @@ pub(super) async fn controller_message(
     Ok((event, plaintext))
 }
 
-fn agent_message(
+async fn agent_message(
     agent: &AgentRuntimeSession,
     group: &mut arkret::ArkretMlsGroup,
     state: &arkret_wire::CommittedEventFullView,
     strand: &arkret_wire::StrandId,
     grant: &arkret_wire::GrantId,
 ) -> Result<(Event, Vec<u8>)> {
-    let scope = state.event.scope_ref.clone();
-    let header = arkret::EventContentPreEncryptionHeader::reconstruct(
-        "1.0",
-        "application/vnd.arkret.message+json",
-        arkret::EncryptedPayloadScheme::MlsRfc9420,
-        scope.clone(),
-        "ak.message.create",
-        group.epoch(),
-        state.event.event_id.clone(),
-        group.local_content_sender_domain()?,
-        arkret::EventContentRoutingContext::None,
+    let content = arkret::ContentBlock::text("Explicitly granted actual Sidecar reply");
+    let plaintext = arkret_canonical::canonical_json_bytes(&content)?;
+    let event = agent.author_scoped_event(
+        arkret_wire::EventKind::MessageCreate,
+        state.event.scope_ref.clone(),
+        json!({"strand_id":strand,"track_name":"discussion","content":content}),
+        vec![arkret::SemanticRef::new(
+            grant.to_string(),
+            arkret::SEMANTIC_REF_ROLE_AUTHORIZED_BY,
+        )],
     )?;
-    let plaintext = arkret_canonical::canonical_json_bytes(&arkret::ContentBlock::text(
-        "Explicitly granted actual Sidecar reply",
-    ))?;
-    let encrypted = arkret::MessageCrypto::encrypt(group, unique_uuid7(), header, &plaintext)?;
-    let authored = arkret_event_draft::TypedEventDraft::<arkret_wire::event_spec::MessageCreate>::new(
-        scope, ActorId::account(agent.agent_account.clone()),
-        arkret_models_collaboration::events_payloads::MessageCreatePayload::with_encrypted_content(
-            strand.clone(), "discussion", arkret_models_crypto::MlsEncryptedPayload::new(encrypted.payload.to_envelope()?)?,
-        ),
-    )?.with_semantic_ref(arkret_wire::SemanticRef::new(grant.to_string(), arkret_wire::SEMANTIC_REF_ROLE_AUTHORIZED_BY))
-        .author_with_digest_suite(Utc::now(), arkret_canonical::DigestSuite::Sha256)?;
-    Ok((
-        sign(
-            authored,
-            &agent.verification_method,
-            agent.runtime_key.to_bytes(),
-        )?,
-        plaintext,
-    ))
+    let (event, _) =
+        crate::harness::content::seal_agent_message(agent, group, &state.event.event_id, event)
+            .await?;
+    Ok((event, plaintext))
 }
 
-pub(super) fn open_message(group: &mut arkret::ArkretMlsGroup, event: &Event) -> Result<Vec<u8>> {
+pub(super) async fn open_message(
+    client: &TestActorClient,
+    group: &mut arkret::ArkretMlsGroup,
+    event: &Event,
+) -> Result<Vec<u8>> {
     let envelope: arkret::EncryptedEnvelope =
         serde_json::from_value(event.payload["encrypted_content"].clone())?;
     let domain = arkret::mls_basic_credential_identity(event.actual_signer())?;
     let header = envelope.reconstruct_pre_encryption_header(
-        arkret::EncryptedPayloadScheme::MlsRfc9420,
+        arkret::EncryptedPayloadScheme::EpochContentAead,
         event.scope_ref.clone(),
         event.kind.as_str(),
         std::str::from_utf8(&domain)?,
         None,
+        crate::harness::content::original_material(client, group, event, &envelope).await?,
     )?;
     let payload =
         arkret::mls::encrypted_envelope_to_payload_with_verified_header(&envelope, header)?;
@@ -1005,7 +987,8 @@ impl JoinObserver for PendingPayload<'_> {
                 .context("pending full content ceiling")?["capability_grant_refs"]
                 == json!([grant])
         );
-        let (pending_write, _) = agent_message(agent, agent_group, accepted, self.strand, &grant)?;
+        let (pending_write, _) =
+            agent_message(agent, agent_group, accepted, self.strand, &grant).await?;
         {
             use std::io::Write;
             let mut file = std::fs::File::create(durable_state_path)?;
@@ -1457,11 +1440,18 @@ pub async fn run_agent_content_sidecar_production()
         serde_json::from_value(message.payload["encrypted_content"].clone())?;
     let domain = arkret::mls_basic_credential_identity(message.actual_signer())?;
     let header = envelope.reconstruct_pre_encryption_header(
-        arkret::EncryptedPayloadScheme::MlsRfc9420,
+        arkret::EncryptedPayloadScheme::EpochContentAead,
         scope,
         message.kind.as_str(),
         std::str::from_utf8(&domain)?,
         None,
+        crate::harness::content::original_material(
+            &agent.runtime,
+            &agent_group,
+            &message,
+            &envelope,
+        )
+        .await?,
     )?;
     let payload =
         arkret::mls::encrypted_envelope_to_payload_with_verified_header(&envelope, header)?;
@@ -1505,7 +1495,7 @@ pub async fn run_agent_content_sidecar_production()
             == json!([grant])
     );
     let (reply, reply_plaintext) =
-        agent_message(&agent, &mut agent_group, &state, &strand, &grant)?;
+        agent_message(&agent, &mut agent_group, &state, &strand, &grant).await?;
     let outcome: AuthoritySubmitResponseBody = serde_json::from_value(
         expect_json(
             write
@@ -1528,7 +1518,7 @@ pub async fn run_agent_content_sidecar_production()
             .reducer_input()
             == Some(&reply)
     );
-    ensure!(open_message(&mut group, &reply)? == reply_plaintext);
+    ensure!(open_message(&client, &mut group, &reply).await? == reply_plaintext);
     let future_state = advance_epoch_material(
         &controller,
         &agent,
@@ -1548,7 +1538,9 @@ pub async fn run_agent_content_sidecar_production()
             .reducer_input()
             == Some(&future_message)
     );
-    ensure!(open_message(&mut agent_group, &future_message)? == future_plaintext);
+    ensure!(
+        open_message(&agent.runtime, &mut agent_group, &future_message).await? == future_plaintext
+    );
     other_controller_content(
         &deployment,
         &agent,
@@ -1670,7 +1662,8 @@ pub async fn run_agent_content_sidecar_production()
     .await?;
     let revoked = client.sdk().agent_sidecar_get(&sidecar).await?;
     ensure!(revoked.desired_agent_ids.is_empty() && revoked.effective_agent_ids.is_empty());
-    let (denied, _) = agent_message(&agent, &mut agent_group, &future_state, &strand, &grant)?;
+    let (denied, _) =
+        agent_message(&agent, &mut agent_group, &future_state, &strand, &grant).await?;
     let submit = ServiceOperationId::from_wire(ServiceOperationId::SELF_EVENTS_COMMAND_SUBMIT_V1)
         .context("registered self events operation")?;
     ensure!(

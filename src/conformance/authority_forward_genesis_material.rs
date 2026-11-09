@@ -7,7 +7,7 @@
 //! governance Station. The epoch-0 group is a real RFC 9420 group the SDK
 //! creates for that device, and every protocol decision is the SDK's: the
 //! validating `PeerAuthorityForwardEventRequestBody` (material presence by Event
-//! kind and the canonical, bounded member shape of `MlsGenesisMaterial`), the
+//! kind and the canonical, bounded member shape of `MlsGroupStateMaterial`), the
 //! published `peer_submit_request_body` schema, the forwarded producer resolution,
 //! the ref's own digest suite (`verify_digest`), the RFC 9420 public state
 //! (`MlsPublicGroupTracker`) and the group-state-material response binding.
@@ -25,7 +25,7 @@ use arkret::{
     ArkretMlsIdentity, ArkretMlsSigner, MlsEndpointIdentity, MlsGovernanceBindingPayload,
 };
 use arkret_models_collaboration::authority_commit::{
-    AuthorityForwardBranch, MLS_GENESIS_MATERIAL_MAX_BLOB_BYTES, MlsGenesisMaterial,
+    AuthorityForwardBranch, MLS_GROUP_STATE_MATERIAL_MAX_BLOB_BYTES, MlsGroupStateMaterial,
     PeerAuthorityForwardEventRequestBody, PeerAuthoritySubmitRequestBody,
 };
 use arkret_models_collaboration::events_payloads::{
@@ -56,7 +56,7 @@ const FIXTURE: &str = "federation-authority-forward-genesis-material-fixture.jso
 const PEER_REQUEST: &str =
     "schemas/authority-commit-operations.schema.json#/$defs/peer_submit_request_body";
 const MATERIAL_SCHEMA: &str =
-    "schemas/authority-commit-operations.schema.json#/$defs/mls_genesis_material";
+    "schemas/authority-commit-operations.schema.json#/$defs/mls_group_state_material";
 const CIPHER_SUITE: &str = "MLS_128_DHKEMX25519_AES128GCM_SHA256_Ed25519";
 const MEMBER_MAX_ENCODED_CHARS: usize = 5_592_406;
 const RESPONSE_BOUND: usize = 8_388_608;
@@ -178,12 +178,12 @@ fn verify_fixture_identity(fixture: &Value) -> Result<()> {
     ensure!(
         world["cipher_suite"] == CIPHER_SUITE
             && world["member_max_encoded_chars"] == MEMBER_MAX_ENCODED_CHARS
-            && world["member_max_decoded_bytes"] == MLS_GENESIS_MATERIAL_MAX_BLOB_BYTES
+            && world["member_max_decoded_bytes"] == MLS_GROUP_STATE_MATERIAL_MAX_BLOB_BYTES
             && world["group_state_material_response_bound"] == RESPONSE_BOUND,
         "the fixture world no longer states the carrier bounds the SDK enforces"
     );
     ensure!(
-        2 * MLS_GENESIS_MATERIAL_MAX_BLOB_BYTES == RESPONSE_BOUND,
+        2 * MLS_GROUP_STATE_MATERIAL_MAX_BLOB_BYTES == RESPONSE_BOUND,
         "two full members no longer decode to exactly the response bound"
     );
     Ok(())
@@ -548,7 +548,7 @@ impl<'a> CaseRun<'a> {
                 let Some(held) = self
                     .forwarding_blobs
                     .get(blob_ref.as_str())
-                    .filter(|held| held.len() <= MLS_GENESIS_MATERIAL_MAX_BLOB_BYTES)
+                    .filter(|held| held.len() <= MLS_GROUP_STATE_MATERIAL_MAX_BLOB_BYTES)
                 else {
                     return refused(ErrorCode::FailedPrecondition);
                 };
@@ -561,14 +561,16 @@ impl<'a> CaseRun<'a> {
                 }
                 bytes.push(held.clone());
             }
-            Some(MlsGenesisMaterial::from_bytes(&bytes[0], &bytes[1]))
+            Some(MlsGroupStateMaterial::from_bytes(&bytes[0], &bytes[1]))
         } else {
             None
         };
         let unsigned_request = PeerAuthorityForwardEventRequestBody {
+            content_backup_sources: None,
+
             branch: AuthorityForwardBranch::AuthorityForward,
             event_submission: EventAdmissionSubmission::new(event.clone()),
-            mls_genesis_material: material,
+            mls_group_state_material: material,
             producer_device_evidence: None,
             producer_agent_evidence: None,
         };
@@ -578,7 +580,8 @@ impl<'a> CaseRun<'a> {
             .fresh_evidence(event, &unsigned_request)?;
         let request = match PeerAuthorityForwardEventRequestBody::new(
             unsigned_request.event_submission,
-            unsigned_request.mls_genesis_material,
+            unsigned_request.mls_group_state_material,
+            None,
             Some(evidence),
         ) {
             Ok(request) => request,
@@ -646,9 +649,11 @@ impl<'a> CaseRun<'a> {
             other => bail!("unsupported carried override {other:?}"),
         };
         let request = PeerAuthorityForwardEventRequestBody {
+            content_backup_sources: None,
+
             branch: AuthorityForwardBranch::AuthorityForward,
             event_submission: EventAdmissionSubmission::new(event.clone()),
-            mls_genesis_material: material.map(|(group_info, tree)| MlsGenesisMaterial {
+            mls_group_state_material: material.map(|(group_info, tree)| MlsGroupStateMaterial {
                 group_info_base64url: group_info,
                 ratchet_tree_base64url: tree,
             }),
@@ -702,7 +707,7 @@ impl<'a> CaseRun<'a> {
             .verify_forwarded_producer(&request)
             .map_err(Refusal::governance)?;
         let material = request
-            .mls_genesis_material
+            .mls_group_state_material
             .as_ref()
             .ok_or(Refusal::governance(ErrorCode::SchemaViolation))?;
         let payload: MlsGenesisPayload = serde_json::to_value(&event.payload)
@@ -861,7 +866,8 @@ fn material_shape(variant: &Value) -> Result<Value> {
             )?)?
         ])
     };
-    let material = MlsGenesisMaterial::from_bytes(&bytes("group_info")?, &bytes("ratchet_tree")?);
+    let material =
+        MlsGroupStateMaterial::from_bytes(&bytes("group_info")?, &bytes("ratchet_tree")?);
     material.validate()?;
     super::schema_validation_fixture::schema_valid(
         MATERIAL_SCHEMA,

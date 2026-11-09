@@ -8,6 +8,7 @@ publish.workspace = true
 [dependencies]
 anyhow = { workspace = true }
 arkret-canonical = { workspace = true }
+arkret-crypto = { workspace = true, features = ["content-history"] }
 arkret-mls = { workspace = true, features = ["test-utils"] }
 arkret-models-integration = { workspace = true }
 arkret-models-crypto = { workspace = true }

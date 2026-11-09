@@ -86,6 +86,7 @@ pub(crate) async fn join_agent_with_observer(
             "target_agent_key_authorize_event_id":agent.key_authorization,
             "target_keypackage_ref":package.keypackage_ref,
             "requester_account_id":controller.account,"intended_realm_id":realm,
+            "effective_scope":scope,
             "mls_group_id":scope.canonical_mls_group_id()?,"claim_purpose":"realm_membership",
             "required_capabilities":["ak.content.v1"],
             "expires_at":arkret_canonical::format_timestamp_canonical(now+chrono::Duration::minutes(4)),
@@ -170,7 +171,15 @@ pub(crate) async fn join_agent_with_observer(
         &arkret::mls_key_package_record_from_claim(selected)?,
         &binding,
     )?;
-    let payload = arkret::MlsCommitPayload::new(genesis.event_id.clone(), 0, &add.commit, binding)?;
+    let payload = crate::scenarios::mls_lifecycle_live::commit_payload_with_public_material(
+        &controller.client,
+        group,
+        genesis.event_id.clone(),
+        0,
+        &add.commit,
+        binding,
+    )
+    .await?;
     let mut event = controller
         .client
         .author_event(
@@ -218,6 +227,8 @@ pub(crate) async fn join_agent_with_observer(
     let submission =
         arkret_models_collaboration::authority_commit::SelfAuthoritySubmitRequestBody::MlsCommit(
             arkret_wire::MlsCommitSubmission {
+                recovery_source: None,
+
                 commit_event: event.clone(),
                 welcomes: vec![welcome.clone()],
                 idempotency_key: arkret_wire::UuidV7::new(

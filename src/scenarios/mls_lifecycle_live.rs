@@ -699,8 +699,15 @@ async fn run_lifecycle(
         MlsGovernanceBindingPayload::new(scope.clone(), Some(genesis.event_id.clone()), 0, 1, 0)?;
     let claimed_record = claimed_keypackage_record(&claim, &bob)?;
     let add = alice_group.add_member_with_governance_binding(&claimed_record, &add_binding)?;
-    let commit_payload =
-        MlsCommitPayload::new(genesis.event_id.clone(), 0, &add.commit, add_binding)?;
+    let commit_payload = crate::scenarios::mls_lifecycle_live::commit_payload_with_public_material(
+        &alice.client,
+        &alice_group,
+        genesis.event_id.clone(),
+        0,
+        &add.commit,
+        add_binding,
+    )
+    .await?;
     let commit_event = alice
         .client
         .author_event(
@@ -711,6 +718,8 @@ async fn run_lifecycle(
         .await?;
     let welcome = signed_welcome(&alice, &commit_event, &bob, &add.welcome)?;
     let submission = SelfAuthoritySubmitRequestBody::MlsCommit(MlsCommitSubmission {
+        recovery_source: None,
+
         commit_event: commit_event.clone(),
         welcomes: vec![welcome.clone()],
         idempotency_key: arkret_wire::UuidV7::new(fresh_uuid_v7().parse()?)?,
@@ -878,26 +887,20 @@ async fn run_lifecycle(
     );
 
     // Encrypted application content at the accepted epoch reaches Bob.
-    let header = arkret::EventContentPreEncryptionHeader::reconstruct(
-        "1.0",
-        "application/vnd.arkret.message+json",
-        arkret::EncryptedPayloadScheme::MlsRfc9420,
-        scope.clone(),
-        EventKind::MessageCreate.as_str(),
-        1,
-        commit_event.event_id.clone(),
-        alice_group.local_content_sender_domain()?,
-        arkret::EventContentRoutingContext::None,
-    )?;
-    let sealed = arkret::MessageCrypto::encrypt(
+    let original = alice.client.author_event(realm_id.as_str(),EventKind::MessageCreate.as_str(),
+        json!({"strand_id":strand_id,"track_name":"discussion","content":arkret::ContentBlock::text("after Add")}),
+    ).await?;
+    let (_, encrypted) = crate::harness::content::seal_device_message(
+        &alice.client,
         &mut alice_group,
-        "mls-lifecycle-message",
-        header,
-        b"after Add",
-    )?;
+        &commit_event.event_id,
+        original,
+    )
+    .await?;
     ensure!(
-        arkret::MessageCrypto::decrypt(&mut bob_group, &sealed)? == b"after Add",
-        "Bob could not decrypt Alice's message at the accepted epoch"
+        bob_group.decrypt_payload(&encrypted)?
+            == arkret_canonical::canonical_json_bytes(&arkret::ContentBlock::text("after Add"))?,
+        "Bob could not decrypt Alice's content at the accepted epoch"
     );
 
     let api_restart_probe = if let Some(case) = api_case {
@@ -1554,6 +1557,7 @@ pub fn claim_request_to(
         "target_device_ids": [target_device],
         "requester_account_id": requester.account,
         "intended_realm_id": realm_id,
+        "effective_scope": ScopeRef::Realm { realm_id: realm_id.clone() },
         "mls_group_id": mls_group_id,
         "claim_purpose": "realm_membership",
         "required_capabilities": [CONTENT_CAPABILITY],
@@ -1812,27 +1816,16 @@ async fn verify_circle_activation_independence(
         "Circle plaintext refusal changed accepted state"
     );
     assert_second_genesis_refused(member, &genesis, database_url).await?;
-    let header = arkret::EventContentPreEncryptionHeader::reconstruct(
-        "1.0",
-        "application/vnd.arkret.message+json",
-        arkret::EncryptedPayloadScheme::MlsRfc9420,
-        scope,
-        EventKind::MessageCreate.as_str(),
-        private_group.epoch(),
-        genesis.event_id.clone(),
-        private_group.local_content_sender_domain()?,
-        arkret::EventContentRoutingContext::None,
-    )?;
-    let sealed = arkret::MessageCrypto::encrypt(
+    let original = circle_event(&member.client,realm.as_str(),&circle,EventKind::MessageCreate,
+        json!({"strand_id":strand_id,"track_name":"discussion","content":arkret::ContentBlock::text("Circle after activation")}),
+    ).await?;
+    let (encrypted, _) = crate::harness::content::seal_device_message(
+        &member.client,
         &mut private_group,
-        fresh_uuid_v7(),
-        header,
-        &arkret_canonical::canonical_json_bytes(&arkret::ContentBlock::text(
-            "Circle after activation",
-        ))?,
-    )?;
-    let encrypted = circle_event(&member.client, realm.as_str(), &circle, EventKind::MessageCreate,
-        json!({"strand_id":strand_id,"track_name":"discussion","encrypted_content":sealed.payload.to_envelope()?})).await?;
+        &genesis.event_id,
+        original,
+    )
+    .await?;
     let committed = submit_and_expect_commit(
         &member.client,
         &member.account,
@@ -1932,9 +1925,39 @@ pub fn canonical(value: Value) -> Result<Value> {
     )?)
 }
 
-/// Upload one public MLS state Blob, bound to `realm_id` through the
-/// `blob_upload_request_body` form member, and return its content-addressed
-/// ref.
+/// Publish the exact pending epoch's public material before authoring its Commit.
+pub async fn commit_payload_with_public_material(
+    client: &TestActorClient,
+    group: &ArkretMlsGroup,
+    base_group_state_ref: EventId,
+    covers_key_access_revision: u64,
+    commit: &arkret_models_crypto::MlsCommitEnvelope,
+    binding: MlsGovernanceBindingPayload,
+) -> Result<MlsCommitPayload> {
+    let (info, tree) = group.pending_public_group_state_bytes(commit, &binding)?;
+    let realm = group.scope().realm_id();
+    let upload = |bytes: Vec<u8>| async move {
+        let actual = upload_public_blob(client, realm, &bytes).await?;
+        let expected = format!("ak:blob:{}", arkret_canonical::sha256_digest(&bytes));
+        ensure!(
+            actual == expected,
+            "public MLS Blob reference differs from its exact bytes"
+        );
+        arkret_wire::BlobRef::new(actual).map_err(anyhow::Error::from)
+    };
+    let group_info_ref = upload(info).await?;
+    let ratchet_tree_ref = upload(tree).await?;
+    Ok(MlsCommitPayload::new(
+        base_group_state_ref,
+        covers_key_access_revision,
+        commit,
+        binding,
+        group_info_ref,
+        ratchet_tree_ref,
+    )?)
+}
+
+/// Upload one public MLS state Blob bound to its Realm and return its address.
 pub async fn upload_public_blob(
     client: &TestActorClient,
     realm_id: &RealmId,

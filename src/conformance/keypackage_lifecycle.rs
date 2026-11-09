@@ -301,18 +301,22 @@ fn claim_receipt_value(claims: &[Value]) -> Value {
         .and_then(|claim| claim.get("device_id"))
         .and_then(Value::as_str)
         .expect("fixture claim record must carry its exact target device id");
+    let scope = arkret_wire::ScopeRef::Realm {
+        realm_id: RealmId::new("ak:realm:AdkQ-RmB1a8zyc52yl9GWAsodQ_EUle1WAVZqbO7pc19").unwrap(),
+    };
     let request = json!({
         "claim_request_id": "AAAAAAAAAAAAAAAAAAAAAA",
         "target_account_id": {
             "principal_id": "ak:did_core:webvh:z6mkfixture",
             "station_id": "ak:did_core:webvh:z6mkfixtureservice"
         },
-        "intended_realm_id": "ak:realm:AdkQ-RmB1a8zyc52yl9GWAsodQ_EUle1WAVZqbO7pc19",
+        "intended_realm_id": scope.realm_id(),
+        "effective_scope": scope,
         "requester_account_id": {
             "principal_id": "ak:did_core:webvh:z6mkfixture",
             "station_id": "ak:did_core:webvh:z6mkfixtureservice"
         },
-        "mls_group_id": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+        "mls_group_id": scope.canonical_mls_group_id().unwrap(),
         "claim_purpose": "realm_membership",
         "required_capabilities": ["ak.content.v1"],
         "expires_at": "2026-01-01T00:05:00.000Z",
@@ -1369,7 +1373,7 @@ fn self_claim_authorization_idempotency_case(
         &typed.requester_authorization,
     )?;
     tally.check(
-        binding.starts_with(b"ak.keypackage-claim-authorization-v1\n"),
+        binding.starts_with(b"ak.peer-keypackage-claim-authorization-v1\n"),
         || "self-claim authorization uses the wrong signing domain".to_owned(),
     )?;
     let request_digest = arkret_canonical::canonical_sha256(&serde_json::to_value(&typed)?)?;

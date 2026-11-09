@@ -1,5 +1,5 @@
 //! Recipient-produced Add proof must traverse the real cross-Station outbox.
-use arkret::{ArkretMlsGroup, ArkretMlsIdentity, MlsCommitPayload, MlsGovernanceBindingPayload};
+use arkret::{ArkretMlsGroup, ArkretMlsIdentity, MlsGovernanceBindingPayload};
 use arkret_models_collaboration::authority_commit::SelfAuthoritySubmitRequestBody;
 use arkret_models_collaboration::events_payloads::MlsGenesisCreatorLeafAuthority;
 use arkret_models_collaboration::mls_roster_authority::{
@@ -105,7 +105,15 @@ pub(super) async fn exercise(
         &mls::claimed_keypackage_record(&claim.claims[0], bob)?,
         &binding,
     )?;
-    let payload = MlsCommitPayload::new(genesis.event_id.clone(), 0, &add.commit, binding)?;
+    let payload = mls::commit_payload_with_public_material(
+        &alice.client,
+        &group,
+        genesis.event_id.clone(),
+        0,
+        &add.commit,
+        binding,
+    )
+    .await?;
     let event = alice
         .client
         .author_event(
@@ -116,6 +124,8 @@ pub(super) async fn exercise(
         .await?;
     let welcome = mls::signed_welcome(alice, &event, bob, &add.welcome)?;
     let submission = SelfAuthoritySubmitRequestBody::MlsCommit(MlsCommitSubmission {
+        recovery_source: None,
+
         commit_event: event.clone(),
         welcomes: vec![welcome.clone()],
         idempotency_key: arkret_wire::UuidV7::new(mls::fresh_uuid_v7().parse()?)?,

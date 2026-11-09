@@ -685,7 +685,9 @@ fn governance_submit(world: &World, variant: &Value) -> Result<Value> {
 
     let event = world.commit_event(&adds)?;
     let welcomes = world.welcomes(&event, &adds)?;
-    let submission = MlsCommitSubmission {
+    let submission: MlsCommitSubmission = MlsCommitSubmission {
+        recovery_source: None,
+
         commit_event: event.clone(),
         welcomes: welcomes.clone(),
         idempotency_key: UuidV7::new("0199d000-0000-7000-8000-0000000009a1".parse()?)?,

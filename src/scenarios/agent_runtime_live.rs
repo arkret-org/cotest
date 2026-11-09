@@ -257,6 +257,9 @@ pub struct AgentRuntimeSession {
     pub key_authorization: EventId,
     /// The runtime's authenticated client.
     pub runtime: TestActorClient,
+    pub history_custody: arkret_models_crypto::AgentHistoryCustody,
+    pub custody_authorization: EventId,
+    pub history_recipient_public: [u8; 32],
     issuer_request:
         Option<arkret_models_collaboration::session_grants::AgentSessionGrantRequestBody>,
 }
@@ -272,6 +275,9 @@ struct AgentPairedPrincipal {
     runtime_key: SigningKey,
     verification_method: DidUrl,
     key_authorization: EventId,
+    history_custody: arkret_models_crypto::AgentHistoryCustody,
+    custody_authorization: EventId,
+    history_recipient_public: [u8; 32],
     authorization: AgentKeyAuthorizePayload,
 }
 
@@ -388,7 +394,7 @@ impl AgentRuntimeSession {
         let device_seed = principal.device_signing_key.to_bytes();
 
         // The controller's recovery policy is a provisioning prerequisite.
-        ensure_controller_recovery_policy(
+        let history_custody = ensure_controller_recovery_policy(
             controller,
             controller_account,
             principal,
@@ -532,6 +538,7 @@ impl AgentRuntimeSession {
                 arkret_bootstrap::AgentProvisionIntentOptions {
                     controller_station_id: station.clone(),
                     created_at: Utc::now(),
+                    history_custody: history_custody.clone(),
                 },
             )?,
             &device_method,
@@ -854,7 +861,47 @@ impl AgentRuntimeSession {
             .await?;
         }
 
+        let policy: arkret_models_crypto::RecoveryPolicyStatusView = serde_json::from_value(
+            expect_json(
+                controller.get("/_arkret/root/identity/recovery-policy"),
+                StatusCode::OK,
+            )
+            .await?,
+        )?;
+        let summary = policy
+            .active_policy
+            .context("approved controller policy absent")?;
+        ensure!(
+            controller_history_custody(controller_account, &summary)? == history_custody,
+            "controller custody policy changed during Agent approval"
+        );
+        let original = summary
+            .policy
+            .context("approved controller policy original absent")?;
+        let public = original
+            .methods
+            .iter()
+            .filter_map(|method| match method {
+                arkret_models_crypto::RecoveryMethod::RecoveryUnlock { keys } => Some(keys),
+                _ => None,
+            })
+            .flatten()
+            .find(|key| key.backup_hpke.key_agreement_ref == history_custody.recipient_key_ref)
+            .context("approved Agent history recipient absent")?;
+        let bytes = arkret::decode_multibase_base58btc(&public.backup_hpke.public_key_multibase)?;
+        let (codec, prefix) =
+            arkret::decode_multicodec_varint(&bytes).context("backup HPKE multicodec")?;
+        ensure!(
+            codec == 0xec && bytes.len() == prefix + 32,
+            "approved history recipient is not X25519"
+        );
+        let history_recipient_public = bytes[prefix..]
+            .try_into()
+            .map_err(|_| anyhow::anyhow!("backup recipient width"))?;
         Ok(AgentPairedPrincipal {
+            history_custody,
+            custody_authorization: provision_event.event_id.clone(),
+            history_recipient_public,
             controller_account: controller_account.clone(),
             agent_did,
             agent_account,
@@ -877,6 +924,9 @@ impl AgentRuntimeSession {
         evidence: Option<&mut provision_evidence::ProvisionEvidence>,
     ) -> Result<Self> {
         let AgentPairedPrincipal {
+            history_custody,
+            custody_authorization,
+            history_recipient_public,
             controller_account,
             agent_did,
             agent_account,
@@ -943,6 +993,9 @@ impl AgentRuntimeSession {
             runtime_key.clone(),
         )?;
         Ok(Self {
+            history_custody,
+            custody_authorization,
+            history_recipient_public,
             controller_account,
             agent_did,
             agent_account,
@@ -957,14 +1010,70 @@ impl AgentRuntimeSession {
     }
 }
 
+fn controller_history_custody(
+    account: &AccountId,
+    summary: &arkret_models_crypto::RecoveryPolicySummary,
+) -> Result<arkret_models_crypto::AgentHistoryCustody> {
+    summary.validate_shape()?;
+    let policy = summary
+        .policy
+        .as_ref()
+        .context("controller policy original absent")?;
+    policy.validate_shape()?;
+    let now = Utc::now();
+    ensure!(
+        summary.account_id == *account
+            && policy.account_id == *account
+            && policy.policy_id == summary.policy_id
+            && policy.version == summary.version
+            && policy.not_before.is_none_or(|at| at <= now)
+            && policy.expires_at.is_none_or(|at| at > now),
+        "controller policy mismatch"
+    );
+    let mut recipients = policy
+        .methods
+        .iter()
+        .filter_map(|m| match m {
+            arkret_models_crypto::RecoveryMethod::RecoveryUnlock { keys } => Some(keys),
+            _ => None,
+        })
+        .flatten()
+        .filter(|k| {
+            k.not_before <= now
+                && k.expires_at > now
+                && k.revoked_at.is_none_or(|at| at > now)
+                && k.backup_hpke.not_before <= now
+                && k.backup_hpke.expires_at > now
+                && k.backup_hpke.revoked_at.is_none_or(|at| at > now)
+                && k.backup_hpke
+                    .hpke_suites
+                    .contains(&arkret::RecoveryBackupHpkeSuite::X25519AeadChacha20Poly1305V1)
+        });
+    let recipient = recipients
+        .next()
+        .context("controller lacks active backup-HPKE recipient")?;
+    ensure!(
+        recipients.next().is_none(),
+        "controller backup-HPKE recipient is ambiguous"
+    );
+    Ok(arkret_models_crypto::AgentHistoryCustody {
+        custodian_actor_id: ActorId::account(account.clone()),
+        recovery_policy_ref: arkret_models_crypto::RecoveryPolicyRef {
+            policy_id: summary.policy_id.clone(),
+            policy_version: summary.version,
+        },
+        recipient_key_ref: recipient.backup_hpke.key_agreement_ref.clone(),
+    })
+}
+
 /// Reuse the accepted controller prerequisite, or publish it once.
-async fn ensure_controller_recovery_policy(
+pub(crate) async fn ensure_controller_recovery_policy(
     controller: &TestActorClient,
     controller_account: &AccountId,
     principal: &crate::harness::ProvisionedTestPrincipal,
     device_method: &DidUrl,
     trust_domain: &arkret_wire::TrustDomainId,
-) -> Result<()> {
+) -> Result<arkret_models_crypto::AgentHistoryCustody> {
     use ed25519_dalek::Signer as _;
 
     let current: arkret_models_crypto::RecoveryPolicyStatusView = serde_json::from_value(
@@ -979,33 +1088,31 @@ async fn ensure_controller_recovery_policy(
         current.account_id.as_ref() == Some(controller_account),
         "recovery policy reader returned another Account"
     );
-    if let Some(summary) = current.active_policy {
-        let policy = summary
-            .policy
-            .as_ref()
-            .context("accepted controller policy original")?;
-        policy.validate_shape()?;
-        ensure!(
-            &summary.account_id == controller_account
-                && &summary.trust_domain == trust_domain
-                && policy.account_id == summary.account_id
-                && policy.version == summary.version
-                && policy.trust_domain == summary.trust_domain
-                && &policy.signature_proof.verification_method == device_method
-                && policy.expires_at.is_none_or(|at| at > Utc::now())
-                && serde_json::to_value(&policy.methods)? == json!([{"kind":"did_root"}]),
-            "accepted recovery policy differs from this controller fixture prerequisite"
-        );
-        println!("[agent-recovery] accepted_policy_reused=1 new_publication=0");
-        return Ok(());
+    let previous = current.active_policy;
+    if let Some(summary) = &previous {
+        if let Ok(custody) = controller_history_custody(controller_account, summary) {
+            return Ok(custody);
+        }
     }
+    // Fixture-held entropy produces a real 24-word proof/HPKE pair. This is
+    // enrollment for the native Agent custody prerequisite, not a DID restore test.
+    let mnemonic =
+        arkret::identity_root::format_bip39_identity_recovery_mnemonic(&principal.root_key_seed)?;
+    let material =
+        arkret::identity_root::derive_identity_recovery_key_material_from_bip39(&mnemonic, "", 0)?;
+    let issued = arkret::canonical::normalize_timestamp_canonical(Utc::now());
+    let expires = issued + chrono::Duration::days(3650);
+    let proof_ref =
+        DidUrl::new(format!("{}#recovery-proof-0", principal.did)).map_err(anyhow::Error::msg)?;
+    let backup_ref =
+        DidUrl::new(format!("{}#backup-hpke-0", principal.did)).map_err(anyhow::Error::msg)?;
     let policy_id = format!("ak:policy:{}", unique_uuid7());
     let mut policy: arkret_models_crypto::RecoveryPolicy = serde_json::from_value(json!({
         "schema": "ak.schema.recovery_policy.v1",
         "policy_id": policy_id,
         "account_id": controller_account,
-        "version": 1,
-        "supersedes_id": null,
+        "version": previous.as_ref().map_or(1, |p| p.version + 1),
+        "supersedes_id": previous.as_ref().map(|p| &p.policy_id),
         "trust_domain": trust_domain,
         "issued_at": arkret_canonical::format_timestamp_canonical(
             arkret::canonical::normalize_timestamp_canonical(Utc::now())
@@ -1015,7 +1122,14 @@ async fn ensure_controller_recovery_policy(
             "signature_algorithm": "Ed25519",
             "signature": "AA"
         },
-        "methods": [{"kind": "did_root"}]
+        "methods": [{"kind":"recovery_unlock", "keys":[{
+            "verification_method":proof_ref, "public_key_multibase":material.recovery_proof_public_key_multikey,
+            "signature_algorithm":"Ed25519", "not_before":issued, "expires_at":expires,
+            "backup_hpke": {"key_agreement_ref":backup_ref, "key_agreement_algorithm":"X25519",
+                "public_key_multibase":material.backup_hpke_public_key_multikey,
+                "hpke_suites":["ak.hpke_x25519_aead_chacha20poly1305.v1"],
+                "use":"backup_hpke", "not_before":issued, "expires_at":expires}
+        }]}]
     }))?;
     let transcript = arkret_models_crypto::recovery_policy_signature_transcript_bytes(&policy)?;
     policy.signature_proof.signature =
@@ -1053,7 +1167,20 @@ async fn ensure_controller_recovery_policy(
         response.status(),
         response.text().await.unwrap_or_default()
     );
-    Ok(())
+    let accepted: arkret_models_crypto::RecoveryPolicyStatusView = serde_json::from_value(
+        expect_json(
+            controller.get("/_arkret/root/identity/recovery-policy"),
+            StatusCode::OK,
+        )
+        .await?,
+    )?;
+    controller_history_custody(
+        controller_account,
+        accepted
+            .active_policy
+            .as_ref()
+            .context("accepted recovery policy absent")?,
+    )
 }
 
 /// The controller's authenticated private disclosure of the Agent's
@@ -1676,6 +1803,7 @@ async fn run_agent_keypackage_journey(terminal: bool) -> Result<()> {
         "target_agent_verification_method": agent.verification_method,
         "target_agent_key_authorize_event_id": agent.key_authorization,
         "intended_realm_id": realm_id,
+        "effective_scope": ScopeRef::Realm { realm_id: realm_id.clone() },
         "mls_group_id": mls_group_id,
         "claim_purpose": "realm_membership",
         "required_capabilities": ["ak.content.v1"],
@@ -1873,10 +2001,10 @@ async fn run_agent_keypackage_journey(terminal: bool) -> Result<()> {
     );
     claim.claim_request_id = fresh_claim_id()?;
     claim.intended_realm_id = joined_realm.clone();
-    claim.mls_group_id = ScopeRef::Realm {
+    claim.effective_scope = ScopeRef::Realm {
         realm_id: joined_realm.clone(),
-    }
-    .canonical_mls_group_id()?;
+    };
+    claim.mls_group_id = claim.effective_scope.canonical_mls_group_id()?;
     let signing_input = arkret_models_crypto::keypackage_claim_authorization_signing_bytes(
         &claim.unsigned_request(),
         &claim.service_binding,
@@ -2092,8 +2220,15 @@ async fn run_agent_keypackage_journey(terminal: bool) -> Result<()> {
     )?;
     let add_record = arkret::mls_key_package_record_from_claim(&add_claim)?;
     let add = controller_group.add_member_with_governance_binding(&add_record, &add_binding)?;
-    let commit_payload =
-        arkret::MlsCommitPayload::new(genesis.event_id.clone(), 0, &add.commit, add_binding)?;
+    let commit_payload = crate::scenarios::mls_lifecycle_live::commit_payload_with_public_material(
+        &controller,
+        &controller_group,
+        genesis.event_id.clone(),
+        0,
+        &add.commit,
+        add_binding,
+    )
+    .await?;
     let commit_event = controller
         .author_event(
             joined_realm.as_str(),
@@ -2142,6 +2277,8 @@ async fn run_agent_keypackage_journey(terminal: bool) -> Result<()> {
     let submission =
         arkret_models_collaboration::authority_commit::SelfAuthoritySubmitRequestBody::MlsCommit(
             arkret_wire::MlsCommitSubmission {
+                recovery_source: None,
+
                 commit_event: commit_event.clone(),
                 welcomes: vec![welcome.clone()],
                 idempotency_key: arkret_wire::UuidV7::new(unique_uuid7().parse()?)?,
@@ -2566,29 +2703,23 @@ async fn run_agent_keypackage_journey(terminal: bool) -> Result<()> {
 
     // Ordinary encrypted replies use the runtime leaf, while historical signer
     // authorization remains in the independent Agent PCR.
-    let header = arkret::EventContentPreEncryptionHeader::reconstruct(
-        "1.0",
-        "application/vnd.arkret.message+json",
-        arkret::EncryptedPayloadScheme::MlsRfc9420,
-        welcome.effective_scope.clone(),
-        arkret_wire::EventKind::MessageCreate.as_str(),
-        1,
-        commit_event.event_id.clone(),
-        agent_group.local_content_sender_domain()?,
-        arkret::EventContentRoutingContext::None,
-    )?;
     let plaintext =
         arkret::canonical::canonical_json_bytes(&arkret::ContentBlock::text("Agent reply"))?;
-    let sealed =
-        arkret::MessageCrypto::encrypt(&mut agent_group, "agent-reply", header, &plaintext)?;
-    let reply = actor_private_event(
+    let original = actor_private_event(
         arkret_wire::EventKind::MessageCreate,
         &agent.agent_account,
         &joined_realm,
-        json!({"strand_id": strand_id, "track_name": "discussion", "encrypted_content": sealed.payload.to_envelope()?}),
+        json!({"strand_id":strand_id,"track_name":"discussion","content":arkret::ContentBlock::text("Agent reply")}),
         &agent.verification_method,
         agent.runtime_key.to_bytes(),
     )?;
+    let (reply, _) = crate::harness::content::seal_agent_message(
+        &agent,
+        &mut agent_group,
+        &commit_event.event_id,
+        original,
+    )
+    .await?;
     // Resolve the controller's current selection before isolating missing
     // message authority. A session overlay is not this action-time selection.
     let selection = arkret::ParticipationReplaceRequestBody {
@@ -2738,11 +2869,18 @@ async fn run_agent_keypackage_journey(terminal: bool) -> Result<()> {
     )?;
     let sender = arkret::mls_basic_credential_identity(accepted.event.actual_signer())?;
     let header = received.reconstruct_pre_encryption_header(
-        arkret::EncryptedPayloadScheme::MlsRfc9420,
+        arkret::EncryptedPayloadScheme::EpochContentAead,
         accepted.event.scope_ref.clone(),
         accepted.event.kind.as_str(),
         std::str::from_utf8(&sender)?,
         None,
+        crate::harness::content::original_material(
+            &controller,
+            &controller_group,
+            &accepted.event,
+            &received,
+        )
+        .await?,
     )?;
     let received =
         arkret::mls::encrypted_envelope_to_payload_with_verified_header(&received, header)?;

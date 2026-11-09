@@ -1,6 +1,6 @@
 //! Independent accepted members on one Station through real MLS repairs.
 
-use arkret::{MlsCommitPayload, MlsGovernanceBindingPayload};
+use arkret::MlsGovernanceBindingPayload;
 use arkret_models_collaboration::authority_commit::SelfAuthoritySubmitRequestBody;
 use arkret_wire::{AuthoritySubmitResponseBody, MlsCommitSubmission, MlsGroupValue};
 
@@ -167,6 +167,8 @@ async fn accept_mls(
     welcomes: Vec<arkret_wire::MlsWelcomeDelivery>,
 ) -> Result<arkret_wire::CommittedEventFullView> {
     let submission = SelfAuthoritySubmitRequestBody::MlsCommit(MlsCommitSubmission {
+        recovery_source: None,
+
         commit_event: event.clone(),
         welcomes,
         idempotency_key: arkret_wire::UuidV7::new(fresh_uuid_v7().parse()?)?,
@@ -254,12 +256,15 @@ pub(crate) async fn exercise(
         dirty.current_key_access_revision,
     )?;
     let repair = alice_group.self_update_commit_with_governance_binding(&repair_binding)?;
-    let repair_payload = MlsCommitPayload::new(
+    let repair_payload = crate::scenarios::mls_lifecycle_live::commit_payload_with_public_material(
+        &alice.client,
+        alice_group,
         dirty.current_mls_commit_event_ref.clone(),
         dirty.current_key_access_revision,
         &repair,
         repair_binding,
-    )?;
+    )
+    .await?;
     let repair_event = alice
         .client
         .author_event(
@@ -292,12 +297,15 @@ pub(crate) async fn exercise(
         &claimed_keypackage_record(&claim.claims[0], &carol)?,
         &binding,
     )?;
-    let payload = MlsCommitPayload::new(
+    let payload = crate::scenarios::mls_lifecycle_live::commit_payload_with_public_material(
+        &alice.client,
+        alice_group,
         base.current_mls_commit_event_ref.clone(),
         base.current_key_access_revision,
         &add.commit,
         binding,
-    )?;
+    )
+    .await?;
     let event = alice
         .client
         .author_event(
@@ -470,12 +478,15 @@ pub(crate) async fn exercise(
         std::slice::from_ref(&bob.actor),
         &remove_binding,
     )?;
-    let remove_payload = MlsCommitPayload::new(
+    let remove_payload = crate::scenarios::mls_lifecycle_live::commit_payload_with_public_material(
+        &alice.client,
+        alice_group,
         state.clone(),
         dirty.current_key_access_revision,
         &remove.commit,
         remove_binding,
-    )?;
+    )
+    .await?;
     let remove_event = alice
         .client
         .author_event(

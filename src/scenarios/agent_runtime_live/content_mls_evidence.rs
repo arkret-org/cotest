@@ -193,7 +193,10 @@ pub async fn run_agent_content_mls_production() -> Result<crate::conformance::Su
             .reducer_input()
             == Some(&first)
     );
-    ensure!(super::content_sidecar_evidence::open_message(&mut recipient, &first)? == first_plain);
+    ensure!(
+        super::content_sidecar_evidence::open_message(&read, &mut recipient, &first).await?
+            == first_plain
+    );
     let recipient_path = journal.path().join("recipient-epoch-one.json");
     durable_group(&mut recipient, &recipient_path)?;
     let base = current(&scene, &scope).await?;
@@ -210,12 +213,17 @@ pub async fn run_agent_content_mls_production() -> Result<crate::conformance::Su
         .author_event(
             scene.realm.as_str(),
             "ak.mls.commit",
-            serde_json::to_value(arkret::MlsCommitPayload::new(
-                base.current_mls_commit_event_ref.clone(),
-                base.current_key_access_revision,
-                &update,
-                binding,
-            )?)?,
+            serde_json::to_value(
+                crate::scenarios::mls_lifecycle_live::commit_payload_with_public_material(
+                    &client,
+                    &group,
+                    base.current_mls_commit_event_ref.clone(),
+                    base.current_key_access_revision,
+                    &update,
+                    binding,
+                )
+                .await?,
+            )?,
         )
         .await?;
     durable_group(
@@ -225,6 +233,8 @@ pub async fn run_agent_content_mls_production() -> Result<crate::conformance::Su
     let submission =
         arkret_models_collaboration::authority_commit::SelfAuthoritySubmitRequestBody::MlsCommit(
             arkret_wire::MlsCommitSubmission {
+                recovery_source: None,
+
                 commit_event: event.clone(),
                 welcomes: vec![],
                 idempotency_key: arkret_wire::UuidV7::new(
@@ -253,7 +263,9 @@ pub async fn run_agent_content_mls_production() -> Result<crate::conformance::Su
     let before = recipient.export_state_record()?;
     let durable = std::fs::read(&recipient_path)?;
     ensure!(
-        super::content_sidecar_evidence::open_message(&mut recipient, &target).is_err(),
+        super::content_sidecar_evidence::open_message(&read, &mut recipient, &target)
+            .await
+            .is_err(),
         "epoch-one recipient exposed actual epoch-two payload"
     );
     let after = recipient.export_state_record()?;
@@ -285,7 +297,10 @@ pub async fn run_agent_content_mls_production() -> Result<crate::conformance::Su
         &mut recipient,
         &journal.path().join("recipient-epoch-two.json"),
     )?;
-    ensure!(super::content_sidecar_evidence::open_message(&mut recipient, &target)? == plaintext);
+    ensure!(
+        super::content_sidecar_evidence::open_message(&read, &mut recipient, &target).await?
+            == plaintext
+    );
     println!(
         "[agent-payload-mls] actual_coauth_membership_read=1 ordinary_realm_scope=1 real_add_welcome_durable_consume=1 epoch_one_payload_decrypted=1 actual_epoch_two_ciphertext_cached=1 stale_private_epoch_returns_no_plaintext=1 complete_crypto_state_and_durable_checkpoint_unchanged=1 actual_accepted_update_installed_and_durable=1 exact_original_ciphertext_decrypted=1"
     );

@@ -231,7 +231,7 @@ pub(super) async fn join(
         "target_agent_id":agent_session.agent_account.principal_id,
         "target_agent_verification_method":agent_session.verification_method,
         "target_agent_key_authorize_event_id":agent_session.key_authorization,
-        "intended_realm_id":realm,"mls_group_id":scope.canonical_mls_group_id()?,
+        "intended_realm_id":realm,"effective_scope":scope,"mls_group_id":scope.canonical_mls_group_id()?,
         "claim_purpose":"realm_membership","required_capabilities":["ak.content.v1"],
         "target_keypackage_ref":package.keypackage_ref,
         "expires_at":arkret_canonical::format_timestamp_canonical(Utc::now()+chrono::Duration::minutes(4)),
@@ -293,12 +293,17 @@ pub(super) async fn join(
         &agent_session.controller_account,
         "ak.mls.commit",
         scope.clone(),
-        serde_json::to_value(arkret::MlsCommitPayload::new(
-            genesis.event_id.clone(),
-            0,
-            &add.commit,
-            binding,
-        )?)?,
+        serde_json::to_value(
+            crate::scenarios::mls_lifecycle_live::commit_payload_with_public_material(
+                controller_client,
+                &controller,
+                genesis.event_id.clone(),
+                0,
+                &add.commit,
+                binding,
+            )
+            .await?,
+        )?,
         Utc::now(),
         Some(&founded.create_ref),
     )?;
@@ -337,7 +342,9 @@ pub(super) async fn join(
         arkret_canonical::normalize_timestamp_canonical(Utc::now()),
         &principal.device_signing_key,
     )?;
-    let submission = arkret_wire::MlsCommitSubmission {
+    let submission: arkret_wire::MlsCommitSubmission = arkret_wire::MlsCommitSubmission {
+        recovery_source: None,
+
         commit_event: commit.clone(),
         welcomes: vec![welcome.clone()],
         idempotency_key: arkret_wire::UuidV7::new(unique_uuid7().parse()?)?,

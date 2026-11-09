@@ -1359,6 +1359,8 @@ fn verify_mls_atomic_submission(fixture: &Value) -> Result<()> {
         welcome_delivery(circle_stream, &commit_event, 2)?,
     ];
     let submission = MlsCommitSubmission {
+        recovery_source: None,
+
         commit_event: commit_event.clone(),
         welcomes: welcomes.clone(),
         idempotency_key: idempotency_key()?,

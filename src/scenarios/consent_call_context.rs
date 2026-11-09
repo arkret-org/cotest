@@ -335,16 +335,23 @@ impl ConsentCallContext {
                 .author_event(
                     realm.as_str(),
                     EventKind::MlsCommit.as_str(),
-                    canonical(serde_json::to_value(arkret::MlsCommitPayload::new(
-                        base.current_mls_commit_event_ref.clone(),
-                        base.current_key_access_revision,
-                        &add.commit,
-                        binding,
-                    )?)?)?,
+                    canonical(serde_json::to_value(
+                        crate::scenarios::mls_lifecycle_live::commit_payload_with_public_material(
+                            &caller.client,
+                            &caller_group,
+                            base.current_mls_commit_event_ref.clone(),
+                            base.current_key_access_revision,
+                            &add.commit,
+                            binding,
+                        )
+                        .await?,
+                    )?)?,
                 )
                 .await?;
             let welcome = signed_welcome(&caller, &event, member, &add.welcome)?;
-            let request=arkret_models_collaboration::authority_commit::SelfAuthoritySubmitRequestBody::MlsCommit(MlsCommitSubmission {commit_event:event.clone(),welcomes:vec![welcome.clone()],idempotency_key:arkret_wire::UuidV7::new(fresh_uuid_v7().parse()?)?});
+            let request=arkret_models_collaboration::authority_commit::SelfAuthoritySubmitRequestBody::MlsCommit(MlsCommitSubmission {
+    recovery_source: None,
+commit_event:event.clone(),welcomes:vec![welcome.clone()],idempotency_key:arkret_wire::UuidV7::new(fresh_uuid_v7().parse()?)?});
             let (status, outcome) = post_json(&caller.client, &request).await?;
             ensure!(
                 status == reqwest::StatusCode::OK,

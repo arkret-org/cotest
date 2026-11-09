@@ -231,30 +231,22 @@ pub(super) async fn exercise(mut material: Materials<'_>) -> Result<()> {
         control.claims.len() == 1
             && control.claims[0].actor_id == ActorId::account(material.agent.agent_account.clone())
     );
-    let header = arkret::EventContentPreEncryptionHeader::reconstruct(
-        "1.0",
-        "application/vnd.arkret.message+json",
-        arkret::EncryptedPayloadScheme::MlsRfc9420,
+    let original = material.agent.author_scoped_event(
+        arkret_wire::EventKind::MessageCreate,
         ScopeRef::Realm {
             realm_id: material.realm.clone(),
         },
-        arkret_wire::EventKind::MessageCreate.as_str(),
-        material.group.epoch(),
-        material.state_ref.clone(),
-        material.group.local_content_sender_domain()?,
-        arkret::EventContentRoutingContext::None,
+        json!({"strand_id":material.strand,"track_name":"discussion",
+            "content":arkret::ContentBlock::text("terminal must refuse this new reply")}),
+        Vec::new(),
     )?;
-    let encrypted = arkret::MessageCrypto::encrypt(
+    let (event, _) = crate::harness::content::seal_agent_message(
+        material.agent,
         material.group,
-        "terminal-frozen-reply",
-        header,
-        &arkret_canonical::canonical_json_bytes(&arkret::ContentBlock::text(
-            "terminal must refuse this new reply",
-        ))?,
-    )?;
-    let event = material.agent.author_scoped_event(arkret_wire::EventKind::MessageCreate,
-        ScopeRef::Realm { realm_id: material.realm.clone() },
-        json!({"strand_id":material.strand,"track_name":"discussion","encrypted_content":encrypted.payload.to_envelope()?}), Vec::new())?;
+        &material.state_ref,
+        original,
+    )
+    .await?;
     let durable = tempfile::NamedTempFile::new()?;
     std::fs::write(
         durable.path(),

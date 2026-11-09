@@ -184,11 +184,14 @@ impl RotationAuthor {
         seed: [u8; 32],
     ) -> Result<KeyBackup> {
         let mut envelope = KeyBackup {
+            custodian_actor_id: None,
+            custody_authorization_ref: None,
+
             backup_id: BackupId::new(backup_id.to_owned())?,
             actor_id: ActorId::account(self.account.clone()),
             device_id: Some(self.principal.device_id.clone()),
             backup_kind: BackupKind::SecretStorage,
-            mixed_secret_storage: false,
+            mixed_secret_storage: None,
             backup_version: "kb_1".to_owned(),
             created_at: arkret::canonical::normalize_timestamp_canonical(Utc::now()),
             updated_at: None,
@@ -214,6 +217,9 @@ impl RotationAuthor {
                 aead_aad_extensions: Default::default(),
             },
             contents: vec![SecretStorageContentIndex {
+                root_context: None,
+                root_ref: None,
+
                 item_kind: SecretStorageItemKind::MlsGroupSecretsBackupKey,
                 secret_id: "mls_group_secrets_backup_key".to_owned(),
             }],
@@ -222,11 +228,13 @@ impl RotationAuthor {
             ciphertext_digest: Hash::new(arkret_canonical::sha256_digest(ciphertext))?,
             plaintext_commitment: None,
             signature_proof: KeyBackupSignatureProof {
-                device_id: self.principal.device_id.clone(),
+                agent_authorization_event_ref: None,
+
+                device_id: Some(self.principal.device_id.clone()),
                 verification_method: self.method.clone(),
                 signature_algorithm: KeyBackupSignatureAlgorithm::Ed25519,
                 signature: Base64UrlString::new("AA").map_err(anyhow::Error::msg)?,
-                device_authorize_event_id: self.principal.founding_authorize_event_id.clone(),
+                device_authorize_event_id: Some(self.principal.founding_authorize_event_id.clone()),
             },
             retention: None,
             series_id: series.clone(),
@@ -1569,6 +1577,10 @@ async fn unlock(
                     "/_arkret/self/keys/backups/{backup_id}/unlock-challenge"
                 ))
                 .json(&KeysBackupsIssueUnlockChallengeRequestBody {
+                    subject_actor_id: None,
+                    custody_authorization_ref: None,
+                    content_history: None,
+
                     request_id: Base64UrlString::new(request_id).map_err(anyhow::Error::msg)?,
                 }),
             StatusCode::OK,
@@ -1576,6 +1588,10 @@ async fn unlock(
         .await?,
     )?;
     let mut proof = KeyBackupUnlockProof {
+        subject_actor_id: None,
+        custody_authorization_ref: None,
+        content_history: None,
+
         schema: KeyBackupUnlockProof::SCHEMA.to_owned(),
         authority: KeyBackupUnlockAuthority::CurrentDevice {
             challenge_id: challenge.challenge_id,
@@ -1627,6 +1643,10 @@ async fn recovery_session_unlock(
     };
 
     let mut proof = KeyBackupUnlockProof {
+        subject_actor_id: None,
+        custody_authorization_ref: None,
+        content_history: None,
+
         schema: KeyBackupUnlockProof::SCHEMA.to_owned(),
         authority: KeyBackupUnlockAuthority::RecoverySession {
             recovery_session_id: session.recovery_session_id.clone(),

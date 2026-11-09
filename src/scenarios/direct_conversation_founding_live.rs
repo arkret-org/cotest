@@ -36,7 +36,7 @@
 use std::time::{Duration, Instant};
 
 use anyhow::{Context as _, Result, bail, ensure};
-use arkret::{ArkretMlsGroup, MlsCommitPayload, MlsGovernanceBindingPayload};
+use arkret::{ArkretMlsGroup, MlsGovernanceBindingPayload};
 use arkret_models_collaboration::authority_commit::{
     AggregateAcceptanceStatus, CommittedEventSubmission,
     DirectConversationFoundingAcceptanceOutcome,
@@ -95,7 +95,6 @@ const FOUNDING_UNIT_ROLE: &str = "direct_conversation_founding_unit";
 const BINDING_ROLE: &str = "direct_conversation_binding";
 const BOOTSTRAP_SOURCE: &str = "ak.authority.direct_conversation_bootstrap_participant.v1";
 const PARTICIPANT_SOURCE: &str = "ak.authority.direct_conversation_participant.v1";
-const MESSAGE_CONTENT_TYPE: &str = "application/vnd.arkret.message+json";
 const PARTICIPANT_DENIED: &str = "direct_conversation_participant_authority_denied";
 
 /// The authority source and critical ref a Direct Conversation Event names.
@@ -649,30 +648,30 @@ async fn issued_locator(member: &Member) -> Result<PrincipalLocator> {
 
 /// One MLS ciphertext Message sealed by `group` at its current epoch over
 /// `group_state_ref`, the committed winning state that epoch was reached by.
-fn sealed_message(
+async fn sealed_message(
+    member: &Member,
     group: &mut ArkretMlsGroup,
     scope: &ScopeRef,
     strand_id: &StrandId,
-    group_state_ref: &EventId,
+    reference: &EventId,
     plaintext: &[u8],
-) -> Result<Value> {
-    let header = arkret::EventContentPreEncryptionHeader::reconstruct(
-        "1.0",
-        MESSAGE_CONTENT_TYPE,
-        arkret::EncryptedPayloadScheme::MlsRfc9420,
-        scope.clone(),
+    refs: Vec<SemanticRef>,
+    cites: Cites<'_>,
+) -> Result<Event> {
+    let original = authored(
+        member,
         arkret_wire::event_kind_str::MESSAGE_CREATE,
-        group.epoch(),
-        group_state_ref.clone(),
-        group.local_content_sender_domain()?,
-        arkret::EventContentRoutingContext::None,
+        scope.clone(),
+        json!({"strand_id":strand_id,"track_name":"discussion",
+            "content":arkret::ContentBlock::text(std::str::from_utf8(plaintext)?)}),
+        refs,
+        cites,
     )?;
-    let sealed = arkret::MessageCrypto::encrypt(group, fresh_uuid_v7(), header, plaintext)?;
-    Ok(json!({
-        "strand_id": strand_id,
-        "track_name": "discussion",
-        "encrypted_content": sealed.payload.to_envelope()?,
-    }))
+    Ok(
+        crate::harness::content::seal_device_message(&member.client, group, reference, original)
+            .await?
+            .0,
+    )
 }
 
 /// Read `event_id` as `reader` sees it committed and decrypt it with the
@@ -698,20 +697,27 @@ async fn open_committed_message(
             .context("the committed Message is MLS ciphertext")?,
     )?;
     let header = envelope.reconstruct_pre_encryption_header(
-        arkret::EncryptedPayloadScheme::MlsRfc9420,
+        arkret::EncryptedPayloadScheme::EpochContentAead,
         scope.clone(),
         arkret_wire::event_kind_str::MESSAGE_CREATE,
         sender_domain,
         None,
+        crate::harness::content::original_material(&reader.client, group, event, &envelope).await?,
     )?;
     let payload = arkret::encrypted_envelope_to_payload_with_verified_header(&envelope, header)?;
-    Ok(arkret::MessageCrypto::decrypt(
+    let bytes = arkret::MessageCrypto::decrypt(
         group,
         &arkret::EncryptedMessage {
             message_id: event_id.to_string(),
             payload,
         },
-    )?)
+    )?;
+    let block: serde_json::Value = serde_json::from_slice(&bytes)?;
+    Ok(block["body"]
+        .as_str()
+        .context("Direct message is not text")?
+        .as_bytes()
+        .to_vec())
 }
 
 /// The peer holds the entire founding stream even though `since_join` keeps
@@ -1710,20 +1716,17 @@ async fn run(
     let genesis_ref = mls_genesis.event_id.clone();
 
     // Provisional: only the founder sends, under the bootstrap source.
-    let provisional = authored(
+    let provisional = sealed_message(
         &alice,
-        arkret_wire::event_kind_str::MESSAGE_CREATE,
-        scope.clone(),
-        sealed_message(
-            &mut alice_group,
-            &scope,
-            &strand_id,
-            &genesis_ref,
-            b"before Bob joins",
-        )?,
+        &mut alice_group,
+        &scope,
+        &strand_id,
+        &genesis_ref,
+        b"before Bob joins",
         Vec::new(),
         Cites::Bootstrap(&create_ref),
-    )?;
+    )
+    .await?;
     expect_committed(&submit(&alice, &provisional).await?, &provisional)?;
     let bob_early = authored(
         &bob,
@@ -1781,17 +1784,24 @@ async fn run(
         &alice,
         arkret_wire::event_kind_str::MLS_COMMIT,
         scope.clone(),
-        serde_json::to_value(MlsCommitPayload::new(
-            genesis_ref.clone(),
-            0,
-            &add.commit,
-            add_binding,
-        )?)?,
+        serde_json::to_value(
+            crate::scenarios::mls_lifecycle_live::commit_payload_with_public_material(
+                &alice.client,
+                &alice_group,
+                genesis_ref.clone(),
+                0,
+                &add.commit,
+                add_binding,
+            )
+            .await?,
+        )?,
         Vec::new(),
         Cites::Bootstrap(&create_ref),
     )?;
     let welcome = signed_welcome(&alice, &add_event, &bob, &add.welcome)?;
     let submission = SelfAuthoritySubmitRequestBody::MlsCommit(MlsCommitSubmission {
+        recovery_source: None,
+
         commit_event: add_event.clone(),
         welcomes: vec![welcome.clone()],
         idempotency_key: arkret_wire::UuidV7::new(fresh_uuid_v7().parse()?)?,
@@ -2064,20 +2074,17 @@ async fn run(
         Cites::Bootstrap(&create_ref),
     )?;
     expect_rejected(&bob, &wrong_state, "direct_conversation_binding_invalid").await?;
-    let late_provisional = authored(
+    let late_provisional = sealed_message(
         &alice,
-        arkret_wire::event_kind_str::MESSAGE_CREATE,
-        scope.clone(),
-        sealed_message(
-            &mut alice_group,
-            &scope,
-            &strand_id,
-            &add_ref,
-            b"provisional is over",
-        )?,
+        &mut alice_group,
+        &scope,
+        &strand_id,
+        &add_ref,
+        b"provisional is over",
         Vec::new(),
         Cites::Bootstrap(&create_ref),
-    )?;
+    )
+    .await?;
     expect_rejected(&alice, &late_provisional, PARTICIPANT_DENIED).await?;
     let bob_binding = authored(
         &bob,
@@ -2165,14 +2172,17 @@ async fn run(
             .await?;
     }
     let bob_plaintext = b"hello, Alice".to_vec();
-    let bob_message = authored(
+    let bob_message = sealed_message(
         &bob,
-        arkret_wire::event_kind_str::MESSAGE_CREATE,
-        scope.clone(),
-        sealed_message(&mut bob_group, &scope, &strand_id, &add_ref, &bob_plaintext)?,
+        &mut bob_group,
+        &scope,
+        &strand_id,
+        &add_ref,
+        &bob_plaintext,
         Vec::new(),
         Cites::Participant(&bob_binding.event_id),
-    )?;
+    )
+    .await?;
     let blocked_dm_sender = if observe_dm_receipt {
         let observation = crate::conformance::shared_submission::observed_authored_shared_message(
             &bob.client,
@@ -2201,20 +2211,17 @@ async fn run(
                 &provisional.event_id,
             )
             .await?;
-        let unblocked_dm_message = authored(
+        let unblocked_dm_message = sealed_message(
             &bob,
-            arkret_wire::event_kind_str::MESSAGE_CREATE,
-            scope.clone(),
-            sealed_message(
-                &mut bob_group,
-                &scope,
-                &strand_id,
-                &add_ref,
-                b"after Alice unblocks",
-            )?,
+            &mut bob_group,
+            &scope,
+            &strand_id,
+            &add_ref,
+            b"after Alice unblocks",
             Vec::new(),
             Cites::Participant(&bob_binding.event_id),
-        )?;
+        )
+        .await?;
         let unblocked_dm_sender =
             crate::conformance::shared_submission::observed_authored_shared_message(
                 &bob.client,
@@ -2275,20 +2282,17 @@ async fn run(
             );
             wait_contact_state(&alice, &bob.account, arkret::ContactState::Tombstoned).await?;
             wait_contact_state(&bob, &alice.account, arkret::ContactState::Tombstoned).await?;
-            let refused = authored(
+            let refused = sealed_message(
                 &bob,
-                arkret_wire::event_kind_str::MESSAGE_CREATE,
-                scope.clone(),
-                sealed_message(
-                    &mut bob_group,
-                    &scope,
-                    &strand_id,
-                    &add_ref,
-                    b"Contact terminal refused this request",
-                )?,
+                &mut bob_group,
+                &scope,
+                &strand_id,
+                &add_ref,
+                b"Contact terminal refused this request",
                 Vec::new(),
                 Cites::Participant(&bob_binding.event_id),
-            )?;
+            )
+            .await?;
             expect_rejected(&bob, &refused, PARTICIPANT_DENIED).await?;
             observer
                 .context("client observation requires an explicit observer")?
@@ -2316,20 +2320,17 @@ async fn run(
             == bob_plaintext,
         "Alice did not decrypt Bob's committed Message"
     );
-    let alice_message = authored(
+    let alice_message = sealed_message(
         &alice,
-        arkret_wire::event_kind_str::MESSAGE_CREATE,
-        scope.clone(),
-        sealed_message(
-            &mut alice_group,
-            &scope,
-            &strand_id,
-            &add_ref,
-            b"hello, Bob",
-        )?,
+        &mut alice_group,
+        &scope,
+        &strand_id,
+        &add_ref,
+        b"hello, Bob",
         Vec::new(),
         Cites::Participant(&bob_binding.event_id),
-    )?;
+    )
+    .await?;
     expect_committed(&submit(&alice, &alice_message).await?, &alice_message)?;
     ensure!(
         open_committed_message(&bob, &mut bob_group, &scope, &alice_message.event_id).await?
@@ -2360,20 +2361,17 @@ async fn run(
     }
 
     // A binding closes bootstrap authorization for later Messages.
-    let bootstrap_after = authored(
+    let bootstrap_after = sealed_message(
         &alice,
-        arkret_wire::event_kind_str::MESSAGE_CREATE,
-        scope.clone(),
-        sealed_message(
-            &mut alice_group,
-            &scope,
-            &strand_id,
-            &add_ref,
-            b"stale source",
-        )?,
+        &mut alice_group,
+        &scope,
+        &strand_id,
+        &add_ref,
+        b"stale source",
         Vec::new(),
         Cites::Bootstrap(&create_ref),
-    )?;
+    )
+    .await?;
     expect_rejected(&alice, &bootstrap_after, PARTICIPANT_DENIED).await?;
 
     // Registered precedence on double matches: a third-party invite is also

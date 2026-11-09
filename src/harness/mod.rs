@@ -15,6 +15,7 @@ use serde_json::{Value, json};
 
 mod assertions;
 mod client;
+pub mod content;
 mod event_builder;
 mod invite_delivery;
 mod native_session;

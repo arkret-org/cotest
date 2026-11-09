@@ -1,6 +1,6 @@
 //! Native KeyPackage lifecycle with real issued members and a restored durable MLS snapshot.
 use anyhow::Result;
-use arkret::{ArkretMlsGroup, MlsCommitPayload, MlsGovernanceBindingPayload};
+use arkret::{ArkretMlsGroup, MlsGovernanceBindingPayload};
 use arkret_models_collaboration::authority_commit::SelfAuthoritySubmitRequestBody;
 use arkret_models_collaboration::device_messages::DeviceMessagesAcknowledgementRequestBody;
 use arkret_models_collaboration::events_payloads::MlsGenesisCreatorLeafAuthority;
@@ -159,10 +159,12 @@ async fn run_with_phase(phase: &FailurePhase) -> Result<()> {
         phase.mark("mls_add_welcome", line!());
         let add_binding=MlsGovernanceBindingPayload::new(scope.clone(),Some(genesis.event_id.clone()),0,1,0)?;
         let add=alice_group.add_member_with_governance_binding(&mls::claimed_keypackage_record(claim,&bob)?,&add_binding)?;
-        let payload=MlsCommitPayload::new(genesis.event_id.clone(),0,&add.commit,add_binding)?;
+        let payload=mls::commit_payload_with_public_material(&alice.client,&alice_group,genesis.event_id.clone(),0,&add.commit,add_binding).await?;
         let commit_event=alice.client.author_event(realm.as_str(),EventKind::MlsCommit.as_str(),mls::canonical(serde_json::to_value(payload)?)?).await?;
         let welcome=mls::signed_welcome(&alice,&commit_event,&bob,&add.welcome)?;
-        let submission=SelfAuthoritySubmitRequestBody::MlsCommit(MlsCommitSubmission { commit_event:commit_event.clone(),welcomes:vec![welcome.clone()],idempotency_key:arkret_wire::UuidV7::new(mls::fresh_uuid_v7().parse()?)? });
+        let submission=SelfAuthoritySubmitRequestBody::MlsCommit(MlsCommitSubmission {
+    recovery_source: None,
+ commit_event:commit_event.clone(),welcomes:vec![welcome.clone()],idempotency_key:arkret_wire::UuidV7::new(mls::fresh_uuid_v7().parse()?)? });
         let accepted_genesis=mls::accepted_full_view(&alice.client,&genesis.event_id).await?;
         let accepted=expect_json(alice.client.post("/_arkret/self/events").json(&submission),reqwest::StatusCode::OK).await?;
         let committed=mls::accepted_full_view(&alice.client,&commit_event.event_id).await?;

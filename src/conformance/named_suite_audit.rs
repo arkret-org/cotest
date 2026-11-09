@@ -169,7 +169,7 @@ const REVIEWED_APPLET_DEVICE_SCOPE_CASES: [&str; 15] = [
     "sidecar",
 ];
 
-const RUNNERS: [(&str, Runner); 59] = [
+const RUNNERS: [(&str, Runner); 60] = [
     (
         "ak.suite.realm_invite_link.proofs.v1",
         Runner::Cases(super::run_realm_invite_link_proof_suite),

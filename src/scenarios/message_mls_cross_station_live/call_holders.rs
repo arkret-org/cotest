@@ -95,12 +95,15 @@ pub(super) async fn add_other(
         &claimed_keypackage_record(&claim.claims[0], other)?,
         &binding,
     )?;
-    let payload = MlsCommitPayload::new(
+    let payload = crate::scenarios::mls_lifecycle_live::commit_payload_with_public_material(
+        &sender.client,
+        sender_group,
         base.current_mls_commit_event_ref.clone(),
         base.current_key_access_revision,
         &add.commit,
         binding,
-    )?;
+    )
+    .await?;
     let event = sender
         .client
         .author_event(
@@ -111,6 +114,8 @@ pub(super) async fn add_other(
         .await?;
     let welcome = signed_welcome(sender, &event, other, &add.welcome)?;
     let submission = SelfAuthoritySubmitRequestBody::MlsCommit(MlsCommitSubmission {
+        recovery_source: None,
+
         commit_event: event.clone(),
         welcomes: vec![welcome.clone()],
         idempotency_key: arkret_wire::UuidV7::new(fresh_uuid_v7().parse()?)?,

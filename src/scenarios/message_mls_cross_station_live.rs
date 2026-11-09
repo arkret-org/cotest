@@ -3,7 +3,7 @@
 //! Messages without requiring a remote high-risk MLS grant.
 
 use anyhow::{Context, Result, ensure};
-use arkret::{ArkretMlsGroup, MlsCommitPayload, MlsGovernanceBindingPayload};
+use arkret::{ArkretMlsGroup, MlsGovernanceBindingPayload};
 use arkret_models_collaboration::authority_commit::SelfAuthoritySubmitRequestBody;
 use arkret_models_collaboration::events_payloads::message::MessageCreatePayload;
 use arkret_wire::{
@@ -179,38 +179,26 @@ pub(crate) async fn submit_and_open_content(
     scope: ScopeRef,
 ) -> Result<arkret_wire::RealmCommit> {
     let plaintext = arkret_canonical::canonical_json_bytes(&content)?;
-    let before = sender_group.export_state_record()?.serialized_state;
-    let header = arkret::EventContentPreEncryptionHeader::reconstruct(
-        "1.0",
-        "application/vnd.arkret.message+json",
-        arkret::EncryptedPayloadScheme::MlsRfc9420,
-        scope.clone(),
-        EventKind::MessageCreate.as_str(),
-        sender_group.epoch(),
-        state_ref.clone(),
-        sender_group.local_content_sender_domain()?,
-        arkret::EventContentRoutingContext::None,
-    )?;
-    let sealed = arkret::MessageCrypto::encrypt(sender_group, fresh_uuid_v7(), header, &plaintext)?;
-    let state_after = sender_group.export_state_record()?;
-    ensure!(
-        before != state_after.serialized_state,
-        "encryption did not advance the sender state"
-    );
-    // Deserialize at the envelope boundary into the SDK's closed payload type.
-    let payload: MessageCreatePayload = serde_json::from_value(serde_json::json!({
-        "strand_id": strand, "track_name": "discussion", "encrypted_content": sealed.payload.to_envelope()?,
-    }))?;
     let mut event = sender
         .client
         .author_event(
             realm.as_str(),
             EventKind::MessageCreate.as_str(),
-            canonical(serde_json::to_value(payload)?)?,
+            canonical(
+                serde_json::json!({"strand_id":strand,"track_name":"discussion","content":content}),
+            )?,
         )
         .await?;
     event.scope_ref = scope.clone();
     crate::harness::refresh_typed_event_proof_with_signing_seed(&mut event, sender.key.to_bytes())?;
+    let (event, _) = crate::harness::content::seal_device_message(
+        &sender.client,
+        sender_group,
+        state_ref,
+        event,
+    )
+    .await?;
+    let state_after = sender_group.export_state_record()?;
     let frozen =
         garth::FrozenMessageSubmission::from_signed_request(garth::MessageSubmitRequestBody {
             submission: arkret_wire::EventAdmissionSubmission::new(event.clone()),
@@ -276,11 +264,18 @@ pub(crate) async fn submit_and_open_content(
         &view.event.actor_id,
     )?)?;
     let header = envelope.reconstruct_pre_encryption_header(
-        arkret::EncryptedPayloadScheme::MlsRfc9420,
+        arkret::EncryptedPayloadScheme::EpochContentAead,
         scope,
         EventKind::MessageCreate.as_str(),
         sender_domain,
         None,
+        crate::harness::content::original_material(
+            &receiver.client,
+            receiver_group,
+            &view.event,
+            &envelope,
+        )
+        .await?,
     )?;
     let payload = arkret::encrypted_envelope_to_payload_with_verified_header(&envelope, header)?;
     let opened = arkret::MessageCrypto::decrypt(
@@ -490,36 +485,24 @@ async fn run_at_two_stations(
         submit_and_expect_commit(&alice.client, &alice.account, ALICE_DEVICE, &genesis).await?;
     ensure_commit_signed_by(&genesis_commit, x)?;
     install_bindings(&mut alice_group, &[&alice]).await?;
-    let stale_header = arkret::EventContentPreEncryptionHeader::reconstruct(
-        "1.0",
-        "application/vnd.arkret.message+json",
-        arkret::EncryptedPayloadScheme::MlsRfc9420,
-        scope.clone(),
-        EventKind::MessageCreate.as_str(),
-        0,
-        genesis.event_id.clone(),
-        alice_group.local_content_sender_domain()?,
-        arkret::EventContentRoutingContext::None,
-    )?;
-    let stale_sealed = arkret::MessageCrypto::encrypt(
-        &mut alice_group,
-        fresh_uuid_v7(),
-        stale_header,
-        &arkret_canonical::canonical_json_bytes(&arkret::ContentBlock::text("epoch zero intent"))?,
-    )?;
-    let stale_payload: MessageCreatePayload = serde_json::from_value(serde_json::json!({
-        "strand_id": strand,
-        "track_name": "discussion",
-        "encrypted_content": stale_sealed.payload.to_envelope()?,
-    }))?;
     let stale_event = alice
         .client
         .author_event(
             &realm,
             EventKind::MessageCreate.as_str(),
-            canonical(serde_json::to_value(stale_payload)?)?,
+            canonical(
+                serde_json::json!({"strand_id":strand,"track_name":"discussion",
+            "content":arkret::ContentBlock::text("epoch zero intent")}),
+            )?,
         )
         .await?;
+    let (stale_event, _) = crate::harness::content::seal_device_message(
+        &alice.client,
+        &mut alice_group,
+        &genesis.event_id,
+        stale_event,
+    )
+    .await?;
     let stale =
         garth::FrozenMessageSubmission::from_signed_request(garth::MessageSubmitRequestBody {
             submission: arkret_wire::EventAdmissionSubmission::new(stale_event.clone()),
@@ -530,7 +513,15 @@ async fn run_at_two_stations(
         &claimed_keypackage_record(&claim.claims[0], &bob)?,
         &binding,
     )?;
-    let payload = MlsCommitPayload::new(genesis.event_id.clone(), 0, &add.commit, binding)?;
+    let payload = crate::scenarios::mls_lifecycle_live::commit_payload_with_public_material(
+        &alice.client,
+        &alice_group,
+        genesis.event_id.clone(),
+        0,
+        &add.commit,
+        binding,
+    )
+    .await?;
     let commit_event = alice
         .client
         .author_event(
@@ -541,6 +532,8 @@ async fn run_at_two_stations(
         .await?;
     let welcome = signed_welcome(&alice, &commit_event, &bob, &add.welcome)?;
     let submission = SelfAuthoritySubmitRequestBody::MlsCommit(MlsCommitSubmission {
+        recovery_source: None,
+
         commit_event: commit_event.clone(),
         welcomes: vec![welcome.clone()],
         idempotency_key: arkret_wire::UuidV7::new(fresh_uuid_v7().parse()?)?,

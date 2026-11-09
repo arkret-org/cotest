@@ -564,11 +564,7 @@ pub fn run_key_backup_unlock_proof_vector() -> Result<()> {
     {
         bail!("key backup plaintext metadata does not match the envelope");
     }
-    if plaintext
-        .items
-        .iter()
-        .any(|item| item.secret_base64url.as_str().is_empty() || item.validate().is_err())
-    {
+    if plaintext.items.iter().any(|item| item.validate().is_err()) {
         bail!("plaintext keybag item carried an invalid or empty secret");
     }
     Ok(())

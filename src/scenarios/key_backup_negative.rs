@@ -242,6 +242,9 @@ fn backup_body(
     let (signing_seed, verification_method) =
         crate::harness::event_signing_identity_for_device(&actor.actor, device_id);
     let mut backup = KeyBackup {
+        custodian_actor_id: None,
+        custody_authorization_ref: None,
+
         backup_id: BackupId::new(backup_id.to_owned())?,
         actor_id: arkret_wire::ActorId::account(arkret_wire::AccountId::new(
             actor_id.clone(),
@@ -249,7 +252,7 @@ fn backup_body(
         )),
         device_id: Some(DeviceId::new(device_id.to_owned())?),
         backup_kind: BackupKind::SecretStorage,
-        mixed_secret_storage: false,
+        mixed_secret_storage: None,
         backup_version: "kb_1".to_owned(),
         created_at,
         updated_at: None,
@@ -277,6 +280,9 @@ fn backup_body(
             aead_aad_extensions: Default::default(),
         },
         contents: vec![SecretStorageContentIndex {
+            root_context: None,
+            root_ref: None,
+
             item_kind: SecretStorageItemKind::MlsGroupSecretsBackupKey,
             secret_id: "mls_group_secrets_backup_key".to_owned(),
         }],
@@ -286,11 +292,13 @@ fn backup_body(
         )?,
         plaintext_commitment: None,
         signature_proof: KeyBackupSignatureProof {
-            device_id: DeviceId::new(device_id.to_owned())?,
+            agent_authorization_event_ref: None,
+
+            device_id: Some(DeviceId::new(device_id.to_owned())?),
             verification_method,
             signature_algorithm: KeyBackupSignatureAlgorithm::Ed25519,
             signature: Base64UrlString::new("AA").map_err(|error| anyhow!(error))?,
-            device_authorize_event_id: principal.founding_authorize_event_id.clone(),
+            device_authorize_event_id: Some(principal.founding_authorize_event_id.clone()),
         },
         retention: None,
         series_id: BackupSeriesId::new(backup_id.replacen("ak:backup:", "ak:backup_series:", 1))?,

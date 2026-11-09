@@ -397,6 +397,9 @@ impl World {
             target_account_id,
             requester_account_id: Some(self.alice.clone()),
             intended_realm_id: self.realm_id.clone(),
+            effective_scope: arkret_wire::ScopeRef::Realm {
+                realm_id: self.realm_id.clone(),
+            },
             mls_group_id: self.mls_group_id()?,
             claim_purpose: PeerKeyPackageClaimPurpose::RealmMembership,
             required_capabilities: required,
@@ -796,7 +799,12 @@ fn add_commit(world: &World, keypackage: &MlsKeyPackageRecord, seed: u8) -> Resu
     let binding =
         MlsGovernanceBindingPayload::new(world.scope.clone(), Some(event_id(GENESIS)), 0, 1, 0)?;
     let add = group.add_member_with_governance_binding(keypackage, &binding)?;
-    let payload = MlsCommitPayload::new(event_id(GENESIS), 0, &add.commit, binding)?;
+    let (info, tree) = cotest_test_support::content_crypto_fixture::pending_public_refs(
+        &group,
+        &add.commit,
+        &binding,
+    )?;
+    let payload = MlsCommitPayload::new(event_id(GENESIS), 0, &add.commit, binding, info, tree)?;
     let method = format!(
         "did:web:alice.example#{}",
         world

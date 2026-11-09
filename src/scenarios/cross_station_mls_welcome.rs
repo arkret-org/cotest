@@ -25,7 +25,7 @@
 use std::time::{Duration, Instant};
 
 use anyhow::{Context, Result, bail, ensure};
-use arkret::{ArkretMlsGroup, MlsCommitPayload, MlsEndpointIdentity, MlsGovernanceBindingPayload};
+use arkret::{ArkretMlsGroup, MlsEndpointIdentity, MlsGovernanceBindingPayload};
 use arkret_models_collaboration::authority_commit::SelfAuthoritySubmitRequestBody;
 use arkret_models_collaboration::device_messages::DeviceMessagesAcknowledgementRequestBody;
 use arkret_models_collaboration::events_payloads::MlsGenesisCreatorLeafAuthority;
@@ -295,6 +295,8 @@ async fn submit_mls_commit(
     welcome: &MlsWelcomeDelivery,
 ) -> Result<arkret_wire::RealmCommit> {
     let submission = SelfAuthoritySubmitRequestBody::MlsCommit(MlsCommitSubmission {
+        recovery_source: None,
+
         commit_event: commit_event.clone(),
         welcomes: vec![welcome.clone()],
         idempotency_key: arkret_wire::UuidV7::new(fresh_uuid_v7().parse()?)?,
@@ -356,7 +358,15 @@ async fn forwarded_add(
         &claimed_keypackage_record(&outcome.claims[0], added)?,
         &binding,
     )?;
-    let payload = MlsCommitPayload::new(base.clone(), 0, &add.commit, binding)?;
+    let payload = crate::scenarios::mls_lifecycle_live::commit_payload_with_public_material(
+        &adder.client,
+        adder_group,
+        base.clone(),
+        0,
+        &add.commit,
+        binding,
+    )
+    .await?;
     let commit_event = adder
         .client
         .author_event(
@@ -920,7 +930,15 @@ async fn cross_station_mls_attest_add_direct_run() -> Result<()> {
         &claimed_keypackage_record(&claim.claims[0], &carol)?,
         &binding,
     )?;
-    let payload = MlsCommitPayload::new(genesis.event_id.clone(), 0, &add.commit, binding)?;
+    let payload = crate::scenarios::mls_lifecycle_live::commit_payload_with_public_material(
+        &alice.client,
+        &alice_group,
+        genesis.event_id.clone(),
+        0,
+        &add.commit,
+        binding,
+    )
+    .await?;
     let commit_event = alice
         .client
         .author_event(

@@ -475,7 +475,7 @@ pub(crate) async fn circle_mls_fixture(
     y: &crate::harness::ArkretServer,
     realm: &RealmId,
 ) -> Result<CircleMlsFixture> {
-    use arkret::{MlsCommitPayload, MlsGovernanceBindingPayload};
+    use arkret::MlsGovernanceBindingPayload;
     use arkret_models_collaboration::authority_commit::SelfAuthoritySubmitRequestBody;
     use arkret_wire::{AuthoritySubmitResponseBody, EventKind, MlsCommitSubmission};
 
@@ -539,16 +539,23 @@ pub(crate) async fn circle_mls_fixture(
         alice,
         &scope,
         EventKind::MlsCommit,
-        canonical(serde_json::to_value(MlsCommitPayload::new(
-            genesis.event_id.clone(),
-            0,
-            &add.commit,
-            add_binding,
-        )?)?)?,
+        canonical(serde_json::to_value(
+            crate::scenarios::mls_lifecycle_live::commit_payload_with_public_material(
+                &alice.client,
+                &alice_group,
+                genesis.event_id.clone(),
+                0,
+                &add.commit,
+                add_binding,
+            )
+            .await?,
+        )?)?,
     )
     .await?;
     let welcome = signed_welcome(alice, &commit_event, bob, &add.welcome)?;
     let submission = SelfAuthoritySubmitRequestBody::MlsCommit(MlsCommitSubmission {
+        recovery_source: None,
+
         commit_event: commit_event.clone(),
         welcomes: vec![welcome.clone()],
         idempotency_key: arkret_wire::UuidV7::new(fresh_uuid_v7().parse()?)?,

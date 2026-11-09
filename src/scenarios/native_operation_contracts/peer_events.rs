@@ -102,6 +102,7 @@ pub(super) async fn exercise(
             PeerAuthorityForwardEventRequestBody::new(
                 submission.clone(),
                 None,
+                None,
                 Some(evidence.clone()),
             )?,
         );

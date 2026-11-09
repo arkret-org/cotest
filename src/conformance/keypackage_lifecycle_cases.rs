@@ -195,6 +195,7 @@ fn accepted_commit(
     base: &EventId,
     envelope: &arkret::MlsCommitEnvelope,
     seed: u8,
+    group: &ArkretMlsGroup,
 ) -> Result<arkret_wire::CommittedEventFullView> {
     let binding = arkret::MlsGovernanceBindingPayload::new(
         scope.clone(),
@@ -203,7 +204,10 @@ fn accepted_commit(
         envelope.epoch,
         0,
     )?;
-    let payload = arkret::MlsCommitPayload::new(base.clone(), 0, envelope, binding)?;
+    let (info, tree) = cotest_test_support::content_crypto_fixture::pending_public_refs(
+        group, envelope, &binding,
+    )?;
+    let payload = arkret::MlsCommitPayload::new(base.clone(), 0, envelope, binding, info, tree)?;
     let event = arkret::TypedEventDraft::<arkret::event_spec::MlsCommit>::new(
         scope.clone(),
         author.clone(),
@@ -659,6 +663,9 @@ fn peer_claim_double_authorization_privacy_case(case: &Value, tally: &mut Tally)
     let source = required_str(case, "source_id")?;
     let destination = required_str(case, "destination_id")?;
     let signed_at = "2026-09-26T00:00:00.000Z";
+    let scope = arkret_wire::ScopeRef::Realm {
+        realm_id: serde_json::from_value(case["intended_realm_id"].clone())?,
+    };
     let body = |destination_id: &str,
                 last_resort_allowed: Option<bool>|
      -> Result<arkret_models_crypto::KeyPackagesClaimRequestBody> {
@@ -668,7 +675,8 @@ fn peer_claim_double_authorization_privacy_case(case: &Value, tally: &mut Tally)
             "target_device_ids": ["ak:device:0196419b-0000-7000-8000-000000000002"],
             "requester_account_id": case["requester_account_id"],
             "intended_realm_id": case["intended_realm_id"],
-            "mls_group_id": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+            "effective_scope": scope,
+            "mls_group_id": scope.canonical_mls_group_id()?,
             "claim_purpose": required_str(case, "claim_purpose")?,
             "required_capabilities": ["ak.content.v1"],
             "expires_at": "2026-09-26T00:04:00.000Z",
@@ -1085,6 +1093,7 @@ fn welcome_add_commit_and_claim_record_binding_case(case: &Value, tally: &mut Ta
         &genesis,
         &winning_add.commit,
         0x61,
+        &winner_group,
     )?;
     let delivery = welcome_for(&winning_add.welcome, &recipient, &winning)?;
     tally.check(
@@ -1104,6 +1113,7 @@ fn welcome_add_commit_and_claim_record_binding_case(case: &Value, tally: &mut Ta
         &genesis,
         &losing_add.commit,
         0x71,
+        &loser_group,
     )?;
     let circle_scope = ScopeRef::Circle {
         realm_id: arkret_wire::RealmId::new(FIXTURE_REALM.to_owned())?,
@@ -1119,6 +1129,7 @@ fn welcome_add_commit_and_claim_record_binding_case(case: &Value, tally: &mut Ta
         &genesis,
         &winning_add.commit,
         0x81,
+        &winner_group,
     )?;
 
     let join = |delivery: &MlsWelcomeDelivery, accepted: &arkret_wire::CommittedEventFullView| {

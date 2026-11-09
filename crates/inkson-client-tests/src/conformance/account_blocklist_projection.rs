@@ -2587,42 +2587,17 @@ async fn authored_encrypted_blocklist_message(
     accepted_group: &arkret_wire::EventId,
     sender_group: &mut arkret::ArkretMlsGroup,
 ) -> Result<arkret_wire::Event> {
-    let body = arkret_canonical::canonical_json_bytes(&arkret::ContentBlock::text(
-        "retained MLS message",
-    ))?;
-    let header = arkret::EventContentPreEncryptionHeader::reconstruct(
-        "1.0",
-        "application/vnd.arkret.message+json",
-        arkret::EncryptedPayloadScheme::MlsRfc9420,
-        arkret_wire::ScopeRef::Realm {
-            realm_id: realm.clone(),
-        },
-        arkret_wire::EventKind::MessageCreate.as_str(),
-        sender_group.epoch(),
-        accepted_group.clone(),
-        sender_group.local_content_sender_domain()?,
-        arkret::EventContentRoutingContext::None,
-    )?;
-    let sealed = arkret::MessageCrypto::encrypt(
+    let original = sender.client.author_event(realm.as_str(),arkret::EventKind::MessageCreate.as_str(),
+        json!({"strand_id":strand,"track_name":"discussion","content":arkret::ContentBlock::text("retained MLS message")}),
+    ).await?;
+    Ok(cotest::harness::content::seal_device_message(
+        &sender.client,
         sender_group,
-        crate::scenarios::mls_lifecycle_live::fresh_uuid_v7(),
-        header,
-        &body,
-    )?;
-    let payload: arkret_models_collaboration::events_payloads::message::MessageCreatePayload =
-        serde_json::from_value(json!({
-            "strand_id": strand,
-            "track_name": "discussion",
-            "encrypted_content": sealed.payload.to_envelope()?,
-        }))?;
-    sender
-        .client
-        .author_event(
-            realm.as_str(),
-            arkret_wire::EventKind::MessageCreate.as_str(),
-            serde_json::to_value(payload)?,
-        )
-        .await
+        accepted_group,
+        original,
+    )
+    .await?
+    .0)
 }
 
 #[expect(

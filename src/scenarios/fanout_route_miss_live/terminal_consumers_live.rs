@@ -109,11 +109,13 @@ pub async fn run() -> Result<()> {
             };
             let mut peer_request = PeerAuthoritySubmitRequestBody::AuthorityForwardEvent(
                 PeerAuthorityForwardEventRequestBody {
+                    content_backup_sources: None,
+
                     branch: AuthorityForwardBranch::AuthorityForward,
                     event_submission: submission,
                     producer_device_evidence: Some(forward_evidence.clone()),
                     producer_agent_evidence: None,
-                    mls_genesis_material: None,
+                    mls_group_state_material: None,
                 },
             );
             let body_digest =

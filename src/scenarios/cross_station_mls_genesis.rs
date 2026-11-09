@@ -13,7 +13,7 @@
 //!    outside the Realm, are not found.
 //! 3. Bob uploads the epoch-0 GroupInfo and ratchet tree to Y bound to the Realm (Eve's Realm-bound
 //!    upload is `capability_denied`) and submits his Genesis there. Y forwards it with
-//!    `mls_genesis_material`, X verifies the content addresses and the RFC 9420 public state,
+//!    `mls_group_state_material`, X verifies the content addresses and the RFC 9420 public state,
 //!    commits it under its own signature and replicates the Commit back to Y.
 //! 4. X serves the exact two Blobs through `ak.peer.mls.read.group_state_material.v1` to Y; Bob
 //!    also reads through `ak.self.mls.read.group_state_material.v1` across Stations, Alice reads

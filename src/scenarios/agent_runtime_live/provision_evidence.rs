@@ -700,6 +700,7 @@ impl ProvisionEvidence {
                 arkret_bootstrap::AgentProvisionIntentOptions {
                     controller_station_id: account_id.station_id.clone(),
                     created_at: Utc::now(),
+                    history_custody: arkret_models_collaboration::events_payloads::agent::AgentProvisionPayload::try_from(provision_event)?.history_custody,
                 },
             )?,
             &method,

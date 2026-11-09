@@ -111,12 +111,18 @@ pub async fn run() -> Result<()> {
     // Structurally valid ciphertext and exact accepted replacement references.
     // The asserted MLS state is deliberately not authoritative: the closed
     // content/heads shape must fail before an opaque ciphertext can enter poll admission.
-    let encrypted = EncryptedEnvelope {
-        version: "1.0".to_owned(),
-        content_type: "application/vnd.arkret.message+json".to_owned(),
-        encryption_context: EncryptedEnvelopeEncryptionContext::standard(0, poll.event_id.clone()),
-        ciphertext: "Y2lwaGVydGV4dA".to_owned(),
-    };
+    let fixture =
+        arkret_schema_conformance::spec_json_artifact("fixtures/content-history-fixture.json")?;
+    // Negative admission fixture: no native MLS state or root publication is asserted.
+    let mut encrypted: EncryptedEnvelope =
+        serde_json::from_value(fixture["kat"]["envelope"].clone())?;
+    let EncryptedEnvelopeEncryptionContext::EpochContent {
+        epoch,
+        group_state_ref,
+        ..
+    } = &mut encrypted.encryption_context;
+    *epoch = 0;
+    *group_state_ref = poll.event_id.clone();
     let invalid = alice
         .author_event(
             &realm,

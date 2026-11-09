@@ -196,6 +196,9 @@ fn rotation_plan(
     let principal_id = arkret_wire::project_did_to_core_id(principal)?;
     let device_id = DeviceId::new(device_id.to_owned())?;
     let mut envelope = KeyBackup {
+        custodian_actor_id: None,
+        custody_authorization_ref: None,
+
         backup_id: binding.new_backups[0].backup_id.clone(),
         actor_id: ActorId::account(AccountId::new(
             principal_id,
@@ -203,7 +206,7 @@ fn rotation_plan(
         )),
         device_id: Some(device_id.clone()),
         backup_kind: BackupKind::SecretStorage,
-        mixed_secret_storage: false,
+        mixed_secret_storage: None,
         backup_version: "kb_1".to_owned(),
         created_at: arkret::canonical::normalize_timestamp_canonical(Utc::now()),
         updated_at: None,
@@ -229,6 +232,9 @@ fn rotation_plan(
             aead_aad_extensions: Default::default(),
         },
         contents: vec![SecretStorageContentIndex {
+            root_context: None,
+            root_ref: None,
+
             item_kind: SecretStorageItemKind::MlsGroupSecretsBackupKey,
             secret_id: "mls_group_secrets_backup_key".to_owned(),
         }],
@@ -237,12 +243,14 @@ fn rotation_plan(
         ciphertext_digest: Hash::new(arkret_canonical::sha256_digest(ciphertext))?,
         plaintext_commitment: None,
         signature_proof: KeyBackupSignatureProof {
-            device_id: device_id.clone(),
+            agent_authorization_event_ref: None,
+
+            device_id: Some(device_id.clone()),
             verification_method: DidUrl::new(format!("{principal}#{device_id}"))
                 .map_err(anyhow::Error::msg)?,
             signature_algorithm: KeyBackupSignatureAlgorithm::Ed25519,
             signature: Base64UrlString::new("AA").map_err(anyhow::Error::msg)?,
-            device_authorize_event_id: device_authorize_event_id.clone(),
+            device_authorize_event_id: Some(device_authorize_event_id.clone()),
         },
         retention: None,
         series_id: binding.new_series_id.clone(),

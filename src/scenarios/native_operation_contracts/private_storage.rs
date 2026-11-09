@@ -90,15 +90,25 @@ pub(super) async fn run() -> Result<()> {
         let deletion_base=format!("/_arkret/self/keys/backups/{}",deletion_envelope.backup_id);
         let deletion_stored=expect_json(client.put(&deletion_base).header("Idempotency-Key",arkret_identifiers::new_prefixed_uuid7("ak:request:")).json(&deletion_envelope),reqwest::StatusCode::OK).await?;
         ensure!(deletion_stored["status"]=="accepted","inactive deletion envelope was not accepted");
-        let listing=client.sdk().list_key_backups(&KeyBackupsListQuery { series_id:None,backup_kind:None,cursor:None,limit:None }).await?;
+        let listing=client.sdk().list_key_backups(&KeyBackupsListQuery {
+    agent_id: None,
+ series_id:None,backup_kind:None,cursor:None,limit:None }).await?;
         let author=crate::scenarios::security_rotation_live::RotationAuthor::from_client(client)?;
         let pointer=author.pointer(&envelope.series_id,1,Vec::new(),&listing.active_series.authority_commit_id)?;
         crate::scenarios::human_device_producer_live::submit_and_expect_commit(client,&deployment.account,principal.device_id.as_str(),&pointer).await?;
         let accepted_pointer=crate::scenarios::mls_lifecycle_live::accepted_full_view(client,&pointer.event_id).await?;
-        let challenge_request = KeysBackupsIssueUnlockChallengeRequestBody { request_id:encoded(&entropy()?)? };
+        let challenge_request = KeysBackupsIssueUnlockChallengeRequestBody {
+    subject_actor_id: None,
+    custody_authorization_ref: None,
+    content_history: None,
+ request_id:encoded(&entropy()?)? };
         let challenge: KeysBackupsUnlockChallenge = serde_json::from_value(expect_json(client.post(&format!("{base}/unlock-challenge")).json(&challenge_request), reqwest::StatusCode::OK).await?)?;
         ensure!(challenge.account_id==deployment.account && challenge.backup_id==envelope.backup_id && challenge.requesting_device_id==principal.device_id && challenge.ciphertext_digest==envelope.ciphertext_digest, "unlock challenge changed its accepted target");
-        let mut proof = KeyBackupUnlockProof { schema:KeyBackupUnlockProof::SCHEMA.into(), authority:KeyBackupUnlockAuthority::CurrentDevice { challenge_id:challenge.challenge_id.clone(),nonce:challenge.nonce.clone() },
+        let mut proof = KeyBackupUnlockProof {
+    subject_actor_id: None,
+    custody_authorization_ref: None,
+    content_history: None,
+ schema:KeyBackupUnlockProof::SCHEMA.into(), authority:KeyBackupUnlockAuthority::CurrentDevice { challenge_id:challenge.challenge_id.clone(),nonce:challenge.nonce.clone() },
             account_id:challenge.account_id.clone(),requesting_device_id:challenge.requesting_device_id.clone(),backup_id:challenge.backup_id.clone(),backup_kind:envelope.backup_kind,series_id:challenge.series_id.clone(),ciphertext_digest:challenge.ciphertext_digest.clone(),challenge:challenge.challenge.clone(),service_id:challenge.service_id.clone(),audience:challenge.audience.clone(),issued_at:challenge.issued_at,expires_at:challenge.expires_at,
             signature_proof:KeyBackupUnlockSignatureProof { verification_method:method.clone(),signature_algorithm:KeyBackupSignatureAlgorithm::Ed25519,signature:encoded(&[0u8;64])? } };
         proof.signature_proof.signature=encoded(&principal.device_signing_key.sign(&proof.signing_payload_bytes()?).to_bytes())?;
@@ -106,7 +116,7 @@ pub(super) async fn run() -> Result<()> {
         let unlocked:KeyBackup=serde_json::from_value(expect_json(client.post(&format!("{base}/unlock")).json(&request),reqwest::StatusCode::OK).await?)?;
         ensure!(serde_json::to_value(&unlocked)?==serde_json::to_value(&envelope)?, "unlock changed the accepted encrypted envelope");
         let plaintext=decrypt_key_backup_envelope(passphrase.as_bytes(), &unlocked)?;
-        ensure!(plaintext.items.len()==1 && plaintext.items[0].secret_base64url==encoded(secret.as_ref())?, "real backup could not restore its retained secret");
+        ensure!(plaintext.items.len()==1 && matches!(&plaintext.items[0], arkret_models_crypto::SecretStorageEntry::Secret(item) if item.secret_base64url == encoded(secret.as_ref())?), "real backup could not restore its retained secret");
         let database=fixture.server.owned_database_url().context("failure injection requires the scenario-owned isolated database")?.to_owned();
         let before_database=database.clone();
         let id=envelope.backup_id.to_string();

@@ -61,8 +61,24 @@ fn accepted(
     add: &MlsMemberAdditionArtifacts,
     binding: MlsGovernanceBindingPayload,
     position: u64,
+    public_material: (Vec<u8>, Vec<u8>),
 ) -> CommittedEventFullView {
-    let payload = MlsCommitPayload::new(base.clone(), 0, &add.commit, binding).unwrap();
+    let reference = |bytes: &[u8]| {
+        arkret_wire::BlobRef::new(format!(
+            "ak:blob:{}",
+            arkret_canonical::sha256_digest(bytes)
+        ))
+        .unwrap()
+    };
+    let payload = MlsCommitPayload::new(
+        base.clone(),
+        0,
+        &add.commit,
+        binding,
+        reference(&public_material.0),
+        reference(&public_material.1),
+    )
+    .unwrap();
     let serde_json::Value::Object(payload) = serde_json::to_value(payload).unwrap() else {
         unreachable!("an MLS Commit payload is an object")
     };
@@ -153,16 +169,58 @@ fn encrypt(
     plaintext: &[u8],
     seed: u8,
 ) -> arkret_models_crypto::EncryptedPayload {
+    use arkret_models_crypto::{
+        ContentContext, ContentEncryptionAlgorithm, ContentProtection, ContentPurpose,
+        ContentRootContext, EventContentMaterial,
+    };
+    let reference = EventId::from_digest(arkret_canonical::DigestSuite::Sha256, [seed; 32]);
+    let root_context = ContentRootContext {
+        effective_scope: scope.clone(),
+        genesis_event_ref: reference.clone(),
+        epoch: group.epoch(),
+        group_state_ref: reference.clone(),
+        cipher_suite: group.group_ciphersuite_canonical_id().unwrap().to_owned(),
+        encryption_backup_strategy: arkret_wire::EncryptionBackupStrategy::EpochContentRoots,
+        backup_strategy_ref: reference.clone(),
+    };
+    let root = group.export_content_root(&root_context).unwrap();
+    let root_ref = arkret_crypto::content_history::content_root_ref(&root, &root_context).unwrap();
+    let context = ContentContext {
+        root_context,
+        root_ref: root_ref.clone(),
+        purpose: ContentPurpose::EventBody,
+        encryption_scheme: arkret_wire::EncryptedPayloadScheme::EpochContentAead,
+        encryption_algorithm: ContentEncryptionAlgorithm::Aes128Gcm,
+        producer: group.local_content_endpoint().unwrap(),
+        content_key_salt: arkret_crypto::content_history::fresh_content_key_salt().unwrap(),
+    };
+    let key = arkret_crypto::content_history::derive_content_key(&root, &context).unwrap();
+    // This local MLS isolation fixture makes no native backup/admission claim.
+    let material = EventContentMaterial {
+        key_commitment: arkret_crypto::content_history::content_key_commitment(&context, &key)
+            .unwrap(),
+        outer_event: serde_json::json!({"kind":"ak.message.create", "scope_ref":scope,
+            "actor_id":group.local_actor_id(), "created_at":"2026-11-09T00:00:00.000Z"}),
+        protection: ContentProtection {
+            root_refs: vec![root_ref],
+            blob_refs: vec![],
+            backup_refs: vec![
+                arkret_wire::BackupId::new(arkret_wire::new_prefixed_uuid7("ak:backup:")).unwrap(),
+            ],
+        },
+        content_context: context,
+    };
     let header = arkret_models_crypto::EventContentPreEncryptionHeader::reconstruct(
         "1.0",
         "application/vnd.arkret.message+json",
-        arkret_wire::EncryptedPayloadScheme::MlsRfc9420,
+        arkret_wire::EncryptedPayloadScheme::EpochContentAead,
         scope,
         "ak.message.create",
         group.epoch(),
-        EventId::from_digest(arkret_canonical::DigestSuite::Sha256, [seed; 32]),
+        reference,
         group.local_content_sender_domain().unwrap(),
         arkret_models_crypto::EventContentRoutingContext::None,
+        material,
     )
     .unwrap();
     group.encrypt_payload(header, plaintext).unwrap()
@@ -181,6 +239,7 @@ pub fn verify() -> Result<()> {
         &source_scope,
         &MlsGovernanceBindingPayload::new(source_scope.clone(), None, 0, 0, 0)?,
     )?;
+    source.install_test_leaf_bindings(vec![source.identity().endpoint_identity()])?;
     let original = encrypt(&mut source, source_scope, b"unselected private history", 9);
     let mut sender = identity(&invoker, 1).create_group_with_governance_binding(
         &scope(),
@@ -195,7 +254,8 @@ pub fn verify() -> Result<()> {
     let binding = MlsGovernanceBindingPayload::new(scope(), Some(base.clone()), 0, 1, 0)?;
     let added =
         sender.add_member_with_governance_binding(&claimed(&applet_identity, 0x81), &binding)?;
-    let view = accepted(&invoker, &base, &added, binding, 1);
+    let public_material = sender.pending_public_group_state_bytes(&added.commit, &binding)?;
+    let view = accepted(&invoker, &base, &added, binding, 1, public_material);
     sender.install_recovered_own_commit(&view, &base)?;
     sender.install_test_leaf_bindings(endpoints.clone())?;
     let mut receiver = ArkretMlsGroup::join_from_verified_welcome_delivery(

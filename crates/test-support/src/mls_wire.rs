@@ -319,11 +319,23 @@ pub fn mls_add_member(input: Value) -> Result<Value> {
         input.key_access_revision,
     )?;
     let add = group.add_member_with_governance_binding(&record, &binding)?;
+    let (group_info, ratchet_tree) =
+        group.pending_public_group_state_bytes(&add.commit, &binding)?;
+    let group_info_ref = arkret_wire::BlobRef::new(format!(
+        "ak:blob:{}",
+        arkret_canonical::sha256_digest(&group_info)
+    ))?;
+    let ratchet_tree_ref = arkret_wire::BlobRef::new(format!(
+        "ak:blob:{}",
+        arkret_canonical::sha256_digest(&ratchet_tree)
+    ))?;
     let payload = MlsCommitPayload::new(
         input.base_group_state_ref,
         input.key_access_revision,
         &add.commit,
         binding,
+        group_info_ref,
+        ratchet_tree_ref,
     )?;
     Ok(json!({
         "commit_payload": payload,
@@ -332,6 +344,8 @@ pub fn mls_add_member(input: Value) -> Result<Value> {
             "ciphertext_base64url": add.welcome.ciphertext_base64url,
         },
         "group_state": encode_group(&group)?,
+        "group_info_b64url": encode_b64(&group_info),
+        "ratchet_tree_b64url": encode_b64(&ratchet_tree),
     }))
 }
 
@@ -488,6 +502,7 @@ struct EncryptMessageInput {
     group_state: String,
     group_state_ref: EventId,
     content: Value,
+    material: arkret_models_crypto::EventContentMaterial,
 }
 
 /// `mls-encrypt-message`: encrypt one canonical Message body at the group's
@@ -499,13 +514,14 @@ pub fn mls_encrypt_message(input: Value) -> Result<Value> {
     let header = arkret::EventContentPreEncryptionHeader::reconstruct(
         MESSAGE_ENVELOPE_VERSION,
         MESSAGE_CONTENT_TYPE,
-        arkret::EncryptedPayloadScheme::MlsRfc9420,
+        arkret::EncryptedPayloadScheme::EpochContentAead,
         group.scope().clone(),
         EventKind::MessageCreate.as_str(),
         group.epoch(),
         input.group_state_ref,
         group.local_content_sender_domain()?,
         arkret::EventContentRoutingContext::None,
+        input.material,
     )?;
     let plaintext = arkret_canonical::canonical_json_bytes(&input.content)?;
     let sealed = arkret::MessageCrypto::encrypt(&mut group, fresh_uuid_v7(), header, &plaintext)?;
@@ -718,7 +734,7 @@ fn fresh_uuid_v7() -> String {
 }
 
 /// Read only the registered public Genesis binding; never create a new group.
-pub fn mls_genesis_material(input: Value) -> Result<Value> {
+pub fn mls_group_state_material(input: Value) -> Result<Value> {
     let payload: arkret_models_collaboration::events_payloads::MlsGenesisPayload =
         serde_json::from_value(input)?;
     payload.validate()?;

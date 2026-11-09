@@ -413,41 +413,41 @@ pub async fn run_agent_content_direct_production()
             .context("Direct write scope")?["capability_grant_refs"]
             == json!([])
     );
-    let header = arkret::EventContentPreEncryptionHeader::reconstruct(
-        "1.0",
-        "application/vnd.arkret.message+json",
-        arkret::EncryptedPayloadScheme::MlsRfc9420,
-        ScopeRef::Realm {
-            realm_id: joined.realm.clone(),
-        },
-        arkret_wire::EventKind::MessageCreate.as_str(),
-        1,
-        joined.state_ref.clone(),
-        joined.agent.local_content_sender_domain()?,
-        arkret::EventContentRoutingContext::None,
-    )?;
     let plaintext = arkret_canonical::canonical_json_bytes(&arkret::ContentBlock::text(
         "Direct participant content without literal grant",
     ))?;
-    let sealed = arkret::MessageCrypto::encrypt(
-        &mut joined.agent,
-        "direct-content-case",
-        header,
-        &plaintext,
-    )?;
-    let message=arkret_event_draft::TypedEventDraft::<arkret_wire::event_spec::MessageCreate>::new(
-        ScopeRef::Realm {realm_id:joined.realm.clone()},ActorId::account(agent.agent_account.clone()),
-        arkret_models_collaboration::events_payloads::MessageCreatePayload::with_encrypted_content(joined.strand.clone(),"discussion",
-            arkret_models_crypto::MlsEncryptedPayload::new(sealed.payload.to_envelope()?)?))?
-        .with_authorization_ref(arkret_wire::AuthorizationRef::new(
-            "ak.authority.direct_conversation_participant.v1".to_owned()).map_err(anyhow::Error::msg)?)
-        .with_semantic_ref(arkret_wire::SemanticRef::new(joined.binding.to_string(),"direct_conversation_binding"))
-        .author_with_digest_suite(Utc::now(),arkret_canonical::DigestSuite::Sha256)?;
-    let message = sign(
-        message,
+    let draft = arkret_event_draft::TypedEventDraft::<arkret_wire::event_spec::MessageCreate>::new(
+        ScopeRef::Realm {
+            realm_id: joined.realm.clone(),
+        },
+        ActorId::account(agent.agent_account.clone()),
+        arkret::MessageCreatePayload::with_content(
+            joined.strand.clone(),
+            "discussion",
+            arkret::ContentBlock::text("Direct participant content without literal grant"),
+        ),
+    )?
+    .with_authorization_ref(
+        arkret::AuthorizationRef::new("ak.authority.direct_conversation_participant.v1".to_owned())
+            .map_err(anyhow::Error::msg)?,
+    )
+    .with_semantic_ref(arkret::SemanticRef::new(
+        joined.binding.to_string(),
+        "direct_conversation_binding",
+    ))
+    .author_with_digest_suite(Utc::now(), arkret_canonical::DigestSuite::Sha256)?;
+    let original = sign(
+        draft,
         &agent.verification_method,
         agent.runtime_key.to_bytes(),
     )?;
+    let (message, _) = crate::harness::content::seal_agent_message(
+        &agent,
+        &mut joined.agent,
+        &joined.state_ref,
+        original,
+    )
+    .await?;
     let outcome: AuthoritySubmitResponseBody = serde_json::from_value(
         expect_json(
             write_runtime
@@ -470,11 +470,18 @@ pub async fn run_agent_content_direct_production()
         serde_json::from_value(message.payload["encrypted_content"].clone())?;
     let domain = arkret::mls_basic_credential_identity(message.actual_signer())?;
     let header = envelope.reconstruct_pre_encryption_header(
-        arkret::EncryptedPayloadScheme::MlsRfc9420,
+        arkret::EncryptedPayloadScheme::EpochContentAead,
         message.scope_ref.clone(),
         message.kind.as_str(),
         std::str::from_utf8(&domain)?,
         None,
+        crate::harness::content::original_material(
+            controller,
+            &joined.controller,
+            &message,
+            &envelope,
+        )
+        .await?,
     )?;
     let payload =
         arkret::mls::encrypted_envelope_to_payload_with_verified_header(&envelope, header)?;

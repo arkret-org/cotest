@@ -210,17 +210,19 @@ fn seal(
     state_ref: &arkret_wire::EventId,
     content_type: &str,
     bytes: &[u8],
+    material: arkret_models_crypto::EventContentMaterial,
 ) -> Result<arkret::EncryptedPayload> {
     let header = arkret::EventContentPreEncryptionHeader::reconstruct(
         "1.0",
         content_type,
-        arkret::EncryptedPayloadScheme::MlsRfc9420,
+        arkret::EncryptedPayloadScheme::EpochContentAead,
         scope.clone(),
         arkret_wire::EventKind::MessageCreate.as_str(),
         group.epoch(),
         state_ref.clone(),
         group.local_content_sender_domain()?,
         arkret::EventContentRoutingContext::None,
+        material,
     )?;
     Ok(arkret::MessageCrypto::encrypt(group, fresh_uuid_v7(), header, bytes)?.payload)
 }
@@ -374,6 +376,28 @@ impl SidecarSyncObserver for PrivateReplyProbe {
             "Return the private Sidecar recovery receipt",
         ))?;
         let request_metadata = metadata(&binding)?;
+        let mut request = controller
+            .client
+            .author_event(
+                realm.as_str(),
+                arkret_wire::EventKind::MessageCreate.as_str(),
+                canonical(serde_json::json!({
+                    "strand_id": strand, "track_name": "discussion",
+                    "content": serde_json::from_slice::<serde_json::Value>(&request_plain)?,
+                    "metadata": serde_json::from_slice::<serde_json::Value>(&request_metadata)?,
+                }))?,
+            )
+            .await?;
+        request.scope_ref = scope.clone();
+        cotest::harness::refresh_typed_event_proof(&mut request)?;
+        let (body_material, metadata_material) =
+            inkson::conformance::prepare_private_sidecar_content(
+                &host,
+                &request,
+                &request_plain,
+                &request_metadata,
+            )
+            .await?;
         let (request_content, request_meta) = host.state_store_handle().write(|store| {
             inkson::conformance::encrypt_private_sidecar_request(
                 store,
@@ -383,14 +407,15 @@ impl SidecarSyncObserver for PrivateReplyProbe {
                 accepted.event.event_id.clone(),
                 &request_plain,
                 &request_metadata,
+                body_material,
+                metadata_material,
             )
         })?;
         inkson::conformance::persist_native_private_cache(&host.state_store()).await?;
-        let mut request=controller.client.author_event(realm.as_str(),arkret_wire::EventKind::MessageCreate.as_str(),canonical(serde_json::json!({
+        request.payload = serde_json::from_value(canonical(serde_json::json!({
             "strand_id":strand,"track_name":"discussion","encrypted_content":request_content.to_envelope()?,
             "encrypted_metadata":request_meta.to_envelope()?,
-        }))?).await?;
-        request.scope_ref = scope.clone();
+        }))?)?;
         cotest::harness::refresh_typed_event_proof(&mut request)?;
         let mut agent_executions = 0usize;
         let (status, outcome) = post_json(
@@ -527,24 +552,68 @@ impl SidecarSyncObserver for PrivateReplyProbe {
             coordinator_assignment_event_id: None,
             request_context: None,
         };
+        let metadata_plain = metadata(&response_binding)?;
+        let mut reply = agent.author_scoped_event(
+            arkret_wire::EventKind::MessageCreate,
+            scope.clone(),
+            serde_json::json!({"strand_id":strand,"track_name":"discussion",
+                "content":serde_json::from_slice::<serde_json::Value>(&reply_plain)?,
+                "metadata":serde_json::from_slice::<serde_json::Value>(&metadata_plain)?}),
+            vec![arkret_wire::SemanticRef::new(
+                request.event_id.to_string(),
+                "after",
+            )],
+        )?;
+        let body_material = cotest::harness::content::prepare_agent(
+            agent,
+            agent_group,
+            &reply,
+            &accepted.event.event_id,
+            "/payload/encrypted_content",
+            "application/vnd.arkret.message+json",
+            &reply_plain,
+        )
+        .await?;
+        let metadata_material = cotest::harness::content::prepare_agent(
+            agent,
+            agent_group,
+            &reply,
+            &accepted.event.event_id,
+            "/payload/encrypted_metadata",
+            arkret::MESSAGE_METADATA_MLS_CONTENT_TYPE,
+            &metadata_plain,
+        )
+        .await?;
         let reply_content = seal(
             agent_group,
             scope,
             &accepted.event.event_id,
             "application/vnd.arkret.message+json",
             &reply_plain,
+            body_material,
         )?;
         let reply_metadata = seal(
             agent_group,
             scope,
             &accepted.event.event_id,
             arkret::MESSAGE_METADATA_MLS_CONTENT_TYPE,
-            &metadata(&response_binding)?,
+            &metadata_plain,
+            metadata_material,
         )?;
-        let reply=agent.author_scoped_event(arkret_wire::EventKind::MessageCreate,scope.clone(),serde_json::json!({
-            "strand_id":strand,"track_name":"discussion","encrypted_content":reply_content.to_envelope()?,
-            "encrypted_metadata":reply_metadata.to_envelope()?,
-        }),vec![arkret_wire::SemanticRef::new(request.event_id.to_string(),"after")])?;
+        reply.payload.remove("content");
+        reply.payload.remove("metadata");
+        reply.payload.insert(
+            "encrypted_content".into(),
+            serde_json::to_value(reply_content.to_envelope()?)?,
+        );
+        reply.payload.insert(
+            "encrypted_metadata".into(),
+            serde_json::to_value(reply_metadata.to_envelope()?)?,
+        );
+        cotest::harness::refresh_typed_event_proof_with_signing_seed(
+            &mut reply,
+            agent.runtime_key.to_bytes(),
+        )?;
         let (status, outcome) = post_json(
             &agent.runtime,
             &arkret_models_collaboration::authority_commit::SelfAuthoritySubmitRequestBody::Event(

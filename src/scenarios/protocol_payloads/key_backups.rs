@@ -111,6 +111,9 @@ fn signed_backup_envelope(
     );
     let created_at = ts("2026-04-26T00:00:00.000Z")?;
     let mut envelope = KeyBackup {
+        custodian_actor_id: None,
+        custody_authorization_ref: None,
+
         backup_id: backup_id(BACKUP_ID)?,
         actor_id: arkret_wire::ActorId::account(arkret_wire::AccountId::new(
             did(actor_id)?,
@@ -118,7 +121,7 @@ fn signed_backup_envelope(
         )),
         device_id: Some(principal.device_id.clone()),
         backup_kind: BackupKind::SecretStorage,
-        mixed_secret_storage: false,
+        mixed_secret_storage: None,
         backup_version: "kb_1".to_owned(),
         created_at,
         updated_at: None,
@@ -144,6 +147,9 @@ fn signed_backup_envelope(
             aead_aad_extensions: Default::default(),
         },
         contents: vec![SecretStorageContentIndex {
+            root_context: None,
+            root_ref: None,
+
             item_kind: SecretStorageItemKind::MlsGroupSecretsBackupKey,
             secret_id: "mls_group_secrets_backup_key".to_owned(),
         }],
@@ -151,15 +157,17 @@ fn signed_backup_envelope(
         ciphertext_digest: Hash::new(CIPHERTEXT_DIGEST)?,
         plaintext_commitment: None,
         signature_proof: KeyBackupSignatureProof {
-            device_id: principal.device_id.clone(),
+            agent_authorization_event_ref: None,
+
+            device_id: Some(principal.device_id.clone()),
             verification_method: DidUrl::new(verification_method)
                 .map_err(|error| anyhow!(error))?,
             signature_algorithm: KeyBackupSignatureAlgorithm::Ed25519,
             signature: Base64UrlString::new("AA").map_err(|error| anyhow!(error))?,
-            device_authorize_event_id: principal.founding_authorize_event_id.clone(),
+            device_authorize_event_id: Some(principal.founding_authorize_event_id.clone()),
         },
         retention: Some(KeyBackupRetention {
-            deletion_eligible_at: Some(ts("2020-01-01T00:00:00.000Z")?),
+            deletion_eligible_at: Some(Some(ts("2020-01-01T00:00:00.000Z")?)),
             legal_hold: Some(false),
             extra: BTreeMap::new(),
         }),
@@ -348,6 +356,10 @@ async fn unlock_proof(
     actor_id: &str,
 ) -> Result<KeyBackupUnlockProof> {
     let request = KeysBackupsIssueUnlockChallengeRequestBody {
+        subject_actor_id: None,
+        custody_authorization_ref: None,
+        content_history: None,
+
         request_id: Base64UrlString::new("cHJvdG9jb2wtdW5sb2NrLXJlcXVlc3Q")
             .map_err(|error| anyhow!(error))?,
     };
@@ -377,6 +389,10 @@ async fn unlock_proof(
     let multibase = ed25519_pubkey_to_did_key_multibase(signing_key.verifying_key().as_bytes());
     let verification_method = format!("did:key:{multibase}#{multibase}");
     let mut proof = KeyBackupUnlockProof {
+        subject_actor_id: None,
+        custody_authorization_ref: None,
+        content_history: None,
+
         schema: KeyBackupUnlockProof::SCHEMA.to_owned(),
         authority: KeyBackupUnlockAuthority::CurrentDevice {
             challenge_id: challenge.challenge_id,

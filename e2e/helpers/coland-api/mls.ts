@@ -444,12 +444,18 @@ export async function addRealmMlsMemberApi(
     commit_payload: Record<string, unknown>;
     welcome: Record<string, unknown>;
     group_state: string;
+    group_info_b64url: string;
+    ratchet_tree_b64url: string;
   }>("mls-add-member", {
     group_state: creator.groupState,
     claim,
     base_group_state_ref: current.current_mls_commit_event_ref,
     key_access_revision: current.current_key_access_revision,
   });
+  const groupInfoRef = await uploadPublicBlob(request, owner, realmId, added.group_info_b64url);
+  const ratchetTreeRef = await uploadPublicBlob(request, owner, realmId, added.ratchet_tree_b64url);
+  expect(groupInfoRef).toBe(added.commit_payload.group_info_ref);
+  expect(ratchetTreeRef).toBe(added.commit_payload.ratchet_tree_ref);
   const commitEvent = signedEventEnvelope({
     actorId: owner.id,
     server: owner.server,

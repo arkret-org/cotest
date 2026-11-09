@@ -47,8 +47,8 @@ use arkret_signatures::{
 use arkret_wire::{
     AccountDeviceProducer, AccountDeviceRevocationAdmissionDecision, AccountId, ActorId,
     AuthoredEvent, DeviceId, Did, DidCoreId, DidKey, DidUrl, ErrorCode, Event,
-    EventAdmissionSubmission, EventId, EventKind, Hash, MlsCommitSubmission, NonEmptyString,
-    RealmId, ScopeRef, ServiceKind,
+    EventAdmissionSubmission, EventId, EventKind, Hash, NonEmptyString, RealmId, ScopeRef,
+    ServiceKind,
 };
 use chrono::{DateTime, Duration, Utc};
 use ed25519_dalek::{Signer as _, SigningKey};
@@ -631,6 +631,7 @@ impl<'a> AccountStation<'a> {
         let request = PeerAuthorityForwardEventRequestBody::new(
             EventAdmissionSubmission::new(event),
             None,
+            None,
             evidence,
         )?;
         self.send(PeerAuthoritySubmitRequestBody::AuthorityForwardEvent(
@@ -640,12 +641,15 @@ impl<'a> AccountStation<'a> {
 
     fn forward_mls(
         &mut self,
-        submission: MlsCommitSubmission,
+        submission: arkret_models_collaboration::content_history::PeerMlsCommitSubmission,
+        material: arkret_models_collaboration::authority_commit::MlsGroupStateMaterial,
         attempt_at: DateTime<Utc>,
     ) -> Result<Value> {
-        let unsigned = json!({"branch":"authority_forward", "mls_submission": &submission});
+        let unsigned = json!({"branch":"authority_forward", "mls_submission": &submission,
+            "mls_group_state_material": &material});
         let evidence = self.fresh_evidence(&submission.commit_event, attempt_at, &unsigned)?;
-        let request = PeerAuthorityForwardMlsRequestBody::new(submission, evidence)?;
+        let request =
+            PeerAuthorityForwardMlsRequestBody::new(submission, material, None, evidence)?;
         self.send(PeerAuthoritySubmitRequestBody::AuthorityForwardMls(request))
     }
 }
@@ -1189,13 +1193,15 @@ fn timestamp(value: &Value) -> Result<DateTime<Utc>> {
 
 fn event_forward_body(
     event: &Event,
-    material: Option<arkret_models_collaboration::authority_commit::MlsGenesisMaterial>,
+    material: Option<arkret_models_collaboration::authority_commit::MlsGroupStateMaterial>,
 ) -> Result<Value> {
     Ok(serde_json::to_value(
         PeerAuthorityForwardEventRequestBody {
+            content_backup_sources: None,
+
             branch: AuthorityForwardBranch::AuthorityForward,
             event_submission: EventAdmissionSubmission::new(event.clone()),
-            mls_genesis_material: material,
+            mls_group_state_material: material,
             producer_device_evidence: None,
             producer_agent_evidence: None,
         },
@@ -1407,21 +1413,60 @@ fn cross_station_accepted(world: &World, variant: &Value) -> Result<Value> {
 }
 
 fn mls_forward(world: &World) -> Result<Value> {
-    let commit_event =
-        world.human_event(EventKind::MlsCommit.as_str(), world.setup.event_created_at)?;
-    let submission: MlsCommitSubmission = serde_json::from_value(json!({
-        "commit_event": commit_event,
-        "welcomes": [],
-        "idempotency_key": MLS_IDEMPOTENCY_KEY,
-    }))?;
+    let scope = ScopeRef::Realm {
+        realm_id: world.realm_id.clone(),
+    };
+    let actor = ActorId::account(world.account.clone());
+    let identity = arkret::ArkretMlsIdentity::new_human_device(
+        actor.clone(),
+        DeviceId::new(DEVICE)?,
+        arkret::ArkretMlsSigner::from_ed25519_signing_key(SigningKey::from_bytes(&DEVICE_SEED)),
+    )?;
+    let mut group = identity.create_group(&scope)?;
+    let base = EventId::from_digest(DigestSuite::Sha256, [0x42; 32]);
+    let binding =
+        arkret::MlsGovernanceBindingPayload::new(scope.clone(), Some(base.clone()), 0, 1, 0)?;
+    let update = group.self_update_commit_with_governance_binding(&binding)?;
+    let (info, tree) = group.pending_public_group_state_bytes(&update, &binding)?;
+    let material = arkret_models_collaboration::authority_commit::MlsGroupStateMaterial::from_bytes(
+        &info, &tree,
+    );
+    let blob = |bytes: &[u8]| {
+        arkret::BlobRef::new(format!(
+            "ak:blob:{}",
+            arkret_canonical::sha256_digest(bytes)
+        ))
+    };
+    let payload =
+        arkret::MlsCommitPayload::new(base, 0, &update, binding, blob(&info)?, blob(&tree)?)?;
+    let event = arkret_wire::test_support::raw_event_for_actor_at(
+        EventKind::MlsCommit.as_str(),
+        scope,
+        actor,
+        serde_json::to_value(payload)?,
+        world.setup.event_created_at,
+    )?;
+    let commit_event = sign(
+        event,
+        &format!("{PRINCIPAL_DID}#{DEVICE}"),
+        DEVICE_SEED,
+        world.setup.event_created_at,
+    )?;
+    let submission = arkret_models_collaboration::content_history::PeerMlsCommitSubmission {
+        commit_event,
+        welcomes: vec![],
+        recovery_source: None,
+        idempotency_key: arkret_wire::UuidV7::new(MLS_IDEMPOTENCY_KEY.parse()?)?,
+    };
     // The Commit Event's producer decides presence for the MLS branch too.
-    let missing = PeerAuthorityForwardMlsRequestBody::new(submission.clone(), None)
-        .err()
-        .context("an MLS forward of a human Commit Event validated without evidence")?;
+    let missing =
+        PeerAuthorityForwardMlsRequestBody::new(submission.clone(), material.clone(), None, None)
+            .err()
+            .context("an MLS forward of a human Commit Event validated without evidence")?;
     ensure!(missing.error_code() == Some(ErrorCode::SchemaViolation));
 
     let mut account = world.account_station(LiveDeviceState::Active)?;
-    let body = account.forward_mls(submission, world.setup.attested_at)?;
+    let body = account.forward_mls(submission, material, world.setup.attested_at)?;
     ensure!(body.get("mls_submission").is_some() && body.get(EVIDENCE_MEMBER).is_some());
     let mut governance = world.remote_governance();
     ensure!(matches!(
@@ -1730,6 +1775,7 @@ fn history_lacks_method(world: &World) -> Result<Value> {
         let request = PeerAuthorityForwardEventRequestBody::new(
             EventAdmissionSubmission::new(event),
             None,
+            None,
             Some(ForwardAccountDeviceSignerEvidence {
                 device_projection_attestation: attestation,
                 service_resolution: world.station_a.resolution()?,
@@ -1762,6 +1808,7 @@ fn non_human_carries_evidence(world: &World, event: Event) -> Result<Value> {
     // independent Agent carrier, so absence is not a valid Agent forward.
     let without_human = PeerAuthorityForwardEventRequestBody::new(
         EventAdmissionSubmission::new(event.clone()),
+        None,
         None,
         None,
     );
@@ -1812,9 +1859,11 @@ fn human_without_evidence(world: &World) -> Result<Value> {
         world.setup.event_created_at,
     )?;
     let body = serde_json::to_value(PeerAuthorityForwardEventRequestBody {
+        content_backup_sources: None,
+
         branch: AuthorityForwardBranch::AuthorityForward,
         event_submission: EventAdmissionSubmission::new(event),
-        mls_genesis_material: None,
+        mls_group_state_material: None,
         producer_device_evidence: None,
         producer_agent_evidence: None,
     })?;

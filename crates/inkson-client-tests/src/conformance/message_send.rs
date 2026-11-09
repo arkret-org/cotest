@@ -234,11 +234,18 @@ async fn run_message_case(
         .encrypted_content
         .context("ordinary Message lost ciphertext")?;
     let header = envelope.reconstruct_pre_encryption_header(
-        arkret::EncryptedPayloadScheme::MlsRfc9420,
+        arkret::EncryptedPayloadScheme::EpochContentAead,
         scope,
         EventKind::MessageCreate.as_str(),
         String::from_utf8(arkret::mls_basic_credential_identity(&sender.actor)?)?,
         None,
+        cotest::harness::content::original_material(
+            &holder.client,
+            holder_group,
+            &submission.event,
+            &envelope,
+        )
+        .await?,
     )?;
     let encrypted = arkret::encrypted_envelope_to_payload_with_verified_header(&envelope, header)?;
     let mut receiver =

@@ -101,11 +101,19 @@ fn authored_message_decrypts_at_the_other_mls_member_without_reencrypting() {
 
     // The Commit Event, as the governance Station accepted it into the Realm's
     // own linear stream. One RealmCommit covers exactly one Event.
+    let (info_ref, tree_ref) = cotest_test_support::content_crypto_fixture::pending_public_refs(
+        &sender,
+        &added.commit,
+        &transition_binding,
+    )
+    .unwrap();
     let commit_payload = MlsCommitPayload::new(
         base_group_state_ref.clone(),
         0,
         &added.commit,
         transition_binding.clone(),
+        info_ref,
+        tree_ref,
     )
     .unwrap();
     let commit_event_id = EventId::from_digest(DigestSuite::Sha256, [11; 32]);
@@ -176,7 +184,24 @@ fn authored_message_decrypts_at_the_other_mls_member_without_reencrypting() {
         ArkretMlsGroup::join_from_verified_welcome_delivery(bob, &delivery, &accepted_commit)
             .unwrap();
 
-    let scheme = EncryptedPayloadScheme::MlsRfc9420;
+    recipient
+        .install_test_leaf_bindings(vec![sender.identity().endpoint_identity(), bob_endpoint])
+        .unwrap();
+    let outer = event_with_payload(
+        &realm,
+        &scope,
+        &EventId::from_digest(DigestSuite::Sha256, [7; 32]),
+        arkret_wire::EventKind::MessageCreate,
+        serde_json::json!({}),
+    );
+    let material = cotest_test_support::content_crypto_fixture::material(
+        &sender,
+        &outer,
+        &accepted_commit.event.event_id,
+        &EventId::from_digest(DigestSuite::Sha256, [7; 32]),
+    )
+    .unwrap();
+    let scheme = EncryptedPayloadScheme::EpochContentAead;
     let sender_domain = sender.local_content_sender_domain().unwrap();
     let header = EventContentPreEncryptionHeader::reconstruct(
         "1.0",
@@ -188,6 +213,7 @@ fn authored_message_decrypts_at_the_other_mls_member_without_reencrypting() {
         EventId::from_digest(DigestSuite::Sha256, [7; 32]),
         &sender_domain,
         EventContentRoutingContext::None,
+        material.clone(),
     )
     .unwrap();
     let plaintext = br#"{"kind":"ak.content.text","body":"first confidential message"}"#;
@@ -206,6 +232,11 @@ fn authored_message_decrypts_at_the_other_mls_member_without_reencrypting() {
                 scheme: scheme.clone(),
                 effective_scope: scope.clone(),
                 sender_domain: sender_domain.clone(),
+                producer: material.content_context.producer.clone(),
+                outer_event_digest: Hash::new(
+                    arkret_canonical::canonical_sha256(&material.outer_event).unwrap(),
+                )
+                .unwrap(),
             },
         },
         blob_refs: vec![],
@@ -245,37 +276,46 @@ fn authored_message_decrypts_at_the_other_mls_member_without_reencrypting() {
             "ak.message.create",
             &sender_domain,
             None,
+            material.clone(),
         )
         .unwrap();
     let received =
         encrypted_envelope_to_payload_with_verified_header(&returned, reconstructed).unwrap();
 
     assert_eq!(recipient.decrypt_payload(&received).unwrap(), plaintext);
-    assert!(recipient.decrypt_payload(&received).is_err());
+    assert_eq!(recipient.decrypt_payload(&received).unwrap(), plaintext);
 
     // The claimed sender domain is sealed into the header the ciphertext was
     // encrypted under, so a second message that renames its sender does not
     // open even though its ciphertext is untouched.
+    let mut next_header = header;
+    next_header.material = cotest_test_support::content_crypto_fixture::material(
+        &sender,
+        &outer,
+        &accepted_commit.event.event_id,
+        &EventId::from_digest(DigestSuite::Sha256, [7; 32]),
+    )
+    .unwrap();
+    let second_material = next_header.material.clone();
     let second = sender
         .encrypt_payload(
-            header,
+            next_header,
             br#"{"kind":"ak.content.text","body":"second confidential message"}"#,
         )
         .unwrap();
     let second_envelope = encrypted_envelope_from_payload(&second).unwrap();
-    let tampered_header = second_envelope
-        .reconstruct_pre_encryption_header(
-            EncryptedPayloadScheme::MlsRfc9420,
-            scope,
-            "ak.message.create",
-            "ak:device:01904100-0000-7000-8000-00000000000e",
-            None,
-        )
-        .unwrap();
-    let tampered =
-        encrypted_envelope_to_payload_with_verified_header(&second_envelope, tampered_header)
-            .unwrap();
-    assert!(recipient.decrypt_payload(&tampered).is_err());
+    let tampered_header = second_envelope.reconstruct_pre_encryption_header(
+        EncryptedPayloadScheme::EpochContentAead,
+        scope,
+        "ak.message.create",
+        "ak:device:01904100-0000-7000-8000-00000000000e",
+        None,
+        second_material,
+    );
+    assert!(
+        tampered_header.is_err(),
+        "an endpoint ID cannot replace the authenticated Actor domain"
+    );
 }
 
 /// Message submission carries exactly one producer Event and refuses anything

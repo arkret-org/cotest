@@ -738,15 +738,19 @@ pub async fn grant_realm_actions(
 
 /// A discussion Message carrying only an RFC 9420 ciphertext envelope.
 fn ciphertext_message_payload(strand_id: &str, group_state_ref: &EventId) -> Result<Value> {
-    let envelope = EncryptedEnvelope {
-        version: "1.0".to_owned(),
-        content_type: "application/vnd.arkret.message+json".to_owned(),
-        encryption_context: EncryptedEnvelopeEncryptionContext::standard(
-            0,
-            group_state_ref.clone(),
-        ),
-        ciphertext: "Y2lwaGVydGV4dA".to_owned(),
-    };
+    let reference = group_state_ref.clone();
+    let fixture =
+        arkret_schema_conformance::spec_json_artifact("fixtures/content-history-fixture.json")?;
+    // Negative admission fixture: no native MLS state or root publication is asserted.
+    let mut envelope: EncryptedEnvelope =
+        serde_json::from_value(fixture["kat"]["envelope"].clone())?;
+    let EncryptedEnvelopeEncryptionContext::EpochContent {
+        epoch,
+        group_state_ref,
+        ..
+    } = &mut envelope.encryption_context;
+    *epoch = 0;
+    *group_state_ref = reference;
     let payload = json!({
         "strand_id": strand_id,
         "track_name": "discussion",

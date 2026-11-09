@@ -41,24 +41,13 @@ pub(super) async fn exercise(
     let plaintext = arkret_canonical::canonical_json_bytes(&arkret::ContentBlock::text(
         "Native MIMI MLS encrypted content",
     ))?;
-    let header = arkret::EventContentPreEncryptionHeader::reconstruct(
-        "1.0",
-        "application/vnd.arkret.message+json",
-        arkret::EncryptedPayloadScheme::MlsRfc9420,
-        scope.clone(),
-        arkret_wire::EventKind::MessageCreate.as_str(),
-        sender.epoch(),
-        state_ref.clone(),
-        sender.local_content_sender_domain()?,
-        arkret::EventContentRoutingContext::None,
-    )?;
-    let before = sender.export_state_record()?.serialized_state;
-    let sealed = arkret::MessageCrypto::encrypt(sender, mls::fresh_uuid_v7(), header, &plaintext)?;
-    ensure!(
-        before != sender.export_state_record()?.serialized_state,
-        "MIMI producer did not advance its actual MLS ratchet"
-    );
-    let envelope = sealed.payload.to_envelope()?;
+    let original = alice.client.author_event(realm.as_str(),arkret::EventKind::MessageCreate.as_str(),
+        json!({"strand_id":strand,"track_name":"discussion","content":arkret::ContentBlock::text("Native MIMI MLS encrypted content")}),
+    ).await?;
+    let (original, sealed) =
+        crate::harness::content::seal_device_message(&alice.client, sender, state_ref, original)
+            .await?;
+    let envelope = sealed.to_envelope()?;
     let container = json!({"encrypted_content":envelope,"thread_id":strand});
     let ciphertext = arkret_canonical::canonical_json_bytes(&container)?;
     ensure!(
@@ -123,15 +112,22 @@ pub(super) async fn exercise(
                 == arkret_canonical::canonical_sha256(&request)?,
         "mapped attribution lost its exact source or accepted binding"
     );
+    ensure!(
+        arkret_models_crypto::EventContentMaterial::outer_event_for(&original)?
+            == arkret_models_crypto::EventContentMaterial::outer_event_for(&committed.event)?,
+        "MIMI mapping substituted the outer Event authenticated by the content ciphertext"
+    );
     let sender_domain = String::from_utf8(arkret_models_crypto::mls_basic_credential_identity(
         &alice.actor,
     )?)?;
     let header = encrypted.reconstruct_pre_encryption_header(
-        arkret::EncryptedPayloadScheme::MlsRfc9420,
+        arkret::EncryptedPayloadScheme::EpochContentAead,
         scope,
         arkret_wire::EventKind::MessageCreate.as_str(),
         sender_domain,
         None,
+        crate::harness::content::original_material(&bob.client, recipient, &original, &encrypted)
+            .await?,
     )?;
     let payload = arkret::encrypted_envelope_to_payload_with_verified_header(&encrypted, header)?;
     let opened = arkret::MessageCrypto::decrypt(
