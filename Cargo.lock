@@ -367,6 +367,7 @@ dependencies = [
  "arkret-canonical",
  "arkret-event-draft",
  "arkret-models-collaboration",
+ "arkret-models-crypto",
  "arkret-models-identity",
  "arkret-wire",
  "chrono",
@@ -393,6 +394,7 @@ dependencies = [
 name = "arkret-crypto"
 version = "0.3.0"
 dependencies = [
+ "aes-gcm 0.11.1",
  "argon2 0.6.0",
  "arkret-canonical",
  "arkret-models-collaboration",
@@ -643,6 +645,7 @@ dependencies = [
  "serde",
  "serde_json",
  "thiserror 2.0.21",
+ "zeroize",
 ]
 
 [[package]]
@@ -2411,6 +2414,7 @@ dependencies = [
  "arkret",
  "arkret-bootstrap",
  "arkret-canonical",
+ "arkret-crypto",
  "arkret-event-draft",
  "arkret-identifiers",
  "arkret-identity",

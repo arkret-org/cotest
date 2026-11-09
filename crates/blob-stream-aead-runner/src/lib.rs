@@ -8,12 +8,13 @@ use std::path::PathBuf;
 
 use anyhow::{Context, Result, bail, ensure};
 use arkret_crypto::blob_aead::{
-    MAX_SEGMENT_COUNT, MAX_SEGMENT_SIZE, MIN_SEGMENT_SIZE, StreamDecryptor, StreamEncryptParams,
-    decrypt_stream, encrypt_stream, stream_segment_count,
+    MAX_SEGMENT_COUNT, MAX_SEGMENT_SIZE, MIN_SEGMENT_SIZE, ResolvedAttachmentGroupState,
+    StreamDecryptor, StreamEncryptParams, decrypt_stream, encrypt_stream, stream_segment_count,
 };
 use arkret_models_crypto::{
-    EncryptedAttachment, EncryptedAttachmentGroupStateRef, EncryptedAttachmentKeyAlgorithm,
-    EncryptedAttachmentKeyRef, StreamEncryptionAlgorithm,
+    AttachmentContentKeyContext, ContentContext, EncryptedAttachment,
+    EncryptedAttachmentGroupStateRef, EncryptedAttachmentKeyAlgorithm, EncryptedAttachmentKeyRef,
+    StreamEncryptionAlgorithm,
 };
 use arkret_schema::{ProtocolSchemaRegistry, SchemaError};
 use arkret_schema_conformance::schema_registry_from_spec_artifacts;
@@ -197,18 +198,50 @@ fn digest_key_ref() -> EncryptedAttachmentKeyRef {
     }
 }
 
-fn parameters(key_ref: EncryptedAttachmentKeyRef) -> StreamEncryptParams {
-    StreamEncryptParams {
+// These are primitive codec fixtures, not native membership or winning-state proofs.
+fn content_context() -> Result<AttachmentContentKeyContext> {
+    let fixture: Value = serde_json::from_slice(&std::fs::read(
+        spec_artifacts_root().join("fixtures/content-history-fixture.json"),
+    )?)?;
+    let original: ContentContext =
+        serde_json::from_value(fixture["kat"]["content_context"].clone())?;
+    let context = AttachmentContentKeyContext {
+        effective_scope: original.root_context.effective_scope,
+        genesis_event_ref: original.root_context.genesis_event_ref,
+        epoch: original.root_context.epoch,
+        scheme: arkret_crypto::blob_aead::SCHEME_STREAM.to_owned(),
+        encryption_algorithm: arkret_crypto::blob_aead::ALG_STREAM_XCHACHA.to_owned(),
+        content_key_salt: original.content_key_salt.try_into()?,
+        producer: original.producer,
+    };
+    context.validate()?;
+    Ok(context)
+}
+
+fn parameters(key_ref: EncryptedAttachmentKeyRef) -> Result<StreamEncryptParams> {
+    Ok(StreamEncryptParams {
         key_ref,
-        content_key_salt: arkret_models_crypto::AttachmentContentKeySalt::from_bytes([7; 32]),
+        content_context: content_context()?,
         digest_suite: arkret_canonical::canonical::DigestSuite::Sha256,
         media_type: "video/mp4".to_owned(),
         segment_bytes: MIN_SEGMENT_SIZE,
-    }
+    })
 }
 
-fn winning_epoch(_reference: &EncryptedAttachmentGroupStateRef) -> Option<u64> {
-    Some(42)
+fn winning_epoch(
+    reference: &EncryptedAttachmentGroupStateRef,
+) -> Option<ResolvedAttachmentGroupState> {
+    if reference != &event_key_ref().group_state_ref
+        && reference != &digest_key_ref().group_state_ref
+    {
+        return None;
+    }
+    let context = content_context().ok()?;
+    Some(ResolvedAttachmentGroupState {
+        effective_scope: context.effective_scope,
+        genesis_event_ref: context.genesis_event_ref,
+        epoch: context.epoch,
+    })
 }
 
 fn envelope_blob_ref(envelope: &EncryptedAttachment) -> Option<&str> {
@@ -270,7 +303,7 @@ fn run_roundtrip(consumer: &mut AttachmentConsumer) -> Result<CaseExecutionResul
     let (ciphertext, envelope) = encrypt_stream(
         &plaintext,
         &key,
-        &parameters(event_key_ref()),
+        &parameters(event_key_ref())?,
         &winning_epoch,
     )?;
     ensure!(
@@ -285,7 +318,7 @@ fn run_roundtrip(consumer: &mut AttachmentConsumer) -> Result<CaseExecutionResul
     let (digest_ciphertext, digest_envelope) = encrypt_stream(
         &plaintext,
         &key,
-        &parameters(digest_key_ref()),
+        &parameters(digest_key_ref())?,
         &winning_epoch,
     )?;
     ensure!(
@@ -303,11 +336,15 @@ fn run_roundtrip(consumer: &mut AttachmentConsumer) -> Result<CaseExecutionResul
     )?;
     ensure!(consumer.state == accepted);
 
-    let wrong_epoch = |_reference: &EncryptedAttachmentGroupStateRef| Some(41);
+    let wrong_epoch = |reference: &EncryptedAttachmentGroupStateRef| {
+        let mut state = winning_epoch(reference)?;
+        state.epoch -= 1;
+        Some(state)
+    };
     expect_protocol_error(
         decrypt_stream(&ciphertext, &envelope, &key, &wrong_epoch).unwrap_err(),
-        "segment_aead_failed",
-        "segment_aead_failed",
+        "content_key_commitment_mismatch",
+        "content_key_commitment_mismatch",
     )?;
     ensure!(consumer.state == accepted);
 
@@ -344,7 +381,7 @@ fn run_truncation(consumer: &mut AttachmentConsumer) -> Result<CaseExecutionResu
     let (ciphertext, envelope) = encrypt_stream(
         &plaintext,
         &key,
-        &parameters(event_key_ref()),
+        &parameters(event_key_ref())?,
         &winning_epoch,
     )?;
     let segments = split_segments(&ciphertext, &envelope)?;
@@ -377,7 +414,7 @@ fn run_reorder(consumer: &mut AttachmentConsumer) -> Result<CaseExecutionResult>
     let (ciphertext, envelope) = encrypt_stream(
         &plaintext,
         &key,
-        &parameters(event_key_ref()),
+        &parameters(event_key_ref())?,
         &winning_epoch,
     )?;
     let segments = split_segments(&ciphertext, &envelope)?;
@@ -413,7 +450,7 @@ fn run_scheme_closure(consumer: &mut AttachmentConsumer) -> Result<CaseExecution
     let (ciphertext, envelope) = encrypt_stream(
         &plaintext,
         &key,
-        &parameters(event_key_ref()),
+        &parameters(event_key_ref())?,
         &winning_epoch,
     )?;
     let before = consumer.state.clone();
@@ -592,6 +629,66 @@ mod tests {
                 "segment_bounds_invalid",
             )?;
         }
+        Ok(())
+    }
+
+    #[test]
+    fn exact_scope_genesis_and_author_are_authenticated_before_sink_acceptance() -> Result<()> {
+        let mut consumer = AttachmentConsumer::new()?;
+        let key = key();
+        let (ciphertext, envelope) = encrypt_stream(
+            b"original scoped attachment",
+            &key,
+            &parameters(event_key_ref())?,
+            &winning_epoch,
+        )?;
+        let before = consumer.state.clone();
+        for change_scope in [false, true] {
+            let different_state = |reference: &EncryptedAttachmentGroupStateRef| {
+                let mut state = winning_epoch(reference)?;
+                let other = EventId::from_digest(arkret_canonical::DigestSuite::Sha256, [45; 32]);
+                if change_scope {
+                    state.effective_scope = arkret_wire::ScopeRef::Realm {
+                        realm_id: arkret_wire::RealmId::from_event_id(&other),
+                    };
+                } else {
+                    state.genesis_event_ref = other;
+                }
+                Some(state)
+            };
+            let error = consumer
+                .accept(&ciphertext, &envelope, &key, &different_state)
+                .unwrap_err();
+            ensure!(
+                error
+                    .to_string()
+                    .contains("content_key_commitment_mismatch")
+            );
+            ensure!(consumer.state == before);
+        }
+        let EncryptedAttachment::Stream(mut changed_author) = envelope.clone() else {
+            bail!("stream codec produced a whole-file envelope");
+        };
+        changed_author.producer.authorization_event_ref =
+            EventId::from_digest(arkret_canonical::DigestSuite::Sha256, [46; 32]);
+        let error = consumer
+            .accept(
+                &ciphertext,
+                &EncryptedAttachment::Stream(changed_author),
+                &key,
+                &winning_epoch,
+            )
+            .unwrap_err();
+        ensure!(
+            error
+                .to_string()
+                .contains("content_key_commitment_mismatch")
+        );
+        ensure!(consumer.state == before);
+        ensure!(
+            consumer.accept(&ciphertext, &envelope, &key, &winning_epoch)?
+                == b"original scoped attachment"
+        );
         Ok(())
     }
 }
