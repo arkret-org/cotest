@@ -235,8 +235,7 @@ pub(crate) async fn exercise(
     let scope = ScopeRef::Realm {
         realm_id: realm.clone(),
     };
-    let group_id = scope.canonical_mls_group_id()?;
-    let (claim, ..) = claim_for(alice, x, y, &carol, realm, &group_id, 0x82).await?;
+    let (claim, ..) = claim_for(alice, x, y, &carol, &scope, 0x82).await?;
     ensure!(claim.claims.len() == 1 && claim.claims[0].actor_id == carol.actor);
     ensure!(claim.claims[0].device_authorize_event_id.as_ref() == Some(&carol.authorize_event_id));
     let dirty = current(urls[0], realm).await?;

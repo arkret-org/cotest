@@ -1,5 +1,5 @@
-//! A native host session backed by the exact harness issuer record.
-//! The ledger is an auth fixture, not evidence of Coauth grant issuance.
+//! Native host sessions retain their authenticated registration or issuer source.
+//! The mock ledger remains an auth fixture, not evidence of Coauth grant issuance.
 
 use anyhow::{Context, Result, ensure};
 use garth::{
@@ -86,13 +86,13 @@ impl AuthenticatedTransportFactory for HostFactory {
     }
 }
 
-pub(super) async fn bind_standard_host(
-    mut client: TestActorClient,
-    issuer: &MockCoauthIntrospectionServer,
+async fn discover_host_binding(
+    client: &TestActorClient,
     station: &arkret_wire::DidCoreId,
     trust_domain: &arkret_wire::TrustDomainId,
+    authority_origin: &str,
     ca_pem: Option<&[u8]>,
-) -> Result<TestActorClient> {
+) -> Result<arkret::StationConnectionBinding> {
     // The harness independently selected this process origin and Station id.
     // This exercises public discovery shape/binding, not persistent UI admission.
     let roots = ca_pem
@@ -120,9 +120,21 @@ pub(super) async fn bind_standard_host(
         .as_ref()
         .context("selected Station does not advertise its Account Authority")?;
     ensure!(
-        authority.origin.as_str() == issuer.origin(),
+        authority.origin.as_str() == authority_origin,
         "selected Station advertises another Account Authority"
     );
+    Ok(binding)
+}
+
+pub(super) async fn bind_standard_host(
+    mut client: TestActorClient,
+    issuer: &MockCoauthIntrospectionServer,
+    station: &arkret_wire::DidCoreId,
+    trust_domain: &arkret_wire::TrustDomainId,
+    ca_pem: Option<&[u8]>,
+) -> Result<TestActorClient> {
+    let binding =
+        discover_host_binding(&client, station, trust_domain, &issuer.origin(), ca_pem).await?;
     let ClientSession::Canonical { grant, .. } = &client.session else {
         anyhow::bail!("native host requires an issuer-ledger Standard grant");
     };
@@ -145,6 +157,77 @@ pub(super) async fn bind_standard_host(
         issuer: issuer.grant_ledger(),
         binding: binding.clone(),
         credential: grant.clone(),
+    };
+    let engine = SessionEngine::with_state(client.sdk.clone(), state);
+    let provider = SessionTransportProvider::new(engine.clone(), factory, Default::default());
+    client.sdk = provider
+        .own_station_result_client(client.sdk.clone(), binding)?
+        .http_client()?;
+    client.native_session_invalidator = Some(LocalSessionInvalidator { engine });
+    Ok(client)
+}
+
+#[derive(Clone)]
+struct RegisteredHostFactory {
+    http: arkret_http_client::Client,
+    accepted: SessionGrantState,
+    binding: arkret::StationConnectionBinding,
+}
+
+impl AuthenticatedTransportFactory for RegisteredHostFactory {
+    type Transport = arkret_http_client::Client;
+
+    fn build(&self, state: &SessionGrantState) -> garth::Result<Self::Transport> {
+        if state != &self.accepted {
+            return Err(garth::Error::Protocol(
+                "registered host session changed".into(),
+            ));
+        }
+        Ok(self.http.clone())
+    }
+
+    fn validate_own_station_session(
+        &self,
+        state: &SessionGrantState,
+        binding: &arkret::StationConnectionBinding,
+    ) -> garth::Result<()> {
+        if binding != &self.binding {
+            return Err(garth::Error::Protocol(
+                "registered Station binding changed".into(),
+            ));
+        }
+        self.build(state).map(|_| ())
+    }
+}
+
+/// Called only after the real Account Authority registration and its receipts
+/// have been verified. The engine owns this local host lifetime; remote issuer
+/// validity remains enforced by the real DPoP-authenticated HTTP operations.
+pub(super) async fn bind_registered_host(
+    mut client: TestActorClient,
+    state: SessionGrantState,
+    station: &arkret_wire::DidCoreId,
+    trust_domain: &arkret_wire::TrustDomainId,
+    authority_origin: &str,
+    ca_pem: Option<&[u8]>,
+) -> Result<TestActorClient> {
+    let binding =
+        discover_host_binding(&client, station, trust_domain, authority_origin, ca_pem).await?;
+    let principal = client
+        .principal
+        .as_ref()
+        .context("registered Device custody absent")?;
+    ensure!(
+        state.account_id == arkret::AccountId::new(principal.core_id.clone(), station.clone())
+            && state.device_id.as_ref() == Some(&principal.device_id)
+            && state.audience_id == *station
+            && state.grant_jwt == client.session.credential(),
+        "registered host differs from the authenticated Account, Device or grant"
+    );
+    let factory = RegisteredHostFactory {
+        http: client.sdk.clone(),
+        accepted: state.clone(),
+        binding: binding.clone(),
     };
     let engine = SessionEngine::with_state(client.sdk.clone(), state);
     let provider = SessionTransportProvider::new(engine.clone(), factory, Default::default());

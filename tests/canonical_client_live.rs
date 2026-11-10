@@ -17,7 +17,7 @@
 
 #![cfg(not(target_arch = "wasm32"))]
 
-use anyhow::Result;
+use anyhow::{Context as _, Result};
 use cotest::harness::{ArkretServer, CanonicalClientRequest, ClientSession};
 use cotest_test_support::provisioning::{DeploymentEndpoints, MockEmailInbox};
 
@@ -167,5 +167,23 @@ async fn the_harness_builds_a_client_from_the_canonical_chain() -> Result<()> {
         }),
         "the founding device is not on the account: {devices:?}"
     );
+    let source = client
+        .sdk()
+        .own_station_result_client()?
+        .context("canonical host source absent")?;
+    let principal = client
+        .principal
+        .as_ref()
+        .context("canonical Device custody absent")?;
+    let original = source
+        .committed_event_get(&principal.founding_authorize_event_id)
+        .await?;
+    assert!(
+        matches!(original.value()?, arkret::CommittedEventView::Full(current)
+        if current.event.event_id == principal.founding_authorize_event_id)
+    );
+    let copied_source = source.clone();
+    client.invalidate_local_native_session()?;
+    assert!(source.check_session().is_err() && copied_source.check_session().is_err());
     Ok(())
 }

@@ -65,9 +65,10 @@ use crate::scenarios::identity_test_support::{
     HARNESS_INTERNAL_AUTHORITY_SECRET, create_human_actor_profile,
 };
 use crate::scenarios::mls_lifecycle_live::{
-    ACTIVE_SUITE, Member, accepted_full_view, canonical, claim_request_between, claim_request_to,
-    claimed_keypackage_record, fresh_uuid_v7, json_equal, post_bytes_at, post_claim, post_json,
-    post_json_at, problem_type, recipient_welcomes, signed_welcome, upload_public_blob,
+    ACTIVE_SUITE, Member, accepted_full_view, canonical, claim_request_between,
+    claim_request_between_scoped, claim_request_to, claimed_keypackage_record, fresh_uuid_v7,
+    json_equal, post_bytes_at, post_claim, post_json, post_json_at, problem_type,
+    recipient_welcomes, signed_welcome, upload_public_blob,
 };
 use crate::scenarios::protocol_payloads::account_summary::{account_frames, listed_row};
 
@@ -219,8 +220,7 @@ pub async fn claim_for(
     source: &ArkretServer,
     destination: &ArkretServer,
     target: &Member,
-    realm_id: &RealmId,
-    group_id: &str,
+    scope: &ScopeRef,
     seed: u8,
 ) -> Result<(
     KeyPackagesClaimResponseBody,
@@ -230,13 +230,12 @@ pub async fn claim_for(
     let deadline = Instant::now() + Duration::from_secs(120);
     let mut attempt = 0u8;
     loop {
-        let request = claim_request_between(
+        let request = claim_request_between_scoped(
             requester,
             source,
             destination,
             target,
-            realm_id,
-            group_id,
+            scope,
             [seed.wrapping_add(attempt); 16],
             ChronoDuration::minutes(5),
         )?;
@@ -339,10 +338,7 @@ async fn forwarded_add(
     Vec<u8>,
     arkret_wire::RealmCommit,
 )> {
-    let realm_id = RealmId::new(realm.to_owned())?;
-    let group_id = scope.canonical_mls_group_id()?;
-    let (outcome, bytes, _) =
-        claim_for(adder, y, y, added, &realm_id, group_id.as_str(), seed).await?;
+    let (outcome, bytes, _) = claim_for(adder, y, y, added, scope, seed).await?;
     ensure!(
         outcome.claims.len() == 1 && outcome.claims[0].actor_id == added.actor,
         "the claim did not select the added member's KeyPackage: {outcome:?}"
@@ -823,7 +819,7 @@ async fn cross_station_mls_welcome_original_run() -> Result<()> {
     //     claim destination, and X answers the stored outcome.
     publish_one(&dave).await?;
     let (relayed, relayed_bytes, relayed_request) =
-        claim_for(&alice, x, y, &dave, &realm_id, group_id.as_str(), 0x61).await?;
+        claim_for(&alice, x, y, &dave, &scope, 0x61).await?;
     ensure!(
         relayed.claims.len() == 1 && relayed.claims[0].actor_id == dave.actor,
         "the relayed claim did not select Dave's KeyPackage: {relayed:?}"
@@ -894,7 +890,6 @@ async fn cross_station_mls_attest_add_direct_run() -> Result<()> {
     let scope = ScopeRef::Realm {
         realm_id: realm_id.clone(),
     };
-    let group_id = scope.canonical_mls_group_id()?;
     let genesis_binding = MlsGovernanceBindingPayload::new(scope.clone(), None, 0, 0, 0)?;
     let mut alice_group = alice
         .mls_identity()?
@@ -922,7 +917,7 @@ async fn cross_station_mls_attest_add_direct_run() -> Result<()> {
         submit_and_expect_commit(&alice.client, &alice.account, ALICE_DEVICE, &genesis).await?;
     ensure_commit_signed_by(&genesis_commit, x)?;
     let _ = publish_one(&carol).await?;
-    let (claim, ..) = claim_for(&alice, x, y, &carol, &realm_id, group_id.as_str(), 0x71).await?;
+    let (claim, ..) = claim_for(&alice, x, y, &carol, &scope, 0x71).await?;
     ensure!(claim.claims.len() == 1 && claim.claims[0].actor_id == carol.actor);
     let binding =
         MlsGovernanceBindingPayload::new(scope.clone(), Some(genesis.event_id.clone()), 0, 1, 0)?;

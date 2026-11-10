@@ -308,16 +308,7 @@ impl ConsentCallContext {
         let mut joined = Vec::new();
         for (index, member) in [&holder, &denied_holder].into_iter().enumerate() {
             let identity = publish_one(member).await?;
-            let (claim, ..) = claim_for(
-                &caller,
-                a,
-                b,
-                member,
-                &realm,
-                &scope.canonical_mls_group_id()?,
-                0x91 + index as u8,
-            )
-            .await?;
+            let (claim, ..) = claim_for(&caller, a, b, member, &scope, 0x91 + index as u8).await?;
             ensure!(claim.claims.len() == 1 && claim.claims[0].actor_id == member.actor);
             let binding = MlsGovernanceBindingPayload::new(
                 scope.clone(),

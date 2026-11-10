@@ -494,16 +494,7 @@ pub(crate) async fn circle_mls_fixture(
         strand_id,
     } = circle_discussion_basis(alice, bob, realm).await?;
     let bob_identity = publish_one(bob).await?;
-    let (claim, ..) = claim_for(
-        alice,
-        x,
-        y,
-        bob,
-        realm,
-        &scope.canonical_mls_group_id()?,
-        0x82,
-    )
-    .await?;
+    let (claim, ..) = claim_for(alice, x, y, bob, &scope, 0x82).await?;
     let genesis_binding = MlsGovernanceBindingPayload::new(scope.clone(), None, 0, 0, 0)?;
     let mut alice_group = alice
         .mls_identity()?

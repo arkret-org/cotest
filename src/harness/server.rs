@@ -1998,9 +1998,24 @@ impl ArkretServer {
             founding_authorize_event_id: founding_authorization.event_id.clone(),
         };
         let control_realm = principal.pcr_realm_id.clone();
+        let native_session = garth::SessionGrantState::from_initial_registration_outcome(
+            &creation.initial_session,
+            founded.session_grant().clone(),
+            chrono::Utc::now(),
+        )?;
         let client = self.actor_client(&founded.did, &device_id, session, Some(principal))?;
         client.track_controlled_realm(&control_realm);
-        Ok(client)
+        super::heap_future(|| {
+            super::native_session::bind_registered_host(
+                client,
+                native_session,
+                &self.service_id,
+                &self.trust_domain,
+                &endpoints.coauth_base_url,
+                self._tls.as_ref().map(|tls| tls.ca_pem.as_slice()),
+            )
+        })
+        .await
     }
 
     /// Register account-first, then publish a primary localpart through the

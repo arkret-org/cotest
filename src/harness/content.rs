@@ -116,13 +116,15 @@ pub async fn prepare_device(
         .context("native Device session required")?;
     let method = arkret::DidUrl::new(format!("{}#{}", principal.did, principal.device_id))
         .map_err(anyhow::Error::msg)?;
-    let custody = crate::scenarios::agent_runtime_live::ensure_controller_recovery_policy(
-        client,
-        &account,
-        principal,
-        &method,
-        &source.binding().trust_domain,
-    )
+    let custody = super::heap_future(|| {
+        crate::scenarios::agent_runtime_live::ensure_controller_recovery_policy(
+            client,
+            &account,
+            principal,
+            &method,
+            &source.binding().trust_domain,
+        )
+    })
     .await?;
     let status: RecoveryPolicyStatusView = serde_json::from_value(
         expect_json(
@@ -202,21 +204,23 @@ pub async fn prepare_device(
             device_generation_ref: anchor.generation_ref,
         },
     };
-    let result = prepare(
-        client,
-        group,
-        event,
-        reference,
-        path,
-        content_type,
-        plaintext,
-        author,
-        custody.recovery_policy_ref,
-        custody.recipient_key_ref.to_string(),
-        &public[prefix..],
-        None,
-        &principal.device_signing_key,
-    )
+    let result = super::heap_future(|| {
+        prepare(
+            client,
+            group,
+            event,
+            reference,
+            path,
+            content_type,
+            plaintext,
+            author,
+            custody.recovery_policy_ref,
+            custody.recipient_key_ref.to_string(),
+            &public[prefix..],
+            None,
+            &principal.device_signing_key,
+        )
+    })
     .await?;
     source.check_session()?;
     Ok(result)

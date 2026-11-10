@@ -60,16 +60,7 @@ pub(super) async fn add_other(
     let scope = ScopeRef::Realm {
         realm_id: realm.clone(),
     };
-    let (claim, ..) = claim_for(
-        sender,
-        governance,
-        hosting,
-        other,
-        realm,
-        &scope.canonical_mls_group_id()?,
-        0x82,
-    )
-    .await?;
+    let (claim, ..) = claim_for(sender, governance, hosting, other, &scope, 0x82).await?;
     ensure!(claim.claims.len() == 1 && claim.claims[0].actor_id == other.actor);
     let url = database_url.to_owned();
     let realm_text = realm.to_string();

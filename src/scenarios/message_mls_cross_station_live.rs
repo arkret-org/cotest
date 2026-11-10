@@ -449,8 +449,7 @@ async fn run_at_two_stations(
     let scope = ScopeRef::Realm {
         realm_id: realm_id.clone(),
     };
-    let group_id = scope.canonical_mls_group_id()?;
-    let (claim, ..) = claim_for(&alice, x, y, &bob, &realm_id, &group_id, 0x81).await?;
+    let (claim, ..) = claim_for(&alice, x, y, &bob, &scope, 0x81).await?;
     ensure!(claim.claims.len() == 1);
     ensure!(claim.claims[0].actor_id == bob.actor);
     ensure!(claim.claims[0].device_authorize_event_id.as_ref() == Some(&bob.authorize_event_id));

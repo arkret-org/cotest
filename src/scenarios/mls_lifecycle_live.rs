@@ -1549,6 +1549,53 @@ pub fn claim_request_to(
     claim_request_id: [u8; 16],
     lifetime: chrono::Duration,
 ) -> Result<KeyPackagesClaimRequestBody> {
+    claim_request_to_in_scope(
+        requester,
+        source,
+        destination,
+        (target_account, target_device),
+        &ScopeRef::Realm {
+            realm_id: realm_id.clone(),
+        },
+        mls_group_id,
+        claim_request_id,
+        lifetime,
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+pub fn claim_request_between_scoped(
+    requester: &Member,
+    source: &ArkretServer,
+    destination: &ArkretServer,
+    target: &Member,
+    scope: &ScopeRef,
+    claim_request_id: [u8; 16],
+    lifetime: chrono::Duration,
+) -> Result<KeyPackagesClaimRequestBody> {
+    claim_request_to_in_scope(
+        requester,
+        source,
+        destination,
+        (&target.account, &target.device),
+        scope,
+        &scope.canonical_mls_group_id()?,
+        claim_request_id,
+        lifetime,
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+fn claim_request_to_in_scope(
+    requester: &Member,
+    source: &ArkretServer,
+    destination: &ArkretServer,
+    (target_account, target_device): (&AccountId, &DeviceId),
+    scope: &ScopeRef,
+    mls_group_id: &str,
+    claim_request_id: [u8; 16],
+    lifetime: chrono::Duration,
+) -> Result<KeyPackagesClaimRequestBody> {
     let signed_at = arkret_canonical::normalize_timestamp_canonical(chrono::Utc::now());
     let mut body: KeyPackagesClaimRequestBody = serde_json::from_value(json!({
         "claim_request_id": base64::engine::general_purpose::URL_SAFE_NO_PAD
@@ -1556,8 +1603,8 @@ pub fn claim_request_to(
         "target_account_id": target_account,
         "target_device_ids": [target_device],
         "requester_account_id": requester.account,
-        "intended_realm_id": realm_id,
-        "effective_scope": ScopeRef::Realm { realm_id: realm_id.clone() },
+        "intended_realm_id": scope.realm_id(),
+        "effective_scope": scope,
         "mls_group_id": mls_group_id,
         "claim_purpose": "realm_membership",
         "required_capabilities": [CONTENT_CAPABILITY],
