@@ -27,6 +27,31 @@ adapt to your local toolchain.
 The current default server under test is the sibling
 `../coland/Cargo.toml` checkout.
 
+## Realm Bot joint consumer tests
+
+The production Savfox consumer tests belong to Cotest. They reuse Coland's
+native admission and transport fixture and provide their own model provider,
+reply publication, MLS epoch change, worker restart and deduplication checks.
+The server and its own tests do not link the Agent runtime.
+
+The two cases cover normal mention replies and an MLS update during a reply.
+Coland retains the independent protocol-side key recovery and management
+transfer cases. Run the consumer cases with the sibling Savfox checkout and
+local PostgreSQL ready:
+
+```sh
+python -B scripts/run-native-rust-tests.py -- cargo +1.99.0 test --locked --manifest-path joint/realm-bot-consumer/Cargo.toml --test realm_bot_consumer -- --test-threads=1
+```
+
+Set `COLAND_TEST_DATABASE_URL` to a PostgreSQL administrator connection that
+can allocate isolated test leases. The native runner supplies the shared test
+TLS authority. The `Realm Bot product consumer` CI job runs the same entry.
+
+The independent Cargo workspace and lockfile keep the external product runtime
+out of the default harness build and avoid coupling its dependency versions to
+the Coauth suite. A compile failure in that runtime is a joint-suite failure;
+it does not prevent Coland from compiling independently.
+
 ## Operation coverage inventory
 
 `operation-test-coverage.json` records a coordinated source snapshot. Ordinary

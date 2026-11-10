@@ -212,6 +212,54 @@ jobs:
         df -i .
         free -h
 
+  realm-bot-consumer:
+    name: Realm Bot product consumer
+    needs: native-sources
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    services:
+      postgres:
+        image: postgres:18-alpine
+        env:
+          POSTGRES_USER: cotest
+          POSTGRES_PASSWORD: cotest-ci
+          POSTGRES_DB: cotest_bot_joint
+        ports:
+          - 5432:5432
+        options: --health-cmd "pg_isready -U cotest -d cotest_bot_joint" --health-interval 5s --health-timeout 5s --health-retries 12
+    env:
+      COLAND_TEST_DATABASE_URL: postgresql://cotest:cotest-ci@127.0.0.1:5432/cotest_bot_joint
+      CARGO_BUILD_JOBS: '4'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: cotest
+      - uses: ./cotest/.github/actions/checkout-native-sources
+        with:
+          refs: ${{ needs.native-sources.outputs.refs }}
+          token: ${{ secrets.CI_REPO_TOKEN || github.token }}
+      - uses: ./cotest/.github/actions/reclaim-hosted-runner-space
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: dtolnay/rust-toolchain@nightly
+        with:
+          components: rustfmt
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: '1.99.0'
+      - name: Install native build dependencies
+        run: sudo apt-get update && sudo apt-get install -y pkg-config libssl-dev libclang-dev openssl dbus-x11 gnome-keyring libsecret-tools
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: cotest/joint/realm-bot-consumer
+      - name: Check joint consumer format
+        working-directory: cotest
+        run: cargo +nightly fmt --manifest-path joint/realm-bot-consumer/Cargo.toml -- --check
+      - name: Verify real consumer reply and restart
+        working-directory: cotest
+        run: bash ../inkson/scripts/with-native-keystore.sh python -B scripts/run-native-rust-tests.py -- cargo +1.99.0 test --locked --manifest-path joint/realm-bot-consumer/Cargo.toml --test realm_bot_consumer -- --test-threads=1
+
   workspace:
     name: complete native workspace
     needs: native-sources

@@ -1,0 +1,84 @@
+[package]
+name = "cotest-realm-bot-consumer"
+version = "0.3.0"
+edition = "2024"
+rust-version = "1.99"
+publish = false
+
+# Resolve product runtimes independently of the main Coauth test harness.
+[workspace]
+resolver = "3"
+
+[[test]]
+name = "realm_bot_consumer"
+path = "tests/realm_bot_consumer.rs"
+
+[dev-dependencies]
+base64 = { version = "0.23.1" }
+diesel = { version = "2.3.14", features = ["postgres", "serde_json", "chrono", "uuid"] }
+diesel-async = { version = "0.9", features = ["postgres", "deadpool", "async-connection-wrapper"] }
+tokio = { version = "1.53.1", features = ["rt-multi-thread", "sync", "time", "macros", "net", "io-util"] }
+tracing = { version = "0.1.44" }
+arkret-crypto = { version = "0.3.0", path = "../../../arkret-rust-sdk/crates/crypto", default-features = false, features = ["hpke"] }
+arkret-event-draft = { version = "0.3.0", path = "../../../arkret-rust-sdk/crates/event-draft", default-features = false }
+serde = { version = "1.0.229", features = ["derive"] }
+arkret = { version = "0.3.0", path = "../../../arkret-rust-sdk/crates/sdk", default-features = false, features = ["mls"] }
+arkret-bootstrap = { version = "0.3.0", path = "../../../arkret-rust-sdk/crates/bootstrap", default-features = false }
+arkret-bridge-runtime = { version = "0.3.0", path = "../../../bridges/crates/runtime", default-features = false, features = ["full", "postgres"] }
+arkret-canonical = { version = "0.3.0", path = "../../../arkret-rust-sdk/crates/canonical", default-features = false }
+arkret-http-client = { version = "0.3.0", path = "../../../arkret-rust-sdk/crates/http-client", default-features = false, features = ["tls-rustls"] }
+arkret-identifiers = { version = "0.3.0", path = "../../../arkret-rust-sdk/crates/identifiers", default-features = false }
+arkret-identity = { version = "0.3.0", path = "../../../arkret-rust-sdk/crates/identity", default-features = false }
+arkret-mls = { version = "0.3.0", path = "../../../arkret-rust-sdk/crates/mls", default-features = false, features = ["test-utils"] }
+arkret-models-collaboration = { version = "0.3.0", path = "../../../arkret-rust-sdk/crates/models-collaboration", default-features = false }
+arkret-models-crypto = { version = "0.3.0", path = "../../../arkret-rust-sdk/crates/models-crypto", default-features = false }
+arkret-models-identity = { version = "0.3.0", path = "../../../arkret-rust-sdk/crates/models-identity", default-features = false }
+arkret-models-integration = { version = "0.3.0", path = "../../../arkret-rust-sdk/crates/models-integration", default-features = false }
+arkret-policy = { version = "0.3.0", path = "../../../arkret-rust-sdk/crates/policy", default-features = false }
+arkret-schema = { version = "0.3.0", path = "../../../arkret-rust-sdk/crates/schema", default-features = false }
+arkret-schema-conformance = { version = "0.3.0", path = "../../../arkret-rust-sdk/crates/schema-conformance", default-features = false }
+arkret-signatures = { version = "0.3.0", path = "../../../arkret-rust-sdk/crates/signatures", default-features = false, features = ["signer"] }
+arkret-state = { version = "0.3.0", path = "../../../arkret-rust-sdk/crates/state", default-features = false }
+arkret-test-kit = { version = "0.3.0", path = "../../../arkret-rust-sdk/crates/test-kit" }
+arkret-wire = { version = "0.3.0", path = "../../../arkret-rust-sdk/crates/wire", default-features = false, features = ["diesel", "test-support"] }
+async-trait = "0.1.92"
+bytes = { version = "1.12.1" }
+chacha20poly1305 = { version = "0.11" }
+chrono = "0.4.45"
+coland-domain = { version = "0.3.0", path = "../../../coland/crates/domain" }
+coland-http = { version = "0.3.0", path = "../../../coland/crates/http", features = ["test-support"] }
+coland-services = { version = "0.3.0", path = "../../../coland/crates/services" }
+coland-storage = { version = "0.3.0", path = "../../../coland/crates/storage", features = ["test-support"] }
+coland-storage-postgres = { path = "../../../coland/crates/storage-postgres", features = ["test-support"] }
+coland-test-support = { version = "0.3.0", path = "../../../coland/crates/test-support" }
+ed25519-dalek = { version = "3.0.0" }
+futures-util = { version = "0.3.34" }
+rand = "0.10.2"
+rand_chacha = "0.10.0"
+rand_core = "0.10.1"
+reqwest = { version = "0.13.4", default-features = false, features = ["form", "json", "rustls"] }
+rustls = { version = "0.23.43", default-features = false, features = ["ring", "std"] }
+salvo = { version = "=1.1.0", default-features = false, features = ["rfc9457", "test"] }
+serde_json = "1.0.151"
+sha2 = "0.11.0"
+tokio-tungstenite = { version = "0.30.0", default-features = false, features = ["connect", "handshake", "rustls-tls-webpki-roots"] }
+tracing-subscriber = { version = "0.3.23" }
+url = "2.5"
+uuid = "1.26.0"
+savfox-gateway-server = { path = "../../../../savfox-ai/savfox/crates/gateway-server", default-features = false, features = ["arkret"] }
+
+# Product consumers use one checked-out protocol and transport type universe.
+[patch."https://github.com/arkret-org/arkret-rust-sdk.git"]
+arkret = { path = "../../../arkret-rust-sdk/crates/sdk" }
+arkret-schema = { path = "../../../arkret-rust-sdk/crates/schema" }
+arkret-crypto = { path = "../../../arkret-rust-sdk/crates/crypto" }
+arkret-models-collaboration = { path = "../../../arkret-rust-sdk/crates/models-collaboration" }
+arkret-models-crypto = { path = "../../../arkret-rust-sdk/crates/models-crypto" }
+arkret-signatures = { path = "../../../arkret-rust-sdk/crates/signatures" }
+arkret-wire = { path = "../../../arkret-rust-sdk/crates/wire" }
+
+[patch."https://github.com/arkret-org/garth.git"]
+garth = { path = "../../../garth" }
+
+[patch."https://github.com/arkret-org/bridges.git"]
+arkret-bridge-runtime = { path = "../../../bridges/crates/runtime" }
