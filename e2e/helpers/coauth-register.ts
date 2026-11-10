@@ -8,6 +8,7 @@
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 
 import { newDeviceId } from "./ids";
+import type { NativeContentCustody } from "./native-content-custody";
 import { type APIRequestContext } from "@playwright/test";
 import {
   coauthOidcClientId,
@@ -52,6 +53,7 @@ export type CoauthPasswordAccount = {
   accountHandoffGrant: string;
   pcrGenesisCommits: Array<Record<string, unknown>>;
   principalRegistrationCheckpoint: Record<string, unknown>;
+  nativeContentCustody: NativeContentCustody;
   genesisClaimed?: boolean;
 };
 
@@ -631,6 +633,21 @@ export async function registerCoauthPasswordAccount(
       ...fixture.checkpoint,
       binding_receipt: receipt,
       stage: "binding_registered",
+    },
+    nativeContentCustody: {
+      principal: {
+        accepted_request: registerBody,
+        outcome: registered,
+        did,
+        device_id: genesisDeviceId,
+        event_verification_method: `${did}#${genesisDeviceId}`,
+        recovery_key: fixture.recovery_key,
+        checkpoint: { ...fixture.checkpoint, binding_receipt: receipt, stage: "binding_registered" },
+      },
+      stationBaseUrl: colandBaseUrl(opts.server),
+      coauthBaseUrl: coauthBase.replace(/\/+$/, ""),
+      trustDomain,
+      sessionSigningSeedB64url: dpopDeviceSeedB64url(handoff.deviceKey),
     },
   };
 }

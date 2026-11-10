@@ -1014,56 +1014,7 @@ fn controller_history_custody(
     account: &AccountId,
     summary: &arkret_models_crypto::RecoveryPolicySummary,
 ) -> Result<arkret_models_crypto::AgentHistoryCustody> {
-    summary.validate_shape()?;
-    let policy = summary
-        .policy
-        .as_ref()
-        .context("controller policy original absent")?;
-    policy.validate_shape()?;
-    let now = Utc::now();
-    ensure!(
-        summary.account_id == *account
-            && policy.account_id == *account
-            && policy.policy_id == summary.policy_id
-            && policy.version == summary.version
-            && policy.not_before.is_none_or(|at| at <= now)
-            && policy.expires_at.is_none_or(|at| at > now),
-        "controller policy mismatch"
-    );
-    let mut recipients = policy
-        .methods
-        .iter()
-        .filter_map(|m| match m {
-            arkret_models_crypto::RecoveryMethod::RecoveryUnlock { keys } => Some(keys),
-            _ => None,
-        })
-        .flatten()
-        .filter(|k| {
-            k.not_before <= now
-                && k.expires_at > now
-                && k.revoked_at.is_none_or(|at| at > now)
-                && k.backup_hpke.not_before <= now
-                && k.backup_hpke.expires_at > now
-                && k.backup_hpke.revoked_at.is_none_or(|at| at > now)
-                && k.backup_hpke
-                    .hpke_suites
-                    .contains(&arkret::RecoveryBackupHpkeSuite::X25519AeadChacha20Poly1305V1)
-        });
-    let recipient = recipients
-        .next()
-        .context("controller lacks active backup-HPKE recipient")?;
-    ensure!(
-        recipients.next().is_none(),
-        "controller backup-HPKE recipient is ambiguous"
-    );
-    Ok(arkret_models_crypto::AgentHistoryCustody {
-        custodian_actor_id: ActorId::account(account.clone()),
-        recovery_policy_ref: arkret_models_crypto::RecoveryPolicyRef {
-            policy_id: summary.policy_id.clone(),
-            policy_version: summary.version,
-        },
-        recipient_key_ref: recipient.backup_hpke.key_agreement_ref.clone(),
-    })
+    cotest_test_support::native_content::controller_history_custody(account, summary)
 }
 
 /// Reuse the accepted controller prerequisite, or publish it once.
@@ -1074,113 +1025,22 @@ pub(crate) async fn ensure_controller_recovery_policy(
     device_method: &DidUrl,
     trust_domain: &arkret_wire::TrustDomainId,
 ) -> Result<arkret_models_crypto::AgentHistoryCustody> {
-    use ed25519_dalek::Signer as _;
-
-    let current: arkret_models_crypto::RecoveryPolicyStatusView = serde_json::from_value(
-        expect_json(
-            controller.get("/_arkret/root/identity/recovery-policy"),
-            StatusCode::OK,
-        )
-        .await?,
-    )?;
-    current.validate_shape()?;
-    ensure!(
-        current.account_id.as_ref() == Some(controller_account),
-        "recovery policy reader returned another Account"
-    );
-    let previous = current.active_policy;
-    if let Some(summary) = &previous {
-        if let Ok(custody) = controller_history_custody(controller_account, summary) {
-            return Ok(custody);
-        }
-    }
-    // Fixture-held entropy produces a real 24-word proof/HPKE pair. This is
-    // enrollment for the native Agent custody prerequisite, not a DID restore test.
     let mnemonic =
         arkret::identity_root::format_bip39_identity_recovery_mnemonic(&principal.root_key_seed)?;
-    let material =
-        arkret::identity_root::derive_identity_recovery_key_material_from_bip39(&mnemonic, "", 0)?;
-    let issued = arkret::canonical::normalize_timestamp_canonical(Utc::now());
-    let expires = issued + chrono::Duration::days(3650);
-    let proof_ref =
-        DidUrl::new(format!("{}#recovery-proof-0", principal.did)).map_err(anyhow::Error::msg)?;
-    let backup_ref =
-        DidUrl::new(format!("{}#backup-hpke-0", principal.did)).map_err(anyhow::Error::msg)?;
-    let policy_id = format!("ak:policy:{}", unique_uuid7());
-    let mut policy: arkret_models_crypto::RecoveryPolicy = serde_json::from_value(json!({
-        "schema": "ak.schema.recovery_policy.v1",
-        "policy_id": policy_id,
-        "account_id": controller_account,
-        "version": previous.as_ref().map_or(1, |p| p.version + 1),
-        "supersedes_id": previous.as_ref().map(|p| &p.policy_id),
-        "trust_domain": trust_domain,
-        "issued_at": arkret_canonical::format_timestamp_canonical(
-            arkret::canonical::normalize_timestamp_canonical(Utc::now())
-        ),
-        "signature_proof": {
-            "verification_method": device_method,
-            "signature_algorithm": "Ed25519",
-            "signature": "AA"
-        },
-        "methods": [{"kind":"recovery_unlock", "keys":[{
-            "verification_method":proof_ref, "public_key_multibase":material.recovery_proof_public_key_multikey,
-            "signature_algorithm":"Ed25519", "not_before":issued, "expires_at":expires,
-            "backup_hpke": {"key_agreement_ref":backup_ref, "key_agreement_algorithm":"X25519",
-                "public_key_multibase":material.backup_hpke_public_key_multikey,
-                "hpke_suites":["ak.hpke_x25519_aead_chacha20poly1305.v1"],
-                "use":"backup_hpke", "not_before":issued, "expires_at":expires}
-        }]}]
-    }))?;
-    let transcript = arkret_models_crypto::recovery_policy_signature_transcript_bytes(&policy)?;
-    policy.signature_proof.signature =
-        arkret_wire::Base64UrlString::new(arkret_canonical::base64url_encode(
-            principal.device_signing_key.sign(&transcript).to_bytes(),
-        ))
-        .map_err(anyhow::Error::msg)?;
-    let event = sign(
-        arkret_wire::AuthoredEvent::finalize_with_digest_suite(
-            arkret_wire::test_support::raw_event_for_actor_at(
-                arkret_wire::EventKind::PolicySet.as_str(),
-                ScopeRef::Realm {
-                    realm_id: principal.pcr_realm_id.clone(),
-                },
-                ActorId::account(controller_account.clone()),
-                json!({"policy_id": policy_id, "value": policy}),
-                arkret::canonical::normalize_timestamp_canonical(Utc::now()),
-            )?,
-            arkret::canonical::DigestSuite::Sha256,
-        )?,
-        device_method,
-        principal.device_signing_key.to_bytes(),
-    )?;
-    let response = controller
-        .post("/_arkret/root/identity/recovery-policy")
-        .header(reqwest::header::CONTENT_TYPE, "application/json")
-        .body(arkret_canonical::canonical_json_bytes(
-            &arkret_wire::EventAdmissionSubmission::new(event),
-        )?)
-        .send()
-        .await?;
-    ensure!(
-        response.status() == StatusCode::OK,
-        "the controller recovery policy was not accepted: {} {}",
-        response.status(),
-        response.text().await.unwrap_or_default()
-    );
-    let accepted: arkret_models_crypto::RecoveryPolicyStatusView = serde_json::from_value(
-        expect_json(
-            controller.get("/_arkret/root/identity/recovery-policy"),
-            StatusCode::OK,
+    let http = controller.sdk();
+    crate::harness::heap_future(|| {
+        cotest_test_support::native_content::ensure_controller_recovery_policy(
+            &http,
+            controller_account,
+            &principal.pcr_realm_id,
+            principal.did.as_str(),
+            device_method,
+            trust_domain,
+            &principal.device_signing_key,
+            &mnemonic,
         )
-        .await?,
-    )?;
-    controller_history_custody(
-        controller_account,
-        accepted
-            .active_policy
-            .as_ref()
-            .context("accepted recovery policy absent")?,
-    )
+    })
+    .await
 }
 
 /// The controller's authenticated private disclosure of the Agent's

@@ -167,39 +167,6 @@ pub(super) async fn bind_standard_host(
     Ok(client)
 }
 
-#[derive(Clone)]
-struct RegisteredHostFactory {
-    http: arkret_http_client::Client,
-    accepted: SessionGrantState,
-    binding: arkret::StationConnectionBinding,
-}
-
-impl AuthenticatedTransportFactory for RegisteredHostFactory {
-    type Transport = arkret_http_client::Client;
-
-    fn build(&self, state: &SessionGrantState) -> garth::Result<Self::Transport> {
-        if state != &self.accepted {
-            return Err(garth::Error::Protocol(
-                "registered host session changed".into(),
-            ));
-        }
-        Ok(self.http.clone())
-    }
-
-    fn validate_own_station_session(
-        &self,
-        state: &SessionGrantState,
-        binding: &arkret::StationConnectionBinding,
-    ) -> garth::Result<()> {
-        if binding != &self.binding {
-            return Err(garth::Error::Protocol(
-                "registered Station binding changed".into(),
-            ));
-        }
-        self.build(state).map(|_| ())
-    }
-}
-
 /// Called only after the real Account Authority registration and its receipts
 /// have been verified. The engine owns this local host lifetime; remote issuer
 /// validity remains enforced by the real DPoP-authenticated HTTP operations.
@@ -224,16 +191,12 @@ pub(super) async fn bind_registered_host(
             && state.grant_jwt == client.session.credential(),
         "registered host differs from the authenticated Account, Device or grant"
     );
-    let factory = RegisteredHostFactory {
-        http: client.sdk.clone(),
-        accepted: state.clone(),
-        binding: binding.clone(),
-    };
-    let engine = SessionEngine::with_state(client.sdk.clone(), state);
-    let provider = SessionTransportProvider::new(engine.clone(), factory, Default::default());
-    client.sdk = provider
-        .own_station_result_client(client.sdk.clone(), binding)?
-        .http_client()?;
+    let (http, engine) = cotest_test_support::session::bind_registered_host_source(
+        client.sdk.clone(),
+        state,
+        binding,
+    )?;
+    client.sdk = http;
     client.native_session_invalidator = Some(LocalSessionInvalidator { engine });
     Ok(client)
 }

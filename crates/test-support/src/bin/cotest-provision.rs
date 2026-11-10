@@ -179,6 +179,8 @@ impl DurableRegistration {
 /// caller refers to both by the handoff id it already has.
 struct Session {
     http: reqwest::Client,
+    ca_pem: Vec<u8>,
+    native_content_client: Option<(String, arkret_http_client::Client)>,
     handoffs: HashMap<String, AccountHandoff>,
     session_grants: HashMap<String, String>,
     /// Garth clients, one per founded principal, keyed by handoff id.
@@ -245,6 +247,8 @@ impl Session {
         validate_private_path(&store_root, true)?;
         Ok(Self {
             http,
+            ca_pem: pem,
+            native_content_client: None,
             handoffs: HashMap::new(),
             session_grants: HashMap::new(),
             garth_clients: HashMap::new(),
@@ -445,6 +449,99 @@ impl Session {
         })
     }
 
+    #[inline(never)]
+    fn native_seal_message(&mut self, value: Value) -> OperationFuture<'_> {
+        heap_operation(|| async move {
+            #[derive(Deserialize)]
+            #[serde(deny_unknown_fields)]
+            struct Body {
+                principal: FoundedPrincipal,
+                station_base_url: String,
+                coauth_base_url: String,
+                trust_domain: String,
+                session_signing_seed_b64url: String,
+                source_credential: String,
+                group_state: String,
+                group_state_ref: arkret_wire::EventId,
+                event: arkret_wire::Event,
+            }
+            let body: Body =
+                serde_json::from_value(value).context("parse private native content fixture")?;
+            anyhow::ensure!(
+                body.principal.session_grant().session_grant == body.source_credential,
+                "native content custody differs from the actual caller credential"
+            );
+            let identity = DurableIdentity {
+                principal: body.principal,
+                trust_domain: body.trust_domain,
+                station_base: body.station_base_url,
+                coauth_base: body.coauth_base_url,
+                session_signing_seed_b64url: body.session_signing_seed_b64url,
+            };
+            let identity_digest = arkret_canonical::canonical_sha256(&identity)?;
+            let http = if let Some((original, http)) = &self.native_content_client {
+                anyhow::ensure!(
+                    original == &identity_digest,
+                    "native content host cannot change its original registration custody"
+                );
+                http.own_station_result_client()?
+                    .context("native content host source unavailable")?
+                    .check_session()?;
+                http.clone()
+            } else {
+                let holder = FoundingDeviceKey::restore(&identity.session_signing_seed_b64url)?;
+                let http = heap_operation(|| {
+                    cotest_test_support::native_content::registered_device_client(
+                        self.http.clone(),
+                        &identity.principal,
+                        &holder,
+                        &identity.station_base,
+                        &identity.coauth_base,
+                        &identity.trust_domain,
+                        &self.ca_pem,
+                    )
+                })
+                .await?;
+                self.native_content_client = Some((identity_digest, http.clone()));
+                http
+            };
+            // This bridge belongs to exactly one original registration. Its
+            // private custody is durable before the first policy/Root write.
+            let id = &self.session_id;
+            if self.identity_path(id).exists() {
+                let previous = self.read_identity(id)?;
+                anyhow::ensure!(
+                    arkret_canonical::canonical_sha256(&previous)?
+                        == arkret_canonical::canonical_sha256(&identity)?,
+                    "native content bridge belongs to another original registration"
+                );
+            } else {
+                self.persist_identity(id, &identity)?;
+            }
+            let directory = self.private_path(id, "content-intents")?;
+            if !directory.exists() {
+                std::fs::create_dir(&directory)?;
+                #[cfg(unix)]
+                {
+                    use std::os::unix::fs::PermissionsExt;
+                    std::fs::set_permissions(&directory, std::fs::Permissions::from_mode(0o700))?;
+                }
+            }
+            validate_private_path(&directory, true)?;
+            heap_operation(|| {
+                cotest_test_support::native_content::seal_device_message(
+                    &http,
+                    &identity.principal,
+                    &body.group_state,
+                    &body.group_state_ref,
+                    body.event,
+                    &directory,
+                )
+            })
+            .await
+        })
+    }
+
     // Separate operation state machines keep founding and restored-identity
     // temporaries out of the same poll frame on default native thread stacks.
     fn dispatch(
@@ -452,6 +549,7 @@ impl Session {
         request: Request,
     ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<Value>> + '_>> {
         match request.op.as_str() {
+            "native_seal_message" => self.native_seal_message(request.body),
             "agent_runtime_pair" => Box::pin(async move {
                 self.open_agent_runtime(request.body)
                     .await

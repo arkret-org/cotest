@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import { observeMessageReferences } from "./message-evidence";
 import { submitOrdinaryComposerDraft } from "./composer-handoff";
+import { registerNativeContentCustody } from "./native-content-custody";
 import { enterSecretText } from "./secret-input";
 import path from "node:path";
 import { generateKeyPairSync, randomBytes, randomUUID } from "node:crypto";
@@ -1856,6 +1857,7 @@ export async function createDpopUserSessionForAccount(
       url,
     }),
   );
+  registerNativeContentCustody(session.grantJwt, account.nativeContentCustody);
   const checkpoint = account.principalRegistrationCheckpoint;
   const pcrGenesisUnit = checkpoint.pcr_genesis_unit as {
     events?: Array<Record<string, unknown>>;

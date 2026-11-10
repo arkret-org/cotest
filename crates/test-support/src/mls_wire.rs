@@ -45,8 +45,8 @@ use serde_json::{Value, json};
 /// The KeyPackage capability every Arkret content group requires
 /// (`keypackage-capability-registry.json`).
 const CONTENT_CAPABILITY: &str = "ak.content.v1";
-const MESSAGE_ENVELOPE_VERSION: &str = "1.0";
-const MESSAGE_CONTENT_TYPE: &str = "application/vnd.arkret.message+json";
+pub(crate) const MESSAGE_ENVELOPE_VERSION: &str = "1.0";
+pub(crate) const MESSAGE_CONTENT_TYPE: &str = "application/vnd.arkret.message+json";
 
 /// One human device endpoint: the complete Account Actor, its device, the
 /// accepted device verification method and the device key seed.
@@ -688,13 +688,13 @@ fn welcome_unsigned_projection(delivery: &MlsWelcomeDelivery) -> Result<Value> {
     Ok(unsigned)
 }
 
-fn encode_group(group: &ArkretMlsGroup) -> Result<String> {
+pub(crate) fn encode_group(group: &ArkretMlsGroup) -> Result<String> {
     Ok(encode_b64(&serde_json::to_vec(
         &group.export_state_record()?,
     )?))
 }
 
-fn decode_group(state: &str) -> Result<ArkretMlsGroup> {
+pub(crate) fn decode_group(state: &str) -> Result<ArkretMlsGroup> {
     let record: MlsGroupStateRecord =
         serde_json::from_slice(&decode_b64(state)?).context("parse MLS group state record")?;
     Ok(ArkretMlsGroup::restore_from_state_record(&record)?)

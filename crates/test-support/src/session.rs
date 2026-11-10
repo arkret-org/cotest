@@ -19,11 +19,13 @@
 //! server harness — and a proof minted over the wrong method or URL, its one
 //! real risk, only shows against a live Station.
 
+mod registered_host;
 use std::sync::Arc;
 
 use anyhow::{Context, Result};
 use arkret_http_client::DpopProofRequest;
 use ed25519_dalek::SigningKey;
+pub use registered_host::bind_registered_host_source;
 use reqwest::RequestBuilder;
 
 /// The credential a client presents, and what presenting it requires.

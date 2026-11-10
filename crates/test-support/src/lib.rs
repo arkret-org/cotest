@@ -20,6 +20,7 @@ pub mod agent_runtime;
 pub mod content_crypto_fixture;
 pub mod garth_client;
 pub mod mls_wire;
+pub mod native_content;
 pub mod operation_observation;
 pub mod provisioning;
 pub mod session;

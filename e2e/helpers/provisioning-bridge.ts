@@ -23,6 +23,7 @@ import type { Readable, Writable } from "node:stream";
 import { createInterface, type Interface } from "node:readline";
 
 import { requiredEnv } from "./env";
+import type { NativeContentCustody } from "./native-content-custody";
 
 /// How long a single bridge call may take before the caller is told it failed.
 ///
@@ -141,6 +142,32 @@ export class ProvisioningBridge {
         ...(sessionId ? { COTEST_PROVISION_SESSION_ID: sessionId } : {}) },
     });
     return new ProvisioningBridge(child);
+  }
+
+  /** Seal one full Event using imported real registration custody and native Root publication. */
+  async sealNativeMessage(args: {
+    custody: NativeContentCustody;
+    sourceCredential: string;
+    groupState: string;
+    groupStateRef: string;
+    event: Record<string, unknown>;
+  }): Promise<{ event: Record<string, unknown>; groupState: string }> {
+    const result = await this.#call("native_seal_message", {
+      principal: args.custody.principal,
+      station_base_url: args.custody.stationBaseUrl,
+      coauth_base_url: args.custody.coauthBaseUrl,
+      trust_domain: args.custody.trustDomain,
+      session_signing_seed_b64url: args.custody.sessionSigningSeedB64url,
+      source_credential: args.sourceCredential,
+      group_state: args.groupState,
+      group_state_ref: args.groupStateRef,
+      event: args.event,
+    });
+    if (typeof result.group_state !== "string" || !result.event
+      || typeof result.event !== "object" || Array.isArray(result.event)) {
+      throw new Error("Native content bridge returned no complete sealed Event and group state");
+    }
+    return { event: result.event as Record<string, unknown>, groupState: result.group_state };
   }
 
   /** Opaque run-owned address only; neither private keys nor a caller-selected path. */
