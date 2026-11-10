@@ -397,12 +397,24 @@ impl GarthClientHandle {
             .as_account_id()
             .context("Human Account required")?
             .station_id;
-        let genesis = self.signed::<event_spec::RealmCreate>(ScopeRef::RealmGenesis, json!({"object": {
-            "schema": "ak.schema.realm_genesis.v1", "purpose": "collaboration", "genesis_salt": salt,
-            "trust_domain": self.trust_domain, "security_class": "standard", "governance_station_id": station,
-            "initial_join_rule": "public", "initial_history_access": "all_history_for_current_members",
-            "initial_discoverability": "listed"
-        }}))?;
+        let object = arkret_models_collaboration::events_payloads::RealmGenesis::new(
+            arkret_models_collaboration::events_payloads::RealmPurpose::Collaboration,
+            salt,
+            arkret_identifiers::TrustDomainId::new(self.trust_domain.clone())?,
+            arkret_wire::SecurityClass::Standard,
+            station.clone(),
+            arkret_wire::JoinRule::Public,
+            arkret_wire::HistoryAccess::AllHistoryForCurrentMembers,
+            arkret_wire::Discoverability::Listed,
+            None,
+            None,
+        )?;
+        let genesis = self.signed::<event_spec::RealmCreate>(
+            ScopeRef::RealmGenesis,
+            serde_json::to_value(
+                arkret_models_collaboration::events_payloads::RealmCreatePayload::new(object),
+            )?,
+        )?;
         let realm_id = genesis.realm_id.clone();
         let genesis_id = genesis.event_id.clone();
         let scope = ScopeRef::Realm {
