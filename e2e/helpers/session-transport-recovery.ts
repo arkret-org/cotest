@@ -1,9 +1,9 @@
-import { expect, type APIRequestContext, type Page, type Response } from "@playwright/test";
+import { expect, type APIRequestContext, type Page, type Request, type Response } from "@playwright/test";
 import { registerRequestAuth, scanRealmStreamApi, sdkEventDerivedIds, wireErrCode } from "./coland-api";
 import { selfPathHeadersForDpopSession, type DpopUserSession } from "./users";
 import { assertAcceptedRealmScanAlignment, orderedResponseObservation, sessionGrantRotationObservation } from "./session-transport-observation";
 
-import { colandBaseUrl, colandServiceId } from "./env";
+import { coauthBaseUrl, colandBaseUrl, colandServiceId } from "./env";
 import { uint64Decimal } from "./uint64-decimal";
 
 const hook = "__inkson_captured_transport_rotation_v1";
@@ -12,6 +12,43 @@ const retiredReads = new Set([
   "/_arkret/self/account/subscribe",
   "/_arkret/self/streams/scan",
 ]);
+
+export function observeBrowserDpopGrant(page: Page, session: DpopUserSession) {
+  const issuer = coauthBaseUrl();
+  if (!issuer) throw new Error("the DPoP grant observer requires the fixture's Coauth issuer");
+  const refreshUrl = new URL("/_arkret/gate/account/session-grants/refresh", issuer).href;
+  const rotation = sessionGrantRotationObservation(session.accountId);
+  let grantId = session.grantId;
+  let grantJwt = session.grantJwt;
+  let failed = false;
+  const refreshes = orderedResponseObservation<Request>(async request => {
+    const response = await request.response();
+    if (response?.status() !== 200) return;
+    const authorization = (await request.allHeaders()).authorization ?? "";
+    const body = await response.json() as Record<string, unknown>;
+    rotation.refresh(authorization, body);
+    if (body.device_id !== session.user.deviceId || body.audience_id !== session.grantAudience) {
+      throw new Error("issuer refresh changed the fixture device or audience");
+    }
+    if (body.session_grant_id === grantId && body.session_grant === grantJwt) return;
+    if (authorization !== `DPoP ${grantJwt}` || body.previous_session_grant_id !== grantId
+      || typeof body.session_grant_id !== "string" || typeof body.session_grant !== "string") {
+      throw new Error("issuer refresh does not extend the fixture grant chain");
+    }
+    grantId = body.session_grant_id;
+    grantJwt = body.session_grant;
+    const current = { ...session, grantJwt };
+    registerRequestAuth(grantJwt, (method, url) => selfPathHeadersForDpopSession(current, method, url));
+  }, () => { failed = true; });
+  page.on("request", request => {
+    if (request.method() === "POST" && request.url() === refreshUrl) refreshes.enqueue(request);
+  });
+  return async () => {
+    await refreshes.settled();
+    if (failed) throw new Error("could not verify the browser's Coauth grant refresh");
+    return grantJwt;
+  };
+}
 
 // The hook rotates through the actual Rust provider and issuer. It neither
 // substitutes a response nor exports grant tokens, holder keys or MLS leaves.

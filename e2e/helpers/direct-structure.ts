@@ -1,4 +1,5 @@
 import { prepareDirectStructureForm } from "./direct-structure-form";
+import { submitOrdinaryComposerDraft } from "./composer-handoff";
 import { openDirectChatNotification } from "./direct-notification";
 import { accountActorId } from "./coland-api";
 import { actorRow } from "./product-locators";
@@ -146,13 +147,14 @@ async function observeSelectedHumanSend(page: Page, strandId: string) {
   let unchanged = true;
   let failed: string | undefined;
   let status = 0;
+  const publicSnapshot = () => ({
+    route: "ak.self.events.command.submit.v1", http_status: status,
+    matching_request_count: requestCount, matching_response_count: responseCount,
+    frozen_request_unchanged: unchanged, typed_pair_ok: paired, accepted,
+    gate_failed: failed !== undefined, reason: failed ?? "none",
+  });
   const log = (stage: "observing" | "request" | "response" | "transport_failed" | "model_progress" | "finished") => {
-    console.info("Direct Chat send diagnostic", JSON.stringify({
-      stage, route: "ak.self.events.command.submit.v1", http_status: status,
-      matching_request_count: requestCount, matching_response_count: responseCount,
-      frozen_request_unchanged: unchanged, typed_pair_ok: paired, accepted,
-      gate_failed: failed !== undefined, reason: failed ?? "none",
-    }));
+    console.info("Direct Chat send diagnostic", JSON.stringify({ stage, ...publicSnapshot() }));
   };
   const require = (ok: boolean, reason: string) => { if (!ok) throw new Error(reason); };
   const select = (request: Request): IngressEvent | undefined => {
@@ -236,6 +238,7 @@ async function observeSelectedHumanSend(page: Page, strandId: string) {
   return {
     check: () => { if (failed) throw new Error(`Direct Chat send diagnostic: ${failed}`); },
     paired: () => accepted && paired,
+    publicSnapshot,
     modelProgress: () => log("model_progress"),
     dispose: () => { page.off("request", onRequest); page.off("response", onResponse); page.off("requestfailed", onFailed); log("finished"); },
   };
@@ -256,10 +259,12 @@ async function verifyStructureSnapshotAuthority(request: APIRequestContext, real
   expect(candidates.length, "Snapshot signer has one configured authority candidate").toBe(1);
   const candidate = candidates[0]!;
   const authorityRequest = { realm_id: realm, nonce: randomBytes(32).toString("base64url") };
-  const authority = await request.post(`${colandBaseUrl(candidate)}/_arkret/open/realm-authority/bundle`, {
-    headers: { "content-type": "application/json", "arkret-operation": "ak.open.realm_authority.read.bundle.v1" }, data: canonicalJson(authorityRequest) });
+  const [authority, resolution] = await Promise.all([
+    request.post(`${colandBaseUrl(candidate)}/_arkret/open/realm-authority/bundle`, {
+      headers: { "content-type": "application/json", "arkret-operation": "ak.open.realm_authority.read.bundle.v1" }, data: canonicalJson(authorityRequest) }),
+    request.get(colandServiceResolution(candidate).resolution_url),
+  ]);
   expect(authority.status(), "candidate must supply the actual nonce-bound authority bundle").toBe(200);
-  const resolution = await request.get(colandServiceResolution(candidate).resolution_url);
   expect(resolution.status(), "candidate's method-native service history is available").toBe(200);
   const authorityBundle = await authority.json();
   expect(cotestWire<{ verified: boolean }>("verify-realm-state-snapshot", {
@@ -595,12 +600,15 @@ export async function structureWrite(page: Page, action: string, kind: string, t
   if (title) {
     const input = panel.getByRole("textbox", { name: "Title", exact: true });
     const field = panel.locator(".direct-title-field");
-    await input.click();
-    await input.fill("");
-    await expect(field).not.toHaveClass(/\bhas-value\b/);
-    await input.pressSequentially(title);
-    await expect(input).toHaveValue(title);
-    await expect(field).toHaveClass(/\bhas-value\b/);
+    // The reactive form can remount while accepting input. Apply the whole
+    // local title and verify the application state before any Save action.
+    await expect(async () => {
+      await input.fill("", { timeout: 1_000 });
+      await expect(field).not.toHaveClass(/\bhas-value\b/, { timeout: 1_000 });
+      await input.fill(title, { timeout: 1_000 });
+      await expect(input).toHaveValue(title, { timeout: 1_000 });
+      await expect(field).toHaveClass(/\bhas-value\b/, { timeout: 1_000 });
+    }).toPass({ timeout: 10_000, intervals: [100, 250] });
   }
   await expect(panel.getByRole("button", { name: "Save", exact: true })).toBeEnabled({ timeout: 180_000 });
   const responses: Response[] = [];
@@ -797,6 +805,22 @@ export async function agentTopicChats(page: Page, receiptPath: string, proof: Di
     }
     throw new Error("message history scan did not reach the final virtual window");
   };
+  const settledReplyHistory = async (realmId: string, strandId: string, humanActor: unknown): Promise<Set<string>> => {
+    const accepted = await scanRealmStreamApi(proof.request, proof.token, realmId);
+    expect(accepted.truncated, "the reply baseline needs the complete authorized stream").toBe(false);
+    const ids = new Set(accepted.events
+      .filter(event => event.kind === "ak.message.create"
+        && (event.payload as Record<string, unknown>).strand_id === strandId
+        && canonicalJson(event.actor_id) !== canonicalJson(humanActor))
+      .map(event => `chat-message-${createHash("sha256").update(String(event.event_id)).digest("hex")}`));
+    // A select change precedes the timeline projection's render. Require this
+    // Chat's actual accepted reply identities before sampling its baseline.
+    await expect.poll(async () => [...await replyIds()].sort(), {
+      timeout: 180_000,
+      message: "the selected Chat must render its own complete accepted reply history",
+    }).toEqual([...ids].sort());
+    return ids;
+  };
   const send = async (id: string, marker: string, prior?: string, excluded?: string, switchTo?: string) => {
     const realmId = decodeURIComponent(new URL(page.url()).pathname.split("/")[2]);
     const humanActor = await page.evaluate(() => {
@@ -807,7 +831,7 @@ export async function agentTopicChats(page: Page, receiptPath: string, proof: Di
     let otherReplies: Set<string> | undefined;
     if (switchTo) {
       await panel.getByRole("combobox", { name: "Chat", exact: true }).selectOption(switchTo);
-      otherReplies = await replyIds();
+      otherReplies = await settledReplyHistory(realmId, switchTo, humanActor);
     }
     const holdPath = `${receiptPath}.hold.json`;
     const holdToken = randomUUID();
@@ -818,12 +842,12 @@ export async function agentTopicChats(page: Page, receiptPath: string, proof: Di
     try {
     await panel.getByRole("combobox", { name: "Chat", exact: true }).selectOption(id);
     const before = (await receipts()).length;
-    const repliesBefore = await replyIds();
+    const repliesBefore = await settledReplyHistory(realmId, id, humanActor);
     await expect(page.locator(".send-chat-button")).toBeEnabled({ timeout: 180_000 });
     await page.locator(".chat-input").fill(marker);
     const observed = await observeSelectedHumanSend(page, id);
     try {
-      await page.locator(".send-chat-button").click();
+      await submitOrdinaryComposerDraft(page, marker);
       // One original 180s window covers both pairing and model receipt progress.
       await expect.poll(async () => {
         observed.check();
@@ -909,29 +933,48 @@ export async function agentTopicChats(page: Page, receiptPath: string, proof: Di
   await send(chats[0], `unclassified-chat-a-${suffix}`, markerA, markerB);
   const returnPath = new URL(page.url()).pathname;
   const selectedAgent = proof.agentId ?? "";
-  await page.goto("/settings/agents", { waitUntil: "domcontentloaded" });
   // The controller's ordinary registered administration UI changes the
   // actual lifecycle; the rejected writes keep the previously valid binding.
   expect(selectedAgent, "pause negative requires the exact Direct Agent").not.toBe("");
-  await actorRow(page, ".agent-admin-row", accountActorId(selectedAgent)).click();
-  await page.locator(".agent-admin-enabled-switch").click();
-  await expect(page.locator(".agent-admin .write-status")).toContainText("Paused", { timeout: 180_000 });
+  await setOwnedAgentLifecycleViaAdmin(page, selectedAgent, false);
   try {
     await rejectDirectStructureEvent(proof, lastChat!, "paused-agent-chat", "ak.strand.archive", { target_ref: chats[0] }, "direct_conversation_participant_authority_denied");
     await rejectDirectStructureEvent(proof, topic, "paused-agent-topic", "ak.space.archive", { space_id: movedTopicId }, "direct_conversation_participant_authority_denied");
   } finally {
-    await page.locator(".agent-admin-enabled-switch").click();
-    await expect(page.locator(".agent-admin .write-status")).toContainText("Resumed. Status: active.", { timeout: 180_000 });
+    await setOwnedAgentLifecycleViaAdmin(page, selectedAgent, true);
     await page.goto(returnPath, { waitUntil: "domcontentloaded" });
   }
   await panel.getByRole("combobox", { name: "Chat", exact: true }).selectOption(mainId);
 }
 
-type DirectStructureProof = { request: APIRequestContext; token: string; agentId?: string; peer?: { token: string; server: ColandKey }; boundaryTargets?: { realmStrand: string; circleStrand: string; thirdActor: ActorId; thirdToken: string } };
+export async function setOwnedAgentLifecycleViaAdmin(page: Page, agentId: string, enabled: boolean) {
+  if (new URL(page.url()).pathname !== "/agents") {
+    await page.getByRole("link", { name: "My Agents", exact: true }).click();
+  }
+  await expect(page).toHaveURL(url => url.pathname === "/agents");
+  const admin = page.locator(".agent-admin");
+  await admin.locator(".agent-admin-filter-all").click();
+  await actorRow(admin, ".agent-admin-row", accountActorId(agentId)).click();
+  const toggle = admin.getByRole("switch", { name: "Agent enabled", exact: true });
+  await expect(toggle).toHaveAttribute("aria-checked", String(!enabled), { timeout: 90_000 });
+  await expect(toggle).toBeEnabled();
+  const command = enabled ? "resume" : "pause";
+  const [response] = await Promise.all([
+    page.waitForResponse(response => response.request().method() === "POST"
+      && decodeURIComponent(new URL(response.url()).pathname) === `/_arkret/self/agents/${agentId}/${command}`,
+    { timeout: 180_000 }),
+    toggle.click(),
+  ]);
+  expect(response.ok(), `the exact Agent ${command} must be accepted`).toBe(true);
+  expect((await response.json()).status).toBe(enabled ? "active" : "paused");
+  await expect(toggle).toHaveAttribute("aria-checked", String(enabled), { timeout: 90_000 });
+}
+
+type DirectStructureProof = { request: APIRequestContext; token: string; agentId?: string; peer?: { token: string; server: ColandKey; currentToken?: () => Promise<string> }; boundaryTargets?: { realmStrand: string; circleStrand: string; thirdActor: ActorId; thirdToken: string } };
 
 export async function rejectDirectStructureEvent(proof: DirectStructureProof, template: IngressEvent,
   name: string, kind: string, payload: Record<string, unknown>, reason?: string,
-  sender?: { token: string; server?: ColandKey; actor?: ActorId; scope?: Record<string, unknown> }) {
+  sender?: { token: string; server?: ColandKey; actor?: ActorId; scope?: Record<string, unknown>; currentToken?: () => Promise<string> }) {
   const realm = template.realm_id!;
   const snapshot = () => readDirectCurrentSnapshot(proof, realm);
   const beforeHead = await readCommitStreamHeadApi(proof.request, proof.token, realm);
@@ -946,11 +989,21 @@ export async function rejectDirectStructureEvent(proof: DirectStructureProof, te
     ...(!sender?.actor ? { proofVerificationMethod: (template.producer_proof as { verification_method: string }).verification_method } : {}),
   });
   const url = `${colandBaseUrl(sender?.server)}/_arkret/self/events`;
-  const response = await proof.request.post(url, {
-    headers: { ...authHeaders(sender?.token ?? proof.token, "POST", url), "content-type": "application/json" },
-    data: canonicalJson({ event }),
+  const eventBody = canonicalJson({ event });
+  const post = (token: string) => proof.request.post(url, {
+    headers: { ...authHeaders(token, "POST", url), "content-type": "application/json" },
+    data: eventBody,
   });
-  const body = await response.json() as Record<string, unknown>;
+  const token = (await sender?.currentToken?.()) ?? sender?.token ?? proof.token;
+  let response = await post(token);
+  let body = await response.json() as Record<string, unknown>;
+  if (sender?.currentToken && response.status() === 401 && wireErrCode(body) === "unauthenticated") {
+    const successor = await sender.currentToken();
+    if (successor !== token) {
+      response = await post(successor);
+      body = await response.json() as Record<string, unknown>;
+    }
+  }
   const outcomeDiagnostic = structureOutcomeDiagnostic(body);
   if (isDirectAdmissionOutcomeReason(reason)) {
     expect(response.status(), outcomeDiagnostic).toBe(200);
@@ -1512,26 +1565,60 @@ async function runFlatTopicChats(alice: Page, bob: Page, mainMessages: string[],
     // send. Navigation can precede its verified current/MLS installation.
     try {
       await expect(sendButton).toBeEnabled({ timeout: 90_000 });
+      await expect(sendButton).not.toHaveClass(/\bsend-readiness-checking\b/, { timeout: 90_000 });
     } catch (error) {
+      const ordinaryBlocker = await sender.locator(".composer-send-diagnostic").evaluate(element => {
+        const diagnostic = element.textContent?.trim();
+        if (!diagnostic) return "empty";
+        if (diagnostic === "Waiting for verified conversation authority and encryption keys.") return "direct_authority";
+        if (diagnostic === "Waiting for this scope's verified send state and this device's local encryption keys.") return "durable_send_probe";
+        if (diagnostic === "Waiting for this device's encryption keys. Keep this conversation open to receive the MLS Welcome.") return "local_group";
+        if (diagnostic === "encryption_transition_pending: synced roster differs from the verified MLS group") return "roster_mismatch";
+        if (diagnostic === "encryption_policy_pending: this scope has no accepted MLS Genesis yet") return "genesis";
+        if (diagnostic === "encryption_policy_pending: waiting for the scope's verified current state") return "unknown_current";
+        if (/^encryption_transition_pending: waiting for the accepted MLS epoch \d+$/.test(diagnostic)) return "local_epoch";
+        if (diagnostic.startsWith("epoch_update_required:")) return "membership_epoch_update";
+        return "unclassified";
+      }, undefined, { timeout: 1_000 }).catch(() => "not_rendered");
       await test.info().attach("direct-topic-chat-send-readiness", {
         body: JSON.stringify({ side: sender === alice ? "alice" : "bob", selected_chat: chatId,
           route_matches_selected_chat: decodeURIComponent(new URL(sender.url()).pathname) === selectedPath,
           selector_matches_selected_chat: await senderSelection.inputValue().then(value => value === chatId).catch(() => false),
           input_matches_marker: await sender.locator(".chat-input").inputValue().then(value => value === text).catch(() => false),
           send_enabled: await sendButton.isEnabled().catch(() => false),
+          ordinary_blocker: ordinaryBlocker,
           draft_hint_visible: await sender.locator(".chat-input-hint").isVisible().catch(() => false),
           backup_prompt_visible: await sender.getByRole("dialog", { name: "Back up encrypted history", exact: true }).isVisible().catch(() => false),
           restore_prompt_visible: await sender.getByRole("dialog", { name: "Restore encryption keys", exact: true }).isVisible().catch(() => false) }), contentType: "application/json",
       });
       throw error;
     }
-    const [sent] = await Promise.all([
-      sender.waitForResponse(response => response.request().method() === "POST"
-        && new URL(response.url()).pathname === "/_arkret/self/events"
-        && ingressEvents(decodeEventIngressBody(response.request().postDataJSON())).some(event => event.kind === "ak.message.create")),
-      sendButton.click(),
-    ]);
+    const send = await observeSelectedHumanSend(sender, chatId);
+    let sent: Response;
+    try {
+      [sent] = await Promise.all([
+        sender.waitForResponse(response => response.request().method() === "POST"
+          && new URL(response.url()).pathname === "/_arkret/self/events"
+          && ingressEvents(decodeEventIngressBody(response.request().postDataJSON())).some(event => event.kind === "ak.message.create"),
+        { timeout: 90_000 }),
+        sendButton.click({ timeout: 30_000 }),
+      ]);
+    } catch (error) {
+      await test.info().attach("direct-topic-chat-send-outcome", {
+        body: JSON.stringify({ side: sender === alice ? "alice" : "bob", ...send.publicSnapshot(),
+          route_matches_selected_chat: decodeURIComponent(new URL(sender.url()).pathname) === selectedPath,
+          input_matches_marker: await sender.locator(".chat-input").inputValue({ timeout: 1_000 }).then(value => value === text).catch(() => false),
+          send_enabled: await sendButton.isEnabled({ timeout: 1_000 }).catch(() => false),
+          send_checking: await sendButton.getAttribute("aria-busy", { timeout: 1_000 }).then(value => value === "true").catch(() => false),
+        }), contentType: "application/json",
+      });
+      throw error;
+    } finally {
+      send.dispose();
+    }
     const message = ingressEvents(decodeEventIngressBody(sent.request().postDataJSON())).find(event => event.kind === "ak.message.create")!;
+    expect(sent.ok(), "the selected Topic Chat send must be accepted").toBe(true);
+    assertAuthoritySubmitOutcome(await sent.json(), message, "selected Topic Chat send");
     expect(message.payload?.strand_id).toBe(chatId);
     expect(message.payload?.encrypted_content).toBeTruthy();
     expect(JSON.stringify(message.payload)).not.toContain(text);
@@ -1664,15 +1751,19 @@ async function runFlatTopicChats(alice: Page, bob: Page, mainMessages: string[],
       commits: originalRead.commits.length, complete_snapshot: true, metadata_plaintext_mirrors: 0 })), contentType: "application/json",
   });
   const refusedTopic = async (referenceState: "active" | "archived") => {
-    const head = proof && await readCommitStreamHeadApi(proof.request, proof.token, realmId);
-    const current = await snapshot();
+    const [head, current] = await Promise.all([
+      proof && readCommitStreamHeadApi(proof.request, proof.token, realmId), snapshot(),
+    ]);
     const event = await structureWrite(alice, "delete_topic_target", "ak.space.tombstone", undefined, topicId, "space_has_live_dependents");
     expect(event.payload?.space_id).toBe(topicId);
     if (proof) {
       expect(head, "rejection must have an authenticated pre-submit cut").toBeDefined();
-      expect(await readCommitStreamHeadApi(proof.request, proof.token, realmId)).toEqual(head);
-      expect(await snapshot()).toEqual(current);
-      const scan = await scanRealmStreamApi(proof.request, proof.token, realmId, { afterPosition: head!.stream_position });
+      const [postHead, postCurrent, scan] = await Promise.all([
+        readCommitStreamHeadApi(proof.request, proof.token, realmId), snapshot(),
+        scanRealmStreamApi(proof.request, proof.token, realmId, { afterPosition: head!.stream_position }),
+      ]);
+      expect(postHead).toEqual(head);
+      expect(postCurrent).toEqual(current);
       expect(scan.truncated).toBe(false);
       expect(scan.events).toEqual([]);
       expect(scan.commits).toEqual([]);
@@ -1698,12 +1789,14 @@ async function runFlatTopicChats(alice: Page, bob: Page, mainMessages: string[],
   const restored = await structureWrite(alice, "restore_chat", "ak.strand.restore");
   expect(restored.payload?.target_ref).toBe(chatId);
   expect(restored.payload?.target_ref).not.toBe(mainId);
-  for (const page of [alice, bob, ...extraDevices]) {
+  const restoredHead = await readCommitStreamHeadApi(proof!.request, proof!.token, realmId);
+  await Promise.all([alice, bob, ...extraDevices].map(async page => {
+    await waitForDurableCurrentCut(page, restoredHead);
     const option = page.locator(".direct-structure").getByRole("combobox", { name: "Chat", exact: true })
       .locator(`option[value=${JSON.stringify(chatId)}]`);
-    await expect(option).not.toContainText("(archived)", { timeout: 90_000 });
-    await expect(option).toContainText(renamed);
-  }
+    await expect(option).toContainText(renamed, { timeout: 90_000 });
+    await expect(option).not.toContainText("(archived)");
+  }));
   // Committed sends cleared the extra Chat, while the untouched main draft
   // survived the second cold reload and both lifecycle transitions.
   await chooseAlice.selectOption(mainId);

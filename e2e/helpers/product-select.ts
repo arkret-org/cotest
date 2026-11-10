@@ -21,14 +21,17 @@ async function open(control: Locator): Promise<Locator> {
   return panel;
 }
 
-async function choose(control: Locator, option: Locator): Promise<void> {
+async function choose(control: Locator, panel: Locator, option: Locator, label?: string | RegExp): Promise<void> {
   await expect(option).toHaveCount(1);
   await expect(option).toBeEnabled();
-  const label = await option.getAttribute("aria-label");
-  if (!label) throw new Error("The product option has no accessible label");
+  // Sapid renders a decorative selected check separately from this label.
+  // Match the public accessible choice, not its indicator or description.
+  const name = label ?? await option.getAttribute("aria-label");
+  expect(name, "the product option must expose its accessible label").toBeTruthy();
+  await expect(option).toHaveAccessibleName(name!);
   await option.click();
-  await expect(control).toHaveAttribute("aria-expanded", "false");
-  await expect(control).toContainText(label);
+  await expect(panel).toBeHidden();
+  await expect(control).toContainText(name!);
 }
 
 /** Select an actual public option key; field wrappers and native controls are supported. */
@@ -45,7 +48,7 @@ export async function selectProductOptionByKey(scope: Locator, value: string): P
     throw new Error("The Sapid option key has no exact semantic identity");
   }
   const optionId = `${id.slice(0, -suffix.length)}-option-${value.length}_${value}`;
-  await choose(trigger, panel.locator(`[role="option"][id="${quote(optionId)}"][data-gly-option-owner="${quote(id)}"]`));
+  await choose(trigger, panel, panel.locator(`[role="option"][id="${quote(optionId)}"][data-gly-option-owner="${quote(id)}"]`));
 }
 
 /** Choose the visible label when the control owns opaque presentation keys. */
@@ -58,7 +61,7 @@ export async function selectProductOptionByLabel(scope: Locator, label: string |
     return;
   }
   const panel = await open(trigger);
-  await choose(trigger, panel.getByRole("option", { name: label, exact: true }));
+  await choose(trigger, panel, panel.getByRole("option", { name: label, exact: true }), label);
 }
 
 export async function selectProductOptionByReference(scope: Locator, reference: string): Promise<void> {

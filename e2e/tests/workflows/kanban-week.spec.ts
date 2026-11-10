@@ -1,4 +1,4 @@
-import { addBoardList } from "../../helpers/kanban-product-ui";
+import { newBoardTrigger, addBoardList } from "../../helpers/kanban-product-ui";
 // Kanban week-in-review workflow — single user runs a day on the board
 // Contract: e2e/scenarios/workflows/kanban-week.md
 // Spec refs:
@@ -19,7 +19,9 @@ import {
 import { createRealmViaApi } from "../../helpers/api";
 import { stepShot } from "../../helpers/screenshots";
 import { decodeIngressEvents } from "../../helpers/event-ingress";
-import { scanRealmStreamApi, sdkEventDerivedObjectId } from "../../helpers/coland-api";
+import { assertAuthoritySubmitOutcome, scanRealmStreamApi, sdkEventDerivedObjectId } from "../../helpers/coland-api";
+import { waitForDurableCurrentCut } from "../../helpers/durable-current-cut";
+import type { CommitStreamHead } from "../../helpers/generated/spec-wire-objects";
 import {
   openDpopUserPage,
   type DpopUserSession,
@@ -151,7 +153,7 @@ test.describe("workflow: kanban week-in-review", () => {
       await expect(patPage.page.locator(".kanban-panel")).toBeVisible({
         timeout: 120_000,
       });
-      await patPage.clickWithPassivePromptRetry(patPage.page.locator(".new-board-toggle"));
+      await patPage.clickWithPassivePromptRetry(newBoardTrigger(patPage.page));
       await patPage.page
         .locator(".new-board-title-input input, .new-board-title-input textarea")
         .fill(`Week 21 board ${stamp}`);
@@ -286,27 +288,27 @@ test.describe("workflow: kanban week-in-review", () => {
       await patPage.page.locator(".list-archive-confirm-button").click();
       const archiveResponse = await archiveWrite;
       expect(archiveResponse.status(), await archiveResponse.text()).toBeLessThan(400);
+      const archiveEvent = decodeIngressEvents(
+        archiveResponse.request().postData(),
+      ).find((event) => event.kind === "ak.space.archive");
+      expect(archiveEvent, "workflow emitted the List archive Event").toBeDefined();
+      const archiveOutcome = await archiveResponse.json();
+      assertAuthoritySubmitOutcome(archiveOutcome, archiveEvent!, "week-in-review List archive");
+      await waitForDurableCurrentCut(patPage.page, archiveOutcome.commit as CommitStreamHead);
       const archivedLists = patPage.page.locator(".kanban-archived-lists");
       await archivedLists.getByRole("button", { name: /^Archived lists \(\d+\)$/ }).click();
-      await expect(
-        patPage.page.locator(".kanban-archived-list-row").filter({ hasText: todayList }),
-      ).toBeVisible({ timeout: 30_000 });
-      const restoreWrite = patPage.page.waitForResponse(
-        (response) =>
+      const archivedList = archivedLists.locator(".kanban-archived-list-row").filter({ hasText: todayList });
+      await expect(archivedList).toBeVisible({ timeout: 30_000 });
+      const [restoreResponse] = await Promise.all([
+        patPage.page.waitForResponse((response) =>
           new URL(response.url()).pathname === "/_arkret/self/events" &&
           response.request().method() === "POST" &&
           decodeIngressEvents(response.request().postData()).some(
             (event) => event.kind === "ak.space.restore",
           ),
-        { timeout: 90_000 },
-      );
-      await archivedLists
-        .locator(".kanban-archived-list-row")
-        .filter({ hasText: todayList })
-        .first()
-        .locator(".list-restore-button")
-        .click();
-      const restoreResponse = await restoreWrite;
+        { timeout: 90_000 }),
+        archivedList.getByRole("button", { name: "Restore", exact: true }).click(),
+      ]);
       expect(restoreResponse.status(), await restoreResponse.text()).toBeLessThan(400);
       await expect(
         patPage.page.locator(".kanban-column").filter({ hasText: todayList }),
@@ -314,10 +316,6 @@ test.describe("workflow: kanban week-in-review", () => {
       // event-envelope.schema.json is closed: the archive is an ordinary
       // producer-signed Event whose payload names only the Space
       // (space_state_transition_payload); it carries no seal or auth basis.
-      const archiveEvent = decodeIngressEvents(
-        archiveResponse.request().postData(),
-      ).find((event) => event.kind === "ak.space.archive");
-      expect(archiveEvent, "workflow emitted the List archive Event").toBeDefined();
       expect(archiveEvent?.payload).toEqual({ space_id: todayListId });
       expect(archiveEvent?.seal_basis).toBeUndefined();
       expect(archiveEvent?.auth_context).toBeUndefined();

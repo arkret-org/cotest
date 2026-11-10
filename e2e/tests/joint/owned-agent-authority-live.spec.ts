@@ -63,7 +63,7 @@ async function rejectedWithoutEffects(bridge: ProvisioningBridge, runtime: strin
 async function provisionOwnedAgent(user: JointUserPage): Promise<string> {
   const page = user.page;
   await user.gotoSettings();
-  await page.locator(".settings-nav-item-agents").click();
+  await page.getByRole("link", { name: "My Agents", exact: true }).click();
   await expect(page.locator(".agent-admin")).toBeVisible();
   await page.locator(".agent-admin-create-open-button").click();
   await page.locator(".agent-admin-provision-agent-slug").locator("input, textarea").fill(`owned-member-${Date.now().toString(36)}`);
@@ -749,18 +749,17 @@ async function switchReviewRealmAndReload(user: JointUserPage, originalRealm: st
     await page.locator(`a[href="/realms/${realm}"]`).first().click();
     await expect(page).toHaveURL(url => decodeURIComponent(url.pathname) === `/realms/${realm}`);
     const realmNavigation = page.locator(".realm-context-bar");
-    await realmNavigation.locator(".realm-nav-menu-button").click();
+    const trigger = realmNavigation.getByRole("button", { name: /^Switch view:/ });
+    await trigger.click();
+    const menu = page.locator(".realm-nav-menu-panel:visible");
     try {
       // The canonical destination is independent of the account's UI locale.
-      await realmNavigation.locator(`.realm-nav-menu-panel a[href="${settings}"]`).click();
+      await menu.locator(`a[href="${settings}"]`).click();
     } catch (error) {
-      const publicMenu = await realmNavigation.evaluate(element => ({
-        trigger_node: element.querySelector(".realm-nav-menu-button")?.getAttribute("data-gly-node"),
-        open_hosts: element.querySelectorAll(".realm-nav-menu-host.is-open").length,
-        panels: element.querySelectorAll(".realm-nav-menu-panel").length,
-        destinations: Array.from(element.querySelectorAll<HTMLAnchorElement>(".realm-nav-menu-panel a"))
+      const publicMenu = await menu.evaluate(element => ({
+        destinations: Array.from(element.querySelectorAll<HTMLAnchorElement>("a"))
           .map(link => ({ href: link.getAttribute("href"), label: link.textContent })),
-      })).catch(() => ({ unavailable: true }));
+      }), undefined, { timeout: 1_000 }).catch(() => ({ unavailable: true }));
       const file = test.info().outputPath(`realm-review-menu-${createHash("sha256").update(realm).digest("hex").slice(0, 12)}.json`);
       await writeFile(file, JSON.stringify(publicMenu));
       await test.info().attach("realm-review-public-navigation", { path: file, contentType: "application/json" });
@@ -909,7 +908,10 @@ test("normal controller requests join and public review, distinct administrator 
     await expect(decidingPanel.locator(".management-review-submit")).toHaveCount(0);
   }
   for (const operation of ["join", "publish"] as const) {
-    await selectProductOptionByLabel(controller.getByLabel("原管理意图", { exact: true }), operation === "join" ? "加入当前 Realm" : "公开当前 Realm 的 Agent interaction");
+    await selectProductOptionByLabel(
+      controller.getByRole("combobox", { name: "原管理意图", exact: true }),
+      operation === "join" ? "加入当前 Realm" : "公开当前 Realm 的 Agent interaction",
+    );
     const before = await footprint(realm, station);
     const response = await reviewResponse(jointRealm.bobPage.page, "requests",
       () => controller.locator(".management-review-request").click());

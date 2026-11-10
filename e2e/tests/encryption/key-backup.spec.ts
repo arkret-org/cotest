@@ -1,4 +1,4 @@
-import { addBoardList, fillCardNarrative } from "../../helpers/kanban-product-ui";
+import { boardSwitcher, newBoardTrigger, addBoardList, fillCardNarrative } from "../../helpers/kanban-product-ui";
 import { authHeaders } from "../../helpers/coland-api";
 import { readCreatorRecords } from "../../helpers/creator-bootstrap";
 import { accountTransportRotationProbe, assertOriginalAcceptedMlsRows } from "../../helpers/session-transport-recovery";
@@ -660,7 +660,7 @@ test.describe("key backup + restore", () => {
         timeout: 120_000,
       });
       await expect(
-        deviceB.page.locator(".board-space-select-button"),
+        boardSwitcher(deviceB.page),
       ).toContainText(boardTitle, {
         timeout: 45_000,
       });
@@ -692,7 +692,7 @@ test.describe("key backup + restore", () => {
           timeout: 120_000,
         });
         await expect(
-          deviceA.page.locator(".board-space-select-button"),
+          boardSwitcher(deviceA.page),
         ).toContainText(boardTitle, {
           timeout: 45_000,
         });
@@ -1284,7 +1284,7 @@ async function createKanbanBoardListAndCard(
   await expect(page.locator(".kanban-panel")).toBeVisible({
     timeout: 120_000,
   });
-  await page.locator(".new-board-toggle").click();
+  await newBoardTrigger(page).click();
   await page.locator(".new-board-title-input input, .new-board-title-input textarea").fill(boardTitle);
   await page.locator(".create-board-space-button").click();
   await expect(page.locator(".kanban-empty-board")).toContainText(

@@ -31,7 +31,7 @@ export function publicRequestFailure(
   operationId?: string,
 ): Error {
   const message = error instanceof Error ? error.message : "";
-  const reason = message.includes("Request context disposed")
+  const reason = /Request context disposed|Target page, context or browser has been closed/.test(message)
     ? "request context disposed"
     : /timeout|timed out/i.test(message)
       ? "request timeout"

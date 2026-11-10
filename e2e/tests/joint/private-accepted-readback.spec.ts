@@ -1,4 +1,5 @@
 import { expectPlaintextMessage } from "../../helpers/message-evidence";
+import { openCardMembers } from "../../helpers/kanban-product-ui";
 import { accountActorId } from "../../helpers/coland-api";
 import { agentMemberRow } from "../../helpers/product-locators";
 import { test, expect, type Page, type APIRequestContext } from "../../helpers/arkret-test";
@@ -59,7 +60,7 @@ test.describe("Private accepted readback real UI @fully-implemented", () => {
       const replies = card.locator(".chat-message").filter({ has:
         page.locator(".content-block-text").filter({ hasText: /^pong(?:\r?\n|$)/ }) });
       for (let index = 0; index < 3; index += 1) {
-        await card.locator(".card-detail-sidebar-tab-members").click();
+        await openCardMembers(card);
         const member = agentMemberRow(card, accountActorId(pairing.agentId).account_id);
         await expect(member).toBeVisible({ timeout: 120_000 });
         const prompt = `Readback ${index + 1}: please reply only pong`;

@@ -1,4 +1,4 @@
-import { addBoardList } from "../../helpers/kanban-product-ui";
+import { boardSwitcher, prepareBoardTitle, newBoardTrigger, addBoardList, submitBoardCardDraft } from "../../helpers/kanban-product-ui";
 // Support escalation workflow — frontline Alex hands off to backend Sam
 // Contract: e2e/scenarios/workflows/support-escalation.md
 // Spec refs:
@@ -200,18 +200,12 @@ test.describe("workflow: support escalation", () => {
       await expect(alexPage.page.locator(".kanban-panel")).toBeVisible({
         timeout: 120_000,
       });
-      await alexPage.page.locator(".new-board-toggle").click();
-      const boardComposer = alexPage.page.locator(".board-create-popover");
-      const boardDraft = boardComposer.locator(".new-board-title-input :is(input,textarea)");
-      await boardDraft.fill("");
-      await expect(boardComposer.locator(".input-empty-prompt")).toBeVisible();
-      await boardDraft.fill(boardTitle);
-      await expect(boardDraft).toHaveValue(boardTitle);
-      await expect(boardComposer.locator(".input-empty-prompt")).toHaveCount(0);
+      await newBoardTrigger(alexPage.page).click();
+      await prepareBoardTitle(alexPage.page, boardTitle);
       await expect(alexPage.page.locator(".create-board-space-button")).toBeEnabled();
       await alexPage.page.locator(".create-board-space-button").click();
       await expect(
-        alexPage.page.locator(".board-space-select-button"),
+        boardSwitcher(alexPage.page),
       ).toContainText(boardTitle, { timeout: 45_000 });
 
       for (const columnName of [triage, inProgress, resolved]) {
@@ -226,9 +220,7 @@ test.describe("workflow: support escalation", () => {
       const triageColumn = alexPage.page
         .locator(".kanban-column")
         .filter({ hasText: triage });
-      await triageColumn.locator(".add-card-button").click();
-      await triageColumn.locator(".new-card-title-input").fill(ticketCard);
-      await triageColumn.locator(".save-card-button").click();
+      await submitBoardCardDraft(triageColumn, ticketCard);
 
       const card = triageColumn
         .locator(".kanban-card")

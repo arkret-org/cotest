@@ -108,7 +108,7 @@ export async function serverLoginViaCoauth(
   );
 }
 
-export async function hardLogoutViaAccountMenu(
+export async function hardLogoutViaAccountPage(
   jointPage: JointUserPage,
 ): Promise<void> {
   const page = jointPage.page;
@@ -182,7 +182,7 @@ async function prepareAcceptedDeviceForOidcLogin(
     const recoveryKey = establishRecoveryKey
       ? await flow.page.completeRecoveryKeySetupIfPrompted(30_000)
       : undefined;
-    await hardLogoutViaAccountMenu(flow.page);
+    await hardLogoutViaAccountPage(flow.page);
     return { page: flow.page, recoveryKey };
   } catch (error) {
     await flow.page.close();

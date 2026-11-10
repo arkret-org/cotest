@@ -1,3 +1,4 @@
+import { contactMessage } from "../../helpers/contact-product-ui";
 import { accountRow } from "../../helpers/product-locators";
 // Contact identity confirmation: authorized profile resolve → first explicit
 // confirmation → rename notice with the old confirmed value → explicit refresh.
@@ -158,8 +159,8 @@ test.describe("contact confirmed display name", () => {
           alicePage.completeRecoveryKeySetupIfPrompted(30_000),
           bobPage.completeRecoveryKeySetupIfPrompted(30_000),
         ]);
-        await bobPage.page.getByRole("button", { name: "Contacts", exact: true }).click();
-        const aliceRow = accountRow(bobPage.page, ".direct-conversation-row", accountActorId(alice.id).account_id);
+        await bobPage.page.getByRole("link", { name: "Contacts", exact: true }).click();
+        const aliceRow = await contactMessage(bobPage.page, accountActorId(alice.id).account_id);
         await expect(async () => {
           if (!new URL(bobPage.page.url()).pathname.startsWith("/direct/")) {
             await aliceRow.click();
@@ -171,8 +172,8 @@ test.describe("contact confirmed display name", () => {
         const [, , encodedRealmId, encodedStrandId] = new URL(bobPage.page.url()).pathname.split("/");
         // The recipient opens the same conversation to demand its verified
         // scope current before installing and acknowledging the Welcome.
-        await alicePage.page.getByRole("button", { name: "Contacts", exact: true }).click();
-        const bobRow = accountRow(alicePage.page, ".direct-conversation-row", accountActorId(bob.id).account_id);
+        await alicePage.page.getByRole("link", { name: "Contacts", exact: true }).click();
+        const bobRow = await contactMessage(alicePage.page, accountActorId(bob.id).account_id);
         await bobRow.click();
         await expect(alicePage.page).toHaveURL(/\/direct\/ak:realm:.*\/ak:strand:/, { timeout: 180_000 });
         expect(new URL(alicePage.page.url()).pathname).toBe(new URL(bobPage.page.url()).pathname);

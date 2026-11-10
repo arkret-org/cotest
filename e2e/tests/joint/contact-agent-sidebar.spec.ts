@@ -1,4 +1,5 @@
 import { accountRow } from "../../helpers/product-locators";
+import { contactMessage } from "../../helpers/contact-product-ui";
 import type { ContactView } from "../../helpers/generated/spec-wire-objects";
 import { expect, type APIRequestContext } from "../../helpers/arkret-test";
 import {
@@ -58,11 +59,26 @@ jointTest.describe("Contacts agent hierarchy @fully-implemented", () => {
       )).toBe(true);
 
       const alicePage = jointRealm.alicePage.page;
-      // The contact was established through the protocol API after Alice's
-      // shell had already loaded its sidebar cache. Reload the product client
-      // so the assertion observes the accepted contact projection.
-      await alicePage.reload({ waitUntil: "domcontentloaded" });
-      await alicePage.getByRole("button", { name: "Contacts", exact: true }).click();
+      const bobPage = jointRealm.bobPage.page;
+      // Refresh both real accepted projections. The responder is still the
+      // only eligible founder; either participant may need another user open
+      // while the founding evidence converges.
+      await Promise.all([bobPage, alicePage].map(page => page.reload({ waitUntil: "domcontentloaded" })));
+      const participants = [
+        [bobPage, jointRealm.aliceSession.accountId],
+        [alicePage, jointRealm.bobSession.accountId],
+      ] as const;
+      await Promise.all(participants.map(async ([page, peer]) => {
+        await page.getByRole("link", { name: "Contacts", exact: true }).click();
+        await expect(async () => {
+          if (!new URL(page.url()).pathname.startsWith("/direct/")) {
+            const message = await contactMessage(page, peer);
+            await message.click({ timeout: 5_000 });
+          }
+          await expect(page).toHaveURL(/\/direct\/ak:realm:.*\/ak:strand:/, { timeout: 8_000 });
+        }).toPass({ timeout: 180_000, intervals: [2_000] });
+      }));
+      expect(new URL(alicePage.url()).pathname).toBe(new URL(bobPage.url()).pathname);
 
       const aliceGroups = alicePage.locator(".contact-sidebar-group");
       const aliceSelfGroup = alicePage.locator(".contact-sidebar-self-group");
@@ -74,7 +90,7 @@ jointTest.describe("Contacts agent hierarchy @fully-implemented", () => {
       // effective (active / paused) belong here. The freshly provisioned
       // agent is still not ready with runtime_key_missing, so it must stay out of the
       // sidebar and out of the Agents count pill until pairing completes;
-      // it remains manageable in Settings → My Agents. Wait for Bob's
+      // it remains manageable in My Agents. Wait for Bob's
       // contact row first — contacts and own agents land from the same
       // sidebar load, so this guards against asserting before data arrives.
       const bobContact = accountRow(alicePage, ".direct-conversation-row", jointRealm.bobSession.accountId);
@@ -87,7 +103,6 @@ jointTest.describe("Contacts agent hierarchy @fully-implemented", () => {
       ).toHaveCount(0);
       await expect(aliceSelfGroup).not.toContainText("Agents");
 
-      const bobPage = jointRealm.bobPage.page;
       const allowedAgent = {
         actor_id: accountActorId(`ak:did_core:web:agents.joint-e2e.local:${stamp}`),
         controller_account_id: jointRealm.aliceSession.accountId,
@@ -138,7 +153,6 @@ jointTest.describe("Contacts agent hierarchy @fully-implemented", () => {
       );
       try {
         await bobPage.reload();
-        await bobPage.getByRole("button", { name: "Contacts", exact: true }).click();
         const bobGroups = bobPage.locator(".contact-sidebar-group");
         await expect(bobGroups.first()).toHaveClass(/\bcontact-sidebar-self-group\b/);
         const aliceContact = accountRow(bobPage, ".direct-conversation-row", jointRealm.aliceSession.accountId);
@@ -197,8 +211,8 @@ async function provisionPendingAgent(
   const url = `${colandBaseUrl()}/_arkret/self/agents`;
   const page = controllerPage.page;
   await controllerPage.gotoSettings();
-  await page.locator(".settings-nav-item-agents").click();
-  await expect(page).toHaveURL(/\/settings\/agents(?:\?|$)/);
+  await page.getByRole("link", { name: "My Agents", exact: true }).click();
+  await expect(page).toHaveURL(/\/agents(?:\?|$)/);
   await page.locator(".agent-admin-create-open-button").click();
   await expect(page.locator('.agent-admin-detail-pane:has(> .event-head :text-is("Create agent"))')).toBeVisible();
   await page.locator(".agent-admin-provision-agent-slug").locator("input, textarea").fill(agentSlug);

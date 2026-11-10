@@ -461,8 +461,8 @@ test.describe("identity.recovery-key-to-encrypted-realm @fully-implemented", () 
         await jointPage.gotoSettings();
         await page.getByRole("link", { name: "Security", exact: true }).click();
         await expect(page).toHaveURL(url => url.pathname === "/settings/encryption");
-        await expect(page.getByRole("heading", { name: "Security", exact: true })).toBeVisible();
         const recovery = page.locator(".settings-mls-recovery");
+        await expect(recovery).toBeVisible();
         await recovery.getByRole("button", { name: "Check and replenish KeyPackages", exact: true }).click();
         await expect(
           recovery.getByText(/^KeyPackage maintenance complete; published:\s*0$/),

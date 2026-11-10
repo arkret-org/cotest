@@ -1,8 +1,9 @@
 import { test as jointTest, expect } from "../../helpers/joint-fixture";
 import { decodeIngressEvents } from "../../helpers/event-ingress";
 import { canonicalJson } from "../../helpers/coland-api";
-import { openDpopUserPageFromSession, type JointUserPage } from "../../helpers/users";
-import type { Page } from "../../helpers/arkret-test";
+import { openDpopUserPageFromSession, selfPathHeadersForDpopSession, type JointUserPage } from "../../helpers/users";
+import { publicRequestFailure } from "../../helpers/secret-safe";
+import type { Page, Route } from "../../helpers/arkret-test";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import os from "node:os";
@@ -42,7 +43,7 @@ test.setTimeout(720_000);
 async function openAgentSettings(user: JointUserPage) {
   await user.gotoSettings();
   await user.page.getByRole("link", { name: "My Agents", exact: true }).click();
-  await expect(user.page).toHaveURL(url => url.pathname === "/settings/agents");
+  await expect(user.page).toHaveURL(url => url.pathname === "/agents");
   await expect(user.page.locator(".agent-admin")).toBeVisible();
 }
 
@@ -52,9 +53,23 @@ const avatarPng = Buffer.from(
 );
 
 for (const mode of ["avatar", "lost-responses", "retryable-profile", "account-switch", "provision-rejected", "profile-rejected", "no-avatar"] as const) {
-  test(`Agent creation persists accepted avatar: ${mode} @fully-implemented`, async ({ jointUsers, agentClient }) => {
+  test(`Agent creation persists accepted avatar: ${mode} @fully-implemented`, async ({ jointUsers, agentClient, request }) => {
     let user = agentClient.user;
     let page = user.page;
+    const policyUrl = new URL("/_arkret/root/identity/recovery-policy", user.serverUrl).toString();
+    const controllerPolicy = async () => {
+      const response = await request.get(policyUrl, {
+        headers: selfPathHeadersForDpopSession(jointUsers.aliceSession, "GET", policyUrl),
+      });
+      const policy = response.ok() ? (await response.json()).active_policy : undefined;
+      return { status: response.status(), activeForController: Boolean(policy
+        && canonicalJson(policy.account_id) === canonicalJson(jointUsers.aliceSession.accountId)) };
+    };
+    if (!(await controllerPolicy()).activeForController) {
+      await user.gotoHome();
+      await user.completeRecoveryKeySetupIfPrompted(120_000);
+    }
+    await expect.poll(controllerPolicy, { timeout: 30_000 }).toEqual({ status: 200, activeForController: true });
     const slug = `avatar-${Date.now().toString(36)}`;
     let avatar: string | undefined;
     let agent: string | undefined;
@@ -67,10 +82,26 @@ for (const mode of ["avatar", "lost-responses", "retryable-profile", "account-sw
     let holdProfile = mode === "retryable-profile" || mode === "account-switch";
     let rejectProvision = mode === "provision-rejected";
     let clientGeneration = 0;
+    let retiredGeneration = 0;
     const profileBytes = new Set<string>();
     const preparationBytes = new Set<string>();
     const provisionBytes = new Set<string>();
     const allocatedAgents = new Set<string>();
+    const fetchLive = async (route: Route, generation: number, operation: string) => {
+      try {
+        return await route.fetch();
+      } catch (error) {
+        if (generation <= retiredGeneration && error instanceof Error
+          && /Request context disposed|Target page, context or browser has been closed/.test(error.message)) {
+          return null;
+        }
+        throw publicRequestFailure(error, "POST", operation);
+      }
+    };
+    const restart = async (beforeNavigate?: (page: Page) => Promise<void>) => {
+      retiredGeneration = clientGeneration;
+      return agentClient.restart(beforeNavigate);
+    };
     const installRoutes = async (target: Page) => {
       const generation = ++clientGeneration;
       await target.route("**/_arkret/self/agents", async route => {
@@ -86,7 +117,8 @@ for (const mode of ["avatar", "lost-responses", "retryable-profile", "account-sw
           }) });
         }
         if (body.phase === "commit") provisionBytes.add(canonicalJson(body));
-        const response = await route.fetch();
+        const response = await fetchLive(route, generation, "Agent provisioning");
+        if (!response) return;
         expect(response.ok()).toBe(true);
         const result = await response.json();
         allocatedAgents.add(result.agent_id);
@@ -95,8 +127,9 @@ for (const mode of ["avatar", "lost-responses", "retryable-profile", "account-sw
           pcr = result.principal_control_realm_id;
           delegation = result.controller_authorization_ref;
           if (mode === "lost-responses" && generation === 1) {
+            await route.abort("failed");
             lostProvision = true;
-            return route.abort("failed");
+            return;
           }
         }
         await route.fulfill({ response });
@@ -128,13 +161,15 @@ for (const mode of ["avatar", "lost-responses", "retryable-profile", "account-sw
             status: "rejected", reason_code: "capability_denied",
           }) });
         }
-        const response = await route.fetch();
+        const response = await fetchLive(route, generation, "Agent Profile submission");
+        if (!response) return;
         expect(response.ok()).toBe(true);
         const outcome = await response.json();
         expect(outcome.commit.event_ref).toBe(profile.event_id);
         if (mode === "lost-responses" && generation === 2) {
+          await route.abort("failed");
           lostProfile = true;
-          return route.abort("failed");
+          return;
         }
         await route.fulfill({ response });
         profileConfirmed = true;
@@ -194,10 +229,10 @@ for (const mode of ["avatar", "lost-responses", "retryable-profile", "account-sw
     }
     if (mode === "lost-responses") {
       await expect.poll(() => lostProvision, { timeout: 180_000 }).toBe(true);
-      user = await agentClient.restart(installRoutes);
+      user = await restart(installRoutes);
       page = user.page;
       await expect.poll(() => lostProfile, { timeout: 180_000 }).toBe(true);
-      user = await agentClient.restart(installRoutes);
+      user = await restart(installRoutes);
       page = user.page;
       await expect.poll(() => profileConfirmed, { timeout: 180_000 }).toBe(true);
       expect(profileAttempts).toBeGreaterThan(1);
@@ -206,11 +241,11 @@ for (const mode of ["avatar", "lost-responses", "retryable-profile", "account-sw
       await expect(page.locator(".agent-admin .write-status")).toContainText("Agent was created; its avatar is still pending", { timeout: 180_000 });
       await page.bringToFront();
       await page.getByRole("link", { name: "Account", exact: true }).click();
-      const menu = page.locator(".account-page");
-      await expect(menu).toBeVisible();
+      const accountPage = page.locator(".account-page");
+      await expect(accountPage).toBeVisible();
       const originalProfile = await page.evaluate(() => JSON.parse(localStorage.getItem("inkson.config.v1") ?? "{}").active_account?.profile_id ?? "");
       expect(originalProfile).not.toBe("");
-      await menu.getByRole("button", { name: "Sign in to another account", exact: true }).click();
+      await accountPage.getByRole("button", { name: "Sign in to another account", exact: true }).click();
       await expect(page.locator(".auth-panel")).toBeVisible();
       await expect(page.locator(".shell.app")).toHaveCount(0);
       await page.waitForTimeout(500);
@@ -248,7 +283,7 @@ for (const mode of ["avatar", "lost-responses", "retryable-profile", "account-sw
         && new URL(response.url()).pathname === "/_arkret/self/agents")
         .then(response => response.json());
       await page.reload({ waitUntil: "domcontentloaded" });
-      await expect(page).toHaveURL(url => url.pathname === "/settings/agents");
+      await expect(page).toHaveURL(url => url.pathname === "/agents");
       const directory = await listed;
       const matching = directory.agents.filter((row: { agent_id: string }) => row.agent_id === agent);
       expect(matching).toHaveLength(1);
@@ -280,7 +315,7 @@ for (const mode of ["avatar", "lost-responses", "retryable-profile", "account-sw
     const before = profileAttempts;
     await page.waitForTimeout(6_000);
     expect(profileAttempts).toBe(before);
-    const cold = await agentClient.restart();
+    const cold = await restart();
     const directoryRead = cold.page.waitForResponse(response => response.request().method() === "GET"
       && new URL(response.url()).pathname === "/_arkret/self/agents")
       .then(response => response.json());

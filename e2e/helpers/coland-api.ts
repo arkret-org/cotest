@@ -675,6 +675,7 @@ export async function createRealmApi(
     governance_station_id: colandServiceId(opts.server),
     initial_join_rule: data.default_join_rule ?? "invite",
     initial_history_access: data.history_access ?? "since_join",
+    initial_encryption_backup_strategy: "ak.encryption_backup.epoch_content_roots.v1",
     initial_discoverability:
       data.discoverability ?? (data.public ? "public" : "listed"),
   };

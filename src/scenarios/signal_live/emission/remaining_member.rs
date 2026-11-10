@@ -552,17 +552,15 @@ pub(crate) async fn exercise(
     let fresh_probe = arm(pause_file, &fresh, &[&carol.account])?.remove(0);
     ensure!(alice.client.sdk().signal_send(&fresh).await?.accepted);
     reached(&fresh_probe, &fresh).await?;
-    // The registered current-device lookup legitimately retains fresh signed
-    // evidence at its origin. Measure that effect separately, then freeze all
-    // accepting tables before releasing the actual recipient frame gate.
+    // The remote device lookup runs after the recipient frame gate is released.
+    // At the pause, neither Station may have changed its acceptance footprint.
     let snapshots = [
         acceptance_rows(urls[0]).await?,
         acceptance_rows(urls[1]).await?,
     ];
-    let query_evidence_added = exact_device_query_effects(&before_query[0], &snapshots[0], alice)?;
     ensure!(
-        snapshots[1] == before_query[1],
-        "recipient query changes no accepting rows"
+        snapshots == before_query,
+        "the paused recipient frame has no accepting or signer-evidence writes"
     );
     std::fs::remove_file(&fresh_probe)?;
     outcome(&fresh_probe, &fresh, true).await?;
@@ -579,14 +577,12 @@ pub(crate) async fn exercise(
         32,
     )?;
     bob_rail.quiet().await?;
-    // The remote recipient's final sender check performs a second registered
-    // keys/query at the origin. Verify every retained immutable evidence root
-    // cryptographically; all other accepting tables must still be identical.
+    // The final sender check performs the registered keys/query at the
+    // origin. Verify the new immutable evidence cryptographically and keep
+    // all other accepting tables identical.
     let origin_after = acceptance_rows(urls[0]).await?;
-    let total_query_evidence_added =
-        exact_device_query_effects(&before_query[0], &origin_after, alice)?;
-    ensure!(total_query_evidence_added >= query_evidence_added);
-    let frame_gate_query_evidence_added = total_query_evidence_added - query_evidence_added;
+    let frame_gate_query_evidence_added =
+        exact_device_query_effects(&snapshots[0], &origin_after, alice)?;
     for (index, url) in urls.iter().enumerate() {
         let after = counts(url, realm).await?;
         ensure!(after[0..2] == settled[index][0..2] && after[2] == settled[index][2] + 1);
@@ -600,7 +596,7 @@ pub(crate) async fn exercise(
         }
     }
     eprintln!(
-        "[signal-remaining-member] boundary={boundary:?} independent_accepted_actors=3 control_epoch=3 control_decrypted=2 same_queued_digest=1 old_epoch_final_gate_denied_before_ttl=2 accepted_remove_epoch=4 remaining_mls_leaves=2 fresh_peer_relay_carol_decrypted=1 bob_no_data_frames=1 canonical_acceptance_rows_unchanged=2 sender_query_evidence_added={query_evidence_added} frame_gate_query_evidence_added={frame_gate_query_evidence_added} complete_immutable_evidence_verified=1 http_and_websocket=1"
+        "[signal-remaining-member] boundary={boundary:?} independent_accepted_actors=3 control_epoch=3 control_decrypted=2 same_queued_digest=1 old_epoch_final_gate_denied_before_ttl=2 accepted_remove_epoch=4 remaining_mls_leaves=2 fresh_peer_relay_carol_decrypted=1 bob_no_data_frames=1 canonical_acceptance_rows_unchanged=2 sender_query_evidence_added=0 frame_gate_query_evidence_added={frame_gate_query_evidence_added} complete_immutable_evidence_verified=1 http_and_websocket=1"
     );
     Ok(())
 }

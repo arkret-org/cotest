@@ -1,4 +1,4 @@
-import { addBoardList } from "../../helpers/kanban-product-ui";
+import { newBoardTrigger, addBoardList } from "../../helpers/kanban-product-ui";
 // Multi-user project simulation
 // Contract: e2e/scenarios/kanban/project-simulation.md
 // Spec refs:
@@ -523,7 +523,7 @@ test.describe("project simulation", () => {
       await expect(alicePage.page.locator(".kanban-panel")).toBeVisible({
         timeout: 120_000,
       });
-      await alicePage.page.getByRole("button", { name: "New board", exact: true }).click();
+      await newBoardTrigger(alicePage.page).click();
       await alicePage.page
         .locator(".new-board-title-input input, .new-board-title-input textarea")
         .fill(`Overdue Board ${stamp}`);

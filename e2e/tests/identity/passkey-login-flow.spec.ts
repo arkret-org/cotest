@@ -8,7 +8,7 @@ import {
 import { coauthBaseUrl, optionalEnv, colandBaseUrl } from "../../helpers/env";
 import { registerCoauthPasswordAccount } from "../../helpers/coauth-register";
 import {
-  hardLogoutViaAccountMenu,
+  hardLogoutViaAccountPage,
   submitCoauthPasswordCredentials,
 } from "../../helpers/real-oidc-login";
 import {
@@ -290,7 +290,7 @@ test.describe("Coauth passkey browser lifecycle @fully-implemented", () => {
         // independent. End the latter explicitly so /login does not correctly
         // redirect the still-authenticated founding device back to the shell.
         await jointPage.gotoHome();
-        await hardLogoutViaAccountMenu(jointPage);
+        await hardLogoutViaAccountPage(jointPage);
         await jointPage.gotoLogin();
         await page.locator(".auth-station-field input").fill(colandBaseUrl());
         await page.locator(".auth-primary").click();

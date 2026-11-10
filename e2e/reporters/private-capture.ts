@@ -1,7 +1,25 @@
 import { createHash } from "node:crypto";
 import { lstatSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
 import path from "node:path";
-import type { FullConfig, Reporter, TestCase, TestResult, TestStep } from "@playwright/test/reporter";
+import type { FullConfig, Reporter, TestCase, TestError, TestResult, TestStep } from "@playwright/test/reporter";
+
+// A caught Playwright transport failure is still recorded as an API step.
+// Strip signed request header values before list, JUnit or HTML can copy them.
+const signedHeaderLine = /^((?:[ \t]|\x1b\[[0-9;]*m)*(?:[-+][ \t]+)?)(?:(authorization)[ \t]*:[ \t]*(?:bearer|dpop)[ \t]+|dpop[ \t]*:[ \t]*)[^\s\x1b]+/gim;
+
+function protectTransportError(error: TestError | undefined) {
+  const seen = new Set<TestError>();
+  for (let entry = error; entry && !seen.has(entry); entry = entry.cause) {
+    seen.add(entry);
+    for (const key of ["message", "stack", "value", "snippet"] as const) {
+      const value = entry[key];
+      if (value !== undefined) {
+        entry[key] = value.replace(signedHeaderLine, (_header, prefix, authorization) =>
+          `${prefix}[${authorization ? "Authorization" : "DPoP"} header omitted]`);
+      }
+    }
+  }
+}
 
 // Playwright writes matcher page snapshots before reporter callbacks. Dispose
 // of the whole automatic context before any retained report is exported.
@@ -25,7 +43,14 @@ export default class PrivateCaptureReporter implements Reporter {
     const input = /^(Fill|Type|Insert) "/.exec(step.title);
     if (input) step.title = `${input[1]} input [value omitted]`;
   }
+  onStepEnd(_test: TestCase, _result: TestResult, step: TestStep) {
+    protectTransportError(step.error);
+  }
+  onError(error: TestError) {
+    protectTransportError(error);
+  }
   onTestEnd(test: TestCase, result: TestResult) {
+    for (const error of result.errors) protectTransportError(error);
     for (const attachment of result.attachments) {
       if (attachment.name !== "error-context") continue;
       try {
@@ -56,7 +81,7 @@ export default class PrivateCaptureReporter implements Reporter {
     mkdirSync(this.options.outputFolder, { recursive: true });
     writeFileSync(path.join(this.options.outputFolder, "private-capture-receipts.json"), JSON.stringify({
       disposed: this.receipts, rejected_attachments: this.failures,
-      boundary: "Whole automatic error-context disposal after Playwright writes it, before retained report export. Assertions and original failures remain unchanged.",
+      boundary: "Discard automatic page context and redact signed request header values before retained report export. Preserve assertion outcomes and source locations.",
     }, null, 2) + "\n");
     if (this.failures) return { status: "failed" as const };
   }

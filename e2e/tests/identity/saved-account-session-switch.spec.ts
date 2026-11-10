@@ -42,7 +42,7 @@ async function authorize(page: Page, account: RealOidcAccount): Promise<void> {
 
 async function completeNewIdentity(page: Page): Promise<void> {
   await page.locator(".choose-new-identity").click();
-  await expect(page.locator(".account-switcher")).toHaveCount(0);
+  await expect(page.locator(".account-page")).toHaveCount(0);
   const words = page.locator(".onboarding-recovery-key-display .rk-word");
   await expect(words).toHaveCount(24);
   const recoveryKey = (await words.allTextContents()).map((word) => word.trim()).join(" ");
@@ -58,15 +58,16 @@ async function addAccount(page: Page): Promise<void> {
   await page.locator(".rail-account").click();
   await page.locator(".account-page").locator(".account-picker__add").click();
   await expect(page.locator(".auth-panel")).toBeVisible();
-  await expect(page.locator(".account-switcher")).toHaveCount(0);
+  await expect(page.locator(".account-page")).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Back to previous account", exact: true })).toBeVisible();
   await expect(page.locator(".auth-primary")).toHaveText("Sign in to this server");
 }
 
 function accountCard(page: Page, account: SavedAccount) {
   const station = account.server_url.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  return page.locator(".account-switch-row").filter({ hasText: account.authority.principal_id })
-    .and(page.getByRole("button", { name: new RegExp(station) }));
+  const accountPage = page.locator(".account-page");
+  return accountPage.locator(".account-switch-row").filter({ hasText: account.authority.principal_id })
+    .and(accountPage.getByRole("button", { name: new RegExp(station) }));
 }
 
 async function selectSavedAccount(page: Page, account: SavedAccount): Promise<void> {
@@ -120,7 +121,7 @@ test("real saved sessions survive add-account, switch both ways and require Coau
   try {
     await page.goto("/login");
     await expect(page.locator(".auth-panel")).toBeVisible();
-    await expect(page.locator(".account-switcher")).toHaveCount(0);
+    await expect(page.locator(".account-page")).toHaveCount(0);
     await test.step("authorize the first saved account", () => authorize(page, first));
     await completeNewIdentity(page);
     const firstAccount = await currentAccount(page);
@@ -143,6 +144,7 @@ test("real saved sessions survive add-account, switch both ways and require Coau
       await expect(page).toHaveURL(/\/settings$/);
       await expect(page.locator(".settings-sidebar-column")).toBeVisible();
       await page.goBack();
+      await expect(page).toHaveURL(/\/account$/);
       await expect(accountPage).toBeVisible();
       await page.setViewportSize(viewport);
       await expect(settings).toBeHidden();
@@ -233,7 +235,7 @@ test("real saved sessions survive add-account, switch both ways and require Coau
     await selectSavedAccount(page, firstAccount);
     await page.locator(".rail-account").click();
     const currentLogout = page.waitForResponse(response => new URL(response.url()).pathname === "/_arkret/gate/account/logout");
-    await page.getByRole("button", { name: "Sign out of this account", exact: true }).click();
+    await page.locator(".account-page").getByRole("button", { name: "Sign out of this account", exact: true }).click();
     expect((await currentLogout).status()).toBe(200);
     await expect.poll(() => currentAccount(page)).toEqual(secondAccount);
     await expect(page.locator(".shell.app")).toBeVisible();
@@ -243,7 +245,7 @@ test("real saved sessions survive add-account, switch both ways and require Coau
     await page.locator(".rail-account").click();
     await accountCard(page, firstAccount).click();
     await expect(page.locator(".auth-panel")).toBeVisible();
-    await expect(page.locator(".account-switcher")).toHaveCount(0);
+    await expect(page.locator(".account-page")).toHaveCount(0);
     await expect(page.locator(".shell.app")).toHaveCount(0);
     await expect(page.locator(".auth-station-field input")).toHaveValue(firstAccount.server_url);
     await page.reload();

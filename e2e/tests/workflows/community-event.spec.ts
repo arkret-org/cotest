@@ -6,7 +6,7 @@ import { expect, test, type Page, type Locator } from "../../helpers/arkret-test
 import { accountActorId, canonicalJson, assertAuthoritySubmitOutcome, sdkEventDerivedObjectId, wireErrCode } from "../../helpers/coland-api";
 import { decodeIngressEvents, type IngressEvent } from "../../helpers/event-ingress";
 import { colandServiceId } from "../../helpers/env";
-import { addBoardList, fillCardNarrative, filterCardAssignee } from "../../helpers/kanban-product-ui";
+import { newBoardTrigger, addBoardList, fillCardNarrative, filterCardAssignee } from "../../helpers/kanban-product-ui";
 import { openRegisteredUserPage } from "../../helpers/users";
 import { stepShot } from "../../helpers/screenshots";
 
@@ -180,7 +180,7 @@ test("three browser-owned members deliver a community event through encrypted di
     const listTitle = `Deliverables ${stamp}`;
     await alice.page.page.goto(`/kanban/${realm}`);
     await expect(alice.page.page.locator(".kanban-panel")).toBeVisible({ timeout: 120_000 });
-    await alice.page.page.getByRole("button", { name: "New board", exact: true }).click();
+    await newBoardTrigger(alice.page.page).click();
     await committed(alice.page.page, "ak.space.create", realm!, () => submitProjectBoard(alice.page.page, boardTitle));
     await expect(alice.page.page.locator(".kanban-empty-board")).toContainText("No lists yet", { timeout: 90_000 });
     const column = await addBoardList(alice.page.page, listTitle);

@@ -31,6 +31,10 @@ post-reload message, and both participants' encrypted presence to become online.
 
 No response is mocked as successful, no binding is inserted into storage, and no
 ordinary Realm capability grant is injected to authorize the Direct Conversation.
+The cross-Station case first renders the real outgoing pending Contact. Bob then
+accepts through his authenticated Station. Alice's same open Contacts document
+must expose the accepted Message action through the background projection refresh,
+with the complete Principal and Station identity verified before opening Direct.
 The fixture's ordinary Realm only prepares the test accounts; all message assertions
 target the separate `/direct/` route.
 

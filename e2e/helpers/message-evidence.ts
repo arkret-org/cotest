@@ -3,6 +3,10 @@ import { expect, type Locator, type Page } from "@playwright/test";
 
 const references = new WeakMap<Page, Set<string>>();
 
+export function renderedMessageId(eventId: string): string {
+  return `chat-message-${createHash("sha256").update(eventId).digest("hex")}`;
+}
+
 function collect(value: unknown, found: Set<string>): void {
   if (typeof value === "string") {
     if (/^ak:event:[A-Za-z0-9_-]+$/.test(value)) found.add(value);
@@ -52,7 +56,7 @@ export async function eventIdFromMessage(message: Locator): Promise<string> {
       if (fold) collect(JSON.parse(fold), candidates);
     }
     const id = await message.getAttribute("id");
-    const matches = [...candidates].filter(event => `chat-message-${createHash("sha256").update(event).digest("hex")}` === id);
+    const matches = [...candidates].filter(event => renderedMessageId(event) === id);
     expect(matches, "the rendered row must bind one actual wire/projection Event reference").toHaveLength(1);
     matched = matches[0];
   }).toPass({ timeout: 30_000, intervals: [250, 500, 1_000] });

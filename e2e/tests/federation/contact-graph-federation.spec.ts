@@ -1,7 +1,7 @@
 import { submitOrdinaryComposerDraft } from "../../helpers/composer-handoff";
 import { decodeIngressEvents } from "../../helpers/event-ingress";
 import { assertAuthoritySubmitOutcome } from "../../helpers/coland-api";
-import { accountRow } from "../../helpers/product-locators";
+import { contactMessage } from "../../helpers/contact-product-ui";
 // Contact graph across Stations (server1/server2 federation).
 //
 // Gated on hasServerCount(2): pass -ServerCount 2 to scripts/run-joint-e2e.ps1.
@@ -404,9 +404,8 @@ test.describe("contact graph federation (server1/server2)", () => {
       // can admit the founding unit, and Alice's resolver answers
       // `awaiting_founder` until it is accepted (9.1). Bob opens first.
       await bobPage.gotoHome();
-      await bobPage.page.getByRole("button", { name: "Contacts", exact: true }).click();
-      await accountRow(bobPage.page, ".direct-conversation-row", accountActorId(alice.id, "server1").account_id)
-        .click();
+      await bobPage.page.getByRole("link", { name: "Contacts", exact: true }).click();
+      await (await contactMessage(bobPage.page, accountActorId(alice.id, "server1").account_id)).click();
       await expect(bobPage.page).toHaveURL(/\/direct\/ak:realm:.*\/ak:strand:/, {
         timeout: 180_000,
       });
@@ -431,8 +430,8 @@ test.describe("contact graph federation (server1/server2)", () => {
         .toMatchObject({ realm_id: realmId, main_strand_id: strandId });
 
       await alicePage.gotoHome();
-      await alicePage.page.getByRole("button", { name: "Contacts", exact: true }).click();
-      const bobRow = accountRow(alicePage.page, ".direct-conversation-row", accountActorId(bob.id, "server2").account_id);
+      await alicePage.page.getByRole("link", { name: "Contacts", exact: true }).click();
+      const bobRow = await contactMessage(alicePage.page, accountActorId(bob.id, "server2").account_id);
       await expect(async () => {
         if (!new URL(alicePage.page.url()).pathname.startsWith("/direct/")) {
           await bobRow.click();

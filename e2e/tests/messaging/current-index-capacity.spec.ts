@@ -84,9 +84,13 @@ test("0540 real Station 1/100/1000 Realm durable cold startup records first scre
       const promptsBefore = postponedPrompts;
       const loadingStarted = Date.now();
       await flow.page.gotoHome();
-      const rows = page.getByRole("navigation", { name: "Main navigation", exact: true })
+      await postpone();
+      await page.getByRole("link", { name: "Realms", exact: true }).click();
+      await expect(page).toHaveURL(url => url.pathname === "/realms");
+      const workspaceList = page.locator(".workspace-list");
+      const rows = workspaceList
         .getByRole("link", { name: new RegExp(`^${prefix}`) });
-      const more = page.getByRole("button", { name: "Load More Realms", exact: true });
+      const more = workspaceList.getByRole("button", { name: "Load More Realms", exact: true });
       let loadMoreClicks = 0;
       await expect.poll(async () => {
         await postpone!();

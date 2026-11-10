@@ -1,4 +1,4 @@
-import { addBoardList, fillCardNarrative } from "../../helpers/kanban-product-ui";
+import { boardSwitcher, newBoardTrigger, addBoardList, fillCardNarrative } from "../../helpers/kanban-product-ui";
 // Sprint planning workflow — tech lead + two engineers commit to stories
 // Contract: e2e/scenarios/workflows/sprint-planning.md
 // Spec refs:
@@ -217,11 +217,11 @@ test.describe("workflow: sprint planning", () => {
       await expect(meiPage.page.locator(".kanban-panel")).toBeVisible({
         timeout: 120_000,
       });
-      await meiPage.page.locator(".new-board-toggle").click();
+      await newBoardTrigger(meiPage.page).click();
       await meiPage.page.locator(".new-board-title-input input, .new-board-title-input textarea").fill(boardTitle);
       await meiPage.page.locator(".create-board-space-button").click();
       await expect(
-        meiPage.page.locator(".board-space-select-button"),
+        boardSwitcher(meiPage.page),
       ).toContainText(boardTitle, { timeout: 45_000 });
 
       for (const columnName of [backlog, todo, doing, done]) {
@@ -329,7 +329,7 @@ test.describe("workflow: sprint planning", () => {
       await expect(meiPage.page.locator(".kanban-panel")).toBeVisible({
         timeout: 120_000,
       });
-      await meiPage.page.locator(".new-board-toggle").click();
+      await newBoardTrigger(meiPage.page).click();
       await meiPage.page.locator(".new-board-title-input input, .new-board-title-input textarea").fill(boardTitle);
       await meiPage.page.locator(".create-board-space-button").click();
       await expect(
@@ -354,7 +354,7 @@ test.describe("workflow: sprint planning", () => {
       );
       expect(boardId).toMatch(/^ak:space:/);
       await expect(
-        meiPage.page.locator(".board-space-select-button"),
+        boardSwitcher(meiPage.page),
       ).toContainText(boardTitle, {
         timeout: 30_000,
       });
@@ -375,7 +375,7 @@ test.describe("workflow: sprint planning", () => {
         timeout: 120_000,
       });
       await expect(
-        bobPage.page.locator(".board-space-select-button"),
+        boardSwitcher(bobPage.page),
       ).toContainText(boardTitle, {
         timeout: 30_000,
       });
@@ -387,8 +387,15 @@ test.describe("workflow: sprint planning", () => {
         .locator(".kanban-column")
         .filter({ hasText: backlog });
       const liveStory = stories[0];
-      await backlogColumn.locator(".add-card-button").click();
-      await backlogColumn.locator(".new-card-title-input").fill(liveStory);
+      await meiPage.page.bringToFront();
+      const cardDraft = backlogColumn.locator(".new-card-title-input");
+      await expect(async () => {
+        if (!await cardDraft.isVisible()) {
+          await backlogColumn.locator(".add-card-button").click({ timeout: 3_000 });
+        }
+        await cardDraft.fill(liveStory, { timeout: 3_000 });
+        await expect(cardDraft).toHaveValue(liveStory, { timeout: 1_000 });
+      }).toPass({ timeout: 30_000, intervals: [250, 500, 1_000] });
       await backlogColumn.locator(".save-card-button").click();
       await expect(
         backlogColumn.locator(".kanban-card").filter({ hasText: liveStory }),
@@ -452,7 +459,7 @@ test.describe("workflow: sprint planning", () => {
         waitUntil: "domcontentloaded",
       });
       await expect(
-        bobPage.page.locator(".board-space-select-button"),
+        boardSwitcher(bobPage.page),
       ).toContainText(boardTitle, {
         timeout: 30_000,
       });
@@ -512,7 +519,7 @@ test.describe("workflow: sprint planning", () => {
           timeout: 120_000,
         });
         await expect(
-          actor.page.locator(".board-space-select-button"),
+          boardSwitcher(actor.page),
         ).toContainText(boardTitle, {
           timeout: 30_000,
         });
@@ -591,11 +598,11 @@ test.describe("workflow: sprint planning", () => {
       await expect(meiPage.page.locator(".kanban-panel")).toBeVisible({
         timeout: 120_000,
       });
-      await meiPage.page.locator(".new-board-toggle").click();
+      await newBoardTrigger(meiPage.page).click();
       await meiPage.page.locator(".new-board-title-input input, .new-board-title-input textarea").fill(boardTitle);
       await meiPage.page.locator(".create-board-space-button").click();
       await expect(
-        meiPage.page.locator(".board-space-select-button"),
+        boardSwitcher(meiPage.page),
       ).toContainText(boardTitle, { timeout: 45_000 });
 
       await addBoardList(meiPage.page, column);

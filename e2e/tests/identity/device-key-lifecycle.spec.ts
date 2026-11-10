@@ -1,4 +1,4 @@
-import { addBoardList } from "../../helpers/kanban-product-ui";
+import { newBoardTrigger, addBoardList } from "../../helpers/kanban-product-ui";
 import {
   expect,
   test,
@@ -17,7 +17,7 @@ import {
   type CoauthPasswordAccount,
 } from "../../helpers/coauth-register";
 import {
-  hardLogoutViaAccountMenu,
+  hardLogoutViaAccountPage,
   openAcceptedDeviceForOidcLogin,
   serverLoginViaCoauth,
   submitCoauthPasswordCredentials,
@@ -227,7 +227,7 @@ test.describe("holder device key lifecycle separation @fully-implemented", () =>
       });
 
       await test.step("hard logout clears the browser session", async () => {
-        await hardLogoutViaAccountMenu(jointPage);
+        await hardLogoutViaAccountPage(jointPage);
       });
 
       const reloginStartIndex = grants.count();
@@ -465,7 +465,7 @@ async function buildEncryptedBoardListCard(
     timeout: 120_000,
   });
   await userPage.clickWithPassivePromptRetry(
-    page.locator(".new-board-toggle"),
+    newBoardTrigger(page),
   );
   await page.locator(".new-board-title-input input, .new-board-title-input textarea").fill(boardTitle);
   await userPage.clickWithPassivePromptRetry(

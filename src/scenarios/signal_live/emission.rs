@@ -428,10 +428,18 @@ pub(super) async fn exercise(
             counts(url, realm).await? == closed[index],
             "no new Event, Commit or relay position after eligibility closed"
         );
-        ensure!(
-            acceptance_rows(url).await? == snapshots[index],
-            "frame denial and delayed peer ingress have zero acceptance footprint at Station {index}"
-        );
+        let after = acceptance_rows(url).await?;
+        if after != snapshots[index] {
+            let changed_tables = snapshots[index]
+                .as_object()
+                .context("acceptance footprint must be an object")?
+                .keys()
+                .filter(|table| snapshots[index].get(*table) != after.get(*table))
+                .collect::<Vec<_>>();
+            anyhow::bail!(
+                "frame denial and delayed peer ingress changed the acceptance footprint at Station {index}: {changed_tables:?}"
+            );
+        }
     }
     if let Rail::WebSocket(rail) = &mut rail {
         rail.finish().await?;

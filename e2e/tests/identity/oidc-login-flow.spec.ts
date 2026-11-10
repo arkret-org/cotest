@@ -40,7 +40,7 @@ import {
   registerUnboundCoauthPasswordAccount,
 } from "../../helpers/coauth-register";
 import {
-  hardLogoutViaAccountMenu,
+  hardLogoutViaAccountPage,
   openAcceptedDeviceForOidcLogin,
   serverLoginViaCoauth,
   submitCoauthPasswordCredentials,
@@ -326,7 +326,7 @@ test.describe("real OIDC browser login lifecycle @fully-implemented", () => {
 
       // 4. Logout.
       await test.step("logout clears the session and returns to /login", async () => {
-        await hardLogoutViaAccountMenu(jointPage);
+        await hardLogoutViaAccountPage(jointPage);
       });
 
       // 5. Returning-user login (same account, no re-registration).
@@ -419,7 +419,7 @@ test.describe("real OIDC browser login lifecycle @fully-implemented", () => {
         await jointPage.gotoLogin();
         await serverLoginViaCoauth(page, account);
         await jointPage.completeRecoveryKeySetupIfPrompted();
-        await hardLogoutViaAccountMenu(jointPage);
+        await hardLogoutViaAccountPage(jointPage);
       });
 
       // Force the full credential ceremony on the next attempt and forge the

@@ -198,6 +198,13 @@ retained List under its current Board. Current structural coverage is checked
 separately from historical Event disclosure; the test does not require sharing
 pre-join MLS keys or private content.
 
+Before the explicit collaboration grant, Bob submits a real SDK-signed,
+metadata-free Strand create of the same valid shape used by the history seed.
+The authority must return the registered `403 capability_denied`, and the
+governing stream head must remain unchanged. Opening a local draft is not used
+as evidence of write authority. The later granted Card creation and reverse
+decryption remain required positive checks.
+
 ## Browser request costs and subscription fallback (1121)
 
 The observer is installed before initial navigation and records browser HTTP

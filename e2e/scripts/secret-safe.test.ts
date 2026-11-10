@@ -25,3 +25,14 @@ test("unstructured request exceptions cannot inject raw credentials into diagnos
   assert.equal(safe.message, "POST HTTP request failed: transport error");
   assert.ok(!safe.stack?.includes(secret));
 });
+
+test("closed intercepted requests keep their classification without either signed header", () => {
+  const authorization = "synthetic-authorization-not-for-reporting";
+  const dpop = "synthetic-dpop-not-for-reporting";
+  const source = new Error(`route.fetch: Target page, context or browser has been closed\nCall log:\n  - authorization: DPoP ${authorization}\n  - dpop: ${dpop}`);
+  const safe = publicRequestFailure(source, "POST", "Agent provisioning");
+  assert.equal(safe.message, "POST Agent provisioning failed: request context disposed");
+  assert.equal(safe.cause, undefined);
+  assert.ok(!safe.stack?.includes(authorization));
+  assert.ok(!safe.stack?.includes(dpop));
+});

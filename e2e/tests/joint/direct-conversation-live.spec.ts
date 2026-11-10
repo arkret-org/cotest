@@ -1,15 +1,15 @@
 import { uint64Decimal, uint64Value } from "../../helpers/uint64-decimal";
 import { submitOrdinaryComposerDraft } from "../../helpers/composer-handoff";
 import { readCreatorRecords } from "../../helpers/creator-bootstrap";
-import { accountRow } from "../../helpers/product-locators";
+import { contactMessage, selectContact } from "../../helpers/contact-product-ui";
 import { openAndPairSecondController } from "../../helpers/paired-controller";
 import { test, expect, type JointUsersFixture } from "../../helpers/joint-fixture";
 import type { APIRequestContext, Browser, Page, Response } from "@playwright/test";
-import type { AccountId } from "../../helpers/generated/spec-wire-objects";
 import { requestContactArkret, respondContactArkret, resolvePrincipalLocator, tombstoneContactArkret } from "../../helpers/contact-api";
 import { accountActorId, assertAuthoritySubmitOutcome, canonicalJson, createRealmApi, resolveDefaultStrandId, scanRealmStreamApi, sdkEventDerivedObjectId, signedEventEnvelope, submitSignedEventApi } from "../../helpers/coland-api";
 import { decodeEventIngressBody, ingressEvents } from "../../helpers/event-ingress";
 import { readScopeMlsGroupCurrentApi } from "../../helpers/coland-api/mls";
+import { observeBrowserDpopGrant } from "../../helpers/session-transport-recovery";
 
 import { approvePairingLinkOnAuthorizedDevice, createDpopUserSession, openDpopUserPageFromSession, selfPathHeadersForDpopSession } from "../../helpers/users";
 import { serverLoginViaCoauth, submitCoauthPasswordCredentials } from "../../helpers/real-oidc-login";
@@ -17,31 +17,18 @@ import { colandBaseUrl } from "../../helpers/env";
 
 import { createDirectBoundaryCircleStrand, directStructureLifecycleGate, flatTopicChats, rejectDirectStructureEvent } from "../../helpers/direct-structure";
 
-async function openContactConversation(page: Page, account: AccountId): Promise<void> {
-  await page.locator(".rail-contacts").click();
-  const people = page.locator(".contact-list-item:not(.contact-agent-list-item)");
-  // These fresh two-account fixtures have exactly one human Contact. Verify
-  // its complete identity in the detail before activating Message.
-  await expect(people).toHaveCount(1, { timeout: 90_000 });
-  await people.click();
-  const detail = accountRow(page, ".contact-row", account);
-  await expect(detail).toBeVisible({ timeout: 90_000 });
-  // Message is available only for an accepted Contact with direct_message.
-  const message = detail.locator(".contact-message");
-  await expect(message).toBeEnabled({ timeout: 90_000 });
-  await message.click();
-}
+const crossStationDirectTimeout = 1_500_000;
 
 function directConversationCase(mode: "normal" | "interrupted" | "offline" | "lost" | "logout" | "account" | "withdrawal" | "leave", remoteBob = false) {
 return async ({ jointUsers, request, browser }: { jointUsers: JointUsersFixture; request: APIRequestContext; browser: Browser }) => {
-  // The normal case includes the full structure lifecycle and physical cache
-  // recovery, matching the dedicated cross-Station case's total budget.
-  test.setTimeout(mode === "normal" ? 1_200_000 : 480_000);
+  // Cross-Station checks additionally prove each accepted cut at the peer.
+  test.setTimeout(remoteBob ? crossStationDirectTimeout : mode === "normal" ? 1_200_000 : 480_000);
   // A Contact pair must establish its own Direct Conversation without any
   // pre-existing shared Realm. Exercise only the two account prerequisites.
   const { alicePage, bobPage, aliceSession, bobSession } = jointUsers;
   const alice = alicePage.page;
   const bob = bobPage.page;
+  const currentBobToken = mode === "leave" ? observeBrowserDpopGrant(bob, bobSession) : undefined;
   const interruptPreparation = mode === "interrupted" || mode === "offline";
   const holdSecondResolve = mode === "normal" || mode === "logout" || mode === "account";
   const phase = (stage: string) => {
@@ -268,6 +255,15 @@ return async ({ jointUsers, request, browser }: { jointUsers: JointUsersFixture;
     ...(remoteLocator ? { recipientServiceId: bobSession.accountId.station_id,
       introductionEvidence: { kind: "locator_ref", principal_locator: remoteLocator } } : {}),
   });
+  if (remoteBob) {
+    // Render the actual pending projection before Bob accepts. The same open
+    // page must consume the background Contact refresh without a document reload.
+    await alice.reload();
+    await alice.getByRole("link", { name: "Contacts", exact: true }).click();
+    const pending = await selectContact(alice, bobSession.accountId);
+    await expect(pending.locator(".contact-pending-outgoing")).toBeVisible();
+    await expect(pending.locator(".contact-message")).toHaveCount(0);
+  }
   const accepted = await respondContactArkret(request, bobSession.grantJwt, {
     requestId: outcome.request_event_ref,
     requesterId: aliceSession.user.id,
@@ -278,11 +274,22 @@ return async ({ jointUsers, request, browser }: { jointUsers: JointUsersFixture;
   expect(accepted.state).toBe("accepted");
   phase("contact_accepted");
   phase("participant_reload_start");
-  await Promise.all([alice.reload(), bob.reload()]);
+  await Promise.all([...(remoteBob ? [] : [alice.reload()]), bob.reload()]);
   phase("participant_reload_finished");
   for (const [page, peer] of [[alice, bobSession.user.id], [bob, aliceSession.user.id]] as const) {
     phase(page === alice ? "alice_direct_open_start" : "bob_direct_open_start");
-    await openContactConversation(page, accountActorId(peer, peer === bobSession.user.id && remoteBob ? "server2" : "default").account_id);
+    if (!remoteBob || page !== alice) {
+      await page.getByRole("link", { name: "Contacts", exact: true }).click();
+    }
+    const row = await contactMessage(page, accountActorId(peer, peer === bobSession.user.id && remoteBob ? "server2" : "default").account_id);
+    if (remoteBob && page === alice) {
+      await test.info().attach("contact-live-acceptance", {
+        body: Buffer.from(JSON.stringify({ actual_pending_rendered_before_accept: true,
+          accepted_action_rendered_without_reload: true, complete_account_identity_verified: true })),
+        contentType: "application/json",
+      });
+    }
+    await row.click();
     phase(page === alice ? "alice_direct_open_finished" : "bob_direct_open_finished");
   }
   if (remoteBob) {
@@ -445,7 +452,9 @@ return async ({ jointUsers, request, browser }: { jointUsers: JointUsersFixture;
   for (const [page, peer] of [[alice, bobSession.user.id], [bob, aliceSession.user.id]] as const) {
     await expect(async () => {
       if (!new URL(page.url()).pathname.startsWith("/direct/")) {
-        await openContactConversation(page, accountActorId(peer, peer === bobSession.user.id && remoteBob ? "server2" : "default").account_id);
+        await page.getByRole("link", { name: "Contacts", exact: true }).click();
+        const row = await contactMessage(page, accountActorId(peer, peer === bobSession.user.id && remoteBob ? "server2" : "default").account_id);
+        await row.click();
       }
       await expect(page).toHaveURL(/\/direct\/ak:realm:.*\/ak:strand:/, { timeout: 5_000 });
     }).toPass({ timeout: 180_000, intervals: [2_000] });
@@ -611,12 +620,83 @@ return async ({ jointUsers, request, browser }: { jointUsers: JointUsersFixture;
     messages.push(offlineMessage);
   }
 
+  const exchangeRealm = decodeURIComponent(path.split("/")[2]);
+  const exchangeStrand = decodeURIComponent(path.split("/")[3]);
+  if (remoteBob) {
+    await expect(async () => {
+      const [aliceGroup, bobGroup] = await Promise.all([
+        readScopeMlsGroupCurrentApi(request, aliceSession.grantJwt, exchangeRealm),
+        readScopeMlsGroupCurrentApi(request, bobSession.grantJwt, exchangeRealm, undefined, "server2"),
+      ]);
+      const joinedCut = Boolean(aliceGroup && bobGroup
+        && uint64Value(aliceGroup.epoch) > 0n && aliceGroup.epoch === bobGroup.epoch
+        && aliceGroup.current_mls_commit_event_ref === bobGroup.current_mls_commit_event_ref
+        && aliceGroup.current_key_access_revision === aliceGroup.covered_key_access_revision
+        && bobGroup.current_key_access_revision === bobGroup.covered_key_access_revision);
+      expect(joinedCut, "the two Stations must expose the same covered MLS cut before exchanging messages").toBe(true);
+    }).toPass({ timeout: 120_000 });
+  }
   const exchange = [`direct-alice-${Date.now()}`, `direct-bob-${Date.now()}`];
   messages.push(...exchange);
   for (const [sender, recipient, message] of [[alice, bob, exchange[0]], [bob, alice, exchange[1]]] as const) {
     await sender.locator(".chat-input").fill(message);
-    await submitOrdinaryComposerDraft(sender, message);
-    await expect(recipient.locator(".chat-message").filter({ hasText: message })).toBeVisible({ timeout: 90_000 });
+    let accepted: { eventId: string; commitId: string; position: number } | undefined;
+    if (remoteBob) {
+      const selectedEvent = (response: Response) => {
+        const request = response.request();
+        if (request.method() !== "POST" || new URL(request.url()).pathname !== "/_arkret/self/events") return undefined;
+        return ingressEvents(decodeEventIngressBody(request.postDataJSON())).find(event =>
+          event.kind === "ak.message.create" && event.realm_id === exchangeRealm && event.payload?.strand_id === exchangeStrand);
+      };
+      let frozenSubmission: string | undefined;
+      const [response] = await Promise.all([
+        sender.waitForResponse(async response => {
+          if (!selectedEvent(response)) return false;
+          const body = response.request().postData()!;
+          if (frozenSubmission === undefined) frozenSubmission = body;
+          expect(body === frozenSubmission, "ordinary Direct retry must retain the complete signed submission").toBe(true);
+          if (response.status() === 503) {
+            const outcome = await response.json().catch(() => undefined);
+            if (outcome?.status === 503 && outcome?.type === "https://arkret.org/problems/temporarily_unavailable") {
+              return false;
+            }
+          }
+          return true;
+        }, { timeout: 90_000 }),
+        submitOrdinaryComposerDraft(sender, message),
+      ]);
+      const sentEvent = selectedEvent(response)!;
+      expect(response.ok(), "the cross-Station sender must obtain an actual accepted response").toBe(true);
+      const outcome = await response.json();
+      assertAuthoritySubmitOutcome(outcome, sentEvent, "cross-Station ordinary Direct send");
+      expect(sentEvent.payload?.encrypted_content).toBeTruthy();
+      expect(JSON.stringify(sentEvent.payload)).not.toContain(message);
+      const commit = outcome.commit;
+      expect(Number.isSafeInteger(commit.stream_position) && commit.stream_position > 0).toBe(true);
+      accepted = { eventId: sentEvent.event_id!, commitId: commit.commit_id, position: commit.stream_position };
+    } else {
+      await submitOrdinaryComposerDraft(sender, message);
+    }
+    try {
+      await expect(recipient.locator(".chat-message").filter({ hasText: message })).toBeVisible({ timeout: 90_000 });
+    } catch (error) {
+      if (accepted) {
+        const peer = recipient === bob ? bobSession : aliceSession;
+        const observed = await scanRealmStreamApi(request, peer.grantJwt, exchangeRealm, {
+          server: recipient === bob ? "server2" : "default", afterPosition: accepted.position - 1,
+          waitForJoinedCut: true,
+        }).catch(() => undefined);
+        await test.info().attach("cross-direct-message-replication", {
+          contentType: "application/json",
+          body: JSON.stringify({ accepted_at_source: true, peer_scan_completed: Boolean(observed),
+            peer_authorization_pending: observed?.authorizationPending === true,
+            peer_has_exact_commit: observed?.commits.some(commit => commit.commit_id === accepted!.commitId
+              && commit.event_ref === accepted!.eventId) === true,
+            peer_has_full_event: observed?.events.some(event => event.event_id === accepted!.eventId) === true }),
+        });
+      }
+      throw error;
+    }
   }
   await Promise.all([alice.reload(), bob.reload()]);
   for (const page of [alice, bob]) {
@@ -634,7 +714,7 @@ return async ({ jointUsers, request, browser }: { jointUsers: JointUsersFixture;
   await expect(alice.locator(".chat-message").filter({ hasText: afterReload })).toBeVisible({ timeout: 90_000 });
   if (mode === "withdrawal" || mode === "leave") {
     await directStructureLifecycleGate(alice, bob, { request, token: aliceSession.grantJwt,
-      peer: { token: bobSession.grantJwt, server: "default" } }, mode, async author => {
+      peer: { token: bobSession.grantJwt, server: "default", currentToken: currentBobToken } }, mode, async author => {
       if (mode === "withdrawal") {
         const withdrawn = await tombstoneContactArkret(request, aliceSession.grantJwt, bobSession.user.id);
         expect(withdrawn.state).toBe("tombstoned");
@@ -645,7 +725,8 @@ return async ({ jointUsers, request, browser }: { jointUsers: JointUsersFixture;
           proofVerificationMethod: (author.producer_proof as { verification_method: string }).verification_method,
           payload: { member_id: author.actor_id, membership: "leave", reason: "self_leave" },
         });
-        await submitSignedEventApi(request, bobSession.grantJwt, event, { context: "Direct participant self leave", controlObserverToken: aliceSession.grantJwt });
+        const token = (await currentBobToken?.()) ?? bobSession.grantJwt;
+        await submitSignedEventApi(request, token, event, { context: "Direct participant self leave", controlObserverToken: aliceSession.grantJwt });
       }
     });
     return;
@@ -712,7 +793,7 @@ test("same-server Direct Conversation founder sends while the peer device is off
 
 
 test("cross-station Direct Conversation preserves encrypted Chat and Topic state across participants and reload", async ({ jointUsers, request, browser }) => {
-  test.setTimeout(1_200_000);
+  test.setTimeout(crossStationDirectTimeout);
   const session = await createDpopUserSession(request, "direct-cross-bob", { server: "server2" });
   expect(session, "the official two-Station runner must supply a real second Station").toBeDefined();
   const remoteFlow = await openDpopUserPageFromSession(browser, session, { server: "server2" });

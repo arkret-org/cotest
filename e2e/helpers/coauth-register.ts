@@ -433,6 +433,26 @@ export async function registerCoauthPasswordAccount(
   const password = opts.password ?? "1amTester!";
   const email = `${slug}@example.test`;
   const displayName = `E2E ${slug}`;
+  const describeUrl = `${colandBaseUrl(opts.server)}/_arkret/describe`;
+  const describeDeadline = Date.now() + 45_000;
+  let describeResponse = await request.get(describeUrl);
+  // The runner's proxy can return 502 while a Station process is recovering.
+  // Wait on the read before creating an account or requesting a handoff.
+  while (process.env.COTEST_TOPOLOGY_PATH && describeResponse.status() === 502
+    && Date.now() + 500 < describeDeadline) {
+    await describeResponse.dispose();
+    await new Promise(resolve => setTimeout(resolve, 500));
+    describeResponse = await request.get(describeUrl, {
+      timeout: Math.max(1, describeDeadline - Date.now()),
+    });
+  }
+  const principalDescribe = await responseJsonRecord(describeResponse, "coland describe");
+  const trustDomain = stringValue(principalDescribe.trust_domain);
+  const audience =
+    stringValue(principalDescribe.service_id) ?? colandServiceId(opts.server);
+  if (!trustDomain) {
+    throw new Error("Station description omitted trust_domain");
+  }
   await registerUnboundCoauthPasswordAccount(request, coauthBase, {
     handle: slug,
     email,
@@ -441,16 +461,6 @@ export async function registerCoauthPasswordAccount(
   });
 
   const genesisDeviceId = newDeviceId();
-  const principalDescribe = await responseJsonRecord(
-    await request.get(`${colandBaseUrl(opts.server)}/_arkret/describe`),
-    "coland describe",
-  );
-  const trustDomain = stringValue(principalDescribe.trust_domain);
-  const audience =
-    stringValue(principalDescribe.service_id) ?? colandServiceId(opts.server);
-  if (!trustDomain) {
-    throw new Error("Station description omitted trust_domain");
-  }
   const handoff = await createCanonicalAccountHandoff(request, coauthBase, {
     audience,
     deviceId: genesisDeviceId,

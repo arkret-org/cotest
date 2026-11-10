@@ -1,11 +1,11 @@
 import { accountActorId } from "./coland-api";
 import { selectProductOptionByLabel } from "./product-select";
-import { addBoardList } from "./kanban-product-ui";
+import { boardSwitcher, newBoardTrigger, addBoardList, prepareBoardTitle, submitBoardCardDraft } from "./kanban-product-ui";
 import { accountRow, actorRow } from "./product-locators";
 import { enterSecretText } from "./secret-input";
 // Shared product UI actions; no session or protocol outcome is injected.
 import { expect, type Page, type Route, type Request, type TestInfo, type Locator } from './arkret-test';
-import { assertAuthoritySubmitOutcome, wireErrCode } from './coland-api';
+import { assertAuthoritySubmitOutcome, sdkEventDerivedIds, wireErrCode } from './coland-api';
 import { decodeIngressEvents, type IngressEvent as SubmittedEvent } from './event-ingress';
 import type { SidecarEnsureAcceptedResponseBody, AccountId, ActorId } from './generated/spec-wire-objects';
 export type PairingHandle={agentId:string;pairingRequestId:string;pairingCode:string};
@@ -109,7 +109,7 @@ export async function provisionAgent(
   inkson: Page,
   agentSlug: string,
 ): Promise<PairingHandle & { pairingLink: string }> {
-  await inkson.goto("/settings/agents", { waitUntil: "domcontentloaded" });
+  await inkson.goto("/agents", { waitUntil: "domcontentloaded" });
   await expect(inkson.locator(".agent-admin")).toBeVisible({
     timeout: 120_000,
   });
@@ -257,6 +257,41 @@ export async function addAgentToRealm(
 }
 
 
+/** Activate the retained private draft until its first real ensure handoff. */
+export async function submitSidecarComposerDraft(card: Locator): Promise<void> {
+  const page = card.page();
+  const input = card.locator(".chat-input");
+  const original = await input.inputValue();
+  expect(original.length > 0, "the private draft must be prepared before Send").toBe(true);
+  let started = false;
+  let ordinaryMessage = false;
+  const observe = (request: Request) => {
+    if (request.method() !== "POST") return;
+    const path = new URL(request.url()).pathname;
+    if (path === "/_arkret/self/agent-sidecars:ensure") started = true;
+    if (!started && path === EVENTS_SUBMIT_PATH) {
+      ordinaryMessage ||= eventSubmissions(request.postData()).some(event => event.kind === "ak.message.create");
+    }
+  };
+  page.on("request", observe);
+  try {
+    await page.bringToFront();
+    await expect(async () => {
+      expect(ordinaryMessage, "a private intent must not fall through to ordinary publication").toBe(false);
+      if (started) return;
+      expect(await input.inputValue() === original, "retain the complete private draft before handoff").toBe(true);
+      await expect(card.locator(".mention-chip")).toHaveCount(1, { timeout: 1_000 });
+      await expect(card.locator(".composer-send-scope")).toContainText(/^Private Sidecar:/, { timeout: 1_000 });
+      const send = card.locator(".send-chat-button");
+      await expect(send).toBeEnabled({ timeout: 1_000 });
+      if (!started) await send.click({ timeout: 2_000 });
+      await expect.poll(() => started, { timeout: 2_000 }).toBe(true);
+    }).toPass({ timeout: 30_000, intervals: [250, 500, 1_000] });
+  } finally {
+    page.off("request", observe);
+  }
+}
+
 export async function waitForSidecarEnsureAcceptance(
   page: Page,
   testInfo: TestInfo,
@@ -345,15 +380,44 @@ export async function createSidecarSourceCard(
   await expect(page.locator(".kanban-panel")).toBeVisible({
     timeout: 120_000,
   });
-  await page.locator(".new-board-toggle").click();
-  await page.locator(".new-board-title-input input, .new-board-title-input textarea").fill(title);
+  let acceptedBoardId: string | undefined;
+  let publicationError: unknown;
+  let frozenSubmission: string | undefined;
+  const boardAcceptance = page.waitForResponse(async response => {
+    const outgoing = response.request();
+    if (outgoing.method() !== "POST" || new URL(response.url()).pathname !== EVENTS_SUBMIT_PATH) return false;
+    const event = eventSubmissions(outgoing.postData()).find(event =>
+      event.kind === "ak.space.create" && event.realm_id === realmId
+      && (event.payload?.object as Record<string, unknown> | undefined)?.kind === "board");
+    if (!event) return false;
+    const body = outgoing.postData()!;
+    if (frozenSubmission === undefined) frozenSubmission = body;
+    expect(body === frozenSubmission, "Board retry retains its original signed submission").toBe(true);
+    if (response.status() === 503) {
+      const problem = await response.json().catch(() => undefined);
+      if (wireErrCode(problem) === "temporarily_unavailable") return false;
+    }
+    return true;
+  }, { timeout: 120_000 }).then(async response => {
+    const event = eventSubmissions(response.request().postData()).find(event =>
+      event.kind === "ak.space.create" && event.realm_id === realmId)!;
+    expect(response.ok(), "the new source Board must have an actual accepted response").toBe(true);
+    assertAuthoritySubmitOutcome(await response.json(), event, "Sidecar source Board");
+    const id = sdkEventDerivedIds(event).object_id;
+    if (!id?.startsWith("ak:space:")) throw new Error("accepted source Board has no derived Space id");
+    acceptedBoardId = id;
+  });
+  void boardAcceptance.catch(error => { publicationError = error; });
+  await newBoardTrigger(page).click();
+  await prepareBoardTitle(page, title);
   await page.locator(".create-board-space-button").click();
   // The toolbar is visible while the Board is still a local pending create.
   // Wait for its accepted canonical route before composing a child List.
-  const acceptedBoardRoute = (url: URL) => decodeURIComponent(url.pathname)
-    .startsWith(`/kanban/${realmId}/board/ak:space:`);
+  const acceptedBoardRoute = (url: URL) => acceptedBoardId !== undefined
+    && decodeURIComponent(url.pathname) === `/kanban/${realmId}/board/${acceptedBoardId}`;
   const deadline = Date.now() + 120_000;
   while (Date.now() < deadline) {
+    if (publicationError) throw publicationError;
     try {
       await expect(page).toHaveURL(acceptedBoardRoute, {
         timeout: Math.max(1, Math.min(2_000, deadline - Date.now())),
@@ -361,12 +425,13 @@ export async function createSidecarSourceCard(
       break;
     } catch {
       if (Date.now() >= deadline) break;
-      const picker = page.locator(".board-space-select-button");
+      const picker = boardSwitcher(page);
       if (!(await picker.isVisible())) continue;
       if (await picker.getAttribute("aria-expanded") !== "true") {
         await picker.click({ timeout: Math.max(1, Math.min(3_000, deadline - Date.now())) });
       }
-      const retry = page.getByRole("option", { name: `${title} (create failed)`, exact: true });
+      const retry = page.locator(".board-select-menu-panel")
+        .getByRole("button", { name: `${title} (create failed)`, exact: true });
       if (await retry.count() !== 1 || !(await retry.isVisible()) || !(await retry.isEnabled())) continue;
       // Drive the existing same-operation retry only for the observed local
       // pre-authoring encryption transition, never an authority rejection.
@@ -376,16 +441,15 @@ export async function createSidecarSourceCard(
       await retry.click({ timeout: Math.max(1, Math.min(3_000, deadline - Date.now())) });
     }
   }
+  await boardAcceptance;
   await expect(page).toHaveURL(acceptedBoardRoute, { timeout: 1 });
   // The accepted route can converge while the retry picker is open. Close
   // that ordinary product popover before interacting with the Board below it.
-  const boardPicker = page.locator(".board-space-select-button");
+  const boardPicker = boardSwitcher(page);
   if (await boardPicker.getAttribute("aria-expanded") === "true") await boardPicker.click();
-  await expect(page.locator(".board-popover-scrim")).toHaveCount(0);
+  await expect(boardPicker).toHaveAttribute("aria-expanded", "false");
   const column = await addBoardList(page, "Work");
-  await column.locator(".add-card-button").click();
-  await column.locator(".new-card-title-input").fill(title);
-  await column.locator(".save-card-button").click();
+  await submitBoardCardDraft(column, title);
   const card = page.locator(".kanban-card").filter({ hasText: title });
   await expect(card).toBeVisible({ timeout: 120_000 });
   await expect(card).not.toHaveClass(/\bis-draft\b/, { timeout: 120_000 });

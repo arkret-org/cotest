@@ -66,18 +66,17 @@ test.describe("joint-inkson smoke @fully-implemented", () => {
       });
     await expect(selfParticipant).toContainText(principalHandle);
 
+    if (accountAuthorityHandle && accountAuthorityHandle !== principalHandle) {
+      await expect(message).not.toContainText(accountAuthorityHandle);
+      await expect(selfParticipant).not.toContainText(accountAuthorityHandle);
+    }
     await jointRealm.alicePage.page.locator(".rail-account").click();
+    const account = jointRealm.alicePage.page.locator(".account-page");
     await expect(
-      jointRealm.alicePage.page.locator(".account-page__head .who"),
+      account.locator(".account-page__head .who"),
     ).toHaveText(principalHandle);
     if (accountAuthorityHandle && accountAuthorityHandle !== principalHandle) {
-      for (const identitySurface of [
-        message,
-        selfParticipant,
-        jointRealm.alicePage.page.locator(".account-page"),
-      ]) {
-        await expect(identitySurface).not.toContainText(accountAuthorityHandle);
-      }
+      await expect(account).not.toContainText(accountAuthorityHandle);
     }
   });
 
@@ -379,6 +378,7 @@ test.describe("joint-inkson smoke @fully-implemented", () => {
         bobPage.page.locator(".notifications-status"),
       ).toContainText(/Joined Realm/, { timeout: 30_000 });
       await expect(inviteCard).toHaveCount(0, { timeout: 30_000 });
+      await bobPage.page.getByRole("link", { name: "Realms", exact: true }).click();
       await expect(bobPage.page.locator(".realm-tree-list")).toContainText(
         `joint invite ${stamp}`,
         { timeout: 30_000 },

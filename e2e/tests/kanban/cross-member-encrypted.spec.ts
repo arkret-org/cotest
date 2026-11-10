@@ -1,5 +1,5 @@
 import { observeCardSaveAction } from "../../helpers/action-evidence";
-import { addBoardList, fillCardNarrative } from "../../helpers/kanban-product-ui";
+import { boardSwitcher, prepareBoardTitle, newBoardTrigger, addBoardList, fillCardNarrative } from "../../helpers/kanban-product-ui";
 import { restartRunnerStation } from "../../helpers/station-runtime";
 import { proveKanbanHistoryTail, seedKanbanHistory } from "../../helpers/kanban-history";
 import { observeRequestCost } from "../../helpers/request-cost";
@@ -57,7 +57,7 @@ import {
   type Page,
 } from "../../helpers/arkret-test";
 import { colandBaseUrl } from "../../helpers/env";
-import { assertAuthoritySubmitOutcome, canonicalJson, grantCapabilityEventApi, queryRealmEventsApi, readCommitStreamHeadApi, replaceAccountDataApi, retypeEventDerivedId, scanRealmStreamApi, sdkEventDerivedObjectId, signedEventEnvelope, submitSignedEventApi } from "../../helpers/coland-api";
+import { accountActorId, assertAuthoritySubmitOutcome, authHeaders, canonicalJson, grantCapabilityEventApi, queryRealmEventsApi, readCommitStreamHeadApi, replaceAccountDataApi, retypeEventDerivedId, scanRealmStreamApi, sdkEventDerivedObjectId, signedEventEnvelope, submitSignedEventApi, wireErrCode } from "../../helpers/coland-api";
 import { grantInviteConsentArkret } from "../../helpers/contact-api";
 import { stepShot } from "../../helpers/screenshots";
 import { selfPathGrantHeaders } from "../../helpers/session-grant-dpop";
@@ -81,7 +81,7 @@ import {
 test.describe.configure({ mode: "default" });
 
 async function selectBoard(page: Page, realm: string, board: string, title: string): Promise<void> {
-  await page.locator(".board-space-select-button").click();
+  await boardSwitcher(page).click();
   const menu = page.locator(".board-select-menu-panel");
   await expect(menu).toBeVisible();
   await menu.getByRole("button", { name: title, exact: true }).click();
@@ -440,16 +440,8 @@ async function buildEncryptedBoardListCard(
   if (creatorRecoveryProof) {
     await waitForOriginalCreatorReady(page, realmId, creatorRecoveryProof, remaining);
   }
-  await page.locator(".new-board-toggle").click({ timeout: remaining() });
-  const boardDraft = page.locator(".new-board-title-input :is(input,textarea)");
-  const boardComposer = page.locator(".board-create-popover");
-  // Observe the actual empty-to-nonempty app binding before authoring; the
-  // browser's edited DOM value alone does not acknowledge the proposed title.
-  await boardDraft.fill("", { timeout: remaining() });
-  await expect(boardComposer.locator(".input-empty-prompt")).toBeVisible({ timeout: remaining() });
-  await boardDraft.fill(boardTitle, { timeout: remaining() });
-  await expect(boardDraft).toHaveValue(boardTitle, { timeout: remaining() });
-  await expect(boardComposer.locator(".input-empty-prompt")).toHaveCount(0, { timeout: remaining() });
+  await newBoardTrigger(page).click({ timeout: remaining() });
+  await prepareBoardTitle(page, boardTitle, remaining());
   await expect(page.locator(".create-board-space-button")).toBeEnabled({ timeout: remaining() });
   const previousBoardPath = decodeURIComponent(new URL(page.url()).pathname);
   await page.locator(".create-board-space-button").click({ timeout: remaining() });
@@ -746,8 +738,7 @@ async function readyReaderBoard(
   // projection is the actual thing under test), so a hiccup opening the dxc
   // Select here is NOT fatal — assertCardDecrypts (a 90s poll for the decrypted
   // card) is the real gate.
-  const selectScope = page.locator(".board-space-selector");
-  const trigger = selectScope.locator("button.board-space-select-button").first();
+  const trigger = boardSwitcher(page);
   const option = page.locator("button.board-select-menu-item.is-active");
   for (let attempt = 0; attempt < 4; attempt += 1) {
     await dismissRecoveryNags(reader);
@@ -1204,7 +1195,7 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
           // cannot author even a Board until lawful winner material is acquired.
           const assertBoardCreateBlocked = async () => {
             await expect(creator.page.locator(".kanban-panel")).toBeVisible({ timeout: 60_000 });
-            await creator.page.locator(".new-board-toggle").click();
+            await newBoardTrigger(creator.page).click();
             await creator.page.locator(".new-board-title-input :is(input,textarea)").fill(boardTitle);
             await expect(creator.page.locator(".create-board-space-button")).toBeDisabled();
           };
@@ -1905,9 +1896,26 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
           historyStage = "verify-retained-board";
           await openReaderBoard(bobPage, realmId, retainedBoard!.boardId);
           await expect(bobPage.page.locator(".kanban-column")).toHaveCount(1);
-          // Membership restores readable current structure. The explicit card
-          // authoring grants are accepted below, after this cold read check.
-          await expect(bobPage.page.locator(".kanban-column").first().locator(".add-card-button")).toBeDisabled();
+          // Opening a local draft is not a capability. Prove the authority
+          // boundary with a real, valid signed create before any write grant.
+          await expect(bobPage.page.locator(".kanban-column").first().locator(".add-card-button")).toBeVisible();
+          const beforeDeniedCreate = await readCommitStreamHeadApi(request, aliceSession.grantJwt, realmId);
+          const deniedCreatedAt = new Date().toISOString();
+          const deniedCreate = signedEventEnvelope({ actorId: bob.id, realmId,
+            kind: "ak.strand.create", createdAt: deniedCreatedAt,
+            payload: { object: { schema: "ak.schema.strand.v1", realm_id: realmId,
+              tracks: { discussion: { enabled: true, is_primary: true, profile: "discussion" } },
+              created_by: accountActorId(bob.id), created_at: deniedCreatedAt } },
+          });
+          const submitUrl = `${colandBaseUrl()}/_arkret/self/events`;
+          const denied = await request.post(submitUrl, {
+            headers: { ...authHeaders(bobSession.grantJwt, "POST", submitUrl), "content-type": "application/json" },
+            data: canonicalJson({ event: deniedCreate }),
+          });
+          expect(denied.status(), "membership alone must not authorize Strand creation").toBe(403);
+          expect(wireErrCode(await denied.json())).toBe("capability_denied");
+          expect(await readCommitStreamHeadApi(request, aliceSession.grantJwt, realmId),
+            "the denied signed create must leave the governing stream unchanged").toEqual(beforeDeniedCreate);
           // Space current retains structural identity and encrypted metadata.
           // history-visibility §4 gives a new member no pre-join MLS secrets;
           // realm-and-space §3.2.1 forbids a plaintext title mirror.
@@ -1918,6 +1926,7 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
           await testInfo.attach("kanban-history-fresh-reader.json", { contentType: "application/json",
             body: JSON.stringify({ reader_closed_before_seed: true, original_device_restarted_after_card_commit: true,
               own_durable_mls_provider_retained: true, send_gate_ready_before_seed: true,
+              unauthorized_signed_create_rejected_without_commit: true,
               no_product_current_or_history_cache_copied: true,
               pre_join_board_and_list_retained_by_current: true, pre_join_board_id: retainedBoard!.boardId }) });
         }

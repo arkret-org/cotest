@@ -1,15 +1,16 @@
 import { prepareAccountStreamOutage, cutAccountStream } from "../../helpers/account-stream-outage";
 import { accountRow } from "../../helpers/product-locators";
 import { publicScreenshot } from "../../helpers/screenshots";
-import { expectPlaintextMessage } from "../../helpers/message-evidence";
+import { expectPlaintextMessage, renderedMessageId } from "../../helpers/message-evidence";
+import { openCardMembers } from "../../helpers/kanban-product-ui";
 import { accountActorId } from "../../helpers/coland-api";
 import { agentMemberRow } from "../../helpers/product-locators";
 import { actorRow } from "../../helpers/product-locators";
-import { openSavfoxArkretChannel, startSavfoxPairing, saveSavfoxChannel, provisionAgent, pairManagedSavfoxAgent, addAgentToRealm, composeSourceAgentMention, createSidecarSourceCard, waitForSidecarEnsureAcceptance, eventIdFromMessage, displayPairingCode } from "../../helpers/agent-sidecar-product-ui";
+import { openSavfoxArkretChannel, startSavfoxPairing, saveSavfoxChannel, provisionAgent, pairManagedSavfoxAgent, addAgentToRealm, composeSourceAgentMention, createSidecarSourceCard, submitSidecarComposerDraft, waitForSidecarEnsureAcceptance, eventIdFromMessage, displayPairingCode } from "../../helpers/agent-sidecar-product-ui";
 import { uint64Decimal } from "../../helpers/uint64-decimal";
 import { observeNativeSearch } from "../../helpers/native-search";
 import { openAndPairSecondController } from "../../helpers/paired-controller";
-import { agentTopicChats } from "../../helpers/direct-structure";
+import { agentTopicChats, setOwnedAgentLifecycleViaAdmin } from "../../helpers/direct-structure";
 import { revealTimelineEvent } from "../../helpers/timeline-visibility";
 import {
   expect,
@@ -193,8 +194,8 @@ privatePairingTest.describe("Agent Savfox split live @fully-implemented", () => 
 
       // ── Phase 1: provision the Agent and capture its first pairing handle ──
       await jointRealm.alicePage.gotoSettings();
-      await inkson.locator(".settings-nav-item-agents").click();
-      await expect(inkson).toHaveURL(/\/settings\/agents(?:\?|$)/);
+      await inkson.getByRole("link", { name: "My Agents", exact: true }).click();
+      await expect(inkson).toHaveURL(/\/agents(?:\?|$)/);
       await inkson.locator(".agent-admin-create-open-button").click();
       await inkson
         .locator(".agent-admin-provision-agent-slug").locator("input, textarea")
@@ -510,7 +511,7 @@ privatePairingTest.describe("Agent Savfox split live @fully-implemented", () => 
         });
         const crash = await cutFirstMlsTransactionSubmission(inkson);
 
-        await openOwnAgentDirectChat(inkson, agentSlug);
+        await openOwnAgentDirectChat(inkson, agentSlug, firstPairing.agentId);
         let crashedEventIds: string[];
         try {
           crashedEventIds = await crash.waitForCutSubmission();
@@ -540,7 +541,7 @@ privatePairingTest.describe("Agent Savfox split live @fully-implemented", () => 
           (events) => events.map((event) => event.eventId).join("|") === crashedEventIds.join("|"),
         );
         await inkson.reload();
-        await openOwnAgentDirectChat(inkson, agentSlug, {
+        await openOwnAgentDirectChat(inkson, agentSlug, firstPairing.agentId, {
           retryUntilChatReady: true,
           resumedSubmissionReady: async () => replayed().length >= 2 &&
             (await bindings.all()).length > 0,
@@ -632,7 +633,7 @@ privatePairingTest.describe("Agent Savfox split live @fully-implemented", () => 
           expect(responseEventId).toMatch(/^ak:event:/);
 
           const openAgentDetails = async () => {
-            await inkson.goto("/settings/agents", {
+            await inkson.goto("/agents", {
               waitUntil: "domcontentloaded",
             });
             const row = inkson
@@ -661,20 +662,10 @@ privatePairingTest.describe("Agent Savfox split live @fully-implemented", () => 
             ).toHaveCount(0);
           };
 
-          await openAgentDetails();
-          await inkson.locator(".agent-admin-enabled-switch").click();
-          await expect(inkson.locator(".agent-admin .write-status")).toContainText(
-            "Paused. Status: paused.",
-            { timeout: 180_000 },
-          );
+          await setOwnedAgentLifecycleViaAdmin(inkson, firstPairing.agentId, false);
           await assertFrozenHistoricalEvent();
 
-          await openAgentDetails();
-          await inkson.locator(".agent-admin-enabled-switch").click();
-          await expect(inkson.locator(".agent-admin .write-status")).toContainText(
-            "Resumed. Status: active.",
-            { timeout: 180_000 },
-          );
+          await setOwnedAgentLifecycleViaAdmin(inkson, firstPairing.agentId, true);
           await assertFrozenHistoricalEvent();
 
           await openAgentDetails();
@@ -747,7 +738,7 @@ privatePairingTest.describe("Agent Savfox split live @fully-implemented", () => 
           jointRealm.realmId,
           `Sidecar source ${Date.now().toString(36)}`,
         );
-        await sourceCard.locator(".card-detail-sidebar-tab-members").click();
+        await openCardMembers(sourceCard);
         const sourceAgent = agentMemberRow(sourceCard, accountActorId(firstPairing.agentId).account_id);
         await expect(sourceAgent).toBeVisible({ timeout: 120_000 });
         const sidecarPrompt = "请在私有 Sidecar 中只回复 pong";
@@ -807,7 +798,7 @@ privatePairingTest.describe("Agent Savfox split live @fully-implemented", () => 
           const ensureResponsePromise = waitForSidecarEnsureAcceptance(inkson, testInfo);
           [ensured] = await Promise.all([
             ensureResponsePromise,
-            sourceCard.locator(".send-chat-button").click(),
+            submitSidecarComposerDraft(sourceCard),
           ]);
           expect(ensureCutFaults).toBe(1);
         } finally {
@@ -1067,9 +1058,7 @@ privatePairingTest.describe("Agent Savfox split live @fully-implemented", () => 
         await inkson.goto(sourceCardUrl, { waitUntil: "domcontentloaded" });
         const privacyCard = inkson.locator(".card-detail-modal");
         await expect(privacyCard).toBeVisible({ timeout: 120_000 });
-        await privacyCard
-          .locator(".card-detail-sidebar-tab-members")
-          .click();
+        await openCardMembers(privacyCard);
         const addressedAgentRow = agentMemberRow(privacyCard, accountActorId(firstPairing.agentId).account_id);
         await expect(addressedAgentRow).toBeVisible({ timeout: 120_000 });
         // This source already has an accepted Sidecar mapping. Reopening it
@@ -1173,23 +1162,9 @@ privatePairingTest.describe("Agent Savfox split live @fully-implemented", () => 
         // cannot reach the runtime/model or become implicitly complete.
         const receiptPath = addressedReceiptPath;
         const receiptsBeforePause = await receiptCount(receiptPath);
-        await inkson.goto("/settings/agents", {
-          waitUntil: "domcontentloaded",
-        });
-        const adminRow = inkson
-          .locator(".agent-admin-row")
-          .filter({ hasText: agentSlug })
-          .first();
-        await expect(adminRow).toBeVisible({ timeout: 120_000 });
-        await adminRow.click();
-        const enabledSwitch = inkson.locator(".agent-admin-enabled-switch");
-        await expect(enabledSwitch).toBeVisible({ timeout: 30_000 });
-        await expect(enabledSwitch).toBeEnabled({ timeout: 30_000 });
-        await enabledSwitch.click();
-        await expect(inkson.locator(".agent-admin .write-status")).toContainText(
-          "Paused",
-          { timeout: 180_000 },
-        );
+        await privacyCard.getByRole("button", { name: "Close card detail", exact: true }).click();
+        await expect(privacyCard).toBeHidden();
+        await setOwnedAgentLifecycleViaAdmin(inkson, firstPairing.agentId, false);
 
         await inkson.goto(sourceCardUrl, { waitUntil: "domcontentloaded" });
         const resumedCard = inkson.locator(".card-detail-modal");
@@ -1224,7 +1199,7 @@ privatePairingTest.describe("Agent Savfox split live @fully-implemented", () => 
         };
         inkson.on("request", capturePostPauseSubmissions);
         const blockedPrompt = `paused runtime must not execute ${Date.now()}`;
-        await resumedCard.locator(".card-detail-sidebar-tab-members").click();
+        await openCardMembers(resumedCard);
         const pausedAgentRow = agentMemberRow(resumedCard, accountActorId(firstPairing.agentId).account_id);
         await expect(pausedAgentRow).toBeVisible({ timeout: 120_000 });
         await composeSourceAgentMention(
@@ -1262,7 +1237,7 @@ privatePairingTest.describe("Agent Savfox split live @fully-implemented", () => 
         // explicitly edits and confirms a fresh ordinary message containing
         // only the chosen text, rather than copying a private Event envelope.
         const retainedReply = resumedCard.locator(
-          `[id=${JSON.stringify(`chat-msg-${evidence.response_event_id}`)}]`,
+          `[id=${JSON.stringify(renderedMessageId(evidence.response_event_id))}]`,
         );
         await revealTimelineEvent(inkson, retainedReply, 30_000,
           resumedCard.locator(".message-list").last());
@@ -1393,7 +1368,7 @@ privatePairingTest("fresh Agent pairing gates the first send until binding and a
     // This exposes the durable-Welcome/unfinished-binding cold-start window.
     await inkson.route(`**${EVENTS_SUBMIT_PATH}`, holdBinding);
     await inkson.route(`**${DIRECT_CONVERSATIONS_RESOLVE_PATH}`, holdSecondResolve);
-    await openOwnAgentDirectChat(inkson, slug);
+    await openOwnAgentDirectChat(inkson, slug, pairing.agentId);
     await expect.poll(() => foundingAcceptedAt, { timeout: 180_000 }).toBeDefined();
     const founding = eventSubmissions(foundingResponse!.request().postData());
     const foundingOutcome = await foundingResponse!.json() as { unit_kind: string; status: string; commits: Array<Record<string, unknown>> };
@@ -1857,23 +1832,28 @@ async function restartNativeMain(request: APIRequestContext) {
 async function openOwnAgentDirectChat(
   inkson: Page,
   agentSlug: string,
+  agentId: string,
   options: {
     retryUntilChatReady?: boolean;
     resumedSubmissionReady?: () => boolean | Promise<boolean>;
     diagnostics?: () => string | Promise<string>;
   } = {},
 ): Promise<void> {
-  await expect(inkson.getByRole("button", { name: "Contacts", exact: true })).toBeVisible({
+  await expect(inkson.getByRole("link", { name: "Contacts", exact: true })).toBeVisible({
     timeout: 120_000,
   });
-  await inkson.getByRole("button", { name: "Contacts", exact: true }).click();
-  const ownAgentRow = inkson
-    .locator(".contact-sidebar-self-group")
-    .locator(".contact-sidebar-agent-row")
-    .filter({ hasText: agentSlug });
-  await expect(ownAgentRow).toBeVisible({ timeout: 120_000 });
+  await inkson.getByRole("link", { name: "Contacts", exact: true }).click();
+  const ownAgentRow = inkson.locator(".contacts-list-pane .contact-agent-list-item")
+    .and(inkson.getByRole("button", { name: agentSlug, exact: true }));
+  const message = inkson.locator(".contact-agent-detail")
+    .filter({ has: inkson.getByText(agentId, { exact: true }) })
+    .locator(".contact-agent-message");
+  const open = async (timeout = 120_000) => {
+    await ownAgentRow.click({ timeout });
+    await message.click({ timeout });
+  };
   if (!options.retryUntilChatReady) {
-    await ownAgentRow.click();
+    await open();
     return;
   }
 
@@ -1893,7 +1873,7 @@ async function openOwnAgentDirectChat(
             .filter(Boolean)
             .join(" | ");
           if (toastText) lastOpenFailure = toastText;
-          const directTab = inkson.getByRole("button", { name: "Contacts", exact: true });
+          const directTab = inkson.getByRole("link", { name: "Contacts", exact: true });
           if (
             !(await ownAgentRow.isVisible().catch(() => false)) &&
             (await directTab.isVisible().catch(() => false))
@@ -1908,7 +1888,13 @@ async function openOwnAgentDirectChat(
             (await ownAgentRow.isEnabled().catch(() => false)) &&
             (await ownAgentRow.getAttribute("aria-busy")) !== "true"
           ) {
-            await ownAgentRow.click();
+            try {
+              await open(2_000);
+            } catch (error) {
+              // The recovered transaction can replace Contacts during the click.
+              // Continue observing the exact accepted replay and ready Chat.
+              if (!(error instanceof Error) || error.name !== "TimeoutError") throw error;
+            }
           }
           return (await chatPanel.isVisible().catch(() => false)) &&
             ((await options.resumedSubmissionReady?.()) ?? true);
