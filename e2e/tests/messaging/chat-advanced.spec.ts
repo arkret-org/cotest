@@ -684,6 +684,25 @@ test.describe("chat advanced", () => {
       }
 
       const firstOriginal = await sendChat(alicePage, realmId, m1);
+      const replyTarget = sdkEventDerivedIds(firstOriginal).object_id;
+      expect(replyTarget).toMatch(/^ak:message:/);
+      const emoji = "👍";
+      async function commitReaction(page: JointUserPage) {
+        const [response] = await Promise.all([
+          page.page.waitForResponse(response => response.request().method() === "POST"
+            && new URL(response.url()).pathname === "/_arkret/self/events"
+            && decodeIngressEvents(response.request().postData()).some(event => event.kind === "ak.reaction.add"),
+          { timeout: 30_000 }),
+          page.page.locator(".chat-reaction-picker").getByRole("button", { name: emoji, exact: true }).click(),
+        ]);
+        expect(response.ok()).toBe(true);
+        const reaction = decodeIngressEvents(response.request().postData()).find(event => event.kind === "ak.reaction.add")!;
+        expect(reaction.payload).toMatchObject({ target_ref: replyTarget, key: emoji });
+        expect(reaction.payload).not.toHaveProperty("encrypted_payload");
+        const outcome = await response.json();
+        expect(outcome.status).toBe("committed");
+        assertAuthoritySubmitOutcome(outcome, reaction, "ordinary reaction");
+      }
 
       await gotoChat(bobPage, realmId);
       const bobOnM1 = bobPage.page
@@ -698,8 +717,8 @@ test.describe("chat advanced", () => {
       await bobReact.click();
       const bobPicker = bobPage.page.locator(".chat-reaction-picker");
       await expect(bobPicker).toBeVisible();
-      await bobPicker.getByRole("button").first().click();
-      await expect(bobOnM1.locator(".chat-reactions")).toBeVisible({
+      await commitReaction(bobPage);
+      await expect(bobOnM1.locator(".chat-reactions")).toHaveText(`${emoji} 1`, {
         timeout: 30_000,
       });
 
@@ -714,11 +733,7 @@ test.describe("chat advanced", () => {
       const carolReact = carolOnM1.locator(".message-context-react-button");
       await expect(carolReact).toBeVisible({ timeout: 5_000 });
       await carolReact.click();
-      await carolPage.page
-        .locator(".chat-reaction-picker")
-        .getByRole("button")
-        .first()
-        .click();
+      await commitReaction(carolPage);
       await expect(carolOnM1.locator(".chat-reactions")).toBeVisible({
         timeout: 30_000,
       });
@@ -732,7 +747,7 @@ test.describe("chat advanced", () => {
         .locator(".chat-message")
         .filter({ hasText: m1 })
         .first();
-      await expect(aliceOnM1.locator(".chat-reactions")).toBeVisible({
+      await expect(aliceOnM1.locator(".chat-reactions")).toHaveText(`${emoji} 2`, {
         timeout: 30_000,
       });
       await stepShot(alicePage.page, testInfo, "reactions-converged");
@@ -741,8 +756,6 @@ test.describe("chat advanced", () => {
       await bobPage.clickTimelineReply(m1);
       await expect(bobPage.page.locator(".chat-reply-banner")).toBeVisible();
       const replyOriginal = await sendChat(bobPage, realmId, m2);
-      const replyTarget = sdkEventDerivedIds(firstOriginal).object_id;
-      expect(replyTarget).toMatch(/^ak:message:/);
       expect(replyOriginal.payload?.reply_to_id).toBe(replyTarget);
       const bobOnM2 = bobPage.page
         .locator(".chat-message")
