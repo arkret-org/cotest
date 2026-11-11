@@ -1,4 +1,5 @@
 import { newBoardTrigger, addBoardList, fillCardNarrative } from "../../helpers/kanban-product-ui";
+import type { StrandTracksUpdatePayload } from "../../helpers/generated/spec-wire-objects";
 // Kanban end-to-end
 // Contract: e2e/scenarios/kanban/end-to-end.md
 // Spec refs:
@@ -607,11 +608,11 @@ test.describe("kanban end-to-end", () => {
       realmId,
       kind: "ak.strand.tracks.update",
       payload: {
-        target_ref: cardId,
+        strand_id: cardId,
         patch: {
           "tracks.discussion.enabled": { $op: "set", value: true },
         },
-      },
+      } satisfies StrandTracksUpdatePayload,
     });
     const response = await request.post(
       `${colandBaseUrl()}/_arkret/self/events`,

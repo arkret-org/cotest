@@ -1,4 +1,5 @@
 import { contactMessage } from "../../helpers/contact-product-ui";
+import type { ActorProfileUpdatePayload } from "../../helpers/generated/spec-wire-objects";
 import { accountRow } from "../../helpers/product-locators";
 // Contact identity confirmation: authorized profile resolve → first explicit
 // confirmation → rename notice with the old confirmed value → explicit refresh.
@@ -270,9 +271,9 @@ test.describe("contact confirmed display name", () => {
         realmId: bobRealmId,
         actorId: bob.id,
         payload: {
-          target_ref: profileId,
+          actor_profile_id: profileId,
           patch: { display_name: { $op: "set", value: renamedDisplay } },
-        },
+        } satisfies ActorProfileUpdatePayload,
       });
       const updateSubmission = await prepareSignedEventSubmissionApi(
         request,

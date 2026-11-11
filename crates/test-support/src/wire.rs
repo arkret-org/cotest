@@ -2477,8 +2477,8 @@ mod tests {
                 "id": "ak:grant:AVmnCiapkC3K0OFT032clTI00FaccV3R4XoEuGk4xygg"
             }],
             "payload": {
-                "target_ref": "ak:morph:Aa8s5OtJTr4DL7dYQbiLrzNhuis8EyjprcGjTo_qPZDF",
-                "patch": [{"op": "replace", "path": "fields.status", "value": "review"}]
+                "morph_id": "ak:morph:Aa8s5OtJTr4DL7dYQbiLrzNhuis8EyjprcGjTo_qPZDF",
+                "patch": {"fields.status": {"$op": "set", "value": "review"}}
             }
         });
         let raw_digest = canonical::canonical_sha256(&event).unwrap();

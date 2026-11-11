@@ -170,8 +170,49 @@ pub async fn run_strand_lifecycle_live() -> Result<()> {
         initial["state"] == "active" && initial.get("stage").is_none(),
         "new Strand is not an active initial-stage object"
     );
+    let named_patch = alice
+        .author_event(
+            &realm,
+            EventKind::StrandUpdate.as_str(),
+            json!({"strand_id":strand,"patch":{"metadata.summary":{"$op":"set","value":"named target accepted"}}}),
+        )
+        .await?;
+    let named_commit = accept(&alice, &alice_account, ALICE_DEVICE, &named_patch).await?;
+    let named_value = value(&alice, &realm_id, &strand, Some(&named_commit)).await?;
+    ensure!(
+        named_value["metadata"]["summary"] == "named target accepted",
+        "new strand_id payload did not update the exact current target"
+    );
+    for target in [
+        json!({"target_ref":strand}),
+        json!({"strand_id":strand,"target_ref":strand}),
+        json!({"strand_id":strand.as_str().replace("ak:strand:","ak:morph:")}),
+    ] {
+        let mut payload = target;
+        payload["patch"] = json!({"metadata.summary":{"$op":"set","value":"refused target shape"}});
+        let event = alice
+            .author_event(&realm, EventKind::StrandUpdate.as_str(), payload)
+            .await?;
+        refuse(
+            &alice,
+            &alice,
+            &event,
+            StatusCode::UNPROCESSABLE_ENTITY,
+            "schema_violation",
+            None,
+        )
+        .await?;
+        ensure!(
+            value(&alice, &realm_id, &strand, Some(&named_commit)).await? == named_value,
+            "a rejected old, dual or wrong-kind target changed the current value"
+        );
+    }
     let first_event = stage(&alice, &realm, &strand, "in_progress", None).await?;
     let first = accept(&alice, &alice_account, ALICE_DEVICE, &first_event).await?;
+    ensure!(
+        first.stream_position == named_commit.stream_position + 1,
+        "invalid single-kind target payload consumed a Commit"
+    );
     let first_value = value(&alice, &realm_id, &strand, Some(&first)).await?;
     ensure!(
         first_value["stage"] == "in_progress"
@@ -220,7 +261,7 @@ pub async fn run_strand_lifecycle_live() -> Result<()> {
         "archive changed the independent stage axis"
     );
     let patch: StrandPatchPayload = serde_json::from_value(
-        json!({"target_ref":strand,"patch":{"metadata.summary":{"$op":"set","value":"forbidden while archived"}}}),
+        json!({"strand_id":strand,"patch":{"metadata.summary":{"$op":"set","value":"forbidden while archived"}}}),
     )?;
     let update = alice
         .author_event(&realm, EventKind::StrandUpdate.as_str(), patch.to_value()?)

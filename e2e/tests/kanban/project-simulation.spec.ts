@@ -1,4 +1,5 @@
 import { newBoardTrigger, addBoardList } from "../../helpers/kanban-product-ui";
+import type { StrandPatchPayload } from "../../helpers/generated/spec-wire-objects";
 // Multi-user project simulation
 // Contract: e2e/scenarios/kanban/project-simulation.md
 // Spec refs:
@@ -467,9 +468,9 @@ test.describe("project simulation", () => {
       realmId,
       kind: "ak.strand.update",
       payload: {
-        target_ref: taskStrandId,
+        strand_id: taskStrandId,
         patch: { metadata: { fields: { status: "resolved" } } },
-      },
+      } satisfies StrandPatchPayload,
     });
     const forbiddenStatus = await request.post(
       `${colandBaseUrl()}/_arkret/self/events`,
@@ -827,9 +828,9 @@ test.describe("project simulation", () => {
       realmId,
       kind: "ak.strand.update",
       payload: {
-        target_ref: cardId,
+        strand_id: cardId,
         patch: { metadata: { title: `renamed ${stamp}` } },
-      },
+      } satisfies StrandPatchPayload,
     });
     await submitSignedEventApi(request, aliceToken, writeEnvelope, {
       context: "update active card after parent board archive",

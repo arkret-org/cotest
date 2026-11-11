@@ -2625,6 +2625,94 @@ export type ConsentReplacePayload = {
   }>;
 };
 
+/** `event-payload.schema.json#/$defs/strand_patch_payload` — closed object schema. */
+export type StrandPatchPayload = {
+  "strand_id": string;
+  "patch": Record<string, unknown>;
+  "expected_state_digest"?: string;
+};
+
+/** `event-payload.schema.json#/$defs/strand_tracks_update_payload` — closed object schema. */
+export type StrandTracksUpdatePayload = {
+  "strand_id": string;
+  "patch": Record<string, unknown>;
+  "expected_state_digest"?: string;
+};
+
+/** `event-payload.schema.json#/$defs/morph_update_payload` — closed object schema. */
+export type MorphUpdatePayload = {
+  "morph_id": string;
+  "patch": Record<string, unknown>;
+  "expected_state_digest"?: string;
+};
+
+/** `event-payload.schema.json#/$defs/actor_profile_update_payload` — closed object schema. */
+export type ActorProfileUpdatePayload = {
+  "actor_profile_id": string;
+  "patch": {
+    "encrypted_private_fields"?: {
+      "version": "1.0";
+      "content_type": string;
+      "encryption_scheme": "ak.encryption.epoch_content_aead.v1";
+      "encryption_context": {
+        "epoch": string;
+        "group_state_ref": string;
+        "routing_context"?: {
+          "target_ref": string;
+          "routing_tag": string;
+        };
+        "content_key_salt": string;
+        "root_ref": string;
+        "key_commitment": string;
+        "protection": {
+          "root_refs": string[];
+          "blob_refs": string[];
+          "backup_refs": string[];
+        };
+      };
+      "ciphertext": string;
+    } | {
+      "$op": "set";
+      "value": {
+        "version": "1.0";
+        "content_type": string;
+        "encryption_scheme": "ak.encryption.epoch_content_aead.v1";
+        "encryption_context": {
+          "epoch": string;
+          "group_state_ref": string;
+          "routing_context"?: {
+            "target_ref": string;
+            "routing_tag": string;
+          };
+          "content_key_salt": string;
+          "root_ref": string;
+          "key_commitment": string;
+          "protection": {
+            "root_refs": string[];
+            "blob_refs": string[];
+            "backup_refs": string[];
+          };
+        };
+        "ciphertext": string;
+      };
+    };
+    [key: string]: unknown;
+  };
+  "expected_state_digest"?: string;
+  "expected_revision"?: {
+    "commit_id": string;
+    "stream_position": number;
+  };
+};
+
+/** `event-payload.schema.json#/$defs/profile_realm_override_payload` — closed object schema. */
+export type ProfileRealmOverridePayload = {
+  "actor_profile_id": string;
+  "target_realm_id": string;
+  "patch": Record<string, unknown>;
+  "expected_state_digest"?: string;
+};
+
 /** `consent-operations.schema.json#/$defs/consent_view` — closed object schema. */
 export type ConsentView = {
   "peer": {

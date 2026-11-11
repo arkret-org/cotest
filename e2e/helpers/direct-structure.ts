@@ -923,7 +923,7 @@ export async function agentTopicChats(page: Page, receiptPath: string, proof: Di
   const movedTopicId = movedTopic.event_id!.replace("ak:event:", "ak:space:");
   await panel.getByRole("combobox", { name: "Chat", exact: true }).selectOption(chats[0]);
   const moved = await structureWrite(page, "place", "ak.strand.update", undefined, movedTopicId);
-  expect(moved.payload?.target_ref).toBe(chats[0]);
+  expect(moved.payload?.strand_id).toBe(chats[0]);
   await send(chats[0], `moved-chat-a-${suffix}`, markerA, markerB);
   await structureWrite(page, "place", "ak.strand.update", undefined, topicId);
   await structureWrite(page, "rename_topic_target", "ak.space.update", `agent-topic-renamed-${suffix}`, topicId);
@@ -1418,7 +1418,7 @@ async function runFlatTopicChats(alice: Page, bob: Page, mainMessages: string[],
   }
   await assertWrongPlaintextStrand(alice, bob, chat.realm_id!, chatId, proof!);
   const classified = await structureWrite(alice, "place", "ak.strand.update", undefined, topicId);
-  expect(classified.payload?.target_ref).toBe(chatId);
+  expect(classified.payload?.strand_id).toBe(chatId);
   expect(classified.payload?.expected_state_digest).toMatch(/^sha256:[a-f0-9]{64}$/);
   const patch = classified.payload?.patch as Record<string, { $op: string; value?: { space_id: string } }>;
   expect(patch.topic.value?.space_id).toBe(topicId);
@@ -1427,7 +1427,7 @@ async function runFlatTopicChats(alice: Page, bob: Page, mainMessages: string[],
   const chatOptions = (page: Page) => page.locator(".direct-structure").getByRole("combobox", { name: "Chat", exact: true });
   const renamedChat = `${chatName}-renamed`;
   const renameChat = await structureWrite(alice, "rename_chat", "ak.strand.update", renamedChat);
-  expect(renameChat.payload?.target_ref).toBe(chatId);
+  expect(renameChat.payload?.strand_id).toBe(chatId);
   expect(Object.keys(renameChat.payload?.patch as object)).toEqual(["encrypted_metadata"]);
   expect(JSON.stringify(renameChat.payload)).not.toContain(renamedChat);
   chatName = renamedChat;
@@ -1443,7 +1443,7 @@ async function runFlatTopicChats(alice: Page, bob: Page, mainMessages: string[],
   const secondRank = ((secondClassification.payload?.patch as any).topic.value as { rank: string }).rank;
   const firstRank = (patch.topic.value as { space_id: string; rank: string }).rank;
   expect(secondRank > firstRank, "new Chat receives a rank after the existing actual Chat").toBe(true);
-  expect(secondClassification.payload?.target_ref).toBe(secondChatId);
+  expect(secondClassification.payload?.strand_id).toBe(secondChatId);
   // The accepted receipt can precede installation in the visible current view.
   // Reorder only after both actual Chat classifications are visible and the
   // router has selected the intended first Chat.
@@ -1457,10 +1457,10 @@ async function runFlatTopicChats(alice: Page, bob: Page, mainMessages: string[],
   const reorder = await structureWrite(alice, "reorder", "ak.strand.update", undefined, topicId);
   const reordered = (reorder.payload?.patch as any).topic.value;
   await test.info().attach("direct-reorder-target-and-ranks", {
-    body: JSON.stringify({ actual_target_ref: reorder.payload?.target_ref, expected_chat_id: chatId,
+    body: JSON.stringify({ actual_strand_id: reorder.payload?.strand_id, expected_chat_id: chatId,
       first_rank: firstRank, second_rank: secondRank, reordered_rank: reordered.rank }), contentType: "application/json",
   });
-  expect(reorder.payload?.target_ref).toBe(chatId);
+  expect(reorder.payload?.strand_id).toBe(chatId);
   expect(reordered.space_id).toBe(topicId);
   expect(reordered.rank > secondRank).toBe(true);
   for (const page of allPages) {
@@ -1479,7 +1479,7 @@ async function runFlatTopicChats(alice: Page, bob: Page, mainMessages: string[],
     await expect.poll(async () => await manage.getByRole("combobox", { name: "Topic", exact: true }).locator("option:not([data-gly-placeholder])").evaluateAll(options => options.map(option => (option as HTMLOptionElement).value))).toEqual(["", secondTopicId, topicId]);
   }
   const migrated = await structureWrite(alice, "place", "ak.strand.update", undefined, secondTopicId);
-  expect(migrated.payload?.target_ref).toBe(chatId);
+  expect(migrated.payload?.strand_id).toBe(chatId);
   expect((migrated.payload?.patch as any).topic.value.space_id).toBe(secondTopicId);
   for (const page of allPages) {
     await expect(chatOptions(page).locator(`option[value=${JSON.stringify(chatId)}]`)).toContainText(secondTopicName, { timeout: 90_000 });
@@ -1496,11 +1496,11 @@ async function runFlatTopicChats(alice: Page, bob: Page, mainMessages: string[],
   const exactChat = rawEntries.filter(row => row.selector.kind === "strand" && row.selector.strand_id === chatId);
   expect(exactChat).toHaveLength(1);
   await rejectDirectStructureEvent(proof!, migrated, "classify-archived-topic", "ak.strand.update", {
-    target_ref: chatId, expected_state_digest: `sha256:${sha256CanonicalJson(exactChat[0].value)}`,
+    strand_id: chatId, expected_state_digest: `sha256:${sha256CanonicalJson(exactChat[0].value)}`,
     patch: { topic: { $op: "set", value: { space_id: secondTopicId, rank: "a0" } } },
   }, "direct_conversation_participant_authority_denied");
   const repaired = await structureWrite(alice, "unplace", "ak.strand.update");
-  expect(repaired.payload?.target_ref).toBe(chatId);
+  expect(repaired.payload?.strand_id).toBe(chatId);
   expect(repaired.payload?.patch).toEqual({ topic: { $op: "unset" } });
   for (const page of allPages) {
     await expect(chatOptions(page).locator(`option[value=${JSON.stringify(chatId)}]`)).not.toContainText(secondTopicName);
@@ -1698,10 +1698,10 @@ async function runFlatTopicChats(alice: Page, bob: Page, mainMessages: string[],
     }, "direct_conversation_participant_authority_denied");
   }
   await rejectSigned("chat-track-overflow", classified, "ak.strand.update", {
-    target_ref: chatId, patch: { tracks: { $op: "set", value: (chat.payload!.object as Record<string, unknown>).tracks } },
+    strand_id: chatId, patch: { tracks: { $op: "set", value: (chat.payload!.object as Record<string, unknown>).tracks } },
   }, "direct_conversation_participant_authority_denied");
   await rejectSigned("chat-topic-subpath", classified, "ak.strand.update", {
-    target_ref: chatId, expected_state_digest: classified.payload!.expected_state_digest,
+    strand_id: chatId, expected_state_digest: classified.payload!.expected_state_digest,
     patch: { "topic.rank": { $op: "set", value: "a0" } },
   }, "direct_conversation_participant_authority_denied");
   await rejectSigned("topic-parent", topic, "ak.space.create", {

@@ -380,7 +380,7 @@ pub(super) async fn run(ctx: &mut MlsApiContext<'_>) -> Result<()> {
     .await?;
     let patch: arkret_models_collaboration::events_payloads::StrandPatchPayload =
         serde_json::from_value(
-            json!({"target_ref":public_strand,"patch":{"scope_circle_id":{"$op":"set","value":basis.circle}}}),
+            json!({"strand_id":public_strand,"patch":{"scope_circle_id":{"$op":"set","value":basis.circle}}}),
         )?;
     let event = ctx
         .source

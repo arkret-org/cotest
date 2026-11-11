@@ -574,7 +574,7 @@ pub async fn calendar_rsvp_converges_across_concurrent_responses() -> Result<()>
             &realm_id,
             "ak.strand.update",
             json!({
-                "target_ref": strand_id,
+                "strand_id": strand_id,
                 "patch": {
                     "metadata.fields.calendar": {
                         "$op": "set",

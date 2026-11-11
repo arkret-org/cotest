@@ -291,7 +291,7 @@ pub async fn run_agent_pcr_profile_admission() -> Result<crate::conformance::Sui
     let profile = current.materialize(&event)?;
     let update = arkret_models_collaboration::events_payloads::ActorProfileUpdatePayload {
         expected_revision: None,
-        target_ref: arkret_wire::ActorProfileId::from_event_id(&event.event_id),
+        actor_profile_id: arkret_wire::ActorProfileId::from_event_id(&event.event_id),
         patch,
         expected_state_digest: Some(
             arkret_models_collaboration::events_payloads::ActorProfileUpdatePayload::state_digest(

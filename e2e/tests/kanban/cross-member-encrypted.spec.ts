@@ -525,7 +525,7 @@ async function addEncryptedDescription(
   const descriptionUpdate = (request: import("@playwright/test").Request) =>
     request.method() === "POST" && new URL(request.url()).pathname === "/_arkret/self/events"
     && decodeIngressEvents(request.postData()).some(event =>
-      event.kind === "ak.strand.update" && event.payload?.target_ref === taskId);
+      event.kind === "ak.strand.update" && event.payload?.strand_id === taskId);
   // Keep one observer through checkpoint recovery so an asynchronous save
   // cannot fall between short-lived response listeners.
   const strandUpdate = page.waitForResponse(
@@ -607,7 +607,7 @@ async function addEncryptedDescription(
   if (!submitted.event) {
     throw new Error("description edit did not submit an Event envelope");
   }
-  expect((submitted.event.payload as Record<string, unknown>)?.target_ref).toBe(taskId);
+  expect((submitted.event.payload as Record<string, unknown>)?.strand_id).toBe(taskId);
   const outcome = JSON.parse(body) as Record<string, unknown>;
   expect(outcome.status, "a new description edit must commit").toBe("committed");
   assertAuthoritySubmitOutcome(
