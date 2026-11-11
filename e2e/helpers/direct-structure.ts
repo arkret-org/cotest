@@ -1282,30 +1282,46 @@ async function indexedDbClearRecovery(page: Page, mainId: string, chatId: string
       await expect(input).toHaveValue(newer);
       await expect(page.locator(".chat-input-hint")).toHaveCount(0);
       mark("new-draft-retained");
+      mark("held-draft-observation-started");
       const heldDraft = await barrier();
+      mark("held-draft-observed");
       expect(heldDraft.held).toBe(1);
       expect(heldDraft.aborted).toBe(0);
       expect(heldDraft.committed, "the held native write transaction prevents a draft commit").toBe(beforeDraft.committed);
+      mark("physical-clear-release-started");
       await page.evaluate(() => { (window as any).__directCacheBarrier.release(); });
+      mark("physical-clear-release-returned");
       await expect.poll(async () => (await barrier()).aborted).toBe(1);
+      mark("physical-clear-aborted");
       await expect.poll(async () => (await barrier()).committed).toBeGreaterThan(beforeDraft.committed);
+      mark("recovery-write-committed");
       await page.reload();
+      mark("recovery-reloaded");
       await expect(input).toHaveValue(newer, { timeout: 90_000 });
+      mark("new-draft-cold-verified");
       await choose.selectOption(mainId);
       await expect(input).toHaveValue(oldDraft);
+      mark("old-draft-cold-verified");
       await choose.selectOption(chatId);
       await input.fill("");
     } else {
+      mark("physical-clear-release-started");
       await page.evaluate(() => { (window as any).__directCacheBarrier.release(); });
+      mark("physical-clear-release-returned");
       await expect.poll(async () => (await barrier()).aborted).toBe(1);
+      mark("physical-clear-aborted");
       await expect(page.locator(".e2ee-plaintext-cache .write-status")).toContainText("cleanup failed");
+      mark("cleanup-failure-visible");
       await expect.poll(async () => (await barrier()).committed).toBeGreaterThan(0);
+      mark("recovery-write-committed");
       await page.goBack();
       await page.goBack();
       await expect(choose).toBeVisible();
       await page.reload();
+      mark("recovery-reloaded");
       await choose.selectOption(mainId);
       await expect(input).toHaveValue(oldDraft, { timeout: 90_000 });
+      mark("old-draft-cold-verified");
     }
     await test.info().attach(`indexeddb-clear-recovery-${cancelSettings ? "cancelled-page" : "visible-error"}`, {
       body: Buffer.from(JSON.stringify({ native_indexeddb_transaction_aborts: 1, cold_old_draft_retained: true,

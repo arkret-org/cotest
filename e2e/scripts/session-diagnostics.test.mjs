@@ -74,6 +74,21 @@ test("routine floods cannot evict sparse critical errors or preparation phases",
   assert.equal(JSON.parse(lines[1000]).omitted_lines, 7001);
 });
 
+test("routine warning and resource-error floods retain an earlier page exception within the same artifact bound", () => {
+  const log = new SessionDiagnostics();
+  for (let i = 0; i < 1000; i++) log.push(`head-${i}`);
+  const exception = JSON.stringify({ type: "pageerror", text: "fixture runtime exception" });
+  log.push(exception);
+  for (let i = 0; i < 10000; i++) {
+    log.push(JSON.stringify({ type: i % 2 ? "warning" : "error", text: `routine diagnostic ${i}` }));
+  }
+  const lines = log.lines();
+  assert.ok(lines.includes(exception), "later successful-path warnings must not hide the page exception");
+  assert.ok(lines.length <= 5000);
+  const marker = JSON.parse(lines[1000]);
+  assert.equal(marker.retained_lines + marker.omitted_lines, 11001);
+});
+
 test("all shares remain bounded and snapshots retain arrival order", () => {
   const log = new SessionDiagnostics();
   for (let i = 0; i < 1000; i++) log.push(`head-${i}`);
@@ -81,15 +96,17 @@ test("all shares remain bounded and snapshots retain arrival order", () => {
     log.push(`normal-${i}`, "normal");
     log.push(`critical-${i}`, "critical");
     log.push(`phase-${i}`, "phase");
+    log.push(`exception-${i}`, "exception");
   }
   const lines = log.lines();
   assert.equal(lines.length, 5000);
   const marker = JSON.parse(lines[1000]);
   assert.equal(marker.retained_lines, 4999);
-  assert.equal(marker.omitted_lines + marker.retained_lines, 19000);
-  assert.deepEqual(lines.slice(-3), ["normal-5999", "critical-5999", "phase-5999"]);
-  assert.equal(lines.filter((line) => line.startsWith("critical-")).length, 500);
+  assert.equal(marker.omitted_lines + marker.retained_lines, 25000);
+  assert.deepEqual(lines.slice(-4), ["normal-5999", "critical-5999", "phase-5999", "exception-5999"]);
+  assert.equal(lines.filter((line) => line.startsWith("critical-")).length, 468);
   assert.equal(lines.filter((line) => line.startsWith("phase-")).length, 500);
+  assert.equal(lines.filter((line) => line.startsWith("exception-")).length, 32);
 });
 
 test("structured diagnostic classification keeps sparse errors apart from render noise", () => {
@@ -97,7 +114,9 @@ test("structured diagnostic classification keeps sparse errors apart from render
   assert.equal(classify({ type: "log", text: "joint Sidecar preparation stage stage = genesis_accepted" }), "phase");
   assert.equal(classify({ type: "log", text: "Sidecar access preparation will resume" }), "critical");
   assert.equal(classify({ type: "log", text: "joint card member current eligibility" }), "normal");
-  assert.equal(classify({ type: "pageerror", text: "failure" }), "critical");
+  assert.equal(classify({ type: "pageerror", text: "failure" }), "exception");
+  assert.equal(classify({ type: "error", text: "resource failure" }), "critical");
+  assert.equal(classify({ type: "log", text: "panicked at fixture.rs" }), "exception");
   assert.equal(classify({ type: "http-error", status: 503 }), "critical");
   assert.equal(classify({ type: "log", text: { unexpected: true } }), "normal");
   assert.equal(classify(null), "normal");

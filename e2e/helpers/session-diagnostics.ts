@@ -1,5 +1,5 @@
 type DiagnosticRow = { sequence: number; value: string };
-type DiagnosticPriority = "normal" | "critical" | "phase";
+type DiagnosticPriority = "normal" | "critical" | "phase" | "exception";
 
 export function accountViewerHandleDiagnostic(value: unknown, principal: string, at: number) {
   const record = (item: unknown): Record<string, unknown> =>
@@ -57,9 +57,12 @@ export function sessionDiagnosticPriority(line: string): DiagnosticPriority {
   }
   if (!row || typeof row !== "object") return "normal";
   const text = typeof row.text === "string" ? row.text : "";
+  if (row.type === "pageerror" || /panicked at|RuntimeError/.test(text)) {
+    return "exception";
+  }
   if (text.includes("joint Sidecar preparation stage")) return "phase";
-  if (["pageerror", "error", "warning", "http-error", "requestfailed"].includes(String(row.type)) ||
-    /Sidecar access preparation will resume|Sidecar restore failed|owned Agent inventory read will resume|panicked at|RuntimeError/.test(text)) {
+  if (["error", "warning", "http-error", "requestfailed"].includes(String(row.type)) ||
+    /Sidecar access preparation will resume|Sidecar restore failed|owned Agent inventory read will resume/.test(text)) {
     return "critical";
   }
   return "normal";
@@ -67,10 +70,12 @@ export function sessionDiagnosticPriority(line: string): DiagnosticPriority {
 
 export class SessionDiagnostics {
   private readonly head: DiagnosticRow[] = [];
-  // Reserve independent shares so routine rendering cannot evict sparse failures or phases.
+  // Keep runtime exceptions independent of routine warnings as well as renders.
+  // All shares together retain the existing 5000-line artifact bound.
   private readonly tail = new DiagnosticRing(2999);
-  private readonly critical = new DiagnosticRing(500);
+  private readonly critical = new DiagnosticRing(468);
   private readonly phases = new DiagnosticRing(500);
+  private readonly exceptions = new DiagnosticRing(32);
   private sequence = 0;
   private omitted = 0;
 
@@ -82,13 +87,14 @@ export class SessionDiagnostics {
     if (this.head.length < 1000) {
       this.head.push(row);
     } else {
-      const ring = priority === "phase" ? this.phases : priority === "critical" ? this.critical : this.tail;
+      const ring = priority === "exception" ? this.exceptions
+        : priority === "phase" ? this.phases : priority === "critical" ? this.critical : this.tail;
       if (ring.push(row)) this.omitted += 1;
     }
   }
 
   lines(): string[] {
-    const retained = [...this.tail.snapshot(), ...this.critical.snapshot(), ...this.phases.snapshot()]
+    const retained = [...this.tail.snapshot(), ...this.critical.snapshot(), ...this.phases.snapshot(), ...this.exceptions.snapshot()]
       .sort((a, b) => a.sequence - b.sequence);
     const head = this.head.map((row) => row.value);
     if (this.omitted === 0) return [...head, ...retained.map((row) => row.value)];
