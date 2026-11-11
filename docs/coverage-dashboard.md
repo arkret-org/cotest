@@ -8,7 +8,7 @@ This static inventory does not claim runtime verification; use an Arkret Joint P
 | UJ-A - First login and multi-device recovery | 34 | 34 | 100.0% | 0 |
 | UJ-B - Workspace creation, invites, and archive visibility | 5 | 5 | 100.0% | 0 |
 | UJ-C - Daily messaging, edits, reactions, receipts, and mentions | 27 | 27 | 100.0% | 0 |
-| UJ-D - Encrypted realm lifecycle and cross-device decrypt | 5 | 5 | 100.0% | 0 |
+| UJ-D - Encrypted realm lifecycle and cross-device decrypt | 8 | 8 | 100.0% | 0 |
 | UJ-E - Federation and cross-domain collaboration | 20 | 20 | 100.0% | 0 |
 | UJ-F - Kanban collaboration and concurrent work | 39 | 39 | 100.0% | 0 |
 | UJ-G - Privacy rights, governance, and GDPR | 19 | 19 | 100.0% | 0 |
@@ -61,6 +61,7 @@ This static inventory does not claim runtime verification; use an Arkret Joint P
 | spec | mapping | implemented | promised | blocking |
 |---|---|---:|---:|---:|
 | encryption/key-backup | domain-fallback | 5 | 5 | 0 |
+| encryption/signal-nonce-allocator | domain-fallback | 3 | 3 | 0 |
 
 ## UJ-E - Federation and cross-domain collaboration
 

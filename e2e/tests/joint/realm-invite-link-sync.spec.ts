@@ -80,6 +80,24 @@ for (const encrypted of [false, true]) {
         await member.page.page.reload({ waitUntil: "domcontentloaded" });
         await expect(member.page.page.locator(".realm-members-card .member-head-actions > .member-count-badge")).toHaveText("2", { timeout: 90_000 });
       }
+      if (encrypted) {
+        // A changed roster must converge to a covered epoch that still sends.
+        // Membership count alone does not establish encrypted collaboration.
+        for (const member of [alice, carol]) await member.page.gotoTimelineRealm(realm);
+        const afterLeave: string[] = [];
+        for (const author of [alice, carol]) {
+          const body = `After Bob left ${author.user.name} ${stamp}`;
+          afterLeave.push(body);
+          await author.page.sendTimelineMessage(realm, body);
+          for (const reader of [alice, carol]) await reader.page.expectTimelineEventVisible(body, 120_000);
+        }
+        await bob.page.page.goto(`/chat/${realm}`, { waitUntil: "domcontentloaded" });
+        await expect(bob.page.page.locator(".shell.app")).toBeVisible({ timeout: 90_000 });
+        await expect(bob.page.page.locator(".connection-status .status-label")).toHaveText(/^Online(?:$|:)/, { timeout: 90_000 });
+        await expect(bob.page.page.locator(".connection-status .sync-cursor")).toContainText("ak:cursor:", { timeout: 90_000 });
+        await expect(bob.page.page.locator(".send-chat-button:enabled")).toHaveCount(0);
+        for (const body of afterLeave) await expect(bob.page.page.getByText(body, { exact: true })).toHaveCount(0);
+      }
     } finally {
       for (const flow of flows) await test.info().attach(`browser-locks-${flow.user.name}`, {
         body: JSON.stringify(await flow.page.page.evaluate(() => navigator.locks.query())),

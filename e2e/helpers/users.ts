@@ -1307,7 +1307,7 @@ export class JointUserPage {
   }
 
   // Send a message into realmId's chat feed. Asserts chat-status persistence.
-  async sendTimelineMessage(realmId: string, body: string) {
+  async sendTimelineMessage(realmId: string, body: string, options: { reloadIfPending?: boolean } = {}) {
     if (!matchesRealmChatRoute(new URL(this.page.url()), realmId)) {
       await this.gotoTimelineRealm(realmId);
     }
@@ -1318,7 +1318,7 @@ export class JointUserPage {
     await submitOrdinaryComposerDraft(this.page, body, {
       click: () => this.clickWithPassivePromptRetry(this.page.locator(".send-chat-button")),
     });
-    await this.waitForTimelineEventSettled(body);
+    await this.waitForTimelineEventSettled(body, 90_000, options);
   }
 
   // A mention subject is a complete AccountId, so the picker row is selected
@@ -1375,10 +1375,20 @@ export class JointUserPage {
       .first();
   }
 
-  async waitForTimelineEventSettled(body: string, timeout = 90_000) {
+  async waitForTimelineEventSettled(body: string, timeout = 90_000, options: { reloadIfPending?: boolean } = {}) {
     const event = this.timelineEvent(body);
     await expect(event).toBeVisible({ timeout });
     const pending = event.locator(".message-send-status");
+    if (options.reloadIfPending === false) {
+      await expect.poll(async () => {
+        const errors = await event.locator(".chat-message-error").allTextContents();
+        if (errors.some(value => value.trim())) return `error: ${errors.join(" ")}`;
+        return /(?:^|\s)is-canonical-message(?:\s|$)/.test(await event.getAttribute("class") ?? "")
+          ? "accepted" : "pending";
+      }, { timeout, message: "the original message must settle before any reload" }).toBe("accepted");
+      await expect(pending).toHaveCount(0);
+      return;
+    }
     const initialTimeout = Math.min(timeout, 15_000);
     const settledWithoutReload = await expect(pending)
       .toHaveCount(0, { timeout: initialTimeout })

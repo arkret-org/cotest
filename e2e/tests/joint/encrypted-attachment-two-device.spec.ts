@@ -7,6 +7,7 @@ import { join } from "node:path";
 import { promisify } from "node:util";
 import { expect, test, type Page } from "../../helpers/arkret-test";
 import { canonicalJson } from "../../helpers/coland-api";
+import { observeMessageSendAction } from "../../helpers/action-evidence";
 import { colandBaseUrl } from "../../helpers/env";
 import { grantInviteConsentArkret } from "../../helpers/contact-api";
 import { readScopeMlsGroupCurrentApi } from "../../helpers/coland-api/mls";
@@ -14,6 +15,24 @@ import { uint64Decimal, uint64Value } from "../../helpers/uint64-decimal";
 import { createDpopUserSession, issueInviteLocatorToken, openDpopUserPageFromSession, selfPathHeadersForDpopSession, type JointUserPage } from "../../helpers/users";
 
 const sha = (bytes: Uint8Array) => createHash("sha256").update(bytes).digest("hex");
+
+async function keyPackageStateNames(page: Page): Promise<string[]> {
+  return page.evaluate(async () => {
+    const db = await new Promise<IDBDatabase>((resolve, reject) => {
+      const request = indexedDB.open("inkson.secret.inkson", 1);
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+    });
+    try {
+      return await new Promise<string[]>((resolve, reject) => {
+        const request = db.transaction("entries", "readonly").objectStore("entries").getAllKeys();
+        request.onsuccess = () => resolve(request.result.map(String)
+          .filter(name => name.startsWith("inkson.mls_key_package.identity_state.v1.")));
+        request.onerror = () => reject(request.error);
+      });
+    } finally { db.close(); }
+  });
+}
 
 async function inspectStoredBlobs(refs: string[]) {
   const controls = process.env.COTEST_READONLY_DATABASE_CONTROLS;
@@ -87,6 +106,23 @@ async function drop(page: Page, filePath: string) {
   await zone.scrollIntoViewIfNeeded();
   const bounds = await zone.boundingBox();
   if (!bounds) throw new Error("The real attachment drop zone has no visible bounds");
+  await page.evaluate(({x, y}) => {
+    const zone = document.querySelector(".compose-drop-zone");
+    const initialHit = Boolean(zone?.contains(document.elementFromPoint(x, y)));
+    const events: Array<{type: string; trusted: boolean; inside_zone: boolean; files: number}> = [];
+    const receive = (event: Event) => {
+      if (events.length >= 12) return;
+      events.push({type: event.type, trusted: event.isTrusted,
+        inside_zone: event.target instanceof Node && Boolean(zone?.contains(event.target)),
+        files: event instanceof DragEvent ? event.dataTransfer?.files.length ?? 0 : 0});
+    };
+    for (const kind of ["dragenter", "dragover", "drop"]) document.addEventListener(kind, receive, true);
+    (window as any).__cotestAttachmentDrop = () => {
+      for (const kind of ["dragenter", "dragover", "drop"]) document.removeEventListener(kind, receive, true);
+      delete (window as any).__cotestAttachmentDrop;
+      return {events, initial_hit_inside_zone: initialHit};
+    };
+  }, {x: bounds.x + bounds.width / 2, y: bounds.y + bounds.height / 2});
   const session = await page.context().newCDPSession(page);
   try {
     const data = {items: [], files: [filePath], dragOperationsMask: 1};
@@ -97,6 +133,10 @@ async function drop(page: Page, filePath: string) {
     }
   } finally {
     await session.detach();
+    const trace = await page.evaluate(() => (window as any).__cotestAttachmentDrop?.()).catch(() => ({unavailable: true}));
+    const path = test.info().outputPath(`attachment-drop-${Date.now()}.json`);
+    writeFileSync(path, JSON.stringify(trace, null, 2));
+    await test.info().attach("attachment-drop", {path, contentType: "application/json"});
   }
 }
 
@@ -117,6 +157,10 @@ test("encrypted attachment two-device upload/send/history/render and exact resta
   if (!alice) throw new Error("sender device did not open");
   let bob: JointUserPage | undefined;
   let late: JointUserPage | undefined;
+  let lostKeyPackageResponse = false;
+  let keyPackageFailureObserved = false;
+  let advertisedPrivateStateNames: string[] = [];
+  let acceptedKeyPackageRefs: string[] = [];
   const png = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+ip1sAAAAASUVORK5CYII=", "base64");
   const marker = `private attachment two-device ${Date.now()}`;
   const uploads: Array<{ref: string; size: number; digest: string; metadata: Record<string, string>}> = [];
@@ -130,10 +174,50 @@ test("encrypted attachment two-device upload/send/history/render and exact resta
     await grantInviteConsentArkret(request, bobSession.grantJwt, bobSession.user, aliceSession.user.id);
     const locator = await issueInviteLocatorToken(request, bobSession.grantJwt);
     await alice.inviteFromAdmin(realm, bobSession.user.id, bobSession.user.id, {token: locator});
-    bob = (await openDpopUserPageFromSession(browser, bobSession))?.page;
+    bob = (await openDpopUserPageFromSession(browser, bobSession, {
+      beforeNavigate: async page => {
+        page.on("console", message => {
+          if (lostKeyPackageResponse && message.text().includes("MLS KeyPackage publish bootstrap failed")) {
+            keyPackageFailureObserved = true;
+          }
+        });
+        await page.route(/\/_arkret\/self\/keys\/keypackages\/upload$/, async route => {
+          const response = await route.fetch();
+          if (lostKeyPackageResponse || response.status() !== 200) {
+            await route.fulfill({ response });
+            return;
+          }
+          const outcome = await response.json();
+          expect(outcome.accepted_count).toBeGreaterThan(0);
+          acceptedKeyPackageRefs = outcome.keypackage_refs;
+          advertisedPrivateStateNames = await keyPackageStateNames(page);
+          expect(advertisedPrivateStateNames.length).toBeGreaterThanOrEqual(outcome.accepted_count);
+          lostKeyPackageResponse = true;
+          // The Station has already accepted this batch. Its error response
+          // must not cause the recipient to discard any advertised init key.
+          await route.fulfill({ response, status: 503, json: {
+            type: "https://arkret.org/problems/temporarily_unavailable",
+            title: "Temporarily unavailable", status: 503,
+            detail: "Accepted KeyPackage upload response lost",
+          } });
+        });
+      },
+    }))?.page;
     if (!bob) throw new Error("receiver device did not open");
     await bob.completeRecoveryKeySetupIfPrompted();
     await bob.acknowledgeRecommendedEncryptionPromptIfVisible();
+    await bob.completeMlsAccountRecoveryIfPrompted(bobSession.recoveryKey!);
+    await expect.poll(() => lostKeyPackageResponse && keyPackageFailureObserved,
+      {timeout: 120_000}).toBe(true);
+    const assertAdvertisedKeysRetained = async () => {
+      const names = new Set(await keyPackageStateNames(bob!.page));
+      expect(advertisedPrivateStateNames.every(name => names.has(name)),
+        "an uncertain upload must retain all previously durable advertised private states").toBe(true);
+    };
+    await assertAdvertisedKeysRetained();
+    await bob.page.reload({waitUntil: "domcontentloaded"});
+    await bob.gotoHome();
+    await assertAdvertisedKeysRetained();
     await bob.completeMlsAccountRecoveryIfPrompted(bobSession.recoveryKey!);
     await bob.acceptInvite(realm);
     await expect.poll(async () => {
@@ -228,9 +312,27 @@ test("encrypted attachment two-device upload/send/history/render and exact resta
     };
     await verifyImage();
 
-    // Editing away and back must still cancel the old upload continuation.
+    // Switching conversations away and back cancels the old continuation.
     // The server accepted its bytes, but no stale result may mark it ready.
+    const expandDiscussions = alice.page.locator(".expand-discussion-list");
+    if (await expandDiscussions.isVisible()) await expandDiscussions.click();
+    const originalChannelName = (await alice.page.locator(".channel-item.active .discussion-track-name").innerText()).trim();
+    const alternateChannelName = `Attachment target B ${Date.now()}`;
+    await alice.page.locator(".open-channel-dialog").click();
+    await expect(alice.page.getByRole("dialog", { name: "New Strand", exact: true })).toBeVisible();
+    await alice.page.locator(".new-channel-name").fill(alternateChannelName);
+    await alice.page.locator(".create-channel-button").click();
+    const alternateChannel = alice.page.locator(".channel-item").filter({hasText: alternateChannelName});
+    const originalChannel = alice.page.locator(".channel-item").filter({hasText: originalChannelName}).first();
+    await expect(alternateChannel).toBeVisible({timeout: 120_000});
+    await originalChannel.click();
+    await expect(originalChannel).toHaveClass(/\bactive\b/);
     let abaAccepted = false;
+    let abaDiscarded = false;
+    const observeAbaDiscard = (message: import("@playwright/test").ConsoleMessage) => {
+      if (message.text().includes("stale attachment upload continuation discarded")) abaDiscarded = true;
+    };
+    alice.page.on("console", observeAbaDiscard);
     let releaseAba!: () => void;
     const abaHeld = new Promise<void>(resolve => { releaseAba = resolve; });
     await alice.page.route(uploadPattern, async route => {
@@ -244,13 +346,13 @@ test("encrypted attachment two-device upload/send/history/render and exact resta
     writeFileSync(targetAbaPath, png);
     await drop(alice.page, targetAbaPath);
     await expect.poll(() => abaAccepted, {timeout: 60_000}).toBe(true);
-    await alice.page.getByRole("textbox", { name: "Message", exact: true }).fill("temporary changed target draft");
-    // Acknowledge both states in the application, rather than coalesced DOM input.
-    await expect(alice.page.locator(".chat-input-hint")).toHaveCount(0);
-    await alice.page.getByRole("textbox", { name: "Message", exact: true }).fill("");
-    await expect(alice.page.locator(".chat-input-hint")).toBeVisible();
-    await expect(alice.page.locator(".compose-upload-progress")).toContainText(/target changed/, {timeout: 30_000});
+    await alternateChannel.click();
+    await expect(alternateChannel).toHaveClass(/\bactive\b/);
+    await originalChannel.click();
+    await expect(originalChannel).toHaveClass(/\bactive\b/);
+    await expect.poll(() => abaDiscarded, {timeout: 30_000}).toBe(true);
     releaseAba();
+    alice.page.off("console", observeAbaDiscard);
     await alice.page.unroute(uploadPattern);
     const aba = (await holderAttachments(alice.page)).find(o => o.filename === "target-aba.png")!;
     expect(aba.uploaded).toBe(false);
@@ -301,7 +403,26 @@ test("encrypted attachment two-device upload/send/history/render and exact resta
     expect(largeObject.descriptor).toMatchObject({
       scheme: "ak.blob.stream_aead.v1", segment_bytes: 262_144, size_bytes: large.length,
     });
-    await alice.sendTimelineMessage(realm, `${marker} fresh and segmented`);
+    const segmentedBody = `${marker} fresh and segmented`;
+    await alice.page.getByRole("textbox", {name: "Message", exact: true}).fill(segmentedBody);
+    await expect(alice.page.locator(".send-chat-button")).toBeEnabled({timeout: 120_000});
+    const segmentedRow = alice.page.locator(".chat-message").filter({hasText: segmentedBody}).first();
+    const finishSendAction = await observeMessageSendAction(alice.page);
+    try {
+      await alice.page.locator(".send-chat-button").click();
+      await expect.poll(async () => {
+        if (!await segmentedRow.count()) return "not-started";
+        const error = segmentedRow.locator(".chat-message-error");
+        if (await error.count()) return `failed: ${(await error.allTextContents()).join(" ")}`;
+        return /(?:^|\s)is-canonical-message(?:\s|$)/.test(await segmentedRow.getAttribute("class") ?? "")
+          ? "accepted" : "pending";
+      }, {timeout: 120_000, message: "the multi-attachment message must be accepted before sender reload"}).toBe("accepted");
+    } finally {
+      await finishSendAction(testInfo, {
+        message_row_present: await segmentedRow.count() > 0,
+        draft_retained: await alice.page.getByRole("textbox", {name: "Message", exact: true}).inputValue() === segmentedBody,
+      });
+    }
     await expect(bob.page.getByRole("img", {name: "fresh-private-image.png", exact: true})).toBeVisible({timeout: 120_000});
     const largeLink = bob.page.getByRole("button", {name: "large-private.bin", exact: true});
     await expect(largeLink).toBeVisible({timeout: 120_000});
@@ -506,11 +627,27 @@ test("encrypted attachment two-device upload/send/history/render and exact resta
       blobs: preparedBlobs.map(o => ({blob_ref: o.blobRef, encryption: {scheme: "ak.blob.stream_aead.v1"}, size_bytes: o.ciphertext.length})),
       postgres_rows: storedBlobs, uploads, original_descriptor: before.descriptor,
       assertions: {exact_restart_object: true, private_structured_send: true, receiver_bytes_and_pixels: true, receiver_restart: true,
+        accepted_keypackage_response_lost: lostKeyPackageResponse, advertised_private_states_survive_failure_and_reload: advertisedPrivateStateNames.length,
+        accepted_keypackage_refs: acceptedKeyPackageRefs,
         target_draft_aba_cancel_and_exact_recovery: true, fresh_object_salt_and_ciphertext: true,
         bounded_browser_source_reads: sourceReads, large_segmented_file_sha256: sha(large), long_text_full_sha256: sha(Buffer.from(fullText)),
         long_text_paging_keeps_artifact_url: true, long_text_viewport_height: firstPageHeight,
         historical_epoch_advanced_from: oldEpoch, since_join_historical_source_not_found: true, since_join_no_historical_preview: true,
         preview_url_revoked_on_target_navigation: true,
         ciphertext_presign_refused: true, tamper_no_preview: tampered}}), contentType: "application/json"});
+  } catch (error) {
+    for (const [label, reader] of [["alice", alice], ["bob", bob], ["late", late]] as const) {
+      if (!reader) continue;
+      const path = testInfo.outputPath(`attachment-failure-state-${label}.json`);
+      writeFileSync(path, JSON.stringify(await reader.page.evaluate(() => ({
+        attachments: document.querySelectorAll(".compose-attachment").length,
+        draft_nonempty: Boolean((document.querySelector(".chat-input") as HTMLTextAreaElement | null)?.value),
+        send_disabled: (document.querySelector(".send-chat-button") as HTMLButtonElement | null)?.disabled ?? true,
+        status: Array.from(document.querySelectorAll(".chat-status,.compose-upload-progress,.composer-send-diagnostic,.chat-message-error,.message-send-status"))
+          .map(node => (node.textContent ?? "").slice(0, 500)).slice(0, 20),
+      })).catch(() => ({unavailable: true})), null, 2));
+      await testInfo.attach(`attachment-failure-state-${label}`, {path, contentType: "application/json"});
+    }
+    throw error;
   } finally { await late?.close(); await bob?.close(); await alice.close(); }
 });

@@ -1,6 +1,7 @@
 // A single project carried from browser-owned registration to shared delivery.
 // Contract: e2e/scenarios/workflows/community-event.md
 import { createHash } from "node:crypto";
+import { observeMessageSendAction } from "../../helpers/action-evidence";
 import { writeFileSync } from "node:fs";
 import { expect, test, type Page, type Locator } from "../../helpers/arkret-test";
 import { accountActorId, canonicalJson, assertAuthoritySubmitOutcome, sdkEventDerivedObjectId, wireErrCode } from "../../helpers/coland-api";
@@ -171,7 +172,16 @@ test("three browser-owned members deliver a community event through encrypted di
       return cut?.covered === true && flows.every(member => cut.members.has(canonicalJson(accountActorId(member.user.id))));
     }, { timeout: 120_000, message: "all project memberships must be covered by the accepted MLS cut" }).toBe(true);
     const kickoff = `Project kickoff: venue, poster and volunteers ${stamp}`;
-    const kickoffEvent = await committed(alice.page.page, "ak.message.create", realm!, () => alice.page.sendTimelineMessage(realm!, kickoff));
+    const finishKickoffAction = await observeMessageSendAction(alice.page.page);
+    let kickoffEvent: Awaited<ReturnType<typeof committed>>;
+    try {
+      kickoffEvent = await committed(alice.page.page, "ak.message.create", realm!, () => alice.page.sendTimelineMessage(realm!, kickoff, { reloadIfPending: false }));
+    } finally {
+      await finishKickoffAction(testInfo, {
+        draft_retained: await alice.page.page.locator(".chat-input").inputValue().catch(() => "") === kickoff,
+        message_row_present: await alice.page.page.locator(".chat-message").filter({hasText: kickoff}).count() > 0,
+      });
+    }
     expect(JSON.stringify(kickoffEvent).includes(kickoff), "kickoff is encrypted on ingress").toBe(false);
     for (const member of flows) await member.page.expectTimelineEventVisible(kickoff, 120_000);
     checkpoint("all accepted memberships covered by MLS and kickoff decrypts for every member");
@@ -245,7 +255,7 @@ test("three browser-owned members deliver a community event through encrypted di
     for (const member of flows) await member.page.gotoTimelineRealm(realm);
     for (const [index, author] of flows.entries()) {
       const message = `${tasks[index].body} Delivery accepted by ${author.user.displayName}.`;
-      const event = await committed(author.page.page, "ak.message.create", realm!, () => author.page.sendTimelineMessage(realm!, message));
+      const event = await committed(author.page.page, "ak.message.create", realm!, () => author.page.sendTimelineMessage(realm!, message, { reloadIfPending: false }));
       expect(JSON.stringify(event).includes(message), "project discussion is encrypted on ingress").toBe(false);
       for (const reader of flows) {
         await reader.page.expectTimelineEventVisible(message, 120_000);
@@ -258,13 +268,32 @@ test("three browser-owned members deliver a community event through encrypted di
     const filename = `approved-poster-${stamp}.png`;
     const file = testInfo.outputPath(filename);
     writeFileSync(file, png);
-    await bob.page.page.locator(".attachment-menu-button").click();
-    const chooser = bob.page.page.waitForEvent("filechooser");
-    await bob.page.page.locator("button.attachment-file-picker").click();
-    await (await chooser).setFiles(file);
-    await expect(bob.page.page.locator(".compose-attachment")).toHaveCount(1, { timeout: 120_000 });
     const announcement = `Final approved community event poster ${stamp}`;
-    const attachment = await committed(bob.page.page, "ak.message.create", realm!, () => bob.page.sendTimelineMessage(realm!, announcement));
+    const uploadPattern = /\/_arkret\/self\/blob\/upload(?:\?.*)?$/;
+    let releaseUpload!: () => void;
+    const captionEntered = new Promise<void>(resolve => { releaseUpload = resolve; });
+    let uploadStarted = false;
+    await bob.page.page.route(uploadPattern, async route => {
+      uploadStarted = true;
+      await captionEntered;
+      await route.continue();
+    });
+    let attachment: Awaited<ReturnType<typeof committed>>;
+    try {
+      await bob.page.page.locator(".attachment-menu-button").click();
+      const chooser = bob.page.page.waitForEvent("filechooser");
+      await bob.page.page.locator("button.attachment-file-picker").click();
+      await (await chooser).setFiles(file);
+      await expect(bob.page.page.locator(".compose-attachment")).toHaveCount(1, { timeout: 120_000 });
+      await expect.poll(() => uploadStarted, { timeout: 120_000 }).toBe(true);
+      await bob.page.page.locator(".chat-input").fill(announcement);
+      await expect(bob.page.page.locator(".send-chat-button")).toBeDisabled();
+      releaseUpload();
+      attachment = await committed(bob.page.page, "ak.message.create", realm!, () => bob.page.sendTimelineMessage(realm!, announcement, { reloadIfPending: false }));
+    } finally {
+      releaseUpload();
+      await bob.page.page.unroute(uploadPattern);
+    }
     expect(attachment.payload?.blob_refs).toHaveLength(1);
     expect(JSON.stringify(attachment).includes(filename), "private filename is encrypted on ingress").toBe(false);
     for (const reader of flows) {
@@ -399,6 +428,17 @@ test("three browser-owned members deliver a community event through encrypted di
     await testInfo.attach("community-runtime-errors", { body: JSON.stringify(browserFailures), contentType: "application/json" });
     await testInfo.attach("community-response-statuses", { body: JSON.stringify(requests), contentType: "application/json" });
     for (const [index, flow] of flows.entries()) {
+      const messageBoundary = testInfo.outputPath(`community-message-boundary-${index}.json`);
+      writeFileSync(messageBoundary, JSON.stringify(await flow.page.page.evaluate(() => ({
+        composer_present: Boolean(document.querySelector(".chat-input")),
+        draft_nonempty: Boolean((document.querySelector(".chat-input") as HTMLTextAreaElement | null)?.value),
+        send_disabled: (document.querySelector(".send-chat-button") as HTMLButtonElement | null)?.disabled ?? true,
+        pending_rows: document.querySelectorAll(".message-send-status").length,
+        error_rows: document.querySelectorAll(".chat-message-error").length,
+        status: Array.from(document.querySelectorAll(".chat-status,.compose-upload-progress,.composer-send-diagnostic,.chat-message-error,.message-send-status"))
+          .map(node => (node.textContent ?? "").slice(0, 500)).slice(0, 20),
+      })), null, 2));
+      await testInfo.attach(`community-message-boundary-${index}`, { path: messageBoundary, contentType: "application/json" });
       const filterStatePath = testInfo.outputPath(`assignee-filter-state-${index}.json`);
       writeFileSync(filterStatePath, JSON.stringify({
         path: new URL(flow.page.page.url()).pathname,
@@ -415,6 +455,7 @@ test("three browser-owned members deliver a community event through encrypted di
           empty_prompts: await flow.page.page.locator(".board-card-composer .input-empty-prompt").count(),
           board_draft: await flow.page.page.locator(".board-create-popover input, .board-create-popover textarea").evaluateAll(nodes => nodes.map(node => (node as HTMLInputElement).value)),
           board_status: await flow.page.page.locator(".board-status").allTextContents(),
+          attachment_status: await flow.page.page.locator(".compose-upload-progress").allTextContents(),
         }), contentType: "application/json",
       }).catch(() => {});
       await testInfo.attach(`community-write-status-${index}`, {
