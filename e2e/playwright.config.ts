@@ -92,6 +92,11 @@ export default defineConfig({
   },
   projects: [
     {
+      name: "signal-nonce",
+      testMatch: "encryption/signal-nonce-allocator.spec.ts",
+      use: { ...devices["Desktop Chrome"], baseURL: undefined },
+    },
+    {
       name: "joint-collaboration",
       dependencies: ["inkson-build-id"],
       testMatch: [

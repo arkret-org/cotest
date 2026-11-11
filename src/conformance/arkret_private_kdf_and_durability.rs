@@ -27,6 +27,10 @@ pub fn run_arkret_private_kdf_and_durability_suite() -> Result<()> {
     }
     run_nonce(case(cases, "full_width_counter_nonce_aes128gcm")?)?;
     run_signal(case(cases, "signal_exporter_key_sha256_aes128gcm")?)?;
+    run_signal_endpoints(
+        &fixture,
+        case(cases, "signal_exporter_key_sha256_aes128gcm")?,
+    )?;
     run_reaction(case(cases, "reaction_routing_hmac_nfc")?)?;
     Ok(())
 }
@@ -160,6 +164,119 @@ fn run_signal(case: &Value) -> Result<()> {
     let forced_nonce = hex::decode(required_str(expected, "forced_equal_nonce_hex")?)?;
     if forced_nonce.len() != 12 || expected["same_raw_aead_key"] != false {
         bail!("Signal forced-equal-nonce negative control drifted");
+    }
+    Ok(())
+}
+
+fn run_signal_endpoints(fixture: &Value, case: &Value) -> Result<()> {
+    use std::collections::{BTreeMap, BTreeSet};
+
+    use aes_gcm::aead::{Aead as _, Payload};
+
+    let root = hex::decode(required_str(&case["expected"], "signal_root_hex")?)?;
+    let contract = &fixture["signal_endpoint_contract"];
+    let domains = contract["domains"]
+        .as_array()
+        .context("Signal endpoint KATs missing")?;
+    if domains.len() != 10 {
+        bail!("Signal KAT must execute all ten endpoint domains");
+    }
+    let scope = ScopeRef::Realm {
+        realm_id: RealmId::new(required_str(&case["input"], "realm_id_utf8")?)?,
+    };
+    let mut keys = BTreeMap::new();
+    let mut distinct = BTreeSet::new();
+    let mut replay = arkret_crypto::AeadNonceReplayTracker::default();
+    for row in domains {
+        let endpoint: arkret_models_crypto::ContentEndpoint =
+            serde_json::from_value(row["verified_endpoint"].clone())?;
+        endpoint.validate()?;
+        let context = arkret_canonical::canonical::canonical_json_bytes(&endpoint)?;
+        if context != required_str(row, "sender_domain_utf8")?.as_bytes() {
+            bail!("Signal KAT is not the direct closed endpoint JCS context");
+        }
+        assert_hex(
+            "Signal endpoint context",
+            &context,
+            row,
+            "sender_domain_hex",
+        )?;
+        let key = arkret::mls::expand_with_registered_label(
+            &root,
+            ExporterLabelId::SignalV1,
+            &context,
+            16,
+        )?;
+        assert_hex("Signal endpoint key", &key, row, "signal_key_hex")?;
+        if !distinct.insert(hex::encode(key.as_slice())) {
+            bail!("Signal endpoint keys collided");
+        }
+        let domain = arkret_crypto::AeadNonceContext {
+            mls_group_id: scope.canonical_mls_group_id()?,
+            epoch: 0,
+            sender_domain: String::from_utf8(context)?,
+        };
+        replay.accept_counter(&domain, 0)?;
+        if replay.accept_counter(&domain, 0).is_ok() {
+            bail!("same-endpoint nonce replay was accepted");
+        }
+        keys.insert(required_str(row, "name")?.to_owned(), key);
+    }
+    let kat = &contract["same_actor_equal_nonce_aead"];
+    let nonce: [u8; 12] = hex::decode(required_str(kat, "nonce_hex")?)?
+        .try_into()
+        .map_err(|_| anyhow::anyhow!("Signal equal nonce must have 12 bytes"))?;
+    let mut plains = Vec::new();
+    let mut ciphertexts = Vec::new();
+    for prefix in ["first", "second"] {
+        let name = required_str(kat, prefix)?;
+        let key = keys.get(name).context("Signal AEAD endpoint missing")?;
+        let cipher = <aes_gcm::Aes128Gcm as aes_gcm::KeyInit>::new_from_slice(key)
+            .map_err(|_| anyhow::anyhow!("Signal KAT key length"))?;
+        let plain = hex::decode(required_str(kat, &format!("{prefix}_plaintext_hex"))?)?;
+        let aad = hex::decode(required_str(kat, &format!("{prefix}_aad_hex"))?)?;
+        let encrypted = cipher
+            .encrypt(
+                &nonce.into(),
+                Payload {
+                    msg: &plain,
+                    aad: &aad,
+                },
+            )
+            .map_err(|_| anyhow::anyhow!("Signal KAT encryption failed"))?;
+        assert_hex(
+            "Signal endpoint AEAD",
+            &encrypted,
+            kat,
+            &format!("{prefix}_ciphertext_hex"),
+        )?;
+        let decrypted = cipher
+            .decrypt(
+                &nonce.into(),
+                Payload {
+                    msg: &encrypted,
+                    aad: &aad,
+                },
+            )
+            .map_err(|_| anyhow::anyhow!("Signal KAT decryption failed"))?;
+        if plain != decrypted {
+            bail!("Signal endpoint plaintext differs");
+        }
+        ciphertexts.push(encrypted[..encrypted.len() - 16].to_vec());
+        plains.push(plain);
+    }
+    let plain_xor: Vec<_> = plains[0]
+        .iter()
+        .zip(&plains[1])
+        .map(|(a, b)| a ^ b)
+        .collect();
+    let cipher_xor: Vec<_> = ciphertexts[0]
+        .iter()
+        .zip(&ciphertexts[1])
+        .map(|(a, b)| a ^ b)
+        .collect();
+    if plain_xor == cipher_xor {
+        bail!("Signal same-Actor equal nonce leaked plaintext XOR");
     }
     Ok(())
 }

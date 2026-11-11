@@ -40,7 +40,11 @@ impl ProfileDecryptor {
 }
 
 impl SignalDecryptor for ProfileDecryptor {
-    async fn decrypt(&self, _envelope: &SignalEnvelope) -> garth::Result<Vec<u8>> {
+    async fn decrypt(
+        &self,
+        _envelope: &SignalEnvelope,
+        _sender_key: &arkret_wire::StationSigningKey,
+    ) -> garth::Result<Vec<u8>> {
         Ok(self.bytes.clone())
     }
 }

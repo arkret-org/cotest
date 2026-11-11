@@ -1493,6 +1493,10 @@ pub async fn run_agent_keypackage_terminal_live() -> Result<()> {
     run_agent_keypackage_journey(true).await
 }
 
+pub async fn run_signal_native() -> Result<()> {
+    crate::harness::heap_future(presence_evidence::run_native).await
+}
+
 async fn run_agent_keypackage_journey(terminal: bool) -> Result<()> {
     let group_name = if terminal {
         "agent-terminal-keypackage"

@@ -15,12 +15,18 @@ use serde_json::json;
 use crate::scenarios::mls_lifecycle_live::{ACTIVE_SUITE, Member};
 
 pub(crate) mod emission;
+pub(crate) mod native_device;
+pub(crate) mod same_actor;
 
 pub async fn run() -> Result<()> {
     crate::harness::heap_future(|| {
         crate::scenarios::message_mls_cross_station_live::run_with_signal(true)
     })
     .await
+}
+
+pub async fn run_same_actor() -> Result<()> {
+    crate::harness::heap_future(super::message_mls_cross_station_live::run_same_actor_signal).await
 }
 
 pub async fn run_ban() -> Result<()> {
@@ -175,6 +181,7 @@ pub fn scoped_envelope_with_payload(
         checkpoint.path(),
         serde_json::to_vec(&group.export_state_record()?)?,
     )?;
+    checkpoint.as_file().sync_all()?;
     let restored = ArkretMlsGroup::restore_from_state_record(&serde_json::from_slice(
         &std::fs::read(checkpoint.path())?,
     )?)?;

@@ -31,6 +31,27 @@ use crate::scenarios::mls_lifecycle_live::{
 mod call_holders;
 
 const GROUP: &str = "message-mls-cross-station";
+
+enum SignalStations {
+    Legacy(TestServerGroup),
+    Native(Vec<super::agent_runtime_live::coauth_session_evidence::ActualAgentDeployment>),
+}
+
+impl SignalStations {
+    fn server(&self, index: usize) -> &crate::harness::ArkretServer {
+        match self {
+            Self::Legacy(group) => group.server(index),
+            Self::Native(deployments) => &deployments[index].station,
+        }
+    }
+
+    fn server_mut(&mut self, index: usize) -> &mut crate::harness::ArkretServer {
+        match self {
+            Self::Legacy(group) => group.server_mut(index),
+            Self::Native(deployments) => &mut deployments[index].station,
+        }
+    }
+}
 const ALICE_DEVICE: &str = "ak:device:01904100-0000-7000-8000-000000002801";
 const BOB_DEVICE: &str = "ak:device:01904100-0000-7000-8000-000000002802";
 
@@ -93,7 +114,11 @@ pub async fn install_bindings(group: &mut ArkretMlsGroup, members: &[&Member]) -
         let actor = arkret_models_crypto::decode_mls_basic_credential_identity(&identity)?;
         let member = members
             .iter()
-            .find(|member| member.actor == actor)
+            .find(|member| {
+                member.actor == actor
+                    && member.key.verifying_key().to_bytes().as_slice()
+                        == leaf.signature_key.as_slice()
+            })
             .context("an occupied leaf has no provisioned member")?;
         let authorization = accepted_full_view(&member.client, &member.authorize_event_id).await?;
         ensure!(authorization.event.kind == EventKind::DeviceAuthorize);
@@ -103,8 +128,9 @@ pub async fn install_bindings(group: &mut ArkretMlsGroup, members: &[&Member]) -
         ensure!(accepted_device.device_id == member.device);
         ensure!(accepted_device.authorized_generation_ref == 1);
         ensure!(
-            accepted_device.authorization_binding_kind
-                == arkret_models_collaboration::events_payloads::device_identity::DeviceAuthorizationBindingKind::RegistrationAnchor
+            matches!(accepted_device.authorization_binding_kind,
+                arkret_models_collaboration::events_payloads::device_identity::DeviceAuthorizationBindingKind::RegistrationAnchor
+                | arkret_models_collaboration::events_payloads::device_identity::DeviceAuthorizationBindingKind::AcceptedDevice)
         );
         ensure!(
             accepted_device.device_public_key_did.as_str()
@@ -331,7 +357,17 @@ pub(crate) async fn run_with_signal_boundary(
     include_signal: bool,
     boundary: super::signal_live::emission::Boundary,
 ) -> Result<()> {
-    run_at_two_stations(include_signal, boundary, None).await
+    run_at_two_stations(include_signal, boundary, None, false).await
+}
+
+pub(crate) async fn run_same_actor_signal() -> Result<()> {
+    run_at_two_stations(
+        true,
+        super::signal_live::emission::Boundary::Leave,
+        None,
+        true,
+    )
+    .await
 }
 
 pub async fn run_with_call_observer(observer: &dyn CrossStationCallObserver) -> Result<()> {
@@ -339,6 +375,7 @@ pub async fn run_with_call_observer(observer: &dyn CrossStationCallObserver) -> 
         false,
         super::signal_live::emission::Boundary::Leave,
         Some(observer),
+        false,
     )
     .await
 }
@@ -347,6 +384,7 @@ async fn run_at_two_stations(
     include_signal: bool,
     boundary: super::signal_live::emission::Boundary,
     observer: Option<&dyn CrossStationCallObserver>,
+    same_actor_signal: bool,
 ) -> Result<()> {
     let Some(x_database) = database(GROUP)? else {
         ensure!(
@@ -388,22 +426,59 @@ async fn run_at_two_stations(
             pause_file.to_string_lossy().into_owned(),
         ));
     }
-    let Some(mut group) = TestServerGroup::try_multi_external_with_node_envs(
-        GROUP,
-        &[station_env(&x_database.connect_url, &coauth), recipient_env],
-    )
-    .await?
-    else {
-        ensure!(
-            observer.is_none(),
-            "cross-Station Call evidence requires a prebuilt Coland"
-        );
-        return skip_or_fail(GROUP, "prebuilt Coland unavailable");
+    let mut group = if same_actor_signal {
+        use super::agent_runtime_live::coauth_session_evidence::actual_agent_deployment;
+        let mut left = actual_agent_deployment("signal-native-left").await?;
+        let mut right = actual_agent_deployment("signal-native-right").await?;
+        left.station
+            .restart_with_federation_mesh(&[right.station.base_url().to_string()])
+            .await?;
+        right
+            .station
+            .restart_with_federation_mesh(&[left.station.base_url().to_string()])
+            .await?;
+        SignalStations::Native(vec![left, right])
+    } else {
+        let Some(group) = TestServerGroup::try_multi_external_with_node_envs(
+            GROUP,
+            &[station_env(&x_database.connect_url, &coauth), recipient_env],
+        )
+        .await?
+        else {
+            ensure!(
+                observer.is_none(),
+                "cross-Station Call evidence requires a prebuilt Coland"
+            );
+            return skip_or_fail(GROUP, "prebuilt Coland unavailable");
+        };
+        SignalStations::Legacy(group)
     };
     let x = group.server(0);
     let y = group.server(1);
-    let mut alice = Member::provision(x, &coauth, "message-mls-alice", ALICE_DEVICE).await?;
-    let mut bob = Member::provision(y, &coauth, "message-mls-bob", BOB_DEVICE).await?;
+    let x_database_url = x
+        .configured_database_url()
+        .context("left Station database")?
+        .to_owned();
+    let y_database_url = y
+        .configured_database_url()
+        .context("right Station database")?
+        .to_owned();
+    let (mut alice, mut bob) = match &group {
+        SignalStations::Native(deployments) => (
+            Member::from_client(
+                deployments[0].controller.clone(),
+                deployments[0].account.clone(),
+            )?,
+            Member::from_client(
+                deployments[1].controller.clone(),
+                deployments[1].account.clone(),
+            )?,
+        ),
+        SignalStations::Legacy(_) => (
+            Member::provision(x, &coauth, "message-mls-alice", ALICE_DEVICE).await?,
+            Member::provision(y, &coauth, "message-mls-bob", BOB_DEVICE).await?,
+        ),
+    };
     let realm =
         create_realm_with_join_rule(&alice.client, "Message MLS two Stations", "invite", &[x, y])
             .await?;
@@ -480,8 +555,13 @@ async fn run_at_two_stations(
             canonical(serde_json::to_value(genesis_payload)?)?,
         )
         .await?;
-    let genesis_commit =
-        submit_and_expect_commit(&alice.client, &alice.account, ALICE_DEVICE, &genesis).await?;
+    let genesis_commit = submit_and_expect_commit(
+        &alice.client,
+        &alice.account,
+        alice.device.as_str(),
+        &genesis,
+    )
+    .await?;
     ensure_commit_signed_by(&genesis_commit, x)?;
     install_bindings(&mut alice_group, &[&alice]).await?;
     let stale_event = alice
@@ -576,6 +656,39 @@ async fn run_at_two_stations(
     )?;
     install_bindings(&mut alice_group, &[&alice, &bob]).await?;
     install_bindings(&mut bob_group, &[&alice, &bob]).await?;
+    if same_actor_signal {
+        let SignalStations::Native(deployments) = &group else {
+            anyhow::bail!("same-Actor Signal requires real issuer deployments");
+        };
+        let other = super::signal_live::native_device::pair(&deployments[0]).await?;
+        ensure!(other.account == alice.account && other.device != alice.device);
+        let (other_group, accepted_state) = call_holders::add_other(
+            &alice,
+            &bob,
+            &other,
+            x,
+            x,
+            &realm_id,
+            &x_database_url,
+            &mut alice_group,
+            &mut bob_group,
+        )
+        .await?;
+        let accepted = accepted_full_view(&alice.client, &accepted_state).await?;
+        return super::signal_live::same_actor::exercise(
+            &alice,
+            &other,
+            &bob,
+            &mut alice_group,
+            other_group,
+            &bob_group,
+            &realm_id,
+            &strand,
+            &accepted_state,
+            &accepted.commit.commit_id,
+        )
+        .await;
+    }
     if let Some(observer) = observer {
         let other = other
             .as_ref()
@@ -587,7 +700,7 @@ async fn run_at_two_stations(
             x,
             y,
             &realm_id,
-            &x_database.connect_url,
+            &x_database_url,
             &mut alice_group,
             &mut bob_group,
         )
@@ -682,7 +795,7 @@ async fn run_at_two_stations(
                 x,
                 y,
                 &coauth,
-                &[&x_database.connect_url, &y_database.connect_url],
+                &[&x_database_url, &y_database_url],
                 &pause_file,
                 boundary,
             )
@@ -702,8 +815,8 @@ async fn run_at_two_stations(
             &initial_message_grant,
             x,
             y,
-            &x_database.connect_url,
-            &y_database.connect_url,
+            &x_database_url,
+            &y_database_url,
             &pause_file,
             boundary,
         )

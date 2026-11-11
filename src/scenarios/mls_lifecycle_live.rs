@@ -109,7 +109,7 @@ impl Member {
         Self::from_client(client, account)
     }
 
-    fn from_client(client: TestActorClient, account: AccountId) -> Result<Self> {
+    pub(crate) fn from_client(client: TestActorClient, account: AccountId) -> Result<Self> {
         let principal = client
             .principal
             .clone()
