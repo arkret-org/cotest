@@ -8,7 +8,7 @@ test("local form preparation survives a pending chat route replacing the selecte
   try {
     const page = await browser.newPage();
     await page.setContent(`<section class="direct-structure"></section><script>
-window.replaced = false; window.submissions = 0;
+window.replaced = false; window.submissions = 0; window.topicChanges = [];
 function mount() {
   const host = document.querySelector('section');
   host.innerHTML = '<select aria-label="Action"><option value="unplace">Unplace</option><option value="delete_topic_target">Delete empty Topic</option></select><button>Save</button>';
@@ -16,7 +16,8 @@ function mount() {
   host.querySelector('select').onchange = event => {
     if (!window.replaced) { window.replaced = true; mount(); return; }
     if (event.target.value === 'delete_topic_target' && !host.querySelector('[aria-label="Topic"]')) {
-      host.insertAdjacentHTML('beforeend', '<select aria-label="Topic"><option value="">Select Topic</option><option value="actual-topic">Actual Topic</option></select>');
+      host.insertAdjacentHTML('beforeend', '<select aria-label="Topic"><option data-gly-placeholder value="" disabled hidden>Choose</option><option value="">Select Topic</option><option value="actual-topic">Actual Topic</option></select>');
+      host.querySelector('[aria-label="Topic"]').onchange = event => window.topicChanges.push(event.target.value);
     }
   };
 }
@@ -25,6 +26,7 @@ mount();
     await prepareDirectStructureForm(page, "delete_topic_target", "actual-topic");
     assert.equal(await page.getByRole("combobox", { name: "Action", exact: true }).inputValue(), "delete_topic_target");
     assert.equal(await page.getByRole("combobox", { name: "Topic", exact: true }).inputValue(), "actual-topic");
+    assert.deepEqual(await page.evaluate(() => window.topicChanges), ["", "actual-topic"]);
     assert.equal(await page.evaluate(() => window.submissions), 0);
   } finally { await browser.close(); }
 });
