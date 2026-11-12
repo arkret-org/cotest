@@ -677,21 +677,3 @@ export async function realmMlsCreatorGroupApi(
     },
   };
 }
-
-/// Encrypt one Message body with the member's group at its current epoch.
-/// Returns the `encrypted_content` envelope and advances the member's state.
-export function encryptMlsMessageContent(
-  group: MlsMemberGroup,
-  content: Record<string, unknown>,
-): Record<string, unknown> {
-  const sealed = cotestWire<{
-    encrypted_content: Record<string, unknown>;
-    group_state: string;
-  }>("mls-encrypt-message", {
-    group_state: group.groupState,
-    group_state_ref: group.groupStateRef,
-    content,
-  });
-  group.groupState = sealed.group_state;
-  return sealed.encrypted_content;
-}

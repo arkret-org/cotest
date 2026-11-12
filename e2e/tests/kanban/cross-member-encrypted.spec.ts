@@ -1,5 +1,5 @@
 import { observeCardSaveAction } from "../../helpers/action-evidence";
-import { boardSwitcher, prepareBoardTitle, newBoardTrigger, addBoardList, fillCardNarrative } from "../../helpers/kanban-product-ui";
+import { boardSwitcher, prepareBoardTitle, newBoardTrigger, addBoardList, fillCardNarrative, submitBoardCardDraft } from "../../helpers/kanban-product-ui";
 import { restartRunnerStation } from "../../helpers/station-runtime";
 import { proveKanbanHistoryTail, seedKanbanHistory } from "../../helpers/kanban-history";
 import { observeRequestCost } from "../../helpers/request-cost";
@@ -474,9 +474,7 @@ async function buildEncryptedBoardListCard(
   await expect(column).toBeVisible({ timeout: 45_000 });
   await expect(column.locator(".add-card-button")).toBeEnabled({ timeout: 120_000 });
   if (!createCard) return boardId;
-  await column.locator(".add-card-button").click();
-  await column.locator(".new-card-title-input").fill(cardTitle);
-  await column.locator(".save-card-button").click();
+  await submitBoardCardDraft(column, cardTitle);
   const resumed = await afterCardSubmitted?.();
   if (resumed) page = resumed;
   const createdCard = page.locator(".kanban-column").filter({ hasText: listTitle }).first()
@@ -701,7 +699,7 @@ async function dismissRecoveryNags(reader: JointUserPage): Promise<void> {
   for (const [dialogName, buttonName] of [
     ["Back up encrypted history", "Remind me later"],
     ["This device does not have the encryption key yet", "Dismiss"],
-    ["Restore encryption keys", "Close"],
+    ["Restore encryption keys", "Not now"],
   ] as const) {
     const btn = page.getByRole("dialog", { name: dialogName, exact: true })
       .getByRole("button", { name: buttonName, exact: true });
@@ -711,14 +709,10 @@ async function dismissRecoveryNags(reader: JointUserPage): Promise<void> {
   }
 }
 
-// Get a member's already-loaded kanban route into a readable board state:
-// dismiss the recovery nags, then EXPLICITLY select the board so its lists/cards
-// project into view — the deep-link `/board/<id>` route alone leaves the
-// board-space selector unset ("Select an option"), so no lists render. If the
-// member's projection never received the board space, the option never appears
-// and this throws — which is itself the cross-member-projection bug this test
-// hunts. Forces past the board-toolbar button overlap and retries the open with
-// nag-dismissal in case a late modal intercepts.
+// Round-trip the routed board's visibly active menu item. Decrypted titles
+// are presentation, and a fresh member may only have structural current data.
+// A missing board option or a different selected board still fails the exact
+// route check; neither requires exposing object ids in the visible title.
 async function readyReaderBoard(
   reader: JointUserPage,
   boardId: string,
@@ -739,8 +733,7 @@ async function readyReaderBoard(
     if (await trigger.getAttribute("aria-expanded") !== "true") {
       await trigger.click({ timeout: 3_000 });
     }
-    const option = page.locator("button.board-select-menu-item")
-      .filter({ hasText: `(${boardId})` });
+    const option = page.locator("button.board-select-menu-item.is-active");
     await expect(option).toHaveCount(1, { timeout: 3_000 });
     await option.click({ timeout: 3_000 });
     await expect(trigger).toHaveAttribute("aria-expanded", "false", { timeout: 3_000 });
@@ -1291,6 +1284,8 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
           expect(submittedGenesisIds.size).toBe(1);
           let holdRetryAbsence = true;
           let retryAbsenceCuts = 0;
+          let releaseRetryAbsence!: () => void;
+          const retryAbsenceResponse = new Promise<void>(resolve => { releaseRetryAbsence = resolve; });
           let freshAbsenceResponses = 0;
           let freshAttemptStartedAt = Number.POSITIVE_INFINITY;
           creator.page.on("response", response => {
@@ -1305,14 +1300,20 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
             const query = route.request().postDataJSON() as Record<string, any>;
             if (holdRetryAbsence && query.realm_id === cutRealmId) {
               retryAbsenceCuts += 1;
+              await retryAbsenceResponse;
               await route.fulfill({ status: 503, contentType: "application/problem+json", body: JSON.stringify({
                 type: "https://arkret.org/problems/temporarily_unavailable", title: "Temporarily unavailable",
                 status: 503, detail: "creator new-attempt absence cut",
               }) });
             } else { await route.fallback(); }
           });
-          await creator.page.locator(".creator-mls-retry-button").click();
-          await expect.poll(() => retryAbsenceCuts, { timeout: 60_000 }).toBeGreaterThan(0);
+          try {
+            await creator.page.locator(".creator-mls-retry-button").click();
+            await expect.poll(() => retryAbsenceCuts, { timeout: 60_000 }).toBeGreaterThan(0);
+            await expect(creator.page.locator(".creator-mls-retry-button")).toBeDisabled();
+          } finally {
+            releaseRetryAbsence();
+          }
           await expect(creator.page.locator(".creator-mls-retry-button")).toBeEnabled({ timeout: 60_000 });
           const blocked = (await readCreatorRecords(creator.page)).find((value) => value.intent.effective_scope.realm_id === cutRealmId)!;
           expect(blocked.state).toBe("rejected");
@@ -1562,6 +1563,17 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
         await testInfo.attach("creator-quarantine-write-counters", { path: file, contentType: "application/json" });
       }
       const records = await readCreatorRecords(creator.page, true).catch(() => []);
+      const retryButton = creator.page.locator(".creator-mls-retry-button");
+      const retryButtonCount = await retryButton.count().catch(() => 0);
+      const publicRetryState = {
+        retry_button_count: retryButtonCount,
+        retry_button_enabled: retryButtonCount === 1 && await retryButton.isEnabled().catch(() => false),
+        durable_state_counts: Object.fromEntries(["rejected", "ready", "quarantined"].map(state =>
+          [state, records.filter(record => record.state === state).length])),
+      };
+      const publicRetryFile = testInfo.outputPath("creator-retry-public-failure.json");
+      await writeFile(publicRetryFile, JSON.stringify(publicRetryState));
+      await testInfo.attach("creator-retry-public-failure", { path: publicRetryFile, contentType: "application/json" });
       const retryStatus = await creator.page.locator(".creator-mls-retry").allTextContents().catch(() => []);
       const safeStatus = retryStatus.filter((text) =>
         !/bearer |recovery_key|mnemonic|access_token|dpop:|eyJ[A-Za-z0-9_-]+\./i.test(text));
@@ -2138,9 +2150,7 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
           .locator(".kanban-column")
           .filter({ hasText: listTitle })
           .first();
-        await bobColumn.locator(".add-card-button").click();
-        await bobColumn.locator(".new-card-title-input").fill(bobCard);
-        await bobColumn.locator(".save-card-button").click();
+        await submitBoardCardDraft(bobColumn, bobCard);
         await expect(
           bobColumn.locator(".kanban-card").filter({ hasText: bobCard }),
         ).toBeVisible({

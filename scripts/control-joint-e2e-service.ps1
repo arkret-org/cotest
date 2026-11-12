@@ -172,9 +172,45 @@ switch ($Action) {
             PassThru = $true
         }
         if ($IsWindows) { $startArguments.WindowStyle = 'Hidden' }
-        $process = Start-Process @startArguments
+        if ($IsWindows) {
+            $process = Start-Process @startArguments
+        } else {
+            # The short-lived controller must not own redirected stream pipes.
+            # A native exec opens the log files and ignores terminal hangup;
+            # the retained shell PID owns the service and its output lifetime.
+            $quoteArgument = { param([string]$value) "'" + $value.Replace("'", "'\''") + "'" }
+            $nohup = (Get-Command nohup -ErrorAction Stop).Source
+            $shell = (Get-Process -Id $PID).Path
+            $encoded = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($wrapped))
+            $nativeCommand = 'exec ' + (& $quoteArgument $nohup) + ' ' + (& $quoteArgument $shell) +
+                ' -NoProfile -EncodedCommand ' + (& $quoteArgument $encoded) +
+                ' < /dev/null > ' + (& $quoteArgument $stdout) + ' 2> ' + (& $quoteArgument $stderr)
+            $startInfo = [System.Diagnostics.ProcessStartInfo]::new('/bin/sh')
+            $startInfo.UseShellExecute = $false
+            $startInfo.WorkingDirectory = [string]$control.working_directory
+            $startInfo.ArgumentList.Add('-c')
+            $startInfo.ArgumentList.Add($nativeCommand)
+            $process = [System.Diagnostics.Process]::Start($startInfo)
+        }
         $replacementIdentity = Get-CotestProcessIdentity -Process $process
         try {
+            # A shell PID does not prove that its service command has started.
+            # Keep the invoking controller alive until the owned child exists;
+            # the caller still checks the real network health independently.
+            $deadline = [datetime]::UtcNow.AddSeconds(30)
+            $replacementTree = @()
+            do {
+                $process.Refresh()
+                if ($process.HasExited) {
+                    throw "Replacement $ServerName $ServiceName exited before service startup (exit=$($process.ExitCode)); see $stdout and $stderr"
+                }
+                $replacementTree = @(Get-CotestOwnedProcessTree -RootIdentity $replacementIdentity)
+                if ($replacementTree.Count -ge 2) { break }
+                Start-Sleep -Milliseconds 50
+            } while ([datetime]::UtcNow -lt $deadline)
+            if ($replacementTree.Count -lt 2) {
+                throw "Replacement $ServerName $ServiceName has no owned service child; see $stdout and $stderr"
+            }
             Write-ControlState @{ kind = $kind; status = 'running'; original_process_id = [int]$service.process_id; current_process_id = $process.Id; current_process_started_at = $replacementIdentity.started_at; restarted = $true; terminated_processes = @($terminated); stdout = $stdout; stderr = $stderr }
         } catch {
             Stop-CotestOwnedProcessTree -RootIdentity $replacementIdentity

@@ -21,7 +21,6 @@
 //!    bindings.
 //! 7. `mls-join-welcome` — the recipient verifies the producer proof and joins from the Welcome
 //!    against the accepted Commit.
-//! 8. `mls-encrypt-message` — encrypt one Message body at the current epoch.
 
 use anyhow::{Context, Result, bail, ensure};
 use arkret::{
@@ -499,41 +498,6 @@ pub fn mls_join_welcome(input: Value) -> Result<Value> {
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
-struct EncryptMessageInput {
-    group_state: String,
-    group_state_ref: EventId,
-    content: Value,
-    material: arkret_models_crypto::EventContentMaterial,
-}
-
-/// `mls-encrypt-message`: encrypt one canonical Message body at the group's
-/// current epoch and return the `encrypted_content` envelope.
-pub fn mls_encrypt_message(input: Value) -> Result<Value> {
-    let input: EncryptMessageInput =
-        serde_json::from_value(input).context("parse MLS Message encrypt input")?;
-    let mut group = decode_group(&input.group_state)?;
-    let header = arkret::EventContentPreEncryptionHeader::reconstruct(
-        MESSAGE_ENVELOPE_VERSION,
-        MESSAGE_CONTENT_TYPE,
-        arkret::EncryptedPayloadScheme::EpochContentAead,
-        group.scope().clone(),
-        EventKind::MessageCreate.as_str(),
-        group.epoch(),
-        input.group_state_ref,
-        group.local_content_sender_domain()?,
-        arkret::EventContentRoutingContext::None,
-        input.material,
-    )?;
-    let plaintext = arkret_canonical::canonical_json_bytes(&input.content)?;
-    let sealed = arkret::MessageCrypto::encrypt(&mut group, fresh_uuid_v7(), header, &plaintext)?;
-    Ok(json!({
-        "encrypted_content": sealed.payload.to_envelope()?,
-        "group_state": encode_group(&group)?,
-    }))
-}
-
-#[derive(Deserialize)]
-#[serde(deny_unknown_fields)]
 struct EncryptSignalInput {
     group_state: String,
     envelope: arkret_wire::SignalEnvelope,
@@ -838,6 +802,7 @@ mod scope_tests {
         });
         let request: KeyPackagesClaimRequestBody =
             serde_json::from_value(mls_keypackage_claim_request(input.clone()).unwrap()).unwrap();
+        assert_eq!(request.effective_scope, circle_scope());
         assert_eq!(
             request.mls_group_id,
             circle_scope().canonical_mls_group_id().unwrap()

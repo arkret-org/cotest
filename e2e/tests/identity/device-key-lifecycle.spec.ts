@@ -1,4 +1,4 @@
-import { newBoardTrigger, addBoardList } from "../../helpers/kanban-product-ui";
+import { newBoardTrigger, addBoardList, fillCardNarrative } from "../../helpers/kanban-product-ui";
 import {
   expect,
   test,
@@ -518,13 +518,7 @@ async function addEncryptedDescription(
   await page.locator(".card-detail-tab-description").click();
   await page.locator(".card-detail-edit-description-button").click();
 
-  const richEditor = page.locator(".card-detail-edit-form")
-    .getByRole("textbox", { name: "Description", exact: true });
-  await expect(richEditor).toBeVisible({ timeout: 45_000 });
-  await richEditor.fill(description);
-  await expect(richEditor).toHaveText(
-    description,
-  );
+  await fillCardNarrative(page, "Description", description);
 
   const strandUpdate = page.waitForResponse(
     (response) =>

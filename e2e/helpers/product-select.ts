@@ -5,8 +5,8 @@ const quote = (text: string) => text.replace(/\\/g, "\\\\").replace(/"/g, '\\"')
 async function control(scope: Locator): Promise<Locator> {
   await expect(scope).toBeVisible({ timeout: 30_000 });
   if (await scope.evaluate(element => element.matches('select, .sapid-select[data-gly-combobox="select"]'))) return scope;
-  const trigger = scope.locator('.sapid-select[data-gly-combobox="select"]');
-  const child = await trigger.count() ? trigger : scope.locator('select:visible');
+  // A visible field can precede mounting its controlled child.
+  const child = scope.locator('.sapid-select[data-gly-combobox="select"], select:visible');
   await expect(child).toHaveCount(1);
   return child;
 }
@@ -15,23 +15,34 @@ async function open(control: Locator): Promise<Locator> {
   await expect(control).toBeEnabled({ timeout: 30_000 });
   const id = await control.getAttribute("aria-controls");
   if (!id) throw new Error("The product select has no listbox identity");
-  if (await control.getAttribute("aria-expanded") !== "true") await control.click();
+  if (await control.getAttribute("aria-expanded") !== "true") await control.click({ timeout: 1_000 });
   const panel = control.page().locator(`[role="listbox"][id="${quote(id)}"]`);
-  await expect(panel).toBeVisible();
+  await expect(panel).toBeVisible({ timeout: 1_000 });
   return panel;
 }
 
-async function choose(control: Locator, panel: Locator, option: Locator, label?: string | RegExp): Promise<void> {
-  await expect(option).toHaveCount(1);
-  await expect(option).toBeEnabled();
-  // Sapid renders a decorative selected check separately from this label.
-  // Match the public accessible choice, not its indicator or description.
-  const name = label ?? await option.getAttribute("aria-label");
-  expect(name, "the product option must expose its accessible label").toBeTruthy();
-  await expect(option).toHaveAccessibleName(name!);
-  await option.click();
-  await expect(panel).toBeHidden();
-  await expect(control).toContainText(name!);
+async function choose(
+  scope: Locator, resolve: (panel: Locator, trigger: Locator) => Locator | Promise<Locator>,
+  label?: string | RegExp,
+): Promise<void> {
+  let selected: { panel: Locator; name: string | RegExp } | undefined;
+  // A frame can retire a menu before activation. Reacquire this local choice.
+  // Keep post-activation checks outside the retry to expose lost user edits.
+  await expect(async () => {
+    const trigger = await control(scope);
+    const panel = await open(trigger);
+    const option = await resolve(panel, trigger);
+    await expect(option).toHaveCount(1, { timeout: 1_000 });
+    await expect(option).toBeEnabled({ timeout: 1_000 });
+    const name = label ?? await option.getAttribute("aria-label");
+    expect(name, "the product option must expose its accessible label").toBeTruthy();
+    await expect(option).toHaveAccessibleName(name!, { timeout: 1_000 });
+    await option.click({ timeout: 1_000 });
+    selected = { panel, name: name! };
+  }).toPass({ timeout: 30_000, intervals: [100, 250, 500] });
+  expect(selected).toBeDefined();
+  await expect(selected!.panel).toBeHidden();
+  await expect(await control(scope)).toContainText(selected!.name);
 }
 
 /** Select an actual public option key; field wrappers and native controls are supported. */
@@ -41,14 +52,16 @@ export async function selectProductOptionByKey(scope: Locator, value: string): P
     await trigger.selectOption(value);
     return;
   }
-  const panel = await open(trigger);
-  const id = await trigger.getAttribute("aria-controls");
-  const suffix = "-listbox-4_root";
-  if (!id?.startsWith("sapid-select-") || !id.endsWith(suffix) || !/^[\x21-\x7e]{1,64}$/.test(value)) {
-    throw new Error("The Sapid option key has no exact semantic identity");
-  }
-  const optionId = `${id.slice(0, -suffix.length)}-option-${value.length}_${value}`;
-  await choose(trigger, panel, panel.locator(`[role="option"][id="${quote(optionId)}"][data-gly-option-owner="${quote(id)}"]`));
+  await choose(scope, async (panel, current) => {
+    const id = await current.getAttribute("aria-controls");
+    const suffix = "-listbox-4_root";
+    if (!id?.startsWith("sapid-select-") || !id.endsWith(suffix) || !/^[\x21-\x7e]{1,64}$/.test(value)) {
+      throw new Error("The Sapid option key has no exact semantic identity");
+    }
+    const optionId = id.slice(0, -suffix.length) + "-option-" + value.length + "_" + value;
+    return panel.locator('[role="option"][id="' + quote(optionId)
+      + '"][data-gly-option-owner="' + quote(id) + '"]');
+  });
 }
 
 /** Choose the visible label when the control owns opaque presentation keys. */
@@ -60,8 +73,7 @@ export async function selectProductOptionByLabel(scope: Locator, label: string |
     await trigger.selectOption({ label: (await option.innerText()).trim() });
     return;
   }
-  const panel = await open(trigger);
-  await choose(trigger, panel, panel.getByRole("option", { name: label, exact: true }), label);
+  await choose(scope, panel => panel.getByRole("option", { name: label, exact: true }), label);
 }
 
 export async function selectProductOptionByReference(scope: Locator, reference: string): Promise<void> {

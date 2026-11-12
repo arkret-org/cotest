@@ -1,4 +1,5 @@
-import { expectPlaintextMessage } from "../../helpers/message-evidence";
+import { expectPlaintextMessage, renderedMessageId } from "../../helpers/message-evidence";
+import { revealTimelineEvent } from "../../helpers/timeline-visibility";
 import { openCardMembers } from "../../helpers/kanban-product-ui";
 import { accountActorId } from "../../helpers/coland-api";
 import { agentMemberRow } from "../../helpers/product-locators";
@@ -110,21 +111,52 @@ test.describe("Private accepted readback real UI @fully-implemented", () => {
           original_discussion_fold_matches: true, writes_reauthored: 0 })) });
       // A cold page must obtain a fresh baseline; restored data is never an allow ticket.
       await hints.restore();
+      await page.bringToFront();
       await page.reload();
       const reopened = page.locator(".card-detail-modal");
       await expect(reopened).toBeVisible({ timeout: 180_000 });
+      const discussion = reopened.getByRole("tab", { name: "Discussion", exact: true });
+      await discussion.click();
+      await expect(discussion).toHaveAttribute("aria-selected", "true");
+      const feed = reopened.locator(".card-discussion-panel .message-list:visible");
+      await expect(feed).toHaveCount(1);
+      await expect.poll(() => feed.evaluate(element => element.clientHeight), {
+        timeout: 30_000, message: "the selected discussion has a usable visible viewport",
+      }).toBeGreaterThan(0);
       for (const exchange of exchanges) {
-        await expect(reopened.locator(".chat-message").filter({ hasText: exchange.prompt })).toBeVisible({ timeout: 120_000 });
+        const prompt = reopened.locator("#" + renderedMessageId(exchange.request));
+        await revealTimelineEvent(page, prompt, 120_000, feed);
+        await expect(prompt).toHaveCount(1);
+        await expectPlaintextMessage(prompt, { timeout: 120_000 });
+        await expect(prompt).toContainText(exchange.prompt);
+        expect(await eventIdFromMessage(prompt)).toBe(exchange.request);
+        const reply = reopened.locator("#" + renderedMessageId(exchange.response));
+        await revealTimelineEvent(page, reply, 120_000, feed);
+        await expect(reply).toHaveCount(1);
+        await expectPlaintextMessage(reply, { timeout: 120_000 });
+        await expect(reply.locator(".content-block-text").filter({ hasText: /^pong(?:\r?\n|$)/ })).toHaveCount(1);
+        await expect(reply.locator(".member-badge-agent")).toBeVisible();
+        await expect(reply.locator(".message-private-sidecar-badge")).toBeVisible();
+        expect(await eventIdFromMessage(reply)).toBe(exchange.response);
         await assertFold(page, realm, exchange.request, exchange.response);
       }
-      await expect(reopened.locator(".chat-message").filter({ has:
-        page.locator(".content-block-text").filter({ hasText: /^pong(?:\r?\n|$)/ }) })).toHaveCount(3);
       expect(submissions.size).toBe(3);
       expect([...submissions.values()]).toEqual([1, 1, 1]);
       await info.attach("private-cold-reload-evidence", { contentType: "application/json",
         body: Buffer.from(JSON.stringify({ fresh_baseline: true, retained_exchanges: 3, duplicate_writes: 0 })) });
       console.info("[private-readback-ui] real reload restored all three exchanges without duplicate writes");
     } finally {
+      const layout = await page.locator(".card-detail-modal").evaluateAll(nodes => nodes.map(node => ({
+        discussion_selected: node.querySelector(".card-detail-tab-discussion")?.getAttribute("aria-selected") === "true",
+        feeds: Array.from(node.querySelectorAll<HTMLElement>(".message-list")).map(feed => ({
+          height: feed.clientHeight, scroll_height: feed.scrollHeight, scroll_top: feed.scrollTop,
+          mounted_rows: feed.querySelectorAll(".chat-message").length,
+          pending_rows: feed.querySelectorAll(".chat-message.is-crypto-pending").length,
+        })),
+      }))).catch(() => []);
+      await info.attach("private-cold-public-layout", {
+        contentType: "application/json", body: JSON.stringify(layout),
+      });
       const projection = await page.evaluate(() => {
         const hook = (window as unknown as Record<string, unknown>).__inkson_sidecar_fold_evidence_v1;
         const config = JSON.parse(localStorage.getItem("inkson.config.v1") ?? "{}");
@@ -135,13 +167,16 @@ test.describe("Private accepted readback real UI @fully-implemented", () => {
         const privateIds = new Set(exchanges.flatMap((entry: { projection: {
           private_request_event_id: string; user_facing_response_event_ids: string[];
         } }) => [entry.projection.private_request_event_id, ...entry.projection.user_facing_response_event_ids]));
-        return { available: !fold.error, real_active_account: Boolean(config.active_account),
+        return { available: !fold.error,
+          fold_error: typeof fold.error === "string" ? fold.error : undefined,
+          real_active_account: Boolean(config.active_account),
           exchanges: exchanges.length,
           replies: exchanges.reduce((sum: number, entry: { projection: { user_facing_response_event_ids: string[] } }) =>
             sum + entry.projection.user_facing_response_event_ids.length, 0),
           private_anchor_count: exchanges.filter((entry: { projection: { source_event_id?: string } }) =>
             privateIds.has(entry.projection.source_event_id)).length };
       }).catch(() => ({ available: false }));
+      console.info("[private-readback-ui] final projection", JSON.stringify(projection));
       await info.attach("private-readback-final-stage", { contentType: "application/json",
         body: Buffer.from(JSON.stringify({ ...hints.observations(), ...projection,
           private_requests_submitted: submissions.size,

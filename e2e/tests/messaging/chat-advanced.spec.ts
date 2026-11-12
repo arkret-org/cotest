@@ -38,7 +38,7 @@ import {
   signedEventEnvelope,
   submitSignedEventApi,
 } from "../../helpers/coland-api";
-import { addRealmMlsMemberApi, encryptMlsMessageContent, realmMlsCreatorGroupApi } from "../../helpers/coland-api/mls";
+import { addRealmMlsMemberApi } from "../../helpers/coland-api/mls";
 import {
   assertJointStackNotRequired,
   ensureRegistered,
@@ -1020,7 +1020,13 @@ test.describe("chat advanced", () => {
       await expect(poll.locator(".poll-state")).toContainText(/closed/i, {
         timeout: 30_000,
       });
-      await expect(poll.locator(".poll-option")).toHaveCount(0);
+      for (const label of [optionA, optionB]) {
+        await expect(poll.getByRole("button", { name: label, exact: true })).toHaveCount(0);
+      }
+      await expect(poll.locator(".poll-result-row").filter({ hasText: optionA })
+        .locator(".poll-vote-count")).toHaveText("0");
+      await expect(poll.locator(".poll-result-row").filter({ hasText: optionB })
+        .locator(".poll-vote-count")).toHaveText("2");
       await stepShot(alicePage.page, testInfo, "poll-closed");
     } finally {
       await Promise.allSettled([

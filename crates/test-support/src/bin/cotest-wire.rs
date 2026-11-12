@@ -40,7 +40,6 @@ fn main() -> Result<()> {
         "mls-welcome-delivery" => mls_wire::mls_welcome_delivery(input)?,
         "mls-install-commit" => mls_wire::mls_install_commit(input)?,
         "mls-join-welcome" => mls_wire::mls_join_welcome(input)?,
-        "mls-encrypt-message" => mls_wire::mls_encrypt_message(input)?,
         "mls-encrypt-signal" => mls_wire::mls_encrypt_signal(input)?,
         "mls-open-signals" => mls_wire::mls_open_signals(input)?,
         "principal-control-realm-id" => wire::principal_control_realm(input)?,

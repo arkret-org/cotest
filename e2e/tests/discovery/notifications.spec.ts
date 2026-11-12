@@ -18,10 +18,10 @@ import {
 } from "../../helpers/coland-api";
 import {
   addRealmMlsMemberApi,
-  encryptMlsMessageContent,
   readScopeMlsGroupCurrentApi,
   realmMlsCreatorGroupApi,
 } from "../../helpers/coland-api/mls";
+import { sealNativeContentMessage } from "../../helpers/native-content-custody";
 import {
   approvePairingLinkOnAuthorizedDevice,
   assertJointStackNotRequired,
@@ -510,20 +510,21 @@ test.describe("notifications", () => {
     const aliceGroup = await realmMlsCreatorGroupApi(request, realmId);
     expect(aliceGroup.groupStateRef).toBe(mlsGroup.current_mls_commit_event_ref);
     expect(aliceGroup.epoch).toBe(mlsGroup.epoch);
-    const encrypted = signedEventEnvelope({
+    const draft = signedEventEnvelope({
       actorId: alice.id,
-      realmId: realmId,
+      realmId,
       kind: "ak.message.create",
       payload: {
         strand_id: strandId,
         track_name: "discussion",
-        encrypted_content: encryptMlsMessageContent(aliceGroup, {
-          kind: "ak.content.text",
-          body: plaintext,
-          format: "plain",
-        }),
+        content: { kind: "ak.content.text", body: plaintext, format: "plain" },
       },
     });
+    const sealed = await sealNativeContentMessage(
+      aliceToken, aliceGroup.groupState, aliceGroup.groupStateRef, draft,
+    );
+    aliceGroup.groupState = sealed.groupState;
+    const encrypted = sealed.event;
     await submitSignedEventApi(request, aliceToken, encrypted, {
       context: "encrypted message with blind wake sidecar",
     });

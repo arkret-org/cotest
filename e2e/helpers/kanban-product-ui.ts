@@ -25,9 +25,11 @@ export async function openCardMembers(detail: Locator): Promise<void> {
 /** Observe the bound empty-title validation before preparing the original intent. */
 export async function prepareBoardTitle(page: Page, title: string, timeout = 120_000): Promise<void> {
   const draft = page.locator(".board-create-popover .new-board-title-input :is(input,textarea)");
-  await draft.fill("", { timeout });
-  await page.locator(".create-board-space-button").click({ timeout });
-  await expect(page.locator(".board-status")).toHaveText("board title is required", { timeout });
+  await expect(async () => {
+    await draft.fill("", { timeout: 3_000 });
+    await page.locator(".create-board-space-button").click({ timeout: 3_000 });
+    await expect(page.locator(".board-status")).toHaveText("board title is required", { timeout: 1_000 });
+  }).toPass({ timeout, intervals: [250, 500, 1_000] });
   await draft.fill(title, { timeout });
   await expect(draft).toHaveValue(title, { timeout });
 }

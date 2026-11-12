@@ -1,4 +1,4 @@
-import { boardSwitcher, newBoardTrigger, addBoardList, fillCardNarrative } from "../../helpers/kanban-product-ui";
+import { boardSwitcher, newBoardTrigger, addBoardList, fillCardNarrative, submitBoardCardDraft } from "../../helpers/kanban-product-ui";
 // Sprint planning workflow — tech lead + two engineers commit to stories
 // Contract: e2e/scenarios/workflows/sprint-planning.md
 // Spec refs:
@@ -243,8 +243,7 @@ test.describe("workflow: sprint planning", () => {
       // after Save so consecutive cards can be entered without reopening it.
       await backlogColumn.locator(".add-card-button").click();
       for (const story of stories) {
-        await backlogColumn.locator(".new-card-title-input").fill(story);
-        await backlogColumn.locator(".save-card-button").click();
+        await submitBoardCardDraft(backlogColumn, story);
         await expect(
           backlogColumn.locator(".kanban-card").filter({ hasText: story }),
         ).toBeVisible({ timeout: 30_000 });
@@ -615,9 +614,8 @@ test.describe("workflow: sprint planning", () => {
       const cardTitleInput = backlogColumn.locator(".new-card-title-input");
       // M1 continuous create retains the composer and clears it after Save.
       for (const card of cards) {
+        await submitBoardCardDraft(backlogColumn, card);
         await expect(cardTitleInput).toBeVisible();
-        await cardTitleInput.fill(card);
-        await backlogColumn.locator(".save-card-button").click();
         await expect(cardTitleInput).toHaveValue("");
         const cardLocator = backlogColumn
           .locator(".kanban-card")

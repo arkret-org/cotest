@@ -1861,6 +1861,7 @@ dependencies = [
  "argon2 0.5.3",
  "arkret-auth",
  "arkret-canonical",
+ "arkret-crypto",
  "arkret-deployment-contracts",
  "arkret-egress-reqwest",
  "arkret-http-client",

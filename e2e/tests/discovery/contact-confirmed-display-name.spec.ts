@@ -178,6 +178,12 @@ test.describe("contact confirmed display name", () => {
         await bobRow.click();
         await expect(alicePage.page).toHaveURL(/\/direct\/ak:realm:.*\/ak:strand:/, { timeout: 180_000 });
         expect(new URL(alicePage.page.url()).pathname).toBe(new URL(bobPage.page.url()).pathname);
+        expect(aliceSession.session.recoveryKey).toBeTruthy();
+        expect(bobSession.recoveryKey).toBeTruthy();
+        await Promise.all([
+          alicePage.completeMlsAccountRecoveryIfPrompted(aliceSession.session.recoveryKey!),
+          bobPage.completeMlsAccountRecoveryIfPrompted(bobSession.recoveryKey!),
+        ]);
         await expect.poll(async () =>
           (await contactRow(request, aliceToken, bob.id))?.direct_conversation,
         { timeout: 90_000, intervals: [500, 1_000, 2_000] }).toMatchObject({

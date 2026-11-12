@@ -414,21 +414,8 @@ test.describe("contact graph federation (server1/server2)", () => {
       const [, , encodedRealmId, encodedStrandId] = bobPath.split("/");
       const realmId = decodeURIComponent(encodedRealmId);
       const strandId = decodeURIComponent(encodedStrandId);
-
-      await expect
-        .poll(
-          async () => {
-            const row = await contactRow(
-              request,
-              aliceToken,
-              bob.id,
-              { server: "server1" },
-            );
-            return row?.direct_conversation;
-          },
-          { timeout: 90_000, intervals: [500, 1_000, 2_000, 5_000] },
-        )
-        .toMatchObject({ realm_id: realmId, main_strand_id: strandId });
+      expect(bobFlow.session.recoveryKey).toBeTruthy();
+      await bobPage.completeMlsAccountRecoveryIfPrompted(bobFlow.session.recoveryKey!);
 
       await alicePage.gotoHome();
       await alicePage.page.getByRole("link", { name: "Contacts", exact: true }).click();
@@ -441,6 +428,12 @@ test.describe("contact graph federation (server1/server2)", () => {
           `/direct/${realmId}/${strandId}`,
         );
       }).toPass({ timeout: 120_000, intervals: [2_000] });
+      expect(aliceFlow.session.recoveryKey).toBeTruthy();
+      await alicePage.completeMlsAccountRecoveryIfPrompted(aliceFlow.session.recoveryKey!);
+      await expect.poll(async () =>
+        (await contactRow(request, aliceToken, bob.id, { server: "server1" }))?.direct_conversation,
+      { timeout: 90_000, intervals: [500, 1_000, 2_000, 5_000] })
+        .toMatchObject({ realm_id: realmId, main_strand_id: strandId });
 
       const aliceMessage = `cross-ps alice ${Date.now()}`;
       await sendCrossStationEncrypted(alicePage, aliceFlow.session.recoveryKey, aliceMessage);

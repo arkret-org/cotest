@@ -273,13 +273,30 @@ async function runReliefProject(admission: "concurrent" | "late-welcome", browse
     await alice.page.page.locator(".cap-grant-subject-input input").fill(canonicalJson({ principal_id: bob.user.id, station_id: colandServiceId("server2") }));
     const revoked = await admitted(alice.page.page, "ak.capability.revoke", realm, () => alice.page.page.locator(".cap-revoke-submit-button").click());
     expect(revoked.payload?.grant_id).toBe(bobGrant);
-    const refusal = bob.page.page.waitForResponse(response => response.request().method() === "POST"
-      && new URL(response.url()).pathname === "/_arkret/self/events"
-      && decodeIngressEvents(response.request().postData()).some(event => event.event_id === heldEvent!.event_id), { timeout: 120_000 });
+    let sourceCutRetries = 0;
+    const refusal = bob.page.page.waitForResponse(async response => {
+      if (response.request().method() !== "POST"
+        || new URL(response.url()).pathname !== "/_arkret/self/events"
+        || !decodeIngressEvents(response.request().postData()).some(event => event.event_id === heldEvent!.event_id)) return false;
+      if (response.status() !== 503) return true;
+      // The origin can chase the revocation while rebinding public MLS
+      // evidence under its source lock. Only registered zero-write temporary
+      // unavailability may precede the actual current-capability decision.
+      const problem = await response.json();
+      expect(wireErrCode(problem)).toBe("temporarily_unavailable");
+      expect(problem.commit === undefined && problem.commits === undefined).toBe(true);
+      sourceCutRetries++;
+      return false;
+    }, { timeout: 120_000 });
     releaseHeld!(true);
     const denied = await refusal;
     expect(denied.status()).toBe(403);
     expect(wireErrCode(await denied.json())).toBe("capability_denied");
+    await testInfo.attach("relief-origin-cut-retries", {
+      contentType: "application/json", body: JSON.stringify({ retryable_source_cut_responses: sourceCutRetries }),
+    });
+    expect(new Set(bobMessages.filter(event => event.event_id === heldEvent!.event_id)
+      .map(event => event.digest)).size, "revocation retries keep the original signed Event").toBe(1);
     await alice.page.gotoTimelineRealm(realm);
     const afterRevoke = `Coordinator publishes the final route; logistics now has read-only access. ${stamp}`;
     await observedDelivery(alice, flows, realm, afterRevoke);
