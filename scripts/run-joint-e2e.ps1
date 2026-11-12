@@ -6924,7 +6924,7 @@ foreach ($directory in Get-ChildItem -LiteralPath $jointDir -Directory -ErrorAct
     }
 }
 foreach ($file in Get-ChildItem -LiteralPath $jointDir -File -ErrorAction SilentlyContinue) {
-    if ($file.Name -match '(?i)(\.log$|\.ndjson$|crash|checkpoint|telemetry)') {
+    if ($file.Name -in @('junit.xml', 'failures.json') -or $file.Name -match '(?i)(\.log$|\.ndjson$|crash|checkpoint|telemetry)') {
         $secretScanRoots.Add($file.FullName)
     }
 }

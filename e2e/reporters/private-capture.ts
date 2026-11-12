@@ -7,6 +7,18 @@ import type { FullConfig, Reporter, TestCase, TestError, TestResult, TestStep } 
 // Strip signed request header values before list, JUnit or HTML can copy them.
 const signedHeaderLine = /^((?:[ \t]|\x1b\[[0-9;]*m)*(?:[-+][ \t]+)?)(?:(authorization)[ \t]*:[ \t]*(?:bearer|dpop)[ \t]+|dpop[ \t]*:[ \t]*)[^\s\x1b]+/gim;
 
+// Matcher descriptions can become HTML step titles even when they pass.
+// Never export a full signed protocol response used as a custom description.
+const privateJsonFields = "authorization|access_token|token|push_key|invite_token|oob_code|token_salt|code_salt|pepper|signing_seed|signed_link|jws|signature|password|secret|secret_base64url|private_key|seed|mnemonic|recovery_key|recovery_phrase|recovery_secret|root_seed|root_private_key|hkdf_prk|prk|credential|plaintext_keybag|keybag_secret|mls_secret|epoch_secret|application_secret|confirmation_key|membership_key|init_secret|joiner_secret|welcome_secret|private_state";
+const privateJsonField = new RegExp(`"(?:${privateJsonFields})"\\s*:`, "i");
+const privateJsonValue = new RegExp(`("(?:${privateJsonFields})"\\s*:\\s*)(?:"(?:\\\\.|[^"\\\\])*"|\\[(?:\\s*\\d+\\s*,?)*\\])`, "gi");
+
+function protectDiagnosticText(value: string): string {
+  return value.replace(signedHeaderLine, (_header, prefix, authorization) =>
+    `${prefix}[${authorization ? "Authorization" : "DPoP"} header omitted]`)
+    .replace(privateJsonValue, '$1"[redacted]"');
+}
+
 function protectTransportError(error: TestError | undefined) {
   const seen = new Set<TestError>();
   for (let entry = error; entry && !seen.has(entry); entry = entry.cause) {
@@ -14,8 +26,7 @@ function protectTransportError(error: TestError | undefined) {
     for (const key of ["message", "stack", "value", "snippet"] as const) {
       const value = entry[key];
       if (value !== undefined) {
-        entry[key] = value.replace(signedHeaderLine, (_header, prefix, authorization) =>
-          `${prefix}[${authorization ? "Authorization" : "DPoP"} header omitted]`);
+        entry[key] = protectDiagnosticText(value);
       }
     }
   }
@@ -39,6 +50,10 @@ export default class PrivateCaptureReporter implements Reporter {
     // The native HTML reporter copies titles at step begin. Input values can
     // contain recovery material even when the later DOM snapshot is discarded.
     // Keep the action and source location without exporting its entered value.
+    if (privateJsonField.test(step.title)) {
+      step.title = `${step.category} step [private parameters omitted]`;
+      return;
+    }
     if (step.category !== "pw:api") return;
     const input = /^(Fill|Type|Insert) "/.exec(step.title);
     if (input) step.title = `${input[1]} input [value omitted]`;
@@ -81,7 +96,7 @@ export default class PrivateCaptureReporter implements Reporter {
     mkdirSync(this.options.outputFolder, { recursive: true });
     writeFileSync(path.join(this.options.outputFolder, "private-capture-receipts.json"), JSON.stringify({
       disposed: this.receipts, rejected_attachments: this.failures,
-      boundary: "Discard automatic page context and redact signed request header values before retained report export. Preserve assertion outcomes and source locations.",
+      boundary: "Discard automatic page context and omit private step parameters, signed header values and secret JSON values before retained report export. Preserve assertion outcomes and source locations.",
     }, null, 2) + "\n");
     if (this.failures) return { status: "failed" as const };
   }

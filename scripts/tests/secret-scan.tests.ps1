@@ -413,6 +413,25 @@ try {
     $embeddedRedaction = Protect-SecretBearingArtifacts -Leaks $embeddedLeaks
     Assert-True (@($embeddedRedaction.not_redacted).Count -gt 0) 'encoded archives require explicit whole-capture disposal, not a claimed partial redaction'
     Assert-True ((Get-FileHash -LiteralPath $embeddedReport -Algorithm SHA256).Hash -ceq $embeddedHash) 'report the original encoded capture unchanged until whole-capture disposal'
+    # Assertions are JSON strings in native HTML and XML-escaped JUnit attributes.
+    $escapedAssertion = 'Error: expected empty failures; received {"signature":"synthetic-report-signature-AAAABBBB"}'
+    $jsonAssertionPath = Join-Path $harRoot 'assertion.json'
+    @{ errors = @(@{ message = $escapedAssertion }) } | ConvertTo-Json -Depth 10 | Set-Content -LiteralPath $jsonAssertionPath
+    $xmlAssertionPath = Join-Path $harRoot 'junit.xml'
+    $xmlMessage = [Security.SecurityElement]::Escape($escapedAssertion)
+    Set-Content -LiteralPath $xmlAssertionPath -Value "<testsuites><testsuite tests='1' failures='1'><testcase name='preserved'><failure message='$xmlMessage'>failure retained</failure></testcase></testsuite></testsuites>"
+    foreach ($reportPath in @($jsonAssertionPath, $xmlAssertionPath)) {
+        $reportLeaks = @(Find-SecretLeaks -ScanRoots @($reportPath))
+        Assert-True (@($reportLeaks | Where-Object { $_.pattern -eq 'json_secret_field' -and $_.verdict -eq 'fail' }).Count -gt 0) 'decoded assertion values must retain the strict report verdict'
+        Assert-True (-not (($reportLeaks.preview -join "`n").Contains('synthetic-report-signature-AAAABBBB'))) 'decoded report previews must withhold synthetic signature values'
+    }
+    $assertionArchive = Join-Path $harRoot 'assertion-report.zip'
+    Compress-Archive -LiteralPath $jsonAssertionPath -DestinationPath $assertionArchive
+    $assertionBase64 = [Convert]::ToBase64String([IO.File]::ReadAllBytes($assertionArchive))
+    $assertionHtml = Join-Path $harRoot 'assertion-report.html'
+    Set-Content -LiteralPath $assertionHtml -Value "<script>window.playwrightReportBase64 = 'data:application/zip;base64,$assertionBase64';</script>"
+    Assert-True (@(Find-SecretLeaks -ScanRoots @($assertionHtml) | Where-Object { $_.pattern -eq 'json_secret_field' -and $_.verdict -eq 'fail' }).Count -gt 0) 'native HTML must decode error message strings inside embedded JSON'
+
     $unknownEmbeddedReport = Join-Path $harRoot 'unknown-report-format.html'
     Set-Content -LiteralPath $unknownEmbeddedReport -Value '<script>window.playwrightReportBase64 = "unknown-format";</script>'
     Assert-True (@(Find-SecretLeaks -ScanRoots @($unknownEmbeddedReport) | Where-Object pattern -eq 'uninspectable_embedded_report').Count -gt 0) 'a changed or incomplete encoded report format must fail closed'

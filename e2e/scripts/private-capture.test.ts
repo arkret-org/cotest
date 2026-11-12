@@ -25,3 +25,23 @@ test("a caught route transport error cannot export its signed headers in Playwri
   assert.equal(stepError.location, location);
   assert.equal(testError.message, "Agent provisioning failed");
 });
+
+test("successful matcher descriptions cannot export signed protocol objects into native HTML step titles", () => {
+  const reporter = new PrivateCaptureReporter({ outputFolder: "unused" });
+  const location = { file: "capture.spec.ts", line: 1, column: 1 };
+  const step = { category: "expect", title: JSON.stringify({ jws: "synthetic-private-step-jws" }), location } as TestStep;
+  reporter.onStepBegin({} as TestCase, {} as TestResult, step);
+  assert.equal(step.title, "expect step [private parameters omitted]");
+  assert.equal(step.location, location);
+});
+
+test("failing matcher values retain failure locations without signature or private scalar bytes", () => {
+  const reporter = new PrivateCaptureReporter({ outputFolder: "unused" });
+  const location = { file: "capture.spec.ts", line: 2, column: 1 };
+  const error = { message: 'expect(received).toEqual(expected)\n+ "signature": "synthetic-private-error-signature"\n+ "seed": [1, 2, 3]', location };
+  reporter.onError(error);
+  assert.match(error.message, /expect\(received\)\.toEqual\(expected\)/);
+  assert.match(error.message, /"signature": "\[redacted\]"/);
+  assert.match(error.message, /"seed": "\[redacted\]"/);
+  assert.equal(error.location, location);
+});
