@@ -9,7 +9,7 @@ const signedHeaderLine = /^((?:[ \t]|\x1b\[[0-9;]*m)*(?:[-+][ \t]+)?)(?:(authori
 
 // Matcher descriptions can become HTML step titles even when they pass.
 // Never export a full signed protocol response used as a custom description.
-const privateJsonFields = "authorization|access_token|token|push_key|invite_token|oob_code|token_salt|code_salt|pepper|signing_seed|signed_link|jws|signature|password|secret|secret_base64url|private_key|seed|mnemonic|recovery_key|recovery_phrase|recovery_secret|root_seed|root_private_key|hkdf_prk|prk|credential|plaintext_keybag|keybag_secret|mls_secret|epoch_secret|application_secret|confirmation_key|membership_key|init_secret|joiner_secret|welcome_secret|private_state";
+const privateJsonFields = "authorization|access_token|token|push_key|invite_token|oob_code|token_salt|code_salt|pepper|signing_seed|signed_link|jws|signature|password|secret|secret_base64url|private_key|private_key_base64url|content_backup_private_key_b64url|privateKeyB64url|seed|mnemonic|recovery_key|recovery_phrase|recovery_secret|root_seed|root_private_key|hkdf_prk|prk|credential|plaintext_keybag|keybag_secret|mls_secret|epoch_secret|application_secret|confirmation_key|membership_key|init_secret|joiner_secret|welcome_secret|private_state";
 const privateJsonField = new RegExp(`"(?:${privateJsonFields})"\\s*:`, "i");
 const privateJsonValue = new RegExp(`("(?:${privateJsonFields})"\\s*:\\s*)(?:"(?:\\\\.|[^"\\\\])*"|\\[(?:\\s*\\d+\\s*,?)*\\])`, "gi");
 

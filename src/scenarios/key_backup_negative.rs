@@ -242,6 +242,7 @@ fn backup_body(
     let (signing_seed, verification_method) =
         crate::harness::event_signing_identity_for_device(&actor.actor, device_id);
     let mut backup = KeyBackup {
+        auth_binding: None,
         custodian_actor_id: None,
         custody_authorization_ref: None,
 

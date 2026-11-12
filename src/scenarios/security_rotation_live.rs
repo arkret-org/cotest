@@ -184,6 +184,7 @@ impl RotationAuthor {
         seed: [u8; 32],
     ) -> Result<KeyBackup> {
         let mut envelope = KeyBackup {
+            auth_binding: None,
             custodian_actor_id: None,
             custody_authorization_ref: None,
 

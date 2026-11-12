@@ -11,6 +11,7 @@ import {
   type KeyObject,
 } from "node:crypto";
 import { uint64Value } from "../../helpers/uint64-decimal";
+import { realmActorArchiveCustody } from "../../helpers/realm-actor-archive-custody";
 import { encodeEd25519PubkeyMultibase, ed25519PrivateKeySeedB64url } from "../../helpers/encoding";
 import {
   expect,
@@ -288,9 +289,15 @@ function capabilityGrantRefForAction(
 
 type ManagedActorId = Extract<ActorId, { kind: "realm" }>;
 
-type RealmActorIdentity = BuiltWebvhGenesis & { control_seed_b64url: string };
+type RealmActorIdentity = BuiltWebvhGenesis & {
+  control_seed_b64url: string;
+  content_backup_private_key_b64url: string;
+};
 
 function buildRealmActorIdentity(baseUrl: string, localId: string): RealmActorIdentity {
+  // The manager's independent archive key is already durable/read back before
+  // its public key can enter inception, SCID, or the later creation transcript.
+  const archive = realmActorArchiveCustody(baseUrl, localId);
   const root = generateWebvhKey();
   const next = generateWebvhKey();
   const control = generateWebvhKey();
@@ -301,8 +308,10 @@ function buildRealmActorIdentity(baseUrl: string, localId: string): RealmActorId
       root_seed_b64url: ed25519PrivateKeySeedB64url(root.privateKey),
       next_root_public_key_multibase: next.multibase,
       control_seed_b64url: controlSeed, version_created_at: canonicalTimestamp(),
+      content_backup_private_key_b64url: archive.privateKeyB64url,
     }),
     control_seed_b64url: controlSeed,
+    content_backup_private_key_b64url: archive.privateKeyB64url,
   };
 }
 
@@ -2345,7 +2354,7 @@ async function provisionAppletBot(request: APIRequestContext,signed: SignedPacka
     if (!botOperation) throw new Error("Independent Bot provision requires its own identity material");
     const material = await request.post(`${authorBaseUrl}/inspect/bot-authoring-material`, {
       data: {applet_id:signed.applet_package.applet_id,effective_scope:previewBody.effective_scope,request_id:previewBody.request_id,
-        material:{inception:{did:botOperation.did,scid:botOperation.scid,versionId:botOperation.versionId,entry:botOperation.entry,didDocument:botOperation.didDocument},control_seed_b64url:botOperation.control_seed_b64url,request_id:previewBody.request_id}},
+        material:{inception:{did:botOperation.did,scid:botOperation.scid,versionId:botOperation.versionId,entry:botOperation.entry,didDocument:botOperation.didDocument},control_seed_b64url:botOperation.control_seed_b64url,content_backup_private_key_b64url:botOperation.content_backup_private_key_b64url,request_id:previewBody.request_id}},
     });
     expect(material.status(), await material.text()).toBe(200);
     const authorRequestOptions = {
@@ -2829,6 +2838,7 @@ async function buildGhostManagedActorCreation(args: {
       material: {
         inception:{did:args.ghostBuilt.did,scid:args.ghostBuilt.scid,versionId:args.ghostBuilt.versionId,entry:args.ghostBuilt.entry,didDocument:args.ghostBuilt.didDocument},
         control_seed_b64url:args.ghostBuilt.control_seed_b64url,
+        content_backup_private_key_b64url:args.ghostBuilt.content_backup_private_key_b64url,
         request_id:typedId("operation").split(":").at(-1)!,
       },
     },

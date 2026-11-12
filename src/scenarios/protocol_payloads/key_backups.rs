@@ -111,6 +111,7 @@ fn signed_backup_envelope(
     );
     let created_at = ts("2026-04-26T00:00:00.000Z")?;
     let mut envelope = KeyBackup {
+        auth_binding: None,
         custodian_actor_id: None,
         custody_authorization_ref: None,
 

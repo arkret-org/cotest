@@ -45,3 +45,22 @@ test("failing matcher values retain failure locations without signature or priva
   assert.match(error.message, /"seed": "\[redacted\]"/);
   assert.equal(error.location, location);
 });
+
+test("archive private fixture inputs cannot enter step titles or error diagnostics", () => {
+  const reporter = new PrivateCaptureReporter({ outputFolder: "unused" });
+  const location = { file: "applet-bridge.spec.ts", line: 1, column: 1 };
+  for (const field of ["content_backup_private_key_b64url", "privateKeyB64url", "private_key_base64url"]) {
+    const secret = "synthetic-archive-private-key-not-for-reporting";
+    const payload = JSON.stringify({ [field]: secret });
+    const step = { category: "expect", title: payload, location } as TestStep;
+    const error = { message: `native fixture failed: ${payload}`, stack: payload, location };
+    reporter.onStepBegin({} as TestCase, {} as TestResult, step);
+    reporter.onError(error);
+    assert.equal(step.title, "expect step [private parameters omitted]");
+    assert.match(error.message, /native fixture failed/);
+    assert.match(error.message, /\[redacted\]/);
+    assert.ok(!error.message.includes(secret) && !error.stack.includes(secret));
+    assert.equal(step.location, location);
+    assert.equal(error.location, location);
+  }
+});

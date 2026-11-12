@@ -196,6 +196,7 @@ fn rotation_plan(
     let principal_id = arkret_wire::project_did_to_core_id(principal)?;
     let device_id = DeviceId::new(device_id.to_owned())?;
     let mut envelope = KeyBackup {
+        auth_binding: None,
         custodian_actor_id: None,
         custody_authorization_ref: None,
 
