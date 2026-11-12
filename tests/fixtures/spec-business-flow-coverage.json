@@ -231,7 +231,7 @@
           "path": "../coland/crates/server/tests/account_data_sync.rs",
           "markers": [
             "account_data",
-            "/_arkret/self/account_data/"
+            "/_arkret/self/account-data/"
           ]
         },
         {
@@ -597,7 +597,7 @@
           "path": "../coland/crates/server/tests/http_api/device_message_send_admission.rs",
           "markers": [
             "fn device_message_outside_the_enqueue_window_is_refused_with_zero_writes",
-            "/_arkret/self/device_messages"
+            "/_arkret/self/device-messages"
           ]
         },
         {
@@ -612,8 +612,8 @@
           "kind": "joint_e2e",
           "path": "src/scenarios/invite_service_fanout_live.rs",
           "markers": [
-            "holder.get(\"/_arkret/self/device_messages\")",
-            ".post(\"/_arkret/self/device_messages/ack\")"
+            "holder.get(\"/_arkret/self/device-messages\")",
+            ".post(\"/_arkret/self/device-messages/ack\")"
           ]
         },
         {

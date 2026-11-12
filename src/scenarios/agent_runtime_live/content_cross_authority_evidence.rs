@@ -128,7 +128,7 @@ pub async fn run_agent_content_cross_authority_production()
     ensure!(acceptance_rows_with_agent_stores(&original_url, true).await? == before);
     ensure!(acceptance_rows_with_agent_stores(&successor_url, true).await? == incoming_before);
     expect_json(
-        scene.agent.runtime.get("/_arkret/self/device_messages"),
+        scene.agent.runtime.get("/_arkret/self/device-messages"),
         StatusCode::OK,
     )
     .await?;

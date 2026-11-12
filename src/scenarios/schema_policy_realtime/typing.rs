@@ -69,7 +69,7 @@ pub async fn typing_and_push_rules_strand_work() -> Result<()> {
         .context("Bob has a provisioned PCR")?
         .pcr_realm_id
         .to_string();
-    let path = "/_arkret/self/account_data/ak.push_rules";
+    let path = "/_arkret/self/account-data/ak.push_rules";
     let rules_written = bob
         .author_event(
             &pcr_realm_id,

@@ -108,6 +108,46 @@ pub async fn run() -> Result<()> {
                     && link.status == RealmLinkStatus::Active),
         "accepted relation was not listed"
     );
+    let query_before = realm_business_footprint(&database_url, &target).await?;
+    for (query, expected_count) in [
+        ("allowed_link_kinds=governed_by", 1),
+        ("allowed_link_kinds=mirror_of", 0),
+        ("allowed_link_kinds=governed_by,mirror_of", 1),
+    ] {
+        let filtered: RealmLinkList = serde_json::from_value(
+            expect_json(
+                bob.get(&format!("/_arkret/self/realms/{target}/links?{query}")),
+                StatusCode::OK,
+            )
+            .await?,
+        )?;
+        ensure!(
+            filtered.links.len() == expected_count
+                && filtered
+                    .links
+                    .iter()
+                    .all(|row| row.link_kind == RealmLinkKind::GovernedBy),
+            "canonical link-kind filter was ignored: {query}: {filtered:?}"
+        );
+    }
+    for query in [
+        "link_kind_allow=mirror_of",
+        "allowed_link_kinds=governed_by&link_kind_allow=mirror_of",
+        "allowed_link_kinds=governed_by&allowed_link_kinds=mirror_of",
+        "allowed_link_kinds=",
+        "allowed_link_kinds=unknown_kind",
+    ] {
+        crate::harness::expect_api_error(
+            bob.get(&format!("/_arkret/self/realms/{target}/links?{query}")),
+            StatusCode::BAD_REQUEST,
+            "query_invalid",
+        )
+        .await?;
+    }
+    ensure!(
+        realm_business_footprint(&database_url, &target).await? == query_before,
+        "read filters or rejected legacy queries changed Realm state"
+    );
     let mut target_before = realm_business_footprint(&database_url, &target).await?;
     let carol_device = "ak:device:01904100-0000-7000-8000-000000003413";
     let carol =

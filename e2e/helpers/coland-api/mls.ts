@@ -536,7 +536,7 @@ export async function joinRealmMlsWelcomeApi(
   if (!pending) {
     throw new Error(`no MLS Welcome was admitted for ${member.id} in ${realmId}`);
   }
-  const queueUrl = `${colandBaseUrl(member.server)}/_arkret/self/device_messages`;
+  const queueUrl = `${colandBaseUrl(member.server)}/_arkret/self/device-messages`;
   let welcome: Record<string, unknown> | undefined;
   let ackToken: string | undefined;
   await expect

@@ -839,7 +839,7 @@ pub fn run_agent_longevity_no_expiry_vector() -> Result<()> {
     // means non-expiring, revocation-governed (key-management.md §3.6.1).
     let payload = serde_json::json!({
         "agent_id": "ak:did_core:web:agent.example",
-        "key_id": "ak:agent_key:0199000000007000800000000000aa01",
+        "key_id": "runtime-key-1",
         "verification_method": "did:web:agent.example#runtime-key-1",
         "public_key": {
             "kty": "OKP", "algorithm": "Ed25519",

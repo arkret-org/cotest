@@ -326,7 +326,7 @@ pub async fn run_agent_repairing_production() -> Result<crate::conformance::Suit
     ensure!(
         agent
             .runtime
-            .get("/_arkret/self/device_messages")
+            .get("/_arkret/self/device-messages")
             .send()
             .await?
             .status()
@@ -475,7 +475,7 @@ pub async fn run_agent_repairing_production() -> Result<crate::conformance::Suit
     )?;
     ensure!(
         current
-            .get("/_arkret/self/device_messages")
+            .get("/_arkret/self/device-messages")
             .send()
             .await?
             .status()
@@ -486,7 +486,7 @@ pub async fn run_agent_repairing_production() -> Result<crate::conformance::Suit
     loop {
         let response = agent
             .runtime
-            .get("/_arkret/self/device_messages")
+            .get("/_arkret/self/device-messages")
             .send()
             .await?;
         if !response.status().is_success() {

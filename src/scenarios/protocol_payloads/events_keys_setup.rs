@@ -95,7 +95,7 @@ async fn account_data_round_trip(server: &ArkretServer, actor: &TestActorClient)
         server.service_id().clone(),
     ));
     let key = arkret_wire::AccountDataKey::PUSH_RULES;
-    let path = format!("/_arkret/self/account_data/{key}");
+    let path = format!("/_arkret/self/account-data/{key}");
     let sealed = |value: serde_json::Value, nonce: u8| {
         arkret_crypto::account_data_crypto::seal_account_data_value_with_nonce(
             &[7; 32],
@@ -116,11 +116,39 @@ async fn account_data_round_trip(server: &ArkretServer, actor: &TestActorClient)
     let body = AccountDataReplaceRequestBody {
         set_event: arkret_wire::EventAdmissionSubmission::new(set),
     };
+    let retired_path = format!("/_arkret/self/account_data/{key}");
+    for request in [
+        actor.get("/_arkret/self/account_data").header(
+            arkret_http_client::HEADER_OPERATION,
+            "ak.self.account_data.read.list.v1",
+        ),
+        actor.get(&retired_path).header(
+            arkret_http_client::HEADER_OPERATION,
+            "ak.self.account_data.resource.get.v1",
+        ),
+        actor
+            .put(&retired_path)
+            .header(
+                arkret_http_client::HEADER_OPERATION,
+                "ak.self.account_data.resource.replace.v1",
+            )
+            .json(&body),
+    ] {
+        crate::harness::expect_api_error(request, StatusCode::NOT_FOUND, "unrecognized_endpoint")
+            .await?;
+    }
     let created = expect_json(actor.put(&path).json(&body), StatusCode::CREATED)
         .await
         .context("account data create")?;
     assert_eq!(created["revision"], 1, "{created}");
     assert_eq!(created["content"], first_value, "{created}");
+    let listed = expect_json(actor.get("/_arkret/self/account-data"), StatusCode::OK).await?;
+    assert!(
+        listed["account_data_entries"]
+            .as_array()
+            .is_some_and(|rows| rows.iter().any(|row| row["account_data_key"] == key)),
+        "canonical account-data list omitted the accepted key: {listed}"
+    );
     let replay = expect_json(actor.put(&path).json(&body), StatusCode::OK)
         .await
         .context("exact account data retry")?;
@@ -153,14 +181,29 @@ async fn account_data_round_trip(server: &ArkretServer, actor: &TestActorClient)
             json!({"key": key, "expected_server_revision": 1, "tombstone": true}),
         )
         .await?;
-    let deleted = expect_json(
-        actor.delete(&path).json(&AccountDataDeleteRequestBody {
-            set_event: arkret_wire::EventAdmissionSubmission::new(tombstone),
-        }),
-        StatusCode::OK,
+    let delete_body = AccountDataDeleteRequestBody {
+        set_event: arkret_wire::EventAdmissionSubmission::new(tombstone),
+    };
+    crate::harness::expect_api_error(
+        actor
+            .delete(&retired_path)
+            .header(
+                arkret_http_client::HEADER_OPERATION,
+                "ak.self.account_data.resource.delete.v1",
+            )
+            .json(&delete_body),
+        StatusCode::NOT_FOUND,
+        "unrecognized_endpoint",
     )
-    .await
-    .context("account data tombstone")?;
+    .await?;
+    let retained = expect_json(actor.get(&path), StatusCode::OK).await?;
+    assert_eq!(
+        retained["revision"], 1,
+        "retired DELETE changed the CAS row: {retained}"
+    );
+    let deleted = expect_json(actor.delete(&path).json(&delete_body), StatusCode::OK)
+        .await
+        .context("account data tombstone")?;
     assert_eq!(deleted["revision"], 2, "{deleted}");
     crate::harness::expect_api_error(actor.get(&path), StatusCode::NOT_FOUND, "not_found")
         .await

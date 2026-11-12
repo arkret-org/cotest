@@ -113,7 +113,7 @@ pub(super) async fn renew_with_real_issuer(
     )?;
     ensure!(
         runtime
-            .get("/_arkret/self/device_messages")
+            .get("/_arkret/self/device-messages")
             .send()
             .await?
             .status()
@@ -254,7 +254,7 @@ pub(super) async fn renew_with_real_issuer(
     ensure!(
         agent
             .runtime
-            .get("/_arkret/self/device_messages")
+            .get("/_arkret/self/device-messages")
             .send()
             .await?
             .status()

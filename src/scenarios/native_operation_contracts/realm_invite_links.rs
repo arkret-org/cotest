@@ -125,7 +125,7 @@ async fn rejected_without_shared_effect(
 async fn create(
     alice: &Member,
     realm: &RealmId,
-    max_uses: u32,
+    max_use_count: u32,
     seconds: i64,
 ) -> Result<(RealmInviteLinkSecret, Event)> {
     let mut seed = [0u8; 32];
@@ -138,7 +138,7 @@ async fn create(
         expires_at: arkret_canonical::normalize_timestamp_canonical(
             chrono::Utc::now() + chrono::Duration::seconds(seconds),
         ),
-        max_uses,
+        max_use_count,
     };
     let event = alice
         .client
@@ -280,6 +280,49 @@ pub(super) async fn run() -> Result<()> {
         let realm:RealmId = human::create_realm_with_join_rule(&alice.client,"Native user-shared link","invite",&[&source.station,&remote.station]).await?.parse()?;
         publish_link_preview_policy(&alice, &realm).await?;
         let (secret,creation) = create(&alice,&realm,2,3600).await?;
+        for retain_canonical_field in [false, true] {
+            let mut payload = serde_json::to_value(&creation.payload)?;
+            payload["max_uses"] = json!(2);
+            if !retain_canonical_field {
+                payload.as_object_mut().unwrap().remove("max_use_count");
+            }
+            let retired = alice.client.author_event(
+                realm.as_str(), EventKind::RealmInviteLinkCreate.as_str(), payload,
+            ).await?;
+            retired.verify_event_id_matches_content_with_digest_suite(
+                arkret_canonical::DigestSuite::Sha256,
+            )?;
+            ensure!(retired.event_id != creation.event_id,
+                "obsolete payload reused the accepted creation Event identity");
+            let (signing_seed, verification_method) = crate::harness::event_signing_identity_for_device(
+                &alice.client.actor, &alice.client.device_id,
+            );
+            let proof = retired.producer_proof.as_ref().context("fresh obsolete-payload producer proof")?;
+            ensure!(proof.verification_method == verification_method,
+                "obsolete payload was not signed by Alice's actual device");
+            let key = arkret_signatures::PublicKeyMaterial::Ed25519Raw {
+                bytes: ed25519_dalek::SigningKey::from_bytes(&signing_seed)
+                    .verifying_key().to_bytes().to_vec(),
+            };
+            let bytes = arkret_signatures::EventProofBuilder::new().envelope_bytes(&retired)?;
+            arkret_signatures::verify_ed25519_detached_jws_proof_with_digest_suite(
+                proof, &bytes, &retired.actor_id, &key, arkret_canonical::DigestSuite::Sha256,
+            )?;
+            let database = source.station.owned_database_url().context("owned link rejection database")?;
+            let before = crate::scenarios::peer_semantic_union_live::realm_business_footprint(
+                database, realm.as_str(),
+            ).await?;
+            let rejection = rejected_without_shared_effect(&source.station, &alice, &retired).await?;
+            ensure!(crate::scenarios::peer_semantic_union_live::realm_business_footprint(
+                database, realm.as_str(),
+            ).await? == before, "obsolete count field changed durable business rows");
+            ensure!(rejection["status"] == 422,
+                "obsolete count field did not reach the schema status: {rejection}");
+            let problem: arkret_wire::Problem = serde_json::from_value(rejection["body"].clone())?;
+            ensure!(problem.status == 422
+                && problem.problem_type == arkret_wire::ErrorCode::SchemaViolation.type_uri(),
+                "obsolete count field failed at another boundary: {rejection}");
+        }
         let link = RealmInviteLinkId::from_event_id(&creation.event_id);
         let before_preview = footprint(&source.station,&realm).await?;
         let bob_prepared = prepare(&bob,&source.station,&realm,&link,&secret).await?;

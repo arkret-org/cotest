@@ -29,7 +29,7 @@ pub const ACCOUNT_BLOCKLIST_PROJECTION_ENTRYPOINT: &str =
     "ak.suite.account.blocklist_projection.v1";
 const FIXTURE: &str = "account-blocklist-projection-fixture.json";
 const BLOCKLIST_KEY: &str = "ak.account.blocklist";
-const PATH: &str = "/_arkret/self/account_data/ak.account.blocklist";
+const PATH: &str = "/_arkret/self/account-data/ak.account.blocklist";
 const SECRET: [u8; 32] = [7; 32];
 pub fn run_account_blocklist_projection_vector() -> Result<()> {
     run_account_blocklist_projection_suite().map(|_| ())

@@ -45,10 +45,90 @@ pub(super) async fn run(
         "schema":"ak.schema.capability.v1","realm_id":realm,"issuer_id":owner_actor,"subject":writer,
         "actions":actions,"resources":[{"kind":"realm","realm_id":realm,"match_scope":"realm_wide"}],
         "constraints":[{"constraint_kind":"claim_based","constraint_subkind":"approval","effect":"require_review",
-            "approval_required":true,"approval_mode":"before_commit","approval_actor_ids":[bob_account.principal_id],
+            "approval_required":true,"approval_mode":"before_commit","approval_principal_ids":[bob_account.principal_id],
             "approval_threshold":"unanimous","timeout":"PT60S"}],
         "issuer_authority_refs":[{"kind":"realm_root","realm_id":realm,"authority_event_ref":typed_realm.event_id(),"authority_generation":"0"}],
         "issued_at":arkret_canonical::format_timestamp_canonical(chrono::Utc::now())}})).await?;
+    for keep_canonical_name in [false, true] {
+        let mut payload = serde_json::to_value(&grant.payload)?;
+        let constraint = &mut payload["grant"]["constraints"][0];
+        constraint["approval_actor_ids"] = constraint["approval_principal_ids"].clone();
+        if !keep_canonical_name {
+            constraint
+                .as_object_mut()
+                .context("approval constraint")?
+                .remove("approval_principal_ids");
+        }
+        let rejected = owner
+            .author_event(realm, EventKind::CapabilityGrant.as_str(), payload)
+            .await?;
+        rejected.verify_event_id_matches_content_with_digest_suite(
+            arkret_canonical::DigestSuite::Sha256,
+        )?;
+        ensure!(
+            rejected.event_id != grant.event_id,
+            "obsolete approval roster reused canonical Event identity"
+        );
+        let (seed, method) =
+            crate::harness::event_signing_identity_for_device(&owner.actor, &owner.device_id);
+        let proof = rejected
+            .producer_proof
+            .as_ref()
+            .context("obsolete roster real producer proof")?;
+        ensure!(
+            proof.verification_method == method,
+            "obsolete roster used a different producer method"
+        );
+        let public_key = arkret_signatures::PublicKeyMaterial::Ed25519Raw {
+            bytes: ed25519_dalek::SigningKey::from_bytes(&seed)
+                .verifying_key()
+                .to_bytes()
+                .to_vec(),
+        };
+        arkret_signatures::verify_ed25519_detached_jws_proof_with_digest_suite(
+            proof,
+            &arkret_signatures::EventProofBuilder::new().envelope_bytes(&rejected)?,
+            &rejected.actor_id,
+            &public_key,
+            arkret_canonical::DigestSuite::Sha256,
+        )?;
+        let before = crate::scenarios::peer_semantic_union_live::realm_business_footprint(
+            governor_database,
+            realm,
+        )
+        .await?;
+        let body = crate::publication::initial_submission(rejected, "")?;
+        let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(30);
+        let response = loop {
+            let response = crate::harness::send_recorded(
+                owner.post("/_arkret/self/events").canonical_json(&body)?,
+            )
+            .await?;
+            if response.status != reqwest::StatusCode::SERVICE_UNAVAILABLE
+                || tokio::time::Instant::now() >= deadline
+            {
+                break response;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+        };
+        let problem: arkret_wire::Problem = serde_json::from_value(response.json()?)?;
+        ensure!(
+            response.status.as_u16() == 422
+                && problem.status == 422
+                && problem.problem_type == arkret_wire::ErrorCode::SchemaViolation.type_uri(),
+            "obsolete or dual approval roster was not rejected at schema boundary: {}",
+            response.context()
+        );
+        ensure!(
+            crate::scenarios::peer_semantic_union_live::realm_business_footprint(
+                governor_database,
+                realm
+            )
+            .await?
+                == before,
+            "obsolete or dual approval roster changed durable Realm state"
+        );
+    }
     let grant_id = GrantId::from_event_id(&grant.event_id);
     let grant_commit = submit_and_expect_commit(
         owner,

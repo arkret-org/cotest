@@ -359,7 +359,7 @@ async fn run_agent_issuer_boundary(
     .context("real Coauth Agent pairing and session issuance")?;
     let response = agent
         .runtime
-        .get("/_arkret/self/device_messages")
+        .get("/_arkret/self/device-messages")
         .send()
         .await?;
     ensure!(
@@ -869,7 +869,7 @@ async fn lifecycle_refusals(
     )?;
     ensure!(
         resumed_runtime
-            .get("/_arkret/self/device_messages")
+            .get("/_arkret/self/device-messages")
             .send()
             .await?
             .status()
@@ -959,7 +959,7 @@ pub(super) async fn wait_runtime_rejected(
     start: std::time::Instant,
 ) -> Result<()> {
     loop {
-        let response = runtime.get("/_arkret/self/device_messages").send().await?;
+        let response = runtime.get("/_arkret/self/device-messages").send().await?;
         if matches!(
             response.status(),
             reqwest::StatusCode::UNAUTHORIZED | reqwest::StatusCode::FORBIDDEN

@@ -313,7 +313,7 @@ test.describe("notifications", () => {
         dndCard.locator(":scope > .write-status"),
       ).toContainText(/do not disturb|dnd/i, { timeout: 30_000 });
 
-      const accountDataUrl = `${colandBaseUrl()}/_arkret/self/account_data/${encodeURIComponent("ak.dnd_schedule")}`;
+      const accountDataUrl = `${colandBaseUrl()}/_arkret/self/account-data/${encodeURIComponent("ak.dnd_schedule")}`;
       let storedDnd: Record<string, unknown> = {};
       await expect
         .poll(

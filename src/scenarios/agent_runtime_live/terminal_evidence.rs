@@ -149,7 +149,7 @@ pub(super) async fn exercise(mut material: Materials<'_>) -> Result<()> {
     )?;
     ensure!(
         runtime
-            .get("/_arkret/self/device_messages")
+            .get("/_arkret/self/device-messages")
             .send()
             .await?
             .status()
@@ -270,7 +270,7 @@ pub(super) async fn exercise(mut material: Materials<'_>) -> Result<()> {
     repairing_evidence::lifecycle(material.controller, material.agent, "deactivate").await?;
     let deadline = terminal_started + Duration::from_secs(60);
     loop {
-        let result = runtime.get("/_arkret/self/device_messages").send().await?;
+        let result = runtime.get("/_arkret/self/device-messages").send().await?;
         if matches!(
             result.status(),
             StatusCode::UNAUTHORIZED | StatusCode::FORBIDDEN

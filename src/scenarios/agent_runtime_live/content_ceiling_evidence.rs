@@ -184,7 +184,7 @@ pub async fn run_agent_content_ceiling_production()
         credential,
         replacement.key.clone(),
     )?;
-    expect_json(current.get("/_arkret/self/device_messages"), StatusCode::OK).await?;
+    expect_json(current.get("/_arkret/self/device-messages"), StatusCode::OK).await?;
     let actions = scene
         .operations
         .iter()
@@ -322,7 +322,7 @@ pub async fn run_agent_content_ceiling_production()
     )
     .await?;
     expect_json(
-        second.runtime.get("/_arkret/self/device_messages"),
+        second.runtime.get("/_arkret/self/device-messages"),
         StatusCode::OK,
     )
     .await?;

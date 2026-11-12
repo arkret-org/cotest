@@ -502,7 +502,7 @@ pub(super) async fn join(
     let consume = persist_and_reopen_agent_consume(&consume, &directory.path().join("consume"))?;
     runtime.sdk().keypackages_consume(&consume).await?;
     runtime
-        .post("/_arkret/self/device_messages/ack")
+        .post("/_arkret/self/device-messages/ack")
         .header("Content-Type", "application/json")
         .body(arkret_canonical::canonical_json_bytes(
             &arkret_models_collaboration::device_messages::DeviceMessagesAcknowledgementRequestBody {

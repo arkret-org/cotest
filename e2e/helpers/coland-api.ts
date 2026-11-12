@@ -1277,7 +1277,7 @@ async function readOwnInviteDeliveryApi(
   opts: { server?: ColandKey },
   inviteId?: string,
 ) {
-  const dataUrl = `${colandBaseUrl(opts.server)}/_arkret/self/account_data`;
+  const dataUrl = `${colandBaseUrl(opts.server)}/_arkret/self/account-data`;
   const holder = await expectJsonOk<{ account_data_entries: Array<{
     account_data_key: string; content: { delivery_entries?: Array<{
       invite_id: string; realm_id: string;
@@ -1728,10 +1728,10 @@ export async function replaceAccountDataApi(
     opts,
   );
   const response = await request.put(
-    `${colandBaseUrl(opts.server)}/_arkret/self/account_data/${encodeURIComponent(key)}`,
+    `${colandBaseUrl(opts.server)}/_arkret/self/account-data/${encodeURIComponent(key)}`,
     {
       headers: {
-        ...authHeaders(token, "PUT", `${colandBaseUrl(opts.server)}/_arkret/self/account_data/${encodeURIComponent(key)}`),
+        ...authHeaders(token, "PUT", `${colandBaseUrl(opts.server)}/_arkret/self/account-data/${encodeURIComponent(key)}`),
         "content-type": "application/json",
       },
       data: canonicalJson({

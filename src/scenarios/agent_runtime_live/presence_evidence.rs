@@ -531,7 +531,7 @@ pub(super) async fn unmapped_ordinary(
     );
     ensure!(
         runtime
-            .get("/_arkret/self/device_messages")
+            .get("/_arkret/self/device-messages")
             .send()
             .await?
             .status()

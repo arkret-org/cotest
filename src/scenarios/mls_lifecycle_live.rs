@@ -784,7 +784,7 @@ async fn run_lifecycle(
     .await?;
 
     bob.client
-        .post("/_arkret/self/device_messages/ack")
+        .post("/_arkret/self/device-messages/ack")
         .json(&DeviceMessagesAcknowledgementRequestBody {
             acknowledgement_token,
         })
@@ -2124,7 +2124,7 @@ pub async fn accepted_full_view(
 pub async fn recipient_welcomes(
     client: &TestActorClient,
 ) -> Result<(Vec<MlsWelcomeDelivery>, String)> {
-    let polled = expect_json(client.get("/_arkret/self/device_messages"), StatusCode::OK).await?;
+    let polled = expect_json(client.get("/_arkret/self/device-messages"), StatusCode::OK).await?;
     let outcome: DeviceMessagesGetResponseBody = serde_json::from_value(polled.clone())
         .with_context(|| format!("recipient queue page is not closed SDK wire data: {polled}"))?;
     let welcomes = outcome
