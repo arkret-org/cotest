@@ -1,13 +1,16 @@
 import assert from "node:assert/strict";
-import { spawn } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { createDecipheriv, randomBytes } from "node:crypto";
 import { once } from "node:events";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, unlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 import { request } from "@playwright/test";
+import { initializeManagerArchive } from "./manager-archive.mjs";
+import { createEd25519KeyPair, encodeEd25519PubkeyMultibase, rawEd25519PublicKey } from "./keypairs.mjs";
+import { canonicalJson } from "./http.mjs";
 
 test("Service-only Applet package persists encrypted and reloads without a Bot", { timeout: 30_000 }, async () => {
   const directory = mkdtempSync(path.join(tmpdir(), "cotest-applet-durability-"));
@@ -131,7 +134,72 @@ test("a lost durable sign-package response replays exactly after process restart
   }
 });
 
-async function startRegistry(keyPath, statePath) {
+test("real SDK inception returns only after independently encrypted archive custody and survives process restart", { timeout: 30_000 }, async () => {
+  assert.ok(process.env.COTEST_WIRE_BIN, "actual cotest-wire must be built for this integration");
+  const root = fileURLToPath(new URL("../../../artifacts/tool-tests/", import.meta.url));
+  mkdirSync(root, { recursive: true });
+  const directory = mkdtempSync(path.join(root, "applet-archive-http-"));
+  const authoring = path.join(directory, "authoring.key");
+  const state = path.join(directory, "authoring.json");
+  const archive = { file: path.join(directory, "archive.json"), key: path.join(directory, "archive.key") };
+  writeFileSync(authoring, randomBytes(32), { mode: 0o600 });
+  writeFileSync(archive.key, randomBytes(32), { mode: 0o600 });
+  initializeManagerArchive(archive.file, archive.key, authoring);
+  const history = createEd25519KeyPair("history");
+  const next = createEd25519KeyPair("next");
+  const control = createEd25519KeyPair("controller");
+  const input = {
+    base_url: "https://applet.fixture.localhost/", local_id: "archive-http",
+    root_seed_b64url: history.privateKey.export({ format: "jwk" }).d,
+    next_root_public_key_multibase: encodeEd25519PubkeyMultibase(rawEd25519PublicKey(next.publicKey)),
+    control_seed_b64url: control.privateKey.export({ format: "jwk" }).d,
+    version_created_at: new Date().toISOString(),
+  };
+  let registry;
+  const post = (base, route, body) => fetch(`${base}${route}`, {
+    method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body),
+  });
+  try {
+    registry = await startRegistry(authoring, state, archive);
+    assert.equal((await post(registry.base, "/sign-package", {
+      namespace: "archive-http", base_url: "https://applet.fixture.localhost",
+    })).status, 200, registry.logs);
+    const response = await post(registry.base, "/inspect/realm-actor-inception", input);
+    assert.equal(response.status, 200, registry.logs);
+    const original = await response.json();
+    const envelope = JSON.parse(readFileSync(archive.file, "utf8"));
+    const decipher = createDecipheriv("aes-256-gcm", readFileSync(archive.key), Buffer.from(envelope.nonce, "base64url"));
+    decipher.setAAD(Buffer.from(envelope.schema));
+    decipher.setAuthTag(Buffer.from(envelope.tag, "base64url"));
+    const held = JSON.parse(Buffer.concat([
+      decipher.update(Buffer.from(envelope.ciphertext, "base64url")), decipher.final(),
+    ]).toString()).entries[0];
+    assert.ok(!canonicalJson(original).includes(held.backup_private_key_base64url));
+    assert.ok(!readFileSync(archive.file, "utf8").includes(held.backup_private_key_base64url));
+    const native = spawnSync(process.env.COTEST_WIRE_BIN, ["realm-actor-inception"], {
+      windowsHide: true, encoding: "utf8", input: canonicalJson({ ...input, content_backup_private_key_b64url: held.backup_private_key_base64url }),
+    });
+    assert.equal(native.status, 0, "the physical held key must reproduce the SDK public declaration");
+    assert.ok(canonicalJson(JSON.parse(native.stdout)) === canonicalJson(original));
+    const before = readFileSync(archive.file);
+    await registry.stop();
+    registry = await startRegistry(authoring, state, archive);
+    const replay = await post(registry.base, "/inspect/realm-actor-inception", input);
+    assert.equal(replay.status, 200);
+    assert.ok(canonicalJson(await replay.json()) === canonicalJson(original));
+    assert.ok(readFileSync(archive.file).equals(before));
+    unlinkSync(archive.file);
+    assert.equal((await post(registry.base, "/inspect/realm-actor-inception", input)).status, 500);
+    assert.equal(existsSync(archive.file), false);
+  } finally {
+    if (registry) await registry.stop();
+    assert.equal(path.dirname(directory), path.resolve(root));
+    assert.ok(path.basename(directory).startsWith("applet-archive-http-"));
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+async function startRegistry(keyPath, statePath, archive) {
   let stderr = "";
   const child = spawn(process.execPath, [fileURLToPath(new URL("../mock-applet-registry.mjs", import.meta.url))], {
     windowsHide: true,
@@ -144,6 +212,8 @@ async function startRegistry(keyPath, statePath) {
       MOCK_APPLET_REGISTRY_PORT: "0",
       MOCK_APPLET_REGISTRY_STATE_FILE: statePath,
       MOCK_APPLET_REGISTRY_STATE_KEY_FILE: keyPath,
+      MOCK_APPLET_REGISTRY_ARCHIVE_FILE: archive?.file ?? "",
+      MOCK_APPLET_REGISTRY_ARCHIVE_KEY_FILE: archive?.key ?? "",
     },
   });
   const closed = once(child, "close");

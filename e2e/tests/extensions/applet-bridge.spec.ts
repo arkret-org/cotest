@@ -290,18 +290,23 @@ type ManagedActorId = Extract<ActorId, { kind: "realm" }>;
 
 type RealmActorIdentity = BuiltWebvhGenesis & { control_seed_b64url: string };
 
-function buildRealmActorIdentity(baseUrl: string, localId: string): RealmActorIdentity {
+async function buildRealmActorIdentity(request: APIRequestContext, baseUrl: string, localId: string): Promise<RealmActorIdentity> {
   const root = generateWebvhKey();
   const next = generateWebvhKey();
   const control = generateWebvhKey();
   const controlSeed = ed25519PrivateKeySeedB64url(control.privateKey);
-  return {
-    ...cotestWire<BuiltWebvhGenesis>("realm-actor-inception", {
+  const response = await request.post(`${requireMockAppletRegistry()}/inspect/realm-actor-inception`, {
+    data: {
       base_url: baseUrl, local_id: localId,
       root_seed_b64url: ed25519PrivateKeySeedB64url(root.privateKey),
       next_root_public_key_multibase: next.multibase,
       control_seed_b64url: controlSeed, version_created_at: canonicalTimestamp(),
-    }),
+    },
+  });
+  expect(response.status(), "native manager must retain its independent archive key before inception").toBe(200);
+  const inception = await response.json() as BuiltWebvhGenesis;
+  return {
+    ...inception,
     control_seed_b64url: controlSeed,
   };
 }
@@ -598,7 +603,7 @@ test.describe("applet bridge", () => {
     const beforeBots = await queryRealmEventsApi(request,token,realmId);
     expect((beforeBots.events as Array<Record<string,unknown>>).some(event=>event.kind==="ak.applet.managed_actor.provision")).toBe(false);
     const first = await provisionAppletBot(request,signed,realmId,`first-${stamp}`,{exerciseAuthoringKats:false});
-    const secondIdentity = buildRealmActorIdentity(colandBaseUrl(),`applet-bot-second-${stamp}`);
+    const secondIdentity = await buildRealmActorIdentity(request,colandBaseUrl(),`applet-bot-second-${stamp}`);
     const second = await provisionAppletBot(request,signed,realmId,`second-${stamp}`,{exerciseAuthoringKats:false,botOperation:secondIdentity});
     expect(first.bot_actor_id).not.toEqual(second.bot_actor_id);
     expect(first.creation_ref).not.toEqual(second.creation_ref);
@@ -769,7 +774,7 @@ test.describe("applet bridge", () => {
           "signed Applet package is missing its Ghost namespace token",
         );
       }
-      const ghostBuilt = buildRealmActorIdentity(colandBaseUrl(),`ghost-${signed.ghost_namespace_token}-${externalUser.id.toLowerCase()}`);
+      const ghostBuilt = await buildRealmActorIdentity(request,colandBaseUrl(),`ghost-${signed.ghost_namespace_token}-${externalUser.id.toLowerCase()}`);
       const ghostCreation = await buildGhostManagedActorCreation({
         request,
         token: aliceToken,
@@ -2119,7 +2124,7 @@ async function signPackage(
       updated: versionTime,
     }),
   });
-  const botBuilt = buildRealmActorIdentity(colandBaseUrl(),`applet-bot-${typedId("operation").split(":").at(-1)}`);
+  const botBuilt = await buildRealmActorIdentity(request,colandBaseUrl(),`applet-bot-${typedId("operation").split(":").at(-1)}`);
   const requestedWebhookAuth =
     data.webhook_signature_policy && typeof data.webhook_signature_policy === "object"
       ? (data.webhook_signature_policy as Record<string, unknown>)

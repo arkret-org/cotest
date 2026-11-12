@@ -39,13 +39,38 @@ struct RealmActorInceptionFixture {
     root_seed_b64url: String,
     next_root_public_key_multibase: String,
     control_seed_b64url: String,
+    content_backup_private_key_b64url: String,
     version_created_at: chrono::DateTime<Utc>,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct NativeArchivePublicKeyFixture {
+    private_key_b64url: String,
+}
+
+pub fn native_archive_recipient_public_key(input: Value) -> Result<Value> {
+    let input: NativeArchivePublicKeyFixture = serde_json::from_value(input)?;
+    let private: [u8; 32] = canonical::base64url_decode(&input.private_key_b64url)?
+        .try_into()
+        .map_err(|_| anyhow::anyhow!("native archive private key must be 32 bytes"))?;
+    Ok(json!({"public_key_base64url":canonical::base64url_encode(
+        arkret::crypto::hpke::x25519_public_key(&private)?
+    )}))
 }
 
 pub fn realm_actor_inception(input: Value) -> Result<Value> {
     let input: RealmActorInceptionFixture = serde_json::from_value(input)?;
     let root = signing_key_from_seed(&input.root_seed_b64url)?;
     let control = signing_key_from_seed(&input.control_seed_b64url)?;
+    let backup: [u8; 32] = canonical::base64url_decode(&input.content_backup_private_key_b64url)?
+        .try_into()
+        .map_err(|_| anyhow::anyhow!("native archive private key must be 32 bytes"))?;
+    ensure!(
+        backup != root.to_bytes() && backup != control.to_bytes(),
+        "native archive key must be independent from history and authoring keys"
+    );
+    let backup_public = arkret::crypto::hpke::x25519_public_key(&backup)?;
     let endpoint = input.base_url.parse()?;
     let inception = arkret_signatures::webvh::prepare_realm_actor_inception(
         &arkret_signatures::webvh::RealmActorInceptionInput {
@@ -55,6 +80,7 @@ pub fn realm_actor_inception(input: Value) -> Result<Value> {
             root_seed: &root.to_bytes(),
             next_root_public_key_multibase: &input.next_root_public_key_multibase,
             controller_public_key: &control.verifying_key().to_bytes(),
+            content_backup_public_key: &backup_public,
         },
     )?;
     Ok(
@@ -134,6 +160,10 @@ pub fn applet_realm_actor_author(input: Value) -> Result<Value> {
     let method =
         DidUrl::new(format!("{}#managed-controller", document.id)).map_err(anyhow::Error::msg)?;
     let control = signing_key_from_seed(&input.control_seed_b64url)?;
+    let recipient = arkret_identity::realm_actor_content_backup_recipient_from_document(
+        &document,
+        &DidUrl::new(format!("{}#content-backup", document.id)).map_err(anyhow::Error::msg)?,
+    )?;
     let scope: arkret_wire::ScopeRef = serde_json::from_value(basis["effective_scope"].clone())?;
     let actor = arkret_wire::ActorId::realm(arkret_wire::RealmActorId::new(
         scope.realm_id().clone(),
@@ -154,7 +184,7 @@ pub fn applet_realm_actor_author(input: Value) -> Result<Value> {
                     "witness_proofs_digest":canonical::canonical_sha256(&Vec::<Value>::new())?}]},
             "log_entries":[entry],"witness_records":[]},
         "control_method_kid":method,"expires_at":request.expires_at,
-        "recovery":{"kind":"manager_native","enabled":true},
+        "recovery":{"kind":"manager_native","enabled":true,"content_backup_recipient":recipient},
     });
     if request.purpose == arkret::AppletManagedActorPurpose::ProvisionGhost {
         candidate["external_ref"] = basis["external_ref"].clone();
@@ -196,6 +226,48 @@ pub fn applet_realm_actor_author(input: Value) -> Result<Value> {
 mod realm_actor_fixture_tests {
     use super::*;
 
+    #[test]
+    fn native_inception_requires_a_separate_real_archive_key() {
+        let original = inception(51, 53);
+        let document = serde_json::from_value(original["didDocument"].clone()).unwrap();
+        let recipient = arkret_identity::realm_actor_content_backup_recipient_from_document(
+            &document,
+            &DidUrl::new(format!(
+                "{}#content-backup",
+                original["did"].as_str().unwrap()
+            ))
+            .unwrap(),
+        )
+        .unwrap();
+        assert_eq!(
+            recipient.public_key_base64url,
+            canonical::base64url_encode(
+                arkret::crypto::hpke::x25519_public_key(&[55; 32]).unwrap()
+            )
+        );
+        assert_eq!(
+            native_archive_recipient_public_key(json!({
+                "private_key_b64url":canonical::base64url_encode([55;32])
+            }))
+            .unwrap()["public_key_base64url"],
+            recipient.public_key_base64url
+        );
+        let mut request = json!({
+            "base_url":"https://applet.example/","local_id":"missing-archive",
+            "root_seed_b64url":canonical::base64url_encode([51;32]),
+            "next_root_public_key_multibase":canonical::ed25519_pubkey_to_did_key_multibase(
+                SigningKey::from_bytes(&[52;32]).verifying_key().as_bytes()),
+            "control_seed_b64url":canonical::base64url_encode([53;32]),
+            "version_created_at":canonical::format_timestamp_canonical(Utc::now()),
+        });
+        assert!(realm_actor_inception(request.clone()).is_err());
+        for reused in [51_u8, 53] {
+            request["content_backup_private_key_b64url"] =
+                json!(canonical::base64url_encode([reused; 32]));
+            assert!(realm_actor_inception(request.clone()).is_err());
+        }
+    }
+
     fn inception(seed: u8, control: u8) -> Value {
         realm_actor_inception(json!({
             "base_url":"https://applet.example/","local_id":format!("actor-{seed}"),
@@ -203,6 +275,7 @@ mod realm_actor_fixture_tests {
             "next_root_public_key_multibase":canonical::ed25519_pubkey_to_did_key_multibase(
                 SigningKey::from_bytes(&[seed+1;32]).verifying_key().as_bytes()),
             "control_seed_b64url":canonical::base64url_encode([control;32]),
+            "content_backup_private_key_b64url":canonical::base64url_encode([seed+4;32]),
             "version_created_at":canonical::format_timestamp_canonical(Utc::now()),
         }))
         .unwrap()
@@ -322,6 +395,7 @@ mod realm_actor_fixture_tests {
     fn current_bot_and_ghost_fixture_author_one_private_creation_original() {
         for ghost in [false, true] {
             let input = author_input(ghost);
+            let original_did = input["inception"]["did"].as_str().unwrap().to_owned();
             let outcome = applet_realm_actor_author(input).unwrap();
             assert_eq!(outcome.as_object().unwrap().len(), 1);
             let event: Event = serde_json::from_value(outcome["create_event"].clone()).unwrap();
@@ -335,6 +409,25 @@ mod realm_actor_fixture_tests {
                 "realm"
             );
             assert!(outcome.get("managed_actor_bundle").is_none());
+            let payload: arkret::RealmActorCreatePayload =
+                serde_json::from_value(outcome["create_event"]["payload"].clone()).unwrap();
+            assert_eq!(
+                payload
+                    .recovery
+                    .content_backup_recipient
+                    .key_agreement_ref
+                    .as_str(),
+                format!("{original_did}#content-backup")
+            );
+            assert_eq!(
+                payload
+                    .recovery
+                    .content_backup_recipient
+                    .public_key_base64url,
+                canonical::base64url_encode(
+                    arkret::crypto::hpke::x25519_public_key(&[35; 32]).unwrap()
+                )
+            );
         }
     }
 

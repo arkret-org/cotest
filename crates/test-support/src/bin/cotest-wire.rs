@@ -47,6 +47,7 @@ fn main() -> Result<()> {
         "webvh-placeholder-did" => wire::webvh_placeholder_did_command(input)?,
         "webvh-genesis" => wire::webvh_genesis(input)?,
         "realm-actor-inception" => wire::realm_actor_inception(input)?,
+        "native-archive-recipient-public-key" => wire::native_archive_recipient_public_key(input)?,
         "applet-realm-actor-author" => wire::applet_realm_actor_author(input)?,
         "webvh-verify-log" => wire::webvh_verify_log(input)?,
         "account-handoff-outcome" => wire::account_handoff_response_body(input)?,

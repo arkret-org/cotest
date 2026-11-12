@@ -58,10 +58,15 @@ import { handleInspect } from "./_shared/inspect.mjs";
 import { canonicalJson, readJson } from "./_shared/http.mjs";
 import { replaceStateFileSync } from "./_shared/atomic-state.mjs";
 import { isolateRequestFailure } from "./_shared/request-handler.mjs";
+import { ManagerArchive } from "./_shared/manager-archive.mjs";
 
 const port = parseInt(process.env.MOCK_APPLET_REGISTRY_PORT ?? "0", 10);
 const durableStateFile = process.env.MOCK_APPLET_REGISTRY_STATE_FILE;
 const durableStateKeyFile = process.env.MOCK_APPLET_REGISTRY_STATE_KEY_FILE;
+const managerArchive = process.env.MOCK_APPLET_REGISTRY_ARCHIVE_FILE
+  ? new ManagerArchive(process.env.MOCK_APPLET_REGISTRY_ARCHIVE_FILE,
+      process.env.MOCK_APPLET_REGISTRY_ARCHIVE_KEY_FILE, durableStateKeyFile)
+  : undefined;
 const durableStateSchema = "cotest.mock_applet_registry_state_encrypted.v1";
 const durableStateKey = durableStateFile
   ? readDurableStateKey(durableStateKeyFile)
@@ -450,6 +455,7 @@ function runCotestWire(commandName, input) {
     throw new Error("Applet mock requires COTEST_WIRE_BIN from the preparation batch");
   }
   const result = spawnSync(binary, [commandName], {
+    windowsHide: true,
     cwd: process.env.COTEST_ROOT ?? process.cwd().replace(/[\\/]e2e$/, ""),
     encoding: "utf8",
     input: canonicalJson(input),
@@ -931,6 +937,19 @@ const server = createServer(isolateRequestFailure(async (req, res) => {
     return;
   }
 
+  if (url.pathname === "/inspect/realm-actor-inception" && req.method === "POST") {
+    if (!managerArchive) {
+      res.statusCode = 503;
+      res.end(JSON.stringify({ error: "native_manager_archive_unavailable" }));
+      return;
+    }
+    const body = await readJson(req);
+    const inception = managerArchive.prepareInception(body,
+      input => runCotestWire("realm-actor-inception", input));
+    res.end(canonicalJson(inception));
+    return;
+  }
+
   if (url.pathname === "/inspect/bot-authoring-material" && req.method === "POST") {
     const body = await readJson(req);
     const packageInfo = packagesByApplet.get(body?.applet_id);
@@ -1045,6 +1064,18 @@ const server = createServer(isolateRequestFailure(async (req, res) => {
       res.end(canonicalJson(existing.outcome));
       return;
     }
+    if (!managerArchive) {
+      res.statusCode = 503;
+      res.end(JSON.stringify({ error: "native_manager_archive_unavailable" }));
+      return;
+    }
+    // The SDK has verified the complete creation request. Bind the held key
+    // to its exact original and full actor before publishing the signed Event.
+    managerArchive.bindActor(material.inception, outcome.create_event.payload.actor_id,
+      outcome.create_event.payload.recovery.content_backup_recipient.public_key_base64url,
+      privateKey => runCotestWire("native-archive-recipient-public-key", {
+        private_key_b64url: privateKey,
+      }).public_key_base64url);
     managedActorAuthoringOutcomes.set(subject, {
       requestDigest,
       outcome,
