@@ -246,10 +246,14 @@ mod realm_actor_fixture_tests {
     fn native_archive_public_key_fixture_uses_strict_secret_bytes_without_echo() {
         let result = native_archive_recipient_public_key(json!({
             "content_backup_private_key_b64url": canonical::base64url_encode([61; 32])
-        })).unwrap();
-        assert_eq!(result["public_key_base64url"], canonical::base64url_encode(
-            arkret::crypto::hpke::x25519_public_key(&[61; 32]).unwrap()
-        ));
+        }))
+        .unwrap();
+        assert_eq!(
+            result["public_key_base64url"],
+            canonical::base64url_encode(
+                arkret::crypto::hpke::x25519_public_key(&[61; 32]).unwrap()
+            )
+        );
         for length in [0, 31, 33] {
             assert!(native_archive_recipient_public_key(json!({
                 "content_backup_private_key_b64url": canonical::base64url_encode(vec![61; length])
@@ -258,11 +262,15 @@ mod realm_actor_fixture_tests {
         let canary = "private-archive-helper-input-must-not-be-echoed";
         let error = native_archive_recipient_public_key(json!({
             "content_backup_private_key_b64url": canary
-        })).unwrap_err();
+        }))
+        .unwrap_err();
         assert!(!format!("{error:#}").contains(canary));
-        assert!(native_archive_recipient_public_key(json!({
-            "private_key_b64url": canonical::base64url_encode([61; 32])
-        })).is_err());
+        assert!(
+            native_archive_recipient_public_key(json!({
+                "private_key_b64url": canonical::base64url_encode([61; 32])
+            }))
+            .is_err()
+        );
     }
 
     fn inception_input(seed: u8, control: u8, archive: u8) -> Value {
