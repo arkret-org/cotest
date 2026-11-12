@@ -43,6 +43,19 @@ struct RealmActorInceptionFixture {
     version_created_at: chrono::DateTime<Utc>,
 }
 
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct NativeArchivePublicKeyFixture {
+    content_backup_private_key_b64url: arkret_models_crypto::SecretBytes,
+}
+
+pub fn native_archive_recipient_public_key(input: Value) -> Result<Value> {
+    let input: NativeArchivePublicKeyFixture = serde_json::from_value(input)?;
+    Ok(json!({"public_key_base64url": canonical::base64url_encode(
+        arkret::crypto::hpke::x25519_public_key(input.content_backup_private_key_b64url.expose())?
+    )}))
+}
+
 pub fn realm_actor_inception(input: Value) -> Result<Value> {
     let input: RealmActorInceptionFixture = serde_json::from_value(input)?;
     let root = signing_key_from_seed(&input.root_seed_b64url)?;
@@ -228,6 +241,29 @@ pub fn applet_realm_actor_author(input: Value) -> Result<Value> {
 #[cfg(test)]
 mod realm_actor_fixture_tests {
     use super::*;
+
+    #[test]
+    fn native_archive_public_key_fixture_uses_strict_secret_bytes_without_echo() {
+        let result = native_archive_recipient_public_key(json!({
+            "content_backup_private_key_b64url": canonical::base64url_encode([61; 32])
+        })).unwrap();
+        assert_eq!(result["public_key_base64url"], canonical::base64url_encode(
+            arkret::crypto::hpke::x25519_public_key(&[61; 32]).unwrap()
+        ));
+        for length in [0, 31, 33] {
+            assert!(native_archive_recipient_public_key(json!({
+                "content_backup_private_key_b64url": canonical::base64url_encode(vec![61; length])
+            })).is_err());
+        }
+        let canary = "private-archive-helper-input-must-not-be-echoed";
+        let error = native_archive_recipient_public_key(json!({
+            "content_backup_private_key_b64url": canary
+        })).unwrap_err();
+        assert!(!format!("{error:#}").contains(canary));
+        assert!(native_archive_recipient_public_key(json!({
+            "private_key_b64url": canonical::base64url_encode([61; 32])
+        })).is_err());
+    }
 
     fn inception_input(seed: u8, control: u8, archive: u8) -> Value {
         json!({

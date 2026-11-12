@@ -37,6 +37,7 @@ type CotestWireCommand =
   | "webvh-placeholder-did"
   | "webvh-genesis"
   | "realm-actor-inception"
+  | "native-archive-recipient-public-key"
   | "applet-realm-actor-author"
   | "account-handoff-outcome"
   | "account-handoff-request"

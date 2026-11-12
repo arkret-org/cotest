@@ -58,10 +58,15 @@ import { handleInspect } from "./_shared/inspect.mjs";
 import { canonicalJson, readJson } from "./_shared/http.mjs";
 import { replaceStateFileSync } from "./_shared/atomic-state.mjs";
 import { isolateRequestFailure } from "./_shared/request-handler.mjs";
+import { ManagerArchive } from "./_shared/manager-archive.mjs";
 
 const port = parseInt(process.env.MOCK_APPLET_REGISTRY_PORT ?? "0", 10);
 const durableStateFile = process.env.MOCK_APPLET_REGISTRY_STATE_FILE;
 const durableStateKeyFile = process.env.MOCK_APPLET_REGISTRY_STATE_KEY_FILE;
+const managerArchive = process.env.MOCK_APPLET_REGISTRY_ARCHIVE_FILE
+  ? new ManagerArchive(process.env.MOCK_APPLET_REGISTRY_ARCHIVE_FILE,
+      process.env.MOCK_APPLET_REGISTRY_ARCHIVE_KEY_FILE, durableStateKeyFile)
+  : undefined;
 const durableStateSchema = "cotest.mock_applet_registry_state_encrypted.v1";
 const durableStateKey = durableStateFile
   ? readDurableStateKey(durableStateKeyFile)
@@ -450,6 +455,7 @@ function runCotestWire(commandName, input) {
     throw new Error("Applet mock requires COTEST_WIRE_BIN from the preparation batch");
   }
   const result = spawnSync(binary, [commandName], {
+    windowsHide: true,
     cwd: process.env.COTEST_ROOT ?? process.cwd().replace(/[\\/]e2e$/, ""),
     encoding: "utf8",
     input: canonicalJson(input),
@@ -931,10 +937,24 @@ const server = createServer(isolateRequestFailure(async (req, res) => {
     return;
   }
 
+  if (url.pathname === "/inspect/realm-actor-inception" && req.method === "POST") {
+    if (!managerArchive) {
+      res.statusCode = 503;
+      res.end(JSON.stringify({ error: "native_manager_archive_unavailable" }));
+      return;
+    }
+    const body = await readJson(req);
+    const inception = managerArchive.prepareInception(body,
+      input => runCotestWire("realm-actor-inception", input));
+    res.end(canonicalJson(inception));
+    return;
+  }
+
   if (url.pathname === "/inspect/bot-authoring-material" && req.method === "POST") {
     const body = await readJson(req);
     const packageInfo = packagesByApplet.get(body?.applet_id);
-    if (!packageInfo || !body.request_id || !body.effective_scope || !body.material) {
+    if (!packageInfo || !body.request_id || !body.effective_scope || !body.material ||
+        Object.hasOwn(body.material, "content_backup_private_key_b64url")) {
       res.statusCode = 400;
       res.end(JSON.stringify({ error: "invalid_bot_authoring_material" }));
       return;
@@ -956,7 +976,8 @@ const server = createServer(isolateRequestFailure(async (req, res) => {
   if (url.pathname === "/inspect/ghost-authoring-material" && req.method === "POST") {
     const body = await readJson(req);
     const packageInfo = packagesByApplet.get(body?.applet_id);
-    if (!packageInfo || !body.external_ref || !body.effective_scope || !body.material) {
+    if (!packageInfo || !body.external_ref || !body.effective_scope || !body.material ||
+        Object.hasOwn(body.material, "content_backup_private_key_b64url")) {
       res.statusCode = 400;
       res.end(JSON.stringify({ error: "invalid_ghost_authoring_material" }));
       return;
@@ -1023,10 +1044,16 @@ const server = createServer(isolateRequestFailure(async (req, res) => {
       res.end(JSON.stringify({ error: "applet_service_key_unavailable" }));
       return;
     }
-    const outcome = runCotestWire("applet-realm-actor-author", {
+    if (!managerArchive) {
+      res.statusCode = 503;
+      res.end(JSON.stringify({ error: "native_manager_archive_unavailable" }));
+      return;
+    }
+    const outcome = managerArchive.authorOriginal(material.inception, privateInput => runCotestWire("applet-realm-actor-author", {
       authoring_request: authoringRequest,
       applet_package: packageInfo.appletPackage,
       ...material,
+      ...privateInput,
       service_signing_seed_b64url: servicePrivateJwk.d,
       service_verification_method: packageInfo.verificationMethod,
       station_id: stationId(),
@@ -1035,7 +1062,9 @@ const server = createServer(isolateRequestFailure(async (req, res) => {
       station_public_jwk: createPublicKey(
         stationNotaryPrivateKey(),
       ).export({ format: "jwk" }),
-    });
+    }), privateKey => runCotestWire("native-archive-recipient-public-key", {
+      content_backup_private_key_b64url: privateKey,
+    }).public_key_base64url);
     if (outcome.error) {
       res.statusCode = outcome.status ?? 400;
       res.end(canonicalJson({ error: outcome.error }));

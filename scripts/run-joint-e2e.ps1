@@ -4026,6 +4026,7 @@ $topology | Add-Member -NotePropertyName generated_at -NotePropertyValue ((Get-D
 $topology | Add-Member -NotePropertyName lifecycle -NotePropertyValue "planned"
 $topology | ConvertTo-Json -Depth 12 | Set-Content -LiteralPath $topologyPath -Encoding utf8NoBOM
 $mockAppletRegistryStateKeyFile = $null
+$mockAppletRegistryArchiveKeyFile = $null
 $ephemeralCoauthServer1Postgres = $null
 $ephemeralCoauthServer2Postgres = $null
 $ephemeralColandPostgres = $null
@@ -5574,7 +5575,17 @@ try {
             $mockAppletRegistryStateKeyFile,
             [System.Security.Cryptography.RandomNumberGenerator]::GetBytes(32)
         )
+        $mockAppletRegistryArchiveFile = Join-Path $serviceLogDir "mock-applet-manager-archive.json"
+        $mockAppletRegistryArchiveKeyFile = Join-Path ([System.IO.Path]::GetTempPath()) "cotest-mock-applet-archive-$timestamp.key"
+        [System.IO.File]::WriteAllBytes(
+            $mockAppletRegistryArchiveKeyFile,
+            [System.Security.Cryptography.RandomNumberGenerator]::GetBytes(32)
+        )
+        & node (Join-Path $mocksRoot '_shared/manager-archive.mjs') initialize `
+            $mockAppletRegistryArchiveFile $mockAppletRegistryArchiveKeyFile $mockAppletRegistryStateKeyFile
+        if ($LASTEXITCODE -ne 0) { throw 'Native manager archive initialization failed' }
         $envExpr = "`$env:MOCK_APPLET_REGISTRY_PORT='$mockAppletRegistryPort'; `$env:MOCK_APPLET_REGISTRY_STATE_FILE=" + (Quote-PsLiteral $mockAppletRegistryStateFile) + "; `$env:MOCK_APPLET_REGISTRY_STATE_KEY_FILE=" + (Quote-PsLiteral $mockAppletRegistryStateKeyFile)
+        $envExpr += "; `$env:MOCK_APPLET_REGISTRY_ARCHIVE_FILE=" + (Quote-PsLiteral $mockAppletRegistryArchiveFile) + "; `$env:MOCK_APPLET_REGISTRY_ARCHIVE_KEY_FILE=" + (Quote-PsLiteral $mockAppletRegistryArchiveKeyFile)
         $envExpr += "; `$env:MOCK_APPLET_REGISTRY_PUBLIC_BASE_URL=" + (Quote-PsLiteral $mockAppletRegistryBaseUrl)
         if ($MockAppletRegistryDid) {
             $envExpr = "$envExpr; `$env:MOCK_APPLET_REGISTRY_DID=" + (Quote-PsLiteral $MockAppletRegistryDid)
@@ -6260,6 +6271,9 @@ finally {
         }
         if ($mockAppletRegistryStateKeyFile) {
             Remove-Item -LiteralPath $mockAppletRegistryStateKeyFile -Force -ErrorAction SilentlyContinue
+        }
+        if ($mockAppletRegistryArchiveKeyFile) {
+            Remove-Item -LiteralPath $mockAppletRegistryArchiveKeyFile -Force -ErrorAction SilentlyContinue
         }
     }
 
