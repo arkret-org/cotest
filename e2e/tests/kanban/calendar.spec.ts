@@ -11,6 +11,7 @@ import {
   type Response,
 } from "../../helpers/arkret-test";
 import { selectProductOptionByLabel } from "../../helpers/product-select";
+import { readTextLineLayout } from "../../helpers/text-layout";
 import { stepShot } from "../../helpers/screenshots";
 import {
   assertJointStackNotRequired,
@@ -217,12 +218,9 @@ test("@fully-implemented calendar schedule and RSVP survive the canonical Strand
     for (const field of ["calendar-agenda-start", "calendar-agenda-end"]) {
       const date = calendar.locator(`.${field}`).first();
       await expect(date).toBeVisible();
-      const layout = await date.evaluate(element => ({
-        height: element.getBoundingClientRect().height,
-        lineHeight: Number.parseFloat(getComputedStyle(element).lineHeight),
-      }));
-      expect(layout.height, "a full local date and time remains readable on one line")
-        .toBeLessThanOrEqual(layout.lineHeight + 1);
+      const layout = await readTextLineLayout(date);
+      expect(layout.fragment_count, "the full date has rendered text").toBeGreaterThan(0);
+      expect(layout.line_count, "a full local date and time remains readable on one line").toBe(1);
     }
     await stepShot(page.page, testInfo, "calendar-schedule-rsvp");
 

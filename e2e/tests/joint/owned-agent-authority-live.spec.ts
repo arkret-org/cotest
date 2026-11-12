@@ -2,6 +2,7 @@ import { accountActorId } from "../../helpers/coland-api";
 import { actorRow } from "../../helpers/product-locators";
 import { selectProductOptionByReference } from "../../helpers/product-select";
 import { selectProductOptionByLabel } from "../../helpers/product-select";
+import { enterSecretText } from "../../helpers/secret-input";
 // A normal member confirms a narrow owned source through Inkson, without an
 // admin granting capability-management actions. Immutable private scope evidence
 // is required before authorization; pairing itself must not grant content rights.
@@ -438,6 +439,13 @@ test("administrator Policy stale CAS and ordinary member edits refuse without ef
   const id = await editor.getByLabel("Exact Policy id", { exact: true }).inputValue();
   const sibling = await openDpopUserPageFromSession(browser, jointRealm.aliceSession, { prepareMlsDevice: false });
   expect(Boolean(sibling)).toBe(true);
+  // Metadata-only Policy editing does not require opening encrypted history.
+  // Handle its optional restore prompt through the product's real Not now action,
+  // including a prompt that mounts after the editor's initial readiness check.
+  const unlockPrompt = sibling!.page.page.getByRole("dialog", { name: "Restore encryption keys", exact: true });
+  await sibling!.page.page.addLocatorHandler(unlockPrompt, async () => {
+    await unlockPrompt.getByRole("button", { name: "Not now", exact: true }).click();
+  });
   let releaseStale!: () => void;
   const staleHold = new Promise<void>(resolve => { releaseStale = resolve; });
   let staleFrozen!: () => void;
@@ -486,6 +494,7 @@ test("administrator Policy stale CAS and ordinary member edits refuse without ef
     expect(canonicalJson(unchanged.current_state) === canonicalJson(accepted.current_state)).toBe(true);
   } finally {
     releaseStale();
+    await sibling!.page.page.removeLocatorHandler(unlockPrompt);
     await sibling!.page.page.unrouteAll({ behavior: "wait" });
     await sibling!.page.close();
   }
@@ -701,7 +710,9 @@ async function loseAcceptedReviewResponse(page: Page, operation: "requests" | "d
   const observed = new Promise<{ body: Record<string, any>; outcome: Record<string, any> }>((resolve, reject) => {
     settle = resolve; fail = reject;
   });
-  await page.route(pattern, async route => {
+  void observed.catch(() => {});
+  const timeout = setTimeout(() => fail(new Error("accepted management response was not observed")), 180_000);
+  const handler = async (route: Route) => {
     try {
       if (retained) {
         expect(canonicalJson(route.request().postDataJSON()) === canonicalJson(retained.body), "transport retry preserves its original request").toBe(true);
@@ -717,13 +728,17 @@ async function loseAcceptedReviewResponse(page: Page, operation: "requests" | "d
       await route.abort("failed");
       settle(value);
     } catch (error) { fail(error); }
-  });
+  };
+  await page.route(pattern, handler);
   try {
     await click();
     const value = await observed;
     await expect(managementReviewPanel(page).locator(":scope > .write-status")).toContainText("操作被拒绝或当前证据不可用", { timeout: 180_000 });
     return value;
-  } finally { await page.unroute(pattern); }
+  } finally {
+    clearTimeout(timeout);
+    await page.unroute(pattern, handler);
+  }
 }
 
 async function sharedReview(panel: Locator, candidate: Record<string, any>) {
@@ -941,14 +956,16 @@ test("normal controller requests join and public review, distinct administrator 
     // This accepted principal's Recovery Key is typed into the normal password
     // form. The browser resolves and verifies native history, then derives and
     // signs with its effective update key; no Device/registration VM substitute.
-    await administrator.getByLabel("身份控制 Recovery Key（仅本次签署，不保存）", { exact: true }).fill(
+    await enterSecretText(jointRealm.alicePage.page,
+      administrator.getByLabel("身份控制 Recovery Key（仅本次签署，不保存）", { exact: true }),
       registeredSubjectIdentityControl(jointRealm.alice).recoveryKey);
     if (operation === "join") {
       expect((await administrator.getByLabel("身份控制 Recovery Key（仅本次签署，不保存）", { exact: true }).inputValue()).length > 0).toBe(true);
       await switchReviewRealmAndReload(jointRealm.alicePage, realm, otherRealm, share, "pending");
       await expect(administrator.getByLabel("身份控制 Recovery Key（仅本次签署，不保存）", { exact: true })).toHaveValue("");
       await confirmReview(administrator);
-      await administrator.getByLabel("身份控制 Recovery Key（仅本次签署，不保存）", { exact: true }).fill(
+      await enterSecretText(jointRealm.alicePage.page,
+        administrator.getByLabel("身份控制 Recovery Key（仅本次签署，不保存）", { exact: true }),
         registeredSubjectIdentityControl(jointRealm.alice).recoveryKey);
     }
     let approved: Record<string, any>;

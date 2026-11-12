@@ -30,20 +30,27 @@ export async function postponeSearchEncryptionPrompts(
     for (const [prompt, dismiss] of prompts) {
       const button = page.getByRole("dialog", { name: prompt, exact: true })
         .getByRole("button", { name: dismiss, exact: true });
-      if (!await button.isVisible() || !await button.isEnabled()) continue;
-      const uncovered = await button.evaluate(element => {
-        const bounds = element.getBoundingClientRect();
-        const top = document.elementFromPoint(bounds.x + bounds.width / 2,
-          bounds.y + bounds.height / 2);
-        return Boolean(top && (top === element || element.contains(top)));
-      });
+      let uncovered: boolean;
+      try {
+        if (!await button.isVisible() || !await button.isEnabled({ timeout: 500 })) continue;
+        uncovered = await button.evaluate(element => {
+          const bounds = element.getBoundingClientRect();
+          const top = document.elementFromPoint(bounds.x + bounds.width / 2,
+            bounds.y + bounds.height / 2);
+          return Boolean(top && (top === element || element.contains(top)));
+        }, undefined, { timeout: 500 });
+      } catch (error) {
+        if (page.isClosed()) return null;
+        if (!await button.isVisible()) continue;
+        throw error;
+      }
       if (uncovered) return { prompt, dismiss };
     }
     return null;
   };
   let postponing = false;
   const postpone = async () => {
-    if (postponing) return;
+    if (postponing || page.isClosed()) return;
     postponing = true;
     try {
       // Pause only the fixture's matching predicate. Unregistering an active
@@ -55,25 +62,30 @@ export async function postponeSearchEncryptionPrompts(
         if (!selected) return;
         const dialog = page.getByRole("dialog", { name: selected.prompt, exact: true });
         try {
-          await dialog.getByRole("button", { name: selected.dismiss, exact: true }).click();
+          await dialog.getByRole("button", { name: selected.dismiss, exact: true }).click({ timeout: 2_500 });
+          await expect(dialog).toBeHidden({ timeout: 2_500 });
         } catch (error) {
           // The initial setup can reveal words between hit-test and click.
           // Re-select its normal dismissal; another foreground workflow keeps
           // its own action, and a still-clickable broken button must fail.
+          if (page.isClosed()) return;
           const current = await frontmost();
-          if (current?.prompt !== selected.prompt) return;
-          if (current.dismiss !== selected.dismiss) continue;
-          throw error;
+          if (!current) return;
+          if (attempt === 2) throw error;
+          continue;
         }
-        await expect(dialog).toBeHidden();
         onPostpone?.(selected.prompt);
       }
       if (await frontmost()) throw new Error("search encryption reminders did not settle after three normal dismissals");
+    } catch (error) {
+      if (!page.isClosed()) throw error;
     } finally {
       try {
         if (!page.isClosed()) {
           await page.evaluate(attribute => document.documentElement.removeAttribute(attribute), pauseAttribute);
         }
+      } catch (error) {
+        if (!page.isClosed()) throw error;
       } finally {
         postponing = false;
       }

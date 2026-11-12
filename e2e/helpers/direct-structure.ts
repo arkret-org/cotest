@@ -1,4 +1,6 @@
 import { prepareDirectStructureForm } from "./direct-structure-form";
+import { expectPlaintextMessage } from "./message-evidence";
+import { revealTimelineEvent } from "./timeline-visibility";
 import { submitOrdinaryComposerDraft } from "./composer-handoff";
 import { openDirectChatNotification } from "./direct-notification";
 import { accountActorId } from "./coland-api";
@@ -22,6 +24,8 @@ import { waitForAcceptedDirectCut } from "./direct-accepted-cut";
 import { waitForDurableCurrentCut } from "./durable-current-cut";
 import { observeSignalTransport } from "./signal-transport-observation";
 import { uint64Decimal } from "./uint64-decimal";
+import { publicMlsRuntimeDiagnostic } from "./mls-runtime-diagnostics";
+import { readOrdinaryHistoryDiagnostic } from "./ordinary-history-diagnostics";
 
 // Negative structure targets must exist outside Direct's protected Realm.
 // Circle creation does not create a Strand: author it with an explicit scope.
@@ -596,7 +600,7 @@ export async function structureWrite(page: Page, action: string, kind: string, t
   const boundaryRealm = decodeURIComponent(new URL(page.url()).pathname.split("/")[2] ?? "");
   const boundaryBefore = boundaryProof ? await Promise.all([structureCut(boundaryProof, boundaryRealm),
     ...(boundaryProof.peer ? [structureCut(boundaryProof, boundaryRealm, boundaryProof.peer)] : [])]) : undefined;
-  await prepareDirectStructureForm(page, action, topic);
+  await prepareDirectStructureForm(page, action);
   if (title) {
     const input = panel.getByRole("textbox", { name: "Title", exact: true });
     const field = panel.locator(".direct-title-field");
@@ -610,6 +614,7 @@ export async function structureWrite(page: Page, action: string, kind: string, t
       await expect(field).toHaveClass(/\bhas-value\b/, { timeout: 1_000 });
     }).toPass({ timeout: 10_000, intervals: [100, 250] });
   }
+  if (topic) await prepareDirectStructureForm(page, action, topic);
   await expect(panel.getByRole("button", { name: "Save", exact: true })).toBeEnabled({ timeout: 180_000 });
   const responses: Response[] = [];
   let signedRequestEmitted = false;
@@ -1124,12 +1129,21 @@ async function ownWatchTransitions(page: Page, otherPages: Page[], strandId: str
   return { event: last!, acceptedCut: acceptedCut! };
 }
 
-async function fillDurableComposerDraft(page: Page, draft: string) {
+function boundDirectComposer(page: Page, strandId: string) {
+  const target = createHash("sha256").update(strandId).digest("hex");
+  return page.locator(".chat-input.chat-target-" + target);
+}
+
+async function fillDurableComposerDraft(page: Page, draft: string, strandId: string) {
   await page.bringToFront();
-  const input = page.locator(".chat-input");
+  const input = boundDirectComposer(page, strandId);
+  await expect(input).toBeVisible({ timeout: 90_000 });
+  await expect(input).toBeEnabled({ timeout: 90_000 });
   if (await input.inputValue() === draft) {
+    await expect(input).toHaveClass(/\bis-draft-saved\b/, { timeout: 90_000 });
     await page.reload({ waitUntil: "domcontentloaded" });
     await expect(input).toHaveValue(draft, { timeout: 90_000 });
+    await expect(input).toHaveClass(/\bis-draft-saved\b/, { timeout: 90_000 });
     return;
   }
   await page.evaluate(() => {
@@ -1165,6 +1179,12 @@ async function fillDurableComposerDraft(page: Page, draft: string) {
     await expect.poll(() => page.evaluate(() => (window as typeof window & {
       __directDraftReceipt?: { completed: number };
     }).__directDraftReceipt?.completed ?? 0), { timeout: 90_000 }).toBeGreaterThan(0);
+    // The physical transaction can belong to another cache field. Wait for
+    // the bound composer to acknowledge this exact target and current text.
+    await input.evaluate(() => new Promise<void>(resolve => {
+      requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+    }));
+    await expect(input).toHaveClass(/\bis-draft-saved\b/, { timeout: 90_000 });
   } finally {
     await page.evaluate(() => (window as typeof window & {
       __directDraftReceipt?: { dispose: () => void };
@@ -1179,7 +1199,7 @@ async function indexedDbClearRecovery(page: Page, mainId: string, chatId: string
   const input = page.locator(".chat-input");
   const choose = page.locator(".direct-structure").getByRole("combobox", { name: "Chat", exact: true });
   await choose.selectOption(mainId);
-  await fillDurableComposerDraft(page, oldDraft);
+  await fillDurableComposerDraft(page, oldDraft, mainId);
   if (cancelSettings) {
     // Mount the second real target before holding the entries transaction.
     // Returning to it must not wait on the structure menu's fresh index read,
@@ -1278,8 +1298,10 @@ async function indexedDbClearRecovery(page: Page, mainId: string, chatId: string
       mark("chat-restored");
       const newer = `${oldDraft}-new-chat`;
       const beforeDraft = await barrier();
-      await input.fill(newer);
-      await expect(input).toHaveValue(newer);
+      const chatInput = boundDirectComposer(page, chatId);
+      await expect(chatInput).toBeEnabled({ timeout: 90_000 });
+      await chatInput.fill(newer);
+      await expect(chatInput).toHaveValue(newer);
       await expect(page.locator(".chat-input-hint")).toHaveCount(0);
       mark("new-draft-retained");
       mark("held-draft-observation-started");
@@ -1295,6 +1317,7 @@ async function indexedDbClearRecovery(page: Page, mainId: string, chatId: string
       mark("physical-clear-aborted");
       await expect.poll(async () => (await barrier()).committed).toBeGreaterThan(beforeDraft.committed);
       mark("recovery-write-committed");
+      await expect(chatInput).toHaveClass(/\bis-draft-saved\b/, { timeout: 90_000 });
       await page.reload();
       mark("recovery-reloaded");
       await expect(input).toHaveValue(newer, { timeout: 90_000 });
@@ -1303,7 +1326,13 @@ async function indexedDbClearRecovery(page: Page, mainId: string, chatId: string
       await expect(input).toHaveValue(oldDraft);
       mark("old-draft-cold-verified");
       await choose.selectOption(chatId);
-      await input.fill("");
+      await expect(chatInput).toBeEnabled({ timeout: 90_000 });
+      await chatInput.fill("");
+      await expect(chatInput).toHaveValue("");
+      await chatInput.evaluate(() => new Promise<void>(resolve => {
+        requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+      }));
+      await expect(chatInput).toHaveClass(/\bis-draft-saved\b/, { timeout: 90_000 });
     } else {
       mark("physical-clear-release-started");
       await page.evaluate(() => { (window as any).__directCacheBarrier.release(); });
@@ -1342,6 +1371,21 @@ async function indexedDbClearRecovery(page: Page, mainId: string, chatId: string
 
 export async function flatTopicChats(alice: Page, bob: Page, mainMessages: string[], extraDevices: Page[] = [], proof?: DirectStructureProof) {
   const pages = [alice, bob, ...extraDevices];
+  const observations = pages.map(page => {
+    const samples: Array<{ sample: ReturnType<typeof publicMlsRuntimeDiagnostic>; count: number }> = [];
+    const listener = (message: { text(): string }) => {
+      const sample = publicMlsRuntimeDiagnostic(message.text());
+      if (!sample) return;
+      const last = samples.at(-1);
+      if (last && JSON.stringify(last.sample) === JSON.stringify(sample)) last.count++;
+      else {
+        samples.push({ sample, count: 1 });
+        if (samples.length > 256) samples.shift();
+      }
+    };
+    page.on("console", listener);
+    return { page, samples, listener };
+  });
   for (const page of pages) {
     await page.addLocatorHandler(page.getByRole("dialog", { name: "Back up encrypted history", exact: true }), async () => {
       await page.getByRole("button", { name: "Remind me later", exact: true }).click();
@@ -1349,7 +1393,20 @@ export async function flatTopicChats(alice: Page, bob: Page, mainMessages: strin
   }
   try {
     await runFlatTopicChats(alice, bob, mainMessages, extraDevices, proof);
+  } catch (error) {
+    const diagnostics = await Promise.all(observations.map(async ({ page, samples }, participant) => {
+      const realm = decodeURIComponent(new URL(page.url()).pathname.split("/")[2] ?? "");
+      const history = /^ak:realm:[A-Za-z0-9_-]{44}$/.test(realm)
+        ? await readOrdinaryHistoryDiagnostic(page, realm).catch(() => ({ error: "unavailable" }))
+        : { error: "invalid_realm" };
+      return { participant, history, runtime: samples };
+    }));
+    await test.info().attach("direct-content-public-diagnostics", {
+      contentType: "application/json", body: JSON.stringify(diagnostics),
+    });
+    throw error;
   } finally {
+    for (const { page, listener } of observations) page.off("console", listener);
     for (const page of pages) {
       await page.removeLocatorHandler(page.getByRole("dialog", { name: "Back up encrypted history", exact: true }));
     }
@@ -1359,6 +1416,18 @@ export async function flatTopicChats(alice: Page, bob: Page, mainMessages: strin
 async function runFlatTopicChats(alice: Page, bob: Page, mainMessages: string[], extraDevices: Page[], proof?: DirectStructureProof) {
   expect(proof, "structure coverage requires the actual accepted participant credentials").toBeDefined();
   structuralBoundaries.set(alice, proof!);
+  const mainRows = new Map<Page, Array<{ body: string; presentationId: string }>>();
+  for (const page of [alice, bob]) {
+    const rows: Array<{ body: string; presentationId: string }> = [];
+    for (const body of mainMessages) {
+      const row = page.locator(".chat-message").filter({ hasText: body });
+      await expect(row).toHaveCount(1);
+      const presentationId = await row.getAttribute("id");
+      expect(presentationId).toMatch(/^chat-message-[0-9a-f]{64}$/);
+      rows.push({ body, presentationId: presentationId! });
+    }
+    mainRows.set(page, rows);
+  }
   await expect(alice.locator(".direct-structure").getByRole("combobox", { name: "Action", exact: true })).toHaveCount(0);
   const mainPath = new URL(alice.url()).pathname;
   const mainId = decodeURIComponent(mainPath.split("/")[3]);
@@ -1537,10 +1606,10 @@ async function runFlatTopicChats(alice: Page, bob: Page, mainMessages: string[],
   await expect(chooseAlice).toHaveValue(chatId);
   const chatDraft = `draft-chat-${suffix}`;
   const mainDraft = `draft-main-${suffix}`;
-  await fillDurableComposerDraft(alice, chatDraft);
+  await fillDurableComposerDraft(alice, chatDraft, chatId);
   await chooseAlice.selectOption(mainId);
   await expect(alice.locator(".chat-input")).toHaveValue("");
-  await fillDurableComposerDraft(alice, mainDraft);
+  await fillDurableComposerDraft(alice, mainDraft, mainId);
   await chooseAlice.selectOption(chatId);
   await expect(alice.locator(".chat-input")).toHaveValue(chatDraft);
   // Both drafts are nonempty at process restart. Storage must isolate the
@@ -1617,7 +1686,7 @@ async function runFlatTopicChats(alice: Page, bob: Page, mainMessages: string[],
           && new URL(response.url()).pathname === "/_arkret/self/events"
           && ingressEvents(decodeEventIngressBody(response.request().postDataJSON())).some(event => event.kind === "ak.message.create"),
         { timeout: 90_000 }),
-        sendButton.click({ timeout: 30_000 }),
+        submitOrdinaryComposerDraft(sender, text),
       ]);
     } catch (error) {
       await test.info().attach("direct-topic-chat-send-outcome", {
@@ -1824,7 +1893,37 @@ async function runFlatTopicChats(alice: Page, bob: Page, mainMessages: string[],
   await structureWrite(bob, "delete_topic_target", "ak.space.tombstone", undefined, topicId);
   for (const page of [alice, bob]) {
     await page.locator(".direct-structure").getByRole("combobox", { name: "Chat", exact: true }).selectOption(mainId);
-    for (const message of mainMessages) await expect(page.locator(".chat-message").filter({ hasText: message })).toBeVisible({ timeout: 90_000 });
+    const navigation = page.locator(".direct-structure");
+    if (await navigation.getByRole("combobox", { name: "Action", exact: true }).isVisible()) {
+      await navigation.getByRole("button", { name: "Manage chats and topics", exact: true }).click();
+    }
+    const feed = page.locator(".message-list:visible");
+    await expect(feed).toHaveCount(1);
+    for (const message of mainRows.get(page)!) {
+      const row = page.locator("#" + message.presentationId);
+      await (async () => {
+        await revealTimelineEvent(page, row, 90_000, feed);
+        await row.scrollIntoViewIfNeeded();
+        await expectPlaintextMessage(row, { timeout: 90_000 });
+        await expect(row).toContainText(message.body);
+      })().catch(async error => {
+        const geometry = await page.locator(".message-list").last().evaluate(feed => ({
+          height: feed.getBoundingClientRect().height,
+          viewport: feed.clientHeight,
+          scrollHeight: feed.scrollHeight,
+          scrollTop: feed.scrollTop,
+          rows: Array.from(feed.querySelectorAll<HTMLElement>(".chat-message")).map(row => ({
+            presentationId: row.id,
+            cryptoPending: row.classList.contains("is-crypto-pending"),
+            height: row.getBoundingClientRect().height,
+          })),
+        })).catch(() => null);
+        const path = test.info().outputPath(`direct-main-history-geometry-${randomUUID()}.json`);
+        await writeFile(path, JSON.stringify(geometry));
+        await test.info().attach("direct-main-history-geometry", { path, contentType: "application/json" });
+        throw error;
+      });
+    }
   }
   expect(decodeURIComponent(new URL(alice.url()).pathname)).toBe(decodeURIComponent(mainPath));
   expect(decodeURIComponent(new URL(bob.url()).pathname.split("/")[2])).toBe(decodeURIComponent(mainPath.split("/")[2]));

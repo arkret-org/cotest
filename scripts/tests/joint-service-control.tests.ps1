@@ -3,7 +3,8 @@ Set-StrictMode -Version Latest
 . (Join-Path $PSScriptRoot '..\lib\process-ownership.ps1')
 
 $controller = (Resolve-Path (Join-Path $PSScriptRoot '..\control-joint-e2e-service.ps1')).Path
-$root = Join-Path ([System.IO.Path]::GetTempPath()) "cotest-service-control-$PID"
+$artifactBase = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..\artifacts\service-control-tests'))
+$root = Join-Path $artifactBase "control-$PID with 'quoted' path"
 $null = New-Item -ItemType Directory -Force -Path $root
 $commandLog = Join-Path $root 'coland-server2.command.txt'
 $statePath = Join-Path $root 'controls\server2.json'
@@ -19,9 +20,29 @@ $statePath = Join-Path $root "controls\server2-$serviceName.json"
 $replacementIdentity = $null
 try {
     $shellPath = (Get-Process -Id $PID).Path
-    $quotedShell = "'" + $shellPath.Replace("'", "''") + "'"
-    $sleepCommand = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes('Start-Sleep -Seconds 60'))
-    $command = "& $quotedShell -NoProfile -EncodedCommand $sleepCommand"
+    $nodePath = (Get-Command node -ErrorAction Stop).Source
+    $portFile = Join-Path $root 'service-port.txt'
+    $failureFile = Join-Path $root 'service-failure.txt'
+    $serviceScript = Join-Path $root 'output-service.cjs'
+    @'
+const fs = require('node:fs');
+const http = require('node:http');
+const [portFile, failureFile] = process.argv.slice(2);
+const fail = code => { fs.writeFileSync(failureFile, code); process.exit(1); };
+process.on('SIGHUP', () => fail('SIGHUP'));
+process.on('uncaughtException', error => fail(error.code || 'uncaughtException'));
+const server = http.createServer((request, response) => {
+    response.end('ok');
+    if (request.url === '/stop') server.close(() => process.exit(0));
+});
+server.listen(0, '127.0.0.1', () => {
+    fs.writeFileSync(portFile, String(server.address().port));
+    setInterval(() => process.stdout.write('service-tick\n'), 100);
+});
+'@ | Set-Content -LiteralPath $serviceScript -Encoding utf8NoBOM
+    $quotedNode = "'" + $nodePath.Replace("'", "''") + "'"
+    $serviceArguments = @($serviceScript, $portFile, $failureFile) | ForEach-Object { "'" + $_.Replace("'", "''") + "'" }
+    $command = "Start-Sleep -Seconds 5; & $quotedNode " + ($serviceArguments -join ' ')
     $command | Set-Content -LiteralPath $commandLog -Encoding utf8NoBOM
     $wrapped = "$command; if (-not `$?) { exit 1 }; exit 0"
     $startArguments = @{
@@ -33,7 +54,11 @@ try {
     if ($IsWindows) { $startArguments.WindowStyle = 'Hidden' }
     $original = Start-Process @startArguments
     $originalIdentity = Get-CotestProcessIdentity -Process $original
-    Start-Sleep -Milliseconds 750
+    $originalDeadline = [datetime]::UtcNow.AddSeconds(15)
+    do {
+        if (@(Get-CotestOwnedProcessTree -RootIdentity $originalIdentity).Count -ge 2) { break }
+        Start-Sleep -Milliseconds 50
+    } while ([datetime]::UtcNow -lt $originalDeadline)
     $topology = [pscustomobject]@{
 
         server_count = 1
@@ -77,7 +102,10 @@ try {
     $state = Get-Content -Raw -LiteralPath $statePath | ConvertFrom-Json
     if ($state.status -ne 'running') { throw 'restore did not return the process tree to running' }
 
-    & $controller -TopologyPath $topologyPath -ServerName server2 -ServiceName $serviceName -Action restart
+    Remove-Item -LiteralPath $portFile -Force -ErrorAction SilentlyContinue
+    $restartArguments = @('-NoProfile', '-File', $controller, '-TopologyPath', $topologyPath, '-ServerName', 'server2', '-ServiceName', $serviceName, '-Action', 'restart') | ConvertTo-Json -Compress
+    & node -e 'require("node:child_process").execFileSync(process.argv[1], JSON.parse(process.argv[2]), { timeout: 60000, windowsHide: true })' $shellPath $restartArguments
+    if ($LASTEXITCODE -ne 0) { throw 'the separate piped restart controller failed' }
     $state = Get-Content -Raw -LiteralPath $statePath | ConvertFrom-Json
     $replacementId = [int]$state.current_process_id
     $replacementIdentity = [pscustomobject]@{ process_id = $replacementId; started_at = $state.current_process_started_at }
@@ -86,17 +114,31 @@ try {
         if (Get-CotestIdentityProcess -Identity $identity) { throw 'restart retained an original process identity' }
     }
     if (-not $state.restarted -or $replacementId -eq $original.Id -or -not (Get-Process -Id $replacementId -ErrorAction SilentlyContinue)) { throw 'restart did not create a tracked replacement process' }
-    Start-Sleep -Milliseconds 750
+    if (@(Get-CotestOwnedProcessTree -RootIdentity $replacementIdentity).Count -lt 2) { throw 'restart returned before the actual service child started' }
+    Start-Sleep -Seconds 2
+    if (Test-Path -LiteralPath $failureFile) {
+        $failure = Get-Content -Raw -LiteralPath $failureFile
+        throw "restart lost its output-producing native service after the controller exited ($failure)"
+    }
+    if (-not (Test-Path -LiteralPath $portFile)) { throw 'replacement native service did not open its health listener' }
+    $port = [int](Get-Content -Raw -LiteralPath $portFile)
+    if ((Invoke-WebRequest -Uri "http://127.0.0.1:$port/health" -TimeoutSec 5).StatusCode -ne 200) { throw 'replacement native service health failed after controller exit' }
     & $controller -TopologyPath $topologyPath -ServerName server2 -ServiceName $serviceName -Action isolate
     & $controller -TopologyPath $topologyPath -ServerName server2 -ServiceName $serviceName -Action restore
     if (-not (Get-CotestIdentityProcess -Identity $replacementIdentity)) { throw 'replacement identity was not usable after isolate/restore' }
     Write-Host "joint-service-control.tests.ps1 ($serviceName): PASS"
 } finally {
+    if (Test-Path -LiteralPath $portFile) {
+        try {
+            $port = [int](Get-Content -Raw -LiteralPath $portFile)
+            $null = Invoke-WebRequest -Uri "http://127.0.0.1:$port/stop" -TimeoutSec 2
+        } catch { }
+    }
     foreach ($identity in @($replacementIdentity, $originalIdentity) | Where-Object { $_ }) {
         Stop-CotestOwnedProcessTree -RootIdentity $identity
     }
     $resolvedRoot = [System.IO.Path]::GetFullPath($root)
-    if (-not $resolvedRoot.StartsWith([System.IO.Path]::GetFullPath([System.IO.Path]::GetTempPath()), [StringComparison]::OrdinalIgnoreCase)) { throw 'test cleanup escaped its temporary directory' }
+    if (-not $resolvedRoot.StartsWith($artifactBase + [System.IO.Path]::DirectorySeparatorChar, [StringComparison]::OrdinalIgnoreCase)) { throw 'test cleanup escaped its artifact directory' }
     Remove-Item -LiteralPath $root -Recurse -Force -ErrorAction SilentlyContinue
 }
 

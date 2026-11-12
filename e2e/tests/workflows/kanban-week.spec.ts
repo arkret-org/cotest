@@ -1,4 +1,4 @@
-import { newBoardTrigger, addBoardList } from "../../helpers/kanban-product-ui";
+import { newBoardTrigger, addBoardList, submitBoardCardDraft } from "../../helpers/kanban-product-ui";
 // Kanban week-in-review workflow — single user runs a day on the board
 // Contract: e2e/scenarios/workflows/kanban-week.md
 // Spec refs:
@@ -41,35 +41,7 @@ async function readRealmEvents(
 }
 
 async function addCardThroughColumn(column: Locator, title: string): Promise<void> {
-  for (let attempt = 0; attempt < 4; attempt += 1) {
-    const titleInput = column.locator(".new-card-title-input").last();
-    if (!(await titleInput.isVisible({ timeout: 250 }).catch(() => false))) {
-      const addButton = column.locator(".add-card-button").last();
-      await expect(addButton).toBeVisible({ timeout: 30_000 });
-      await addButton.click({ timeout: 5_000 }).catch(async (error) => {
-        if (!(await titleInput.isVisible({ timeout: 500 }).catch(() => false))) {
-          throw error;
-        }
-      });
-    }
-    await expect(titleInput).toBeVisible({ timeout: 30_000 });
-    await titleInput.fill(title);
-    const saveButton = column.locator(".save-card-button").last();
-    if (await saveButton.isEnabled({ timeout: 2_000 }).catch(() => false)) {
-      try {
-        await saveButton.click({ timeout: 30_000 });
-        return;
-      } catch (error) {
-        if (await column.getByText(title, { exact: true }).isVisible({ timeout: 500 }).catch(() => false)) {
-          return;
-        }
-        if (attempt === 3) {
-          throw error;
-        }
-      }
-    }
-  }
-  throw new Error(`card editor was repeatedly replaced before saving ${title}`);
+  await submitBoardCardDraft(column, title);
 }
 
 async function waitForCanonicalStrandId(

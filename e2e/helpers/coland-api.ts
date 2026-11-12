@@ -26,6 +26,7 @@ import {
   flagonBaseUrl,
 } from "./env";
 import { base64url } from "./encoding";
+import { sealNativeContentMessage } from "./native-content-custody";
 import { postFrozenRealmBootstrap } from "./coland-api/realm-bootstrap";
 import type {
   ActorId,
@@ -48,7 +49,6 @@ import {
 } from "./coland-api/account-stream";
 import {
   activateRealmMlsApi,
-  encryptMlsMessageContent,
   readScopeMlsGroupCurrentApi,
   scopeMlsMemberGroupApi,
 } from "./coland-api/mls";
@@ -1413,13 +1413,7 @@ export async function sendLocalAuthoredMessageApi(
   const principal = await currentActorIdApi(request, token, opts);
   const strandId = await resolveDefaultStrandId(request, token, realmId, opts);
   const content = { kind: "ak.content.text", body };
-  const payload = await localMessagePayload(request, token, realmId, strandId, content, opts);
-  // The MLS private state advanced exactly once above; transport retries keep
-  // this Event, producer proof and ciphertext rather than encrypting again.
-  const event = signedEventEnvelope({
-    actorId: principal, server: opts.server, realmId,
-    kind: "ak.message.create", payload,
-  });
+  const event = await localMessageEvent(request, token, principal, realmId, strandId, content, opts);
   const url = `${colandBaseUrl(opts.server)}/_arkret/self/events`;
   const submission = canonicalJson({ event });
   const submit = () => request.post(url, {
@@ -1457,21 +1451,26 @@ export async function sendLocalAuthoredMessageApi(
   };
 }
 
-async function localMessagePayload(
-  request: APIRequestContext, token: string, realmId: string, strandId: string,
-  content: Record<string, unknown>, opts: { server?: ColandKey; encrypted?: boolean },
+async function localMessageEvent(
+  request: APIRequestContext, token: string, actorId: string, realmId: string, strandId: string,
+  content: Record<string, unknown>, opts: { server?: ColandKey; encrypted?: boolean; createdAt?: string },
 ): Promise<Record<string, unknown>> {
   const scopeRef = { kind: "realm", realm_id: realmId };
   const current = await readScopeMlsGroupCurrentApi(request, token, realmId, scopeRef, opts.server);
-  const payload: Record<string, unknown> = { strand_id: strandId, track_name: "discussion" };
-  if (current) {
-    const group = await scopeMlsMemberGroupApi(request, token, realmId, scopeRef, undefined, opts.server);
-    payload.encrypted_content = encryptMlsMessageContent(group, content);
-  } else {
-    if (opts.encrypted) throw new Error("Encrypted Message requires accepted MLS genesis and local private state");
-    payload.content = content;
+  if (!current && opts.encrypted) {
+    throw new Error("Encrypted Message requires accepted MLS genesis and local private state");
   }
-  return payload;
+  const event = signedEventEnvelope({
+    actorId, realmId, server: opts.server, createdAt: opts.createdAt,
+    kind: "ak.message.create",
+    payload: { strand_id: strandId, track_name: "discussion", content },
+  });
+  if (!current) return event;
+
+  const group = await scopeMlsMemberGroupApi(request, token, realmId, scopeRef, undefined, opts.server);
+  const sealed = await sealNativeContentMessage(token, group.groupState, group.groupStateRef, event);
+  group.groupState = sealed.groupState;
+  return sealed.event;
 }
 
 export async function sendMessageApi(
@@ -1511,11 +1510,7 @@ export async function sendMessageApi(
       } : mention),
     } : {}),
   };
-  const payload = await localMessagePayload(request, token, realmId, strandId, content, opts);
-  const envelope = signedEventEnvelope({
-    actorId, server: opts.server, realmId, kind: "ak.message.create",
-    createdAt: opts.createdAt, payload,
-  });
+  const envelope = await localMessageEvent(request, token, actorId, realmId, strandId, content, opts);
   const submission = await submitSignedEventApi(request, token, envelope, {
     server: opts.server,
     context: `send message to ${realmId}`,
