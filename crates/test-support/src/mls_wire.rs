@@ -228,6 +228,7 @@ pub fn mls_keypackage_claim_request(input: Value) -> Result<Value> {
         "target_device_ids": [input.target_device_id],
         "requester_account_id": requester.account_id,
         "intended_realm_id": input.realm_id,
+        "effective_scope": scope,
         "mls_group_id": scope.canonical_mls_group_id()?,
         "claim_purpose": "realm_membership",
         "required_capabilities": [CONTENT_CAPABILITY],

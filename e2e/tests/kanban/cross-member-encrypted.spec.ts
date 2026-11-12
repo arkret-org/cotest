@@ -559,15 +559,16 @@ async function addEncryptedDescription(
       if (!status || status === "Saving...") continue;
       // A checkpoint read refusal precedes Event authoring. Never retry ingress.
       const checkpointRefused = /^(?:encrypted card write is not ready: )?(?:MLS send gate is not ready: )?(?:account checkpoint changed (?:before|during) committed read|MLS checkpoint repeatedly changed during committed read)$/.test(status);
+      const localGroupBehind = /^encrypted card write is not ready: MLS send gate is not ready: the local group is not at the accepted epoch [0-9]+$/.test(status);
       expect(
-        checkpointRefused || status.includes("encryption_transition_pending")
+        checkpointRefused || localGroupBehind || status.includes("encryption_transition_pending")
           || status === "Restoring encrypted Realm state before saving..."
           || status === "Waiting for the current card before saving...",
         `description save failed before submission: ${status}`,
       ).toBe(true);
       if (!ingressObserved && Date.now() < responseDeadline
         && preAuthoringRetries < 3
-        && (checkpointRefused || status.includes("encryption_transition_pending")
+        && (checkpointRefused || localGroupBehind || status.includes("encryption_transition_pending")
           || status === "Waiting for the current card before saving...")
         && await save.isEnabled()) {
         preAuthoringRetries++;
@@ -732,29 +733,20 @@ async function readyReaderBoard(
     await dismissRecoveryNags(reader);
     await page.waitForTimeout(400);
   }
-  // Best-effort: explicitly select alice's board so the right board's lists
-  // render. The deep-link `/board/<id>` route + first-board auto-select usually
-  // already select it once the board Space projects into the switcher (that
-  // projection is the actual thing under test), so a hiccup opening the dxc
-  // Select here is NOT fatal — assertCardDecrypts (a 90s poll for the decrypted
-  // card) is the real gate.
   const trigger = boardSwitcher(page);
-  const option = page.locator("button.board-select-menu-item.is-active");
-  for (let attempt = 0; attempt < 4; attempt += 1) {
+  await expect(async () => {
     await dismissRecoveryNags(reader);
-    if (!(await option.isVisible().catch(() => false))) {
-      await trigger.click({ force: true, timeout: 3_000 }).catch(() => {});
+    if (await trigger.getAttribute("aria-expanded") !== "true") {
+      await trigger.click({ timeout: 3_000 });
     }
-    if (await option.isVisible({ timeout: 1_500 }).catch(() => false)) {
-      expect(decodeURIComponent(new URL(page.url()).pathname).split("/board/")[1]?.split("/")[0]).toBe(boardId);
-      await option.click({ force: true }).catch(() => {});
-      break;
-    }
-  }
-  const scrim = page.locator("button.board-popover-scrim");
-  if (await scrim.isVisible().catch(() => false)) {
-    await scrim.click().catch(() => {});
-  }
+    const option = page.locator("button.board-select-menu-item")
+      .filter({ hasText: `(${boardId})` });
+    await expect(option).toHaveCount(1, { timeout: 3_000 });
+    await option.click({ timeout: 3_000 });
+    await expect(trigger).toHaveAttribute("aria-expanded", "false", { timeout: 3_000 });
+  }).toPass({ timeout: 60_000, intervals: [250, 500, 1_000] });
+  expect(decodeURIComponent(new URL(page.url()).pathname))
+    .toMatch(new RegExp(`/board/${boardId}$`));
 }
 
 async function openReaderBoard(
@@ -1299,6 +1291,16 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
           expect(submittedGenesisIds.size).toBe(1);
           let holdRetryAbsence = true;
           let retryAbsenceCuts = 0;
+          let freshAbsenceResponses = 0;
+          let freshAttemptStartedAt = Number.POSITIVE_INFINITY;
+          creator.page.on("response", response => {
+            const request = response.request();
+            if (response.status() !== 200 || request.method() !== "POST"
+              || new URL(response.url()).pathname !== "/_arkret/self/streams/scan"
+              || request.timing().startTime < freshAttemptStartedAt) return;
+            const query = request.postDataJSON() as Record<string, unknown>;
+            if (query.realm_id === cutRealmId) freshAbsenceResponses++;
+          });
           await creator.page.route(/\/_arkret\/self\/streams\/scan(?:\?.*)?$/, async (route) => {
             const query = route.request().postDataJSON() as Record<string, any>;
             if (holdRetryAbsence && query.realm_id === cutRealmId) {
@@ -1317,6 +1319,7 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
           expect(blocked.rejection).toEqual(closedRejection);
           expect(submittedGenesisIds.size).toBe(1);
           holdRetryAbsence = false;
+          freshAttemptStartedAt = Date.now();
           rejectionActive = false;
           epochUnitAtCut = undefined;
           signedGenesisAtCut = undefined;
@@ -1342,9 +1345,13 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
           expect(freshCut.realm_genesis).toEqual(rejectedCut.realm_genesis);
           expect(Date.parse(freshCut.snapshot.created_at))
             .toBeGreaterThanOrEqual(Date.parse(rejectedCut.snapshot.created_at));
-          // The sequence is consumer-local, not a cross-client clock.
-          // SDK same_read compares this exact holder/session/read binding.
-          expect(freshCut.request_sequence).not.toBe(rejectedCut.request_sequence);
+          // Re-entering the route recreates the consumer and its local counter.
+          // The final ready cut is also later than the SDK's actual reopen cut.
+          // Prove an independent successful absence read after this retry;
+          // SDK reopen_rejected separately rejects reuse of its exact old read.
+          await expect.poll(() => freshAbsenceResponses, { timeout: 30_000,
+            message: "the explicit new attempt must consume a fresh successful absence query" })
+            .toBeGreaterThan(0);
           expect(submittedGenesisIds.size).toBe(2);
           epochUnitAtCut = undefined;
           signedGenesisAtCut = undefined;

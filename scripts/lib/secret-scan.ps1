@@ -298,6 +298,82 @@ function Add-SecretLeaksFromReader {
 }
 
 
+# Report encoders quote error messages as data. Inspect decoded values while
+# preserving the original file and class; findings never export those values.
+function Add-JsonReportSecretLeaksFromReader {
+    param($Reader, [string]$DisplayPath, [string]$ArtifactClass, $Patterns, $Leaks)
+    $text = $Reader.ReadToEnd()
+    $raw = [IO.StringReader]::new($text)
+    try { Add-SecretLeaksFromReader $raw $DisplayPath $ArtifactClass $Patterns $Leaks }
+    finally { $raw.Dispose() }
+    try {
+        $document = ConvertFrom-Json -InputObject $text -AsHashtable -Depth 100 -ErrorAction Stop
+        $pending = [Collections.Generic.Stack[object]]::new()
+        if ($null -ne $document) { $pending.Push($document) }
+        while ($pending.Count -gt 0) {
+            $value = $pending.Pop()
+            if ($value -is [string]) {
+                $decoded = [IO.StringReader]::new($value)
+                try { Add-SecretLeaksFromReader $decoded "$DisplayPath!decoded-json-string" $ArtifactClass $Patterns $Leaks }
+                finally { $decoded.Dispose() }
+            } elseif ($value -is [Collections.IDictionary]) {
+                foreach ($member in $value.Values) { if ($null -ne $member) { $pending.Push($member) } }
+            } elseif ($value -is [Collections.IEnumerable]) {
+                foreach ($member in $value) { if ($null -ne $member) { $pending.Push($member) } }
+            }
+        }
+    } catch {
+        $Leaks.Add([pscustomobject]@{
+            path = $DisplayPath; line = 1; pattern = 'uninspectable_json_report'
+            category = $script:SecretCategoryCredential; artifact_class = $ArtifactClass
+            verdict = Get-SecretLeakVerdict -Category $script:SecretCategoryCredential -ArtifactClass $ArtifactClass
+            preview = 'JSON report could not be decoded; source values omitted.'
+        })
+    }
+}
+
+function Add-XmlReportSecretLeaksFromReader {
+    param($Reader, [string]$DisplayPath, [string]$ArtifactClass, $Patterns, $Leaks)
+    $settings = [Xml.XmlReaderSettings]::new()
+    $settings.DtdProcessing = [Xml.DtdProcessing]::Prohibit
+    $settings.XmlResolver = $null
+    $xml = [Xml.XmlReader]::Create($Reader, $settings)
+    try {
+        while ($xml.Read()) {
+            $values = [Collections.Generic.List[string]]::new()
+            if ($xml.HasAttributes) {
+                while ($xml.MoveToNextAttribute()) { $values.Add($xml.Value) }
+                [void]$xml.MoveToElement()
+            }
+            if ($xml.NodeType -in @([Xml.XmlNodeType]::Text, [Xml.XmlNodeType]::CDATA)) { $values.Add($xml.Value) }
+            foreach ($value in $values) {
+                $decoded = [IO.StringReader]::new($value)
+                try { Add-SecretLeaksFromReader $decoded "$DisplayPath!decoded-xml-value" $ArtifactClass $Patterns $Leaks }
+                finally { $decoded.Dispose() }
+            }
+        }
+    } catch {
+        $Leaks.Add([pscustomobject]@{
+            path = $DisplayPath; line = 1; pattern = 'uninspectable_xml_report'
+            category = $script:SecretCategoryCredential; artifact_class = $ArtifactClass
+            verdict = Get-SecretLeakVerdict -Category $script:SecretCategoryCredential -ArtifactClass $ArtifactClass
+            preview = 'XML report could not be decoded; source values omitted.'
+        })
+    } finally { $xml.Dispose() }
+}
+
+function Get-SecretArtifactReader {
+    param([string]$Path)
+    switch ([IO.Path]::GetExtension($Path).ToLowerInvariant()) {
+        '.har' { return 'Add-HarSecretLeaksFromReader' }
+        '.html' { return 'Add-HtmlReportSecretLeaksFromReader' }
+        '.htm' { return 'Add-HtmlReportSecretLeaksFromReader' }
+        '.json' { return 'Add-JsonReportSecretLeaksFromReader' }
+        '.xml' { return 'Add-XmlReportSecretLeaksFromReader' }
+        default { return 'Add-SecretLeaksFromReader' }
+    }
+}
+
 # HAR serializes credentials as separate name/value members. Scan its typed
 # transport fields and decoded bodies in addition to the ordinary text view.
 function Add-HarSecretLeaksFromReader {
@@ -401,7 +477,7 @@ function Add-HtmlReportSecretLeaksFromReader {
                         $entryStream = $entry.Open()
                         $entryReader = [IO.StreamReader]::new($entryStream, $true)
                         try {
-                            $memberScanner = if ([IO.Path]::GetExtension($entry.FullName) -ieq '.har') { 'Add-HarSecretLeaksFromReader' } else { 'Add-SecretLeaksFromReader' }
+                            $memberScanner = Get-SecretArtifactReader $entry.FullName
                             & $memberScanner -Reader $entryReader -DisplayPath "$DisplayPath!embedded-playwright-report!$($entry.FullName)" `
                                 -ArtifactClass $ArtifactClass -Patterns $Patterns -Leaks $Leaks
                         } finally { $entryReader.Dispose(); $entryStream.Dispose() }
@@ -463,7 +539,7 @@ function Find-SecretLeaks {
                             $stream = $entry.Open()
                             $reader = New-Object System.IO.StreamReader($stream, $true)
                             try {
-                                $scanReader = if ([IO.Path]::GetExtension($entry.FullName) -ieq '.har') { 'Add-HarSecretLeaksFromReader' } elseif ([IO.Path]::GetExtension($entry.FullName) -in @('.html', '.htm')) { 'Add-HtmlReportSecretLeaksFromReader' } else { 'Add-SecretLeaksFromReader' }
+                                $scanReader = Get-SecretArtifactReader $entry.FullName
                                 & $scanReader -Reader $reader -DisplayPath "$($file.FullName)!$($entry.FullName)" `
                                     -ArtifactClass $artifactClass -Patterns $patterns -Leaks $leaks
                             }
@@ -487,7 +563,7 @@ function Find-SecretLeaks {
                 $stream = [System.IO.File]::OpenRead($file.FullName)
                 $reader = New-Object System.IO.StreamReader($stream, $true)
                 try {
-                    $scanReader = if ($file.Extension -ieq '.har') { 'Add-HarSecretLeaksFromReader' } elseif ($file.Extension -in @('.html', '.htm')) { 'Add-HtmlReportSecretLeaksFromReader' } else { 'Add-SecretLeaksFromReader' }
+                    $scanReader = Get-SecretArtifactReader $file.FullName
                     & $scanReader -Reader $reader -DisplayPath $file.FullName `
                         -ArtifactClass $artifactClass -Patterns $patterns -Leaks $leaks
                 }

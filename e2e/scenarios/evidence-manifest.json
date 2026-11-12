@@ -142,16 +142,19 @@
         "session_injection"
       ],
       "protocol_object_producers": [
+        "cotest_wire_oracle",
         "inkson_product_client",
         "raw_http_fixture"
       ],
       "declared_test_bypasses": [
         "create_realm_passive_prompt_dismissal",
         "raw_http_fixture_or_oracle",
-        "session_injection"
+        "session_injection",
+        "test_only_signer_or_wire_builder"
       ],
       "claims_excluded": [
         "mls_backup_unlock_and_missing_recovery_prompt_behavior",
+        "product_protocol_object_generation",
         "registration_login_authorization",
         "ui_driven_business_flow_for_raw_http_steps"
       ]

@@ -313,7 +313,7 @@ privatePairingTest.describe("Agent Savfox split live @fully-implemented", () => 
           .filter({ hasText: "Arkret" });
         await expect(arkretCard).toHaveCount(1);
         await arkretCard.getByRole("button", { name: "Channel actions", exact: true }).click();
-        await arkretCard.getByRole("button", { name: "Health", exact: true }).click();
+        await savfox.getByRole("menuitem", { name: "Health", exact: true }).click();
         await expect(savfox).toHaveURL(url => /^\/channels\/health\/arkret(?:-|$)/.test(url.pathname));
         const health = savfox.getByText(/Runtime_pairing_state:/);
         await expect.poll(async () => {

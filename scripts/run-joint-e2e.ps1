@@ -496,6 +496,34 @@ function Add-PreflightResult {
         }) | Out-Null
 }
 
+function Assert-SdkGeneratedSourcesCurrent {
+    param(
+        [Parameter(Mandatory = $true)][string]$SdkRoot,
+        [Parameter(Mandatory = $true)][string]$SpecArtifactsDirectory,
+        [Parameter(Mandatory = $true)][string]$LogDirectory
+    )
+    $checkScript = Join-Path $SdkRoot "tools/sync-spec.ps1"
+    if (-not (Test-Path -LiteralPath $checkScript -PathType Leaf)) {
+        throw "SDK generated-source checker is missing: $checkScript"
+    }
+    if (-not (Test-Path -LiteralPath $SpecArtifactsDirectory -PathType Container)) {
+        throw "Normative Spec artifacts are missing: $SpecArtifactsDirectory"
+    }
+    $null = New-Item -ItemType Directory -Force -Path $LogDirectory
+    $checkLog = Join-Path $LogDirectory "check-sdk-generated.log"
+    Write-Host "Checking SDK generated sources against the current Spec before service builds."
+    Push-Location $SdkRoot
+    try {
+        & pwsh -NoProfile -File $checkScript -ArtifactsDir $SpecArtifactsDirectory -Check *> $checkLog
+        $checkExit = $LASTEXITCODE
+    } finally {
+        Pop-Location
+    }
+    if ($checkExit -ne 0) {
+        throw "SDK generated sources do not match the current Spec (exit=$checkExit): $checkLog"
+    }
+}
+
 function Find-CommandPath {
     param([Parameter(Mandatory = $true)][string[]]$Names)
 
@@ -4068,6 +4096,12 @@ try {
     $sourceFreezeBefore = Get-JointSourceFreezeState -RepositoryPaths $sourceFreezePaths -ArtifactDirectory $jointDir
     $preflightSourceHeads | ConvertTo-Json -Depth 5 |
         Set-Content -LiteralPath $preflightSourceHeadsJson -Encoding UTF8
+    if ($willStartDefaultInkson -and -not $SkipBuild) {
+        Assert-SdkGeneratedSourcesCurrent `
+            -SdkRoot (Join-Path $workspaceRoot "arkret-rust-sdk") `
+            -SpecArtifactsDirectory (Join-Path $workspaceRoot "arkret-spec/spec/v1/artifacts") `
+            -LogDirectory $serviceLogDir
+    }
     if ($StartCoauth) {
         # Accepted test identity custody stays outside publishable artifacts.
         # The runner owns cleanup even if a worker terminates its bridge abruptly.
@@ -6924,7 +6958,7 @@ foreach ($directory in Get-ChildItem -LiteralPath $jointDir -Directory -ErrorAct
     }
 }
 foreach ($file in Get-ChildItem -LiteralPath $jointDir -File -ErrorAction SilentlyContinue) {
-    if ($file.Name -match '(?i)(\.log$|\.ndjson$|crash|checkpoint|telemetry)') {
+    if ($file.Name -in @('junit.xml', 'failures.json') -or $file.Name -match '(?i)(\.log$|\.ndjson$|crash|checkpoint|telemetry)') {
         $secretScanRoots.Add($file.FullName)
     }
 }

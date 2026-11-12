@@ -86,7 +86,7 @@ test("0540 real Station 1/100/1000 Realm durable cold startup records first scre
       await flow.page.gotoHome();
       await postpone();
       await page.getByRole("link", { name: "Realms", exact: true }).click();
-      await expect(page).toHaveURL(url => url.pathname === "/realms");
+      await expect(page).toHaveURL(url => url.pathname === "/realms/manage");
       const workspaceList = page.locator(".workspace-list");
       const rows = workspaceList
         .getByRole("link", { name: new RegExp(`^${prefix}`) });
