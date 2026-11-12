@@ -1596,7 +1596,7 @@ export type AppletAuthorityMaterialResponseBody = {
           "resource_kind"?: string;
           "approval_required"?: boolean;
           "approval_mode"?: "before_commit";
-          "approval_actor_ids"?: string[];
+          "approval_principal_ids"?: string[];
           "approval_relation"?: "responsible" | "controller" | "guardian" | "realm_admin" | "custom";
           "timeout"?: string;
           "approval_threshold"?: "majority" | "unanimous" | number;
@@ -6072,7 +6072,7 @@ export type CapabilityGrantObject = {
     "resource_kind"?: string;
     "approval_required"?: boolean;
     "approval_mode"?: "before_commit";
-    "approval_actor_ids"?: string[];
+    "approval_principal_ids"?: string[];
     "approval_relation"?: "responsible" | "controller" | "guardian" | "realm_admin" | "custom";
     "timeout"?: string;
     "approval_threshold"?: "majority" | "unanimous" | number;
@@ -6347,7 +6347,7 @@ export type CapabilityGrantPayload = {
       "resource_kind"?: string;
       "approval_required"?: boolean;
       "approval_mode"?: "before_commit";
-      "approval_actor_ids"?: string[];
+      "approval_principal_ids"?: string[];
       "approval_relation"?: "responsible" | "controller" | "guardian" | "realm_admin" | "custom";
       "timeout"?: string;
       "approval_threshold"?: "majority" | "unanimous" | number;
