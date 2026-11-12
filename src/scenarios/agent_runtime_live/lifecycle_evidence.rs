@@ -411,7 +411,7 @@ pub async fn run_agent_controller_lifecycle_boundary() -> Result<()> {
     loop {
         let response = agent
             .runtime
-            .get("/_arkret/self/device_messages")
+            .get("/_arkret/self/device-messages")
             .send()
             .await?;
         if matches!(

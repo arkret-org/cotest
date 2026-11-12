@@ -100,8 +100,8 @@ test.describe("personal blocklist", () => {
     expect(secondEntry.revision).toBe(2);
 
     const get = await request.get(
-      `${colandBaseUrl()}/_arkret/self/account_data/${encodeURIComponent(dataType)}`,
-      { headers: authHeaders(token, "GET", `${colandBaseUrl()}/_arkret/self/account_data/${encodeURIComponent(dataType)}`) },
+      `${colandBaseUrl()}/_arkret/self/account-data/${encodeURIComponent(dataType)}`,
+      { headers: authHeaders(token, "GET", `${colandBaseUrl()}/_arkret/self/account-data/${encodeURIComponent(dataType)}`) },
     );
     expect(get.status()).toBe(200);
     expect(
@@ -109,9 +109,9 @@ test.describe("personal blocklist", () => {
     ).toEqual(secondEntry.content);
 
     const list = await request.get(
-      `${colandBaseUrl()}/_arkret/self/account_data`,
+      `${colandBaseUrl()}/_arkret/self/account-data`,
       {
-        headers: authHeaders(token, "GET", `${colandBaseUrl()}/_arkret/self/account_data`),
+        headers: authHeaders(token, "GET", `${colandBaseUrl()}/_arkret/self/account-data`),
       },
     );
     expect(list.status()).toBe(200);

@@ -49,6 +49,7 @@ export async function observeNativeSearch(
       encoding: "utf8", maxBuffer: 16 * 1024 * 1024, timeout: 180_000,
       windowsHide: true,
       env: { ...process.env, SSL_CERT_FILE: ca,
+        LOCALAPPDATA: path.join(path.dirname(statePath), "native-local-app-data"),
         INKSON_CONFIG_PATH: path.join(path.dirname(statePath), "native-config.json") },
     }, (error, stdout, stderr) => {
       if (error) {

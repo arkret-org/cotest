@@ -24,6 +24,7 @@ fn main() -> Result<()> {
         "historical-human-signer-query" => wire::historical_human_signer_query(input)?,
         "historical-human-signer-fact" => wire::historical_human_signer_fact(input)?,
         "event-envelope-parse" => wire::event_envelope_parse(input)?,
+        "content-backup-coverage" => wire::content_backup_coverage(input)?,
         "project-committed-stream-scan" => wire::project_committed_stream_scan(input)?,
         "verify-realm-state-snapshot" => wire::verify_realm_state_snapshot(input)?,
         "verify-consent-current" => wire::verify_consent_current(input)?,

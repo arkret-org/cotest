@@ -1,4 +1,4 @@
-//! Phase 2 — `/_arkret/self/device_messages` send / duplicate / list / describe.
+//! Phase 2 — `/_arkret/self/device-messages` send / duplicate / list / describe.
 
 use anyhow::{Context, Result};
 use reqwest::StatusCode;
@@ -32,7 +32,7 @@ async fn send_application_message(
             expect_json(
                 server
                     .http()
-                    .post(server.url("/_arkret/self/device_messages"))
+                    .post(server.url("/_arkret/self/device-messages"))
                     .bearer_auth(token)
                     .header("Idempotency-Key", "protocol-device-txn")
                     .json(&device_message_send_request(
@@ -66,7 +66,7 @@ async fn duplicate_send_is_idempotent(
             expect_json(
                 server
                     .http()
-                    .post(server.url("/_arkret/self/device_messages"))
+                    .post(server.url("/_arkret/self/device-messages"))
                     .bearer_auth(token)
                     .header("Idempotency-Key", "protocol-device-txn")
                     .json(&device_message_send_request(
@@ -109,7 +109,7 @@ async fn list_delivered_keeps_ciphertext_only(
         expect_json(
             server
                 .http()
-                .get(server.url("/_arkret/self/device_messages"))
+                .get(server.url("/_arkret/self/device-messages"))
                 .bearer_auth(token),
             StatusCode::OK,
         )
@@ -159,7 +159,7 @@ async fn list_delivered_keeps_ciphertext_only(
         expect_json(
             server
                 .http()
-                .post(server.url("/_arkret/self/device_messages/ack"))
+                .post(server.url("/_arkret/self/device-messages/ack"))
                 .bearer_auth(token)
                 .json(
                     &arkret_models_collaboration::device_messages::DeviceMessagesAcknowledgementRequestBody {
@@ -178,7 +178,7 @@ async fn list_delivered_keeps_ciphertext_only(
         expect_json(
             server
                 .http()
-                .get(server.url("/_arkret/self/device_messages"))
+                .get(server.url("/_arkret/self/device-messages"))
                 .bearer_auth(token),
             StatusCode::OK,
         )
@@ -267,7 +267,7 @@ async fn one_invalid_expiry_rejects_the_whole_batch(
     expect_api_error(
         server
             .http()
-            .post(server.url("/_arkret/self/device_messages"))
+            .post(server.url("/_arkret/self/device-messages"))
             .bearer_auth(token)
             .header("Idempotency-Key", "protocol-device-mixed-expiry")
             .json(&body),
@@ -297,7 +297,7 @@ async fn unknown_device_row_carries_only_id_and_status(
     let raw = expect_json(
         server
             .http()
-            .post(server.url("/_arkret/self/device_messages"))
+            .post(server.url("/_arkret/self/device-messages"))
             .bearer_auth(token)
             .header("Idempotency-Key", "protocol-device-unknown-row")
             .json(&device_message_send_request(
@@ -346,7 +346,7 @@ async fn exact_retry_after_expiry_returns_original_result(
     let send = || {
         server
             .http()
-            .post(server.url("/_arkret/self/device_messages"))
+            .post(server.url("/_arkret/self/device-messages"))
             .bearer_auth(token)
             .header("Idempotency-Key", "protocol-device-retry-after-expiry")
             .json(&body)
@@ -383,7 +383,7 @@ async fn exact_retry_after_expiry_returns_original_result(
     expect_json(
         server
             .http()
-            .post(server.url("/_arkret/self/device_messages/ack"))
+            .post(server.url("/_arkret/self/device-messages/ack"))
             .bearer_auth(token)
             .json(
                 &arkret_models_collaboration::device_messages::DeviceMessagesAcknowledgementRequestBody {
@@ -404,7 +404,7 @@ async fn device_queue(
         expect_json(
             server
                 .http()
-                .get(server.url("/_arkret/self/device_messages"))
+                .get(server.url("/_arkret/self/device-messages"))
                 .bearer_auth(token),
             StatusCode::OK,
         )

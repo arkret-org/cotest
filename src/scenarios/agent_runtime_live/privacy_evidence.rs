@@ -209,7 +209,7 @@ pub async fn run_agent_requested_scope_privacy_production()
     ensure!(
         agent
             .runtime
-            .get("/_arkret/self/device_messages")
+            .get("/_arkret/self/device-messages")
             .send()
             .await?
             .status()

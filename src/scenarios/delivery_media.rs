@@ -175,10 +175,10 @@ pub async fn to_device_messages_are_idempotent_opaque_and_drained_once() -> Resu
     let token = alice.expect_dev_bearer().to_owned();
     // Account bootstrap may queue actor-private updates; consume them through
     // the same explicit ACK so the queue under test starts empty.
-    let bootstrap = expect_json(alice.get("/_arkret/self/device_messages"), StatusCode::OK).await?;
+    let bootstrap = expect_json(alice.get("/_arkret/self/device-messages"), StatusCode::OK).await?;
     if let Some(acknowledgement_token) = bootstrap["acknowledgement_token"].as_str() {
         expect_json(
-            alice.post("/_arkret/self/device_messages/ack").json(
+            alice.post("/_arkret/self/device-messages/ack").json(
                 &DeviceMessagesAcknowledgementRequestBody {
                     acknowledgement_token: acknowledgement_token.to_owned(),
                 },
@@ -191,7 +191,7 @@ pub async fn to_device_messages_are_idempotent_opaque_and_drained_once() -> Resu
     expect_api_error(
         server
             .http()
-            .post(server.url("/_arkret/self/device_messages"))
+            .post(server.url("/_arkret/self/device-messages"))
             .header("Idempotency-Key", "device-noauth")
             .json(&DeviceMessagesSendRequestBody {
                 messages: BTreeMap::new(),
@@ -203,7 +203,7 @@ pub async fn to_device_messages_are_idempotent_opaque_and_drained_once() -> Resu
     expect_api_error(
         server
             .http()
-            .post(server.url("/_arkret/self/device_messages"))
+            .post(server.url("/_arkret/self/device-messages"))
             .bearer_auth(&token)
             .header("Idempotency-Key", "device-bad-json")
             .header("content-type", "application/json")
@@ -229,7 +229,7 @@ pub async fn to_device_messages_are_idempotent_opaque_and_drained_once() -> Resu
     let send = expect_json(
         server
             .http()
-            .post(server.url("/_arkret/self/device_messages"))
+            .post(server.url("/_arkret/self/device-messages"))
             .bearer_auth(&token)
             .header("Idempotency-Key", "device-idempotent-txn")
             .json(&request),
@@ -246,7 +246,7 @@ pub async fn to_device_messages_are_idempotent_opaque_and_drained_once() -> Resu
     let duplicate = expect_json(
         server
             .http()
-            .post(server.url("/_arkret/self/device_messages"))
+            .post(server.url("/_arkret/self/device-messages"))
             .bearer_auth(&token)
             .header("Idempotency-Key", "device-idempotent-txn")
             .json(&request),
@@ -261,7 +261,7 @@ pub async fn to_device_messages_are_idempotent_opaque_and_drained_once() -> Resu
     let delivered = expect_json(
         server
             .http()
-            .get(server.url("/_arkret/self/device_messages"))
+            .get(server.url("/_arkret/self/device-messages"))
             .bearer_auth(&token),
         StatusCode::OK,
     )
@@ -278,7 +278,7 @@ pub async fn to_device_messages_are_idempotent_opaque_and_drained_once() -> Resu
             expect_json(
                 server
                     .http()
-                    .post(server.url("/_arkret/self/device_messages/ack"))
+                    .post(server.url("/_arkret/self/device-messages/ack"))
                     .bearer_auth(&token)
                     .json(&DeviceMessagesAcknowledgementRequestBody {
                         acknowledgement_token: delivered["acknowledgement_token"].as_str().unwrap().to_owned(),
@@ -292,7 +292,7 @@ pub async fn to_device_messages_are_idempotent_opaque_and_drained_once() -> Resu
     let drained = expect_json(
         server
             .http()
-            .get(server.url("/_arkret/self/device_messages"))
+            .get(server.url("/_arkret/self/device-messages"))
             .bearer_auth(&token),
         StatusCode::OK,
     )
@@ -305,7 +305,7 @@ pub async fn to_device_messages_are_idempotent_opaque_and_drained_once() -> Resu
     let message_replay = expect_json(
         server
             .http()
-            .post(server.url("/_arkret/self/device_messages"))
+            .post(server.url("/_arkret/self/device-messages"))
             .bearer_auth(&token)
             .header("Idempotency-Key", "device-logical-replay-txn")
             .json(&request),
@@ -316,7 +316,7 @@ pub async fn to_device_messages_are_idempotent_opaque_and_drained_once() -> Resu
     let after_message_replay = expect_json(
         server
             .http()
-            .get(server.url("/_arkret/self/device_messages"))
+            .get(server.url("/_arkret/self/device-messages"))
             .bearer_auth(&token),
         StatusCode::OK,
     )
@@ -340,7 +340,7 @@ pub async fn to_device_messages_are_idempotent_opaque_and_drained_once() -> Resu
     expect_api_error(
         server
             .http()
-            .post(server.url("/_arkret/self/device_messages"))
+            .post(server.url("/_arkret/self/device-messages"))
             .bearer_auth(&token)
             .header("Idempotency-Key", "device-logical-conflict-txn")
             .json(&conflicting_request),

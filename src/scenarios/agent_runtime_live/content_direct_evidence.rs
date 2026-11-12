@@ -269,7 +269,7 @@ pub async fn run_agent_content_direct_production()
         agent.runtime_key.clone(),
     )?;
     expect_json(
-        service_runtime.get("/_arkret/self/device_messages"),
+        service_runtime.get("/_arkret/self/device-messages"),
         StatusCode::OK,
     )
     .await?;

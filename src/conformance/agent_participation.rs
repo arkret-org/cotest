@@ -925,7 +925,7 @@ pub fn run_agent_participation_session_overlay_vector() -> Result<()> {
         "next_replace_input": vector["next_replace_input"],
     }))?;
     let outcome = AgentParticipationResponseBody {
-        agent_id: "ak:did_core:web:agents.acme.example:alice-summary".to_owned(),
+        agent_id: "ak:did_core:web:agents.acme.example:alice-summary".parse()?,
         participation_entries: vec![entry.clone()],
     };
     if outcome.participation_entries.len() != 1 {

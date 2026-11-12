@@ -951,7 +951,7 @@ impl JoinObserver for PendingPayload<'_> {
                 && available[0].commit_event_ref == accepted.event.event_id
         );
         crate::harness::expect_api_error(
-            write.get("/_arkret/self/device_messages"),
+            write.get("/_arkret/self/device-messages"),
             StatusCode::FORBIDDEN,
             arkret_wire::ErrorCode::CAPABILITY_DENIED,
         )
@@ -1709,7 +1709,7 @@ pub async fn run_agent_content_sidecar_production()
     .await?;
     ensure!(client.sdk().committed_event_get(&grant_event).await? == original_grant);
     crate::harness::expect_api_error(
-        fresh_read.get("/_arkret/self/device_messages"),
+        fresh_read.get("/_arkret/self/device-messages"),
         StatusCode::FORBIDDEN,
         arkret_wire::ErrorCode::CAPABILITY_DENIED,
     )

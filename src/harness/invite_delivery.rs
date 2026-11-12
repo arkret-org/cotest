@@ -135,7 +135,7 @@ async fn dispatch_invite(
 /// cell without the single-key registration gate.
 async fn read_delivered_invite_entry(invitee: &TestActorClient, invite_id: &str) -> Result<()> {
     let listed_value =
-        expect_json(invitee.get("/_arkret/self/account_data"), StatusCode::OK).await?;
+        expect_json(invitee.get("/_arkret/self/account-data"), StatusCode::OK).await?;
     let listed: AccountDataList = serde_json::from_value(listed_value)
         .context("account-data list is not an AccountDataList")?;
     let cell = listed

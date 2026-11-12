@@ -125,7 +125,7 @@ pub(crate) async fn verify_consent_delivery_race(
 
 pub(super) async fn delivery_cell(holder: &TestActorClient) -> Result<Option<AccountDataEntry>> {
     let listed: AccountDataList = serde_json::from_value(
-        expect_json(holder.get("/_arkret/self/account_data"), StatusCode::OK).await?,
+        expect_json(holder.get("/_arkret/self/account-data"), StatusCode::OK).await?,
     )?;
     Ok(listed
         .account_data_entries

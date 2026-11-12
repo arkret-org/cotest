@@ -872,6 +872,53 @@ pub fn project_committed_stream_scan(input: Value) -> Result<Value> {
     Ok(json!({"full_positions": full_positions, "truncated": input.outcome.truncated}))
 }
 
+/// Compare accepted backup PUTs with the SDK's registered encrypted Event slots.
+/// The CLI returns counts only; protocol envelopes never enter assertion output.
+pub fn content_backup_coverage(input: Value) -> Result<Value> {
+    use arkret_event_draft::EventContentEnvelopesExt as _;
+    use arkret_models_crypto::{
+        EncryptedEnvelopeEncryptionContext, KeyBackup, SecretStorageItemKind,
+    };
+    #[derive(Deserialize)]
+    #[serde(deny_unknown_fields)]
+    struct Input {
+        event: Event,
+        backups: Vec<KeyBackup>,
+    }
+    let input: Input = serde_json::from_value(input).context("parse content backup coverage")?;
+    let slots = input.event.event_content_envelopes()?;
+    for backup in &input.backups {
+        backup.validate()?;
+        backup.validate_ciphertext_digest()?;
+    }
+    let mut covered = 0;
+    for slot in &slots {
+        let EncryptedEnvelopeEncryptionContext::EpochContent {
+            epoch,
+            group_state_ref,
+            root_ref,
+            protection,
+            ..
+        } = &slot.envelope.encryption_context;
+        let matched = protection.root_refs.contains(root_ref)
+            && input.backups.iter().any(|backup| {
+                backup.actor_id == input.event.actor_id
+                    && protection.backup_refs.contains(&backup.backup_id)
+                    && backup.contents.iter().any(|item| {
+                        item.item_kind == SecretStorageItemKind::ContentEpochRoot
+                            && item.root_ref.as_ref() == Some(root_ref)
+                            && item.root_context.as_ref().is_some_and(|context| {
+                                context.effective_scope == input.event.scope_ref
+                                    && context.epoch == *epoch
+                                    && context.group_state_ref == *group_state_ref
+                            })
+                    })
+            });
+        covered += usize::from(matched);
+    }
+    Ok(json!({"registered_slots": slots.len(), "covered_slots": covered}))
+}
+
 pub fn event_envelope_parse(input: Value) -> Result<Value> {
     let _: Event = serde_json::from_value(input).context("parse closed Event envelope")?;
     Ok(json!({ "valid": true }))
@@ -2061,6 +2108,51 @@ mod tests {
     use arkret_wire::EventId;
 
     use super::*;
+
+    #[test]
+    fn registered_content_backup_coverage_requires_exact_durable_root_coordinates() {
+        let history: Value = serde_json::from_str(include_str!(
+            "../../../../arkret-spec/spec/v1/artifacts/fixtures/content-history-fixture.json"
+        ))
+        .unwrap();
+        let source: Value = serde_json::from_str(include_str!(
+            "../../../../arkret-spec/spec/v1/artifacts/fixtures/content-backup-source-fixture.json"
+        ))
+        .unwrap();
+        // Test only the registered-slot/backup projection. Signature acceptance
+        // is asserted against the actual ingress response by the live caller.
+        let mut event = source["cases"][0]["event"].clone();
+        event["actor_id"] = history["kat"]["outer_event"]["actor_id"].clone();
+        event["realm_id"] = history["kat"]["outer_event"]["realm_id"].clone();
+        event["scope_ref"] = history["kat"]["outer_event"]["scope_ref"].clone();
+        event["payload"]
+            .as_object_mut()
+            .unwrap()
+            .remove("encrypted_metadata");
+        event["payload"]["encrypted_content"] = history["kat"]["envelope"].clone();
+        let backup = history["root_backup"]["envelope"].clone();
+        let inspect = |backups: Vec<Value>| {
+            content_backup_coverage(json!({"event": event, "backups": backups})).unwrap()
+        };
+        assert_eq!(
+            inspect(vec![backup.clone()]),
+            json!({"registered_slots":1,"covered_slots":1})
+        );
+        assert_eq!(inspect(vec![])["covered_slots"], 0);
+        let mut changed = backup.clone();
+        changed["contents"][0]["root_context"]["epoch"] = json!("999");
+        assert_eq!(inspect(vec![changed])["covered_slots"], 0);
+        let mut changed = backup.clone();
+        changed["backup_id"] = json!("ak:backup:01904100-0000-7000-8000-000000000099");
+        assert_eq!(inspect(vec![changed])["covered_slots"], 0);
+        let mut changed = backup.clone();
+        changed["contents"][0]["root_ref"] = json!(format!("sha256:{}", "00".repeat(32)));
+        assert_eq!(inspect(vec![changed])["covered_slots"], 0);
+        let mut changed = backup;
+        changed["actor_id"]["account_id"]["principal_id"] =
+            json!("ak:did_core:web:another.example");
+        assert_eq!(inspect(vec![changed])["covered_slots"], 0);
+    }
 
     fn stream_projection_fixture(second_position: u64) -> Result<Value> {
         use arkret_wire::{CommitStreamRef, EventId, RealmId, ScopeRef};

@@ -95,7 +95,7 @@ async fn account_data_round_trip(server: &ArkretServer, actor: &TestActorClient)
         server.service_id().clone(),
     ));
     let key = arkret_wire::AccountDataKey::PUSH_RULES;
-    let path = format!("/_arkret/self/account_data/{key}");
+    let path = format!("/_arkret/self/account-data/{key}");
     let sealed = |value: serde_json::Value, nonce: u8| {
         arkret_crypto::account_data_crypto::seal_account_data_value_with_nonce(
             &[7; 32],

@@ -22,7 +22,7 @@ async fn untouched(holder: &TestActorClient, realm: &str) -> Result<()> {
         !serde_json::to_string(&invites)?.contains(realm),
         "low-trust delivery exposed a holder-private invite"
     );
-    let data = expect_json(holder.get("/_arkret/self/account_data"), StatusCode::OK).await?;
+    let data = expect_json(holder.get("/_arkret/self/account-data"), StatusCode::OK).await?;
     ensure!(
         !data["account_data_entries"]
             .as_array()

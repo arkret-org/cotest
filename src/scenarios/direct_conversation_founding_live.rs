@@ -1870,7 +1870,7 @@ async fn run(
         .await?;
     }
     bob.client
-        .post("/_arkret/self/device_messages/ack")
+        .post("/_arkret/self/device-messages/ack")
         .json(&DeviceMessagesAcknowledgementRequestBody {
             acknowledgement_token,
         })

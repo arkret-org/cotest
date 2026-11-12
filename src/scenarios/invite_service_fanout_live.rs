@@ -213,7 +213,7 @@ pub(crate) async fn account_data_row(
     // holder-readable list is their canonical read surface; the single-key
     // resource route deliberately accepts only encrypted private-key patterns.
     let listed_value =
-        expect_json(holder.get("/_arkret/self/account_data"), StatusCode::OK).await?;
+        expect_json(holder.get("/_arkret/self/account-data"), StatusCode::OK).await?;
     let listed: AccountDataList = serde_json::from_value(listed_value)
         .context("account-data list is not an AccountDataList")?;
     listed
@@ -262,7 +262,7 @@ async fn receive_verified_fanout_batch(
     expected_service_id: &str,
     tracker: &mut FanoutTracker,
 ) -> Result<Vec<DeviceMessageEnvelope>> {
-    let polled = expect_json(holder.get("/_arkret/self/device_messages"), StatusCode::OK).await?;
+    let polled = expect_json(holder.get("/_arkret/self/device-messages"), StatusCode::OK).await?;
     let outcome: DeviceMessagesGetResponseBody = serde_json::from_value(polled.clone())
         .with_context(|| format!("to-device response is not closed SDK wire data: {polled}"))?;
     ensure!(
@@ -331,7 +331,7 @@ async fn receive_verified_fanout_batch(
     };
     let ack_raw = expect_json(
         holder
-            .post("/_arkret/self/device_messages/ack")
+            .post("/_arkret/self/device-messages/ack")
             .json(&ack_request),
         StatusCode::OK,
     )
@@ -346,7 +346,7 @@ async fn receive_verified_fanout_batch(
         serde_json::from_value(
             expect_json(
                 holder
-                    .post("/_arkret/self/device_messages/ack")
+                    .post("/_arkret/self/device-messages/ack")
                     .json(&ack_request),
                 StatusCode::OK,
             )
@@ -610,7 +610,7 @@ async fn assert_notify_invite_wakes_account_subscribe(
     let invite_delta = match invite_delta {
         Ok(delta) => delta,
         Err(error) => {
-            let queued = expect_json(holder.get("/_arkret/self/device_messages"), StatusCode::OK)
+            let queued = expect_json(holder.get("/_arkret/self/device-messages"), StatusCode::OK)
                 .await
                 .unwrap_or(Value::Null);
             return Err(error).with_context(|| {
@@ -862,7 +862,7 @@ pub async fn invite_service_fanout_live_run() -> Result<()> {
     ] {
         drain_known_fanout(active_holder, server.service_id().as_str(), tracker).await?;
         let drained = expect_json(
-            active_holder.get("/_arkret/self/device_messages"),
+            active_holder.get("/_arkret/self/device-messages"),
             StatusCode::OK,
         )
         .await?;

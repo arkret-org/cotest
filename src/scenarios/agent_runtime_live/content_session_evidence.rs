@@ -359,7 +359,7 @@ pub async fn run_agent_session_content_production()
         .await?;
     ensure!(serde_json::to_value(&retained)? == serde_json::to_value(&selected)?);
     expect_json(
-        agent.runtime.get("/_arkret/self/device_messages"),
+        agent.runtime.get("/_arkret/self/device-messages"),
         StatusCode::OK,
     )
     .await?;

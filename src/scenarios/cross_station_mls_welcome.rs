@@ -735,7 +735,7 @@ async fn cross_station_mls_welcome_original_run() -> Result<()> {
     ensure!(carol_group.epoch() == 1, "Carol did not join at epoch 1");
     carol
         .client
-        .post("/_arkret/self/device_messages/ack")
+        .post("/_arkret/self/device-messages/ack")
         .json(&DeviceMessagesAcknowledgementRequestBody {
             acknowledgement_token,
         })

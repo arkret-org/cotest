@@ -125,7 +125,7 @@ async fn rejected_without_shared_effect(
 async fn create(
     alice: &Member,
     realm: &RealmId,
-    max_uses: u32,
+    max_use_count: u32,
     seconds: i64,
 ) -> Result<(RealmInviteLinkSecret, Event)> {
     let mut seed = [0u8; 32];
@@ -138,7 +138,7 @@ async fn create(
         expires_at: arkret_canonical::normalize_timestamp_canonical(
             chrono::Utc::now() + chrono::Duration::seconds(seconds),
         ),
-        max_uses,
+        max_use_count,
     };
     let event = alice
         .client

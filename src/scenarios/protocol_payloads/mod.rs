@@ -9,7 +9,7 @@
 //! Submodules — each is a single async helper representing one protocol phase:
 //! - [`events_keys_setup`] — `/_arkret/self/events` plus `/_arkret/self/keys/{upload,query,claim}`
 //!   strand.
-//! - [`device_messages`] — `/_arkret/self/device_messages` send / duplicate / list / describe + the
+//! - [`device_messages`] — `/_arkret/self/device-messages` send / duplicate / list / describe + the
 //!   verification-event side path.
 //! - [`key_backups`] — `/_arkret/self/keys/backups/*` PUT / list / unlock plus `/_arkret/describe`
 //!   operation advertisement.

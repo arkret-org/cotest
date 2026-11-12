@@ -17,6 +17,7 @@ type CotestWireCommand =
   | "verify-realm-state-snapshot"
   | "verify-consent-current"
   | "validate-applet-authority-material"
+  | "content-backup-coverage"
   | "key-backup-auth-signature"
   | "mimi-consent-proof"
   | "mimi-request-consent-proof"

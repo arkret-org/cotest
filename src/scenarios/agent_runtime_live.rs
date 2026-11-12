@@ -1283,7 +1283,7 @@ pub async fn run_agent_runtime_session_live() -> Result<()> {
         "the Agent account lives on its controller's Station"
     );
     let queue = expect_json(
-        agent.runtime.get("/_arkret/self/device_messages"),
+        agent.runtime.get("/_arkret/self/device-messages"),
         StatusCode::OK,
     )
     .await?;
@@ -1305,7 +1305,7 @@ pub async fn run_agent_runtime_session_live() -> Result<()> {
     );
     let refused = agent
         .runtime
-        .get("/_arkret/self/device_messages")
+        .get("/_arkret/self/device-messages")
         .send()
         .await?;
     ensure!(
@@ -1321,7 +1321,7 @@ pub async fn run_agent_runtime_session_live() -> Result<()> {
         "resume did not commit the active status"
     );
     expect_json(
-        agent.runtime.get("/_arkret/self/device_messages"),
+        agent.runtime.get("/_arkret/self/device-messages"),
         StatusCode::OK,
     )
     .await?;
@@ -1343,7 +1343,7 @@ pub async fn run_agent_runtime_session_live() -> Result<()> {
     let sent = expect_json(
         agent
             .runtime
-            .post("/_arkret/self/device_messages")
+            .post("/_arkret/self/device-messages")
             .header("Idempotency-Key", unique_uuid7())
             .json(&send),
         StatusCode::OK,
@@ -1355,7 +1355,7 @@ pub async fn run_agent_runtime_session_live() -> Result<()> {
         "the Agent's device message was not delivered: {sent}"
     );
     let inbox = expect_json(
-        controller.get("/_arkret/self/device_messages"),
+        controller.get("/_arkret/self/device-messages"),
         StatusCode::OK,
     )
     .await?;
@@ -1416,7 +1416,7 @@ pub async fn run_agent_runtime_session_live() -> Result<()> {
     );
     let ended = agent
         .runtime
-        .get("/_arkret/self/device_messages")
+        .get("/_arkret/self/device-messages")
         .send()
         .await?;
     ensure!(
@@ -2457,7 +2457,7 @@ async fn run_agent_keypackage_journey(terminal: bool) -> Result<()> {
     let frozen_consume = std::fs::read(&consume_path)?;
     agent
         .runtime
-        .post("/_arkret/self/device_messages/ack")
+        .post("/_arkret/self/device-messages/ack")
         .json(
             &arkret_models_collaboration::device_messages::DeviceMessagesAcknowledgementRequestBody {
                 acknowledgement_token,

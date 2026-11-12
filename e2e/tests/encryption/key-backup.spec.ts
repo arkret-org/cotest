@@ -1,5 +1,7 @@
 import { boardSwitcher, newBoardTrigger, addBoardList, fillCardNarrative } from "../../helpers/kanban-product-ui";
-import { authHeaders } from "../../helpers/coland-api";
+import { decodeIngressEvents } from "../../helpers/event-ingress";
+import { cotestWire } from "../../helpers/coland-api/wire-client";
+import { assertAuthoritySubmitOutcome, authHeaders } from "../../helpers/coland-api";
 import { readCreatorRecords } from "../../helpers/creator-bootstrap";
 import { accountTransportRotationProbe, assertOriginalAcceptedMlsRows } from "../../helpers/session-transport-recovery";
 // Key backup + restore
@@ -257,7 +259,7 @@ test.describe("key backup + restore", () => {
         `A1 historical encrypted card 3 ${stamp}`,
       ];
       for (const card of historicalCards) {
-        await sendTimelineMessageAndWaitForPrivateBackup(
+        await sendTimelineMessageAndWaitForContentBackup(
           deviceA,
           realmId,
           card,
@@ -277,7 +279,7 @@ test.describe("key backup + restore", () => {
         false,
       );
       sessionsToClose.push(deviceB);
-      const deviceBKeyBackupPuts = collectKeyBackupPuts(deviceB.page);
+      const deviceBKeyBackupPuts = collectKeyBackupPuts(deviceB.page, keyBackupPuts);
       collectA1ProtocolFailures(deviceB.page, protocolFailures);
 
       await deviceB.gotoHome();
@@ -294,14 +296,7 @@ test.describe("key backup + restore", () => {
       }
 
       const deviceBCard = `A1 restored device writes encrypted card ${stamp}`;
-      const deviceBPrivatePlaintextBackupsBefore =
-        mlsPrivatePlaintextBackupPutCount(deviceBKeyBackupPuts);
-      await deviceB.sendTimelineMessage(realmId, deviceBCard);
-      await expect
-        .poll(() => mlsPrivatePlaintextBackupPutCount(deviceBKeyBackupPuts), {
-          timeout: 120_000,
-        })
-        .toBeGreaterThan(deviceBPrivatePlaintextBackupsBefore);
+      await sendTimelineMessageAndWaitForContentBackup(deviceB, realmId, deviceBCard, deviceBKeyBackupPuts);
       // Verify recovery before reload could construct an unrelated new client.
       const recoveryEvidence = await transportRecovery.verify();
       await deviceA.gotoTimelineRealm(realmId);
@@ -319,7 +314,7 @@ test.describe("key backup + restore", () => {
       });
 
       const deviceACard = `A1 original device continues encrypted writes ${stamp}`;
-      await sendTimelineMessageAndWaitForPrivateBackup(
+      await sendTimelineMessageAndWaitForContentBackup(
         deviceA, realmId, deviceACard, keyBackupPuts,
       );
       await expect(deviceB.timelineEvent(deviceACard)).toBeVisible({ timeout: 90_000 });
@@ -443,7 +438,7 @@ test.describe("key backup + restore", () => {
         `A3 historical encrypted card 2 ${stamp}`,
       ];
       for (const card of historicalCards) {
-        await sendTimelineMessageAndWaitForPrivateBackup(
+        await sendTimelineMessageAndWaitForContentBackup(
           deviceA,
           realmId,
           card,
@@ -608,20 +603,9 @@ test.describe("key backup + restore", () => {
         listTitle,
         cardTitle,
       );
-      // Board/List/Strand creation is structural. Write encrypted content
-      // before requiring a new encrypted private-plaintext backup item.
-      const privateBackupsBefore = mlsPrivatePlaintextBackupPutCount(keyBackupPuts);
-      await updateCardDescription(
-        deviceA.page,
-        cardTitle,
-        `A2 original encrypted detail ${stamp}`,
-      );
-      await expect
-        .poll(
-          () => mlsPrivatePlaintextBackupPutCount(keyBackupPuts),
-          { timeout: 120_000 },
-        )
-        .toBeGreaterThan(privateBackupsBefore);
+      // Structural creation alone does not establish recoverable encrypted content.
+      await writeAndExpectContentRootBackup(deviceA.page, realmId, "ak.strand.update", keyBackupPuts,
+        () => updateCardDescription(deviceA.page, cardTitle, `A2 original encrypted detail ${stamp}`));
 
       await expect
         .poll(
@@ -644,7 +628,7 @@ test.describe("key backup + restore", () => {
         account,
       );
       sessionsToClose.push(deviceB);
-      const deviceBKeyBackupPuts = collectKeyBackupPuts(deviceB.page);
+      const deviceBKeyBackupPuts = collectKeyBackupPuts(deviceB.page, keyBackupPuts);
       collectA1ProtocolFailures(deviceB.page, protocolFailures);
 
       await deviceB.gotoHome();
@@ -668,15 +652,9 @@ test.describe("key backup + restore", () => {
         deviceB.page.locator(".kanban-card").filter({ hasText: cardTitle }),
       ).toBeVisible({ timeout: 90_000 });
 
-      const deviceBPrivatePlaintextBackupsBefore =
-        mlsPrivatePlaintextBackupPutCount(deviceBKeyBackupPuts);
-      await updateCardDescription(deviceB.page, cardTitle, restoredDescription);
+      await writeAndExpectContentRootBackup(deviceB.page, realmId, "ak.strand.update", deviceBKeyBackupPuts,
+        () => updateCardDescription(deviceB.page, cardTitle, restoredDescription));
       await expectEncryptedKanbanSaveErrorsAbsent(deviceB.page);
-      await expect
-        .poll(() => mlsPrivatePlaintextBackupPutCount(deviceBKeyBackupPuts), {
-          timeout: 120_000,
-        })
-        .toBeGreaterThan(deviceBPrivatePlaintextBackupsBefore);
 
       await deviceA.page.goto(`/kanban/${realmId}/board/${boardId}`, {
         waitUntil: "domcontentloaded",
@@ -896,8 +874,7 @@ type SessionGrantHolderProofTrace = {
   unlocks: KeyBackupUnlockRequest[];
 };
 
-function collectKeyBackupPuts(page: Page): KeyBackupPut[] {
-  const hits: KeyBackupPut[] = [];
+function collectKeyBackupPuts(page: Page, hits: KeyBackupPut[] = []): KeyBackupPut[] {
   page.on("response", async (response) => {
     if (
       response.request().method() !== "PUT" ||
@@ -1210,29 +1187,45 @@ async function expectMlsAccountSecretBackupUploaded(
     .toBe(true);
 }
 
-function mlsPrivatePlaintextBackupPutCount(
+async function writeAndExpectContentRootBackup(
+  page: Page,
+  realmId: string,
+  kind: string,
   keyBackupPuts: KeyBackupPut[],
-): number {
-  return keyBackupPuts.filter(
-    (hit) =>
-      hit.status === 200 &&
-      /"item_kind"\s*:\s*"mls_private_plaintext"/.test(keyBackupWireData(hit)),
-  ).length;
+  write: () => Promise<unknown>,
+): Promise<void> {
+  const accepted = page.waitForResponse(response =>
+    response.ok() && response.request().method() === "POST"
+    && new URL(response.url()).pathname === "/_arkret/self/events"
+    && decodeIngressEvents(response.request().postData()).some(event =>
+      event.realm_id === realmId && event.kind === kind), { timeout: 120_000 });
+  void accepted.catch(() => {});
+  await write();
+  const response = await accepted;
+  const event = decodeIngressEvents(response.request().postData())
+    .find(event => event.realm_id === realmId && event.kind === kind)!;
+  assertAuthoritySubmitOutcome(await response.json(), event, "recoverable encrypted write");
+  await expect.poll(() => {
+    const backups = keyBackupPuts.filter(hit => hit.status === 200)
+      .map(hit => JSON.parse(hit.postData));
+    const coverage = cotestWire<{ registered_slots: number; covered_slots: number }>(
+      "content-backup-coverage", { event, backups });
+    // A root can already be durable before this write, including earlier
+    // content at the same epoch. Do not demand a new backup per message.
+    return coverage.registered_slots > 0 && coverage.covered_slots === coverage.registered_slots;
+  }, { timeout: 120_000, intervals: [250, 500, 1_000],
+    message: "every registered encrypted slot must name an observed durable Content Epoch Root backup" })
+    .toBe(true);
 }
 
-async function sendTimelineMessageAndWaitForPrivateBackup(
+async function sendTimelineMessageAndWaitForContentBackup(
   device: JointUserPage,
   realmId: string,
   body: string,
   keyBackupPuts: KeyBackupPut[],
 ) {
-  const backupsBefore = mlsPrivatePlaintextBackupPutCount(keyBackupPuts);
-  await device.sendTimelineMessage(realmId, body);
-  await expect
-    .poll(() => mlsPrivatePlaintextBackupPutCount(keyBackupPuts), {
-      timeout: 120_000,
-    })
-    .toBeGreaterThan(backupsBefore);
+  await writeAndExpectContentRootBackup(device.page, realmId, "ak.message.create", keyBackupPuts,
+    () => device.sendTimelineMessage(realmId, body));
 }
 
 async function unlockMlsAccountSecret(page: Page, recoveryKey: string) {

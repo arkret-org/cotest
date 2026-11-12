@@ -238,7 +238,7 @@ pub async fn declared_durable_effects_match_live_producers() -> Result<()> {
         }),
     );
     let response = alice
-        .put(&format!("/_arkret/self/account_data/{account_data_key}"))
+        .put(&format!("/_arkret/self/account-data/{account_data_key}"))
         .json(
             &arkret_models_identity::account::AccountDataReplaceRequestBody {
                 set_event: arkret_wire::EventAdmissionSubmission::new(set_event),

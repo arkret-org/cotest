@@ -68,7 +68,7 @@ fn sdk_device_signature_kat(fixture: &Value) -> Result<()> {
             "GET",
             text(&case["components"], "@target-uri").unwrap(),
             "station.example",
-            "/_arkret/self/device_messages",
+            "/_arkret/self/device-messages",
             headers.iter().map(|(n, v)| (n, v)),
             &[],
             &key,

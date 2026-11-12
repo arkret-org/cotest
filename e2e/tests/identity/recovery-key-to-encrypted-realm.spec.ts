@@ -502,7 +502,7 @@ test.describe("identity.recovery-key-to-encrypted-realm @fully-implemented", () 
             hit.status >= 500 &&
             !isExpectedRecoveryPolicyPending(hit) &&
             !isExpectedSnapshotCutPending(hit, journeyRealms),
-        ),
+        ).map(({ method, path, status, errorCode }) => ({ method, path, status, errorCode })),
         "unexpected Arkret 5xx responses",
       ).toEqual([]);
       expect(protocolDiagnostics, protocolDiagnostics.join("\n")).toEqual([]);

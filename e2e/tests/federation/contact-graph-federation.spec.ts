@@ -1,6 +1,6 @@
 import { submitOrdinaryComposerDraft } from "../../helpers/composer-handoff";
 import { decodeIngressEvents } from "../../helpers/event-ingress";
-import { assertAuthoritySubmitOutcome } from "../../helpers/coland-api";
+import { assertAuthoritySubmitOutcome, wireErrCode } from "../../helpers/coland-api";
 import { contactMessage } from "../../helpers/contact-product-ui";
 // Contact graph across Stations (server1/server2 federation).
 //
@@ -84,8 +84,9 @@ async function sendCrossStationEncrypted(user: JointUserPage, recoveryKey: strin
   ]);
   const original = decodeIngressEvents(response.request().postData(), { context: "cross-Station Direct original" }).find(isOriginal)!;
   expect(original.payload?.encrypted_content).toBeTruthy();
-  expect(response.ok(), `Direct submission HTTP ${response.status()}`).toBe(true);
-  assertAuthoritySubmitOutcome(await response.json(), original, "cross-Station encrypted Direct send");
+  const outcome = await response.json();
+  expect(response.ok(), `Direct submission HTTP ${response.status()} code=${wireErrCode(outcome) || "none"}`).toBe(true);
+  assertAuthoritySubmitOutcome(outcome, original, "cross-Station encrypted Direct send");
   await expect(page.locator(".chat-message").filter({ hasText: message })).toBeVisible({ timeout: 90_000 });
 }
 
