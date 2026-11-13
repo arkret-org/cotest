@@ -1,5 +1,5 @@
 import { prepareDirectStructureForm } from "./direct-structure-form";
-import { expectPlaintextMessage } from "./message-evidence";
+import { eventIdFromMessage, expectPlaintextMessage } from "./message-evidence";
 import { revealTimelineEvent } from "./timeline-visibility";
 import { submitOrdinaryComposerDraft } from "./composer-handoff";
 import { openDirectChatNotification } from "./direct-notification";
@@ -1369,7 +1369,25 @@ async function indexedDbClearRecovery(page: Page, mainId: string, chatId: string
   }
 }
 
-export async function flatTopicChats(alice: Page, bob: Page, mainMessages: string[], extraDevices: Page[] = [], proof?: DirectStructureProof) {
+type DirectMainMessage = { body: string; eventId: string; presentationId: string };
+
+export async function captureDirectMainMessages(page: Page, bodies: string[]): Promise<DirectMainMessage[]> {
+  const feed = page.locator(".message-list:visible");
+  await expect(feed).toHaveCount(1);
+  const messages: DirectMainMessage[] = [];
+  for (const body of bodies) {
+    const row = page.locator(".chat-message").filter({ hasText: body });
+    await revealTimelineEvent(page, row, 90_000, feed);
+    await expect(row).toHaveCount(1);
+    await expectPlaintextMessage(row, { timeout: 90_000 });
+    const presentationId = await row.getAttribute("id");
+    expect(presentationId).toMatch(/^chat-message-[0-9a-f]{64}$/);
+    messages.push({ body, eventId: await eventIdFromMessage(row), presentationId: presentationId! });
+  }
+  return messages;
+}
+
+export async function flatTopicChats(alice: Page, bob: Page, mainMessages: DirectMainMessage[], extraDevices: Page[] = [], proof?: DirectStructureProof) {
   const pages = [alice, bob, ...extraDevices];
   const observations = pages.map(page => {
     const samples: Array<{ sample: ReturnType<typeof publicMlsRuntimeDiagnostic>; count: number }> = [];
@@ -1399,7 +1417,19 @@ export async function flatTopicChats(alice: Page, bob: Page, mainMessages: strin
       const history = /^ak:realm:[A-Za-z0-9_-]{44}$/.test(realm)
         ? await readOrdinaryHistoryDiagnostic(page, realm).catch(() => ({ error: "unavailable" }))
         : { error: "invalid_realm" };
-      return { participant, history, runtime: samples };
+      const targets = await Promise.all(mainMessages.map(async message => ({
+        event_id: message.eventId,
+        presentation_id: message.presentationId,
+        mounted: await page.locator("#" + message.presentationId).count(),
+        crypto_pending: await page.locator("#" + message.presentationId + ".is-crypto-pending").count(),
+        history: await readOrdinaryHistoryDiagnostic(page, realm, message.eventId).catch(() => ({ error: "unavailable" })),
+      }))).catch(() => []);
+      const geometry = await page.locator(".message-list:visible").evaluate(feed => ({
+        viewport: feed.clientHeight, scroll_height: feed.scrollHeight, scroll_top: feed.scrollTop,
+        mounted_rows: feed.querySelectorAll(".chat-message").length,
+        pending_rows: feed.querySelectorAll(".chat-message.is-crypto-pending").length,
+      })).catch(() => null);
+      return { participant, history, targets, geometry, runtime: samples };
     }));
     await test.info().attach("direct-content-public-diagnostics", {
       contentType: "application/json", body: JSON.stringify(diagnostics),
@@ -1413,18 +1443,21 @@ export async function flatTopicChats(alice: Page, bob: Page, mainMessages: strin
   }
 }
 
-async function runFlatTopicChats(alice: Page, bob: Page, mainMessages: string[], extraDevices: Page[], proof?: DirectStructureProof) {
+async function runFlatTopicChats(alice: Page, bob: Page, mainMessages: DirectMainMessage[], extraDevices: Page[], proof?: DirectStructureProof) {
   expect(proof, "structure coverage requires the actual accepted participant credentials").toBeDefined();
   structuralBoundaries.set(alice, proof!);
   const mainRows = new Map<Page, Array<{ body: string; presentationId: string }>>();
   for (const page of [alice, bob]) {
     const rows: Array<{ body: string; presentationId: string }> = [];
-    for (const body of mainMessages) {
-      const row = page.locator(".chat-message").filter({ hasText: body });
+    const feed = page.locator(".message-list:visible");
+    await expect(feed).toHaveCount(1);
+    for (const message of mainMessages) {
+      const row = page.locator("#" + message.presentationId);
+      await revealTimelineEvent(page, row, 90_000, feed);
       await expect(row).toHaveCount(1);
-      const presentationId = await row.getAttribute("id");
-      expect(presentationId).toMatch(/^chat-message-[0-9a-f]{64}$/);
-      rows.push({ body, presentationId: presentationId! });
+      await expectPlaintextMessage(row, { timeout: 90_000 });
+      await expect(row).toContainText(message.body);
+      rows.push(message);
     }
     mainRows.set(page, rows);
   }
@@ -1451,7 +1484,7 @@ async function runFlatTopicChats(alice: Page, bob: Page, mainMessages: string[],
     const choose = page.locator(".direct-structure").getByRole("combobox", { name: "Chat", exact: true });
     await expect(choose.locator(`option[value=${JSON.stringify(chatId)}]`)).toContainText(chatName, { timeout: 90_000 });
     await choose.selectOption(chatId);
-    for (const message of mainMessages) await expect(page.locator(".chat-message").filter({ hasText: message })).toHaveCount(0);
+    for (const message of mainMessages) await expect(page.locator(".chat-message").filter({ hasText: message.body })).toHaveCount(0);
   }
   const { event: bobWatch, acceptedCut: watchCut } = await ownWatchTransitions(bob, [alice, ...extraDevices], chatId);
   // Qualify the accepted Watch on each actual Station before consuming its

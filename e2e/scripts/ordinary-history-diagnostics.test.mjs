@@ -20,3 +20,24 @@ test("ordinary history diagnostics reject unknown errors and malformed facts and
   assert.deepEqual(result, { exact_records: Array.from({ length: 8 }, () => ({})) });
   assert.deepEqual(publicOrdinaryHistoryDiagnostic({ error: "account_mismatch" }), { error: "account_mismatch" });
 });
+
+test("content material evidence exports only fixed readiness booleans", () => {
+  const result = publicOrdinaryHistoryDiagnostic({ exact_records: [{ material: {
+    original_decodes: true, encrypted_envelope_decodes: true, root_cached: false,
+    public_epoch_ready: false, checkpoint_present: true, checkpoint_epoch_matches: true,
+    epoch_reference_matches: true, header_reconstructs: false,
+    protected_original_retained: false, accepted_original_retained: true, aead_opens: false,
+    root_base64url: "fixture-sensitive-root", ciphertext: "fixture-sensitive-ciphertext",
+  } }] });
+  assert.deepEqual(result.exact_records[0].material, {
+    original_decodes: true, encrypted_envelope_decodes: true, root_cached: false,
+    public_epoch_ready: false, checkpoint_present: true, checkpoint_epoch_matches: true,
+    epoch_reference_matches: true, header_reconstructs: false,
+    protected_original_retained: false, accepted_original_retained: true, aead_opens: false,
+  });
+  assert.ok(!JSON.stringify(result).includes("fixture-sensitive"));
+  const malformed = publicOrdinaryHistoryDiagnostic({ exact_records: [{ material: {
+    root_cached: "fixture-sensitive-root", header_reconstructs: { plaintext: "fixture-sensitive" },
+  } }] });
+  assert.deepEqual(malformed, { exact_records: [{ material: {} }] });
+});
