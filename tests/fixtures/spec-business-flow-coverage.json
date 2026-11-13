@@ -643,7 +643,7 @@
         },
         {
           "kind": "conformance_fixture",
-          "path": "src/conformance/keypackage_lifecycle_cases.rs",
+          "path": "src/conformance/keypackage_lifecycle/cases.rs",
           "markers": [
             "ak.suite.crypto.keypackage_lifecycle.v1",
             "fn run_keypackage_lifecycle_suite"

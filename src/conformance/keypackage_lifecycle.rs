@@ -55,7 +55,6 @@ pub const ALL_KEYPACKAGE_LIFECYCLE_VECTOR_IDS: &[&str] = &[
     VECTOR_ID_MLS_KEYPACKAGE_ACTOR_AND_CIPHERSUITE_CLOSURE,
 ];
 
-#[path = "keypackage_lifecycle_cases.rs"]
 mod cases;
 
 pub use cases::run_keypackage_lifecycle_suite;

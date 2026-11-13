@@ -11,7 +11,7 @@ resolver = "3"
 
 [[test]]
 name = "realm_bot_consumer"
-path = "tests/realm_bot_consumer.rs"
+path = "tests/realm_bot_consumer/main.rs"
 
 [dev-dependencies]
 base64 = { version = "0.23.1" }

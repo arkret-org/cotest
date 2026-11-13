@@ -343,7 +343,7 @@ fn default_gate_paths() -> OperationRegistryGatePaths {
             OperationSourceRoot::new("coland", workspace_root.join("coland"))
                 .with_dir("crates/http/src/routing")
                 .with_file("crates/http/src/wire.rs")
-                .with_file("crates/http/src/did_resolver_chain.rs"),
+                .with_file("crates/http/src/state/did_resolver_chain.rs"),
             OperationSourceRoot::new("sdk", workspace_root.join("arkret-rust-sdk"))
                 .with_dir("crates/http-client/src")
                 .with_dir("crates/sdk/src")

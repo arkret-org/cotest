@@ -3,7 +3,6 @@
 use anyhow::Result;
 use serial_test::serial;
 
-#[path = "coauth_session_grant_response_loss/scenario.rs"]
 mod scenario;
 
 /// A real PostgreSQL commit survives a killed Coauth process and the exact

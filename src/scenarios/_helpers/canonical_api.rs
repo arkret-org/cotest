@@ -5,7 +5,6 @@ use cotest_test_support::provisioning::{DeploymentEndpoints, MockEmailInbox};
 
 use crate::harness::{ArkretServer, CanonicalClientRequest, ClientSession, TestActorClient};
 
-#[path = "canonical_pairing.rs"]
 mod pairing;
 
 pub struct CanonicalApiFixture {

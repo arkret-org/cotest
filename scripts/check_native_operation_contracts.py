@@ -1182,7 +1182,7 @@ def evidence_coverage(document, directory: Path, execution: Path):
         "coauth/crates/storage-postgres/src/station_trust.rs",
         "cotest/src/scenarios/agent_runtime_live/coauth_session_evidence.rs",
         "cotest/src/scenarios/_helpers/native_issuer_binding.rs",
-        "cotest/src/harness/public_base.rs",
+        "cotest/src/harness/server/public_base.rs",
         "cotest/crates/test-support/src/operation_observation.rs",
         "cotest/tests/native_operation_contracts.rs",
         "cotest/tests/fixtures/native-operation-contracts.json",

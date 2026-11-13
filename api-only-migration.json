@@ -485,11 +485,11 @@
           "symbol": "signature_policy_enforces_digest_components_and_time_window"
         },
         {
-          "file": "coland/crates/http/src/routing/federation/federation_tests.rs",
+          "file": "coland/crates/http/src/routing/federation/tests.rs",
           "symbol": "verify_actor_headers_reject_destination_mismatch"
         },
         {
-          "file": "coland/crates/http/src/routing/federation/federation_tests.rs",
+          "file": "coland/crates/http/src/routing/federation/tests.rs",
           "symbol": "signature_input_rejects_mismatched_federation_key"
         }
       ]

@@ -1,11 +1,10 @@
 //! Joint Coland transport and Savfox consumer regressions.
 //! Run through `joint/realm-bot-consumer/Cargo.toml`.
-#[path = "../../../../coland/crates/storage-postgres/tests/support/applet_authoring.rs"]
+#[path = "../../../../../coland/crates/storage-postgres/tests/support/applet_authoring/mod.rs"]
 #[allow(dead_code)]
 mod applet_authoring;
-#[path = "realm_bot_consumer/consumer.rs"]
 mod consumer;
-#[path = "../../../../coland/crates/storage-postgres/tests/support/ordinary_realm.rs"]
+#[path = "../../../../../coland/crates/storage-postgres/tests/support/ordinary_realm.rs"]
 #[allow(dead_code)]
 mod ordinary_realm;
 
