@@ -6,6 +6,7 @@ import { openCardMembers } from "../../helpers/kanban-product-ui";
 import { accountActorId } from "../../helpers/coland-api";
 import { agentMemberRow } from "../../helpers/product-locators";
 import { actorRow } from "../../helpers/product-locators";
+import { selectProductOptionByReference } from "../../helpers/product-select";
 import { openSavfoxArkretChannel, startSavfoxPairing, saveSavfoxChannel, provisionAgent, pairManagedSavfoxAgent, addAgentToRealm, composeSourceAgentMention, createSidecarSourceCard, submitSidecarComposerDraft, waitForSidecarEnsureAcceptance, eventIdFromMessage, displayPairingCode } from "../../helpers/agent-sidecar-product-ui";
 import { uint64Decimal } from "../../helpers/uint64-decimal";
 import { observeNativeSearch } from "../../helpers/native-search";
@@ -1628,7 +1629,7 @@ async function confirmNativePublicStrandAuthority(page: Page, realm: JointRealmF
   const row = actorRow(page, ".member-self-agent-row", accountActorId(agentId));
   const panel = row.locator(".event:has(> .event-head :text-is(\"明确授权自有 Agent\"))");
   await expect(panel.locator(".owned-agent-scope")).toBeVisible({ timeout: 120_000 });
-  await panel.locator(".owned-agent-scope").selectOption(strand);
+  await selectProductOptionByReference(panel.locator(".owned-agent-scope"), strand);
   for (const label of ["发送消息", "读取 Strand", "读取事件", "读取对象"]) {
     await panel.getByRole("checkbox", { name: label, exact: true }).check();
   }
