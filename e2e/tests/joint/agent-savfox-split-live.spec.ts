@@ -1630,9 +1630,10 @@ async function confirmNativePublicStrandAuthority(page: Page, realm: JointRealmF
   const panel = row.locator(".event:has(> .event-head :text-is(\"明确授权自有 Agent\"))");
   await expect(panel.locator(".owned-agent-scope")).toBeVisible({ timeout: 120_000 });
   await selectProductOptionByReference(panel.locator(".owned-agent-scope"), strand);
-  for (const label of ["发送消息", "读取 Strand", "读取事件", "读取对象"]) {
-    await panel.getByRole("checkbox", { name: label, exact: true }).check();
-  }
+  // Membership supplies ordinary reads. Do not exceed the immutable provision
+  // ceiling by inventing a Strand-read grant for this public reply exercise.
+  for (const checkbox of await panel.getByRole("checkbox").all()) await checkbox.uncheck();
+  await panel.getByRole("checkbox", { name: "发送消息", exact: true }).check();
   const accepted = page.waitForResponse(response => response.request().method() === "POST"
     && new URL(response.url()).pathname === EVENTS_SUBMIT_PATH
     && eventSubmissions(response.request().postData()).some(event => event.kind === "ak.capability.grant"),
@@ -1650,7 +1651,7 @@ async function confirmNativePublicStrandAuthority(page: Page, realm: JointRealmF
   expect(canonicalJson(grant.resources) === canonicalJson([{ kind: "strand", realm_id: realm.realmId, strand_id: strand }])).toBe(true);
   expect(Array.isArray(grant.actions)).toBe(true);
   expect(canonicalJson([...(grant.actions as string[])].sort()) === canonicalJson([
-    "ak.message.create", "ak.strand.read", "ak.event.read", "ak.object.read",
+    "ak.message.create",
   ].sort())).toBe(true);
   const sources = grant.issuer_authority_refs as Array<Record<string, unknown>>;
   expect(sources.length).toBe(1);
