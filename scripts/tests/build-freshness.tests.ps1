@@ -403,6 +403,66 @@ path = "src/main.rs"
     catch { $changedDuringBuildRejected = $_.Exception.Message -like 'Build inputs changed during the managed build;*' }
     Assert-True ($changedDuringBuildRejected -and (Get-Content -Raw -LiteralPath $cached.StampPath) -ceq $savedStamp) 'actual build that changes source inventory must not refresh the previous stamp'
 
+    # A fresh Git revision must be fetched before the offline source inventory.
+    # Use separate real Cargo caches so a developer's warm cache cannot hide it.
+    $gitDependency = Join-Path $testRoot 'cold-git-dependency'
+    $coldRoot = Join-Path $testRoot 'cold-git-consumer'
+    foreach ($directory in @($gitDependency, $coldRoot)) {
+        $null = New-Item -ItemType Directory -Path (Join-Path $directory 'src')
+        Invoke-BuildInputGit -RepositoryRoot $directory -Arguments @('init', '-q') | Out-Null
+        Set-Content -LiteralPath (Join-Path $directory '.gitignore') -Value '/target/' -Encoding UTF8
+    }
+    Set-Content -LiteralPath (Join-Path $gitDependency 'Cargo.toml') -Value @'
+[package]
+name = "cold_git_dependency"
+version = "0.1.0"
+edition = "2021"
+'@ -Encoding UTF8
+    Set-Content -LiteralPath (Join-Path $gitDependency 'src/lib.rs') -Value 'pub fn value() -> &''static str { "cold-ready" }' -Encoding UTF8
+    Invoke-BuildInputGit -RepositoryRoot $gitDependency -Arguments @('add', '.') | Out-Null
+    Invoke-BuildInputGit -RepositoryRoot $gitDependency -Arguments @('-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.test', 'commit', '-qm', 'dependency') | Out-Null
+    $dependencyRevision = (Invoke-BuildInputGit -RepositoryRoot $gitDependency -Arguments @('rev-parse', 'HEAD')).Trim()
+    $dependencyUri = ([System.Uri]::new($gitDependency)).AbsoluteUri
+    $coldManifest = Join-Path $coldRoot 'Cargo.toml'
+    $coldManifestText = @"
+[package]
+name = "cold_git_consumer"
+version = "0.1.0"
+edition = "2021"
+[dependencies]
+cold_git_dependency = { git = "$dependencyUri", rev = "$dependencyRevision" }
+"@
+    Set-Content -LiteralPath $coldManifest -Value $coldManifestText -Encoding UTF8
+    Set-Content -LiteralPath (Join-Path $coldRoot 'src/main.rs') -Value 'fn main() { println!("{}", cold_git_dependency::value()); }' -Encoding UTF8
+    $previousCargoHome = $env:CARGO_HOME
+    try {
+        $env:CARGO_HOME = Join-Path $testRoot 'cargo-warm'
+        Invoke-BuildInputNative -FilePath (Get-Command cargo).Source -WorkingDirectory $coldRoot -Arguments @('generate-lockfile') | Out-Null
+        Invoke-BuildInputGit -RepositoryRoot $coldRoot -Arguments @('add', '.') | Out-Null
+        Invoke-BuildInputGit -RepositoryRoot $coldRoot -Arguments @('-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.test', 'commit', '-qm', 'consumer') | Out-Null
+        $coldLock = Join-Path $coldRoot 'Cargo.lock'
+        $coldLockHash = (Get-FileHash -LiteralPath $coldLock -Algorithm SHA256).Hash
+        $env:CARGO_HOME = Join-Path $testRoot 'cargo-cold'
+        $coldInventoryRejected = $false
+        try { Resolve-RepositoryBuildInputRoots -RepositoryRoots @($coldRoot) | Out-Null }
+        catch { $coldInventoryRejected = $_.Exception.Message -like '*offline*' }
+        Assert-True $coldInventoryRejected 'an absent real Git checkout must fail the offline inspector before preparation'
+        $coldPrepared = & $prepareScript -ManifestPath $coldManifest -BinaryName cold_git_consumer -TargetDirectory (Join-Path $coldRoot 'target') -Jobs 1
+        Assert-True ((Get-FileHash -LiteralPath $coldLock -Algorithm SHA256).Hash -ceq $coldLockHash) 'cold preparation must preserve every locked dependency byte'
+        Assert-True ((Invoke-BuildInputNative -FilePath $coldPrepared.ArtifactPath).Trim() -ceq 'cold-ready') 'cold preparation must build the real locked Git dependency'
+        $coldStates = @(Get-ArtifactBuildRepositoryStates -ArtifactPath $coldPrepared.ArtifactPath -RepositoryRoots @($coldRoot))
+        Assert-True (Test-ArtifactBuildStamp -ArtifactPath $coldPrepared.ArtifactPath -RepositoryStates $coldStates).Matches 'cold preparation must retain exact offline source and artifact binding'
+        Set-Content -LiteralPath (Join-Path $gitDependency 'src/lib.rs') -Value 'pub fn value() -> &''static str { "later" }' -Encoding UTF8
+        Invoke-BuildInputGit -RepositoryRoot $gitDependency -Arguments @('add', '.') | Out-Null
+        Invoke-BuildInputGit -RepositoryRoot $gitDependency -Arguments @('-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.test', 'commit', '-qm', 'advance') | Out-Null
+        $laterRevision = (Invoke-BuildInputGit -RepositoryRoot $gitDependency -Arguments @('rev-parse', 'HEAD')).Trim()
+        Set-Content -LiteralPath $coldManifest -Value $coldManifestText.Replace($dependencyRevision, $laterRevision) -Encoding UTF8
+        $unlockedRevisionRejected = $false
+        try { & $prepareScript -ManifestPath $coldManifest -BinaryName cold_git_consumer -TargetDirectory (Join-Path $coldRoot 'target') -Jobs 1 | Out-Null }
+        catch { $unlockedRevisionRejected = $_.Exception.Message -like '*lock file*' }
+        Assert-True ($unlockedRevisionRejected -and (Get-FileHash -LiteralPath $coldLock -Algorithm SHA256).Hash -ceq $coldLockHash) 'preparation must refuse a new Git revision without rewriting the lock'
+    } finally { $env:CARGO_HOME = $previousCargoHome }
+
     $stampPath = Get-ArtifactBuildStampPath -ArtifactPath $artifact
     $stamp = Get-Content -Raw -LiteralPath $stampPath | ConvertFrom-Json
     $stamp.PSObject.Properties.Remove("artifact_sha256")

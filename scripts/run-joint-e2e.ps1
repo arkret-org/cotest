@@ -4103,6 +4103,14 @@ try {
             -SpecArtifactsDirectory (Join-Path $workspaceRoot "arkret-spec/spec/v1/artifacts") `
             -LogDirectory $serviceLogDir
     }
+    if (-not $SkipBuild) {
+        # Source inspection stays offline. Prepare all selected Rust workspace
+        # locks first so new pinned Git dependencies work on a cold machine.
+        $cargoDependencyRoots = @($sourceFreezePaths.Values | Where-Object {
+            $_ -and (Test-Path -LiteralPath (Join-Path $_ 'Cargo.toml') -PathType Leaf)
+        })
+        Initialize-LockedCargoDependencyCache -RepositoryRoots $cargoDependencyRoots
+    }
     if ($StartCoauth) {
         # Accepted test identity custody stays outside publishable artifacts.
         # The runner owns cleanup even if a worker terminates its bridge abruptly.

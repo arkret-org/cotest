@@ -57,6 +57,29 @@ function Resolve-BuildInputPath {
     return $current
 }
 
+function Initialize-LockedCargoDependencyCache {
+    param([Parameter(Mandatory = $true)][AllowEmptyCollection()][string[]]$RepositoryRoots)
+    $roots = [System.Collections.Generic.SortedSet[string]]::new([System.StringComparer]::Ordinal)
+    foreach ($candidate in $RepositoryRoots) {
+        $root = Resolve-BuildInputPath -Path $candidate
+        if (-not (Test-Path -LiteralPath (Join-Path $root 'Cargo.toml') -PathType Leaf)) {
+            throw "Cargo dependency preparation root has no manifest: $root"
+        }
+        $null = $roots.Add($root)
+    }
+    if ($roots.Count -eq 0) { return }
+    $cargo = Get-Command cargo -ErrorAction Stop
+    foreach ($root in $roots) {
+        # Fetch the exact lock before inspecting its complete graph offline.
+        # A fresh Git revision is not guaranteed to exist in Cargo's cache.
+        # --locked keeps missing/stale locks fatal and cannot select new inputs.
+        Write-Host "Preparing locked Cargo dependencies: $root"
+        Invoke-BuildInputNative -FilePath $cargo.Source -WorkingDirectory $root -Arguments @(
+            'fetch', '--locked', '--manifest-path', (Join-Path $root 'Cargo.toml')
+        ) | Out-Null
+    }
+}
+
 function Get-ArtifactBuildDependencyScope {
     param([Parameter(Mandatory = $true)][string]$ArtifactPath)
     # These are product binaries, not their workspace's integration examples.

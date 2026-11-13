@@ -22,6 +22,7 @@ $cargo = Get-Command cargo -ErrorAction Stop
 $previousTargetDirectory = $env:CARGO_TARGET_DIR
 try {
     if ($TargetDirectory) { $env:CARGO_TARGET_DIR = Resolve-BuildInputPath -Path $TargetDirectory }
+    Initialize-LockedCargoDependencyCache -RepositoryRoots (@($workingDirectory) + @($RepositoryRoots))
     $metadata = Invoke-BuildInputNative -FilePath $cargo.Source -WorkingDirectory $workingDirectory -Arguments @(
         'metadata', '--format-version', '1', '--locked', '--offline', '--all-features', '--manifest-path', $manifest
     ) | ConvertFrom-Json -AsHashtable -ErrorAction Stop
