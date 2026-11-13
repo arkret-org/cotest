@@ -107,6 +107,9 @@ param(
     [switch]$StartSavfox,
     [string]$SavfoxRoot,
     [string]$SavfoxBin,
+    # Opt-in real local Codex runtime for the addressed gateway. Ordinary
+    # deterministic conformance probes keep their existing provider.
+    [string]$SavfoxCodexCommand,
     [string]$SavfoxBaseUrl,
     [string]$SavfoxToken = "cotest-savfox-joint-e2e-token-0000000000000001",
     [string]$ColandNotarySigningKey = "OTk5OTk5OTk5OTk5OTk5OTk5OTk5OTk5OTk5OTk5OTk=",
@@ -4782,6 +4785,27 @@ try {
             -ManagedServices $managedServices
         $savfoxModelReceipts = $savfoxAddressedProbe.ReceiptPath
         $savfoxUnaddressedModelReceipts = $savfoxUnaddressedProbe.ReceiptPath
+        Remove-Item Env:COTEST_SAVFOX_TERMINAL_HOME -ErrorAction SilentlyContinue
+        if ($SavfoxCodexCommand) {
+            $codexCommand = (Resolve-Path -LiteralPath $SavfoxCodexCommand -ErrorAction Stop).Path
+            $agentDirectory = Join-Path $savfoxAddressedProbe.Home "agents"
+            $agentWorkspace = Join-Path $savfoxAddressedProbe.Home "project-workspace"
+            New-Item -ItemType Directory -Path $agentDirectory, $agentWorkspace -Force | Out-Null
+            @{
+                id = "default"; name = "Atlas local Codex"; kind = "terminal"
+                system_prompt = "You are the Atlas project reviewer. Reply concisely in Chinese. Follow the current project message, including its unique acknowledgement marker. Discuss only; do not call tools or modify files."
+                terminal = @{
+                    enabled = $true; runtime = "codex"; profile = "codex"; mode = "app_server"
+                    session_scope = "per_session"; io_protocol = "plain_text"
+                    terminal_execution = "native_terminal"; savfox_approval_bridge = "disabled"
+                    command = $codexCommand
+                    args = @("app-server", "--listen", "stdio://", "-c", 'approval_policy="never"', "-c", 'sandbox_mode="read-only"')
+                    cwd = $agentWorkspace; timeout_secs = 300; include_system_prompt = $true
+                    workspace = @{ mode = "shared"; cleanup_policy = "per_session" }
+                }
+            } | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath (Join-Path $agentDirectory "default.json") -Encoding UTF8
+            $env:COTEST_SAVFOX_TERMINAL_HOME = $savfoxAddressedProbe.Home
+        }
     }
 
     if ($willStartDefaultColand -and -not $colandDatabaseDsn) {

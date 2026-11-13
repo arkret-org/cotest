@@ -34,6 +34,15 @@ native admission and transport fixture and provide their own model provider,
 reply publication, MLS epoch change, worker restart and deduplication checks.
 The server and its own tests do not link the Agent runtime.
 
+For a local project exercise, `scripts/run-joint-e2e.ps1 -StartSavfox
+-SavfoxCodexCommand <absolute-codex-executable>` configures the addressed
+gateway's default Agent as a real Codex `app-server` terminal runtime. It
+uses the local Codex login, a run-owned working directory and read-only Codex
+sandbox settings. This opt-in lane requires a live model reply; the ordinary
+deterministic conformance probes retain their existing behavior. Tests can
+inspect `COTEST_SAVFOX_TERMINAL_HOME` for runtime metadata, but must export
+only safe status fields, never authentication data or terminal transcripts.
+
 The two cases cover normal mention replies and an MLS update during a reply.
 Coland retains the independent protocol-side key recovery and management
 transfer cases. Run the consumer cases with the sibling Savfox checkout and
