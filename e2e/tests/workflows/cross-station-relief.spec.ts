@@ -290,8 +290,17 @@ async function runReliefProject(admission: "concurrent" | "late-welcome", browse
     }, { timeout: 120_000 });
     releaseHeld!(true);
     const denied = await refusal;
+    const deniedProblem = await denied.json();
+    const deniedCode = wireErrCode(deniedProblem);
+    await testInfo.attach("relief-delayed-write-refusal", {
+      contentType: "application/json", body: JSON.stringify({ status: denied.status(),
+        code: ["failed_precondition", "epoch_mismatch", "capability_denied", "temporarily_unavailable"].includes(deniedCode ?? "") ? deniedCode : "other",
+        has_commit: deniedProblem?.commit !== undefined || deniedProblem?.commits !== undefined,
+        epoch_update_required: deniedProblem?.reason === "epoch_update_required",
+      }),
+    });
     expect(denied.status()).toBe(403);
-    expect(wireErrCode(await denied.json())).toBe("capability_denied");
+    expect(deniedCode).toBe("capability_denied");
     await testInfo.attach("relief-origin-cut-retries", {
       contentType: "application/json", body: JSON.stringify({ retryable_source_cut_responses: sourceCutRetries }),
     });

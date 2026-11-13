@@ -268,9 +268,14 @@ test.describe("workflow: kanban week-in-review", () => {
       assertAuthoritySubmitOutcome(archiveOutcome, archiveEvent!, "week-in-review List archive");
       await waitForDurableCurrentCut(patPage.page, archiveOutcome.commit as CommitStreamHead);
       const archivedLists = patPage.page.locator(".kanban-archived-lists");
-      await archivedLists.getByRole("button", { name: /^Archived lists \(\d+\)$/ }).click();
+      // Durable installation can precede the maintenance view's next render.
+      // Open the accepted List's disclosure, rather than the retiring zero row.
+      const archiveViewDeadline = Date.now() + 30_000;
+      const archiveToggle = archivedLists.getByRole("button", { name: "Archived lists (1)", exact: true });
+      await expect(archiveToggle).toBeVisible({ timeout: Math.max(1, archiveViewDeadline - Date.now()) });
+      await archiveToggle.click({ timeout: Math.max(1, archiveViewDeadline - Date.now()) });
       const archivedList = archivedLists.locator(".kanban-archived-list-row").filter({ hasText: todayList });
-      await expect(archivedList).toBeVisible({ timeout: 30_000 });
+      await expect(archivedList).toBeVisible({ timeout: Math.max(1, archiveViewDeadline - Date.now()) });
       const [restoreResponse] = await Promise.all([
         patPage.page.waitForResponse((response) =>
           new URL(response.url()).pathname === "/_arkret/self/events" &&

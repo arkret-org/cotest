@@ -3,6 +3,7 @@
 // Spec: models/calendar-event.md, models/strand-and-message.md
 
 import { newBoardTrigger, addBoardList } from "../../helpers/kanban-product-ui";
+import { clickCardSave } from "../../helpers/card-save";
 import { assertAuthoritySubmitOutcome } from "../../helpers/coland-api";
 import {
   expect,
@@ -127,7 +128,7 @@ test("@fully-implemented calendar schedule and RSVP survive the canonical Strand
     const scheduleWrite = page.page
       .waitForResponse(schedulePredicate, { timeout: 90_000 })
       .catch(() => undefined);
-    await editor.locator(".card-detail-save-button").click();
+    await clickCardSave(editor);
     const scheduled = await scheduleWrite;
     const scheduleStatus = await editor
       .locator(".card-detail-edit-status")

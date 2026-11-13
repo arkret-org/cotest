@@ -7,6 +7,8 @@ for (const encrypted of [false, true]) {
     test.setTimeout(1_200_000);
     const stamp = Date.now();
     const flows: Array<Awaited<ReturnType<typeof openRegisteredUserPage>>> = [];
+    let phase = "setup";
+    let authorIndex = -1;
     try {
       for (const actor of ["alice", "bob", "carol"]) {
         flows.push(await openRegisteredUserPage(browser, request, `link-sync-${actor}-${stamp}`));
@@ -84,8 +86,11 @@ for (const encrypted of [false, true]) {
         // A changed roster must converge to a covered epoch that still sends.
         // Membership count alone does not establish encrypted collaboration.
         for (const member of [alice, carol]) await member.page.gotoTimelineRealm(realm);
+        phase = "post_leave_send";
         const afterLeave: string[] = [];
         for (const author of [alice, carol]) {
+          authorIndex = flows.indexOf(author);
+          await author.page.page.bringToFront();
           const body = `After Bob left ${author.user.name} ${stamp}`;
           afterLeave.push(body);
           await author.page.sendTimelineMessage(realm, body);
@@ -98,6 +103,23 @@ for (const encrypted of [false, true]) {
         await expect(bob.page.page.locator(".send-chat-button:enabled")).toHaveCount(0);
         for (const body of afterLeave) await expect(bob.page.page.getByText(body, { exact: true })).toHaveCount(0);
       }
+    } catch (error) {
+      for (const [index, flow] of flows.entries()) {
+        const readiness = await flow.page.page.locator(".send-chat-button").evaluateAll(nodes => nodes.map(node => {
+          const title = node.getAttribute("title") ?? "";
+          return {
+            disabled: (node as HTMLButtonElement).disabled,
+            epoch_pending: title.startsWith("encryption_transition_pending:"),
+            policy_pending: title.startsWith("encryption_policy_pending:"),
+            awaiting_welcome: title.startsWith("Waiting for this device's encryption keys."),
+            awaiting_scope: title.startsWith("Waiting for this scope's verified send state"),
+          };
+        })).catch(() => []);
+        await test.info().attach(`share-link-public-readiness-${index}`, {
+          contentType: "application/json", body: JSON.stringify({ phase, author_index: authorIndex, readiness }),
+        });
+      }
+      throw error;
     } finally {
       for (const flow of flows) await test.info().attach(`browser-locks-${flow.user.name}`, {
         body: JSON.stringify(await flow.page.page.evaluate(() => navigator.locks.query())),

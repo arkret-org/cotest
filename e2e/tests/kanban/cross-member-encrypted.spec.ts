@@ -1,4 +1,5 @@
 import { observeCardSaveAction } from "../../helpers/action-evidence";
+import { clickCardSave } from "../../helpers/card-save";
 import { boardSwitcher, prepareBoardTitle, newBoardTrigger, addBoardList, fillCardNarrative, submitBoardCardDraft } from "../../helpers/kanban-product-ui";
 import { restartRunnerStation } from "../../helpers/station-runtime";
 import { proveKanbanHistoryTail, seedKanbanHistory } from "../../helpers/kanban-history";
@@ -540,7 +541,7 @@ async function addEncryptedDescription(
   page.on("request", captureRequest);
   const finishActionTrace = await observeCardSaveAction(page);
   try {
-    await save.click();
+    await clickCardSave(form, Math.min(30_000, responseDeadline - Date.now()));
     while (Date.now() < responseDeadline) {
       response = await Promise.race([
         strandUpdate,
@@ -570,7 +571,7 @@ async function addEncryptedDescription(
           || status === "Waiting for the current card before saving...")
         && await save.isEnabled()) {
         preAuthoringRetries++;
-        await save.click();
+        await clickCardSave(form, Math.min(30_000, responseDeadline - Date.now()));
       }
     }
   } finally {
