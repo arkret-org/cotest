@@ -6,6 +6,7 @@ import { createRealmViaApi, sendPlaintextMessageViaApi } from "../../helpers/api
 import { authHeaders, resolveDefaultStrandId } from "../../helpers/coland-api";
 import { coauthBaseUrl, colandBaseUrl } from "../../helpers/env";
 import { observeNativeSearch } from "../../helpers/native-search";
+import { nativeSearchEvidence } from "../../helpers/native-search-evidence";
 import { postponeSearchEncryptionPrompts } from "../../helpers/local-search";
 import { createDpopUserSession, issueUserSession, openDpopUserPageFromSession,
   pairSiblingDeviceSession, selfPathHeadersForDpopSession, type DpopUserSession } from "../../helpers/users";
@@ -47,7 +48,7 @@ async function runHolderRevocation(
     expect(observed.view.results).toHaveLength(1);
     expect(observed.view.results[0]!.event_id).toBe(accepted.event_id);
     expect(observed.view.results[0]!.content.body).toBe(body);
-    observations.push({ step, observed });
+    observations.push({ step, observed: nativeSearchEvidence(observed) });
     return observed.view.results[0]!;
   };
   try {

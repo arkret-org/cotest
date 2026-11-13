@@ -7,6 +7,7 @@ import { accountActorId, canonicalTimestamp, joinRealmMemberByInviteApi,
   resolveDefaultStrandId, signedEventEnvelope, submitSignedEventApi } from "../../helpers/coland-api";
 import { postponeSearchEncryptionPrompts } from "../../helpers/local-search";
 import { observeNativeSearch } from "../../helpers/native-search";
+import { nativeSearchEvidence } from "../../helpers/native-search-evidence";
 import { allowExplicitInviteNotifications, createDpopUserSession, issueUserSession,
   openDpopUserPageFromSession } from "../../helpers/users";
 
@@ -100,7 +101,7 @@ test("0540 real local search rechecks Circle revocation and the exact parent joi
         expect(native.view.results[0]!.covering_commit.commit_id).toBe(await rows.locator(".global-search-result-commit-reference").innerText());
         expect(native.view.results[0]!.content.body).toBe(query);
       }
-      observations.push({ step, native });
+      observations.push({ step, native: nativeSearchEvidence(native) });
       return native.view.results[0];
     };
     expect((await paired("initial-Circle-source", privateBody, 1))!.event_id).toBe(original);

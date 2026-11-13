@@ -730,6 +730,11 @@ async function readyReaderBoard(
   const trigger = boardSwitcher(page);
   await expect(async () => {
     await dismissRecoveryNags(reader);
+    const detail = page.locator(".card-detail-overlay");
+    if (await detail.isVisible()) {
+      await detail.locator(".card-detail-close-button").click({ timeout: 3_000 });
+      await expect(detail).toBeHidden({ timeout: 3_000 });
+    }
     if (await trigger.getAttribute("aria-expanded") !== "true") {
       await trigger.click({ timeout: 3_000 });
     }

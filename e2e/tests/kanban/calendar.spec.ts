@@ -133,6 +133,16 @@ test("@fully-implemented calendar schedule and RSVP survive the canonical Strand
       .locator(".card-detail-edit-status")
       .textContent({ timeout: 1_000 })
       .catch(() => "schedule write was not emitted");
+    if (!scheduled) {
+      const boardStatus = page.page.locator(".board-status");
+      const publicState = {
+        editor_visible: await editor.isVisible(),
+        submitting: await boardStatus.filter({ hasText: /^submitting ak\.strand\.update/ }).count() > 0,
+        failed: await boardStatus.filter({ hasText: /failed|rejected|unavailable|not ready/i }).count() > 0,
+        pending: await boardStatus.filter({ hasText: /pending|queued|awaiting/i }).count() > 0,
+      };
+      throw new Error(`calendar schedule write was not emitted: ${JSON.stringify(publicState)}`);
+    }
     expect(scheduled, scheduleStatus ?? "schedule write was not emitted").toBeTruthy();
     const scheduledResponse = scheduled!;
     const scheduledText = await scheduledResponse.text();

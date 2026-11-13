@@ -3,6 +3,7 @@ import { expect, test } from "../../helpers/arkret-test";
 import { createRealmViaApi, listRealmEventsViaApi, sendPlaintextMessageViaApi } from "../../helpers/api";
 import { resolveDefaultStrandId } from "../../helpers/coland-api";
 import { observeNativeSearch } from "../../helpers/native-search";
+import { nativeSearchEvidence } from "../../helpers/native-search-evidence";
 import { postponeSearchEncryptionPrompts } from "../../helpers/local-search";
 import { createDpopUserSession, issueUserSession, openDpopUserPageFromSession,
   pairSiblingDeviceSession } from "../../helpers/users";
@@ -74,7 +75,7 @@ test("0540 real local search never treats missing MLS keys or opaque ciphertext 
         expect(native.view.results[0]!.event_id).toBe(await rows.locator(".global-search-result-event-reference").innerText());
         expect(native.view.results[0]!.content.body).toBe(control);
       }
-      observations.push({ step, native });
+      observations.push({ step, native: nativeSearchEvidence(native) });
     };
     await check("keyless-Device-can-read-independent-plaintext", publicRealm, control, 1);
     await check("accepted-ciphertext-does-not-release-the-body", encryptedRealm, body, 0);

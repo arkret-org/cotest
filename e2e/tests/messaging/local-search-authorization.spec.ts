@@ -2,7 +2,8 @@
 import { expect, test } from "../../helpers/arkret-test";
 import { createRealmViaApi, sendPlaintextMessageViaApi } from "../../helpers/api";
 import { accountActorId, resolveDefaultStrandId, signedEventEnvelope, submitSignedEventApi } from "../../helpers/coland-api";
-import { observeNativeSearch, type NativeSearchObservation } from "../../helpers/native-search";
+import { observeNativeSearch } from "../../helpers/native-search";
+import { nativeSearchEvidence } from "../../helpers/native-search-evidence";
 import { issueUserSession, openDpopUserPage } from "../../helpers/users";
 
 test("0540 real local search preserves native/browser source identity and withdraws a departed Realm", async ({
@@ -11,7 +12,7 @@ test("0540 real local search preserves native/browser source identity and withdr
   test.setTimeout(900_000);
   const flow = await openDpopUserPage(browser, request, "search-current", { prepareMlsDevice: false });
   if (!flow) throw new Error("search authorization requires real Coauth DPoP login");
-  const observed: Array<{ step: string; native: NativeSearchObservation }> = [];
+  const observed: Array<{ step: string; native: ReturnType<typeof nativeSearchEvidence> }> = [];
   try {
     const token = await issueUserSession(request, flow.user);
     const suffix = Date.now();
@@ -61,7 +62,7 @@ test("0540 real local search preserves native/browser source identity and withdr
         expect(result.view.results[0]!.content.body).toBe(query);
         expect(Date.parse(result.recheck_at!)).toBeGreaterThan(Date.now());
       }
-      observed.push({ step, native: result });
+      observed.push({ step, native: nativeSearchEvidence(result) });
       return result.view.results[0];
     };
     await flow.page.gotoTimelineRealm(realms[0]!);

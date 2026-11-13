@@ -5,6 +5,7 @@ import { joinRealmMemberByInviteApi, resolveDefaultStrandId, signedEventEnvelope
   scanRealmStreamApi, submitSignedEventApi } from "../../helpers/coland-api";
 import { waitForDurableCurrentCut } from "../../helpers/durable-current-cut";
 import { observeNativeSearch, type NativeSearchObservation } from "../../helpers/native-search";
+import { nativeSearchEvidence } from "../../helpers/native-search-evidence";
 import { allowExplicitInviteNotifications, createDpopUserSession, issueUserSession,
   openDpopUserPageFromSession } from "../../helpers/users";
 import { writeFile } from "node:fs/promises";
@@ -109,7 +110,7 @@ test("0540 real local search rechecks late-join history and preserves revision s
         expect(result.covering_commit.commit_id).toBe(visible!.commit_id);
         expect(Date.parse(native.recheck_at!)).toBeGreaterThan(Date.now());
       }
-      steps.push({ step, query, visible, native });
+      steps.push({ step, visible, native: nativeSearchEvidence(native) });
       return { visible, result: native.view.results[0] };
     };
     const initial = await paired("all-history-before-tightening", earlyBody, 1);
