@@ -1423,16 +1423,8 @@ export class JointUserPage {
   }
 
   async expectTimelineEventVisible(body: string, timeout = 45_000) {
-    await expect
-      .poll(
-        async () => {
-          await this.dismissPassiveBlockingPrompts();
-          return await this.timelineEvent(body).count();
-        },
-        { timeout, intervals: [250, 500, 1_000, 2_000] },
-      )
-      .toBeGreaterThan(0);
     await this.dismissPassiveBlockingPrompts();
+    await revealTimelineEvent(this.page, this.timelineEvent(body), timeout);
     await expect(this.timelineEvent(body)).toBeVisible({ timeout: 5_000 });
   }
 

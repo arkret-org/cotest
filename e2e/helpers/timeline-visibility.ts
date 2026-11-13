@@ -24,7 +24,34 @@ export async function revealTimelineEvent(
 ): Promise<void> {
   let restart = true;
   await expect.poll(async () => {
-    if (await event.count()) return true;
+    if (await event.count()) {
+      let target;
+      try {
+        target = await event.first().elementHandle({ timeout: 1_000 });
+        if (!target) return false;
+        return await target.evaluate(async element => {
+          // The initial mount can precede the virtualizer's first tail window.
+          // Keep the actual target in view through the pending layout frames.
+          element.scrollIntoView({ block: "nearest", inline: "nearest", behavior: "instant" });
+          for (let frame = 0; frame < 2; frame++) {
+            await new Promise<void>(resolve => requestAnimationFrame(() => resolve()));
+          }
+          const viewport = element.closest(".message-list");
+          if (!element.isConnected || !viewport) return false;
+          const row = element.getBoundingClientRect();
+          const bounds = viewport.getBoundingClientRect();
+          const top = bounds.top + viewport.clientTop;
+          const bottom = top + viewport.clientHeight;
+          return row.height > 0 && viewport.clientHeight > 0
+            && row.bottom > top && row.top < bottom;
+        });
+      } catch (error) {
+        if (page.isClosed()) throw error;
+        return false;
+      } finally {
+        await target?.dispose().catch(() => {});
+      }
+    }
     // Unmounted virtual rows cannot scrollIntoView. Traverse the actual feed,
     // allowing each layout update to mount its window before the next probe.
     restart = await feed.evaluate((element, fromStart) => {
@@ -40,6 +67,6 @@ export async function revealTimelineEvent(
   }, {
     timeout,
     intervals: [250],
-    message: "timeline action target must be mounted through the visible feed",
+    message: "timeline action target must remain visible through virtual layout updates",
   }).toBe(true);
 }

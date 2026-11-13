@@ -128,3 +128,67 @@ test("sampling advances within the viewport instead of jumping over a provisiona
     assert.deepEqual([...seen].sort((a, b) => a - b), Array.from({ length: 256 }, (_, index) => index));
   } finally { await page.close(); }
 });
+
+async function intersectsFeed(row, feed) {
+  const box = await row.boundingBox();
+  const viewport = await feed.boundingBox();
+  return !!box && !!viewport && box.y < viewport.y + viewport.height
+    && box.y + box.height > viewport.y;
+}
+
+test("mounted historical rows must be scrolled into the actual clipped feed", async () => {
+  const page = await browser.newPage();
+  try {
+    await page.setContent(`<div class="message-list" style="height:140px;width:500px;overflow:auto">
+      <div style="height:500px"></div>
+      <article class="chat-message" id="old-report" style="height:100px">Accepted historical report</article>
+      <div style="height:700px">Large poster</div></div>`);
+    const feed = page.locator(".message-list");
+    const row = page.locator("#old-report");
+    assert.equal(await row.count(), 1);
+    assert.equal(await intersectsFeed(row, feed), false);
+    await revealTimelineEvent(page, row, 5_000, feed);
+    assert.equal(await intersectsFeed(row, feed), true,
+      "finding an offscreen DOM node is insufficient");
+  } finally { await page.close(); }
+});
+
+test("a cold production virtual timeline keeps the requested historical row readable", async () => {
+  const page = await browser.newPage();
+  try {
+    await page.setContent(`<style>
+      .message-list{height:140px;width:500px;overflow:auto;display:flex;flex-direction:column;position:relative}
+      .virtual-timeline{position:relative;flex-shrink:0}
+      .chat-virtual-slice{position:absolute;width:100%;display:flex;flex-direction:column;gap:12px}
+      .chat-message{flex-shrink:0}
+      </style><div id="feed" class="message-list"><div class="virtual-timeline">
+      <div class="chat-virtual-slice"></div></div></div>`);
+    await page.evaluate(async source => {
+      const module = await import(URL.createObjectURL(new Blob([source], { type: "text/javascript" })));
+      const keys = Array.from({ length: 16 }, (_, index) => String(index));
+      const list = document.querySelector(".virtual-timeline");
+      const slice = document.querySelector(".chat-virtual-slice");
+      const render = (start, end, top = 0) => {
+        slice.style.top = `${top}px`;
+        slice.innerHTML = keys.slice(start, end).map(key =>
+          `<article class="chat-message chat-message-row" id="chat-message-${key}" `
+          + `style="height:${key === "15" ? 640 : 120}px">Report ${key}</article>`).join("");
+      };
+      list.style.height = `${keys.length * 132}px`;
+      render(0, keys.length);
+      let controller;
+      controller = module.mountVirtualTimeline({ feed_id: "feed", follows_latest: true }, window => {
+        render(window.start, window.end, window.top);
+        requestAnimationFrame(() => controller.update({ ack: true }));
+      });
+      controller.update({ generation: 1, keys });
+    }, layoutSource);
+    const feed = page.locator(".message-list");
+    const row = page.locator("#chat-message-1");
+    await revealTimelineEvent(page, row, 10_000, feed);
+    await page.waitForTimeout(150);
+    assert.equal(await row.count(), 1,
+      "the initial all-row mount must not be mistaken for the settled virtual window");
+    assert.equal(await intersectsFeed(row, feed), true);
+  } finally { await page.close(); }
+});

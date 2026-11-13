@@ -368,6 +368,12 @@ jobs:
           path: arkret-spec
           ref: ${{ env.SIBLING_REF }}
           token: ${{ secrets.CI_REPO_TOKEN || github.token }}
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository_owner }}/inkson
+          path: inkson
+          ref: ${{ env.SIBLING_REF }}
+          token: ${{ secrets.CI_REPO_TOKEN || github.token }}
       - uses: actions/setup-node@v4
         with:
           node-version: "24"
@@ -380,6 +386,11 @@ jobs:
       - name: typecheck
         working-directory: cotest/e2e
         run: npm run typecheck
+      - name: Virtual timeline visibility regression
+        working-directory: cotest/e2e
+        run: |
+          npx playwright install --with-deps chromium
+          npm run check:timeline-visibility
       - name: request cost evidence privacy
         working-directory: cotest/e2e
         run: node --test scripts/request-cost.test.mjs
