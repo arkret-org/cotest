@@ -166,15 +166,16 @@ test.describe("workflow: kanban week-in-review", () => {
           timeout: 90_000,
         });
       }
+      const cardIds = new Map<string, string>();
       for (const task of [triageTask, prTask, specTask, planTask]) {
         const card = today.locator(".kanban-card").filter({ hasText: task }).first();
-        await waitForCanonicalStrandId(
+        cardIds.set(task, await waitForCanonicalStrandId(
           request,
           realmId,
           patFlow.session,
           card,
           task,
-        );
+        ));
       }
       await stepShot(patPage.page, testInfo, "B-four-tasks");
 
@@ -220,16 +221,34 @@ test.describe("workflow: kanban week-in-review", () => {
         .locator(".kanban-archived-card-row")
         .filter({ hasText: prTask })
         .first();
-      await archivedRow.locator(".card-restore-button").click();
+      const restoreDeadline = Date.now() + 30_000;
+      const [restoreCardResponse] = await Promise.all([
+        patPage.page.waitForResponse(response =>
+          new URL(response.url()).pathname === "/_arkret/self/events"
+            && response.request().method() === "POST"
+            && decodeIngressEvents(response.request().postData()).some(event =>
+              event.kind === "ak.strand.restore" && event.payload?.target_ref === cardIds.get(prTask)),
+        { timeout: Math.max(1, restoreDeadline - Date.now()) }),
+        archivedRow.locator(".card-restore-button").click(),
+      ]);
+      expect(restoreCardResponse.status()).toBeLessThan(400);
+      const restoreCardEvent = decodeIngressEvents(restoreCardResponse.request().postData())
+        .find(event => event.kind === "ak.strand.restore" && event.payload?.target_ref === cardIds.get(prTask));
+      expect(restoreCardEvent).toBeDefined();
+      const restoreCardOutcome = await restoreCardResponse.json();
+      assertAuthoritySubmitOutcome(restoreCardOutcome, restoreCardEvent!, "week-in-review exact Card restore");
+      await waitForDurableCurrentCut(patPage.page, restoreCardOutcome.commit as CommitStreamHead,
+        { timeoutMs: Math.max(1, restoreDeadline - Date.now()) });
       await expect(
         patPage.page.locator(".kanban-card").filter({ hasText: prTask }),
-      ).toBeVisible({ timeout: 30_000 });
-      const restoredTitles = await today.locator(".kanban-card").allTextContents();
-      const restoredPrIndex = restoredTitles.findIndex((title) => title.includes(prTask));
-      const restoredSpecIndex = restoredTitles.findIndex((title) => title.includes(specTask));
-      expect(restoredPrIndex).toBeGreaterThanOrEqual(0);
-      expect(restoredSpecIndex).toBeGreaterThanOrEqual(0);
-      expect(restoredPrIndex).toBeLessThan(restoredSpecIndex);
+      ).toBeVisible({ timeout: Math.max(1, restoreDeadline - Date.now()) });
+      await expect.poll(async () => {
+        const titles = await today.locator(".kanban-card").allTextContents();
+        const restored = titles.findIndex(title => title.includes(prTask));
+        const following = titles.findIndex(title => title.includes(specTask));
+        return restored >= 0 && following >= 0 && restored < following;
+      }, { timeout: Math.max(1, restoreDeadline - Date.now()),
+        message: "the accepted restore preserves the original Card ordering" }).toBe(true);
       await stepShot(patPage.page, testInfo, "D-restored");
 
       // Phase E — archive an entire List and restore it. realm-and-space.md

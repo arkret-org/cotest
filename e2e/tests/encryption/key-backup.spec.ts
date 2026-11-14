@@ -1,4 +1,5 @@
-import { boardSwitcher, newBoardTrigger, addBoardList, fillCardNarrative } from "../../helpers/kanban-product-ui";
+import { boardSwitcher, newBoardTrigger, prepareBoardTitle, addBoardList, fillCardNarrative } from "../../helpers/kanban-product-ui";
+import { clickCardSave } from "../../helpers/card-save";
 import { decodeIngressEvents } from "../../helpers/event-ingress";
 import { cotestWire } from "../../helpers/coland-api/wire-client";
 import { assertAuthoritySubmitOutcome, authHeaders } from "../../helpers/coland-api";
@@ -1278,8 +1279,13 @@ async function createKanbanBoardListAndCard(
     timeout: 120_000,
   });
   await newBoardTrigger(page).click();
-  await page.locator(".new-board-title-input input, .new-board-title-input textarea").fill(boardTitle);
+  await prepareBoardTitle(page, boardTitle, 30_000);
+  const previousBoardPath = decodeURIComponent(new URL(page.url()).pathname);
   await page.locator(".create-board-space-button").click();
+  await expect(page).toHaveURL(url => {
+    const current = decodeURIComponent(url.pathname);
+    return current !== previousBoardPath && current.startsWith(`/kanban/${realmId}/board/ak:space:`);
+  }, { timeout: 30_000 });
   await expect(page.locator(".kanban-empty-board")).toContainText(
     /No lists yet/,
     {
@@ -1287,7 +1293,7 @@ async function createKanbanBoardListAndCard(
     },
   );
   await expect
-    .poll(() => page.url(), { timeout: 30_000 })
+    .poll(() => decodeURIComponent(new URL(page.url()).pathname), { timeout: 30_000 })
     .toContain("/board/ak:space:");
   const boardId = decodeURIComponent(
     new URL(page.url()).pathname.split("/board/")[1]?.split("/")[0] ?? "",
@@ -1325,24 +1331,30 @@ async function updateCardDescription(
   await expect(page.locator(".card-detail-modal")).toBeVisible({
     timeout: 45_000,
   });
+  await page.locator(".card-detail-tab-description").click();
   await page.locator(".card-detail-edit-description-button").click();
   await fillCardNarrative(page, "Description", description);
+  const taskId = decodeURIComponent(new URL(page.url()).pathname.split("/task/")[1]?.split("/")[0] ?? "");
+  expect(taskId).toMatch(/^ak:strand:/);
+  const form = page.locator(".card-detail-edit-form");
   const save = page.locator(".card-detail-save-button");
   const panel = page.locator(".card-description-panel");
   let ingressObserved = false;
   let preAuthoringRetries = 0;
   const captureRequest = (request: Request) => {
     if (request.method() === "POST"
-      && new URL(request.url()).pathname === "/_arkret/self/events") {
+      && new URL(request.url()).pathname === "/_arkret/self/events"
+      && decodeIngressEvents(request.postData()).some(event =>
+        event.kind === "ak.strand.update" && event.payload?.strand_id === taskId)) {
       ingressObserved = true;
     }
   };
   page.on("request", captureRequest);
   try {
-    await save.click();
     const deadline = Date.now() + 120_000;
+    await clickCardSave(form, Math.min(30_000, deadline - Date.now()));
     await expect.poll(async () => {
-      const text = await panel.textContent() ?? "";
+      const text = await panel.textContent({ timeout: Math.min(1_000, Math.max(1, deadline - Date.now())) }).catch(() => "") ?? "";
       if (text.includes(description)) return text;
       const remaining = Math.max(1, deadline - Date.now());
       const status = await page.locator(".card-detail-edit-status")
@@ -1354,10 +1366,10 @@ async function updateCardDescription(
         && Date.now() < deadline
         && await save.isEnabled({ timeout: Math.min(1_000, remaining) }).catch(() => false)) {
         preAuthoringRetries++;
-        await save.click({ timeout: Math.max(1, Math.min(3_000, deadline - Date.now())) });
+        await clickCardSave(form, Math.max(1, Math.min(30_000, deadline - Date.now())));
       }
-      return await panel.textContent() ?? "";
-    }, { timeout: 120_000, intervals: [100, 250, 500] }).toContain(description);
+      return await panel.textContent({ timeout: Math.min(1_000, Math.max(1, deadline - Date.now())) }).catch(() => "") ?? "";
+    }, { timeout: Math.max(1, deadline - Date.now()), intervals: [100, 250, 500] }).toContain(description);
   } finally {
     page.off("request", captureRequest);
     await test.info().attach("kanban-description-pre-authoring-retries", {

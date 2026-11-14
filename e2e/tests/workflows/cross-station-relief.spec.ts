@@ -1,6 +1,6 @@
 // Contract: e2e/scenarios/workflows/cross-station-relief.md
 import { createHash } from "node:crypto";
-import { writeFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
 import { expect, test, type Page, type Browser, type APIRequestContext, type TestInfo } from "../../helpers/arkret-test";
 import { accountActorId, assertAuthoritySubmitOutcome, canonicalJson, sdkEventDerivedObjectId, wireErrCode } from "../../helpers/coland-api";
 import { decodeIngressEvents, type IngressEvent } from "../../helpers/event-ingress";
@@ -15,6 +15,11 @@ import { readOrdinaryHistoryDiagnostic } from "../../helpers/ordinary-history-di
 import type { EventAdmissionSubmission } from "../../helpers/generated/spec-wire-objects";
 
 const invitationAcceptKind: EventAdmissionSubmission["event"]["kind"] = "ak.realm_invite_link.accept";
+const problemVocabulary = JSON.parse(readFileSync(new URL(
+  "../../../../arkret-spec/spec/v1/artifacts/registry/error-code-registry.json", import.meta.url,
+), "utf8")) as { codes: Array<{ code: string }>; reason_codes: Array<{ code: string }> };
+const registeredProblems = new Set(problemVocabulary.codes.map(value => value.code));
+const registeredReasons = new Set(problemVocabulary.reason_codes.map(value => value.code));
 
 test.use({ trace: "off", video: "off", screenshot: "off" });
 
@@ -294,9 +299,15 @@ async function runReliefProject(admission: "concurrent" | "late-welcome", browse
     const deniedCode = wireErrCode(deniedProblem);
     await testInfo.attach("relief-delayed-write-refusal", {
       contentType: "application/json", body: JSON.stringify({ status: denied.status(),
-        code: ["failed_precondition", "epoch_mismatch", "capability_denied", "temporarily_unavailable"].includes(deniedCode ?? "") ? deniedCode : "other",
+        code: registeredProblems.has(deniedCode ?? "") ? deniedCode : "other",
+        reason_code: registeredReasons.has(deniedProblem?.reason_code) ? deniedProblem.reason_code : "unclassified",
         has_commit: deniedProblem?.commit !== undefined || deniedProblem?.commits !== undefined,
-        epoch_update_required: deniedProblem?.reason === "epoch_update_required",
+        epoch_update_required: deniedProblem?.reason_code === "epoch_update_required",
+        detail_fingerprint: typeof deniedProblem?.detail === "string"
+          ? createHash("sha256").update(deniedProblem.detail).digest("hex") : null,
+        detail_categories: typeof deniedProblem?.detail === "string"
+          ? ["checkpoint", "revision", "epoch", "source", "governance", "capability", "authority", "digest", "concurrent", "transaction", "snapshot"]
+            .filter(term => deniedProblem.detail.toLowerCase().includes(term)) : [],
       }),
     });
     expect(denied.status()).toBe(403);

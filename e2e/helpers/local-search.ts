@@ -1,4 +1,4 @@
-import { expect, type Page } from "@playwright/test";
+import { errors, expect, type Page } from "@playwright/test";
 
 // Search fixtures may keep encryption keys unavailable. Postpone only these
 // ordinary prompts; leave foreground security workflows and all keys intact.
@@ -41,6 +41,9 @@ export async function postponeSearchEncryptionPrompts(
         }, undefined, { timeout: 500 });
       } catch (error) {
         if (page.isClosed()) return null;
+        // A bounded hit-test is an observation, not a dismissal. Leave the
+        // real dialog intact and let the original outer readiness budget retry.
+        if (error instanceof errors.TimeoutError) continue;
         if (!await button.isVisible()) continue;
         throw error;
       }

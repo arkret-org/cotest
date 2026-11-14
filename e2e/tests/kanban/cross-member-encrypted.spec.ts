@@ -2312,9 +2312,9 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
             ));
             await alicePage.page.waitForTimeout(2_000);
             const steady = await cost.snapshot(steadyStart);
+            await testInfo.attach("kanban-request-same-cut-20.json", { contentType: "application/json", body: JSON.stringify(steady) });
             expect(lists(steady)).toHaveLength(0);
             expect(steady.http.filter(row => row.path === "/_arkret/self/streams/scan")).toHaveLength(0);
-            await testInfo.attach("kanban-request-same-cut-20.json", { contentType: "application/json", body: JSON.stringify(steady) });
           } else {
             expect(subscriptionCut!.proof().rejected_real_connections).toBeGreaterThan(0);
             expect(first.http.some(row => isHttpSubscriptionPath(row.path))).toBe(true);

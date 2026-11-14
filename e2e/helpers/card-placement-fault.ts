@@ -91,7 +91,20 @@ export async function installCardPlacementFault(page: Page, realm: string, fault
         expect(durable!.move).toBe(cutId); expect(durable!.moveCount).toBe(1);
       } else expect(durable!.move).toBeNull();
       if (fault !== "card-move-response-lost") {
-        await expect(page.locator(".kanban-card").filter({ hasText: cardTitle })).toHaveClass(/\bis-draft\b/);
+        const card = page.locator(".kanban-card").filter({ hasText: cardTitle });
+        await expect(card).toHaveCount(1);
+        if (fault === "card-before-send") {
+          await expect(card).toHaveClass(/\bis-draft\b/);
+        } else {
+          // A lost HTTP response does not suppress the authentic live Commit.
+          // The create may already be accepted while placement remains durable
+          // and unfinished. realm-and-space §3.6 permits this exact state.
+          expect(acceptedCommit).toMatch(/^ak:realm_commit:/);
+          await expect.poll(async () =>
+            await card.evaluate(node => node.classList.contains("is-draft"))
+              || await card.locator(".write-state-accepted, .write-state-synced").count() === 1,
+          ).toBe(true);
+        }
       }
       const url = page.url();
       let processRestarted = false;
