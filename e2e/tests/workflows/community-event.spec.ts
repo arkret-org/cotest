@@ -175,7 +175,7 @@ test("three browser-owned members deliver a community event through encrypted di
     const finishKickoffAction = await observeMessageSendAction(alice.page.page);
     let kickoffEvent: Awaited<ReturnType<typeof committed>>;
     try {
-      kickoffEvent = await committed(alice.page.page, "ak.message.create", realm!, () => alice.page.sendTimelineMessage(realm!, kickoff, { reloadIfPending: false }));
+      kickoffEvent = await committed(alice.page.page, "ak.message.create", realm!, () => alice.page.sendTimelineMessage(realm!, kickoff));
     } finally {
       await finishKickoffAction(testInfo, {
         draft_retained: await alice.page.page.locator(".chat-input").inputValue().catch(() => "") === kickoff,
@@ -255,7 +255,7 @@ test("three browser-owned members deliver a community event through encrypted di
     for (const member of flows) await member.page.gotoTimelineRealm(realm);
     for (const [index, author] of flows.entries()) {
       const message = `${tasks[index].body} Delivery accepted by ${author.user.displayName}.`;
-      const event = await committed(author.page.page, "ak.message.create", realm!, () => author.page.sendTimelineMessage(realm!, message, { reloadIfPending: false }));
+      const event = await committed(author.page.page, "ak.message.create", realm!, () => author.page.sendTimelineMessage(realm!, message));
       expect(JSON.stringify(event).includes(message), "project discussion is encrypted on ingress").toBe(false);
       for (const reader of flows) {
         await reader.page.expectTimelineEventVisible(message, 120_000);
@@ -289,7 +289,7 @@ test("three browser-owned members deliver a community event through encrypted di
       await bob.page.page.locator(".chat-input").fill(announcement);
       await expect(bob.page.page.locator(".send-chat-button")).toBeDisabled();
       releaseUpload();
-      attachment = await committed(bob.page.page, "ak.message.create", realm!, () => bob.page.sendTimelineMessage(realm!, announcement, { reloadIfPending: false }));
+      attachment = await committed(bob.page.page, "ak.message.create", realm!, () => bob.page.sendTimelineMessage(realm!, announcement));
     } finally {
       releaseUpload();
       await bob.page.page.unroute(uploadPattern);

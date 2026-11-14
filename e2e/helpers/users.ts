@@ -71,6 +71,7 @@ import {
   generatedRecoveryKey,
   finishRecoverySetupBeforeClose,
   installRecoverySetupHandler,
+  waitForRecoverySetupCompletion,
 } from "./recovery-setup";
 import { matchesRealmChatRoute } from "./navigation";
 
@@ -283,6 +284,7 @@ export class JointUserPage {
   }
 
   async gotoHome() {
+    await waitForRecoverySetupCompletion(this.page);
     const shell = this.page.locator("html[data-inkson-app-shell] .shell.app");
     for (let attempt = 0; attempt < 3; attempt += 1) {
       if (attempt === 0) {
@@ -737,6 +739,7 @@ export class JointUserPage {
   async completeRecoveryKeySetupIfPrompted(
     timeoutMs = 5_000,
   ): Promise<string | undefined> {
+    await waitForRecoverySetupCompletion(this.page);
     const prompt = recoverySetupDialog(this.page);
     const dialog = prompt;
     const visible = await prompt
@@ -1307,7 +1310,7 @@ export class JointUserPage {
   }
 
   // Send a message into realmId's chat feed. Asserts chat-status persistence.
-  async sendTimelineMessage(realmId: string, body: string, options: { reloadIfPending?: boolean } = {}) {
+  async sendTimelineMessage(realmId: string, body: string) {
     if (!matchesRealmChatRoute(new URL(this.page.url()), realmId)) {
       await this.gotoTimelineRealm(realmId);
     }
@@ -1318,7 +1321,7 @@ export class JointUserPage {
     await submitOrdinaryComposerDraft(this.page, body, {
       click: () => this.clickWithPassivePromptRetry(this.page.locator(".send-chat-button")),
     });
-    await this.waitForTimelineEventSettled(body, 90_000, options);
+    await this.waitForTimelineEventSettled(body, 90_000);
   }
 
   // A mention subject is a complete AccountId, so the picker row is selected
@@ -1375,51 +1378,18 @@ export class JointUserPage {
       .first();
   }
 
-  async waitForTimelineEventSettled(body: string, timeout = 90_000, options: { reloadIfPending?: boolean } = {}) {
+  async waitForTimelineEventSettled(body: string, timeout = 90_000) {
     const event = this.timelineEvent(body);
     await expect(event).toBeVisible({ timeout });
     const pending = event.locator(".message-send-status");
-    if (options.reloadIfPending === false) {
-      await expect.poll(async () => {
-        const errors = await event.locator(".chat-message-error").allTextContents();
-        if (errors.some(value => value.trim())) return `error: ${errors.join(" ")}`;
-        return /(?:^|\s)is-canonical-message(?:\s|$)/.test(await event.getAttribute("class") ?? "")
-          ? "accepted" : "pending";
-      }, { timeout, message: "the original message must settle before any reload" }).toBe("accepted");
-      await expect(pending).toHaveCount(0);
-      return;
-    }
-    const initialTimeout = Math.min(timeout, 15_000);
-    const settledWithoutReload = await expect(pending)
-      .toHaveCount(0, { timeout: initialTimeout })
-      .then(() => true)
-      .catch(() => false);
+    // A pending optimistic row can still own encryption and backup requests.
+    // Reloading it after 15s aborts that preparation before a signed Event
+    // exists. Wait for the original operation; scenarios own cold-read checks
+    // only after acceptance, never as a substitute for it.
     const canonicalMessageClass = /(?:^|\s)is-canonical-message(?:\s|$)/;
-    const acceptedWithoutReload = settledWithoutReload && canonicalMessageClass.test(
-      (await event.getAttribute("class")) ?? "",
-    );
-    if (acceptedWithoutReload) {
-      await expect(event.locator(".chat-message-error")).toHaveCount(0);
-      return;
-    }
-
-    // The wasm events adapter returns each bounded stream window as one batch,
-    // so an accepted Event can legitimately miss the first optimistic window.
-    // Re-enter through the durable projection once: this both proves the write
-    // survived reload and avoids treating a missed live-subscribe wakeup as an
-    // indefinitely pending write.
-    const remainingTimeout = Math.max(5_000, timeout - initialTimeout);
-    await this.page.reload({ waitUntil: "domcontentloaded" });
-    await this.dismissPassiveBlockingPrompts();
-    await expect(this.page.locator(".chat-panel")).toBeVisible({
-      timeout: Math.min(remainingTimeout, 60_000),
-    });
-    await expect(event).toBeVisible({ timeout: remainingTimeout });
-    await expect(event).toHaveClass(canonicalMessageClass, { timeout: remainingTimeout });
+    await expect(event).toHaveClass(canonicalMessageClass, { timeout });
     await expect(event.locator(".chat-message-error")).toHaveCount(0);
-    await expect(pending).toHaveCount(0, {
-      timeout: remainingTimeout,
-    });
+    await expect(pending).toHaveCount(0);
   }
 
   async expectTimelineEventVisible(body: string, timeout = 45_000) {

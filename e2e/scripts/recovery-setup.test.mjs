@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { after, before, test } from "node:test";
 import { chromium } from "@playwright/test";
-import { completeRecoverySetup, finishRecoverySetupBeforeClose, installRecoverySetupHandler } from "../helpers/recovery-setup.ts";
+import { completeRecoverySetup, finishRecoverySetupBeforeClose, installRecoverySetupHandler, waitForRecoverySetupCompletion } from "../helpers/recovery-setup.ts";
 
 let browser;
 before(async () => { browser = await chromium.launch(); });
@@ -143,5 +143,25 @@ test("cleanup preserves a latched recovery failure instead of hiding it", async 
     assert.ok(failure);
     await assert.rejects(finishRecoverySetupBeforeClose(page), (error) => error === failure);
     assert.equal(await page.evaluate(() => window.saves), 0);
+  } finally { await page.close(); }
+});
+
+test("home navigation waits for the active recovery publication before replacing its document", async () => {
+  const page = await browser.newPage({ baseURL: "http://recovery-navigation.test" });
+  try {
+    await prompt(page, false, 8_000);
+    let configured = false;
+    let configuredAtNavigation = false;
+    await installRecoverySetupHandler(page, () => { configured = true; });
+    await page.route("http://recovery-navigation.test/", async route => {
+      configuredAtNavigation = configured;
+      await route.fulfill({ contentType: "text/html", body: '<html data-inkson-app-shell><body><div class="shell app"></div></body></html>' });
+    });
+    await page.getByTestId("outside").click({ timeout: 20_000 });
+    assert.equal(configured, false, "publication is still owned by the original document");
+    await waitForRecoverySetupCompletion(page);
+    await page.goto("/");
+    assert.equal(configuredAtNavigation, true, "navigation must not retire an unpublished recovery writer");
+    await finishRecoverySetupBeforeClose(page);
   } finally { await page.close(); }
 });
