@@ -795,6 +795,19 @@ privatePairingTest.describe("Agent Savfox split live @fully-implemented", () => 
           await route.continue();
         };
         await inkson.route("**/_arkret/self/agent-sidecars:ensure", ensureCutFault);
+        const privateSourceStrand = decodeURIComponent(new URL(inkson.url()).pathname).split("/task/")[1]?.split("/")[0];
+        expect(privateSourceStrand).toMatch(/^ak:strand:/);
+        // Ensure acceptance establishes the scope; it is not acceptance of
+        // the original message. Observe that separate protocol boundary
+        // before requiring the accepted-draft UI transition.
+        const privateAdmission = inkson.waitForResponse(response =>
+          response.request().method() === "POST"
+          && new URL(response.url()).pathname === EVENTS_SUBMIT_PATH
+          && eventSubmissions(response.request().postData()).some(event => {
+            const scope = event.scope_ref as { kind?: string } | undefined;
+            return event.kind === "ak.message.create" && scope?.kind === "sidecar"
+              && event.payload?.strand_id === privateSourceStrand;
+          }), { timeout: 120_000 }).then(response => response, () => null);
         let ensured: SidecarEnsureAcceptedResponseBody;
         try {
           const ensureResponsePromise = waitForSidecarEnsureAcceptance(inkson, testInfo);
@@ -828,6 +841,14 @@ privatePairingTest.describe("Agent Savfox split live @fully-implemented", () => 
         );
         expect(readySidecar.access_readiness).toBe("ready");
         expect(readySidecar.effective_agent_ids).toContain(firstPairing.agentId);
+        const privateResponse = await privateAdmission;
+        expect(privateResponse, "the original private Send must reach Event admission").not.toBeNull();
+        if (!privateResponse) throw new Error("the original private Send did not reach Event admission");
+        const privateEvent = eventSubmissions(privateResponse.request().postData()).find(event =>
+          event.kind === "ak.message.create" && event.payload?.strand_id === privateSourceStrand);
+        expect(privateEvent?.scope_ref).toEqual({ kind: "sidecar", realm_id: jointRealm.realmId, sidecar_id: ensured.sidecar_id });
+        expect(privateResponse.status(), "private message admission response").toBe(200);
+        assertAuthoritySubmitOutcome(await privateResponse.json() as Record<string, unknown>, privateEvent!, "original private Send");
         // Ensure and request submission are one Send action. Accepted private
         // input clears once; restored private history cannot route a new draft.
         await expect(sourceCard.locator(".chat-input")).toHaveValue("", {
@@ -1102,7 +1123,26 @@ privatePairingTest.describe("Agent Savfox split live @fully-implemented", () => 
           .locator(".content-block-text")
           .filter({ hasText: /^pong(?:\r?\n|$)/ });
         const privacyPongsBefore = await privacyPongs.count();
+        // Scope readiness precedes encryption, backup and Event admission.
+        // Observe acceptance of this exact private request before asserting
+        // its rendered row; a normal click must still author it only once.
+        const privacyAdmission = inkson.waitForResponse(response =>
+          response.request().method() === "POST"
+          && new URL(response.url()).pathname === EVENTS_SUBMIT_PATH
+          && eventSubmissions(response.request().postData()).some(event => {
+            const scope = event.scope_ref as { kind?: string; sidecar_id?: string } | undefined;
+            return event.kind === "ak.message.create" && event.realm_id === jointRealm.realmId
+              && scope?.kind === "sidecar" && scope.sidecar_id === ensured.sidecar_id
+              && event.payload?.strand_id === privateSourceStrand;
+          }), { timeout: 120_000 }).then(response => response, () => null);
         await privacyCard.locator(".send-chat-button").click();
+        const privacyResponse = await privacyAdmission;
+        expect(privacyResponse, "the addressed-only private request must reach Event admission").not.toBeNull();
+        if (!privacyResponse) throw new Error("the addressed-only private request did not reach Event admission");
+        const privacyEvent = eventSubmissions(privacyResponse.request().postData()).find(event =>
+          event.kind === "ak.message.create" && event.payload?.strand_id === privateSourceStrand)!;
+        expect(privacyResponse.status(), "addressed-only private admission response").toBe(200);
+        assertAuthoritySubmitOutcome(await privacyResponse.json() as Record<string, unknown>, privacyEvent, "addressed-only private Send");
         const privacyRequest = privacyCard
           .locator(".chat-message")
           .filter({ hasText: privacyPrompt })

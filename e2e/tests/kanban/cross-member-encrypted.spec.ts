@@ -1,5 +1,6 @@
 import { observeCardSaveAction } from "../../helpers/action-evidence";
 import { clickCardSave } from "../../helpers/card-save";
+import { observeBrowserDpopGrant } from "../../helpers/session-transport-recovery";
 import { boardSwitcher, prepareBoardTitle, openNewBoard, addBoardList, fillCardNarrative, submitBoardCardDraft } from "../../helpers/kanban-product-ui";
 import { restartRunnerStation } from "../../helpers/station-runtime";
 import { proveKanbanHistoryTail, seedKanbanHistory } from "../../helpers/kanban-history";
@@ -179,6 +180,7 @@ async function waitForMlsCommit(
   session: DpopUserSession,
   realmId: string,
   recipientId: string,
+  currentGrant: () => Promise<string>,
   minimumEpoch = 1,
 ): Promise<void> {
   await expect
@@ -197,7 +199,7 @@ async function waitForMlsCommit(
             "content-type": "application/json",
             ...selfPathGrantHeaders({
               deviceKey: session.deviceKey,
-              grantJwt: session.grantJwt,
+              grantJwt: await currentGrant(),
               method: "POST",
               url,
             }),
@@ -717,6 +719,7 @@ async function dismissRecoveryNags(reader: JointUserPage): Promise<void> {
 async function readyReaderBoard(
   reader: JointUserPage,
   boardId: string,
+  boardLabel: string,
 ): Promise<void> {
   const page = reader.page;
   await expect(page.locator(".kanban-panel")).toBeVisible({
@@ -739,7 +742,8 @@ async function readyReaderBoard(
     if (await trigger.getAttribute("aria-expanded") !== "true") {
       await trigger.click({ timeout: 3_000 });
     }
-    const option = page.locator("button.board-select-menu-item.is-active");
+    const option = page.locator("button.board-select-menu-item")
+      .and(page.getByRole("button", { name: boardLabel, exact: true }));
     await expect(option).toHaveCount(1, { timeout: 3_000 });
     await option.click({ timeout: 3_000 });
     await expect(trigger).toHaveAttribute("aria-expanded", "false", { timeout: 3_000 });
@@ -752,11 +756,12 @@ async function openReaderBoard(
   reader: JointUserPage,
   realmId: string,
   boardId: string,
+  boardLabel: string,
 ): Promise<void> {
   await reader.page.goto(`/kanban/${realmId}/board/${boardId}`, {
     waitUntil: "domcontentloaded",
   });
-  await readyReaderBoard(reader, boardId);
+  await readyReaderBoard(reader, boardId, boardLabel);
 }
 
 async function openPendingTimeline(reader: JointUserPage, realmId: string): Promise<void> {
@@ -1454,7 +1459,7 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
       await stepShot(creator.page, testInfo, "A-secure-cache-before-reload");
 
       await creator.page.reload({ waitUntil: "domcontentloaded" });
-      await readyReaderBoard(creator, boardId);
+      await readyReaderBoard(creator, boardId, boardTitle);
       expect((await readCreatorIntents(creator.page)).find(
         (intent) => intent.effective_scope.realm_id === realmId,
       )).toEqual(intentBeforeReload);
@@ -1647,7 +1652,9 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
       const costs: Array<{ reader: string; cost: ReturnType<typeof observeRequestCost> }> = [];
       let subscriptionCut: Awaited<ReturnType<typeof installSubscriptionCut>> | undefined;
       const requestCase = fault === "requests-websocket" || fault === "requests-http-fallback";
+      let currentAliceGrant = async () => aliceSession.grantJwt;
       const observeAlice = async (page: Page) => {
+        currentAliceGrant = observeBrowserDpopGrant(page, aliceSession);
         costs.push({ reader: "alice", cost: observeRequestCost(page) });
         if (requestCase) subscriptionCut = await installSubscriptionCut(page, fault === "requests-http-fallback");
       };
@@ -1814,7 +1821,7 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
         } else {
           await bobPage.gotoTimelineRealm(realmId);
         }
-        await waitForMlsCommit(request, aliceSession, realmId, bob.id);
+        await waitForMlsCommit(request, aliceSession, realmId, bob.id, currentAliceGrant);
         await bobPage.completeMlsAccountRecoveryIfPrompted(bobSession.recoveryKey!);
         await bobPage.page.reload({ waitUntil: "domcontentloaded" });
         await bobPage.completeRecoveryKeySetupIfPrompted();
@@ -1919,7 +1926,7 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
           await bobPage.completeMlsAccountRecoveryIfPrompted(bobSession.recoveryKey!);
           expect(retainedBoard).toBeTruthy();
           historyStage = "verify-retained-board";
-          await openReaderBoard(bobPage, realmId, retainedBoard!.boardId);
+          await openReaderBoard(bobPage, realmId, retainedBoard!.boardId, "Title pending sync");
           await expect(bobPage.page.locator(".kanban-column")).toHaveCount(1);
           // Opening a local draft is not a capability. Prove the authority
           // boundary with a real, valid signed create before any write grant.
@@ -1945,9 +1952,10 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
           // history-visibility §4 gives a new member no pre-join MLS secrets;
           // realm-and-space §3.2.1 forbids a plaintext title mirror.
           const retainedList = bobPage.page.locator(".kanban-column-title")
-            .and(bobPage.page.getByRole("button", { name: new RegExp(`[(]${retainedBoard!.listId}[)]$`) }));
+            .and(bobPage.page.getByRole("button", { name: `Title pending sync (${retainedBoard!.listId})`, exact: true }));
+          await expect(retainedList).toHaveCount(1);
           await expect(retainedList).toBeVisible();
-          await expect(retainedList).not.toHaveAccessibleName(`Retained list ${stamp} (${retainedBoard!.listId})`);
+          await expect(bobPage.page.locator(".kanban-panel")).not.toContainText(`Retained list ${stamp}`);
           await testInfo.attach("kanban-history-fresh-reader.json", { contentType: "application/json",
             body: JSON.stringify({ reader_closed_before_seed: true, original_device_restarted_after_card_commit: true,
               own_durable_mls_provider_retained: true, send_gate_ready_before_seed: true,
@@ -2002,7 +2010,7 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
         //    card content.
         const firstReaderCost = costs.filter(entry => entry.reader === "bob").at(-1)!.cost;
         const firstBoardStart = firstReaderCost.mark();
-        await openReaderBoard(bobPage, realmId, boardId);
+        await openReaderBoard(bobPage, realmId, boardId, holdPrivateState ? "Title pending sync" : boardTitle);
         if (holdPrivateState) {
           await expect.poll(() => privateReadCuts, { timeout: 90_000 }).toBeGreaterThan(0);
           // The List structure is accepted, but its title is encrypted metadata
@@ -2029,7 +2037,7 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
           await bobPage.page.unroute(privateClaimQuery);
           privateClaimRouteOwner = undefined;
           await expect(bobPage.page.locator(".chat-panel")).toHaveClass(/\binitial-sync-complete\b/, { timeout: 120_000 });
-          await openReaderBoard(bobPage, realmId, boardId);
+          await openReaderBoard(bobPage, realmId, boardId, boardTitle);
         }
         await assertCardDecrypts(bobPage, aliceCard, aliceDescription);
         await testInfo.attach("kanban-first-reader-display-cost.json", { contentType: "application/json",
@@ -2041,7 +2049,7 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
         // 5) Reload survival: the decrypted card must not flash-then-vanish when
         //    the live refresh clobbers the bootstrap backfill.
         await bobPage.page.reload({ waitUntil: "domcontentloaded" });
-        await readyReaderBoard(bobPage, boardId);
+        await readyReaderBoard(bobPage, boardId, boardTitle);
         await assertCardDecrypts(bobPage, aliceCard, aliceDescription);
         await assertE2eeStorageIsHardened(bobPage.page, [aliceDescription]);
         await stepShot(bobPage.page, testInfo, "C-bob-card-survives-reload");
@@ -2058,7 +2066,7 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
             await expect(detail).toBeVisible();
             return detail.locator(".card-detail-calendar");
           };
-          await openReaderBoard(alicePage, realmId, boardId);
+          await openReaderBoard(alicePage, realmId, boardId, boardTitle);
           await assertCardDecrypts(alicePage, aliceCard, aliceDescription);
           const creatorCalendar = await openCalendar(alicePage);
           await creatorCalendar.locator("button.card-detail-calendar-edit").click();
@@ -2082,7 +2090,7 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
           const memberCalendar = await openCalendar(bobPage);
           await expect(memberCalendar).toContainText(location, {timeout: 90_000});
           await bobPage.page.reload({waitUntil: "domcontentloaded"});
-          await readyReaderBoard(bobPage, boardId);
+          await readyReaderBoard(bobPage, boardId, boardTitle);
           await assertCardDecrypts(bobPage, aliceCard, aliceDescription);
           await openCalendar(bobPage);
           await expect(memberCalendar).toContainText(location, {timeout: 90_000});
@@ -2107,12 +2115,12 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
           await carolPage.completeRecoveryKeySetupIfPrompted();
           await carolPage.acknowledgeRecommendedEncryptionPromptIfVisible();
           await carolPage.acceptInvite(realmId);
-          await waitForMlsCommit(request, aliceSession, realmId, carol.id, 2);
+          await waitForMlsCommit(request, aliceSession, realmId, carol.id, currentAliceGrant, 2);
           await carolPage.gotoTimelineRealm(realmId);
           // Bob was not a new recipient of this Welcome. His durable epoch-one
           // group must apply the accepted tail, rather than borrow Carol's secret.
           await bobPage.page.reload({ waitUntil: "domcontentloaded" });
-          await readyReaderBoard(bobPage, boardId);
+          await readyReaderBoard(bobPage, boardId, boardTitle);
           await assertCardDecrypts(bobPage, aliceCard, aliceDescription);
           await stepShot(bobPage.page, testInfo, "C2-bob-after-next-accepted-commit");
         }
@@ -2143,10 +2151,10 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
           // Both members must be able to edit the same accepted encrypted
           // Strand, rather than merely decrypt each other's own cards.
           await addEncryptedDescription(bobPage.page, aliceCard, bobEditOfAliceCard);
-          await openReaderBoard(alicePage, realmId, boardId);
+          await openReaderBoard(alicePage, realmId, boardId, boardTitle);
           await assertCardDecrypts(alicePage, aliceCard, bobEditOfAliceCard);
           await alicePage.page.reload({ waitUntil: "domcontentloaded" });
-          await readyReaderBoard(alicePage, boardId);
+          await readyReaderBoard(alicePage, boardId, boardTitle);
           await assertCardDecrypts(alicePage, aliceCard, bobEditOfAliceCard);
         }
 
@@ -2167,7 +2175,7 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
         ).not.toHaveClass(/(?:^|\s)is-draft(?:\s|$)/, { timeout: 120_000 });
         await addEncryptedDescription(bobPage.page, bobCard, bobDescription);
 
-        await openReaderBoard(alicePage, realmId, boardId);
+        await openReaderBoard(alicePage, realmId, boardId, boardTitle);
         await expect(
           alicePage.page.locator(".kanban-card").filter({ hasText: bobCard }),
           "bob's card must project back to alice (reverse cross-member sync)",
@@ -2183,11 +2191,11 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
 
         if (!fault || cardFault) {
           await alicePage.page.reload({ waitUntil: "domcontentloaded" });
-          await readyReaderBoard(alicePage, boardId);
+          await readyReaderBoard(alicePage, boardId, boardTitle);
           await assertCardDecrypts(alicePage, bobCard, bobDescription);
           await addEncryptedDescription(alicePage.page, bobCard, aliceEditOfBobCard);
           await bobPage.page.reload({ waitUntil: "domcontentloaded" });
-          await readyReaderBoard(bobPage, boardId);
+          await readyReaderBoard(bobPage, boardId, boardTitle);
           await assertCardDecrypts(bobPage, bobCard, aliceEditOfBobCard);
         }
 
@@ -2223,13 +2231,13 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
           await testInfo.attach("kanban-station-process-restart.json", { contentType: "application/json", body: JSON.stringify(proof) });
           for (const reader of [alicePage, bobPage]) {
             await reader.page.reload({ waitUntil: "domcontentloaded" });
-            await readyReaderBoard(reader, boardId);
+            await readyReaderBoard(reader, boardId, boardTitle);
             await assertCardDecrypts(reader, aliceCard, aliceDescription);
             await assertCardDecrypts(reader, bobCard, bobDescription);
           }
         }
         if (fault === "member-leave" || fault === "member-revoke") {
-          await openReaderBoard(bobPage, realmId, boardId);
+          await openReaderBoard(bobPage, realmId, boardId, boardTitle);
           await assertCardDecrypts(bobPage, aliceCard, aliceDescription);
           await bobPage.page.locator(".kanban-card").filter({ hasText: aliceCard }).first().click();
           await bobPage.page.locator(".card-detail-tab-description").click();
@@ -2279,7 +2287,7 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
               private_content_observed: boolean; enabled_write_observed: boolean } }).__cotestRevocationProbe);
           expect(cold.private_content_observed).toBe(false);
           expect(cold.enabled_write_observed).toBe(false);
-          await openReaderBoard(alicePage, realmId, boardId);
+          await openReaderBoard(alicePage, realmId, boardId, boardTitle);
           await assertCardDecrypts(alicePage, aliceCard, aliceDescription);
           await testInfo.attach("kanban-membership-terminal-ui.json", { contentType: "application/json",
             body: JSON.stringify({ fault, event_id: event.event_id, commit_id: terminalCommit.commit_id,
@@ -2383,7 +2391,7 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
           const delivered = await subscriptionCut!.waitForCut(accepted.at(-1)!, lastCommitId);
           await waitForDurableCurrentCut(alicePage.page, lifecycleHead!);
           const deliveredHttpCost = await subscriptionCut!.httpProof();
-          await openReaderBoard(alicePage, realmId, boardId);
+          await openReaderBoard(alicePage, realmId, boardId, boardTitle);
           await assertCardDecrypts(alicePage, aliceCard, aliceDescription);
           const changes = await cost.snapshot(changedStart);
           expect(Object.values(changes.maximum_parallel_lists).every(value => value <= 1)).toBe(true);

@@ -10,9 +10,9 @@ function failFirstHitTest(page, failure) {
     get(dialog, property) {
       if (property === "getByRole") return (...buttonArgs) => new Proxy(dialog.getByRole(...buttonArgs), {
         get(button, key) {
-          if (key === "evaluate") return (...evaluateArgs) => {
+          if (key === "evaluateAll") return (...evaluateArgs) => {
             if (pending) { pending = false; throw failure; }
-            return button.evaluate(...evaluateArgs);
+            return button.evaluateAll(...evaluateArgs);
           };
           const value = Reflect.get(button, key);
           return typeof value === "function" ? value.bind(button) : value;

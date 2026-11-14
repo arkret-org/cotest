@@ -32,13 +32,14 @@ export async function postponeSearchEncryptionPrompts(
         .getByRole("button", { name: dismiss, exact: true });
       let uncovered: boolean;
       try {
-        if (!await button.isVisible() || !await button.isEnabled({ timeout: 500 })) continue;
-        uncovered = await button.evaluate(element => {
+        uncovered = await button.evaluateAll(elements => elements.some(element => {
+          if (element.matches(":disabled")) return false;
           const bounds = element.getBoundingClientRect();
+          if (bounds.width <= 0 || bounds.height <= 0) return false;
           const top = document.elementFromPoint(bounds.x + bounds.width / 2,
             bounds.y + bounds.height / 2);
           return Boolean(top && (top === element || element.contains(top)));
-        }, undefined, { timeout: 500 });
+        }));
       } catch (error) {
         if (page.isClosed()) return null;
         // A bounded hit-test is an observation, not a dismissal. Leave the

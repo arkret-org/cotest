@@ -50,7 +50,13 @@ test("an old unmounted row is revealed by scrolling the real feed", async () => 
     assert.equal(await event.count(), 0);
     await revealTimelineEvent(page, event, 5_000);
     assert.equal(await event.count(), 1);
-    assert.equal(await page.getByTestId("message-list").evaluate(feed => feed.scrollTop), 0);
+    assert.equal(await event.evaluate(row => {
+      const feed = row.closest(".message-list");
+      const bounds = feed.getBoundingClientRect();
+      const top = bounds.top + feed.clientTop;
+      const target = row.getBoundingClientRect();
+      return target.bottom > top && target.top < top + feed.clientHeight;
+    }), true);
   } finally { await page.close(); }
 });
 

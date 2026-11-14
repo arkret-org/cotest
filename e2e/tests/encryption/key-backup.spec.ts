@@ -1331,16 +1331,23 @@ async function updateCardDescription(
   await expect(page.locator(".card-detail-modal")).toBeVisible({
     timeout: 45_000,
   });
+  await expect.poll(() => decodeURIComponent(new URL(page.url()).pathname), { timeout: 15_000 })
+    .toContain("/task/ak:strand:");
+  const taskId = decodeURIComponent(new URL(page.url()).pathname.split("/task/")[1]?.split("/")[0] ?? "");
+  expect(taskId).toMatch(/^ak:strand:/);
   await page.locator(".card-detail-tab-description").click();
   await page.locator(".card-detail-edit-description-button").click();
   await fillCardNarrative(page, "Description", description);
-  const taskId = decodeURIComponent(new URL(page.url()).pathname.split("/task/")[1]?.split("/")[0] ?? "");
-  expect(taskId).toMatch(/^ak:strand:/);
   const form = page.locator(".card-detail-edit-form");
-  const save = page.locator(".card-detail-save-button");
+  const save = form.locator(".card-detail-save-button");
   const panel = page.locator(".card-description-panel");
+  const readDescription = () => panel.evaluateAll(panels => {
+    if (panels.length > 1) throw new Error("card description panel must be unique");
+    return panels[0]?.textContent ?? "";
+  });
   let ingressObserved = false;
   let preAuthoringRetries = 0;
+  const publicStatuses = new Set<string>();
   const captureRequest = (request: Request) => {
     if (request.method() === "POST"
       && new URL(request.url()).pathname === "/_arkret/self/events"
@@ -1354,11 +1361,26 @@ async function updateCardDescription(
     const deadline = Date.now() + 120_000;
     await clickCardSave(form, Math.min(30_000, deadline - Date.now()));
     await expect.poll(async () => {
-      const text = await panel.textContent({ timeout: Math.min(1_000, Math.max(1, deadline - Date.now())) }).catch(() => "") ?? "";
+      const text = await readDescription();
       if (text.includes(description)) return text;
       const remaining = Math.max(1, deadline - Date.now());
       const status = await page.locator(".card-detail-edit-status")
         .textContent({ timeout: Math.min(1_000, remaining) }).catch(() => null);
+      // Project only fixed product reasons; never retain the narrative, a
+      // transport error body, or recovery material in this diagnostic.
+      const reasons = [
+        "Saving...", "Restoring encrypted Realm state before saving...",
+        "Waiting for the current card before saving...", "Unable to save changes.",
+        "account checkpoint changed before committed read",
+        "account checkpoint changed during committed read",
+        "the Realm detail awaits a complete baseline",
+        "the local group is not at the accepted epoch",
+        "the scope's MLS Genesis is not accepted yet", "epoch_update_required",
+        "encryption_transition_pending", "cannot prepare card encryption",
+        "MissingKeyMaterial", "current card value is not available",
+        "pending local write", "Failed to fetch", "session changed",
+      ].filter(reason => status?.includes(reason));
+      publicStatuses.add(!status?.trim() ? "empty_or_absent" : reasons.join(" | ") || "other_withheld");
       // Retry the retained draft only for a known refusal before any ingress.
       // Once a request exists, recovery belongs to the original signed Event.
       if (!ingressObserved && preAuthoringRetries < 3
@@ -1368,12 +1390,16 @@ async function updateCardDescription(
         preAuthoringRetries++;
         await clickCardSave(form, Math.max(1, Math.min(30_000, deadline - Date.now())));
       }
-      return await panel.textContent({ timeout: Math.min(1_000, Math.max(1, deadline - Date.now())) }).catch(() => "") ?? "";
+      return await readDescription();
     }, { timeout: Math.max(1, deadline - Date.now()), intervals: [100, 250, 500] }).toContain(description);
   } finally {
+    // This window ends at local description projection. The caller separately
+    // awaits original Event acceptance and durable Content Epoch Root coverage.
     page.off("request", captureRequest);
     await test.info().attach("kanban-description-pre-authoring-retries", {
-      body: JSON.stringify({ pre_authoring_retries: preAuthoringRetries, ingress_observed: ingressObserved }),
+      body: JSON.stringify({ pre_authoring_retries: preAuthoringRetries, ingress_observed: ingressObserved,
+        public_statuses: [...publicStatuses], editor_present: await form.count(),
+        description_panel_present: await panel.count() }),
       contentType: "application/json",
     });
   }
