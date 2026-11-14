@@ -1,4 +1,5 @@
 import { prepareAccountStreamOutage, cutAccountStream } from "../../helpers/account-stream-outage";
+import { assertAgentPermissionOverview } from "../../helpers/agent-sidecar-product-ui";
 import { accountRow } from "../../helpers/product-locators";
 import { publicScreenshot } from "../../helpers/screenshots";
 import { expectPlaintextMessage, renderedMessageId } from "../../helpers/message-evidence";
@@ -77,6 +78,7 @@ import {
 const APPROVAL_FALLBACK_POLL_MS = 30_000;
 const APPROVAL_NOTIFICATION_FEATURE = "ak.feature.agent_runtime_approval_notifications.v1";
 const AGENT_LIST_PATH = "/_arkret/self/agents";
+const ORIGINAL_COMPOSER_SCOPE_LABEL = /^(?:Send to this Realm discussion; visible to authorized readers of this scope|Visible to authorized readers in this Circle|Visible to the two participants in this direct conversation)$/;
 const AGENT_LIST_GLOB = "**/_arkret/self/agents";
 const ACCOUNT_SUBSCRIBE_PATH = "/_arkret/self/account/subscribe";
 const RUNTIME_KEY_REQUEST_STATUS_PATH =
@@ -233,6 +235,7 @@ privatePairingTest.describe("Agent Savfox split live @fully-implemented", () => 
       await expect(inkson.locator(".agent-admin-pairing-card")).toBeVisible({
         timeout: 180_000,
       });
+      await assertAgentPermissionOverview(inkson, agentSlug);
       const pairingLink = await inkson
         .locator(".agent-admin-pairing-url")
         .inputValue();
@@ -854,7 +857,7 @@ privatePairingTest.describe("Agent Savfox split live @fully-implemented", () => 
         await expect(sourceCard.locator(".chat-input")).toHaveValue("", {
           timeout: 30_000,
         });
-        await expect(sourceCard.locator(".composer-send-scope")).toContainText(/^(Original Strand|Circle discussion|Direct conversation):/);
+        await expect(sourceCard.locator(".composer-send-scope")).toHaveText(ORIGINAL_COMPOSER_SCOPE_LABEL);
 
         const requestMessage = sourceCard
           .locator(".chat-message")
@@ -1299,7 +1302,7 @@ privatePairingTest.describe("Agent Savfox split live @fully-implemented", () => 
         expect(publishStrandId).toMatch(/^ak:strand:[A-Za-z0-9_-]+$/);
         expect(publishUrl.searchParams.get("tab")).toBe("discussion");
         await publishCard.locator(".chat-input").fill(sharedBody);
-        await expect(publishCard.locator(".composer-send-scope")).toContainText(/^(Original Strand|Circle discussion|Direct conversation):/);
+        await expect(publishCard.locator(".composer-send-scope")).toHaveText(ORIGINAL_COMPOSER_SCOPE_LABEL);
         await expect(inkson.locator(".sidecar-security-state")).toHaveCount(0);
         await expect(publishCard.locator(".send-chat-button")).toBeEnabled({ timeout: 30_000 });
         const publishResponsePromise = inkson.waitForResponse(
@@ -1772,7 +1775,7 @@ async function nativePublicMentionAndReply(page: Page, card: Locator, request: A
   expect(mention).toMatch(/^@/);
   await expect(composer).toHaveValue(`${mention} `);
   await composer.fill(`${mention} ${prompt}`);
-  await expect(card.locator(".composer-send-scope")).toContainText(/^(Original Strand|Circle discussion|Direct conversation):/);
+  await expect(card.locator(".composer-send-scope")).toHaveText(ORIGINAL_COMPOSER_SCOPE_LABEL);
   const sourceResponse = page.waitForResponse(response => {
     const request = response.request();
     return request.method() === "POST" && new URL(response.url()).pathname === EVENTS_SUBMIT_PATH

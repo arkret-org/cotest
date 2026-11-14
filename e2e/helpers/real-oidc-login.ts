@@ -58,7 +58,7 @@ export async function serverLoginViaCoauth(
   account: RealOidcAccount,
 ): Promise<void> {
   for (let attempt = 0; attempt < 2; attempt += 1) {
-    await page.getByLabel("Sign-in server URL", { exact: true }).fill(colandBaseUrl());
+    await page.getByLabel("Account server URL", { exact: true }).fill(colandBaseUrl());
     await page.locator(".auth-panel:not(.registration-panel)").getByRole("button", { name: "Sign in to this server", exact: true }).click();
 
     await submitCoauthPasswordCredentials(page, account);

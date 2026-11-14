@@ -4,7 +4,7 @@ import { boardSwitcher, openNewBoard, addBoardList, prepareBoardTitle, submitBoa
 import { accountRow, actorRow } from "./product-locators";
 import { enterSecretText } from "./secret-input";
 // Shared product UI actions; no session or protocol outcome is injected.
-import { expect, type Page, type Route, type Request, type TestInfo, type Locator } from './arkret-test';
+import { expect, test, type Page, type Route, type Request, type TestInfo, type Locator } from './arkret-test';
 import { assertAuthoritySubmitOutcome, sdkEventDerivedIds, wireErrCode } from './coland-api';
 import { decodeIngressEvents, type IngressEvent as SubmittedEvent } from './event-ingress';
 import type { SidecarEnsureAcceptedResponseBody, AccountId, ActorId } from './generated/spec-wire-objects';
@@ -105,6 +105,20 @@ export async function saveSavfoxChannel(savfox: Page): Promise<void> {
 }
 
 
+export async function assertAgentPermissionOverview(inkson: Page, agentSlug: string): Promise<void> {
+  const overview = inkson.locator(".agent-permission-overview");
+  await expect(overview).toContainText("configured ceilings, not current effective access");
+  await expect(overview).toContainText("Read ceiling");
+  await expect(overview).toContainText("Write and proposal ceiling");
+  await expect(overview).toContainText("does not disclose physical location");
+  await expect(inkson.locator(".agent-admin-exact-permissions > .sapid-collapsible-trigger")).toHaveAttribute("aria-expanded", "false");
+  // Capture only the public permission summary; pairing credentials are outside it.
+  await expect(async () => {
+    await expect(overview).toBeVisible();
+    await overview.screenshot({ path: test.info().outputPath(`permission-overview-${agentSlug.replace(/[^a-zA-Z0-9-]/g, "-")}.png`), animations: "disabled", timeout: 5_000 });
+  }).toPass({ timeout: 30_000, intervals: [200, 500, 1_000] });
+}
+
 export async function provisionAgent(
   inkson: Page,
   agentSlug: string,
@@ -147,6 +161,7 @@ export async function provisionAgent(
   await expect(inkson.locator(".agent-admin-pairing-card")).toBeVisible({
     timeout: remainingPairingBudget(),
   });
+  await assertAgentPermissionOverview(inkson, agentSlug);
   return {
     agentId: body.agent_id,
     pairingRequestId: body.pairing_request_id,

@@ -106,7 +106,7 @@ test.describe("real OIDC browser login lifecycle @fully-implemented", () => {
       });
       try {
         await jointPage.gotoLogin();
-        await page.getByLabel("Sign-in server URL", { exact: true }).fill(colandBaseUrl());
+        await page.getByLabel("Account server URL", { exact: true }).fill(colandBaseUrl());
         await page.locator(".auth-panel:not(.registration-panel)").getByRole("button", { name: "Sign in to this server", exact: true }).click();
         await submitCoauthPasswordCredentials(page, account);
         const approve = page.locator(".login-container").getByRole("button", { name: "Allow", exact: true });
