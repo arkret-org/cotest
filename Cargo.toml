@@ -69,6 +69,11 @@ edition = "2024"
 rust-version = "1.99"
 publish = false
 
+# Dependency workspace profiles are ignored here. Keep the PostgreSQL archive
+# within the MSVC COFF member-offset limit while retaining backtrace locations.
+[profile.dev.package.coland-storage-postgres]
+debug = "line-tables-only"
+
 [workspace.lints.rust]
 unsafe_code = "deny"
 
