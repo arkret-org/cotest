@@ -13,13 +13,19 @@ const completedRecoverySetups = new WeakMap<Page, string>();
 const failedRecoverySetups = new WeakMap<Page, unknown>();
 const closingRecoveryPages = new WeakSet<Page>();
 
+// A locator handler releases its triggering action after 5s, but publication
+// still belongs to that document. Ordinary navigation must join that writer.
+export async function waitForRecoverySetupCompletion(page: Page): Promise<void> {
+  const active = recoverySetupCompletions.get(page);
+  if (active) await active;
+  if (failedRecoverySetups.has(page)) throw failedRecoverySetups.get(page);
+}
+
 // Cleanup owns the already-started publication too. Stop re-arming before
 // awaiting that writer, and propagate its real failure before closing Page.
 export async function finishRecoverySetupBeforeClose(page: Page): Promise<void> {
   closingRecoveryPages.add(page);
-  const active = recoverySetupCompletions.get(page);
-  if (active) await active;
-  if (failedRecoverySetups.has(page)) throw failedRecoverySetups.get(page);
+  await waitForRecoverySetupCompletion(page);
 }
 
 // Publish only one completion per page. Locator handlers must not await an
