@@ -1,4 +1,4 @@
-import { boardSwitcher, newBoardTrigger, addBoardList, fillCardNarrative, submitBoardCardDraft } from "../../helpers/kanban-product-ui";
+import { boardSwitcher, openNewBoard, openBoardOptions, addBoardList, fillCardNarrative, submitBoardCardDraft } from "../../helpers/kanban-product-ui";
 // Sprint planning workflow — tech lead + two engineers commit to stories
 // Contract: e2e/scenarios/workflows/sprint-planning.md
 // Spec refs:
@@ -217,7 +217,7 @@ test.describe("workflow: sprint planning", () => {
       await expect(meiPage.page.locator(".kanban-panel")).toBeVisible({
         timeout: 120_000,
       });
-      await newBoardTrigger(meiPage.page).click();
+      await openNewBoard(meiPage.page);
       await meiPage.page.locator(".new-board-title-input input, .new-board-title-input textarea").fill(boardTitle);
       await meiPage.page.locator(".create-board-space-button").click();
       await expect(
@@ -328,7 +328,7 @@ test.describe("workflow: sprint planning", () => {
       await expect(meiPage.page.locator(".kanban-panel")).toBeVisible({
         timeout: 120_000,
       });
-      await newBoardTrigger(meiPage.page).click();
+      await openNewBoard(meiPage.page);
       await meiPage.page.locator(".new-board-title-input input, .new-board-title-input textarea").fill(boardTitle);
       await meiPage.page.locator(".create-board-space-button").click();
       await expect(
@@ -597,7 +597,7 @@ test.describe("workflow: sprint planning", () => {
       await expect(meiPage.page.locator(".kanban-panel")).toBeVisible({
         timeout: 120_000,
       });
-      await newBoardTrigger(meiPage.page).click();
+      await openNewBoard(meiPage.page);
       await meiPage.page.locator(".new-board-title-input input, .new-board-title-input textarea").fill(boardTitle);
       await meiPage.page.locator(".create-board-space-button").click();
       await expect(
@@ -630,6 +630,7 @@ test.describe("workflow: sprint planning", () => {
       // Bulk archive the whole board: cascade-archive every active card +
       // list, then the board Space itself. The button opens a confirmation
       // dialog first; the cascade only fires from the confirm button.
+      await openBoardOptions(meiPage.page);
       await meiPage.page.locator(".archive-board-button").click();
       await meiPage.page.locator(".archive-board-confirm-button").click();
 

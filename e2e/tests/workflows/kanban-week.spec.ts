@@ -1,4 +1,4 @@
-import { newBoardTrigger, addBoardList, submitBoardCardDraft } from "../../helpers/kanban-product-ui";
+import { newBoardTrigger, openBoardOptions, addBoardList, submitBoardCardDraft } from "../../helpers/kanban-product-ui";
 // Kanban week-in-review workflow — single user runs a day on the board
 // Contract: e2e/scenarios/workflows/kanban-week.md
 // Spec refs:
@@ -125,6 +125,7 @@ test.describe("workflow: kanban week-in-review", () => {
       await expect(patPage.page.locator(".kanban-panel")).toBeVisible({
         timeout: 120_000,
       });
+      await openBoardOptions(patPage.page);
       await patPage.clickWithPassivePromptRetry(newBoardTrigger(patPage.page));
       await patPage.page
         .locator(".new-board-title-input input, .new-board-title-input textarea")

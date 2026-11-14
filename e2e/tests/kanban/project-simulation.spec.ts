@@ -1,4 +1,4 @@
-import { newBoardTrigger, addBoardList } from "../../helpers/kanban-product-ui";
+import { openNewBoard, addBoardList } from "../../helpers/kanban-product-ui";
 import type { StrandPatchPayload } from "../../helpers/generated/spec-wire-objects";
 // Multi-user project simulation
 // Contract: e2e/scenarios/kanban/project-simulation.md
@@ -524,7 +524,7 @@ test.describe("project simulation", () => {
       await expect(alicePage.page.locator(".kanban-panel")).toBeVisible({
         timeout: 120_000,
       });
-      await newBoardTrigger(alicePage.page).click();
+      await openNewBoard(alicePage.page);
       await alicePage.page
         .locator(".new-board-title-input input, .new-board-title-input textarea")
         .fill(`Overdue Board ${stamp}`);

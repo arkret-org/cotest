@@ -1,4 +1,4 @@
-import { boardSwitcher, prepareBoardTitle, newBoardTrigger, addBoardList, submitBoardCardDraft } from "../../helpers/kanban-product-ui";
+import { boardSwitcher, prepareBoardTitle, openNewBoard, addBoardList, submitBoardCardDraft } from "../../helpers/kanban-product-ui";
 // Support escalation workflow — frontline Alex hands off to backend Sam
 // Contract: e2e/scenarios/workflows/support-escalation.md
 // Spec refs:
@@ -200,7 +200,7 @@ test.describe("workflow: support escalation", () => {
       await expect(alexPage.page.locator(".kanban-panel")).toBeVisible({
         timeout: 120_000,
       });
-      await newBoardTrigger(alexPage.page).click();
+      await openNewBoard(alexPage.page);
       await prepareBoardTitle(alexPage.page, boardTitle);
       await expect(alexPage.page.locator(".create-board-space-button")).toBeEnabled();
       await alexPage.page.locator(".create-board-space-button").click();

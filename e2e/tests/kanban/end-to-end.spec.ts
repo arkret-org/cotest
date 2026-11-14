@@ -1,4 +1,4 @@
-import { newBoardTrigger, addBoardList, fillCardNarrative } from "../../helpers/kanban-product-ui";
+import { openNewBoard, addBoardList, fillCardNarrative } from "../../helpers/kanban-product-ui";
 import type { StrandTracksUpdatePayload } from "../../helpers/generated/spec-wire-objects";
 // Kanban end-to-end
 // Contract: e2e/scenarios/kanban/end-to-end.md
@@ -133,7 +133,7 @@ async function buildEncryptedBoardAndCard(
 ): Promise<void> {
   await page.goto(`/kanban/${realmId}`, { waitUntil: "domcontentloaded" });
   await expect(page.locator(".kanban-panel")).toBeVisible({ timeout: 120_000 });
-  await newBoardTrigger(page).click();
+  await openNewBoard(page);
   await page.locator(".new-board-title-input input, .new-board-title-input textarea").fill(`Enc Board ${stamp}`);
   await page.locator(".create-board-space-button").click();
   await expect(page.locator(".kanban-empty-board")).toContainText(/No lists yet/, {
@@ -260,7 +260,7 @@ test.describe("kanban end-to-end", () => {
       // every ak.strand.* event would 403 with capability_denied).
       await alicePage.page.goto(`/kanban/${realmId}`, { waitUntil: "domcontentloaded" });
       await expect(alicePage.page.locator(".kanban-panel")).toBeVisible({ timeout: 120_000 });
-      await newBoardTrigger(alicePage.page).click();
+      await openNewBoard(alicePage.page);
       await alicePage.page
         .locator(".new-board-title-input input, .new-board-title-input textarea")
         .fill(`Sprint 23 ${stamp}`);
@@ -664,7 +664,7 @@ test.describe("kanban end-to-end", () => {
       });
       await alicePage.page.goto(`/kanban/${realmId}`, { waitUntil: "domcontentloaded" });
       await expect(alicePage.page.locator(".kanban-panel")).toBeVisible({ timeout: 120_000 });
-      await newBoardTrigger(alicePage.page).click();
+      await openNewBoard(alicePage.page);
       await alicePage.page.locator(".new-board-title-input input, .new-board-title-input textarea").fill(`Column Drag ${stamp}`);
       await alicePage.page.locator(".create-board-space-button").click();
       await expect(alicePage.page.locator(".kanban-empty-board")).toContainText(/No lists yet/, {
@@ -725,7 +725,7 @@ test.describe("kanban end-to-end", () => {
       });
       await alicePage.page.goto(`/kanban/${realmId}`, { waitUntil: "domcontentloaded" });
       await expect(alicePage.page.locator(".kanban-panel")).toBeVisible({ timeout: 120_000 });
-      await newBoardTrigger(alicePage.page).click();
+      await openNewBoard(alicePage.page);
       await alicePage.page.locator(".new-board-title-input input, .new-board-title-input textarea").fill(`Order Board ${stamp}`);
       await alicePage.page.locator(".create-board-space-button").click();
       await expect(alicePage.page.locator(".kanban-empty-board")).toContainText(/No lists yet/, {
@@ -855,7 +855,7 @@ test.describe("kanban end-to-end", () => {
       await expect(alicePage.page.locator(".kanban-panel")).toBeVisible({ timeout: 120_000 });
 
       // Board + one column + one card (title only).
-      await newBoardTrigger(alicePage.page).click();
+      await openNewBoard(alicePage.page);
       await alicePage.page.locator(".new-board-title-input input, .new-board-title-input textarea").fill(`Enc Board ${stamp}`);
       await alicePage.page.locator(".create-board-space-button").click();
       await expect(alicePage.page.locator(".kanban-empty-board")).toContainText(/No lists yet/, {

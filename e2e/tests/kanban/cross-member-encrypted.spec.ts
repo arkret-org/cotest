@@ -1,6 +1,6 @@
 import { observeCardSaveAction } from "../../helpers/action-evidence";
 import { clickCardSave } from "../../helpers/card-save";
-import { boardSwitcher, prepareBoardTitle, newBoardTrigger, addBoardList, fillCardNarrative, submitBoardCardDraft } from "../../helpers/kanban-product-ui";
+import { boardSwitcher, prepareBoardTitle, openNewBoard, addBoardList, fillCardNarrative, submitBoardCardDraft } from "../../helpers/kanban-product-ui";
 import { restartRunnerStation } from "../../helpers/station-runtime";
 import { proveKanbanHistoryTail, seedKanbanHistory } from "../../helpers/kanban-history";
 import { observeRequestCost } from "../../helpers/request-cost";
@@ -441,7 +441,7 @@ async function buildEncryptedBoardListCard(
   if (creatorRecoveryProof) {
     await waitForOriginalCreatorReady(page, realmId, creatorRecoveryProof, remaining);
   }
-  await newBoardTrigger(page).click({ timeout: remaining() });
+  await openNewBoard(page, { timeout: remaining() });
   await prepareBoardTitle(page, boardTitle, remaining());
   await expect(page.locator(".create-board-space-button")).toBeEnabled({ timeout: remaining() });
   const previousBoardPath = decodeURIComponent(new URL(page.url()).pathname);
@@ -1186,7 +1186,7 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
           // cannot author even a Board until lawful winner material is acquired.
           const assertBoardCreateBlocked = async () => {
             await expect(creator.page.locator(".kanban-panel")).toBeVisible({ timeout: 60_000 });
-            await newBoardTrigger(creator.page).click();
+            await openNewBoard(creator.page);
             await creator.page.locator(".new-board-title-input :is(input,textarea)").fill(boardTitle);
             await expect(creator.page.locator(".create-board-space-button")).toBeDisabled();
           };

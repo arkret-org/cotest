@@ -1,6 +1,6 @@
 import { accountActorId } from "./coland-api";
 import { selectProductOptionByLabel } from "./product-select";
-import { boardSwitcher, newBoardTrigger, addBoardList, prepareBoardTitle, submitBoardCardDraft } from "./kanban-product-ui";
+import { boardSwitcher, openNewBoard, addBoardList, prepareBoardTitle, submitBoardCardDraft } from "./kanban-product-ui";
 import { accountRow, actorRow } from "./product-locators";
 import { enterSecretText } from "./secret-input";
 // Shared product UI actions; no session or protocol outcome is injected.
@@ -409,7 +409,7 @@ export async function createSidecarSourceCard(
     acceptedBoardId = id;
   });
   void boardAcceptance.catch(error => { publicationError = error; });
-  await newBoardTrigger(page).click();
+  await openNewBoard(page);
   await prepareBoardTitle(page, title);
   await page.locator(".create-board-space-button").click();
   // The toolbar is visible while the Board is still a local pending create.

@@ -6,6 +6,18 @@ export function newBoardTrigger(page: Page): Locator {
   return page.locator(".board-popover-host").getByRole("button", { name: "New board", exact: true });
 }
 
+export async function openBoardOptions(page: Page, options?: { timeout?: number }): Promise<void> {
+  const disclosure = page.locator(".board-toolbar-options > .sapid-collapsible-trigger");
+  if (await disclosure.count() && await disclosure.getAttribute("aria-expanded") !== "true") {
+    await disclosure.click(options);
+  }
+}
+
+export async function openNewBoard(page: Page, options?: { timeout?: number }): Promise<void> {
+  await openBoardOptions(page, options);
+  await newBoardTrigger(page).click(options);
+}
+
 export function boardSwitcher(page: Page): Locator {
   return page.locator(".board-select-menu-host").getByRole("button", { name: "Switch board", exact: true });
 }
@@ -96,6 +108,8 @@ export async function addBoardList(page: Page, title: string): Promise<Locator> 
     .test(decodeURIComponent(url.pathname)), { timeout: 120_000 });
   const [, , realmId, , boardId] = decodeURIComponent(new URL(page.url()).pathname).split("/");
   const composer = page.locator(".board-list-compose");
+  const disclosure = page.locator(".board-toolbar-add-list > .sapid-collapsible-trigger");
+  if (await disclosure.getAttribute("aria-expanded") !== "true") await disclosure.click();
   const input = composer.locator(".new-column-input");
   const submit = composer.locator(".add-column-button");
   await expect(composer).toBeVisible();

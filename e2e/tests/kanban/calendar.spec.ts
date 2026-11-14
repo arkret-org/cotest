@@ -2,7 +2,7 @@
 // Contract: e2e/scenarios/kanban/calendar.md
 // Spec: models/calendar-event.md, models/strand-and-message.md
 
-import { newBoardTrigger, addBoardList } from "../../helpers/kanban-product-ui";
+import { openNewBoard, addBoardList } from "../../helpers/kanban-product-ui";
 import { clickCardSave } from "../../helpers/card-save";
 import { assertAuthoritySubmitOutcome } from "../../helpers/coland-api";
 import {
@@ -70,7 +70,7 @@ test("@fully-implemented calendar schedule and RSVP survive the canonical Strand
       timeout: 120_000,
     });
 
-    await newBoardTrigger(page.page).click();
+    await openNewBoard(page.page);
     await page.page
       .locator(".new-board-title-input input, .new-board-title-input textarea")
       .fill(`Calendar Board ${stamp}`);

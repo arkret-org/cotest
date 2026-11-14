@@ -1,4 +1,4 @@
-import { boardSwitcher, newBoardTrigger, prepareBoardTitle, addBoardList, fillCardNarrative } from "../../helpers/kanban-product-ui";
+import { boardSwitcher, openNewBoard, prepareBoardTitle, addBoardList, fillCardNarrative } from "../../helpers/kanban-product-ui";
 import { clickCardSave } from "../../helpers/card-save";
 import { decodeIngressEvents } from "../../helpers/event-ingress";
 import { cotestWire } from "../../helpers/coland-api/wire-client";
@@ -1278,7 +1278,7 @@ async function createKanbanBoardListAndCard(
   await expect(page.locator(".kanban-panel")).toBeVisible({
     timeout: 120_000,
   });
-  await newBoardTrigger(page).click();
+  await openNewBoard(page);
   await prepareBoardTitle(page, boardTitle, 30_000);
   const previousBoardPath = decodeURIComponent(new URL(page.url()).pathname);
   await page.locator(".create-board-space-button").click();
