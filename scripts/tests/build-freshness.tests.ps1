@@ -389,7 +389,7 @@ path = "src/main.rs"
     $savedStamp = Get-Content -Raw -LiteralPath $cached.StampPath
     $wrongTargetRejected = $false
     try { & $prepareScript -ManifestPath (Join-Path $buildRoot 'Cargo.toml') -BinaryName unrelated_executable -TargetDirectory $fixtureTarget -Jobs 1 | Out-Null }
-    catch { $wrongTargetRejected = $_.Exception.Message -like 'Cargo metadata must select exactly one workspace binary:*' }
+    catch { $wrongTargetRejected = $_.Exception.Message -like 'Cargo metadata must select all binaries in exactly one workspace package*' }
     Assert-True ($wrongTargetRejected -and (Get-Content -Raw -LiteralPath $cached.StampPath) -ceq $savedStamp) 'unselected executable must not be built or stamped'
     Set-Content -LiteralPath (Join-Path $buildRoot 'src/main.rs') -Value 'not valid Rust' -Encoding UTF8
     $failedBuildRejected = $false

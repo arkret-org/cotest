@@ -253,11 +253,13 @@ function Prepare-JointPostNativeTools {
     # dev features. Finalize the ordinary product graph after every Rust gate,
     # before any caller can spawn these run-owned tools.
     $manifest = Join-Path $RepositoryRoot "Cargo.toml"
+    $batch = @(& $PrepareScriptPath -ManifestPath $manifest `
+        -BinaryNames @("cotest-wire", "cotest-provision") -PackageName "cotest-test-support" `
+        -TargetDirectory $TargetDirectory -Jobs $Jobs -RepositoryRoots $RepositoryRoots)
+    if ($batch.Count -ne 2) { throw 'Post-native preparation did not report both selected tools' }
     $tools = [System.Collections.Generic.List[object]]::new()
     foreach ($name in @("cotest-wire", "cotest-provision")) {
-        $prepared = @(& $PrepareScriptPath -ManifestPath $manifest `
-            -BinaryName $name -PackageName "cotest-test-support" `
-            -TargetDirectory $TargetDirectory -Jobs $Jobs -RepositoryRoots $RepositoryRoots)
+        $prepared = @($batch | Where-Object { $_.BinaryName -ceq $name })
         if ($prepared.Count -ne 1) { throw "Post-native preparation did not report one selected tool: $name" }
         $expectedName = if ($IsWindows) { "$name.exe" } else { $name }
         $expectedPath = Resolve-BuildInputPath -Path (Join-Path $TargetDirectory "debug/$expectedName")
@@ -266,13 +268,17 @@ function Prepare-JointPostNativeTools {
         }
         $tools.Add([pscustomobject]@{ Name = $name; Prepared = $prepared[0] })
     }
-    # Verify both once more after the last build, not just each immediately
-    # after its own Cargo invocation. A changed first executable fails closed.
+    # Recheck shared sources after the last build, then check each exact binary.
+    # The same complete graph and excluded-output guard prove input equivalence.
+    $sourceTimer = [Diagnostics.Stopwatch]::StartNew()
+    $states = @(Get-ArtifactBuildRepositoryStates -ArtifactPath $tools[0].Prepared.ArtifactPath `
+        -RepositoryRoots (@($RepositoryRoot) + @($RepositoryRoots)))
+    Assert-BatchArtifactInputsEquivalent -ArtifactPaths @($tools | ForEach-Object { $_.Prepared.ArtifactPath }) -RepositoryStates $states
+    $sourceVerificationSeconds = $sourceTimer.Elapsed.TotalSeconds
     $verified = [System.Collections.Generic.List[object]]::new()
     foreach ($tool in $tools) {
         $path = $tool.Prepared.ArtifactPath
-        $states = @(Get-ArtifactBuildRepositoryStates -ArtifactPath $path `
-            -RepositoryRoots (@($RepositoryRoot) + @($RepositoryRoots)))
+        $verificationTimer = [Diagnostics.Stopwatch]::StartNew()
         $stamp = Test-ArtifactBuildStamp -ArtifactPath $path -RepositoryStates $states
         $actualSha = (Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash.ToLowerInvariant()
         if (-not $stamp.Matches -or $actualSha -cne $tool.Prepared.ArtifactSha256) {
@@ -285,6 +291,10 @@ function Prepare-JointPostNativeTools {
             cargo_fresh = [bool]$tool.Prepared.CargoFresh
             artifact_time_utc = $tool.Prepared.ArtifactTimeUtc
             artifact_matches_stamp = $true
+            # Shared batch durations, not additive per-tool durations.
+            preparation_batch_timings = $tool.Prepared.BatchTimings
+            final_source_verification_seconds = $sourceVerificationSeconds
+            final_verification_seconds = $verificationTimer.Elapsed.TotalSeconds
         })
     }
     ConvertTo-Json -InputObject @($verified.ToArray()) -Depth 4 |
@@ -6359,7 +6369,7 @@ finally {
     }
 }
 
-$finishedAt = Get-Date
+$executionFinishedAt = Get-Date
 $screenshotIndex = Join-Path $jointDir "screenshots.md"
 $screenshotFiles = @(Get-ChildItem -Path $screenshotDir -Recurse -File -ErrorAction SilentlyContinue |
     Where-Object { $_.Extension -in @(".png", ".jpg", ".jpeg", ".webp") } |
@@ -7133,6 +7143,7 @@ $secretScanLines | Set-Content -LiteralPath $secretScanMd -Encoding UTF8
 $sourceFreezeReport = Complete-JointSourceFreeze -Before $sourceFreezeBefore `
     -RepositoryPaths $sourceFreezePaths -ArtifactDirectory $jointDir -ExitCode $exitCode
 $exitCode = $sourceFreezeReport.exit_code
+$finishedAt = Get-Date
 
 $summary = [pscustomobject]@{
 
@@ -7154,6 +7165,8 @@ $summary = [pscustomobject]@{
     evidence_counts = $evidenceTotals
     scenario_evidence_manifest = $scenarioEvidenceManifestPath
     started_at = $startedAt.ToString("o")
+    execution_finished_at = $executionFinishedAt.ToString("o")
+    final_audit_seconds = [Math]::Round(($finishedAt - $executionFinishedAt).TotalSeconds, 2)
     finished_at = $finishedAt.ToString("o")
     duration_seconds = [Math]::Round(($finishedAt - $startedAt).TotalSeconds, 2)
     exit_code = $exitCode

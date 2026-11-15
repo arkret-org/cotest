@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { lstatSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
+import { appendFileSync, lstatSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import type { FullConfig, Reporter, TestCase, TestError, TestResult, TestStep } from "@playwright/test/reporter";
 
@@ -37,6 +37,8 @@ function protectTransportError(error: TestError | undefined) {
 export default class PrivateCaptureReporter implements Reporter {
   private roots: string[] = [];
   private failures = 0;
+  private sourceRoot: string | undefined;
+  private failureSourcesPath: string | undefined;
   private readonly receipts: Array<{ test_id: string; bytes: number; sha256: string }> = [];
   private readonly options: { outputFolder: string };
   constructor(options: { outputFolder: string }) { this.options = options; }
@@ -45,6 +47,10 @@ export default class PrivateCaptureReporter implements Reporter {
     this.roots = [...new Set(config.projects.map(project => path.resolve(project.outputDir)))];
     this.failures = 0;
     this.receipts.length = 0;
+    this.sourceRoot = realpathSync(config.configFile ? path.dirname(config.configFile) : config.rootDir);
+    mkdirSync(this.options.outputFolder, { recursive: true });
+    this.failureSourcesPath = path.join(this.options.outputFolder, "failure-sources.jsonl");
+    writeFileSync(this.failureSourcesPath, "");
   }
   onStepBegin(_test: TestCase, _result: TestResult, step: TestStep) {
     // The native HTML reporter copies titles at step begin. Input values can
@@ -66,6 +72,46 @@ export default class PrivateCaptureReporter implements Reporter {
   }
   onTestEnd(test: TestCase, result: TestResult) {
     for (const error of result.errors) protectTransportError(error);
+    if (this.failureSourcesPath && ["failed", "timedOut", "interrupted"].includes(result.status)) {
+      // Export only verified source locations and fixed counters immediately.
+      // Error text, matcher values, test titles and page snapshots stay out.
+      const locations: Array<{ file: string; line: number; column: number }> = [];
+      const addLocation = (location: TestError["location"]) => {
+        if (locations.length >= 64 || !location || !this.sourceRoot || !Number.isSafeInteger(location.line) || location.line < 1 ||
+            !Number.isSafeInteger(location.column) || location.column < 1) return;
+        try {
+          const source = realpathSync(location.file);
+          const file = path.relative(this.sourceRoot, source).split(path.sep).join("/");
+          if (!/^(?:tests|helpers|setup)\/[A-Za-z0-9_./-]+\.(?:ts|js|mts|mjs)$/.test(file) ||
+              file.split("/").some(part => part === "..")) return;
+          if (!locations.some(entry => entry.file === file && entry.line === location.line && entry.column === location.column)) {
+            locations.push({ file, line: location.line, column: location.column });
+          }
+        } catch { /* A missing or external source is not exported. */ }
+      };
+      addLocation(test.location);
+      const seen = new Set<TestError>();
+      for (const error of result.errors) {
+        for (let entry: TestError | undefined = error; entry && !seen.has(entry); entry = entry.cause) {
+          seen.add(entry);
+          addLocation(entry.location);
+        }
+      }
+      const steps = [...(result.steps ?? [])];
+      const seenSteps = new Set<TestStep>();
+      while (steps.length) {
+        const step = steps.pop()!;
+        if (seenSteps.has(step)) continue;
+        seenSteps.add(step);
+        if (step.error) addLocation(step.location);
+        steps.push(...step.steps);
+      }
+      appendFileSync(this.failureSourcesPath, JSON.stringify({
+        test_id_sha256: createHash("sha256").update(test.id).digest("hex"),
+        status: result.status, retry: result.retry, duration_ms: result.duration,
+        error_count: result.errors.length, locations,
+      }) + "\n");
+    }
     for (const attachment of result.attachments) {
       if (attachment.name !== "error-context") continue;
       try {

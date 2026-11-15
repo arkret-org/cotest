@@ -259,6 +259,26 @@ function Get-ArtifactBuildRepositoryStates {
     )
 }
 
+function Assert-BatchArtifactInputsEquivalent {
+    param([Parameter(Mandatory = $true)][string[]]$ArtifactPaths, [Parameter(Mandatory = $true)]$RepositoryStates)
+    # Sharing a source snapshot is valid only when none of the selected outputs
+    # is itself a Git input. Never hide a tracked or non-ignored output to batch.
+    $scopes = @($ArtifactPaths | ForEach-Object { Get-ArtifactBuildDependencyScope -ArtifactPath $_ } | Sort-Object -Unique)
+    if ($scopes.Count -ne 1 -or $scopes[0] -ne 'all') { throw 'Batch preparation requires the same complete dependency scope' }
+    foreach ($state in $RepositoryStates) {
+        $inventory = Invoke-BuildInputGit -RepositoryRoot $state.RepositoryRoot -Arguments @('ls-files', '--cached', '--others', '--exclude-standard', '-z')
+        $paths = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
+        foreach ($relative in $inventory.Split([char[]]@([char]0), [System.StringSplitOptions]::RemoveEmptyEntries)) {
+            $null = $paths.Add([IO.Path]::GetFullPath((Join-Path $state.RepositoryRoot $relative)))
+        }
+        foreach ($artifact in $ArtifactPaths) {
+            if ($paths.Contains((Resolve-BuildInputPath -Path $artifact)) -or $paths.Contains((Get-ArtifactBuildStampPath -ArtifactPath $artifact))) {
+                throw 'Batch preparation cannot share inputs when an output or stamp is a Git input'
+            }
+        }
+    }
+}
+
 function Assert-BuildInputStatesUnchanged {
     param([Parameter(Mandatory = $true)]$Before, [Parameter(Mandatory = $true)]$After, [string]$DiagnosticPath)
     $beforeJson = ConvertTo-Json -InputObject @(ConvertTo-BuildStampInputs -RepositoryStates $Before) -Depth 4 -Compress

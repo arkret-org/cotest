@@ -12,6 +12,9 @@ $toolCalls=@($ast.FindAll({param($node) $node -is [System.Management.Automation.
 $native=$ast.Find({param($node) $node -is [System.Management.Automation.Language.AssignmentStatementAst] -and $node.Left.Extent.Text -eq '$provisioningCommand'},$true)
 $hook=$ast.Find({param($node) $node -is [System.Management.Automation.Language.CommandAst] -and $node.GetCommandName() -eq 'Start-ManagedCommand' -and $node.Extent.Text.Contains('prepare-post-provision')},$true)
 if($toolCalls.Count -ne 1 -or $null -eq $native -or $null -eq $hook -or $toolCalls[0].Extent.StartOffset -le $native.Extent.EndOffset -or $toolCalls[0].Extent.EndOffset -ge $hook.Extent.StartOffset){throw 'normal product finalization must occur after native gates and before any post-provision business command'}
+$finish=$ast.Find({param($node) $node -is [System.Management.Automation.Language.AssignmentStatementAst] -and $node.Left.Extent.Text -eq '$finishedAt'},$true)
+$freeze=$ast.Find({param($node) $node -is [System.Management.Automation.Language.CommandAst] -and $node.GetCommandName() -eq 'Complete-JointSourceFreeze'},$true)
+if($null -eq $finish -or $null -eq $freeze -or $finish.Extent.StartOffset -le $freeze.Extent.EndOffset){throw 'reported finish time must include final source and secret audits'}
 function Assert-True([bool]$Condition,[string]$Message){if(-not $Condition){throw $Message}}
 $parent=Join-Path ([System.IO.Path]::GetTempPath()) ('cotest-post-native-' + [guid]::NewGuid())
 $fixture=Join-Path $parent 'fixture'
@@ -76,6 +79,40 @@ fn actual_auto_binary_uses_test_feature_graph() {
  foreach($tool in $cached){
   $previous=@($restored | Where-Object name -CEQ $tool.name)[0]
   Assert-True ($tool.cargo_fresh -and $tool.artifact_time_utc -eq $previous.artifact_time_utc -and $tool.artifact_sha256 -ceq $previous.artifact_sha256) 'actual unchanged Cargo verification must retain natural tool mtime and bytes'
+  Assert-True ($tool.preparation_batch_timings.binary_count -eq 2 -and $tool.preparation_batch_timings.total_seconds -gt 0) 'both tools must share a measured preparation batch'
  }
- Write-Host 'post-native tools fixture: PASS (actual test overwrite, strict old-stamp rejection, actual normal restoration, natural-mtime cache verification)'
+ $paths=@($cached | ForEach-Object {Join-Path $target ("debug/" + $_.name + $(if($IsWindows){'.exe'}else{''}))})
+ $stamp=Get-ArtifactBuildStampPath -ArtifactPath $paths[0]
+ $originalStamp=(Get-FileHash -LiteralPath $stamp -Algorithm SHA256).Hash
+ foreach($names in @(@('cotest-wire','missing-bin'),@('cotest-wire','cotest-wire'))){
+  $rejected=$false
+  try { & $prepare -ManifestPath (Join-Path $fixture 'Cargo.toml') -BinaryNames $names -TargetDirectory $target -Jobs 1 | Out-Null } catch { $rejected=$true }
+  Assert-True $rejected 'missing or duplicate binaries must fail closed'
+  Assert-True ((Get-FileHash -LiteralPath $stamp -Algorithm SHA256).Hash -ceq $originalStamp) 'rejected selection must not stamp an old executable'
+ }
+ # The first executable is normally excluded from its own snapshot. A batch
+ # must reject it too if a caller makes that output a tracked source input.
+ foreach($output in @($paths[0],(Get-ArtifactBuildStampPath -ArtifactPath $paths[1]))){
+  Invoke-BuildInputGit -RepositoryRoot $fixture -Arguments @('add','-f','--',$output) | Out-Null
+  $rejected=$false
+  try { Prepare-JointPostNativeTools -RepositoryRoot $fixture -TargetDirectory $target -PrepareScriptPath $prepare -DiagnosticPath (Join-Path $parent 'rejected.json') -Jobs 1 | Out-Null } catch { $rejected=$_.Exception.Message -ceq 'Batch preparation cannot share inputs when an output or stamp is a Git input' }
+  Assert-True $rejected 'tracked output or stamp must prevent shared source snapshots'
+  Assert-True (-not (Test-Path -LiteralPath (Join-Path $parent 'rejected.json'))) 'rejected batch must not emit a success receipt'
+  Assert-True ((Get-FileHash -LiteralPath $stamp -Algorithm SHA256).Hash -ceq $originalStamp) 'rejected source inventory must not overwrite stamps'
+  Invoke-BuildInputGit -RepositoryRoot $fixture -Arguments @('reset','-q','HEAD','--',$output) | Out-Null
+ }
+ $tamper=Join-Path $parent 'tamper.ps1'
+ $env:COTEST_FIXTURE_PREPARE=$prepare
+ Set-Content -LiteralPath $tamper -Value @'
+param($ManifestPath,$BinaryNames,$PackageName,$TargetDirectory,$Jobs,$RepositoryRoots)
+$items=@(& $env:COTEST_FIXTURE_PREPARE @PSBoundParameters)
+$file=$items[0].ArtifactPath
+[IO.File]::WriteAllBytes($file,([IO.File]::ReadAllBytes($file) + [byte]0))
+$items
+'@
+ $rejected=$false
+ try { Prepare-JointPostNativeTools -RepositoryRoot $fixture -TargetDirectory $target -PrepareScriptPath $tamper -DiagnosticPath (Join-Path $parent 'tampered.json') -Jobs 1 | Out-Null } catch { $rejected=$_.Exception.Message -like 'Post-native tool artifact/stamp mismatch:*' }
+ Assert-True $rejected 'a first tool changed after the batch must fail final byte verification'
+ Assert-True (-not (Test-Path -LiteralPath (Join-Path $parent 'tampered.json'))) 'tampered tools must not receive a success receipt'
+ Write-Host 'post-native tools fixture: PASS (shared build, test-feature overwrite/restoration, warm cache, invalid selection/source inventory and final-byte rejection)'
 }finally{Remove-Item -LiteralPath $parent -Recurse -Force}

@@ -1,7 +1,50 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import type { TestCase, TestError, TestResult, TestStep } from "@playwright/test/reporter";
+import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import type { FullConfig, TestCase, TestError, TestResult, TestStep } from "@playwright/test/reporter";
 import PrivateCaptureReporter from "../reporters/private-capture.ts";
+
+test("failure sources are available before run end and cannot carry private error text or outside paths", () => {
+  const root = mkdtempSync(path.join(os.tmpdir(), "cotest-private-reporter-"));
+  try {
+    mkdirSync(path.join(root, "tests"));
+    const source = path.join(root, "tests", "fixture.spec.ts");
+    writeFileSync(source, "// Synthetic source location.\n");
+    mkdirSync(path.join(root, "helpers"));
+    const helper = path.join(root, "helpers", "fixture.ts");
+    writeFileSync(helper, "// Synthetic failing step.\n");
+    const outputFolder = path.join(root, "artifacts");
+    const reporter = new PrivateCaptureReporter({ outputFolder });
+    const config = { rootDir: root, projects: [{ outputDir: path.join(root, "results") }] } as FullConfig;
+    reporter.onBegin(config);
+    const canary = "synthetic-private-value-must-never-appear";
+    const location = { file: source, line: 7, column: 3 };
+    const cause: TestError = { message: canary, location };
+    cause.cause = cause;
+    const error: TestError = { message: canary, stack: canary, snippet: canary,
+      location: { file: `/private/${canary}.ts`, line: 1, column: 1 }, cause };
+    const testcase = { id: canary, title: canary, location } as TestCase;
+    const result = { status: "failed", attachments: [], errors: [error], retry: 0, duration: 123,
+      steps: [{ error, location: { file: helper, line: 9, column: 2 }, steps: [], title: canary }],
+    } as unknown as TestResult;
+    reporter.onTestEnd(testcase, result);
+    const file = path.join(outputFolder, "failure-sources.jsonl");
+    const raw = readFileSync(file, "utf8");
+    assert.ok(!raw.includes(canary) && !raw.includes(root) && !raw.includes("/private/"));
+    const entry = JSON.parse(raw);
+    assert.deepEqual(entry.locations, [{ file: "tests/fixture.spec.ts", line: 7, column: 3 }, { file: "helpers/fixture.ts", line: 9, column: 2 }]);
+    assert.equal(entry.status, "failed");
+    assert.equal(entry.duration_ms, 123);
+    reporter.onTestEnd(testcase, { ...result, status: "passed" } as TestResult);
+    assert.equal(readFileSync(file, "utf8"), raw);
+    reporter.onTestEnd(testcase, { ...result, status: "timedOut" } as TestResult);
+    assert.equal(readFileSync(file, "utf8").trim().split("\n").length, 2);
+    reporter.onBegin(config);
+    assert.equal(readFileSync(file, "utf8"), "");
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
 
 test("a caught route transport error cannot export its signed headers in Playwright reports", () => {
   const reporter = new PrivateCaptureReporter({ outputFolder: "unused" });
