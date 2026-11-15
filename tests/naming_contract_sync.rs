@@ -34,7 +34,8 @@ const TOKEN: &str = "Aepgr15HbtERKfqPAh9SrfWBdihSvX_c94JvujvBS2f-";
 const REALM: &str = "ak:realm:ARQRpvtCGBgQfVQzTK4_Hgbg0D0HSnc3gPCvXOQUICir";
 
 fn artifacts() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../arkret-spec/spec/v1/artifacts")
+    arkret_schema_conformance::default_spec_artifacts_dir()
+        .expect("canonical Spec artifacts are required for naming interoperability")
 }
 
 fn account() -> AccountId {
@@ -202,6 +203,71 @@ fn canonical_fields_round_trip_and_legacy_or_dual_names_are_rejected() {
             )
             .is_err()
         );
+    }
+}
+
+#[test]
+fn pr21_fields_match_canonical_schemas_and_reject_legacy_or_dual_names() {
+    use arkret_models_collaboration::events_payloads::preview::PreviewPolicyPayloadValueHistory;
+    use arkret_models_collaboration::objects::queries::FieldFilter;
+    use arkret_models_collaboration::sync_frames::account_subscribe::AccountFilter;
+    use arkret_models_integration::PushCounts;
+
+    let mut registry = schema_registry_from_spec_artifacts(artifacts()).unwrap();
+    renamed::<PushCounts>(
+        &mut registry,
+        "push-operations.schema.json",
+        "/$defs/counts",
+        json!({"unread_increment_count": 3}),
+        &[("unread_increment", "unread_increment_count")],
+    );
+    renamed::<FieldFilter>(
+        &mut registry,
+        "query.schema.json",
+        "/$defs/field_filter",
+        json!({"field": "kind", "operator": "eq", "value": "task"}),
+        &[("op", "operator")],
+    );
+    renamed::<AccountFilter>(
+        &mut registry,
+        "account-subscribe-frame.schema.json",
+        "/$defs/account_filter",
+        json!({"realm_ids": [REALM], "max_window_event_count": 2}),
+        &[("window_limit", "max_window_event_count")],
+    );
+    renamed::<PreviewPolicyPayloadValueHistory>(
+        &mut registry,
+        "event-payload.schema.json",
+        "/$defs/preview_policy_payload/properties/value/properties/history",
+        json!({"range": "last_n_events", "content": "redacted", "member_events_allowed": true}),
+        &[("include_member_events", "member_events_allowed")],
+    );
+}
+
+#[test]
+fn boolean_query_filters_preserve_grammar_and_reject_obsolete_operator_members() {
+    use arkret_models_collaboration::objects::queries::Filter;
+
+    let mut registry = schema_registry_from_spec_artifacts(artifacts()).unwrap();
+    let key = fragment(&mut registry, "query.schema.json", "/$defs/query_filter");
+    let predicate = json!({"field": "kind", "operator": "eq", "value": "task"});
+    for value in [
+        predicate.clone(),
+        json!({"and": [predicate, {"not": {"or": [predicate]}}]}),
+    ] {
+        registry.validate_value(&key, &value).unwrap();
+        let filter: Filter = serde_json::from_value(value.clone()).unwrap();
+        assert_eq!(serde_json::to_value(filter).unwrap(), value);
+    }
+    for value in [
+        json!({"and": [predicate], "op": "eq"}),
+        json!({"and": [predicate], "operator": "eq"}),
+        json!({"and": [predicate], "or": [predicate]}),
+        json!({"not": {"field": "kind", "op": "eq", "value": "task"}}),
+        json!({"or": [{"field": "kind", "operator": "eq", "op": "eq", "value": "task"}]}),
+    ] {
+        assert!(registry.validate_value(&key, &value).is_err());
+        assert!(serde_json::from_value::<Filter>(value).is_err());
     }
 }
 

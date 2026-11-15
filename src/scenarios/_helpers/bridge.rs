@@ -8,6 +8,16 @@ use arkret_models_collaboration::device_pairing::{
     DevicePairingStageRequestBody, DevicePairingStageResponseBody, DevicePairingState,
     DevicePairingStatusRequestBody, DevicePairingStatusResponseBody,
 };
+use arkret_models_collaboration::session_grants::{
+    SessionGrantValidationInput, SessionGrantValidationMetadata, SessionGrantValidationResponseBody,
+};
+use arkret_models_identity::{
+    CanonicalSessionPublicJwk, SessionGrantAdminIntrospectionStatus, SessionGrantCredentialClass,
+    SessionGrantDeviceBinding, SessionGrantHolderBinding, SessionGrantMetadata, SessionGrantScope,
+};
+#[cfg(test)]
+use arkret_wire::{AccountId, DidCoreId, SessionGrantId};
+use arkret_wire::{DeviceId, EventId, SessionGrantSecret};
 use salvo::affix_state;
 use salvo::prelude::{Depot, Json, Request, Response, Router, handler};
 use serde_json::{Value, json};
@@ -28,12 +38,12 @@ struct CoauthGrantBinding {
     session_grant: String,
     account_id: arkret_wire::AccountId,
     grant_ref: arkret_wire::SessionGrantRef,
+    metadata: SessionGrantMetadata,
     subject: String,
     holder: CoauthGrantHolder,
     cnf_jkt: String,
     session_public_key: String,
     revoked: bool,
-    recorded_at: chrono::DateTime<chrono::Utc>,
     expires_at: chrono::DateTime<chrono::Utc>,
 }
 
@@ -115,42 +125,33 @@ impl MockCoauthGrantLedger {
         let bindings = self.bindings.lock().expect("coauth mock binding lock");
         let binding = bindings
             .iter()
-            .find(|binding| binding.session_grant == credential)
+            .find(|binding| binding.session_grant.as_str() == credential)
             .context("own Station credential has no issuer record")?;
+        let metadata = &binding.metadata;
+        let now = chrono::Utc::now();
         anyhow::ensure!(
-            !binding.revoked && binding.expires_at > chrono::Utc::now(),
+            !binding.revoked && metadata.not_before <= now && now < metadata.expires_at,
             "own Station issuer record is revoked or expired"
         );
         anyhow::ensure!(
-            binding.account_id.station_id == *station,
+            metadata.audience_id == *station && metadata.account_id.station_id == *station,
             "issuer record belongs to another Station"
         );
-        let (device_id, granted_scope) = match &binding.holder {
-            CoauthGrantHolder::HumanDevice { device_id, .. } => (
-                Some(arkret_wire::DeviceId::new(device_id.clone())?),
-                standard_human_grant_scopes()
-                    .into_iter()
-                    .map(str::to_owned)
-                    .collect(),
-            ),
-            CoauthGrantHolder::AgentRuntime { scopes, .. } => (None, scopes.clone()),
-            CoauthGrantHolder::RecoveryCandidateDevice { .. } => {
-                anyhow::bail!("recovery credential cannot become an ordinary own-Station host");
-            }
-        };
+        anyhow::ensure!(
+            metadata.credential_class == SessionGrantCredentialClass::Standard,
+            "recovery credential cannot become an ordinary own-Station host"
+        );
+        metadata.validate()?;
         Ok(garth::SessionGrantState {
-            account_id: arkret_wire::AccountId::new(
-                arkret_wire::DidCoreId::new(binding.subject.clone())?,
-                station.clone(),
-            ),
-            device_id,
-            grant_ref: binding.grant_ref.clone(),
-            session_grant: arkret_wire::SessionGrantSecret::new(binding.session_grant.clone())?,
-            expires_at: binding.expires_at,
-            audience_id: station.clone(),
-            granted_scope,
-            session_public_key: Some(binding.session_public_key.clone()),
-            dpop_jkt: Some(binding.cnf_jkt.clone()),
+            account_id: metadata.account_id.clone(),
+            device_id: metadata.device_id.clone(),
+            grant_ref: metadata.grant_ref(),
+            session_grant: SessionGrantSecret::new(binding.session_grant.clone())?,
+            expires_at: metadata.expires_at,
+            audience_id: metadata.audience_id.clone(),
+            granted_scope: metadata.scopes.clone(),
+            session_public_key: Some(metadata.session_public_key.as_str().to_owned()),
+            dpop_jkt: Some(metadata.cnf_jkt.clone()),
             pending_refresh: None,
         })
     }
@@ -440,8 +441,18 @@ impl MockCoauthIntrospectionServer {
         | CoauthGrantHolder::RecoveryCandidateDevice { device_id } = &holder
         {
             anyhow::ensure!(
-                coordinates.device_id.as_str() == device_id,
+                coordinates
+                    .device_id
+                    .as_ref()
+                    .map(arkret_wire::DeviceId::as_str)
+                    == Some(device_id.as_str()),
                 "mock issuer Device differs from its reserved coordinates"
+            );
+        }
+        if matches!(holder, CoauthGrantHolder::AgentRuntime { .. }) {
+            anyhow::ensure!(
+                coordinates.device_id.is_none(),
+                "Agent fixture cannot carry a Device selector"
             );
         }
         let mut bindings = self.bindings.lock().expect("coauth mock binding lock");
@@ -462,6 +473,12 @@ impl MockCoauthIntrospectionServer {
                     }),
                 "the exact fixture credential already has different immutable issuer facts"
             );
+            existing.metadata.validate()?;
+            anyhow::ensure!(
+                existing.metadata.grant_ref() == coordinates.grant_ref
+                    && existing.metadata.account_id == coordinates.account_id,
+                "stored fixture metadata differs from its immutable issuer coordinates"
+            );
             // Rebinding never extends the original lifetime or clears revocation.
             return Ok(());
         }
@@ -473,16 +490,24 @@ impl MockCoauthIntrospectionServer {
             expires_at > recorded_at,
             "fixture grant must first be recorded before its immutable expiry"
         );
+        let metadata = fixture_grant_metadata(
+            &coordinates,
+            &holder,
+            &session_public_key,
+            &cnf_jkt,
+            recorded_at,
+            expires_at,
+        )?;
         let binding = CoauthGrantBinding {
             session_grant: session_grant.to_owned(),
             account_id: coordinates.account_id,
+            metadata,
             grant_ref: coordinates.grant_ref,
             subject: subject.to_owned(),
             holder,
             cnf_jkt,
             session_public_key,
             revoked: false,
-            recorded_at,
             expires_at,
         };
         // Each exact credential is its own ledger record, so a second device
@@ -771,15 +796,10 @@ async fn coauth_introspect(req: &mut Request, depot: &mut Depot, res: &mut Respo
         .lock()
         .expect("mock requests lock")
         .push(body.clone());
-    // The contract surface is the typed wire shape: only a by-secret
-    // introspection request with an audience is in-contract.
-    let parsed = serde_json::from_value::<
-        arkret_models_collaboration::session_grants::SessionGrantValidationInput,
-    >(body);
-    let Ok(arkret_models_collaboration::session_grants::SessionGrantValidationInput::BySecret(
-        by_secret,
-    )) = parsed
-    else {
+    // This read-only fixture endpoint authorizes only the exact opaque
+    // credential branch. An issuer-local management id is never a credential.
+    let parsed = serde_json::from_value::<SessionGrantValidationInput>(body);
+    let Ok(SessionGrantValidationInput::BySecret(request)) = parsed else {
         res.status_code(salvo::http::StatusCode::BAD_REQUEST);
         res.render(Json(json!({ "error": "invalid_typed_request" })));
         return;
@@ -794,116 +814,157 @@ async fn coauth_introspect(req: &mut Request, depot: &mut Depot, res: &mut Respo
         res.render(Json(json!({ "error": "grant_not_bound" })));
         return;
     }
-    // Exact-token authority: only the complete credential the ledger recorded
-    // is active. A token that merely parses, or that reuses a known `jti` under
-    // re-signed claims, has no active record here.
+    // Only the exact credential and its already-recorded audience can select
+    // an active fixture record. The caller cannot supply issuer metadata.
     let Some(binding) = bindings
         .iter()
-        .find(|binding| binding.session_grant == by_secret.session_grant.as_str())
+        .find(|binding| binding.session_grant.as_str() == request.session_grant.as_str())
     else {
-        res.render(Json(json!({
-            "active": false,
-            "status": "not_found",
-            "proof_required": false,
-            "one_time_use_consumed": false
-        })));
+        res.render(Json(inactive_grant_response(
+            SessionGrantAdminIntrospectionStatus::NotFound,
+        )));
         return;
     };
+    if request.audience_id != binding.metadata.audience_id {
+        res.render(Json(inactive_grant_response(
+            SessionGrantAdminIntrospectionStatus::AudienceMismatch,
+        )));
+        return;
+    }
     if binding.revoked {
-        res.render(Json(json!({
-            "active": false,
-            "status": "revoked",
-            "proof_required": false,
-            "one_time_use_consumed": false
-        })));
+        res.render(Json(inactive_grant_response(
+            SessionGrantAdminIntrospectionStatus::Revoked,
+        )));
         return;
     }
-    if chrono::Utc::now() >= binding.expires_at {
-        res.render(Json(json!({"active":false,"status":"expired","proof_required":false,"one_time_use_consumed":false})));
+    if chrono::Utc::now() >= binding.metadata.expires_at {
+        res.render(Json(inactive_grant_response(
+            SessionGrantAdminIntrospectionStatus::Expired,
+        )));
         return;
     }
-    let audience = by_secret.audience_id.as_str();
-    // The independent issuer-scoped reference was frozen at first bind.
-    let grant_id = binding.grant_ref.id.clone();
-    let expires_at = arkret_canonical::format_timestamp_canonical(binding.expires_at);
-    let mut grant = json!({
-        "id": grant_id,
-        "issuer_id": binding.grant_ref.issuer_id,
-        "account_id": {
-            "principal_id": binding.subject,
-            "station_id": audience
-        },
-        "audience_id": audience,
-        "expires_at": expires_at,
-        "not_before": arkret_canonical::format_timestamp_canonical(binding.recorded_at),
-        "revocation_ref": format!("cotest-mock:{}:{}", binding.grant_ref.issuer_id, binding.grant_ref.id),
-        "session_id": "cotest-mock-session",
-        "credential_class": "standard",
-        "cnf_jkt": binding.cnf_jkt,
-        "session_public_key": binding.session_public_key
-    });
-    if audience != binding.account_id.station_id.as_str() {
-        res.render(Json(json!({"active":false,"status":"not_found","proof_required":false,"one_time_use_consumed":false})));
+    let response = SessionGrantValidationResponseBody {
+        active: true,
+        status: SessionGrantAdminIntrospectionStatus::Active,
+        proof_required: false,
+        one_time_use_consumed: false,
+        grant: Some(SessionGrantValidationMetadata {
+            metadata: binding.metadata.clone(),
+            revoked_at: None,
+            revocation_ref: format!(
+                "cotest-mock:{}:{}",
+                binding.grant_ref.issuer_id, binding.grant_ref.id
+            ),
+        }),
+    };
+    if response.validate().is_err() {
+        res.status_code(salvo::http::StatusCode::INTERNAL_SERVER_ERROR);
         return;
     }
-    match &binding.holder {
-        CoauthGrantHolder::HumanDevice {
-            device_id,
-            authorization_event_id,
-        } => {
-            grant["device_id"] = json!(device_id);
-            grant["proof_kind"] = json!("account_handoff");
-            grant["scopes"] = json!(standard_human_grant_scopes());
-            grant["holder_binding"] = json!({
-                "kind": "human_device",
-                "device_binding": device_id
-            });
-            // The human lane requires the exact device authorization
-            // selector; it replays the accepted founding
-            // `ak.device.authorize` Event of the bound principal at its
-            // current generation (founding = 1).
-            grant["device_binding"] = json!({
-                "device_id": device_id,
-                "authorization_event_id": authorization_event_id,
-                "model_generation_ref": 1
-            });
-        }
-        // An Agent grant carries no device: its holder is the exact
-        // (agent_id, method, accepted key authorization) triple.
-        CoauthGrantHolder::AgentRuntime {
-            agent_key_authorization_ref,
-            verification_method,
-            scopes,
-            scope_details,
-        } => {
-            grant["proof_kind"] = json!("agent_key_proof");
-            grant["scopes"] = json!(scopes);
-            grant["scope_details"] = json!(scope_details);
-            grant["holder_binding"] = json!({
-                "kind": "agent_runtime",
-                "agent_id": binding.subject,
-                "agent_key_authorization_ref": agent_key_authorization_ref,
-                "verification_method": verification_method
-            });
-        }
-        CoauthGrantHolder::RecoveryCandidateDevice { device_id } => {
-            grant["credential_class"] = json!("recovery_session");
-            grant["proof_kind"] = json!("account_handoff");
-            grant["device_id"] = json!(device_id);
-            grant["scopes"] = json!(arkret_models_identity::RECOVERY_SESSION_GRANT_OPERATIONS);
-            grant["holder_binding"] = json!({
-                "kind": "recovery_candidate_device",
-                "device_id": device_id
-            });
-        }
+    res.render(Json(response));
+}
+
+fn inactive_grant_response(
+    status: SessionGrantAdminIntrospectionStatus,
+) -> SessionGrantValidationResponseBody {
+    SessionGrantValidationResponseBody {
+        active: false,
+        status,
+        proof_required: false,
+        one_time_use_consumed: false,
+        grant: None,
     }
-    res.render(Json(json!({
-        "active": true,
-        "status": "active",
-        "proof_required": false,
-        "one_time_use_consumed": false,
-        "grant": grant
-    })));
+}
+
+fn fixture_grant_metadata(
+    coordinates: &crate::scenarios::bridge_contracts::session_grant::MockSessionGrantCoordinates,
+    holder: &CoauthGrantHolder,
+    public_key: &str,
+    cnf_jkt: &str,
+    recorded_at: chrono::DateTime<chrono::Utc>,
+    expires_at: chrono::DateTime<chrono::Utc>,
+) -> Result<SessionGrantMetadata> {
+    let principal_id = coordinates.account_id.principal_id.clone();
+    let (device_id, mut scopes, credential_class, holder_binding, device_binding, scope_details) =
+        match holder.clone() {
+            CoauthGrantHolder::HumanDevice {
+                device_id,
+                authorization_event_id,
+            } => {
+                let device_id = DeviceId::new(device_id)?;
+                (
+                    Some(device_id.clone()),
+                    standard_human_grant_scopes().map(str::to_owned).to_vec(),
+                    SessionGrantCredentialClass::Standard,
+                    SessionGrantHolderBinding::HumanDevice {
+                        device_binding: device_id.to_string(),
+                    },
+                    Some(SessionGrantDeviceBinding {
+                        device_id,
+                        authorization_event_id: EventId::new(authorization_event_id)?,
+                        model_generation_ref: 1,
+                    }),
+                    None,
+                )
+            }
+            CoauthGrantHolder::AgentRuntime {
+                agent_key_authorization_ref,
+                verification_method,
+                scopes,
+                scope_details,
+            } => (
+                None,
+                scopes,
+                SessionGrantCredentialClass::Standard,
+                SessionGrantHolderBinding::AgentRuntime {
+                    agent_id: principal_id.clone(),
+                    agent_key_authorization_ref: EventId::new(agent_key_authorization_ref)?,
+                    verification_method: arkret_wire::DidUrl::new(verification_method)
+                        .map_err(anyhow::Error::msg)?,
+                },
+                None,
+                Some(serde_json::from_value::<SessionGrantScope>(Value::Object(
+                    scope_details,
+                ))?),
+            ),
+            CoauthGrantHolder::RecoveryCandidateDevice { device_id } => {
+                let device_id = DeviceId::new(device_id)?;
+                (
+                    Some(device_id.clone()),
+                    arkret_models_identity::RECOVERY_SESSION_GRANT_OPERATIONS
+                        .iter()
+                        .map(|value| (*value).to_owned())
+                        .collect(),
+                    SessionGrantCredentialClass::RecoverySession,
+                    SessionGrantHolderBinding::RecoveryCandidateDevice { device_id },
+                    None,
+                    None,
+                )
+            }
+        };
+    scopes.sort();
+    scopes.dedup();
+
+    let metadata = SessionGrantMetadata {
+        id: coordinates.grant_ref.id.clone(),
+        issuer_id: coordinates.grant_ref.issuer_id.clone(),
+        account_id: coordinates.account_id.clone(),
+        device_id,
+        audience_id: coordinates.account_id.station_id.clone(),
+        scopes,
+        not_before: recorded_at,
+        expires_at,
+        session_id: arkret_identifiers::new_prefixed_uuid7("fixture-session-"),
+        session_public_key: CanonicalSessionPublicJwk::new(public_key.to_owned())?,
+        cnf_jkt: cnf_jkt.to_owned(),
+        credential_class,
+        holder_binding,
+        device_binding,
+        proof_kind: None,
+        scope_details,
+    };
+    metadata.validate()?;
+    Ok(metadata)
 }
 
 fn standard_human_grant_scopes() -> [&'static str; 3] {
@@ -921,6 +982,11 @@ mod opaque_grant_tests {
     const PRINCIPAL: &str = "ak:did_core:web:alice.example";
     const DEVICE: &str = "ak:device:01904100-0000-7000-8000-0000000000a1";
     const STATION: &str = "ak:did_core:web:station.example";
+
+    // This synthetic issuer-only selector is not a native accepted Event.
+    fn authorization(seed: u8) -> String {
+        EventId::from_digest(arkret_canonical::DigestSuite::Sha256, [seed; 32]).to_string()
+    }
 
     fn credential() -> String {
         crate::scenarios::bridge_contracts::session_grant::mock_session_grant(
@@ -968,7 +1034,7 @@ mod opaque_grant_tests {
             &secret,
             PRINCIPAL,
             DEVICE,
-            "fixture-authorize",
+            &authorization(0x62),
             &key.verifying_key(),
             expiry,
         )?;
@@ -978,14 +1044,14 @@ mod opaque_grant_tests {
             &secret,
             PRINCIPAL,
             DEVICE,
-            "fixture-authorize",
+            &authorization(0x62),
             &key.verifying_key(),
         )?;
         issuer.bind_founding_device_grant_until(
             &secret,
             PRINCIPAL,
             DEVICE,
-            "fixture-authorize",
+            &authorization(0x62),
             &key.verifying_key(),
             expiry,
         )?;
@@ -996,7 +1062,7 @@ mod opaque_grant_tests {
                     &secret,
                     PRINCIPAL,
                     DEVICE,
-                    "fixture-authorize",
+                    &authorization(0x62),
                     &key.verifying_key(),
                     expiry + chrono::Duration::seconds(1),
                 )
@@ -1008,7 +1074,7 @@ mod opaque_grant_tests {
                     &secret,
                     PRINCIPAL,
                     DEVICE,
-                    "another-authorization",
+                    &authorization(0x64),
                     &key.verifying_key(),
                 )
                 .is_err()
@@ -1020,7 +1086,7 @@ mod opaque_grant_tests {
                     &secret,
                     PRINCIPAL,
                     DEVICE,
-                    "fixture-authorize",
+                    &authorization(0x62),
                     &wrong_key.verifying_key(),
                 )
                 .is_err()
@@ -1030,7 +1096,7 @@ mod opaque_grant_tests {
             &secret,
             PRINCIPAL,
             DEVICE,
-            "fixture-authorize",
+            &authorization(0x62),
             &key.verifying_key(),
         )?;
         anyhow::ensure!(issuer.own_station_session_state(&secret, &station).is_err());
@@ -1050,7 +1116,7 @@ mod opaque_grant_tests {
             &secret,
             PRINCIPAL,
             DEVICE,
-            "fixture-authorize",
+            &authorization(0x62),
             &key.verifying_key(),
         )?;
         let response = introspect(&issuer, &secret, STATION).await?;
@@ -1094,7 +1160,7 @@ mod opaque_grant_tests {
             &secret,
             PRINCIPAL,
             DEVICE,
-            "fixture-authorize",
+            &authorization(0x62),
             &key.verifying_key(),
             expiry,
         )?;
@@ -1114,10 +1180,148 @@ mod opaque_grant_tests {
         let bindings = issuer.bindings.lock().expect("fixture ledger");
         anyhow::ensure!(
             bindings[0].expires_at == original.expires_at
-                && bindings[0].recorded_at == original.recorded_at
+                && bindings[0].metadata.not_before == original.metadata.not_before
                 && bindings[0].grant_ref == original.grant_ref
                 && !bindings[0].revoked
         );
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+mod opaque_independent_issuer_tests {
+    use super::*;
+
+    async fn bound_fixture()
+    -> Result<(MockCoauthIntrospectionServer, SessionGrantSecret, DidCoreId)> {
+        let issuer = MockCoauthIntrospectionServer::spawn().await?;
+        let mut opaque = [0_u8; 32];
+        getrandom::fill(&mut opaque)?;
+        let secret = SessionGrantSecret::from_bytes(opaque);
+        let station = DidCoreId::new("ak:did_core:web:station.example")?;
+        let authorization = EventId::from_digest(arkret_canonical::DigestSuite::Sha256, [0x62; 32]);
+        let key = ed25519_dalek::SigningKey::from_bytes(&[0x63; 32]);
+        crate::scenarios::bridge_contracts::session_grant::reserve_mock_session_grant_coordinates(
+            secret.as_str(),
+            crate::scenarios::bridge_contracts::session_grant::MockSessionGrantCoordinates {
+                account_id: AccountId::new(
+                    "ak:did_core:web:alice.example".parse()?,
+                    station.clone(),
+                ),
+                device_id: Some("ak:device:01904100-0000-7000-8000-0000000000a1".parse()?),
+                grant_ref: arkret_wire::SessionGrantRef::new(
+                    "ak:did_core:web:coauth.cotest.local".parse()?,
+                    SessionGrantId::new_v7_at(chrono::Utc::now().timestamp_millis().try_into()?),
+                ),
+            },
+        )?;
+        issuer.bind_founding_device_grant(
+            secret.as_str(),
+            "ak:did_core:web:alice.example",
+            "ak:device:01904100-0000-7000-8000-0000000000a1",
+            authorization.as_str(),
+            &key.verifying_key(),
+        )?;
+        Ok((issuer, secret, station))
+    }
+
+    async fn introspect(
+        issuer: &MockCoauthIntrospectionServer,
+        body: Value,
+    ) -> Result<reqwest::Response> {
+        Ok(reqwest::Client::new()
+            .post(issuer.url())
+            .bearer_auth("principal-token")
+            .json(&body)
+            .send()
+            .await?)
+    }
+
+    #[tokio::test]
+    async fn opaque_lookup_is_exact_and_keeps_issuer_audience_and_native_holder_binding()
+    -> Result<()> {
+        let (issuer, secret, station) = bound_fixture().await?;
+        let response: SessionGrantValidationResponseBody = introspect(
+            &issuer,
+            json!({"session_grant":secret,"audience_id":station}),
+        )
+        .await?
+        .error_for_status()?
+        .json()
+        .await?;
+        response.validate()?;
+        ensure_active(&response)?;
+        let metadata = &response.grant.as_ref().context("active metadata")?.metadata;
+        let host = issuer.own_station_session_state(secret.as_str(), &station)?;
+        assert_eq!(host.grant_ref, metadata.grant_ref());
+        assert_eq!(host.account_id, metadata.account_id);
+        assert_eq!(host.session_grant, secret);
+        assert_ne!(host.grant_ref.issuer_id, station);
+        assert_eq!(
+            metadata.human_device_authorization_selector()?.device_id,
+            host.device_id.clone().unwrap()
+        );
+        let other = SessionGrantSecret::from_bytes([0x64; 32]);
+        let unknown: SessionGrantValidationResponseBody = introspect(
+            &issuer,
+            json!({"session_grant":other,"audience_id":station}),
+        )
+        .await?
+        .json()
+        .await?;
+        assert_eq!(
+            unknown.status,
+            SessionGrantAdminIntrospectionStatus::NotFound
+        );
+        assert!(unknown.grant.is_none());
+        let other_station = DidCoreId::new("ak:did_core:web:other.example")?;
+        let mismatch: SessionGrantValidationResponseBody = introspect(
+            &issuer,
+            json!({"session_grant":secret,"audience_id":other_station}),
+        )
+        .await?
+        .json()
+        .await?;
+        assert_eq!(
+            mismatch.status,
+            SessionGrantAdminIntrospectionStatus::AudienceMismatch
+        );
+        assert!(mismatch.grant.is_none());
+        assert!(
+            issuer
+                .own_station_session_state(secret.as_str(), &other_station)
+                .is_err()
+        );
+        Ok(())
+    }
+
+    fn ensure_active(response: &SessionGrantValidationResponseBody) -> Result<()> {
+        anyhow::ensure!(
+            response.active
+                && response.status == SessionGrantAdminIntrospectionStatus::Active
+                && response.grant.is_some()
+        );
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn opaque_lookup_rejects_old_dual_and_management_fields() -> Result<()> {
+        let (issuer, secret, station) = bound_fixture().await?;
+        let reference = issuer
+            .own_station_session_state(secret.as_str(), &station)?
+            .grant_ref
+            .clone();
+        for request in [
+            json!({"grant_jwt":secret,"audience_id":station}),
+            json!({"session_grant":secret,"grant_jwt":secret,"audience_id":station}),
+            json!({"id":reference.id,"audience_id":station}),
+            json!({"session_grant":"header.payload.signature","audience_id":station}),
+        ] {
+            assert_eq!(
+                introspect(&issuer, request).await?.status(),
+                reqwest::StatusCode::BAD_REQUEST
+            );
+        }
         Ok(())
     }
 }

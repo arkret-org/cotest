@@ -3,7 +3,8 @@ mod challenge_once;
 
 use anyhow::Result;
 use arkret_crypto::backup::{
-    KeyBackupAuthBinding, build_key_backup_envelope, decrypt_key_backup_envelope, derive_vault_kek,
+    KeyBackupAuthorizationBinding, build_key_backup_envelope, decrypt_key_backup_envelope,
+    derive_vault_kek,
 };
 use arkret_models_collaboration::sync_frames::account_subscribe::AccountSubscribeParameters;
 use arkret_models_crypto::*;
@@ -81,7 +82,7 @@ pub(super) async fn run() -> Result<()> {
         let method = DidUrl::new(format!("{}#{}", principal.did, principal.device_id)).map_err(anyhow::Error::msg)?;
         let seal = |backup_id| build_key_backup_envelope(backup_id, ActorId::account(deployment.account.clone()), Some(principal.device_id.clone()), BackupKind::SecretStorage, "kb_1", "mls_group_secrets", &kek,
             vec![SecretStorageSecret { item_kind: SecretStorageItemKind::MlsGroupSecretsBackupKey, secret_id:"mls_group_secrets_backup_key".into(), secret_base64url:secret_wire.clone(), secret_generation:None, extra:Default::default() }],
-            &KeyBackupAuthBinding { device_id:principal.device_id.clone(), verification_method:method.clone(), signature_algorithm:KeyBackupSignatureAlgorithm::Ed25519, device_authorize_event_id:principal.founding_authorize_event_id.clone() },
+            &KeyBackupAuthorizationBinding { device_id:principal.device_id.clone(), verification_method:method.clone(), signature_algorithm:KeyBackupSignatureAlgorithm::Ed25519, device_authorize_event_id:principal.founding_authorize_event_id.clone() },
             &|bytes| Ok(principal.device_signing_key.sign(bytes).to_bytes().to_vec()));
         let envelope = seal(backup_id)?;
         let deletion_envelope = seal(arkret_identifiers::new_prefixed_uuid7("ak:backup:").parse()?)?;

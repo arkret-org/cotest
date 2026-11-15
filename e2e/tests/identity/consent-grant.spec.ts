@@ -105,7 +105,7 @@ test.describe("complete peer Consent", () => {
       });
       expect(refused.status()).toBe(409);
       expect(consentExpectedCurrent(await readConsentCurrentApi(request, token, alice.id, peer)))
-        .toEqual({ state: "present", revision: closed.view.revision });
+        .toEqual({ state: "present", commit_id: closed.view.revision.commit_id });
     }
     const other = consentPeer(bob.id, "ak:did_core:web:other-station.example");
     expect((await readConsentCurrentApi(request, token, alice.id, other)).current).toEqual({ state: "never_written" });
@@ -177,11 +177,12 @@ test.describe("complete peer Consent", () => {
 
       const extended = await readConsentCurrentApi(request, token, flow.user.id, peer);
       expect(extended.current.state).toBe("present");
-      const extendedRevision = consentExpectedCurrent(extended);
-      expect(extendedRevision.state).toBe("present");
-      if (extendedRevision.state !== "present" || extended.current.state !== "present") {
+      const extendedExpectedCurrent = consentExpectedCurrent(extended);
+      expect(extendedExpectedCurrent.state).toBe("present");
+      if (extendedExpectedCurrent.state !== "present" || extended.current.state !== "present") {
         throw new Error("confirmed four-scope Consent has no accepted revision");
       }
+      const extendedRevision = extended.current.current_state.revision;
 
       // A page reload must retain the complete authenticated set, including
       // inactive permissions and the presence of every optional member.
@@ -196,7 +197,7 @@ test.describe("complete peer Consent", () => {
         await expect(actor.page.locator(".consent-permissions-editor").getByRole("checkbox", { name: consentScopeLabels[scope], exact: true })).toBeChecked();
       }
       expect(consentExpectedCurrent(await readConsentCurrentApi(request, token, flow.user.id, peer)))
-        .toEqual(extendedRevision);
+        .toEqual(extendedExpectedCurrent);
 
       for (const scope of ["invite", "voice_call", "video_call", "presence"]) {
         await actor.page.locator(".consent-permissions-editor").getByRole("checkbox", { name: consentScopeLabels[scope], exact: true }).uncheck();
@@ -208,7 +209,7 @@ test.describe("complete peer Consent", () => {
       expect(JSON.parse(await diff.locator(".preformatted").nth(1).innerText())).toEqual([]);
       const beforeEmptyConfirmation = await readConsentCurrentApi(request, token, flow.user.id, peer);
       expect(consentPermissions(beforeEmptyConfirmation)).toEqual(replacement);
-      expect(consentExpectedCurrent(beforeEmptyConfirmation)).toEqual(extendedRevision);
+      expect(consentExpectedCurrent(beforeEmptyConfirmation)).toEqual(extendedExpectedCurrent);
       await actor.clickWithPassivePromptRetry(actor.page.locator(".consent-confirm-replace-button"));
       await expect.poll(async () => {
         const current = await readConsentCurrentApi(request, token, flow.user.id, peer);
@@ -216,13 +217,14 @@ test.describe("complete peer Consent", () => {
       }).toEqual({ state: "present", permissions: [] });
       await expect(actor.page.locator(".consent-confirm-replace-button")).toHaveCount(0);
       const empty = await readConsentCurrentApi(request, token, flow.user.id, peer);
-      const emptyRevision = consentExpectedCurrent(empty);
-      expect(emptyRevision.state).toBe("present");
-      if (emptyRevision.state !== "present" || empty.current.state !== "present") {
+      const emptyExpectedCurrent = consentExpectedCurrent(empty);
+      expect(emptyExpectedCurrent.state).toBe("present");
+      if (emptyExpectedCurrent.state !== "present" || empty.current.state !== "present") {
         throw new Error("confirmed empty Consent reverted to never_written");
       }
-      const previousPosition = extended.current.current_state.revision.stream_position;
-      const emptyPosition = empty.current.current_state.revision.stream_position;
+      const emptyRevision = empty.current.current_state.revision;
+      const previousPosition = extendedRevision.stream_position;
+      const emptyPosition = emptyRevision.stream_position;
       expect(Number.isSafeInteger(previousPosition) && previousPosition >= 0).toBe(true);
       expect(Number.isSafeInteger(emptyPosition) && emptyPosition >= 0).toBe(true);
       expect(emptyPosition).toBeGreaterThan(previousPosition);

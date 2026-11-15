@@ -1,6 +1,7 @@
 //! Independent JSON/Ed25519 interpretation of the published single-submit KAT.
 //! Qualified inputs are explicit fixture assumptions, never native authority evidence.
-use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
+use base64::Engine as _;
+use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use ed25519_dalek::{Signature, Verifier as _, VerifyingKey};
 use serde_json::{Value, json};
 use sha2::{Digest as _, Sha256};
@@ -614,9 +615,9 @@ pub(super) fn cases(kat: &Value, cases: &[Value]) -> Result<Vec<ReferenceProject
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use base64::Engine as _;
     use ed25519_dalek::Signer as _;
+
+    use super::*;
 
     fn fixture() -> Value {
         super::super::super::load_fixture_value("security-transaction-resilience-fixture.json")

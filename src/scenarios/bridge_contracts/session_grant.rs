@@ -9,10 +9,10 @@ use crate::scenarios::identity_test_support::{
 };
 
 /// Coordinates retained by the fixture issuer, never embedded in the secret.
-#[derive(Clone)]
+#[derive(Clone, PartialEq, Eq)]
 pub(crate) struct MockSessionGrantCoordinates {
     pub account_id: arkret_wire::AccountId,
-    pub device_id: arkret_wire::DeviceId,
+    pub device_id: Option<arkret_wire::DeviceId>,
     pub grant_ref: arkret_wire::SessionGrantRef,
 }
 
@@ -33,7 +33,30 @@ pub(crate) fn mock_session_grant_coordinates(secret: &str) -> Result<MockSession
         .context("credential has no fixture issuer coordinates")
 }
 
+/// Explicit fixture issuance coordinates, retained outside the opaque secret.
+/// A reserved secret remains unissued until its exact issuer ledger is bound.
+pub(crate) fn reserve_mock_session_grant_coordinates(
+    secret: &str,
+    coordinates: MockSessionGrantCoordinates,
+) -> Result<()> {
+    arkret_wire::SessionGrantSecret::new(secret.to_owned())?;
+    let mut values = fixture_credentials()
+        .lock()
+        .expect("fixture credential lock");
+    if let Some(existing) = values.get(secret) {
+        anyhow::ensure!(
+            *existing == coordinates,
+            "fixture credential coordinates are immutable"
+        );
+        return Ok(());
+    }
+    values.insert(secret.to_owned(), coordinates);
+    Ok(())
+}
+
 /// Reserve a canonical opaque credential and independent UUIDv7 reference.
+/// This explicitly co-located fixture uses the Station as its issuer; distinct
+/// issuers supply their full reference through the reservation function above.
 /// Binding it into a mock issuer ledger is an explicit separate step.
 pub fn mock_session_grant(subject: &str, device_id: &str, audience: &str) -> String {
     let issuer: arkret_wire::DidCoreId = audience.parse().expect("fixture Station");
@@ -42,7 +65,7 @@ pub fn mock_session_grant(subject: &str, device_id: &str, audience: &str) -> Str
             subject.parse().expect("fixture principal"),
             issuer.clone(),
         ),
-        device_id: device_id.parse().expect("fixture Device"),
+        device_id: Some(device_id.parse().expect("fixture Device")),
         grant_ref: arkret_wire::SessionGrantRef::new(
             issuer,
             arkret_wire::SessionGrantId::new_v7_at(
@@ -56,10 +79,36 @@ pub fn mock_session_grant(subject: &str, device_id: &str, audience: &str) -> Str
     let mut bytes = [0_u8; 32];
     getrandom::fill(&mut bytes).expect("fixture SessionGrant entropy");
     let secret = arkret_wire::SessionGrantSecret::from_bytes(bytes).into_string();
-    fixture_credentials()
-        .lock()
-        .expect("fixture credential lock")
-        .insert(secret.clone(), coordinates);
+    reserve_mock_session_grant_coordinates(&secret, coordinates)
+        .expect("new fixture credential coordinates");
+    secret
+}
+
+/// Agent fixture issuance has no Device selector. The actual accepted runtime
+/// method and grant scope are supplied separately to the fixture issuer binder.
+pub fn mock_agent_session_grant(subject: &str, audience: &str) -> String {
+    let station: arkret_wire::DidCoreId = audience.parse().expect("fixture Station");
+    let coordinates = MockSessionGrantCoordinates {
+        account_id: arkret_wire::AccountId::new(
+            subject.parse().expect("fixture Agent"),
+            station.clone(),
+        ),
+        device_id: None,
+        grant_ref: arkret_wire::SessionGrantRef::new(
+            station,
+            arkret_wire::SessionGrantId::new_v7_at(
+                chrono::Utc::now()
+                    .timestamp_millis()
+                    .try_into()
+                    .expect("fixture time"),
+            ),
+        ),
+    };
+    let mut bytes = [0_u8; 32];
+    getrandom::fill(&mut bytes).expect("fixture SessionGrant entropy");
+    let secret = arkret_wire::SessionGrantSecret::from_bytes(bytes).into_string();
+    reserve_mock_session_grant_coordinates(&secret, coordinates)
+        .expect("new Agent fixture coordinates");
     secret
 }
 

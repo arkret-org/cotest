@@ -118,7 +118,7 @@ fn filter(realms: &[String], limit: u32) -> Result<AccountFilter> {
                 .map(|r| RealmId::new(r.clone()))
                 .collect::<std::result::Result<_, _>>()?,
         ),
-        window_limit: Some(limit),
+        max_window_event_count: Some(limit),
         ..Default::default()
     })
 }
@@ -283,7 +283,7 @@ pub async fn canonical_account_stream_api_migration() -> Result<()> {
         let items = bucket["committed_events"]
             .as_array()
             .context("limited committed Events")?;
-        ensure!(items.len() <= 2, "window_limit exceeded");
+        ensure!(items.len() <= 2, "max_window_event_count exceeded");
         for item in items {
             visible.push(serde_json::to_string(&item["commit"]["event_ref"])?);
         }
@@ -318,9 +318,9 @@ pub async fn canonical_account_stream_api_migration() -> Result<()> {
     );
 
     for query in [
-        "filter.window_limit=invalid",
-        "filter.window_limit=-1",
-        "filter.window_limit=1&filter.window_limit=2",
+        "filter.max_window_event_count=invalid",
+        "filter.max_window_event_count=-1",
+        "filter.max_window_event_count=1&filter.max_window_event_count=2",
         "filter.realms=invalid",
         "filter.event_kinds=ak.message.create",
         "filter.not_event_kinds=ak.message.create",

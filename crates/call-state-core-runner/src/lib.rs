@@ -533,7 +533,7 @@ fn axis_case() -> Result<(usize, usize)> {
         "call_id": CALL,
         "state_transition": {"from": "scheduled", "to": "ringing"},
         "focus": {"mode": "sfu", "session_focus": "fra-1"},
-        "roster_delta": {"op": "join", "participant": participant}
+        "roster_delta": {"operation": "join", "participant": participant}
     });
     serde_json::from_value::<arkret_models_collaboration::events_payloads::call::CallStatePayload>(
         combined_payload.clone(),
@@ -584,7 +584,7 @@ fn axis_case() -> Result<(usize, usize)> {
         EventKind::CallState,
         json!({
             "call_id": CALL,
-            "moderation_delta": {"op": "remove_participant", "removal": removal}
+            "moderation_delta": {"operation": "remove_participant", "removal": removal}
         }),
         603,
     );

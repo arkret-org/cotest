@@ -332,6 +332,7 @@ impl Session {
         struct Body {
             station_base_url: String,
             coauth_base_url: String,
+            expected_issuer_id: arkret_wire::DidCoreId,
             controller_account_id: arkret_wire::AccountId,
             controller_grant: arkret_wire::SessionGrantSecret,
             controller_holder_seed: String,
@@ -364,6 +365,7 @@ impl Session {
             self.http.clone(),
             &body.station_base_url,
             &body.coauth_base_url,
+            &body.expected_issuer_id,
             &controller,
             &body.controller_account_id,
             &body.controller_verification_method,
@@ -468,7 +470,7 @@ impl Session {
             let body: Body =
                 serde_json::from_value(value).context("parse private native content fixture")?;
             anyhow::ensure!(
-                body.principal.session_grant().session_grant == body.source_credential,
+                body.principal.session_grant().session_grant.as_str() == body.source_credential,
                 "native content custody differs from the actual caller credential"
             );
             let identity = DurableIdentity {
@@ -790,8 +792,10 @@ impl Session {
                 // outcome — but the read is done here so the proof is signed by
                 // the device key, which is not.
                 let grant = principal.session_grant();
-                self.session_grants
-                    .insert(body.handoff_id.clone(), grant.session_grant.clone());
+                self.session_grants.insert(
+                    body.handoff_id.clone(),
+                    grant.session_grant.as_str().to_owned(),
+                );
                 // Named fields, not the whole checkpoint: that carries
                 // `device_signing_seed_b64url`, and this boundary exists so key
                 // material stays on this side of it. What crosses is the
@@ -832,8 +836,13 @@ impl Session {
                     )
                     .await?;
                 let grant = &identity.principal.session_grant().session_grant;
-                let read = read_self_account_viewer(&self.http, &body.coland_base_url, grant, &key)
-                    .await?;
+                let read = read_self_account_viewer(
+                    &self.http,
+                    &body.coland_base_url,
+                    grant.as_str(),
+                    &key,
+                )
+                .await?;
                 Ok(json!({ "status": read.status, "body": read.body }))
             }),
             // --- Garth as a client -------------------------------------------
@@ -887,7 +896,7 @@ impl Session {
                 let client = GarthClientHandle::new(GarthClientConfig {
                     http: self.http.clone(),
                     station_base_url: &body.coland_base_url,
-                    session_grant: principal.session_grant().session_grant.clone(),
+                    session_grant: principal.session_grant().session_grant.as_str().to_owned(),
                     signing_key: session_key.signing_key(),
                     account_id: body.account_id,
                     device_id: &body.device_id,

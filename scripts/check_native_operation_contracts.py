@@ -951,7 +951,7 @@ def native_issuer_pin(captured):
     boundary = history["boundary"]
     endpoints = [entry["endpoint"] for entry in document["services"]
                  if entry["protocol_names"] == ["ArkretService"] and
-                 {"name": "serviceKind", "value": "station"} in entry["extensions"]]
+                 {"name": "service_kind", "value": "station"} in entry["extensions"]]
     require(pin["name"] == originals["configured_name"] and
             pin["canonical_endpoint"] == originals["configured_endpoint"] and
             endpoints == [pin["canonical_endpoint"]] and

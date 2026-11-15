@@ -750,7 +750,7 @@ function prepareSignedPackage(body) {
     limits: body.limits ?? {
       max_transaction_event_count: 100,
       max_payload_bytes: 65536,
-      rate_limit_per_minute: 60,
+      max_transaction_count_per_minute: 60,
     },
     ghost_policy: body.ghost_policy ?? {
       enabled: true,

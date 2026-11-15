@@ -50,7 +50,7 @@ export async function mint({ wireBin, repoRoot, baseUrl, directory }) {
       '@context': ['https://www.w3.org/ns/did/v1'], id: placeholder,
       verificationMethod: [{ id: method, type: 'Multikey', controller: placeholder, publicKeyMultibase: assertion.multibase }],
       authentication: [method], assertionMethod: [method], alsoKnownAs: [],
-      service: [{ id: `${placeholder}#service`, type: 'ArkretService', serviceKind: 'directory_service', serviceEndpoint: baseUrl }],
+      service: [{ id: `${placeholder}#service`, type: 'ArkretService', service_kind: 'directory_service', serviceEndpoint: baseUrl }],
     },
   });
   mkdirSync(path.join(directory, 'webvh', localId), { recursive: true });
@@ -149,7 +149,7 @@ export async function verifyRemote({ wireBin, directory, did, logUrl, baseUrl, c
   }
   const document = JSON.parse(readFileSync(documentPath, 'utf8'));
   const services = (document.service ?? []).filter(service => service.type === 'ArkretService');
-  if (services.length !== 1 || services[0].serviceKind !== 'directory_service' || services[0].serviceEndpoint !== baseUrl || new URL(baseUrl).protocol !== 'https:') throw new Error('verified DID does not identify this HTTPS Directory endpoint');
+  if (services.length !== 1 || services[0].service_kind !== 'directory_service' || services[0].serviceEndpoint !== baseUrl || new URL(baseUrl).protocol !== 'https:') throw new Error('verified DID does not identify this HTTPS Directory endpoint');
   if ((expectedHistoryHead && expectedHistoryHead !== commitment.method_history_head) || (expectedVersionId && expectedVersionId !== commitment.version_id)) throw new Error('configured Directory commitment does not match verified current history');
   // Missing SDK projection is an error: an older CLI cannot grant fallback trust.
   if (!commitment.expected_service_id?.startsWith('ak:did_core:')) throw new Error('SDK projection output is missing; rebuild the prepared wire CLI');

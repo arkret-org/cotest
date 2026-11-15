@@ -709,7 +709,7 @@ impl TransportProvider for BoundedProvider {
                 stream_refs: Some(vec![arkret_wire::CommitStreamRef::Realm {
                     realm_id: realm_id.clone(),
                 }]),
-                window_limit: Some(100),
+                max_window_event_count: Some(100),
                 ..garth::AccountFilter::default()
             }),
             ..garth::AccountSubscribeParameters::default()

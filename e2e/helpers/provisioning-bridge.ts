@@ -175,6 +175,7 @@ export class ProvisioningBridge {
     endpoints: DeploymentEndpoints;
     controllerAccountId: AccountId;
     controllerGrant: string;
+    controllerIssuerId: string;
     controllerHolderSeed: string;
     controllerEventSeed: string;
     controllerVerificationMethod: string;
@@ -183,6 +184,7 @@ export class ProvisioningBridge {
     const result = await this.#call("agent_runtime_pair", {
       station_base_url: args.endpoints.colandBaseUrl, coauth_base_url: args.endpoints.coauthBaseUrl,
       controller_account_id: args.controllerAccountId, controller_grant: args.controllerGrant,
+      expected_issuer_id: args.controllerIssuerId,
       controller_holder_seed: args.controllerHolderSeed, controller_event_seed: args.controllerEventSeed,
       controller_verification_method: args.controllerVerificationMethod,
       agent_id: args.agentId, strand_id: args.strandId,

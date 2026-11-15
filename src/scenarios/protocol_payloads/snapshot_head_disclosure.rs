@@ -526,7 +526,7 @@ pub fn window_positions(
 }
 
 /// Fresh Coland + real PostgreSQL: an Account frame filtered to one Realm with
-/// a limited `window_limit` names a committed-prefix basis only when `/head`
+/// a limited `max_window_event_count` names a committed-prefix basis only when `/head`
 /// already issued the exact snapshot at the window's anchor; that
 /// `snapshot_ref` reads back as an independent original signed for that stream. Without
 /// a prior issuance the limited window is `preview_only` with no basis. The
@@ -568,14 +568,17 @@ pub async fn limited_account_window_names_issued_basis_or_is_preview_only() -> R
     ensure!(anchor.stream_position == 6, "bootstrap head is position 6");
     author.create_default_strand(&realm_id).await?;
 
-    let frame =
-        account_detail_frame(&author, json!({"realm_ids": [realm_id], "window_limit": 2})).await?;
+    let frame = account_detail_frame(
+        &author,
+        json!({"realm_ids": [realm_id], "max_window_event_count": 2}),
+    )
+    .await?;
     let entry = realm_detail(&frame, &realm_id)?;
     let [window] = entry.streams.as_deref().context("stream windows")? else {
         anyhow::bail!("a single-member Realm has exactly its Realm stream window");
     };
     ensure!(
-        window.limited && window.complete && window.window_limit == 2,
+        window.limited && window.complete && window.max_window_event_count == 2,
         "the limited window must be complete at its own ceiling: {window:?}"
     );
     ensure!(window.next_position == 9, "window head is position 8");
@@ -686,7 +689,7 @@ pub async fn limited_account_window_names_issued_basis_or_is_preview_only() -> R
             && whole_window.preview_only.is_none()
             && whole_window.window_start_basis.is_none()
             && window_positions(&whole) == (0..=8).collect::<Vec<_>>(),
-        "default window_limit 20 delivers the whole stream: {whole_window:?}"
+        "default max_window_event_count 20 delivers the whole stream: {whole_window:?}"
     );
 
     // No snapshot was ever issued for this Realm: preview only.
@@ -709,7 +712,7 @@ pub async fn limited_account_window_names_issued_basis_or_is_preview_only() -> R
             json!({
                 "realm_ids": [unissued_id],
                 "stream_refs": [{"kind": "realm", "realm_id": unissued_id}],
-                "window_limit": 2
+                "max_window_event_count": 2
             }),
         )
         .await?,

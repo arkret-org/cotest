@@ -49,7 +49,6 @@ pub fn runtime_pair_error_summary(error: &anyhow::Error) -> String {
         "pairing/read-accepted-key",
         "pairing/describe",
         "pairing/issue-session",
-        "pairing/observe-session",
         "accepted Agent key state unavailable",
         "accepted pairing handle missing",
         "accepted pairing code missing",
@@ -125,6 +124,7 @@ pub struct AgentRuntimeHandle {
     http: reqwest::Client,
     station_base: String,
     grant_url: String,
+    issuer_id: DidCoreId,
 }
 
 fn random_key() -> Result<SigningKey> {
@@ -243,6 +243,8 @@ fn disclosure(
 impl AgentRuntimeHandle {
     /// The accepted controller transport reads the original create-locked
     /// key state. No pairing code or scope supplied by the caller is trusted.
+    /// `expected_issuer_id` is the harness's verified Coauth owning-Station
+    /// identity, supplied independently of the requested audience or secret.
     #[allow(
         clippy::too_many_arguments,
         reason = "The pairing fixture binds each accepted controller credential, service endpoint and durable device location explicitly."
@@ -251,6 +253,7 @@ impl AgentRuntimeHandle {
         http: reqwest::Client,
         station_base: &str,
         coauth_base: &str,
+        expected_issuer_id: &DidCoreId,
         controller: &SdkClient,
         controller_account: &AccountId,
         controller_device_method: &DidUrl,
@@ -594,8 +597,13 @@ impl AgentRuntimeHandle {
         let grant = session
             .current_state()
             .context("real Coauth did not issue Agent SessionGrant")?;
+        // The authenticated issue response binds the opaque credential and
+        // public issuer reference. The accepted Agent key and original PCR
+        // sources were verified above. Resource Stations independently check
+        // the issuer's private metadata during actual protected admission.
         ensure!(
             grant.account_id == account
+                && grant.grant_ref.issuer_id == *expected_issuer_id
                 && grant.device_id.is_none()
                 && grant.audience_id == controller_account.station_id
                 && grant.dpop_jkt.as_deref() == Some(binding.jkt.as_str())
@@ -662,6 +670,7 @@ impl AgentRuntimeHandle {
             http,
             station_base: station_base.to_owned(),
             grant_url: grant_url.to_string(),
+            issuer_id: expected_issuer_id.clone(),
         })
     }
 
@@ -709,6 +718,13 @@ impl AgentRuntimeHandle {
             .context("content session missing")?;
         ensure!(
             grant.grant_ref != old.grant_ref
+                && grant.grant_ref.issuer_id == self.issuer_id
+                && grant.session_grant != old.session_grant
+                && grant.account_id == self.account
+                && grant.device_id.is_none()
+                && grant.audience_id == old.audience_id
+                && grant.dpop_jkt == old.dpop_jkt
+                && grant.session_public_key == old.session_public_key
                 && grant
                     .granted_scope
                     .iter()
