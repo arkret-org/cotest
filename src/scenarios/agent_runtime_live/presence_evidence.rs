@@ -58,7 +58,11 @@ async fn native_session(
         },
     )
     .await?;
-    let claims = content_session_evidence::observed_issued_claims(&credential)?;
+    let claims = content_session_evidence::observed_issued_metadata(
+        &deployment.coauth.pg.connect_url,
+        &credential,
+    )
+    .await?;
     ensure!(
         claims.scopes.iter().any(|scope| scope == "ak.event.read"),
         "real scoped issuer did not grant Direct read"
@@ -108,8 +112,11 @@ pub(super) async fn run_native() -> Result<()> {
         None,
     )
     .await?;
-    let prior =
-        content_session_evidence::observed_issued_claims(agent.runtime.session().credential())?;
+    let prior = content_session_evidence::observed_issued_metadata(
+        &deployment.coauth.pg.connect_url,
+        agent.runtime.session().credential(),
+    )
+    .await?;
     ensure!(!prior.scopes.iter().any(|scope| scope == "ak.event.read"));
     let founded = direct_evidence::found(controller, &agent, station).await?;
     let (runtime, request) = native_session(

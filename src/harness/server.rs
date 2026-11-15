@@ -549,7 +549,7 @@ impl ArkretServer {
             .principal
             .as_ref()
             .context("a Standard grant needs the client's provisioned principal")?;
-        let grant = crate::scenarios::bridge_contracts::session_grant::mock_session_grant_jwt(
+        let grant = crate::scenarios::bridge_contracts::session_grant::mock_session_grant(
             principal.core_id.as_str(),
             principal.device_id.as_str(),
             self.service_id.as_str(),
@@ -572,18 +572,18 @@ impl ArkretServer {
             .map(|issuer| issuer.origin())
     }
 
-    /// Read the typed ID from this fixture issuer's exact ledger. Mock tokens
-    /// are not production SignedSessionGrantClaims and must not be decoded as such.
-    pub(crate) fn harness_session_grant_id(
+    /// Read the complete issuer-scoped reference from the exact fixture ledger.
+    /// Opaque secrets contain no locally decodable metadata.
+    pub(crate) fn harness_session_grant_ref(
         &self,
         client: &TestActorClient,
-    ) -> Result<arkret_wire::SessionGrantId> {
+    ) -> Result<arkret_wire::SessionGrantRef> {
         Ok(self
             .session_grant_issuer
             .as_ref()
             .context("harness issuer ledger is unavailable")?
             .own_station_session_state(client.session().credential(), &self.service_id)?
-            .grant_id
+            .grant_ref
             .clone())
     }
 
@@ -624,14 +624,10 @@ impl ArkretServer {
             anyhow::bail!("mock session reissue requires a canonical predecessor");
         };
         let predecessor = issuer.own_station_session_state(grant, &self.service_id)?;
-        let (unsigned, _) = grant
-            .rsplit_once('.')
-            .context("mock grant has no JWT signature")?;
-        let mut signature = [0u8; 64];
-        getrandom::fill(&mut signature).map_err(anyhow::Error::msg)?;
-        let grant = format!(
-            "{unsigned}.{}",
-            arkret_canonical::base64url_encode(signature)
+        let grant = crate::scenarios::bridge_contracts::session_grant::mock_session_grant(
+            principal.core_id.as_str(),
+            principal.device_id.as_str(),
+            self.service_id.as_str(),
         );
         anyhow::ensure!(
             grant != client.session.credential(),
@@ -658,7 +654,7 @@ impl ArkretServer {
         let fresh_state =
             issuer.own_station_session_state(fresh.session.credential(), &self.service_id)?;
         anyhow::ensure!(
-            fresh_state.grant_id != predecessor.grant_id
+            fresh_state.grant_ref != predecessor.grant_ref
                 && fresh_state.account_id == predecessor.account_id
                 && fresh_state.device_id == predecessor.device_id
                 && fresh_state.audience_id == predecessor.audience_id
@@ -1081,6 +1077,20 @@ impl ArkretServer {
     /// HTTPS server. It is absent for ordinary production-style HTTP handles.
     pub(crate) fn tls_ca_path(&self) -> Option<&Path> {
         self._tls.as_ref().map(|tls| tls.ca_path.as_path())
+    }
+
+    /// Run-scoped transport credentials for an independent native test endpoint.
+    /// These files contain no Station or Applet protocol signing material.
+    pub(crate) fn native_test_tls_identity_paths(&self) -> Result<(PathBuf, PathBuf)> {
+        let tls = self
+            ._tls
+            .as_ref()
+            .context("native test endpoint requires the owned HTTPS harness")?;
+        anyhow::ensure!(
+            tls.cert_path.is_file() && tls.key_path.is_file(),
+            "native test endpoint requires actual run-scoped TLS identity files"
+        );
+        Ok((tls.cert_path.clone(), tls.key_path.clone()))
     }
 
     pub fn service_id(&self) -> &DidCoreId {
@@ -1950,7 +1960,7 @@ impl ArkretServer {
         );
 
         let session = crate::harness::ClientSession::Canonical {
-            grant: founded.session_grant().session_grant.clone(),
+            grant: founded.session_grant().session_grant.as_str().to_owned(),
             signing_key: std::sync::Arc::new(handoff.device_key.signing_key()),
         };
         // The actor is the resolvable DID for the same reason: every other

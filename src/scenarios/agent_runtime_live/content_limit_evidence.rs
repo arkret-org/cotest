@@ -80,8 +80,12 @@ async fn quota_exhaustion(scene: &GrantFixture) -> Result<()> {
             .any(|action| action == "ak.message.create")
     );
     ensure!(
-        claims.scope_details.as_ref().context("quota source refs")?["capability_grant_refs"]
-            == json!([grant])
+        claims
+            .scope_details
+            .as_ref()
+            .context("quota source refs")?
+            .capability_grant_refs
+            == vec![grant.to_string()]
     );
     ensure!(
         quota_rows(scene).await? == initial,
@@ -175,8 +179,9 @@ async fn temporal_condition(scene: &GrantFixture) -> Result<()> {
         claims
             .scope_details
             .as_ref()
-            .context("condition source refs")?["capability_grant_refs"]
-            == json!([grant])
+            .context("condition source refs")?
+            .capability_grant_refs
+            == vec![grant.to_string()]
     );
     scene
         .commit_message(

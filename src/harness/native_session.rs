@@ -126,6 +126,22 @@ async fn discover_host_binding(
     Ok(binding)
 }
 
+fn validate_human_host_account(
+    state: &SessionGrantState,
+    principal: &arkret_wire::DidCoreId,
+    station: &arkret_wire::DidCoreId,
+    device: &str,
+) -> Result<()> {
+    ensure!(
+        state.account_id == arkret_wire::AccountId::new(principal.clone(), station.clone())
+            && state.audience_id == *station
+            && state.grant_ref.issuer_id == *station
+            && state.device_id.as_ref().map(arkret_wire::DeviceId::as_str) == Some(device),
+        "native grant belongs to another Account, issuer, audience or Device"
+    );
+    Ok(())
+}
+
 pub(super) async fn bind_standard_host(
     mut client: TestActorClient,
     issuer: &MockCoauthIntrospectionServer,
@@ -139,11 +155,16 @@ pub(super) async fn bind_standard_host(
         anyhow::bail!("native host requires an issuer-ledger Standard grant");
     };
     let state = issuer.own_station_session_state(grant, station)?;
-    if let Some(device) = &state.device_id {
+    if state.device_id.is_some() {
+        let principal = client
+            .principal
+            .as_ref()
+            .context("native Human host lacks its provisioned principal")?;
         ensure!(
-            device.as_str() == client.device_id,
-            "native grant belongs to another device"
+            principal.device_id.as_str() == client.device_id,
+            "native Human client differs from its provisioned Device"
         );
+        validate_human_host_account(&state, &principal.core_id, station, &client.device_id)?;
     } else {
         ensure!(
             client.principal.is_none()
@@ -188,7 +209,7 @@ pub(super) async fn bind_registered_host(
         state.account_id == arkret::AccountId::new(principal.core_id.clone(), station.clone())
             && state.device_id.as_ref() == Some(&principal.device_id)
             && state.audience_id == *station
-            && state.grant_jwt == client.session.credential(),
+            && state.session_grant.as_str() == client.session.credential(),
         "registered host differs from the authenticated Account, Device or grant"
     );
     let (http, engine) = cotest_test_support::session::bind_registered_host_source(
@@ -208,29 +229,56 @@ mod tests {
     use super::*;
 
     #[tokio::test]
+    async fn human_host_rejects_another_account_even_with_the_same_device() -> Result<()> {
+        let issuer = MockCoauthIntrospectionServer::spawn().await?;
+        let station = arkret_wire::DidCoreId::new("ak:did_core:web:station.example")?;
+        let principal = arkret_wire::DidCoreId::new("ak:did_core:web:alice.example")?;
+        let another_principal = arkret_wire::DidCoreId::new("ak:did_core:web:bob.example")?;
+        let device = "ak:device:01904100-0000-7000-8000-0000000000a1";
+        let secret = crate::scenarios::bridge_contracts::session_grant::mock_session_grant(
+            principal.as_str(),
+            device,
+            station.as_str(),
+        );
+        let key = ed25519_dalek::SigningKey::from_bytes(&[0x52; 32]);
+        issuer.bind_founding_device_grant(
+            &secret,
+            principal.as_str(),
+            device,
+            "fixture-authorize",
+            &key.verifying_key(),
+        )?;
+        let state = issuer.own_station_session_state(&secret, &station)?;
+        validate_human_host_account(&state, &principal, &station, device)?;
+        ensure!(validate_human_host_account(&state, &another_principal, &station, device).is_err());
+        Ok(())
+    }
+
+    #[tokio::test]
     async fn published_reauthentication_invalidates_only_the_old_local_source() -> Result<()> {
         let issuer = MockCoauthIntrospectionServer::spawn().await?;
         let station = arkret_wire::DidCoreId::new("ak:did_core:web:station.example")?;
         let principal = "ak:did_core:web:alice.example";
         let device = "ak:device:01904100-0000-7000-8000-0000000000a1";
         let key = ed25519_dalek::SigningKey::from_bytes(&[0x52; 32]);
-        let first = crate::scenarios::bridge_contracts::session_grant::mock_session_grant_jwt(
+        let first = crate::scenarios::bridge_contracts::session_grant::mock_session_grant(
             principal,
             device,
             station.as_str(),
         );
-        let (unsigned, _) = first.rsplit_once('.').context("fixture signature")?;
-        let second = format!(
-            "{unsigned}.{}",
-            arkret_canonical::base64url_encode([0x53; 64])
+        let second = crate::scenarios::bridge_contracts::session_grant::mock_session_grant(
+            principal,
+            device,
+            station.as_str(),
         );
-        let bind = |credential: &str| -> Result<_> {
-            issuer.bind_founding_device_grant(
+        let bind = |credential: &str, expires_at| -> Result<_> {
+            issuer.bind_founding_device_grant_until(
                 credential,
                 principal,
                 device,
                 "fixture-authorize",
                 &key.verifying_key(),
+                expires_at,
             )?;
             let state = issuer.own_station_session_state(credential, &station)?;
             let http =
@@ -263,10 +311,14 @@ mod tests {
                 state,
             ))
         };
-        let (old, old_source, old_record) = bind(&first)?;
+        let (old, old_source, old_record) =
+            bind(&first, chrono::Utc::now() + chrono::Duration::minutes(10))?;
         let old_copy = old.clone();
-        let (fresh, fresh_source, fresh_record) = bind(&second)?;
-        ensure!(old_record.grant_id != fresh_record.grant_id);
+        let fresh_expires_at = arkret_canonical::normalize_timestamp_canonical(
+            chrono::Utc::now() + chrono::Duration::seconds(5),
+        );
+        let (fresh, fresh_source, fresh_record) = bind(&second, fresh_expires_at)?;
+        ensure!(old_record.grant_ref != fresh_record.grant_ref);
         ensure!(
             old_record.account_id == fresh_record.account_id
                 && old_record.device_id == fresh_record.device_id
@@ -296,7 +348,15 @@ mod tests {
             issuer.own_station_session_state(&first, &station)? == old_record,
             "local invalidation changed the old issuer record or expiry"
         );
-        issuer.set_grant_expiry(&second, chrono::Utc::now() - chrono::Duration::seconds(1))?;
+        tokio::time::sleep(
+            fresh_expires_at
+                .signed_duration_since(chrono::Utc::now())
+                .to_std()
+                .unwrap_or_default()
+                + std::time::Duration::from_millis(10),
+        )
+        .await;
+        ensure!(fresh_record.expires_at == fresh_expires_at);
         ensure!(
             published
                 .lock()
@@ -314,7 +374,7 @@ mod tests {
         let station = arkret_wire::DidCoreId::new("ak:did_core:web:station.example")?;
         let principal = "ak:did_core:web:alice.example";
         let device = "ak:device:01904100-0000-7000-8000-0000000000a1";
-        let grant = crate::scenarios::bridge_contracts::session_grant::mock_session_grant_jwt(
+        let grant = crate::scenarios::bridge_contracts::session_grant::mock_session_grant(
             principal,
             device,
             station.as_str(),

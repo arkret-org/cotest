@@ -113,7 +113,7 @@ cotest-view-write-contract-runner = { path = "crates/view-write-contract-runner"
 anyhow = "1.0.104"
 arbitrary = "1.4"
 argon2 = { version = "0.6.0", default-features = false, features = ["alloc", "password-hash"] }
-arkret = { path = "../arkret-rust-sdk/crates/sdk", features = ["mls"] }
+arkret = { path = "../arkret-rust-sdk/crates/sdk", features = ["mls", "blob-aead"] }
 arkret-bootstrap = { path = "../arkret-rust-sdk/crates/bootstrap" }
 arkret-canonical = { path = "../arkret-rust-sdk/crates/canonical" }
 arkret-crypto = { path = "../arkret-rust-sdk/crates/crypto" }
@@ -321,6 +321,7 @@ tracing = { workspace = true }
 tracing-subscriber = { workspace = true, features = ["env-filter", "json"] }
 unicode-normalization = { workspace = true }
 url = { workspace = true }
+uuid = { version = "1.26.0", features = ["v7"] }
 zeroize = { workspace = true }
 
 [dev-dependencies]
@@ -335,9 +336,6 @@ rand_core_06 = { package = "rand_core", version = "0.6.4", features = ["std"] }
 proptest = { workspace = true, default-features = false, features = ["std"] }
 salvo = { workspace = true, features = ["test"] }
 serial_test = { workspace = true }
-# `Uuid::now_v7` in the coland PCR genesis fixture that
-# `tests/station_account_isolation.rs` includes by path.
-uuid = { version = "1.26.0", features = ["v7"] }
 
 [lints]
 workspace = true

@@ -29,8 +29,11 @@ pub async fn run_agent_direct_content_session_boundary() -> Result<()> {
         None,
     )
     .await?;
-    let prior =
-        content_session_evidence::observed_issued_claims(agent.runtime.session().credential())?;
+    let prior = content_session_evidence::observed_issued_metadata(
+        &deployment.coauth.pg.connect_url,
+        agent.runtime.session().credential(),
+    )
+    .await?;
     ensure!(!prior.scopes.iter().any(|action| action == "ak.event.read"));
     let founded = direct_evidence::found(controller, &agent, station).await?;
     let realm = founded.coordinates.realm_id.clone();
@@ -74,7 +77,11 @@ pub async fn run_agent_direct_content_session_boundary() -> Result<()> {
         },
     )
     .await?;
-    let current = content_session_evidence::observed_issued_claims(&credential)?;
+    let current = content_session_evidence::observed_issued_metadata(
+        &deployment.coauth.pg.connect_url,
+        &credential,
+    )
+    .await?;
     ensure!(current.session_id != prior.session_id);
     ensure!(
         current
@@ -93,8 +100,9 @@ pub async fn run_agent_direct_content_session_boundary() -> Result<()> {
         current
             .scope_details
             .as_ref()
-            .context("Direct content ceiling")?["capability_grant_refs"]
-            == json!([])
+            .context("Direct content ceiling")?
+            .capability_grant_refs
+            .is_empty()
     );
     let runtime = station.client_with_agent_runtime_grant(
         agent.agent_did.as_str(),
@@ -124,7 +132,11 @@ pub async fn run_agent_direct_content_session_boundary() -> Result<()> {
     ensure!(refreshed.status().is_success());
     let refreshed: arkret_models_collaboration::session_grants::SessionGrantResponseBody =
         refreshed.json().await?;
-    let claims = content_session_evidence::observed_issued_claims(&refreshed.session_grant)?;
+    let claims = content_session_evidence::observed_issued_metadata(
+        &deployment.coauth.pg.connect_url,
+        refreshed.session_grant.as_str(),
+    )
+    .await?;
     ensure!(
         claims.session_id == current.session_id
             && claims.scopes == current.scopes
@@ -133,7 +145,7 @@ pub async fn run_agent_direct_content_session_boundary() -> Result<()> {
     let runtime = station.client_with_agent_runtime_grant(
         agent.agent_did.as_str(),
         "direct-content-refreshed",
-        refreshed.session_grant,
+        refreshed.session_grant.into_string(),
         agent.runtime_key.clone(),
     )?;
     expect_json(runtime.get(&path), StatusCode::OK).await?;

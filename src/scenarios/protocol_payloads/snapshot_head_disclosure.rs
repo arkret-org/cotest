@@ -6,7 +6,7 @@ use sha2::{Digest, Sha256};
 
 use crate::harness::{ArkretServer, TestActorClient, expect_json, expect_status};
 use crate::scenarios::_helpers::bridge::MockCoauthIntrospectionServer;
-use crate::scenarios::bridge_contracts::session_grant::mock_session_grant_jwt;
+use crate::scenarios::bridge_contracts::session_grant::mock_session_grant;
 use crate::scenarios::identity_test_support::{
     HARNESS_INTERNAL_AUTHORITY_SECRET, actor_did_for_service_did,
     spawn_with_harness_account_authority,
@@ -75,7 +75,7 @@ pub async fn snapshot_author(server_name: &str, actor: &str) -> Result<SnapshotA
         .demo_client(&actor_id, "ak:device:01904100-0000-7000-8000-0000000000a1")
         .await?;
     let principal = client.principal.as_ref().context("founding principal")?;
-    let grant = mock_session_grant_jwt(
+    let grant = mock_session_grant(
         principal.core_id.as_str(),
         principal.device_id.as_str(),
         server.service_id().as_str(),

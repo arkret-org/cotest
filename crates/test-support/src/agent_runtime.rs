@@ -174,7 +174,7 @@ fn sdk_with_retry(
 pub fn controller_transport(
     http: reqwest::Client,
     base: &str,
-    grant: String,
+    grant: arkret_wire::SessionGrantSecret,
     holder: SigningKey,
 ) -> Result<SdkClient> {
     let holder = Arc::new(holder);
@@ -182,7 +182,7 @@ pub fn controller_transport(
         http,
         base,
         Some(Auth::Dpop(DpopAuth::with_dpop_token(
-            grant,
+            grant.into_string(),
             move |request| {
                 garth::session::dpop::build_http_dpop_proof(request, &holder).map_err(|_| {
                     arkret_http_client::Error::Protocol("controller DPoP signing failed".into())
@@ -594,16 +594,11 @@ impl AgentRuntimeHandle {
         let grant = session
             .current_state()
             .context("real Coauth did not issue Agent SessionGrant")?;
-        let observation = grant
-            .agent_participation_observation(chrono::Utc::now())
-            .context("pairing/observe-session")?;
         ensure!(
             grant.account_id == account
                 && grant.device_id.is_none()
                 && grant.audience_id == controller_account.station_id
                 && grant.dpop_jkt.as_deref() == Some(binding.jkt.as_str())
-                && observation.agent_key_authorization_ref == authorization
-                && observation.verification_method == identity.verification_method
                 && grant
                     .granted_scope
                     .iter()
@@ -628,7 +623,7 @@ impl AgentRuntimeHandle {
             http.clone(),
             station_base,
             Some(Auth::Dpop(DpopAuth::with_dpop_token(
-                grant.grant_jwt.clone(),
+                grant.session_grant.as_str().to_owned(),
                 {
                     let holder = holder.clone();
                     move |request| {
@@ -713,7 +708,7 @@ impl AgentRuntimeHandle {
             .current_state()
             .context("content session missing")?;
         ensure!(
-            grant.grant_id != old.grant_id
+            grant.grant_ref != old.grant_ref
                 && grant
                     .granted_scope
                     .iter()
@@ -729,7 +724,7 @@ impl AgentRuntimeHandle {
             self.http.clone(),
             &self.station_base,
             Some(Auth::Dpop(DpopAuth::with_dpop_token(
-                grant.grant_jwt.clone(),
+                grant.session_grant.as_str().to_owned(),
                 move |request| {
                     garth::session::dpop::build_http_dpop_proof(request, &holder).map_err(|_| {
                         arkret_http_client::Error::Protocol("Agent HTTP DPoP signing failed".into())

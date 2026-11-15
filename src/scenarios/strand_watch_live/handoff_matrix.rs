@@ -16,6 +16,8 @@ use serde_json::json;
 use super::*;
 use crate::harness::CanonicalJsonBody;
 
+mod guard_contracts;
+
 #[expect(
     clippy::too_many_arguments,
     reason = "Handoff matrix carries both Stations and the original accepted unit and frozen read"
@@ -33,6 +35,7 @@ pub(super) async fn run(
     original: &AuditPairedEventUnitSubmission,
     original_outcome: &AuditPairedEventAcceptanceOutcome,
     frozen: &WatchAuditReadRequestBody,
+    owner_transfer: bool,
 ) -> Result<()> {
     ensure!(old_url != new_url, "handoff uses one database");
     let old = group.server(1);
@@ -65,6 +68,7 @@ pub(super) async fn run(
     )
     .await?;
     let empty_strand = StrandId::from_event_id(&empty.event_id);
+    let grant_continuity = guard_contracts::prepare(owner, bob, old_url, realm).await?;
     let mut nonce_bytes = [0u8; 32];
     getrandom::fill(&mut nonce_bytes).map_err(anyhow::Error::msg)?;
     let nonce = Base64UrlString::new(arkret_canonical::base64url_encode(nonce_bytes))
@@ -389,6 +393,12 @@ pub(super) async fn run(
             level_public: None,
         }),
     )?;
+    grant_continuity
+        .assert_after_handoff(owner, bob, new_url, realm)
+        .await?;
+    if owner_transfer {
+        super::owner_transfer::run(group, owner, bob, realm, 2, new_url).await?;
+    }
     println!(
         "[watch-handoff] three_native_stations=1 independent_private_import=1 signed_peer_activation=1 generation_one=1 old_pair_exact_replay=1 old_frozen_read_refused=1 late_old_tenure_reply_refused=1 three_station_cold_restart=1"
     );

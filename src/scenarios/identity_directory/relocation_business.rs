@@ -75,7 +75,7 @@ fn resolution_submission(
 ) -> Result<EventAdmissionSubmission> {
     let principal = client.principal.as_ref().context("registered principal")?;
     let payload = PrincipalResolutionUpdatePayload {
-        expected_revision: revision,
+        expected_commit_id: revision.commit_id,
         next: ResolutionCommitment {
             did: entry["state"]["id"]
                 .as_str()

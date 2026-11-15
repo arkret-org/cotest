@@ -260,7 +260,7 @@ pub async fn pair(fixture: &CanonicalApiFixture) -> Result<TestActorClient> {
         "sibling Standard grant changed the Account, Device or audience"
     );
     let session = ClientSession::Canonical {
-        grant: grant.session_grant,
+        grant: grant.session_grant.into_string(),
         signing_key: std::sync::Arc::new(holder_key.signing_key()),
     };
     let mut principal = original.clone();
@@ -345,27 +345,41 @@ pub(super) async fn refresh_for_device(
         .principal
         .as_ref()
         .context("accepted Device custody")?;
-    let jwt = client.session().credential();
-    let encoded = jwt.split('.').nth(1).context("grant claims")?;
-    let claims: arkret_models_identity::SignedSessionGrantClaims =
-        serde_json::from_slice(&arkret_canonical::base64url_decode(encoded)?)?;
-    let jkt = claims.session_public_key.thumbprint_sha256()?;
+    let source = client
+        .sdk()
+        .own_station_result_client()?
+        .context("accepted native host source")?;
+    let snapshot = source.session()?;
+    let predecessor = snapshot.grant_ref().clone();
+    let account_id = snapshot.account_id().clone();
+    let audience_id = snapshot.binding().service_id.clone();
+    ensure!(
+        account_id.principal_id == original.core_id && account_id.station_id == audience_id,
+        "refresh host differs from the accepted Account"
+    );
+    let ClientSession::Canonical { signing_key, .. } = client.session() else {
+        anyhow::bail!("refresh requires the captured holder key");
+    };
+    let jkt = arkret_signatures::dpop::dpop_jwk_thumbprint(
+        &arkret_signatures::JsonWebKey::from_ed25519_verifying_key(&signing_key.verifying_key()),
+    )?;
+    let secret = arkret_wire::SessionGrantSecret::new(client.session().credential().to_owned())?;
     let now = arkret_canonical::normalize_timestamp_canonical(chrono::Utc::now());
     let unsigned = arkret_wire::UnsignedAcceptedDeviceRefreshPossessionProof {
         context: arkret_wire::AcceptedDevicePossessionProofContext::V1,
         purpose: arkret_wire::AcceptedDeviceRefreshPossessionPurpose::SessionGrantRefresh,
-        predecessor_session_grant_id: claims.grant_id.clone(),
-        account_id: claims.account_id.clone(),
+        predecessor_session_grant_ref: predecessor.clone(),
+        account_id: account_id.clone(),
         device_id: original.device_id.clone(),
-        audience_id: claims.audience_id.clone(),
+        audience_id: audience_id.clone(),
         holder_jkt: jkt.clone(),
         session_intent_digest:
             arkret_models_collaboration::session_grant_bodies::session_grant_refresh_request_digest(
-                jwt,
-                &claims.grant_id,
-                &claims.account_id.principal_id,
+                &secret,
+                &predecessor,
+                &account_id.principal_id,
                 &original.device_id,
-                &claims.audience_id,
+                &audience_id,
                 &jkt,
             )?,
         issued_at: now,
@@ -385,8 +399,8 @@ pub(super) async fn refresh_for_device(
     .map_err(anyhow::Error::msg)?;
     let proof = unsigned.attach_signature(signature)?;
     let request = arkret::session_grant::human_session_grant_refresh_request(
-        jwt,
-        Some(claims.audience_id),
+        secret,
+        Some(audience_id),
         original.device_id.clone(),
         proof,
     )?;
@@ -395,7 +409,16 @@ pub(super) async fn refresh_for_device(
         .http_client(fixture.http.clone())
         .auth(session_auth(client.session())?)
         .build()?;
-    Ok(gate.auth_refresh_session_grant(&request).await?)
+    source.check_session()?;
+    let outcome = gate.auth_refresh_session_grant(&request).await?;
+    source.check_session()?;
+    ensure!(
+        outcome.account_id == account_id
+            && outcome.issuer_id == predecessor.issuer_id
+            && outcome.previous_session_grant_id.as_ref() == Some(&predecessor.id),
+        "refresh outcome changed its exact predecessor or Account"
+    );
+    Ok(outcome)
 }
 
 /// Issue a real restricted grant; no accepted-device state is fabricated.
@@ -406,6 +429,7 @@ pub(super) async fn recovery_candidate(
     Client,
     arkret_models_identity::InitialSessionGrantIntent,
     provisioning::AccountHandoff,
+    arkret_wire::SessionGrantRef,
 )> {
     let device_id =
         arkret_wire::DeviceId::new(arkret_identifiers::new_prefixed_uuid7("ak:device:"))?;
@@ -428,6 +452,7 @@ pub(super) async fn recovery_candidate(
         },
     );
     let grant = gate.auth_issue_session_grant(&request).await?;
+    let grant_ref = grant.grant_ref();
     let mut principal = original.clone();
     principal.device_id = device_id.clone();
     principal.device_signing_key = identity_key.signing_key();
@@ -448,7 +473,7 @@ pub(super) async fn recovery_candidate(
         original.did.as_str(),
         device_id.as_str(),
         ClientSession::Canonical {
-            grant: grant.session_grant,
+            grant: grant.session_grant.into_string(),
             signing_key: std::sync::Arc::new(holder_key.signing_key()),
         },
         Some(principal),
@@ -458,5 +483,5 @@ pub(super) async fn recovery_candidate(
         session_public_key: grant.session_public_key,
         audience_id: grant.audience_id,
     };
-    Ok((candidate, gate, initial, pending))
+    Ok((candidate, gate, initial, pending, grant_ref))
 }

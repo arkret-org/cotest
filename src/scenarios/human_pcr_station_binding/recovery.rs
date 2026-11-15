@@ -9,7 +9,9 @@ use arkret_wire::*;
 use chrono::Utc;
 use ed25519_dalek::Signer as _;
 
-use crate::harness::{TestActorClient, event_envelope_for_device, expect_json};
+use crate::harness::{
+    CanonicalJsonBody as _, TestActorClient, event_envelope_for_device, expect_json,
+};
 use crate::scenarios::_helpers::canonical_api::CanonicalApiFixture;
 use crate::scenarios::security_rotation_live::{
     RotationAuthor, create_verified_recovery_unlock_session_bound,
@@ -36,8 +38,17 @@ fn unique(prefix: &str) -> String {
 pub(crate) struct CompletedCandidate {
     pub(crate) candidate: TestActorClient,
     gate: arkret_http_client::Client,
-    pub(crate) request: RecoveryCompletionGrantRequestBody,
+    pub(crate) request: arkret_models_identity::RecoveryCompletionGrantRequestBody,
+    pub(crate) completion: RecoveryTransactionCompletion,
     pub(crate) handoff: cotest_test_support::provisioning::AccountHandoff,
+}
+
+pub(crate) struct PreparedCandidate {
+    pub(crate) candidate: TestActorClient,
+    gate: arkret_http_client::Client,
+    pub(crate) create: RecoveryTransactionCreateRequestBody,
+    initial: arkret_models_identity::InitialSessionGrantIntent,
+    handoff: cotest_test_support::provisioning::AccountHandoff,
 }
 
 pub(crate) async fn complete_native(
@@ -45,21 +56,21 @@ pub(crate) async fn complete_native(
     recovery_method: &DidUrl,
     recovery_seed: [u8; 32],
 ) -> Result<CompletedCandidate> {
-    let (candidate, gate, initial, handoff) = fixture.recovery_candidate().await?;
+    prepare_native(fixture, recovery_method, recovery_seed)
+        .await?
+        .submit_native()
+        .await
+}
+
+/// Freeze the actual verified Session and signed R before its single native POST.
+/// Fault tests use this same production request, without manufacturing accepted C.
+pub(crate) async fn prepare_native(
+    fixture: &CanonicalApiFixture,
+    recovery_method: &DidUrl,
+    recovery_seed: [u8; 32],
+) -> Result<PreparedCandidate> {
+    let (candidate, gate, initial, handoff, grant_ref) = fixture.recovery_candidate().await?;
     let custody = candidate.principal.as_ref().context("candidate custody")?;
-    let encoded = candidate
-        .session()
-        .credential()
-        .split('.')
-        .nth(1)
-        .context("restricted claims")?;
-    let claims: arkret_models_identity::SignedSessionGrantClaims =
-        serde_json::from_slice(&arkret_canonical::base64url_decode(encoded)?)?;
-    ensure!(
-        claims.credential_class
-            == arkret_models_identity::SessionGrantCredentialClass::RecoverySession,
-        "issuer did not return a restricted grant"
-    );
     let author = RotationAuthor::from_client(&candidate)?;
     let session = create_verified_recovery_unlock_session_bound(
         &candidate,
@@ -68,8 +79,8 @@ pub(crate) async fn complete_native(
         recovery_seed,
         custody.device_signing_key.to_bytes(),
         (
-            claims.grant_id,
-            base64url(claims.session_public_key.thumbprint_sha256()?)?,
+            grant_ref,
+            base64url(initial.session_public_key.thumbprint_sha256()?)?,
         ),
         crate::scenarios::_helpers::coauth_bootstrap::JOINT_TRUST_DOMAIN.parse()?,
     )
@@ -98,8 +109,8 @@ pub(crate) async fn complete_native(
         0,
     )?;
     let mut authorize = DeviceAuthorizePayload {
-        expected_control_revision: None,
-        expected_device_revision: None,
+        expected_control_commit_id: None,
+        expected_device_commit_id: None,
         device_id: custody.device_id.clone(),
         device_public_key_did: nonempty(format!(
             "did:key:{}",
@@ -163,73 +174,36 @@ pub(crate) async fn complete_native(
             serde_json::to_value(authorize)?,
         ),
     ];
-    let intent = PcrPolicyRecoveryIntent {
-        recovery_session_id: session.recovery_session_id.clone(),
-        replacement_device_id: custody.device_id.clone(),
-        previous_model_generation_ref: session.current_device_generation_ref,
-        new_model_generation_ref: next,
-        terminal_receipt_id: unique("ak:receipt:").parse()?,
-        reanchor_commit_intent: RecoveryCommitIntent {
-            realm_id: custody.pcr_realm_id.clone(),
-            predecessor_ref: session.realm_stream_head.commit_id.clone(),
-            unit_event_digests: [
-                Hash::new(
-                    events[0]
-                        .event_digest_with_digest_suite(arkret_canonical::DigestSuite::Sha256)?,
-                )?,
-                Hash::new(
-                    events[1]
-                        .event_digest_with_digest_suite(arkret_canonical::DigestSuite::Sha256)?,
-                )?,
-            ],
-        },
-        reanchor_unit: PreparedEventUnit::new(
-            arkret_canonical::DigestSuite::Sha256,
-            EventsSubmitBatchRequestBody {
-                events: events
-                    .into_iter()
-                    .map(EventAdmissionSubmission::new)
-                    .collect(),
-            },
-        )?,
-    };
-    let request = RecoveryTransactionCreateRequestBody::new(
-        unique("ak:transaction:").parse()?,
-        session.account_id.clone(),
-        session.expires_at,
-        intent,
-    )?;
-    let mut transaction = crate::scenarios::security_rotation_live::create(
-        &candidate,
-        &SecurityTransactionCreateRequestBody::Recovery(request),
-    )
-    .await?;
-    let SecurityTransactionPreparedPlan::Recovery(plan) = &transaction.prepared_plan else {
-        anyhow::bail!("wrong native recovery plan")
-    };
+    let proof = session
+        .proof_summary
+        .as_ref()
+        .context("verified recovery proof absent")?;
     let method = verification_method(format!("{}#{}", custody.did, custody.device_id))?;
     let mut receipt = RecoveryReceipt {
         schema: SchemaId::RECOVERY_RECEIPT_V1.to_owned(),
-        receipt_id: plan.binding.terminal_receipt_id.clone(),
-        transaction_id: transaction.transaction_id.clone(),
-        transaction_request_digest: transaction.request_digest.clone(),
-        prepared_plan_digest: transaction.prepared_plan_digest.clone(),
+        receipt_id: unique("ak:receipt:").parse()?,
+        transaction_id: unique("ak:transaction:").parse()?,
         account_id: session.account_id.clone(),
+        expires_at: session.expires_at,
         recovery_session_id: session.recovery_session_id.clone(),
-        policy_id: session.policy_id,
+        session_grant_ref: session.session_grant_ref.clone(),
+        session_grant_cnf_jkt: session.session_grant_cnf_jkt.clone(),
+        policy_id: session.policy_id.clone(),
         policy_version: session.policy_version,
-        trust_domain: session.trust_domain,
+        trust_domain: session.trust_domain.clone(),
         new_device_id: custody.device_id.clone(),
         identity_model: RecoveryIdentityModel::PcrPolicy,
         recovery_authority_kind: RecoveryAuthorityKind::PcrPolicy,
-        previous_model_generation_ref: plan.previous_model_generation_ref,
-        new_model_generation_ref: plan.new_model_generation_ref,
-        authorization_event_id: plan.binding.authorize_event_id.clone(),
-        reanchor_event_id: plan.binding.reanchor_event_id.clone(),
+        previous_model_generation_ref: session.current_device_generation_ref,
+        new_model_generation_ref: next,
         proof_summary: RecoveryProofSummary {
-            kind: RecoveryProofKind::RecoveryUnlock,
-            proof_digest: plan.proof_digest.clone(),
+            kind: proof.kind,
+            proof_digest: proof.proof_digest.clone(),
             quorum_participant_count: None,
+        },
+        recovery_unit: RecoveryUnit {
+            predecessor_ref: session.realm_stream_head.commit_id.clone(),
+            events: events.map(EventAdmissionSubmission::new),
         },
         unlocked_backups: Vec::new(),
         welcome_count: 0,
@@ -241,74 +215,111 @@ pub(crate) async fn complete_native(
         signature_proof: RecoveryReceiptSignatureProof {
             verification_method: method.clone(),
             signature_algorithm: "Ed25519".into(),
-            signature: base64url("AA")?,
+            signature: base64url("A".repeat(86))?,
         },
-        extra: Default::default(),
     };
+    receipt.validate_for_session(&session, receipt.completed_at)?;
     receipt.signature_proof.signature = sign(
         &custody.device_signing_key,
         &receipt.signature_transcript_bytes()?,
     )?;
-    let mut attestation = ClientStepAttestation {
-        step: SecurityTransactionStep::CommitRecoveryUnit,
-        output_ref: receipt.receipt_id.to_string(),
-        transaction_id: transaction.transaction_id.clone(),
-        transaction_request_digest: transaction.request_digest.clone(),
-        prepared_plan_digest: transaction.prepared_plan_digest.clone(),
-        artifact: ClientStepAttestationArtifact::Recovery(RecoveryTerminalCommit {
-            recovery_receipt: receipt.clone(),
-        }),
-        signature_proof: ClientStepAttestationSignatureProof {
-            verification_method: method,
-            signature_algorithm: "Ed25519".into(),
-            signature: base64url("AA")?,
-        },
-    };
-    attestation.signature_proof.signature =
-        sign(&custody.device_signing_key, &attestation.signing_bytes()?)?;
-    let continued = SecurityTransactionContinueRequestBody {
-        request_digest: transaction.request_digest.clone(),
-        prepared_plan_digest: transaction.prepared_plan_digest.clone(),
-        expected_accepted_step_count: 0,
-        client_attestation: attestation,
-    };
-    transaction = serde_json::from_value(
-        expect_json(
-            candidate
-                .post(&format!(
-                    "/_arkret/self/security-transactions/{}/continue",
-                    transaction.transaction_id
-                ))
-                .json(&continued),
-            reqwest::StatusCode::OK,
-        )
-        .await?,
-    )?;
-    let Some(SecurityTransactionTerminalOutcome::Completed {
-        completion_attestation: Some(completion),
-        ..
-    }) = &transaction.terminal_outcome
-    else {
-        anyhow::bail!("recovery did not complete: {transaction:?}")
-    };
-    let mut request = RecoveryCompletionGrantRequestBody {
-        transaction_id: transaction.transaction_id,
-        transaction_request_digest: transaction.request_digest,
-        terminal_receipt: serde_json::to_value(receipt)?,
-        completion_attestation: completion.clone(),
-        device_authorization_event_id: completion.device_authorization_event_ref.event_id.clone(),
-        new_model_generation_ref: completion.new_model_generation_ref,
-        initial_session: serde_json::to_value(initial)?,
-        canonical_request_digest: Hash::new(format!("sha256:{}", "0".repeat(64)))?,
-    };
-    request.canonical_request_digest = request.expected_canonical_request_digest()?;
-    request.validate_structural()?;
-    Ok(CompletedCandidate {
+    let create = RecoveryTransactionCreateRequestBody::new(receipt)?;
+    Ok(PreparedCandidate {
         candidate,
         gate,
-        request,
+        create,
+        initial,
         handoff,
     })
+}
+
+impl PreparedCandidate {
+    pub(crate) async fn submit_native(self) -> Result<CompletedCandidate> {
+        let body = SecurityTransactionCreateRequestBody::Recovery(self.create.clone());
+        let candidate = &self.candidate;
+        let create = &self.create;
+        let completion: RecoveryTransactionCompletion = serde_json::from_value(
+            expect_json(
+                candidate
+                    .post("/_arkret/self/security-transactions")
+                    .canonical_json(&body)?,
+                reqwest::StatusCode::OK,
+            )
+            .await?,
+        )?;
+        completion.validate_for_request(create)?;
+        let replay: RecoveryTransactionCompletion = serde_json::from_value(
+            expect_json(
+                candidate
+                    .post("/_arkret/self/security-transactions")
+                    .canonical_json(&body)?,
+                reqwest::StatusCode::OK,
+            )
+            .await?,
+        )?;
+        ensure!(
+            completion == replay,
+            "single-submit Recovery response-loss replay changed its native closure"
+        );
+        self.finish(completion)
+    }
+
+    pub(crate) fn finish(
+        self,
+        completion: RecoveryTransactionCompletion,
+    ) -> Result<CompletedCandidate> {
+        completion.validate_for_request(&self.create)?;
+        let Self {
+            candidate,
+            gate,
+            create,
+            initial,
+            handoff,
+        } = self;
+        let receipt = create.recovery_receipt;
+        let custody = candidate.principal.as_ref().context("candidate custody")?;
+        let method = verification_method(format!("{}#{}", custody.did, custody.device_id))?;
+        // The ordinary client sends only frozen R to AA. C is carried from the
+        // original Station to AA by the existing authenticated server channel.
+        let proof_at = arkret_canonical::normalize_timestamp_canonical(Utc::now());
+        let handoff_expires =
+            chrono::DateTime::parse_from_rfc3339(&handoff.expires_at)?.with_timezone(&Utc);
+        let mut possession = AcceptedDeviceIssuePossessionProof {
+            context: AcceptedDevicePossessionProofContext::V1,
+            purpose: AcceptedDeviceIssuePossessionPurpose::RecoveryCompletionGrantIssue,
+            request_id: unique("ak:request:").parse()?,
+            account_subject: handoff.account_subject.clone(),
+            account_handoff_grant_digest: Hash::new(arkret_canonical::sha256_digest(
+                handoff.account_handoff_grant.as_bytes(),
+            ))?,
+            account_id: receipt.account_id.clone(),
+            device_id: custody.device_id.clone(),
+            audience_id: initial.audience_id.clone(),
+            holder_jkt: initial.session_public_key.thumbprint_sha256()?,
+            session_intent_digest:
+                arkret_models_identity::RecoveryCompletionGrantRequestBody::session_intent_digest(
+                    &receipt, &initial,
+                )?,
+            issued_at: proof_at,
+            expires_at: (proof_at + chrono::Duration::seconds(300)).min(handoff_expires),
+            verification_method: method,
+            signature: base64url("A".repeat(86))?,
+        };
+        possession.signature = sign(
+            &custody.device_signing_key,
+            &possession.canonical_signing_bytes()?,
+        )?;
+        let request = arkret_models_identity::RecoveryCompletionGrantRequestBody::new(
+            receipt, initial, possession,
+        )?;
+        Ok(CompletedCandidate {
+            candidate,
+            gate,
+            request,
+            completion,
+            handoff,
+        })
+    }
 }
 
 pub(crate) struct RecoveryAuthority {
@@ -387,10 +398,22 @@ pub(super) async fn verify_recovery_generation_boundary(
     let stale = complete_native(fixture, &authority.method, authority.seed).await?;
     let current = complete_native(fixture, &authority.method, authority.seed).await?;
     ensure!(
-        stale.request.new_model_generation_ref.checked_add(1)
-            == Some(current.request.new_model_generation_ref)
-            && stale.request.device_authorization_event_id
-                != current.request.device_authorization_event_id,
+        stale
+            .request
+            .terminal_receipt
+            .new_model_generation_ref
+            .checked_add(1)
+            == Some(current.request.terminal_receipt.new_model_generation_ref)
+            && stale
+                .completion
+                .completion_attestation
+                .device_authorization_event_ref
+                .event_id
+                != current
+                    .completion
+                    .completion_attestation
+                    .device_authorization_event_ref
+                    .event_id,
         "two native recoveries did not accept distinct consecutive generations"
     );
     let refused = super::require_device_denial(
@@ -412,38 +435,36 @@ pub(super) async fn verify_recovery_generation_boundary(
         .gate
         .issue_recovery_completion_grant(&current.request)
         .await?;
-    let grant: arkret_models_collaboration::session_grants::SessionGrantResponseBody =
-        serde_json::from_value(accepted.issued_session)?;
+    let grant = accepted.issued_session;
+    grant.validate_binding(
+        &current.request.terminal_receipt.session_grant_ref.issuer_id,
+        &current.request.terminal_receipt.account_id,
+        &current.request.initial_session.audience_id,
+        &current.request.initial_session.session_public_key,
+        chrono::Utc::now(),
+    )?;
     ensure!(
-        grant.account_id == current.request.completion_attestation.account_id
-            && grant.device_id.as_ref()
-                == Some(&current.request.completion_attestation.replacement_device_id),
-        "recovery changed Account or Device"
+        grant.account_id == current.request.terminal_receipt.account_id
+            && grant.device_id.as_ref() == Some(&current.request.terminal_receipt.new_device_id)
+            && grant.issuer_id == current.request.terminal_receipt.session_grant_ref.issuer_id,
+        "completion changed the full Account, issuer or accepted replacement Device"
     );
-    let encoded = grant
-        .session_grant
-        .split('.')
-        .nth(1)
-        .context("completed grant claims")?;
-    let claims: arkret_models_identity::SignedSessionGrantClaims =
-        serde_json::from_slice(&arkret_canonical::base64url_decode(encoded)?)?;
-    ensure!(
-        claims.credential_class == arkret_models_identity::SessionGrantCredentialClass::Standard
-            && claims
-                .device_binding
-                .as_ref()
-                .is_some_and(|binding| binding.authorization_event_id
-                    == current.request.device_authorization_event_id
-                    && binding.model_generation_ref == current.request.new_model_generation_ref),
-        "completion grant did not bind the actual accepted authorization and generation"
-    );
+    garth::SessionGrantState::from_initial_registration_outcome(
+        &current.request.initial_session,
+        grant.clone(),
+        accepted.issued_at,
+    )?;
     let mut accepted_principal = current
         .candidate
         .principal
         .clone()
         .context("replacement custody")?;
-    accepted_principal.founding_authorize_event_id =
-        current.request.device_authorization_event_id.clone();
+    accepted_principal.founding_authorize_event_id = current
+        .completion
+        .completion_attestation
+        .device_authorization_event_ref
+        .event_id
+        .clone();
     let client = fixture.server.actor_client(
         current.candidate.principal.as_ref().unwrap().did.as_str(),
         current
@@ -456,7 +477,7 @@ pub(super) async fn verify_recovery_generation_boundary(
         match current.candidate.session() {
             crate::harness::ClientSession::Canonical { signing_key, .. } => {
                 crate::harness::ClientSession::Canonical {
-                    grant: grant.session_grant,
+                    grant: grant.session_grant.as_str().to_owned(),
                     signing_key: signing_key.clone(),
                 }
             }
@@ -468,7 +489,7 @@ pub(super) async fn verify_recovery_generation_boundary(
         .sdk()
         .current_principal(&arkret_models_identity::CurrentPrincipalRequestBody {
             request_id: unique("ak:request:").parse()?,
-            account_id: current.request.completion_attestation.account_id.clone(),
+            account_id: current.completion.completion_attestation.account_id.clone(),
         })
         .await?;
     ensure!(
@@ -477,7 +498,11 @@ pub(super) async fn verify_recovery_generation_boundary(
     );
     let original = crate::scenarios::mls_lifecycle_live::accepted_full_view(
         &client,
-        &current.request.device_authorization_event_id,
+        &current
+            .completion
+            .completion_attestation
+            .device_authorization_event_ref
+            .event_id,
     )
     .await?;
     ensure!(

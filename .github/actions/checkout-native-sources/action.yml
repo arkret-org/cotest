@@ -85,6 +85,7 @@ runs:
         set -euo pipefail
         destination="$(dirname -- "$GITHUB_WORKSPACE")/savfox-ai/savfox"
         test ! -e "$destination"
+        test ! -L "$destination"
         mkdir -p -- "$(dirname -- "$destination")"
         mv -- "$GITHUB_WORKSPACE/_native-savfox-checkout" "$destination"
         python - <<'PY'
@@ -99,12 +100,28 @@ runs:
         if set(refs) != required:
             raise SystemExit('incomplete native source set')
         workspace = Path(os.environ['GITHUB_WORKSPACE'])
+        server = (os.environ.get('GITHUB_SERVER_URL') or 'https://github.com').rstrip('/')
+        owner = os.environ.get('GITHUB_REPOSITORY_OWNER') or 'arkret-org'
         for name, expected in sorted(refs.items()):
             if not isinstance(expected, str) or not re.fullmatch('[0-9a-f]{40}', expected):
                 raise SystemExit('invalid native source commit')
             root = workspace.parent / 'savfox-ai/savfox' if name == 'savfox' else workspace / name
+            if root.is_symlink():
+                raise SystemExit(f'native source destination is a symlink: {name}')
+            checkout_root = Path(subprocess.check_output(
+                ['git', 'rev-parse', '--show-toplevel'], cwd=root, text=True).strip()).resolve()
+            if checkout_root != root.resolve():
+                raise SystemExit(f'native source is not its own Git repository: {name}')
+            repository_owner = 'savfox-ai' if name == 'savfox' else owner
+            expected_origin = f'{server}/{repository_owner}/{name}'
+            origin = subprocess.check_output(
+                ['git', 'remote', 'get-url', 'origin'], cwd=root, text=True,
+                stderr=subprocess.PIPE).strip()
+            if origin.removesuffix('/').removesuffix('.git') != expected_origin:
+                raise SystemExit(f'native source origin mismatch: {name}')
             actual = subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=root, text=True).strip()
-            dirty = subprocess.check_output(['git', 'status', '--porcelain'], cwd=root, text=True)
+            dirty = subprocess.check_output(
+                ['git', 'status', '--porcelain=v1', '--untracked-files=all'], cwd=root, text=True)
             if actual != expected or dirty:
                 raise SystemExit(f'native source mismatch: {name}')
             print(f'native source {name}={actual}')

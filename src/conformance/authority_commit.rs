@@ -699,7 +699,7 @@ fn verify_event_commit_submission_is_the_only_event_dto() -> Result<()> {
 
     for extra in [
         "basis",
-        "expected_revision",
+        "expected_commit_id",
         "commit_base",
         "preconditions",
         "seal",
@@ -1685,8 +1685,6 @@ fn recovery_attestation(
             "ak:transaction:019a8400-0000-7000-8000-000000000401".to_owned(),
         )
         .map_err(anyhow::Error::msg)?,
-        transaction_request_digest: Hash::new(format!("sha256:{}", "33".repeat(32)))?,
-        prepared_plan_digest: Hash::new(format!("sha256:{}", "44".repeat(32)))?,
         account_id: arkret_wire::AccountId::new(
             service_id(PRODUCER_DID)?,
             service_id(OLD_AUTHORITY_DID)?,

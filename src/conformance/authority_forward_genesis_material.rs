@@ -573,6 +573,8 @@ impl<'a> CaseRun<'a> {
             mls_group_state_material: material,
             producer_device_evidence: None,
             producer_agent_evidence: None,
+
+            successor_device_evidence: None,
         };
         let evidence = self
             .world
@@ -659,6 +661,8 @@ impl<'a> CaseRun<'a> {
             }),
             producer_device_evidence: None,
             producer_agent_evidence: None,
+
+            successor_device_evidence: None,
         };
         Ok(Some(request))
     }

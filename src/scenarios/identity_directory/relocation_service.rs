@@ -297,7 +297,7 @@ pub async fn service_migration_preserves_business_and_refreshes_peer_route() -> 
         renewed.account_id == predecessor.account_id
             && renewed.device_id == predecessor.device_id
             && renewed.audience_id == predecessor.audience_id
-            && renewed.grant_id != predecessor.grant_id
+            && renewed.grant_ref != predecessor.grant_ref
             && renewed.granted_scope == predecessor.granted_scope
             && renewed.dpop_jkt == predecessor.dpop_jkt
             && renewed.session_public_key == predecessor.session_public_key,

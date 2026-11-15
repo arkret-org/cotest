@@ -122,8 +122,56 @@ def account_identity_creation(evidence):
                 proof["native_history_base64url"] and proof["station_resolution"]
                 for proof in proofs), "HTTP success has no independently verified identity original")
     sessions = originals["issued_session_originals"]
-    require(len(sessions) == 1 and sessions[0]["grant_jwt"] ==
-            register["response_body"]["issued_session"]["session_grant"], "issuer session original changed")
+    require(len(sessions) == 1, "registration replay minted another issuer credential")
+    stored = sessions[0]
+    issued = register["response_body"]["issued_session"]
+    initial = register["request_body"]["identity_creation"]["initial_session"]
+    account = evidence["station_readback"]["account_id"]
+    issuer = account["station_id"]
+    canonical = lambda value: json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode()
+    secret = issued["session_grant"]
+    require(isinstance(secret, str) and re.fullmatch(r"[A-Za-z0-9_-]{43}", secret) is not None,
+            "registration returned a noncanonical opaque credential")
+    secret_bytes = base64.b64decode(secret + "=", altchars=b"-_", validate=True)
+    require(len(secret_bytes) == 32 and base64.urlsafe_b64encode(secret_bytes).decode().rstrip("=") == secret and
+            stored["session_grant"] == secret and
+            stored["credential_digest"] == "\\x" + hashlib.sha256(secret.encode("ascii")).hexdigest(),
+            "issuer session original or exact opaque digest changed")
+    encoded_metadata = stored["canonical_metadata"]
+    require(isinstance(encoded_metadata, str) and encoded_metadata.startswith("\\x"),
+            "registration omitted the issuer canonical metadata original")
+    original_bytes = bytes.fromhex(encoded_metadata[2:])
+    metadata = json.loads(original_bytes)
+    require(canonical(metadata) == original_bytes, "registration metadata original is not canonical")
+    require(re.fullmatch(r"ak:session_grant:[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}", metadata["id"]) is not None and
+            "ak:session_grant:" + stored["grant_id"] == metadata["id"] == issued["session_grant_id"] and
+            stored["issuer_id"] == metadata["issuer_id"] == issued["issuer_id"] == issuer and
+            metadata["account_id"] == issued["account_id"] == account and
+            account["principal_id"] == register["request_body"]["principal_id"] and
+            stored["audience_id"] == metadata["audience_id"] == issued["audience_id"] == initial["audience_id"] == issuer,
+            "registration receipt has no independent issuer/Account/audience/UUIDv7 binding")
+    holder = json.loads(initial["session_public_key"])
+    holder_jkt = base64.urlsafe_b64encode(hashlib.sha256(canonical(
+        {key: holder[key] for key in ("crv", "kty", "x")})).digest()).decode().rstrip("=")
+    require(holder["kty"] == "OKP" and holder["crv"] == "Ed25519" and
+            stored["session_public_key"] == metadata["session_public_key"] == issued["session_public_key"] == initial["session_public_key"] and
+            metadata["cnf_jkt"] == holder_jkt and
+            stored["device_id"] == metadata["device_id"] == issued["device_id"] == initial["device_id"] and
+            metadata["holder_binding"] == {"kind": "human_device", "device_binding": initial["device_id"]} and
+            metadata["device_binding"]["device_id"] == initial["device_id"] and
+            metadata["device_binding"]["authorization_event_id"] == evidence["station_readback"]["founding_device_authorize_event"]["event_id"] and
+            metadata["device_binding"]["model_generation_ref"] == 1 and
+            metadata["credential_class"] == stored["credential_class"] == "standard" and
+            metadata.get("proof_kind") == "account_handoff" and metadata.get("scope_details") is None,
+            "registration changed the original holder or accepted founding Device")
+    require(metadata["scopes"] == issued["granted_scope"] == stored["scope_list"] ==
+            ["ak.self.account.read.describe.v1", "ak.self.committed_event.read.scan.v1"] and
+            metadata["expires_at"] == issued["expires_at"] and
+            datetime.fromisoformat(metadata["not_before"].replace("Z", "+00:00")) <
+            datetime.fromisoformat(metadata["expires_at"].replace("Z", "+00:00")) and
+            metadata["session_id"] == stored["session_id"] and stored["lifecycle_state"] == "active" and
+            stored["successor_grant_id"] is None and issued.get("previous_session_grant_id") is None,
+            "registration changed the initial scope, validity or independent issuer chain")
     require(bool(evidence["station_readback"]), "Station audit readback absent")
     require({row["operation_id"] for row in evidence["exact_replays"]} ==
             {handoff["operation_id"], register["operation_id"]}, "exact terminal replays absent")
@@ -136,34 +184,101 @@ def account_identity_creation(evidence):
 def account_device_sessions(evidence):
     account_logout(evidence["logout"], evidence)
     originals = evidence["authority_originals"]
+    account = evidence["station_readback"]["account_id"]
+    issuer = account["station_id"]
+    instant = lambda value: datetime.fromisoformat(value.replace("Z", "+00:00"))
+    canonical = lambda value: json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode()
+    digest = lambda value: "sha256:" + hashlib.sha256(value).hexdigest()
     require(originals["total_grants"] == 3 and originals["issued"]["grant"]["lifecycle_state"] == "superseded" and
             originals["refreshed"]["grant"]["lifecycle_state"] == "active", "native grant lineage or replay count changed")
+    requests = {}
+    metadata_by_phase = {}
     for phase, operation in (("issued", "ak.gate.account.command.issue_session_grant.v1"),
                              ("refreshed", "ak.gate.account.command.refresh_session_grant.v1")):
         original = originals[phase]
         responses = [row for row in evidence["observations"]["exchanges"] if row["operation_id"] == operation]
         require(len(responses) == 2 and len({row["request_json_base64url"] for row in responses}) == 1,
                 "native session operation did not replay the frozen request")
+        request = decoded_json(responses[0]["request_json_base64url"])
+        require(all(row["request_body"] == request for row in responses), "session request observation changed its canonical original")
+        requests[phase] = request
         body = decoded_json(original["canonical_outcome_base64url"])
+        secret = body["session_grant"]
+        grant = original["grant"]
+        ledger = original["operation"]
         require(body == original["canonical_outcome"] and all(row["response_body"] == body for row in responses) and
-                original["operation"]["state"] == "committed" and original["grant"]["grant_jwt"] == body["session_grant"],
+                ledger["state"] == "committed" and ledger["operation_kind"] == ("issue" if phase == "issued" else "refresh") and
+                grant["session_grant"] == secret,
                 "native response lost its immutable issuer original")
         verified = evidence[phase + "_verification"]
-        require(verified["signing_key_id"] == original["grant"]["signing_key_id"] == original["operation"]["signing_key_id"],
-                "verified JWT did not use the issuer ledger's exact signing key")
-        token = body["session_grant"].split(".")
-        require(len(token) == 3 and decoded_json(token[1]) == verified["claims"], "verified JWT claims changed")
-        claims = verified["claims"]
-        preimage = {key: value for key, value in claims.items() if key not in {"kind", "jti"}}
-        preimage["schema"] = "ak.session_grant.issuance.v1"
-        require(decoded_json(original["issuance_preimage_base64url"]) == original["issuance_preimage"] == preimage,
-                "session grant was not derived from the stored issuance preimage")
-        require(claims["account_id"] == evidence["station_readback"]["account_id"] and
-                claims["device_binding"]["authorization_event_id"] == evidence["station_readback"]["founding_device_authorize_event"]["event_id"] and
-                verified["station_viewer"]["principal_id"] == claims["account_id"]["principal_id"] and bool(verified["issuer_jwks"]),
+        metadata = verified["metadata"]
+        metadata_by_phase[phase] = metadata
+        require(decoded_json(original["canonical_metadata_base64url"]) == original["metadata"] == metadata and
+                base64.urlsafe_b64encode(canonical(metadata)).decode().rstrip("=") == original["canonical_metadata_base64url"],
+                "issuer metadata was changed or is not the exact canonical original")
+        require(re.fullmatch(r"[A-Za-z0-9_-]{43}", secret) is not None and
+                base64.urlsafe_b64encode(base64.b64decode(secret + "=", altchars=b"-_", validate=True)).decode().rstrip("=") == secret and
+                re.fullmatch(r"ak:session_grant:[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}", metadata["id"]) is not None,
+                "issued U or independently allocated record UUIDv7 is not canonical")
+        require(verified["credential_digest"] == digest(secret.encode("ascii")) and
+                grant["credential_digest"] == "\\x" + hashlib.sha256(secret.encode("ascii")).hexdigest() and
+                grant["issuer_id"] == ledger["issuer_id"] == metadata["issuer_id"] == body["issuer_id"] == issuer and
+                "ak:session_grant:" + grant["grant_id"] == metadata["id"] == body["session_grant_id"] and
+                ledger["result_grant_id"] == ledger["reserved_grant_id"] == grant["grant_id"] and
+                ledger["reserved_session_grant"] == secret and grant["issuance_operation_id"] == ledger["id"],
+                "opaque credential is not bound to the exact issuer operation and independent record")
+        public_jwk = json.loads(metadata["session_public_key"])
+        require(public_jwk["kty"] == "OKP" and public_jwk["crv"] == "Ed25519" and
+                metadata["cnf_jkt"] == verified["holder_jkt"] == base64.urlsafe_b64encode(
+                    hashlib.sha256(canonical({key: public_jwk[key] for key in ("crv", "kty", "x")})).digest()).decode().rstrip("="),
+                "metadata public key and actual holder thumbprint differ")
+        device = metadata["device_binding"]
+        proof = request["accepted_device_possession_proof"]
+        require(metadata["credential_class"] == grant["credential_class"] == "standard" and
+                metadata["holder_binding"] == {"kind": "human_device", "device_binding": metadata["device_id"]} and
+                metadata.get("scope_details") is None and metadata.get("proof_kind") == "account_handoff" and
+                metadata["account_id"] == body["account_id"] == proof["account_id"] == account and
+                metadata["audience_id"] == body["audience_id"] == grant["audience_id"] == proof["audience_id"] == issuer and
+                metadata["device_id"] == body["device_id"] == grant["device_id"] == device["device_id"] == request["device_id"] == proof["device_id"] and
+                device["model_generation_ref"] > 0 and
+                device["authorization_event_id"] == evidence["station_readback"]["founding_device_authorize_event"]["event_id"] and
+                verified["station_viewer"]["principal_id"] == account["principal_id"] and
+                metadata["session_public_key"] == body["session_public_key"] == grant["session_public_key"] and
+                metadata["session_id"] == grant["session_id"] == ledger["session_id"] and
+                metadata["scopes"] == body["granted_scope"] == grant["scope_list"] ==
+                ["ak.self.account.read.describe.v1", "ak.self.committed_event.read.scan.v1"] and
+                metadata["cnf_jkt"] == proof["holder_jkt"],
                 "native session has no exact accepted Device and Station consumer closure")
-    require(originals["refreshed"]["canonical_outcome"]["previous_session_grant_id"] ==
-            originals["issued"]["canonical_outcome"]["session_grant_id"], "refresh changed its exact predecessor")
+        require(instant(metadata["not_before"]) <= instant(verified["verified_at"]) < instant(metadata["expires_at"]) and
+                instant(metadata["expires_at"]) == instant(body["expires_at"]) == instant(grant["expires_at"]) == instant(ledger["grant_expires_at"]) and
+                instant(metadata["not_before"]) == instant(ledger["grant_not_before"]) and
+                0 < (instant(proof["expires_at"]) - instant(proof["issued_at"])).total_seconds() <= 300,
+                "native session expiry or accepted-device proof window changed")
+        intent = canonical({"request": request, "holder_jkt": verified["holder_jkt"]})
+        require(ledger["canonical_intent"] == "\\x" + intent.hex() and
+                ledger["canonical_intent_digest"] == "\\x" + hashlib.sha256(intent).hexdigest() and
+                ledger["outcome_digest"] == "\\x" + canonical_digest(body),
+                "issuer operation changed its exact request/holder binding or canonical outcome")
+    issued = originals["issued"]["canonical_outcome"]
+    refreshed = originals["refreshed"]["canonical_outcome"]
+    old = metadata_by_phase["issued"]
+    new = metadata_by_phase["refreshed"]
+    refresh = requests["refreshed"]
+    proof = refresh["accepted_device_possession_proof"]
+    ref = {"issuer_id": old["issuer_id"], "id": old["id"]}
+    require(issued.get("previous_session_grant_id") is None and refreshed["previous_session_grant_id"] == old["id"] and
+            old["id"] != new["id"] and issued["session_grant"] != refreshed["session_grant"] and
+            originals["issued"]["grant"]["successor_grant_id"] == originals["refreshed"]["grant"]["grant_id"] and
+            originals["refreshed"]["operation"]["target_session_grant_id"] == originals["issued"]["grant"]["grant_id"] and
+            originals["refreshed"]["operation"]["operation_selector"] == {"predecessor_grant_id": old["id"]} and
+            all(old.get(field) == new.get(field) for field in ("issuer_id", "account_id", "audience_id", "device_id", "session_public_key", "cnf_jkt", "session_id", "scopes", "scope_details", "credential_class", "holder_binding", "device_binding", "proof_kind")),
+            "refresh changed its exact predecessor, minted duplicate authority or widened immutable bindings")
+    require(requests["issued"]["accepted_device_possession_proof"]["purpose"] == "session_grant_issue" and
+            proof["purpose"] == "session_grant_refresh" and proof["predecessor_session_grant_ref"] == ref and
+            refresh["session_grant"] == issued["session_grant"] and
+            proof["session_intent_digest"] == "sha256:" + canonical_digest({"operation": "refresh_session_grant", "session_grant_digest": digest(issued["session_grant"].encode("ascii")),
+                "predecessor_session_grant_ref": ref, "principal_id": account["principal_id"], "device_id": new["device_id"], "audience_id": new["audience_id"], "holder_jkt": new["cnf_jkt"]}),
+            "refresh PoP omitted its original issuer reference, exact opaque predecessor or signed intent")
     require(bool(evidence["observations"]["accepted_identity_material"]), "native Device prerequisite absent")
 
 
@@ -195,40 +310,235 @@ def account_device_pairing(evidence):
 def account_policy_recovery(evidence):
     originals = evidence["authority_originals"]
     exchanges = evidence["observations"]["exchanges"]
-    by_id = {row["operation_id"]: row for row in exchanges}
-    create = by_id["ak.self.security_transaction.command.create.v1"]
-    continued = by_id["ak.self.security_transaction.command.continue.v1"]
+    creates = [row for row in exchanges if row["operation_id"] == "ak.self.security_transaction.command.create.v1"]
+    require(len(creates) >= 2 and all(row["request_body"] == creates[0]["request_body"] and
+            row["response_body"] == creates[0]["response_body"] for row in creates),
+            "Recovery response loss did not replay one complete frozen create")
+    require(not any(row["operation_id"] == "ak.self.security_transaction.command.continue.v1" for row in exchanges),
+            "Recovery incorrectly used Rotation continue")
     transaction = evidence["transaction"]
-    require(decoded_json(originals["transaction_request_bytes"]) == originals["transaction_request"] == create["request_body"],
-            "recovery transaction lost its exact creation request")
-    require(originals["transaction"]["prepared_plan"] == transaction["prepared_plan"] == create["response_body"]["prepared_plan"] and
-            originals["transaction"]["terminal_outcome"] == transaction["terminal_outcome"] == continued["response_body"]["terminal_outcome"],
-            "native recovery transaction differs from its durable plan or terminal outcome")
+    receipt = transaction["recovery_receipt"]
+    completion = transaction["completion_attestation"]
+    require(decoded_json(originals["transaction_request_bytes"]) == originals["transaction_request"] == creates[0]["request_body"] ==
+            {"kind": "recovery", "recovery_receipt": receipt}, "Recovery lost its sole complete signed R")
+    require(originals["transaction"]["kind"] == "recovery" and originals["transaction"]["recovery_completion"] == transaction == creates[0]["response_body"] and
+            all(originals["transaction"].get(field) is None for field in
+                ("prepared_plan", "prepared_plan_digest", "request_digest", "accepted_steps", "terminal_outcome", "revoke_proposal", "revoke_command_outcome")) and
+            originals["steps"] == [], "Recovery retained a prepared/continue branch or changed its immutable closure")
     request = evidence["completion_request"]
-    completion = request["completion_attestation"]
+    require(set(request) == {"terminal_receipt", "initial_session", "accepted_device_possession_proof", "canonical_request_digest"} and
+            request["terminal_receipt"] == receipt and
+            completion["terminal_receipt_digest"] == "sha256:" + canonical_digest(receipt) and
+            request["canonical_request_digest"] == "sha256:" + canonical_digest({key: value for key, value in request.items() if key != "canonical_request_digest"}),
+            "completion request has another R, redundant witness or incorrect whole-body digest")
     require(decoded_json(originals["issuance_request_bytes"]) == originals["issuance_request"] == request and
             decoded_json(originals["issuance_outcome_bytes"]) == originals["issuance_outcome"] == evidence["issued"],
-            "recovery issuance request or response differs from the issuer original")
+            "Recovery issuance changed the exact issuer request or outcome bytes")
     sessions = originals["sessions"]
-    require(len(sessions) == 1 and sessions[0]["state"] == "completed" and sessions[0]["proof_payload"] is not None,
-            "recovery lacks a durably accepted proof and completed session")
-    require(bool(originals["steps"]) and originals["grant"]["grant_jwt"] == evidence["issued"]["issued_session"]["session_grant"],
-            "recovery lacks accepted transaction steps or the issued credential original")
-    require(decoded_json(originals["issuance_preimage_bytes"]) == originals["issuance_preimage"],
-            "recovery issuance preimage was replaced")
-    for member, ref_member in (("reanchor", "reanchor_event_ref"), ("authorize", "device_authorization_event_ref")):
+    require(len(sessions) == 1 and sessions[0]["state"] == "completed" and sessions[0]["proof_payload"] is not None and
+            sessions[0]["session_grant_issuer_id"] == receipt["session_grant_ref"]["issuer_id"] and
+            sessions[0]["session_grant_id"] == receipt["session_grant_ref"]["id"],
+            "Recovery lost its durably verified original issuer-scoped session")
+    account = receipt["account_id"]
+    issuer = receipt["session_grant_ref"]["issuer_id"]
+    require(transaction["transaction_id"] == completion["transaction_id"] == receipt["transaction_id"] == evidence["issued"]["transaction_id"] and
+            transaction["account_id"] == completion["account_id"] == account and
+            completion["recovery_session_id"] == receipt["recovery_session_id"] and
+            completion["terminal_receipt_id"] == receipt["receipt_id"] and
+            completion["replacement_device_id"] == receipt["new_device_id"] and
+            completion["new_model_generation_ref"] == receipt["new_model_generation_ref"] == receipt["previous_model_generation_ref"] + 1,
+            "Recovery closure changed its Account/session/receipt/candidate/generation")
+    pair = receipt["recovery_unit"]["events"]
+    require(len(pair) == 2 and all(set(slot) == {"event"} and bool(slot["event"].get("producer_proof")) for slot in pair) and
+            [slot["event"]["kind"] for slot in pair] == ["ak.device.reanchor", "ak.device.authorize"] and
+            bool(receipt["signature_proof"]["signature"]), "Recovery stripped full EAS or admitted an unregistered generic approval carrier")
+    for index, (member, ref_member) in enumerate((("reanchor", "reanchor_event_ref"), ("authorize", "device_authorization_event_ref"))):
         view, reference = evidence[member], completion[ref_member]
-        require(view["event"]["event_id"] == reference["event_id"] and
-                view["commit"]["commit_id"] == reference["commit_id"] and
-                view["commit"]["realm_id"] == evidence["policy"]["commit"]["realm_id"],
-                "recovery completion does not close over the accepted PCR originals")
-    require(bool(evidence["observations"]["accepted_identity_material"]), "recovery has no admitted identity prerequisite")
+        commit = view["commit"]
+        require(view["event"] == pair[index]["event"] and view["event"]["event_id"] == reference["event_id"] == commit["event_ref"] and
+                commit["commit_id"] == reference["commit_id"] and commit["stream_ref"] == reference["stream_ref"] and
+                commit["stream_position"] == reference["stream_position"] and commit["realm_id"] == evidence["policy"]["commit"]["realm_id"],
+                "Recovery C does not bind the two actual accepted PCR originals")
+    require(evidence["reanchor"]["commit"]["previous_commit_ref"] == receipt["recovery_unit"]["predecessor_ref"] and
+            evidence["authorize"]["commit"]["previous_commit_ref"] == evidence["reanchor"]["commit"]["commit_id"] and
+            completion["reanchor_event_ref"]["stream_ref"] == completion["device_authorization_event_ref"]["stream_ref"] and
+            completion["reanchor_event_ref"]["stream_position"] + 1 == completion["device_authorization_event_ref"]["stream_position"],
+            "Recovery pair did not atomically extend the independent PCR predecessor")
+    issued = evidence["issued"]["issued_session"]
+    metadata = evidence["metadata"]
+    secret = issued["session_grant"]
+    require(decoded_json(originals["metadata_bytes"]) == originals["metadata"] == metadata and
+            originals["grant"]["session_grant"] == secret and
+            originals["grant"]["issuer_id"] == metadata["issuer_id"] == issued["issuer_id"] == issuer and
+            "ak:session_grant:" + originals["grant"]["grant_id"] == metadata["id"] == issued["session_grant_id"] and
+            originals["grant"]["credential_digest"] == "\\x" + hashlib.sha256(secret.encode("ascii")).hexdigest(),
+            "completion credential is not the issuer's exact opaque record")
+    require(re.fullmatch(r"[A-Za-z0-9_-]{43}", secret) is not None and
+            base64.urlsafe_b64encode(base64.b64decode(secret + "=", altchars=b"-_", validate=True)).decode().rstrip("=") == secret and
+            re.fullmatch(r"ak:session_grant:[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}", metadata["id"]) is not None,
+            "completion U or independent UUIDv7 identity is not canonical")
+    proof = request["accepted_device_possession_proof"]
+    initial = request["initial_session"]
+    require(metadata["credential_class"] == "standard" and metadata["holder_binding"]["kind"] == "human_device" and
+            metadata["account_id"] == issued["account_id"] == account and
+            metadata["device_id"] == issued["device_id"] == initial["device_id"] == receipt["new_device_id"] and
+            metadata["cnf_jkt"] == proof["holder_jkt"] and metadata["session_public_key"] == issued["session_public_key"] == initial["session_public_key"] and
+            metadata["scopes"] == issued["granted_scope"] and metadata["expires_at"] == issued["expires_at"] and
+            metadata["device_binding"]["authorization_event_id"] == completion["device_authorization_event_ref"]["event_id"] and
+            metadata["device_binding"]["model_generation_ref"] == completion["new_model_generation_ref"] and
+            proof["purpose"] == "recovery_completion_grant_issue" and proof["account_id"] == account and
+            proof["session_intent_digest"] == "sha256:" + canonical_digest({"receipt_digest": completion["terminal_receipt_digest"], "initial_session": initial}),
+            "completion metadata or fresh accepted-device PoP changed its actual native authority")
+    ledger = originals["issuance"]
+    require(ledger["issuer_id"] == issuer and ledger["principal_id"] == account["principal_id"] and
+            ledger["account_station_id"] == account["station_id"] and ledger["transaction_id"] == receipt["transaction_id"] and
+            ledger["terminal_receipt_digest"] == completion["terminal_receipt_digest"] and
+            ledger["canonical_request_digest"] == request["canonical_request_digest"] and
+            ledger["reanchor_ref"] == completion["reanchor_event_ref"] and ledger["device_authorization_ref"] == completion["device_authorization_event_ref"],
+            "completion issuer business key is not full issuer/Account/transaction with one original closure")
+    require(bool(evidence["observations"]["accepted_identity_material"]), "Recovery has no admitted identity prerequisite")
 
 
 def matches_registered_path(template, path):
     parts = re.split(r"(\{[a-zA-Z_][a-zA-Z0-9_]*\})", template)
     pattern = "".join(r"[^/]+" if part.startswith("{") and part.endswith("}") else re.escape(part) for part in parts)
     return re.fullmatch(pattern, path) is not None
+
+
+def backup_challenge_combinations(evidence, exchanges):
+    combination = evidence["challenge_once"]
+    require(bool(combination["database"]["database"]) and combination["database"]["server_port"] > 0 and
+            urlsplit(combination["origin"]).scheme == "https" and
+            combination["authority"] == evidence["unlock_challenge"]["service_id"],
+            "backup combination requires an actual owned authority database")
+    expected_holder = combination["unlock"]["expected_holder"]
+    require(expected_holder["session_grant_ref"] == combination["accepted_session_grant_ref"] and
+            combination["authenticated_actor"] == evidence["envelope"]["actor_id"],
+            "backup holder/Account differs from the actual accepted host session")
+    for lane, method, suffix, operation in [
+        ("unlock", "POST", "/unlock", "ak.self.keys.backups.command.unlock.v1"),
+        ("delete", "DELETE", "", "ak.self.keys.backups.resource.delete.v1"),
+    ]:
+        case = combination[lane]
+        challenge, request = case["challenge"], case["request"]
+        proof = request["proof"]
+        require(challenge["service_id"] == combination["authority"] and
+                challenge["account_id"] == evidence["unlock_challenge"]["account_id"] and
+                urlsplit(challenge["audience"]).netloc == urlsplit(combination["origin"]).netloc,
+                "backup challenge changed authority/public-origin audience")
+        issued = [row for row in exchanges if row["operation_id"] ==
+                  f"ak.self.keys.backups.command.issue_{lane}_challenge.v1" and row["response_status"] == 200 and
+                  row["request_body"]["request_id"] == challenge["request_id"] and row["response_body"] == challenge]
+        require(len(issued) == 1 and "nonce" not in challenge,
+                "backup combination has no exact actual challenge issuance original")
+        body_digest = "sha256:" + canonical_digest(request)
+        concurrent = case["concurrency"]
+        requests = concurrent["requests"] + case["replay_requests"]
+        require(len(concurrent["requests"]) == len(case["replay_requests"]) == 2 and
+                len({row["dpop_sha256"] for row in requests}) == 4 and
+                all(row["body_sha256"] == body_digest and row["body_bytes"] > 0 and
+                    row["method"] == method and
+                    urlsplit(row["url"]).netloc == urlsplit(combination["origin"]).netloc and
+                    urlsplit(row["url"]).path == "/_arkret/self/keys/backups/" + challenge["backup_id"] + suffix
+                    for row in requests),
+                "backup retry changed exact body/authority or reused an outer DPoP")
+        for row in requests:
+            jwk = row["dpop_public_jwk"]
+            require(jwk["kty"] == "OKP" and jwk["crv"] == "Ed25519" and "d" not in jwk,
+                    "backup request did not retain its actual public Ed25519 DPoP key")
+            public = base64.b64decode(jwk["x"] + "=", altchars=b"-_", validate=True)
+            require(len(public) == 32 and base64.urlsafe_b64encode(public).decode().rstrip("=") == jwk["x"],
+                    "backup DPoP public coordinate is not canonical Ed25519")
+            # RFC 7638, independently recomputed from the actual signed request
+            # header's public JWK, not a returned ledger's self-description.
+            thumbprint_members = {"crv": jwk["crv"], "kty": jwk["kty"], "x": jwk["x"]}
+            thumbprint = base64.urlsafe_b64encode(bytes.fromhex(canonical_digest(thumbprint_members))).decode().rstrip("=")
+            require(row["dpop_jkt"] == expected_holder["cnf_jkt"] == thumbprint,
+                    "backup request/replay changed the actual accepted DPoP holder")
+        require(concurrent["statuses"] == [200, 200] and
+                len(concurrent["backend_forwarded_before"]) == len(concurrent["backend_forwarded_after"]) == 2 and
+                all(after == before + 1 for before, after in zip(concurrent["backend_forwarded_before"], concurrent["backend_forwarded_after"])),
+                "backup race did not execute once on each actual service instance")
+        require(len(case["replay_backend_before"]) == len(case["replay_backend_after"]) == 2 and
+                all(after == before + 1 for before, after in zip(case["replay_backend_before"], case["replay_backend_after"])),
+                "backup replay did not reach both actually reopened service instances")
+        first, both = concurrent["first_wait"], concurrent["both_wait"]
+        first_pids = {row["pid"] for row in first["waiters"]}
+        both_pids = {row["pid"] for row in both["waiters"]}
+        require(first["barrier_pid"] == both["barrier_pid"] and len(first_pids) >= 1 and
+                len(both_pids) >= 2 and first_pids <= both_pids and
+                all(row["wait_event_type"] == "Lock" and bool(row["blocking_pids"]) for row in both["waiters"]),
+                "backup race lacks two real PostgreSQL connections at the held challenge cut")
+        # Retain the actual blocking graph, not just a count or timing claim.
+        reachable = {both["barrier_pid"]}
+        while True:
+            expanded = reachable | {row["pid"] for row in both["waiters"] if set(row["blocking_pids"]) & reachable}
+            if expanded == reachable:
+                break
+            reachable = expanded
+        require(both_pids <= reachable, "backup waiter graph is unrelated to its real SQL barrier")
+        processes = case["processes"]
+        before, after = processes["before"], processes["after"]
+        digests = processes["configuration_before"] + processes["configuration_after"]
+        require(len(before) == len(after) == 2 and before[0]["pid"] != before[1]["pid"] and
+                after[0]["pid"] != after[1]["pid"] and len(digests) == 4 and len(set(digests)) == 1 and
+                re.fullmatch(r"sha256:[0-9a-f]{64}", digests[0]) is not None,
+                "backup reopen lacks shared immutable authority configuration/two processes")
+        for original, reopened in zip(before, after):
+            require(original["pid"] > 0 and reopened["pid"] > 0 and
+                    bool(original["os_process"]) and bool(reopened["os_process"]) and
+                    (original["pid"] != reopened["pid"] or original["os_process"] != reopened["os_process"]) and
+                    original["executable"] == reopened["executable"] and original["sha256"] == reopened["sha256"] and
+                    original["origin"] == reopened["origin"] == combination["origin"],
+                    "backup restart did not replace its exact owned native process")
+        require(len(processes["response_loss"]) == 2 and
+                all(row["upstream"] == f"real TLS Station {method} accepted" and row["network_error"] and
+                    "zero response bytes" in row["downstream"] for row in processes["response_loss"]),
+                "backup restart lacks real zero-response caller observations")
+        require(case["accepted"] == case["replayed"], "backup reopen repeated a consumption/debit/terminal outcome")
+        matching = [row for row in exchanges if row["operation_id"] == operation and row["request_body"] == request and row["response_status"] == 200]
+        require(len(matching) == 4, "backup combination lacks the two actual concurrent and two reopened standard HTTP exchanges")
+        if lane == "unlock":
+            outcome = case["outcome"]
+            require(outcome == evidence["envelope"] == case["accepted"]["backup"] and
+                    case["outcome_digest"] == "sha256:" + canonical_digest(outcome) and
+                    all(row["response_body"] == outcome for row in matching),
+                    "backup restart changed the exact encrypted unlock original")
+            entries = case["accepted"]["entries"]
+            old = case["before"]["entries"]
+            charge = len(json.dumps(outcome, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode())
+            require(len(old) == len(entries) == 1 and old[0]["consumed_at"] is None and old[0]["request_digest"] is None and
+                    case["before"]["authority"]["challenge"] == case["accepted"]["authority"]["challenge"] == challenge and
+                    entries[0]["consumed_at"] is not None and entries[0]["request_digest"] == body_digest and
+                    case["charge"] == entries[0]["charge"] == case["before"]["authority"]["remaining_bytes"] == charge and
+                    case["accepted"]["authority"]["remaining_bytes"] == 0 and
+                    proof["authority"] == {"challenge_id": challenge["challenge_id"]},
+                    "two-instance unlock did not consume/debit exactly once")
+            holder = json.loads(entries[0]["holder"])
+            require(holder == expected_holder and set(holder["session_grant_ref"]) == {"issuer_id", "id"} and
+                    holder["session_grant_ref"]["issuer_id"] == combination["authority"] and
+                    re.fullmatch(r"ak:session_grant:[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}", holder["session_grant_ref"]["id"]) is not None and
+                    bool(holder["cnf_jkt"]), "unlock ledger lost its exact full issuer/holder binding")
+            for field, value in challenge.items():
+                if field not in {"request_id", "operation"}:
+                    require(proof.get(field) == value, "combined unlock changed exact challenge member " + field)
+        else:
+            receipts = case["accepted"]["receipts"]
+            expected_receipt = {"authenticated_actor": combination["authenticated_actor"],
+                                "request_hash": body_digest, "operation_id": "ak.self.keys.backups.resource.delete",
+                                "idempotency_key": "ak.self.keys.backups.resource.delete.v1:" + challenge["backup_id"] + ":" + request["request_id"]}
+            require(case["before"]["backups"] == [case["envelope"]] and case["before"]["receipts"] == [] and
+                    case["before"]["challenge"]["consumed_at"] is None and case["accepted"]["backups"] == [] and
+                    case["before"]["challenge"]["challenge"] == case["accepted"]["challenge"]["challenge"] == challenge and
+                    case["accepted"]["challenge"]["consumed_at"] is not None and len(receipts) == 1 and
+                    receipts[0]["response_status"] == 200 and receipts[0]["response_body"] is None and
+                    case["expected_receipt"] == expected_receipt and case["envelope"]["actor_id"] == combination["authenticated_actor"] and
+                    all(receipts[0][key] == value for key, value in expected_receipt.items()) and
+                    case["outcome"] == {"status": 200, "body_bytes": 0} and
+                    all(row["response_body"] is None for row in matching) and
+                    proof["kind"] == "recovery_unlock" and
+                    proof["recovery_session_id"] == evidence["recovery_session"]["recovery_session_id"],
+                    "two-instance delete lost its exact consumed challenge/empty200 receipt/recovery source")
 
 
 def account_private_storage(evidence):
@@ -286,11 +596,34 @@ def account_private_storage(evidence):
     require(any(row["request_body"]==evidence["delete_request"] and row["response_body"] is None and row["response_status"]==evidence["deleted"] for row in deletions) and
             any(row["request_body"]==evidence["trusted_request"] and row["response_body"] is None and row["response_status"]==evidence["trusted_deleted"] for row in deletions),
             "delete authority branch evidence differs from its actual requests")
-    require(by_id["ak.self.keys.backups.command.unlock.v1"]["response_body"] == envelope and
+    original_unlocks = [row for row in exchanges if row["operation_id"] == "ak.self.keys.backups.command.unlock.v1" and
+                        row["request_body"]["proof"]["authority"] == {"challenge_id": evidence["unlock_challenge"]["challenge_id"]} and
+                        row["response_status"] == 200]
+    require(bool(original_unlocks) and all(row["response_body"] == envelope for row in original_unlocks) and
             by_id["ak.self.account.command.revoke_cursor.v1"]["request_body"] == evidence["revoke_request"] and
             by_id["ak.self.account.command.revoke_cursor.v1"]["response_body"] == evidence["revoked"],
             "private storage evidence changed the actual requests or responses")
+    challenge = evidence["unlock_challenge"]
+    proof = original_unlocks[0]["request_body"]["proof"]
+    require("nonce" not in challenge and "nonce" not in proof and set(proof["authority"]) == {"challenge_id"} and
+            proof["authority"]["challenge_id"] == challenge["challenge_id"], "ordinary backup unlock retained an independent nonce or changed its sole challenge")
+    for field, value in challenge.items():
+        if field not in {"request_id", "operation"}:
+            require(proof.get(field) == value, "ordinary backup proof changed exact issued challenge member " + field)
+    for value in (challenge["challenge_id"], challenge["challenge"]):
+        require(re.fullmatch(r"[A-Za-z0-9_-]{43}", value) is not None and
+                base64.urlsafe_b64encode(base64.b64decode(value + "=", altchars=b"-_", validate=True)).decode().rstrip("=") == value,
+                "backup challenge is not canonical 32-byte base64url")
+    instant = lambda value: datetime.fromisoformat(value.replace("Z", "+00:00"))
+    require(0 < (instant(challenge["expires_at"]) - instant(challenge["issued_at"])).total_seconds() <= 300,
+            "ordinary backup challenge exceeded its exact 300-second lifetime")
+    require("nonce" not in evidence["delete_challenge"], "backup delete retained an independent nonce")
+    grant_ref = evidence["recovery_session"]["session_grant_ref"]
+    require(set(grant_ref) == {"issuer_id", "id"} and bool(grant_ref["issuer_id"]) and
+            re.fullmatch(r"ak:session_grant:[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}", grant_ref["id"]) is not None,
+            "backup Recovery session lost its independent full issuer reference")
     require(bool(evidence["observations"]["accepted_identity_material"]), "private storage has no admitted identity prerequisite")
+    backup_challenge_combinations(evidence, exchanges)
 
 
 def mls_interop(evidence):
@@ -843,10 +1176,16 @@ def account_logout(evidence, session):
         require(decoded_json(row["canonical_outcome_base64url"]) == row["canonical_outcome"] ==
                 session["authority_originals"][phase]["canonical_outcome"],
                 "logout rewrote an immutable issued original")
-    claims = session["refreshed_verification"]["claims"]
+    metadata = session["refreshed_verification"]["metadata"]
     journal = evidence["journal"]
-    require(journal["account_id"] == claims["account_id"] and
-            journal["device_id"] == claims["device_binding"]["device_id"] and
+    original = session["authority_originals"]["refreshed"]["grant"]
+    require(rows[1]["grant"]["issuer_id"] == original["issuer_id"] == metadata["issuer_id"] and
+            rows[1]["grant"]["grant_id"] == original["grant_id"] and
+            rows[1]["grant"]["session_grant"] == original["session_grant"] and
+            rows[1]["grant"]["credential_digest"] == original["credential_digest"] and
+            journal["account_id"] == metadata["account_id"] and
+            journal["device_id"] == metadata["device_binding"]["device_id"] and
+            journal["cnf_jkt"] == metadata["cnf_jkt"] and
             journal["auth_side_confirmed"] is True and bool(journal["completed_at"]),
             "logout lacks the exact native holder journal's durable completion")
 
@@ -1141,7 +1480,77 @@ def peer_keypackage_claims(evidence):
     mls_attest_add(evidence["mls_add"], evidence)
 
 
-PROOFS = {"peer_contacts": peer_contacts, "peer_keypackage_claims": peer_keypackage_claims,"account_identity_creation": account_identity_creation, "account_device_sessions": account_device_sessions,
+def account_security_rotation(evidence):
+    request = evidence["request"]
+    rotation = evidence["completed"]
+    originals = evidence["authority_originals"]
+    require(request["kind"] == rotation["kind"] == originals["transaction"]["kind"] == "security_rotation" and
+            originals["transaction"].get("recovery_completion") is None,
+            "Rotation incorrectly reused the single-submit Recovery branch")
+    require(decoded_json(originals["canonical_request_bytes"]) == originals["canonical_request"] == request and
+            originals["transaction"]["prepared_plan"] == rotation["prepared_plan"] == request["prepared_plan"] and
+            originals["transaction"]["request_digest"] == rotation["request_digest"] == "sha256:" + canonical_digest(request) and
+            originals["transaction"]["prepared_plan_digest"] == rotation["prepared_plan_digest"] == "sha256:" + canonical_digest(request["prepared_plan"]) and
+            originals["transaction"]["accepted_steps"] == rotation["accepted_steps"] and
+            originals["transaction"]["terminal_outcome"] == rotation["terminal_outcome"],
+            "Rotation original request, plan digests or final accepted resource changed")
+    require(evidence["final_get"] == evidence["create_replay"] == evidence["continue_replay"] == rotation and
+            len(evidence["worker_completed"]["accepted_steps"]) == 4 and
+            len(rotation["accepted_steps"]) == 5 and
+            rotation["accepted_steps"][:4] == evidence["worker_completed"]["accepted_steps"] and
+            rotation["terminal_outcome"]["outcome"] == "completed",
+            "Rotation did not preserve four workers then exact local_commit/replay")
+    steps = originals["steps"]
+    require(len(steps) == 5 and {step["step"] for step in steps} ==
+            {"revoke", "upload_new_material", "switch_authoritative_pointer", "erase_old_material", "local_commit"},
+            "Rotation lacks one exact durable outcome for every step")
+    for step in steps:
+        require(decoded_json(step["canonical_request_bytes"]) == step["canonical_request"] and
+                step["response"]["transaction_id"] == rotation["transaction_id"],
+                "Rotation step original is not bound to its own immutable transaction")
+    local = next(step for step in steps if step["step"] == "local_commit")
+    require(local["canonical_request"] == evidence["local_commit_request"] and
+            local["response"] == rotation and
+            local["participant_outcome"] == evidence["local_commit_request"]["client_attestation"]["artifact"] and
+            evidence["local_commit_request"]["expected_accepted_step_count"] == 4 and
+            evidence["local_commit_request"]["request_digest"] == rotation["request_digest"] and
+            evidence["local_commit_request"]["prepared_plan_digest"] == rotation["prepared_plan_digest"],
+            "Rotation local_commit was not the exact real signed terminal action")
+    plan = request["prepared_plan"]
+    binding = evidence["binding"]
+    require(len(plan["backup_rotations"]) == 1 and plan["backup_rotations"][0]["binding"] == binding and
+            evidence["revoke"]["event"] == plan["revoke_unit"]["request"]["events"][0]["event"] and
+            evidence["pointer"]["event"] == plan["backup_rotations"][0]["active_series_unit"]["request"]["events"][0]["event"] and
+            evidence["revoke"]["event"]["payload"]["device_id"] == evidence["target_device_id"] and
+            evidence["target_denial"] in {"device_revoked", "device_revocation_pending", "device_generation_fenced"} and
+            rotation["revoke_command_outcome"]["outcome"] == "accepted",
+            "Rotation changed its real native revoke target or pointer")
+    require(evidence["after"]["active_series"]["authority_commit_id"] == evidence["pointer"]["commit"]["commit_id"] and
+            evidence["after"]["active_series"]["secret_storage"] ==
+            {"state": "active", "active_series_id": binding["new_series_id"], "series_pointer_version": 2},
+            "Rotation did not install the exact authoritative pointer")
+    require(originals["erased_exists"] is False and
+            originals["replacement"] == plan["backup_rotations"][0]["new_backup_envelopes"][0],
+            "Rotation did not physically erase old and retain exact new envelope")
+    erase = originals["erase_progress"]
+    require(len(erase) == 1 and decoded_json(erase[0]["canonical_request_bytes"]) == erase[0]["canonical_request"],
+            "Rotation erase worker lost original request bytes")
+    outcome = erase[0]["row"]["outcome"]
+    require(outcome["status"] == "complete" and outcome["transaction_id"] == rotation["transaction_id"] and
+            outcome["request_digest"] == "sha256:" + canonical_digest(erase[0]["canonical_request"]) and
+            len(outcome["series_records"]) == 1 and outcome["series_records"][0]["status"] == "erased" and
+            outcome["series_records"][0]["remaining_backups"] == [] and
+            outcome["series_records"][0]["erased_backups"] == binding["old_backups"],
+            "Rotation erase has no durable completed object accounting")
+    exchanges = evidence["observations"]["exchanges"]
+    continued = [row for row in exchanges if row["operation_id"] == "ak.self.security_transaction.command.continue.v1"]
+    require(len(continued) == 2 and all(row["request_body"] == evidence["local_commit_request"] and
+            row["response_body"] == rotation for row in continued),
+            "Rotation did not actually replay one exact successful native continue")
+    require(bool(evidence["observations"]["accepted_identity_material"]),
+            "Rotation has no actually admitted identity prerequisite")
+
+PROOFS = {"account_security_rotation": account_security_rotation, "peer_contacts": peer_contacts, "peer_keypackage_claims": peer_keypackage_claims,"account_identity_creation": account_identity_creation, "account_device_sessions": account_device_sessions,
           "account_device_pairing": account_device_pairing, "account_policy_recovery": account_policy_recovery,
           "account_private_storage": account_private_storage, "mls_interop": mls_interop,
           "account_consent": account_consent,"identity_reservations":identity_reservations,

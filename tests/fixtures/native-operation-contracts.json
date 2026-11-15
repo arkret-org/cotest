@@ -64,6 +64,11 @@
       "target": "native_operation_contracts",
       "test": "peer_contacts_retain_two_native_authorities_and_nonempty_originals",
       "artifact": "peer-contacts.json"
+    },
+    "account_security_rotation": {
+      "target": "native_operation_contracts",
+      "test": "account_security_rotation_retains_worker_and_local_commit_originals",
+      "artifact": "account-security-rotation.json"
     }
   },
   "operations": [
@@ -353,7 +358,7 @@
     },
     {
       "operation_id": "ak.self.security_transaction.command.continue.v1",
-      "native_case": "account_policy_recovery"
+      "native_case": "account_security_rotation"
     },
     {
       "operation_id": "ak.self.security_transaction.command.create.v1",

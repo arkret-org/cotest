@@ -174,15 +174,15 @@ fn issue_session_grant(
     Ok(SessionGrantResponseBody {
         account_id: AccountId::new(request.principal_id.clone(), request.audience_id.clone()),
         device_id: Some(request.device_id.clone()),
-        session_grant: "ak.session.grant.test".to_owned(),
+        issuer_id: request.audience_id.clone(),
+        session_grant: arkret_wire::SessionGrantSecret::new("A".repeat(43))
+            .map_err(|_| arkret_wire::ReasonCode::PROOF_INVALID)?,
         expires_at: now + server_max_ttl,
-        session_grant_id: SessionGrantId::from_issuance_digest(canonical::sha256_bytes(
-            request
-                .accepted_device_possession_proof
-                .session_intent_digest
-                .as_str()
-                .as_bytes(),
-        )),
+        session_grant_id: SessionGrantId::new_v7_at(
+            now.timestamp_millis()
+                .try_into()
+                .map_err(|_| arkret_wire::ReasonCode::PROOF_INVALID)?,
+        ),
         session_public_key: CanonicalSessionPublicJwk::new(
             r#"{"crv":"Ed25519","kty":"OKP","x":"11qYAYKxCrfVS_7TyWQHOg7hcvPapiMlrwIaaPcHURo"}"#,
         )
@@ -208,10 +208,14 @@ fn validate_closed_human_session_shapes() -> Result<()> {
     let principal_id = did("ak:did_core:webvh:z6mkfixture")?;
     let device_id = device("ak:device:0196419b-0000-7000-8000-000000000001")?;
     let audience = did("ak:did_core:webvh:z6mkfixtureserviceexample")?;
-    let predecessor = SessionGrantId::from_issuance_digest(canonical::sha256_bytes(b"previous"));
+    let predecessor = arkret_wire::SessionGrantRef::new(
+        audience.clone(),
+        SessionGrantId::new_v7_at(1_785_000_000_000),
+    );
+    let secret = arkret_wire::SessionGrantSecret::new("A".repeat(43))?;
     let holder_jkt = "ERERERERERERERERERERERERERERERERERERERERERE";
     let intent = session_grant_refresh_request_digest(
-        "grant.jwt.fixture",
+        &secret,
         &predecessor,
         &principal_id,
         &device_id,
@@ -219,13 +223,13 @@ fn validate_closed_human_session_shapes() -> Result<()> {
         holder_jkt,
     )?;
     let refresh = json!({
-        "grant_jwt": "grant.jwt.fixture",
+        "session_grant": secret,
         "audience_id": audience,
         "device_id": device_id,
         "accepted_device_possession_proof": {
             "context": ProofContextId::SESSION_GRANT_ACCEPTED_DEVICE_POSSESSION_PROOF_V1,
             "purpose": "session_grant_refresh",
-            "predecessor_session_grant_id": predecessor,
+            "predecessor_session_grant_ref": predecessor,
             "account_id": AccountId::new(principal_id.clone(), audience.clone()),
             "device_id": device_id,
             "audience_id": audience,

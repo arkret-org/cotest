@@ -157,7 +157,7 @@ pub(super) async fn run(ctx: &mut MlsApiContext<'_>) -> Result<()> {
     let relation_payload: arkret_models_collaboration::events_payloads::RelationCreatePayload =
         serde_json::from_value(json!({
             "primary_conflict_domain":{"domain_kind":"from","relation_kind":"confidential_discussion_of","from_ref":basis.strand_id},
-            "expected_revision":null,"relation":{"scope_circle_id":basis.circle,"relation_kind":"confidential_discussion_of",
+            "expected_commit_id":null,"relation":{"scope_circle_id":basis.circle,"relation_kind":"confidential_discussion_of",
                 "from_ref":basis.strand_id,"to_ref":public_strand,"fields":{"role":"promoted_discussion"}}
         }))?;
     let relation = scoped_event(

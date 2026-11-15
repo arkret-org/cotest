@@ -290,7 +290,7 @@ pub async fn run_agent_pcr_profile_admission() -> Result<crate::conformance::Sui
         serde_json::from_value(serde_json::to_value(&event.payload)?)?;
     let profile = current.materialize(&event)?;
     let update = arkret_models_collaboration::events_payloads::ActorProfileUpdatePayload {
-        expected_revision: None,
+        expected_commit_id: None,
         actor_profile_id: arkret_wire::ActorProfileId::from_event_id(&event.event_id),
         patch,
         expected_state_digest: Some(

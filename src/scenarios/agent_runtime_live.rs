@@ -958,7 +958,7 @@ impl AgentRuntimeSession {
         let (grant, issuer_request) = match issuer {
             AgentSessionIssuer::Fixture(coauth) => {
                 let grant =
-                    crate::scenarios::bridge_contracts::session_grant::mock_session_grant_jwt(
+                    crate::scenarios::bridge_contracts::session_grant::mock_session_grant(
                         agent_id.as_str(),
                         verification_method.as_str(),
                         station.as_str(),
@@ -2616,7 +2616,7 @@ async fn run_agent_keypackage_journey(terminal: bool) -> Result<()> {
         controller_account_id: controller_account.clone(),
         interaction_mode:
             arkret_models_collaboration::agent_interaction::AgentInteractionMode::Public,
-        expected_revision: None,
+        expected_commit_id: None,
     };
     controller
         .submit_event(

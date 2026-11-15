@@ -35,10 +35,17 @@ jobs:
         github-token: ${{ secrets.CI_REPO_TOKEN || github.token }}
         script: |
           const refs = {cotest: context.sha};
+          const producerPins = {
+            'arkret-rust-sdk': '819fc97ca2356cd0ed467864babfaca93e0b5494',
+            'garth': '8c35acec7c6d8c79b61c06855367340f0a17da78',
+            'arkret-spec': '4e46718f83a4fcbedc12ef7409bc68743ec41dc9',
+            'chime': 'aa8e2afc78fa35c6248c1a1016280b22d7502645',
+            'flagon': '42655527c279fb2895d259058ec0f20422e61222',
+          };
           const siblings = ['arkret-spec', 'arkret-rust-sdk', 'inkson', 'coland',
             'coauth', 'floria', 'flagon', 'chime', 'garth', 'bridges'];
           await Promise.all(siblings.map(async repo => {
-            const {data} = await github.rest.repos.getCommit({owner: context.repo.owner, repo, ref: 'main'});
+            const {data} = await github.rest.repos.getCommit({owner: context.repo.owner, repo, ref: producerPins[repo] ?? 'main'});
             refs[repo] = data.sha;
           }));
           const {data} = await github.rest.repos.getCommit({owner: 'savfox-ai', repo: 'savfox', ref: 'main'});

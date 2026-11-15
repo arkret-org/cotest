@@ -96,7 +96,7 @@ pub async fn run_agent_human_approval_production()
         .await?;
     controller.submit_event(realm.as_str(), "ak.agent.interaction.set", serde_json::to_value(arkret_models_collaboration::agent_interaction::AgentInteractionSetPayload {
         agent_account_id:agent.agent_account.clone(), controller_account_id:deployment.account.clone(),
-        interaction_mode:arkret_models_collaboration::agent_interaction::AgentInteractionMode::Public, expected_revision:None,
+        interaction_mode:arkret_models_collaboration::agent_interaction::AgentInteractionMode::Public, expected_commit_id:None,
     })?).await?;
     controller
         .sdk()
@@ -339,7 +339,7 @@ pub async fn run_agent_human_approval_production()
     let runtime = station.client_with_agent_runtime_grant(
         agent.agent_did.as_str(),
         "approved-content-runtime",
-        issued.session_grant.clone(),
+        issued.session_grant.as_str().to_owned(),
         agent.runtime_key.clone(),
     )?;
     let message =

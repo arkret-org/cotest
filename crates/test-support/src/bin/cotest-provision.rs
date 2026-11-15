@@ -333,7 +333,7 @@ impl Session {
             station_base_url: String,
             coauth_base_url: String,
             controller_account_id: arkret_wire::AccountId,
-            controller_grant: String,
+            controller_grant: arkret_wire::SessionGrantSecret,
             controller_holder_seed: String,
             controller_event_seed: String,
             controller_verification_method: arkret_wire::DidUrl,

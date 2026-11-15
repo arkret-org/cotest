@@ -216,6 +216,6 @@ pub(crate) async fn pair(deployment: &ActualAgentDeployment) -> Result<Member> {
     principal.native_root_rotation = None;
     let client = deployment
         .station
-        .client_with_founding_device_grant(&principal, issued.session_grant)?;
+        .client_with_founding_device_grant(&principal, issued.session_grant.into_string())?;
     Member::from_client(client, deployment.account.clone())
 }

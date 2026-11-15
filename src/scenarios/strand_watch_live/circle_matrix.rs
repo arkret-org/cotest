@@ -231,8 +231,14 @@ pub(super) async fn run(
         .await?,
     )?;
     allowed.validate_for_request(&explicit, 0)?;
-    let revoke=owner.author_event(realm,EventKind::CapabilityRevoke.as_str(),json!({"grant_id":arkret_wire::GrantId::from_event_id(&grant.event_id),
-        "expected_revision":{"commit_id":granted.commit_id,"stream_position":granted.stream_position}})).await?;
+    let revoke = owner
+        .author_event(
+            realm,
+            EventKind::CapabilityRevoke.as_str(),
+            json!({"grant_id":arkret_wire::GrantId::from_event_id(&grant.event_id),
+        "expected_commit_id":granted.commit_id}),
+        )
+        .await?;
     submit_and_expect_commit(
         owner,
         owner_actor.as_account_id().context("owner Account")?,

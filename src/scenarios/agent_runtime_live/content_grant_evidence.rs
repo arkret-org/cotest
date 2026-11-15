@@ -138,7 +138,7 @@ impl GrantFixture {
             arkret_models_collaboration::agent_interaction::AgentInteractionSetPayload {
                 agent_account_id:agent.agent_account.clone(), controller_account_id:deployment.account.clone(),
                 interaction_mode:arkret_models_collaboration::agent_interaction::AgentInteractionMode::Public,
-                expected_revision:None,
+                expected_commit_id:None,
             })?).await?)?;
         controller
             .sdk()
@@ -204,7 +204,7 @@ impl GrantFixture {
         &self,
     ) -> Result<(
         TestActorClient,
-        arkret_models_identity::SignedSessionGrantClaims,
+        arkret_models_identity::SessionGrantMetadata,
     )> {
         let operations = self
             .operations
@@ -220,7 +220,7 @@ impl GrantFixture {
         selectors: arkret_models_collaboration::session_grants::RequestedAgentSessionGrantScope,
     ) -> Result<(
         TestActorClient,
-        arkret_models_identity::SignedSessionGrantClaims,
+        arkret_models_identity::SessionGrantMetadata,
     )> {
         let (credential, _) = coauth_session_evidence::issue_runtime_session_with_scope(
             &self.deployment.station,
@@ -234,7 +234,11 @@ impl GrantFixture {
             selectors,
         )
         .await?;
-        let claims = super::content_session_evidence::observed_issued_claims(&credential)?;
+        let claims = super::content_session_evidence::observed_issued_metadata(
+            &self.deployment.coauth.pg.connect_url,
+            &credential,
+        )
+        .await?;
         let client = self.deployment.station.client_with_agent_runtime_grant(
             self.agent.agent_did.as_str(),
             "grant-content-runtime",
@@ -418,7 +422,7 @@ fn committed(value: serde_json::Value) -> Result<EventId> {
     }
 }
 
-fn read_without_write(claims: &arkret_models_identity::SignedSessionGrantClaims) -> Result<()> {
+fn read_without_write(claims: &arkret_models_identity::SessionGrantMetadata) -> Result<()> {
     ensure!(claims.scopes.iter().any(|action| action == "ak.event.read"));
     ensure!(
         !claims
@@ -431,8 +435,9 @@ fn read_without_write(claims: &arkret_models_identity::SignedSessionGrantClaims)
         claims
             .scope_details
             .as_ref()
-            .context("read scope details")?["capability_grant_refs"]
-            == json!([]),
+            .context("read scope details")?
+            .capability_grant_refs
+            .is_empty(),
         "membership read fabricated a literal source ref"
     );
     Ok(())
@@ -538,11 +543,10 @@ pub async fn run_agent_content_grant_production() -> Result<crate::conformance::
         claims
             .scope_details
             .as_ref()
-            .context("write scope details")?["capability_grant_refs"]
-            .as_array()
-            .context("actual used grant refs")?
+            .context("write scope details")?
+            .capability_grant_refs
             .iter()
-            .any(|value| value.as_str() == Some(write_a.as_str()))
+            .any(|value| value.as_str() == write_a.as_str())
     );
     scene
         .commit_message(

@@ -34,7 +34,7 @@ use arkret_models_collaboration::governance::realm_join_intake::{
 };
 use arkret_models_crypto::{
     EncryptedEnvelope, EncryptedEnvelopeEncryptionContext, SecurityRotationRevokeCommandDecision,
-    SecurityTransaction,
+    SecurityRotationTransaction, SecurityTransaction,
 };
 use arkret_wire::{
     AccountId, ActorId, AuthorityCommitStatus, AuthoritySubmitResponseBody, CommitStreamRef,
@@ -51,7 +51,7 @@ use crate::harness::{
 use crate::scenarios::_helpers::bridge::MockCoauthIntrospectionServer;
 use crate::scenarios::_helpers::coauth_bootstrap::{EphemeralPg, spawn_ephemeral_postgres_for};
 use crate::scenarios::_helpers::live_gate::skip_or_fail;
-use crate::scenarios::bridge_contracts::session_grant::mock_session_grant_jwt;
+use crate::scenarios::bridge_contracts::session_grant::mock_session_grant;
 use crate::scenarios::identity_test_support::{
     HARNESS_INTERNAL_AUTHORITY_SECRET, actor_did_for_service_did,
 };
@@ -83,7 +83,7 @@ pub async fn standard_client(
         .principal
         .as_ref()
         .context("the client carries its provisioned principal")?;
-    let grant = mock_session_grant_jwt(
+    let grant = mock_session_grant(
         principal.core_id.as_str(),
         principal.device_id.as_str(),
         server.service_id().as_str(),
@@ -1104,7 +1104,7 @@ async fn ensure_absent_from_stream(
 
 async fn wait_for_accepted_revoke(
     client: &TestActorClient,
-    created: &SecurityTransaction,
+    created: &SecurityRotationTransaction,
 ) -> Result<()> {
     let path = format!(
         "/_arkret/self/security-transactions/{}",
@@ -1124,7 +1124,17 @@ async fn wait_for_accepted_revoke(
             bail!("the device revoke was never decided: {current:?}");
         }
         tokio::time::sleep(Duration::from_millis(500)).await;
-        current = serde_json::from_value(expect_json(client.get(&path), StatusCode::OK).await?)?;
+        let next: SecurityTransaction =
+            serde_json::from_value(expect_json(client.get(&path), StatusCode::OK).await?)?;
+        let SecurityTransaction::SecurityRotation(next) = next else {
+            bail!("the rotation resource changed transaction kind");
+        };
+        next.validate_structural()?;
+        ensure!(
+            next.transaction_id == created.transaction_id,
+            "the rotation resource changed its exact transaction"
+        );
+        current = next;
     }
 }
 

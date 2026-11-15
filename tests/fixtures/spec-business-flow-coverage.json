@@ -117,7 +117,9 @@
           "kind": "ordinary",
           "path": "../coland/crates/http/src/routing/identity/recovery/security_transaction_endpoints.rs",
           "markers": [
-            "continue_commit_recovery_unit"
+            "submit_recovery_unit",
+            "security_transaction_continue",
+            "continue_rotation_local_commit"
           ]
         },
         {
@@ -125,6 +127,22 @@
           "path": "../coauth/crates/backend/src/handlers/arkret/recovery_authority.rs",
           "markers": [
             "issue_recovery_completion_grant_endpoint"
+          ]
+        },
+        {
+          "kind": "ordinary",
+          "path": "src/scenarios/native_operation_contracts/policy_recovery.rs",
+          "markers": [
+            "pub(super) async fn run()",
+            "account-policy-recovery.json"
+          ]
+        },
+        {
+          "kind": "ordinary",
+          "path": "src/scenarios/native_operation_contracts/security_rotation.rs",
+          "markers": [
+            "pub(super) async fn run()",
+            "account-security-rotation.json"
           ]
         }
       ]
@@ -223,7 +241,7 @@
           "path": "../coauth/crates/backend/src/handlers/arkret/session_grant/session_logout.rs",
           "markers": [
             "require_auth_session_logout_service_caller(req, depot)?",
-            "terminate_auth_side_session_by_grant_jwt(depot, &caller_service_id, &body.grant_jwt)"
+            "terminate_auth_side_session_by_session_grant(\n            depot,\n            &caller_service_id,\n            &body.session_grant,\n        )"
           ]
         },
         {

@@ -668,11 +668,53 @@ pub async fn run_account_blocklist_case6_production() -> Result<super::CaseExecu
     fixture_case_result(case)
 }
 
+/// Fixture transport custody for a child running the same native executable.
+/// This is passed over owned stdin, never logged or installed as issuer metadata.
+#[derive(serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct NativeAccountSessionCapsule {
+    pub(crate) outcome: arkret_models_collaboration::session_grants::SessionGrantResponseBody,
+    station_url: String,
+    holder_seed_b64url: String,
+    principal: arkret_wire::Did,
+    identity_seed: [u8; 32],
+}
+
+impl Drop for NativeAccountSessionCapsule {
+    fn drop(&mut self) {
+        use zeroize::Zeroize as _;
+        self.holder_seed_b64url.zeroize();
+        self.identity_seed.zeroize();
+    }
+}
+
+impl NativeAccountSessionCapsule {
+    pub(crate) async fn restore(&self) -> Result<inkson::conformance::NativeAccountSession> {
+        inkson::conformance::restore_native_account_session(
+            &self.outcome,
+            &self.station_url,
+            &self.holder_seed_b64url,
+            &self.principal,
+            &self.identity_seed,
+        )
+        .await
+    }
+}
+
 pub(crate) async fn native_account_session(
     client: &TestActorClient,
 ) -> Result<inkson::conformance::NativeAccountSession> {
+    native_account_session_capsule(client)
+        .await?
+        .restore()
+        .await
+}
+
+pub(crate) async fn native_account_session_capsule(
+    client: &TestActorClient,
+) -> Result<NativeAccountSessionCapsule> {
     use arkret_models_collaboration::session_grants::{
-        SessionGrantValidationByJwt, SessionGrantValidationInput,
+        SessionGrantValidationBySecret, SessionGrantValidationInput,
         SessionGrantValidationResponseBody,
     };
     use base64::Engine as _;
@@ -684,9 +726,9 @@ pub(crate) async fn native_account_session(
         .authentication_metadata
         .account_authority
         .context("fixture Account Authority")?;
-    let request = SessionGrantValidationInput::ByJwt(SessionGrantValidationByJwt {
-        grant_jwt: grant.clone(),
-        audience_id: Some(description.service_id.clone()),
+    let request = SessionGrantValidationInput::BySecret(SessionGrantValidationBySecret {
+        session_grant: arkret_wire::SessionGrantSecret::new(grant.clone())?,
+        audience_id: description.service_id.clone(),
         proof: None,
     });
     // This is the deployment-private harness issuer, never a client-facing
@@ -711,7 +753,9 @@ pub(crate) async fn native_account_session(
     let metadata = result.grant.context("active fixture grant metadata")?;
     let device = arkret_wire::DeviceId::new(client.device_id.clone())?;
     ensure!(
-        metadata.account_id.principal_id.as_str() == actor_core_id(&client.actor)?
+        metadata.issuer_id == description.service_id
+            && metadata.audience_id == description.service_id
+            && metadata.account_id.principal_id.as_str() == actor_core_id(&client.actor)?
             && metadata.account_id.station_id == description.service_id
             && metadata.device_id.as_ref() == Some(&device),
         "issuer grant differs from the actual native endpoint"
@@ -724,12 +768,13 @@ pub(crate) async fn native_account_session(
         "issuer grant is bound to another DPoP holder"
     );
     let outcome = arkret_models_collaboration::session_grants::SessionGrantResponseBody {
-        session_grant: grant.clone(),
-        session_grant_id: metadata.id,
-        session_public_key: metadata.session_public_key,
-        audience_id: metadata.audience_id,
-        granted_scope: metadata.scopes,
-        account_id: metadata.account_id,
+        issuer_id: metadata.issuer_id.clone(),
+        session_grant: arkret_wire::SessionGrantSecret::new(grant.clone())?,
+        session_grant_id: metadata.id.clone(),
+        session_public_key: metadata.session_public_key.clone(),
+        audience_id: metadata.audience_id.clone(),
+        granted_scope: metadata.scopes.clone(),
+        account_id: metadata.account_id.clone(),
         device_id: Some(device),
         expires_at: metadata.expires_at,
         previous_session_grant_id: None,
@@ -738,14 +783,13 @@ pub(crate) async fn native_account_session(
         .principal
         .as_ref()
         .context("native fixture lacks its accepted Device identity")?;
-    inkson::conformance::restore_native_account_session(
-        &outcome,
-        client.sdk().base_url().as_str(),
-        &seed,
-        &principal.did,
-        &principal.device_signing_key.to_bytes(),
-    )
-    .await
+    Ok(NativeAccountSessionCapsule {
+        outcome,
+        station_url: client.sdk().base_url().to_string(),
+        holder_seed_b64url: seed,
+        principal: principal.did.clone(),
+        identity_seed: principal.device_signing_key.to_bytes(),
+    })
 }
 
 /// Exercise the ordinary Inkson Account projector and Garth subscription,

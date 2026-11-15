@@ -1,4 +1,6 @@
 //! Actual encrypted backup custody and issued cursor revocation through native authorities.
+mod challenge_once;
+
 use anyhow::Result;
 use arkret_crypto::backup::{
     KeyBackupAuthBinding, build_key_backup_envelope, decrypt_key_backup_envelope, derive_vault_kek,
@@ -67,7 +69,7 @@ async fn delete_empty(builder: reqwest::RequestBuilder) -> Result<u16> {
 pub(super) async fn run() -> Result<()> {
     let (result, observations) = observe(async {
         let deployment = crate::scenarios::agent_runtime_live::coauth_session_evidence::actual_agent_deployment("native-private-storage").await?;
-        let fixture=crate::scenarios::_helpers::canonical_api::CanonicalApiFixture::from_owned(deployment.station,deployment.controller,deployment.http,deployment.endpoints,deployment.oidc_client_id);
+        let mut fixture=crate::scenarios::_helpers::canonical_api::CanonicalApiFixture::from_owned(deployment.station,deployment.controller,deployment.http,deployment.endpoints,deployment.oidc_client_id);
         let client=&fixture.client;
         let private_route=super::actor_private::exercise(&fixture.server,client,&deployment.account).await?;
         let principal = client.principal.as_ref().context("accepted Device custody absent")?;
@@ -103,15 +105,17 @@ pub(super) async fn run() -> Result<()> {
     content_history: None,
  request_id:encoded(&entropy()?)? };
         let challenge: KeysBackupsUnlockChallenge = serde_json::from_value(expect_json(client.post(&format!("{base}/unlock-challenge")).json(&challenge_request), reqwest::StatusCode::OK).await?)?;
+        challenge.validate_at(chrono::Utc::now())?;
         ensure!(challenge.account_id==deployment.account && challenge.backup_id==envelope.backup_id && challenge.requesting_device_id==principal.device_id && challenge.ciphertext_digest==envelope.ciphertext_digest, "unlock challenge changed its accepted target");
         let mut proof = KeyBackupUnlockProof {
     subject_actor_id: None,
     custody_authorization_ref: None,
     content_history: None,
- schema:KeyBackupUnlockProof::SCHEMA.into(), authority:KeyBackupUnlockAuthority::CurrentDevice { challenge_id:challenge.challenge_id.clone(),nonce:challenge.nonce.clone() },
+ schema:KeyBackupUnlockProof::SCHEMA.into(), authority:KeyBackupUnlockAuthority::CurrentDevice { challenge_id:challenge.challenge_id.clone() },
             account_id:challenge.account_id.clone(),requesting_device_id:challenge.requesting_device_id.clone(),backup_id:challenge.backup_id.clone(),backup_kind:envelope.backup_kind,series_id:challenge.series_id.clone(),ciphertext_digest:challenge.ciphertext_digest.clone(),challenge:challenge.challenge.clone(),service_id:challenge.service_id.clone(),audience:challenge.audience.clone(),issued_at:challenge.issued_at,expires_at:challenge.expires_at,
             signature_proof:KeyBackupUnlockSignatureProof { verification_method:method.clone(),signature_algorithm:KeyBackupSignatureAlgorithm::Ed25519,signature:encoded(&[0u8;64])? } };
         proof.signature_proof.signature=encoded(&principal.device_signing_key.sign(&proof.signing_payload_bytes()?).to_bytes())?;
+        proof.validate_for_challenge(&challenge)?;
         let request=KeysBackupsUnlockRequestBody { proof };
         let unlocked:KeyBackup=serde_json::from_value(expect_json(client.post(&format!("{base}/unlock")).json(&request),reqwest::StatusCode::OK).await?)?;
         ensure!(serde_json::to_value(&unlocked)?==serde_json::to_value(&envelope)?, "unlock changed the accepted encrypted envelope");
@@ -137,12 +141,10 @@ pub(super) async fn run() -> Result<()> {
         let trusted_service=TrustedRecoveryServiceEntry { service_id:fixture.server.service_id().clone(),audience:fixture.server.base_url().origin().ascii_serialization(),authorization_verification_method:trusted_method.clone() };
         let recovery_authority=crate::scenarios::human_pcr_station_binding::recovery::prepare_recovery_authority_with_trusted_service(client,Some(trusted_service)).await?;
         let policy=crate::scenarios::mls_lifecycle_live::accepted_full_view(client,&recovery_authority.policy_event.event_id).await?;
-        let (candidate,_gate,_initial,_handoff)=fixture.recovery_candidate().await?;
-        let claims:arkret_models_identity::SignedSessionGrantClaims=serde_json::from_slice(&arkret_canonical::base64url_decode(candidate.session().credential().split('.').nth(1).context("native recovery claims absent")?)?)?;
-        claims.validate()?;
+        let (candidate,_gate,initial,_handoff,grant_ref)=fixture.recovery_candidate().await?;
         let candidate_author=crate::scenarios::security_rotation_live::RotationAuthor::from_client(&candidate)?;
         let recovery_session=crate::scenarios::security_rotation_live::create_verified_recovery_unlock_session_bound(&candidate,&candidate_author,&recovery_authority.method,recovery_authority.seed,
-            candidate.principal.as_ref().context("candidate custody absent")?.device_signing_key.to_bytes(),(claims.grant_id,Base64UrlString::new(claims.session_public_key.thumbprint_sha256()?).map_err(anyhow::Error::msg)?),crate::scenarios::_helpers::coauth_bootstrap::JOINT_TRUST_DOMAIN.parse()?).await?;
+            candidate.principal.as_ref().context("candidate custody absent")?.device_signing_key.to_bytes(),(grant_ref,Base64UrlString::new(initial.session_public_key.thumbprint_sha256()?).map_err(anyhow::Error::msg)?),crate::scenarios::_helpers::coauth_bootstrap::JOINT_TRUST_DOMAIN.parse()?).await?;
         let delete_challenge:KeysBackupsDeleteChallenge=serde_json::from_value(expect_json(client.post(&format!("{deletion_base}/delete-challenge")).json(&KeysBackupsIssueDeleteChallengeRequestBody { request_id:encoded(&entropy()?)? }),reqwest::StatusCode::OK).await?)?;
         let delete_request=KeysBackupsDeleteRequestBody { request_id:delete_challenge.request_id.clone(),challenge_id:delete_challenge.challenge_id.clone(),proof:HighRiskAuthorityProof::RecoveryUnlock(HighRiskRecoveryUnlockProofBody { kind:RecoveryUnlockProofKind::RecoveryUnlock,recovery_session_id:recovery_session.recovery_session_id.clone(),proof:PayloadProof {
             kind:arkret_wire::proof_kind::DETACHED_JWS.into(),verification_method:recovery_authority.method.clone(),payload_digest:delete_challenge.delete_intent_digest(None)?,created_at:delete_challenge.issued_at,domain:None,audience:None,proof_purpose:Some(PayloadProofPurpose::IssuerAttestation),
@@ -206,7 +208,13 @@ pub(super) async fn run() -> Result<()> {
             Ok(json!({"backup_count":remaining,"delete_challenge":challenge,"cursor_revocations":revocations}))
         }).await??;
         ensure!(after["backup_count"]==0 && after["delete_challenge"]["consumed_at"].is_string() && after["cursor_revocations"].as_array().is_some_and(|rows|rows.len()==1), "native delete or cursor side effect is missing");
-        Ok::<_,anyhow::Error>(json!({"private_route":private_route,"envelope":envelope,"deletion_envelope":deletion_envelope,"accepted_pointer":accepted_pointer,"recovery_policy":policy,"recovery_session":recovery_session,"unlocked":unlocked,"unlock_challenge":challenge,"delete_challenge":delete_challenge,"delete_request":delete_request,"deleted":deleted,"trusted_envelope":trusted_envelope,"trusted_request":trusted_request,"trusted_deleted":trusted_deleted,"trusted_original":trusted_original,"delete_replay":delete_replay,"sdk_delete_replay_verified":true,"accepted_delete":accepted_delete,"rollback_probe":{"status":refused_status.as_u16(),"response":refused_body,"before":rollback_before,"after":rollback_after},"cursor":cursor,"revoke_request":revoke,"revoked":revoked,"before":before,"after":after,"processes":[deployment.coauth.server.native_process_identity()?,fixture.server.native_process_identity()?]}))
+        let combo_envelope=seal(arkret_identifiers::new_prefixed_uuid7("ak:backup:").parse()?)?;
+        let combo_delete_signer=ed25519_dalek::SigningKey::from_bytes(&recovery_authority.seed);
+        let challenge_once=crate::harness::heap_future(|| challenge_once::run(
+            &mut fixture.server,client,&envelope,&combo_envelope,&delete_request,
+            &combo_delete_signer,
+        )).await?;
+        Ok::<_,anyhow::Error>(json!({"private_route":private_route,"envelope":envelope,"deletion_envelope":deletion_envelope,"accepted_pointer":accepted_pointer,"recovery_policy":policy,"recovery_session":recovery_session,"unlocked":unlocked,"unlock_challenge":challenge,"delete_challenge":delete_challenge,"delete_request":delete_request,"deleted":deleted,"trusted_envelope":trusted_envelope,"trusted_request":trusted_request,"trusted_deleted":trusted_deleted,"trusted_original":trusted_original,"delete_replay":delete_replay,"sdk_delete_replay_verified":true,"accepted_delete":accepted_delete,"rollback_probe":{"status":refused_status.as_u16(),"response":refused_body,"before":rollback_before,"after":rollback_after},"cursor":cursor,"revoke_request":revoke,"revoked":revoked,"before":before,"after":after,"challenge_once":challenge_once,"processes":[deployment.coauth.server.native_process_identity()?,fixture.server.native_process_identity()?]}))
     }).await;
     retain_attempt("account-private-storage", &observations)?;
     let mut artifact = result?;

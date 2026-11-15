@@ -26,7 +26,7 @@
 use anyhow::{Context, Result};
 
 use crate::scenarios::_helpers::bridge::MockCoauthIntrospectionServer;
-use crate::scenarios::bridge_contracts::session_grant::mock_session_grant_jwt;
+use crate::scenarios::bridge_contracts::session_grant::mock_session_grant;
 use crate::scenarios::identity_test_support::{
     HARNESS_INTERNAL_AUTHORITY_SECRET, actor_did_for_service_did,
     spawn_with_harness_account_authority,
@@ -88,7 +88,7 @@ pub async fn events_keys_device_blob_push_surfaces_work() -> Result<()> {
         .principal
         .as_ref()
         .context("client carries its provisioned principal")?;
-    let grant = mock_session_grant_jwt(
+    let grant = mock_session_grant(
         principal.core_id.as_str(),
         principal.device_id.as_str(),
         server.service_id().as_str(),

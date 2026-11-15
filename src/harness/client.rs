@@ -1066,10 +1066,7 @@ impl TestActorClient {
             arkret_wire::event_kind_str::CAPABILITY_REVOKE,
             serde_json::to_value(CapabilityRevokePayload {
                 grant_id,
-                expected_revision: arkret_wire::CurrentRevision {
-                    commit_id: commit.commit_id.clone(),
-                    stream_position: commit.stream_position,
-                },
+                expected_commit_id: commit.commit_id.clone(),
                 reason: Some("revoked_by_realm_owner".to_owned()),
             })?,
         )

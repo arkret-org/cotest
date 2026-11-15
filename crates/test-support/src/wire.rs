@@ -1331,7 +1331,7 @@ fn build_pcr_genesis_unit(
             // `registration_anchor` is one of the three branches that MUST NOT
             // carry an install fence (`device-lifecycle.md` section 5.2.3).
             applet_id: None,
-        expected_control_revision:None,expected_device_revision:None,
+        expected_control_commit_id:None,expected_device_commit_id:None,
         };
     authorize_payload.device_signature =
         arkret_models_collaboration::events_payloads::SignatureMaterial::NonEmptyString(non_empty(
@@ -1832,8 +1832,8 @@ pub fn device_pairing_approval(input: Value) -> Result<Value> {
         // `accepted_device` is one of the three branches that MUST NOT carry an
         // install fence (`device-lifecycle.md` section 5.2.3).
         applet_id: None,
-        expected_control_revision: None,
-        expected_device_revision: None,
+        expected_control_commit_id: None,
+        expected_device_commit_id: None,
     };
     payload
         .validate_wire_constraints()

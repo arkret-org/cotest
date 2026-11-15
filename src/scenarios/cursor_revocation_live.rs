@@ -93,7 +93,7 @@ pub async fn same_device_distinct_session_cursor_revocation_live() -> Result<()>
         .principal
         .as_ref()
         .context("accepted founding device required")?;
-    let template = crate::scenarios::bridge_contracts::session_grant::mock_session_grant_jwt(
+    let template = crate::scenarios::bridge_contracts::session_grant::mock_session_grant(
         principal.core_id.as_str(),
         principal.device_id.as_str(),
         group.server(0).service_id().as_str(),

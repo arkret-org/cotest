@@ -28,7 +28,7 @@ pub(super) async fn issue(
     realm: &RealmId,
 ) -> Result<(
     TestActorClient,
-    arkret_models_identity::SignedSessionGrantClaims,
+    arkret_models_identity::SessionGrantMetadata,
 )> {
     let (credential, _) = coauth_session_evidence::issue_runtime_session_with_scope(
         &deployment.station,
@@ -42,7 +42,11 @@ pub(super) async fn issue(
         selectors(realm),
     )
     .await?;
-    let claims = content_session_evidence::observed_issued_claims(&credential)?;
+    let claims = content_session_evidence::observed_issued_metadata(
+        &deployment.coauth.pg.connect_url,
+        &credential,
+    )
+    .await?;
     let runtime = deployment.station.client_with_agent_runtime_grant(
         agent.agent_did.as_str(),
         "direct-content-runtime",
@@ -255,7 +259,11 @@ pub async fn run_agent_content_direct_production()
         &service_actions,
     )
     .await?;
-    let claims = content_session_evidence::observed_issued_claims(&service)?;
+    let claims = content_session_evidence::observed_issued_metadata(
+        &deployment.coauth.pg.connect_url,
+        &service,
+    )
+    .await?;
     ensure!(
         claims
             .scopes
@@ -312,7 +320,7 @@ pub async fn run_agent_content_direct_production()
     policy.validate()?;
     let set: arkret_models_collaboration::governance::operation_wire::PolicySetStatePayload =
         serde_json::from_value(json!({
-        "policy_id":policy.id,"expected_revision":null,"value":policy}))?;
+        "policy_id":policy.id,"expected_commit_id":null,"value":policy}))?;
     set.validate()?;
     let event = controller
         .author_event(
@@ -369,8 +377,12 @@ pub async fn run_agent_content_direct_production()
     let (read_runtime, claims) = issue(&deployment, &agent, &read_actions, &joined.realm).await?;
     ensure!(claims.scopes.iter().any(|v| v == "ak.event.read"));
     ensure!(
-        claims.scope_details.as_ref().context("Direct scope")?["capability_grant_refs"]
-            == json!([])
+        claims
+            .scope_details
+            .as_ref()
+            .context("Direct scope")?
+            .capability_grant_refs
+            .is_empty()
     );
     let original = controller
         .sdk()
@@ -410,8 +422,9 @@ pub async fn run_agent_content_direct_production()
         claims
             .scope_details
             .as_ref()
-            .context("Direct write scope")?["capability_grant_refs"]
-            == json!([])
+            .context("Direct write scope")?
+            .capability_grant_refs
+            .is_empty()
     );
     let plaintext = arkret_canonical::canonical_json_bytes(&arkret::ContentBlock::text(
         "Direct participant content without literal grant",

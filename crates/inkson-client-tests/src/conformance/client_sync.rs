@@ -12,7 +12,9 @@ use garth::{AccountSubscribeBatch, AccountSubscribeParameters, AccountSubscribeT
 use inkson::sync_engine::NativeAccountHost;
 use serde_json::Value;
 
+mod frozen_baseline;
 mod private_reply;
+pub use frozen_baseline::run_frozen_current_baseline;
 mod readback;
 pub use readback::{CheckpointReadbackScope, checkpoint_readback_test};
 mod recovery;

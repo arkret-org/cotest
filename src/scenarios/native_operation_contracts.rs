@@ -49,6 +49,7 @@ mod peer_membership_reads;
 mod peer_signal;
 mod policy_recovery;
 mod private_storage;
+mod security_rotation;
 mod service_registrations;
 
 pub async fn organization_registrations() -> Result<()> {
@@ -85,6 +86,11 @@ mod session_grants;
 pub async fn account_policy_recovery() -> Result<()> {
     validate_registered_schema_bindings()?;
     policy_recovery::run().await
+}
+
+pub async fn account_security_rotation() -> Result<()> {
+    validate_registered_schema_bindings()?;
+    crate::harness::heap_future(security_rotation::run).await
 }
 
 pub async fn account_device_pairing() -> Result<()> {
@@ -201,11 +207,37 @@ fn validate_exchange_schemas(
     observations: &NativeOperationObservations,
     required: &[&str],
 ) -> Result<()> {
-    verify_native_issuer_bindings(observations)?;
     let obligations: Value = serde_json::from_str(OBLIGATIONS)?;
-    obligations["operations"]
+    let rows = obligations["operations"]
         .as_array()
         .context("native obligations absent")?;
+    let mut selected = required
+        .iter()
+        .copied()
+        .collect::<std::collections::BTreeSet<_>>();
+    for exchange in &observations.exchanges {
+        if rows
+            .iter()
+            .any(|row| row["operation_id"] == exchange.operation_id.as_str())
+        {
+            selected.insert(exchange.operation_id.as_str());
+        }
+    }
+    for identifier in &selected {
+        ensure!(
+            rows.iter().any(|row| row["operation_id"] == *identifier),
+            "native operation obligation missing: {identifier}"
+        );
+    }
+    validate_registered_exchange_schemas(observations, &selected.into_iter().collect::<Vec<_>>())
+}
+
+/// Canonical operation/schema validation only; this does not award native coverage.
+pub(crate) fn validate_registered_exchange_schemas(
+    observations: &NativeOperationObservations,
+    required: &[&str],
+) -> Result<()> {
+    verify_native_issuer_bindings(observations)?;
     let mut registry = arkret_schema_conformance::schema_registry_from_default_spec_artifacts()?
         .context("native operation schemas are unavailable")?;
     let artifacts = arkret_schema_conformance::default_spec_artifacts_dir()
@@ -225,27 +257,11 @@ fn validate_exchange_schemas(
         registry.validate_value(&identifier, value)?;
         Ok(())
     };
-    let mut validate_operations = required
+    for identifier in required
         .iter()
         .copied()
-        .collect::<std::collections::BTreeSet<_>>();
-    for exchange in &observations.exchanges {
-        if obligations["operations"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .any(|row| row["operation_id"] == exchange.operation_id.as_str())
-        {
-            validate_operations.insert(exchange.operation_id.as_str());
-        }
-    }
-    for identifier in validate_operations {
-        obligations["operations"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .find(|row| row["operation_id"] == identifier)
-            .context("native operation obligation missing")?;
+        .collect::<std::collections::BTreeSet<_>>()
+    {
         let descriptor = arkret_wire::ServiceOperationId::from_wire(identifier)
             .context("native operation is not registered")?
             .descriptor();
@@ -510,7 +526,7 @@ fn verify_native_station_http_request(
     Ok(input)
 }
 
-fn verify_native_station_commits(
+pub(crate) fn verify_native_station_commits(
     observations: &NativeOperationObservations,
     views: &[arkret_wire::CommittedEventFullView],
 ) -> Result<()> {
@@ -777,7 +793,7 @@ pub async fn account_identity_creation() -> Result<()> {
         .context("issuer originals absent")?;
     ensure!(
         sessions.len() == 1
-            && sessions[0]["grant_jwt"] == json!(accepted.issued_session.session_grant),
+            && sessions[0]["session_grant"] == json!(accepted.issued_session.session_grant),
         "registration replay minted another credential or lost the issuer original"
     );
     ensure!(

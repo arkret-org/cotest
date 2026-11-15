@@ -926,8 +926,9 @@ impl JoinObserver for PendingPayload<'_> {
             claims
                 .scope_details
                 .as_ref()
-                .context("pending explicit write ceiling")?["capability_grant_refs"]
-                == json!([grant])
+                .context("pending explicit write ceiling")?
+                .capability_grant_refs
+                == vec![grant.to_string()]
         );
         let material = arkret_models_collaboration::mls_group_state_material::MlsMemberGroupStateMaterialReadRequestBody {
             realm_id:accepted.event.realm_id.clone(), effective_scope:accepted.event.scope_ref.clone(),
@@ -984,8 +985,9 @@ impl JoinObserver for PendingPayload<'_> {
             combined
                 .scope_details
                 .as_ref()
-                .context("pending full content ceiling")?["capability_grant_refs"]
-                == json!([grant])
+                .context("pending full content ceiling")?
+                .capability_grant_refs
+                == vec![grant.to_string()]
         );
         let (pending_write, _) =
             agent_message(agent, agent_group, accepted, self.strand, &grant).await?;
@@ -1338,8 +1340,9 @@ pub async fn run_agent_content_sidecar_production()
         claims
             .scope_details
             .as_ref()
-            .context("Sidecar frozen ceiling")?["capability_grant_refs"]
-            == json!([])
+            .context("Sidecar frozen ceiling")?
+            .capability_grant_refs
+            .is_empty()
     );
     ensure!(
         claims.scopes.iter().any(|v| v == "ak.event.read")
@@ -1418,8 +1421,9 @@ pub async fn run_agent_content_sidecar_production()
         narrowed
             .scope_details
             .as_ref()
-            .context("narrowed ceiling")?["capability_grant_refs"]
-            == json!([])
+            .context("narrowed ceiling")?
+            .capability_grant_refs
+            .is_empty()
     );
     let (message, plaintext) = controller_message(&controller, &mut group, &state, &strand).await?;
     let (fresh_read, fresh_claims) =
@@ -1428,8 +1432,9 @@ pub async fn run_agent_content_sidecar_production()
         fresh_claims
             .scope_details
             .as_ref()
-            .context("effective Sidecar ceiling")?["capability_grant_refs"]
-            == json!([])
+            .context("effective Sidecar ceiling")?
+            .capability_grant_refs
+            .is_empty()
     );
     let received = fresh_read
         .sdk()
@@ -1491,8 +1496,9 @@ pub async fn run_agent_content_sidecar_production()
         write_claims
             .scope_details
             .as_ref()
-            .context("explicit write ceiling")?["capability_grant_refs"]
-            == json!([grant])
+            .context("explicit write ceiling")?
+            .capability_grant_refs
+            == vec![grant.to_string()]
     );
     let (reply, reply_plaintext) =
         agent_message(&agent, &mut agent_group, &state, &strand, &grant).await?;
@@ -1578,20 +1584,20 @@ pub async fn run_agent_content_sidecar_production()
         .sdk()
         .exact_current_state(&mode_request, mode_generation)
         .await?;
-    let (prior_mode, expected_revision) = agent_interaction_from_verified_exact_read(
+    let (prior_mode, expected_commit_id) = agent_interaction_from_verified_exact_read(
         &mode_before,
         &realm,
         &agent.agent_account,
         &deployment.account,
         mode_generation,
     )?;
-    ensure!(prior_mode == AgentInteractionMode::Private && expected_revision.is_none());
+    ensure!(prior_mode == AgentInteractionMode::Private && expected_commit_id.is_none());
     let set = arkret_models_collaboration::agent_interaction::AgentInteractionSetPayload {
         agent_account_id: agent.agent_account.clone(),
         controller_account_id: deployment.account.clone(),
         interaction_mode:
             arkret_models_collaboration::agent_interaction::AgentInteractionMode::Public,
-        expected_revision,
+        expected_commit_id: expected_commit_id.map(|revision| revision.commit_id),
     };
     let change = client
         .author_event(

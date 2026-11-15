@@ -133,7 +133,7 @@ impl StandardGrantStation {
             .principal
             .as_ref()
             .context("a Standard grant needs the client's provisioned principal")?;
-        let grant = crate::scenarios::bridge_contracts::session_grant::mock_session_grant_jwt(
+        let grant = crate::scenarios::bridge_contracts::session_grant::mock_session_grant(
             principal.core_id.as_str(),
             principal.device_id.as_str(),
             self.server.service_id().as_str(),
@@ -524,8 +524,8 @@ async fn authorize_additional_principal_device(
         .generation_for(&account)
         .context("keys/query omitted the current PCR device generation")?;
     let mut payload = DeviceAuthorizePayload {
-        expected_control_revision: None,
-        expected_device_revision: None,
+        expected_control_commit_id: None,
+        expected_device_commit_id: None,
         pairing_challenge_transcript_digest: Some(Hash::new(arkret_canonical::sha256_digest(
             format!("cotest:device-pairing:{actor}:{device_id}").as_bytes(),
         ))?),
@@ -753,8 +753,8 @@ async fn bootstrap_test_device_authorization(
             .map_err(anyhow::Error::msg)?,
     ];
     let mut payload = DeviceAuthorizePayload {
-        expected_control_revision: None,
-        expected_device_revision: None,
+        expected_control_commit_id: None,
+        expected_device_commit_id: None,
         pairing_challenge_transcript_digest: None,
         device_id: device_id.clone(),
         device_public_key_did: device_public_key.clone(),

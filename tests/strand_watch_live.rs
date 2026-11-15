@@ -39,6 +39,18 @@ async fn real_three_stations_handoff_complete_private_watch_namespace() -> Resul
 
 #[tokio::test(flavor = "multi_thread")]
 #[serial]
+async fn real_owner_transfer_two_stations_verify_remote_successor_consent() -> Result<()> {
+    cotest::scenarios::strand_watch_live::run_owner_transfer_peer_live().await
+}
+
+#[tokio::test(flavor = "multi_thread")]
+#[serial]
+async fn real_owner_transfer_three_stations_after_native_governor_handoff() -> Result<()> {
+    cotest::scenarios::strand_watch_live::run_owner_transfer_handoff_live().await
+}
+
+#[tokio::test(flavor = "multi_thread")]
+#[serial]
 async fn real_device_replacement_refuses_late_watch_and_preserves_account_value() -> Result<()> {
     cotest::scenarios::human_device_producer_live::run_watch_device_replacement_live().await
 }

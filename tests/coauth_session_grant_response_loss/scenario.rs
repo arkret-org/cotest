@@ -95,19 +95,91 @@ pub async fn coauth_session_grant_response_loss_run() -> Result<()> {
     );
     let outcome: Value =
         serde_json::from_slice(&replay_one).context("decode replayed debug grant outcome")?;
+    let id = arkret_identifiers::SessionGrantId::new(
+        outcome["grant_id"]
+            .as_str()
+            .context("replayed grant id absent")?,
+    )?;
+    let secret: arkret_identifiers::SessionGrantSecret =
+        serde_json::from_value(outcome["session_grant"].clone())?;
+    let expected_account =
+        arkret_wire::AccountId::new(actor_id.parse()?, station.service_id().clone());
+    let expected_ref = arkret_identifiers::SessionGrantRef::new(station.service_id().clone(), id);
+    let held_jwk = arkret_models_identity::CanonicalSessionPublicJwk::new(serde_json::to_string(
+        &issue_body["dpop_jwk"],
+    )?)?;
+    let held_jkt = arkret_signatures::dpop::dpop_jwk_thumbprint(
+        &arkret_signatures::JsonWebKey::from_ed25519_verifying_key(&holder.verifying_key()),
+    )?;
+    let expected_scopes = vec![
+        format!(
+            "urn:arkret:client:device:{}",
+            issue_body["device_id"].as_str().unwrap()
+        ),
+        "urn:arkret:station:session.bind".to_owned(),
+    ];
+    let database_url = coauth.pg.connect_url.clone();
+    let issuer = station.service_id().to_string();
+    let presented = secret.as_str().to_owned();
+    let (metadata_bytes, canonical_outcome, stored, count) = tokio::task::spawn_blocking(
+        move || -> Result<(Vec<u8>, Vec<u8>, Value, i64)> {
+            let mut db = postgres::Client::connect(&database_url, postgres::NoTls)?;
+            let row = db.query_one(
+                "SELECT g.canonical_metadata, o.canonical_outcome, to_jsonb(g)
+                 FROM oauth_session_grants g JOIN oauth_session_grant_operations o ON o.id=g.issuance_operation_id
+                 WHERE g.issuer_id=$1 AND g.session_grant=$2 AND o.state='committed'",
+                &[&issuer, &presented],
+            )?;
+            let count = db.query_one(
+                "SELECT count(*) FROM oauth_session_grants WHERE issuer_id=$1 AND subject_id=$2",
+                &[&issuer, &actor_id],
+            )?.get(0);
+            Ok((row.get(0), row.get(1), row.get(2), count))
+        },
+    ).await??;
+    let metadata: arkret_models_identity::SessionGrantMetadata =
+        serde_json::from_slice(&metadata_bytes)?;
+    metadata.validate_request_binding(
+        &expected_ref,
+        &expected_account,
+        station.service_id(),
+        chrono::Utc::now(),
+    )?;
     ensure!(
-        outcome
-            .get("grant_id")
-            .and_then(Value::as_str)
-            .is_some_and(|value| value.starts_with("ak:session_grant:")),
-        "replayed outcome omitted a canonical SessionGrantId"
+        arkret_canonical::canonical_json_bytes(&metadata)? == metadata_bytes
+            && canonical_outcome == replay_one
+            && count == 1,
+        "process restart changed the canonical issuer originals or minted another grant"
     );
     ensure!(
-        outcome
-            .get("grant_jwt")
-            .and_then(Value::as_str)
-            .is_some_and(|value| value.split('.').count() == 3),
-        "replayed outcome omitted the committed signed credential"
+        metadata.session_public_key == held_jwk
+            && metadata.cnf_jkt == held_jkt
+            && metadata
+                .device_id
+                .as_ref()
+                .map(arkret_identifiers::DeviceId::as_str)
+                == issue_body["device_id"].as_str()
+            && metadata.scopes == expected_scopes
+            && metadata.credential_class
+                == arkret_models_identity::SessionGrantCredentialClass::Standard,
+        "replayed issuer record changed the requested holder, Device or scope"
+    );
+    ensure!(
+        outcome["account_id"] == json!(expected_account)
+            && outcome["principal_id"] == json!(expected_account.principal_id)
+            && outcome["audience_id"] == json!(station.service_id())
+            && outcome["dpop_jkt"] == json!(held_jkt)
+            && outcome["scopes"] == json!(expected_scopes)
+            && outcome["expires_at"]
+                == json!(arkret_canonical::format_timestamp_canonical(
+                    metadata.expires_at
+                ))
+            && outcome["local_account_id"] == stored["local_account_id"]
+            && stored["session_grant"] == json!(secret)
+            && stored["issuer_id"] == json!(expected_ref.issuer_id)
+            && stored["lifecycle_state"] == "active"
+            && stored["successor_grant_id"].is_null(),
+        "public opaque outcome is not bound to the independent request and immutable issuer record"
     );
     Ok(())
 }

@@ -463,7 +463,7 @@ async fn signal_recipient_consumes_formal_dual_action_fixture_without_body_on_re
         "resources":[{"kind":"strand","realm_id":signal.realm_id,"strand_id":strand}],
         "status":"active", "issued_at":"2026-07-01T00:00:00.000Z",
         "issuer_authority_refs":[{"kind":"realm_root","realm_id":signal.realm_id,"authority_event_ref":crate::fixture_event_id("signal-product-root"),"authority_generation":"0"}],
-        "authority_root_refs":[{"kind":"realm_root","realm_id":signal.realm_id,"authority_event_ref":crate::fixture_event_id("signal-product-root"),"authority_generation":"0"}], "authority_depth":1
+        "authority_root_ref":{"kind":"realm_root","realm_id":signal.realm_id,"authority_event_ref":crate::fixture_event_id("signal-product-root"),"authority_generation":"0"}, "authority_depth":1
     }))?;
     let head = CommitStreamHead {
         stream_ref: CommitStreamRef::Realm {

@@ -4,11 +4,9 @@
 
 use std::collections::BTreeMap;
 
-use anyhow::{Context, Result, bail, ensure};
-use arkret_models_identity::{
-    CanonicalSessionPublicJwk, SessionGrantIssuancePreimage, SignedSessionGrantClaims,
-};
-use serde_json::{Value, json};
+use anyhow::{Context, Result, ensure};
+use arkret_models_identity::{CanonicalSessionPublicJwk, SessionGrantMetadata};
+use serde_json::Value;
 
 use super::load_fixture_value;
 
@@ -20,194 +18,99 @@ fn text<'a>(value: &'a Value, key: &str) -> Result<&'a str> {
         .with_context(|| format!("missing string {key}"))
 }
 
-fn materialize_issuance_preimage(vectors: &[Value], vector: &Value) -> Result<Value> {
-    if let Some(canonical_preimage) = vector
-        .get("canonical_preimage_utf8")
-        .and_then(Value::as_str)
-    {
-        return serde_json::from_str(canonical_preimage)
-            .context("parse canonical issuance preimage fixture");
-    }
-
-    let mut preimage = if !vector["issuance_preimage"].is_null() {
-        vector["issuance_preimage"].clone()
-    } else {
-        let inherited = text(vector, "inherits")?;
-        let base = vectors
-            .iter()
-            .find(|candidate| candidate["name"].as_str() == Some(inherited))
-            .with_context(|| format!("unknown inherited issuance vector {inherited}"))?;
-        materialize_issuance_preimage(vectors, base)?
-    };
-    if let Some(overrides) = vector["override"].as_object() {
-        let object = preimage
-            .as_object_mut()
-            .context("issuance preimage object")?;
-        for (field, value) in overrides {
-            object.insert(field.clone(), value.clone());
-        }
-    }
-    if let Some(omitted) = vector["omit"].as_array() {
-        let object = preimage
-            .as_object_mut()
-            .context("issuance preimage object")?;
-        for field in omitted {
-            object.remove(field.as_str().context("omitted field must be a string")?);
-        }
-    }
-    Ok(preimage)
-}
-
-/// Pin issuer domain separation, the closed preimage and the suite-tagged ID.
+/// Verify official opaque entropy, portable references and immutable metadata.
 pub fn run_session_grant_issuance_kat_suite() -> Result<()> {
     let fixture = load_fixture_value(SESSION_FIXTURE)?;
     let vectors = fixture["accepted_vectors"]
         .as_array()
-        .context("accepted_vectors must be an array")?;
-    ensure!(vectors.len() >= 3, "session-grant KAT coverage regressed");
-    for required in [
-        "issuer_a_closed_preimage",
-        "issuer_b_domain_separation",
-        "absent_optional_is_omitted",
-    ] {
-        ensure!(
-            vectors
-                .iter()
-                .any(|vector| vector["name"].as_str() == Some(required)),
-            "session-grant KAT is missing required vector {required}"
-        );
-    }
-
-    let mut derived_ids = BTreeMap::new();
+        .context("accepted vectors")?;
+    ensure!(vectors.len() >= 6, "opaque issuer KAT coverage regressed");
+    let mut references = BTreeMap::new();
     for vector in vectors {
         let name = text(vector, "name")?;
-        let preimage: SessionGrantIssuancePreimage =
-            serde_json::from_value(materialize_issuance_preimage(vectors, vector)?)
-                .with_context(|| format!("parse issuance preimage {name}"))?;
-        let bytes = preimage.canonical_bytes()?;
+        let metadata: SessionGrantMetadata = serde_json::from_value(vector["metadata"].clone())?;
+        metadata.validate()?;
         ensure!(
-            bytes == text(vector, "canonical_preimage_utf8")?.as_bytes(),
-            "canonical issuance bytes drifted for {name}"
+            arkret_canonical::canonical_json_bytes(&metadata)?
+                == text(vector, "canonical_metadata_utf8")?.as_bytes()
         );
-        ensure!(
-            hex::encode(preimage.issuance_digest()?) == text(vector, "sha256_digest_hex")?,
-            "issuance digest drifted for {name}"
-        );
-        let grant_id = preimage.grant_id()?;
-        ensure!(grant_id.as_str() == text(vector, "session_grant_id")?);
-        ensure!(grant_id.as_str() == text(vector, "jwt_jti")?);
-        derived_ids.insert(name.to_owned(), grant_id.to_string());
-
-        // A signed claim is the preimage plus kind+jti, never an Event envelope.
-        let mut claims = materialize_issuance_preimage(vectors, vector)?;
-        claims
-            .as_object_mut()
-            .context("preimage object")?
-            .remove("schema");
-        claims["kind"] = json!("ak.session.grant");
-        claims["jti"] = json!(grant_id.as_str());
-        let claims: arkret_models_identity::SignedSessionGrantClaims =
-            serde_json::from_value(claims).with_context(|| format!("parse claims {name}"))?;
-        claims.validate()?;
-        ensure!(claims.recomputed_grant_id()? == grant_id);
-    }
-    ensure!(
-        derived_ids["issuer_a_closed_preimage"] != derived_ids["issuer_b_domain_separation"],
-        "issuer DID must domain-separate otherwise identical grants"
-    );
-    let canonical_jwk = text(&fixture["jwk_canonicalization"], "all_inputs_normalize_to")?;
-    for wire in fixture["equivalent_non_canonical_jwk_inputs"]
-        .as_array()
-        .context("equivalent JWK inputs")?
-    {
-        ensure!(CanonicalSessionPublicJwk::new(wire.as_str().unwrap())?.as_str() == canonical_jwk);
-    }
-
-    let vector_by_name = |name: &str| -> Result<&Value> {
-        vectors
-            .iter()
-            .find(|vector| vector["name"].as_str() == Some(name))
-            .with_context(|| format!("unknown accepted vector {name}"))
-    };
-    let claims_value = |vector: &Value| -> Result<Value> {
-        let mut claims = materialize_issuance_preimage(vectors, vector)?;
-        claims
-            .as_object_mut()
-            .context("preimage object")?
-            .remove("schema");
-        claims["kind"] = json!("ak.session.grant");
-        claims["jti"] = vector["session_grant_id"].clone();
-        Ok(claims)
-    };
-    for tamper in fixture["tamper_cases"]
-        .as_array()
-        .context("tamper_cases must be an array")?
-    {
-        let base = vector_by_name(
-            tamper["base_vector"]
-                .as_str()
-                .unwrap_or("issuer_a_closed_preimage"),
+        let entropy = hex::decode(text(vector, "random_bytes_hex")?)?;
+        ensure!(entropy.len() == 32);
+        let encoded = arkret_canonical::base64url_encode(&entropy);
+        ensure!(encoded == text(vector, "session_grant")?);
+        let secret = arkret_wire::SessionGrantSecret::new(encoded)?;
+        let digest = arkret_canonical::sha256_bytes(secret.as_str().as_bytes());
+        ensure!(format!("sha256:{}", hex::encode(digest)) == text(vector, "credential_digest")?);
+        ensure!(arkret_canonical::base64url_encode(digest) == text(vector, "dpop_ath")?);
+        ensure!(serde_json::to_value(metadata.grant_ref())? == vector["session_grant_ref"]);
+        references.insert(name.to_owned(), metadata.grant_ref());
+        metadata.validate_request_binding(
+            &metadata.grant_ref(),
+            &metadata.account_id,
+            &metadata.audience_id,
+            metadata.not_before,
         )?;
-        let mut claims = claims_value(base)?;
-        match text(tamper, "mutate")? {
-            "issuance_nonce" => {
-                claims["issuance_nonce"] = json!("/////////////////////wAAAAAAAAAAAAAAAAAAAAA")
-            }
-            "audience_id" => {
-                claims["audience_id"] = json!("ak:did_core:webvh:z6mkfixtureotherexample")
-            }
-            "holder_binding.device_binding" => {
-                claims["holder_binding"]["device_binding"] =
-                    json!("ak:device:019a0000-0000-7000-8000-000000000099")
-            }
-            "session_public_key_member_order_or_whitespace" => {
-                claims["session_public_key"] = json!(
-                    "{ \"kty\": \"OKP\", \"crv\": \"Ed25519\", \"x\": \"11qYAYdk9Jc1iP4Z9Qv7XKpM6Jw8LmN0RsTuVwXyZaB\" }"
-                )
-            }
-            "session_id" => claims["session_id"] = base["session_grant_id"].clone(),
-            other => bail!("unhandled SessionGrant tamper vector {other}"),
-        }
-        let rejected =
-            serde_json::from_value::<SignedSessionGrantClaims>(claims).map_or(true, |claims| {
-                claims.validate().is_err()
-                    || claims
-                        .recomputed_grant_id()
-                        .map_or(true, |recomputed| recomputed != claims.grant_id)
-            });
         ensure!(
-            rejected,
-            "tamper vector {} was accepted",
-            text(tamper, "name")?
+            metadata
+                .validate_request_binding(
+                    &metadata.grant_ref(),
+                    &metadata.account_id,
+                    &metadata.audience_id,
+                    metadata.expires_at
+                )
+                .is_err()
         );
     }
-
+    let first = &references["issuer_a_standard"];
+    let second = &references["issuer_b_same_record_id"];
+    ensure!(
+        first.id == second.id && first != second,
+        "issuer scoping must not collapse equal local UUIDs"
+    );
+    let canonical_jwk = text(&fixture, "canonical_public_jwk")?;
+    for value in fixture["equivalent_non_canonical_jwk_inputs"]
+        .as_array()
+        .context("JWK inputs")?
+    {
+        ensure!(
+            CanonicalSessionPublicJwk::new(value.as_str().context("JWK string")?)?.as_str()
+                == canonical_jwk
+        );
+    }
     for negative in fixture["credential_binding_negative_cases"]
         .as_array()
-        .context("credential binding negatives")?
+        .context("binding negatives")?
     {
-        let base = vector_by_name(text(negative, "base_vector")?)?;
-        let mut claims = claims_value(base)?;
+        let base = vectors
+            .iter()
+            .find(|v| v["name"] == negative["base_vector"])
+            .context("negative base vector")?;
+        let mut metadata = base["metadata"].clone();
+        let object = metadata.as_object_mut().context("metadata object")?;
         if let Some(fields) = negative["omit"].as_array() {
             for field in fields {
-                claims
-                    .as_object_mut()
-                    .unwrap()
-                    .remove(field.as_str().unwrap());
+                object.remove(field.as_str().context("omitted member")?);
             }
         }
-        if let Some(add) = negative.get("add_from_vector") {
-            let field = text(add, "field")?;
-            let source = vector_by_name(text(add, "vector")?)?;
-            claims[field] = materialize_issuance_preimage(vectors, source)?[field].clone();
+        if let Some(fields) = negative["set"].as_object() {
+            for (key, value) in fields {
+                object.insert(key.clone(), value.clone());
+            }
         }
-        let rejected = serde_json::from_value::<SignedSessionGrantClaims>(claims)
-            .map_or(true, |claims| claims.validate().is_err());
         ensure!(
-            rejected,
-            "binding negative {} was accepted",
+            serde_json::from_value::<SessionGrantMetadata>(metadata).is_err(),
+            "binding negative {} accepted",
             text(negative, "name")?
         );
+    }
+    for invalid in [
+        String::new(),
+        "A".repeat(42),
+        "B".repeat(43),
+        format!("{}=", "A".repeat(43)),
+        "header.payload.signature".into(),
+    ] {
+        ensure!(arkret_wire::SessionGrantSecret::new(invalid).is_err());
     }
     Ok(())
 }
@@ -293,24 +196,24 @@ impl MiniIssuerLedger {
 /// service harness, not by this in-memory KAT.
 pub fn run_session_grant_issuer_ledger_reference_model_suite() -> Result<()> {
     let fixture = load_fixture_value(SESSION_FIXTURE)?;
-    let replay_names: Vec<&str> = fixture["replay_cases"]
-        .as_array()
-        .context("replay cases")?
-        .iter()
-        .map(|case| case["name"].as_str().unwrap())
-        .collect();
-    ensure!(
-        replay_names
-            == [
-                "same_request_exact_replay",
-                "same_key_different_intent",
-                "replay_after_expiry",
-                "replay_after_supersede"
-            ]
-    );
+    let cases = fixture["ledger_cases"].as_array().context("ledger cases")?;
+    for required in [
+        "issue_response_loss_restart_exact_replay",
+        "same_identity_different_intent",
+        "replay_after_expiry",
+        "refresh_response_loss_restart_exact_replay",
+        "cross_issuer_same_id_isolated",
+    ] {
+        ensure!(
+            cases
+                .iter()
+                .any(|case| case["name"].as_str() == Some(required)),
+            "missing ledger case {required}"
+        );
+    }
     let intent = br#"{"audience":"did:web:service.example","request":"same"}"#;
     let outcome =
-        br#"{"session_grant_id":"ak:session_grant:fixture","session_grant":"jwt.fixture"}"#;
+        br#"{"session_grant_id":"ak:session_grant:019a0000-0000-7000-8000-000000000011","session_grant":"AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8"}"#;
     let mut ledger = MiniIssuerLedger::default();
     ensure!(
         ledger.issue("proof-1", intent, outcome, 100) == LedgerResult::Outcome(outcome.to_vec())

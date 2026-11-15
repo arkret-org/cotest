@@ -64,11 +64,12 @@ pub(super) async fn exercise(
     );
     let issuer_database = deployment.coauth.pg.connect_url.clone();
     let tokens = [issued.to_owned(), refreshed.to_owned()];
+    let issuer_id = deployment.station.service_id().as_str().to_owned();
     let issuer = tokio::task::spawn_blocking(move || -> Result<Value> {
         let mut db=postgres::Client::connect(&issuer_database,postgres::NoTls)?;
         let mut originals=Vec::new();
         for token in tokens {
-            let row=db.query_one("SELECT to_jsonb(g),to_jsonb(s),o.canonical_outcome FROM oauth_session_grants g JOIN user_sessions s ON s.id=g.user_session_id JOIN oauth_session_grant_operations o ON o.id=g.issuance_operation_id WHERE g.grant_jwt=$1",&[&token])?;
+            let row=db.query_one("SELECT to_jsonb(g),to_jsonb(s),o.canonical_outcome FROM oauth_session_grants g JOIN user_sessions s ON s.id=g.user_session_id JOIN oauth_session_grant_operations o ON o.id=g.issuance_operation_id WHERE g.session_grant=$1 AND g.issuer_id=$2",&[&token,&issuer_id])?;
             let bytes:Vec<u8>=row.get(2);
             originals.push(json!({"grant":row.get::<_,Value>(0),"browser_session":row.get::<_,Value>(1),"canonical_outcome_base64url":arkret_canonical::base64url_encode(&bytes),"canonical_outcome":serde_json::from_slice::<Value>(&bytes)?}));
         }
@@ -108,9 +109,9 @@ pub(super) fn verify(
     evidence: &Value,
     claims: &Value,
 ) -> Result<()> {
-    let claims: arkret_models_identity::SignedSessionGrantClaims =
+    let claims: arkret_models_identity::SessionGrantMetadata =
         serde_json::from_value(claims.clone())?;
-    let token = evidence["issuer_originals"][1]["grant"]["grant_jwt"]
+    let token = evidence["issuer_originals"][1]["grant"]["session_grant"]
         .as_str()
         .context("actual issuer credential original")?;
     let expected = claims.session_public_key.thumbprint_sha256()?;

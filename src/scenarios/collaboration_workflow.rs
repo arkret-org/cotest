@@ -210,7 +210,7 @@ pub async fn standard_session_grant_revoke_invalidates_current_session() -> Resu
         .ok_or_else(|| anyhow::anyhow!("standard grant issuer ledger is unavailable"))?;
     let revoke_url = format!("{authority_origin}/_arkret/gate/account/session-grants/revoke");
     expect_status(server.http().post(&revoke_url), StatusCode::UNAUTHORIZED).await?;
-    let grant_id = server.harness_session_grant_id(&bob)?;
+    let grant_ref = server.harness_session_grant_ref(&bob)?;
     let crate::harness::ClientSession::Canonical { grant, signing_key } = bob.session() else {
         anyhow::bail!("revocation scenario requires a canonical holder");
     };
@@ -228,7 +228,7 @@ pub async fn standard_session_grant_revoke_invalidates_current_session() -> Resu
         .build()?;
     let request = serde_json::from_value(serde_json::json!({}))?;
     let revoked = authority_client
-        .session_grant_revoke(&grant_id, &request)
+        .session_grant_revoke(&grant_ref.id, &request)
         .await?;
     assert_eq!(revoked.revoked_count, 1);
     expect_status(
