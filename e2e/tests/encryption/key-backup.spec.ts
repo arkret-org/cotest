@@ -974,12 +974,14 @@ async function expectNewGrantDpopSelfPath(
     trace.authorizedSelfRequests
       .slice(startIndex)
       .some(isRealGrantDpopSelfRequest),
-    `${label}: expected a real session-grant JWT self/root request with DPoP`,
+    `${label}: expected an opaque SessionGrant self/root request with DPoP`,
   ).toBe(true);
 }
 
 function isRealGrantDpopSelfRequest(hit: HolderProofRequest): boolean {
-  return hit.hasDpop && hit.status < 500 && hit.grantJwt.split(".").length >= 3;
+  if (!hit.hasDpop || hit.status >= 500 || !/^[A-Za-z0-9_-]{43}$/.test(hit.grantJwt)) return false;
+  const credential = Buffer.from(hit.grantJwt, "base64url");
+  return credential.length === 32 && credential.toString("base64url") === hit.grantJwt;
 }
 
 async function expectSuccessfulUnlockWithHolderProof(

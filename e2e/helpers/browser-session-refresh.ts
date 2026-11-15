@@ -38,11 +38,12 @@ export function observeBrowserSessionRefresh(
     try {
       const input = request.postDataJSON();
       const outcome = await response.json();
-      if (closed || typeof input?.grant_jwt !== "string" || input.device_id !== options.deviceId ||
+      if (closed || typeof input?.session_grant !== "string" || input.device_id !== options.deviceId ||
           (input.audience_id !== undefined && input.audience_id !== options.audience) ||
           outcome?.account_id?.principal_id !== options.accountId.principal_id ||
           outcome?.account_id?.station_id !== options.accountId.station_id ||
           outcome?.device_id !== options.deviceId || outcome?.audience_id !== options.audience ||
+          outcome?.issuer_id !== options.accountId.station_id ||
           JSON.stringify(outcome?.granted_scope) !== JSON.stringify(options.grantedScope) ||
           typeof outcome?.session_grant !== "string" || !outcome.session_grant ||
           typeof outcome?.session_grant_id !== "string" || !outcome.session_grant_id ||
@@ -54,12 +55,12 @@ export function observeBrowserSessionRefresh(
           key?.x !== options.holderJwk.x) return;
       const next = { credential: outcome.session_grant, id: outcome.session_grant_id,
         previous: outcome.previous_session_grant_id };
-      const known = successors.get(input.grant_jwt);
+      const known = successors.get(input.session_grant);
       if (known && (known.credential !== next.credential || known.id !== next.id || known.previous !== next.previous)) {
         conflict = true;
         return;
       }
-      successors.set(input.grant_jwt, next);
+      successors.set(input.session_grant, next);
       // A later response may finish decoding first. Join only the exact chain
       // rooted at this fixture's original credential and grant id.
       for (;;) {

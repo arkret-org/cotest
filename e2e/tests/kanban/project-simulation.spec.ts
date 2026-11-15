@@ -738,10 +738,7 @@ test.describe("project simulation", () => {
         payload: {
           primary_conflict_domain: (assignment.payload as Record<string, unknown>)
             .primary_conflict_domain,
-          expected_revision: {
-            commit_id: assignmentCommit.commit_id,
-            stream_position: assignmentCommit.stream_position,
-          },
+          expected_commit_id: assignmentCommit.commit_id,
           relation_id: relationId,
         },
       }),

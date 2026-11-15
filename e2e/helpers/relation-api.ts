@@ -2,7 +2,7 @@
 // Contract: arkret-spec/spec/v1/zh/models/relation.md sections 2 and 6;
 // schemas/event-payload.schema.json#/$defs/relation_create_payload.
 //
-// The payload is exactly `{primary_conflict_domain, expected_revision,
+// The payload is exactly `{primary_conflict_domain, expected_commit_id,
 // relation}`. `relation` is the closed six-field `relation_definition`
 // authoring region; the materialized members (`schema`, `realm_id`, `id`,
 // `state`, `created_by`, `created_at`, ...) are reducer-derived and rejected.
@@ -14,8 +14,6 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 export type RelationEndpoint = string | Record<string, unknown>;
-
-export type CurrentRevision = { commit_id: string; stream_position: number };
 
 const registryPath = resolve(
   dirname(fileURLToPath(import.meta.url)),
@@ -55,7 +53,7 @@ export function relationCreatePayload(args: {
   scopeCircleId?: string;
   rank?: string;
   fields?: Record<string, unknown>;
-  expectedRevision?: CurrentRevision | null;
+  expectedCommitId?: string | null;
 }): Record<string, unknown> {
   const domainKind = registeredDomainKind(args.relationKind);
   return {
@@ -65,7 +63,7 @@ export function relationCreatePayload(args: {
       from_ref: args.fromRef,
       ...(domainKind === "tuple" ? { to_ref: args.toRef } : {}),
     },
-    expected_revision: args.expectedRevision ?? null,
+    expected_commit_id: args.expectedCommitId ?? null,
     relation: {
       ...(args.scopeCircleId ? { scope_circle_id: args.scopeCircleId } : {}),
       relation_kind: args.relationKind,

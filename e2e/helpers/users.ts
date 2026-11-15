@@ -95,7 +95,7 @@ type UserSession = {
   serverUrl: string;
   keepDeviceAuthorizationModal: boolean;
   /// The credential presented on `/_arkret/self/*`. Under the ②(A+②) model this
-  /// is the `ak.session.grant` JWT; a request to a self-path also requires the
+  /// is the opaque SessionGrant; a request to a self-path also requires the
   /// DPoP + holder-proof material in `grant` below.
   sessionCredential: string;
   /// Real grant + DPoP material for direct (non-browser) self-path API calls.
@@ -125,7 +125,7 @@ type OpenUserOpts = {
   /// This keeps diagnostics/page helpers but avoids seeding a fixture
   /// account/device into inkson.config.v1 before the product login flow runs.
   neutralLoginConfig?: boolean;
-  /// Real `ak.session.grant` JWT to inject as inkson's session credential.
+  /// Real opaque SessionGrant to inject as inkson's session credential.
   /// When set together with `dpopSeedB64url`, inkson's dev-only boot injection
   /// rehydrates the grant + DPoP device key instead of relying on dev-login.
   grantJwt?: string;
@@ -2238,6 +2238,7 @@ export async function pairSiblingDeviceSession(
     const grant = await expectJsonOk<{
       session_grant?: string;
       session_grant_id?: string;
+      issuer_id?: string;
       expires_at: string;
       granted_scope: string[];
       account_id?: { principal_id?: string; station_id?: string };
@@ -2274,6 +2275,7 @@ export async function pairSiblingDeviceSession(
     expect(grantJwt, "sibling session grant").toBeTruthy();
     expect(grantId, "sibling session grant id").toBeTruthy();
     expect(grant.account_id).toEqual(accountId);
+    expect(grant.issuer_id).toBe(accountId.station_id);
     expect(grant.audience_id).toBe(accountId.station_id);
     expect(grant.device_id).toBe(deviceId);
     registerRequestAuth(grantJwt!, (method, url) =>
@@ -2649,7 +2651,7 @@ export async function openUser(
   const sessionInjection =
     opts.grantJwt && opts.dpopSeedB64url
       ? {
-          grant_jwt: opts.grantJwt,
+          session_grant: opts.grantJwt,
           account_id: opts.accountId,
           dpop_seed_b64url: opts.dpopSeedB64url,
           principal_did: user.did,
@@ -2659,7 +2661,7 @@ export async function openUser(
           ...(opts.eventSigningSeedB64url
             ? { event_signing_seed_b64url: opts.eventSigningSeedB64url }
             : {}),
-          grant_id: opts.grantId ?? "",
+          grant_ref: { issuer_id: opts.accountId!.station_id, id: opts.grantId ?? "" },
           expires_at: opts.grantExpiresAt ?? canonicalSessionsByGrant.get(opts.grantJwt)?.grantExpiresAt,
           granted_scope: opts.grantedScope ?? canonicalSessionsByGrant.get(opts.grantJwt)?.grantedScope,
           audience: opts.grantAudience ?? "",

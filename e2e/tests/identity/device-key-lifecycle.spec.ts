@@ -421,7 +421,7 @@ async function reloadWithSessionGrantExpiringSoon(
       window.localStorage.setItem(
         "inkson.test.session_grant_expiry_override.v1",
         JSON.stringify({
-          expected_grant_jwt: expectedGrantJwt,
+          expected_session_grant: expectedGrantJwt,
           seconds_from_now: secondsFromNow,
           result_key: resultKey,
         }),

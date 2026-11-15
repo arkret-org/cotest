@@ -28,7 +28,7 @@ test.describe("provisioning bridge @fully-implemented", () => {
     // The AccountId is closed: the Station half is the Station that registered
     // it, not whatever the caller asked for.
     expect(principal.accountId.station_id).toBe(station.serviceId);
-    expect(principal.grant.sessionGrant, "grant carried no session JWT").toBeTruthy();
+    expect(principal.grant.sessionGrant, "grant carried no opaque SessionGrant").toBeTruthy();
     expect(principal.grant.audienceId).toBe(station.serviceId);
     expect(principal.grant.deviceId).toBe(principal.deviceId);
     expect(principal.grant.grantedScope.length).toBeGreaterThan(0);

@@ -76,7 +76,7 @@ test.describe("complete peer Consent", () => {
     const replay = await expectJsonOk<ConsentView>(await first.submit(), "old exact Consent replacement replay");
     expect(replay.revision).toEqual(first.view.revision);
     const afterReplay = await readConsentCurrentApi(request, token, alice.id, peer);
-    expect(consentExpectedCurrent(afterReplay)).toEqual({ state: "present", revision: added.view.revision });
+    expect(consentExpectedCurrent(afterReplay)).toEqual({ state: "present", commit_id: added.view.revision.commit_id });
     expect(consentPermissions(afterReplay)).toEqual([...original, { consent_scope: "presence" }]);
   });
 
@@ -93,8 +93,8 @@ test.describe("complete peer Consent", () => {
     const readClosed = await readConsentCurrentApi(request, token, alice.id, peer);
     expect(readClosed.current.state).toBe("present");
     expect(consentPermissions(readClosed)).toEqual([]);
-    expect(consentExpectedCurrent(readClosed)).toEqual({ state: "present", revision: closed.view.revision });
-    for (const expected of [consentExpectedCurrent(never), { state: "present" as const, revision: first.view.revision }]) {
+    expect(consentExpectedCurrent(readClosed)).toEqual({ state: "present", commit_id: closed.view.revision.commit_id });
+    for (const expected of [consentExpectedCurrent(never), { state: "present" as const, commit_id: first.view.revision.commit_id }]) {
       const event = consentReplacementEvent(alice.id, {
         peer, expected_current: expected, permissions: [{ consent_scope: "presence" }],
       });
@@ -179,7 +179,7 @@ test.describe("complete peer Consent", () => {
       expect(extended.current.state).toBe("present");
       const extendedRevision = consentExpectedCurrent(extended);
       expect(extendedRevision.state).toBe("present");
-      if (extendedRevision.state !== "present") {
+      if (extendedRevision.state !== "present" || extended.current.state !== "present") {
         throw new Error("confirmed four-scope Consent has no accepted revision");
       }
 
@@ -218,15 +218,15 @@ test.describe("complete peer Consent", () => {
       const empty = await readConsentCurrentApi(request, token, flow.user.id, peer);
       const emptyRevision = consentExpectedCurrent(empty);
       expect(emptyRevision.state).toBe("present");
-      if (emptyRevision.state !== "present") {
+      if (emptyRevision.state !== "present" || empty.current.state !== "present") {
         throw new Error("confirmed empty Consent reverted to never_written");
       }
-      const previousPosition = extendedRevision.revision.stream_position;
-      const emptyPosition = emptyRevision.revision.stream_position;
+      const previousPosition = extended.current.current_state.revision.stream_position;
+      const emptyPosition = empty.current.current_state.revision.stream_position;
       expect(Number.isSafeInteger(previousPosition) && previousPosition >= 0).toBe(true);
       expect(Number.isSafeInteger(emptyPosition) && emptyPosition >= 0).toBe(true);
       expect(emptyPosition).toBeGreaterThan(previousPosition);
-      expect(emptyRevision.revision.commit_id).not.toBe(extendedRevision.revision.commit_id);
+      expect(emptyRevision.commit_id).not.toBe(extendedRevision.commit_id);
       await actor.clickWithPassivePromptRetry(actor.page.locator(".consent-read-complete-button"));
       await expect(input).toBeVisible({ timeout: 30_000 });
       await expect.poll(async () => JSON.parse(await input.inputValue())).toEqual([]);

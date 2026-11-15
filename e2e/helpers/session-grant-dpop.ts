@@ -21,7 +21,7 @@
 // (coland: crates/http/src/routing/identity/auth_grant_dpop.rs):
 //   * compact JWS, header `{typ:"dpop+jwt", alg:"Ed25519", jwk:<public OKP jwk>}`
 //   * claims `{htm, htu, ath, jti, iat}`
-//   * `ath = base64url(sha256(grant_jwt))` (unpadded)
+//   * `ath = base64url(sha256(exact ASCII SessionGrant))` (unpadded)
 // and the embedded JWK thumbprint equals the grant's `cnf.jkt`.
 
 import {
@@ -160,7 +160,7 @@ export function jwkThumbprintEd25519(x: string): string {
 }
 
 /// `ath` claim per RFC 9449 §4.3: base64url-encoded SHA-256 of the presented
-/// session credential, unpadded. In Arkret this is the `ak.session.grant` JWT.
+/// exact ASCII opaque SessionGrant credential, unpadded.
 export function dpopAth(grantJwt: string): string {
   return base64url(createHash("sha256").update(grantJwt).digest());
 }

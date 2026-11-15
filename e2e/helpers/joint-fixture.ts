@@ -15,7 +15,7 @@ import {
 export type JointUsersFixture = {
   alice: JointUser;
   bob: JointUser;
-  /// Real `ak.session.grant` JWT (the bearer presented on `/_arkret/self/*`).
+  /// Real opaque SessionGrant presented with DPoP on `/_arkret/self/*`.
   aliceToken: string;
   bobToken: string;
   aliceSession: DpopUserSession;

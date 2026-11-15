@@ -15,8 +15,8 @@ function setup() {
   const page = new EventEmitter(); return { page, tracker: observeBrowserSessionRefresh(page, options) };
 }
 function emit(page, predecessor = "initial", credential = "next", extra = {}) {
-  const input = { grant_jwt: predecessor, device_id: "device", audience_id: "station", ...extra.input };
-  const body = { account_id: accountId, device_id: "device", audience_id: "station",
+  const input = { session_grant: predecessor, device_id: "device", audience_id: "station", ...extra.input };
+  const body = { account_id: accountId, issuer_id: "station", device_id: "device", audience_id: "station",
     granted_scope: ["read", "write"], session_public_key: JSON.stringify(holderJwk),
     session_grant: credential, session_grant_id: "grant-1", previous_session_grant_id: "grant-0",
     expires_at: expiry, ...extra.outcome };
@@ -39,12 +39,21 @@ test("foreign issuer and failed refresh cannot change the credential", async () 
 });
 test("Account, Device, audience, scope and holder changes are refused", async () => {
   for (const outcome of [{ account_id: { ...accountId, station_id: "other" } },
+    { issuer_id: "other" }, { issuer_id: undefined },
     { account_id: { ...accountId, principal_id: "bob" } }, { device_id: "other" },
     { audience_id: "other" }, { granted_scope: ["admin"] },
     { session_public_key: JSON.stringify({ ...holderJwk, x: "other" }) }, { expires_at: "2000-01-01T00:00:00Z" }]) {
     const { page, tracker } = setup(); emit(page, "initial", "bad", { outcome }); await setImmediate();
     assert.equal(tracker.credential(), "initial");
   }
+});
+
+test("retired grant_jwt refresh input cannot advance the observed chain", async () => {
+  const { page, tracker } = setup();
+  emit(page, "initial", "next", { input: { session_grant: undefined, grant_jwt: "initial" } });
+  await setImmediate();
+  assert.equal(tracker.credential(), "initial");
+  assert.equal(tracker.refreshCount(), 0);
 });
 test("an unrelated chain cannot replace this browser fixture", async () => {
   const { page, tracker } = setup(); emit(page, "unrelated"); await setImmediate();

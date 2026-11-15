@@ -21,7 +21,7 @@ export function consentPermissions(current: ConsentCurrentReadResponseBody): Con
 
 export function consentExpectedCurrent(current: ConsentCurrentReadResponseBody): ConsentReplacePayload["expected_current"] {
   return current.current.state === "present"
-    ? { state: "present", revision: structuredClone(current.current.current_state.revision) }
+    ? { state: "present", commit_id: current.current.current_state.revision.commit_id }
     : { state: "never_written" };
 }
 

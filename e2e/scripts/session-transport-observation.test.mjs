@@ -159,8 +159,9 @@ test("forged genesis coordinates and Event refs fail without weakening ordinary 
 
 // Opaque tool-only strings exercise attribution; no JWT validation is simulated.
 const holder = { principal_id: "principal", station_id: "station" };
+const hookRef = (id, issuer = holder.station_id) => JSON.stringify({ issuer_id: issuer, id });
 function refreshBody(previous, successor, grant) {
-  return { account_id: holder, previous_session_grant_id: previous,
+  return { account_id: holder, issuer_id: holder.station_id, previous_session_grant_id: previous,
     session_grant_id: successor, session_grant: grant };
 }
 
@@ -170,16 +171,16 @@ test("concurrent refresh cannot substitute another pair's viewer denial and reco
   tracker.refresh("DPoP other-old", refreshBody("other-before", "other-after", "other-new"));
   tracker.viewer(401, "DPoP other-old", "unauthenticated");
   tracker.viewer(200, "DPoP other-new");
-  assert.equal(tracker.recovered("other-before", "other-after"), true);
-  assert.equal(tracker.recovered("target-before", "target-after"), false);
-  assert.equal(tracker.matchesPredecessor("target-before", "target-after", "DPoP other-old"), false);
+  assert.equal(tracker.recovered(hookRef("other-before"), hookRef("other-after")), true);
+  assert.equal(tracker.recovered(hookRef("target-before"), hookRef("target-after")), false);
+  assert.equal(tracker.matchesPredecessor(hookRef("target-before"), hookRef("target-after"), "DPoP other-old"), false);
   tracker.viewer(401, "DPoP target-old", "unauthenticated");
   tracker.viewer(200, "DPoP other-new");
-  assert.equal(tracker.recovered("target-before", "target-after"), false);
+  assert.equal(tracker.recovered(hookRef("target-before"), hookRef("target-after")), false);
   tracker.viewer(200, "DPoP target-new");
-  assert.equal(tracker.recovered("target-before", "target-after"), true);
-  assert.equal(tracker.matchesPredecessor("target-before", "target-after", "DPoP target-old"), true);
-  assert.equal(tracker.matchesPredecessor("target-before", "other-after", "DPoP target-old"), false);
+  assert.equal(tracker.recovered(hookRef("target-before"), hookRef("target-after")), true);
+  assert.equal(tracker.matchesPredecessor(hookRef("target-before"), hookRef("target-after"), "DPoP target-old"), true);
+  assert.equal(tracker.matchesPredecessor(hookRef("target-before"), hookRef("other-after"), "DPoP target-old"), false);
 });
 
 test("wrong grant, wrong problem and successor before predecessor denial do not satisfy recovery", () => {
@@ -189,13 +190,13 @@ test("wrong grant, wrong problem and successor before predecessor denial do not 
   tracker.viewer(401, "DPoP wrong", "unauthenticated");
   tracker.viewer(401, "DPoP old", "capability_denied");
   tracker.viewer(200, "DPoP new");
-  assert.equal(tracker.recovered("before", "after"), false);
+  assert.equal(tracker.recovered(hookRef("before"), hookRef("after")), false);
   tracker.viewer(401, "DPoP old", "unauthenticated");
-  assert.equal(tracker.recovered("before", "after"), false);
+  assert.equal(tracker.recovered(hookRef("before"), hookRef("after")), false);
   tracker.viewer(200, "DPoP wrong");
-  assert.equal(tracker.recovered("before", "after"), false);
+  assert.equal(tracker.recovered(hookRef("before"), hookRef("after")), false);
   tracker.viewer(200, "DPoP new");
-  assert.equal(tracker.recovered("before", "after"), true);
+  assert.equal(tracker.recovered(hookRef("before"), hookRef("after")), true);
 });
 
 test("subscription recovery requires the exact demand and its issuer-linked successor", () => {
@@ -219,6 +220,8 @@ test("refresh attribution rejects different complete holders, missing ids and ch
   for (const mutate of [
     body => { body.account_id = { ...holder, principal_id: "other" }; },
     body => { body.account_id = { ...holder, station_id: "other" }; },
+    body => { body.issuer_id = "other"; },
+    body => { delete body.issuer_id; },
     body => { delete body.previous_session_grant_id; },
     body => { body.session_grant_id = body.previous_session_grant_id; },
     body => { delete body.session_grant; },
@@ -227,7 +230,7 @@ test("refresh attribution rejects different complete holders, missing ids and ch
     const body = refreshBody("before", "after", "new");
     mutate(body);
     assert.throws(() => tracker.refresh("DPoP old", body), /expected holder and distinct grant pair/);
-    assert.equal(tracker.recovered("before", "after"), false);
+    assert.equal(tracker.recovered(hookRef("before"), hookRef("after")), false);
   }
   const tracker = sessionGrantRotationObservation(holder);
   tracker.refresh("DPoP old", refreshBody("before", "after", "new"));
@@ -235,4 +238,25 @@ test("refresh attribution rejects different complete holders, missing ids and ch
     /opaque authorization binding/);
   assert.throws(() => tracker.refresh("DPoP old", refreshBody("before", "after", "substituted")),
     /opaque authorization binding/);
+});
+
+test("local rotation hook requires both complete issuer-scoped references", () => {
+  const tracker = sessionGrantRotationObservation(holder);
+  tracker.refresh("DPoP old", refreshBody("before", "after", "new"));
+  tracker.viewer(401, "DPoP old", "unauthenticated");
+  tracker.viewer(200, "DPoP new");
+  assert.equal(tracker.recovered(hookRef("before"), hookRef("after")), true);
+  for (const [previous, successor] of [
+    ["before", "after"],
+    [hookRef("before", "foreign"), hookRef("after")],
+    [hookRef("before"), hookRef("after", "foreign")],
+    [JSON.stringify({ id: "before" }), hookRef("after")],
+    [JSON.stringify({ issuer_id: "station", id: "before", extra: true }), hookRef("after")],
+    [JSON.stringify(null), hookRef("after")],
+    [hookRef("before"), "not-json"],
+  ]) {
+    assert.equal(tracker.recovered(previous, successor), false);
+    assert.equal(tracker.matchesPredecessor(previous, successor, "DPoP old"), false);
+  }
+  assert.equal(tracker.recovered(JSON.stringify({ id: "before", issuer_id: "station" }), hookRef("after")), true);
 });

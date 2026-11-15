@@ -714,6 +714,7 @@ export type AppletAuthorityMaterialResponseBody = {
             "not_before": string;
             "expires_at": string | null;
           };
+          "owner_transfer_acceptance_intent_digest"?: string;
         };
         "proof": {
           "verification_method": string;
@@ -1000,6 +1001,7 @@ export type AppletAuthorityMaterialResponseBody = {
             "not_before": string;
             "expires_at": string | null;
           };
+          "owner_transfer_acceptance_intent_digest"?: string;
         };
         "proof": {
           "verification_method": string;
@@ -1350,10 +1352,7 @@ export type AppletAuthorityMaterialResponseBody = {
           } | {
             "target_ref": string;
             "decision_ref": string;
-            "expected_revision": {
-              "commit_id": string;
-              "stream_position": number;
-            };
+            "expected_commit_id": string;
             "reason_code"?: string;
             "reason"?: string;
             "effective_at"?: string;
@@ -1617,7 +1616,6 @@ export type AppletAuthorityMaterialResponseBody = {
           "max_key_age"?: string;
           "key_backup_required"?: boolean;
           "approved_key_issuer_ids"?: string[];
-          "depends_on_moderation_state"?: boolean;
           "allowed_managed_actor_roles"?: Array<"bot" | "ghost">;
         }>;
         "issued_at": string;
@@ -1675,7 +1673,7 @@ export type AppletAuthorityMaterialResponseBody = {
           "agent_join_event_id": string;
         }>;
         "authority_depth": number;
-        "authority_root_refs": Array<{
+        "authority_root_ref": {
           "kind": "realm_root";
           "realm_id": string;
           "authority_event_ref": string;
@@ -1689,7 +1687,7 @@ export type AppletAuthorityMaterialResponseBody = {
           };
           "controller_join_event_id": string;
           "agent_join_event_id": string;
-        }>;
+        };
       };
     } | {
       "selector": {
@@ -2610,10 +2608,7 @@ export type ConsentReplacePayload = {
     "state": "never_written";
   } | {
     "state": "present";
-    "revision": {
-      "commit_id": string;
-      "stream_position": number;
-    };
+    "commit_id": string;
   };
   "permissions": Array<{
     "consent_scope": "invite" | "voice_call" | "video_call" | "presence";
@@ -2699,10 +2694,7 @@ export type ActorProfileUpdatePayload = {
     [key: string]: unknown;
   };
   "expected_state_digest"?: string;
-  "expected_revision"?: {
-    "commit_id": string;
-    "stream_position": number;
-  };
+  "expected_commit_id"?: string;
 };
 
 /** `event-payload.schema.json#/$defs/profile_realm_override_payload` — closed object schema. */
@@ -6093,7 +6085,6 @@ export type CapabilityGrantObject = {
     "max_key_age"?: string;
     "key_backup_required"?: boolean;
     "approved_key_issuer_ids"?: string[];
-    "depends_on_moderation_state"?: boolean;
     "allowed_managed_actor_roles"?: Array<"bot" | "ghost">;
   }>;
   "issued_at": string;
@@ -6151,7 +6142,7 @@ export type CapabilityGrantObject = {
     "agent_join_event_id": string;
   }>;
   "authority_depth": number;
-  "authority_root_refs": Array<{
+  "authority_root_ref": {
     "kind": "realm_root";
     "realm_id": string;
     "authority_event_ref": string;
@@ -6165,7 +6156,7 @@ export type CapabilityGrantObject = {
     };
     "controller_join_event_id": string;
     "agent_join_event_id": string;
-  }>;
+  };
 };
 
 /** `event-payload.schema.json#/$defs/capability_grant_payload` — closed object schema. */
@@ -6368,7 +6359,6 @@ export type CapabilityGrantPayload = {
       "max_key_age"?: string;
       "key_backup_required"?: boolean;
       "approved_key_issuer_ids"?: string[];
-      "depends_on_moderation_state"?: boolean;
       "allowed_managed_actor_roles"?: Array<"bot" | "ghost">;
     }>;
     "issued_at": string;

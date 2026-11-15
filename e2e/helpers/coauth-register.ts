@@ -573,6 +573,8 @@ export async function registerCoauthPasswordAccount(
     !grantJwt ||
     !accountId?.principal_id ||
     !accountId.station_id ||
+    sessionOutcome.issuer_id !== accountId.station_id ||
+    grantAudience !== accountId.station_id ||
     !grantAudience ||
     !expiresAt ||
     !deviceSigningSeed

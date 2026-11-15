@@ -32,14 +32,31 @@ export function sessionGrantRotationObservation(account: DpopUserSession["accoun
     pendingSubscriptions: Set<string>;
   }> = [];
   let sequence = 0;
+  function reference(issuer: unknown, id: unknown) {
+    return issuer === account.station_id && typeof id === "string" && id.length > 0
+      ? JSON.stringify({ issuer_id: issuer, id }) : undefined;
+  }
+  function hookReference(value: unknown) {
+    if (typeof value !== "string") return undefined;
+    try {
+      const ref = JSON.parse(value);
+      if (!ref || typeof ref !== "object" || Array.isArray(ref)
+        || Object.keys(ref).sort().join(",") !== "id,issuer_id") return undefined;
+      return reference(ref.issuer_id, ref.id);
+    } catch { return undefined; }
+  }
   function pair(previous: unknown, successor: unknown) {
-    return pairs.find(item => item.previous === previous && item.successor === successor);
+    const before = hookReference(previous);
+    const after = hookReference(successor);
+    return before === undefined || after === undefined ? undefined
+      : pairs.find(item => item.previous === before && item.successor === after);
   }
   return {
     refresh(predecessorAuthorization: string, body: Record<string, unknown>) {
       const holder = body.account_id as Record<string, unknown> | null | undefined;
       if (!holder || Object.keys(holder).sort().join(",") !== "principal_id,station_id"
         || holder.principal_id !== account.principal_id || holder.station_id !== account.station_id
+        || body.issuer_id !== account.station_id
         || typeof body.previous_session_grant_id !== "string" || typeof body.session_grant_id !== "string"
         || body.previous_session_grant_id === body.session_grant_id
         || typeof body.session_grant !== "string" || !body.session_grant
@@ -48,7 +65,9 @@ export function sessionGrantRotationObservation(account: DpopUserSession["accoun
         throw new Error("issuer refresh did not bind the expected holder and distinct grant pair");
       }
       const successorAuthorization = `DPoP ${body.session_grant}`;
-      const existing = pair(body.previous_session_grant_id, body.session_grant_id);
+      const previous = reference(body.issuer_id, body.previous_session_grant_id)!;
+      const successor = reference(body.issuer_id, body.session_grant_id)!;
+      const existing = pair(previous, successor);
       if (existing) {
         if (existing.predecessorAuthorization !== predecessorAuthorization
           || existing.successorAuthorization !== successorAuthorization) {
@@ -56,7 +75,7 @@ export function sessionGrantRotationObservation(account: DpopUserSession["accoun
         }
         return;
       }
-      pairs.push({ previous: body.previous_session_grant_id, successor: body.session_grant_id,
+      pairs.push({ previous, successor,
         predecessorAuthorization, successorAuthorization, pendingSubscriptions: new Set() });
     },
     viewer(status: number, authorization: string | undefined, problemCode?: string) {

@@ -151,7 +151,7 @@ async function revokeAppletRuntime(
   expect(preview.status(), previewText).toBe(200);
   // applet-integration.md §4b: the preview outcome carries only the canonical
   // plan; the caller computes `revoke_plan_digest = SHA-256(JCS(revoke_plan))`.
-  // Every capability intent's `expected_revision` is copied byte-for-byte into
+  // Every capability intent's `expected_commit_id` is copied byte-for-byte into
   // the caller-signed `CapabilityRevokePayload`, and every managed membership
   // intent gets one caller-signed `ak.member.state` removal.
   const plan = JSON.parse(previewText) as {
@@ -160,7 +160,7 @@ async function revokeAppletRuntime(
       reason_code: string;
       capability_revocations: Array<{
         grant_id: string;
-        expected_revision: Record<string, unknown>;
+        expected_commit_id: string;
         reason_code: string;
       }>;
       membership_removals: Array<{
@@ -182,7 +182,7 @@ async function revokeAppletRuntime(
       scopeRef: effectiveScope,
       payload: {
         grant_id: intent.grant_id,
-        expected_revision: intent.expected_revision,
+        expected_commit_id: intent.expected_commit_id,
         reason: intent.reason_code,
       },
     }),
@@ -2737,7 +2737,7 @@ function appletRegistrationPayload(
   return {
     applet_id: pkg.applet_id,
     service_id: pkg.service_id,
-    expected_revision: null,
+    expected_commit_id: null,
     controller_principal_id: pkg.controller_principal_id,
     base_url: pkg.base_url,
     claimed_profiles: pkg.claimed_profiles,

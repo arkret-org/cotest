@@ -395,17 +395,17 @@ test("administrator configures all Realm operations and Circle operations with e
     let editor = await loadPolicyEditor(user, realm);
     if (circleId) await editor.getByLabel("Scope Circle id (blank means this Realm)", { exact: true }).fill(circleId);
     const id = await editor.getByLabel("Exact Policy id", { exact: true }).inputValue();
-    let previous: Record<string, unknown> | null = null;
+    let previous: string | null = null;
     for (const operation of managementOperations.filter(op => !circleId || op !== "publish")) {
       const rule = editor.locator(".agent-policy-rules > .event");
       await chooseManagementOperations(rule, [operation]);
       await selectProductOptionByLabel(rule.getByLabel("Effect", { exact: true }), "deny");
       const write = await savePolicyEditor(user, editor, realm);
-      expect(canonicalJson(write.event.payload!.expected_revision) === canonicalJson(previous), "exact nullable CAS predecessor").toBe(true);
+      expect(write.event.payload!.expected_commit_id, "exact nullable CAS predecessor").toBe(previous);
       expect((write.event.payload!.value as any).rules[0].agent_operations).toEqual([operation]);
       expect((write.event.payload!.value as any).policy_kind).toBe("agent");
       const current = await assertPolicyCurrent(request, jointRealm.aliceSession, realm, write);
-      previous = current.current_state.revision;
+      previous = current.current_state.revision.commit_id;
       // A reload must re-read accepted exact current, not reuse the form as proof.
       await user.page.reload({ waitUntil: "domcontentloaded" });
       editor = await loadPolicyEditor(user, realm, id);
@@ -456,7 +456,7 @@ test("administrator Policy stale CAS and ordinary member edits refuse without ef
     const events = decodeIngressEvents(route.request().postData());
     const policy = events.find(event => event.kind === "ak.policy.set" && event.payload?.policy_id === id);
     if (!policy) { await route.continue(); return; }
-    expect(policy.payload?.expected_revision).toBeNull();
+    expect(policy.payload?.expected_commit_id).toBeNull();
     const raw = route.request().postData()!;
     if (originalStale === undefined) originalStale = raw;
     expect(raw === originalStale, "the delayed candidate keeps every original signed request byte").toBe(true);
@@ -517,7 +517,7 @@ test("administrator Policy stale CAS and ordinary member edits refuse without ef
   await expect(memberEditor.locator(".agent-policy-save")).toBeDisabled();
   const accepted = await exactPolicy(request, jointRealm.aliceSession, realm, id);
   const event = signedEventEnvelope({ actorId: jointRealm.bob.id, realmId: realm, kind: "ak.policy.set",
-    payload: { policy_id: id, expected_revision: accepted.current_state.revision, value: accepted.current_state.value } });
+    payload: { policy_id: id, expected_commit_id: accepted.current_state.revision.commit_id, value: accepted.current_state.value } });
   const before = await footprint(realm, jointRealm.bobSession.accountId.station_id, String(event.event_id));
   const refusal = await rawSubmitSignedEventApi(request, jointRealm.bobToken, event);
   const body = await refusal.json();

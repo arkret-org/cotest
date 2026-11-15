@@ -25,6 +25,7 @@ export async function observeNativeSearch(
   const input = {
     outcome: {
       session_grant: session.grantJwt,
+      issuer_id: session.accountId.station_id,
       session_grant_id: session.grantId,
       session_public_key: canonicalJson(session.deviceKey.publicJwk),
       audience_id: session.grantAudience,
@@ -32,7 +33,6 @@ export async function observeNativeSearch(
       account_id: session.accountId,
       device_id: session.user.deviceId,
       expires_at: session.grantExpiresAt,
-      previous_session_grant_id: null,
     },
     station_url: colandBaseUrl(server),
     holder_seed_b64url: session.dpopSeedB64url,

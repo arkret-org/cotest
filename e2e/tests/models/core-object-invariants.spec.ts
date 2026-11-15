@@ -618,7 +618,7 @@ test.describe("core object invariants", () => {
 
   // ── Phase D — Relation primary conflict domain CAS (relation.md section 6).
   // - has_default_view registers a `from` domain: the first create at a
-  //   never-written domain (`expected_revision=null`) wins; a second create on
+  //   never-written domain (`expected_commit_id=null`) wins; a second create on
   //   the same active domain is `failed_precondition` with zero writes, so the
   //   relation list shows exactly the first edge. No implicit auto-tombstone.
   // - an exact accepted Event replay returns the original Commit.
