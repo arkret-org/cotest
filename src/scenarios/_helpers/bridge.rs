@@ -44,7 +44,6 @@ struct CoauthGrantBinding {
     cnf_jkt: String,
     session_public_key: String,
     revoked: bool,
-    recorded_at: chrono::DateTime<chrono::Utc>,
     expires_at: chrono::DateTime<chrono::Utc>,
 }
 
@@ -509,7 +508,6 @@ impl MockCoauthIntrospectionServer {
             cnf_jkt,
             session_public_key,
             revoked: false,
-            recorded_at,
             expires_at,
         };
         // Each exact credential is its own ledger record, so a second device
@@ -1182,7 +1180,7 @@ mod opaque_grant_tests {
         let bindings = issuer.bindings.lock().expect("fixture ledger");
         anyhow::ensure!(
             bindings[0].expires_at == original.expires_at
-                && bindings[0].recorded_at == original.recorded_at
+                && bindings[0].metadata.not_before == original.metadata.not_before
                 && bindings[0].grant_ref == original.grant_ref
                 && !bindings[0].revoked
         );
