@@ -70,7 +70,7 @@ pub async fn registered_device_client(
     let sdk = crate::agent_runtime::controller_transport(
         http,
         station,
-        principal.session_grant().session_grant.as_str().to_owned(),
+        principal.session_grant().session_grant.clone(),
         holder.signing_key(),
     )?;
     let (sdk, _lifetime) = crate::session::bind_registered_host_source(sdk, state, binding)?;

@@ -508,6 +508,10 @@ export type AppletInstallRequestBody = {
       };
     } & {
       "kind": "ak.capability.grant";
+      "scope_ref"?: {
+        "kind": "realm";
+        "realm_id": string;
+      };
       [key: string]: unknown;
     }>;
   };
