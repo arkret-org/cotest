@@ -958,9 +958,8 @@ impl AgentRuntimeSession {
         let (grant, issuer_request) = match issuer {
             AgentSessionIssuer::Fixture(coauth) => {
                 let grant =
-                    crate::scenarios::bridge_contracts::session_grant::mock_session_grant(
+                    crate::scenarios::bridge_contracts::session_grant::mock_agent_session_grant(
                         agent_id.as_str(),
-                        verification_method.as_str(),
                         station.as_str(),
                     );
                 coauth.bind_agent_runtime_grant(

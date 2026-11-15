@@ -33,7 +33,7 @@ test('a tampered signed entry fails the actual SDK verifier', () => {
 });
 test('verified log cannot authenticate a different fetched document', () => {
   const document = JSON.parse(readFileSync(built.document_path, 'utf8'));
-  document.service[0].serviceKind = 'station';
+  document.service[0].service_kind = 'station';
   const documentPath = path.join(directory, 'wrong.did.json');
   writeFileSync(documentPath, JSON.stringify(document));
   assert.throws(() => verifyFetched({ wireBin, directory: path.join(directory, 'identity'), logPath: built.log_path, documentPath }), /differs from exact minted original/);

@@ -224,7 +224,7 @@ pub async fn seal_device_message(
         "content backup basis belongs to another Account or PCR"
     );
     let author = arkret::crypto::content_history::ContentRootBackupAuthor::Device {
-        binding: arkret::crypto::backup::KeyBackupAuthBinding {
+        binding: arkret::crypto::backup::KeyBackupAuthorizationBinding {
             device_id: device,
             verification_method: method.clone(),
             signature_algorithm: KeyBackupSignatureAlgorithm::Ed25519,

@@ -39,7 +39,7 @@ operation）；仅存的同步读面是注册端点 `POST /_arkret/self/authz/ch
 2. 断言:`POST /_arkret/self/authz/check {actor_id: bob, action: ak.message.create, resource: {kind: realm}}` → `decision = "hard_deny"`(grant 之前)
 3. alice 提交 `ak.capability.grant` 事件(issuer=alice、subject=bob、actions=[`ak.message.create`]、`expires_at=+1h`,grant 对象带 detached-JWS proof)
 4. 断言:同一 authz/check → `decision = "allow"`
-5. 断言:`GET /_arkret/self/authz/effective-grants?subject=<bob>&realm_id=<R>`(realm owner 可查)返回的 EffectiveGrantSnapshot 含该 grant id
+5. 断言:`GET /_arkret/self/authz/effective-grants?subject_actor_id=<percent-encoded JCS ActorId>&realm_id=<R>`（bob 使用完整 `ActorId`，含 principal／Station；realm owner 可查）返回的 EffectiveGrantSnapshot 含该 grant id
 
 ### Phase B — §10 合法收窄再授权
 

@@ -139,8 +139,23 @@ class NativeOperationContractGates(unittest.TestCase):
             gate.mimi_notify(evidence, {}, {})
 
     def test_issuer_original_pin_drift_and_revocation_are_rejected(self):
-        # Structural component only: synthetic storage rows grant no native credit.
-        resolution = gate.read(gate.ROOT / "coauth/crates/backend/src/services/station_trust/fixtures/native_station_resolutions.json")[0]
+        # Structural component only. These intentionally unsigned placeholders
+        # test pin consistency, not SDK verification or native execution.
+        resolution = {
+            "service_id": "component-station", "service_kind": "station",
+            "normalized_did_document": {
+                "did": "did:webvh:component", "services": [{
+                    "endpoint": "https://component-station.example",
+                    "protocol_names": ["ArkretService"],
+                    "extensions": [{"name": "service_kind", "value": "station"}],
+                }],
+            },
+            "method_history_evidence": {
+                "evidence_kind": "webvh_log",
+                "boundary": {"to_method_history_head": "component-head", "to_version_id": "component-version"},
+                "log_entries": [{"unsigned_component_placeholder": True}],
+            },
+        }
         document = resolution["normalized_did_document"]
         boundary = resolution["method_history_evidence"]["boundary"]
         pin = {"name": "component-owner", "canonical_endpoint": document["services"][0]["endpoint"],

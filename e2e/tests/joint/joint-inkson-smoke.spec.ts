@@ -468,7 +468,10 @@ async function listInvitesForDpop(
   subjectId: string,
 ): Promise<Array<{ id: string; realm_id: string; invitee_account_id?: import("../../helpers/generated/spec-wire-objects").AccountId }>> {
   const url = new URL("/_arkret/self/authz/invites", serverUrl);
-  url.searchParams.set("subject_account_id", canonicalJson({ principal_id: subjectId, station_id: session.accountId.station_id }));
+  url.searchParams.set("subject_account_id", canonicalJson({
+    principal_id: subjectId,
+    station_id: session.accountId.station_id,
+  }));
   const href = url.toString();
   const response = await request.get(href, {
     headers: {

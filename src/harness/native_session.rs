@@ -131,11 +131,12 @@ fn validate_human_host_account(
     principal: &arkret_wire::DidCoreId,
     station: &arkret_wire::DidCoreId,
     device: &str,
+    expected_ref: &arkret_wire::SessionGrantRef,
 ) -> Result<()> {
     ensure!(
         state.account_id == arkret_wire::AccountId::new(principal.clone(), station.clone())
             && state.audience_id == *station
-            && state.grant_ref.issuer_id == *station
+            && state.grant_ref == *expected_ref
             && state.device_id.as_ref().map(arkret_wire::DeviceId::as_str) == Some(device),
         "native grant belongs to another Account, issuer, audience or Device"
     );
@@ -164,7 +165,18 @@ pub(super) async fn bind_standard_host(
             principal.device_id.as_str() == client.device_id,
             "native Human client differs from its provisioned Device"
         );
-        validate_human_host_account(&state, &principal.core_id, station, &client.device_id)?;
+        let expected_ref =
+            crate::scenarios::bridge_contracts::session_grant::mock_session_grant_coordinates(
+                grant,
+            )?
+            .grant_ref;
+        validate_human_host_account(
+            &state,
+            &principal.core_id,
+            station,
+            &client.device_id,
+            &expected_ref,
+        )?;
     } else {
         ensure!(
             client.principal.is_none()
@@ -245,12 +257,27 @@ mod tests {
             &secret,
             principal.as_str(),
             device,
-            "fixture-authorize",
+            &arkret_wire::EventId::from_digest(arkret_canonical::DigestSuite::Sha256, [0x62; 32])
+                .to_string(),
             &key.verifying_key(),
         )?;
         let state = issuer.own_station_session_state(&secret, &station)?;
-        validate_human_host_account(&state, &principal, &station, device)?;
-        ensure!(validate_human_host_account(&state, &another_principal, &station, device).is_err());
+        let expected_ref =
+            crate::scenarios::bridge_contracts::session_grant::mock_session_grant_coordinates(
+                &secret,
+            )?
+            .grant_ref;
+        validate_human_host_account(&state, &principal, &station, device, &expected_ref)?;
+        ensure!(
+            validate_human_host_account(
+                &state,
+                &another_principal,
+                &station,
+                device,
+                &expected_ref
+            )
+            .is_err()
+        );
         Ok(())
     }
 
@@ -276,7 +303,11 @@ mod tests {
                 credential,
                 principal,
                 device,
-                "fixture-authorize",
+                &arkret_wire::EventId::from_digest(
+                    arkret_canonical::DigestSuite::Sha256,
+                    [0x62; 32],
+                )
+                .to_string(),
                 &key.verifying_key(),
                 expires_at,
             )?;
@@ -384,7 +415,8 @@ mod tests {
             &grant,
             principal,
             device,
-            "fixture-authorize",
+            &arkret_wire::EventId::from_digest(arkret_canonical::DigestSuite::Sha256, [0x62; 32])
+                .to_string(),
             &key.verifying_key(),
         )?;
         let state = issuer.own_station_session_state(&grant, &station)?;

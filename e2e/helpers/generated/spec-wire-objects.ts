@@ -61,7 +61,7 @@ export type AppletPackage = {
   "limits": {
     "max_transaction_event_count"?: number;
     "max_payload_bytes"?: number;
-    "rate_limit_per_minute"?: number;
+    "max_transaction_count_per_minute"?: number;
   };
   "ghost_policy": {
     "enabled": boolean;
@@ -180,7 +180,7 @@ export type AppletInstallRequestBody = {
     "limits": {
       "max_transaction_event_count"?: number;
       "max_payload_bytes"?: number;
-      "rate_limit_per_minute"?: number;
+      "max_transaction_count_per_minute"?: number;
     };
     "ghost_policy": {
       "enabled": boolean;
@@ -508,6 +508,10 @@ export type AppletInstallRequestBody = {
       };
     } & {
       "kind": "ak.capability.grant";
+      "scope_ref"?: {
+        "kind": "realm";
+        "realm_id": string;
+      };
       [key: string]: unknown;
     }>;
   };
@@ -1551,7 +1555,7 @@ export type AppletAuthorityMaterialResponseBody = {
           "allowed_relation_kinds"?: string[];
           "allowed_from_container_refs"?: string[];
           "allowed_to_container_refs"?: string[];
-          "wip_limit_override_allowed"?: boolean;
+          "active_strand_count_override_allowed"?: boolean;
           "allowed_tracks"?: string[];
           "denied_tracks"?: string[];
           "blob_presign_scope"?: {
@@ -1589,7 +1593,7 @@ export type AppletAuthorityMaterialResponseBody = {
           "max_artifact_bytes"?: number;
           "max_operation_count"?: number;
           "period"?: string;
-          "burst"?: number;
+          "burst_operation_count"?: number;
           "constraint_scope"?: "per_actor" | "per_space" | "per_realm" | "global";
           "max_resource_count"?: number;
           "resource_kind"?: string;
@@ -1923,7 +1927,7 @@ export type AppletAuthorityMaterialResponseBody = {
                 "principal_id": string;
               };
             }>;
-            "threshold": number;
+            "min_approver_count": number;
             "max_age_seconds": number;
           };
         }>;
@@ -1945,7 +1949,7 @@ export type AppletAuthorityMaterialResponseBody = {
               "principal_id": string;
             };
           }>;
-          "threshold": number;
+          "min_approver_count": number;
           "max_age_seconds": number;
         };
         "default_operations"?: Array<"join" | "publish" | "create_bot" | "map_ghost">;
@@ -2029,7 +2033,7 @@ export type AppletAuthorityMaterialResponseBody = {
           }>;
         } | {
           "kind": "device_quorum";
-          "k": number;
+          "min_device_count": number;
           "member_ids": string[];
         } | {
           "kind": "trusted_recovery_service";
@@ -5820,8 +5824,8 @@ export type SpaceObject = {
   "summary"?: string;
   "labels"?: string[];
   "fields"?: {
-    "wip_limit"?: number;
-    "wip_limit_enforcement"?: "warn" | "reject" | "require_review";
+    "max_active_strand_count"?: number;
+    "active_strand_count_enforcement"?: "warn" | "reject" | "require_review";
     [key: string]: unknown;
   };
   "avatar_blob_ref"?: string;
@@ -6020,7 +6024,7 @@ export type CapabilityGrantObject = {
     "allowed_relation_kinds"?: string[];
     "allowed_from_container_refs"?: string[];
     "allowed_to_container_refs"?: string[];
-    "wip_limit_override_allowed"?: boolean;
+    "active_strand_count_override_allowed"?: boolean;
     "allowed_tracks"?: string[];
     "denied_tracks"?: string[];
     "blob_presign_scope"?: {
@@ -6058,7 +6062,7 @@ export type CapabilityGrantObject = {
     "max_artifact_bytes"?: number;
     "max_operation_count"?: number;
     "period"?: string;
-    "burst"?: number;
+    "burst_operation_count"?: number;
     "constraint_scope"?: "per_actor" | "per_space" | "per_realm" | "global";
     "max_resource_count"?: number;
     "resource_kind"?: string;
@@ -6294,7 +6298,7 @@ export type CapabilityGrantPayload = {
       "allowed_relation_kinds"?: string[];
       "allowed_from_container_refs"?: string[];
       "allowed_to_container_refs"?: string[];
-      "wip_limit_override_allowed"?: boolean;
+      "active_strand_count_override_allowed"?: boolean;
       "allowed_tracks"?: string[];
       "denied_tracks"?: string[];
       "blob_presign_scope"?: {
@@ -6332,7 +6336,7 @@ export type CapabilityGrantPayload = {
       "max_artifact_bytes"?: number;
       "max_operation_count"?: number;
       "period"?: string;
-      "burst"?: number;
+      "burst_operation_count"?: number;
       "constraint_scope"?: "per_actor" | "per_space" | "per_realm" | "global";
       "max_resource_count"?: number;
       "resource_kind"?: string;

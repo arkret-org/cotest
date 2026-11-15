@@ -315,7 +315,7 @@ impl RotationAuthor {
     }
 
     /// A's `ak.policy.set` publishing a recovery policy whose only method is
-    /// a `device_quorum` of `k` over `members`, the policy signed with `seed`
+    /// a `device_quorum` of `min_device_count` over `members`, signed with `seed`
     /// under `method` and the Event signed by A.
     #[allow(clippy::too_many_arguments)]
     fn recovery_policy(
@@ -323,13 +323,13 @@ impl RotationAuthor {
         policy_id: &str,
         version: u64,
         supersedes: Option<&str>,
-        k: u32,
+        min_device_count: u32,
         members: &[&str],
         method: &DidUrl,
         seed: [u8; 32],
     ) -> Result<Event> {
-        let mut policy: arkret_models_crypto::RecoveryPolicy =
-            serde_json::from_value(serde_json::json!({
+        let mut policy: arkret_models_crypto::RecoveryPolicy = serde_json::from_value(
+            serde_json::json!({
                 "schema": "ak.schema.recovery_policy.v1",
                 "policy_id": policy_id,
                 "account_id": self.account,
@@ -344,8 +344,9 @@ impl RotationAuthor {
                     "signature_algorithm": "Ed25519",
                     "signature": "AA"
                 },
-                "methods": [{"kind": "device_quorum", "min_device_count": k, "member_ids": members}]
-            }))?;
+                "methods": [{"kind": "device_quorum", "min_device_count": min_device_count, "member_ids": members}]
+            }),
+        )?;
         let transcript = arkret_models_crypto::recovery_policy_signature_transcript_bytes(&policy)?;
         policy.signature_proof.signature =
             Base64UrlString::new(arkret_canonical::base64url_encode(
@@ -2206,7 +2207,7 @@ fn recovery_grant_coordinates(
         )?;
     ensure!(
         coordinates.account_id == AccountId::new(principal.core_id.clone(), station.clone())
-            && coordinates.device_id == principal.device_id,
+            && coordinates.device_id.as_ref() == Some(&principal.device_id),
         "fixture issuer coordinates differ from exact recovery credential"
     );
     let jwk = arkret_signatures::JsonWebKey::from_ed25519_verifying_key(

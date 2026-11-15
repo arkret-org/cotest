@@ -195,7 +195,7 @@ test.describe("conformance snapshot/query/scalability vectors @fully-implemented
       { id: "row-x", kind: "note", rank: 0, title: "Ignored" },
     ];
     const query = {
-      filters: [{ field: "kind", op: "eq", value: "task" }],
+      filters: [{ field: "kind", operator: "eq", value: "task" }],
       order_by: [{ field: "rank", direction: "asc" }],
       limit: 2,
     };
@@ -249,7 +249,7 @@ test.describe("conformance snapshot/query/scalability vectors @fully-implemented
     const rejectVectors = [
       {
         vector_id: "ak.vector.query.unknown_filter_key.v1",
-        query: { filters: [{ field: "kind", op: "outside_registry", value: "task" }] },
+        query: { filters: [{ field: "kind", operator: "outside_registry", value: "task" }] },
       },
       {
         vector_id: "ak.vector.query.conflicting_sort.v1",

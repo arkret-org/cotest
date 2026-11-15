@@ -449,16 +449,13 @@ pub async fn run_agent_repairing_production() -> Result<crate::conformance::Suit
         Ok(())
     })
     .await??;
-    let method = replacement
+    replacement
         .bootstrap
         .validated_runtime_identity()
-        .map_err(anyhow::Error::msg)?
-        .verification_method
-        .clone();
+        .map_err(anyhow::Error::msg)?;
     let payload = AgentKeyAuthorizePayload::try_from(&replacement.body.authorize_event.event)?;
-    let grant = crate::scenarios::bridge_contracts::session_grant::mock_session_grant(
+    let grant = crate::scenarios::bridge_contracts::session_grant::mock_agent_session_grant(
         agent.agent_account.principal_id.as_str(),
-        method.as_str(),
         station.service_id().as_str(),
     );
     coauth.bind_agent_runtime_grant(

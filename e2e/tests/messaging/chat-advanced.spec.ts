@@ -150,7 +150,7 @@ async function accountSubscribeTimelineEvents(
   // (`CommittedEventView`: a RealmCommit plus the exact signed Event, or a
   // withheld marker without Event bytes); a window may span several frames.
   const frames = await accountSubscribeRealmFramesApi(request, token, realmId, {
-    filter: { realm_ids: [realmId], window_limit: 100 },
+    filter: { realm_ids: [realmId], max_window_event_count: 100 },
     onRead: async (diagnostic) => {
       await test.info().attach("safe-chat-account-timeline-read", {
         contentType: "application/json", body: JSON.stringify(diagnostic),

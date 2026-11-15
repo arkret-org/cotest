@@ -546,6 +546,7 @@ export async function registerCoauthPasswordAccount(
   const sessionOutcome = objectRecord(registered.issued_session);
   const registeredPrincipalId = stringValue(registered.principal_id);
   const grantId = stringValue(sessionOutcome?.session_grant_id);
+  const issuerId = stringValue(sessionOutcome?.issuer_id);
   const grantJwt = stringValue(sessionOutcome?.session_grant);
   const accountIdValue = objectRecord(sessionOutcome?.account_id);
   const accountId = accountIdValue
@@ -573,7 +574,8 @@ export async function registerCoauthPasswordAccount(
     !grantJwt ||
     !accountId?.principal_id ||
     !accountId.station_id ||
-    sessionOutcome.issuer_id !== accountId.station_id ||
+    !issuerId ||
+    issuerId !== accountId.station_id ||
     grantAudience !== accountId.station_id ||
     !grantAudience ||
     !expiresAt ||
@@ -604,6 +606,7 @@ export async function registerCoauthPasswordAccount(
   };
   const eventSigningKey = dpopDeviceKeyFromSeedB64url(deviceSigningSeed);
   const initialGrant: DpopBoundGrant = {
+    issuerId,
     grantId,
     grantJwt,
     accountId: completeAccountId,

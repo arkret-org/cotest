@@ -141,7 +141,7 @@ pub async fn prepare_device(
         "backup native basis belongs to another Account"
     );
     let author = arkret_crypto::content_history::ContentRootBackupAuthor::Device {
-        binding: arkret_crypto::backup::KeyBackupAuthBinding {
+        binding: arkret_crypto::backup::KeyBackupAuthorizationBinding {
             device_id: principal.device_id.clone(),
             verification_method: method,
             signature_algorithm: KeyBackupSignatureAlgorithm::Ed25519,
