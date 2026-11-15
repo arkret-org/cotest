@@ -1,7 +1,7 @@
-import type { Locator } from "@playwright/test";
+import { expect, type Locator } from "@playwright/test";
 
 /** Measure rendered text fragments, including wrappers with display: contents. */
-export async function readTextLineLayout(target: Locator) {
+export async function readTextLineLayout(target: Locator, timeout?: number) {
   return target.evaluate(element => {
     const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT);
     const fragments: Array<{ top: number; bottom: number; height: number }> = [];
@@ -27,5 +27,15 @@ export async function readTextLineLayout(target: Locator) {
       } else lines.push({ ...fragment });
     }
     return { fragment_count: fragments.length, line_count: lines.length };
-  });
+  }, undefined, { timeout });
+}
+
+/** Reacquire live text after an asynchronous view replacement, within the caller's budget. */
+export async function expectSingleTextLine(target: Locator, timeout: number): Promise<void> {
+  const deadline = Date.now() + timeout;
+  await expect.poll(async () => {
+    const layout = await readTextLineLayout(target, Math.max(1, deadline - Date.now()));
+    return { has_text: layout.fragment_count > 0, line_count: layout.line_count };
+  }, { timeout, message: "the full rendered date remains readable on one line" })
+    .toEqual({ has_text: true, line_count: 1 });
 }

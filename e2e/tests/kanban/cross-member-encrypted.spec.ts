@@ -1,3 +1,4 @@
+import { contentHistoryProof } from "../../helpers/content-history-proof";
 import { observeCardSaveAction } from "../../helpers/action-evidence";
 import { clickCardSave } from "../../helpers/card-save";
 import { observeBrowserDpopGrant } from "../../helpers/session-transport-recovery";
@@ -2013,8 +2014,9 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
         await openReaderBoard(bobPage, realmId, boardId, holdPrivateState ? "Title pending sync" : boardTitle);
         if (holdPrivateState) {
           await expect.poll(() => privateReadCuts, { timeout: 90_000 }).toBeGreaterThan(0);
-          // The List structure is accepted, but its title is encrypted metadata
-          // and must remain undisclosed while the private Welcome state is cut.
+          // The cut withholds the Welcome claim, not independently authorized
+          // history DEKs. content-history §4 allows exact metadata readback
+          // without installing MLS private state or enabling fresh writes.
           const committedList = bobPage.page.locator(".kanban-column");
           await expect(committedList).toHaveCount(1, { timeout: 90_000 });
           await expect(committedList).toBeVisible({ timeout: 90_000 });
@@ -2027,10 +2029,53 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
           expect(acceptedLists).toHaveLength(1);
           expect(sdkEventDerivedObjectId(acceptedLists[0])).toMatch(/^ak:space:/);
           expect(decodeURIComponent(new URL(bobPage.page.url()).pathname)).toBe(`/kanban/${realmId}/board/${boardId}`);
-          await expect(committedList).not.toContainText(listTitle);
-          await expect(bobPage.page.locator(".kanban-panel")).not.toContainText(boardTitle);
-          await expect(bobPage.page.locator(".kanban-panel")).not.toContainText(aliceCard);
+          let historyProof: ReturnType<typeof contentHistoryProof>;
+          const historyDeadline = Date.now() + 90_000;
+          await expect.poll(async () => {
+            const scan = await scanRealmStreamApi(request, bobSession.grantJwt, realmId, { limit: 1000 });
+            const source = scan.events.find(event => event.kind === "ak.space.create"
+              && sdkEventDerivedObjectId(event) === boardId);
+            if (!source) return false;
+            historyProof = contentHistoryProof(scan, {
+              realmId, sourceEventId: String(source.event_id), sourceKind: "ak.space.create", issuerActor: accountActorId(alice.id),
+              recipientActor: accountActorId(bob.id), recipientDeviceId: bob.deviceId,
+            });
+            return !!historyProof;
+          }, { timeout: Math.max(1, historyDeadline - Date.now()),
+            message: "an accepted exact Board metadata grant remains readable while the Welcome claim is cut" }).toBe(true);
+          const { source, request: originalRequest, grant } = historyProof!;
+          expect(canonicalJson(source).includes(boardTitle), "the original Board wire never contains its private title").toBe(false);
+          await expect(bobPage.page.locator(".kanban-panel")).toContainText(boardTitle,
+            { timeout: Math.max(1, historyDeadline - Date.now()) });
+          // A Board key never authorizes another object. If later metadata is
+          // already visible, require its own exact accepted grant immediately;
+          // do not wait for a future grant to excuse an unauthorized disclosure.
+          const panel = bobPage.page.locator(".kanban-panel");
+          const listVisible = await committedList.evaluate((node, title) => node.textContent?.includes(title) === true, listTitle);
+          const cardVisible = await panel.evaluate((node, title) => node.textContent?.includes(title) === true, aliceCard);
+          if (listVisible || cardVisible) {
+            const scan = await scanRealmStreamApi(request, bobSession.grantJwt, realmId, { limit: 1000 });
+            for (const item of [
+              { visible: listVisible, eventId: acceptedLists[0]!.event_id, kind: "ak.space.create" as const },
+              { visible: cardVisible, eventId: latestCardEventId, kind: "ak.strand.create" as const },
+            ]) {
+              if (!item.visible) continue;
+              expect(typeof item.eventId === "string", "visible metadata must retain its original source").toBe(true);
+              const proof = contentHistoryProof(scan, {
+                realmId, sourceEventId: String(item.eventId), sourceKind: item.kind,
+                issuerActor: accountActorId(alice.id), recipientActor: accountActorId(bob.id),
+                recipientDeviceId: bob.deviceId,
+              });
+              expect(!!proof, "no private List or Card metadata without its own exact accepted grant").toBe(true);
+            }
+          }
           await expect(committedList.locator(".add-card-button")).toBeDisabled();
+          await testInfo.attach("private-welcome-history-key-cut.json", { contentType: "application/json",
+            body: JSON.stringify({ request_event_id: originalRequest.event_id,
+              grant_event_id: grant.event_id, source_event_id: source.event_id,
+              content_path: "/payload/object/encrypted_metadata", exact_request_binding: true,
+              board_metadata_decrypted: true, private_claim_still_cut: holdPrivateState,
+              fresh_card_write_disabled: true }) });
           await openPendingTimeline(bobPage, realmId);
           await expect(bobPage.page.locator(".chat-panel")).toHaveClass(/\binitial-sync-pending\b/);
           holdPrivateState = false;

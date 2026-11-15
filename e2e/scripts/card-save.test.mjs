@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { after, before, test } from "node:test";
 import { chromium } from "@playwright/test";
 import { clickCardSave } from "../helpers/card-save.ts";
+import { clickEnabledButton } from "../helpers/button-activation.ts";
 
 let browser;
 before(async () => { browser = await chromium.launch(); });
@@ -81,4 +82,34 @@ test("a replacement editor never receives the previous editor's Save", async () 
     await assert.rejects(clickCardSave(form, 3_000), /editor retired/);
     assert.equal(await page.evaluate(() => window.activations), 0);
   });
+});
+
+test("a poll opener loses a single disabled pointer gesture and the shared primitive opens it once", async () => {
+  for (const reliable of [false, true]) {
+    const page = await browser.newPage();
+    try {
+      await page.setContent('<div class="chat-composer"><button type="button" class="open-poll-composer-button">Poll</button></div>');
+      await page.evaluate(() => {
+        window.activations = 0;
+        const button = document.querySelector("button");
+        button.addEventListener("pointerdown", event => {
+          event.currentTarget.disabled = true;
+          setTimeout(() => { button.disabled = false; }, 150);
+        }, { once: true });
+        button.onclick = () => {
+          window.activations++;
+          const input = document.createElement("input");
+          input.className = "poll-question-input";
+          document.querySelector(".chat-composer").append(input);
+        };
+      });
+      if (reliable) {
+        await clickEnabledButton(page.locator(".chat-composer"), ".open-poll-composer-button", {
+          action: "open poll", owner: "chat composer", timeout: 3_000,
+        });
+      } else await page.locator("button").click();
+      assert.equal(await page.locator(".poll-question-input").count(), reliable ? 1 : 0);
+      assert.equal(await page.evaluate(() => window.activations), reliable ? 1 : 0);
+    } finally { await page.close(); }
+  }
 });

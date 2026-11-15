@@ -9,6 +9,8 @@
     // relative imports, ESM) so the type gate matches how specs actually run.
     "module": "ESNext",
     "moduleResolution": "Bundler",
+    // Native Node helper tests load TypeScript modules directly with no emit.
+    "allowImportingTsExtensions": true,
     "lib": ["ES2022", "DOM"],
     "types": ["node"],
     "strict": true,

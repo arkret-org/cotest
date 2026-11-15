@@ -5,6 +5,7 @@ import { eventIdFromMessage } from "../../helpers/message-evidence";
 import { createDpopUserSession, openUserPage, type JointUserPage } from "../../helpers/users";
 import { colandBaseUrl } from "../../helpers/env";
 import { selectProductOptionByLabel } from "../../helpers/product-select";
+import { clickEnabledButton } from "../../helpers/button-activation";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -103,7 +104,9 @@ test("Circle poll survives readback, replacement, a new browser process and anot
   await channel.click();
   await expect(channel).toHaveClass(/active/);
 
-  await page.locator(".open-poll-composer-button").click();
+  await clickEnabledButton(page.locator(".chat-composer"), ".open-poll-composer-button", {
+    action: "open poll", owner: "chat composer",
+  });
   await page.locator(".poll-question-input").fill(question);
   await page.locator(".poll-option-input").nth(0).fill(answers[0]!);
   await page.locator(".poll-option-input").nth(1).fill(answers[1]!);

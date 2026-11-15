@@ -12,7 +12,7 @@ import {
   type Response,
 } from "../../helpers/arkret-test";
 import { selectProductOptionByLabel } from "../../helpers/product-select";
-import { readTextLineLayout } from "../../helpers/text-layout";
+import { expectSingleTextLine } from "../../helpers/text-layout";
 import { stepShot } from "../../helpers/screenshots";
 import {
   assertJointStackNotRequired,
@@ -227,11 +227,10 @@ test("@fully-implemented calendar schedule and RSVP survive the canonical Strand
       "1 yes",
     );
     for (const field of ["calendar-agenda-start", "calendar-agenda-end"]) {
+      const layoutDeadline = Date.now() + 20_000;
       const date = calendar.locator(`.${field}`).first();
-      await expect(date).toBeVisible();
-      const layout = await readTextLineLayout(date);
-      expect(layout.fragment_count, "the full date has rendered text").toBeGreaterThan(0);
-      expect(layout.line_count, "a full local date and time remains readable on one line").toBe(1);
+      await expect(date).toBeVisible({ timeout: Math.max(1, layoutDeadline - Date.now()) });
+      await expectSingleTextLine(date, Math.max(1, layoutDeadline - Date.now()));
     }
     await stepShot(page.page, testInfo, "calendar-schedule-rsvp");
 
