@@ -1550,7 +1550,314 @@ def account_security_rotation(evidence):
     require(bool(evidence["observations"]["accepted_identity_material"]),
             "Rotation has no actually admitted identity prerequisite")
 
-PROOFS = {"account_security_rotation": account_security_rotation, "peer_contacts": peer_contacts, "peer_keypackage_claims": peer_keypackage_claims,"account_identity_creation": account_identity_creation, "account_device_sessions": account_device_sessions,
+
+def applet_installations(evidence):
+    """Bind real owning-process exchanges to immutable installation effects.
+
+    Crypto/native-method verification is performed by the source-fenced Rust
+    driver using the canonical SDK. This independent proof checks every linked
+    original, observed operation and replay/effect invariant, not a verified flag.
+    """
+    install = evidence["installed"]
+    request = evidence["install_request"]
+    basis = request["authoring_request_basis"]
+    applet, service = install["applet_id"], install["service_id"]
+    realm, actor = evidence["realm_id"], evidence["actor_id"]
+    scope = {"kind": "realm", "realm_id": realm}
+    package = evidence["package"]
+    resolution = evidence["service_resolution"]
+    require(package == request["applet_package"] and package["applet_id"] == applet and
+            package["service_id"] == service and basis["effective_scope"] == scope and
+            basis["install_actor_id"] == actor and basis["target_station_id"] == evidence["station_id"] and
+            service != evidence["station_id"] and resolution["service_id"] == service and
+            resolution["service_kind"] == "applet_service" and bool(resolution["method_history_evidence"]),
+            "Applet installation has no independent actual Service/method/Account source")
+    registration, grant, revoke = (evidence[name] for name in ("registration", "grant", "revoke"))
+    require(registration["event"] == basis["registration_event"] and
+            [grant["event"]] == basis["capability_grant_events"] and
+            registration["event"]["kind"] == "ak.applet.registration" and
+            grant["event"]["kind"] == "ak.capability.grant" and
+            revoke["event"]["kind"] == "ak.capability.revoke" and
+            install["registration_event_ref"] == registration["event"]["event_id"] and
+            install["registration_epoch"] == package["registration_epoch"] and not install["rejections"],
+            "Applet installation changed its exact producer originals")
+    body = grant["event"]["payload"]["grant"]
+    require(len(install["capability_grant_refs"]) == 1 and body["issuer_id"] == actor and
+            body["subject"] == {"kind":"service","service_id":service} and
+            body["actions"] == package["requested_scopes"] and body["resources"] == [scope] and
+            basis["applet_id"] == applet and basis["service_id"] == service and
+            basis["package_digest"] == package["package_digest"],
+            "Applet accepted Grant differs from the actual Service/package/effect source")
+    bindings = [x for x in body["constraints"] if x.get("constraint_kind") == "authority_control" and
+                x.get("constraint_subkind") == "applet_authority"]
+    require(len(bindings) == 1 and bindings[0]["applet_id"] == applet and
+            bindings[0]["executed_by"] == {"kind":"service","service_id":service} and
+            bindings[0]["registration_epoch"] == package["registration_epoch"],
+            "Applet accepted Grant lost its original Applet authority binding")
+    snapshots = evidence["snapshots"]
+    before, installed, revoked = (snapshots[name] for name in ("before", "installed", "revoked"))
+    require(snapshots["after_preview"] == before and snapshots["install_replay"] == installed and
+            snapshots["revoke_preview"] == installed and snapshots["after_replays"] == revoked and
+            evidence["install_replay"] == evidence["old_install_replay"] == install and
+            evidence["revoke_replay"] == evidence["revoked"],
+            "Applet preview/replay wrote effects, changed an outcome or revived the old install")
+    require(before["installations"] == before["sources"] == before["grants"] == [] and
+            len(installed["committed"]) == len(before["committed"]) + 2 and
+            len(revoked["committed"]) == len(installed["committed"]) + 1 and
+            len(installed["events"]) == len(before["events"]) + 2 and
+            len(revoked["events"]) == len(installed["events"]) + 1,
+            "Applet case has unexpected queued or accepted side effects")
+    for name in ("quota_counters", "quota_buckets", "quota_consumptions"):
+        require(before[name] == installed[name] == revoked[name],
+                "Applet source-only installation/revoke unexpectedly charged a business quota")
+    def single(state, name):
+        rows = state[name]
+        require(isinstance(rows, list) and len(rows) == 1, "Applet native row is absent or ambiguous")
+        return rows[0]
+    record = single(installed, "installations")["record"]
+    require(record["effective_scope"] == scope and record["owner_actor_id"] == actor and
+            record["target_station_id"] == evidence["station_id"] and
+            record["install_body_digest"] == "sha256:" + canonical_digest(request),
+            "Applet installation record does not bind its authenticated full request")
+    source = single(installed, "sources")
+    current = single(installed, "grants")
+    terminal = single(revoked, "grants")
+    require(single(installed, "installations")["record"]["install_id"] ==
+            single(revoked, "installations")["record"]["install_id"] == source["install_id"] == install["install_id"] and
+            single(installed, "installations")["record"]["status"] == "installed" and
+            single(revoked, "installations")["record"]["status"] == "revoked" and
+            source["registration_event_ref"] == registration["event"]["event_id"] and
+            source["realm_id"] == realm and source["applet_id"] == applet and source["service_id"] == service and
+            source["grant_id"] == install["capability_grant_refs"][0] == current["grant_id"] == terminal["grant_id"] and
+            current["status"] == "active" and terminal["status"] == "revoked" and
+            current["current_commit_id"] == grant["commit"]["commit_id"] and
+            terminal["current_commit_id"] == revoke["commit"]["commit_id"] and
+            revoked["sources"] == installed["sources"],
+            "Applet source/current lost its immutable instance or revocation")
+    for original in (registration, grant, revoke):
+        event, commit = original["event"], original["commit"]
+        require(event["realm_id"] == realm and event["scope_ref"] == scope and event["actor_id"] == actor and
+                commit["stream_ref"] == scope and commit["event_ref"] == event["event_id"] and
+                sum(row == original for row in revoked["committed"]) == 1,
+                "Applet original differs from the one actual accepted Event/Commit")
+    require(registration["commit"]["stream_position"] < grant["commit"]["stream_position"] < revoke["commit"]["stream_position"],
+            "Applet registration/Grant/revoke source order changed")
+    material_request = evidence["material_request"]
+    require(material_request == {"effective_scope": scope, "grant_ids": install["capability_grant_refs"]},
+            "Applet material request changed its exact original set")
+    for name in ("active", "inactive", "still_inactive"):
+        material = evidence[name]
+        require(material["applet_id"] == applet and material["service_id"] == service and material["effective_scope"] == scope and
+                material["registration"]["event"] == registration["event"] and material["registration"]["commit"] == registration["commit"] and
+                len(material["grant_events"]) == 1 and material["grant_events"][0]["event"] == grant["event"] and
+                material["grant_events"][0]["commit"] == grant["commit"],
+                "Applet material replaced a historical original")
+    active = evidence["active"]["current_binding"]
+    require(active["status"] == "active" and active["registration_epoch"] == install["registration_epoch"] and
+            active["service_id"] == service and
+            active["registration_ref"] == {"event_id":registration["event"]["event_id"],"commit_id":registration["commit"]["commit_id"],
+                                            "stream_ref":scope,"stream_position":registration["commit"]["stream_position"]} and
+            evidence["inactive"]["current_binding"] == evidence["still_inactive"]["current_binding"] == {"status":"inactive"},
+            "Applet audit current revived a fenced instance or changed its original cut")
+    preview = evidence["revoke_preview"]["revoke_plan"]
+    revoke_request = evidence["revoke_request"]
+    require(len(preview["capability_revocations"]) == 1 and preview["membership_removals"] == preview["widget_token_refs"] == [] and
+            preview["capability_revocations"][0]["grant_id"] == current["grant_id"] and
+            preview["capability_revocations"][0]["expected_commit_id"] == grant["commit"]["commit_id"] and
+            revoke_request["revoke_plan_digest"] == "sha256:" + canonical_digest(preview) and
+            [entry["event"] for entry in revoke_request["capability_revoke_events"]] == [revoke["event"]] and
+            revoke_request["membership_state_events"] == [] and
+            revoke["event"]["payload"]["grant_id"] == current["grant_id"] and
+            revoke["event"]["payload"]["expected_commit_id"] == grant["commit"]["commit_id"],
+            "Applet revoke is not the exact preview/current-CID and original target")
+    outcome = evidence["revoked"]
+    reference = {"event_id":revoke["event"]["event_id"],"commit_id":revoke["commit"]["commit_id"],
+                 "stream_ref":scope,"stream_position":revoke["commit"]["stream_position"]}
+    require(outcome["status"] == "complete" and not outcome.get("rejections", []) and
+            outcome["revoke_plan_digest"] == revoke_request["revoke_plan_digest"] and reference in outcome["revoked_refs"],
+            "Applet revoke returned no exact completed effect")
+    denied = evidence["invalid_material_signature"]
+    require(denied["status"] == denied["problem"]["status"] == 401 and
+            denied["problem"]["type"].endswith("/http_signature_invalid"),
+            "Applet material did not verify the real Service HTTP signature")
+    exchanges = evidence["observations"]["exchanges"]
+    def actual(operation):
+        found = [row for row in exchanges if row["operation_id"] == operation]
+        require(bool(found), "Applet native operation has no real owning-process exchange")
+        return found
+    previews = actual("ak.self.applet.install.command.preview.v1")
+    require(len(previews) == 1 and previews[0]["request_body"]["authoring_request_basis"] == basis and
+            previews[0]["response_body"]["plan"]["plan_digest"] == request["plan_digest"],
+            "Applet install is not bound to its actual preview")
+    installs = actual("ak.self.applet.command.install.v1")
+    require(len(installs) == 3 and [x["response_status"] for x in installs] == [201,200,200] and
+            all(x["request_body"] == request and x["response_body"] == install and
+                x["explicit_request_headers"]["idempotency-key"] == evidence["install_key"] for x in installs),
+            "Applet install exact replay changed its actual body, identity or response")
+    reads = actual("ak.self.applet.authority.read.material.v1")
+    require(len(reads) == 3 and [x["response_body"] for x in reads] == [evidence[n] for n in ("active","inactive","still_inactive")] and
+            all(x["request_body"] == material_request and x["response_status"] == 200 for x in reads),
+            "Applet material lacks actual active/inactive audit exchanges")
+    method = package["webhook_signature_policy"]["key_ref"]
+    for exchange in reads:
+        headers = exchange["explicit_request_headers"]
+        raw = base64.urlsafe_b64decode(exchange["request_json_base64url"] + "=" * (-len(exchange["request_json_base64url"]) % 4))
+        digest = "sha-256=:" + base64.b64encode(hashlib.sha256(raw).digest()).decode() + ":"
+        require(headers["source-service-id"] == service and headers["destination-service-id"] == evidence["station_id"] and
+                headers["content-digest"] == digest and f'keyid="{method}"' in headers["signature-input"] and
+                bool(headers["signature"]), "Applet material used another actual Service/key/body")
+    revoke_previews = actual("ak.self.applet.revoke.command.preview.v1")
+    require(len(revoke_previews) == 1 and revoke_previews[0]["request_body"] == evidence["revoke_preview_request"] and
+            revoke_previews[0]["response_body"] == evidence["revoke_preview"], "Applet revoke preview is not an actual response")
+    revokes = actual("ak.self.applet.command.revoke.v1")
+    require(len(revokes) == 2 and all(x["request_body"] == revoke_request and x["response_body"] == outcome and
+            x["explicit_request_headers"]["idempotency-key"] == evidence["revoke_key"] for x in revokes),
+            "Applet revoke exact replay changed its actual body, identity or outcome")
+
+
+
+def call_invitation_delivery(delivery, request, sender, holder, device, admitted):
+    """Compare actual recipient bytes and product authority, not Deferred."""
+    require(delivery["envelope"] == request["envelope"], "recipient substituted the actual invitation envelope")
+    authority = delivery["delivery_authority"]
+    require(authority["recipient_account_id"] == holder and authority["key"]["actor"] == sender and
+            authority["key"]["verification_method"] == request["invitation"]["proof"]["verification_method"],
+            "invitation delivery lost its full recipient or actual producer")
+    plaintext = decoded_json(delivery["plaintext_base64url"])
+    invitation = request["invitation"]
+    require(plaintext["kind"] == "ak.call.signal" and plaintext["signal_kind"] == "invite" and
+            plaintext["call_id"] == invitation["call_id"] and
+            plaintext["data"]["media"]["audio"] == invitation["media"]["audio"] and
+            plaintext["data"]["media"]["video"] == invitation["media"]["video"] and
+            plaintext["data"]["media"].get("screen", False) == invitation["media"]["screen"],
+            "actual decrypted Call invite differs from the producer-signed relation")
+    actual = authority.get("call_invitation")
+    if not admitted:
+        require(actual is None, "revoked invitation retained a ringing admission")
+        return
+    require(isinstance(actual, dict) and actual["invitation"] == invitation and
+            actual["request"]["invitation"] == invitation and actual["request"]["envelope"] == request["envelope"] and
+            actual["request"]["subject_actor_id"] == {"kind": "account", "account_id": holder} and
+            actual["request"]["subject_device_id"] == device and
+            actual["request"]["admission_phase"] == "product_delivery" and
+            actual["request"]["audience_actor_id"] == {"kind": "service", "service_id": holder["station_id"]} and
+            actual["decision"]["admitted"] is True and
+            actual["decision"]["request_digest"] == "sha256:" + canonical_digest(actual["request"]),
+            "Deferred has no exact actual recipient admission")
+    call_invitation_verdict(actual["request"], actual["decision"], delivery["received_at"], True)
+
+
+def call_invitation_verdict(request, decision, received_at, admitted):
+    instant = lambda value: datetime.fromisoformat(value.replace("Z", "+00:00"))
+    evaluated, expires, received = map(instant, (decision["evaluated_at"], decision["expires_at"], received_at))
+    require(decision["request_digest"] == "sha256:" + canonical_digest(request) and
+            decision["admitted"] is admitted and int(decision["authority_generation"]) == 0 and
+            evaluated <= received < expires <= instant(request["invitation"]["expires_at"]) and
+            0 < (expires - evaluated).total_seconds() <= 30 and
+            re.fullmatch(r"[A-Za-z0-9_-]{22,64}", request["nonce"]) is not None,
+            "invitation verdict lost its exact fresh outstanding Human-authority request")
+
+
+def call_invitation(evidence):
+    source, destination = evidence["source_station"], evidence["holder_station"]
+    sender, holder, device = evidence["sender"], evidence["holder"], evidence["holder_device"]
+    require(source != destination and sender["account_id"]["station_id"] == source and holder["station_id"] == destination and
+            len(evidence["processes"]) == 4 and len(evidence["observations"]["issuer_bindings"]) == 2,
+            "invitation lacks two independently admitted native Station/AA deployments")
+    call = evidence["call"]
+    require(call == evidence["remote_call"] and call["event"]["kind"] == "ak.call.create" and
+            call["commit"]["event_ref"] == call["event"]["event_id"] and
+            call["event"]["actor_id"] == sender and evidence["mls"]["remote"] == evidence["mls"]["committed"] and
+            evidence["mls"]["committed"]["event"] == evidence["mls"]["submission"]["commit_event"] and
+            evidence["mls"]["welcome"] in evidence["mls"]["submission"]["welcomes"] and
+            evidence["mls"]["epoch"] == 1,
+            "invitation has no exact accepted Call and recipient-installed MLS original")
+    for actor, name in ((sender, "sender_authorize"), ({"kind": "account", "account_id": holder}, "holder_authorize")):
+        authorize = evidence[name]
+        require(authorize["event"]["kind"] == "ak.device.authorize" and authorize["event"]["actor_id"] == actor and
+                authorize["commit"]["event_ref"] == authorize["event"]["event_id"] and
+                any(row["register_request"]["principal_id"] == actor["account_id"]["principal_id"] and
+                    row["station_resolution"]["service_id"] == actor["account_id"]["station_id"] and
+                    row["register_request"]["identity_creation"]["pcr_genesis_unit"]["events"][1] == authorize["event"]
+                    for row in evidence["observations"]["accepted_identity_material"]),
+                "invitation Device original is not in the full native Account founding unit")
+    require(evidence["holder_authorize"]["event"]["payload"]["device_id"] == device,
+            "admission subject is not the actual accepted holder Device")
+    cuts = [evidence[name] for name in ("consent_grant", "consent_revoke", "consent_restore")]
+    prior = None
+    for index, cut in enumerate(cuts):
+        event, commit = cut["accepted"]["event"], cut["accepted"]["commit"]
+        current = cut["current"]["current"]
+        require(event["kind"] == "ak.consent.replace" and event["actor_id"] == {"kind": "account", "account_id": holder} and
+                event["payload"]["peer"] == {"kind": "actor", "actor_id": sender} and commit["event_ref"] == event["event_id"] and
+                current["state"] == "present" and current["current_state"]["value"]["permissions"] == event["payload"]["permissions"] and
+                current["current_state"]["revision"] == {"commit_id": commit["commit_id"], "stream_position": commit["stream_position"]},
+                "invitation Consent lacks its exact immutable accepted set/current revision")
+        if prior is not None:
+            require(event["payload"]["expected_current"] == {"state": "present", "commit_id": prior["commit_id"]} and
+                    int(commit["stream_position"]) > int(prior["stream_position"]),
+                    "invitation Consent revoke/restore is not a genuine exact scalar CAS")
+        if index == 1:
+            require(event["payload"]["permissions"] == [], "invitation revocation did not preserve an accepted empty set")
+        else:
+            require(len(event["payload"]["permissions"]) == 1 and event["payload"]["permissions"][0]["consent_scope"] == "voice_call",
+                    "actual invitation has no concrete current voice-call permission")
+        prior = commit
+    exchanges = evidence["observations"]["exchanges"]
+    def actual(operation, request, response):
+        matching = [row for row in exchanges if row["operation_id"] == operation and row["request_body"] == request and
+                    row["response_body"] == response and row["response_status"] == 200]
+        require(len(matching) == 1, "invitation omitted or duplicated its exact actual successful HTTP exchange")
+        return matching[0]
+    digests = set()
+    for name, response, delivery, expected in (("self_request", "self_response", "self_delivery", True),
+                                              ("relay_request", "relay_response", "relay_delivery", True),
+                                              ("revoked_request", "revoked_response", "revoked_delivery", False),
+                                              ("restored_request", "restored_response", "restored_delivery", True)):
+        request = evidence[name]
+        require(evidence[response] == {"status": "deferred"} and request["invitation"]["inviter_actor_id"] == sender and
+                request["invitation"]["holder_account_id"] == holder and
+                request["invitation"]["scope_ref"] == call["event"]["scope_ref"] == request["envelope"]["scope_ref"] and
+                request["invitation"]["call_id"] == call["event"]["event_id"].replace("ak:event:", "ak:call:", 1) and
+                request["invitation"]["envelope_digest"] == "sha256:" + canonical_digest(request["envelope"]),
+                "Deferred invitation changed the actual signed Call/scope/encrypted relation")
+        basis = evidence[name.removesuffix("_request") + "_basis"]
+        require(any(head["stream_ref"] == call["commit"]["stream_ref"] and
+                    head["commit_id"] == request["envelope"]["authority_commit_id"]
+                    for head in basis["visible_stream_heads"]) and
+                request["envelope"]["encrypted_payload"]["key_ref"]["group_state_ref"] == evidence["mls"]["committed"]["event"]["event_id"],
+                "invitation receiver basis was not the independently read signed current MLS/Realm cut")
+        operation = "ak.peer.call.invitation.command.relay.v1" if name == "relay_request" else "ak.self.call.invitation.command.send.v1"
+        exchange = actual(operation, request, evidence[response])
+        if name == "relay_request":
+            require(exchange["explicit_request_headers"]["source-service-id"] == source and
+                    exchange["explicit_request_headers"]["destination-service-id"] == destination,
+                    "relay did not traverse the two actual independent Stations")
+        call_invitation_delivery(evidence[delivery], request, sender, holder, device, expected)
+        digests.add(request["envelope"]["proof"]["envelope_digest"])
+    require(len(digests) == 4, "separate actual invitation attempts reused one encrypted source identity")
+    for request_name, result_name, at, expected in (("admission_request", "admission", "admission_received_at", True),
+                                                   ("denial_request", "denial", "denial_received_at", False)):
+        request = evidence[request_name]
+        exchange = actual("ak.peer.call.invitation.read.admission.v1", request, evidence[result_name])
+        require(exchange["explicit_request_headers"]["source-service-id"] == destination == exchange["explicit_request_headers"]["destination-service-id"] and
+                request["admission_phase"] == "product_delivery" and request["audience_actor_id"] == {"kind": "service", "service_id": destination} and
+                request["subject_actor_id"] == {"kind": "account", "account_id": holder} and request["subject_device_id"] == device,
+                "private admission caller is not the actual Human hosting consumer")
+        call_invitation_verdict(request, evidence[result_name], evidence[at], expected)
+    require(evidence["admission_request"]["nonce"] != evidence["denial_request"]["nonce"],
+            "revocation reused a formerly positive outstanding admission request")
+    require(evidence["wrong_status"] == evidence["wrong_problem"]["status"] == 403 and
+            evidence["wrong_problem"]["type"] == "https://arkret.org/problems/capability_denied" and
+            evidence["wrong_problem"]["detail"] == "caller is not exact authorized token issuer" and
+            evidence["wrong_before"] == evidence["wrong_after"],
+            "inviter obtained private admission or unauthorized source changed holder footprint")
+    require(evidence["before"] == evidence["after"] and evidence["negative_before"] == evidence["negative_after"] and
+            all(value["canonical_events"] and value["realm_commits"] for value in evidence["before"]),
+            "invitation ACK or rejection changed native canonical/current/Consent facts")
+
+
+PROOFS = {"applet_installations": applet_installations, "call_invitation": call_invitation, "account_security_rotation": account_security_rotation, "peer_contacts": peer_contacts, "peer_keypackage_claims": peer_keypackage_claims,"account_identity_creation": account_identity_creation, "account_device_sessions": account_device_sessions,
           "account_device_pairing": account_device_pairing, "account_policy_recovery": account_policy_recovery,
           "account_private_storage": account_private_storage, "mls_interop": mls_interop,
           "account_consent": account_consent,"identity_reservations":identity_reservations,
@@ -1596,6 +1903,7 @@ def evidence_coverage(document, directory: Path, execution: Path):
         "cotest/tests/native_operation_contracts.rs",
         "cotest/tests/fixtures/native-operation-contracts.json",
         "cotest/src/scenarios/native_operation_contracts.rs",
+        "cotest/src/scenarios/native_operation_contracts/call_invitation.rs",
         "cotest/crates/test-support/src/provisioning/gate.rs",
         "coauth/crates/backend/src/handlers/arkret/account_register.rs",
         "coland/crates/services/src/authority_commit.rs",

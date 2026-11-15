@@ -424,16 +424,16 @@ pub async fn method_faults() -> Result<()> {
         .context("role entries")?;
     let role_entry = role_services
         .iter_mut()
-        .find(|entry| entry["type"] == "ArkretService" && entry["serviceKind"] == "station")
+        .find(|entry| entry["type"] == "ArkretService" && entry["service_kind"] == "station")
         .context("Station role")?;
-    role_entry["serviceKind"] = json!("push_gateway");
+    role_entry["service_kind"] = json!("push_gateway");
     let wrong_role = signer.successor(role_state).await?;
     let mut egress_state = entries(&current)?.last().unwrap()["state"].clone();
     for service in egress_state["service"]
         .as_array_mut()
         .context("egress service entries")?
     {
-        if service["type"] == "ArkretService" && service["serviceKind"] == "station" {
+        if service["type"] == "ArkretService" && service["service_kind"] == "station" {
             service["serviceEndpoint"] = json!("https://169.254.169.254/");
         }
     }

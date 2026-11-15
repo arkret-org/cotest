@@ -184,7 +184,7 @@ impl RotationAuthor {
         seed: [u8; 32],
     ) -> Result<KeyBackup> {
         let mut envelope = KeyBackup {
-            auth_binding: None,
+            authorization_binding: None,
             custodian_actor_id: None,
             custody_authorization_ref: None,
 
@@ -344,7 +344,7 @@ impl RotationAuthor {
                     "signature_algorithm": "Ed25519",
                     "signature": "AA"
                 },
-                "methods": [{"kind": "device_quorum", "k": k, "member_ids": members}]
+                "methods": [{"kind": "device_quorum", "min_device_count": k, "member_ids": members}]
             }))?;
         let transcript = arkret_models_crypto::recovery_policy_signature_transcript_bytes(&policy)?;
         policy.signature_proof.signature =
@@ -2058,7 +2058,7 @@ async fn quorum_delete(
         proof: HighRiskAuthorityProof::DeviceQuorum(
             arkret_models_crypto::HighRiskDeviceQuorumProofBody {
                 kind: arkret_models_crypto::DeviceQuorumProofKind::DeviceQuorum,
-                threshold: 2,
+                min_device_count: 2,
                 signatures,
             },
         ),

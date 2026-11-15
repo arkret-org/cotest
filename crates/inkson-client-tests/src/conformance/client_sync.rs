@@ -567,7 +567,7 @@ impl Probe {
             catchup: Some(true),
             filter: Some(garth::AccountFilter {
                 realm_ids: Some(vec![]),
-                window_limit: Some(20),
+                max_window_event_count: Some(20),
                 ..Default::default()
             }),
             ..Default::default()
@@ -1444,7 +1444,7 @@ impl Probe {
             catchup: Some(true),
             filter: Some(garth::AccountFilter {
                 realm_ids: Some(vec![realm.clone()]),
-                window_limit: Some(20),
+                max_window_event_count: Some(20),
                 lazy_load_members: Some(true),
                 ..Default::default()
             }),

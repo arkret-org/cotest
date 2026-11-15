@@ -48,7 +48,7 @@ fn control(
         arkret_signatures::Ed25519DetachedJwsSigner::new(key.clone(), method.as_str().to_owned());
     Ok(OrganizationControlProof {
         proof_kind: OrganizationControlProofKind::ResolvedVerificationMethod,
-        quorum_threshold: None,
+        min_signature_count: None,
         proofs: vec![PayloadProof {
             kind: "detached_jws".into(),
             verification_method: method,

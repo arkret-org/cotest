@@ -69,6 +69,16 @@
       "target": "native_operation_contracts",
       "test": "account_security_rotation_retains_worker_and_local_commit_originals",
       "artifact": "account-security-rotation.json"
+    },
+    "applet_installations": {
+      "target": "native_operation_contracts",
+      "test": "applet_installations_retain_original_sources_and_exact_fenced_replays",
+      "artifact": "applet-installations.json"
+    },
+    "call_invitation": {
+      "target": "native_operation_contracts",
+      "test": "call_invitation_retains_real_recipient_and_fresh_holder_verdict",
+      "artifact": "call-invitation.json"
     }
   },
   "operations": [
@@ -286,11 +296,11 @@
     },
     {
       "operation_id": "ak.self.applet.command.install.v1",
-      "native_case": null
+      "native_case": "applet_installations"
     },
     {
       "operation_id": "ak.self.applet.command.revoke.v1",
-      "native_case": null
+      "native_case": "applet_installations"
     },
     {
       "operation_id": "ak.self.applet.ghost.command.preview.v1",
@@ -298,11 +308,11 @@
     },
     {
       "operation_id": "ak.self.applet.install.command.preview.v1",
-      "native_case": null
+      "native_case": "applet_installations"
     },
     {
       "operation_id": "ak.self.applet.revoke.command.preview.v1",
-      "native_case": null
+      "native_case": "applet_installations"
     },
     {
       "operation_id": "ak.self.blob.command.presign.v1",
@@ -374,7 +384,7 @@
     },
     {
       "operation_id": "ak.self.applet.authority.read.material.v1",
-      "native_case": null
+      "native_case": "applet_installations"
     },
     {
       "operation_id": "ak.self.management_review.command.request.v1",
@@ -390,15 +400,15 @@
     },
     {
       "operation_id": "ak.self.call.invitation.command.send.v1",
-      "native_case": null
+      "native_case": "call_invitation"
     },
     {
       "operation_id": "ak.peer.call.invitation.command.relay.v1",
-      "native_case": null
+      "native_case": "call_invitation"
     },
     {
       "operation_id": "ak.peer.call.invitation.read.admission.v1",
-      "native_case": null
+      "native_case": "call_invitation"
     },
     {
       "operation_id": "ak.self.consent.read.current.v1",

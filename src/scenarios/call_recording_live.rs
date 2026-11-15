@@ -25,7 +25,7 @@ use crate::scenarios::human_device_producer_live::{
 use crate::scenarios::mls_lifecycle_live::{self as mls, Member};
 
 mod evidence;
-mod service;
+pub(crate) mod service;
 
 /// This independent composition does not award native operation obligations.
 pub async fn verify_native_composition() -> Result<()> {
@@ -56,7 +56,7 @@ async fn owner_event(
     submit(member, &event).await
 }
 
-async fn verify_owned_originals(
+pub(crate) async fn verify_owned_originals(
     member: &Member,
     originals: &[&CommittedEventFullView],
 ) -> Result<Vec<(VerifiedProducerEvent, VerifiedRealmCommit)>> {

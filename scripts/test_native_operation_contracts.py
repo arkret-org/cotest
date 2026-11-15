@@ -27,6 +27,55 @@ class NativeOperationContractGates(unittest.TestCase):
         guard.start()
         cls.addClassCleanup(guard.stop)
 
+
+    def test_call_invitation_deferred_cannot_replace_the_actual_recipient_admission(self):
+        # Component test for the structural domain oracle only. Actual producer,
+        # native Station history, MLS decrypt and verdict signatures are checked
+        # by the Rust native case; this dictionary earns no native credit.
+        sender = {"kind": "account", "account_id": {"principal_id": "sender", "station_id": "A"}}
+        holder = {"principal_id": "holder", "station_id": "H"}
+        envelope = {"component": "same actual encrypted envelope"}
+        invitation = {"call_id": "call", "media": {"audio": True, "video": False, "screen": False},
+                      "expires_at": "2026-11-15T00:00:30.000Z", "proof": {"verification_method": "method"}}
+        request = {"invitation": invitation, "envelope": envelope}
+        outstanding = {**request, "subject_actor_id": {"kind": "account", "account_id": holder},
+                       "subject_device_id": "device", "admission_phase": "product_delivery",
+                       "audience_actor_id": {"kind": "service", "service_id": "H"},
+                       "nonce": "eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHg"}
+        decision = {"request_digest": "sha256:" + gate.canonical_digest(outstanding), "admitted": True,
+                    "authority_generation": "0", "evaluated_at": "2026-11-15T00:00:00.000Z",
+                    "expires_at": "2026-11-15T00:00:30.000Z"}
+        plaintext = {"kind": "ak.call.signal", "signal_kind": "invite", "call_id": "call",
+                     "data": {"media": {"audio": True, "video": False}}}
+        encoded = base64.urlsafe_b64encode(json.dumps(plaintext).encode()).decode().rstrip("=")
+        delivery = {"envelope": envelope, "plaintext_base64url": encoded, "received_at": "2026-11-15T00:00:01.000Z",
+                    "delivery_authority": {"recipient_account_id": holder,
+                    "key": {"actor": sender, "verification_method": "method"},
+                    "call_invitation": {"invitation": invitation, "request": outstanding, "decision": decision}}}
+        gate.call_invitation_delivery(delivery, request, sender, holder, "device", True)
+        missing = copy.deepcopy(delivery)
+        missing["delivery_authority"].pop("call_invitation")
+        with self.assertRaisesRegex(ValueError, "Deferred has no exact actual recipient"):
+            gate.call_invitation_delivery(missing, request, sender, holder, "device", True)
+        with self.assertRaisesRegex(ValueError, "revoked invitation retained"):
+            gate.call_invitation_delivery(delivery, request, sender, holder, "device", False)
+        gate.call_invitation_delivery(missing, request, sender, holder, "device", False)
+        changed = copy.deepcopy(delivery)
+        changed["delivery_authority"]["call_invitation"]["request"]["nonce"] = "eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXk"
+        with self.assertRaisesRegex(ValueError, "Deferred has no exact actual recipient"):
+            gate.call_invitation_delivery(changed, request, sender, holder, "device", True)
+        changed = copy.deepcopy(delivery)
+        changed["delivery_authority"]["recipient_account_id"]["station_id"] = "other"
+        with self.assertRaisesRegex(ValueError, "full recipient"):
+            gate.call_invitation_delivery(changed, request, sender, holder, "device", True)
+        for received in ("2026-11-14T23:59:59.000Z", "2026-11-15T00:00:30.000Z"):
+            with self.subTest(received=received), self.assertRaisesRegex(ValueError, "fresh outstanding"):
+                gate.call_invitation_verdict(outstanding, decision, received, True)
+        changed = copy.deepcopy(decision)
+        changed["authority_generation"] = "1"
+        with self.assertRaisesRegex(ValueError, "fresh outstanding"):
+            gate.call_invitation_verdict(outstanding, changed, delivery["received_at"], True)
+
     def test_mls_add_ack_cannot_replace_recipient_producer_or_governance_original(self):
         for evidence in ({"replay": {"status": "duplicate"}},
                          {"request": {"component": True}, "producer_original": {"request_json": {"component": True}},
@@ -393,6 +442,109 @@ class NativeOperationContractGates(unittest.TestCase):
         changed["attempts"][1]["started_at"] = "2026-10-26T00:00:03.000Z"
         with self.assertRaisesRegex(ValueError, "stored admission timestamp"):
             gate.peer_invite(changed)
+
+
+
+class AppletInstallationProofGates(unittest.TestCase):
+    """Component-only mutation tests. No process/crypto/native credit exists here."""
+    @staticmethod
+    def component():
+        actor = {"kind":"account","account_id":{"principal_id":"component-human","station_id":"component-station"}}
+        scope = {"kind":"realm","realm_id":"component-realm"}
+        def original(kind, label, position, payload):
+            return {"event":{"kind":kind,"realm_id":"component-realm","scope_ref":scope,"actor_id":actor,
+                             "event_id":"component-event-"+label,"payload":payload},
+                    "commit":{"commit_id":"component-commit-"+label,"event_ref":"component-event-"+label,
+                              "stream_ref":scope,"stream_position":position}}
+        reg = original("ak.applet.registration","registration",0,{})
+        grant = original("ak.capability.grant","grant",1,{})
+        revoke = original("ak.capability.revoke","revoke",2,{"grant_id":"component-grant","expected_commit_id":grant["commit"]["commit_id"]})
+        package = {"applet_id":"component-applet","service_id":"component-service","registration_epoch":"component-epoch","package_digest":"component-package","requested_scopes":["ak.call.record"],
+                   "webhook_signature_policy":{"key_ref":"component-service#key"}}
+        grant["event"]["payload"]={"grant":{"issuer_id":actor,"subject":{"kind":"service","service_id":"component-service"},
+            "actions":["ak.call.record"],"resources":[scope],"constraints":[{"constraint_kind":"authority_control","constraint_subkind":"applet_authority",
+            "applet_id":"component-applet","executed_by":{"kind":"service","service_id":"component-service"},"registration_epoch":"component-epoch"}]}}
+        basis = {"effective_scope":scope,"install_actor_id":actor,"target_station_id":"component-station",
+                 "applet_id":"component-applet","service_id":"component-service","package_digest":"component-package",
+                 "registration_event":reg["event"],"capability_grant_events":[grant["event"]]}
+        request = {"applet_package":package,"authoring_request_basis":basis,"plan_digest":"component-plan"}
+        install = {"install_id":"component-install","applet_id":"component-applet","service_id":"component-service",
+                   "registration_event_ref":reg["event"]["event_id"],"registration_epoch":"component-epoch",
+                   "capability_grant_refs":["component-grant"],"rejections":[]}
+        def snap(status, committed):
+            grant_status = "active" if status=="installed" else "revoked"
+            return {"installations":[{"record":{"install_id":"component-install","status":status,"effective_scope":scope,"owner_actor_id":actor,
+                        "target_station_id":"component-station","install_body_digest":"sha256:"+gate.canonical_digest(request)}}],
+                    "sources":[{"install_id":"component-install","grant_id":"component-grant","registration_event_ref":reg["event"]["event_id"],
+                                "realm_id":"component-realm","applet_id":"component-applet","service_id":"component-service"}],
+                    "grants":[{"grant_id":"component-grant","status":grant_status,"current_commit_id":(grant if status=="installed" else revoke)["commit"]["commit_id"]}],
+                    "committed":committed,"events":[x["event"] for x in committed],
+                    "quota_counters":[],"quota_buckets":[],"quota_consumptions":[]}
+        before = {"installations":[],"sources":[],"grants":[],"committed":[],"events":[],"quota_counters":[],"quota_buckets":[],"quota_consumptions":[]}
+        installed = snap("installed",[reg,grant]); revoked = snap("revoked",[reg,grant,revoke])
+        registration_ref = {"event_id":reg["event"]["event_id"],"commit_id":reg["commit"]["commit_id"],"stream_ref":scope,"stream_position":0}
+        def material(active):
+            return {"applet_id":"component-applet","service_id":"component-service","effective_scope":scope,"registration":reg,"grant_events":[grant],
+                    "current_binding":({"status":"active","registration_ref":registration_ref,"registration_epoch":"component-epoch","service_id":"component-service"} if active else {"status":"inactive"})}
+        plan = {"capability_revocations":[{"grant_id":"component-grant","expected_commit_id":grant["commit"]["commit_id"]}],"membership_removals":[],"widget_token_refs":[]}
+        revoke_request = {"revoke_plan_digest":"sha256:"+gate.canonical_digest(plan),"capability_revoke_events":[{"event":revoke["event"]}],"membership_state_events":[]}
+        outcome = {"status":"complete","revoke_plan_digest":revoke_request["revoke_plan_digest"],"revoked_refs":[{"event_id":revoke["event"]["event_id"],"commit_id":revoke["commit"]["commit_id"],"stream_ref":scope,"stream_position":2}]}
+        evidence = {"realm_id":"component-realm","station_id":"component-station","actor_id":actor,"package":package,
+                    "service_resolution":{"service_id":"component-service","service_kind":"applet_service","method_history_evidence":{"component_only":True}},
+                    "install_request":request,"installed":install,"install_replay":install,"old_install_replay":install,"install_key":"component-install-key",
+                    "registration":reg,"grant":grant,"revoke":revoke,
+                    "snapshots":{"before":before,"after_preview":before,"installed":installed,"install_replay":installed,"revoke_preview":installed,"revoked":revoked,"after_replays":revoked},
+                    "material_request":{"effective_scope":scope,"grant_ids":["component-grant"]},"active":material(True),"inactive":material(False),"still_inactive":material(False),
+                    "revoke_preview_request":{"component":"preview"},"revoke_preview":{"revoke_plan":plan},"revoke_request":revoke_request,"revoke_key":"component-revoke-key",
+                    "revoked":outcome,"revoke_replay":outcome,"invalid_material_signature":{"status":401,"problem":{"status":401,"type":"https://arkret.org/problems/http_signature_invalid"}}}
+        exchanges = []
+        def exchange(operation, body, response, status=200, headers=None):
+            raw = json.dumps(body,sort_keys=True,separators=(",",":")).encode()
+            h = dict(headers or {})
+            if operation=="ak.self.applet.authority.read.material.v1":
+                h.update({"source-service-id":"component-service","destination-service-id":"component-station",
+                          "signature-input":'sig1=();keyid="component-service#key"',"signature":"component-only-not-crypto-proof",
+                          "content-digest":"sha-256=:"+base64.b64encode(hashlib.sha256(raw).digest()).decode()+":"})
+            exchanges.append({"operation_id":operation,"request_body":body,"response_body":response,"response_status":status,
+                              "explicit_request_headers":h,"request_json_base64url":base64.urlsafe_b64encode(raw).decode().rstrip("=")})
+        exchange("ak.self.applet.install.command.preview.v1",{"authoring_request_basis":basis},{"plan":{"plan_digest":"component-plan"}})
+        for status in [201,200,200]:exchange("ak.self.applet.command.install.v1",request,install,status,{"idempotency-key":"component-install-key"})
+        for name in ["active","inactive","still_inactive"]:exchange("ak.self.applet.authority.read.material.v1",evidence["material_request"],evidence[name])
+        exchange("ak.self.applet.revoke.command.preview.v1",evidence["revoke_preview_request"],evidence["revoke_preview"])
+        for _ in range(2):exchange("ak.self.applet.command.revoke.v1",revoke_request,outcome,headers={"idempotency-key":"component-revoke-key"})
+        evidence["observations"]={"exchanges":exchanges}
+        # Keep each snapshot/response independent so a single mutation cannot
+        # accidentally repair the linked value it is meant to falsify.
+        return json.loads(json.dumps(evidence))
+
+    def test_applet_installation_component_bindings_and_all_five_real_exchange_requirements(self):
+        evidence=self.component()
+        gate.applet_installations(evidence)
+        operations={x["operation_id"] for x in evidence["observations"]["exchanges"]}
+        self.assertEqual(len(operations),5)
+        for operation in operations:
+            changed=copy.deepcopy(evidence)
+            changed["observations"]["exchanges"]=[x for x in changed["observations"]["exchanges"] if x["operation_id"]!=operation]
+            with self.subTest(operation=operation),self.assertRaises(ValueError):gate.applet_installations(changed)
+
+    def test_applet_source_instance_original_current_and_replay_mutations_refuse(self):
+        evidence=self.component()
+        changes=[
+            lambda x:x["snapshots"]["installed"]["sources"][0].update(install_id="other-instance"),
+            lambda x:x["snapshots"]["revoked"]["grants"][0].update(status="active"),
+            lambda x:x["snapshots"]["after_replays"]["events"].append({"unexpected":"queued"}),
+            lambda x:x["inactive"]["current_binding"].update(status="active"),
+            lambda x:x["grant"]["commit"].update(commit_id="other-original"),
+            lambda x:x["revoke_request"]["capability_revoke_events"][0]["event"]["payload"].update(expected_commit_id="other-cid"),
+            lambda x:x["revoked"].update(status="in_progress"),
+            lambda x:x["snapshots"]["after_preview"]["events"].append({"unexpected":"preview-effect"}),
+            lambda x:x["observations"]["exchanges"][1]["explicit_request_headers"].update({"idempotency-key":"new-key"}),
+            lambda x:x["observations"]["exchanges"][4]["explicit_request_headers"].update({"source-service-id":"borrowed-station"}),
+            lambda x:x["invalid_material_signature"].update(status=200),
+        ]
+        for mutate in changes:
+            changed=copy.deepcopy(evidence); mutate(changed)
+            with self.subTest(mutation=changes.index(mutate)),self.assertRaises(ValueError):gate.applet_installations(changed)
 
 
 if __name__ == "__main__":

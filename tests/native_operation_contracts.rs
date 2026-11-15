@@ -1,4 +1,9 @@
 //! Positive operation contracts require real owned services and accepted originals.
+
+#[tokio::test(flavor = "multi_thread")]
+async fn call_invitation_retains_real_recipient_and_fresh_holder_verdict() -> anyhow::Result<()> {
+    cotest::scenarios::native_operation_contracts::call_invitation().await
+}
 #[test]
 fn mls_interop_entry_future_keeps_large_child_state_on_the_heap() {
     fn check<F: std::future::Future>(_: impl FnOnce() -> F) {
@@ -91,4 +96,10 @@ async fn peer_keypackage_claims_retain_two_native_authorities_and_original_cas()
 async fn peer_contacts_retain_two_native_authorities_and_nonempty_originals() -> anyhow::Result<()>
 {
     cotest::scenarios::native_operation_contracts::peer_contacts().await
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn applet_installations_retain_original_sources_and_exact_fenced_replays()
+-> anyhow::Result<()> {
+    cotest::scenarios::native_operation_contracts::applet_installations().await
 }

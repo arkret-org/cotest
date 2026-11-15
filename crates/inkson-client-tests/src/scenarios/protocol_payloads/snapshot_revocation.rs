@@ -57,7 +57,7 @@ impl RevokeAfterIssuance {
             self.issued.purpose == RealmSnapshotPurpose::FullRecovery
                 && window.limited
                 && window.complete
-                && window.window_limit == 20
+                && window.max_window_event_count == 20
                 && window.preview_only.is_none()
                 && original.purpose == RealmSnapshotPurpose::StreamHistory
                 && original.snapshot_id == basis.snapshot_ref

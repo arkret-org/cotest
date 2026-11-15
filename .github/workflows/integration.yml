@@ -36,9 +36,9 @@ jobs:
         script: |
           const refs = {cotest: context.sha};
           const producerPins = {
-            'arkret-rust-sdk': '819fc97ca2356cd0ed467864babfaca93e0b5494',
-            'garth': '8c35acec7c6d8c79b61c06855367340f0a17da78',
-            'arkret-spec': '4e46718f83a4fcbedc12ef7409bc68743ec41dc9',
+            'arkret-rust-sdk': 'e84ab4be3f1004ef5f48ea2250cd403787c4e706',
+            'garth': '0df727f46130ea18673785952846ee250724fdc6',
+            'arkret-spec': '66c9261b58fa211505ce8a710c1464bdc4a63dc8',
             'chime': 'aa8e2afc78fa35c6248c1a1016280b22d7502645',
             'flagon': '42655527c279fb2895d259058ec0f20422e61222',
           };

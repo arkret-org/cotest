@@ -950,7 +950,7 @@ fn route_record(did: &str, key: &SigningKey, now: DateTime<Utc>) -> Result<Value
             "id": format!("{did}#station"),
             "type": "ArkretService",
             "serviceEndpoint": "https://station-b.example/",
-            "serviceKind": "station",
+            "service_kind": "station",
         }],
     }))?;
     let resolution = build_authenticated_did_web_service_resolution(

@@ -57,7 +57,7 @@ async fn audit(
             .post("/_arkret/self/identity/resolution-audit/query")
             .canonical_json(&PrincipalResolutionAuditRequestBody {
                 account_id: account.clone(),
-                history_depth: Some(depth),
+                max_predecessor_event_count: Some(depth),
                 after_resolution_event_ref: after,
             })?,
         StatusCode::OK,

@@ -12,7 +12,7 @@ const SCOPE: [&str; 5] = [
     "ak.peer.mls.command.attest_add.v1",
 ];
 
-async fn await_source_claim(
+pub(super) async fn await_source_claim(
     alice: &crate::harness::TestActorClient,
     request: &KeyPackagesClaimRequestBody,
 ) -> Result<(KeyPackagesClaimResponseBody, Vec<Value>)> {

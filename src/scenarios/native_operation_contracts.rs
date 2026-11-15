@@ -3,6 +3,13 @@ use anyhow::{Context as _, Result, ensure};
 use cotest_test_support::operation_observation::{NativeOperationObservations, observe};
 use serde_json::{Value, json};
 
+mod call_invitation;
+
+pub async fn call_invitation() -> Result<()> {
+    validate_registered_schema_bindings()?;
+    crate::harness::heap_future(call_invitation::run).await
+}
+
 mod account_logout;
 mod actor_private;
 mod media_token;
@@ -44,6 +51,7 @@ pub async fn blob_presign() -> Result<()> {
     blob_presign::run().await
 }
 
+mod applet_installations;
 mod organization_registrations;
 mod peer_membership_reads;
 mod peer_signal;
@@ -55,6 +63,11 @@ mod service_registrations;
 pub async fn organization_registrations() -> Result<()> {
     validate_registered_schema_bindings()?;
     organization_registrations::run().await
+}
+
+pub async fn applet_installations() -> Result<()> {
+    validate_registered_schema_bindings()?;
+    crate::harness::heap_future(applet_installations::run).await
 }
 
 pub async fn service_registrations() -> Result<()> {

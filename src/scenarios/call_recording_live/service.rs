@@ -47,7 +47,7 @@ impl MethodArtifacts {
     }
 }
 
-pub(super) struct RecorderService {
+pub(crate) struct RecorderService {
     pub package: AppletPackage,
     pub epoch_evidence: AppletRegistrationEpochEvidence,
     signing_key: SigningKey,
@@ -73,17 +73,18 @@ impl RecorderService {
         let mut service_seed = [0; 32];
         getrandom::fill(&mut service_seed)?;
         let now = arkret_canonical::normalize_timestamp_canonical(chrono::Utc::now());
-        let inception = arkret_signatures::webvh::prepare_service_inception_with_did_key_seed(
-            &mut rng,
-            &arkret_signatures::webvh::ServiceInceptionInput {
-                principal_endpoint: &base,
-                local_id: "recorder",
-                also_known_as: &[],
-                version_created_at: now,
-                did_key_fragment: Some("recorder-key"),
-            },
-            &service_seed,
-        )?;
+        let inception =
+            arkret_signatures::webvh::prepare_applet_service_inception_with_did_key_seed(
+                &mut rng,
+                &arkret_signatures::webvh::ServiceInceptionInput {
+                    principal_endpoint: &base,
+                    local_id: "recorder",
+                    also_known_as: &[],
+                    version_created_at: now,
+                    did_key_fragment: Some("recorder-key"),
+                },
+                &service_seed,
+            )?;
         let did = Did::new(inception.did.clone())?;
         let service_id = arkret_wire::project_did_to_core_id(&did)?;
         ensure!(
@@ -200,12 +201,12 @@ impl RecorderService {
 
     /// Preview and install through the actual standard API. Caller-signed
     /// registration and G2 enter the Station's native atomic install unit.
-    pub async fn install(
+    pub(crate) async fn installation_request(
         &self,
         station: &ArkretServer,
         member: &crate::scenarios::mls_lifecycle_live::Member,
         realm: &RealmId,
-    ) -> Result<(AppletInstallResponseBody, Event, Event)> {
+    ) -> Result<(AppletInstallRequestBody, Event, Event)> {
         use arkret_models_collaboration::events_payloads::{
             CapabilityGrantCreateBody, CapabilityGrantPayload,
         };
@@ -276,6 +277,16 @@ impl RecorderService {
             authoring_request_basis: basis,
             plan_digest: preview.plan.plan_digest,
         };
+        Ok((body, registration, grant))
+    }
+
+    pub async fn install(
+        &self,
+        station: &ArkretServer,
+        member: &crate::scenarios::mls_lifecycle_live::Member,
+        realm: &RealmId,
+    ) -> Result<(AppletInstallResponseBody, Event, Event)> {
+        let (body, registration, grant) = self.installation_request(station, member, realm).await?;
         let response: AppletInstallResponseBody = serde_json::from_value(
             expect_json(
                 member
@@ -426,6 +437,73 @@ impl RecorderService {
             request = request.header(name, value);
         }
         expect_json(request, reqwest::StatusCode::OK).await
+    }
+
+    /// Build one real Service-authenticated material read, using the SDK's
+    /// canonical RFC 9421 scenario rather than a fixture verification policy.
+    pub(crate) fn authority_material_request(
+        &self,
+        station: &ArkretServer,
+        body: &arkret_models_collaboration::applet_installation_authority::AppletAuthorityMaterialRequestBody,
+    ) -> Result<reqwest::RequestBuilder> {
+        use arkret_signatures::http_signature::{
+            ContentDigest, ContentDigestAlgorithm, HttpSignatureScenario, SignedRequestParts,
+            sign_http_message_for_scenario,
+        };
+        let bytes = arkret_canonical::canonical_json_bytes(body)?;
+        let target = station.url(&format!(
+            "/_arkret/self/applets/{}/authority/material",
+            self.package.applet_id
+        ));
+        let url = url::Url::parse(&target)?;
+        let digest = ContentDigest::compute(&bytes, ContentDigestAlgorithm::Sha256).wire_value;
+        let headers = vec![
+            ("content-type".into(), "application/json".into()),
+            ("content-digest".into(), digest.clone()),
+            (
+                "source-service-id".into(),
+                self.package.service_id.to_string(),
+            ),
+            (
+                "destination-service-id".into(),
+                station.service_id().to_string(),
+            ),
+            (
+                "source-trust-domain".into(),
+                station.trust_domain().to_string(),
+            ),
+            (
+                "destination-trust-domain".into(),
+                station.trust_domain().to_string(),
+            ),
+            (
+                "arkret-operation".into(),
+                arkret_wire::ServiceOperationId::SELF_APPLET_AUTHORITY_READ_MATERIAL_V1.into(),
+            ),
+        ];
+        let signed = sign_http_message_for_scenario(
+            &SignedRequestParts {
+                method: "POST".into(),
+                target_uri: target.clone(),
+                authority: url[url::Position::BeforeHost..url::Position::AfterPort].to_owned(),
+                path: url.path().into(),
+                headers: headers.clone(),
+                body_digest: Some(digest),
+            },
+            HttpSignatureScenario::ServiceToServiceV1,
+            &["content-digest"],
+            "sig1",
+            self.method.as_str(),
+            chrono::Utc::now().timestamp(),
+            &self.signing_key,
+        )?;
+        let mut request = station.http().post(target).body(bytes);
+        for (name, value) in headers {
+            request = request.header(name, value);
+        }
+        Ok(request
+            .header("signature-input", signed.signature_input_header)
+            .header("signature", signed.signature_header))
     }
 
     pub fn service_id(&self) -> &DidCoreId {

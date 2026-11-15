@@ -21,10 +21,12 @@ REPO = Path(__file__).resolve().parents[1]
 ARTIFACTS = REPO / "artifacts"
 DECLARATIONS = REPO / "tests/fixtures/native-operation-contracts.json"
 REQUIRED = (
+    "applet_installations_retain_original_sources_and_exact_fenced_replays",
     "account_identity_creation_preserves_native_issuer_and_pcr_originals",
     "account_device_sessions_preserve_issuer_originals_and_real_consumer",
     "account_device_pairing_retains_real_target_and_admitted_original",
     "account_policy_recovery_retains_accepted_unit_and_issuer_originals",
+    "account_security_rotation_retains_worker_and_local_commit_originals",
     "account_private_storage_retains_encryption_and_durable_effects",
     "mls_interop_retains_native_claims_mls_and_mimi_originals",
     "account_consent_retains_holder_current_and_admitted_quarantine",
@@ -34,6 +36,7 @@ REQUIRED = (
     "blob_presign_retains_classified_native_object_and_live_policy",
     "peer_keypackage_claims_retain_two_native_authorities_and_original_cas",
     "peer_contacts_retain_two_native_authorities_and_nonempty_originals",
+    "call_invitation_retains_real_recipient_and_fresh_holder_verdict",
 )
 META = (
     "mls_interop_entry_future_keeps_large_child_state_on_the_heap",
@@ -215,7 +218,8 @@ def log_status(data: bytes):
             raise ValueError("totals disagree")
         if result_ok != (counts["failed"] == 0) or counts["measured"] != 0 or counts["filtered_out"] != 0:
             raise ValueError("unexpected totals")
-    complete = counts is not None and all(found.get(name) == "passed" for name in REQUIRED)
+    complete = (counts is not None and counts["passed"] == len(REQUIRED) + len(META)
+                and all(found.get(name) == "passed" for name in (*REQUIRED, *META)))
     return found, counts, complete
 
 

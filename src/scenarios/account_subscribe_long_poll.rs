@@ -579,10 +579,10 @@ async fn authz_invites(
     realm_id: &str,
 ) -> Result<arkret_models_collaboration::governance::authorization::AuthorizationInvitePage> {
     let account = client_account_id(subject)?;
+    let selector = String::from_utf8(arkret_canonical::canonical_json_bytes(&account)?)?;
     let response = crate::harness::expect_json(
         viewer.get("/_arkret/self/authz/invites").query(&[
-            ("subject", account.principal_id.as_str()),
-            ("subject_station_id", account.station_id.as_str()),
+            ("subject_account_id", selector.as_str()),
             ("realm_id", realm_id),
         ]),
         StatusCode::OK,

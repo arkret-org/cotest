@@ -1313,8 +1313,9 @@ async fn run_durable_account_round(
         expected: expected.map(|(event, commit)| (event.clone(), commit.clone())),
         observed: std::sync::atomic::AtomicBool::new(false),
     };
-    let request: AccountSubscribeParameters =
-        serde_json::from_value(json!({"filter":{"realm_ids":[realm],"window_limit":100}}))?;
+    let request: AccountSubscribeParameters = serde_json::from_value(
+        json!({"filter":{"realm_ids":[realm],"max_window_event_count":100}}),
+    )?;
     let device = arkret_wire::DeviceId::new(client.device_id.clone())?;
     tokio::time::timeout(
         Duration::from_secs(45),
