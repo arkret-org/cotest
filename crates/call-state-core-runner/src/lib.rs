@@ -596,6 +596,25 @@ fn axis_case() -> Result<(usize, usize)> {
 
     let capture = FacetRef::composite(facet::CALL_RECORDING, &[CALL, "capture-1"]);
     let result = FacetRef::composite(facet::CALL_RECORDING_RESULT, &[CALL, "capture-1"]);
+    let current_fixture: Value = serde_json::from_slice(&std::fs::read(
+        artifacts_root().join("fixtures/call-current-fixture.json"),
+    )?)?;
+    let key_ref = current_fixture
+        .pointer("/capture_transcripts/original_rows")
+        .and_then(Value::as_array)
+        .and_then(|rows| {
+            rows.iter().find_map(|row| {
+                (row.pointer("/event/kind").and_then(Value::as_str)
+                    == Some(EventKind::CallRecordingStart.as_str())
+                    && row
+                        .pointer("/event/payload/capture_kind")
+                        .and_then(Value::as_str)
+                        == Some("recording"))
+                .then(|| row.pointer("/event/payload/capture_metadata/key_ref"))
+                .flatten()
+            })
+        })
+        .context("normative recording Start must carry its MLS key reference")?;
     let capture_payload = |consent_confirmed| {
         json!({
             "call_id": CALL,
@@ -604,9 +623,16 @@ fn axis_case() -> Result<(usize, usize)> {
             "capture_kind": "recording",
             "mode": "audio_video",
             "visible_notice": true,
-            "capture_metadata": {"retention": {"consent_confirmed": consent_confirmed}}
+            "capture_metadata": {
+                "key_ref": key_ref,
+                "retention": {"consent_confirmed": consent_confirmed}
+            }
         })
     };
+    let valid: arkret_models_collaboration::events_payloads::call::CallRecordingStartPayload =
+        serde_json::from_value(capture_payload(true))
+            .context("consented recording Start must decode before the consent mutation")?;
+    ensure!(valid.validate().is_ok(), "recording Start positive control");
     let unconsented = operation(EventKind::CallRecordingStart, capture_payload(false), 604);
     let before_call = call_snapshot(&state, CALL);
     let before_capture = state.facet_value(REALM, &capture).cloned();

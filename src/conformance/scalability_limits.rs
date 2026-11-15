@@ -1,3 +1,7 @@
+//! Reference decisions and consistency checks for generated limit fixtures.
+//! Declared write/read expectations are fixture metadata, not observations of
+//! a running HTTP service or database transaction.
+
 use anyhow::{Result, anyhow, bail};
 use arkret_wire::ProfileId;
 use serde_json::Value;

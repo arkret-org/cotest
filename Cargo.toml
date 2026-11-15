@@ -238,10 +238,8 @@ cotest-view-write-contract-runner = { workspace = true }
 # `arkret` facade (`arkret::identity::*`). cotest's primary-handle /
 # mention vectors drive these directly so every implementation agrees on
 # the deterministic selection + canonical claim digest.
-# T5.3 — canonical hash convergence vectors in
-# `tests/canonical_hash_convergence.rs` exercise the high-level
-# `EventProofBuilder` facade alongside the low-level canonical helpers
-# to pin that every Arkret service hashes payloads identically.
+# Fixed canonical-hash vectors exercise the SDK encoding helpers directly;
+# service writer behavior is verified by its actual integration tests.
 # state-model round-trip vectors: cotest exercises the SDK's public
 # `arkret_state::state_model` implementations for SequencedState,
 # CausalRegister, OrSet, OrderedLog, and Counter.
