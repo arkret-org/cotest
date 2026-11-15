@@ -47,18 +47,17 @@ pub(crate) async fn complete_native(
 ) -> Result<CompletedCandidate> {
     let (candidate, gate, initial, handoff) = fixture.recovery_candidate().await?;
     let custody = candidate.principal.as_ref().context("candidate custody")?;
-    let encoded = candidate
-        .session()
-        .credential()
-        .split('.')
-        .nth(1)
-        .context("restricted claims")?;
-    let claims: arkret_models_identity::SignedSessionGrantClaims =
-        serde_json::from_slice(&arkret_canonical::base64url_decode(encoded)?)?;
+    let issued = candidate
+        .issued_session_response
+        .as_ref()
+        .context("original restricted issuance response")?;
     ensure!(
-        claims.credential_class
-            == arkret_models_identity::SessionGrantCredentialClass::RecoverySession,
-        "issuer did not return a restricted grant"
+        issued.device_id.as_ref() == Some(&custody.device_id)
+            && issued.granted_scope.iter().all(|scope| {
+                arkret_models_identity::RECOVERY_SESSION_GRANT_OPERATIONS.contains(&scope.as_str())
+            })
+            && !issued.granted_scope.is_empty(),
+        "restricted issuance changed its requested candidate or closed public operation set"
     );
     let author = RotationAuthor::from_client(&candidate)?;
     let session = create_verified_recovery_unlock_session_bound(
@@ -68,8 +67,8 @@ pub(crate) async fn complete_native(
         recovery_seed,
         custody.device_signing_key.to_bytes(),
         (
-            claims.grant_id,
-            base64url(claims.session_public_key.thumbprint_sha256()?)?,
+            issued.grant_ref(),
+            base64url(issued.session_public_key.thumbprint_sha256()?)?,
         ),
         crate::scenarios::_helpers::coauth_bootstrap::JOINT_TRUST_DOMAIN.parse()?,
     )
@@ -98,8 +97,8 @@ pub(crate) async fn complete_native(
         0,
     )?;
     let mut authorize = DeviceAuthorizePayload {
-        expected_control_revision: None,
-        expected_device_revision: None,
+        expected_control_commit_id: None,
+        expected_device_commit_id: None,
         device_id: custody.device_id.clone(),
         device_public_key_did: nonempty(format!(
             "did:key:{}",
@@ -412,31 +411,28 @@ pub(super) async fn verify_recovery_generation_boundary(
         .gate
         .issue_recovery_completion_grant(&current.request)
         .await?;
-    let grant: arkret_models_collaboration::session_grants::SessionGrantResponseBody =
-        serde_json::from_value(accepted.issued_session)?;
+    let grant = accepted.issued_session;
     ensure!(
         grant.account_id == current.request.completion_attestation.account_id
             && grant.device_id.as_ref()
                 == Some(&current.request.completion_attestation.replacement_device_id),
         "recovery changed Account or Device"
     );
-    let encoded = grant
-        .session_grant
-        .split('.')
-        .nth(1)
-        .context("completed grant claims")?;
-    let claims: arkret_models_identity::SignedSessionGrantClaims =
-        serde_json::from_slice(&arkret_canonical::base64url_decode(encoded)?)?;
+    let predecessor = current
+        .candidate
+        .issued_session_response
+        .as_ref()
+        .context("original restricted issuer response")?;
     ensure!(
-        claims.credential_class == arkret_models_identity::SessionGrantCredentialClass::Standard
-            && claims
-                .device_binding
-                .as_ref()
-                .is_some_and(|binding| binding.authorization_event_id
-                    == current.request.device_authorization_event_id
-                    && binding.model_generation_ref == current.request.new_model_generation_ref),
-        "completion grant did not bind the actual accepted authorization and generation"
+        grant.issuer_id == predecessor.issuer_id
+            && grant.audience_id == predecessor.audience_id
+            && grant.session_public_key == predecessor.session_public_key
+            && grant.expires_at > Utc::now(),
+        "completion public response changed issuer, audience, holder or validity"
     );
+    // Private accepted-device/generation binding is enforced by the actual
+    // Station requests below, together with their accepted native originals;
+    // an opaque public response cannot expose or prove issuer-private metadata.
     let mut accepted_principal = current
         .candidate
         .principal
@@ -456,7 +452,7 @@ pub(super) async fn verify_recovery_generation_boundary(
         match current.candidate.session() {
             crate::harness::ClientSession::Canonical { signing_key, .. } => {
                 crate::harness::ClientSession::Canonical {
-                    grant: grant.session_grant,
+                    grant: grant.session_grant.as_str().to_owned(),
                     signing_key: signing_key.clone(),
                 }
             }

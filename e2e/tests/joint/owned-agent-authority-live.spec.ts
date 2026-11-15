@@ -205,6 +205,7 @@ test("ordinary member explicitly grants, withdraws cold and confirms a new owned
     const runtime = await bridge.pairAgentRuntime({
       endpoints: { colandBaseUrl: colandBaseUrl(), coauthBaseUrl: coauthBaseUrl()! },
       controllerAccountId: session.accountId, controllerGrant: session.grantJwt,
+      controllerIssuerId: session.grantIssuerId,
       controllerHolderSeed: session.dpopSeedB64url, controllerEventSeed: session.eventSigningSeedB64url,
       controllerVerificationMethod: `${session.user.did}#${session.user.deviceId}`,
       agentId, strandId: strand,
@@ -606,6 +607,7 @@ test("normal administrator default denial admits an exact controller exception a
     await custody.pairAgentRuntime({
       endpoints: { colandBaseUrl: colandBaseUrl(), coauthBaseUrl: coauthBaseUrl()! },
       controllerAccountId: session.accountId, controllerGrant: session.grantJwt,
+      controllerIssuerId: session.grantIssuerId,
       controllerHolderSeed: session.dpopSeedB64url, controllerEventSeed: session.eventSigningSeedB64url,
       controllerVerificationMethod: `${session.user.did}#${session.user.deviceId}`,
       agentId: agent,

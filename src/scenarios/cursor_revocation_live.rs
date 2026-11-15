@@ -93,23 +93,11 @@ pub async fn same_device_distinct_session_cursor_revocation_live() -> Result<()>
         .principal
         .as_ref()
         .context("accepted founding device required")?;
-    let template = crate::scenarios::bridge_contracts::session_grant::mock_session_grant_jwt(
-        principal.core_id.as_str(),
-        principal.device_id.as_str(),
-        group.server(0).service_id().as_str(),
-    );
-    // Distinct opaque credentials are registered as exact Standard issuances
-    // in the explicit mock AA; no client decodes claims for authorization.
-    let prefix = template
-        .rsplit_once('.')
-        .context("fixture credential shape")?
-        .0;
-    let second_grant = format!(
-        "{prefix}.{}",
-        base64::engine::general_purpose::URL_SAFE_NO_PAD.encode([0x45; 64])
-    );
+    // The fixture issuer records a distinct opaque allocation beside the first.
+    let second_grant = arkret_wire::SessionGrantSecret::from_bytes([0x45; 32]).into_string();
     issuer.bind_founding_device_grant(
         &second_grant,
+        group.server(0).service_id(),
         principal.core_id.as_str(),
         principal.device_id.as_str(),
         principal.founding_authorize_event_id.as_str(),

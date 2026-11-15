@@ -487,7 +487,7 @@ async fn accept_roster(
     outcome: &CallMediaTokenExchangeResponseBody,
 ) -> Result<Event> {
     let event=holder.client.author_event(context.realm.as_str(),EventKind::CallState.as_str(),serde_json::json!({
-        "call_id":outcome.call_id,"roster_delta":{"op":"join","participant":{
+        "call_id":outcome.call_id,"roster_delta":{"operation":"join","participant":{
             "actor_id":outcome.actor_id,"device_id":outcome.device_id,
             "joined_at":arkret_canonical::format_timestamp_canonical(chrono::DateTime::<Utc>::from_timestamp(Utc::now().timestamp().div_euclid(300)*300,0).unwrap()),
             "media":outcome.media,"focus_id":outcome.focus_id,
@@ -1198,7 +1198,7 @@ async fn sfu_media(
         )
         .await?;
         let event=member.client.author_event(context.realm.as_str(),EventKind::CallState.as_str(),serde_json::json!({
-            "call_id":request.call_id,"roster_delta":{"op":"join","participant":{
+            "call_id":request.call_id,"roster_delta":{"operation":"join","participant":{
                 "actor_id":session.actor_id,"device_id":session.device_id,
                 "focus_id":session.focus_id,"participant_id":session.participant_id,
                 "participant_binding":session.participant_binding,"media":{"audio":session.desired_media.audio,"video":session.desired_media.video,"screen":session.desired_media.screen}

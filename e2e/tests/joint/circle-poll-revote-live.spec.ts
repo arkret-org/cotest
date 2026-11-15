@@ -167,7 +167,7 @@ test("Circle poll survives readback, replacement, a new browser process and anot
         expect(acceptedAfterRestart.events.some((event) => event.event_id === pollEventRef),
           "the governing Circle stream retains the accepted poll after process restart").toBe(true);
         const accountFrames = await accountSubscribeRealmFramesApi(request, aliceToken, realmId, {
-          filter: { realm_ids: [realmId], window_limit: 20 },
+          filter: { realm_ids: [realmId], max_window_event_count: 20 },
           onRead: async (diagnostic) => {
             await testInfo.attach("safe-poll-account-current-read", {
               contentType: "application/json", body: JSON.stringify(diagnostic),

@@ -192,7 +192,7 @@ pub async fn preview_account_window_backfills_without_failing_its_sibling_realm(
 
     // Coland answers one Realm detail per subscribe turn; continue on the
     // returned cursor until both details arrived, as one projected batch.
-    let filter = json!({"realm_ids": [preview_id, sibling_id], "window_limit": 8});
+    let filter = json!({"realm_ids": [preview_id, sibling_id], "max_window_event_count": 8});
     let mut batch = Vec::new();
     let mut after: Option<String> = None;
     for _ in 0..4 {
@@ -376,8 +376,11 @@ pub async fn limited_window_strand_tail_verifies_with_same_cut_current_through_i
     );
     let strand_id = author.create_default_strand(&realm_id).await?;
 
-    let frame =
-        account_detail_frame(&author, json!({"realm_ids": [realm_id], "window_limit": 2})).await?;
+    let frame = account_detail_frame(
+        &author,
+        json!({"realm_ids": [realm_id], "max_window_event_count": 2}),
+    )
+    .await?;
     let entry = realm_detail(&frame, &realm_id)?;
     let [window] = entry.streams.as_deref().context("stream windows")? else {
         anyhow::bail!("a single-member Realm has exactly its Realm stream window");
@@ -741,8 +744,11 @@ pub async fn restricted_join_policy_floor_verifies_through_inkson() -> Result<()
         "the signed cut must carry the join policy and restricted rule: {issued:?}"
     );
     author.create_default_strand(&realm_id).await?;
-    let frame =
-        account_detail_frame(&author, json!({"realm_ids": [realm_id], "window_limit": 2})).await?;
+    let frame = account_detail_frame(
+        &author,
+        json!({"realm_ids": [realm_id], "max_window_event_count": 2}),
+    )
+    .await?;
     let entry = realm_detail(&frame, &realm_id)?;
     let [window] = entry.streams.as_deref().context("stream windows")? else {
         anyhow::bail!("a founder Realm has exactly its Realm stream window");

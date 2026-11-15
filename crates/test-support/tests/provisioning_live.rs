@@ -314,8 +314,8 @@ async fn the_canonical_chain_founds_a_principal_end_to_end() {
         "initial grant bound to the wrong audience"
     );
     assert!(
-        !grant.session_grant.trim().is_empty(),
-        "initial grant carried no session grant JWT"
+        arkret_wire::SessionGrantSecret::new(grant.session_grant.as_str()).is_ok(),
+        "initial grant carried no canonical opaque credential"
     );
     assert!(
         !grant.granted_scope.is_empty(),
@@ -371,7 +371,7 @@ async fn the_canonical_chain_founds_a_principal_end_to_end() {
     let read = read_self_account_viewer(
         &http,
         &endpoints.coland_base_url,
-        &grant.session_grant,
+        grant.session_grant.as_str(),
         &handoff.device_key,
     )
     .await
@@ -479,7 +479,7 @@ async fn a_canonical_session_authorizes_a_caller_built_request() {
     .expect("found a principal through the canonical chain");
 
     let session = ClientSession::Canonical {
-        grant: principal.session_grant().session_grant.clone(),
+        grant: principal.session_grant().session_grant.as_str().to_owned(),
         signing_key: std::sync::Arc::new(handoff.device_key.signing_key()),
     };
     // A canonical session has no bearer. A caller that treats it as one sends
@@ -520,7 +520,7 @@ async fn a_canonical_session_authorizes_a_caller_built_request() {
     // a proof signed by a different key. The Station has to refuse it, or the
     // binding it advertises is not being checked.
     let impostor = ClientSession::Canonical {
-        grant: principal.session_grant().session_grant.clone(),
+        grant: principal.session_grant().session_grant.as_str().to_owned(),
         signing_key: std::sync::Arc::new(
             FoundingDeviceKey::generate("impostor")
                 .expect("OS CSPRNG for live fixture key")

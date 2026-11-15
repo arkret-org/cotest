@@ -672,7 +672,7 @@ pub(crate) async fn native_account_session(
     client: &TestActorClient,
 ) -> Result<inkson::conformance::NativeAccountSession> {
     use arkret_models_collaboration::session_grants::{
-        SessionGrantValidationByJwt, SessionGrantValidationInput,
+        SessionGrantValidationBySecret, SessionGrantValidationInput,
         SessionGrantValidationResponseBody,
     };
     use base64::Engine as _;
@@ -684,13 +684,13 @@ pub(crate) async fn native_account_session(
         .authentication_metadata
         .account_authority
         .context("fixture Account Authority")?;
-    let request = SessionGrantValidationInput::ByJwt(SessionGrantValidationByJwt {
-        grant_jwt: grant.clone(),
-        audience_id: Some(description.service_id.clone()),
+    let request = SessionGrantValidationInput::BySecret(SessionGrantValidationBySecret {
+        session_grant: arkret_wire::SessionGrantSecret::new(grant.clone())?,
+        audience_id: description.service_id.clone(),
         proof: None,
     });
     // This is the deployment-private harness issuer, never a client-facing
-    // authentication route or a grant reconstructed from unverified JWT claims.
+    // authentication route or a grant reconstructed from opaque credential bytes.
     let result: SessionGrantValidationResponseBody = reqwest::Client::new()
         .post(format!(
             "{}/_coauth/internal/session-grants/introspect",
@@ -708,7 +708,10 @@ pub(crate) async fn native_account_session(
         result.active && !result.proof_required && !result.one_time_use_consumed,
         "fixture issuer did not confirm an active grant"
     );
-    let metadata = result.grant.context("active fixture grant metadata")?;
+    let metadata = result
+        .grant
+        .context("active fixture grant metadata")?
+        .metadata;
     let device = arkret_wire::DeviceId::new(client.device_id.clone())?;
     ensure!(
         metadata.account_id.principal_id.as_str() == actor_core_id(&client.actor)?
@@ -724,7 +727,8 @@ pub(crate) async fn native_account_session(
         "issuer grant is bound to another DPoP holder"
     );
     let outcome = arkret_models_collaboration::session_grants::SessionGrantResponseBody {
-        session_grant: grant.clone(),
+        session_grant: arkret_wire::SessionGrantSecret::new(grant.clone())?,
+        issuer_id: metadata.issuer_id,
         session_grant_id: metadata.id,
         session_public_key: metadata.session_public_key,
         audience_id: metadata.audience_id,

@@ -134,7 +134,7 @@ pub async fn run_agent_content_mls_production() -> Result<crate::conformance::Su
                 .any(|action| action == "ak.message.create")
     );
     ensure!(
-        claims.scope_details.as_ref().context("membership source")?["capability_grant_refs"]
+        serde_json::to_value(claims.scope_details.as_ref().context("membership source")?)?["capability_grant_refs"]
             == json!([])
     );
     scene.agent.runtime = read.clone();

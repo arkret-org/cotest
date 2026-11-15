@@ -157,7 +157,7 @@ pub async fn approval_admission_run() -> Result<()> {
             "list",
             "Review",
             Some(&board_id),
-            json!({"wip_limit":1,"wip_limit_enforcement":"require_review"}),
+            json!({"max_active_strand_count":1,"active_strand_count_enforcement":"require_review"}),
         ),
     )
     .await?;

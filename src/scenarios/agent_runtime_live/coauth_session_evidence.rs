@@ -729,7 +729,7 @@ pub(super) async fn issue_runtime_session_with_scope(
         .await
         .with_context(|| format!("real Agent {negative} rejection"))?;
     }
-    Ok((outcome.session_grant, original))
+    Ok((outcome.session_grant.into_string(), original))
 }
 
 pub(super) async fn issuer_state(url: &str) -> Result<serde_json::Value> {

@@ -98,8 +98,7 @@ export async function acceptInviteViaApi(
 ) {
   const base = colandBaseUrl(opts.server);
   const listUrl = new URL("/_arkret/self/authz/invites", base);
-  listUrl.searchParams.set("subject", actorId);
-  listUrl.searchParams.set("subject_station_id", colandServiceId(opts.server));
+  listUrl.searchParams.set("subject_account_id", canonicalJson(accountActorId(actorId, opts.server).account_id));
   listUrl.searchParams.set("realm_id", realmId);
   let invite: InviteObject | undefined;
   await expect

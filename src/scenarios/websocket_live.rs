@@ -849,14 +849,14 @@ pub async fn run_transport_and_three_rails() -> Result<()> {
         .principal
         .as_ref()
         .context("accepted founding device")?;
-    let new_grant =
-        crate::scenarios::bridge_contracts::session_grant::issuer_key_forged_session_grant_jwt(
-            principal.core_id.as_str(),
-            principal.device_id.as_str(),
-            server.service_id().as_str(),
-        );
+    let new_grant = crate::scenarios::bridge_contracts::session_grant::unrecorded_session_grant(
+        principal.core_id.as_str(),
+        principal.device_id.as_str(),
+        server.service_id().as_str(),
+    );
     issuer.bind_founding_device_grant(
         &new_grant,
+        server.service_id(),
         principal.core_id.as_str(),
         principal.device_id.as_str(),
         principal.founding_authorize_event_id.as_str(),

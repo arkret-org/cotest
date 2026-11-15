@@ -96,10 +96,12 @@ async fn unavailable_policy_source(
     scene.read_exact(runtime).await?;
     let (restored, claims) = scene.issue_for(operations, scene.selectors()).await?;
     ensure!(
-        claims
-            .scope_details
-            .as_ref()
-            .context("restored absence proof")?["policy_refs"]
+        serde_json::to_value(
+            claims
+                .scope_details
+                .as_ref()
+                .context("restored absence proof")?
+        )?["policy_refs"]
             == json!([])
     );
     scene.read_exact(&restored).await?;
@@ -236,7 +238,7 @@ async fn publish_policy(
     previous: Option<arkret_wire::CurrentRevision>,
 ) -> Result<arkret_wire::CurrentRevision> {
     let payload: PolicySetStatePayload = serde_json::from_value(json!({
-        "policy_id":policy.id,"expected_revision":previous,"value":policy,
+        "policy_id":policy.id,"expected_commit_id":previous.map(|revision|revision.commit_id),"value":policy,
     }))?;
     payload.validate()?;
     let controller = &scene.deployment.controller;
@@ -391,10 +393,12 @@ pub async fn run_agent_content_policy_production()
         .collect::<Vec<_>>();
     let (runtime, initial_claims) = scene.issue_for(&read_operations, scene.selectors()).await?;
     ensure!(
-        initial_claims
-            .scope_details
-            .as_ref()
-            .context("complete initial Policy absence")?["policy_refs"]
+        serde_json::to_value(
+            initial_claims
+                .scope_details
+                .as_ref()
+                .context("complete initial Policy absence")?
+        )?["policy_refs"]
             == json!([])
     );
     scene.read_exact(&runtime).await?;
@@ -403,10 +407,12 @@ pub async fn run_agent_content_policy_production()
     publish_policy(&scene, &allow, None).await?;
     let (runtime, claims) = scene.issue_for(&read_operations, scene.selectors()).await?;
     ensure!(
-        claims
-            .scope_details
-            .as_ref()
-            .context("policy scope details")?["policy_refs"]
+        serde_json::to_value(
+            claims
+                .scope_details
+                .as_ref()
+                .context("policy scope details")?
+        )?["policy_refs"]
             .as_array()
             .context("actual current policy refs")?
             .iter()

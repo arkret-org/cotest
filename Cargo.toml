@@ -160,7 +160,7 @@ hpke-rs = "0.8"
 hpke-rs-crypto = "0.8"
 hpke-rs-rust-crypto = "0.8"
 inkson = { path = "../inkson" }
-jsonschema = { version = "0.59.0", default-features = false }
+jsonschema = { version = "0.60.1", default-features = false }
 postgres = "0.19.14"
 p256 = "0.14.0"
 proptest = { version = "1", default-features = false }

@@ -357,7 +357,7 @@ pub(super) async fn run(
         .author_event(
             realm,
             EventKind::CapabilityRevoke.as_str(),
-            json!({"grant_id":grant_id,"expected_revision":{"commit_id":grant_commit.commit_id,"stream_position":grant_commit.stream_position}}),
+            json!({"grant_id":grant_id,"expected_commit_id":grant_commit.commit_id}),
         )
         .await?;
     submit_and_expect_commit(

@@ -190,7 +190,7 @@ fn verified_commit() -> (RealmCommit, VerifiedRealmCommit) {
             "publicKeyMultibase":canonical::ed25519_pubkey_to_did_key_multibase(station_key().verifying_key().as_bytes())}],
         "authentication":[station_method()], "assertionMethod":[station_method()],
         "service":[{"id":"did:web:sdk-station.arkret.org#station","type":"ArkretService",
-            "serviceEndpoint":"https://sdk-station.arkret.org/","serviceKind":"station"}]
+            "serviceEndpoint":"https://sdk-station.arkret.org/","service_kind":"station"}]
     })).unwrap();
     let route = arkret::identity::build_authenticated_did_web_service_resolution(
         station(),

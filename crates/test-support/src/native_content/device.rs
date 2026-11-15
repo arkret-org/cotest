@@ -70,7 +70,7 @@ pub async fn registered_device_client(
     let sdk = crate::agent_runtime::controller_transport(
         http,
         station,
-        principal.session_grant().session_grant.clone(),
+        principal.session_grant().session_grant.as_str().to_owned(),
         holder.signing_key(),
     )?;
     let (sdk, _lifetime) = crate::session::bind_registered_host_source(sdk, state, binding)?;
@@ -224,7 +224,7 @@ pub async fn seal_device_message(
         "content backup basis belongs to another Account or PCR"
     );
     let author = arkret::crypto::content_history::ContentRootBackupAuthor::Device {
-        binding: arkret::crypto::backup::KeyBackupAuthBinding {
+        binding: arkret::crypto::backup::KeyBackupAuthorizationBinding {
             device_id: device,
             verification_method: method.clone(),
             signature_algorithm: KeyBackupSignatureAlgorithm::Ed25519,

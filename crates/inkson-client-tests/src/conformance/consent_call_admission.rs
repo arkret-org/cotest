@@ -1935,10 +1935,10 @@ async fn exercise_complete_roster_leave_and_rejoin(
             realm.as_str(),
             EventKind::CallState.as_str(),
             serde_json::json!({
-                "call_id":call,"roster_delta":{"op":"leave",
+                "call_id":call,"roster_delta":{"operation":"leave",
                     "actor_id":member.actor,
                     "device_id":member.device,
-                    "expected_revision":revision
+                    "expected_commit_id":revision.commit_id
                 }
             }),
         )

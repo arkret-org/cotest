@@ -94,11 +94,11 @@ pub async fn ensure_controller_recovery_policy(
         "recovery policy reader returned another Account"
     );
     let previous = current.active_policy;
-    if let Some(summary) = &previous {
-        if let Ok(custody) = controller_history_custody(account, summary) {
-            source.check_session()?;
-            return Ok(custody);
-        }
+    if let Some(summary) = &previous
+        && let Ok(custody) = controller_history_custody(account, summary)
+    {
+        source.check_session()?;
+        return Ok(custody);
     }
     let material = arkret::identity_root::derive_identity_recovery_key_material_from_bip39(
         recovery_mnemonic,

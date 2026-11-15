@@ -212,12 +212,13 @@ fn run_case(case: &Value) -> Result<(CaseExecutionResult, usize, usize, usize)> 
             let row = &list.grants[0];
             let payload = CapabilityRelinquishPayload {
                 grant_id: row.grant.id.clone(),
-                expected_revision: row.revision.clone(),
+                expected_commit_id: row.revision.commit_id.clone(),
                 reason: None,
             };
             let payload_wire = serde_json::to_value(payload)?;
             ensure!(
-                payload_wire["expected_revision"] == at(case, "/list_result/revision")?.clone()
+                payload_wire["expected_commit_id"]
+                    == at(case, "/list_result/revision/commit_id")?.clone()
             );
             ensure!(str_at(case, "/expected/decision")? == "allow_authoring");
             ensure!(bool_at(case, "/expected/basis_is_row_revision")?);

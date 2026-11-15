@@ -80,7 +80,7 @@ async fn quota_exhaustion(scene: &GrantFixture) -> Result<()> {
             .any(|action| action == "ak.message.create")
     );
     ensure!(
-        claims.scope_details.as_ref().context("quota source refs")?["capability_grant_refs"]
+        serde_json::to_value(claims.scope_details.as_ref().context("quota source refs")?)?["capability_grant_refs"]
             == json!([grant])
     );
     ensure!(
@@ -172,10 +172,12 @@ async fn temporal_condition(scene: &GrantFixture) -> Result<()> {
             .any(|action| action == "ak.message.create")
     );
     ensure!(
-        claims
-            .scope_details
-            .as_ref()
-            .context("condition source refs")?["capability_grant_refs"]
+        serde_json::to_value(
+            claims
+                .scope_details
+                .as_ref()
+                .context("condition source refs")?
+        )?["capability_grant_refs"]
             == json!([grant])
     );
     scene

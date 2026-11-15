@@ -163,6 +163,7 @@ export type DpopUserSession = {
   account: CoauthPasswordAccount;
   grantJwt: string;
   grantId: string;
+  grantIssuerId: string;
   grantExpiresAt: string;
   grantedScope: string[];
   accountId: { principal_id: string; station_id: string };
@@ -1809,6 +1810,7 @@ export async function createDpopUserSessionForAccount(
     account,
     grantJwt: grant.grantJwt,
     grantId: grant.grantId,
+    grantIssuerId: grant.issuerId,
     grantExpiresAt: grant.expiresAt,
     grantedScope: grant.scopes,
     accountId: grant.accountId,
@@ -2305,6 +2307,7 @@ export async function pairSiblingDeviceSession(
       account: foundingSession.account,
       grantJwt: grantJwt!,
       grantId: grantId!,
+      grantIssuerId: grant.issuer_id!,
       grantExpiresAt: grant.expires_at,
       grantedScope: grant.granted_scope,
       accountId,

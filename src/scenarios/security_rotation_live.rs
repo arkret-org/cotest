@@ -48,7 +48,7 @@ use crate::harness::{
 use crate::scenarios::_helpers::bridge::MockCoauthIntrospectionServer;
 use crate::scenarios::_helpers::coauth_bootstrap::spawn_ephemeral_postgres_for;
 use crate::scenarios::bridge_contracts::session_grant::{
-    mock_recovery_session_grant_jwt, mock_session_grant_jwt,
+    mock_recovery_session_grant, mock_session_grant,
 };
 use crate::scenarios::identity_test_support::{
     HARNESS_INTERNAL_AUTHORITY_SECRET, actor_did_for_service_did,
@@ -184,7 +184,7 @@ impl RotationAuthor {
         seed: [u8; 32],
     ) -> Result<KeyBackup> {
         let mut envelope = KeyBackup {
-            auth_binding: None,
+            authorization_binding: None,
             custodian_actor_id: None,
             custody_authorization_ref: None,
 
@@ -315,7 +315,7 @@ impl RotationAuthor {
     }
 
     /// A's `ak.policy.set` publishing a recovery policy whose only method is
-    /// a `device_quorum` of `k` over `members`, the policy signed with `seed`
+    /// a `device_quorum` of `min_device_count` over `members`, signed with `seed`
     /// under `method` and the Event signed by A.
     #[allow(clippy::too_many_arguments)]
     fn recovery_policy(
@@ -323,13 +323,13 @@ impl RotationAuthor {
         policy_id: &str,
         version: u64,
         supersedes: Option<&str>,
-        k: u32,
+        min_device_count: u32,
         members: &[&str],
         method: &DidUrl,
         seed: [u8; 32],
     ) -> Result<Event> {
-        let mut policy: arkret_models_crypto::RecoveryPolicy =
-            serde_json::from_value(serde_json::json!({
+        let mut policy: arkret_models_crypto::RecoveryPolicy = serde_json::from_value(
+            serde_json::json!({
                 "schema": "ak.schema.recovery_policy.v1",
                 "policy_id": policy_id,
                 "account_id": self.account,
@@ -344,8 +344,9 @@ impl RotationAuthor {
                     "signature_algorithm": "Ed25519",
                     "signature": "AA"
                 },
-                "methods": [{"kind": "device_quorum", "k": k, "member_ids": members}]
-            }))?;
+                "methods": [{"kind": "device_quorum", "min_device_count": min_device_count, "member_ids": members}]
+            }),
+        )?;
         let transcript = arkret_models_crypto::recovery_policy_signature_transcript_bytes(&policy)?;
         policy.signature_proof.signature =
             Base64UrlString::new(arkret_canonical::base64url_encode(
@@ -660,13 +661,14 @@ pub(crate) async fn rotation_fixture(
         let authorize =
             admit_accepted_device(server, &actor, &principal, &account, device, seed).await?;
         let key = SigningKey::from_bytes(&seed);
-        let grant = mock_session_grant_jwt(
+        let grant = mock_session_grant(
             principal.core_id.as_str(),
             device,
             server.service_id().as_str(),
         );
         coauth.bind_founding_device_grant(
             &grant,
+            server.service_id(),
             principal.core_id.as_str(),
             device,
             authorize.as_str(),
@@ -685,13 +687,14 @@ pub(crate) async fn rotation_fixture(
     };
     let client_b = session_for(DEVICE_B, DEVICE_B_SEED).await?;
     let client_c = session_for(DEVICE_C, DEVICE_C_SEED).await?;
-    let grant_a = mock_session_grant_jwt(
+    let grant_a = mock_session_grant(
         principal.core_id.as_str(),
         DEVICE_A,
         server.service_id().as_str(),
     );
     coauth.bind_founding_device_grant(
         &grant_a,
+        server.service_id(),
         principal.core_id.as_str(),
         DEVICE_A,
         principal.founding_authorize_event_id.as_str(),
@@ -1895,8 +1898,8 @@ fn device_authorization(
     let mut hpke = vec![0xec, 0x01];
     hpke.extend([seed[0].wrapping_add(1); 32]);
     let mut payload = DeviceAuthorizePayload {
-        expected_control_revision: None,
-        expected_device_revision: None,
+        expected_control_commit_id: None,
+        expected_device_commit_id: None,
         device_id: DeviceId::new(device.to_owned())?,
         device_public_key_did: NonEmptyString::new(format!("did:key:{public}"))
             .map_err(anyhow::Error::msg)?,
@@ -2054,7 +2057,7 @@ async fn quorum_delete(
         proof: HighRiskAuthorityProof::DeviceQuorum(
             arkret_models_crypto::HighRiskDeviceQuorumProofBody {
                 kind: arkret_models_crypto::DeviceQuorumProofKind::DeviceQuorum,
-                threshold: 2,
+                min_device_count: 2,
                 signatures,
             },
         ),
@@ -2191,36 +2194,15 @@ pub async fn key_backup_device_quorum_delete_removes_an_envelope() -> Result<()>
     Ok(())
 }
 
-fn recovery_grant_coordinates(
-    principal: &ProvisionedTestPrincipal,
-    station: &DidCoreId,
-) -> Result<(arkret_wire::SessionGrantId, Base64UrlString)> {
-    let grant =
-        mock_recovery_session_grant_jwt(principal.core_id.as_str(), DEVICE_A, station.as_str());
-    // rotation_fixture records B, C, then A. The mock assigns every non-first
-    // binding an id derived from the exact credential.
-    let mut token = vec![0x01];
-    token.extend(arkret_canonical::sha256_bytes(grant.as_bytes()));
-    let grant_id = arkret_wire::SessionGrantId::new(format!(
-        "ak:session_grant:{}",
-        arkret_canonical::base64url_encode(token)
-    ))?;
-    let jwk = arkret_signatures::JsonWebKey::from_ed25519_verifying_key(
-        &principal.device_signing_key.verifying_key(),
-    );
-    let cnf_jkt = Base64UrlString::new(arkret_signatures::dpop::dpop_jwk_thumbprint(&jwk)?)
-        .map_err(anyhow::Error::msg)?;
-    Ok((grant_id, cnf_jkt))
-}
-
 async fn create_verified_recovery_unlock_session(
+    issuer: &MockCoauthIntrospectionServer,
     client: &TestActorClient,
     signer: &RotationAuthor,
     recovery_method: &DidUrl,
     recovery_seed: [u8; 32],
     requesting_device_seed: [u8; 32],
 ) -> Result<arkret_models_crypto::RecoverySession> {
-    let coordinates = recovery_grant_coordinates(&signer.principal, &signer.station)?;
+    let coordinates = issuer.recovery_grant_coordinates(client.session().credential())?;
     create_verified_recovery_unlock_session_bound(
         client,
         signer,
@@ -2239,7 +2221,7 @@ pub(crate) async fn create_verified_recovery_unlock_session_bound(
     recovery_method: &DidUrl,
     recovery_seed: [u8; 32],
     requesting_device_seed: [u8; 32],
-    coordinates: (arkret_wire::SessionGrantId, Base64UrlString),
+    coordinates: (arkret_wire::SessionGrantRef, Base64UrlString),
     trust_domain: arkret_wire::TrustDomainId,
 ) -> Result<arkret_models_crypto::RecoverySession> {
     use arkret_models_crypto::{
@@ -2252,7 +2234,7 @@ pub(crate) async fn create_verified_recovery_unlock_session_bound(
     };
     use arkret_wire::{DidKey, RequestId};
 
-    let (grant_id, cnf_jkt) = coordinates;
+    let (grant_ref, cnf_jkt) = coordinates;
     let request_id = RequestId::new(arkret_identifiers::new_prefixed_uuid7("ak:request:"))?;
     let requesting_device_key = SigningKey::from_bytes(&requesting_device_seed);
     let device_multibase = arkret_canonical::ed25519_pubkey_to_did_key_multibase(
@@ -2263,7 +2245,7 @@ pub(crate) async fn create_verified_recovery_unlock_session_bound(
     let possession = RecoveryDevicePossessionTranscript {
         schema: RECOVERY_DEVICE_POSSESSION_DOMAIN.to_owned(),
         request_id: request_id.clone(),
-        session_grant_id: grant_id,
+        session_grant_ref: grant_ref,
         session_grant_cnf_jkt: cnf_jkt,
         account_id: signer.account.clone(),
         requesting_device_id: signer.principal.device_id.clone(),
@@ -2303,7 +2285,7 @@ pub(crate) async fn create_verified_recovery_unlock_session_bound(
         schema: RECOVERY_PROOF_TRANSCRIPT_SCHEMA.to_owned(),
         kind: arkret_models_crypto::RecoveryProofKind::RecoveryUnlock,
         request_id: session.request_id.clone(),
-        session_grant_id: session.session_grant_id.clone(),
+        session_grant_ref: session.session_grant_ref.clone(),
         session_grant_cnf_jkt: session.session_grant_cnf_jkt.clone(),
         account_id: session.account_id.clone(),
         requesting_device_id: session.requesting_device_id.clone(),
@@ -2578,13 +2560,14 @@ pub async fn key_backup_unlock_rejects_published_test_signing_material_live() ->
         published.text().await.unwrap_or_default()
     );
 
-    let recovery_grant = mock_recovery_session_grant_jwt(
+    let recovery_grant = mock_recovery_session_grant(
         signer.principal.core_id.as_str(),
         signer.principal.device_id.as_str(),
         signer.station.as_str(),
     );
     coauth.bind_recovery_session_grant(
         &recovery_grant,
+        &signer.station,
         signer.principal.core_id.as_str(),
         signer.principal.device_id.as_str(),
         &signer.principal.device_signing_key.verifying_key(),
@@ -2592,6 +2575,7 @@ pub async fn key_backup_unlock_rejects_published_test_signing_material_live() ->
     let recovery_client =
         server.client_with_founding_device_grant(&signer.principal, recovery_grant)?;
     let session = create_verified_recovery_unlock_session(
+        &coauth,
         &recovery_client,
         &signer,
         &recovery_method,
@@ -2663,13 +2647,14 @@ pub async fn key_backup_recovery_unlock_delete_is_session_exact_and_zero_write()
         published.text().await.unwrap_or_default()
     );
 
-    let recovery_grant = mock_recovery_session_grant_jwt(
+    let recovery_grant = mock_recovery_session_grant(
         signer.principal.core_id.as_str(),
         signer.principal.device_id.as_str(),
         signer.station.as_str(),
     );
     coauth.bind_recovery_session_grant(
         &recovery_grant,
+        &signer.station,
         signer.principal.core_id.as_str(),
         signer.principal.device_id.as_str(),
         &signer.principal.device_signing_key.verifying_key(),
@@ -2677,6 +2662,7 @@ pub async fn key_backup_recovery_unlock_delete_is_session_exact_and_zero_write()
     let recovery_client =
         server.client_with_founding_device_grant(&signer.principal, recovery_grant)?;
     let session = create_verified_recovery_unlock_session(
+        &coauth,
         &recovery_client,
         &signer,
         &recovery_method,

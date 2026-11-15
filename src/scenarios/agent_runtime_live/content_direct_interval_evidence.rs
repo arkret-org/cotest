@@ -451,7 +451,7 @@ pub async fn run_agent_content_direct_interval_production()
     let (before, claims) = content_direct_evidence::issue(&local, &agent, &actions, &realm).await?;
     ensure!(
         claims.scopes.iter().any(|action| action == "ak.event.read")
-            && claims.scope_details.as_ref().context("Direct scope")?["capability_grant_refs"]
+            && serde_json::to_value(claims.scope_details.as_ref().context("Direct scope")?)?["capability_grant_refs"]
                 == json!([])
     );
     ensure!(
@@ -482,7 +482,7 @@ pub async fn run_agent_content_direct_interval_production()
     let (after, claims) = content_direct_evidence::issue(&local, &agent, &actions, &realm).await?;
     ensure!(
         claims.scopes.iter().any(|action| action == "ak.event.read")
-            && claims.scope_details.as_ref().context("Direct scope")?["capability_grant_refs"]
+            && serde_json::to_value(claims.scope_details.as_ref().context("Direct scope")?)?["capability_grant_refs"]
                 == json!([])
     );
     ensure!(

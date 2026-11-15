@@ -104,10 +104,10 @@ pub async fn coauth_session_grant_response_loss_run() -> Result<()> {
     );
     ensure!(
         outcome
-            .get("grant_jwt")
+            .get("session_grant")
             .and_then(Value::as_str)
-            .is_some_and(|value| value.split('.').count() == 3),
-        "replayed outcome omitted the committed signed credential"
+            .is_some_and(|value| arkret_wire::SessionGrantSecret::new(value).is_ok()),
+        "replayed outcome omitted the committed opaque credential"
     );
     Ok(())
 }

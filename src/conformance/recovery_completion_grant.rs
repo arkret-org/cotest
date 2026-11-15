@@ -20,7 +20,7 @@ use arkret_wire::{
 use base64::Engine as _;
 use chrono::{Duration, TimeZone as _, Utc};
 use ed25519_dalek::{Signature, Signer as _, SigningKey, Verifier as _};
-use serde_json::{Value, json};
+use serde_json::json;
 
 #[derive(Clone)]
 struct CompletionContext {
@@ -200,24 +200,14 @@ fn completion_vector() -> Result<CompletionVector> {
     };
     request.canonical_request_digest = request.expected_canonical_request_digest()?;
 
-    let grant_claims = json!({
-        "credential_class": "standard",
-        "session_public_key": session_public_key.clone(),
-        "aud": audience,
-        "scope": standard_initial_session_grant_scope()
-    });
-    let jwt = format!(
-        "{}.{}.fixture-signature",
-        encode_json(&json!({"alg": "EdDSA", "typ": "JWT"}))?,
-        encode_json(&grant_claims)?
-    );
     let grant = SessionGrantResponseBody {
         account_id: AccountId::new(principal_id.parse()?, audience.parse()?),
         device_id: Some(device_id.parse()?),
-        session_grant: jwt,
+        // This reference fixture explicitly assigns the coordinator as its owning issuer.
+        issuer_id: audience.parse()?,
+        session_grant: arkret_wire::SessionGrantSecret::from_bytes([0x35; 32]),
         expires_at: completed_at + Duration::hours(1),
-        session_grant_id: "ak:session_grant:ATLC-gY-xpE0kN3QXVYxo0Kh32EoNCTBQTSFuu_P57e6"
-            .parse()?,
+        session_grant_id: "ak:session_grant:019a8400-0000-7000-8000-000000000008".parse()?,
         session_public_key,
         audience_id: audience.parse()?,
         granted_scope: standard_initial_session_grant_scope(),
@@ -334,10 +324,8 @@ fn validate_completion_vector(vector: &CompletionVector) -> Result<()> {
         grant.clone(),
         vector.outcome.issued_at,
     )?;
-    let claims = jwt_payload(&grant.session_grant)?;
-    if claims["credential_class"] != "standard" || claims.get("recovery_binding").is_some() {
-        bail!("recovery completion did not issue a direct Standard grant");
-    }
+    // The original typed public response is bound above. No credential bytes
+    // disclose or prove private issuer credential-class metadata.
     let operation_values = serde_json::to_value(ACCOUNT_HANDOFF_ALLOWED_OPERATIONS)?;
     if operation_values.as_array().is_some_and(|values| {
         values.iter().any(|value| {
@@ -481,17 +469,4 @@ fn verify_b64url(key: &SigningKey, message: &[u8], signature: &str) -> Result<()
     key.verifying_key()
         .verify(message, &signature)
         .map_err(|error| anyhow!(error.to_string()))
-}
-
-fn encode_json(value: &Value) -> Result<String> {
-    Ok(base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(serde_json::to_vec(value)?))
-}
-
-fn jwt_payload(jwt: &str) -> Result<Value> {
-    let payload = jwt
-        .split('.')
-        .nth(1)
-        .context("session grant is not compact JWT")?;
-    let bytes = base64::engine::general_purpose::URL_SAFE_NO_PAD.decode(payload)?;
-    serde_json::from_slice(&bytes).context("decode session grant claims")
 }

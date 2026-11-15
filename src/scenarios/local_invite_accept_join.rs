@@ -99,13 +99,14 @@ async fn realm_head(client: &TestActorClient, realm_id: &RealmId) -> Result<u64>
 }
 
 /// The first Account subscribe frame's Realm detail for `realm` at
-/// `window_limit`, after the SDK's closed frame contract.
+/// `max_window_event_count`, after the SDK's closed frame contract.
 async fn realm_window(
     client: &TestActorClient,
     realm: &str,
-    window_limit: u32,
+    max_window_event_count: u32,
 ) -> Result<arkret_models_collaboration::sync_frames::account_subscribe::RealmSyncEntry> {
-    let filter = serde_json::json!({"realm_ids": [realm], "window_limit": window_limit});
+    let filter =
+        serde_json::json!({"realm_ids": [realm], "max_window_event_count": max_window_event_count});
     let filter = String::from_utf8(arkret_canonical::canonical_json_bytes(&filter)?)?;
     let response = client
         .get("/_arkret/self/account/subscribe")

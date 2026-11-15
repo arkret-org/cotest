@@ -3,16 +3,15 @@
 use super::*;
 use crate::harness::CanonicalJsonBody;
 
-pub(super) fn observed_issued_claims(
+pub(super) async fn observed_issued_metadata(
+    database_url: &str,
     credential: &str,
-) -> Result<arkret_models_identity::SignedSessionGrantClaims> {
-    // This is a test observation; the real Station independently verifies
-    // issuer signature, introspection and holder binding before every read.
-    let payload = credential
-        .split('.')
-        .nth(1)
-        .context("issuer credential payload")?;
-    Ok(serde_json::from_slice(&URL_SAFE_NO_PAD.decode(payload)?)?)
+) -> Result<arkret_models_identity::SessionGrantMetadata> {
+    crate::scenarios::_helpers::coauth_bootstrap::recorded_session_grant_metadata(
+        database_url,
+        credential,
+    )
+    .await
 }
 
 pub(super) fn content_refresh_request(
@@ -25,12 +24,13 @@ pub(super) fn content_refresh_request(
         UnsignedAgentSessionRefreshProof,
     };
     use ed25519_dalek::Signer as _;
+    let session_grant = arkret_wire::SessionGrantSecret::new(credential)?;
     let now = arkret_canonical::normalize_timestamp_canonical(Utc::now());
     let unsigned = UnsignedAgentSessionRefreshProof {
         context: AgentSessionRefreshProofContext::V1,
         request_canonical_digest:
             arkret_models_collaboration::session_grant_bodies::agent_session_refresh_request_digest(
-                credential,
+                &session_grant,
                 &agent.agent_account.principal_id,
                 &agent.key_authorization,
                 station.service_id(),
@@ -45,7 +45,7 @@ pub(super) fn content_refresh_request(
     Ok(
         arkret_models_collaboration::session_grants::SessionGrantRefreshRequestBody::Agent(
             AgentSessionGrantRefreshRequestBody {
-                grant_jwt: credential.to_owned(),
+                session_grant,
                 audience_id: Some(station.service_id().clone()),
                 principal_id: agent.agent_account.principal_id.clone(),
                 agent_key_authorization_ref: agent.key_authorization.clone(),
@@ -260,7 +260,7 @@ pub async fn run_agent_session_content_production()
     )
     .await?;
     let old_credential = agent.runtime.session().credential().to_owned();
-    let old = observed_issued_claims(&old_credential)?;
+    let old = observed_issued_metadata(&deployment.coauth.pg.connect_url, &old_credential).await?;
     ensure!(!old.scopes.iter().any(|action| action == "ak.event.read"));
     let issue_url = format!(
         "{}/_arkret/gate/account/session-grants",
@@ -426,7 +426,7 @@ pub async fn run_agent_session_content_production()
         .as_array()
         .context("issuer grant rows")?
         .iter()
-        .filter(|row| row["grant_jwt"] == old_credential)
+        .filter(|row| row["session_grant"] == old_credential)
         .collect::<Vec<_>>();
     ensure!(
         old_rows.len() == 1
@@ -434,7 +434,7 @@ pub async fn run_agent_session_content_production()
             && old_rows[0]["successor_grant_id"].is_null(),
         "fresh issuance superseded or revoked the predecessor grant"
     );
-    let fresh = observed_issued_claims(&credential)?;
+    let fresh = observed_issued_metadata(&deployment.coauth.pg.connect_url, &credential).await?;
     ensure!(
         arkret_schema::agent_runtime_scope::assess_agent_runtime_scopes(
             &completed,
@@ -456,10 +456,12 @@ pub async fn run_agent_session_content_production()
         fresh.session_id != old.session_id,
         "fresh issue superseded its independent predecessor chain"
     );
-    let details = fresh
-        .scope_details
-        .as_ref()
-        .context("content scope details")?;
+    let details = serde_json::to_value(
+        fresh
+            .scope_details
+            .as_ref()
+            .context("content scope details")?,
+    )?;
     ensure!(details["capability_grant_refs"] == json!([]) && details["policy_refs"] == json!([]));
     let runtime = station.client_with_agent_runtime_grant(
         agent.agent_did.as_str(),
@@ -475,7 +477,10 @@ pub async fn run_agent_session_content_production()
         matches!(disclosed, arkret_wire::CommittedEventView::Full(ref full) if full.event == content)
     );
     ensure!(
-        observed_issued_claims(&old_credential)?.scopes == old.scopes,
+        observed_issued_metadata(&deployment.coauth.pg.connect_url, &old_credential)
+            .await?
+            .scopes
+            == old.scopes,
         "new issue mutated old credential"
     );
     let service_actions = actions
@@ -512,7 +517,8 @@ pub async fn run_agent_session_content_production()
         )
         .await?;
         ensure!(
-            !observed_issued_claims(&bounded)?
+            !observed_issued_metadata(&deployment.coauth.pg.connect_url, &bounded)
+                .await?
                 .scopes
                 .iter()
                 .any(|scope| scope == "ak.event.read"),
@@ -582,7 +588,7 @@ pub async fn run_agent_session_content_production()
     );
     let original_outcome: arkret_models_collaboration::session_grants::SessionGrantResponseBody =
         serde_json::from_slice(&original_parallel)?;
-    ensure!(original_outcome.session_grant == parallel_credential);
+    ensure!(original_outcome.session_grant.as_str() == parallel_credential);
     let refresh_url = format!(
         "{}/_arkret/gate/account/session-grants/refresh",
         deployment.coauth.base_url()
@@ -635,7 +641,11 @@ pub async fn run_agent_session_content_production()
     );
     let rotated: arkret_models_collaboration::session_grants::SessionGrantResponseBody =
         serde_json::from_slice(&bytes)?;
-    let next = observed_issued_claims(&rotated.session_grant)?;
+    let next = observed_issued_metadata(
+        &deployment.coauth.pg.connect_url,
+        rotated.session_grant.as_str(),
+    )
+    .await?;
     ensure!(
         next.scopes == fresh.scopes
             && next.scope_details == fresh.scope_details
@@ -645,7 +655,7 @@ pub async fn run_agent_session_content_production()
     let rotated_runtime = station.client_with_agent_runtime_grant(
         agent.agent_did.as_str(),
         "membership-content-rotated",
-        rotated.session_grant.clone(),
+        rotated.session_grant.as_str().to_owned(),
         agent.runtime_key.clone(),
     )?;
     expect_json(rotated_runtime.get(&path), StatusCode::OK).await?;
@@ -700,7 +710,7 @@ pub async fn run_agent_session_content_production()
         status == StatusCode::FORBIDDEN && problem.code() == "capability_denied",
         "retained issue outcome restored withdrawn payload authority: {status} {problem:?}"
     );
-    let refresh = content_refresh_request(station, &agent, &rotated.session_grant)?;
+    let refresh = content_refresh_request(station, &agent, rotated.session_grant.as_str())?;
     let denied = rotated_runtime
         .authorize(station.http().post(&refresh_url))
         .canonical_json(&refresh)?

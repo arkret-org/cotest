@@ -923,10 +923,12 @@ impl JoinObserver for PendingPayload<'_> {
                 && !claims.scopes.iter().any(|action| action == "ak.event.read")
         );
         ensure!(
-            claims
-                .scope_details
-                .as_ref()
-                .context("pending explicit write ceiling")?["capability_grant_refs"]
+            serde_json::to_value(
+                claims
+                    .scope_details
+                    .as_ref()
+                    .context("pending explicit write ceiling")?
+            )?["capability_grant_refs"]
                 == json!([grant])
         );
         let material = arkret_models_collaboration::mls_group_state_material::MlsMemberGroupStateMaterialReadRequestBody {
@@ -981,10 +983,12 @@ impl JoinObserver for PendingPayload<'_> {
                     .any(|action| action == "ak.message.create")
         );
         ensure!(
-            combined
-                .scope_details
-                .as_ref()
-                .context("pending full content ceiling")?["capability_grant_refs"]
+            serde_json::to_value(
+                combined
+                    .scope_details
+                    .as_ref()
+                    .context("pending full content ceiling")?
+            )?["capability_grant_refs"]
                 == json!([grant])
         );
         let (pending_write, _) =
@@ -1335,10 +1339,12 @@ pub async fn run_agent_content_sidecar_production()
     let (read, claims) =
         content_direct_evidence::issue(&deployment, &agent, &read_actions, &realm).await?;
     ensure!(
-        claims
-            .scope_details
-            .as_ref()
-            .context("Sidecar frozen ceiling")?["capability_grant_refs"]
+        serde_json::to_value(
+            claims
+                .scope_details
+                .as_ref()
+                .context("Sidecar frozen ceiling")?
+        )?["capability_grant_refs"]
             == json!([])
     );
     ensure!(
@@ -1415,20 +1421,24 @@ pub async fn run_agent_content_sidecar_production()
         narrowed.scopes
     );
     ensure!(
-        narrowed
-            .scope_details
-            .as_ref()
-            .context("narrowed ceiling")?["capability_grant_refs"]
+        serde_json::to_value(
+            narrowed
+                .scope_details
+                .as_ref()
+                .context("narrowed ceiling")?
+        )?["capability_grant_refs"]
             == json!([])
     );
     let (message, plaintext) = controller_message(&controller, &mut group, &state, &strand).await?;
     let (fresh_read, fresh_claims) =
         content_direct_evidence::issue(&deployment, &agent, &read_actions, &realm).await?;
     ensure!(
-        fresh_claims
-            .scope_details
-            .as_ref()
-            .context("effective Sidecar ceiling")?["capability_grant_refs"]
+        serde_json::to_value(
+            fresh_claims
+                .scope_details
+                .as_ref()
+                .context("effective Sidecar ceiling")?
+        )?["capability_grant_refs"]
             == json!([])
     );
     let received = fresh_read
@@ -1488,10 +1498,12 @@ pub async fn run_agent_content_sidecar_production()
             .any(|action| action == "ak.message.create")
     );
     ensure!(
-        write_claims
-            .scope_details
-            .as_ref()
-            .context("explicit write ceiling")?["capability_grant_refs"]
+        serde_json::to_value(
+            write_claims
+                .scope_details
+                .as_ref()
+                .context("explicit write ceiling")?
+        )?["capability_grant_refs"]
             == json!([grant])
     );
     let (reply, reply_plaintext) =
@@ -1578,20 +1590,20 @@ pub async fn run_agent_content_sidecar_production()
         .sdk()
         .exact_current_state(&mode_request, mode_generation)
         .await?;
-    let (prior_mode, expected_revision) = agent_interaction_from_verified_exact_read(
+    let (prior_mode, expected_commit_id) = agent_interaction_from_verified_exact_read(
         &mode_before,
         &realm,
         &agent.agent_account,
         &deployment.account,
         mode_generation,
     )?;
-    ensure!(prior_mode == AgentInteractionMode::Private && expected_revision.is_none());
+    ensure!(prior_mode == AgentInteractionMode::Private && expected_commit_id.is_none());
     let set = arkret_models_collaboration::agent_interaction::AgentInteractionSetPayload {
         agent_account_id: agent.agent_account.clone(),
         controller_account_id: deployment.account.clone(),
         interaction_mode:
             arkret_models_collaboration::agent_interaction::AgentInteractionMode::Public,
-        expected_revision,
+        expected_commit_id: expected_commit_id.map(|revision| revision.commit_id),
     };
     let change = client
         .author_event(

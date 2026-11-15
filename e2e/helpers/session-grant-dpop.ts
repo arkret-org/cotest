@@ -55,6 +55,7 @@ export type DpopDeviceKey = {
 
 export type DpopBoundGrant = {
   grantId: string;
+  issuerId: string;
   grantJwt: string;
   /// Exact Station account whose durable session chain issued the grant.
   accountId: { principal_id: string; station_id: string };

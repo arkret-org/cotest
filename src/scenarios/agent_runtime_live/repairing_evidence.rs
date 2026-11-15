@@ -456,13 +456,14 @@ pub async fn run_agent_repairing_production() -> Result<crate::conformance::Suit
         .verification_method
         .clone();
     let payload = AgentKeyAuthorizePayload::try_from(&replacement.body.authorize_event.event)?;
-    let grant = crate::scenarios::bridge_contracts::session_grant::mock_session_grant_jwt(
+    let grant = crate::scenarios::bridge_contracts::session_grant::mock_session_grant(
         agent.agent_account.principal_id.as_str(),
         method.as_str(),
         station.service_id().as_str(),
     );
     coauth.bind_agent_runtime_grant(
         &grant,
+        station.service_id(),
         &paired.authorize_event_ref,
         &payload,
         &replacement.key.verifying_key(),

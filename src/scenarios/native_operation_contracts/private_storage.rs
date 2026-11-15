@@ -1,7 +1,8 @@
 //! Actual encrypted backup custody and issued cursor revocation through native authorities.
 use anyhow::Result;
 use arkret_crypto::backup::{
-    KeyBackupAuthBinding, build_key_backup_envelope, decrypt_key_backup_envelope, derive_vault_kek,
+    KeyBackupAuthorizationBinding, build_key_backup_envelope, decrypt_key_backup_envelope,
+    derive_vault_kek,
 };
 use arkret_models_collaboration::sync_frames::account_subscribe::AccountSubscribeParameters;
 use arkret_models_crypto::*;
@@ -79,7 +80,7 @@ pub(super) async fn run() -> Result<()> {
         let method = DidUrl::new(format!("{}#{}", principal.did, principal.device_id)).map_err(anyhow::Error::msg)?;
         let seal = |backup_id| build_key_backup_envelope(backup_id, ActorId::account(deployment.account.clone()), Some(principal.device_id.clone()), BackupKind::SecretStorage, "kb_1", "mls_group_secrets", &kek,
             vec![SecretStorageSecret { item_kind: SecretStorageItemKind::MlsGroupSecretsBackupKey, secret_id:"mls_group_secrets_backup_key".into(), secret_base64url:secret_wire.clone(), secret_generation:None, extra:Default::default() }],
-            &KeyBackupAuthBinding { device_id:principal.device_id.clone(), verification_method:method.clone(), signature_algorithm:KeyBackupSignatureAlgorithm::Ed25519, device_authorize_event_id:principal.founding_authorize_event_id.clone() },
+            &KeyBackupAuthorizationBinding { device_id:principal.device_id.clone(), verification_method:method.clone(), signature_algorithm:KeyBackupSignatureAlgorithm::Ed25519, device_authorize_event_id:principal.founding_authorize_event_id.clone() },
             &|bytes| Ok(principal.device_signing_key.sign(bytes).to_bytes().to_vec()));
         let envelope = seal(backup_id)?;
         let deletion_envelope = seal(arkret_identifiers::new_prefixed_uuid7("ak:backup:").parse()?)?;
@@ -138,11 +139,10 @@ pub(super) async fn run() -> Result<()> {
         let recovery_authority=crate::scenarios::human_pcr_station_binding::recovery::prepare_recovery_authority_with_trusted_service(client,Some(trusted_service)).await?;
         let policy=crate::scenarios::mls_lifecycle_live::accepted_full_view(client,&recovery_authority.policy_event.event_id).await?;
         let (candidate,_gate,_initial,_handoff)=fixture.recovery_candidate().await?;
-        let claims:arkret_models_identity::SignedSessionGrantClaims=serde_json::from_slice(&arkret_canonical::base64url_decode(candidate.session().credential().split('.').nth(1).context("native recovery claims absent")?)?)?;
-        claims.validate()?;
+        let issued = candidate.issued_session_response.as_ref().context("original restricted issuance response absent")?;
         let candidate_author=crate::scenarios::security_rotation_live::RotationAuthor::from_client(&candidate)?;
         let recovery_session=crate::scenarios::security_rotation_live::create_verified_recovery_unlock_session_bound(&candidate,&candidate_author,&recovery_authority.method,recovery_authority.seed,
-            candidate.principal.as_ref().context("candidate custody absent")?.device_signing_key.to_bytes(),(claims.grant_id,Base64UrlString::new(claims.session_public_key.thumbprint_sha256()?).map_err(anyhow::Error::msg)?),crate::scenarios::_helpers::coauth_bootstrap::JOINT_TRUST_DOMAIN.parse()?).await?;
+            candidate.principal.as_ref().context("candidate custody absent")?.device_signing_key.to_bytes(),(issued.grant_ref(),Base64UrlString::new(issued.session_public_key.thumbprint_sha256()?).map_err(anyhow::Error::msg)?),crate::scenarios::_helpers::coauth_bootstrap::JOINT_TRUST_DOMAIN.parse()?).await?;
         let delete_challenge:KeysBackupsDeleteChallenge=serde_json::from_value(expect_json(client.post(&format!("{deletion_base}/delete-challenge")).json(&KeysBackupsIssueDeleteChallengeRequestBody { request_id:encoded(&entropy()?)? }),reqwest::StatusCode::OK).await?)?;
         let delete_request=KeysBackupsDeleteRequestBody { request_id:delete_challenge.request_id.clone(),challenge_id:delete_challenge.challenge_id.clone(),proof:HighRiskAuthorityProof::RecoveryUnlock(HighRiskRecoveryUnlockProofBody { kind:RecoveryUnlockProofKind::RecoveryUnlock,recovery_session_id:recovery_session.recovery_session_id.clone(),proof:PayloadProof {
             kind:arkret_wire::proof_kind::DETACHED_JWS.into(),verification_method:recovery_authority.method.clone(),payload_digest:delete_challenge.delete_intent_digest(None)?,created_at:delete_challenge.issued_at,domain:None,audience:None,proof_purpose:Some(PayloadProofPurpose::IssuerAttestation),

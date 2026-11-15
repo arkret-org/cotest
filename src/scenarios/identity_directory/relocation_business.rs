@@ -57,7 +57,7 @@ async fn audit(
             .post("/_arkret/self/identity/resolution-audit/query")
             .canonical_json(&PrincipalResolutionAuditRequestBody {
                 account_id: account.clone(),
-                history_depth: Some(depth),
+                max_predecessor_event_count: Some(depth),
                 after_resolution_event_ref: after,
             })?,
         StatusCode::OK,
@@ -75,7 +75,7 @@ fn resolution_submission(
 ) -> Result<EventAdmissionSubmission> {
     let principal = client.principal.as_ref().context("registered principal")?;
     let payload = PrincipalResolutionUpdatePayload {
-        expected_revision: revision,
+        expected_commit_id: revision.commit_id,
         next: ResolutionCommitment {
             did: entry["state"]["id"]
                 .as_str()

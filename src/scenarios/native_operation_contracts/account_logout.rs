@@ -68,7 +68,7 @@ pub(super) async fn exercise(
         let mut db=postgres::Client::connect(&issuer_database,postgres::NoTls)?;
         let mut originals=Vec::new();
         for token in tokens {
-            let row=db.query_one("SELECT to_jsonb(g),to_jsonb(s),o.canonical_outcome FROM oauth_session_grants g JOIN user_sessions s ON s.id=g.user_session_id JOIN oauth_session_grant_operations o ON o.id=g.issuance_operation_id WHERE g.grant_jwt=$1",&[&token])?;
+            let row=db.query_one("SELECT to_jsonb(g),to_jsonb(s),o.canonical_outcome FROM oauth_session_grants g JOIN user_sessions s ON s.id=g.user_session_id JOIN oauth_session_grant_operations o ON o.id=g.issuance_operation_id WHERE g.session_grant=$1",&[&token])?;
             let bytes:Vec<u8>=row.get(2);
             originals.push(json!({"grant":row.get::<_,Value>(0),"browser_session":row.get::<_,Value>(1),"canonical_outcome_base64url":arkret_canonical::base64url_encode(&bytes),"canonical_outcome":serde_json::from_slice::<Value>(&bytes)?}));
         }
@@ -106,14 +106,14 @@ pub(super) async fn exercise(
 pub(super) fn verify(
     observations: &NativeOperationObservations,
     evidence: &Value,
-    claims: &Value,
+    metadata: &Value,
 ) -> Result<()> {
-    let claims: arkret_models_identity::SignedSessionGrantClaims =
-        serde_json::from_value(claims.clone())?;
-    let token = evidence["issuer_originals"][1]["grant"]["grant_jwt"]
+    let metadata: arkret_models_identity::SessionGrantMetadata =
+        serde_json::from_value(metadata.clone())?;
+    let token = evidence["issuer_originals"][1]["grant"]["session_grant"]
         .as_str()
         .context("actual issuer credential original")?;
-    let expected = claims.session_public_key.thumbprint_sha256()?;
+    let expected = metadata.session_public_key.thumbprint_sha256()?;
     let issuer: reqwest::Url = original_exchange(
         observations,
         "ak.gate.account.command.issue_session_grant.v1",

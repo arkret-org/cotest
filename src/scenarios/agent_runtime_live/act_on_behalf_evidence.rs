@@ -76,7 +76,7 @@ pub async fn run_agent_act_on_behalf_boundary() -> Result<()> {
         controller_account_id: deployment.account.clone(),
         interaction_mode:
             arkret_models_collaboration::agent_interaction::AgentInteractionMode::Public,
-        expected_revision: None,
+        expected_commit_id: None,
     };
     controller
         .submit_event(
@@ -668,7 +668,7 @@ pub async fn run_agent_act_on_behalf_boundary() -> Result<()> {
     let original: arkret_models_collaboration::session_grants::SessionGrantResponseBody =
         serde_json::from_slice(&body)?;
     ensure!(
-        original.session_grant == credential,
+        original.session_grant.as_str() == credential,
         "completed replay minted a different credential"
     );
     ensure!(

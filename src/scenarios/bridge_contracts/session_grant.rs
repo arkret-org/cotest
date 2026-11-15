@@ -1,6 +1,4 @@
 use anyhow::{Context, Result};
-use base64::Engine as _;
-use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use reqwest::StatusCode;
 use serde_json::json;
 
@@ -11,48 +9,38 @@ use crate::scenarios::identity_test_support::{
     spawn_with_harness_account_authority,
 };
 
-/// A grant-shaped bearer credential (JWT with `kind = "ak.session.grant"`).
-/// The mock never verifies its signature; the shape only matters so the SUT
-/// recognizes the credential class and so `ath` binds a stable token.
-pub fn mock_session_grant_jwt(subject: &str, device_id: &str, audience: &str) -> String {
-    grant_shaped_jwt(subject, device_id, audience, 0x42)
+/// A deterministic opaque fixture allocation. The mock ledger, not the bytes,
+/// records its holder and audience; DPoP `ath` binds the complete credential.
+pub fn mock_session_grant(subject: &str, device_id: &str, audience: &str) -> String {
+    fixture_session_grant(subject, device_id, audience, 0x42)
 }
 
 /// A distinct grant-shaped credential used for a candidate device's
 /// restricted recovery session. The mock issuer ledger supplies the typed
 /// credential class, holder binding, and closed recovery scope on
-/// introspection; the distinct signature keeps this record separate from the
+/// introspection; the distinct allocation keeps this record separate from the
 /// same device's Standard grant.
-pub fn mock_recovery_session_grant_jwt(subject: &str, device_id: &str, audience: &str) -> String {
-    grant_shaped_jwt(subject, device_id, audience, 0x44)
+pub fn mock_recovery_session_grant(subject: &str, device_id: &str, audience: &str) -> String {
+    fixture_session_grant(subject, device_id, audience, 0x44)
 }
 
-/// A structurally perfect grant-shaped credential whose only difference from
-/// [`mock_session_grant_jwt`] is its signature bytes: exactly what someone
-/// holding a leaked issuer signing key can mint. The claims are self-consistent
-/// and the credential class is recognizable, so nothing short of the issuer
-/// ledger's exact-credential record can tell it apart.
-pub fn issuer_key_forged_session_grant_jwt(
-    subject: &str,
-    device_id: &str,
-    audience: &str,
-) -> String {
-    grant_shaped_jwt(subject, device_id, audience, 0x43)
+/// A canonical opaque credential absent from the fixture issuer's ledger.
+/// Its valid encoding and shared public fixture coordinates confer no authority.
+pub fn unrecorded_session_grant(subject: &str, device_id: &str, audience: &str) -> String {
+    fixture_session_grant(subject, device_id, audience, 0x43)
 }
 
-fn grant_shaped_jwt(subject: &str, device_id: &str, audience: &str, signature_byte: u8) -> String {
-    let header = URL_SAFE_NO_PAD.encode(br#"{"alg":"Ed25519","typ":"JWT"}"#);
-    let payload = URL_SAFE_NO_PAD.encode(
-        serde_json::to_vec(&json!({
-            "kind": arkret_models_identity::SESSION_GRANT_CREDENTIAL_KIND,
-            "sub": subject,
-            "device_id": device_id,
-            "aud": audience,
-        }))
-        .expect("session grant payload serializes"),
-    );
-    let signature = URL_SAFE_NO_PAD.encode([signature_byte; 64]);
-    format!("{header}.{payload}.{signature}")
+fn fixture_session_grant(subject: &str, device_id: &str, audience: &str, allocation: u8) -> String {
+    let bytes = arkret_canonical::canonical_json_bytes(&json!({
+        "fixture": "cotest-session-grant",
+        "subject": subject,
+        "device_id": device_id,
+        "audience": audience,
+        "allocation": allocation,
+    }))
+    .expect("fixture allocation serializes");
+    arkret_wire::SessionGrantSecret::from_bytes(arkret_canonical::sha256_bytes(&bytes))
+        .into_string()
 }
 
 pub async fn session_grant_presentation_uses_configured_coauth_introspection() -> Result<()> {
@@ -95,8 +83,8 @@ pub async fn session_grant_presentation_uses_configured_coauth_introspection() -
         principal.device_signing_key.verifying_key(),
         "the short-lived grant holder must be independent from the Event device key",
     );
-    let grant_jwt =
-        mock_session_grant_jwt(&principal_core_id, &device_id, server.service_id().as_str());
+    let session_grant =
+        mock_session_grant(&principal_core_id, &device_id, server.service_id().as_str());
     // The Account Authority's issuer ledger holds this exact credential; the
     // Station submits the complete token and consumes the returned authority
     // metadata instead of rebuilding any issuer fact locally.
@@ -116,14 +104,17 @@ pub async fn session_grant_presentation_uses_configured_coauth_introspection() -
     // This is an unavailable dependency, not an authoritative inactive grant;
     // the Station must neither authenticate it nor tell the holder to log out.
     let unavailable_dpop = arkret_signatures::build_dpop_proof(
-        &arkret_signatures::DpopProofRequest::new("POST", &push_url).access_token(&grant_jwt),
+        &arkret_signatures::DpopProofRequest::new("POST", &push_url).access_token(&session_grant),
         &holder_key,
     )?;
     expect_api_error(
         server
             .http()
             .post(&push_url)
-            .header(reqwest::header::AUTHORIZATION, format!("DPoP {grant_jwt}"))
+            .header(
+                reqwest::header::AUTHORIZATION,
+                format!("DPoP {session_grant}"),
+            )
             .header("DPoP", &unavailable_dpop.header_value)
             .json(&push_body),
         StatusCode::SERVICE_UNAVAILABLE,
@@ -131,18 +122,19 @@ pub async fn session_grant_presentation_uses_configured_coauth_introspection() -
     )
     .await?;
     coauth.bind_founding_device_grant(
-        &grant_jwt,
+        &session_grant,
+        server.service_id(),
         &principal_core_id,
         &device_id,
         principal.founding_authorize_event_id.as_str(),
         &holder_key.verifying_key(),
     )?;
 
-    // §3.3 presentation: `Authorization: DPoP <grant jwt>` plus a
+    // §3.3 presentation: `Authorization: DPoP <opaque credential>` plus a
     // sender-constrained DPoP proof bound to the grant (`ath`) and to this
     // exact request target (`htm`/`htu`).
     let dpop = arkret_signatures::build_dpop_proof(
-        &arkret_signatures::DpopProofRequest::new("POST", &push_url).access_token(&grant_jwt),
+        &arkret_signatures::DpopProofRequest::new("POST", &push_url).access_token(&session_grant),
         &holder_key,
     )?;
     // This fixture does not onboard a Push Gateway. A valid presentation
@@ -153,7 +145,10 @@ pub async fn session_grant_presentation_uses_configured_coauth_introspection() -
         server
             .http()
             .post(&push_url)
-            .header(reqwest::header::AUTHORIZATION, format!("DPoP {grant_jwt}"))
+            .header(
+                reqwest::header::AUTHORIZATION,
+                format!("DPoP {session_grant}"),
+            )
             .header("DPoP", &dpop.header_value)
             .json(&push_body),
         StatusCode::SERVICE_UNAVAILABLE,
@@ -168,9 +163,8 @@ pub async fn session_grant_presentation_uses_configured_coauth_introspection() -
     );
     // `api-conventions.md` §3.3 / `key-management.md` §6.1: the Station submits
     // the complete token plus its own service DID as `audience_id`. It MUST NOT
-    // introspect by `jti`/grant id, and MUST NOT rebuild the issuer's facts
-    // (JWT signature, issuer DID history, derived ID) for itself.
-    assert_eq!(requests[0]["grant_jwt"], grant_jwt);
+    // introspect by a management record id or derive issuer facts from secret bytes.
+    assert_eq!(requests[0]["session_grant"], session_grant);
     assert_eq!(requests[0]["audience_id"], server.service_id().as_str());
     assert!(
         requests
@@ -192,20 +186,14 @@ pub async fn session_grant_presentation_uses_configured_coauth_introspection() -
         "internal introspection must present the configured channel credential and no self-reported identity header: {observations:?}"
     );
 
-    // Negative: a self-consistent grant minted with a leaked issuer signing key
-    // has no active exact ledger record. The forgery is structurally perfect --
-    // same subject, device and audience, and presented with a correctly bound
-    // DPoP proof -- so only the exact-token authority can reject it. A Station
-    // that verified the JWT locally and authorized on that basis would admit it.
-    let forged_grant_jwt = issuer_key_forged_session_grant_jwt(
-        &principal_core_id,
-        &device_id,
-        server.service_id().as_str(),
-    );
-    assert_ne!(forged_grant_jwt, grant_jwt);
+    // Negative: a canonical opaque credential with the same public fixture
+    // coordinates and a valid DPoP proof has no exact issuer record.
+    let unrecorded_grant =
+        unrecorded_session_grant(&principal_core_id, &device_id, server.service_id().as_str());
+    assert_ne!(unrecorded_grant, session_grant);
     let forged_dpop = arkret_signatures::build_dpop_proof(
         &arkret_signatures::DpopProofRequest::new("POST", &push_url)
-            .access_token(&forged_grant_jwt),
+            .access_token(&unrecorded_grant),
         &holder_key,
     )?;
     expect_status(
@@ -214,7 +202,7 @@ pub async fn session_grant_presentation_uses_configured_coauth_introspection() -
             .post(&push_url)
             .header(
                 reqwest::header::AUTHORIZATION,
-                format!("DPoP {forged_grant_jwt}"),
+                format!("DPoP {unrecorded_grant}"),
             )
             .header("DPoP", &forged_dpop.header_value)
             .json(&push_body),
@@ -222,19 +210,17 @@ pub async fn session_grant_presentation_uses_configured_coauth_introspection() -
     )
     .await?;
 
-    // Negative: re-signing the active grant's claims for a different audience
-    // produces a credential a `jti`-keyed lookup or a locally verified signature
-    // would still accept. The bound authority is the exact credential bytes, and
-    // these are different bytes.
-    let resigned_grant_jwt = mock_session_grant_jwt(
+    // Negative: another canonical credential allocated for another audience
+    // cannot select the active credential's record.
+    let other_unrecorded_grant = mock_session_grant(
         &principal_core_id,
         &device_id,
         "ak:did_core:web:other-station.example",
     );
-    assert_ne!(resigned_grant_jwt, grant_jwt);
+    assert_ne!(other_unrecorded_grant, session_grant);
     let resigned_dpop = arkret_signatures::build_dpop_proof(
         &arkret_signatures::DpopProofRequest::new("POST", &push_url)
-            .access_token(&resigned_grant_jwt),
+            .access_token(&other_unrecorded_grant),
         &holder_key,
     )?;
     expect_status(
@@ -243,7 +229,7 @@ pub async fn session_grant_presentation_uses_configured_coauth_introspection() -
             .post(&push_url)
             .header(
                 reqwest::header::AUTHORIZATION,
-                format!("DPoP {resigned_grant_jwt}"),
+                format!("DPoP {other_unrecorded_grant}"),
             )
             .header("DPoP", &resigned_dpop.header_value)
             .json(&push_body),
@@ -257,7 +243,7 @@ pub async fn session_grant_presentation_uses_configured_coauth_introspection() -
     // closed as `unauthenticated`.
     let wrong_holder_key = ed25519_dalek::SigningKey::from_bytes(&[0xd9; 32]);
     let wrong_dpop = arkret_signatures::build_dpop_proof(
-        &arkret_signatures::DpopProofRequest::new("POST", &push_url).access_token(&grant_jwt),
+        &arkret_signatures::DpopProofRequest::new("POST", &push_url).access_token(&session_grant),
         &wrong_holder_key,
     )?;
     // Both negatives must ride the harness send boundary (`expect_status` →
@@ -269,7 +255,10 @@ pub async fn session_grant_presentation_uses_configured_coauth_introspection() -
         server
             .http()
             .post(&push_url)
-            .header(reqwest::header::AUTHORIZATION, format!("DPoP {grant_jwt}"))
+            .header(
+                reqwest::header::AUTHORIZATION,
+                format!("DPoP {session_grant}"),
+            )
             .header("DPoP", &wrong_dpop.header_value)
             .json(&push_body),
         StatusCode::UNAUTHORIZED,
@@ -282,7 +271,7 @@ pub async fn session_grant_presentation_uses_configured_coauth_introspection() -
         server
             .http()
             .post(&push_url)
-            .bearer_auth(&grant_jwt)
+            .bearer_auth(&session_grant)
             .json(&push_body),
         StatusCode::UNAUTHORIZED,
     )

@@ -188,7 +188,7 @@ pub(super) async fn bind_registered_host(
         state.account_id == arkret::AccountId::new(principal.core_id.clone(), station.clone())
             && state.device_id.as_ref() == Some(&principal.device_id)
             && state.audience_id == *station
-            && state.grant_jwt == client.session.credential(),
+            && state.session_grant.as_str() == client.session.credential(),
         "registered host differs from the authenticated Account, Device or grant"
     );
     let (http, engine) = cotest_test_support::session::bind_registered_host_source(
@@ -214,22 +214,23 @@ mod tests {
         let principal = "ak:did_core:web:alice.example";
         let device = "ak:device:01904100-0000-7000-8000-0000000000a1";
         let key = ed25519_dalek::SigningKey::from_bytes(&[0x52; 32]);
-        let first = crate::scenarios::bridge_contracts::session_grant::mock_session_grant_jwt(
+        let first = crate::scenarios::bridge_contracts::session_grant::mock_session_grant(
             principal,
             device,
             station.as_str(),
         );
-        let (unsigned, _) = first.rsplit_once('.').context("fixture signature")?;
-        let second = format!(
-            "{unsigned}.{}",
-            arkret_canonical::base64url_encode([0x53; 64])
-        );
+        let second = arkret_wire::SessionGrantSecret::from_bytes([0x53; 32]).into_string();
         let bind = |credential: &str| -> Result<_> {
             issuer.bind_founding_device_grant(
                 credential,
+                &station,
                 principal,
                 device,
-                "fixture-authorize",
+                arkret_wire::EventId::from_digest(
+                    arkret_canonical::DigestSuite::Sha256,
+                    [0x54; 32],
+                )
+                .as_str(),
                 &key.verifying_key(),
             )?;
             let state = issuer.own_station_session_state(credential, &station)?;
@@ -266,7 +267,7 @@ mod tests {
         let (old, old_source, old_record) = bind(&first)?;
         let old_copy = old.clone();
         let (fresh, fresh_source, fresh_record) = bind(&second)?;
-        ensure!(old_record.grant_id != fresh_record.grant_id);
+        ensure!(old_record.grant_ref != fresh_record.grant_ref);
         ensure!(
             old_record.account_id == fresh_record.account_id
                 && old_record.device_id == fresh_record.device_id
@@ -314,7 +315,7 @@ mod tests {
         let station = arkret_wire::DidCoreId::new("ak:did_core:web:station.example")?;
         let principal = "ak:did_core:web:alice.example";
         let device = "ak:device:01904100-0000-7000-8000-0000000000a1";
-        let grant = crate::scenarios::bridge_contracts::session_grant::mock_session_grant_jwt(
+        let grant = crate::scenarios::bridge_contracts::session_grant::mock_session_grant(
             principal,
             device,
             station.as_str(),
@@ -322,9 +323,11 @@ mod tests {
         let key = ed25519_dalek::SigningKey::from_bytes(&[0x52; 32]);
         issuer.bind_founding_device_grant(
             &grant,
+            &station,
             principal,
             device,
-            "fixture-authorize",
+            arkret_wire::EventId::from_digest(arkret_canonical::DigestSuite::Sha256, [0x54; 32])
+                .as_str(),
             &key.verifying_key(),
         )?;
         let state = issuer.own_station_session_state(&grant, &station)?;

@@ -22,7 +22,7 @@ use serde_json::Value;
 use crate::harness::{ArkretServer, CanonicalJsonBody, TestActorClient, expect_json};
 use crate::scenarios::_helpers::bridge::MockCoauthIntrospectionServer;
 use crate::scenarios::_helpers::coauth_bootstrap::{EphemeralPg, spawn_ephemeral_postgres_for};
-use crate::scenarios::bridge_contracts::session_grant::mock_session_grant_jwt;
+use crate::scenarios::bridge_contracts::session_grant::mock_session_grant;
 use crate::scenarios::identity_test_support::{
     HARNESS_INTERNAL_AUTHORITY_SECRET, actor_did_for_service_did,
     spawn_with_harness_account_authority_at,
@@ -74,13 +74,14 @@ impl InviteStation {
             .as_ref()
             .context("the provisioned client carries its principal")?
             .clone();
-        let grant = mock_session_grant_jwt(
+        let grant = mock_session_grant(
             principal.core_id.as_str(),
             principal.device_id.as_str(),
             self.server.service_id().as_str(),
         );
         self.coauth.bind_founding_device_grant(
             &grant,
+            self.server.service_id(),
             principal.core_id.as_str(),
             principal.device_id.as_str(),
             principal.founding_authorize_event_id.as_str(),

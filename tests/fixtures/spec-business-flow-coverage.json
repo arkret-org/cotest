@@ -117,7 +117,8 @@
           "kind": "ordinary",
           "path": "../coland/crates/http/src/routing/identity/recovery/security_transaction_endpoints.rs",
           "markers": [
-            "continue_commit_recovery_unit"
+            "async fn submit_recovery_unit(",
+            ".commit_recovery_unit("
           ]
         },
         {
@@ -214,7 +215,7 @@
           "kind": "ordinary",
           "path": "../coauth/crates/backend/src/handlers/arkret/tests.rs",
           "markers": [
-            "fn session_grant_is_signed_for_the_bound_principal_id",
+            "fn session_grant_is_opaque_for_the_bound_principal_id",
             "issue_session_grant("
           ]
         },
@@ -223,7 +224,8 @@
           "path": "../coauth/crates/backend/src/handlers/arkret/session_grant/session_logout.rs",
           "markers": [
             "require_auth_session_logout_service_caller(req, depot)?",
-            "terminate_auth_side_session_by_grant_jwt(depot, &caller_service_id, &body.grant_jwt)"
+            "terminate_auth_side_session_by_session_grant(",
+            "&body.session_grant,"
           ]
         },
         {

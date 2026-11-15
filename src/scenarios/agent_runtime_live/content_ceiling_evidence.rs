@@ -171,7 +171,11 @@ pub async fn run_agent_content_ceiling_production()
         &service_actions,
     )
     .await?;
-    let new_claims = content_session_evidence::observed_issued_claims(&credential)?;
+    let new_claims = content_session_evidence::observed_issued_metadata(
+        &deployment.coauth.pg.connect_url,
+        &credential,
+    )
+    .await?;
     ensure!(
         !new_claims
             .scopes

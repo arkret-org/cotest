@@ -1266,3 +1266,51 @@ mod tests {
         }
     }
 }
+
+/// Observe the exact canonical issuer record in a scenario-owned test database.
+/// This is test evidence, never a client credential decoder or a production
+/// authentication transport. Both services still perform their real admission.
+pub(crate) async fn recorded_session_grant_metadata(
+    database_url: &str,
+    credential: &str,
+) -> Result<arkret_models_identity::SessionGrantMetadata> {
+    let database_url = database_url.to_owned();
+    let credential = arkret_wire::SessionGrantSecret::new(credential)?;
+    tokio::task::spawn_blocking(move || -> Result<_> {
+        let mut database = postgres::Client::connect(&database_url, postgres::NoTls)?;
+        let records = database.query(
+            "SELECT canonical_metadata,credential_digest,grant_id::text,issuer_id,subject_id,audience_id,session_id,session_public_key,credential_class,device_id,scope_list FROM oauth_session_grants WHERE session_grant=$1",
+            &[&credential.as_str()],
+        )?;
+        anyhow::ensure!(records.len() == 1, "exact fixture credential has no unique issuer record");
+        let row = &records[0];
+        let canonical_metadata: Vec<u8> = row.get(0);
+        let digest: Vec<u8> = row.get(1);
+        anyhow::ensure!(
+            digest == arkret_canonical::sha256_bytes(credential.as_str().as_bytes()),
+            "issuer credential digest differs from its exact stored credential"
+        );
+        let metadata: arkret_models_identity::SessionGrantMetadata =
+            serde_json::from_slice(&canonical_metadata)?;
+        metadata.validate()?;
+        anyhow::ensure!(
+            arkret_canonical::canonical_json_bytes(&metadata)? == canonical_metadata,
+            "issuer metadata is not the retained canonical original"
+        );
+        anyhow::ensure!(
+            metadata.id.as_str() == format!("ak:session_grant:{}", row.get::<_, String>(2))
+                && metadata.issuer_id.as_str() == row.get::<_, String>(3)
+                && metadata.account_id.principal_id.as_str() == row.get::<_, String>(4)
+                && metadata.audience_id.as_str() == row.get::<_, String>(5)
+                && metadata.session_id == row.get::<_, String>(6)
+                && metadata.session_public_key.as_str() == row.get::<_, String>(7)
+                && serde_json::to_value(metadata.credential_class)?.as_str()
+                    == Some(row.get::<_, String>(8).as_str())
+                && metadata.device_id.as_ref().map(ToString::to_string)
+                    == row.get::<_, Option<String>>(9)
+                && metadata.scopes == row.get::<_, Vec<String>>(10),
+            "issuer metadata differs from its actual issuance record"
+        );
+        Ok(metadata)
+    }).await?
+}

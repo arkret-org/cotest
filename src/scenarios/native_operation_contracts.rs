@@ -777,7 +777,7 @@ pub async fn account_identity_creation() -> Result<()> {
         .context("issuer originals absent")?;
     ensure!(
         sessions.len() == 1
-            && sessions[0]["grant_jwt"] == json!(accepted.issued_session.session_grant),
+            && sessions[0]["session_grant"] == json!(accepted.issued_session.session_grant),
         "registration replay minted another credential or lost the issuer original"
     );
     ensure!(

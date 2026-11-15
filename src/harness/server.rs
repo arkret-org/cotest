@@ -549,13 +549,14 @@ impl ArkretServer {
             .principal
             .as_ref()
             .context("a Standard grant needs the client's provisioned principal")?;
-        let grant = crate::scenarios::bridge_contracts::session_grant::mock_session_grant_jwt(
+        let grant = crate::scenarios::bridge_contracts::session_grant::mock_session_grant(
             principal.core_id.as_str(),
             principal.device_id.as_str(),
             self.service_id.as_str(),
         );
         issuer.bind_founding_device_grant(
             &grant,
+            &self.service_id,
             principal.core_id.as_str(),
             principal.device_id.as_str(),
             principal.founding_authorize_event_id.as_str(),
@@ -572,8 +573,8 @@ impl ArkretServer {
             .map(|issuer| issuer.origin())
     }
 
-    /// Read the typed ID from this fixture issuer's exact ledger. Mock tokens
-    /// are not production SignedSessionGrantClaims and must not be decoded as such.
+    /// Read the typed ID from this fixture issuer's exact ledger. Mock credentials
+    /// are opaque and must never be decoded for issuer facts.
     pub(crate) fn harness_session_grant_id(
         &self,
         client: &TestActorClient,
@@ -583,7 +584,8 @@ impl ArkretServer {
             .as_ref()
             .context("harness issuer ledger is unavailable")?
             .own_station_session_state(client.session().credential(), &self.service_id)?
-            .grant_id
+            .grant_ref
+            .id
             .clone())
     }
 
@@ -624,21 +626,16 @@ impl ArkretServer {
             anyhow::bail!("mock session reissue requires a canonical predecessor");
         };
         let predecessor = issuer.own_station_session_state(grant, &self.service_id)?;
-        let (unsigned, _) = grant
-            .rsplit_once('.')
-            .context("mock grant has no JWT signature")?;
-        let mut signature = [0u8; 64];
-        getrandom::fill(&mut signature).map_err(anyhow::Error::msg)?;
-        let grant = format!(
-            "{unsigned}.{}",
-            arkret_canonical::base64url_encode(signature)
-        );
+        let mut secret_bytes = [0u8; 32];
+        getrandom::fill(&mut secret_bytes).map_err(anyhow::Error::msg)?;
+        let grant = arkret_wire::SessionGrantSecret::from_bytes(secret_bytes).into_string();
         anyhow::ensure!(
             grant != client.session.credential(),
             "mock reissue reused a credential"
         );
         issuer.bind_founding_device_grant(
             &grant,
+            &self.service_id,
             principal.core_id.as_str(),
             principal.device_id.as_str(),
             principal.founding_authorize_event_id.as_str(),
@@ -658,7 +655,7 @@ impl ArkretServer {
         let fresh_state =
             issuer.own_station_session_state(fresh.session.credential(), &self.service_id)?;
         anyhow::ensure!(
-            fresh_state.grant_id != predecessor.grant_id
+            fresh_state.grant_ref != predecessor.grant_ref
                 && fresh_state.account_id == predecessor.account_id
                 && fresh_state.device_id == predecessor.device_id
                 && fresh_state.audience_id == predecessor.audience_id
@@ -1950,7 +1947,7 @@ impl ArkretServer {
         );
 
         let session = crate::harness::ClientSession::Canonical {
-            grant: founded.session_grant().session_grant.clone(),
+            grant: founded.session_grant().session_grant.as_str().to_owned(),
             signing_key: std::sync::Arc::new(handoff.device_key.signing_key()),
         };
         // The actor is the resolvable DID for the same reason: every other
@@ -2103,6 +2100,7 @@ impl ArkretServer {
             device_id: device_id.to_owned(),
             session,
             native_session_invalidator: None,
+            issued_session_response: None,
             principal,
             consent_current_authority: self
                 .external_restart

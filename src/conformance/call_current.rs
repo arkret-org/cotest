@@ -218,9 +218,12 @@ fn session(
         binding.clone(),
         account,
         binding.service_id.clone(),
-        arkret_wire::SessionGrantId::from_issuance_digest([3; 32]),
+        arkret_wire::SessionGrantRef::new(
+            binding.service_id.clone(),
+            arkret_wire::SessionGrantId::new_v7_at(1_785_000_000_003),
+        ),
         epoch,
-        "current-fixture".into(),
+        arkret_wire::SessionGrantSecret::from_bytes([3; 32]).into_string(),
     )
     .map(|s| s.with_provider_identity(Default::default()))
 }
@@ -423,8 +426,14 @@ async fn run_case(fixture: &Value, case: &Value) -> Result<&'static str> {
             let previous: CallModerationCurrentValue = serde_json::from_value(prior)?;
             let mut delta = row["event"]["payload"]["moderation_delta"].clone();
             if name == "stale_restore_revision" {
-                delta["expected_revision"]["stream_position"] =
-                    json!(previous.last_source.source_commit.stream_position - 1);
+                delta["expected_commit_id"] = json!(
+                    previous
+                        .last_source
+                        .source_commit
+                        .previous_commit_ref
+                        .clone()
+                        .context("older accepted moderation commit")?
+                );
             }
             let (_, commit) = source(&row)?;
             let result = CallModerationCurrentValue::apply_delta(
@@ -450,8 +459,14 @@ async fn run_case(fixture: &Value, case: &Value) -> Result<&'static str> {
             let row = &fixture["original_rows"][8];
             let (_, commit) = source(row)?;
             let mut delta = row["event"]["payload"]["roster_delta"].clone();
-            delta["expected_revision"]["stream_position"] =
-                json!(previous.last_source.source_commit.stream_position - 1);
+            delta["expected_commit_id"] = json!(
+                previous
+                    .last_source
+                    .source_commit
+                    .previous_commit_ref
+                    .clone()
+                    .context("older accepted roster commit")?
+            );
             return Ok(verdict(
                 CallRosterCurrentValue::apply_delta(
                     Some(&previous),

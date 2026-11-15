@@ -171,7 +171,7 @@ pub async fn run_registered_agent_watch_live() -> Result<()> {
         controller_account_id: account.clone(),
         interaction_mode:
             arkret_models_collaboration::agent_interaction::AgentInteractionMode::Public,
-        expected_revision: None,
+        expected_commit_id: None,
     };
     let mode: arkret_wire::AuthoritySubmitResponseBody = serde_json::from_value(
         controller
@@ -261,10 +261,7 @@ pub async fn run_registered_agent_watch_live() -> Result<()> {
     let private_mode = arkret_models_collaboration::agent_interaction::AgentInteractionSetPayload {
         interaction_mode:
             arkret_models_collaboration::agent_interaction::AgentInteractionMode::Private,
-        expected_revision: Some(arkret_wire::CurrentRevision {
-            commit_id: public_commit.commit_id,
-            stream_position: public_commit.stream_position,
-        }),
+        expected_commit_id: Some(public_commit.commit_id.clone()),
         ..public_mode
     };
     controller

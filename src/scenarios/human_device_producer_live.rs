@@ -51,7 +51,7 @@ use crate::harness::{
 use crate::scenarios::_helpers::bridge::MockCoauthIntrospectionServer;
 use crate::scenarios::_helpers::coauth_bootstrap::{EphemeralPg, spawn_ephemeral_postgres_for};
 use crate::scenarios::_helpers::live_gate::skip_or_fail;
-use crate::scenarios::bridge_contracts::session_grant::mock_session_grant_jwt;
+use crate::scenarios::bridge_contracts::session_grant::mock_session_grant;
 use crate::scenarios::identity_test_support::{
     HARNESS_INTERNAL_AUTHORITY_SECRET, actor_did_for_service_did,
 };
@@ -83,13 +83,14 @@ pub async fn standard_client(
         .principal
         .as_ref()
         .context("the client carries its provisioned principal")?;
-    let grant = mock_session_grant_jwt(
+    let grant = mock_session_grant(
         principal.core_id.as_str(),
         principal.device_id.as_str(),
         server.service_id().as_str(),
     );
     coauth.bind_founding_device_grant(
         &grant,
+        server.service_id(),
         principal.core_id.as_str(),
         principal.device_id.as_str(),
         principal.founding_authorize_event_id.as_str(),
@@ -1303,8 +1304,9 @@ async fn run_durable_account_round(
         expected: expected.map(|(event, commit)| (event.clone(), commit.clone())),
         observed: std::sync::atomic::AtomicBool::new(false),
     };
-    let request: AccountSubscribeParameters =
-        serde_json::from_value(json!({"filter":{"realm_ids":[realm],"window_limit":100}}))?;
+    let request: AccountSubscribeParameters = serde_json::from_value(
+        json!({"filter":{"realm_ids":[realm],"max_window_event_count":100}}),
+    )?;
     let device = arkret_wire::DeviceId::new(client.device_id.clone())?;
     tokio::time::timeout(
         Duration::from_secs(45),
