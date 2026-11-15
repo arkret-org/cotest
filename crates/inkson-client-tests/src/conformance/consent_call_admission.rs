@@ -1045,7 +1045,7 @@ fn run_call_cases<'a>(
                 current.effective_stream_head == revoked_head,
                 "exact retries allocated another Commit"
             );
-            ensure!(current.expected_current() == arkret_models_collaboration::events_payloads::consent::ConsentExpectedCurrent::Present { revision: revoked.revision.clone() },
+            ensure!(current.expected_current() == arkret_models_collaboration::events_payloads::consent::ConsentExpectedCurrent::Present { commit_id: revoked.revision.commit_id.clone() },
                 "exact retry rolled current back from its accepted replacement");
             ensure!(current.current_permissions().is_some_and(|permissions| {
                 !permissions.iter().any(|p| p.consent_scope == revoked.scope)

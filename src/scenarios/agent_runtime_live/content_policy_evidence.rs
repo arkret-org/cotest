@@ -96,13 +96,12 @@ async fn unavailable_policy_source(
     scene.read_exact(runtime).await?;
     let (restored, claims) = scene.issue_for(operations, scene.selectors()).await?;
     ensure!(
-        serde_json::to_value(
-            claims
-                .scope_details
-                .as_ref()
-                .context("restored absence proof")?
-        )?["policy_refs"]
-            == json!([])
+        claims
+            .scope_details
+            .as_ref()
+            .context("restored absence proof")?
+            .policy_refs
+            .is_empty()
     );
     scene.read_exact(&restored).await?;
     println!(
@@ -238,7 +237,7 @@ async fn publish_policy(
     previous: Option<arkret_wire::CurrentRevision>,
 ) -> Result<arkret_wire::CurrentRevision> {
     let payload: PolicySetStatePayload = serde_json::from_value(json!({
-        "policy_id":policy.id,"expected_commit_id":previous.map(|revision|revision.commit_id),"value":policy,
+        "policy_id":policy.id,"expected_commit_id":previous.as_ref().map(|revision|revision.commit_id.clone()),"value":policy,
     }))?;
     payload.validate()?;
     let controller = &scene.deployment.controller;
@@ -393,13 +392,12 @@ pub async fn run_agent_content_policy_production()
         .collect::<Vec<_>>();
     let (runtime, initial_claims) = scene.issue_for(&read_operations, scene.selectors()).await?;
     ensure!(
-        serde_json::to_value(
-            initial_claims
-                .scope_details
-                .as_ref()
-                .context("complete initial Policy absence")?
-        )?["policy_refs"]
-            == json!([])
+        initial_claims
+            .scope_details
+            .as_ref()
+            .context("complete initial Policy absence")?
+            .policy_refs
+            .is_empty()
     );
     scene.read_exact(&runtime).await?;
     unavailable_policy_source(&scene, &read_operations, &runtime).await?;
@@ -407,16 +405,13 @@ pub async fn run_agent_content_policy_production()
     publish_policy(&scene, &allow, None).await?;
     let (runtime, claims) = scene.issue_for(&read_operations, scene.selectors()).await?;
     ensure!(
-        serde_json::to_value(
-            claims
-                .scope_details
-                .as_ref()
-                .context("policy scope details")?
-        )?["policy_refs"]
-            .as_array()
-            .context("actual current policy refs")?
+        claims
+            .scope_details
+            .as_ref()
+            .context("policy scope details")?
+            .policy_refs
             .iter()
-            .any(|value| value.as_str() == Some(allow.id.as_str()))
+            .any(|value| value.as_str() == allow.id.as_str())
     );
     scene.read_exact(&runtime).await?;
     let mut deny = read_policy(&scene, arkret_wire::PolicyEffect::Deny)?;

@@ -174,7 +174,7 @@ fn sdk_with_retry(
 pub fn controller_transport(
     http: reqwest::Client,
     base: &str,
-    grant: String,
+    grant: arkret_wire::SessionGrantSecret,
     holder: SigningKey,
 ) -> Result<SdkClient> {
     let holder = Arc::new(holder);
@@ -182,7 +182,7 @@ pub fn controller_transport(
         http,
         base,
         Some(Auth::Dpop(DpopAuth::with_dpop_token(
-            grant,
+            grant.into_string(),
             move |request| {
                 garth::session::dpop::build_http_dpop_proof(request, &holder).map_err(|_| {
                     arkret_http_client::Error::Protocol("controller DPoP signing failed".into())

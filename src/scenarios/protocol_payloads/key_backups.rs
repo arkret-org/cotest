@@ -397,7 +397,6 @@ async fn unlock_proof(
         schema: KeyBackupUnlockProof::SCHEMA.to_owned(),
         authority: KeyBackupUnlockAuthority::CurrentDevice {
             challenge_id: challenge.challenge_id,
-            nonce: challenge.nonce,
         },
         account_id: challenge.account_id,
         requesting_device_id: challenge.requesting_device_id,

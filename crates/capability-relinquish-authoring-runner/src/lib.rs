@@ -1,7 +1,8 @@
 //! Executable capability relinquishment authoring conformance runner.
 //!
 //! The runner consumes the production `EffectiveGrantSnapshot` active-row carrier and
-//! copies its typed `CurrentRevision` into the production relinquish payload.
+//! extracts its exact Commit ID from the read-side `CurrentRevision` for the
+//! production relinquish payload; the read revision keeps its stream position.
 //! A separate CAS model covers stale and concurrent writes without turning a
 //! list digest or historical evaluation into an authoring basis.
 
@@ -10,7 +11,7 @@ use std::path::PathBuf;
 use anyhow::{Context, Result, bail, ensure};
 use arkret_models_collaboration::events_payloads::CapabilityRelinquishPayload;
 use arkret_models_collaboration::governance::authorization::EffectiveGrantSnapshot;
-use arkret_wire::{CurrentRevision, ErrorCode};
+use arkret_wire::{CurrentRevision, ErrorCode, RealmCommitId};
 use serde::Deserialize;
 use serde_json::{Value, json};
 
@@ -52,8 +53,8 @@ struct CapabilityCell {
 }
 
 impl CapabilityCell {
-    fn compare_and_swap(&mut self, expected: &CurrentRevision) -> bool {
-        if &self.revision != expected {
+    fn compare_and_swap(&mut self, expected: &RealmCommitId) -> bool {
+        if &self.revision.commit_id != expected {
             return false;
         }
         self.revision = next_revision();
@@ -107,12 +108,12 @@ fn active_grant() -> Value {
             "grant_id": "ak:grant:AU1_A5a8MMz_OdxEleQlWPFn-ljdJteaJv3ZZ9APkcrZ"
         }],
         "authority_depth": 2,
-        "authority_root_refs": [{
+        "authority_root_ref": {
             "kind": "realm_root",
             "realm_id": "ak:realm:Ac1aCK8aQdnkYImvdH3DFjq4jDCP198pXYWCGzGuVyj5",
             "authority_event_ref": "ak:event:AR9qVnHK4a0914zPmH5CRZLTjSSV_8ghJKuGGivDaExf",
             "authority_generation": "0"
-        }],
+        },
         "issued_at": "2026-09-21T00:00:00.000Z",
         "status": "active"
     })
@@ -219,6 +220,7 @@ fn run_case(case: &Value) -> Result<(CaseExecutionResult, usize, usize, usize)> 
             ensure!(
                 payload_wire["expected_commit_id"]
                     == at(case, "/list_result/revision/commit_id")?.clone()
+                    && payload_wire.get("expected_revision").is_none()
             );
             ensure!(str_at(case, "/expected/decision")? == "allow_authoring");
             ensure!(bool_at(case, "/expected/basis_is_row_revision")?);
@@ -263,7 +265,7 @@ fn run_case(case: &Value) -> Result<(CaseExecutionResult, usize, usize, usize)> 
                 revision: next_revision(),
                 projection_writes: 0,
             };
-            ensure!(!cell.compare_and_swap(&stale));
+            ensure!(!cell.compare_and_swap(&stale.commit_id));
             ensure!(str_at(case, "/expected/decision")? == "reject");
             ensure!(str_at(case, "/expected/error_code")? == ErrorCode::CAS_CONFLICT);
             ensure!(
@@ -287,8 +289,8 @@ fn run_case(case: &Value) -> Result<(CaseExecutionResult, usize, usize, usize)> 
                 revision: expected.clone(),
                 projection_writes: 0,
             };
-            let first = cell.compare_and_swap(&expected);
-            let second = cell.compare_and_swap(&expected);
+            let first = cell.compare_and_swap(&expected.commit_id);
+            let second = cell.compare_and_swap(&expected.commit_id);
             ensure!(
                 usize::from(first) + usize::from(second)
                     == u64_at(case, "/expected/successful_operations")? as usize
@@ -421,6 +423,40 @@ mod tests {
     }
 
     #[test]
+    fn relinquish_uses_scalar_commit_id_and_rejects_legacy_guard_shapes() {
+        let revision = revision(41);
+        let payload = CapabilityRelinquishPayload {
+            grant_id: serde_json::from_value(active_grant()["id"].clone()).unwrap(),
+            expected_commit_id: revision.commit_id.clone(),
+            reason: None,
+        };
+        let wire = serde_json::to_value(&payload).unwrap();
+        assert_eq!(
+            wire["expected_commit_id"],
+            serde_json::to_value(&revision.commit_id).unwrap()
+        );
+        assert!(wire["expected_commit_id"].is_string());
+        assert!(wire.get("expected_revision").is_none());
+        let decoded: CapabilityRelinquishPayload = serde_json::from_value(wire.clone()).unwrap();
+        assert_eq!(decoded.expected_commit_id, revision.commit_id);
+        let read_revision = serde_json::to_value(&revision).unwrap();
+        assert_eq!(read_revision["stream_position"], json!(41));
+
+        for invalid in [Value::Null, read_revision.clone()] {
+            let mut changed = wire.clone();
+            changed["expected_commit_id"] = invalid;
+            assert!(serde_json::from_value::<CapabilityRelinquishPayload>(changed).is_err());
+        }
+        let mut legacy = wire.clone();
+        legacy.as_object_mut().unwrap().remove("expected_commit_id");
+        legacy["expected_revision"] = read_revision.clone();
+        assert!(serde_json::from_value::<CapabilityRelinquishPayload>(legacy).is_err());
+        let mut mixed = wire;
+        mixed["expected_revision"] = read_revision;
+        assert!(serde_json::from_value::<CapabilityRelinquishPayload>(mixed).is_err());
+    }
+
+    #[test]
     fn effective_list_rejects_a_terminal_grant() {
         let mut wire = grant_list_wire(
             serde_json::to_value(revision(41)).unwrap(),
@@ -436,7 +472,7 @@ mod tests {
             revision: next_revision(),
             projection_writes: 0,
         };
-        assert!(!cell.compare_and_swap(&revision(41)));
+        assert!(!cell.compare_and_swap(&revision(41).commit_id));
         assert_eq!(cell.projection_writes, 0);
     }
 }

@@ -81,7 +81,7 @@ pub async fn run_current_invite_matrix() -> Result<()> {
         },
     )
     .await?;
-    let remaining = super::revoke_invite_consent(&bob.client, concrete.0).await?;
+    let (remaining, _) = super::revoke_invite_consent(&bob.client, concrete.0).await?;
     ensure!(
         remaining.permission_scopes == vec![ConsentScope::VoiceCall],
         "invite removal changed the other concrete permission"

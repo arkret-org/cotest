@@ -463,7 +463,7 @@ pub(crate) async fn read_consent_set(
             current_state: result,
         } => Ok((
             ConsentExpectedCurrent::Present {
-                revision: result.revision,
+                commit_id: result.revision.commit_id,
             },
             result.value.permissions,
         )),
@@ -544,10 +544,10 @@ pub(super) async fn grant_scoped_consent(
 async fn revoke_invite_consent(
     holder: &TestActorClient,
     granted: ConsentView,
-) -> Result<ConsentView> {
+) -> Result<(ConsentView, arkret_wire::Event)> {
     let (expected_current, mut permissions) = read_consent_set(holder, &granted.peer).await?;
     permissions.retain(|permission| permission.consent_scope != ConsentScope::Invite);
-    let (view, _) = submit_consent_set(
+    let (view, event) = submit_consent_set(
         holder,
         ConsentReplacePayload {
             peer: granted.peer,
@@ -556,7 +556,7 @@ async fn revoke_invite_consent(
         },
     )
     .await?;
-    Ok(view)
+    Ok((view, event))
 }
 
 async fn grant_then_revoke_invite_consent(
@@ -564,7 +564,8 @@ async fn grant_then_revoke_invite_consent(
     peer: &TestActorClient,
 ) -> Result<ConsentView> {
     let (granted, _) = grant_invite_consent(holder, peer).await?;
-    revoke_invite_consent(holder, granted).await
+    let (view, _) = revoke_invite_consent(holder, granted).await?;
+    Ok(view)
 }
 
 async fn assert_notify_invite_wakes_account_subscribe(
@@ -972,8 +973,18 @@ pub async fn consent_current_and_invite_gate_live_run() -> Result<()> {
             .await?;
     dispatch_explicit_invite(&inviter, prepared).await?;
     let notified = account_data_row(&holder, AccountDataKey::ACCOUNT_INVITE_DELIVERY).await?;
-    let mut stale_revision = granted.revision.clone();
-    stale_revision.stream_position += 1;
+    let (stale_expected_current, stale_permissions) =
+        read_consent_set(&holder, &granted.peer).await?;
+    ensure!(
+        stale_expected_current
+            == ConsentExpectedCurrent::Present {
+                commit_id: granted.revision.commit_id.clone(),
+            }
+            && stale_permissions
+                .iter()
+                .any(|permission| permission.consent_scope == ConsentScope::Invite),
+        "the stale candidate must freeze the actual still-granted full set and Commit ID"
+    );
     let stale_event = holder
         .author_event(
             holder
@@ -985,13 +996,29 @@ pub async fn consent_current_and_invite_gate_live_run() -> Result<()> {
             "ak.consent.replace",
             serde_json::to_value(ConsentReplacePayload {
                 peer: granted.peer.clone(),
-                expected_current: ConsentExpectedCurrent::Present {
-                    revision: stale_revision,
-                },
-                permissions: vec![],
+                expected_current: stale_expected_current,
+                permissions: stale_permissions,
             })?,
         )
         .await?;
+    let preflight_before_revoke = prepare_invite_with_evidence(
+        &inviter,
+        &holder,
+        "Consent prepared before revoke",
+        evidence.clone(),
+    )
+    .await?;
+    let (revoked, revoke_event) = revoke_invite_consent(&holder, granted.clone()).await?;
+    ensure!(
+        revoked.permission_scopes.is_empty(),
+        "revoke did not close current"
+    );
+    ensure!(
+        revoked.revision.commit_id != granted.revision.commit_id
+            && stale_event.event_id != revoke_event.event_id
+            && stale_event.payload.get("permissions") != revoke_event.payload.get("permissions"),
+        "a stale full-set candidate must differ from the accepted revoke independently of timestamps"
+    );
     let stale = expect_json(
         holder
             .post("/_arkret/self/consent/results/replace")
@@ -1005,17 +1032,18 @@ pub async fn consent_current_and_invite_gate_live_run() -> Result<()> {
         stale["type"] == "https://arkret.org/problems/failed_precondition",
         "stale Consent did not keep its registered CAS error"
     );
-    let preflight_before_revoke = prepare_invite_with_evidence(
-        &inviter,
-        &holder,
-        "Consent prepared before revoke",
-        evidence.clone(),
-    )
-    .await?;
-    let revoked = revoke_invite_consent(&holder, granted.clone()).await?;
+    let after_stale: ConsentView = serde_json::from_value(
+        expect_json(
+            holder
+                .get("/_arkret/self/consent/result")
+                .query(&[("peer", serde_json::to_string(&granted.peer)?)]),
+            StatusCode::OK,
+        )
+        .await?,
+    )?;
     ensure!(
-        revoked.permission_scopes.is_empty(),
-        "revoke did not close current"
+        after_stale == revoked,
+        "stale replacement changed the accepted revoked current"
     );
     let old_result: ConsentView = serde_json::from_value(
         expect_json(
@@ -1114,7 +1142,7 @@ pub async fn consent_current_and_invite_gate_live_run() -> Result<()> {
         remaining.is_empty()
             && empty_current
                 == ConsentExpectedCurrent::Present {
-                    revision: empty.revision
+                    commit_id: empty.revision.commit_id
                 },
         "clearing the full set must retain an accepted present revision"
     );
@@ -1139,7 +1167,7 @@ pub async fn consent_current_and_invite_gate_live_run() -> Result<()> {
     );
     let (invite, _) = grant_invite_consent(&holder, &inviter).await?;
     ensure!(invite.permission_scopes == vec![ConsentScope::Invite, ConsentScope::VoiceCall]);
-    let without_invite = revoke_invite_consent(&holder, invite).await?;
+    let (without_invite, _) = revoke_invite_consent(&holder, invite).await?;
     ensure!(
         without_invite.permission_scopes == voice.permission_scopes,
         "removing invite changed the other permission"
@@ -1259,7 +1287,7 @@ async fn verify_full_set_concurrent_replacement(
     ensure!(
         expected_current
             == ConsentExpectedCurrent::Present {
-                revision: winner_view.revision.clone()
+                commit_id: winner_view.revision.commit_id.clone()
             }
             && winner_permissions == signed_permissions.permissions,
         "current did not retain exactly the winning signed set"
@@ -1288,7 +1316,7 @@ async fn verify_full_set_concurrent_replacement(
             && permissions.is_empty()
             && current
                 == ConsentExpectedCurrent::Present {
-                    revision: empty.revision
+                    commit_id: empty.revision.commit_id
                 },
         "old accepted replay reexecuted CAS or turned present empty into never_written"
     );

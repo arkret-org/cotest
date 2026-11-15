@@ -1,6 +1,5 @@
 use anyhow::{Context, Result};
 use reqwest::StatusCode;
-use serde_json::json;
 
 use crate::harness::{expect_api_error, expect_status};
 use crate::scenarios::_helpers::bridge::MockCoauthIntrospectionServer;
@@ -9,38 +8,117 @@ use crate::scenarios::identity_test_support::{
     spawn_with_harness_account_authority,
 };
 
-/// A deterministic opaque fixture allocation. The mock ledger, not the bytes,
-/// records its holder and audience; DPoP `ath` binds the complete credential.
+/// Coordinates retained by the fixture issuer, never embedded in the secret.
+#[derive(Clone, PartialEq, Eq)]
+pub(crate) struct MockSessionGrantCoordinates {
+    pub account_id: arkret_wire::AccountId,
+    pub device_id: Option<arkret_wire::DeviceId>,
+    pub grant_ref: arkret_wire::SessionGrantRef,
+}
+
+fn fixture_credentials()
+-> &'static std::sync::Mutex<std::collections::BTreeMap<String, MockSessionGrantCoordinates>> {
+    static VALUES: std::sync::OnceLock<
+        std::sync::Mutex<std::collections::BTreeMap<String, MockSessionGrantCoordinates>>,
+    > = std::sync::OnceLock::new();
+    VALUES.get_or_init(Default::default)
+}
+
+pub(crate) fn mock_session_grant_coordinates(secret: &str) -> Result<MockSessionGrantCoordinates> {
+    fixture_credentials()
+        .lock()
+        .expect("fixture credential lock")
+        .get(secret)
+        .cloned()
+        .context("credential has no fixture issuer coordinates")
+}
+
+/// Explicit fixture issuance coordinates, retained outside the opaque secret.
+/// A reserved secret remains unissued until its exact issuer ledger is bound.
+pub(crate) fn reserve_mock_session_grant_coordinates(
+    secret: &str,
+    coordinates: MockSessionGrantCoordinates,
+) -> Result<()> {
+    arkret_wire::SessionGrantSecret::new(secret.to_owned())?;
+    let mut values = fixture_credentials()
+        .lock()
+        .expect("fixture credential lock");
+    if let Some(existing) = values.get(secret) {
+        anyhow::ensure!(
+            *existing == coordinates,
+            "fixture credential coordinates are immutable"
+        );
+        return Ok(());
+    }
+    values.insert(secret.to_owned(), coordinates);
+    Ok(())
+}
+
+/// Reserve a canonical opaque credential and independent UUIDv7 reference.
+/// This explicitly co-located fixture uses the Station as its issuer; distinct
+/// issuers supply their full reference through the reservation function above.
+/// Binding it into a mock issuer ledger is an explicit separate step.
 pub fn mock_session_grant(subject: &str, device_id: &str, audience: &str) -> String {
-    fixture_session_grant(subject, device_id, audience, 0x42)
+    let issuer: arkret_wire::DidCoreId = audience.parse().expect("fixture Station");
+    let coordinates = MockSessionGrantCoordinates {
+        account_id: arkret_wire::AccountId::new(
+            subject.parse().expect("fixture principal"),
+            issuer.clone(),
+        ),
+        device_id: Some(device_id.parse().expect("fixture Device")),
+        grant_ref: arkret_wire::SessionGrantRef::new(
+            issuer,
+            arkret_wire::SessionGrantId::new_v7_at(
+                chrono::Utc::now()
+                    .timestamp_millis()
+                    .try_into()
+                    .expect("fixture time"),
+            ),
+        ),
+    };
+    let mut bytes = [0_u8; 32];
+    getrandom::fill(&mut bytes).expect("fixture SessionGrant entropy");
+    let secret = arkret_wire::SessionGrantSecret::from_bytes(bytes).into_string();
+    reserve_mock_session_grant_coordinates(&secret, coordinates)
+        .expect("new fixture credential coordinates");
+    secret
 }
 
-/// A distinct grant-shaped credential used for a candidate device's
-/// restricted recovery session. The mock issuer ledger supplies the typed
-/// credential class, holder binding, and closed recovery scope on
-/// introspection; the distinct allocation keeps this record separate from the
-/// same device's Standard grant.
+/// Agent fixture issuance has no Device selector. The actual accepted runtime
+/// method and grant scope are supplied separately to the fixture issuer binder.
+pub fn mock_agent_session_grant(subject: &str, audience: &str) -> String {
+    let station: arkret_wire::DidCoreId = audience.parse().expect("fixture Station");
+    let coordinates = MockSessionGrantCoordinates {
+        account_id: arkret_wire::AccountId::new(
+            subject.parse().expect("fixture Agent"),
+            station.clone(),
+        ),
+        device_id: None,
+        grant_ref: arkret_wire::SessionGrantRef::new(
+            station,
+            arkret_wire::SessionGrantId::new_v7_at(
+                chrono::Utc::now()
+                    .timestamp_millis()
+                    .try_into()
+                    .expect("fixture time"),
+            ),
+        ),
+    };
+    let mut bytes = [0_u8; 32];
+    getrandom::fill(&mut bytes).expect("fixture SessionGrant entropy");
+    let secret = arkret_wire::SessionGrantSecret::from_bytes(bytes).into_string();
+    reserve_mock_session_grant_coordinates(&secret, coordinates)
+        .expect("new Agent fixture coordinates");
+    secret
+}
+
 pub fn mock_recovery_session_grant(subject: &str, device_id: &str, audience: &str) -> String {
-    fixture_session_grant(subject, device_id, audience, 0x44)
+    mock_session_grant(subject, device_id, audience)
 }
 
-/// A canonical opaque credential absent from the fixture issuer's ledger.
-/// Its valid encoding and shared public fixture coordinates confer no authority.
-pub fn unrecorded_session_grant(subject: &str, device_id: &str, audience: &str) -> String {
-    fixture_session_grant(subject, device_id, audience, 0x43)
-}
-
-fn fixture_session_grant(subject: &str, device_id: &str, audience: &str, allocation: u8) -> String {
-    let bytes = arkret_canonical::canonical_json_bytes(&json!({
-        "fixture": "cotest-session-grant",
-        "subject": subject,
-        "device_id": device_id,
-        "audience": audience,
-        "allocation": allocation,
-    }))
-    .expect("fixture allocation serializes");
-    arkret_wire::SessionGrantSecret::from_bytes(arkret_canonical::sha256_bytes(&bytes))
-        .into_string()
+/// An unrecorded secret cannot acquire authority through an issuer signing key.
+pub fn unissued_session_grant(subject: &str, device_id: &str, audience: &str) -> String {
+    mock_session_grant(subject, device_id, audience)
 }
 
 pub async fn session_grant_presentation_uses_configured_coauth_introspection() -> Result<()> {
@@ -123,7 +201,6 @@ pub async fn session_grant_presentation_uses_configured_coauth_introspection() -
     .await?;
     coauth.bind_founding_device_grant(
         &session_grant,
-        server.service_id(),
         &principal_core_id,
         &device_id,
         principal.founding_authorize_event_id.as_str(),
@@ -162,8 +239,9 @@ pub async fn session_grant_presentation_uses_configured_coauth_introspection() -
         "grant presentation must introspect at coauth"
     );
     // `api-conventions.md` §3.3 / `key-management.md` §6.1: the Station submits
-    // the complete token plus its own service DID as `audience_id`. It MUST NOT
-    // introspect by a management record id or derive issuer facts from secret bytes.
+    // the complete opaque secret plus its own service DID as `audience_id`. It MUST NOT
+    // introspect by `jti`/grant id, and MUST NOT rebuild the issuer's facts
+    // (JWT signature, issuer DID history, derived ID) for itself.
     assert_eq!(requests[0]["session_grant"], session_grant);
     assert_eq!(requests[0]["audience_id"], server.service_id().as_str());
     assert!(
@@ -186,14 +264,14 @@ pub async fn session_grant_presentation_uses_configured_coauth_introspection() -
         "internal introspection must present the configured channel credential and no self-reported identity header: {observations:?}"
     );
 
-    // Negative: a canonical opaque credential with the same public fixture
-    // coordinates and a valid DPoP proof has no exact issuer record.
-    let unrecorded_grant =
-        unrecorded_session_grant(&principal_core_id, &device_id, server.service_id().as_str());
-    assert_ne!(unrecorded_grant, session_grant);
+    // An unrecorded canonical secret has no issuer authority, even when the
+    // presenter holds a valid DPoP key or knows an issuer signing key.
+    let forged_session_grant =
+        unissued_session_grant(&principal_core_id, &device_id, server.service_id().as_str());
+    assert_ne!(forged_session_grant, session_grant);
     let forged_dpop = arkret_signatures::build_dpop_proof(
         &arkret_signatures::DpopProofRequest::new("POST", &push_url)
-            .access_token(&unrecorded_grant),
+            .access_token(&forged_session_grant),
         &holder_key,
     )?;
     expect_status(
@@ -202,7 +280,7 @@ pub async fn session_grant_presentation_uses_configured_coauth_introspection() -
             .post(&push_url)
             .header(
                 reqwest::header::AUTHORIZATION,
-                format!("DPoP {unrecorded_grant}"),
+                format!("DPoP {forged_session_grant}"),
             )
             .header("DPoP", &forged_dpop.header_value)
             .json(&push_body),
@@ -210,17 +288,17 @@ pub async fn session_grant_presentation_uses_configured_coauth_introspection() -
     )
     .await?;
 
-    // Negative: another canonical credential allocated for another audience
-    // cannot select the active credential's record.
-    let other_unrecorded_grant = mock_session_grant(
+    // A different audience fixture reserves a different opaque credential;
+    // no bytes from it are active in this issuer ledger.
+    let resigned_session_grant = mock_session_grant(
         &principal_core_id,
         &device_id,
         "ak:did_core:web:other-station.example",
     );
-    assert_ne!(other_unrecorded_grant, session_grant);
+    assert_ne!(resigned_session_grant, session_grant);
     let resigned_dpop = arkret_signatures::build_dpop_proof(
         &arkret_signatures::DpopProofRequest::new("POST", &push_url)
-            .access_token(&other_unrecorded_grant),
+            .access_token(&resigned_session_grant),
         &holder_key,
     )?;
     expect_status(
@@ -229,7 +307,7 @@ pub async fn session_grant_presentation_uses_configured_coauth_introspection() -
             .post(&push_url)
             .header(
                 reqwest::header::AUTHORIZATION,
-                format!("DPoP {other_unrecorded_grant}"),
+                format!("DPoP {resigned_session_grant}"),
             )
             .header("DPoP", &resigned_dpop.header_value)
             .json(&push_body),

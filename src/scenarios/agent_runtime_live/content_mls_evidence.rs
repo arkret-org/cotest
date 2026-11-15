@@ -134,8 +134,12 @@ pub async fn run_agent_content_mls_production() -> Result<crate::conformance::Su
                 .any(|action| action == "ak.message.create")
     );
     ensure!(
-        serde_json::to_value(claims.scope_details.as_ref().context("membership source")?)?["capability_grant_refs"]
-            == json!([])
+        claims
+            .scope_details
+            .as_ref()
+            .context("membership source")?
+            .capability_grant_refs
+            .is_empty()
     );
     scene.agent.runtime = read.clone();
     let binding = arkret::MlsGovernanceBindingPayload::new(scope.clone(), None, 0, 0, 0)?;

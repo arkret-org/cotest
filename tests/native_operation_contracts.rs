@@ -39,6 +39,12 @@ async fn account_policy_recovery_retains_accepted_unit_and_issuer_originals() ->
 }
 
 #[tokio::test(flavor = "multi_thread")]
+async fn account_security_rotation_retains_worker_and_local_commit_originals() -> anyhow::Result<()>
+{
+    cotest::scenarios::native_operation_contracts::account_security_rotation().await
+}
+
+#[tokio::test(flavor = "multi_thread")]
 async fn account_private_storage_retains_encryption_and_durable_effects() -> anyhow::Result<()> {
     cotest::scenarios::native_operation_contracts::account_private_storage().await
 }

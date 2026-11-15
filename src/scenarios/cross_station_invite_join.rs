@@ -62,6 +62,9 @@ const BOB_DEVICE: &str = "ak:device:01904100-0000-7000-8000-000000002402";
 const CAROL_DEVICE: &str = "ak:device:01904100-0000-7000-8000-000000002404";
 const TITLE: &str = "Cross-Station invite";
 
+mod reaction_current;
+pub use reaction_current::since_join_current_reaction_survives_a_new_message_revision;
+
 /// Submit `event` through Bob's own Station and return the raw answer.
 async fn submit_raw(
     client: &TestActorClient,

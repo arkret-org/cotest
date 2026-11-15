@@ -34,7 +34,7 @@ use arkret_models_collaboration::governance::realm_join_intake::{
 };
 use arkret_models_crypto::{
     EncryptedEnvelope, EncryptedEnvelopeEncryptionContext, SecurityRotationRevokeCommandDecision,
-    SecurityTransaction,
+    SecurityRotationTransaction, SecurityTransaction,
 };
 use arkret_wire::{
     AccountId, ActorId, AuthorityCommitStatus, AuthoritySubmitResponseBody, CommitStreamRef,
@@ -90,7 +90,6 @@ pub async fn standard_client(
     );
     coauth.bind_founding_device_grant(
         &grant,
-        server.service_id(),
         principal.core_id.as_str(),
         principal.device_id.as_str(),
         principal.founding_authorize_event_id.as_str(),
@@ -1105,7 +1104,7 @@ async fn ensure_absent_from_stream(
 
 async fn wait_for_accepted_revoke(
     client: &TestActorClient,
-    created: &SecurityTransaction,
+    created: &SecurityRotationTransaction,
 ) -> Result<()> {
     let path = format!(
         "/_arkret/self/security-transactions/{}",
@@ -1125,7 +1124,17 @@ async fn wait_for_accepted_revoke(
             bail!("the device revoke was never decided: {current:?}");
         }
         tokio::time::sleep(Duration::from_millis(500)).await;
-        current = serde_json::from_value(expect_json(client.get(&path), StatusCode::OK).await?)?;
+        let next: SecurityTransaction =
+            serde_json::from_value(expect_json(client.get(&path), StatusCode::OK).await?)?;
+        let SecurityTransaction::SecurityRotation(next) = next else {
+            bail!("the rotation resource changed transaction kind");
+        };
+        next.validate_structural()?;
+        ensure!(
+            next.transaction_id == created.transaction_id,
+            "the rotation resource changed its exact transaction"
+        );
+        current = next;
     }
 }
 

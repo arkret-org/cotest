@@ -259,6 +259,111 @@ impl ArkretServer {
         Ok(relay)
     }
 
+    /// Start one more owned process of this exact durable Station. Its blob
+    /// directory/log/ports have independent lifetimes; its authority database,
+    /// encrypted keystore, AA wiring and public origin remain the original's.
+    /// The original server must outlive this sibling's use of its owned DB.
+    pub(crate) async fn spawn_service_route_sibling(
+        &self,
+        relay: &ServiceRouteRelay,
+        label: &str,
+    ) -> Result<Self> {
+        ensure!(
+            self.service_id == relay.service_id
+                && self.trust_domain == relay.trust_domain
+                && self.base_url == relay.public_base,
+            "sibling requires the original Station's installed public relay"
+        );
+        ensure!(
+            self.owned_database_url().is_some(),
+            "sibling requires the original scenario-owned PostgreSQL database"
+        );
+        let config = self.external_restart.as_ref().context("owned Station")?;
+        let tls = self._tls.clone().context("owned Station TLS")?;
+        let env = self.shared_service_route_environment()?;
+        let borrowed = env
+            .iter()
+            .map(|(key, value)| (key.as_str(), value.as_str()))
+            .collect::<Vec<_>>();
+        let mut sibling = Self::spawn_external_binary_with_ports_env_and_tls(
+            label,
+            &config.bin_path,
+            reserve_port()?,
+            reserve_port()?,
+            &borrowed,
+            tls,
+        )
+        .await?;
+        ensure!(
+            sibling.service_id == self.service_id
+                && sibling.service_did == self.service_did
+                && sibling.trust_domain == self.trust_domain,
+            "shared durable inputs did not load the same Station"
+        );
+        sibling.base_url = relay.public_base.clone();
+        sibling.session_grant_issuer = self.session_grant_issuer.clone();
+        ensure!(
+            sibling.service_route_configuration_digest()?
+                == self.service_route_configuration_digest()?,
+            "sibling effective authority configuration differs"
+        );
+        Ok(sibling)
+    }
+
+    /// Normalize the actual retained authority inputs, never returning secrets
+    /// to a scenario or artifact. Process-local ports/blob/log paths are not
+    /// shared authority inputs. The hash also commits to the real executable.
+    pub(crate) fn service_route_configuration_digest(&self) -> Result<String> {
+        let config = self.external_restart.as_ref().context("owned Station")?;
+        arkret_canonical::canonical_sha256(&serde_json::json!({
+            "service_id":self.service_id,"service_did":self.service_did,
+            "public_origin":self.base_url,"trust_domain":self.trust_domain,
+            "executable_sha256":arkret_canonical::sha256_digest(fs::read(&config.bin_path)?),
+            "environment":self.shared_service_route_environment()?,
+        }))
+        .map_err(Into::into)
+    }
+
+    fn shared_service_route_environment(&self) -> Result<BTreeMap<String, String>> {
+        let config = self.external_restart.as_ref().context("owned Station")?;
+        let mut env = config.extra_env.iter().cloned().collect::<BTreeMap<_, _>>();
+        env.remove("COLAND_METRICS_BIND");
+        env.remove("COLAND_BLOB_ROOT");
+        env.insert(
+            "DATABASE_URL".into(),
+            self.configured_database_url()
+                .context("durable Station DB")?
+                .into(),
+        );
+        env.insert("COLAND_PUBLIC_BASE_URL".into(), self.base_url.to_string());
+        env.insert("COLAND_TRUST_DOMAIN".into(), self.trust_domain.to_string());
+        env.entry("COLAND_NOTARY_SIGNING_KEY".into())
+            .or_insert_with(|| config.notary_signing_key.clone());
+        if !env.contains_key("COLAND_KEYSTORE_BACKEND") {
+            env.insert("COLAND_KEYSTORE_BACKEND".into(), "encrypted_file".into());
+            env.insert(
+                "COLAND_KEYSTORE_PATH".into(),
+                self.blob_root
+                    .as_ref()
+                    .context("original durable keystore directory")?
+                    .join("keystore.v1")
+                    .to_string_lossy()
+                    .into_owned(),
+            );
+            env.insert(
+                "COLAND_KEYSTORE_MASTER_KEY".into(),
+                DURABLE_TEST_KEYSTORE_MASTER_KEY.into(),
+            );
+        }
+        ensure!(
+            env.get("COLAND_KEYSTORE_BACKEND").map(String::as_str) == Some("encrypted_file")
+                && env.contains_key("COLAND_KEYSTORE_PATH")
+                && env.contains_key("COLAND_KEYSTORE_MASTER_KEY"),
+            "shared-process fixture requires the actual encrypted-file keystore inputs"
+        );
+        Ok(env)
+    }
+
     /// Put another process of the same durable Station behind its public origin.
     pub async fn join_service_route_relay(&mut self, relay: &ServiceRouteRelay) -> Result<()> {
         ensure!(

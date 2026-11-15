@@ -130,14 +130,12 @@ pub(super) async fn exercise(mut material: Materials<'_>) -> Result<()> {
             .reducer_input()
             .context("original key authorization")?,
     )?;
-    let grant = crate::scenarios::bridge_contracts::session_grant::mock_session_grant(
+    let grant = crate::scenarios::bridge_contracts::session_grant::mock_agent_session_grant(
         material.agent.agent_account.principal_id.as_str(),
-        material.agent.verification_method.as_str(),
         material.station.service_id().as_str(),
     );
     material.issuer.bind_agent_runtime_grant(
         &grant,
-        material.station.service_id(),
         &material.agent.key_authorization,
         &payload,
         &material.agent.runtime_key.verifying_key(),

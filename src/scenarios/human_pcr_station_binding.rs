@@ -248,7 +248,7 @@ pub async fn run_coauth_device_boundary_live() -> Result<()> {
         principal.did.as_str(),
         principal.device_id.as_str(),
         crate::harness::ClientSession::Canonical {
-            grant: refreshed.session_grant.as_str().to_owned(),
+            grant: refreshed.session_grant.into_string(),
             signing_key: signing_key.clone(),
         },
         Some(principal.clone()),

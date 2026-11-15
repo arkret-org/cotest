@@ -580,6 +580,38 @@ pub(super) fn build_runtime_session_request(
     Ok(body)
 }
 
+/// Validate the public receipt independently of test-only issuer database observations.
+fn validate_agent_issued_receipt(
+    outcome: &arkret_models_collaboration::session_grants::SessionGrantResponseBody,
+    account: &arkret_wire::AccountId,
+    requested_scope: &[String],
+    held_key: &ed25519_dalek::VerifyingKey,
+    now: chrono::DateTime<chrono::Utc>,
+) -> Result<()> {
+    let holder = arkret_models_identity::CanonicalSessionPublicJwk::new(serde_json::to_string(
+        &arkret_signatures::JsonWebKey::from_ed25519_verifying_key(held_key),
+    )?)?;
+    outcome.validate_binding(
+        &account.station_id,
+        account,
+        &account.station_id,
+        &holder,
+        now,
+    )?;
+    ensure!(
+        outcome.device_id.is_none() && outcome.previous_session_grant_id.is_none(),
+        "fresh Agent receipt contains Human Device or predecessor binding"
+    );
+    ensure!(
+        outcome
+            .granted_scope
+            .iter()
+            .all(|scope| requested_scope.contains(scope)),
+        "Agent receipt exceeds the exact signed request scope ceiling"
+    );
+    Ok(())
+}
+
 #[expect(
     clippy::too_many_arguments,
     reason = "Session fixture binds the accepted Agent authority, signing key, and requested scope"
@@ -651,13 +683,17 @@ pub(super) async fn issue_runtime_session_with_scope(
         "real issuer replay changed the recorded outcome"
     );
     let outcome: SessionGrantResponseBody = serde_json::from_slice(&first)?;
-    ensure!(
-        outcome.device_id.is_none(),
-        "Agent grant incorrectly binds a Human Device"
-    );
     let SessionGrantRequestBody::Agent(original) = request else {
         unreachable!()
     };
+    let expected_account = arkret_wire::AccountId::new(agent.clone(), station.service_id().clone());
+    validate_agent_issued_receipt(
+        &outcome,
+        &expected_account,
+        &original.requested_scope,
+        &key.verifying_key(),
+        chrono::Utc::now(),
+    )?;
     expect_issue_refusal(
         station,
         database_url,
@@ -1265,6 +1301,100 @@ pub(super) async fn expect_issue_refusal(
         problem.status
     );
     Ok(())
+}
+
+#[cfg(test)]
+mod issued_receipt_tests {
+    use super::*;
+
+    #[test]
+    fn agent_receipt_uses_independent_station_account_holder_and_signed_scope() -> Result<()> {
+        use arkret_models_collaboration::session_grants::SessionGrantResponseBody;
+        let now = arkret_canonical::normalize_timestamp_canonical(chrono::Utc::now());
+        let account = arkret_wire::AccountId::new(
+            "ak:did_core:web:agent.example".parse()?,
+            "ak:did_core:web:station.example".parse()?,
+        );
+        let key = ed25519_dalek::SigningKey::from_bytes(&[0x52; 32]);
+        let holder =
+            arkret_models_identity::CanonicalSessionPublicJwk::new(serde_json::to_string(
+                &arkret_signatures::JsonWebKey::from_ed25519_verifying_key(&key.verifying_key()),
+            )?)?;
+        let scopes = vec!["ak.event.read".to_owned()];
+        let outcome = SessionGrantResponseBody {
+            account_id: account.clone(),
+            issuer_id: account.station_id.clone(),
+            device_id: None,
+            session_grant: arkret_wire::SessionGrantSecret::from_bytes([0x53; 32]),
+            expires_at: now + chrono::Duration::minutes(10),
+            session_grant_id: arkret_wire::SessionGrantId::new_v7_at(
+                now.timestamp_millis().try_into()?,
+            ),
+            session_public_key: holder,
+            audience_id: account.station_id.clone(),
+            granted_scope: scopes.clone(),
+            previous_session_grant_id: None,
+        };
+        validate_agent_issued_receipt(&outcome, &account, &scopes, &key.verifying_key(), now)?;
+        let mut changed = outcome.clone();
+        changed.issuer_id = "ak:did_core:web:another-issuer.example".parse()?;
+        ensure!(
+            validate_agent_issued_receipt(&changed, &account, &scopes, &key.verifying_key(), now)
+                .is_err()
+        );
+        changed = outcome.clone();
+        changed.account_id.principal_id = "ak:did_core:web:another-agent.example".parse()?;
+        ensure!(
+            validate_agent_issued_receipt(&changed, &account, &scopes, &key.verifying_key(), now)
+                .is_err()
+        );
+        changed = outcome.clone();
+        changed.audience_id = "ak:did_core:web:another-station.example".parse()?;
+        ensure!(
+            validate_agent_issued_receipt(&changed, &account, &scopes, &key.verifying_key(), now)
+                .is_err()
+        );
+        let wrong_holder = ed25519_dalek::SigningKey::from_bytes(&[0x54; 32]);
+        ensure!(
+            validate_agent_issued_receipt(
+                &outcome,
+                &account,
+                &scopes,
+                &wrong_holder.verifying_key(),
+                now
+            )
+            .is_err()
+        );
+        changed = outcome.clone();
+        changed.device_id = Some("ak:device:01904100-0000-7000-8000-0000000000a1".parse()?);
+        ensure!(
+            validate_agent_issued_receipt(&changed, &account, &scopes, &key.verifying_key(), now)
+                .is_err()
+        );
+        changed = outcome.clone();
+        changed.granted_scope.push("ak.message.create".to_owned());
+        ensure!(
+            validate_agent_issued_receipt(&changed, &account, &scopes, &key.verifying_key(), now)
+                .is_err()
+        );
+        changed = outcome.clone();
+        changed.previous_session_grant_id = Some(outcome.session_grant_id.clone());
+        ensure!(
+            validate_agent_issued_receipt(&changed, &account, &scopes, &key.verifying_key(), now)
+                .is_err()
+        );
+        ensure!(
+            validate_agent_issued_receipt(
+                &outcome,
+                &account,
+                &scopes,
+                &key.verifying_key(),
+                outcome.expires_at
+            )
+            .is_err()
+        );
+        Ok(())
+    }
 }
 
 #[cfg(test)]

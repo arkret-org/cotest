@@ -32,10 +32,17 @@ jobs:
           github-token: ${{ secrets.CI_REPO_TOKEN || github.token }}
           script: |
             const refs = {cotest: context.sha};
+            const producerPins = {
+              'arkret-rust-sdk': '819fc97ca2356cd0ed467864babfaca93e0b5494',
+              'garth': '8c35acec7c6d8c79b61c06855367340f0a17da78',
+              'arkret-spec': '4e46718f83a4fcbedc12ef7409bc68743ec41dc9',
+              'chime': 'fed3a6c08501ecb2e02fa0b10f6c152b07b8359e',
+              'flagon': '3a186987db707470e48021f160be9035fb2dfd67',
+            };
             const siblings = ['arkret-spec', 'arkret-rust-sdk', 'inkson', 'coland',
               'coauth', 'floria', 'flagon', 'chime', 'garth', 'bridges'];
             await Promise.all(siblings.map(async repo => {
-              const {data} = await github.rest.repos.getCommit({owner: context.repo.owner, repo, ref: 'main'});
+              const {data} = await github.rest.repos.getCommit({owner: context.repo.owner, repo, ref: producerPins[repo] ?? 'main'});
               refs[repo] = data.sha;
             }));
             const {data} = await github.rest.repos.getCommit({owner: 'savfox-ai', repo: 'savfox', ref: 'main'});
@@ -157,6 +164,30 @@ jobs:
         ./scripts/tests/native-conformance-stream-order.tests.ps1
         ./scripts/tests/secret-scan.tests.ps1
         ./scripts/tests/joint-source-freeze.tests.ps1
+    - name: Qualify owned authority PostgreSQL capacity
+      if: matrix.lane == 'authority'
+      shell: bash
+      env:
+        AUTHORITY_POSTGRES_CONTAINER: ${{ job.services.postgres.id }}
+      run: |
+        set -euo pipefail
+        test -n "$AUTHORITY_POSTGRES_CONTAINER"
+        docker exec "$AUTHORITY_POSTGRES_CONTAINER" psql -U cotest -d cotest_test_coauth_evidence \
+          -X -v ON_ERROR_STOP=1 -c 'ALTER SYSTEM SET max_locks_per_transaction = 1024'
+        docker restart "$AUTHORITY_POSTGRES_CONTAINER" >/dev/null
+        for _ in {1..60}; do
+          if docker exec "$AUTHORITY_POSTGRES_CONTAINER" pg_isready -U cotest -d cotest_test_coauth_evidence >/dev/null 2>&1; then
+            break
+          fi
+          sleep 1
+        done
+        docker exec "$AUTHORITY_POSTGRES_CONTAINER" pg_isready -U cotest -d cotest_test_coauth_evidence
+        server_version=$(psql "$DATABASE_URL" -X -At -v ON_ERROR_STOP=1 -c 'SHOW server_version_num')
+        locks=$(psql "$DATABASE_URL" -X -At -v ON_ERROR_STOP=1 -c 'SHOW max_locks_per_transaction')
+        [[ "$server_version" =~ ^[0-9]+$ && "$locks" =~ ^[0-9]+$ ]]
+        test "$((server_version / 10000))" -eq 18
+        test "$locks" -ge 1024
+        printf 'Owned CI PostgreSQL server_version_num=%s max_locks_per_transaction=%s\n' "$server_version" "$locks"
     - name: Migrate isolated Coauth route-evidence database
       run: psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f coauth/crates/storage-postgres/migrations/00000000000000_initial/up.sql
     - name: fmt
@@ -189,6 +220,227 @@ jobs:
       if: matrix.lane == 'authority'
       working-directory: cotest
       run: bash ../inkson/scripts/with-native-keystore.sh python scripts/run-native-operation-contracts.py --output artifacts/native-operation-contracts-ci
+    - name: Execute independent native acceptance compositions
+      if: ${{ !cancelled() && matrix.lane == 'authority' }}
+      working-directory: cotest
+      shell: bash
+      env:
+        EXPLICIT_NATIVE_SOURCE_REFS: ${{ needs.native-sources.outputs.refs }}
+      run: |
+        set -euo pipefail
+        bash ../inkson/scripts/with-native-keystore.sh python -B - <<'PY'
+        import importlib.util
+        import json
+        import os
+        from pathlib import Path
+        import re
+        import shutil
+        import sys
+
+        repo = Path.cwd().resolve()
+        sys.path.insert(0, str(repo / 'scripts'))
+        import native_workspace_execution as workspace
+        spec = importlib.util.spec_from_file_location('native_authority_runner', repo / 'scripts/run-native-operation-contracts.py')
+        runner = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(runner)
+
+        def require(value, message):
+            if not value:
+                raise RuntimeError(message)
+
+        def read(path):
+            return json.loads(path.read_text(encoding='utf-8'))
+
+        def verify_receipt(path, selector):
+            receipt = read(path)
+            invocations = receipt.get('invocations', [])
+            require(receipt.get('cargo_exit_code') == 0 and len(invocations) == 1,
+                    'independent selector did not produce one successful native invocation')
+            invocation = invocations[0]
+            tests = invocation.get('tests', [])
+            require(invocation.get('exit_code') == 0 and len(tests) == 1
+                    and tests[0] == {'name': selector, 'status': 'passed'},
+                    'independent selector was missing, ignored, delegated, duplicated or failed')
+            return receipt
+
+        rows = [
+            ('reaction-domains', 'reaction_mls_http_live', 'accepted_mls_epochs_and_adjacent_windows_keep_reaction_current_domains_separate', True, None),
+            ('reaction-capacity', 'reaction_mls_http_live', 'large_active_reaction_shape_obeys_whole_snapshot_http_budget', True, None),
+            ('recovery-race', 'recovery_transaction_faults', 'recovery_native_two_transactions_same_session_generation_race', True, 'same_session_race'),
+            ('recovery-pre-accept', 'recovery_transaction_faults', 'recovery_native_kill_before_acceptance_has_zero_effects_then_exact_retry', True, 'pre_accept_kill'),
+            ('recovery-response-loss', 'recovery_transaction_faults', 'recovery_native_kill_after_commit_before_observation_restores_exact_c_and_two_commits', True, 'post_accept_response_loss_restart'),
+            ('recovery-issuer-rollback', 'recovery_transaction_faults', 'recovery_native_issuer_rollback_preserves_pcr_and_retries_aa_only', True, 'issuer_rollback_after_native_completion'),
+            ('recovery-lost-holder', 'recovery_transaction_faults', 'recovery_native_lost_holder_uses_ordinary_issue_without_rewriting_outcome', True, 'lost_holder_ordinary_issue'),
+            ('call-recording', 'call_recording_live', 'account_call_recording_native_stream_cipher_and_receiver_integrity', False, None),
+        ]
+        identity = os.environ['GITHUB_RUN_ID'] + '-' + os.environ['GITHUB_RUN_ATTEMPT']
+        require(re.fullmatch(r'[0-9]+-[0-9]+', identity), 'invalid independent run identity')
+        output = repo / 'artifacts' / ('explicit-native-acceptance-' + identity)
+        output.mkdir(mode=0o700, parents=True, exist_ok=False)
+        public = Path(os.environ['RUNNER_TEMP']) / 'explicit-native-acceptance-public'
+        public.mkdir(mode=0o700, exist_ok=False)
+        refs = json.loads(os.environ['EXPLICIT_NATIVE_SOURCE_REFS'])
+        summary = {'scope': 'independent-native-acceptance', 'acceptance': False,
+                   'expected': {'M10': 2, 'Recovery': 5, 'C02': 1, 'total': 8},
+                   'passed': 0, 'failed': 0, 'not_run': 8, 'source_refs': refs,
+                   'native_operation_coverage_credit': 0, 'selectors': []}
+        inventory_path = repo / 'tests/fixtures/native-operation-contracts.json'
+        inventory_hash = runner.digest(inventory_path)
+        try:
+            require(not any(name in os.environ for name in (
+                workspace.PLAN_ENV, workspace.DOC_ENV, workspace.REAL_DOC_ENV, workspace.OLD_DOC_ENV)),
+                'independent execution cannot inherit workspace shard delegation')
+            inventory = read(inventory_path)
+            require(len(inventory['cases']) == 14 and len(inventory['operations']) == 91,
+                    'independent cases cannot change registered native operation scope')
+            summary['registered_inventory'] = {'cases': 14, 'operations': 91, 'sha256': inventory_hash}
+            frozen_source = workspace.source_snapshot(repo, refs)
+            summary['source_snapshot_sha256'] = frozen_source
+            (output / 'source-refs.json').write_text(json.dumps(refs, sort_keys=True) + '\n', encoding='utf-8')
+            authority = repo / 'artifacts/native-operation-contracts-ci'
+            products = {}
+            for service in ('coland', 'coauth'):
+                product = read(authority / (service + '-result.json'))
+                executable = Path(product['executable'])
+                require(product.get('exit_code') == 0 and product.get('sources_unchanged') is True
+                        and executable.is_absolute() and executable.resolve() == executable
+                        and executable.is_file() and executable.parent == authority / 'tools'
+                        and runner.digest(executable) == product.get('sha256'),
+                        'independent native authority product is not the frozen actual build')
+                require(product.get('source_fence') == service + '-sources.json'
+                        and read(authority / product['source_fence']) == runner.source_fence(),
+                        'authority build source bytes differ from the independent execution')
+                products[service] = {'executable': str(executable), 'sha256': product['sha256'],
+                                     'result_sha256': runner.digest(authority / (service + '-result.json'))}
+            summary['products'] = {name: {'sha256': value['sha256'], 'result_sha256': value['result_sha256']}
+                                   for name, value in products.items()}
+            environment = os.environ.copy()
+            for service, product in products.items():
+                environment[service.upper() + '_BIN'] = product['executable']
+            for variable, name in (
+                ('COTEST_SERVICE_LOG_DIR', 'services'),
+                ('COTEST_NATIVE_FAILURE_DIAGNOSTICS_DIR', 'diagnostics'),
+                ('COTEST_NATIVE_OPERATION_EVIDENCE_DIR', 'recovery-observations'),
+                ('COTEST_CALL_RECORDING_EVIDENCE_DIR', 'recording-observations')):
+                directory = output / name
+                directory.mkdir(mode=0o700)
+                environment[variable] = str(directory)
+            environment['COTEST_TRANSCRIPT_PATH'] = str(output / 'transcript.ndjson')
+            for label, target, selector, ignored, recovery_case in rows:
+                status = {'selector': selector, 'target': target, 'passed': 0, 'status': 'failed'}
+                try:
+                    require(workspace.source_snapshot(repo, refs) == frozen_source,
+                            'independent source refs or bytes changed')
+                    for product in products.values():
+                        require(runner.digest(Path(product['executable'])) == product['sha256'],
+                                'frozen authority executable changed')
+                    receipt_path = output / (label + '-libtest.json')
+                    command = [sys.executable, '-B', str(repo / 'scripts/run-native-rust-tests.py'),
+                               '--libtest-report', str(receipt_path),
+                               'cargo', 'test', '--locked', '-p', 'cotest', '--test', target, selector,
+                               '--', '--exact']
+                    if ignored:
+                        command.append('--ignored')
+                    command.extend(['--nocapture', '--test-threads=1'])
+                    result = runner.execute(output, label, repo, command, environment, require_success=False)
+                    require(result['exit_code'] == 0 and result['sources_unchanged'],
+                            'independent native execution failed or source bytes changed')
+                    verify_receipt(receipt_path, selector)
+                    if recovery_case:
+                        artifact = output / 'recovery-observations' / ('recovery-native-' + recovery_case + '.json')
+                        body = read(artifact)
+                        require(body.get('case') == recovery_case
+                                and body.get('execution') == 'this artifact is written only after the actual native case completed'
+                                and body['database_topology']['station'] != body['database_topology']['account_authority']
+                                and set(body['actual_processes']) == {'station', 'coauth'},
+                                'Recovery success evidence differs from its actual independent case')
+                        status['evidence_sha256'] = runner.digest(artifact)
+                    elif target == 'call_recording_live':
+                        artifact = output / 'recording-observations/call-recording.json'
+                        body = read(artifact)
+                        require(body.get('case') == 'call_recording_live'
+                                and body.get('scope') == ['ak.self.events.command.submit.v1', 'ak.peer.events.command.submit.v1'],
+                                'recording success evidence is not the independent verified composition')
+                        status['evidence_sha256'] = runner.digest(artifact)
+                    else:
+                        log = (output / (label + '.log')).read_text(encoding='utf-8')
+                        pattern = (r'reaction MLS composition passed: real epochs (\d+) -> (\d+), adjacent windows (\d+) -> (\d+), 3 independent native current keys'
+                                   if label == 'reaction-domains' else
+                                   r'reaction HTTP composition passed: (\d+) storage-admitted keys, (\d+) whole signed bytes, native over-budget rollback and (\d+) HTTP-visible active keys; seed Events were not per-Event HTTP submissions')
+                        matches = re.findall(pattern, log)
+                        require(len(matches) == 1, 'actual Reaction composition measurements missing')
+                        status['actual_measurements'] = [int(value) for value in matches[0]]
+                    require(workspace.source_snapshot(repo, refs) == frozen_source,
+                            'independent source refs or bytes changed after execution')
+                    for product in products.values():
+                        require(runner.digest(Path(product['executable'])) == product['sha256'],
+                                'frozen authority executable changed after execution')
+                    status.update(status='passed', passed=1,
+                                  log_sha256=runner.digest(output / (label + '.log')),
+                                  libtest_sha256=runner.digest(receipt_path),
+                                  result_sha256=runner.digest(output / (label + '-result.json')),
+                                  source_fence_sha256=runner.digest(output / (label + '-sources.json')))
+                except Exception:
+                    status['failure_kind'] = 'native-execution-or-evidence-invalid'
+                    log = output / (label + '.log')
+                    if log.is_file():
+                        diagnostic = output / 'failures' / label
+                        diagnostic.mkdir(mode=0o700, parents=True)
+                        shutil.copyfile(log, diagnostic / 'runner-error.log')
+                summary['selectors'].append(status)
+                summary['passed'] += status['passed']
+                summary['failed'] += int(status['status'] != 'passed')
+                summary['not_run'] -= 1
+                print('independent selector ' + selector + ': ' + status['status'], flush=True)
+            require(workspace.source_snapshot(repo, refs) == frozen_source
+                    and runner.digest(inventory_path) == inventory_hash,
+                    'independent execution changed source inputs or registered inventory')
+            summary['acceptance'] = summary['passed'] == 8 and summary['failed'] == 0 and summary['not_run'] == 0
+        finally:
+            (public / 'summary.json').write_text(json.dumps(summary, sort_keys=True) + '\n', encoding='utf-8')
+        require(summary['acceptance'], 'independent native acceptance did not pass all eight exact selectors')
+        PY
+    - name: Require explicit native acceptance status
+      if: always() && matrix.lane == 'authority'
+      shell: bash
+      run: |
+        python -B - <<'PY'
+        import json
+        import os
+        from pathlib import Path
+        directory = Path(os.environ['RUNNER_TEMP']) / 'explicit-native-acceptance-public'
+        directory.mkdir(mode=0o700, exist_ok=True)
+        path = directory / 'summary.json'
+        if not path.exists():
+            path.write_text(json.dumps({'scope': 'independent-native-acceptance', 'acceptance': False,
+                                        'expected': {'M10': 2, 'Recovery': 5, 'C02': 1, 'total': 8},
+                                        'passed': 0, 'failed': 0, 'not_run': 8,
+                                        'native_operation_coverage_credit': 0, 'selectors': []}) + '\n', encoding='utf-8')
+        summary = json.loads(path.read_text(encoding='utf-8'))
+        if (summary.get('acceptance') is not True or summary.get('passed') != 8
+                or summary.get('failed') != 0 or summary.get('not_run') != 0
+                or len(summary.get('selectors', [])) != 8
+                or any(row.get('status') != 'passed' or row.get('passed') != 1 for row in summary['selectors'])
+                or summary.get('native_operation_coverage_credit') != 0):
+            raise SystemExit('independent native acceptance requires eight actual exact passed selectors')
+        PY
+    - name: Sanitize independent native acceptance diagnostics
+      if: always() && matrix.lane == 'authority'
+      working-directory: cotest
+      shell: pwsh
+      run: |
+        ./scripts/publish-joint-failure.ps1 `
+          -RunRoot "artifacts/explicit-native-acceptance-$env:GITHUB_RUN_ID-$env:GITHUB_RUN_ATTEMPT" `
+          -OutputDirectory "$env:RUNNER_TEMP/explicit-native-acceptance-diagnostics"
+    - name: Preserve independent native acceptance status
+      if: always() && matrix.lane == 'authority'
+      uses: actions/upload-artifact@v4
+      with:
+        name: explicit-native-acceptance-${{ github.sha }}-${{ github.run_attempt }}
+        if-no-files-found: error
+        path: |
+          ${{ runner.temp }}/explicit-native-acceptance-public/summary.json
+          ${{ runner.temp }}/explicit-native-acceptance-diagnostics/
     - name: check_ignore_comments hygiene
       if: ${{ !cancelled() && matrix.lane == 'checks' }}
       working-directory: cotest
@@ -279,13 +531,13 @@ jobs:
         with:
           repository: ${{ github.repository_owner }}/arkret-spec
           path: arkret-spec
-          ref: ${{ env.SIBLING_REF }}
+          ref: 4e46718f83a4fcbedc12ef7409bc68743ec41dc9
           token: ${{ secrets.CI_REPO_TOKEN || github.token }}
       - uses: actions/checkout@v4
         with:
           repository: ${{ github.repository_owner }}/arkret-rust-sdk
           path: arkret-rust-sdk
-          ref: ${{ env.SIBLING_REF }}
+          ref: 819fc97ca2356cd0ed467864babfaca93e0b5494
           token: ${{ secrets.CI_REPO_TOKEN || github.token }}
       - uses: actions/checkout@v4
         with:
@@ -366,7 +618,7 @@ jobs:
         with:
           repository: ${{ github.repository_owner }}/arkret-spec
           path: arkret-spec
-          ref: ${{ env.SIBLING_REF }}
+          ref: 4e46718f83a4fcbedc12ef7409bc68743ec41dc9
           token: ${{ secrets.CI_REPO_TOKEN || github.token }}
       - uses: actions/checkout@v4
         with:
@@ -458,7 +710,7 @@ jobs:
         with:
           repository: ${{ github.repository_owner }}/arkret-spec
           path: arkret-spec
-          ref: ${{ env.SIBLING_REF }}
+          ref: 4e46718f83a4fcbedc12ef7409bc68743ec41dc9
           token: ${{ secrets.CI_REPO_TOKEN || github.token }}
       - uses: actions/checkout@v4
         with:
@@ -476,19 +728,19 @@ jobs:
         with:
           repository: ${{ github.repository_owner }}/chime
           path: chime
-          ref: ${{ env.SIBLING_REF }}
+          ref: aa8e2afc78fa35c6248c1a1016280b22d7502645
           token: ${{ secrets.CI_REPO_TOKEN || github.token }}
       - uses: actions/checkout@v4
         with:
           repository: ${{ github.repository_owner }}/arkret-rust-sdk
           path: arkret-rust-sdk
-          ref: ${{ env.SIBLING_REF }}
+          ref: 819fc97ca2356cd0ed467864babfaca93e0b5494
           token: ${{ secrets.CI_REPO_TOKEN || github.token }}
       - uses: actions/checkout@v4
         with:
           repository: ${{ github.repository_owner }}/garth
           path: garth
-          ref: ${{ env.SIBLING_REF }}
+          ref: 8c35acec7c6d8c79b61c06855367340f0a17da78
           token: ${{ secrets.CI_REPO_TOKEN || github.token }}
       - uses: actions/checkout@v4
         with:
@@ -538,7 +790,7 @@ jobs:
         with:
           repository: ${{ github.repository_owner }}/arkret-spec
           path: arkret-spec
-          ref: ${{ env.SIBLING_REF }}
+          ref: 4e46718f83a4fcbedc12ef7409bc68743ec41dc9
           token: ${{ secrets.CI_REPO_TOKEN || github.token }}
       - uses: actions/checkout@v4
         with:
@@ -574,19 +826,19 @@ jobs:
         with:
           repository: ${{ github.repository_owner }}/chime
           path: chime
-          ref: ${{ env.SIBLING_REF }}
+          ref: aa8e2afc78fa35c6248c1a1016280b22d7502645
           token: ${{ secrets.CI_REPO_TOKEN || github.token }}
       - uses: actions/checkout@v4
         with:
           repository: ${{ github.repository_owner }}/arkret-rust-sdk
           path: arkret-rust-sdk
-          ref: ${{ env.SIBLING_REF }}
+          ref: 819fc97ca2356cd0ed467864babfaca93e0b5494
           token: ${{ secrets.CI_REPO_TOKEN || github.token }}
       - uses: actions/checkout@v4
         with:
           repository: ${{ github.repository_owner }}/garth
           path: garth
-          ref: ${{ env.SIBLING_REF }}
+          ref: 8c35acec7c6d8c79b61c06855367340f0a17da78
           token: ${{ secrets.CI_REPO_TOKEN || github.token }}
       - uses: EmbarkStudios/cargo-deny-action@v2
         continue-on-error: true
@@ -606,19 +858,19 @@ jobs:
         with:
           repository: ${{ github.repository_owner }}/arkret-rust-sdk
           path: arkret-rust-sdk
-          ref: ${{ env.SIBLING_REF }}
+          ref: 819fc97ca2356cd0ed467864babfaca93e0b5494
           token: ${{ secrets.CI_REPO_TOKEN || github.token }}
       - uses: actions/checkout@v4
         with:
           repository: ${{ github.repository_owner }}/garth
           path: garth
-          ref: ${{ env.SIBLING_REF }}
+          ref: 8c35acec7c6d8c79b61c06855367340f0a17da78
           token: ${{ secrets.CI_REPO_TOKEN || github.token }}
       - uses: actions/checkout@v4
         with:
           repository: ${{ github.repository_owner }}/arkret-spec
           path: arkret-spec
-          ref: ${{ env.SIBLING_REF }}
+          ref: 4e46718f83a4fcbedc12ef7409bc68743ec41dc9
           token: ${{ secrets.CI_REPO_TOKEN || github.token }}
       - uses: actions/checkout@v4
         with:
@@ -654,7 +906,7 @@ jobs:
         with:
           repository: ${{ github.repository_owner }}/chime
           path: chime
-          ref: ${{ env.SIBLING_REF }}
+          ref: aa8e2afc78fa35c6248c1a1016280b22d7502645
           token: ${{ secrets.CI_REPO_TOKEN || github.token }}
       - uses: dtolnay/rust-toolchain@master
         with:
@@ -690,7 +942,7 @@ jobs:
         with:
           repository: ${{ github.repository_owner }}/arkret-spec
           path: arkret-spec
-          ref: ${{ env.SIBLING_REF }}
+          ref: 4e46718f83a4fcbedc12ef7409bc68743ec41dc9
           token: ${{ secrets.CI_REPO_TOKEN || github.token }}
       - uses: actions/checkout@v4
         with:
@@ -726,19 +978,19 @@ jobs:
         with:
           repository: ${{ github.repository_owner }}/chime
           path: chime
-          ref: ${{ env.SIBLING_REF }}
+          ref: aa8e2afc78fa35c6248c1a1016280b22d7502645
           token: ${{ secrets.CI_REPO_TOKEN || github.token }}
       - uses: actions/checkout@v4
         with:
           repository: ${{ github.repository_owner }}/arkret-rust-sdk
           path: arkret-rust-sdk
-          ref: ${{ env.SIBLING_REF }}
+          ref: 819fc97ca2356cd0ed467864babfaca93e0b5494
           token: ${{ secrets.CI_REPO_TOKEN || github.token }}
       - uses: actions/checkout@v4
         with:
           repository: ${{ github.repository_owner }}/garth
           path: garth
-          ref: ${{ env.SIBLING_REF }}
+          ref: 8c35acec7c6d8c79b61c06855367340f0a17da78
           token: ${{ secrets.CI_REPO_TOKEN || github.token }}
       - uses: dtolnay/rust-toolchain@master
         with:
@@ -779,12 +1031,6 @@ jobs:
         with:
           refs: ${{ needs.native-sources.outputs.refs }}
           token: ${{ secrets.CI_REPO_TOKEN || github.token }}
-
-      - name: Complete Coland build dependency layout
-        working-directory: coland
-        env:
-          CI_REPO_TOKEN: ${{ secrets.CI_REPO_TOKEN || github.token }}
-        run: bash .ci/checkout-build-dependencies.sh
 
       - uses: dtolnay/rust-toolchain@master
         with:

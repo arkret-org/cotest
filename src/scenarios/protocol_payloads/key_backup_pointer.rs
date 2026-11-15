@@ -129,7 +129,6 @@ pub async fn key_backup_active_pointer_is_committed_and_listed_at_its_pcr_cut() 
     );
     coauth.bind_founding_device_grant(
         &grant,
-        server.service_id(),
         principal.core_id.as_str(),
         principal.device_id.as_str(),
         principal.founding_authorize_event_id.as_str(),

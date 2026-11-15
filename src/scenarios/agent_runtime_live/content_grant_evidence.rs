@@ -432,13 +432,12 @@ fn read_without_write(claims: &arkret_models_identity::SessionGrantMetadata) -> 
         "cross-resource grant spliced into write authority"
     );
     ensure!(
-        serde_json::to_value(
-            claims
-                .scope_details
-                .as_ref()
-                .context("read scope details")?
-        )?["capability_grant_refs"]
-            == json!([]),
+        claims
+            .scope_details
+            .as_ref()
+            .context("read scope details")?
+            .capability_grant_refs
+            .is_empty(),
         "membership read fabricated a literal source ref"
     );
     Ok(())
@@ -541,16 +540,13 @@ pub async fn run_agent_content_grant_production() -> Result<crate::conformance::
         "exact current write grant omitted"
     );
     ensure!(
-        serde_json::to_value(
-            claims
-                .scope_details
-                .as_ref()
-                .context("write scope details")?
-        )?["capability_grant_refs"]
-            .as_array()
-            .context("actual used grant refs")?
+        claims
+            .scope_details
+            .as_ref()
+            .context("write scope details")?
+            .capability_grant_refs
             .iter()
-            .any(|value| value.as_str() == Some(write_a.as_str()))
+            .any(|value| value.as_str() == write_a.as_str())
     );
     scene
         .commit_message(

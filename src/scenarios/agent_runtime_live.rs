@@ -957,14 +957,13 @@ impl AgentRuntimeSession {
         // 10. The Account Authority binds the runtime's SessionGrant.
         let (grant, issuer_request) = match issuer {
             AgentSessionIssuer::Fixture(coauth) => {
-                let grant = crate::scenarios::bridge_contracts::session_grant::mock_session_grant(
-                    agent_id.as_str(),
-                    verification_method.as_str(),
-                    station.as_str(),
-                );
+                let grant =
+                    crate::scenarios::bridge_contracts::session_grant::mock_agent_session_grant(
+                        agent_id.as_str(),
+                        station.as_str(),
+                    );
                 coauth.bind_agent_runtime_grant(
                     &grant,
-                    &station,
                     &key_authorization,
                     &authorization,
                     &runtime_key.verifying_key(),

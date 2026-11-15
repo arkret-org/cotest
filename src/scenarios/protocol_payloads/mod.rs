@@ -95,7 +95,6 @@ pub async fn events_keys_device_blob_push_surfaces_work() -> Result<()> {
     );
     coauth.bind_founding_device_grant(
         &grant,
-        server.service_id(),
         principal.core_id.as_str(),
         principal.device_id.as_str(),
         principal.founding_authorize_event_id.as_str(),

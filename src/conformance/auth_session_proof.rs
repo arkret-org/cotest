@@ -18,7 +18,7 @@ use arkret_signatures::http_signature::{
     SignatureVerificationPolicy, SignedRequestParts, canonical_message,
     http_signature_scenario_components, sign_message, verify_signed_http_message,
 };
-use arkret_wire::{AccountId, ProfileId, ProofContextId, SessionGrantRef, SessionGrantSecret};
+use arkret_wire::{AccountId, ProfileId, ProofContextId};
 use chrono::{DateTime, Duration, Utc};
 use ed25519_dalek::{SigningKey, VerifyingKey};
 use serde::Deserialize;
@@ -174,11 +174,15 @@ fn issue_session_grant(
     Ok(SessionGrantResponseBody {
         account_id: AccountId::new(request.principal_id.clone(), request.audience_id.clone()),
         device_id: Some(request.device_id.clone()),
-        issuer_id: DidCoreId::new("ak:did_core:web:fixture-issuer.example")
+        issuer_id: request.audience_id.clone(),
+        session_grant: arkret_wire::SessionGrantSecret::new("A".repeat(43))
             .map_err(|_| arkret_wire::ReasonCode::PROOF_INVALID)?,
-        session_grant: SessionGrantSecret::from_bytes([0x51; 32]),
         expires_at: now + server_max_ttl,
-        session_grant_id: SessionGrantId::new_v7_at(now.timestamp_millis() as u64),
+        session_grant_id: SessionGrantId::new_v7_at(
+            now.timestamp_millis()
+                .try_into()
+                .map_err(|_| arkret_wire::ReasonCode::PROOF_INVALID)?,
+        ),
         session_public_key: CanonicalSessionPublicJwk::new(
             r#"{"crv":"Ed25519","kty":"OKP","x":"11qYAYKxCrfVS_7TyWQHOg7hcvPapiMlrwIaaPcHURo"}"#,
         )
@@ -204,14 +208,14 @@ fn validate_closed_human_session_shapes() -> Result<()> {
     let principal_id = did("ak:did_core:webvh:z6mkfixture")?;
     let device_id = device("ak:device:0196419b-0000-7000-8000-000000000001")?;
     let audience = did("ak:did_core:webvh:z6mkfixtureserviceexample")?;
-    let predecessor = SessionGrantRef::new(
-        did("ak:did_core:web:fixture-issuer.example")?,
-        SessionGrantId::new_v7_at(1_780_000_000_000),
+    let predecessor = arkret_wire::SessionGrantRef::new(
+        audience.clone(),
+        SessionGrantId::new_v7_at(1_785_000_000_000),
     );
-    let credential = SessionGrantSecret::from_bytes([0x52; 32]);
+    let secret = arkret_wire::SessionGrantSecret::new("A".repeat(43))?;
     let holder_jkt = "ERERERERERERERERERERERERERERERERERERERERERE";
     let intent = session_grant_refresh_request_digest(
-        &credential,
+        &secret,
         &predecessor,
         &principal_id,
         &device_id,
@@ -219,7 +223,7 @@ fn validate_closed_human_session_shapes() -> Result<()> {
         holder_jkt,
     )?;
     let refresh = json!({
-        "session_grant": credential,
+        "session_grant": secret,
         "audience_id": audience,
         "device_id": device_id,
         "accepted_device_possession_proof": {

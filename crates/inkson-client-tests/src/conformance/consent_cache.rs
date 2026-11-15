@@ -1856,7 +1856,7 @@ async fn presence_current(
     ensure!(
         current.value()?.expected_current()
             == arkret::ConsentExpectedCurrent::Present {
-                revision: empty.revision,
+                commit_id: empty.revision.commit_id,
             }
             && current
                 .value()?

@@ -27,6 +27,7 @@ mod approval_matrix;
 mod circle_matrix;
 mod handoff_matrix;
 mod mute_matrix;
+mod owner_transfer;
 
 const GROUP: &str = "strand-watch-current-live";
 const ALICE_DEVICE: &str = "ak:device:01904100-0000-7000-8000-000000002361";
@@ -683,26 +684,40 @@ pub async fn run_strand_watch_current_live() -> Result<()> {
 }
 
 /// Registered first admission through authenticated HTTP, with real device proofs.
+enum AuditProbe {
+    Watch,
+    OwnerTransfer,
+}
+
 pub async fn run_registered_watch_audit_live() -> Result<()> {
-    run_registered_watch_audit(false, false, false).await
+    run_registered_watch_audit(false, false, false, AuditProbe::Watch).await
 }
 
 pub async fn run_registered_watch_audit_peer_live() -> Result<()> {
-    run_registered_watch_audit(true, false, false).await
+    run_registered_watch_audit(true, false, false, AuditProbe::Watch).await
 }
 
 pub async fn run_registered_watch_audit_scan_recovery_live() -> Result<()> {
-    run_registered_watch_audit(true, true, false).await
+    run_registered_watch_audit(true, true, false, AuditProbe::Watch).await
 }
 
 pub async fn run_registered_watch_handoff_live() -> Result<()> {
-    run_registered_watch_audit(true, false, true).await
+    run_registered_watch_audit(true, false, true, AuditProbe::Watch).await
+}
+
+pub async fn run_owner_transfer_peer_live() -> Result<()> {
+    run_registered_watch_audit(true, false, false, AuditProbe::OwnerTransfer).await
+}
+
+pub async fn run_owner_transfer_handoff_live() -> Result<()> {
+    run_registered_watch_audit(true, false, true, AuditProbe::OwnerTransfer).await
 }
 
 async fn run_registered_watch_audit(
     cross_station: bool,
     faults: bool,
     handoff: bool,
+    probe: AuditProbe,
 ) -> Result<()> {
     use arkret_models_collaboration::authority_commit::{
         AuditPairedEventUnitKind, AuditPairedEventUnitSubmission, SelfAuthoritySubmitRequestBody,
@@ -712,7 +727,12 @@ async fn run_registered_watch_audit(
         WatchAuditReadRequestBody, WatchAuditReadResponseBody,
     };
     use arkret_wire::{EventAdmissionSubmission, SemanticRef};
-    let scenario = if handoff {
+    let owner_transfer = matches!(probe, AuditProbe::OwnerTransfer);
+    let scenario = if owner_transfer && handoff {
+        "owner-transfer-three-station-handoff-live"
+    } else if owner_transfer {
+        "owner-transfer-two-station-peer-live"
+    } else if handoff {
         "registered-watch-handoff-live"
     } else if faults {
         "registered-watch-audit-scan-recovery-live"
@@ -834,6 +854,17 @@ async fn run_registered_watch_audit(
                 stream_position: committed.stream_position,
             },
         ));
+    }
+    if owner_transfer && !handoff {
+        return owner_transfer::run(
+            &mut group,
+            controller,
+            &bob,
+            &realm,
+            1,
+            &peer_db.as_ref().context("governor DB")?.connect_url,
+        )
+        .await;
     }
     grant_realm_actions(
         controller,
@@ -1188,6 +1219,7 @@ async fn run_registered_watch_audit(
             &unit,
             &accepted,
             &cleared_request,
+            owner_transfer,
         )
         .await?;
     }

@@ -116,6 +116,8 @@ pub async fn run() -> Result<()> {
                     producer_device_evidence: Some(forward_evidence.clone()),
                     producer_agent_evidence: None,
                     mls_group_state_material: None,
+
+                    successor_device_evidence: None,
                 },
             );
             let body_digest =

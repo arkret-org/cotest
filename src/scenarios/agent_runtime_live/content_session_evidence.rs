@@ -7,11 +7,27 @@ pub(super) async fn observed_issued_metadata(
     database_url: &str,
     credential: &str,
 ) -> Result<arkret_models_identity::SessionGrantMetadata> {
-    crate::scenarios::_helpers::coauth_bootstrap::recorded_session_grant_metadata(
-        database_url,
-        credential,
-    )
-    .await
+    // Test-only observation of the issuer's immutable original. Production
+    // readers still use independent authenticated HTTP issuer/current gates.
+    let database_url = database_url.to_owned();
+    let credential = credential.to_owned();
+    tokio::task::spawn_blocking(move || -> Result<_> {
+        let mut db = postgres::Client::connect(&database_url, postgres::NoTls)?;
+        let row = db.query_one(
+            "SELECT canonical_metadata FROM oauth_session_grants WHERE session_grant=$1",
+            &[&credential],
+        )?;
+        let bytes: Vec<u8> = row.get(0);
+        let metadata: arkret_models_identity::SessionGrantMetadata =
+            serde_json::from_slice(&bytes)?;
+        metadata.validate()?;
+        ensure!(
+            arkret_canonical::canonical_json_bytes(&metadata)? == bytes,
+            "issuer record metadata is not canonical"
+        );
+        Ok(metadata)
+    })
+    .await?
 }
 
 pub(super) fn content_refresh_request(
@@ -24,8 +40,8 @@ pub(super) fn content_refresh_request(
         UnsignedAgentSessionRefreshProof,
     };
     use ed25519_dalek::Signer as _;
-    let session_grant = arkret_wire::SessionGrantSecret::new(credential)?;
     let now = arkret_canonical::normalize_timestamp_canonical(Utc::now());
+    let session_grant = arkret_wire::SessionGrantSecret::new(credential.to_owned())?;
     let unsigned = UnsignedAgentSessionRefreshProof {
         context: AgentSessionRefreshProofContext::V1,
         request_canonical_digest:
@@ -45,7 +61,7 @@ pub(super) fn content_refresh_request(
     Ok(
         arkret_models_collaboration::session_grants::SessionGrantRefreshRequestBody::Agent(
             AgentSessionGrantRefreshRequestBody {
-                session_grant,
+                session_grant: arkret_wire::SessionGrantSecret::new(credential.to_owned())?,
                 audience_id: Some(station.service_id().clone()),
                 principal_id: agent.agent_account.principal_id.clone(),
                 agent_key_authorization_ref: agent.key_authorization.clone(),
@@ -456,13 +472,11 @@ pub async fn run_agent_session_content_production()
         fresh.session_id != old.session_id,
         "fresh issue superseded its independent predecessor chain"
     );
-    let details = serde_json::to_value(
-        fresh
-            .scope_details
-            .as_ref()
-            .context("content scope details")?,
-    )?;
-    ensure!(details["capability_grant_refs"] == json!([]) && details["policy_refs"] == json!([]));
+    let details = fresh
+        .scope_details
+        .as_ref()
+        .context("content scope details")?;
+    ensure!(details.capability_grant_refs.is_empty() && details.policy_refs.is_empty());
     let runtime = station.client_with_agent_runtime_grant(
         agent.agent_did.as_str(),
         "membership-content-runtime",

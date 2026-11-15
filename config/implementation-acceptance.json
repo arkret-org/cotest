@@ -1,50 +1,6 @@
 {
   "tasks": [
     {
-      "task": "2026-08-09-external-did-binding-implementation.md",
-      "criteria_count": 4,
-      "criteria_sha256": "4f20aec3d6e9ef4f6336a0f8fb7e118905653e3db5e2679f2b17d41e05d6adae",
-      "spec_refs": [],
-      "source_refs": [
-        "arkret-work/tasks/impl-active/2026-08-09-external-did-binding-implementation.md",
-        "coauth/Cargo.toml",
-        "arkret-rust-sdk/Cargo.toml",
-        "coland/Cargo.toml"
-      ],
-      "tests": [],
-      "engineering_checks": [
-        "Inventory-only restored owner from upstream e8933b59. Source anchors identify its existing task and owning workspace manifests; no implementation, runtime/test execution or completed acceptance is claimed."
-      ],
-      "remaining_scenarios": [
-        "先完成注册分支职责的正式澄清，再用正式选定的closed DTO复核外部已发布DID的注册／绑定／合法PCR lineage；逐项标记完整方法验证的事实owner、TCB内exact结果承接、治理接纳时本次身份／意图／状态门及accepted registration anchor持久化位置。跨独立信任边界仍须独立验证，不无条件要求同TCB每一跳重放完整WebVH历史。",
-        "Inkson 提供用户可达的外部 WebVH 绑定入口，区分外部绑定和自有 identity creation；challenge/account handoff/DPoP 与所选 Station、账号上下文严格绑定。",
-        "Cotest 使用真实外部托管 log/witness，验证合法绑定及错误 active update key、challenge发起端自报history/summary替代独立解析、缺 witness/freshness、篡改 Coauth 结果和跨 Station 复用均零写拒绝；正式选定ceremony携带的合法完整registration anchor/log须由事实owner独立验证，不因来自调用方而一概拒绝。",
-        "注册后冻结证据可重放；DID rotation/deactivation/outage 不阻断普通 PCR 业务，同 principal 在不同 Station 的 AccountId、PCR、设备与 cache 互不替代。"
-      ]
-    },
-    {
-      "task": "2026-08-10-webvh-host-relocation.md",
-      "criteria_count": 5,
-      "criteria_sha256": "48305939e01a262d3e36bdc8bee02fd6222b75bbf2e82f61e216dc9eab72f7c5",
-      "spec_refs": [],
-      "source_refs": [
-        "arkret-work/tasks/impl-active/2026-08-10-webvh-host-relocation.md",
-        "coland/Cargo.toml",
-        "arkret-rust-sdk/Cargo.toml"
-      ],
-      "tests": [],
-      "engineering_checks": [
-        "Inventory-only restored owner from upstream e8933b59. Source anchors identify its existing task and owning workspace manifests; no implementation, runtime/test execution or completed acceptance is claimed."
-      ],
-      "remaining_scenarios": [
-        "明确长期 hosted principal/service 的 portability 产品选择，接通客户端签名 inception 或迁移前开启 portable；hosting 不持有用户 control 私钥。",
-        "Coland 支持 same-SCID rename admission、完整 genesis→head history、current/历史 alias 原子索引与 canonical log serving；拒绝 alias-only、SCID 改变、无授权 rename、fork 与 rollback。",
-        "PCR identity resolution update 以当前 AccountId/ActorId 与正式 accepted evidence 精确定位，同 cut 独立验证 old→new method boundary，并按规范提供可重放历史证据；不以裸 head/version 自报通过。",
-        "service public-base迁移以合法method successor、匹配的Describe及持久防回退为权威；按实际部署补preflight、必要待签材料、双host serving与旧入口退休。业务peer通过现行route刷新恢复，不恢复独立route successor链或未登记notice/ACK协议；未实现命令不得作为可用运维指导。",
-        "Cotest 双 host/多 Station live 覆盖 A→B→C alias、提前开启 portable、搬迁时才开启拒绝、缺历史/witness、fork、重启/部分失败/离线恢复、不同 core 不继承 authority；不以静态 fixture 替代。"
-      ]
-    },
-    {
       "task": "2026-08-29-2134-retained-http-product-sdk-wiring.md",
       "criteria_count": 9,
       "criteria_sha256": "0d7b97b219beef178e70c25b41d39ab54eef5a2a1e1d418f311daba256d2716b",
@@ -139,15 +95,14 @@
         "独立工作区 Savfox 的嵌套 Bound 投毒/冷恢复和 RealmActor 配置回归由本轮报告记实际来源，不越过本 manifest 工作区约束伪造 source ref。"
       ],
       "remaining_scenarios": [
-        "完成全部消费者旧协议及遗漏扫描，修复可达旧生产接受/错误正例，保留现行合法分支和原件来源/持久回归；在最终冻结输入通过正式生成、native/WASM及变更涉及测试，保留真实失败。",
-        "复验已有 Circle add/delete、Agent deactivate、invite-policy 保存/刷新页面执行器；使用真实 target、同源 joint-e2e WASM、明确 INKSON_WIRE_BIN，保留 schema/签名和 operation 到达守卫。完整浏览器复验仍归1011。",
-        "无筛选完整 joint-full/release 联合矩阵仍唯一归0900，保留其全部 proof/产品/恢复/多站双 Coauth 与来源义务；核 11 primary/13 native 强制入口、collection floor、零空选择及跳过，分别记录 collected/passed/failed/skipped/fixme/did-not-run 和 provider lane，不以静态登记或旧 SUT 代替执行。"
+        "对全部消费者完成可达旧协议／遗漏扫描，移除正式退役的生产接受与错误正例，保留现行合法分支并补真实拒绝、原件来源与持久状态回归；正式生成、native／WASM和变更涉及的测试通过后冻结输入。",
+        "无筛选 joint／release 最终实跑核实 11 primary／13 native 入口均被强制调度、零跳过／零空选择，保留原 collection floor 及历史选择记录；最终 full／跨仓 source pin 复用 [0900](../impl-tailin/2026-09-09-0900-joint-conformance-and-live-acceptance.md)。E 为显式 mock-idp 筛选加同一完整 native executor 的运行，不代替无筛选矩阵；迁 tailin 后 active 追踪元数据变更也须包含在最终 source pin。"
       ]
     },
     {
       "task": "2026-09-06-1725-joint-e2e-inkson-decoupling-and-provisioning-convergence.md",
-      "criteria_count": 14,
-      "criteria_sha256": "de40d16aa27e09d301c48849c5abce1c4a80ca2ed5dd7565ebd05008812925cb",
+      "criteria_count": 13,
+      "criteria_sha256": "203d39ef7bbec358ee37ce6c7c8aa7fed6464bbea96b715cc44a73e514422b06",
       "spec_refs": [
         "arkret-spec/spec/v1/zh/sync/websocket-binding.md",
         "arkret-spec/spec/v1/zh/sync/client-sync.md"
@@ -163,12 +118,11 @@
       "remaining_scenarios": [
         "AV-UI-BOUND：冻结构建、设备和普通/Sidecar混合大历史规模；实际WASM消息DOM保持实现上限（当前窗口最多120条），输入、滚动、取消、定位旧消息/回最新持续响应；覆盖可变正文、图片晚到与生成预览增长的阅读锚点，留主线程长任务/交互延迟证据。独立浏览器presentation夹具与native测试不能代替真实账号完整历史验收。",
         "AV-UI-INVALIDATION：UI重绘、opaque cursor/presence等bookkeeping不得重复fold/decrypt/merge或唤醒creator；accepted完整Event无需改变cursor即可更新，revision/redaction/Poll与exact current变化自动安装；账号、scope、head、历史签名、MLS及权限变化仍重验和撤权拒显。含大历史首次重建的分批响应预算，不能只以DOM窗口证明验证/持久化有界。",
-        "AV-UI-LIVE：原卡片普通消息及连续三次`@me/<slug>`私密回复无需刷新自动可见，分别留accepted、执行完成、客户端安装/验证和可见证据，并验双用户无私密披露；`encryption_policy_pending`或不完整current cut保持失败关闭，独立恢复，不能默认策略或用历史合成current。",
+        "AV-UI-LIVE：原卡片普通消息无需刷新自动可见，分别留accepted、执行完成、客户端安装/验证和可见证据，并验双用户无私密披露；`encryption_policy_pending`或不完整current cut保持失败关闭，独立恢复，不能默认策略或用历史合成current。",
         "AV-MODE/ROSTER/ROUTE/EXEC/OBS：补齐跨站受权 mode current、远端 PCR 及 runtime 第三方完整 participation 观察；保持 controller-only exact CAS、群路由、Sidecar 自动派生成员和失败关闭，验转换在途、附件/编辑 scope、private 强提及无触发和 owner Direct/Sidecar 私有。",
-        "保留上游逐CommitStream后台维护、Sidecar草稿current路由与task生命周期恢复；和本地Bound current发布、持久会话fence共同验证，连续三次private回复、大历史预算与完整跨站矩阵仍未验收。",
+        "保留上游逐CommitStream后台维护、Sidecar草稿current路由与task生命周期恢复；和本地Bound current发布、持久会话fence共同验证，大历史预算与完整跨站矩阵仍未验收。",
         "**NET-01 WebSocket优先与单owner。** 合法完整descriptor+bundle且健康ready时，三类订阅均选WebSocket，稳定阶段同selector的HTTP订阅请求为0；慢握手可有界临时HTTP保活，ready后先释放HTTP consumer再打开对应socket channel。缺广告/不合法descriptor、代理或Upgrade失败、channel拒绝/配额耗尽时在其合法范围降级；连接错误按§8.1精确执行1002/1009立即HTTP并等descriptor变化或显式重试、1008至多一次fresh grant+fresh socket、1001/1012遵守drain及三次无welcome预算。HTTP恢复与WebSocket恢复都不产生双consumer、不重置其它channel cursor、不补发离线Signal；native和浏览器均证明实际路径。",
-        "**NET-02 提示合并与发现公平性。** 受控夹具先排入同stream 20条提示，首次独立snapshot已覆盖其全部head；处理完整批次只执行1轮必要snapshot/历史追赶，后19条不各自重读同cut。相同position冲突、治理/披露/成员变化、resync/unauthorized/quarantine/control不得当作普通重复提示跳过。超过64条可见stream的第65条及后续新增流，在既有30秒发现周期加必要网络/处理时间内可被发现和追赶；不因健康WebSocket而删除唯一发现兜底，busy流不得饿死其它流。周期发现、控制处理与按需取材分开计数。",
-        "**NET-03 Sidecar局部补尾。** 同会话原件已接纳且10条Sidecar前缀完整、其中1条只缺尾部1条时，只扫描该stream必要尾页，其余9条不重新扫genesis；snapshot/authoritative current与全部所需历史仍同cut原子安装。新会话/冷重启、floor>0、withheld、fork、失败flush及并发新cut有独立正负例，不用持久坐标冒充本次接纳，不部分发布current或提前推进cursor。独立私有写入的accepted回读不依赖live提示必须到达。",
+        "**NET-02 失效与发现公平性剩余矩阵。** 跨批次20提示只追赶1轮已闭合；仍须在当前实际传输中验证相同position冲突、治理/披露/成员变化、resync/unauthorized/quarantine/control不被内容去重跳过。超过64条可见stream的第65条及后续新增流，在既有30秒发现周期加必要网络/处理时间内可被发现和追赶；健康WebSocket仍保唯一发现兜底，busy流不得饿死其它流。周期发现、控制处理与按需取材分开计数。",
         "**NET-04 MLS依赖调度与设备复用。** 10个已稳定候选Realm在普通消息/无关cursor重铸时不重复发起10套准入取材；真正设备授权/撤销、成员变化、runtime key替换、KeyPackage暂不可用及pending Welcome/Commit能独立唤醒。一次合法同会话协调轮次内账户设备viewer只取1份，授权/代数变化立即废弃该轮复用。把超过500条、加入/授权事件在501条之后的场景接入实际协调，获取确切所需原件/当前依赖并成功恢复，不再反复取旧第一页，也不每次全历史重放；未知结果不重复Add或重签原意图。看板锁定私有字段的恢复也复用同一账户/Device/会话恢复owner：同卡20次开关或无关Realm epoch不重复并发key-backup列表/解锁，实际新backup/密钥/私有sidecar可独立唤醒；保留受界定的必要发现、Retry-After、失败退避及显式重试，禁止把旧解锁证明当跨会话授权票。定向计数区分初始恢复、真实新材料和重复交互，不能仅证明Space/Strand为0就宣称恢复取材为0。",
         "**NET-05 联系人共享读取。** 在受控同一新鲜度窗口内同时挂载首页、侧栏、Contacts，只有1个进行中的contacts list读取；后台已成功加载后开侧栏/页面不再无条件重读。联系人写后统一失效并合并回读，显式刷新可强制取新；凭证轮换不单凭token字符串变化重拉展示数据，真实身份/权限变化仍失效。没有已登记且覆盖全部变化的Contact订阅时保留一个有界轮询owner，WebSocket本身不等于有Contact通知；离线/隐藏/持续失败降频，恢复可见后在已声明活性预算内补读。",
         "**NET-06 viewer/describe复用。** 同一次启动的身份、展示标签、管理员标记共享已获取viewer，展示不阻塞Chat必要历史；安全设备/撤销探测在需要新证据时仍请求，不复用旧grant授权票。连接describe共用合法信任校验结果/进行中任务，创建Realm获取service id/trust_domain不重复describe，WebSocket引擎复用同连接描述。并发首取、失败后重试、服务/账户切换、同DID不同Station、连接信任变化及ABA均无串用；缓存的是有界数据，不是永久权限结论。",
@@ -178,7 +132,7 @@
       ]
     },
     {
-      "task": "2026-09-10-0540-client-current-state-durable-index.md",
+      "task": "2026-09-10-0540-client-current-result-durable-index.md",
       "criteria_count": 4,
       "criteria_sha256": "b7c8962e042040c44f7c4f1782184fc450d53f2509151d71503e7afdfb4c708d",
       "spec_refs": [
@@ -485,7 +439,10 @@
       ],
       "engineering_checks": [],
       "remaining_scenarios": [
-        "真实1／100／1000 Realm实机首屏与长任务；完整正式搜索授权与holder／Device／session同源矩阵；history收紧、适用retention披露、缺密钥／未验证crypto、私密Sidecar及完整修订链展示。现行v1没有通用消息TTL，不将Policy有效期解释为消息expiry。已闭合的物理事务、跨流依赖、holder时间边界、Circle对象门、Message终态、revision绑定恢复、个人block／hide、withheld恢复、Event字段裁剪正式入口及合法Policy求值／策略时间窗不重复列为待实现；本批夹具不替代真实Station与完整产品矩阵。"
+        "1／100／1000 Realm真实服务端与实机首屏、UI长任务指标；类型编译、索引微基准与全库library通过均不是该容量验收。",
+        "补齐正式搜索入口当前读取授权的同来源native／browser负例矩阵：缺当前cut、错误Event／Commit／actor／scope／Strand、错账号设备、撤权及Circle成员撤权／父join变化均不释放正文。Account／独立stream候选与Circle对象当前证据门已实现，完整入口矩阵仍须对照。",
+        "完整搜索负例与生命周期矩阵：history收紧、适用retention的披露撤下／恢复、缺密钥／未验证crypto，以及借公共Strand定位私密Sidecar和修订链的完整浏览器展示；Message当前撤回终态、最新revision的同cut签名carrier绑定／补齐恢复及合法Policy求值／时间窗已实现。现行scope-settings §4.3未定义通用消息TTL，Policy.expires_at是策略有效期，不能据此发明消息expiry字段或期限求解器。",
+        "补齐完整holder／Device／session搜索授权入口的同来源native／browser正负矩阵，尤其浏览器异步晚到、会话／Device replacement及完整holder授权证据链；原生正式hook已完成的到期／续期／替换晚到不重复列为待实现，但不代替全入口对照。"
       ]
     },
     {
@@ -666,30 +623,8 @@
       ],
       "engineering_checks": [],
       "remaining_scenarios": [
-        "逐case named生产消费/required-ref合取；原origin binding移除；最终签名SDK/profile闭包"
-      ]
-    },
-    {
-      "task": "2026-09-25-2142-mimi-facade-production-path.md",
-      "criteria_count": 5,
-      "criteria_sha256": "6d9db0d85658f8864659ddd0dc2d72eed3e97d9c9dadca3e821d35b65dfd7e35",
-      "spec_refs": [],
-      "source_refs": [
-        "arkret-work/tasks/impl-active/2026-09-25-2142-mimi-facade-production-path.md",
-        "arkret-rust-sdk/Cargo.toml",
-        "coland/Cargo.toml",
-        "cotest/Cargo.toml"
-      ],
-      "tests": [],
-      "engineering_checks": [
-        "Inventory only: reconcile the omitted active entry already declared by upstream e8933b59 and its unchanged task text. No MI implementation, provider execution or product acceptance is claimed."
-      ],
-      "remaining_scenarios": [
-        "最新冻结源码下，认证服务签 Message Event 与 covering RealmCommit 同事务；observer 在构造/写入/fanout 前拒绝，authenticated GroupInfo、current room binding、scope 派生 group id 不一致时零 Event/Commit/outbox/receipt/fanout。",
-        "room binding migration 的 completed/rolled_back 正例和非法 proof、相邻 binding、拓扑、MLS installed state/GroupInfo 拒绝路径全部以真实 PG/HTTP 执行；有具体缺口才补生产接线，不恢复旧“缺 GroupInfo 一律停线”结论。",
-        "在真实独立provider及其它未验收组合继续复核report事务与Provider-ID分区；单Station accepted-binding下服务签Event／covering Commit／current／ledger、实际report ID、晚期故障回滚、并发与冷重启exact retry已由MI交付，不重复持有该子边界。",
-        "reporter 的 Actor/Account、membership_ref、room_binding_ref、device proof 与受限 Circle 可见性按同一 accepted cut 验证；缺失/歧义/撤销/跨 provider/同 principal 异 Station 均拒绝，moderation evidence 不提供身份 authority，self moderation 不被用作 facade 代签入口。",
-        "2326正式闭合后，真实独立provider成功claim→原claim单次Welcome使用→consumed，以及重放／到期／错scope／撤权均按正式合同验明，拒绝时零非法副作用；Cotest现有runner的fixture case集完整且实际执行；旧授权用例以正式 PCR Event/RealmCommit 重建，保留 accepted material、重放和零副作用断言，并记录 SHA/features/SUT/退出码。"
+        "SE-NAMED：重算现行named-suite登记集合及对应生产consumer／fixture／decision point／required_case_refs，逐case审阅，补完整Agent／Account响应与bootstrap真实消费证明；基础五case启动和已交付门禁不重做。内部完整audit缺任何required case或生产消费审阅仍拒绝；单profile认证另按正式适用性闭包计算，不能凭该audit扩大或裁剪声明。",
+        "SE-CLOSE：闭合内部named audit的生产覆盖与每份声明闭包的required suites，并在最终声明组合复验，输出具名差集、逐case结果、语义审阅与精确来源。0038b结果按引用合取，尚未证明判定点保留缺口。SDK正式claim另核适用条款、acceptable-set证据类型及按条款选择的vector结果／API inventory／审计来源、vector／decision-point覆盖、非零证据摘要、sdk_artifact URI／digest、spec_revision／contract_digest、issued_at／issuer／verification method及授权签名；未知／重复条款和无效绑定拒绝，not_applicable附机器可读理由。正式生成与验证使用现有SDK工具并符合sdk-conformance-claim schema，核proof.kid与issuer.verification_method一致及规范签名transcript，复用SDK已有负例，不以required-ref清零或内部布尔值代替正式claim。0038b不复制全suite或其它条款验收。"
       ]
     },
     {
@@ -836,8 +771,8 @@
     },
     {
       "task": "2026-10-22-2129-local-ci-repair.md",
-      "criteria_count": 4,
-      "criteria_sha256": "eaa0eb7401eca4d7b00c9d9a1061aea2e80fd0ddf8d5925f406a3254e2fef0e6",
+      "criteria_count": 5,
+      "criteria_sha256": "cf2817e06b6f3a3e8b3ca8023b29dba85ea6a8379d14dc55e0f45bdcfa56171d",
       "spec_refs": [],
       "source_refs": [
         "coland/Cargo.toml",
@@ -849,29 +784,363 @@
         "Engineering-only CI inventory. Preserve separate upstream platform/security failures; no product acceptance or CI green claim."
       ],
       "remaining_scenarios": [
-        "核验最新 main 上 Coland `01d56ca1` 的原生 TLS 整仓测试、Cotest `18fb7ae5` 的实际 SDK 产物捕获/完整测试、Inkson `70132ac1` 的完整浏览器 E2E；已完成的局部检查见报告，不重复记作剩项。",
-        "解决 Savfox keyring4 自动升级的已移除特性不兼容，并验证实际 OS 凭据行为；Windows原生 vault Error(8)仍待定位，不能以单元测试替代原生验收。",
-        "恢复协调仓跨仓 baseline 对私有 Flagon 的 CI 读取凭据，统一当前仓布局/工具链并执行完整 lane；本轮没有修改组织策略或写入个人令牌。",
-        "在具备环境时完成原任务尚缺的相关平台/完整联合验收；不接管其它产品 owner 的验收，不把本轮 CI 通过代替未运行的平台。"
+        "保留并在外部付款／支出条件修复后独立复验协调仓平台阻断：已对844d75e4的三次run共14job独立核runner空、steps0及官方payment/spending annotation；ab0五run27job另存原件；后续 head 不继承旧原因，不降低矩阵或替代为假通过。",
+        "继续各仓当前 main 的非保留 CI 首错及远端复验，先本地检查后直接 main；Glory／Sapid 最新 main、已完成的真实启动交付及合并归报告，完整业务结果与保留红项逐源记录，不以启动通过替代全门。",
+        "核对 Coland 当前 main 的官方 CI／Docker／HTTP 结果；当前单依赖边与冻结 Savfox 输入修复已发布，早期编译、PG、正式启动构建及旧 a229／694 成绩保原来源，不继承给新源码，原10000／SLO与已记录栈条件保持。",
+        "以实际当前12源 fresh 守卫复验 Cotest 当前 main 的原235 native／每片31 docs／8 shards／360分钟及 Contact、E2E、authority 和可触发集成门；旧 Coland 锁阻断修复后，等原整run终态再单次复验被拒重跑的part2／6，旧源码结果不继承。验实际会话重签与旧source失效、Sentinel HTTP200、固定核心、当前cut／历史basis／帧撤权／真实清单、成本分配及缓存，原10000／19MLS／13required／SLO不松。两项admin正向403、暂停31、mTLS及官方人工REVIEW按用户范围保红，不造权限、改成功oracle或授未执行joint信用；本批提交门仍按用户裁决限真实启动。",
+        "Coauth 已取得真实 registered clients／浏览器／完整 Basic36 结果，仍有5项官方人工REVIEW；保留这些人审结论及 FAPI 实际 PAR／授权响应iss／OAuth DPoP缺口，discovery 成功不抵消后续失败。2026-10-28 用户明确维持现有产品能力范围，RFC 8705 mTLS 认证及 token 绑定本轮不实现，完整 nightly `all` 的该红项明确保留；不得再将其误记为缺外部秘密。"
       ]
     },
     {
-      "task": "agent-platform.md",
-      "criteria_count": 3,
-      "criteria_sha256": "cf3a366d49c4ebdbe2c508b1a14722f97177c71c446604a3dac015ab567cd8a4",
+      "task": "2026-10-25-2015-native-operation-contracts.md",
+      "criteria_count": 5,
+      "criteria_sha256": "3b392880120ce7cf83243f7a012dc14dbed7d76f2ab3d37c41b17a476b603b3a",
       "spec_refs": [],
       "source_refs": [
-        "arkret-work/tasks/impl-active/agent-platform.md",
-        "inkson/Cargo.toml"
+        "arkret-work/tasks/impl-active/2026-10-25-2015-native-operation-contracts.md",
+        "cotest/src/scenarios/native_operation_contracts.rs",
+        "cotest/scripts/run-native-operation-contracts.py"
+      ],
+      "tests": [
+        {
+          "path": "cotest/tests/native_operation_contracts.rs",
+          "symbol": "account_device_sessions_preserve_issuer_originals_and_real_consumer",
+          "kind": "live",
+          "covers": "Existing native issuer/session case only; does not reopen the paused operation inventory or prove all remaining contracts."
+        }
+      ],
+      "engineering_checks": [
+        "This active-owner traceability record points to existing sources and concrete remaining task criteria only. It neither starts a suspended owner nor claims native, browser, deployment, CI or completion results."
+      ],
+      "remaining_scenarios": [
+        "逐项具有真实有效请求、正式入口、精确权限、已接纳原件、完整权威闭包、具名测试和自然完成结果；固定97缺项／重复／过期来源均失败。",
+        "正向合同验证实际效果；精确重放、冲突及失效分别验证，HTTP接纳不等于交付。恢复旧擦除不代表旧物理擦除已全面合规；该5项保持未覆盖，不能因此自动重做已撤销架构或擦除功能。",
+        "实际组织资格与允许迁移边界必须从规范证明，不得用Human／用户管理Agent PCR顶替组织PCR，不能复制整库或测试自签充当真实权威。",
+        "后续若用户恢复合同工作，同步Spec／SDK／schema／registry／OpenAPI和所有实际消费者，清除旧名、重复alias及动态调用漂移，不改变版本。",
+        "后续完成各子项目native／WASM／TS／mock、Inkson原生读取原件再生、全部97同源验收与最终复审后，才可将本任务归档；本轮定向回退交付不等于97完成。"
+      ]
+    },
+    {
+      "task": "2026-10-28-0602-realm-invite-links-and-ivs-withdrawal.md",
+      "criteria_count": 4,
+      "criteria_sha256": "c6f1847a2090b397f47cf310951b339ec0840aa914a1590e923ac859cb9a56a4",
+      "spec_refs": [],
+      "source_refs": [
+        "arkret-work/tasks/impl-active/2026-10-28-0602-realm-invite-links-and-ivs-withdrawal.md",
+        "cotest/scripts/check_realm_invite_links.py",
+        "cotest/tests/realm_invite_link_contracts.rs"
+      ],
+      "tests": [
+        {
+          "path": "cotest/tests/realm_invite_link_contracts.rs",
+          "symbol": "realm_invite_links_retain_real_acceptance_and_atomic_usage",
+          "kind": "live",
+          "covers": "Real accepted invite-link/atomic-usage entrypoint; full remaining cross-station/browser matrix stays pending."
+        }
+      ],
+      "engineering_checks": [
+        "This active-owner traceability record points to existing sources and concrete remaining task criteria only. It neither starts a suspended owner nor claims native, browser, deployment, CI or completion results."
+      ],
+      "remaining_scenarios": [
+        "普通邀请／PrincipalLocator／注册与找回邮件、全部旧provider调用链撤销及客户端行为的完整工程回归；不能仅以编译通过代替。",
+        "新Realm链接真实同站／跨站、末次额度与撤销竞争、到期、失败零共享写、精确重试、退出后不可复用、权限变更／ban／closed、同principal异Station、重启及合法交接验收完整；必须真实签发与已接纳原件，不能以mock或前置拒绝替代。",
+        "Inkson生成管理、全局landing、登录前后选账号接受及浏览器实机闭环；同步所有消费者并验证Savfox的SDK Git pin／lock（当前仍为旧pin）。",
+        "完成其余邀请联合验收后，在最终源复验SDK生成／Check、类型／命名／未知字段／隔离／库存门禁，提交后续修正并同步main，再归档实现owner、更新余量。"
+      ]
+    },
+    {
+      "task": "2026-10-29-0328-collaboration-pr-review-and-followups.md",
+      "criteria_count": 4,
+      "criteria_sha256": "24c588fe9006480005d082f640d207b70b62ab6b2af5cc74be420d04c2bff5bf",
+      "spec_refs": [],
+      "source_refs": [
+        "arkret-work/tasks/impl-active/2026-10-29-0328-collaboration-pr-review-and-followups.md",
+        "cotest/.github/workflows/ci.yml",
+        "cotest/scripts/run-joint-e2e.ps1"
       ],
       "tests": [],
       "engineering_checks": [
-        "Inventory-only restored owner from upstream e8933b59. Source anchors identify its existing task and owning workspace manifests; no implementation, runtime/test execution or completed acceptance is claimed."
+        "This active-owner traceability record points to existing sources and concrete remaining task criteria only. It neither starts a suspended owner nor claims native, browser, deployment, CI or completion results."
       ],
       "remaining_scenarios": [
-        "AV-A1：创建前耐久绑定所选 blob 与该次 Agent 创建意图；创建成功后沿正式 ActorProfile create/update 发布，只有 exact accepted 结果才能显示完成并清理输入，不因页面卸载丢掉后继动作。",
-        "AV-A2：列表、刷新、冷重启均读回同一 Agent 的 accepted 头像；无头像的合法创建保持可用，不修改 provision 协议。",
-        "AV-A3：创建／profile 拒绝、接受后丢响应、进程中断、重复恢复与账号切换有明确状态；失败保留可恢复输入，原请求按正式幂等合同续接，不发布到另一账号或重复创建 Agent。"
+        "本轮“社区活动筹备”模拟项目的真实多个用户／隔离浏览器旅程完成，具名场景与实际producer保存，新发现复现／issue／修复PR及Cotest回归交付。",
+        "Coland21／复用PR22精确head完整CI与review通过，正常合回main并核新main门；必要的新依赖普通SUT真实构建与具名联合复验、准确producer来源记录完成。",
+        "Cotest 回归与 coverage/evidence 生成物同步，相关完整门禁和 CI 通过；真实结果、限制与 SHA 写入报告，卫生检查、提交推送、归档完成。",
+        "Cotest10所列当前完整片真实失败按Spec复审修复候选，正常整合后新exact-head完整原生／真实docs／强聚合通过，保留31暂停红门及三PR不合。"
+      ]
+    },
+    {
+      "task": "2026-11-02-1127-joint-full-failure-remediation.md",
+      "criteria_count": 6,
+      "criteria_sha256": "414aa434fe1ac08cd03ebd77b666b5b1ab1f07745f2d5a5aa1fe0b756fa511b5",
+      "spec_refs": [],
+      "source_refs": [
+        "arkret-work/tasks/impl-active/2026-11-02-1127-joint-full-failure-remediation.md",
+        "cotest/scripts/run-joint-e2e.ps1"
+      ],
+      "tests": [],
+      "engineering_checks": [
+        "This active-owner traceability record points to existing sources and concrete remaining task criteria only. It neither starts a suspended owner nor claims native, browser, deployment, CI or completion results."
+      ],
+      "remaining_scenarios": [
+        "定位并闭合实际项目 Agent Strand 授权 HTTP409，随后验证共享请求、真实回复和冷读；当前尚未调用项目模型。",
+        "原无筛选三站 joint-full 及本任务其它既有恢复／Direct／Agent验收继续保持原未完状态。",
+        "原107项首败按实际原因修正，不以跳过、降低断言或兼容退役字段绕过。",
+        "针对性验证覆盖修复行为和关键拒绝边界。",
+        "冻结修复源码后正式三站 joint-full 自然结束，记录全部通过、失败及未运行。",
+        "真实剩余失败有证据与唯一归属，代码和交付记录提交同步；仅实际完成后归档。"
+      ]
+    },
+    {
+      "task": "2026-11-06-2219-mnemonic-device-authoring.md",
+      "criteria_count": 1,
+      "criteria_sha256": "c113c0543243e767bfb8ac4f92974b79674f844c8ad1dd38db05e3049cb344ba",
+      "spec_refs": [],
+      "source_refs": [
+        "arkret-work/tasks/impl-active/2026-11-06-2219-mnemonic-device-authoring.md",
+        "cotest/src/scenarios/human_device_producer_live.rs",
+        "coland/crates/http/src/routing/identity/recovery/security_transaction_endpoints.rs"
+      ],
+      "tests": [
+        {
+          "path": "cotest/tests/human_device_producer_live.rs",
+          "symbol": "local_message_recovery_and_durable_account_cursor_read_back_queued_commit",
+          "kind": "live",
+          "covers": "Existing Device recovery/authoring source; not the deferred real-user deployment acceptance."
+        }
+      ],
+      "engineering_checks": [
+        "This active-owner traceability record points to existing sources and concrete remaining task criteria only. It neither starts a suspended owner nor claims native, browser, deployment, CI or completion results."
+      ],
+      "remaining_scenarios": [
+        "用户安排统一部署后，对chris恢复设备实际创建Realm、硬刷新／重登及订阅执行线上green验收；本轮不部署。"
+      ]
+    },
+    {
+      "task": "2026-11-08-1156-recoverable-content-production.md",
+      "criteria_count": 12,
+      "criteria_sha256": "3b35a99f9573e64da5ac67bbf880244852dcb42fd0f93cee46b96a584e618eb8",
+      "spec_refs": [],
+      "source_refs": [
+        "arkret-work/tasks/impl-active/2026-11-08-1156-recoverable-content-production.md",
+        "cotest/src/scenarios/human_device_producer_live.rs",
+        "arkret-rust-sdk/crates/models-crypto/src/content_history.rs"
+      ],
+      "tests": [
+        {
+          "path": "cotest/tests/human_device_producer_live.rs",
+          "symbol": "local_message_recovery_and_durable_account_cursor_read_back_queued_commit",
+          "kind": "live",
+          "covers": "Existing native recovery/readback source only; identity receipt does not satisfy historical-content decryption/readiness."
+        }
+      ],
+      "engineering_checks": [
+        "This active-owner traceability record points to existing sources and concrete remaining task criteria only. It neither starts a suspended owner nor claims native, browser, deployment, CI or completion results."
+      ],
+      "remaining_scenarios": [
+        "正文／blob分别消费正式root／KDF／原作者端点域／key commitment／AAD KAT，32-byte fresh salt意图先耐久；exact retry原件不变，epoch／正文变化另取salt，同派生域不能绑定不同内容。真实原Event ID／producer proof／accepted Commit逐项验证，历史不重签成替代归档。",
+        "root作为现有secret_storage typed item、公开root索引与原签protection精确匹配；原件、blob、根包、coverage原子耐久，失败零接纳；PCR从genesis无损保管全部原件与证明。分页完整性独立核最新可信cut，拒绝缺条、重复、错scope／basis、少根、旧前缀及回滚。 固定256条coverage页且仅末页可短，根块仅default backup-HPKE、单独aead.enc；最后充分根包不可普通删除，recipient轮换先完整重封装并保存原根替代映射。",
+        "`ak.mls.history_grant`经现有Event提交／读取交付，准确选择原正文或附件；发送与领取均核current权限。部分／开放epoch仅DEK，完整封闭且全获权epoch才可整根。撤销、过期、错recipient／HPKE key、跨scope拒绝；新成员真实解开全部获权原件才history-ready。 先由exact recipient自签accepted history_request；grant逐字绑定request、HPKE enc||ct||tag及header，拒绝任意公钥／非canonical／低阶DH。 按正式2222从原Event／已认证解密视图定位正文、metadata及附件；单项附件DEK直接验commitment及原AAD，不要求R、不再次根KDF，父正文key独立获权，缺descriptor／父key保持未完成。",
+        "首次启用校验同一24词派生recovery-proof与backup HPKE公钥，空BIP39附加passphrase、accepted充分policy，不要求另一文件、旧端secret或在线批准者；空本地状态恢复个人原PCR全历史。恢复旧视图不安装旧授权为current，不借first-device unsupported active-series分支。 换代后按current-device content_history原签意图及fresh≤300秒challenge逐对象读旧根；identity session完成／过期后可续传，不受普通64对象桶截断，旧端不复活。",
+        "generation CAS＋replacement授权＋session消费原子提交，所有旧设备/session/队列/KeyPackage即时fence。完整安全库存包含空群及PCR／Realm／Circle／Sidecar／Direct，防并发新增遗漏；跨站义务耐久、重试和断点对账，不跳不可达目标。 库存typed preimage从完整native join/Add/consume/claim/outgoing-intent账本冻结，pending先对账并fence并发新membership；cleanup逐scope与原库存全序相等，物料Blob在prepare时即私密ACL。",
+        "仍有参与资格的scope，External Commit仅原joined Actor的已接纳replacement沿exact base进入，验证recovery_binding与库存；每个winning Commit保存external_pub GroupInfo及同epoch tree。真实Remove全部旧leaf、保留其他Actor，期间全部发送者受业务屏障；同base只一winner。 origin先签exact端点／method／授权／Event／base／库存及完整native service来源，governor后定committed_at及fact摘要；self禁止自报source，peer与本地治理均缺来源零接纳。",
+        "recovery roster保留原Commit／covering RealmCommit／native历史producer fact，独立own Station验证后投影digest-bound公钥，客户端再核原签和RFC path／replacement key；Agent不伪装Device/Service，不伪造Add claim，不公开controller私有scope或PCR历史，不以current DID／治理manifest替代原来源。 Genesis/Add/recovery唯一全序，Add保留原双签；own Station独立核origin原签／native历史及最终fact字段衔接，客户端核真实NewMemberCommit path、无MemberMAC分支及两种wrapper共同2MiB／8条最长前缀预算。",
+        "Agent历史保管有controller明确原签history_custody批准，备份主体Agent，cross-subject custodian policy及recipient引用准确；可信controller客户端解封后只向批准的新runtime密封Agent材料，24词／backup私钥／Human其它scope永不进入runtime。按原生supersedes授权集合替换，不套Human generation，不另provision身份。 custody required在immutable provision，Agent PCR首个依赖加密profile前完成首根耐久；runtime原生上传、不伪造Device，controller独享active pointer。既有list/challenge/unlock及scan/get/Blob必须按专用current_agent_history_custodian逐主体反枚举，另一controller／Human PCR／foreign scope均拒绝。",
+        "含任何新根的新备份块取fresh block key；所有recipient／压实／active-series分支对旧端隔离，不能用旧account secret／旧SSK解新块。旧端缓存旧历史不可抹除，但旧MLS私态、旧根、旧日常key均不能读收尾后新内容／新备份。",
+        "产品分别显示身份恢复、历史恢复及全scope安全收尾；服务receipt中的ready不是客户端解密证据。客户端逐件核全部原历史、全库存winning结果并持久化；重启／硬刷新／重登仍可读写，全部成立才最终完成。缺材料或不可达保持pending／明确故障，不静默新Account／PCR。 预签RecoveryReceipt不追加动态状态；新端在原PCR自签独立pending／ready检查点，不能由controller冒签runtime，pending禁止假cleanup；完整解密及scope结果已在客户端验证且重启可续才ready。",
+        "Cotest清空全部旧本地私态，用真实24词＋服务器备份、原生DID／registration／accepted authority完成Human及Agent端到端；覆盖授权新成员、since_join负例、同Actor多端、错来源／key／head、缺块／回滚、旧端晚到／撤销／并发、空群库存、中间epoch写入、跨站断连、压实块旁路、每步崩溃及WASM。保留旧端离线快照分别验证新消息和新备份负例。 新增当前custodian跨主体原件正例、wrong subject／custody／撤权反例、first-root失败零依赖写入、source过期／错原origin／错fact／晚到旧端，以及identity completed后逐对象断点续传和超过256条coverage。",
+        "各仓定向／完整门禁、nightly fmt、严格Clippy、SDK schema同步与真实业务回归通过；明确记录实际源码与SUT，提交推送归档，不以旧62项PoC替代新验收。"
+      ]
+    },
+    {
+      "task": "2026-11-14-2133-protocol-rationality-production-sync.md",
+      "criteria_count": 135,
+      "criteria_sha256": "67aa570bb1e84ed8f067e04197d09abdd939b267fd8b1526a23400f6c7ee04fe",
+      "spec_refs": [],
+      "source_refs": [
+        "arkret-work/tasks/impl-active/2026-11-14-2133-protocol-rationality-production-sync.md",
+        "cotest/src/scenarios/native_operation_contracts.rs",
+        "cotest/src/scenarios/reaction_mls_http_live.rs",
+        "cotest/src/scenarios/call_recording_live.rs",
+        "arkret-rust-sdk/crates/models-identity/src/session_credential.rs"
+      ],
+      "tests": [
+        {
+          "path": "cotest/tests/native_operation_contracts.rs",
+          "symbol": "account_device_sessions_preserve_issuer_originals_and_real_consumer",
+          "kind": "live",
+          "covers": "2042 opaque issuer/holder/refresh evidence entry; actual execution is separately required."
+        },
+        {
+          "path": "cotest/tests/native_operation_contracts.rs",
+          "symbol": "account_private_storage_retains_encryption_and_durable_effects",
+          "kind": "live",
+          "covers": "2034 exact challenge/private storage and C03 composition entry; no executed credit here."
+        },
+        {
+          "path": "cotest/tests/recovery_transaction_faults.rs",
+          "symbol": "recovery_native_kill_after_commit_before_observation_restores_exact_c_and_two_commits",
+          "kind": "live",
+          "covers": "2043 true native lost-response/crash recovery entry; ignored execution remains mandatory."
+        },
+        {
+          "path": "cotest/tests/call_recording_live.rs",
+          "symbol": "account_call_recording_native_stream_cipher_and_receiver_integrity",
+          "kind": "live",
+          "covers": "2032/C02 native recording source/codec/receiver path, not a pure artifact model."
+        },
+        {
+          "path": "cotest/tests/reaction_mls_http_live.rs",
+          "symbol": "large_active_reaction_shape_obeys_whole_snapshot_http_budget",
+          "kind": "live",
+          "covers": "2045/M10 active shape at real whole HTTP capacity; explicit ignored case remains unexecuted."
+        },
+        {
+          "path": "cotest/crates/inkson-client-tests/tests/snapshot_busy_cut_live.rs",
+          "symbol": "actual_frozen_account_pages_resume_after_owned_client_kill",
+          "kind": "live",
+          "covers": "2036 real client frozen continuation/durable checkpoint entry, no compile-to-runtime inference."
+        }
+      ],
+      "engineering_checks": [
+        "This active-owner traceability record points to existing sources and concrete remaining task criteria only. It neither starts a suspended owner nor claims native, browser, deployment, CI or completion results."
+      ],
+      "remaining_scenarios": [
+        "SDK 正式生成成功，全部手写行为及真实密码学回归通过，无旧协议 alias/双读。",
+        "Coauth/Coland 两独立部署、独立数据库，opaque/refresh/Recovery/completion 持久化和 HTTP 回归通过。",
+        "全部 authoring/reader 消费者完成接线；所有受影响仓库的规定编译、测试及 WASM/前端检查通过。",
+        "Reaction Snapshot 后旧前缀不能复活；空 active 行保 revision；baseline live head 前进不导致重启，真实 mixed cut 拒绝。",
+        "Grant 严格前态顺序、深度/当前祖先/撤销、安全缓存失效仍有效；action-resource 来源及时间并集不被扩大。",
+        "单 challenge 的对象/角色/TTL/同事务消费与 exact replay，Call 原件 BlobRef/AEAD/retention 全链保持。",
+        "Cotest wire 类型和 native 聚合、真实 joint-smoke/joint-full 通过；最终源码冻结与测试来源一致。",
+        "exact compatibility train 绑定所有最终源码 SHA，完成规定检查及发布；各仓提交同步，最终复核与 root/evidence hygiene 通过。",
+        "**2030-C01**：在实际实现路径验证：比较基线模型与新实现（不恢复旧二元 wire 入口）：同一可信 row 的合法二元 guard 与单 ID guard 对所有 accepted/rejected 业务结果一致，字段删除造成的畸形输入集合变化单独说明。",
+        "**2030-C02**：在实际实现路径验证：正确 ID、陈旧 ID、另一 selector/stream/Realm 的 ID、同形伪 ID均按完整上下文判定；同数字 position 不放行。",
+        "**2030-C03**：在实际实现路径验证：两个并发作者同 current ID 至多一个成功；失败者重新获授权读取并重新确认，不能改旧签名。",
+        "**2030-C04**：在实际实现路径验证：A→B→A 后原 A 的 Commit ID 不再可写；仅值相同不构成重试。",
+        "**2030-C05**：在实际实现路径验证：首次 null、清空后 null、未知缺行、权限过滤缺行、tombstone 五类分开验证。",
+        "**2030-C06**：在实际实现路径验证：已 accepted 的 exact Event replay 返回原 Commit，不重做新 current CAS；未 accepted 的相同请求不得变成无条件写。",
+        "**2030-C07**：在实际实现路径验证：governance handoff 不允许旧响应覆盖新任期；仍保留本领域原有治理与来源检查，不额外创造“换任期必须改写全部 row revision”的义务。",
+        "**2030-C08**：在实际实现路径验证：hash/body 或同 position 冲突仍隔离失败，不以 position 补救冲突 identity。",
+        "**2030-C09**：在实际实现路径验证：read-side revision、snapshot head/floor、CommittedEventRef 四元组未被误改；所有不在集合内的 guard 保持原语义。",
+        "**2030-C10**：在实际实现路径验证：新 payload 的 ID/producer proof、批准意图、幂等 digest 与 fixture 一致；旧 expected_revision 被 closed schema 拒绝。",
+        "**2032-C01**：在实际实现路径验证：最小合法 ready 仅含一个完整 artifact；外层镜像、双 digest、未知字段、null 与混合分支均拒绝。",
+        "**2032-C02**：在实际实现路径验证：Blob 内容翻转、截断、错误 suite、ref 不对应 exact bytes 失败；正确存储摘要但 AEAD/tag/AAD 错误也失败。",
+        "**2032-C03**：在实际实现路径验证：parent recording_id、Call/Realm、start Event、exporter Context、media service 错配分别拒绝。",
+        "**2032-C04**：在实际实现路径验证：start 没有 artifact 仍可合法开始；start 的 own EventId 自引用、无 consent 或 false 均拒绝。",
+        "**2032-C05**：在实际实现路径验证：手动 stopped 无产物合法；合法后继 ready 依原状态机成立；终态后新段必须新 recording_id/start。",
+        "**2032-C06**：在实际实现路径验证：failed 不承载 artifact/明文/backend URL，原诊断词表与长度门保留。",
+        "**2032-C07**：在实际实现路径验证：ready 不得重开被撤销的 consent、忽略失效 capability、解除 legal hold 或改写原 start 资格。",
+        "**2032-C08**：在实际实现路径验证：retention 与 policy 只读取唯一 artifact，所有旧镜像索引均能机械重算且不独立接受写入。",
+        "**2032-C09**：在实际实现路径验证：录制和转写使用不同 labels；只精简录制 ready 没有误删转写必需事实。",
+        "**2032-C10**：在实际实现路径验证：并发状态更新、重复 Event、迟到失败和 response loss 沿既有 Commit/幂等规则，不按到达顺序改终态。",
+        "**2034-C01**：在实际实现路径验证：每种挑战合法 32 octets 通过；截断、非 canonical 尾位、padding、错长度和额外 nonce 拒绝。",
+        "**2034-C02**：在实际实现路径验证：相同签发 request 重发原对象；不同参数不能改绑；过期/已消费不能借原 identity 生成新对象。",
+        "**2034-C03**：在实际实现路径验证：双实例并发消费最多一个产生业务效果，响应丢失和重启后仍 exact replay。",
+        "**2034-C04**：在实际实现路径验证：跨 unlock/delete、跨 Account/Device/RealmActor、backup/series/scope/service/origin 的复用均拒绝。",
+        "**2034-C05**：在实际实现路径验证：Device current head/authorization/generation 改变，旧挑战不能读替换后的包；manager archive 保留其独立历史资格。",
+        "**2034-C06**：在实际实现路径验证：完整 envelope 仅签名字节改变也因 envelope_digest 错配拒绝，不能因删 nonce 放松原件绑定。",
+        "**2034-C07**：在实际实现路径验证：高风险 delete 的三类授权及 quorum/policy 不变；普通 Device 不凭挑战提升为高风险删除者。",
+        "**2034-C08**：在实际实现路径验证：delete 已成功且对象消失后的合法 exact replay 仍返回原 outcome，不重复审计或再删除。",
+        "**2034-C09**：在实际实现路径验证：unlock 当前 holder失权、对象不可披露、recovery session 完成/过期时不返回新材料；不将挑战租期当凭据租期。",
+        "**2034-C10**：在实际实现路径验证：DPoP、AEAD、handover 等不同 nonce 未被误删；所有变动 transcript 的实际签名正负例重算。",
+        "**2036-C01**：在实际实现路径验证：两页以上基线在每页间持续合法写入时完成固定 C，再由 tail 到达最终当前状态，无静默窗口依赖。",
+        "**2036-C02**：在实际实现路径验证：冻结 heads 不变而底层 current 行已更新时，后续页仍返回 C 的原值，不混合 cut。",
+        "**2036-C03**：在实际实现路径验证：delta 先到、baseline 后到，及进程重启/中断后续页，均不丢较新值、不提前推进 checkpoint。",
+        "**2036-C04**：在实际实现路径验证：exact duplicate 页可幂等消费；同身份异字节、缺页、乱序和不同冻结实例拼接拒绝。",
+        "**2036-C05**：在实际实现路径验证：新增授权 stream 不被旧 frozen completeness 吞掉，旧 C 也不扩张到未经授权 scope。",
+        "**2036-C06**：在实际实现路径验证：权限撤回、目标 redaction、治理换代及窗口丢失分别走原失败合同，不返回改写的原签 Snapshot。",
+        "**2036-C07**：在实际实现路径验证：无关 Realm/Circle 实时 head 前进不触发全账号重建；没有跨流 position 比较。",
+        "**2036-C08**：在实际实现路径验证：cursor 过期、撤销、外站误投、主体/设备/filter失配仍严格拒绝，不续期、不产生 ACK/业务副作用。",
+        "**2036-C09**：在实际实现路径验证：RealmSnapshot 仍完整内联、预算不变；Account 帧分段/原子安装义务未被绕过。",
+        "**2040-M01**：G01；root T 首授 required-finite，T+25h 原 root 新明确批准另一 GrantId；可在本次 TTL/审批/当前上界内通过；旧 grant 不续期。",
+        "**2040-M02**：G02；finite parent E，child 拟 E+1ms；expiry widening 零写入拒绝，即使 t+L 更晚。",
+        "**2040-M03**：G03；非 required-finite 普通聊天，无 expiry；维持原合法长期授权，不强加 TTL。",
+        "**2040-M04**：G04；root 已 transfer，但旧 controller 发新 grant；新签发拒绝；旧已发 grant 按原 generation 继续有效。",
+        "**2040-M05**：G05；authority.reset 后混入旧代 parent；不同 root/current generation 拒绝，不生成多 root。",
+        "**2040-M06**：G06；多 parent 同根，分别完整覆盖不同合法(action,resource)；正常组合，并派生一个 root_ref。",
+        "**2040-M07**：G07；A只准 action=read/resource=X，B只准write/resource=Y，child要write/X；不得做笛卡尔积，拒绝。",
+        "**2040-M08**：G08；同(action,resource)父窗口[0,10)与[20,30)，child要[5,25)；不得取凸包，拒绝；处于单段的窄 child 可过。",
+        "**2040-M09**：G09；有 finite 与无限来源混合，其中无限来源只覆盖另一个资源；不得借用 t+L 放宽 finite 资源。",
+        "**2040-M10**：G10；parent 被撤/到期/主体不同 Station，旧 depth/root 尚在；当前行使拒绝，不以历史结构放行。",
+        "**2040-M11**：G11；新 child 指向尚未接纳的未来 grant；revoke 后复用旧 ID；真实前态/不可变身份门拒绝，无需查环。",
+        "**2040-M12**：G12；depth=4 后尝试第5层，或terminal owned_agent被引用；按既有深度/terminal规则拒绝。",
+        "**2040-M13**：G13；同根多parent包含重复/不贡献覆盖的ref；既有去重/冗余ref门拒绝。",
+        "**2040-M14**：G14；原 true-hint 场景不再携hint，moderation变化；由D(g)触发失效，不因缺字段拒绝，也不stale-allow。",
+        "**2040-M15**：G15；producer带已删除hint或derived root_ref/depth；closed authoring body拒绝，不留兼容读法。",
+        "**2040-M16**：G16；handoff 仅换governance_generation；原root_ref与委派generation保持，合法来源不误失效。",
+        "**2040-M17**：G17；同一exact Event重试且L或controller已变化；沿原accepted结果精确重放，不重算旧expiry/根。",
+        "**2040-M18**：G18；committed_at+L超时间表示范围；失败关闭，不饱和、不wrap、不落部分状态。",
+        "**2042-C02**：在实际实现路径验证：byte-exact发行/refresh/revoke/outcome在重启、并发、timeout、terminal和GC场景可复算。",
+        "**2042-C03**：在实际实现路径验证：原DPoP、RFC9421、holder/current授权和120s/30s/敏感fresh门保持，合法缓存可用性不被改变。",
+        "**2042-C04**：在实际实现路径验证：Recovery completion跨Station/AccountAuthority、deactivated/过期旧grant/原receipt迟到/新holder绑定闭环通过独立复审。",
+        "**2042-M01**：1. 任意合法外形 U，但 ledger 无记录；不 active；不能由shape、ID或本地claims补权限。",
+        "**2042-M02**：2. U已知，攻击者无holder key；DPoP签名/JKT失败。",
+        "**2042-M03**：3. issuer A/B恶意使用相同UUID id；SessionGrantRef、通道issuer和exact U隔离，B不能复用A签名引用。",
+        "**2042-M04**：4. 同U换audience；issuer/resource均拒绝，缓存不能跨audience命中。",
+        "**2042-M05**：5. token body与Authorization不同；refresh/revoke/introspection使用处exact比较拒绝。",
+        "**2042-M06**：6. DPoP ath对UUID、decoded U或JSON求hash；拒绝；只有ASCII 43字符token为输入。",
+        "**2042-M07**：7. issue第一次commit后响应丢失；fresh DPoP重验后重放相同ID/U/outcome，无第二记录。",
+        "**2042-M08**：8. 同request identity换scope/holder/Account；duplicate_conflict，零新grant。",
+        "**2042-M09**：9. 两个refresh并发；一个issuer事务获胜；另一exact同intent复用，异intent不得第二successor。",
+        "**2042-M10**：10. predecessor已superseded后exact refresh retry；仅在原操作/secret/holder/current gate匹配时返回原successor，不恢复普通权限。",
+        "**2042-M11**：11. revoke晚于原active cache；原freshness上界不变；已观察terminal不得被迟到active覆盖。",
+        "**2042-M12**：12. authority不可达但缓存仍合法；仅原operation允许且未过严限时使用；敏感fresh请求失败关闭。",
+        "**2042-M13**：13. human Device撤销/generation前进；原U即使未过期也不能通过独立current-device gate。",
+        "**2042-M14**：14. Agent key/method或主人上界变化；exact holder/current Agent/controller及scope_details全部重验，不能伪Device。",
+        "**2042-M15**：15. candidate recovery U调用普通内容/refresh；拒绝；不能升级class或借Standard holder字段。",
+        "**2042-M16**：16. recovery PCR成功但旧U过期且AA仍deactivated；fresh BoundHandoff+replacement PoP走既有completion，一跳承运原closure，不先Standard、不重提PCR。",
+        "**2042-M17**：17. attacker只有原receipt或旧grant ID；没有fresh handoff/当前replacement PoP不能取回新Standard。",
+        "**2042-M18**：18. completion retry时新DPoP key合法轮换；identity key签本次intent把fresh holder绑定到原closure；历史grant/JKT不被改写。",
+        "**2042-M19**：19. proof携A的裸ID却从B通道提交；缺完整SessionGrantRef或issuer不一致拒绝，不能查当前配置补issuer。",
+        "**2042-M20**：20. issuer key正常轮换；opaque U/outcome字节不变；内省/status签名按自身历史/current职责验证，不重签旧outcome。",
+        "**2042-M21**：21. UUID碰撞或secret随机碰撞；issuer唯一约束内重抽，响应前无可见不一致。",
+        "**2042-M22**：22. replay记录已GC，无法确认首次效果；session_grant_replay_indeterminate，不补发。",
+        "**2043-C03**：在实际实现路径验证：覆盖表中全部并发、过期、响应丢失、crash、错scope、错Account/Station/issuer/JKT、active/deactivated续接与真实两Commit原子性。",
+        "**2043-C04**：在实际实现路径验证：完整私有分离部署验证，无共享数据库/实现crate/私钥跨界；AA仅由原Station的真实完成证据与current设备来源签发独立Standard。",
+        "**2043-M01**：新replacement key不在accepted目录；session candidate verifier验原冻结key，可首次完成；无需先授权。",
+        "**2043-M02**：receipt签名key与session candidate不同；零效果拒绝；不按caller DID URL找替代key。",
+        "**2043-M03**：authorize Event换key/Device/Account；与Session和R逐项相等失败，拒绝。",
+        "**2043-M04**：固定两槽出现 generic approval_signatures（即使重新签 R）必须零写拒绝，不能剥离后验；其原生 recovery policy 因子、quorum、candidate／producer／R 原签门仍全部强制，不虚构通用 approval carrier。",
+        "**2043-M05**：相同principal不同Station；完整Account/Station/PCR不符拒绝，不能按裸DID串权。",
+        "**2043-M06**：同ID、同signed R，响应丢失；返回同两Commit/C/R，不新增position和generation。",
+        "**2043-M07**：同ID、同业务字段但另一signature bytes；exact canonical请求不同，duplicate_conflict。",
+        "**2043-M08**：两transaction竞争同session/generation；同一接纳CAS最多一个成功；另一失败且无Event/Commit/active-device部分结果。",
+        "**2043-M09**：prepare式提前占位；已删除；首次网络提交就是完整授权，不能保留半个ready协议。",
+        "**2043-M10**：PCR无关写先改变head；按原head CAS拒绝；不替caller改Event；使用新session/transaction重新明确授权。",
+        "**2043-M11**：policy在签R后被显式撤回；首次准入current gate拒绝；不能只看历史snapshot。",
+        "**2043-M12**：原grant已过期、尚无accepted结果；首次准入拒绝；不能靠request fence复活。",
+        "**2043-M13**：已accepted后原grant到期；新的有资格读取/完成角色取原结果，历史不改；旧grant无新准入。",
+        "**2043-M14**：已accepted后设备又被撤销；C仍是历史事实，但新Standard issuance/current读取按独立当前授权拒绝；不重签C。",
+        "**2043-M15**：crash在接纳写之前；无任何公开恢复效果；同R重试。",
+        "**2043-M16**：crash在接纳写之后、response之前；durable完整C/两Commit可exact恢复，不重复接受。",
+        "**2043-M17**：deactivated账号PCR完成response丢失；fresh handoff completion取原C后独立reactivate；不要求先Standard。",
+        "**2043-M18**：Coauth issuer事务在Coland终态后失败；PCR完成事实保持；同R重复completion issuer请求续接，不再PCR提交。",
+        "**2043-M19**：completion首次已签发Standard、response丢失；issuer ledger exact outcome重放同U/ref；不再reactivate或再发另一链。",
+        "**2043-M20**：账号因子被盗且攻击者拿到R，但无replacement identity私钥；无法签本次completion holder PoP，零Standard；历史R签名不能授权新holder。",
+        "**2043-M21**：原DPoP key与新completion holder不同；仅在当前accepted replacement PoP明确绑定新holder时允许首次issue；原Session历史ref/JKT不改。",
+        "**2043-M22**：issuer已成功但原DPoP私钥丢失；原账号已active，走普通accepted-device issue；不能改写同transaction原outcome。",
+        "**2043-M23**：客户端试图把旧receipt移到新transaction；transaction_id在R原签内，修改无效；旧R不能扩权。",
+        "**2043-M24**：receipt试图签未发生Commit；schema禁止CommitRef/commit_id；C只能在实际接纳后生成。",
+        "**2043-M25**：outcome/Welcome本地声明尚未全historyready；不影响其明确领域含义；内容ready仍由content-history独立合同证明。",
+        "**2045-M01**：R01；同键 add/remove/add；active 一项，source 为最后 add；三条历史原件保留。",
+        "**2045-M02**：R02；remove 是最后操作，重放旧 add；空 row 真实 revision 保持；旧输入不回灌，无墓碑仍不复活。",
+        "**2045-M03**：R03；Snapshot C 空，接到 p<C 旧 add、p=C+1 新 add；前者只读/去重；后者连续验证后合法激活。",
+        "**2045-M04**：R04；p=C+2 remove 先到，C+1 add 未到；缓冲补缺，不先删或跳 head；按 C+1/C+2 归约后空。",
+        "**2045-M05**：R05；同 position 异 Event/Commit/current bytes；失败关闭，不任择覆盖。",
+        "**2045-M06**：R06；相同 principal 异 Station、多人同 tag；身份分开，remove 仅影响原 actor/key。",
+        "**2045-M07**：R07；p1 消息/p2 反应/p10 加入/p11 消息修订；当前正文和 active metadata 可见，成员/count 可算，不取 p2 原件。",
+        "**2045-M08**：R08；无旧 epoch key/原件只知 opaque tag；不猜 emoji，不造 AAD，不授旧内容；metadata 状态可消费。",
+        "**2045-M09**：R09；已 remove 历史 key 十万种；current 不保这些 key/actor/source；保目标空 row 与 revision。",
+        "**2045-M10**：R10；当前 active key 很多或跨 epoch/window；仍按真实 shape 执行 8MiB 预算，不跨域合并。",
+        "**2045-M11**：R11；目标不可见、跨 scope、redacted；当前披露/授权门拒绝或隐藏，不泄漏成员/正文。",
+        "**2045-M12**：R12；annotation 在 floor 前，metadata active；不经 current 带出 annotation；原合法历史读取独立。",
+        "**2045-M13**：R13；无 baseline、preview/partial 页、未知缺口；不删除全集合，不声称 empty/full，不跳 continuity。",
+        "**2045-M14**：R14；baseline 安装时崩溃、增量先到、旧 baseline 迟到；current/checkpoint 原子恢复，旧结果不盖新值。",
+        "**2045-M15**：R15；历史扫描拿到旧 remove/add 或 stream_history basis；只影响历史展示，不写 live current 或推进其 head。",
+        "**2045-M16**：R16；trusted row 比 timeline 新、row 空；安装完整 row 但不证明 timeline/其它 selector 完整；空保 revision。",
+        "**2045-M17**：R17；handoff/旧 generation 迟到；验原合法 handoff 与来源，旧 current 不盖新，不重建墓碑。",
+        "**2045-M18**：R18；producer 伪造 source、携旧 assertions/last_action 字段；新 closed shape/准入拒绝，不保旧兼容。"
       ]
     },
     {

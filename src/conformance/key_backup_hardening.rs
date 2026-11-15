@@ -580,8 +580,7 @@ pub fn run_key_backup_delete_authority_vector() -> Result<()> {
 
     let challenge: KeysBackupsDeleteChallenge = serde_json::from_value(json!({
         "challenge_id": "AAAAAAAAAAAAAAAAAAAAAA",
-        "challenge": "BBBBBBBBBBBBBBBBBBBBBB",
-        "nonce": "CCCCCCCCCCCCCCCCCCCCCC",
+        "challenge": arkret_canonical::base64url_encode([0x42_u8; 32]),
         "operation": "ak.self.keys.backups.resource.delete.v1",
         "account_id": {
             "principal_id": "ak:did_core:webvh:z6mkfixture",
@@ -594,6 +593,7 @@ pub fn run_key_backup_delete_authority_vector() -> Result<()> {
         "issued_at": "2026-07-31T00:00:00.000Z",
         "expires_at": "2026-07-31T00:05:00.000Z"
     }))?;
+    challenge.validate_at(challenge.issued_at)?;
     let reason = Some("operator-request");
     let baseline = key_backup_delete_intent_digest(&challenge, reason)?;
 
@@ -617,7 +617,6 @@ pub fn run_key_backup_delete_authority_vector() -> Result<()> {
         "reason",
         "challenge_id",
         "challenge",
-        "nonce",
         "audience",
         "service_id",
         "issued_at",
@@ -670,14 +669,19 @@ pub fn run_key_backup_delete_authority_vector() -> Result<()> {
         &serde_json::from_value::<KeysBackupsDeleteChallenge>(audience)?,
         reason,
     )?);
-    let mut nonce = serde_json::to_value(&challenge)?;
-    nonce["nonce"] = json!("EEEEEEEEEEEEEEEEEEEEEE");
+    let mut changed_challenge = serde_json::to_value(&challenge)?;
+    changed_challenge["challenge"] = json!(arkret_canonical::base64url_encode([0x45_u8; 32]));
     mutations.push(key_backup_delete_intent_digest(
-        &serde_json::from_value::<KeysBackupsDeleteChallenge>(nonce)?,
+        &serde_json::from_value::<KeysBackupsDeleteChallenge>(changed_challenge)?,
         reason,
     )?);
     if mutations.iter().any(|digest| digest == &baseline) {
-        bail!("backup_id/reason/audience/nonce mutation did not change the signed transcript");
+        bail!("backup_id/reason/audience/challenge mutation did not change the signed transcript");
+    }
+    let mut retired_nonce = serde_json::to_value(&challenge)?;
+    retired_nonce["nonce"] = json!("CCCCCCCCCCCCCCCCCCCCCC");
+    if serde_json::from_value::<KeysBackupsDeleteChallenge>(retired_nonce).is_ok() {
+        bail!("the retired redundant delete-challenge nonce was accepted");
     }
 
     #[derive(Clone, Copy)]
@@ -770,7 +774,10 @@ pub fn run_key_backup_delete_authority_vector() -> Result<()> {
         bail!("same backup delete request_id with another request did not conflict");
     }
     let expired_at = challenge.expires_at + Duration::seconds(1);
-    if expired_at <= challenge.expires_at || !challenge_consumed {
+    if expired_at <= challenge.expires_at
+        || challenge.validate_at(expired_at).is_ok()
+        || !challenge_consumed
+    {
         bail!("expired or replayed challenge negative cases were not constructed");
     }
     Ok(())
@@ -780,30 +787,14 @@ fn key_backup_delete_intent_transcript(
     challenge: &arkret_models_crypto::KeysBackupsDeleteChallenge,
     reason: Option<&str>,
 ) -> Value {
-    serde_json::json!({
-        "context": arkret_models_crypto::KEY_BACKUP_DELETE_PROOF_CONTEXT,
-        "operation": challenge.operation,
-        "request_id": challenge.request_id,
-        "account_id": challenge.account_id,
-        "backup_id": challenge.backup_id,
-        "reason": reason,
-        "challenge_id": challenge.challenge_id,
-        "challenge": challenge.challenge,
-        "nonce": challenge.nonce,
-        "audience": challenge.audience,
-        "service_id": challenge.service_id,
-        "issued_at": challenge.issued_at,
-        "expires_at": challenge.expires_at,
-    })
+    challenge.delete_intent_transcript(reason)
 }
 
 fn key_backup_delete_intent_digest(
     challenge: &arkret_models_crypto::KeysBackupsDeleteChallenge,
     reason: Option<&str>,
 ) -> Result<String> {
-    Ok(arkret_canonical::canonical_sha256(
-        &key_backup_delete_intent_transcript(challenge, reason),
-    )?)
+    Ok(challenge.delete_intent_digest(reason)?.as_str().to_owned())
 }
 
 pub fn run_key_backup_hardening_fixture_suite() -> Result<()> {

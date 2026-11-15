@@ -6,7 +6,10 @@ use serde_json::Value;
 use super::{required_str, security_transaction_resilience_reference};
 
 pub fn run_security_transaction_resilience_joint_gate() -> Result<()> {
-    let reference_source = include_str!("security_transaction_resilience_reference.rs");
+    let reference_source = concat!(
+        include_str!("security_transaction_resilience_reference.rs"),
+        include_str!("security_transaction_resilience_reference/recovery.rs")
+    );
     for forbidden in [
         "use arkret_",
         "use garth",
@@ -33,15 +36,10 @@ pub fn run_security_transaction_resilience_joint_gate() -> Result<()> {
     verify_continue_cases(&reference_fixture.continue_cases)
         .context("security transaction continue cases")?;
 
-    // The legacy SDK fixture interpreter was removed with the old transaction
-    // state model. Pin the current SDK's closed step orders directly, while the
-    // independent runner still exercises every published fault projection.
-    let recovery_steps = serde_json::to_value(arkret_models_crypto::RECOVERY_STEP_ORDER)?;
+    // Rotation alone has worker/continue steps. Recovery is independently
+    // interpreted from its full signed R and native closure, then compared with
+    // the SDK's structural and cryptographic interpretation of the same originals.
     let rotation_steps = serde_json::to_value(arkret_models_crypto::SECURITY_ROTATION_STEP_ORDER)?;
-    ensure!(
-        recovery_steps == serde_json::json!(["commit_recovery_unit"]),
-        "SDK recovery step order drifted"
-    );
     ensure!(
         rotation_steps
             == serde_json::json!([
@@ -53,8 +51,42 @@ pub fn run_security_transaction_resilience_joint_gate() -> Result<()> {
             ]),
         "SDK security rotation step order drifted"
     );
+    let kat = &fixture["single_submit_recovery_kat"];
+    let completed: arkret_models_crypto::RecoveryTransactionCompletion =
+        serde_json::from_value(kat["expected_outcome"].clone())?;
+    completed.validate_structural()?;
+    super::run_recovery_completion_grant_suite()?;
+    for projection in &reference {
+        let value = serde_json::to_value(projection)?;
+        if value["kind"] != "recovery" {
+            continue;
+        }
+        ensure!(
+            value["transaction_id"] == serde_json::to_value(&completed.transaction_id)?
+                && value["receipt_digest"]
+                    == serde_json::to_value(completed.recovery_receipt.receipt_digest()?)?,
+            "independent Recovery identity differs from SDK's full signed R"
+        );
+        if !value["native_commits"]
+            .as_array()
+            .context("native projection")?
+            .is_empty()
+        {
+            ensure!(
+                value["native_commits"] == kat["native_commits"]
+                    && value["completion_attestation"]
+                        == serde_json::to_value(&completed.completion_attestation)?,
+                "independent Recovery native closure differs from SDK original"
+            );
+        } else {
+            ensure!(
+                value["completion_attestation"].is_null(),
+                "refused Recovery exposed C"
+            );
+        }
+    }
     // 2 kinds x 3 fault positions x 7 faults, 10 rotation cases and 11
-    // recovery terminal-commit cases, each pinned by name in the runner.
+    // single-submit Recovery cases, each pinned by name in the runner.
     ensure!(
         reference.len() == 63,
         "reference runner did not execute all 63 security-transaction scenarios"
@@ -71,109 +103,102 @@ pub fn run_security_transaction_resilience_joint_gate() -> Result<()> {
     Ok(())
 }
 
-/// `identity/security-transactions.md`: `continue` submits exactly one
-/// client-attested terminal step.
-///
-/// The derivation is the point of the contract, so this recomputes it from
-/// `(kind, accepted_steps.length)` instead of reading `derived_next_step` back.
-/// The general request schema carries no `kind`, which is why the `{0,4}` terminal
-/// indices must not appear in the schema and must be enforced here: a coordinator
-/// -owned prefix step, a not-yet-ready terminal, a mismatched attestation step and
-/// an attestation-less POST are all `failed_precondition` with no side effect.
+/// Rotation derives one terminal-ready local_commit from its four workers.
+/// Recovery has no continue route, including an empty/attestation-less request.
 fn verify_continue_cases(cases: &[Value]) -> Result<()> {
-    ensure!(!cases.is_empty(), "fixture publishes no continue cases");
-    let mut saw_kinds = BTreeSet::new();
-    let mut saw_worker_prefix = false;
-    let mut saw_accepted_terminal = false;
-    let mut saw_attestation_less_rejection = false;
+    let mut kinds = BTreeSet::new();
+    let mut saw_worker = false;
+    let mut saw_terminal = false;
+    let mut saw_prefix_refusal = false;
+    let mut saw_recovery_refusal = false;
     for case in cases {
         let name = required_str(case, "name")?;
         let kind = required_str(case, "transaction_kind")?;
+        kinds.insert(kind);
+        if kind == "recovery" {
+            ensure!(
+                required_str(case, "expected")? == "reject_without_side_effect"
+                    && required_str(case, "reason_code")? == "failed_precondition"
+                    && case.get("accepted_step_count").is_none()
+                    && case.get("derived_next_step").is_none(),
+                "Recovery continue case {name} resurrected a prepared/step branch"
+            );
+            saw_recovery_refusal = true;
+            continue;
+        }
+        ensure!(kind == "security_rotation", "unknown continue kind {kind}");
         let accepted = case["accepted_step_count"]
             .as_u64()
-            .with_context(|| format!("continue case {name} omits accepted_step_count"))?;
-        let (terminal_index, terminal_step) = match kind {
-            // Recovery has no coordinator-owned prefix at all: index 0 is
-            // already terminal, so the only derivable step is the single
-            // `commit_recovery_unit`.
-            "recovery" => (0, "commit_recovery_unit"),
-            "security_rotation" => (4, "local_commit"),
-            other => bail!("continue case {name} declares unknown transaction kind {other}"),
-        };
-        // Past the terminal index there is no next step, and the fixture spells
-        // that as an explicit JSON `null` rather than omitting the member.
-        let derived = case
-            .get("derived_next_step")
-            .with_context(|| format!("continue case {name} omits derived_next_step"))?;
-        let derived = match derived {
-            Value::Null => None,
-            Value::String(value) => Some(value.as_str()),
-            _ => bail!("continue case {name} derives a non-string next step"),
-        };
-        let terminal_ready = accepted == terminal_index;
-        if terminal_ready && derived != Some(terminal_step) {
-            bail!("continue case {name} is terminal-ready but derives {derived:?}");
-        }
-        if !terminal_ready && derived == Some(terminal_step) {
-            bail!("continue case {name} derives the terminal step from a coordinator prefix");
-        }
-        if accepted > terminal_index && derived.is_some() {
-            bail!("continue case {name} derives a step after the terminal one");
-        }
-
-        let attested_step = case["client_attestation_step"].as_str();
-        let expected = required_str(case, "expected")?;
-        let should_accept = terminal_ready && attested_step == Some(terminal_step);
-        saw_kinds.insert(kind.to_owned());
-        match expected {
+            .context("Rotation prefix")?;
+        let steps = [
+            "revoke",
+            "upload_new_material",
+            "switch_authoritative_pointer",
+            "erase_old_material",
+            "local_commit",
+        ];
+        let derived = usize::try_from(accepted)
+            .ok()
+            .and_then(|n| steps.get(n))
+            .copied();
+        ensure!(
+            case["derived_next_step"].as_str() == derived,
+            "case {name} changed the actual next step"
+        );
+        let may_accept =
+            terminal_continue_allowed(accepted, case["client_attestation_step"].as_str());
+        match required_str(case, "expected")? {
+            "worker_resumes_same_step" => {
+                ensure!(
+                    accepted < 4
+                        && case["driver"] == "durable_transaction_worker"
+                        && case["client_continue_present"] == false,
+                    "client drove a worker step"
+                );
+                saw_worker = true;
+            }
             "accept_terminal_step" => {
-                if !should_accept {
-                    bail!("continue case {name} accepts a step the derivation does not allow");
-                }
-                if case["cas_matches"].as_bool() != Some(true)
-                    || case["reserved_output_matches"].as_bool() != Some(true)
-                {
-                    bail!("continue case {name} accepts without CAS and reserved-output equality");
-                }
-                saw_accepted_terminal = true;
+                ensure!(
+                    may_accept
+                        && case["cas_matches"] == true
+                        && case["reserved_output_matches"] == true,
+                    "terminal continue lacks its exact CAS/artifact"
+                );
+                saw_terminal = true;
             }
             "reject_without_side_effect" => {
-                if should_accept {
-                    bail!("continue case {name} rejects a well-formed terminal continue");
-                }
-                if required_str(case, "reason_code")? != "failed_precondition" {
-                    bail!("continue case {name} must reject with failed_precondition");
-                }
-                if case["client_attestation_present"].as_bool() == Some(false) {
-                    saw_attestation_less_rejection = true;
-                }
+                ensure!(
+                    !may_accept && case["reason_code"] == "failed_precondition",
+                    "valid terminal was incorrectly refused"
+                );
+                saw_prefix_refusal = true;
             }
-            "worker_resumes_same_step" => {
-                if required_str(case, "driver")? != "durable_transaction_worker"
-                    || case["client_continue_present"].as_bool() != Some(false)
-                {
-                    bail!("continue case {name} lets a client drive a coordinator-owned prefix");
-                }
-                saw_worker_prefix = true;
-            }
-            other => bail!("continue case {name} declares unknown expectation {other}"),
+            other => bail!("unknown continue expectation {other}"),
         }
     }
+    // Exercise the absent-artifact branch directly even though the published
+    // fixture's Recovery rejection no longer carries a fictitious step count.
+    for accepted in 0..=5 {
+        ensure!(
+            !terminal_continue_allowed(accepted, None),
+            "attestation-less POST became a read alias"
+        );
+    }
     ensure!(
-        saw_worker_prefix,
-        "continue cases must cover a coordinator-owned prefix resumed by the worker"
+        terminal_continue_allowed(4, Some("local_commit"))
+            && !terminal_continue_allowed(1, Some("local_commit")),
+        "terminal derivation drifted"
     );
     ensure!(
-        saw_accepted_terminal,
-        "continue cases must cover an accepted client-attested terminal step"
-    );
-    ensure!(
-        saw_attestation_less_rejection,
-        "continue cases must cover that an attestation-less POST is not a `get` alias"
-    );
-    ensure!(
-        saw_kinds == BTreeSet::from(["recovery".to_owned(), "security_rotation".to_owned()]),
-        "continue cases must cover both transaction kinds"
+        saw_worker
+            && saw_terminal
+            && saw_prefix_refusal
+            && saw_recovery_refusal
+            && kinds == BTreeSet::from(["recovery", "security_rotation"]),
+        "continue matrix lost a required branch"
     );
     Ok(())
+}
+fn terminal_continue_allowed(accepted: u64, artifact: Option<&str>) -> bool {
+    accepted == 4 && artifact == Some("local_commit")
 }

@@ -923,13 +923,12 @@ impl JoinObserver for PendingPayload<'_> {
                 && !claims.scopes.iter().any(|action| action == "ak.event.read")
         );
         ensure!(
-            serde_json::to_value(
-                claims
-                    .scope_details
-                    .as_ref()
-                    .context("pending explicit write ceiling")?
-            )?["capability_grant_refs"]
-                == json!([grant])
+            claims
+                .scope_details
+                .as_ref()
+                .context("pending explicit write ceiling")?
+                .capability_grant_refs
+                == vec![grant.to_string()]
         );
         let material = arkret_models_collaboration::mls_group_state_material::MlsMemberGroupStateMaterialReadRequestBody {
             realm_id:accepted.event.realm_id.clone(), effective_scope:accepted.event.scope_ref.clone(),
@@ -983,13 +982,12 @@ impl JoinObserver for PendingPayload<'_> {
                     .any(|action| action == "ak.message.create")
         );
         ensure!(
-            serde_json::to_value(
-                combined
-                    .scope_details
-                    .as_ref()
-                    .context("pending full content ceiling")?
-            )?["capability_grant_refs"]
-                == json!([grant])
+            combined
+                .scope_details
+                .as_ref()
+                .context("pending full content ceiling")?
+                .capability_grant_refs
+                == vec![grant.to_string()]
         );
         let (pending_write, _) =
             agent_message(agent, agent_group, accepted, self.strand, &grant).await?;
@@ -1339,13 +1337,12 @@ pub async fn run_agent_content_sidecar_production()
     let (read, claims) =
         content_direct_evidence::issue(&deployment, &agent, &read_actions, &realm).await?;
     ensure!(
-        serde_json::to_value(
-            claims
-                .scope_details
-                .as_ref()
-                .context("Sidecar frozen ceiling")?
-        )?["capability_grant_refs"]
-            == json!([])
+        claims
+            .scope_details
+            .as_ref()
+            .context("Sidecar frozen ceiling")?
+            .capability_grant_refs
+            .is_empty()
     );
     ensure!(
         claims.scopes.iter().any(|v| v == "ak.event.read")
@@ -1421,25 +1418,23 @@ pub async fn run_agent_content_sidecar_production()
         narrowed.scopes
     );
     ensure!(
-        serde_json::to_value(
-            narrowed
-                .scope_details
-                .as_ref()
-                .context("narrowed ceiling")?
-        )?["capability_grant_refs"]
-            == json!([])
+        narrowed
+            .scope_details
+            .as_ref()
+            .context("narrowed ceiling")?
+            .capability_grant_refs
+            .is_empty()
     );
     let (message, plaintext) = controller_message(&controller, &mut group, &state, &strand).await?;
     let (fresh_read, fresh_claims) =
         content_direct_evidence::issue(&deployment, &agent, &read_actions, &realm).await?;
     ensure!(
-        serde_json::to_value(
-            fresh_claims
-                .scope_details
-                .as_ref()
-                .context("effective Sidecar ceiling")?
-        )?["capability_grant_refs"]
-            == json!([])
+        fresh_claims
+            .scope_details
+            .as_ref()
+            .context("effective Sidecar ceiling")?
+            .capability_grant_refs
+            .is_empty()
     );
     let received = fresh_read
         .sdk()
@@ -1498,13 +1493,12 @@ pub async fn run_agent_content_sidecar_production()
             .any(|action| action == "ak.message.create")
     );
     ensure!(
-        serde_json::to_value(
-            write_claims
-                .scope_details
-                .as_ref()
-                .context("explicit write ceiling")?
-        )?["capability_grant_refs"]
-            == json!([grant])
+        write_claims
+            .scope_details
+            .as_ref()
+            .context("explicit write ceiling")?
+            .capability_grant_refs
+            == vec![grant.to_string()]
     );
     let (reply, reply_plaintext) =
         agent_message(&agent, &mut agent_group, &state, &strand, &grant).await?;

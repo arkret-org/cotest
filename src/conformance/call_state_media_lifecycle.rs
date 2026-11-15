@@ -24,7 +24,9 @@
 //! error enum grows them.
 
 use anyhow::{Result, bail};
-use arkret_identifiers::{BlobRef, CallId, DidCoreId, EventId, GrantId, Hash, PolicyId, RealmId};
+use arkret_identifiers::{
+    BlobRef, CallId, DidCoreId, EventId, GrantId, Hash, PolicyId, RealmCommitId, RealmId,
+};
 use arkret_models_collaboration::events_payloads::call::{
     CallRecordingArtifact, CallRecordingDeletionAudit, CallRecordingDeletionStatus,
     CallRecordingDeletionTrigger, CallRecordingEncryption, CallRecordingEncryptionAlgorithm,
@@ -32,7 +34,10 @@ use arkret_models_collaboration::events_payloads::call::{
     CallRecordingStartPayload, CallRecordingState, CallRecordingTransition, CallStatePayload,
     CallTranscriptMetadata, CallTranscriptState, CallTranscriptTransition,
 };
-use arkret_wire::{ExporterLabelId, ProfileId};
+use arkret_models_crypto::{
+    EncryptedAttachmentGroupStateRef, EncryptedAttachmentKeyAlgorithm, EncryptedAttachmentKeyRef,
+};
+use arkret_wire::{Base64UrlString, ExporterLabelId, ProfileId};
 use chrono::{DateTime, Utc};
 use serde_json::{Value, json};
 
@@ -205,6 +210,16 @@ fn start_event_id() -> EventId {
     EventId::new("ak:event:ARHMhWPvHwsRKYQXNhB6wm4cESEe1fbHz6rJWPRl9wHY").unwrap()
 }
 
+// Symbolic source coordinates for pure wire vectors, not accepted native facts.
+// The result guard names the pending artifact axis, not the stop FSM axis.
+fn pending_artifact_commit_id() -> RealmCommitId {
+    RealmCommitId::from_digest([0x71; 32])
+}
+
+fn stop_event_id() -> EventId {
+    EventId::from_digest(arkret_canonical::DigestSuite::Sha256, [0x72; 32])
+}
+
 fn hash(ch: char) -> Hash {
     Hash::new(format!("sha256:{}", ch.to_string().repeat(64))).unwrap()
 }
@@ -222,7 +237,8 @@ fn valid_recording_artifact() -> CallRecordingArtifact {
         // the artifact has (`conformance/encoding.md` §4.0.1); there is no
         // sibling content_digest or ciphertext_digest beside it.
         blob_ref: BlobRef::new(format!("ak:blob:{}", hash('a'))).unwrap(),
-        size_bytes: 1_048_576,
+        // One full 1 MiB plaintext segment plus its 16-byte AEAD tag.
+        size_bytes: 1_048_592,
         duration_ms: 42_000,
         media_type: "video/mp4".to_owned(),
         encryption: CallRecordingEncryption {
@@ -237,6 +253,17 @@ fn valid_recording_artifact() -> CallRecordingArtifact {
                 media_service_id: DidCoreId::new("ak:did_core:web:recorder.example").unwrap(),
                 recording_start_event_id: start_event_id(),
             },
+            key_ref: EncryptedAttachmentKeyRef {
+                algorithm: EncryptedAttachmentKeyAlgorithm::Mls,
+                group_state_ref: EncryptedAttachmentGroupStateRef::Event(EventId::from_digest(
+                    arkret_canonical::DigestSuite::Sha256,
+                    [0x73; 32],
+                )),
+            },
+            // Fixed descriptor bytes only: this vector does not encrypt media.
+            nonce_prefix: Base64UrlString::new(arkret_canonical::base64url_encode([0x74; 19]))
+                .unwrap(),
+            segment_bytes: 1_048_576,
         },
         retention_policy_id: Some(
             PolicyId::new("ak:policy:019a7360-0000-7000-8000-000000000005").unwrap(),
@@ -268,7 +295,6 @@ fn valid_recording_artifact() -> CallRecordingArtifact {
 }
 
 fn ready_call_state_payload(artifact: Option<CallRecordingArtifact>) -> CallStatePayload {
-    let artifact_ref = artifact.as_ref();
     CallStatePayload {
         call_id: call_id(),
         state_transition: None,
@@ -280,25 +306,12 @@ fn ready_call_state_payload(artifact: Option<CallRecordingArtifact>) -> CallStat
             .unwrap(),
             from: CallRecordingState::Stopped,
             to: CallRecordingState::Ready,
-            capture_metadata: Some(CallRecordingMetadata {
-                content_digest: artifact_ref.and_then(|artifact| {
-                    artifact
-                        .blob_ref
-                        .as_str()
-                        .strip_prefix("ak:blob:")
-                        .and_then(|digest| Hash::new(digest.to_owned()).ok())
-                }),
-                duration_ms: artifact_ref.map(|artifact| artifact.duration_ms),
-                media_type: artifact_ref.map(|artifact| artifact.media_type.clone()),
-                retention_policy_id: artifact_ref
-                    .and_then(|artifact| artifact.retention_policy_id.clone()),
-                retention: artifact_ref.map(|artifact| artifact.retention.clone()),
-                recording_start_event_id: artifact_ref
-                    .map(|artifact| artifact.recording_start_event_id.clone()),
-                artifact,
-                failure_reason_code: None,
-                failure_message: None,
-            }),
+            expected_commit_id: Some(pending_artifact_commit_id()),
+            capture_metadata: Some(
+                artifact
+                    .map(CallRecordingMetadata::ready)
+                    .unwrap_or_default(),
+            ),
         }),
         transcript_transition: None,
         roster_delta: None,
@@ -378,6 +391,21 @@ pub fn run_recording_result_artifact_shape_vector() -> Result<()> {
         );
     }
 
+    let valid = valid_recording_artifact();
+    valid.validate()?;
+    if arkret_models_collaboration::events_payloads::call::recording_stream_geometry(
+        valid.size_bytes,
+        valid.encryption.segment_bytes,
+    )? != (1_048_576, 1)
+    {
+        bail!("recording wire fixture lost its exact ciphertext STREAM geometry");
+    }
+    evaluate_recording_result_artifact_shape(
+        serde_json::to_value(ready_call_state_payload(Some(valid))).unwrap(),
+        true,
+    )
+    .map_err(|code| anyhow::anyhow!("valid recording control rejected before mutations: {code}"))?;
+
     match evaluate_recording_result_artifact_shape(
         serde_json::to_value(ready_call_state_payload(None)).unwrap(),
         false,
@@ -408,10 +436,12 @@ pub fn run_recording_result_artifact_shape_vector() -> Result<()> {
 
     let mut missing_audit = valid_recording_artifact();
     missing_audit.deletion_audit = None;
-    match evaluate_recording_result_artifact_shape(
-        serde_json::to_value(ready_call_state_payload(Some(missing_audit))).unwrap(),
-        true,
-    ) {
+    let missing_audit =
+        serde_json::to_value(ready_call_state_payload(Some(missing_audit))).unwrap();
+    evaluate_recording_result_artifact_shape(missing_audit.clone(), false).map_err(|code| {
+        anyhow::anyhow!("ready artifact without completed-deletion claim rejected: {code}")
+    })?;
+    match evaluate_recording_result_artifact_shape(missing_audit, true) {
         Err(code) if code == arkret_wire::ErrorCode::SCHEMA_VIOLATION => {}
         other => bail!("completed deletion without deletion_audit must fail closed, got {other:?}"),
     }
@@ -543,6 +573,7 @@ pub fn run_transcribe_lifecycle_vector() -> Result<()> {
                 .unwrap(),
             from: CallTranscriptState::Stopped,
             to: CallTranscriptState::Ready,
+            expected_commit_id: Some(pending_artifact_commit_id()),
             capture_metadata: Some(CallTranscriptMetadata {
                 content_digest: Some(hash('c')),
                 media_type: Some("text/vtt".to_owned()),
@@ -557,6 +588,7 @@ pub fn run_transcribe_lifecycle_vector() -> Result<()> {
                     consent_confirmed: Some(true),
                 }),
                 transcript_start_event_id: Some(start_event_id()),
+                transcript_stop_event_id: Some(stop_event_id()),
                 failure_reason_code: None,
             }),
         }),
@@ -568,17 +600,10 @@ pub fn run_transcribe_lifecycle_vector() -> Result<()> {
         .validate_transcript_result_storage()
         .map_err(|code| anyhow::anyhow!("typed transcript result unexpectedly rejected: {code}"))?;
 
-    let bypass = json!({
-        "call_id": call_id().to_string(),
-        "transcript_transition": {
-            "recording_id": "transcript-019a7360-0000-7000-8000-000000000002",
-            "from": "stopped",
-            "to": "ready",
-            "capture_metadata": {
-                "transcript_artifact_url": "https://backend.example/transcript.vtt"
-            }
-        }
-    });
+    // Mutate only the prohibited backend field on the complete valid result.
+    let mut bypass = serde_json::to_value(&ready)?;
+    bypass["transcript_transition"]["capture_metadata"]["transcript_artifact_url"] =
+        json!("https://backend.example/transcript.vtt");
     if serde_json::from_value::<CallStatePayload>(bypass).is_ok() {
         bail!("transcript_result must reject backend-hosted artifact URLs");
     }
@@ -587,10 +612,12 @@ pub fn run_transcribe_lifecycle_vector() -> Result<()> {
         "call_id": call_id().to_string(),
         "transcript_transition": {
             "recording_id": "transcript-019a7360-0000-7000-8000-000000000002",
-            "from": "transcribing",
+            "from": "stopped",
             "to": "failed",
+            "expected_commit_id": pending_artifact_commit_id(),
             "capture_metadata": {
-                "transcript_start_event_id": start_event_id().to_string(),
+                "transcript_start_event_id": start_event_id(),
+                "transcript_stop_event_id": stop_event_id(),
                 "failure_reason_code": "storage_failed"
             }
         }

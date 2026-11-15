@@ -11,6 +11,8 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 
+mod recovery;
+
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct SecurityTransactionResilienceFixture {
@@ -24,7 +26,8 @@ pub(crate) struct SecurityTransactionResilienceFixture {
     assertions: Vec<String>,
     rotation_cases: Vec<Value>,
     pub(crate) continue_cases: Vec<Value>,
-    recovery_terminal_commit_cases: Vec<Value>,
+    single_submit_recovery_kat: Value,
+    recovery_submit_cases: Vec<Value>,
     equivalence_output: Value,
 }
 
@@ -39,11 +42,27 @@ struct FixtureRunner {
 #[serde(deny_unknown_fields)]
 pub struct ReferenceProjection {
     pub scenario: String,
-    pub transaction_id: String,
-    pub request_digest: String,
-    pub prepared_plan_digest: String,
-    pub accepted_steps: Vec<String>,
-    pub terminal_outcome: String,
+    #[serde(flatten)]
+    result: ReferenceOutcome,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
+enum ReferenceOutcome {
+    SecurityRotation {
+        transaction_id: String,
+        request_digest: String,
+        prepared_plan_digest: String,
+        accepted_steps: Vec<String>,
+        terminal_outcome: String,
+    },
+    Recovery {
+        transaction_id: Value,
+        receipt_digest: String,
+        native_commits: Vec<Value>,
+        completion_attestation: Option<Value>,
+        outcome: String,
+    },
 }
 
 fn canonical_write(value: &Value, output: &mut String) -> Result<(), String> {
@@ -113,13 +132,10 @@ fn strings_at<'a>(fixture: &'a Value, pointer: &str) -> Result<Vec<&'a str>, Str
         .collect()
 }
 
-/// A RecoveryTransaction has exactly one step. The two-step
-/// `submit_reanchor_unit` / `issue_terminal_receipt` shape is gone: both
-/// Events, the first new-generation reanchor commit and the terminal outcome
-/// now enter through the single `commit_recovery_unit` continue.
+/// Only Rotation has an accepted-step ledger. Recovery publishes one immutable
+/// closure at create; it must never enter this prefix/continue derivation.
 fn steps(kind: &str) -> Result<Vec<String>, String> {
     let values = match kind {
-        "recovery" => vec!["commit_recovery_unit"],
         "security_rotation" => vec![
             "revoke",
             "upload_new_material",
@@ -134,7 +150,6 @@ fn steps(kind: &str) -> Result<Vec<String>, String> {
 
 fn transaction_id(kind: &str) -> Result<String, String> {
     let suffix = match kind {
-        "recovery" => "000000000001",
         "security_rotation" => "000000000003",
         _ => return Err(format!("unknown transaction kind {kind}")),
     };
@@ -150,19 +165,21 @@ fn projection(
     let transaction_id = transaction_id(kind)?;
     Ok(ReferenceProjection {
         scenario,
-        request_digest: digest(&json!({
-            "kind": kind,
-            "suite": "security_transaction_resilience",
-            "transaction_id": transaction_id,
-        }))?,
-        prepared_plan_digest: digest(&json!({
-            "kind": kind,
-            "steps": steps(kind)?,
-            "suite": "security_transaction_resilience",
-        }))?,
-        transaction_id,
-        accepted_steps,
-        terminal_outcome: terminal_outcome.to_owned(),
+        result: ReferenceOutcome::SecurityRotation {
+            request_digest: digest(&json!({
+                "kind": kind,
+                "suite": "security_transaction_resilience",
+                "transaction_id": transaction_id,
+            }))?,
+            prepared_plan_digest: digest(&json!({
+                "kind": kind,
+                "steps": steps(kind)?,
+                "suite": "security_transaction_resilience",
+            }))?,
+            transaction_id,
+            accepted_steps,
+            terminal_outcome: terminal_outcome.to_owned(),
+        },
     })
 }
 
@@ -302,10 +319,12 @@ fn validate_fixture(fixture: &SecurityTransactionResilienceFixture) -> Result<()
     // for an added assertion as loudly as for a deleted one, and says nothing
     // about which.
     const EXPECTED_ASSERTIONS: &[&str] = &[
+        "Recovery is one exact signed receipt containing two EventAdmissionSubmission slots; it has no prepare plan or outer terminal signature.",
+        "Recovery success atomically creates distinct consecutive Commits, device/generation/session terminal and native content-recovery fence.",
+        "The existing completion operation obtains the original success closure server-side and verifies a fresh accepted-device PoP for the new holder.",
         "accepted_or_rejected_revoke_outcome_is_atomic_with_step_or_abort_expiry",
         "accepted_revoke_proposal_has_exact_covering_commit_and_pending_without_outcome",
         "accepted_step_contains_only_acceptor_and_accepted_at",
-        "accepted_webvh_entry_resumes_the_same_reanchor_unit",
         "authorization_lease_is_not_issued_or_accepted",
         "backup_envelopes_are_signed_digest_checked_and_match_binding_in_canonical_backup_id_order",
         "client_attestation_method_resolves_current_device_key_at_same_accepted_pcr_cut",
@@ -317,14 +336,9 @@ fn validate_fixture(fixture: &SecurityTransactionResilienceFixture) -> Result<()
         "erase_rechecks_live_transaction_active_account_non_revoked_authorizing_device_current_pointer_and_generation",
         "erased_series_never_becomes_active_again",
         "exact_replay_returns_the_stored_outcome",
-        "governance_station_issues_both_recovery_realm_commits_only_inside_commit_recovery_unit",
         "one_transaction_id_and_one_reserved_id_set",
-        "only_the_atomic_generation_cas_winner_commits_a_reanchor_commit",
         "pointer_switch_precedes_every_old_series_erase",
         "public_store_log_telemetry_and_crash_artifact_contain_no_secret_material",
-        "recovery_authoritative_results_are_all_invisible_before_the_commit_and_all_visible_after",
-        "recovery_create_freezes_two_signed_events_current_predecessor_and_ordered_digests_with_no_recovery_effect",
-        "recovery_stored_outcome_is_checked_before_consumed_session_refusal",
         "request_plan_effect_results_accepted_positions_and_first_terminal_outcome_are_durable",
         "reserved_plan_ids_and_digests_alone_never_prove_a_completed_effect",
         "security_rotation_create_requires_fresh_high_risk_authentication_and_binds_the_authenticated_authorizing_device",
@@ -570,259 +584,11 @@ fn run_rotation_cases(
     Ok(projections)
 }
 
-/// Every authoritative result of a RecoveryTransaction. The atomic boundary is
-/// the whole list: all of it is invisible before the single commit and all of
-/// it is visible after, so a case that shows one of them early is a broken
-/// boundary, not a partial success.
-const RECOVERY_AUTHORITATIVE_RESULTS: [&str; 8] = [
-    "accepted_reanchor_event",
-    "accepted_authorize_event",
-    "committed_reanchor_realm_commit",
-    "committed_authorize_realm_commit",
-    "advanced_device_generation",
-    "active_verified_replacement_device",
-    "consumed_recovery_session",
-    "completed_terminal_outcome",
-];
-
 fn members<'a>(case: &'a Value, key: &str) -> Vec<&'a str> {
     case.get(key)
         .and_then(Value::as_array)
         .map(|values| values.iter().filter_map(Value::as_str).collect())
         .unwrap_or_default()
-}
-
-fn case_text<'a>(case: &'a Value, name: &str, key: &str) -> Result<&'a str, String> {
-    case.get(key)
-        .and_then(Value::as_str)
-        .ok_or_else(|| format!("recovery terminal commit case {name} needs a string {key}"))
-}
-
-/// A refusal's `reason_code`, when the fixture names one, is the canonical
-/// outcome; otherwise the fixture's expectation label is. This runner owns no
-/// error registry (the dependency fence forbids importing one).
-fn recovery_case_outcome(case: &Value, expected: &str) -> String {
-    case.get("reason_code")
-        .and_then(Value::as_str)
-        .unwrap_or(expected)
-        .to_owned()
-}
-
-/// A rejected commit attempt leaves every authoritative result, the accepted
-/// terminal step and the completion attestation at zero.
-fn has_zero_recovery_effects(case: &Value) -> bool {
-    let zero = members(case, "zero_effects");
-    RECOVERY_AUTHORITATIVE_RESULTS
-        .iter()
-        .all(|result| zero.contains(result))
-        && zero.contains(&"accepted_terminal_step")
-        && zero.contains(&"recovery_completion_attestation")
-}
-
-fn validate_recovery_terminal_commit_case(case: &Value, name: &str) -> Result<(), String> {
-    match name {
-        "create_freezes_events_predecessor_and_ordered_digests" => {
-            let frozen = members(case, "frozen_plan_members");
-            if !members(case, "observable_recovery_effects").is_empty()
-                || members(case, "committed_command_result_unit_event_digests")
-                    != ["reanchor_digest", "authorize_digest"]
-                || [
-                    "binding.reanchor_event_id",
-                    "binding.authorize_event_id",
-                    "binding.terminal_receipt_id",
-                    "reanchor_unit",
-                    "reanchor_commit_intent",
-                    "reanchor_commit_intent.predecessor_ref",
-                    "reanchor_commit_intent.unit_event_digests",
-                ]
-                .iter()
-                .any(|member| !frozen.contains(member))
-            {
-                return Err(
-                    "recovery create must freeze both signed Events, the current predecessor and the ordered [reanchor, authorize] digests and leave no recovery effect"
-                        .to_owned(),
-                );
-            }
-        }
-        // Same caveat as the race case below: the fixture contract is the
-        // atomic boundary, which the Station has not closed yet.
-        "terminal_commit_is_one_atomic_commit" => {
-            let invisible = members(case, "invisible_before_commit");
-            let visible = members(case, "visible_after_commit");
-            if RECOVERY_AUTHORITATIVE_RESULTS
-                .iter()
-                .any(|result| !invisible.contains(result) || !visible.contains(result))
-                || !visible.contains(&"accepted_terminal_step")
-                || !visible.contains(&"recovery_completion_attestation")
-            {
-                return Err(
-                    "the terminal commit must hide every authoritative result before it and show all of them after"
-                        .to_owned(),
-                );
-            }
-        }
-        "swapped_event_digest_order_differs_from_the_frozen_plan" => {
-            let frozen = members(case, "frozen_order");
-            let submitted = members(case, "submitted_order");
-            if frozen != ["reanchor_digest", "authorize_digest"]
-                || submitted == frozen
-                || submitted.iter().collect::<BTreeSet<_>>()
-                    != frozen.iter().collect::<BTreeSet<_>>()
-                || !has_zero_recovery_effects(case)
-            {
-                return Err(
-                    "a reordered commit unit must be refused against the frozen digest order with zero authoritative writes"
-                        .to_owned(),
-                );
-            }
-        }
-        // The Station issues both recovery RealmCommits itself; the terminal
-        // artifact never carries commit material.
-        "terminal_artifact_attempts_to_carry_realm_commit_material" => {
-            let forbidden = members(case, "forbidden_members");
-            if ["realm_commit", "realm_commit_id", "authority_signature"]
-                .iter()
-                .any(|member| !forbidden.contains(member))
-            {
-                return Err(
-                    "the recovery terminal artifact must refuse every RealmCommit member"
-                        .to_owned(),
-                );
-            }
-        }
-        "receipt_completed_at_later_than_the_linearized_commit_time" => {
-            if !has_zero_recovery_effects(case)
-                || case.get("retry_with_a_new_receipt").and_then(Value::as_str) != Some("accepted")
-                || case
-                    .get("retry_with_different_bytes_for_a_frozen_step_outcome")
-                    .and_then(Value::as_str)
-                    != Some("duplicate_conflict")
-            {
-                return Err(
-                    "an authoring time later than the linearized commit must reject with zero authoritative writes and stay retryable with a new receipt"
-                        .to_owned(),
-                );
-            }
-        }
-        "terminal_response_lost_then_byte_identical_continue" => {
-            if case
-                .get("stored_outcome_checked_before_live_state_refusal")
-                .and_then(Value::as_bool)
-                != Some(true)
-                || members(case, "replayed_members")
-                    != [
-                        "terminal_outcome",
-                        "terminal_outcome.receipt_id",
-                        "terminal_outcome.completion_attestation",
-                    ]
-            {
-                return Err(
-                    "a lost terminal response must replay the stored outcome before any live-state refusal"
-                        .to_owned(),
-                );
-            }
-        }
-        // KNOWN UNCLOSED on the Station side: the terminal commit does not yet
-        // share one local database transaction end to end. So "the loser leaves
-        // no residue" and "a crash before the commit rolls the whole thing back"
-        // hold in the contract this runner checks, and do NOT hold end to end in
-        // a joint run. This stays the contract, not a relaxed one: the joint
-        // acceptance is an open implementation item, not a reason to weaken the
-        // check here.
-        "two_units_race_the_same_previous_generation" => {
-            if !members(case, "loser_residue").is_empty()
-                || case.get("winner_quarantined").and_then(Value::as_bool) != Some(false)
-            {
-                return Err(
-                    "only the atomic CAS winner may commit a reanchor commit, and it is never quarantined"
-                        .to_owned(),
-                );
-            }
-        }
-        "raw_recovery_commit_without_a_completed_transaction"
-            if (members(case, "attempted_paths")
-                != ["ordinary_commit_submit", "federation", "history_replay"]
-                || case.get("expected_finality").and_then(Value::as_str) != Some("none")) =>
-        {
-            return Err(
-                    "a raw recovery commit must reach no finality through submit, federation or history replay"
-                        .to_owned(),
-                );
-        }
-        _ => {}
-    }
-    Ok(())
-}
-
-/// The recovery terminal-commit cases, pinned by name for the same reason the
-/// assertion set is: a count alone cannot say *which* case left the fixture,
-/// and a case that quietly disappears takes its arm in
-/// [`validate_recovery_terminal_commit_case`] out of service without a word.
-const EXPECTED_RECOVERY_TERMINAL_COMMIT_CASES: &[&str] = &[
-    "byte_identical_create_replays_the_same_frozen_material",
-    "create_freezes_events_predecessor_and_ordered_digests",
-    "ordered_event_digests_differ_from_the_frozen_intent",
-    "raw_recovery_commit_without_a_completed_transaction",
-    "receipt_completed_at_later_than_the_linearized_commit_time",
-    "same_transaction_id_with_different_intent_bytes",
-    "swapped_event_digest_order_differs_from_the_frozen_plan",
-    "terminal_artifact_attempts_to_carry_realm_commit_material",
-    "terminal_commit_is_one_atomic_commit",
-    "terminal_response_lost_then_byte_identical_continue",
-    "two_units_race_the_same_previous_generation",
-];
-
-fn run_recovery_terminal_commit_cases(
-    fixture: &SecurityTransactionResilienceFixture,
-) -> Result<Vec<ReferenceProjection>, String> {
-    let declared = fixture
-        .recovery_terminal_commit_cases
-        .iter()
-        .filter_map(|case| case.get("name").and_then(Value::as_str))
-        .collect::<BTreeSet<_>>();
-    let expected = EXPECTED_RECOVERY_TERMINAL_COMMIT_CASES
-        .iter()
-        .copied()
-        .collect::<BTreeSet<_>>();
-    if declared != expected {
-        let missing = expected.difference(&declared).copied().collect::<Vec<_>>();
-        let extra = declared.difference(&expected).copied().collect::<Vec<_>>();
-        return Err(format!(
-            "recovery terminal commit case set drifted: missing {missing:?}, unregistered {extra:?}"
-        ));
-    }
-    let terminal_step = steps("recovery")?;
-    let mut projections = Vec::with_capacity(fixture.recovery_terminal_commit_cases.len());
-    for case in &fixture.recovery_terminal_commit_cases {
-        let name = case_text(case, "<unnamed>", "name")?;
-        let phase = case_text(case, name, "phase")?;
-        if !matches!(phase, "create" | "commit_recovery_unit" | "post_commit") {
-            return Err(format!(
-                "recovery terminal commit case {name} declares unknown phase {phase}"
-            ));
-        }
-        let expected = case_text(case, name, "expected")?;
-        validate_recovery_terminal_commit_case(case, name)?;
-        // Recovery owns no coordinator prefix, so the accepted ledger is either
-        // the single terminal step or empty; nothing in between is reachable.
-        let accepted_terminal = phase != "create"
-            && (members(case, "visible_after_commit").contains(&"accepted_terminal_step")
-                || matches!(
-                    expected,
-                    "replay_stored_outcome" | "single_atomic_cas_winner"
-                ));
-        projections.push(projection(
-            format!("recovery_terminal_commit/{phase}/{name}"),
-            "recovery",
-            if accepted_terminal {
-                terminal_step.clone()
-            } else {
-                Vec::new()
-            },
-            &recovery_case_outcome(case, expected),
-        )?);
-    }
-    Ok(projections)
 }
 
 pub fn run(
@@ -839,10 +605,14 @@ pub fn run(
     let mut projections = Vec::with_capacity(
         kinds.len() * positions.len() * faults.len()
             + fixture.rotation_cases.len()
-            + fixture.recovery_terminal_commit_cases.len(),
+            + fixture.recovery_submit_cases.len(),
     );
     for kind in kinds {
-        let all_steps = steps(kind)?;
+        let all_steps = if kind == "security_rotation" {
+            steps(kind)?
+        } else {
+            Vec::new()
+        };
         for position in &positions {
             if !matches!(
                 *position,
@@ -864,6 +634,15 @@ pub fn run(
                         | "terminal_replay"
                 ) {
                     return Err(format!("unknown resilience fault {fault}"));
+                }
+                if kind == "recovery" {
+                    projections.push(recovery::fault(
+                        &fixture.single_submit_recovery_kat,
+                        format!("{kind}/{position}/{fault}"),
+                        position,
+                        fault,
+                    )?);
+                    continue;
                 }
                 let staged_secret_lost = *fault == "staged_secret_lost";
                 projections.push(projection(
@@ -888,7 +667,10 @@ pub fn run(
         }
     }
     projections.extend(run_rotation_cases(fixture)?);
-    projections.extend(run_recovery_terminal_commit_cases(fixture)?);
+    projections.extend(recovery::cases(
+        &fixture.single_submit_recovery_kat,
+        &fixture.recovery_submit_cases,
+    )?);
     Ok(projections)
 }
 

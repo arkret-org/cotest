@@ -424,7 +424,7 @@ pub(crate) fn blob_upload_form(bytes: &[u8], media_type: &str) -> Result<reqwest
     blob_upload_classified_form(bytes, media_type, None)
 }
 
-fn blob_upload_classified_form(
+pub(crate) fn blob_upload_classified_form(
     bytes: &[u8],
     media_type: &str,
     encryption: Option<arkret_models_collaboration::objects::blob::BlobStorageEncryption>,

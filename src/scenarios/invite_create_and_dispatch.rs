@@ -81,7 +81,6 @@ impl InviteStation {
         );
         self.coauth.bind_founding_device_grant(
             &grant,
-            self.server.service_id(),
             principal.core_id.as_str(),
             principal.device_id.as_str(),
             principal.founding_authorize_event_id.as_str(),

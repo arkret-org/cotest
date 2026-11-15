@@ -1204,6 +1204,8 @@ fn event_forward_body(
             mls_group_state_material: material,
             producer_device_evidence: None,
             producer_agent_evidence: None,
+
+            successor_device_evidence: None,
         },
     )?)
 }
@@ -1866,6 +1868,8 @@ fn human_without_evidence(world: &World) -> Result<Value> {
         mls_group_state_material: None,
         producer_device_evidence: None,
         producer_agent_evidence: None,
+
+        successor_device_evidence: None,
     })?;
     ensure!(body.get(EVIDENCE_MEMBER).is_none());
     judge(world, &body, &world.station_a.service_id, world.setup.now)

@@ -49,27 +49,45 @@ async fn verify_issued(
     grant: &SessionGrantResponseBody,
     holder: &SigningKey,
 ) -> Result<Value> {
-    let metadata = crate::scenarios::_helpers::coauth_bootstrap::recorded_session_grant_metadata(
-        &deployment.coauth.pg.connect_url,
-        grant.session_grant.as_str(),
-    )
-    .await?;
+    let database_url = deployment.coauth.pg.connect_url.clone();
+    let secret = grant.session_grant.as_str().to_owned();
+    let issuer = deployment.station.service_id().as_str().to_owned();
+    let bytes = tokio::task::spawn_blocking(move || -> Result<Vec<u8>> {
+        let mut database = postgres::Client::connect(&database_url, postgres::NoTls)?;
+        Ok(database
+            .query_one(
+                "SELECT canonical_metadata FROM oauth_session_grants WHERE session_grant=$1 AND issuer_id=$2",
+                &[&secret, &issuer],
+            )?
+            .get(0))
+    })
+    .await??;
+    let metadata: SessionGrantMetadata = serde_json::from_slice(&bytes)?;
+    metadata.validate()?;
+    ensure!(
+        arkret_canonical::canonical_json_bytes(&metadata)? == bytes,
+        "issuer metadata differs from its canonical original"
+    );
+    let now = chrono::Utc::now();
+    let holder_jwk =
+        arkret_models_identity::CanonicalSessionPublicJwk::new(serde_json::to_string(&json!({
+            "crv": "Ed25519",
+            "kty": "OKP",
+            "x": arkret_canonical::base64url_encode(holder.verifying_key().to_bytes()),
+        }))?)?;
     grant.validate_binding(
         deployment.station.service_id(),
         &deployment.account,
         deployment.station.service_id(),
-        &metadata.session_public_key,
-        chrono::Utc::now(),
+        &holder_jwk,
+        now,
     )?;
-    let holder_jwk =
-        arkret_signatures::JsonWebKey::from_ed25519_verifying_key(&holder.verifying_key());
-    ensure!(
-        metadata.cnf_jkt == arkret_signatures::dpop::dpop_jwk_thumbprint(&holder_jwk)?
-            && metadata.grant_ref() == grant.grant_ref()
-            && metadata.scopes == grant.granted_scope,
-        "public issuance response differs from its actual issuer record or native holder"
-    );
-    let now = chrono::Utc::now();
+    metadata.validate_request_binding(
+        &grant.grant_ref(),
+        &deployment.account,
+        &deployment.account.station_id,
+        now,
+    )?;
     let principal = deployment
         .controller
         .principal
@@ -78,16 +96,21 @@ async fn verify_issued(
     let device = metadata
         .device_binding
         .as_ref()
-        .context("native grant has no accepted Device binding")?;
+        .context("issuer omitted accepted Device binding")?;
+    let expected_jkt = arkret_signatures::dpop::dpop_jwk_thumbprint(
+        &arkret_signatures::JsonWebKey::from_ed25519_verifying_key(&holder.verifying_key()),
+    )?;
     ensure!(
-        metadata.account_id == deployment.account
-            && metadata.audience_id == deployment.account.station_id
-            && metadata.id == grant.session_grant_id
+        metadata.id == grant.session_grant_id
+            && metadata.issuer_id == grant.issuer_id
+            && metadata.session_public_key == grant.session_public_key
+            && metadata.scopes == grant.granted_scope
+            && metadata.expires_at == grant.expires_at
+            && metadata.cnf_jkt == expected_jkt
+            && grant.device_id.as_ref() == Some(&principal.device_id)
             && device.device_id == principal.device_id
-            && device.authorization_event_id == principal.founding_authorize_event_id
-            && metadata.not_before <= now
-            && now < metadata.expires_at,
-        "native grant changed its accepted Device or validity"
+            && device.authorization_event_id == principal.founding_authorize_event_id,
+        "opaque response changed the exact issuer record or accepted holder"
     );
     let key = holder.clone();
     let client = arkret_http_client::Client::builder(deployment.station.base_url().clone())
@@ -105,29 +128,31 @@ async fn verify_issued(
     let viewer = client.account_viewer().await?;
     ensure!(
         viewer.principal_id == deployment.account.principal_id,
-        "Station consumed another grant subject"
+        "Station consumed another opaque grant subject"
     );
     Ok(
-        json!({"metadata":metadata,"verified_at":arkret_canonical::format_timestamp_canonical(now),"station_viewer":viewer}),
+        json!({"metadata":metadata,"verified_at":arkret_canonical::format_timestamp_canonical(now),
+        "station_viewer":viewer,"credential_digest":arkret_canonical::sha256_digest(grant.session_grant.as_str().as_bytes()),"holder_jkt":expected_jkt}),
     )
 }
 
 async fn ledger(deployment: &Deployment, issued: &str, refreshed: &str) -> Result<Value> {
     let database = deployment.coauth.pg.connect_url.clone();
     let tokens = [issued.to_owned(), refreshed.to_owned()];
+    let issuer = deployment.station.service_id().as_str().to_owned();
     tokio::task::spawn_blocking(move || -> Result<Value> {
         let mut database = postgres::Client::connect(&database, postgres::NoTls)?;
         let mut rows = Vec::new();
         for token in tokens {
-            let row = database.query_one("SELECT to_jsonb(g), to_jsonb(o), o.canonical_outcome, g.canonical_metadata FROM oauth_session_grants g JOIN oauth_session_grant_operations o ON o.id=g.issuance_operation_id WHERE g.session_grant=$1", &[&token])?;
+            let row = database.query_one("SELECT to_jsonb(g), to_jsonb(o), o.canonical_outcome, g.canonical_metadata FROM oauth_session_grants g JOIN oauth_session_grant_operations o ON o.id=g.issuance_operation_id WHERE g.session_grant=$1 AND g.issuer_id=$2", &[&token, &issuer])?;
             let bytes: Vec<u8> = row.get(2);
-            let canonical_metadata: Vec<u8> = row.get(3);
-            let original: SessionGrantMetadata = serde_json::from_slice(&canonical_metadata)?;
+            let preimage: Vec<u8> = row.get(3);
+            let original: arkret_models_identity::SessionGrantMetadata = serde_json::from_slice(&preimage)?;
             original.validate()?;
             rows.push(json!({"grant":row.get::<_,Value>(0),"operation":row.get::<_,Value>(1),
                 "canonical_outcome_base64url":arkret_canonical::base64url_encode(&bytes),
                 "canonical_outcome":serde_json::from_slice::<Value>(&bytes)?,
-                "canonical_metadata_base64url":arkret_canonical::base64url_encode(&canonical_metadata),"metadata":original}));
+                "canonical_metadata_base64url":arkret_canonical::base64url_encode(&preimage),"metadata":original}));
         }
         let count: i64 = database.query_one("SELECT count(*) FROM oauth_session_grants", &[])?.get(0);
         Ok(json!({"issued":rows[0],"refreshed":rows[1],"total_grants":count}))
@@ -154,16 +179,18 @@ pub(super) async fn run() -> Result<()> {
         let retry = post(&deployment, issue_url, SCOPE[0], &handoff.account_handoff_grant, &holder_key, &request).await?;
         ensure!(issued == retry, "native issue retry changed its accepted original");
         let issued: SessionGrantResponseBody = serde_json::from_value(issued)?;
+        ensure!(issued.previous_session_grant_id.is_none(), "fresh human issuance carried a predecessor");
+        ensure!(issued.granted_scope == arkret_models_identity::standard_initial_session_grant_scope(), "human issuance changed the registered standard scope");
         let issued_proof = verify_issued(&deployment, &issued, &holder_key).await?;
-        let metadata: SessionGrantMetadata = serde_json::from_value(issued_proof["metadata"].clone())?;
+        let claims: SessionGrantMetadata = serde_json::from_value(issued_proof["metadata"].clone())?;
         let now = arkret_canonical::normalize_timestamp_canonical(chrono::Utc::now());
         let unsigned = arkret_wire::UnsignedAcceptedDeviceRefreshPossessionProof {
             context: arkret_wire::AcceptedDevicePossessionProofContext::V1,
             purpose: arkret_wire::AcceptedDeviceRefreshPossessionPurpose::SessionGrantRefresh,
-            predecessor_session_grant_ref: metadata.grant_ref(),account_id: metadata.account_id.clone(),device_id: principal.device_id.clone(),
-            audience_id: metadata.audience_id.clone(),holder_jkt: jkt.clone(),
+            predecessor_session_grant_ref: claims.grant_ref(),account_id: claims.account_id.clone(),device_id: principal.device_id.clone(),
+            audience_id: claims.audience_id.clone(),holder_jkt: jkt.clone(),
             session_intent_digest: arkret_models_collaboration::session_grant_bodies::session_grant_refresh_request_digest(&issued.session_grant,
-                &metadata.grant_ref(), &metadata.account_id.principal_id, &principal.device_id, &metadata.audience_id, &jkt)?,
+                &claims.grant_ref(), &claims.account_id.principal_id, &principal.device_id, &claims.audience_id, &jkt)?,
             issued_at: now,expires_at: now + chrono::Duration::minutes(1),
             verification_method: arkret_wire::DidUrl::new(format!("{}#{}", principal.did, principal.device_id)).map_err(anyhow::Error::msg)?,
         };
@@ -171,13 +198,20 @@ pub(super) async fn run() -> Result<()> {
             principal.device_signing_key.sign(&unsigned.canonical_signing_bytes()?).to_bytes(),
         )).map_err(anyhow::Error::msg)?;
         let possession = unsigned.attach_signature(signature)?;
-        let request = arkret::session_grant::human_session_grant_refresh_request(issued.session_grant.clone(), Some(metadata.audience_id), principal.device_id.clone(), possession)?;
+        let request = arkret::session_grant::human_session_grant_refresh_request(issued.session_grant.clone(), Some(claims.audience_id), principal.device_id.clone(), possession)?;
         let refreshed = post(&deployment, "/_arkret/gate/account/session-grants/refresh", SCOPE[1], issued.session_grant.as_str(), &holder_key, &request).await?;
         let retry = post(&deployment, "/_arkret/gate/account/session-grants/refresh", SCOPE[1], issued.session_grant.as_str(), &holder_key, &request).await?;
         ensure!(refreshed == retry, "native refresh retry changed its accepted original");
         let refreshed: SessionGrantResponseBody = serde_json::from_value(refreshed)?;
+        refreshed.validate_refresh_binding(&issued, chrono::Utc::now())?;
         ensure!(refreshed.previous_session_grant_id.as_ref() == Some(&issued.session_grant_id), "native refresh lost its exact predecessor");
         let refreshed_proof = verify_issued(&deployment, &refreshed, &holder_key).await?;
+        let refreshed_metadata: SessionGrantMetadata = serde_json::from_value(refreshed_proof["metadata"].clone())?;
+        ensure!(refreshed_metadata.session_id == claims.session_id
+            && refreshed_metadata.scope_details == claims.scope_details
+            && refreshed_metadata.holder_binding == claims.holder_binding
+            && refreshed_metadata.device_binding == claims.device_binding,
+            "refresh changed the immutable session authority bindings");
         let originals = ledger(&deployment, issued.session_grant.as_str(), refreshed.session_grant.as_str()).await?;
         ensure!(originals["total_grants"] == 3 && originals["issued"]["grant"]["lifecycle_state"] == "superseded" &&
             originals["refreshed"]["grant"]["lifecycle_state"] == "active", "native replay minted extra grants or failed to supersede its predecessor");
@@ -204,7 +238,7 @@ pub(super) async fn run() -> Result<()> {
     ensure!(
         originals["issued"]["metadata"] == issued["metadata"]
             && originals["refreshed"]["metadata"] == refreshed["metadata"],
-        "canonical issuer metadata differs from its recorded original"
+        "issuer replay changed its immutable canonical metadata"
     );
     validate_exchange_schemas(&observations, &SCOPE)?;
     super::account_logout::verify(&observations, &logout, &refreshed["metadata"])?;

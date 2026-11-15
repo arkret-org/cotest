@@ -82,7 +82,6 @@ pub async fn snapshot_author(server_name: &str, actor: &str) -> Result<SnapshotA
     );
     coauth.bind_founding_device_grant(
         &grant,
-        server.service_id(),
         principal.core_id.as_str(),
         principal.device_id.as_str(),
         principal.founding_authorize_event_id.as_str(),

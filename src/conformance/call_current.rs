@@ -220,10 +220,10 @@ fn session(
         binding.service_id.clone(),
         arkret_wire::SessionGrantRef::new(
             binding.service_id.clone(),
-            arkret_wire::SessionGrantId::new_v7_at(1_785_000_000_003),
+            arkret_wire::SessionGrantId::new_v7_at(1_785_000_000_000),
         ),
         epoch,
-        arkret_wire::SessionGrantSecret::from_bytes([3; 32]).into_string(),
+        "current-fixture".into(),
     )
     .map(|s| s.with_provider_identity(Default::default()))
 }
@@ -426,14 +426,8 @@ async fn run_case(fixture: &Value, case: &Value) -> Result<&'static str> {
             let previous: CallModerationCurrentValue = serde_json::from_value(prior)?;
             let mut delta = row["event"]["payload"]["moderation_delta"].clone();
             if name == "stale_restore_revision" {
-                delta["expected_commit_id"] = json!(
-                    previous
-                        .last_source
-                        .source_commit
-                        .previous_commit_ref
-                        .clone()
-                        .context("older accepted moderation commit")?
-                );
+                delta["expected_commit_id"] =
+                    json!(arkret_wire::RealmCommitId::from_digest([238; 32]));
             }
             let (_, commit) = source(&row)?;
             let result = CallModerationCurrentValue::apply_delta(
@@ -459,14 +453,7 @@ async fn run_case(fixture: &Value, case: &Value) -> Result<&'static str> {
             let row = &fixture["original_rows"][8];
             let (_, commit) = source(row)?;
             let mut delta = row["event"]["payload"]["roster_delta"].clone();
-            delta["expected_commit_id"] = json!(
-                previous
-                    .last_source
-                    .source_commit
-                    .previous_commit_ref
-                    .clone()
-                    .context("older accepted roster commit")?
-            );
+            delta["expected_commit_id"] = json!(arkret_wire::RealmCommitId::from_digest([238; 32]));
             return Ok(verdict(
                 CallRosterCurrentValue::apply_delta(
                     Some(&previous),

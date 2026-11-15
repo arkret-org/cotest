@@ -334,7 +334,7 @@ impl Session {
             coauth_base_url: String,
             expected_issuer_id: arkret_wire::DidCoreId,
             controller_account_id: arkret_wire::AccountId,
-            controller_grant: String,
+            controller_grant: arkret_wire::SessionGrantSecret,
             controller_holder_seed: String,
             controller_event_seed: String,
             controller_verification_method: arkret_wire::DidUrl,

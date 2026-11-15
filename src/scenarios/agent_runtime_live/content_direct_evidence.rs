@@ -377,8 +377,12 @@ pub async fn run_agent_content_direct_production()
     let (read_runtime, claims) = issue(&deployment, &agent, &read_actions, &joined.realm).await?;
     ensure!(claims.scopes.iter().any(|v| v == "ak.event.read"));
     ensure!(
-        serde_json::to_value(claims.scope_details.as_ref().context("Direct scope")?)?["capability_grant_refs"]
-            == json!([])
+        claims
+            .scope_details
+            .as_ref()
+            .context("Direct scope")?
+            .capability_grant_refs
+            .is_empty()
     );
     let original = controller
         .sdk()
@@ -415,13 +419,12 @@ pub async fn run_agent_content_direct_production()
     let (write_runtime, claims) = issue(&deployment, &agent, &actions, &joined.realm).await?;
     ensure!(claims.scopes.iter().any(|v| v == "ak.message.create"));
     ensure!(
-        serde_json::to_value(
-            claims
-                .scope_details
-                .as_ref()
-                .context("Direct write scope")?
-        )?["capability_grant_refs"]
-            == json!([])
+        claims
+            .scope_details
+            .as_ref()
+            .context("Direct write scope")?
+            .capability_grant_refs
+            .is_empty()
     );
     let plaintext = arkret_canonical::canonical_json_bytes(&arkret::ContentBlock::text(
         "Direct participant content without literal grant",

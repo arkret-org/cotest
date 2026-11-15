@@ -131,6 +131,8 @@ pub(super) async fn exercise(
             account_id: bob.account.clone(),
             device_ids: vec![bob.device.clone()],
         }],
+
+        owner_transfer_acceptance: None,
     };
     request.validate()?;
     let keys = peer(station, "/_arkret/peer/keys/query", &request).await?;

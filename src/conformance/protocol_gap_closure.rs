@@ -60,13 +60,9 @@ pub fn run_protocol_gap_closure_fixture_suite() -> Result<()> {
         "pointer_switch_precedes_every_old_series_erase",
         "erased_series_never_becomes_active_again",
         "public_store_log_telemetry_and_crash_artifact_contain_no_secret_material",
-        // The recovery half of the suite: the whole point of collapsing
-        // recovery into one step is that both recovery RealmCommits have
-        // exactly one entrance and every authoritative result crosses the same
-        // boundary at once.
-        "governance_station_issues_both_recovery_realm_commits_only_inside_commit_recovery_unit",
-        "recovery_authoritative_results_are_all_invisible_before_the_commit_and_all_visible_after",
-        "only_the_atomic_generation_cas_winner_commits_a_reanchor_commit",
+        "The existing completion operation obtains the original success closure server-side and verifies a fresh accepted-device PoP for the new holder.",
+        "Recovery is one exact signed receipt containing two EventAdmissionSubmission slots; it has no prepare plan or outer terminal signature.",
+        "Recovery success atomically creates distinct consecutive Commits, device/generation/session terminal and native content-recovery fence.",
         // Rotation revoke: a pending proposal and its single terminal result
         // are two durable boundaries (decision 0102).
         "accepted_revoke_proposal_has_exact_covering_commit_and_pending_without_outcome",
@@ -79,6 +75,10 @@ pub fn run_protocol_gap_closure_fixture_suite() -> Result<()> {
     }
 
     validate_rotation_cases(&fixture["rotation_cases"])?;
+    // This independent state model injects all three crash positions at the one
+    // atomic create boundary, checks both native Commits and the complete R/C,
+    // and retains the rejected request's zero-effects obligation.
+    super::recovery_transaction_faults::run_recovery_transaction_fault_matrix()?;
     run_independent_replay_model(&kinds, &positions, &faults)
 }
 
@@ -145,6 +145,9 @@ fn run_independent_replay_model(
 ) -> Result<()> {
     let mut executed = 0usize;
     for kind in kinds {
+        if *kind == "recovery" {
+            continue; // Executed above by its single-create atomic state model.
+        }
         let effect_count = remote_effect_count(kind)?;
         for position in positions {
             for fault in faults {
@@ -194,6 +197,7 @@ fn run_independent_replay_model(
     }
     let expected: usize = kinds
         .iter()
+        .filter(|kind| **kind != "recovery")
         .map(|kind| remote_effect_count(kind))
         .collect::<Result<Vec<_>>>()?
         .into_iter()
@@ -209,10 +213,8 @@ fn run_independent_replay_model(
 /// Remote side effects a transaction of this kind performs, which is also the
 /// number of distinct positions a fault can be injected at.
 ///
-/// A RecoveryTransaction has exactly one: `commit_recovery_unit` carries both
-/// re-anchor Events, the first new-generation RealmCommit and the terminal result
-/// across a single boundary. The old two-step shape is gone, so a second
-/// position here would be modelling a boundary the protocol no longer has.
+/// Recovery's one atomic create is interpreted by its dedicated model above;
+/// only Rotation exposes the five worker/local-commit positions here.
 fn remote_effect_count(kind: &str) -> Result<usize> {
     match kind {
         "recovery" => Ok(1),

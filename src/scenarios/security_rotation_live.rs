@@ -21,13 +21,13 @@ use arkret_models_collaboration::events_payloads::{
 };
 use arkret_models_crypto::{
     BackupActiveSeriesPointer, BackupKind, BackupObjectRef, BackupRotationBinding,
-    BackupRotationKind, BackupRotationPlan, ClientStepAttestation, ClientStepAttestationArtifact,
+    BackupRotationKind, BackupRotationPlan, ClientStepAttestation,
     ClientStepAttestationSignatureProof, KeyBackup, KeyBackupAead, KeyBackupAeadName,
     KeyBackupDomainSeparation, KeyBackupEncryption, KeyBackupRecipientMethod,
     KeyBackupSignatureAlgorithm, KeyBackupSignatureProof, KeysBackupsPage, PreparedEventUnit,
     SecretStorageContentIndex, SecretStorageItemKind, SecurityRotationLocalCommit,
-    SecurityRotationRevokeCommandDecision, SecurityRotationTransactionCreateRequestBody,
-    SecurityTransaction, SecurityTransactionContinueRequestBody,
+    SecurityRotationRevokeCommandDecision, SecurityRotationTransaction,
+    SecurityRotationTransactionCreateRequestBody, SecurityTransactionContinueRequestBody,
     SecurityTransactionCreateRequestBody, SecurityTransactionStep,
     SecurityTransactionTerminalOutcome,
 };
@@ -135,7 +135,7 @@ impl RotationAuthor {
     }
     pub(crate) fn local_commit(
         &self,
-        current: &SecurityTransaction,
+        current: &SecurityRotationTransaction,
         rotation: &SecurityRotationTransactionCreateRequestBody,
     ) -> Result<SecurityTransactionContinueRequestBody> {
         let artifact = SecurityRotationLocalCommit {
@@ -153,7 +153,7 @@ impl RotationAuthor {
             transaction_id: current.transaction_id.clone(),
             transaction_request_digest: current.request_digest.clone(),
             prepared_plan_digest: current.prepared_plan_digest.clone(),
-            artifact: ClientStepAttestationArtifact::SecurityRotation(artifact),
+            artifact,
             signature_proof: ClientStepAttestationSignatureProof {
                 verification_method: self.method.clone(),
                 signature_algorithm: "Ed25519".into(),
@@ -668,7 +668,6 @@ pub(crate) async fn rotation_fixture(
         );
         coauth.bind_founding_device_grant(
             &grant,
-            server.service_id(),
             principal.core_id.as_str(),
             device,
             authorize.as_str(),
@@ -694,7 +693,6 @@ pub(crate) async fn rotation_fixture(
     );
     coauth.bind_founding_device_grant(
         &grant_a,
-        server.service_id(),
         principal.core_id.as_str(),
         DEVICE_A,
         principal.founding_authorize_event_id.as_str(),
@@ -1045,7 +1043,7 @@ pub async fn security_rotation_runs_worker_steps_to_local_commit() -> Result<()>
             transaction_id: erased.transaction_id.clone(),
             transaction_request_digest: erased.request_digest.clone(),
             prepared_plan_digest: erased.prepared_plan_digest.clone(),
-            artifact: ClientStepAttestationArtifact::SecurityRotation(artifact),
+            artifact,
             signature_proof: ClientStepAttestationSignatureProof {
                 verification_method: signer.method.clone(),
                 signature_algorithm: "Ed25519".to_owned(),
@@ -1077,7 +1075,7 @@ pub async fn security_rotation_runs_worker_steps_to_local_commit() -> Result<()>
         "a forged local commit was not refused: {forged_status} {forged_body}"
     );
     let genuine = local_commit(seed_a)?;
-    let completed: SecurityTransaction = serde_json::from_value(
+    let completed: SecurityRotationTransaction = serde_json::from_value(
         expect_json(
             canonical_post(&client_a, &continue_path, &genuine)?,
             StatusCode::OK,
@@ -1093,7 +1091,7 @@ pub async fn security_rotation_runs_worker_steps_to_local_commit() -> Result<()>
             ),
         "the local commit did not complete the rotation: {completed:?}"
     );
-    let replayed: SecurityTransaction = serde_json::from_value(
+    let replayed: SecurityRotationTransaction = serde_json::from_value(
         expect_json(
             canonical_post(&client_a, &continue_path, &genuine)?,
             StatusCode::OK,
@@ -1104,7 +1102,7 @@ pub async fn security_rotation_runs_worker_steps_to_local_commit() -> Result<()>
         replayed == completed,
         "an exact local commit replay changed the resource"
     );
-    let fetched: SecurityTransaction = serde_json::from_value(
+    let fetched: SecurityRotationTransaction = serde_json::from_value(
         expect_json(
             client_a.get(&format!(
                 "/_arkret/self/security-transactions/{}",
@@ -1196,7 +1194,7 @@ pub async fn security_rotation_rejected_revoke_restores_the_target_device() -> R
     let mut expired = None;
     for _ in 0..40 {
         tokio::time::sleep(std::time::Duration::from_millis(500)).await;
-        let current: SecurityTransaction =
+        let current: SecurityRotationTransaction =
             serde_json::from_value(expect_json(client_a.get(&path), StatusCode::OK).await?)?;
         if current.terminal_outcome.is_some() {
             expired = Some(current);
@@ -1320,7 +1318,7 @@ pub async fn security_rotation_erase_resumes_after_a_partial_failure() -> Result
     let mut resumed = None;
     for _ in 0..40 {
         tokio::time::sleep(std::time::Duration::from_millis(500)).await;
-        let current: SecurityTransaction =
+        let current: SecurityRotationTransaction =
             serde_json::from_value(expect_json(client_a.get(&path), StatusCode::OK).await?)?;
         if current.accepted_steps.len() == 4 || current.terminal_outcome.is_some() {
             resumed = Some(current);
@@ -1489,7 +1487,7 @@ async fn erase_resume_across(between: BetweenAttempts, name: &str) -> Result<()>
             );
         }
     }
-    let unchanged: SecurityTransaction =
+    let unchanged: SecurityRotationTransaction =
         serde_json::from_value(expect_json(client_a.get(&path), StatusCode::OK).await?)?;
     ensure!(
         unchanged.accepted_steps.len() == 3 && unchanged.terminal_outcome.is_none(),
@@ -1499,7 +1497,7 @@ async fn erase_resume_across(between: BetweenAttempts, name: &str) -> Result<()>
     let mut settled = None;
     for _ in 0..90 {
         tokio::time::sleep(std::time::Duration::from_millis(500)).await;
-        let current: SecurityTransaction =
+        let current: SecurityRotationTransaction =
             serde_json::from_value(expect_json(client_a.get(&path), StatusCode::OK).await?)?;
         if current.accepted_steps.len() == 4 || current.terminal_outcome.is_some() {
             settled = Some(current);
@@ -1591,6 +1589,7 @@ async fn unlock(
         )
         .await?,
     )?;
+    challenge.validate_at(Utc::now())?;
     let mut proof = KeyBackupUnlockProof {
         subject_actor_id: None,
         custody_authorization_ref: None,
@@ -1598,18 +1597,17 @@ async fn unlock(
 
         schema: KeyBackupUnlockProof::SCHEMA.to_owned(),
         authority: KeyBackupUnlockAuthority::CurrentDevice {
-            challenge_id: challenge.challenge_id,
-            nonce: challenge.nonce,
+            challenge_id: challenge.challenge_id.clone(),
         },
-        account_id: challenge.account_id,
-        requesting_device_id: challenge.requesting_device_id,
-        backup_id: challenge.backup_id,
+        account_id: challenge.account_id.clone(),
+        requesting_device_id: challenge.requesting_device_id.clone(),
+        backup_id: challenge.backup_id.clone(),
         backup_kind: BackupKind::SecretStorage,
-        series_id: challenge.series_id,
-        ciphertext_digest: challenge.ciphertext_digest,
-        challenge: challenge.challenge,
-        service_id: challenge.service_id,
-        audience: challenge.audience,
+        series_id: challenge.series_id.clone(),
+        ciphertext_digest: challenge.ciphertext_digest.clone(),
+        challenge: challenge.challenge.clone(),
+        service_id: challenge.service_id.clone(),
+        audience: challenge.audience.clone(),
         issued_at: challenge.issued_at,
         expires_at: challenge.expires_at,
         signature_proof: KeyBackupUnlockSignatureProof {
@@ -1622,6 +1620,7 @@ async fn unlock(
     proof.signature_proof.signature =
         Base64UrlString::new(arkret_canonical::base64url_encode(signature.to_bytes()))
             .map_err(anyhow::Error::msg)?;
+    proof.validate_for_challenge(&challenge)?;
     Ok(canonical_post(
         client,
         &format!("/_arkret/self/keys/backups/{backup_id}/unlock"),
@@ -1821,6 +1820,9 @@ pub async fn security_rotation_refuses_ineligible_approval_sidecars_before_write
         .sdk()
         .create_security_transaction(&verified)
         .await?;
+    let arkret_models_crypto::SecurityTransaction::SecurityRotation(accepted) = accepted else {
+        anyhow::bail!("Rotation create returned a Recovery result");
+    };
     ensure!(
         !accepted.accepted_steps.is_empty(),
         "valid verified producer did not execute a worker step"
@@ -1831,7 +1833,7 @@ pub async fn security_rotation_refuses_ineligible_approval_sidecars_before_write
 pub(crate) async fn create(
     client: &TestActorClient,
     request: &SecurityTransactionCreateRequestBody,
-) -> Result<SecurityTransaction> {
+) -> Result<SecurityRotationTransaction> {
     Ok(serde_json::from_value(
         expect_json(
             client
@@ -1843,7 +1845,7 @@ pub(crate) async fn create(
     )?)
 }
 
-fn aborted_with(transaction: &SecurityTransaction, reason: &str) -> bool {
+fn aborted_with(transaction: &SecurityRotationTransaction, reason: &str) -> bool {
     matches!(
         &transaction.terminal_outcome,
         Some(SecurityTransactionTerminalOutcome::Aborted { reason_code, .. })
@@ -2194,15 +2196,36 @@ pub async fn key_backup_device_quorum_delete_removes_an_envelope() -> Result<()>
     Ok(())
 }
 
+fn recovery_grant_coordinates(
+    client: &TestActorClient,
+    principal: &ProvisionedTestPrincipal,
+    station: &DidCoreId,
+) -> Result<(arkret_wire::SessionGrantRef, Base64UrlString)> {
+    let coordinates =
+        crate::scenarios::bridge_contracts::session_grant::mock_session_grant_coordinates(
+            client.session().credential(),
+        )?;
+    ensure!(
+        coordinates.account_id == AccountId::new(principal.core_id.clone(), station.clone())
+            && coordinates.device_id.as_ref() == Some(&principal.device_id),
+        "fixture issuer coordinates differ from exact recovery credential"
+    );
+    let jwk = arkret_signatures::JsonWebKey::from_ed25519_verifying_key(
+        &principal.device_signing_key.verifying_key(),
+    );
+    let cnf_jkt = Base64UrlString::new(arkret_signatures::dpop::dpop_jwk_thumbprint(&jwk)?)
+        .map_err(anyhow::Error::msg)?;
+    Ok((coordinates.grant_ref, cnf_jkt))
+}
+
 async fn create_verified_recovery_unlock_session(
-    issuer: &MockCoauthIntrospectionServer,
     client: &TestActorClient,
     signer: &RotationAuthor,
     recovery_method: &DidUrl,
     recovery_seed: [u8; 32],
     requesting_device_seed: [u8; 32],
 ) -> Result<arkret_models_crypto::RecoverySession> {
-    let coordinates = issuer.recovery_grant_coordinates(client.session().credential())?;
+    let coordinates = recovery_grant_coordinates(client, &signer.principal, &signer.station)?;
     create_verified_recovery_unlock_session_bound(
         client,
         signer,
@@ -2567,7 +2590,6 @@ pub async fn key_backup_unlock_rejects_published_test_signing_material_live() ->
     );
     coauth.bind_recovery_session_grant(
         &recovery_grant,
-        &signer.station,
         signer.principal.core_id.as_str(),
         signer.principal.device_id.as_str(),
         &signer.principal.device_signing_key.verifying_key(),
@@ -2575,7 +2597,6 @@ pub async fn key_backup_unlock_rejects_published_test_signing_material_live() ->
     let recovery_client =
         server.client_with_founding_device_grant(&signer.principal, recovery_grant)?;
     let session = create_verified_recovery_unlock_session(
-        &coauth,
         &recovery_client,
         &signer,
         &recovery_method,
@@ -2654,7 +2675,6 @@ pub async fn key_backup_recovery_unlock_delete_is_session_exact_and_zero_write()
     );
     coauth.bind_recovery_session_grant(
         &recovery_grant,
-        &signer.station,
         signer.principal.core_id.as_str(),
         signer.principal.device_id.as_str(),
         &signer.principal.device_signing_key.verifying_key(),
@@ -2662,7 +2682,6 @@ pub async fn key_backup_recovery_unlock_delete_is_session_exact_and_zero_write()
     let recovery_client =
         server.client_with_founding_device_grant(&signer.principal, recovery_grant)?;
     let session = create_verified_recovery_unlock_session(
-        &coauth,
         &recovery_client,
         &signer,
         &recovery_method,

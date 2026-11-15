@@ -97,13 +97,12 @@ pub async fn run_agent_direct_content_session_boundary() -> Result<()> {
         "provisional Direct read manufactured a participant write source"
     );
     ensure!(
-        serde_json::to_value(
-            current
-                .scope_details
-                .as_ref()
-                .context("Direct content ceiling")?
-        )?["capability_grant_refs"]
-            == json!([])
+        current
+            .scope_details
+            .as_ref()
+            .context("Direct content ceiling")?
+            .capability_grant_refs
+            .is_empty()
     );
     let runtime = station.client_with_agent_runtime_grant(
         agent.agent_did.as_str(),

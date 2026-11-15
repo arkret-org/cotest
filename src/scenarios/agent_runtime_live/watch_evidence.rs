@@ -261,7 +261,7 @@ pub async fn run_registered_agent_watch_live() -> Result<()> {
     let private_mode = arkret_models_collaboration::agent_interaction::AgentInteractionSetPayload {
         interaction_mode:
             arkret_models_collaboration::agent_interaction::AgentInteractionMode::Private,
-        expected_commit_id: Some(public_commit.commit_id.clone()),
+        expected_commit_id: Some(public_commit.commit_id),
         ..public_mode
     };
     controller

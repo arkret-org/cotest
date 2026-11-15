@@ -556,7 +556,6 @@ impl ArkretServer {
         );
         issuer.bind_founding_device_grant(
             &grant,
-            &self.service_id,
             principal.core_id.as_str(),
             principal.device_id.as_str(),
             principal.founding_authorize_event_id.as_str(),
@@ -573,19 +572,18 @@ impl ArkretServer {
             .map(|issuer| issuer.origin())
     }
 
-    /// Read the typed ID from this fixture issuer's exact ledger. Mock credentials
-    /// are opaque and must never be decoded for issuer facts.
-    pub(crate) fn harness_session_grant_id(
+    /// Read the complete issuer-scoped reference from the exact fixture ledger.
+    /// Opaque secrets contain no locally decodable metadata.
+    pub(crate) fn harness_session_grant_ref(
         &self,
         client: &TestActorClient,
-    ) -> Result<arkret_wire::SessionGrantId> {
+    ) -> Result<arkret_wire::SessionGrantRef> {
         Ok(self
             .session_grant_issuer
             .as_ref()
             .context("harness issuer ledger is unavailable")?
             .own_station_session_state(client.session().credential(), &self.service_id)?
             .grant_ref
-            .id
             .clone())
     }
 
@@ -626,16 +624,17 @@ impl ArkretServer {
             anyhow::bail!("mock session reissue requires a canonical predecessor");
         };
         let predecessor = issuer.own_station_session_state(grant, &self.service_id)?;
-        let mut secret_bytes = [0u8; 32];
-        getrandom::fill(&mut secret_bytes).map_err(anyhow::Error::msg)?;
-        let grant = arkret_wire::SessionGrantSecret::from_bytes(secret_bytes).into_string();
+        let grant = crate::scenarios::bridge_contracts::session_grant::mock_session_grant(
+            principal.core_id.as_str(),
+            principal.device_id.as_str(),
+            self.service_id.as_str(),
+        );
         anyhow::ensure!(
             grant != client.session.credential(),
             "mock reissue reused a credential"
         );
         issuer.bind_founding_device_grant(
             &grant,
-            &self.service_id,
             principal.core_id.as_str(),
             principal.device_id.as_str(),
             principal.founding_authorize_event_id.as_str(),
@@ -1078,6 +1077,20 @@ impl ArkretServer {
     /// HTTPS server. It is absent for ordinary production-style HTTP handles.
     pub(crate) fn tls_ca_path(&self) -> Option<&Path> {
         self._tls.as_ref().map(|tls| tls.ca_path.as_path())
+    }
+
+    /// Run-scoped transport credentials for an independent native test endpoint.
+    /// These files contain no Station or Applet protocol signing material.
+    pub(crate) fn native_test_tls_identity_paths(&self) -> Result<(PathBuf, PathBuf)> {
+        let tls = self
+            ._tls
+            .as_ref()
+            .context("native test endpoint requires the owned HTTPS harness")?;
+        anyhow::ensure!(
+            tls.cert_path.is_file() && tls.key_path.is_file(),
+            "native test endpoint requires actual run-scoped TLS identity files"
+        );
+        Ok((tls.cert_path.clone(), tls.key_path.clone()))
     }
 
     pub fn service_id(&self) -> &DidCoreId {
@@ -2100,7 +2113,6 @@ impl ArkretServer {
             device_id: device_id.to_owned(),
             session,
             native_session_invalidator: None,
-            issued_session_response: None,
             principal,
             consent_current_authority: self
                 .external_restart

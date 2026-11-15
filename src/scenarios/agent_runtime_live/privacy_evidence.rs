@@ -230,7 +230,6 @@ pub async fn run_agent_requested_scope_privacy_production()
     let rejected = coauth
         .bind_agent_runtime_grant(
             "unrepresented-constraint",
-            station.service_id(),
             &body.authorize_event.event.event_id,
             &unsupported,
             &material.key.verifying_key(),
@@ -252,7 +251,6 @@ pub async fn run_agent_requested_scope_privacy_production()
     let rejected = coauth
         .bind_agent_runtime_grant(
             "empty-constraint-intersection",
-            station.service_id(),
             &body.authorize_event.event.event_id,
             &empty_intersection,
             &material.key.verifying_key(),

@@ -829,11 +829,25 @@ pub async fn run_transport_and_three_rails() -> Result<()> {
         .context("advertised limit close 1009")?;
     eprintln!("[websocket-live] malformed, binary and oversized frames passed");
 
-    issuer.set_grant_expiry(
-        alice.session().credential(),
+    let short_principal = alice
+        .principal
+        .as_ref()
+        .context("accepted founding device")?;
+    let short_grant = crate::scenarios::bridge_contracts::session_grant::mock_session_grant(
+        short_principal.core_id.as_str(),
+        short_principal.device_id.as_str(),
+        server.service_id().as_str(),
+    );
+    issuer.bind_founding_device_grant_until(
+        &short_grant,
+        short_principal.core_id.as_str(),
+        short_principal.device_id.as_str(),
+        short_principal.founding_authorize_event_id.as_str(),
+        &short_principal.device_signing_key.verifying_key(),
         Utc::now() + chrono::Duration::seconds(15),
     )?;
-    let (mut refresh, _) = authenticated(&server, &alice).await?;
+    let short_client = server.client_with_founding_device_grant(short_principal, short_grant)?;
+    let (mut refresh, _) = authenticated(&server, &short_client).await?;
     open(
         &mut refresh,
         "reauth-signal",
@@ -849,14 +863,13 @@ pub async fn run_transport_and_three_rails() -> Result<()> {
         .principal
         .as_ref()
         .context("accepted founding device")?;
-    let new_grant = crate::scenarios::bridge_contracts::session_grant::unrecorded_session_grant(
+    let new_grant = crate::scenarios::bridge_contracts::session_grant::unissued_session_grant(
         principal.core_id.as_str(),
         principal.device_id.as_str(),
         server.service_id().as_str(),
     );
     issuer.bind_founding_device_grant(
         &new_grant,
-        server.service_id(),
         principal.core_id.as_str(),
         principal.device_id.as_str(),
         principal.founding_authorize_event_id.as_str(),
