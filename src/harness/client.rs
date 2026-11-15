@@ -54,7 +54,6 @@ pub struct TestActorClient {
     /// valid with a per-request proof. Go through [`Self::authorize`].
     pub(super) session: super::ClientSession,
     pub(super) native_session_invalidator: Option<super::native_session::LocalSessionInvalidator>,
-    pub(crate) issued_session_response: Option<arkret_models_identity::SessionGrantResponseBody>,
     /// Realms this actor created, i.e. the ones whose authority-root cell it
     /// controls. `capabilities.md` section 3.2: v1 genesis issues no self-grant,
     /// so the controller authorizes its own Events by naming that cell in
@@ -88,36 +87,6 @@ type HeldGrants = std::sync::Arc<
 >;
 
 impl TestActorClient {
-    /// Retain an original public issuance response received by this fixture's
-    /// configured Account Authority transport. This is not private issuer
-    /// metadata and does not create a native authenticated session source.
-    pub(crate) fn retain_issued_session_response(
-        &mut self,
-        response: arkret_models_identity::SessionGrantResponseBody,
-    ) -> Result<()> {
-        let principal = self
-            .principal
-            .as_ref()
-            .context("issued Device custody absent")?;
-        let super::ClientSession::Canonical { grant, signing_key } = self.session() else {
-            anyhow::bail!("issuance response requires the exact canonical credential");
-        };
-        let holder =
-            arkret_signatures::JsonWebKey::from_ed25519_verifying_key(&signing_key.verifying_key());
-        anyhow::ensure!(
-            response.session_grant.as_str() == grant
-                && response.account_id
-                    == AccountId::new(principal.core_id.clone(), self.service_id.parse()?)
-                && response.device_id.as_ref() == Some(&principal.device_id)
-                && response.audience_id.as_str() == self.service_id
-                && response.session_public_key.thumbprint_sha256()?
-                    == arkret_signatures::dpop::dpop_jwk_thumbprint(&holder)?,
-            "public issuance response changed its exact fixture credential, Account, Device, audience or holder"
-        );
-        self.issued_session_response = Some(response);
-        Ok(())
-    }
-
     pub fn sdk(&self) -> SdkClient {
         self.sdk.clone()
     }

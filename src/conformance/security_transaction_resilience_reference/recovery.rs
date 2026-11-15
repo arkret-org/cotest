@@ -615,7 +615,6 @@ pub(super) fn cases(kat: &Value, cases: &[Value]) -> Result<Vec<ReferenceProject
 #[cfg(test)]
 mod tests {
     use super::*;
-    use base64::Engine as _;
     use ed25519_dalek::Signer as _;
 
     fn fixture() -> Value {
