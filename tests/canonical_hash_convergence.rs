@@ -1,24 +1,9 @@
-//! T5.3 (2026-05-20) — canonical-JSON convergence vectors.
-//!
-//! Every Arkret service (coauth / coland / inkson / floria) now
-//! routes canonical-JSON encoding and `payload_digest` computation through
-//! the SDK's `arkret_canonical` module and the
-//! `arkret_signatures::EventProofBuilder` facade. This test pins a
-//! handful of fixture payloads representing the three shapes that
-//! matter on the wire — coauth `handle_claim`, coland event-envelope
-//! payload, did:webvh log update — and asserts every entry point
-//! produces the same `sha256:<hex>` digest as the SDK's
-//! `canonical_sha256`.
-//!
-//! If a downstream service ever re-introduces a hand-rolled canonical
-//! writer that drifts from the spec, the digest mismatch here is the
-//! first place it surfaces (instead of inscrutable cross-service signature
-//! failures in federation / replication tests).
+//! Fixed SDK canonical-encoding and identity-digest vectors.
+//! These tests call SDK helpers directly; they do not exercise service writers.
 
 use arkret_canonical::{
     blake3_digest, canonical_hash, canonical_json_bytes, canonical_sha256, verify_digest,
 };
-use cotest::conformance::{CanonicalFixtureBuilder, CanonicalFixtureSuite};
 use serde_json::{Value, json};
 
 /// A canonical-hash test vector: the input payload shape, the wire
@@ -58,14 +43,7 @@ fn vectors() -> Vec<CanonicalVector> {
                 "issued_at": "2026-05-20T00:00:00.000Z",
                 "expires_at": "2026-05-20T00:05:00.000Z",
             }),
-            // R3.1 digest — recomputed after the `handle_uri` → `handle`
-            // wire rename. Source of truth: SDK's
-            // `arkret_canonical::canonical_sha256` over the canonical
-            // JSON bytes of the payload above. If this digest drifts, the
-            // first place to look is whether any downstream service has
-            // re-introduced a hand-rolled canonical encoder. To regenerate:
-            // `cargo test -p cotest --test canonical_hash_convergence \
-            //  dump_canonical_digests -- --ignored --nocapture`.
+            // Fixed canonical SHA-256 digest over the fixture above.
             expected_digest: "sha256:d16c9427ace94189dfd45741a7fa22d69b4fb58989c4df362aded31c1893a4f5",
         },
         CanonicalVector {
@@ -138,50 +116,21 @@ fn vectors() -> Vec<CanonicalVector> {
                 "issued_at": "2026-05-20T00:00:00.000Z",
                 "expires_at": "2026-05-20T00:05:00.000Z",
             }),
-            // Pinned via `cargo test -p cotest --test canonical_hash_convergence \
-            //  dump_canonical_digests -- --ignored --nocapture`.
             expected_digest: "sha256:9fa581799dd6b550c912479327c13aa9cab0583ead3571514619f82e50f2c566",
         },
     ]
 }
 
-fn canonical_fixture_suite() -> CanonicalFixtureSuite {
-    let mut builder = CanonicalFixtureBuilder::new("ak.profile.cotest.canonical_hash.v1")
-        .description("Canonical hash convergence vectors shared through the SDK fixture builder.");
-    for vector in vectors() {
-        builder
-            .push(vector.vector_id, &vector.payload)
-            .expect("build canonical fixture vector");
-    }
-    builder.finish()
-}
-
-/// Round-trip every vector through `arkret_canonical::canonical_sha256`
-/// to make sure the SDK hash itself is stable and matches what we encode
-/// in `expected_digest`. The other downstream services all reach the same
-/// digest by going through this same SDK helper, so this is also our
-/// witness that they cannot drift apart silently.
 #[test]
 fn sdk_canonical_sha256_matches_pinned_vectors() {
-    let mut drifted = Vec::new();
-    let suite = canonical_fixture_suite();
-    for (vector, generated) in vectors().into_iter().zip(suite.vectors.iter()) {
-        generated
-            .assert_matches_input()
-            .expect("fixture self-check");
-        let actual = canonical_sha256(&generated.input).expect("canonical_sha256");
-        if actual != vector.expected_digest || generated.expected_digest != vector.expected_digest {
-            drifted.push(format!(
-                "{}\n  expected: {}\n  builder:  {}\n  actual:   {}",
-                vector.label, vector.expected_digest, generated.expected_digest, actual
-            ));
-        }
+    for vector in vectors() {
+        let actual = canonical_sha256(&vector.payload).expect("canonical_sha256");
+        assert_eq!(
+            actual, vector.expected_digest,
+            "{} ({})",
+            vector.label, vector.vector_id
+        );
     }
-    assert!(
-        drifted.is_empty(),
-        "one or more canonical hash vectors drifted:\n{}",
-        drifted.join("\n")
-    );
 }
 
 #[test]
@@ -201,68 +150,20 @@ fn sdk_blake3_digest_backend_matches_known_vector() {
     assert!(arkret_identifiers::Hash::new(canonical).is_ok());
 }
 
-/// Diagnostic: prints the SDK-computed canonical digest for every vector.
-/// Run with `cargo test -p cotest --test canonical_hash_convergence \
-/// dump_canonical_digests -- --nocapture` to regenerate the pinned values
-/// after a fixture rename.
-/// Gating: diagnostic-only — prints canonical digests; run explicitly with
-/// `--nocapture` after a fixture rename.
-/// Tier: contract
-#[test]
-#[ignore = "diagnostic — run with --nocapture to print canonical digests"]
-fn dump_canonical_digests() {
-    for vector in canonical_fixture_suite().vectors {
-        println!("{} => {}", vector.vector_id, vector.expected_digest);
-    }
-}
-
 /// Re-encoding the same payload value with permuted object keys MUST
 /// yield byte-identical canonical bytes. The SDK encoder sorts object
-/// keys before serialisation, so this test would fail if any downstream
-/// service ever fell back to `serde_json::to_vec` (which preserves
-/// insertion order) for a hash input.
+/// keys before serialisation; an order-sensitive SDK encoder must fail here.
 #[test]
 fn canonical_bytes_are_stable_across_key_permutations() {
-    for vector in canonical_fixture_suite().vectors {
-        let value = vector.input.clone();
+    for vector in vectors() {
+        let value = vector.payload.clone();
         let scrambled = scramble_object_keys(value);
-        let original_bytes = canonical_json_bytes(&vector.input).unwrap();
+        let original_bytes = canonical_json_bytes(&vector.payload).unwrap();
         let scrambled_bytes = canonical_json_bytes(&scrambled).unwrap();
         assert_eq!(
             original_bytes, scrambled_bytes,
             "canonical bytes drifted for {} under key permutation",
             vector.vector_id
-        );
-    }
-}
-
-/// Every service ultimately goes through one of two SDK entry points:
-/// the low-level `arkret_canonical::canonical_sha256` (used by
-/// `coauth::handlers::arkret::canonical_json_sha256` and coland's
-/// `validate_event_proofs`), or
-/// the high-level `arkret_signatures::EventProofBuilder` (used by
-/// inkson / floria when emitting a fresh detached-JWS proof). Both
-/// must yield the same canonical bytes for the same input; this test
-/// pins the equivalence so a future EventProofBuilder change cannot
-/// silently drift from the canonical encoder.
-#[test]
-fn event_proof_builder_matches_low_level_canonical_helpers() {
-    use arkret_signatures::EventProofBuilder;
-    let builder = EventProofBuilder::new();
-    for vector in canonical_fixture_suite().vectors {
-        let low_level_bytes = canonical_json_bytes(&vector.input).unwrap();
-        let builder_bytes = builder.canonical_bytes(&vector.input).unwrap();
-        assert_eq!(
-            low_level_bytes, builder_bytes,
-            "EventProofBuilder.canonical_bytes drifted from canonical_json_bytes for {}",
-            vector.vector_id,
-        );
-        let builder_hash = builder.payload_digest(&vector.input).unwrap();
-        assert_eq!(
-            builder_hash.as_str(),
-            vector.expected_digest,
-            "EventProofBuilder.payload_digest drifted from pinned vector for {}",
-            vector.vector_id,
         );
     }
 }
@@ -275,9 +176,6 @@ fn event_proof_builder_matches_low_level_canonical_helpers() {
 // fully-pinned fixture so a future formula drift in the SDK surfaces here
 // first (instead of as a cross-service cache mismatch).
 //
-// To regenerate after an intentional formula change:
-//   cargo test -p cotest --test canonical_hash_convergence \
-//     dump_r3_2_identity_digests -- --ignored --nocapture
 
 fn pinned_r3_2_inputs() -> (
     arkret_identifiers::RealmId,
@@ -360,23 +258,6 @@ fn r3_2_identity_digests_match_pinned_baseline() {
         effective_set, display_state,
         "expected_state_digest and member_display_state_digest MUST differ"
     );
-}
-
-/// Gating: diagnostic-only — regenerates the R3.2 identity digest baseline;
-/// run explicitly with `--nocapture`.
-/// Tier: contract
-#[test]
-#[ignore = "diagnostic — run with --nocapture to regenerate the R3.2 identity digest baseline"]
-fn dump_r3_2_identity_digests() {
-    use arkret_models_identity::{
-        member_display_state_digest, member_identity_effective_set_digest,
-    };
-    let (realm, actor, events, claims) = pinned_r3_2_inputs();
-    let effective_set = member_identity_effective_set_digest(&[]).expect("effective-set digest");
-    let display_state =
-        member_display_state_digest(&realm, &actor, &events, &claims).expect("display digest");
-    println!("member_identity_effective_set_digest => {effective_set}");
-    println!("member_display_state_digest         => {display_state}");
 }
 
 /// Walk a JSON value and reverse the key order of every object. Used

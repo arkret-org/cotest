@@ -5,55 +5,34 @@ import {
 } from "../../helpers/coauth-register";
 import { coauthBaseUrl } from "../../helpers/env";
 
-test.describe("identity-scope boot safety", () => {
-  test("legacy anonymous account state fails closed without a WASM panic", async ({
-    page,
-  }) => {
-    const failures: string[] = [];
-    page.on("pageerror", (error) => failures.push(`pageerror:${error.message}`));
-    page.on("console", (message) => {
-      if (message.type() === "error") {
-        failures.push(`console:${message.text()}`);
-      }
-    });
-    await page.addInitScript(() => {
-      const deviceId =
-        "ak:device:019f0000-0000-7000-8000-000000000001";
-      localStorage.setItem(
-        "inkson.config.v1",
-        JSON.stringify({
-          server_url: "https://local.host",
-          stations: ["https://local.host"],
-          account_did: "anonymous",
-          device_id: deviceId,
-          session_credential: "legacy-incomplete-session",
-        }),
-      );
-      localStorage.setItem(
-        "inkson.local_state.v1",
-        JSON.stringify({
-          active_did: "anonymous",
-          device_prefs: { values: {} },
-          pending_login: null,
-          known_dids: ["anonymous"],
-        }),
-      );
-    });
+test.describe("persisted-state boot recovery", () => {
+  for (const key of ["inkson.config.v1", "inkson.local_state.v1"]) {
+    test(`malformed ${key} shows login without a WASM panic`, async ({ page }) => {
+      const failures: string[] = [];
+      page.on("pageerror", (error) => failures.push(`pageerror:${error.message}`));
+      page.on("console", (message) => {
+        if (message.type() === "error") {
+          failures.push(`console:${message.text()}`);
+        }
+      });
+      await page.addInitScript((storageKey) => {
+        localStorage.removeItem("inkson.config.v1");
+        localStorage.removeItem("inkson.local_state.v1");
+        localStorage.setItem(storageKey, "{");
+      }, key);
 
-    await page.goto("/login", { waitUntil: "domcontentloaded" });
-    await expect(page.locator(".auth-panel")).toBeVisible({
-      timeout: 60_000,
-    });
-    await page.waitForTimeout(1_000);
-
-    expect(
-      failures.filter((failure) =>
-        /identity-owned key|RuntimeError: unreachable|wasm-bindgen.*not marked as `catch`/i.test(
-          failure,
+      await page.goto("/login", { waitUntil: "domcontentloaded" });
+      await expect(page.locator(".auth-panel")).toBeVisible({ timeout: 60_000 });
+      await page.evaluate(() => new Promise<void>((resolve) => {
+        requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+      }));
+      expect(
+        failures.filter((failure) =>
+          /identity-owned key|RuntimeError: unreachable|wasm-bindgen.*not marked as `catch`/i.test(failure),
         ),
-      ),
-    ).toEqual([]);
-  });
+      ).toEqual([]);
+    });
+  }
 });
 
 test.describe("first registration PCR genesis @fully-implemented", () => {
