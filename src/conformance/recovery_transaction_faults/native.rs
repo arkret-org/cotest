@@ -7,7 +7,8 @@ use std::sync::Arc;
 
 use anyhow::{Context as _, Result, ensure};
 use arkret_models_crypto::{
-    RecoveryTransactionCompletion, SecurityTransaction, SecurityTransactionCreateRequestBody,
+    RecoveryTransactionCompletion, RecoveryTransactionCreateRequestBody, SecurityTransaction,
+    SecurityTransactionCreateRequestBody, SecurityTransactionKind,
 };
 use arkret_models_identity::{IssueRecoveryCompletionGrantResponseBody, SessionGrantMetadata};
 use ed25519_dalek::Signer as _;
@@ -32,6 +33,19 @@ fn rows(value: &Value, table: &str) -> Result<usize> {
         .as_array()
         .with_context(|| format!("native {table} footprint absent"))?
         .len())
+}
+fn issuer_footprint_summary(before: &Value, after: &Value) -> Result<Value> {
+    let mut tables = serde_json::Map::new();
+    let original_tables = before.as_object().context("issuer footprint tables")?;
+    for table in original_tables.keys() {
+        tables.insert(
+            table.clone(),
+            json!({"before_rows":rows(before,table)?,
+            "after_rows":rows(after,table)?,"before_digest":digest(&before[table])?,
+            "after_digest":digest(&after[table])?}),
+        );
+    }
+    Ok(Value::Object(tables))
 }
 fn require_single_unit(before: &Value, after: &Value) -> Result<()> {
     for (table, increment) in [
@@ -125,6 +139,13 @@ async fn issue(
     completed: &CompletedCandidate,
 ) -> Result<IssueRecoveryCompletionGrantResponseBody> {
     let response = issuer_request(http, origin, completed)?.send().await?;
+    read_issuance(response, completed).await
+}
+
+async fn read_issuance(
+    response: reqwest::Response,
+    completed: &CompletedCandidate,
+) -> Result<IssueRecoveryCompletionGrantResponseBody> {
     let status = response.status();
     let bytes = response.bytes().await?;
     ensure!(
@@ -189,6 +210,43 @@ async fn assert_public_originals(
     client: &TestActorClient,
     completed: &RecoveryTransactionCompletion,
 ) -> Result<Value> {
+    // Replay uses the independently issued Standard grant's current reader
+    // qualification, rather than reusing a consumed restricted recovery grant.
+    let request = RecoveryTransactionCreateRequestBody {
+        kind: SecurityTransactionKind::Recovery,
+        recovery_receipt: completed.recovery_receipt.clone(),
+    };
+    let replayed: RecoveryTransactionCompletion = serde_json::from_value(
+        expect_json(
+            client
+                .post("/_arkret/self/security-transactions")
+                .canonical_json(&SecurityTransactionCreateRequestBody::Recovery(
+                    request.clone(),
+                ))?,
+            reqwest::StatusCode::OK,
+        )
+        .await?,
+    )?;
+    ensure!(
+        replayed == *completed,
+        "current reader replay changed original signed R/C"
+    );
+    let mut changed = request;
+    changed.recovery_receipt.signature_proof.signature =
+        arkret_wire::Base64UrlString::new("A".repeat(86)).map_err(anyhow::Error::msg)?;
+    let refused = client
+        .post("/_arkret/self/security-transactions")
+        .canonical_json(&SecurityTransactionCreateRequestBody::Recovery(changed))?
+        .send()
+        .await?;
+    let status = refused.status();
+    let problem: arkret_wire::Problem = refused.json().await?;
+    ensure!(
+        status == reqwest::StatusCode::CONFLICT
+            && problem.status == status.as_u16()
+            && problem.code() == arkret_wire::ErrorCode::DUPLICATE_CONFLICT,
+        "changed full signature bytes did not conflict at the accepted identity: {problem:?}"
+    );
     let resource: SecurityTransaction = serde_json::from_value(
         expect_json(
             client.get(&format!(
@@ -231,7 +289,10 @@ async fn assert_public_originals(
                 .matches(&arkret_wire::CommittedEventView::Full(second.clone())),
         "served originals differ from C's exact two Commit refs"
     );
-    Ok(json!({"transaction":resource,"reanchor":first,"authorize":second}))
+    Ok(
+        json!({"transaction":resource,"reanchor":first,"authorize":second,
+        "current_reader_post_replay":true,"changed_signature_status":status.as_u16()}),
+    )
 }
 async fn ordinary_reissue(
     fixture: &CanonicalApiFixture,
@@ -582,11 +643,9 @@ async fn run_owned_native_case(case: &str) -> Result<()> {
             fixture.server.start_external_process().await?;
             let restarted = process_evidence(fixture.server.native_process_identity()?)?;
             require_restarted(&initial_processes["station"], &restarted)?;
-            let replayed = prepared.submit_native().await?;
-            ensure!(
-                replayed.completion == completion,
-                "exact frozen R changed C after actual restart"
-            );
+            // C here is the relay's test oracle, never a completion-request
+            // input. The request uses only frozen R; AA must retrieve C itself.
+            let replayed = prepared.finish(completion.clone())?;
             let outcome = issue(&http, &origin, &replayed).await?;
             let client = accepted_client(&fixture, &replayed, &outcome)?;
             let first = assert_public_originals(&client, &completion).await?;
@@ -608,7 +667,23 @@ async fn run_owned_native_case(case: &str) -> Result<()> {
             require_single_unit(&before, &native)?;
             let issuer_before = issuer_footprint(&issuer_database).await?;
             let failure = Instrumentation::issuer_fail_insert(&issuer_database)?;
-            let refused = issuer_request(&http, &origin, &completed)?.send().await?;
+            let request = issuer_request(&http, &origin, &completed)?.build()?;
+            let same_failed_proof = request
+                .try_clone()
+                .context("failed completion request is not replayable")?;
+            // Decode only our own freshly built proof to identify its expected
+            // replay-cache effect; this is not an authentication verifier.
+            let own_proof = request
+                .headers()
+                .get("DPoP")
+                .context("own DPoP header")?
+                .to_str()?;
+            let payload = own_proof.split('.').nth(1).context("own DPoP payload")?;
+            let claims: Value =
+                serde_json::from_slice(&arkret_canonical::base64url_decode(payload)?)?;
+            let failed_jti_digest =
+                arkret_canonical::sha256_digest(claims["jti"].as_str().context("own DPoP jti")?);
+            let refused = http.execute(request).await?;
             let status = refused.status();
             let error = refused.text().await?;
             ensure!(
@@ -620,16 +695,81 @@ async fn run_owned_native_case(case: &str) -> Result<()> {
                 trigger_hits == 1,
                 "native AA failure did not reach the actual completion INSERT trigger exactly once"
             );
+            let issuer_failed = issuer_footprint(&issuer_database).await?;
+            if let Some(directory) = std::env::var_os("COTEST_NATIVE_OPERATION_EVIDENCE_DIR") {
+                std::fs::write(
+                    std::path::PathBuf::from(directory)
+                        .join("recovery-native-issuer-rollback-footprint-difference.json"),
+                    serde_json::to_vec_pretty(
+                        &json!({"failed_http_proof_jti_digest":failed_jti_digest,
+                        "tables":issuer_footprint_summary(&issuer_before,&issuer_failed)?}),
+                    )?,
+                )?;
+            }
+            for table in [
+                "oauth_session_grant_operations",
+                "oauth_session_grants",
+                "recovery_completion_grant_issuances",
+            ] {
+                ensure!(
+                    issuer_failed[table] == issuer_before[table],
+                    "failed AA completion retained business effects in {table}"
+                );
+            }
+            let prior_jtis = issuer_before["dpop_jti_replay"]
+                .as_array()
+                .context("prior replay cache")?;
+            let failed_jtis = issuer_failed["dpop_jti_replay"]
+                .as_array()
+                .context("failed replay cache")?;
+            let added = failed_jtis
+                .iter()
+                .filter(|row| !prior_jtis.contains(row))
+                .collect::<Vec<_>>();
             ensure!(
-                issuer_footprint(&issuer_database).await? == issuer_before,
-                "failed AA completion retained operation, grant, replay JTI or issuance effects"
+                failed_jtis.len() == prior_jtis.len() + 1
+                    && prior_jtis.iter().all(|row| failed_jtis.contains(row))
+                    && added.len() == 1
+                    && added[0]["jti_digest"].as_str() == Some(failed_jti_digest.as_str()),
+                "failed AA request did not retain exactly its authenticated HTTP proof while preserving the prior replay cache"
             );
             ensure!(
                 station_footprint(&station_database).await? == native,
                 "AA transaction failure changed already-committed native PCR facts"
             );
+            let refused = http.execute(same_failed_proof).await?;
+            let failed_replay_status = refused.status();
+            let problem: arkret_wire::Problem = refused.json().await?;
+            ensure!(
+                failed_replay_status == reqwest::StatusCode::UNAUTHORIZED
+                    && problem.status == failed_replay_status.as_u16()
+                    && problem.code() == arkret_wire::ErrorCode::SIGNATURE_INVALID,
+                "failed business admission made the authenticated HTTP proof replayable: {problem:?}"
+            );
+            ensure!(
+                issuer_footprint(&issuer_database).await? == issuer_failed
+                    && fault_hits(&issuer_database).await? == 1
+                    && station_footprint(&station_database).await? == native,
+                "reused failed HTTP proof reached business admission or changed issuer/PCR effects"
+            );
             failure.cleanup()?;
-            let accepted = issue(&http, &origin, &completed).await?;
+            let request = issuer_request(&http, &origin, &completed)?.build()?;
+            let same_proof = request
+                .try_clone()
+                .context("completion request is not replayable")?;
+            let accepted = read_issuance(http.execute(request).await?, &completed).await?;
+            let committed_issuer = issuer_footprint(&issuer_database).await?;
+            let refused = http.execute(same_proof).await?;
+            let replay_status = refused.status();
+            let problem: arkret_wire::Problem = refused.json().await?;
+            ensure!(
+                replay_status == reqwest::StatusCode::UNAUTHORIZED
+                    && problem.status == replay_status.as_u16()
+                    && problem.code() == arkret_wire::ErrorCode::SIGNATURE_INVALID
+                    && issuer_footprint(&issuer_database).await? == committed_issuer,
+                "exact completion body excused a reused HTTP DPoP proof or left issuer residue: {problem:?}"
+            );
+            // A fresh outer proof must still retrieve the one accepted outcome.
             let replay = issue(&http, &origin, &completed).await?;
             ensure!(
                 arkret_canonical::canonical_json_bytes(&accepted)?
@@ -652,7 +792,7 @@ async fn run_owned_native_case(case: &str) -> Result<()> {
                         == rows(&issuer_before, "oauth_session_grant_operations")? + 1,
                 "AA retry retained multiple successful outcomes"
             );
-            json!({"injected_fault":"independent AA PostgreSQL BEFORE INSERT raises after native completion","failed_http_status":status.as_u16(),"trigger_hits":trigger_hits,"failed_body":error,"issuer_before_digest":digest(&issuer_before)?,"issuer_after_digest":digest(&after)?,"native_digest":digest(&native)?,"originals":originals})
+            json!({"injected_fault":"independent AA PostgreSQL BEFORE INSERT raises after native completion","failed_http_status":status.as_u16(),"trigger_hits":trigger_hits,"failed_body":error,"failed_http_proof_jti_digest":failed_jti_digest,"failed_dpop_replay_status":failed_replay_status.as_u16(),"same_dpop_replay_status":replay_status.as_u16(),"fresh_dpop_same_outcome":true,"issuer_before_digest":digest(&issuer_before)?,"issuer_after_digest":digest(&after)?,"native_digest":digest(&native)?,"originals":originals})
         }
         "lost_holder_ordinary_issue" => {
             let completed = prepared.submit_native().await?;

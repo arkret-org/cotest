@@ -85,11 +85,11 @@ pub fn run_security_transaction_resilience_joint_gate() -> Result<()> {
             );
         }
     }
-    // 2 kinds x 3 fault positions x 7 faults, 10 rotation cases and 11
-    // single-submit Recovery cases, each pinned by name in the runner.
+    // 2 kinds x 3 named positions x 7 fault labels, 10 rotation cases and 11
+    // Recovery cases. These are Spec projections, not 63 independent live cuts.
     ensure!(
         reference.len() == 63,
-        "reference runner did not execute all 63 security-transaction scenarios"
+        "reference runner did not emit all 63 named security-transaction projections"
     );
     ensure!(
         reference

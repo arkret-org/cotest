@@ -4,7 +4,7 @@ use anyhow::{Context as _, Result, ensure};
 use arkret_models_crypto::RecoveryTransactionCompletion;
 use arkret_models_identity::{
     ACCOUNT_HANDOFF_ALLOWED_OPERATIONS, AccountHandoffBinding, AccountHandoffResponseBody,
-    CanonicalSessionPublicJwk, IssueRecoveryCompletionGrantResponseBody,
+    CanonicalSessionPublicJwk, Handle, IssueRecoveryCompletionGrantResponseBody,
     RecoveryCompletionGrantRequestBody,
 };
 use arkret_signatures::PublicKeyMaterial;
@@ -75,15 +75,22 @@ fn completion_vector() -> Result<CompletionVector> {
         .next()
         .context("candidate principal DID")?;
     let at = request.accepted_device_possession_proof.issued_at;
-    let handoff: AccountHandoffResponseBody = serde_json::from_value(json!({
-        "request_id":"ak:request:019ba000-0000-7000-8000-000000000011",
-        "account_handle":"alice:example.net",
-        "account_subject":request.accepted_device_possession_proof.account_subject,
-        "account_handoff_grant":"g".repeat(43),
-        "expires_at":at + Duration::minutes(5),
-        "allowed_operations":ACCOUNT_HANDOFF_ALLOWED_OPERATIONS,
-        "binding":{"state":"bound","principal_id":request.terminal_receipt.account_id.principal_id,"did":principal_did},
-    }))?;
+    let handoff = AccountHandoffResponseBody {
+        request_id: "ak:request:019ba000-0000-7000-8000-000000000011".parse()?,
+        account_handle: Handle::parse("alice:example.net")?,
+        account_subject: request
+            .accepted_device_possession_proof
+            .account_subject
+            .clone(),
+        preferred_locale: None,
+        account_handoff_grant: "g".repeat(43),
+        expires_at: at + Duration::minutes(5),
+        allowed_operations: ACCOUNT_HANDOFF_ALLOWED_OPERATIONS,
+        binding: AccountHandoffBinding::Bound {
+            principal_id: request.terminal_receipt.account_id.principal_id.clone(),
+            did: principal_did.parse()?,
+        },
+    };
     // R/C/native Commits are exact formal originals. This fresh PoP is really
     // re-signed for this test's independently authenticated handoff token.
     request

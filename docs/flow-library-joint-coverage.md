@@ -41,6 +41,8 @@
 
 ## 本轮关键用户验收盘点
 
+Recovery参考模型统一由`security_transaction_resilience.rs`执行冻结先后、失钥后的原字节重试、完整效应及不同事务CAS输家；`recovery_transaction_faults.rs`仅保留五个真实native故障入口。Spec中的具名投影数量不等于独立故障注入次数，也不代表这些ignored live用例已经执行。
+
 | 用户场景 | 当前默认 smoke 证据 | 结论 |
 | --- | --- | --- |
 | 新账号注册并设置 24 词 | `identity/recovery-key-to-encrypted-realm`、`identity/oidc-login-flow` onboarding case | 已覆盖真实 Coauth 注册/OAuth/Inkson onboarding；读取 24 个词、原样确认、完成身份创建，禁止 session injection 与 recovery override。 |

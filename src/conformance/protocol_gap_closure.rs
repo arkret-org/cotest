@@ -75,10 +75,8 @@ pub fn run_protocol_gap_closure_fixture_suite() -> Result<()> {
     }
 
     validate_rotation_cases(&fixture["rotation_cases"])?;
-    // This independent state model injects all three crash positions at the one
-    // atomic create boundary, checks both native Commits and the complete R/C,
-    // and retains the rejected request's zero-effects obligation.
-    super::recovery_transaction_faults::run_recovery_transaction_fault_matrix()?;
+    // Recovery's signed closure/freeze/CAS projections are owned by the
+    // security-transaction resilience runner; native cuts have their live suite.
     run_independent_replay_model(&kinds, &positions, &faults)
 }
 
@@ -213,7 +211,7 @@ fn run_independent_replay_model(
 /// Remote side effects a transaction of this kind performs, which is also the
 /// number of distinct positions a fault can be injected at.
 ///
-/// Recovery's one atomic create is interpreted by its dedicated model above;
+/// Recovery's one atomic create is interpreted by the resilience runner;
 /// only Rotation exposes the five worker/local-commit positions here.
 fn remote_effect_count(kind: &str) -> Result<usize> {
     match kind {

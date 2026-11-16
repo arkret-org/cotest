@@ -248,19 +248,6 @@ impl PreparedCandidate {
             .await?,
         )?;
         completion.validate_for_request(create)?;
-        let replay: RecoveryTransactionCompletion = serde_json::from_value(
-            expect_json(
-                candidate
-                    .post("/_arkret/self/security-transactions")
-                    .canonical_json(&body)?,
-                reqwest::StatusCode::OK,
-            )
-            .await?,
-        )?;
-        ensure!(
-            completion == replay,
-            "single-submit Recovery response-loss replay changed its native closure"
-        );
         self.finish(completion)
     }
 
