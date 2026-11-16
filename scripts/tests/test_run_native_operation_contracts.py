@@ -139,7 +139,13 @@ class FrozenProductTests(unittest.TestCase):
                 prepared_host = Path(environment["COTEST_NATIVE_APPLET_HOST_PRODUCT"])
                 self.assertEqual(prepared_host, output / f"{runner.gate.APPLET_HOST_TARGET}-product.json")
                 self.assertEqual(json.loads(prepared_host.read_text()), host_product)
-                self.assertEqual(command[command.index("--") + 1:command.index("--") + 3], ["--nocapture", "--test-threads=1"])
+                # The native launcher owns one separator; Cargo owns the next.
+                # Check both boundaries instead of mistaking the launcher for libtest.
+                self.assertEqual(command[:10], [
+                    sys.executable, "-B", str(runner.gate.REPO / "scripts/run-native-rust-tests.py"), "--",
+                    "cargo", "test", "--locked", "--test", "native_operation_contracts", "--",
+                ])
+                self.assertEqual(command[10:12], ["--nocapture", "--test-threads=1"])
                 self.assertEqual(command.count("--skip"), len(document["cases"]) - 1)
                 self.assertNotIn(document["cases"]["account_device_pairing"]["test"], command)
                 self.assertFalse(kwargs["require_success"])

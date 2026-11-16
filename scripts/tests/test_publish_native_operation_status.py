@@ -52,7 +52,7 @@ class NativeOperationStatusTests(unittest.TestCase):
 
     def full_log(self):
         lines = [f"test {name} ... \x1b[32mok\x1b[0m" for name in (*publisher.REQUIRED, *publisher.META)]
-        lines += [PRIVATE, "test result: ok. 19 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 12.50s"]
+        lines += [PRIVATE, "test result: ok. 20 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 12.50s"]
         (self.run / "native.log").write_text("\n".join(lines) + "\n", encoding="utf-8")
 
     def publish(self, label="public"):
@@ -69,7 +69,7 @@ class NativeOperationStatusTests(unittest.TestCase):
         self.assertEqual(result["status"], "failed")
         self.assertFalse(result["coverage"]["acceptance"])
         self.assertEqual(result["coverage"]["uncovered_operations"], sorted(self.unmapped))
-        self.assertEqual(len(result["tests"]), 17)
+        self.assertEqual(len(result["tests"]), 18)
         self.assertEqual(len(result["meta_tests"]), 2)
         for name in ("native-result.json", "native-sources.json", "native.log", "coverage.json"):
             self.assertEqual(result["hashes"][name], hashlib.sha256((self.run / name).read_bytes()).hexdigest())
@@ -143,7 +143,7 @@ class NativeOperationStatusTests(unittest.TestCase):
 
     def test_declaration_cannot_drop_any_registered_case(self):
         document = json.loads(self.declarations.read_text(encoding="utf-8"))
-        self.assertEqual(len(document["cases"]), 17)
+        self.assertEqual(len(document["cases"]), 18)
         for identifier in document["cases"]:
             changed = json.loads(json.dumps(document))
             changed["cases"].pop(identifier)
@@ -171,7 +171,7 @@ class NativeOperationStatusTests(unittest.TestCase):
                 lines += [f"test {name} ... {PRIVATE}", PRIVATE, "\x1b[32mok\x1b[0m"]
             else:
                 lines += [f"test {name} ... ok"]
-        lines += ["test result: ok. 19 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 12.50s"]
+        lines += ["test result: ok. 20 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 12.50s"]
         (self.run / "native.log").write_text("\n".join(lines) + "\n", encoding="utf-8")
         result = self.publish()
         self.assertTrue(result["export_complete"])
@@ -315,7 +315,7 @@ class NativeOperationStatusTests(unittest.TestCase):
         self.assertFalse(result["native_execution_complete"])
         for field in ("native", "counts", "coverage"):
             self.assertIsNone(result[field])
-        self.assertEqual([row["status"] for row in result["tests"]], ["not_observed"] * 17)
+        self.assertEqual([row["status"] for row in result["tests"]], ["not_observed"] * 18)
         self.assertEqual([row["status"] for row in result["meta_tests"]], ["not_observed"] * 2)
 
     def test_preflight_failure_exports_only_typed_facts_and_hashes(self):
@@ -415,7 +415,7 @@ class NativeOperationStatusTests(unittest.TestCase):
     def failed_mls_log(self):
         names = (*publisher.REQUIRED, *publisher.META)
         lines = [f"test {name} ... {'FAILED' if name == publisher.MLS_CASE else 'ok'}" for name in names]
-        lines += [PRIVATE, "test result: FAILED. 17 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 12.50s"]
+        lines += [PRIVATE, "test result: FAILED. 19 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 12.50s"]
         (self.run / "native.log").write_text("\n".join(lines) + "\n", encoding="utf-8")
         result = json.loads((self.run / "native-result.json").read_text())
         self.write("native-result.json", dict(result, exit_code=101))
@@ -426,12 +426,12 @@ class NativeOperationStatusTests(unittest.TestCase):
         self.write("diagnostics/mls-interop.json", phase)
         result = self.publish()
         self.assertEqual(result["failure_phases"], [phase])
-        self.assertEqual(result["counts"], {"passed": 17, "failed": 1, "ignored": 0, "measured": 0, "filtered_out": 0})
+        self.assertEqual(result["counts"], {"passed": 19, "failed": 1, "ignored": 0, "measured": 0, "filtered_out": 0})
         self.assertEqual(result["status"], "failed")
         self.assertFalse(result["export_complete"])
         self.assertFalse(result["native_execution_complete"])
         self.assertIsNone(result["coverage"])
-        self.assertEqual(len(result["tests"]), 17)
+        self.assertEqual(len(result["tests"]), 18)
         self.assertEqual(len(result["meta_tests"]), 2)
         real_publish = publisher.publish
         def isolated(run_root, output_dir):
