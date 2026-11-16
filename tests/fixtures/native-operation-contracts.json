@@ -79,24 +79,34 @@
       "target": "native_operation_contracts",
       "test": "call_invitation_retains_real_recipient_and_fresh_holder_verdict",
       "artifact": "call-invitation.json"
+    },
+    "push_gateway": {
+      "target": "native_operation_contracts",
+      "test": "push_gateway_retains_native_registration_receipt_and_provider_dispatch",
+      "artifact": "push-gateway.json"
+    },
+    "applet_managed_configuration": {
+      "target": "native_operation_contracts",
+      "test": "applet_managed_configuration_retains_review_originals_and_native_route",
+      "artifact": "applet-managed-configuration.json"
     }
   },
   "operations": [
     {
       "operation_id": "ak.edge.applet.command.transaction.v1",
-      "native_case": null
+      "native_case": "applet_managed_configuration"
     },
     {
       "operation_id": "ak.edge.applet.managed_actor.command.author.v1",
-      "native_case": null
+      "native_case": "applet_managed_configuration"
     },
     {
       "operation_id": "ak.edge.push.command.apply_registration.v1",
-      "native_case": null
+      "native_case": "push_gateway"
     },
     {
       "operation_id": "ak.edge.push.command.notify.v1",
-      "native_case": null
+      "native_case": "push_gateway"
     },
     {
       "operation_id": "ak.gate.account.command.abandon_identity_creation.v1",
@@ -304,7 +314,7 @@
     },
     {
       "operation_id": "ak.self.applet.ghost.command.preview.v1",
-      "native_case": null
+      "native_case": "applet_managed_configuration"
     },
     {
       "operation_id": "ak.self.applet.install.command.preview.v1",
@@ -380,7 +390,7 @@
     },
     {
       "operation_id": "ak.self.applet.bot.command.preview.v1",
-      "native_case": null
+      "native_case": "applet_managed_configuration"
     },
     {
       "operation_id": "ak.self.applet.authority.read.material.v1",
@@ -388,15 +398,15 @@
     },
     {
       "operation_id": "ak.self.management_review.command.request.v1",
-      "native_case": null
+      "native_case": "applet_managed_configuration"
     },
     {
       "operation_id": "ak.self.management_review.command.decide.v1",
-      "native_case": null
+      "native_case": "applet_managed_configuration"
     },
     {
       "operation_id": "ak.self.management_review.read.status.v1",
-      "native_case": null
+      "native_case": "applet_managed_configuration"
     },
     {
       "operation_id": "ak.self.call.invitation.command.send.v1",
@@ -436,15 +446,15 @@
     },
     {
       "operation_id": "ak.self.applet.configuration.command.submit.v1",
-      "native_case": null
+      "native_case": "applet_managed_configuration"
     },
     {
       "operation_id": "ak.peer.applet.configuration.command.submit.v1",
-      "native_case": null
+      "native_case": "applet_managed_configuration"
     },
     {
       "operation_id": "ak.edge.applet.configuration.command.execute.v1",
-      "native_case": null
+      "native_case": "applet_managed_configuration"
     }
   ]
 }

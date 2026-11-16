@@ -52,6 +52,7 @@ pub async fn blob_presign() -> Result<()> {
 }
 
 mod applet_installations;
+mod applet_managed_configuration;
 mod organization_registrations;
 mod peer_membership_reads;
 mod peer_signal;
@@ -63,6 +64,11 @@ mod service_registrations;
 pub async fn organization_registrations() -> Result<()> {
     validate_registered_schema_bindings()?;
     organization_registrations::run().await
+}
+
+pub async fn applet_managed_configuration() -> Result<()> {
+    validate_registered_schema_bindings()?;
+    crate::harness::heap_future(applet_managed_configuration::run).await
 }
 
 pub async fn applet_installations() -> Result<()> {
@@ -869,4 +875,11 @@ pub async fn account_identity_creation() -> Result<()> {
         println!("native operation contract passed: {identifier}");
     }
     Ok(())
+}
+
+mod push_gateway;
+
+pub async fn push_gateway() -> Result<()> {
+    validate_registered_schema_bindings()?;
+    crate::harness::heap_future(push_gateway::run).await
 }

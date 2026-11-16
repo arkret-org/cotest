@@ -103,3 +103,15 @@ async fn applet_installations_retain_original_sources_and_exact_fenced_replays()
 -> anyhow::Result<()> {
     cotest::scenarios::native_operation_contracts::applet_installations().await
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn push_gateway_retains_native_registration_receipt_and_provider_dispatch()
+-> anyhow::Result<()> {
+    cotest::scenarios::native_operation_contracts::push_gateway().await
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn applet_managed_configuration_retains_review_originals_and_native_route()
+-> anyhow::Result<()> {
+    cotest::scenarios::native_operation_contracts::applet_managed_configuration().await
+}

@@ -14,6 +14,7 @@ pub mod health;
 pub mod http;
 pub mod joint_service_bootstrap;
 pub mod live_gate;
+pub mod managed_applet_host;
 pub mod mock_http;
 pub(crate) mod native_account;
 pub(crate) mod native_issuer_binding;

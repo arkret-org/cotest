@@ -29,7 +29,7 @@ const SCOPE: [&str; 5] = [
 
 /// Observe only this case's durable authority/effects. HTTP nonce/cache rows
 /// are not business effects, and are deliberately outside this comparison.
-async fn originals(
+pub(super) async fn originals(
     database: &str,
     realm: &RealmId,
     applet: &arkret_wire::AppletId,
@@ -75,7 +75,7 @@ fn only<'a>(value: &'a Value, name: &str) -> Result<&'a Value> {
     Ok(row)
 }
 
-fn require_original(snapshot: &Value, original: &CommittedEventFullView) -> Result<()> {
+pub(super) fn require_original(snapshot: &Value, original: &CommittedEventFullView) -> Result<()> {
     let found = snapshot["committed"]
         .as_array()
         .context("native committed originals absent")?

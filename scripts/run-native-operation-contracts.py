@@ -24,26 +24,8 @@ def write(path, value):
     path.write_text(json.dumps(value, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
 
-def source_fence():
-    result = {}
-    repositories = [(path.name, path) for path in gate.ROOT.iterdir() if (path / ".git").exists()]
-    savfox = gate.ROOT.parent / "savfox-ai/savfox"
-    if (savfox / ".git").exists():
-        repositories.append(("savfox", savfox))
-    for name, root in repositories:
-        if name == "arkret-work":
-            continue
-        paths = subprocess.run(["git", "ls-files", "-z", "--cached", "--others", "--exclude-standard"],
-                               cwd=root, check=True, capture_output=True).stdout.decode("utf-8").split("\0")
-        for relative in paths:
-            path = root / relative
-            if relative and path.is_file() and (path.suffix in {".rs", ".toml", ".lock", ".json", ".sql", ".md", ".py", ".ps1", ".ts", ".mjs", ".yml", ".yaml", ".sh", ".txt"} or path.name == "Dockerfile" or path.name.endswith(".dockerignore")):
-                result[f"{name}/{relative}"] = digest(path)
-    return result
-
-
 def execute(output, name, repository, command, environment, *, require_success=True):
-    before = source_fence()
+    before = gate.source_fence()
     fence = output / f"{name}-sources.json"
     write(fence, before)
     metadata = subprocess.run(["cargo", "metadata", "--locked", "--format-version", "1", "--no-deps"],
@@ -60,7 +42,7 @@ def execute(output, name, repository, command, environment, *, require_success=T
     except subprocess.TimeoutExpired:
         code = 124
     result = {"command": command, "exit_code": code, "seconds": round(time.monotonic() - started, 2),
-              "sources_unchanged": source_fence() == before, "source_fence": fence.name,
+              "sources_unchanged": gate.source_fence() == before, "source_fence": fence.name,
               "log": log.name, "target_directory": json.loads(metadata.stdout)["target_directory"]}
     write(output / f"{name}-result.json", result)
     if require_success:
@@ -91,6 +73,32 @@ def build(output, name, environment):
     return {"producer_result": f"{name}-result.json", "executable": str(frozen), "sha256": result["sha256"]}
 
 
+def build_managed_applet_host(output, environment):
+    name = gate.APPLET_HOST_TARGET
+    command = ["cargo", "build", "--locked", "--bin", name,
+               "--message-format=json-render-diagnostics"]
+    result = execute(output, name, gate.REPO, command, environment)
+    cargo_log = (output / result["log"]).read_text(encoding="utf-8")
+    artifact = gate.managed_applet_host_artifact(cargo_log)
+    # Keep the exact artifact Cargo reported. A copied or inferred executable
+    # cannot substitute for this test product's full source/build provenance.
+    executable = Path(artifact["executable"]).resolve(strict=True)
+    result.update(role=gate.APPLET_HOST_ROLE, executable=str(executable), sha256=digest(executable),
+                  compiler_target=artifact["target"], metadata=f"{name}-metadata.json")
+    product = {"role": gate.APPLET_HOST_ROLE, "producer_result": f"{name}-result.json",
+               "executable": str(executable), "sha256": result["sha256"]}
+    gate.verify_managed_applet_host_product(
+        product, result, gate.read(output / result["source_fence"]), gate.source_fence(),
+        gate.read(output / result["metadata"]), cargo_log)
+    write(output / f"{name}-result.json", result)
+    write(output / f"{name}-product.json", product)
+    return product
+
+
+def native_service_names(selected_cases):
+    return ("coland", "coauth", "floria") if selected_cases is None or "push_gateway" in selected_cases else ("coland", "coauth")
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", type=Path, required=True, help="A new directory inside Cotest artifacts.")
@@ -103,7 +111,10 @@ def main():
     observations = output / "observations"
     observations.mkdir()
     environment = os.environ.copy()
-    for variable in ("COTEST_COAUTH_DATABASE_URL", "COTEST_COLAND_DATABASE_URL"):
+    database_variables = ["COTEST_COAUTH_DATABASE_URL", "COTEST_COLAND_DATABASE_URL"]
+    if "floria" in native_service_names(args.case):
+        database_variables.append("COTEST_FLORIA_DATABASE_URL")
+    for variable in database_variables:
         gate.require(bool(environment.get(variable)), f"{variable} is required; a missing native database cannot be skipped")
     environment.setdefault("COLAND_TEST_DATABASE_URL", environment["COTEST_COLAND_DATABASE_URL"])
     environment["COTEST_NATIVE_OPERATION_EVIDENCE_DIR"] = str(observations)
@@ -112,11 +123,14 @@ def main():
     execute(output, "service-isolation", gate.REPO,
             [sys.executable, "-B", str(gate.REPO / "scripts/check_service_isolation.py")], environment)
     products = []
-    for name in ("coland", "coauth"):
+    for name in native_service_names(args.case):
         print(f"Building native {name}", flush=True)
         product = build(output, name, environment)
         products.append(product)
         environment[name.upper() + "_BIN"] = product["executable"]
+    print("Building the owned production managed Applet host worker", flush=True)
+    products.append(build_managed_applet_host(output, environment))
+    environment["COTEST_NATIVE_APPLET_HOST_PRODUCT"] = str(output / f"{gate.APPLET_HOST_TARGET}-product.json")
     # Failure locations are private diagnostics, never observations or proof.
     diagnostics = output / "diagnostics"
     diagnostics.mkdir(mode=0o700)

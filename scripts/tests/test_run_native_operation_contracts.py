@@ -98,16 +98,36 @@ class FrozenProductTests(unittest.TestCase):
         self.assertNotIn("executable", producer)
         self.assertNotIn("sha256", producer)
 
+    def test_native_service_selection_keeps_existing_authorities_and_requires_gateway_for_full_or_push(self):
+        self.assertEqual(runner.native_service_names(None), ("coland", "coauth", "floria"))
+        self.assertEqual(runner.native_service_names(["push_gateway"]), ("coland", "coauth", "floria"))
+        self.assertEqual(runner.native_service_names(["account_device_pairing"]), ("coland", "coauth"))
+        self.assertEqual(runner.native_service_names(["account_device_pairing", "push_gateway"]), ("coland", "coauth", "floria"))
+
     def test_failure_diagnostics_are_separate_and_do_not_bypass_the_native_gate(self):
         output = self.root / "artifacts/new-run"
         document = runner.gate.declarations()
         products = []
+        authority_builds = []
+        host_builds = []
+        host_executable = self.source.with_name("native_applet_host_worker" + (".exe" if os.name == "nt" else ""))
+        host_executable.write_bytes(b"independent component host fixture; not executed")
+        host_product = {"role": runner.gate.APPLET_HOST_ROLE,
+                        "producer_result": f"{runner.gate.APPLET_HOST_TARGET}-result.json",
+                        "executable": str(host_executable), "sha256": runner.digest(host_executable)}
         calls = []
         def build(root, name, environment):
             self.assertNotIn("COTEST_NATIVE_FAILURE_DIAGNOSTICS_DIR", environment)
+            authority_builds.append(name)
             product = {"executable": str(self.source), "sha256": runner.digest(self.source)}
             products.append(product)
             return product
+        def build_host(root, environment):
+            self.assertNotIn("COTEST_NATIVE_FAILURE_DIAGNOSTICS_DIR", environment)
+            self.assertEqual(root, output)
+            host_builds.append(root)
+            runner.write(root / f"{runner.gate.APPLET_HOST_TARGET}-product.json", host_product)
+            return host_product
         def execute(root, name, repository, command, environment, **kwargs):
             calls.append(name)
             if name == "native":
@@ -116,16 +136,22 @@ class FrozenProductTests(unittest.TestCase):
                 self.assertEqual(diagnostic, output / "diagnostics")
                 self.assertTrue(diagnostic.is_dir())
                 self.assertFalse(diagnostic.is_relative_to(observation))
-                self.assertEqual(command[-3:], ["--", "--nocapture", "--test-threads=1"])
+                prepared_host = Path(environment["COTEST_NATIVE_APPLET_HOST_PRODUCT"])
+                self.assertEqual(prepared_host, output / f"{runner.gate.APPLET_HOST_TARGET}-product.json")
+                self.assertEqual(json.loads(prepared_host.read_text()), host_product)
+                self.assertEqual(command[command.index("--") + 1:command.index("--") + 3], ["--nocapture", "--test-threads=1"])
+                self.assertEqual(command.count("--skip"), len(document["cases"]) - 1)
+                self.assertNotIn(document["cases"]["account_device_pairing"]["test"], command)
                 self.assertFalse(kwargs["require_success"])
                 return {"exit_code": 101, "sources_unchanged": True}
             return {"exit_code": 0, "sources_unchanged": True}
         with patch.object(runner.gate, "REPO", self.root), \
                 patch.object(runner.gate, "declarations", return_value=document), \
-                patch.object(sys, "argv", ["runner", "--output", str(output)]), \
+                patch.object(sys, "argv", ["runner", "--output", str(output), "--case", "account_device_pairing"]), \
                 patch.dict(os.environ, {"COTEST_COAUTH_DATABASE_URL": "synthetic-coauth",
                                        "COTEST_COLAND_DATABASE_URL": "synthetic-coland"}, clear=True), \
                 patch.object(runner, "build", side_effect=build), \
+                patch.object(runner, "build_managed_applet_host", side_effect=build_host), \
                 patch.object(runner, "execute", side_effect=execute), \
                 patch.object(runner.audit_native_operation_schemas, "audit", return_value={"schema_valid": True}), \
                 patch.object(runner.gate, "evidence_coverage") as coverage, \
@@ -134,8 +160,12 @@ class FrozenProductTests(unittest.TestCase):
                 runner.main()
         self.assertEqual(calls, ["service-isolation", "native"])
         self.assertEqual(len(products), 2)
+        self.assertEqual(authority_builds, ["coland", "coauth"])
+        self.assertEqual(host_builds, [output])
         self.assertEqual(list((output / "observations").iterdir()), [])
         self.assertEqual(json.loads((output / "native-result.json").read_text())["exit_code"], 101)
+        self.assertEqual(json.loads((output / "native-result.json").read_text())["native_products"],
+                         [*products, host_product])
         coverage.assert_not_called()
 
 

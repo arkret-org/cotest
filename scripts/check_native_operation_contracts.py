@@ -9,11 +9,19 @@ import math
 from datetime import datetime
 from pathlib import Path
 import re
+import subprocess
 from urllib.parse import urlsplit
 
 REPO = Path(__file__).resolve().parents[1]
 ROOT = REPO.parent
 CONTRACTS = REPO / "tests/fixtures/native-operation-contracts.json"
+APPLET_HOST_TARGET = "native_applet_host_worker"
+APPLET_HOST_ROLE = "cotest_managed_applet_host_worker"
+APPLET_HOST_OPERATIONS = {
+    "ak.edge.applet.managed_actor.command.author.v1",
+    "ak.edge.applet.configuration.command.execute.v1",
+    "ak.edge.applet.command.transaction.v1",
+}
 
 
 def read(path: Path):
@@ -28,6 +36,24 @@ def canonical_digest(value) -> str:
 def require(condition, message):
     if not condition:
         raise ValueError(message)
+
+
+def source_fence():
+    result = {}
+    repositories = [(path.name, path) for path in ROOT.iterdir() if (path / ".git").exists()]
+    savfox = ROOT.parent / "savfox-ai/savfox"
+    if (savfox / ".git").exists():
+        repositories.append(("savfox", savfox))
+    for name, root in repositories:
+        if name == "arkret-work":
+            continue
+        paths = subprocess.run(["git", "ls-files", "-z", "--cached", "--others", "--exclude-standard"],
+                               cwd=root, check=True, capture_output=True).stdout.decode("utf-8").split("\0")
+        for relative in paths:
+            path = root / relative
+            if relative and path.is_file() and (path.suffix in {".rs", ".toml", ".lock", ".json", ".sql", ".md", ".py", ".ps1", ".ts", ".mjs", ".yml", ".yaml", ".sh", ".txt"} or path.name == "Dockerfile" or path.name.endswith(".dockerignore")):
+                result[f"{name}/{relative}"] = hashlib.sha256(path.read_bytes()).hexdigest()
+    return result
 
 
 def declarations(document=None):
@@ -1857,7 +1883,142 @@ def call_invitation(evidence):
             "invitation ACK or rejection changed native canonical/current/Consent facts")
 
 
-PROOFS = {"applet_installations": applet_installations, "call_invitation": call_invitation, "account_security_rotation": account_security_rotation, "peer_contacts": peer_contacts, "peer_keypackage_claims": peer_keypackage_claims,"account_identity_creation": account_identity_creation, "account_device_sessions": account_device_sessions,
+def push_gateway_actual(evidence, name, operation, request, response, status=200):
+    rows = evidence[name]
+    require(len(rows) == 1, "push operation has no unique actual ingress exchange")
+    row = rows[0]
+    ingress = row["ingress"]
+    require(row["status"] == ingress["response_status"] == status and row["request"] == request and
+            row["response"] == response and json.loads(base64.b64decode(ingress["request_body_base64"], validate=True)) == request and
+            json.loads(base64.b64decode(ingress["response_body_base64"], validate=True)) == response,
+            "push proof changed its actual request or response bytes")
+    headers = {name.lower(): base64.b64decode(value, validate=True).decode() for name, value in ingress["request_headers"]}
+    require(headers["arkret-operation"] == operation and headers["destination-service-id"] == evidence["gateway"]["gateway_resolution"]["service_id"] and
+            bool(headers["signature"]) and bool(headers["signature-input"]) and
+            ingress["private_request_target"] == ingress["public_target"] and
+            urlsplit(ingress["public_target"]).scheme == "https" and
+            urlsplit(ingress["public_target"]).netloc == urlsplit(evidence["gateway"]["process"]["origin"]).netloc == headers.get("host", urlsplit(ingress["public_target"]).netloc),
+            "push proof did not retain the original signed public HTTPS target")
+    if 200 <= status < 300:
+        matching = [exchange for exchange in evidence["observations"]["exchanges"]
+                    if exchange["operation_id"] == operation and exchange["request_body"] == request and
+                    exchange["response_body"] == response and exchange["url"] == ingress["public_target"] and
+                    exchange["response_status"] == status and exchange["explicit_request_headers"] == headers]
+        require(bool(matching) and headers["source-service-id"] == evidence["source_station"],
+                "push success has no exact recorded owning native source exchange")
+    return headers
+
+
+def push_gateway_receipt(evidence, request, response):
+    receipt = response["receipt"]
+    gateway = evidence["gateway"]["gateway_resolution"]["service_id"]
+    require(all(receipt[field] == request[field] for field in ("registration_id", "push_target_id", "device_id", "state")) and
+            receipt["request_digest"] == "sha256:" + canonical_digest(request) and
+            receipt["source_station_id"] == evidence["source_station"] and receipt["destination_gateway_id"] == gateway and
+            receipt["proof"]["audience"] == evidence["source_station"] and receipt["proof"]["created_at"] == receipt["stored_at"] and
+            bool(receipt["proof"]["jws"]), "push receipt substituted its exact request, tenant, gateway or stored original")
+    state = evidence["gateway"]["gateway_history"]["entries"][-1]["state"]
+    require(receipt["proof"]["verification_method"] in state["assertionMethod"],
+            "push receipt lacks its actual Gateway native assertion method")
+
+
+def push_gateway(evidence):
+    apply_operation, notify_operation = "ak.edge.push.command.apply_registration.v1", "ak.edge.push.command.notify.v1"
+    gateway = evidence["gateway"]
+    resolution, history = gateway["gateway_resolution"], gateway["gateway_history"]
+    source, device = evidence["source_station"], evidence["device"]
+    request, response = evidence["accepted_request"], evidence["accepted"]
+    require(source != evidence["other_station"] and source != resolution["service_id"] and
+            resolution["service_kind"] == "push_gateway" and history["native_history"] is True and
+            history["entries"] == resolution["method_history_evidence"]["log_entries"] and
+            history["did"] == resolution["normalized_did_document"]["did"] and
+            gateway["onboarded_station_resolution"]["service_id"] == source and
+            len(evidence["processes"]) == 5 and gateway["process"] in evidence["processes"] and
+            len(evidence["observations"]["issuer_bindings"]) == 2,
+            "push gateway lacks its independent real native identity and source authority foundation")
+    push_gateway_actual(evidence, "apply", apply_operation, request, response)
+    push_gateway_receipt(evidence, request, response)
+    registered = evidence["registered"]
+    require(request["state"] == "active" and all(registered[field] == request[field] for field in ("registration_id", "push_target_id")) and
+            request["device_id"] == evidence["registration"]["device_id"] == device and
+            request["push_key"] == evidence["registration"]["push_key"] and
+            request["app_id"] == evidence["registration"]["app_id"] == "org.arkret.native-push",
+            "Gateway registration was not derived by the actual authenticated Station")
+    initial, installed = evidence["initial"], evidence["installed"]
+    require(initial["gateway_registrations"] == initial["push_devices"] == initial["push_registration_handoff_intents"] == [] and
+            len(installed["gateway_registrations"]) == len(installed["push_devices"]) == len(installed["push_registration_handoff_intents"]) == 1,
+            "push effect omitted its exact original Station and Gateway durable rows")
+    row, intent, local = installed["gateway_registrations"][0], installed["push_registration_handoff_intents"][0], installed["push_devices"][0]
+    require(row["source_station_id"] == intent["source_station_id"] == source and
+            row["registration_id"] == intent["registration_id"] == request["registration_id"] and
+            row["push_target_id"] == request["push_target_id"] and row["device_id"] == device and row["state"] == "active" and
+            row["request_digest"] == intent["request_digest"] == response["receipt"]["request_digest"] and
+            json.loads(row["receipt_json"]) == intent["receipt"] == response["receipt"] and
+            intent["status"] == "receipt_verified" and intent["destination_gateway_id"] == resolution["service_id"] and
+            intent["canonical_request"] == "\\x" + json.dumps(request, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode().hex() and
+            local["public_handoff"] is True and local["device_id"] == device and
+            local["payload"]["registration_id"] == request["registration_id"] and
+            local["payload"]["push_target_id"] == request["push_target_id"] and
+            isinstance(row["route_ciphertext"], str) and row["route_ciphertext"] and request["push_key"] not in row["route_ciphertext"],
+            "push receipt and encrypted provider route do not match the real source transaction")
+    require(installed == evidence["after_replay"] == evidence["after_changed"] == evidence["after_notify"] and
+            evidence["replay"] == response, "exact push replay or notify rewrote registration originals")
+    push_gateway_actual(evidence, "replay_exchange", apply_operation, request, evidence["replay"])
+    changed = evidence["changed_exchange"][0]
+    changed_headers = push_gateway_actual(evidence, "changed_exchange", apply_operation, changed["request"], changed["response"], 409)
+    require(changed["request"]["registration_id"] == request["registration_id"] and changed["request"]["push_key"] != request["push_key"] and
+            changed["response"]["type"] == "https://arkret.org/problems/duplicate_conflict" and changed_headers["source-service-id"] == source,
+            "changed push registration was not rejected under the exact immutable identity")
+    notify, notified = evidence["notify"], evidence["notified"]
+    require(notify["notification"] == {"push_target_id":request["push_target_id"],"wakeup_kind":"message","devices":[{"device_id":device}]} and
+            notified == {"push_target_id":request["push_target_id"],"outcomes":[{"device_id":device,"gateway_status":"accepted"}]} and
+            evidence["duplicate"] == notified,
+            "push notify accepted a different device/target or no actual positive outcome")
+    first_headers = push_gateway_actual(evidence, "notify_exchange", notify_operation, notify, notified)
+    retry_headers = push_gateway_actual(evidence, "duplicate_exchange", notify_operation, notify, evidence["duplicate"])
+    require(first_headers["idempotency-key"] == retry_headers["idempotency-key"] == evidence["notify_key"],
+            "notify replay substituted its exact signed identity")
+    provider = evidence["provider_after_notify"]
+    received = provider["provider_received"]
+    require(provider["deployment"] == "explicit_operator_connect_proxy" and
+            provider["declared_provider_url"] == "https://1.1.1.1/deliver/{push_key}" and len(received) == 1 and
+            received == evidence["provider_after_duplicate"]["provider_received"] == gateway["provider"]["provider_received"] and
+            any(row.get("accepted") is True and row["request"].startswith("CONNECT 1.1.1.1:443 HTTP/1.1\r\n") for row in provider["connect_observations"]) and
+            received[0]["method"] == "POST" and received[0]["uri"].endswith("/deliver/" + request["push_key"]) and
+            json.loads(base64.b64decode(received[0]["raw_body_base64"], validate=True)) == received[0]["body"] and
+            received[0]["body"]["push_target_id"] == request["push_target_id"] and received[0]["body"]["wakeup_kind"] == "message" and
+            not ({"actor_id","account_id","realm_id","strand_id","event_id","message_id"} & received[0]["body"].keys()),
+            "Gateway acceptance lacks exactly one real private provider dispatch and opaque route")
+    wrong = evidence["wrong_exchange"][0]
+    wrong_headers = push_gateway_actual(evidence, "wrong_exchange", notify_operation, notify, wrong["response"], 401)
+    require(wrong_headers["source-service-id"] == evidence["other_station"] and evidence["wrong_before"] == evidence["wrong_after"] == installed,
+            "another actual Station borrowed the installed tenant route or caused effects")
+    revoked, revoked_response = evidence["revoked"], evidence["revoked_response"]
+    require(revoked == {field:request[field] for field in ("registration_id","push_target_id","device_id")} | {"state":"revoked"},
+            "terminal revoke changed the original installed route identity")
+    push_gateway_actual(evidence, "revoke_exchange", apply_operation, revoked, revoked_response)
+    push_gateway_receipt(evidence, revoked, revoked_response)
+    terminal = evidence["after_revoke"]["gateway_registrations"]
+    require(len(terminal) == 1 and terminal[0]["state"] == "revoked" and terminal[0]["route_ciphertext"] is None and
+            json.loads(terminal[0]["receipt_json"]) == revoked_response["receipt"] and evidence["after_revoke"] == evidence["after_revive"],
+            "revocation did not durably tombstone the provider route without revival")
+    revived = evidence["revive_exchange"][0]
+    push_gateway_actual(evidence, "revive_exchange", apply_operation, request, revived["response"], 409)
+    require(revived["response"]["type"] == "https://arkret.org/problems/duplicate_conflict",
+            "terminal active replay did not fail closed with exact conflict")
+    rejected = {"push_target_id":request["push_target_id"],"outcomes":[{"device_id":device,"gateway_status":"rejected","reason_code":"push_target_unknown"}]}
+    require(evidence["revoked_notify"] == rejected, "revoked target remained dispatchable")
+    push_gateway_actual(evidence, "revoked_notify_exchange", notify_operation, notify, rejected)
+    require(all(initial[table] == evidence["after_revive"][table] for table in ("canonical_events","realm_commits","pcr_device_authorization_current_states")) and
+            initial["canonical_events"] and initial["realm_commits"], "service-local push effects changed governance/Device authority originals")
+
+
+def applet_managed_configuration(evidence):
+    from native_applet_management_proof import check
+    check(evidence, require=require, digest=canonical_digest, decode=decoded_json)
+
+
+PROOFS = {"applet_managed_configuration": applet_managed_configuration, "push_gateway": push_gateway, "applet_installations": applet_installations, "call_invitation": call_invitation, "account_security_rotation": account_security_rotation, "peer_contacts": peer_contacts, "peer_keypackage_claims": peer_keypackage_claims,"account_identity_creation": account_identity_creation, "account_device_sessions": account_device_sessions,
           "account_device_pairing": account_device_pairing, "account_policy_recovery": account_policy_recovery,
           "account_private_storage": account_private_storage, "mls_interop": mls_interop,
           "account_consent": account_consent,"identity_reservations":identity_reservations,
@@ -1869,6 +2030,69 @@ def deployment_boundary_guard(source_fence):
     from check_service_isolation import source_errors
     failures = source_errors(ROOT, source_fence)
     require(not failures, "; ".join(failures))
+
+
+def managed_applet_host_artifact(cargo_log):
+    artifacts = []
+    completed = []
+    for line in cargo_log.splitlines():
+        try:
+            record = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if record.get("reason") == "build-finished":
+            completed.append(record.get("success"))
+        target = record.get("target", {})
+        if (record.get("reason") == "compiler-artifact" and target.get("name") == APPLET_HOST_TARGET
+                and target.get("kind") == ["bin"] and record.get("executable")):
+            artifacts.append(record)
+    require(len(artifacts) == 1 and completed == [True],
+            "Cargo did not report exactly one successfully built managed Applet host worker")
+    require(artifacts[0].get("profile", {}).get("test") is False,
+            "managed Applet host artifact is a test harness instead of its real main")
+    return artifacts[0]
+
+
+def verify_managed_applet_host_product(product, producer, inputs, execution_sources, metadata, cargo_log):
+    require(product.get("role") == producer.get("role") == APPLET_HOST_ROLE,
+            "managed Applet host product has another role")
+    require(producer.get("command") == ["cargo", "build", "--locked", "--bin", APPLET_HOST_TARGET,
+                                        "--message-format=json-render-diagnostics"],
+            "managed Applet host was not built by its exact Cargo binary target")
+    require(producer.get("exit_code") == 0 and producer.get("sources_unchanged") is True and
+            producer.get("executable") == product.get("executable") and producer.get("sha256") == product.get("sha256"),
+            "managed Applet host has no matching successful product build")
+    required = {"cotest/Cargo.toml", "cotest/Cargo.lock", "cotest/src/bin/native_applet_host_worker.rs",
+                "cotest/src/scenarios/_helpers/managed_applet_host.rs", "cotest/crates/test-support/src/operation_observation.rs",
+                "bridges/Cargo.toml", "bridges/crates/runtime/Cargo.toml", "bridges/crates/runtime/src/web.rs",
+                "bridges/crates/runtime/src/manager_archive.rs", "bridges/crates/runtime/src/file_authoring_store.rs",
+                "arkret-rust-sdk/Cargo.toml", "arkret-rust-sdk/crates/wire/Cargo.toml",
+                "arkret-rust-sdk/crates/signatures/Cargo.toml"}
+    # This worker links Cotest and Bridge. The production-server exception
+    # excluding Cotest inputs must never be used for its executable.
+    require(required <= inputs.keys() and inputs == execution_sources == source_fence(),
+            "managed Applet host belongs to old or incomplete Cotest/Bridge/SDK sources")
+    artifact = managed_applet_host_artifact(cargo_log)
+    target = producer.get("compiler_target", {})
+    require(target == artifact["target"] and
+            Path(artifact["executable"]).resolve() == Path(product["executable"]).resolve(),
+            "managed Applet host product differs from the actual Cargo compiler artifact")
+    require(target.get("kind") == ["bin"] and target.get("name") == APPLET_HOST_TARGET and
+            target.get("test") is False and
+            Path(target.get("src_path", "")).resolve() == (REPO / "src/bin/native_applet_host_worker.rs").resolve(),
+            "managed Applet host compiler artifact is not the owned utility binary")
+    matches = [item for package in metadata.get("packages", []) for item in package.get("targets", [])
+               if item.get("kind") == ["bin"] and item.get("name") == APPLET_HOST_TARGET]
+    require(len(matches) == 1 and matches[0] == target,
+            "managed Applet host compiler target differs from actual Cargo metadata")
+    executable = Path(product["executable"])
+    actual_target = Path(metadata.get("target_directory", "")).resolve()
+    require(str(actual_target) == producer.get("target_directory") and executable.is_absolute() and
+            executable.is_file() and executable.resolve().is_relative_to(actual_target) and
+            executable.parent == actual_target / "debug" and
+            re.fullmatch(r"native_applet_host_worker(?:\.exe)?", executable.name) is not None and
+            hashlib.sha256(executable.read_bytes()).hexdigest() == product["sha256"],
+            "managed Applet host executable differs from the exact native Cargo artifact")
 
 
 def evidence_coverage(document, directory: Path, execution: Path):
@@ -1921,15 +2145,24 @@ def evidence_coverage(document, directory: Path, execution: Path):
     products = result.get("native_products", [])
     require(len(products) >= 2, "native executable build provenance absent")
     product_identities = set()
+    applet_host_identities = set()
     for product in products:
         producer = read(execution.parent / product["producer_result"])
         require(producer["exit_code"] == 0 and producer["sources_unchanged"] is True and
                 producer["sha256"] == product["sha256"] and producer["executable"] == product["executable"],
                 "native executable differs from its successful build")
         inputs = read(execution.parent / producer["source_fence"])
-        # Cotest is not a production dependency of either native executable.
-        require(all(source_fence.get(path) == digest for path, digest in inputs.items()
-                    if not path.startswith("cotest/")), "native executable belongs to old production sources")
+        if product.get("role") == APPLET_HOST_ROLE:
+            require(not applet_host_identities, "managed Applet host product was registered more than once")
+            verify_managed_applet_host_product(product, producer, inputs, source_fence,
+                                               read(execution.parent / producer["metadata"]),
+                                               (execution.parent / producer["log"]).read_text(encoding="utf-8"))
+            applet_host_identities.add((product["executable"], product["sha256"]))
+        else:
+            require("role" not in product, "native executable has an unrecognized product role")
+            # Cotest is not a production dependency of either native server.
+            require(all(source_fence.get(path) == digest for path, digest in inputs.items()
+                        if not path.startswith("cotest/")), "native executable belongs to old production sources")
         product_identities.add((product["executable"], product["sha256"]))
     rows = {row["operation_id"]: row for row in document["operations"]}
     covered = set()
@@ -1942,6 +2175,29 @@ def evidence_coverage(document, directory: Path, execution: Path):
         require(case["target"] in result["command"] or "--workspace" in result["command"],
                 "native test target was not selected by the execution")
         proof = read(path)
+        if identifier == "push_gateway":
+            required_push = {"floria/Cargo.toml", "floria/src/main.rs", "floria/src/pushkin/custom.rs", "floria/src/auth/signature.rs",
+                             "floria/src/auth/helpers.rs", "floria/src/registration_handoff.rs", "floria/src/service/registration_handoff.rs",
+                             "floria/src/service/notify/mod.rs", "floria/src/egress.rs", "floria/src/lib.rs",
+                             "cotest/src/scenarios/_helpers/floria_bootstrap.rs", "cotest/src/scenarios/_helpers/floria_bootstrap/native.rs",
+                             "cotest/src/scenarios/native_operation_contracts/push_gateway.rs", "cotest/src/harness/server/native_push_gateway.rs",
+                             "arkret-rust-sdk/crates/egress-reqwest/src/tls_roots.rs", "arkret-rust-sdk/crates/test-kit/src/service_identity.rs"}
+            require(required_push <= source_fence.keys(), "native Push Gateway source provenance is incomplete")
+        if identifier == "applet_managed_configuration":
+            required_applet = {
+                "cotest/src/scenarios/native_operation_contracts/applet_managed_configuration.rs",
+                "cotest/src/scenarios/native_operation_contracts/applet_managed_configuration/service.rs",
+                "cotest/src/scenarios/native_operation_contracts/applet_managed_configuration/effects.rs",
+                "cotest/scripts/native_applet_management_proof.py",
+                "cotest/src/harness/server/service_route_relay.rs",
+                "cotest/src/scenarios/call_recording_live/service.rs",
+                "bridges/crates/runtime/src/web.rs",
+                "bridges/crates/runtime/src/applet_configuration.rs",
+                "bridges/crates/runtime/src/managed_authoring.rs",
+                "coland/crates/http/src/routing/management_review.rs",
+                "coland/crates/http/src/routing/extensions/applet_bridge/configuration.rs",
+            }
+            require(required_applet <= source_fence.keys(), "native Applet management source provenance is incomplete")
         scope = {op for op, row in rows.items() if row["native_case"] == identifier}
         require(proof["case"] == identifier and set(proof["scope"]) == scope and bool(scope),
                 "native evidence has the wrong operation scope")
@@ -1955,6 +2211,9 @@ def evidence_coverage(document, directory: Path, execution: Path):
                     "native process executable changed")
             require((process["executable"], process["sha256"].removeprefix("sha256:")) in product_identities,
                     "native process did not use the frozen product build")
+            if process.get("role") == APPLET_HOST_ROLE:
+                require((process["executable"], process["sha256"].removeprefix("sha256:")) in applet_host_identities,
+                        "managed Applet process did not use its complete-source worker product")
         seen = set()
         for exchange in proof["observations"]["exchanges"]:
             operation = exchange["operation_id"]
@@ -1964,6 +2223,11 @@ def evidence_coverage(document, directory: Path, execution: Path):
             url = urlsplit(exchange["url"])
             require(f"{url.scheme}://{url.netloc}" in origins and matches_registered_path(binding["path"], url.path) and
                     exchange["method"] == binding["method"], "request did not reach the owning native process")
+            if operation in APPLET_HOST_OPERATIONS:
+                require(sum(process.get("role") == APPLET_HOST_ROLE and
+                            process["origin"].rstrip("/") == f"{url.scheme}://{url.netloc}"
+                            for process in processes) == 1,
+                        "Edge authoring/configuration/completion did not reach its exact owned production host")
             require(exchange["explicit_request_headers"]["arkret-operation"] == operation and
                     200 <= exchange["response_status"] < 300, "refused or wrong operation is not coverage")
             if binding["request_schema_ref"] is None:

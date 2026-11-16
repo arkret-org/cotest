@@ -4,6 +4,9 @@ use std::collections::BTreeMap;
 use anyhow::ensure;
 use arkret_keystore::{EncryptedFileKeyStore, KeyBytes, KeyStore};
 use arkret_models_identity::{AuthenticatedServiceResolution, ResolutionMethodHistoryEvidence};
+use cotest_test_support::operation_observation::{
+    NativeOperationObservations, observe, record_response,
+};
 use salvo::conn::rustls::{Keycert, RustlsConfig};
 use salvo::conn::{Listener, TcpListener as HttpListener};
 use salvo::prelude::*;
@@ -20,6 +23,7 @@ struct FaultState {
     requests: BTreeMap<String, usize>,
     upstream: Option<Url>,
     forwarded: BTreeMap<(String, String), usize>,
+    operation_observations: NativeOperationObservations,
 }
 
 impl ServiceRouteControl {
@@ -54,6 +58,17 @@ pub struct ServiceRouteRelay {
 impl ServiceRouteRelay {
     pub fn control(&self) -> ServiceRouteControl {
         self.control.clone()
+    }
+
+    /// Actual forwarded peer bytes only. A locally supplied fault response
+    /// returns before recording and cannot certify a production operation.
+    pub fn operation_observations(&self) -> NativeOperationObservations {
+        self.control
+            .0
+            .lock()
+            .unwrap()
+            .operation_observations
+            .clone()
     }
 
     pub fn select_backend(&self, server: &ArkretServer) -> Result<()> {
@@ -96,6 +111,7 @@ impl Drop for ServiceRouteRelay {
 #[derive(Clone)]
 struct Relay {
     upstream: Url,
+    public_base: Url,
     http: HttpClient,
     control: ServiceRouteControl,
 }
@@ -145,6 +161,25 @@ impl Relay {
                 .as_str(),
         )?;
         let body = req.payload_with_max_size(16 * 1024 * 1024).await?.to_vec();
+        let recorded = if req
+            .headers()
+            .get("arkret-operation")
+            .and_then(|v| v.to_str().ok())
+            == Some(arkret_wire::ServiceOperationId::PEER_APPLET_CONFIGURATION_COMMAND_SUBMIT_V1)
+        {
+            let public = self.public_base.join(
+                req.uri()
+                    .path_and_query()
+                    .context("observed peer path")?
+                    .as_str(),
+            )?;
+            let mut original = reqwest::Request::new(req.method().clone(), public);
+            *original.headers_mut() = req.headers().clone();
+            *original.body_mut() = Some(body.clone().into());
+            Some(original)
+        } else {
+            None
+        };
         let mut headers = req.headers().clone();
         let authority = req
             .uri()
@@ -171,7 +206,8 @@ impl Relay {
             .forwarded
             .entry((upstream.to_string(), path))
             .or_default() += 1;
-        res.status_code(response.status());
+        let upstream_status = response.status();
+        res.status_code(upstream_status);
         let mut headers = response.headers().clone();
         headers.remove("content-length");
         headers.remove("transfer-encoding");
@@ -180,7 +216,29 @@ impl Relay {
         if account_stream {
             res.stream(response.bytes_stream());
         } else {
-            res.write_body(response.bytes().await?)?;
+            let bytes = response.bytes().await?;
+            if upstream_status.is_success()
+                && let Some(original) = recorded
+            {
+                let (recorded, observations) = observe(async {
+                    record_response(Some(&original), upstream_status.as_u16(), &bytes)
+                })
+                .await;
+                recorded?;
+                ensure!(
+                    observations.accepted_identity_material.is_empty()
+                        && observations.issuer_bindings.is_empty(),
+                    "relay observation cannot substitute issuer authority"
+                );
+                self.control
+                    .0
+                    .lock()
+                    .unwrap()
+                    .operation_observations
+                    .exchanges
+                    .extend(observations.exchanges);
+            }
+            res.write_body(bytes)?;
         }
         Ok(())
     }
@@ -217,6 +275,7 @@ async fn listen(
     let control = ServiceRouteControl::default();
     let relay = Relay {
         upstream,
+        public_base: public.clone(),
         http: tls.http_client()?,
         control: control.clone(),
     };

@@ -207,77 +207,15 @@ impl RecorderService {
         member: &crate::scenarios::mls_lifecycle_live::Member,
         realm: &RealmId,
     ) -> Result<(AppletInstallRequestBody, Event, Event)> {
-        use arkret_models_collaboration::events_payloads::{
-            CapabilityGrantCreateBody, CapabilityGrantPayload,
-        };
-        use arkret_models_collaboration::governance::grant_constraint::{
-            CapabilitySubject, GrantConstraint, IssuerAuthorityRef,
-        };
-        let registration = member
-            .client
-            .author_event(
-                realm.as_str(),
-                EventKind::AppletRegistration.as_str(),
-                serde_json::to_value(self.package.to_registration(&self.epoch_evidence, None)?)?,
-            )
-            .await?;
-        let grant = member
-            .client
-            .author_event(
-                realm.as_str(),
-                EventKind::CapabilityGrant.as_str(),
-                serde_json::to_value(CapabilityGrantPayload {
-                    grant: CapabilityGrantCreateBody {
-                        schema: arkret_wire::SchemaId::CAPABILITY_V1.into(),
-                        realm_id: Some(realm.clone()),
-                        issuer_id: member.actor.clone(),
-                        subject: CapabilitySubject::Actor(ActorId::service(
-                            self.package.service_id.clone(),
-                        )),
-                        actions: self.package.requested_scopes.clone(),
-                        resources: vec![arkret_wire::WireResourceSelector::realm(realm.clone())],
-                        constraints: vec![GrantConstraint::applet_authority(
-                            self.package.applet_id.clone(),
-                            ActorId::service(self.package.service_id.clone()),
-                            self.package.registration_epoch.clone(),
-                        )],
-                        issuer_authority_refs: vec![IssuerAuthorityRef::RealmRoot {
-                            realm_id: realm.clone(),
-                            authority_event_ref: realm.event_id(),
-                            authority_generation: 0,
-                        }],
-                        issued_at: chrono::Utc::now(),
-                    },
-                })?,
-            )
-            .await?;
-        let basis: AppletInstallAuthoringRequestBasis = serde_json::from_value(json!({
-            "schema":AppletInstallAuthoringRequestBasis::SCHEMA,"purpose":"install_service","target_station_id":station.service_id(),
-            "install_actor_id":member.actor,"applet_id":self.package.applet_id,"service_id":self.package.service_id,"package_digest":self.package.package_digest,
-            "effective_scope":{"kind":"realm","realm_id":realm},"approval_request":{"approve_actions":self.package.requested_scopes,
-                "ghost_actor_mode":"policy_declared","delegated_native_actors_allowed":false,"e2ee_join_allowed":false,"widget_allowed":false},
-            "actor_policy":{"ghost_actor_mode":"policy_declared"},"e2ee_policy":{"mls_join_allowed":false},"widget_policy":{"widget_allowed":false},
-            "registration_event":registration,"capability_grant_events":[grant]
-        }))?;
-        let preview: AppletInstallPreviewResponseBody = serde_json::from_value(
-            expect_json(
-                member
-                    .client
-                    .post("/_arkret/self/applets/install/preview")
-                    .json(&AppletInstallPreviewRequestBody {
-                        applet_package: self.package.clone(),
-                        authoring_request_basis: basis.clone(),
-                    }),
-                reqwest::StatusCode::OK,
-            )
-            .await?,
-        )?;
-        let body = AppletInstallRequestBody {
-            applet_package: self.package.clone(),
-            authoring_request_basis: basis,
-            plan_digest: preview.plan.plan_digest,
-        };
-        Ok((body, registration, grant))
+        installation_request_for_package(
+            &self.package,
+            &self.epoch_evidence,
+            station,
+            member,
+            realm,
+            &[],
+        )
+        .await
     }
 
     pub async fn install(
@@ -544,4 +482,87 @@ impl RecorderService {
             )?,
         )
     }
+}
+
+/// Shared real preview authoring for independently hosted Applet packages.
+pub(crate) async fn installation_request_for_package(
+    package: &AppletPackage,
+    epoch_evidence: &AppletRegistrationEpochEvidence,
+    station: &ArkretServer,
+    member: &crate::scenarios::mls_lifecycle_live::Member,
+    realm: &RealmId,
+    extra_constraints: &[arkret_models_collaboration::governance::grant_constraint::GrantConstraint],
+) -> Result<(AppletInstallRequestBody, Event, Event)> {
+    use arkret_models_collaboration::events_payloads::{
+        CapabilityGrantCreateBody, CapabilityGrantPayload,
+    };
+    use arkret_models_collaboration::governance::grant_constraint::{
+        CapabilitySubject, GrantConstraint, IssuerAuthorityRef,
+    };
+    let registration = member
+        .client
+        .author_event(
+            realm.as_str(),
+            EventKind::AppletRegistration.as_str(),
+            serde_json::to_value(package.to_registration(epoch_evidence, None)?)?,
+        )
+        .await?;
+    let grant = member
+        .client
+        .author_event(
+            realm.as_str(),
+            EventKind::CapabilityGrant.as_str(),
+            serde_json::to_value(CapabilityGrantPayload {
+                grant: CapabilityGrantCreateBody {
+                    schema: arkret_wire::SchemaId::CAPABILITY_V1.into(),
+                    realm_id: Some(realm.clone()),
+                    issuer_id: member.actor.clone(),
+                    subject: CapabilitySubject::Actor(ActorId::service(package.service_id.clone())),
+                    actions: package.requested_scopes.clone(),
+                    resources: vec![arkret_wire::WireResourceSelector::realm(realm.clone())],
+                    constraints: [GrantConstraint::applet_authority(
+                        package.applet_id.clone(),
+                        ActorId::service(package.service_id.clone()),
+                        package.registration_epoch.clone(),
+                    )]
+                    .into_iter()
+                    .chain(extra_constraints.iter().cloned())
+                    .collect(),
+                    issuer_authority_refs: vec![IssuerAuthorityRef::RealmRoot {
+                        realm_id: realm.clone(),
+                        authority_event_ref: realm.event_id(),
+                        authority_generation: 0,
+                    }],
+                    issued_at: chrono::Utc::now(),
+                },
+            })?,
+        )
+        .await?;
+    let basis: AppletInstallAuthoringRequestBasis = serde_json::from_value(json!({
+        "schema":AppletInstallAuthoringRequestBasis::SCHEMA,"purpose":"install_service","target_station_id":station.service_id(),
+        "install_actor_id":member.actor,"applet_id":package.applet_id,"service_id":package.service_id,"package_digest":package.package_digest,
+        "effective_scope":{"kind":"realm","realm_id":realm},"approval_request":{"approve_actions":package.requested_scopes,
+            "ghost_actor_mode":"policy_declared","delegated_native_actors_allowed":false,"e2ee_join_allowed":false,"widget_allowed":false},
+        "actor_policy":{"ghost_actor_mode":"policy_declared"},"e2ee_policy":{"mls_join_allowed":false},"widget_policy":{"widget_allowed":false},
+        "registration_event":registration,"capability_grant_events":[grant]
+    }))?;
+    let preview: AppletInstallPreviewResponseBody = serde_json::from_value(
+        expect_json(
+            member
+                .client
+                .post("/_arkret/self/applets/install/preview")
+                .json(&AppletInstallPreviewRequestBody {
+                    applet_package: package.clone(),
+                    authoring_request_basis: basis.clone(),
+                }),
+            reqwest::StatusCode::OK,
+        )
+        .await?,
+    )?;
+    let body = AppletInstallRequestBody {
+        applet_package: package.clone(),
+        authoring_request_basis: basis,
+        plan_digest: preview.plan.plan_digest,
+    };
+    Ok((body, registration, grant))
 }

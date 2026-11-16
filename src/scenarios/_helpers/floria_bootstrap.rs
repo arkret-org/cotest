@@ -138,3 +138,6 @@ pub async fn spawn_floria_with_custom_pushkin_url(
         config: config_file,
     }))
 }
+
+mod native;
+pub use native::{NativeFloria, NativePushProvider};

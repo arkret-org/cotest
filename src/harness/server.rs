@@ -8,6 +8,7 @@ use std::sync::{Arc, Mutex, OnceLock};
 use std::time::{Duration, SystemTime};
 use std::{fs, mem};
 
+mod native_push_gateway;
 mod public_base;
 mod scan_gap_relay;
 mod service_route_relay;

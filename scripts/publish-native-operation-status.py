@@ -21,6 +21,8 @@ REPO = Path(__file__).resolve().parents[1]
 ARTIFACTS = REPO / "artifacts"
 DECLARATIONS = REPO / "tests/fixtures/native-operation-contracts.json"
 REQUIRED = (
+    "applet_managed_configuration_retains_review_originals_and_native_route",
+    "push_gateway_retains_native_registration_receipt_and_provider_dispatch",
     "applet_installations_retain_original_sources_and_exact_fenced_replays",
     "account_identity_creation_preserves_native_issuer_and_pcr_originals",
     "account_device_sessions_preserve_issuer_originals_and_real_consumer",

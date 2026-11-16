@@ -562,5 +562,146 @@ class AppletInstallationProofGates(unittest.TestCase):
             with self.subTest(mutation=changes.index(mutate)),self.assertRaises(ValueError):gate.applet_installations(changed)
 
 
+def push_gateway_component_fixture():
+    # Structural oracle input only. No producer is launched and no component
+    # value, fake signature or receipt here can earn native operation credit.
+    source, other, destination, device = "component-A", "component-B", "component-G", "component-device"
+    method, did = "did:key:component-gateway#receipt", "did:key:component-gateway"
+    request = {"registration_id":"registration_component_0000000000","push_target_id":"component-target","device_id":device,
+               "state":"active","push_key":"component-provider-token","app_id":"org.arkret.native-push","visible_notification_opt_in":False}
+    def response(body):
+        receipt = {key:body[key] for key in ("registration_id","push_target_id","device_id","state")}
+        receipt.update(request_digest="sha256:"+gate.canonical_digest(body),source_station_id=source,destination_gateway_id=destination,
+                       stored_at="2026-11-16T00:00:00.000Z",proof={"verification_method":method,"audience":source,
+                       "created_at":"2026-11-16T00:00:00.000Z","jws":"component-only-not-native-signature"})
+        return {"receipt":receipt}
+    accepted = response(request)
+    original = {"state":{"id":did,"assertionMethod":[method]}}
+    gateway_process = {"origin":"https://127.0.0.1:1234","component":"not-a-native-process"}
+    gateway = {"gateway_resolution":{"service_id":destination,"service_kind":"push_gateway",
+               "method_history_evidence":{"log_entries":[copy.deepcopy(original)]},"normalized_did_document":{"did":did}},
+               "gateway_history":{"did":did,"native_history":True,"entries":[copy.deepcopy(original)]},
+               "onboarded_station_resolution":{"service_id":source},"process":gateway_process}
+    initial = {"gateway_registrations":[],"push_devices":[],"push_registration_handoff_intents":[],
+               "canonical_events":[{"component":"event-original"}],"realm_commits":[{"component":"commit-original"}],
+               "pcr_device_authorization_current_states":[{"component":"actual-selector-placeholder"}]}
+    installed = copy.deepcopy(initial)
+    installed["gateway_registrations"] = [{"source_station_id":source,"registration_id":request["registration_id"],
+        "push_target_id":request["push_target_id"],"device_id":device,"state":"active",
+        "request_digest":accepted["receipt"]["request_digest"],"receipt_json":json.dumps(accepted["receipt"]),"route_ciphertext":"component-opaque-ciphertext"}]
+    installed["push_registration_handoff_intents"] = [{"source_station_id":source,"registration_id":request["registration_id"],
+        "request_digest":accepted["receipt"]["request_digest"],"receipt":copy.deepcopy(accepted["receipt"]),"status":"receipt_verified",
+        "destination_gateway_id":destination,"canonical_request":"\\x"+json.dumps(request,sort_keys=True,separators=(",", ":")).encode().hex()}]
+    installed["push_devices"] = [{"public_handoff":True,"device_id":device,"payload":{
+        "registration_id":request["registration_id"],"push_target_id":request["push_target_id"]}}]
+    notify = {"notification":{"push_target_id":request["push_target_id"],"wakeup_kind":"message","devices":[{"device_id":device}]}}
+    notified = {"push_target_id":request["push_target_id"],"outcomes":[{"device_id":device,"gateway_status":"accepted"}]}
+    provider_body = {"app_id":"org.arkret.native-push","push_target_id":request["push_target_id"],"wakeup_kind":"message"}
+    encoded = lambda value:base64.b64encode(json.dumps(value,sort_keys=True,separators=(",", ":")).encode()).decode()
+    provider = {"deployment":"explicit_operator_connect_proxy","declared_provider_url":"https://1.1.1.1/deliver/{push_key}",
+                "connect_observations":[{"accepted":True,"request":"CONNECT 1.1.1.1:443 HTTP/1.1\r\nHost: 1.1.1.1:443\r\n\r\n"}],
+                "provider_received":[{"method":"POST","uri":"https://1.1.1.1/deliver/"+request["push_key"],
+                                      "raw_body_base64":encoded(provider_body),"body":provider_body}]}
+    gateway["provider"] = copy.deepcopy(provider)
+    revoked = {field:request[field] for field in ("registration_id","push_target_id","device_id")} | {"state":"revoked"}
+    revoked_response = response(revoked)
+    terminal = copy.deepcopy(installed)
+    terminal["gateway_registrations"][0].update(state="revoked",route_ciphertext=None,receipt_json=json.dumps(revoked_response["receipt"]))
+    changed = copy.deepcopy(request)
+    changed["push_key"] = "different-provider-token"
+    problem = {"type":"https://arkret.org/problems/duplicate_conflict","status":409}
+    denied = {"type":"https://arkret.org/problems/unauthenticated","status":401}
+    rejected = {"push_target_id":request["push_target_id"],"outcomes":[{"device_id":device,"gateway_status":"rejected","reason_code":"push_target_unknown"}]}
+    value = {"source_station":source,"other_station":other,"device":device,"gateway":gateway,
+             "accepted_request":request,"accepted":accepted,"registered":{key:request[key] for key in ("registration_id","push_target_id")},
+             "registration":{key:request[key] for key in ("device_id","push_key","app_id")},"initial":initial,"installed":installed,
+             "after_replay":copy.deepcopy(installed),"after_changed":copy.deepcopy(installed),"after_notify":copy.deepcopy(installed),
+             "replay":copy.deepcopy(accepted),"notify":notify,"notified":notified,"duplicate":copy.deepcopy(notified),"notify_key":"component-notify-key",
+             "provider_after_notify":copy.deepcopy(provider),"provider_after_duplicate":copy.deepcopy(provider),
+             "wrong_before":copy.deepcopy(installed),"wrong_after":copy.deepcopy(installed),
+             "revoked":revoked,"revoked_response":revoked_response,"after_revoke":terminal,"after_revive":copy.deepcopy(terminal),
+             "revoked_notify":rejected,"processes":[{"component":str(index)} for index in range(4)]+[gateway_process],
+             "observations":{"issuer_bindings":[{"component":"A"},{"component":"B"}],"exchanges":[]}}
+    def actual(name, operation, body, result, status=200, sender=source):
+        path = "/_arkret/edge/push/registrations:apply" if operation.endswith("apply_registration.v1") else "/_arkret/edge/push/notify"
+        url = gateway_process["origin"] + path
+        headers = {"host":"127.0.0.1:1234","arkret-operation":operation,"source-service-id":sender,
+                   "destination-service-id":destination,"signature":"component-signature","signature-input":"component-signature-input"}
+        if operation.endswith("notify.v1"):
+            headers["idempotency-key"] = value["notify_key"]
+        ingress = {"public_target":url,"private_request_target":url,"request_headers":[[key,base64.b64encode(item.encode()).decode()] for key,item in headers.items()],
+                   "request_body_base64":encoded(body),"response_body_base64":encoded(result),"response_status":status}
+        value[name] = [{"ingress":ingress,"request":copy.deepcopy(body),"response":copy.deepcopy(result),"status":status}]
+        if 200 <= status < 300:
+            value["observations"]["exchanges"].append({"operation_id":operation,"request_body":copy.deepcopy(body),"response_body":copy.deepcopy(result),
+                "url":url,"response_status":status,"explicit_request_headers":copy.deepcopy(headers)})
+    apply, wakeup = "ak.edge.push.command.apply_registration.v1", "ak.edge.push.command.notify.v1"
+    actual("apply",apply,request,accepted)
+    actual("replay_exchange",apply,request,accepted)
+    actual("changed_exchange",apply,changed,problem,409)
+    actual("notify_exchange",wakeup,notify,notified)
+    actual("duplicate_exchange",wakeup,notify,notified)
+    actual("wrong_exchange",wakeup,notify,denied,401,other)
+    actual("revoke_exchange",apply,revoked,revoked_response)
+    actual("revive_exchange",apply,request,problem,409)
+    actual("revoked_notify_exchange",wakeup,notify,rejected)
+    return value
+
+
+class NativePushGatewayProofGates(unittest.TestCase):
+    def test_component_shape_is_accepted_without_any_native_execution_credit(self):
+        gate.push_gateway(push_gateway_component_fixture())
+
+    def test_http2_authority_is_the_original_public_uri_without_a_synthetic_host_header(self):
+        value = push_gateway_component_fixture()
+        # HTTP/2 carries authority in its pseudo-header/URI. Preserve that
+        # actual representation instead of inventing a received Host header.
+        for name in ("apply","replay_exchange","changed_exchange","notify_exchange","duplicate_exchange",
+                     "wrong_exchange","revoke_exchange","revive_exchange","revoked_notify_exchange"):
+            value[name][0]["ingress"]["request_headers"] = [[key,item] for key,item in value[name][0]["ingress"]["request_headers"] if key != "host"]
+        for exchange in value["observations"]["exchanges"]:
+            exchange["explicit_request_headers"].pop("host")
+        gate.push_gateway(value)
+
+    def test_ack_or_cache_cannot_replace_the_actual_authority_provider_or_immutable_receipt(self):
+        def change_tenant(value):
+            value["installed"]["gateway_registrations"][0]["source_station_id"] = "other-tenant"
+        def remove_provider(value):
+            value["provider_after_notify"]["provider_received"] = []
+        def double_dispatch(value):
+            value["provider_after_notify"]["provider_received"] *= 2
+        def plaintext_route(value):
+            value["installed"]["gateway_registrations"][0]["route_ciphertext"] = value["accepted_request"]["push_key"]
+        def rewrite_receipt(value):
+            receipt = json.loads(value["installed"]["gateway_registrations"][0]["receipt_json"])
+            receipt["proof"]["jws"] = "changed-original-signature"
+            value["installed"]["gateway_registrations"][0]["receipt_json"] = json.dumps(receipt)
+        def change_canonical_request(value):
+            value["installed"]["push_registration_handoff_intents"][0]["canonical_request"] = "\\x00"
+        def lose_source_identity(value):
+            value["registered"].pop("registration_id")
+        def swap_private_target(value):
+            value["apply"][0]["ingress"]["private_request_target"] = "http://127.0.0.1:1234/_arkret/edge/push/registrations:apply"
+        def mutate_actual_bytes(value):
+            value["apply"][0]["ingress"]["request_body_base64"] = base64.b64encode(b"{}").decode()
+        def borrow_other_station(value):
+            value["other_station"] = value["source_station"]
+        def revive_terminal(value):
+            value["after_revoke"]["gateway_registrations"][0]["route_ciphertext"] = "reanimated-route"
+        def substitute_cache_key(value):
+            value["notify_key"] = "another-key"
+        def leak_private_body(value):
+            value["provider_after_notify"]["provider_received"][0]["body"]["actor_id"] = "private-account"
+        def lose_native_gateway(value):
+            value["gateway"]["gateway_history"]["entries"] = []
+        for mutate in (change_tenant, remove_provider, double_dispatch, plaintext_route, rewrite_receipt, change_canonical_request,
+                       lose_source_identity, swap_private_target, mutate_actual_bytes, borrow_other_station, revive_terminal,
+                       substitute_cache_key, leak_private_body, lose_native_gateway):
+            value = push_gateway_component_fixture()
+            mutate(value)
+            with self.subTest(mutation=mutate.__name__), self.assertRaises((ValueError, KeyError, IndexError, TypeError)):
+                gate.push_gateway(value)
+
+
 if __name__ == "__main__":
     unittest.main()
