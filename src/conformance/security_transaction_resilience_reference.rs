@@ -595,6 +595,7 @@ pub fn run(
     fixture: &SecurityTransactionResilienceFixture,
 ) -> Result<Vec<ReferenceProjection>, String> {
     validate_fixture(fixture)?;
+    recovery::check_freeze_and_atomic_effects(&fixture.single_submit_recovery_kat)?;
     let kinds = strings_at(&fixture.fault_matrix, "/transaction_kinds")?;
     let positions = strings_at(&fixture.fault_matrix, "/fault_positions")?;
     let faults = strings_at(&fixture.fault_matrix, "/faults")?;

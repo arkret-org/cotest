@@ -2,7 +2,7 @@
 //! Qualified inputs are explicit fixture assumptions, never native authority evidence.
 use base64::Engine as _;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
-use ed25519_dalek::{Signature, Verifier as _, VerifyingKey};
+use ed25519_dalek::{Signature, Signer as _, Verifier as _, VerifyingKey};
 use serde_json::{Value, json};
 use sha2::{Digest as _, Sha256};
 
@@ -235,12 +235,30 @@ impl Ledger {
         )?;
         let request = bytes(receipt)?;
         if let Some((original, outcome)) = &self.accepted {
-            return if original == &request {
-                Ok(outcome.clone())
-            } else {
-                Err("duplicate_conflict".into())
-            };
+            if original == &request {
+                return Ok(outcome.clone());
+            }
+            check(
+                outcome["recovery_receipt"]["account_id"] != receipt["account_id"]
+                    || outcome["recovery_receipt"]["transaction_id"] != receipt["transaction_id"],
+                "duplicate_conflict",
+            )?;
         }
+        let generation = self
+            .visible
+            .as_ref()
+            .map_or(&source["current_generation"], |state| &state["generation"]);
+        let head = self
+            .visible
+            .as_ref()
+            .map_or(&source["predecessor_ref"], |state| {
+                &state["native_commits"][1]["commit_id"]
+            });
+        check(
+            receipt["previous_model_generation_ref"] == *generation
+                && receipt["recovery_unit"]["predecessor_ref"] == *head,
+            "generation_or_head_conflict",
+        )?;
         for field in [
             "account_id",
             "recovery_session_id",
@@ -264,12 +282,10 @@ impl Ledger {
                 && source["grant_active"] == true
                 && source["session_consumed"] == false
                 && source["candidate_already_authorized"] == false
-                && source["current_generation"] == receipt["previous_model_generation_ref"]
                 && receipt["new_model_generation_ref"].as_u64()
                     == receipt["previous_model_generation_ref"]
                         .as_u64()
-                        .and_then(|n| n.checked_add(1))
-                && receipt["recovery_unit"]["predecessor_ref"] == source["predecessor_ref"],
+                        .and_then(|n| n.checked_add(1)),
             "live source/CAS refused",
         )?;
         let now = instant(&source["now"])?;
@@ -408,8 +424,8 @@ impl Ledger {
             result: ReferenceOutcome::Recovery {
                 transaction_id: kat["receipt"]["transaction_id"].clone(),
                 receipt_digest: digest(&kat["receipt"])?,
-                native_commits: if self.accepted.is_some() {
-                    kat["native_commits"]
+                native_commits: if let Some(visible) = &self.visible {
+                    visible["native_commits"]
                         .as_array()
                         .ok_or("missing Commits")?
                         .clone()
@@ -432,6 +448,8 @@ pub(super) fn fault(
     position: &str,
     fault: &str,
 ) -> Result<ReferenceProjection, String> {
+    // These are the Spec's named final-state projections. Several names share
+    // a transition; actual crash/response/process cuts belong to the native suite.
     let mut ledger = Ledger::default();
     let r = &kat["receipt"];
     let q = &kat["qualified_inputs"];
@@ -470,6 +488,110 @@ pub(super) fn fault(
         "response loss/restart did not replay one atomic closure",
     )?;
     ledger.projection(scenario, kat, "completed")
+}
+
+#[derive(Default)]
+struct FrozenSubmission(Option<Vec<u8>>);
+
+impl FrozenSubmission {
+    fn freeze(&mut self, receipt: &Value, has_authoring_key: bool) -> Result<Vec<u8>, String> {
+        let request = bytes(&json!({"kind":"recovery","recovery_receipt":receipt}))?;
+        if let Some(original) = &self.0 {
+            check(*original == request, "duplicate_conflict")?;
+        } else {
+            check(has_authoring_key, "staged_secret_lost")?;
+            self.0 = Some(request.clone());
+        }
+        Ok(request)
+    }
+
+    fn submit(&self, ledger: &mut Ledger, source: &Value, kat: &Value) -> Result<Value, String> {
+        let request = self.0.as_ref().ok_or("signed R was not frozen")?;
+        let body: Value = serde_json::from_slice(request).map_err(|e| e.to_string())?;
+        ledger.submit(&body["recovery_receipt"], source, kat)
+    }
+}
+
+// Client freeze ordering is a reference phase, not a claim of real disk or
+// process durability. It feeds the same independent cryptographic Ledger.
+pub(super) fn check_freeze_and_atomic_effects(kat: &Value) -> Result<(), String> {
+    let receipt = &kat["receipt"];
+    let source = &kat["qualified_inputs"];
+    let mut frozen = FrozenSubmission::default();
+    let mut ledger = Ledger::default();
+    check(
+        frozen
+            .freeze(receipt, false)
+            .is_err_and(|e| e == "staged_secret_lost")
+            && frozen
+                .submit(&mut ledger, source, kat)
+                .is_err_and(|e| e == "signed R was not frozen")
+            && frozen.0.is_none()
+            && ledger.visible.is_none()
+            && ledger.accepted.is_none(),
+        "first submission without authoring key escaped the freeze phase",
+    )?;
+    let original = frozen.freeze(receipt, true)?;
+    check(
+        frozen.freeze(receipt, false)? == original,
+        "lost key changed frozen request",
+    )?;
+    frozen.submit(&mut ledger, source, kat)?;
+    check(
+        ledger.visible
+            == Some(json!({
+                "native_commits":kat["native_commits"],
+                "generation":receipt["new_model_generation_ref"],
+                "device":receipt["new_device_id"],
+                "session_state":"completed",
+                "content_recovery_fence":receipt["recovery_unit"]["events"][0]["event"]["event_id"],
+                "completion_attestation":kat["expected_outcome"]["completion_attestation"]
+            })),
+        "accepted recovery omitted an authoritative effect",
+    )?;
+    let committed = ledger.clone();
+    let mut contender = receipt.clone();
+    contender["transaction_id"] = json!("ak:transaction:019ba000-0000-7000-8000-000000000099");
+    let signer = ed25519_dalek::SigningKey::from_bytes(&std::array::from_fn(|i| i as u8 + 1));
+    let mut transcript = b"ak.identity.recovery_receipt.signature.v1\n".to_vec();
+    transcript.extend(bytes(&unsigned(&contender, &["signature_proof"])?)?);
+    contender["signature_proof"]["signature"] =
+        json!(URL_SAFE_NO_PAD.encode(signer.sign(&transcript).to_bytes()));
+    verify_receipt(&contender, source)?;
+    check(
+        frozen
+            .freeze(&contender, false)
+            .is_err_and(|e| e == "duplicate_conflict")
+            && frozen.0.as_ref() == Some(&original),
+        "changed transaction replaced frozen request",
+    )?;
+    check(
+        ledger
+            .submit(&contender, source, kat)
+            .is_err_and(|e| e == "generation_or_head_conflict")
+            && ledger.accepted == committed.accepted
+            && ledger.visible == committed.visible
+            && ledger.issued == committed.issued,
+        "different transaction on the old basis left CAS residue",
+    )?;
+    let mut expired = kat["completion_qualified_inputs"].clone();
+    expired["now"] = json!("2099-01-01T00:00:00.000Z");
+    let request = &kat["completion_request"];
+    check(
+        ledger.complete(request, &expired, kat).is_err() && ledger.issued.is_none(),
+        "unaccepted expired completion occupied issuance",
+    )?;
+    let first = ledger.complete(request, &kat["completion_qualified_inputs"], kat)?;
+    let issued = ledger.issued.clone();
+    check(
+        ledger.complete(request, &expired, kat)? == first && ledger.issued == issued,
+        "accepted completion expiry minted another outcome",
+    )?;
+    expired["current_device_active"] = json!(false);
+    check(
+        ledger.complete(request, &expired, kat).is_err() && ledger.issued == issued,
+        "accepted completion bypassed current device qualification",
+    )
 }
 
 pub(super) fn cases(kat: &Value, cases: &[Value]) -> Result<Vec<ReferenceProjection>, String> {
