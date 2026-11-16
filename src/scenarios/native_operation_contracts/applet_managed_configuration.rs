@@ -4,7 +4,7 @@ use arkret_models_collaboration::governance::operation_wire::AppletPolicyTarget;
 use arkret_models_integration::*;
 use arkret_wire::{
     ActorId, ApprovalContext, ApprovalSignature, ApprovalSignatureInput, ApprovalSignatureProof,
-    ApprovalSignatureProofKind, ApprovalTarget, CapabilityActionId, CommittedEventFullView, Event,
+    ApprovalSignatureProofKind, ApprovalTarget, CapabilityActionId, Event,
     EventAdmissionSubmission, EventKind, Hash, ManagementOperation, RealmId, ScopeRef,
     ServiceOperationId,
 };
@@ -31,7 +31,8 @@ const SCOPE: [&str; 10] = [
 ];
 
 fn op(name: &str) -> Result<ServiceOperationId> {
-    name.parse().map_err(anyhow::Error::msg)
+    ServiceOperationId::from_wire(name)
+        .with_context(|| format!("unregistered native operation: {name}"))
 }
 
 fn vote(
@@ -93,6 +94,7 @@ fn verify_preview(
     service: &ManagedService,
     preview: &AppletManagedActorAuthoringRequest,
     install: &AppletInstallResponseBody,
+    expected_scope: &ScopeRef,
     registration: &Event,
     grant: &Event,
 ) -> Result<()> {
@@ -117,7 +119,7 @@ fn verify_preview(
     };
     ensure!(
         applet == &install.applet_id
-            && scope == &install.effective_scope
+            && scope == expected_scope
             && registration_ref == &registration.event_id
             && authorization_ref == &arkret_wire::GrantId::from_event_id(&grant.event_id)
             && epoch == &service.epoch
@@ -291,10 +293,37 @@ async fn scenario() -> Result<(Value, NativeOperationObservations)> {
         registration.event == registration_event && grant.event == grant_event,
         "installation rewrote producer originals"
     );
+    // This scenario requested a Realm installation. Bind that exact request
+    // scope to its accepted grant, rather than inventing a response mirror.
+    let effective_scope = ScopeRef::Realm {
+        realm_id: realm.clone(),
+    };
+    let original_grant: arkret_models_collaboration::events_payloads::CapabilityGrantPayload =
+        serde_json::from_value(serde_json::to_value(&grant.event.payload)?)?;
+    ensure!(
+        installed.applet_id == service.package.applet_id
+            && installed.registration_event_ref == registration.event.event_id
+            && installed.registration_epoch == service.epoch
+            && installed
+                .capability_grant_refs
+                .contains(&arkret_wire::GrantId::from_event_id(&grant.event.event_id))
+            && matches!(
+                &original_grant.grant.subject,
+                arkret_models_collaboration::governance::grant_constraint::CapabilitySubject::Actor(
+                    ActorId::Service { service_id }
+                ) if service_id == &installed.service_id
+            )
+            && original_grant
+                .grant
+                .resources
+                .iter()
+                .any(|resource| resource.is_exact_scope(&effective_scope)),
+        "accepted registration/grant does not bind this exact requested installation"
+    );
     let before_previews =
         effects::snapshot(&governor.station, &realm, &installed.applet_id).await?;
     let ghost_request = GhostPreviewRequestBody {
-        effective_scope: installed.effective_scope.clone(),
+        effective_scope: effective_scope.clone(),
         external_ref: GhostExternalTuple {
             protocol: "fixture".into(),
             instance_id: "native-instance".into(),
@@ -324,7 +353,7 @@ async fn scenario() -> Result<(Value, NativeOperationObservations)> {
     );
     let bot_request = AppletBotPreviewRequestBody {
         service_id: service.package.service_id.clone(),
-        effective_scope: installed.effective_scope.clone(),
+        effective_scope: effective_scope.clone(),
         request_id: uuid::Uuid::now_v7().simple().to_string(),
         display_name: Some("Preview only Bot".into()),
     };
@@ -348,6 +377,7 @@ async fn scenario() -> Result<(Value, NativeOperationObservations)> {
         &service,
         &ghost.authoring_request,
         &installed,
+        &effective_scope,
         &registration_event,
         &grant_event,
     )?;
@@ -355,6 +385,7 @@ async fn scenario() -> Result<(Value, NativeOperationObservations)> {
         &service,
         &bot.authoring_request,
         &installed,
+        &effective_scope,
         &registration_event,
         &grant_event,
     )?;
@@ -370,7 +401,7 @@ async fn scenario() -> Result<(Value, NativeOperationObservations)> {
     let target = AppletPolicyTarget::Installation {
         applet_id: installed.applet_id.clone(),
         service_id: installed.service_id.clone(),
-        effective_scope: installed.effective_scope.clone(),
+        effective_scope: effective_scope.clone(),
     };
     let policy=owner.client.author_event(realm.as_str(),EventKind::PolicySet.as_str(),json!({
         "policy_id":policy_id,"expected_commit_id":null,"value":{"schema":"ak.schema.policy.v1","id":policy_id,"realm_id":realm,"policy_kind":"applet","default_effect":"allow","created_by":owner.actor,"created_at":arkret_canonical::format_timestamp_canonical(chrono::Utc::now()),
@@ -402,7 +433,7 @@ async fn scenario() -> Result<(Value, NativeOperationObservations)> {
     );
     let review = ManagementReviewRequestBody {
         request_id: format!("native-review-{}", uuid::Uuid::now_v7()),
-        effective_scope: installed.effective_scope.clone(),
+        effective_scope: effective_scope.clone(),
         management_operation: ManagementOperation::MapGhost,
         requester_actor_id: ActorId::service(installed.service_id.clone()),
         target: ManagementReviewTarget::Event {
@@ -520,7 +551,7 @@ async fn scenario() -> Result<(Value, NativeOperationObservations)> {
         intent: AppletConfigurationIntent {
             request_id: arkret_identifiers::new_prefixed_uuid7("ak:request:").parse()?,
             service_id: installed.service_id.clone(),
-            effective_scope: installed.effective_scope.clone(),
+            effective_scope: effective_scope.clone(),
             selection: AppletConfigurationSelection::NewBot {
                 display_name: Some("Native configured Bot".into()),
             },

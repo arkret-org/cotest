@@ -253,6 +253,14 @@ struct GatewayIngress {
 
 #[handler]
 impl GatewayIngress {
+    async fn handle(&self, req: &mut Request, res: &mut Response) {
+        if let Err(error) = self.forward(req, res).await {
+            tracing::error!(%error, "native Gateway ingress failed");
+            res.status_code(StatusCode::BAD_GATEWAY);
+            res.render(Text::Plain(error.to_string()));
+        }
+    }
+
     async fn forward(&self, req: &mut Request, res: &mut Response) -> Result<()> {
         let path = req
             .uri()

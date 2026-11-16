@@ -31,7 +31,7 @@ impl ArkretServer {
             endpoint.scheme() == "https",
             "native Gateway onboarding requires actual HTTPS"
         );
-        let registry = serde_json::json!([{"canonical_origin":endpoint.origin().ascii_serialization(),"service_did":document.id,"receipt_verification_method":receipt_method,"receipt_public_key_multibase":arkret_canonical::encode_ed25519_pubkey_multibase(&key)}]);
+        let registry = serde_json::json!([{"canonical_origin":endpoint.origin().ascii_serialization(),"service_did":document.id,"receipt_verification_method":receipt_method,"receipt_public_key_multibase":arkret_canonical::ed25519_pubkey_to_did_key_multibase(&key)}]);
         let config = self
             .external_restart
             .as_mut()
