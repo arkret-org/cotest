@@ -34,7 +34,6 @@ use arkret_wire::{
     AccountId, AccountStatusRecordId, DidCoreId, DidUrl, ErrorCode, Hash, PayloadProof, ReceiptId,
     SchemaId,
 };
-use chrono::{DateTime, Utc};
 use coland_storage::{
     AccountStatusReplicaAppend, AccountStatusReplicaConflictKind,
     classify_account_status_replica_append,
@@ -1032,10 +1031,4 @@ fn verify_fanout_outbox(fixture: &Value) -> Result<()> {
         );
     }
     Ok(())
-}
-
-/// Unused import guard: the suite reads timestamps through the record types.
-#[allow(dead_code)]
-fn _timestamp_type_is_used(value: DateTime<Utc>) -> DateTime<Utc> {
-    value
 }
