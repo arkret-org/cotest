@@ -240,7 +240,6 @@ fn run_sidecar_view_state_fixture() -> Result<()> {
 
 pub fn run_sidecar_mls_bootstrap_binding_vector() -> Result<()> {
     let digest: Hash = serde_json::from_value(json!(format!("sha256:{}", "cd".repeat(32))))?;
-    let head = vec![event_id(8), event_id(9)];
     let binding = MlsGovernanceBindingPayload::sidecar(
         realm_id(),
         sidecar_id(),
@@ -249,7 +248,6 @@ pub fn run_sidecar_mls_bootstrap_binding_vector() -> Result<()> {
         0,
         0,
         digest.clone(),
-        head.clone(),
     )?;
     let bytes = binding.to_deterministic_cbor()?;
     let decoded = MlsGovernanceBindingPayload::from_deterministic_cbor(&bytes)?;
@@ -261,22 +259,14 @@ pub fn run_sidecar_mls_bootstrap_binding_vector() -> Result<()> {
         .sidecar_binding()
         .ok_or_else(|| anyhow!("Sidecar binding absent"))?;
     ensure!(
-        sidecar.participant_authority_digest == digest && sidecar.authority_stream_head == head,
+        sidecar.participant_authority_digest == digest,
         "signed Sidecar authority cut was lost"
     );
+    let mut forbidden = serde_json::to_value(&binding)?;
+    forbidden["authority_stream_head"] = json!([event_id(8)]);
     ensure!(
-        MlsGovernanceBindingPayload::sidecar(
-            realm_id(),
-            sidecar_id(),
-            None,
-            0,
-            0,
-            0,
-            digest,
-            vec![event_id(9), event_id(8)]
-        )
-        .is_err(),
-        "unsorted Sidecar authority head was accepted"
+        serde_json::from_value::<MlsGovernanceBindingPayload>(forbidden).is_err(),
+        "the removed Sidecar authority head was accepted"
     );
     Ok(())
 }
@@ -351,7 +341,6 @@ pub fn run_sidecar_eligibility_states_vector() -> Result<()> {
     );
     let context: AgentSidecarMlsContext = serde_json::from_value(json!({
         "participant_authority_digest": format!("sha256:{}", "cd".repeat(32)),
-        "authority_stream_head": [event_id(8)],
         "current_controller_device_ready": false
     }))?;
     context.validate_shape()?;

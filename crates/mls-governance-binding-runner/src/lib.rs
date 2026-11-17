@@ -4,7 +4,6 @@ use std::collections::BTreeSet;
 use std::path::PathBuf;
 
 use anyhow::{Context, Result, ensure};
-use arkret_canonical::DigestSuite;
 use arkret_mls::{
     MlsCurrentSendState, MlsGovernanceBindingPublicState, MlsGovernanceBindingRejection,
     VerifiedMlsGovernanceBinding, verify_current_send_governance_binding,
@@ -136,11 +135,10 @@ fn case_result(name: &str, assertions: usize) -> CaseExecutionResult {
 }
 
 /// Negatives that pin the Sidecar-only members to the Sidecar scope.
-const SIDECAR_SCOPE_REJECTIONS: [&str; 4] = [
+const SIDECAR_SCOPE_REJECTIONS: [&str; 3] = [
     "sidecar_member_missing",
     "non_sidecar_carries_sidecar_member",
-    "authority_stream_head_unsorted",
-    "authority_stream_head_duplicate",
+    "authority_stream_head_forbidden",
 ];
 
 fn string_list(value: &Value) -> Result<Vec<&str>> {
@@ -152,7 +150,7 @@ fn string_list(value: &Value) -> Result<Vec<&str>> {
         .collect()
 }
 
-/// Five shared members plus two Sidecar-only members, in RFC 8949 section
+/// Five shared members plus one Sidecar-only member, in RFC 8949 section
 /// 4.2.1 order, with each accepted sample carrying exactly its scope's set.
 fn check_member_sets(case: &Value) -> Result<usize> {
     let order = string_list(&case["canonical_member_order"])?;
@@ -161,11 +159,11 @@ fn check_member_sets(case: &Value) -> Result<usize> {
         .collect::<BTreeSet<_>>();
     let all = order.iter().copied().collect::<BTreeSet<_>>();
     ensure!(
-        order.len() == 7 && all.len() == 7,
-        "binding must have seven registered members"
+        order.len() == 6 && all.len() == 6,
+        "binding must have six registered members"
     );
     ensure!(
-        sidecar_only == BTreeSet::from(["authority_stream_head", "participant_authority_digest"]),
+        sidecar_only == BTreeSet::from(["participant_authority_digest"]),
         "Sidecar-only members drifted"
     );
     let mut deterministic = order.clone();
@@ -205,7 +203,7 @@ fn check_member_sets(case: &Value) -> Result<usize> {
     }
     ensure!(
         sidecar_samples == 1,
-        "exactly one seven-member Sidecar KAT is registered"
+        "exactly one six-member Sidecar KAT is registered"
     );
     let rejections = case["rejection_samples"]
         .as_array()
@@ -222,43 +220,40 @@ fn check_member_sets(case: &Value) -> Result<usize> {
     Ok(5)
 }
 
-/// `authority_stream_head` is bounded by the decoder collection limit: the
-/// limit itself is accepted and one more ref is a schema violation.
-fn check_authority_stream_head_bound(case: &Value) -> Result<usize> {
-    let limit = case["resource_limits"]["maximum_collection_items"]
-        .as_u64()
-        .context("maximum_collection_items missing")?;
-    ensure!(limit == 64, "decoder collection limit drifted");
-    let sidecar = case["accepted"]
-        .as_array()
-        .context("accepted[] missing")?
-        .iter()
-        .find(|sample| sample["binding"]["effective_scope"]["kind"] == "sidecar")
-        .context("Sidecar KAT missing")?;
-    let with_head = |count: u64| -> Result<MlsGovernanceBindingPayload> {
-        let mut refs = (0..count)
-            .map(|seed| {
-                let seed = u8::try_from(seed)?;
-                Ok(EventId::from_digest(DigestSuite::Sha256, [seed; 32]))
-            })
-            .collect::<Result<Vec<_>>>()?;
-        refs.sort_by(|left, right| left.as_str().cmp(right.as_str()));
-        let mut binding = sidecar["binding"].clone();
-        binding["authority_stream_head"] = serde_json::to_value(refs)?;
-        as_binding(&binding)
-    };
-    with_head(limit)?.validate()?;
-    let over = with_head(limit + 1)?.validate();
+/// Resource limits constrain the deterministic decoder rather than a roster.
+fn check_decoder_limits(case: &Value) -> Result<usize> {
+    ensure!(case["resource_limits"]["maximum_input_bytes"] == 16_384);
+    ensure!(case["resource_limits"]["maximum_nesting_depth"] == 8);
+    ensure!(case["resource_limits"]["maximum_collection_items"] == 64);
     ensure!(
-        matches!(&over, Err(error) if error.error_code() == Some(ErrorCode::SchemaViolation)),
-        "a Sidecar head above the collection limit was not a schema violation"
+        case["rejection_samples"]
+            .as_array()
+            .context("rejection_samples[] missing")?
+            .iter()
+            .any(|sample| sample["name"] == "resource_limit_exceeded"),
+        "decoder resource rejection is missing"
     );
-    Ok(2)
+    Ok(4)
 }
 
 fn run_wire_encoding(case: &Value) -> Result<CaseExecutionResult> {
     let mut effects = EffectSink::default();
-    let mut assertions = check_member_sets(case)? + check_authority_stream_head_bound(case)?;
+    let mut assertions = check_member_sets(case)? + check_decoder_limits(case)?;
+    ensure!(
+        case["accepted"]
+            .as_array()
+            .context("accepted[] missing")?
+            .len()
+            == 4
+    );
+    ensure!(
+        case["rejection_samples"]
+            .as_array()
+            .context("rejection_samples[] missing")?
+            .len()
+            == 15
+    );
+    assertions += 2;
     for sample in case["accepted"].as_array().context("accepted[] missing")? {
         let encoded = hex::decode(sample["encoded_map_hex"].as_str().context("hex missing")?)?;
         let decoded = MlsGovernanceBindingPayload::from_deterministic_cbor(&encoded)?;

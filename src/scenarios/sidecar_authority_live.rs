@@ -363,12 +363,6 @@ async fn run_with_options(
             && !view.mls_context.current_controller_device_ready,
         "an accepted ensure without MLS must not fabricate controller readiness"
     );
-    ensure!(
-        view.mls_context
-            .authority_stream_head
-            .contains(&create.event_id),
-        "read view lost accepted private creation authority"
-    );
     expect_json(
         outsider.client.get(&format!(
             "/_arkret/self/agent-sidecars/{}",
@@ -518,7 +512,6 @@ async fn run_with_options(
         0,
         0,
         view.mls_context.participant_authority_digest,
-        view.mls_context.authority_stream_head,
     )?;
     let mut group = controller
         .mls_identity()?

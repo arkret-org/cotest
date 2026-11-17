@@ -737,8 +737,6 @@ pub(super) fn cases(kat: &Value, cases: &[Value]) -> Result<Vec<ReferenceProject
 
 #[cfg(test)]
 mod tests {
-    use ed25519_dalek::Signer as _;
-
     use super::*;
 
     fn fixture() -> Value {

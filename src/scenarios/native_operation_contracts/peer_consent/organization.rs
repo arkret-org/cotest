@@ -193,18 +193,29 @@ pub(super) async fn create(
     let did = Did::new(&inception.did)?;
     let document: arkret_identity::DidDocument =
         serde_json::from_value(inception.log_entry["state"].clone())?;
+    ensure!(
+        document.id == did,
+        "published native Org document names another DID"
+    );
+    let normalized = arkret_models_identity::normalized_did_document(&document)?;
     let control_method = document
         .verification_methods
         .keys()
         .filter_map(|id| DidUrl::new(id).ok())
         .find(|method| {
-            arkret_identity::validate_verification_method_relationship(
-                &document,
-                method,
-                &did,
-                arkret_identity::DidVerificationRelationship::CapabilityInvocation,
-            )
-            .is_ok()
+            normalized["capability_invocations"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .any(|row| row["verification_method"].as_str() == Some(method.as_str()))
+                && normalized["verification_methods"]
+                    .as_array()
+                    .into_iter()
+                    .flatten()
+                    .any(|row| {
+                        row["verification_method"].as_str() == Some(method.as_str())
+                            && row["controller_did"].as_str() == Some(did.as_str())
+                    })
                 && arkret_identity::public_key_material_from_document(&document, method)
                     .ok()
                     .and_then(|key| key.ed25519_bytes().ok())
@@ -258,7 +269,9 @@ pub(super) async fn create(
         RealmCreatePayload { object },
     )?
     .with_executed_by(executor)
-    .with_authorization_ref(AuthorizationRef::new(control_method.as_str())?)
+    .with_authorization_ref(
+        AuthorizationRef::new(control_method.as_str()).map_err(anyhow::Error::msg)?,
+    )
     .author_with_digest_suite(at, arkret_canonical::DigestSuite::Sha256)?;
     arkret_signatures::sign_event(
         &mut authored,
@@ -329,7 +342,8 @@ pub(super) async fn create(
     else {
         anyhow::bail!("actual H CLI did not retain the genuine G original");
     };
-    let nonce = Base64UrlString::new(arkret_canonical::base64url_encode(entropy()?))?;
+    let nonce = Base64UrlString::new(arkret_canonical::base64url_encode(entropy()?))
+        .map_err(anyhow::Error::msg)?;
     let bundle_request = RealmAuthorityBundleRequestBody {
         realm_id: request.event_submission.event.realm_id.clone(),
         nonce: nonce.clone(),

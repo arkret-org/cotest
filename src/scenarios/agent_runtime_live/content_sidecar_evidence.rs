@@ -285,7 +285,6 @@ async fn other_controller_content(
         0,
         0,
         view.mls_context.participant_authority_digest,
-        view.mls_context.authority_stream_head,
     )?;
     let mut group = controller
         .mls_identity()?
@@ -493,7 +492,6 @@ async fn advance_epoch_material(
         base.epoch + 1,
         base.current_key_access_revision,
         view.mls_context.participant_authority_digest,
-        view.mls_context.authority_stream_head,
     )?;
     let update = group.self_update_commit_with_governance_binding(&binding)?;
     let payload = crate::scenarios::mls_lifecycle_live::commit_payload_with_public_material(
@@ -1361,7 +1359,6 @@ pub async fn run_agent_content_sidecar_production()
         0,
         0,
         view.mls_context.participant_authority_digest,
-        view.mls_context.authority_stream_head,
     )?;
     let mut group = controller
         .mls_identity()?

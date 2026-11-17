@@ -5550,7 +5550,6 @@ export type AgentSidecarView = {
   "effective_agent_ids": string[];
   "mls_context": {
     "participant_authority_digest": string;
-    "authority_stream_head": string[];
     "mls_group_id"?: string;
     "epoch"?: string;
     "genesis_event_ref"?: string;

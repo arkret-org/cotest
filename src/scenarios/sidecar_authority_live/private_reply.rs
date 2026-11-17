@@ -156,7 +156,6 @@ pub(crate) async fn join_agent_with_observer(
             1,
             base.current_key_access_revision,
             view.mls_context.participant_authority_digest,
-            view.mls_context.authority_stream_head,
         )?
     } else {
         arkret::MlsGovernanceBindingPayload::new(
