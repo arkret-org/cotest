@@ -42,10 +42,21 @@ pub struct ActualAgentDeployment {
 pub fn actual_agent_deployment(
     label: &str,
 ) -> impl std::future::Future<Output = Result<ActualAgentDeployment>> + '_ {
-    crate::harness::heap_future(|| actual_agent_deployment_configured(label))
+    crate::harness::heap_future(|| actual_agent_deployment_configured(label, false))
 }
 
-async fn actual_agent_deployment_configured(label: &str) -> Result<ActualAgentDeployment> {
+/// The terminal lifecycle driver configures a real issuer policy before its
+/// ordinary fresh browser onboarding. No authentication fact is backdated.
+pub fn actual_account_erasure_deployment(
+    label: &str,
+) -> impl std::future::Future<Output = Result<ActualAgentDeployment>> + '_ {
+    crate::harness::heap_future(|| actual_agent_deployment_configured(label, true))
+}
+
+async fn actual_agent_deployment_configured(
+    label: &str,
+    erasure_policy: bool,
+) -> Result<ActualAgentDeployment> {
     let mut port = reserve_port()?;
     let email_base = format!("http://127.0.0.1:{}", port.port());
     port.release();
@@ -143,6 +154,15 @@ async fn actual_agent_deployment_configured(label: &str) -> Result<ActualAgentDe
     let client_id = "01GFWR28C4KNE04WG3HKXB7C9R";
     coauth.config.as_file_mut().seek(SeekFrom::Start(0))?;
     let mut config: serde_json::Value = serde_saphyr::from_reader(coauth.config.as_file_mut())?;
+    if erasure_policy {
+        ensure!(
+            config
+                .get("arkret")
+                .is_some_and(serde_json::Value::is_object),
+            "actual Coauth Arkret policy configuration is missing"
+        );
+        config["arkret"]["erasure_request_max_auth_age"] = json!(300);
+    }
     config["clients"] = serde_json::to_value(json!([{
         "client_id": client_id,
         "client_auth_method": "none",

@@ -810,6 +810,7 @@ fn signed_chain() -> Result<SignedChain> {
         realm_id: realm_id(),
         genesis_event,
         genesis_commit,
+        producer_signer_fact: None,
         authority_transitions: vec![RealmAuthorityTransition {
             change_event,
             change_commit,

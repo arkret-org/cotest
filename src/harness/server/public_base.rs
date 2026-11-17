@@ -12,7 +12,7 @@ impl ArkretServer {
         Ok(url)
     }
 
-    fn retained_migration_command(&self) -> Result<Command> {
+    pub(super) fn retained_operator_command(&self) -> Result<Command> {
         let config = self
             .external_restart
             .as_ref()
@@ -69,7 +69,7 @@ impl ArkretServer {
             matches!(self.handle, SutHandle::Terminated),
             "migration requires the business process stopped"
         );
-        let mut command = self.retained_migration_command()?;
+        let mut command = self.retained_operator_command()?;
         command.args([
             "service-identity",
             "migrate-base",
@@ -159,7 +159,7 @@ impl ArkretServer {
         historical_did: &Did,
     ) -> Result<HistoricalOriginHost> {
         let mut metrics = reserve_port()?;
-        let mut command = self.retained_migration_command()?;
+        let mut command = self.retained_operator_command()?;
         command
             .arg("--bind")
             .arg(format!(

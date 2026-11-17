@@ -1090,10 +1090,22 @@ def account_erasure_status(evidence):
     require(evidence["erasure_request_max_auth_age"] == 300, "native erasure has no actual configured high-risk freshness policy")
     accepted=evidence["accepted"]
     intent=evidence["originals"]["intent"]
-    require(accepted==evidence["replay"]==json.loads(base64.b64decode(evidence["originals"]["canonical_outcome_base64"])) and
+    require(accepted==json.loads(base64.b64decode(evidence["originals"]["canonical_outcome_base64"])) and
             accepted["request_id"]==evidence["request"]["request_id"]==intent["request_id"] and
             intent["request_digest"]=="sha256:"+canonical_digest(evidence["request"]) and intent["record_issued_at"] and
             "withdrawal_window_ends_at" not in accepted,"erasure response did not retain its actual atomic intent and original acceptance")
+    refusal=evidence["post_issuance_replay"]
+    require(refusal["status"]==401 and refusal["body"]["type"]=="https://arkret.org/problems/account_erased",
+            "issued terminal original did not fence the exact HTTP retry")
+    after_refusal=evidence["originals_after_refusal"]
+    for field in ("intent","records","intents","bindings"):
+        require(after_refusal[field]==evidence["originals"][field],f"terminal retry changed the original {field}")
+    require(evidence["canonical_outcome_before"]==after_refusal["canonical_outcome_base64"]==evidence["originals"]["canonical_outcome_base64"] and
+            len(evidence["originals"]["intents"])==1,
+            "terminal retry changed durable bytes or created another intent")
+    require(evidence["deployment_policy"]["configured_erasure_request_max_auth_age"]==300 and
+            evidence["deployment_policy"]["config_sha256"].startswith("sha256:"),
+            "native erasure policy was not read from the actual deployment configuration")
     instant=lambda value:datetime.fromisoformat(value.replace("Z","+00:00"))
     recorded=instant(accepted["recorded_at"])
     require(any(0 <= (recorded-instant(row["created_at"])).total_seconds() <= 60 for row in evidence["originals"]["authentications"]),
@@ -1116,6 +1128,9 @@ def account_erasure_status(evidence):
                     job["payload"]["body_digest"]=="sha256:"+canonical_digest(publication["body"]) for job in jobs),
                 "native publication was reconstructed rather than retained from the actual durable job")
     native_erasure_receipts(evidence["receipt_evidence"],records[-1],evidence["observations"])
+    require(evidence["active_gateway"]["gateway"]["process"] in evidence["processes"], "actual Gateway process is absent from the frozen binary evidence")
+    native_active_erasure_gateway(evidence["active_gateway"],evidence["observations"],evidence["receipt_evidence"]["package"],records[-1]["account_id"])
+    native_active_erasure_gateway_mutations(evidence["active_gateway"],evidence["observations"],evidence["receipt_evidence"]["package"],records[-1]["account_id"])
 
 
 def native_erasure_receipts(evidence, terminal, observations):
@@ -1140,7 +1155,7 @@ def native_erasure_receipts(evidence, terminal, observations):
             "erasure did not start with the actual accepted encrypted backup")
     for field in ("data","backups","private_events","routes","data_changes","global_versions"):
         require(after[field]==[],f"Completed retained private {field}")
-    require(after["canonical_pcr"]==before["canonical_pcr"] and bool(after["canonical_pcr"]),
+    require(after["canonical_pcr"]==before["canonical_pcr"] and bool(after["canonical_pcr"]["events"]) and bool(after["canonical_pcr"]["commits"]),
             "erasure rewrote or omitted its accepted canonical PCR")
     require(len(after["completions"])==1 and after["completions"][0]["package"]==package==evidence["completion"]["package"] and
             after["completions"][0]["account_id"]==account and
@@ -1149,14 +1164,22 @@ def native_erasure_receipts(evidence, terminal, observations):
     acknowledgement=evidence["accepted"]
     receipt_bytes=json.dumps(receipt,ensure_ascii=False,sort_keys=True,separators=(",", ":")).encode()
     digest="sha256:"+hashlib.sha256(b"ak.erasure-receipt.v1\n"+receipt_bytes).hexdigest()
-    require(acknowledgement==evidence["replay"]==evidence["duplicate"] and evidence["fetched"]==package and
+    require(acknowledgement==evidence["replay"] and evidence["fetched"]==package and
             acknowledgement["status"]=="accepted" and acknowledgement["receipt_id"]==receipt["receipt_id"] and
             acknowledgement["receipt_digest"]==digest and acknowledgement["issuer_id"]==evidence["source_id"] and
             acknowledgement["receiver_id"]==evidence["receiver_id"],"receipt transport changed its native frozen acknowledgement or package")
+    duplicate=evidence["duplicate"]
+    require(duplicate["status"]=="duplicate" and duplicate["accepted_at"]==acknowledgement["accepted_at"] and
+            all(duplicate[field]==acknowledgement[field] for field in ("receipt_id","receipt_digest","issuer_id","receiver_id")) and
+            bool(duplicate["proof"]["jws"]),
+            "new-key receipt retry lost its truthful duplicate status, original time or independently verified binding")
+    require(evidence["invalid"]["status"]==400 and evidence["invalid"]["originals_before"]==evidence["invalid"]["originals_after"],
+            "forged receipt changed original durable custody")
     originals=evidence["receiver_originals"]
     replies=[row for row in originals if row["operation_id"]=="ak.peer.erasure_receipt.command.submit.v1"]
     lookups=[row for row in originals if row["idempotency_key"]=="erasure-receipt:lookup:"+receipt["receipt_id"]]
-    require(len(replies)==2 and all(row["response_body"]==acknowledgement for row in replies) and
+    require(len(replies)==2 and {row["response_body"]["status"] for row in replies}=={"accepted","duplicate"} and
+            any(row["response_body"]==acknowledgement for row in replies) and any(row["response_body"]==duplicate for row in replies) and
             len(lookups)==1 and lookups[0]["response_body"]["package"]==package and
             lookups[0]["response_body"]["acceptance"]==acknowledgement,
             "native receiver lacks its exact atomic response and lookup custody")
@@ -1165,6 +1188,115 @@ def native_erasure_receipts(evidence, terminal, observations):
             row["explicit_request_headers"]["source-service-id"]==evidence["source_id"] and
             row["explicit_request_headers"]["destination-service-id"]==evidence["receiver_id"] for row in exchanges),
             "receipt operations have no actual qualified cross-Station transports")
+
+def native_active_erasure_gateway(evidence, observations, package, account):
+    required={"registered","registration_request","apply","active_acceptance","initial_notify","initial_notify_exchange",
+              "provider_before","before","blocked_revoke","unavailable_revoke","revoke_exchanges","revoke_request",
+              "revoke_receipt","after","stopped_notify","stopped_notify_exchange","source_station","gateway"}
+    require(isinstance(evidence,dict) and required <= evidence.keys(),"active Gateway evidence is incomplete")
+    proof={**evidence,"observations":observations}
+    source=evidence["source_station"]
+    gateway=evidence["gateway"]["gateway_resolution"]
+    history=evidence["gateway"]["gateway_history"]
+    require(source==account["station_id"]==package["receipt"]["issuer_id"] and
+            source!=gateway["service_id"] and gateway["service_kind"]=="push_gateway" and history["native_history"] is True and
+            history["entries"]==gateway["method_history_evidence"]["log_entries"] and
+            evidence["gateway"]["onboarded_station_resolution"]["service_id"]==source,
+            "active Gateway native identity or full Account owner differs")
+    before=evidence["before"]
+    require(len(before["intents"])==len(before["push_devices"])==len(before["gateway_registrations"])==1 and
+            before["completions"]==[],"active Gateway had no unique original installation before erasure")
+    installed=before["intents"][0]
+    active=json.loads(base64.b64decode("".join(installed["canonical_request_base64"].split()),validate=True))
+    fields=("registration_id","push_target_id","device_id")
+    require(active["state"]=="active" and installed["local_account_id"]==account and installed["source_station_id"]==source and
+            installed["desired_state"]=="active" and installed["status"]=="receipt_verified" and
+            installed["request_digest"]=="sha256:"+canonical_digest(active) and
+            installed["receipt"]==evidence["active_acceptance"]["receipt"] and
+            all(evidence["registered"][field]==active[field] for field in ("registration_id","push_target_id")) and
+            active["device_id"]==evidence["registration_request"]["device_id"] and
+            active["push_key"]==evidence["registration_request"]["push_key"] and
+            before["push_devices"][0]["public_handoff"] is True and before["push_devices"][0]["payload"]["account_id"]==account and
+            before["gateway_registrations"][0]["state"]=="active" and before["gateway_registrations"][0]["has_route_ciphertext"] is True,
+            "active Gateway original tuple/receipt/route was not actually installed")
+    push_gateway_actual(proof,"apply","ak.edge.push.command.apply_registration.v1",active,evidence["active_acceptance"])
+    push_gateway_receipt(proof,active,evidence["active_acceptance"])
+    notify={"notification":{"push_target_id":active["push_target_id"],"wakeup_kind":"message","devices":[{"device_id":active["device_id"]}]}}
+    accepted={"push_target_id":active["push_target_id"],"outcomes":[{"device_id":active["device_id"],"gateway_status":"accepted"}]}
+    require(evidence["initial_notify"]==accepted and len(evidence["provider_before"])==1,
+            "active Gateway had no actual provider delivery before erasure")
+    push_gateway_actual(proof,"initial_notify_exchange","ak.edge.push.command.notify.v1",notify,accepted)
+    provider=evidence["provider_before"][0]
+    require(provider["method"]=="POST" and provider["uri"].endswith("/deliver/"+active["push_key"]) and
+            json.loads(base64.b64decode(provider["raw_body_base64"],validate=True))==provider["body"] and
+            provider["body"]["push_target_id"]==active["push_target_id"],"active Gateway provider original differs")
+    blocked=evidence["blocked_revoke"]
+    witnesses=blocked["pg_blocking_pids"]
+    require(bool(witnesses) and all(isinstance(row["holder_pid"],int) and not isinstance(row["holder_pid"],bool) and
+            row["holder_pid"]>0 and isinstance(row["blocked_pid"],int) and not isinstance(row["blocked_pid"],bool) and row["blocked_pid"]>0 and row["holder_pid"]!=row["blocked_pid"] and
+            row["wait_event_type"]=="Lock" and "floria_push_registration_handoffs" in row["query"].lower() for row in witnesses) and
+            blocked["cut"]["completions"]==[],"active Gateway blocking witness or zero-completion causal cut is absent")
+    failure=evidence["unavailable_revoke"]
+    revoke={field:active[field] for field in fields}|{"state":"revoked"}
+    proof["failure_exchange"]=[failure["exchange"]]
+    headers=push_gateway_actual(proof,"failure_exchange","ak.edge.push.command.apply_registration.v1",revoke,failure["exchange"]["response"],503)
+    require(headers["source-service-id"]==source and failure["exchange"]["response"]["type"]=="https://arkret.org/problems/service_unavailable" and
+            failure["cut"]["completions"]==[] and failure["cut"]["intents"][0]["desired_state"]=="revoked" and
+            failure["cut"]["intents"][0]["status"]=="awaiting_receipt" and failure["cut"]["intents"][0]["receipt"] is None and
+            failure["cut"]["gateway_registrations"][0]["state"]=="active",
+            "active Gateway failed revoke was hidden, acknowledged or completed prematurely")
+    after=evidence["after"]
+    require(after["push_devices"]==[] and len(after["completions"])==1 and after["completions"][0]["package"]==package and
+            after["completions"][0]["account_id"]==account and bool(after["intents"]) and
+            all(row["desired_state"]=="revoked" and row["status"]=="receipt_verified" and row["local_account_id"]==account for row in after["intents"]),
+            "active Gateway Completed lacks the exact signed completion or verified source revocation")
+    retained=next((row for row in after["intents"] if row["registration_id"]==active["registration_id"]),None)
+    require(retained is not None and evidence["revoke_request"]==revoke and
+            json.loads(base64.b64decode("".join(retained["canonical_request_base64"].split()),validate=True))==revoke and
+            retained["request_digest"]=="sha256:"+canonical_digest(revoke) and
+            retained["receipt"]==evidence["revoke_receipt"]["receipt"] and retained["destination_gateway_id"]==gateway["service_id"],
+            "active Gateway original successful revoke bytes or receipt changed")
+    successful=[row for row in evidence["revoke_exchanges"] if row["status"]==200 and row["request"]==revoke and row["response"]==evidence["revoke_receipt"]]
+    require(bool(successful),"active Gateway has no actual successful worker revoke exchange")
+    proof["verified_revoke_exchange"]=[successful[0]]
+    push_gateway_actual(proof,"verified_revoke_exchange","ak.edge.push.command.apply_registration.v1",revoke,evidence["revoke_receipt"])
+    push_gateway_receipt(proof,revoke,evidence["revoke_receipt"])
+    rows=after["gateway_registrations"]
+    require(len(rows)==1 and rows[0]["state"]=="revoked" and rows[0]["has_route_ciphertext"] is False and
+            json.loads(rows[0]["receipt_json"])==evidence["revoke_receipt"]["receipt"],
+            "active Gateway retained a route or another stored receipt after Completed")
+    rejected={"push_target_id":active["push_target_id"],"outcomes":[{"device_id":active["device_id"],"gateway_status":"rejected","reason_code":"push_target_unknown"}]}
+    require(evidence["stopped_notify"]==rejected and evidence["gateway"]["provider"]["provider_received"]==evidence["provider_before"],
+            "active Gateway old target still dispatched after Completed")
+    push_gateway_actual(proof,"stopped_notify_exchange","ak.edge.push.command.notify.v1",notify,rejected)
+
+
+def native_active_erasure_gateway_mutations(evidence, observations, package, account):
+    # Start only from the real validated native artifact. These counterexamples
+    # certify rejecting predicates; they mint no native authority or coverage.
+    import copy
+    mutations=[
+        ("missing installation",lambda value:value.pop("before")),
+        ("missing actual lock witness",lambda value:value["blocked_revoke"].__setitem__("pg_blocking_pids",[])),
+        ("premature blocked completion",lambda value:value["blocked_revoke"]["cut"].__setitem__("completions",copy.deepcopy(value["after"]["completions"]))),
+        ("premature failed completion",lambda value:value["unavailable_revoke"]["cut"].__setitem__("completions",copy.deepcopy(value["after"]["completions"]))),
+        ("failure forged as authority denial",lambda value:value["unavailable_revoke"]["exchange"]["response"].__setitem__("type","https://arkret.org/problems/capability_denied")),
+        ("missing verified original",lambda value:value["after"]["intents"][0].__setitem__("status","awaiting_receipt")),
+        ("wrong revoke tuple",lambda value:value["revoke_request"].__setitem__("device_id",value["revoke_request"]["device_id"][:-1]+("1" if value["revoke_request"]["device_id"][-1]=="0" else "0"))),
+        ("missing real worker exchange",lambda value:value.__setitem__("revoke_exchanges",[])),
+        ("invalid revoke proof",lambda value:value["revoke_receipt"]["receipt"]["proof"].__setitem__("jws","")),
+        ("retained route ciphertext",lambda value:value["after"]["gateway_registrations"][0].__setitem__("has_route_ciphertext",True)),
+        ("old target still dispatches",lambda value:value["gateway"]["provider"]["provider_received"].append(copy.deepcopy(value["provider_before"][0]))),
+    ]
+    for name,mutate in mutations:
+        changed=copy.deepcopy(evidence)
+        mutate(changed)
+        try:
+            native_active_erasure_gateway(changed,observations,package,account)
+        except ValueError:
+            continue
+        raise ValueError("active Gateway negative mutation unexpectedly passed: "+name)
+
 
 def mimi_claim(evidence):
     request=evidence["request"]
@@ -2018,7 +2150,23 @@ def applet_managed_configuration(evidence):
     check(evidence, require=require, digest=canonical_digest, decode=decoded_json)
 
 
-PROOFS = {"applet_managed_configuration": applet_managed_configuration, "push_gateway": push_gateway, "applet_installations": applet_installations, "call_invitation": call_invitation, "account_security_rotation": account_security_rotation, "peer_contacts": peer_contacts, "peer_keypackage_claims": peer_keypackage_claims,"account_identity_creation": account_identity_creation, "account_device_sessions": account_device_sessions,
+def circle_rotation(evidence):
+    from native_circle_rotation_proof import check
+    check(evidence, require=require, decode=decoded_json, digest=canonical_digest,
+          error_registry=read(ROOT / "arkret-spec/spec/v1/artifacts/registry/error-code-registry.json"))
+
+
+def mimi_proxy_download(evidence):
+    from native_mimi_proxy_download_proof import check
+    check(evidence, require=require, digest=canonical_digest, decode=decoded_json)
+
+
+def peer_consent(evidence):
+    from native_peer_consent_proof import check
+    check(evidence, require=require, digest=canonical_digest, decode=decoded_json)
+
+
+PROOFS = {"peer_consent": peer_consent, "circle_rotation": circle_rotation, "mimi_proxy_download": mimi_proxy_download, "account_erasure_status": account_erasure_status, "applet_managed_configuration": applet_managed_configuration, "push_gateway": push_gateway, "applet_installations": applet_installations, "call_invitation": call_invitation, "account_security_rotation": account_security_rotation, "peer_contacts": peer_contacts, "peer_keypackage_claims": peer_keypackage_claims,"account_identity_creation": account_identity_creation, "account_device_sessions": account_device_sessions,
           "account_device_pairing": account_device_pairing, "account_policy_recovery": account_policy_recovery,
           "account_private_storage": account_private_storage, "mls_interop": mls_interop,
           "account_consent": account_consent,"identity_reservations":identity_reservations,
@@ -2030,6 +2178,89 @@ def deployment_boundary_guard(source_fence):
     from check_service_isolation import source_errors
     failures = source_errors(ROOT, source_fence)
     require(not failures, "; ".join(failures))
+
+
+COLAND_CUSTODY_TARGET = "coland-keystore-snapshot"
+COLAND_CUSTODY_SOURCES = {
+    "coland/Cargo.toml", "coland/Cargo.lock", "coland/crates/server/Cargo.toml",
+    "coland/crates/server/src/main.rs",
+    "coland/crates/server/src/bin/coland-keystore-snapshot.rs",
+    "cotest/src/harness/server/custody_provision.rs",
+    "cotest/scripts/run-native-operation-contracts.py",
+    "cotest/scripts/check_native_operation_contracts.py",
+}
+
+
+def coland_custody_build_command():
+    return ["cargo", "build", "--locked", "-p", "coland", "--bin", "coland",
+            "--bin", COLAND_CUSTODY_TARGET, "--message-format=json-render-diagnostics",
+            "--features", "conformance-harness"]
+
+
+def coland_custody_artifacts(cargo_log):
+    found = {"coland": [], COLAND_CUSTODY_TARGET: []}
+    finished = []
+    for line in cargo_log.splitlines():
+        try:
+            record = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if record.get("reason") == "build-finished":
+            finished.append(record.get("success"))
+        target = record.get("target", {})
+        if record.get("reason") == "compiler-artifact" and target.get("name") in found:
+            require(target.get("kind") == ["bin"] and record.get("profile", {}).get("test") is False
+                    and record.get("executable"), "Coland custody supply is not an actual binary main")
+            found[target["name"]].append(record)
+    require(finished == [True] and all(len(rows) == 1 for rows in found.values()),
+            "Cargo did not report exactly one Coland and custody CLI from one successful build")
+    server, utility = found["coland"][0], found[COLAND_CUSTODY_TARGET][0]
+    require(server.get("package_id") and server["package_id"] == utility.get("package_id"),
+            "Coland custody CLI belongs to a different package build")
+    return server, utility
+
+
+def verify_coland_custody_product(product, producer, inputs, execution_sources, metadata, cargo_log):
+    require(producer.get("command") == coland_custody_build_command() and
+            producer.get("exit_code") == 0 and producer.get("sources_unchanged") is True,
+            "Coland custody CLI requires the same explicit successful two-bin Cargo build")
+    require(COLAND_CUSTODY_SOURCES <= inputs.keys() and inputs == execution_sources == source_fence(),
+            "Coland custody supply belongs to incomplete or different source inputs")
+    server, utility = coland_custody_artifacts(cargo_log)
+    actual_target = Path(metadata.get("target_directory", "")).resolve()
+    require(str(actual_target) == producer.get("target_directory"),
+            "Coland custody target differs from actual Cargo metadata")
+    frozen_server = Path(product.get("executable", ""))
+    custody = producer.get("custody_cli", {})
+    require(set(custody) == {"executable", "sha256"}, "Coland custody CLI product is absent or malformed")
+    frozen_utility = Path(custody["executable"])
+    expected_utility_name = COLAND_CUSTODY_TARGET + frozen_server.suffix
+    require(frozen_server.is_absolute() and frozen_server.is_file() and
+            re.fullmatch(r"coland(?:\.exe)?", frozen_server.name) is not None and
+            frozen_utility == frozen_server.with_name(expected_utility_name),
+            "frozen custody CLI is not the exact Coland sibling executable")
+    for record, frozen, expected_name, relative in (
+        (server, frozen_server, "coland", "crates/server/src/main.rs"),
+        (utility, frozen_utility, COLAND_CUSTODY_TARGET, "crates/server/src/bin/coland-keystore-snapshot.rs"),
+    ):
+        target = record["target"]
+        matches = [item for package in metadata.get("packages", [])
+                   if package.get("id") == server["package_id"] for item in package.get("targets", [])
+                   if item.get("name") == expected_name and item.get("kind") == ["bin"]]
+        require(len(matches) == 1 and matches[0] == target and
+                Path(target.get("src_path", "")).resolve() == (ROOT / "coland" / relative).resolve(),
+                "Coland custody compiler target differs from its real owning source/metadata")
+        original = Path(record["executable"])
+        require(original.is_absolute() and original.is_file() and
+                original.parent == actual_target / "debug" and original.name == frozen.name and
+                frozen.is_absolute() and frozen.is_file(),
+                "Coland custody executable differs from the exact native Cargo artifact")
+        actual_hash = hashlib.sha256(frozen.read_bytes()).hexdigest()
+        expected_hash = product.get("sha256") if expected_name == "coland" else custody["sha256"]
+        require(actual_hash == expected_hash == hashlib.sha256(original.read_bytes()).hexdigest(),
+                "Coland custody frozen bytes differ from their same-build compiler artifact")
+    require(producer.get("executable") == product.get("executable") and
+            producer.get("sha256") == product.get("sha256"), "Coland main product binding changed")
 
 
 def managed_applet_host_artifact(cargo_log):
@@ -2146,6 +2377,7 @@ def evidence_coverage(document, directory: Path, execution: Path):
     require(len(products) >= 2, "native executable build provenance absent")
     product_identities = set()
     applet_host_identities = set()
+    custody_cli_verified = False
     for product in products:
         producer = read(execution.parent / product["producer_result"])
         require(producer["exit_code"] == 0 and producer["sources_unchanged"] is True and
@@ -2163,7 +2395,15 @@ def evidence_coverage(document, directory: Path, execution: Path):
             # Cotest is not a production dependency of either native server.
             require(all(source_fence.get(path) == digest for path, digest in inputs.items()
                         if not path.startswith("cotest/")), "native executable belongs to old production sources")
+        if "custody_cli" in producer:
+            require(not custody_cli_verified and "role" not in product,
+                    "Coland custody CLI supply was repeated or given another role")
+            verify_coland_custody_product(product, producer, inputs, source_fence,
+                                          read(execution.parent / producer["metadata"]),
+                                          (execution.parent / producer["log"]).read_text(encoding="utf-8"))
+            custody_cli_verified = True
         product_identities.add((product["executable"], product["sha256"]))
+    require(custody_cli_verified, "native Coland custody CLI supply was not verified")
     rows = {row["operation_id"]: row for row in document["operations"]}
     covered = set()
     for identifier, case in document["cases"].items():
@@ -2175,6 +2415,43 @@ def evidence_coverage(document, directory: Path, execution: Path):
         require(case["target"] in result["command"] or "--workspace" in result["command"],
                 "native test target was not selected by the execution")
         proof = read(path)
+        if identifier == "peer_consent":
+            required_consent = {
+                "cotest/src/scenarios/native_operation_contracts/peer_consent.rs",
+                "cotest/src/scenarios/native_operation_contracts/peer_consent/organization.rs",
+                "cotest/src/scenarios/native_operation_contracts/peer_consent/effects.rs",
+                "cotest/src/harness/server/organization_hosting.rs",
+                "cotest/src/harness/server/public_base.rs",
+                "cotest/src/harness/server/service_route_relay.rs",
+                "cotest/scripts/native_peer_consent_proof.py",
+                "coland/crates/server/src/bootstrap/operator.rs",
+                "coland/crates/server/src/bootstrap/organization_hosting.rs",
+                "coland/crates/server/src/runtime.rs",
+                "coland/crates/http/src/state/organization_hosting.rs",
+                "coland/crates/http/src/routing/consent_private.rs",
+                "coland/crates/http/src/routing/call_admission.rs",
+                "coland/crates/storage-postgres/src/organization_hosting.rs",
+                "coland/crates/storage-postgres/src/organization_pcr_genesis.rs",
+                "coland/crates/storage-postgres/src/consent_private_commands.rs",
+                "coland/crates/storage-postgres/src/consent_request_quarantine.rs",
+                "coland/crates/storage-postgres/src/consent_private_effects.rs",
+                "coland/crates/storage-postgres/src/consent_private_effects_projection.rs",
+            }
+            require(required_consent <= source_fence.keys(), "native PeerConsent hosting/authority provenance is incomplete")
+        if identifier == "mimi_proxy_download":
+            required_mimi = {
+                "cotest/src/scenarios/native_operation_contracts/mimi_proxy_download.rs",
+                "cotest/src/scenarios/native_operation_contracts/mimi_proxy_download/effects.rs",
+                "cotest/src/harness/server/public_assets.rs",
+                "cotest/scripts/native_mimi_proxy_download_proof.py",
+                "coland/crates/http/src/config.rs",
+                "coland/crates/http/src/routing/interop/mimi/payload.rs",
+                "coland/crates/http/src/routing/interop/mimi/proxy_download.rs",
+                "coland/crates/http/src/routing/interop/mimi/signature.rs",
+                "coland/crates/http/src/routing/interop/blob.rs",
+                "coland/crates/storage-postgres/src/authority_commit/mimi_blob_delivery.rs",
+            }
+            require(required_mimi <= source_fence.keys(), "native MIMI public asset source provenance is incomplete")
         if identifier == "push_gateway":
             required_push = {"floria/Cargo.toml", "floria/src/main.rs", "floria/src/pushkin/custom.rs", "floria/src/auth/signature.rs",
                              "floria/src/auth/helpers.rs", "floria/src/registration_handoff.rs", "floria/src/service/registration_handoff.rs",

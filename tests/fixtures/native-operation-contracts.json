@@ -89,6 +89,26 @@
       "target": "native_operation_contracts",
       "test": "applet_managed_configuration_retains_review_originals_and_native_route",
       "artifact": "applet-managed-configuration.json"
+    },
+    "account_erasure_status": {
+      "target": "native_operation_contracts",
+      "test": "account_erasure_retains_native_terminal_intent_and_physical_receipt",
+      "artifact": "account-erasure-status.json"
+    },
+    "circle_rotation": {
+      "target": "native_operation_contracts",
+      "test": "circle_rotation_retains_actual_update_paths_welcome_and_original_replays",
+      "artifact": "circle-rotation.json"
+    },
+    "mimi_proxy_download": {
+      "target": "native_operation_contracts",
+      "test": "mimi_proxy_download_retains_public_object_current_policy_and_provider_originals",
+      "artifact": "mimi-proxy-download.json"
+    },
+    "peer_consent": {
+      "target": "native_operation_contracts",
+      "test": "peer_consent_retains_real_hosting_current_proxy_and_worker_effects",
+      "artifact": "peer-consent.json"
     }
   },
   "operations": [
@@ -146,7 +166,7 @@
     },
     {
       "operation_id": "ak.gate.account.command.request_erasure.v1",
-      "native_case": null
+      "native_case": "account_erasure_status"
     },
     {
       "operation_id": "ak.gate.account.exchange.create_handoff.v1",
@@ -166,7 +186,7 @@
     },
     {
       "operation_id": "ak.open.mimi.command.proxy_download.v1",
-      "native_case": null
+      "native_case": "mimi_proxy_download"
     },
     {
       "operation_id": "ak.open.mimi.command.request_consent.v1",
@@ -194,11 +214,11 @@
     },
     {
       "operation_id": "ak.peer.account_status.command.submit.v1",
-      "native_case": null
+      "native_case": "account_erasure_status"
     },
     {
       "operation_id": "ak.peer.account_status.read.resolve.v1",
-      "native_case": null
+      "native_case": "account_erasure_status"
     },
     {
       "operation_id": "ak.peer.contacts.command.submit.v1",
@@ -206,11 +226,11 @@
     },
     {
       "operation_id": "ak.peer.erasure_receipt.command.submit.v1",
-      "native_case": null
+      "native_case": "account_erasure_status"
     },
     {
       "operation_id": "ak.peer.erasure_receipt.resource.get.v1",
-      "native_case": null
+      "native_case": "account_erasure_status"
     },
     {
       "operation_id": "ak.peer.events.command.submit.v1",
@@ -334,7 +354,7 @@
     },
     {
       "operation_id": "ak.self.circle.command.rotate_scope.v1",
-      "native_case": null
+      "native_case": "circle_rotation"
     },
     {
       "operation_id": "ak.self.consent.command.replace.v1",
@@ -426,7 +446,7 @@
     },
     {
       "operation_id": "ak.peer.consent.read.current.v1",
-      "native_case": null
+      "native_case": "peer_consent"
     },
     {
       "operation_id": "ak.self.strand.watch.command.audit_read.v1",
@@ -438,11 +458,11 @@
     },
     {
       "operation_id": "ak.peer.consent.command.proxy.v1",
-      "native_case": null
+      "native_case": "peer_consent"
     },
     {
       "operation_id": "ak.peer.consent.command.publish_effects.v1",
-      "native_case": null
+      "native_case": "peer_consent"
     },
     {
       "operation_id": "ak.self.applet.configuration.command.submit.v1",

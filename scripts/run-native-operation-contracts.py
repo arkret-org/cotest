@@ -51,26 +51,44 @@ def execute(output, name, repository, command, environment, *, require_success=T
 
 
 def build(output, name, environment):
-    command = ["cargo", "build", "--locked", "-p", name, "--bin", name, "--message-format=json-render-diagnostics"]
-    if name == "coland":
-        command.extend(["--features", "conformance-harness"])
+    command = (gate.coland_custody_build_command() if name == "coland" else
+               ["cargo", "build", "--locked", "-p", name, "--bin", name, "--message-format=json-render-diagnostics"])
     result = execute(output, name, gate.ROOT / name, command, environment)
-    executables = []
-    for line in (output / result["log"]).read_text(encoding="utf-8").splitlines():
-        try:
-            record = json.loads(line)
-        except json.JSONDecodeError:
-            continue
-        if record.get("reason") == "compiler-artifact" and record.get("target", {}).get("name") == name and record.get("executable"):
-            executables.append(Path(record["executable"]))
+    cargo_log = (output / result["log"]).read_text(encoding="utf-8")
+    custody_artifact = None
+    if name == "coland":
+        server, custody_artifact = gate.coland_custody_artifacts(cargo_log)
+        executables = [Path(server["executable"])]
+    else:
+        executables = []
+        for line in cargo_log.splitlines():
+            try:
+                record = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if record.get("reason") == "compiler-artifact" and record.get("target", {}).get("name") == name and record.get("executable"):
+                executables.append(Path(record["executable"]))
     gate.require(len(executables) == 1, f"Cargo did not report exactly one {name} executable")
     frozen = output / "tools" / executables[0].name
     frozen.parent.mkdir(exist_ok=True)
     shutil.copyfile(executables[0], frozen)
     shutil.copymode(executables[0], frozen)
     result.update(executable=str(frozen), sha256=digest(frozen))
+    product = {"producer_result": f"{name}-result.json", "executable": str(frozen), "sha256": result["sha256"]}
+    if custody_artifact is not None:
+        original = Path(custody_artifact["executable"])
+        custody_frozen = frozen.with_name(original.name)
+        shutil.copyfile(original, custody_frozen)
+        shutil.copymode(original, custody_frozen)
+        result.update(custody_cli={"executable": str(custody_frozen), "sha256": digest(custody_frozen)},
+                      metadata=f"{name}-metadata.json")
+        # Validate both actual Cargo products before any owned fixture can run
+        # the custody CLI, then revalidate the same frozen bytes at publication.
+        inputs = gate.read(output / result["source_fence"])
+        gate.verify_coland_custody_product(product, result, inputs, inputs,
+                                          gate.read(output / result["metadata"]), cargo_log)
     write(output / f"{name}-result.json", result)
-    return {"producer_result": f"{name}-result.json", "executable": str(frozen), "sha256": result["sha256"]}
+    return product
 
 
 def build_managed_applet_host(output, environment):
@@ -96,7 +114,7 @@ def build_managed_applet_host(output, environment):
 
 
 def native_service_names(selected_cases):
-    return ("coland", "coauth", "floria") if selected_cases is None or "push_gateway" in selected_cases else ("coland", "coauth")
+    return ("coland", "coauth", "floria") if selected_cases is None or "push_gateway" in selected_cases or "account_erasure_status" in selected_cases else ("coland", "coauth")
 
 
 def main():

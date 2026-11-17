@@ -52,7 +52,7 @@ class NativeOperationStatusTests(unittest.TestCase):
 
     def full_log(self):
         lines = [f"test {name} ... \x1b[32mok\x1b[0m" for name in (*publisher.REQUIRED, *publisher.META)]
-        lines += [PRIVATE, "test result: ok. 20 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 12.50s"]
+        lines += [PRIVATE, "test result: ok. 24 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 12.50s"]
         (self.run / "native.log").write_text("\n".join(lines) + "\n", encoding="utf-8")
 
     def publish(self, label="public"):
@@ -69,7 +69,7 @@ class NativeOperationStatusTests(unittest.TestCase):
         self.assertEqual(result["status"], "failed")
         self.assertFalse(result["coverage"]["acceptance"])
         self.assertEqual(result["coverage"]["uncovered_operations"], sorted(self.unmapped))
-        self.assertEqual(len(result["tests"]), 18)
+        self.assertEqual(len(result["tests"]), 22)
         self.assertEqual(len(result["meta_tests"]), 2)
         for name in ("native-result.json", "native-sources.json", "native.log", "coverage.json"):
             self.assertEqual(result["hashes"][name], hashlib.sha256((self.run / name).read_bytes()).hexdigest())
@@ -82,27 +82,44 @@ class NativeOperationStatusTests(unittest.TestCase):
         self.assertEqual(code, 0)
         self.assertFalse(json.loads((self.root / "complete-cli/summary.json").read_text())["coverage"]["acceptance"])
 
-    def test_all_eighteen_registered_cases_and_two_meta_are_required(self):
+    def test_all_twenty_two_registered_cases_and_two_meta_are_required(self):
         # Independent declaration names and fixed meta anchors prevent a dropped
         # REQUIRED/META entry from making the positive oracle self-fulfilling.
         document = json.loads(self.declarations.read_text(encoding="utf-8"))
-        self.assertEqual(len(document["cases"]), 18)
+        self.assertEqual(len(document["cases"]), 22)
         self.assertEqual(len(document["operations"]), 91)
         self.assertEqual(len(self.scope), 91)
-        self.assertEqual(len(self.unmapped), 11)
+        self.assertEqual(len(self.unmapped), 1)
         anchors = {
+            "account_device_pairing": "account_device_pairing_retains_real_target_and_admitted_original",
+            "account_device_sessions": "account_device_sessions_preserve_issuer_originals_and_real_consumer",
+            "account_identity_creation": "account_identity_creation_preserves_native_issuer_and_pcr_originals",
+            "account_policy_recovery": "account_policy_recovery_retains_accepted_unit_and_issuer_originals",
+            "account_private_storage": "account_private_storage_retains_encryption_and_durable_effects",
+            "account_consent": "account_consent_retains_holder_current_and_admitted_quarantine",
+            "identity_reservations": "identity_reservations_retain_fresh_authentication_and_published_originals",
+            "service_registrations": "service_registrations_retain_actual_native_bootstrap_and_receipt",
+            "organization_registrations": "organization_registrations_retain_external_control_and_native_lifecycle",
+            "mls_interop": "mls_interop_retains_native_claims_mls_and_mimi_originals",
+            "blob_presign": "blob_presign_retains_classified_native_object_and_live_policy",
+            "peer_keypackage_claims": "peer_keypackage_claims_retain_two_native_authorities_and_original_cas",
+            "peer_contacts": "peer_contacts_retain_two_native_authorities_and_nonempty_originals",
             "account_security_rotation": "account_security_rotation_retains_worker_and_local_commit_originals",
             "applet_installations": "applet_installations_retain_original_sources_and_exact_fenced_replays",
             "call_invitation": "call_invitation_retains_real_recipient_and_fresh_holder_verdict",
-            "applet_managed_configuration": "applet_managed_configuration_retains_review_originals_and_native_route",
             "push_gateway": "push_gateway_retains_native_registration_receipt_and_provider_dispatch",
+            "applet_managed_configuration": "applet_managed_configuration_retains_review_originals_and_native_route",
+            "account_erasure_status": "account_erasure_retains_native_terminal_intent_and_physical_receipt",
+            "circle_rotation": "circle_rotation_retains_actual_update_paths_welcome_and_original_replays",
+            "mimi_proxy_download": "mimi_proxy_download_retains_public_object_current_policy_and_provider_originals",
+            "peer_consent": "peer_consent_retains_real_hosting_current_proxy_and_worker_effects",
         }
         for identifier, name in anchors.items():
             self.assertEqual(document["cases"][identifier]["test"], name)
         names = [case["test"] for case in document["cases"].values()]
-        self.assertEqual(len(set(names)), 18)
+        self.assertEqual(len(set(names)), 22)
         self.assertEqual(set(names), set(publisher.REQUIRED))
-        self.assertEqual(len(publisher.REQUIRED), 18)
+        self.assertEqual(len(publisher.REQUIRED), 22)
         meta = (
             "mls_interop_entry_future_keeps_large_child_state_on_the_heap",
             "all_native_operation_schema_references_resolve_once",
@@ -110,28 +127,28 @@ class NativeOperationStatusTests(unittest.TestCase):
         self.assertEqual(publisher.META, meta)
         lines = [f"test {name} ... ok" for name in (*names, *meta)]
         complete = "\n".join(lines + [
-            "test result: ok. 20 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 12.50s"
+            "test result: ok. 24 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 12.50s"
         ]) + "\n"
         (self.run / "native.log").write_text(complete, encoding="utf-8")
-        result = self.publish("all-twenty")
+        result = self.publish("all-twenty-two")
         self.assertTrue(result["export_complete"])
         self.assertTrue(result["native_execution_complete"])
         self.assertEqual({row["test"] for row in result["tests"]}, set(names))
         self.assertEqual({row["test"] for row in result["meta_tests"]}, set(meta))
         self.assertTrue(all(row["status"] == "passed" for row in result["tests"] + result["meta_tests"]))
-        # Full execution is not full acceptance: 11 of the original 91 operation
+        # Full execution is not full acceptance: 1 of the original 91 operation
         # obligations still lack a driver. Synthetic logs earn no native proof.
         self.assertFalse(result["coverage"]["acceptance"])
-        self.assertEqual(result["coverage"]["native_covered"], 80)
-        self.assertEqual(result["coverage"]["remaining"], 11)
+        self.assertEqual(result["coverage"]["native_covered"], 90)
+        self.assertEqual(result["coverage"]["remaining"], 1)
         self.assertEqual(result["coverage"]["uncovered_operations"], sorted(self.unmapped))
         self.assertEqual(result["status"], "failed")
         for name in (*names, *meta):
             exact = f"test {name} ... ok\n"
             self.assertEqual(complete.count(exact), 1)
-            omitted = complete.replace(exact, "").replace("20 passed;", "19 passed;")
+            omitted = complete.replace(exact, "").replace("24 passed;", "23 passed;")
             ignored = complete.replace(exact, f"test {name} ... ignored\n").replace(
-                "20 passed; 0 failed; 0 ignored;", "19 passed; 0 failed; 1 ignored;")
+                "24 passed; 0 failed; 0 ignored;", "23 passed; 0 failed; 1 ignored;")
             duplicate = complete.replace(exact, exact + exact)
             for kind, log in (("absent", omitted), ("ignored", ignored), ("duplicate", duplicate)):
                 with self.subTest(test=name, kind=kind):
@@ -143,7 +160,7 @@ class NativeOperationStatusTests(unittest.TestCase):
 
     def test_declaration_cannot_drop_any_registered_case(self):
         document = json.loads(self.declarations.read_text(encoding="utf-8"))
-        self.assertEqual(len(document["cases"]), 18)
+        self.assertEqual(len(document["cases"]), 22)
         for identifier in document["cases"]:
             changed = json.loads(json.dumps(document))
             changed["cases"].pop(identifier)
@@ -171,7 +188,7 @@ class NativeOperationStatusTests(unittest.TestCase):
                 lines += [f"test {name} ... {PRIVATE}", PRIVATE, "\x1b[32mok\x1b[0m"]
             else:
                 lines += [f"test {name} ... ok"]
-        lines += ["test result: ok. 20 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 12.50s"]
+        lines += ["test result: ok. 24 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 12.50s"]
         (self.run / "native.log").write_text("\n".join(lines) + "\n", encoding="utf-8")
         result = self.publish()
         self.assertTrue(result["export_complete"])
@@ -315,7 +332,7 @@ class NativeOperationStatusTests(unittest.TestCase):
         self.assertFalse(result["native_execution_complete"])
         for field in ("native", "counts", "coverage"):
             self.assertIsNone(result[field])
-        self.assertEqual([row["status"] for row in result["tests"]], ["not_observed"] * 18)
+        self.assertEqual([row["status"] for row in result["tests"]], ["not_observed"] * 22)
         self.assertEqual([row["status"] for row in result["meta_tests"]], ["not_observed"] * 2)
 
     def test_preflight_failure_exports_only_typed_facts_and_hashes(self):
@@ -415,7 +432,7 @@ class NativeOperationStatusTests(unittest.TestCase):
     def failed_mls_log(self):
         names = (*publisher.REQUIRED, *publisher.META)
         lines = [f"test {name} ... {'FAILED' if name == publisher.MLS_CASE else 'ok'}" for name in names]
-        lines += [PRIVATE, "test result: FAILED. 19 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 12.50s"]
+        lines += [PRIVATE, "test result: FAILED. 23 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 12.50s"]
         (self.run / "native.log").write_text("\n".join(lines) + "\n", encoding="utf-8")
         result = json.loads((self.run / "native-result.json").read_text())
         self.write("native-result.json", dict(result, exit_code=101))
@@ -426,12 +443,12 @@ class NativeOperationStatusTests(unittest.TestCase):
         self.write("diagnostics/mls-interop.json", phase)
         result = self.publish()
         self.assertEqual(result["failure_phases"], [phase])
-        self.assertEqual(result["counts"], {"passed": 19, "failed": 1, "ignored": 0, "measured": 0, "filtered_out": 0})
+        self.assertEqual(result["counts"], {"passed": 23, "failed": 1, "ignored": 0, "measured": 0, "filtered_out": 0})
         self.assertEqual(result["status"], "failed")
         self.assertFalse(result["export_complete"])
         self.assertFalse(result["native_execution_complete"])
         self.assertIsNone(result["coverage"])
-        self.assertEqual(len(result["tests"]), 18)
+        self.assertEqual(len(result["tests"]), 22)
         self.assertEqual(len(result["meta_tests"]), 2)
         real_publish = publisher.publish
         def isolated(run_root, output_dir):

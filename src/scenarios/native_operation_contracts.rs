@@ -4,13 +4,31 @@ use cotest_test_support::operation_observation::{NativeOperationObservations, ob
 use serde_json::{Value, json};
 
 mod call_invitation;
+mod circle_rotation;
+mod peer_consent;
+
+pub async fn peer_consent() -> Result<()> {
+    validate_registered_schema_bindings()?;
+    crate::harness::heap_future(peer_consent::run).await
+}
+
+pub async fn circle_rotation() -> Result<()> {
+    validate_registered_schema_bindings()?;
+    crate::harness::heap_future(circle_rotation::run).await
+}
 
 pub async fn call_invitation() -> Result<()> {
     validate_registered_schema_bindings()?;
     crate::harness::heap_future(call_invitation::run).await
 }
 
+mod account_erasure_status;
 mod account_logout;
+
+pub async fn account_erasure_status() -> Result<()> {
+    validate_registered_schema_bindings()?;
+    crate::harness::heap_future(account_erasure_status::run).await
+}
 mod actor_private;
 mod media_token;
 mod mimi_message;
@@ -882,4 +900,11 @@ mod push_gateway;
 pub async fn push_gateway() -> Result<()> {
     validate_registered_schema_bindings()?;
     crate::harness::heap_future(push_gateway::run).await
+}
+
+mod mimi_proxy_download;
+
+pub async fn mimi_proxy_download() -> Result<()> {
+    validate_registered_schema_bindings()?;
+    crate::harness::heap_future(mimi_proxy_download::run).await
 }

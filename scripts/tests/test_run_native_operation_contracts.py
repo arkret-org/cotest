@@ -1,5 +1,6 @@
 """Filesystem transport regressions; these fixtures are not native authority evidence."""
 import importlib.util
+import copy
 import contextlib
 import io
 import json
@@ -29,30 +30,44 @@ class FrozenProductTests(unittest.TestCase):
         self.root = Path(self.temp.name).resolve()
         self.output = self.root / "evidence"
         self.output.mkdir()
-        self.source = self.root / "target/coland"
-        self.source.parent.mkdir()
+        self.source = self.root / "target/debug/coland"
+        self.source.parent.mkdir(parents=True)
         self.source.write_bytes(f"#!{sys.executable}\nraise SystemExit(0)\n".encode())
         self.source.chmod(0o751)
+        self.utility = self.source.with_name("coland-keystore-snapshot")
+        self.utility.write_bytes(b"synthetic custody product; never executed")
+        self.utility.chmod(0o751)
+        self.inputs = dict.fromkeys(runner.gate.COLAND_CUSTODY_SOURCES, "a" * 64)
 
     def execute(self, output, name, repository, command, environment):
-        (output / "build.log").write_text(json.dumps({
-            "reason": "compiler-artifact", "target": {"name": name, "kind": ["bin"]},
-            "executable": str(self.source),
-        }) + "\n", encoding="utf-8")
+        targets = [{"name": name, "kind": ["bin"],
+                    "src_path": str(runner.gate.ROOT / "coland/crates/server/src/main.rs")},
+                   {"name": runner.gate.COLAND_CUSTODY_TARGET, "kind": ["bin"],
+                    "src_path": str(runner.gate.ROOT / "coland/crates/server/src/bin/coland-keystore-snapshot.rs")}]
+        records = [{"reason": "compiler-artifact", "target": target,
+                    "package_id": "synthetic-coland-package", "profile": {"test": False},
+                    "executable": str(executable)}
+                   for target, executable in zip(targets, (self.source, self.utility))]
+        records.append({"reason": "build-finished", "success": True})
+        (output / "build.log").write_text("".join(json.dumps(record) + "\n" for record in records), encoding="utf-8")
         self.command = command
-        result = {"log": "build.log", "exit_code": 0, "sources_unchanged": True,
-                  "source_fence": "original-source-fence.json", "target_directory": str(self.source.parent)}
+        metadata = {"target_directory": str(self.source.parent.parent),
+                    "packages": [{"id": "synthetic-coland-package", "targets": targets}]}
+        runner.write(output / f"{name}-metadata.json", metadata)
+        runner.write(output / "original-source-fence.json", self.inputs)
+        result = {"command": command, "log": "build.log", "exit_code": 0, "sources_unchanged": True,
+                  "source_fence": "original-source-fence.json", "target_directory": metadata["target_directory"]}
         (output / f"{name}-result.json").write_text(json.dumps(result), encoding="utf-8")
         return result
 
     def build(self):
-        with patch.object(runner, "execute", side_effect=self.execute):
+        with patch.object(runner, "execute", side_effect=self.execute), patch.object(runner.gate, "source_fence", return_value=self.inputs):
             return runner.build(self.output, "coland", {})
 
     def test_simulated_posix_mode_is_copied_with_the_frozen_bytes(self):
         # Windows does not expose POSIX execute bits. This model exercises the
         # real copy boundary without claiming an actual POSIX process launch.
-        modes = {self.source: 0o751}
+        modes = {self.source: 0o751, self.utility: 0o751}
         original_copy = shutil.copyfile
         original_mode = shutil.copymode
 
@@ -98,9 +113,73 @@ class FrozenProductTests(unittest.TestCase):
         self.assertNotIn("executable", producer)
         self.assertNotIn("sha256", producer)
 
+    def test_custody_cli_is_frozen_as_the_same_build_sibling_without_a_new_product_role(self):
+        product = self.build()
+        producer = runner.gate.read(self.output / product["producer_result"])
+        utility = producer["custody_cli"]
+        self.assertEqual(set(product), {"producer_result", "executable", "sha256"})
+        self.assertEqual(set(utility), {"executable", "sha256"})
+        self.assertEqual(Path(utility["executable"]), Path(product["executable"]).with_name(self.utility.name))
+        self.assertEqual(Path(utility["executable"]).read_bytes(), self.utility.read_bytes())
+        self.assertEqual(utility["sha256"], runner.digest(self.utility))
+        bins = [self.command[i + 1] for i, value in enumerate(self.command[:-1]) if value == "--bin"]
+        self.assertEqual(bins, ["coland", "coland-keystore-snapshot"])
+
+    def test_custody_supply_rejects_wrong_role_artifact_metadata_and_both_omitted_sources(self):
+        product = self.build()
+        original = runner.gate.read(self.output / product["producer_result"])
+        metadata = runner.gate.read(self.output / original["metadata"])
+        records = [json.loads(line) for line in (self.output / original["log"]).read_text().splitlines()]
+        for mutation in ("missing_cli", "duplicate_cli", "test_harness", "test_target", "foreign_package", "wrong_source",
+                         "outside_target", "wrong_sibling", "wrong_hash", "server_only_command", "missing_cli_source", "both_missing_cotest_source"):
+            with self.subTest(mutation=mutation):
+                producer, meta, log = copy.deepcopy(original), copy.deepcopy(metadata), copy.deepcopy(records)
+                inputs, execution = dict(self.inputs), dict(self.inputs)
+                if mutation == "missing_cli":
+                    log.pop(1)
+                elif mutation == "duplicate_cli":
+                    log.insert(1, copy.deepcopy(log[1]))
+                elif mutation == "test_harness":
+                    log[1]["profile"]["test"] = True
+                elif mutation == "test_target":
+                    log[1]["target"]["kind"] = ["test"]
+                elif mutation == "foreign_package":
+                    log[1]["package_id"] = "another-package"
+                elif mutation == "wrong_source":
+                    meta["packages"][0]["targets"][1]["src_path"] = str(self.root / "unrelated.rs")
+                elif mutation == "outside_target":
+                    log[1]["executable"] = str(self.root / self.utility.name)
+                elif mutation == "wrong_sibling":
+                    producer["custody_cli"]["executable"] = str(self.root / self.utility.name)
+                elif mutation == "wrong_hash":
+                    producer["custody_cli"]["sha256"] = "0" * 64
+                elif mutation == "server_only_command":
+                    producer["command"] = ["cargo", "build", "--bin", "coland"]
+                elif mutation == "missing_cli_source":
+                    inputs.pop("coland/crates/server/src/bin/coland-keystore-snapshot.rs")
+                elif mutation == "both_missing_cotest_source":
+                    inputs.pop("cotest/src/harness/server/custody_provision.rs")
+                    execution.pop("cotest/src/harness/server/custody_provision.rs")
+                with patch.object(runner.gate, "source_fence", return_value=self.inputs):
+                    with self.assertRaises(ValueError):
+                        runner.gate.verify_coland_custody_product(product, producer, inputs, execution, meta,
+                            "".join(json.dumps(record) + "\n" for record in log))
+
+    def test_custody_frozen_byte_change_cannot_survive_runtime_reverification(self):
+        product = self.build()
+        producer = runner.gate.read(self.output / product["producer_result"])
+        utility = Path(producer["custody_cli"]["executable"])
+        utility.write_bytes(b"different or stale product")
+        with patch.object(runner.gate, "source_fence", return_value=self.inputs):
+            with self.assertRaisesRegex(ValueError, "frozen bytes"):
+                runner.gate.verify_coland_custody_product(product, producer, self.inputs, self.inputs,
+                    runner.gate.read(self.output / producer["metadata"]),
+                    (self.output / producer["log"]).read_text(encoding="utf-8"))
+
     def test_native_service_selection_keeps_existing_authorities_and_requires_gateway_for_full_or_push(self):
         self.assertEqual(runner.native_service_names(None), ("coland", "coauth", "floria"))
         self.assertEqual(runner.native_service_names(["push_gateway"]), ("coland", "coauth", "floria"))
+        self.assertEqual(runner.native_service_names(["account_erasure_status"]), ("coland", "coauth", "floria"))
         self.assertEqual(runner.native_service_names(["account_device_pairing"]), ("coland", "coauth"))
         self.assertEqual(runner.native_service_names(["account_device_pairing", "push_gateway"]), ("coland", "coauth", "floria"))
 

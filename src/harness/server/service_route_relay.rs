@@ -165,8 +165,15 @@ impl Relay {
             .headers()
             .get("arkret-operation")
             .and_then(|v| v.to_str().ok())
-            == Some(arkret_wire::ServiceOperationId::PEER_APPLET_CONFIGURATION_COMMAND_SUBMIT_V1)
-        {
+            .is_some_and(|operation| {
+                matches!(
+                    operation,
+                    arkret_wire::ServiceOperationId::PEER_APPLET_CONFIGURATION_COMMAND_SUBMIT_V1
+                        | arkret_wire::ServiceOperationId::PEER_CONSENT_READ_CURRENT_V1
+                        | arkret_wire::ServiceOperationId::PEER_CONSENT_COMMAND_PROXY_V1
+                        | arkret_wire::ServiceOperationId::PEER_CONSENT_COMMAND_PUBLISH_EFFECTS_V1
+                )
+            }) {
             let public = self.public_base.join(
                 req.uri()
                     .path_and_query()
@@ -351,6 +358,7 @@ impl ArkretServer {
             reserve_port()?,
             &borrowed,
             tls,
+            false,
         )
         .await?;
         ensure!(
@@ -447,6 +455,16 @@ impl ArkretServer {
         &mut self,
         old: &ServiceRouteControl,
     ) -> Result<ServiceRouteRelay> {
+        self.move_service_endpoint_with_reports(old)
+            .await
+            .map(|(relay, ..)| relay)
+    }
+
+    /// Same native migration, retaining its actual two CLI reports for proofs.
+    pub(crate) async fn move_service_endpoint_with_reports(
+        &mut self,
+        old: &ServiceRouteControl,
+    ) -> Result<(ServiceRouteRelay, Value, Value)> {
         let tls = self
             ._tls
             .clone()
@@ -460,9 +478,11 @@ impl ArkretServer {
         let mut port = reserve_port()?;
         let public = Url::parse(&format!("https://127.0.0.1:{}/", port.port()))?;
         self.stop_external_process().await?;
-        self.migrate_public_base_with_hosting(&public, true, true)
+        let preflight = self
+            .migrate_public_base_with_hosting(&public, true, true)
             .await?;
-        self.migrate_public_base_with_hosting(&public, false, true)
+        let applied = self
+            .migrate_public_base_with_hosting(&public, false, true)
             .await?;
         self.external_restart.as_mut().unwrap().bind = bind.clone();
         port.release();
@@ -485,7 +505,7 @@ impl ArkretServer {
             "retained method host {metadata} returned {}",
             response.status()
         );
-        Ok(relay)
+        Ok((relay, preflight, applied))
     }
 
     pub fn rebind_actor_client(&self, previous: &TestActorClient) -> Result<TestActorClient> {

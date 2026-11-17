@@ -303,7 +303,8 @@ async fn scenario() -> Result<(Value, NativeOperationObservations)> {
     ensure!(
         installed.applet_id == service.package.applet_id
             && installed.registration_event_ref == registration.event.event_id
-            && installed.registration_epoch == service.epoch
+            && installed.registration_epoch
+                == service.package.compute_registration_epoch(&service.epoch)?
             && installed
                 .capability_grant_refs
                 .contains(&arkret_wire::GrantId::from_event_id(&grant.event.event_id))

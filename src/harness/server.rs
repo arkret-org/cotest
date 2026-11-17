@@ -8,7 +8,10 @@ use std::sync::{Arc, Mutex, OnceLock};
 use std::time::{Duration, SystemTime};
 use std::{fs, mem};
 
+mod custody_provision;
 mod native_push_gateway;
+mod organization_hosting;
+mod public_assets;
 mod public_base;
 mod scan_gap_relay;
 mod service_route_relay;
@@ -786,10 +789,15 @@ impl ArkretServer {
             metrics_port,
             extra_env,
             Arc::new(HarnessTls::new()?),
+            true,
         )
         .await
     }
 
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "An initial owned store and a shared frontend have different provisioning ownership."
+    )]
     async fn spawn_external_binary_with_ports_env_and_tls(
         name: &str,
         bin_path: &Path,
@@ -797,6 +805,7 @@ impl ArkretServer {
         mut metrics_port: ReservedPort,
         extra_env: &[(&str, &str)],
         tls: Arc<HarnessTls>,
+        first_store_owner: bool,
     ) -> Result<Self> {
         let bind = format!("127.0.0.1:{}", port.port());
         let metrics_bind = format!("127.0.0.1:{}", metrics_port.port());
@@ -862,6 +871,13 @@ impl ArkretServer {
         }
         for &(key, value) in extra_env {
             command.env(key, value);
+        }
+        if first_store_owner && (durable_keystore_needed || keystore_backend_chosen) {
+            custody_provision::provision_first_owned_store(
+                &command,
+                bin_path,
+                log_path.as_deref(),
+            )?;
         }
         // Release the guard listeners at the last possible moment so the child
         // can bind the ports it was handed (the file-lock keeps this manager
@@ -2310,6 +2326,7 @@ impl TestServerGroup {
                 node.metrics,
                 &extra_env,
                 tls.clone(),
+                true,
             )
             .await
             {

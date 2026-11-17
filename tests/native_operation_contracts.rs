@@ -115,3 +115,27 @@ async fn applet_managed_configuration_retains_review_originals_and_native_route(
 -> anyhow::Result<()> {
     cotest::scenarios::native_operation_contracts::applet_managed_configuration().await
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn account_erasure_retains_native_terminal_intent_and_physical_receipt() -> anyhow::Result<()>
+{
+    cotest::scenarios::native_operation_contracts::account_erasure_status().await
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn circle_rotation_retains_actual_update_paths_welcome_and_original_replays()
+-> anyhow::Result<()> {
+    cotest::scenarios::native_operation_contracts::circle_rotation().await
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn mimi_proxy_download_retains_public_object_current_policy_and_provider_originals()
+-> anyhow::Result<()> {
+    cotest::scenarios::native_operation_contracts::mimi_proxy_download().await
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn peer_consent_retains_real_hosting_current_proxy_and_worker_effects() -> anyhow::Result<()>
+{
+    cotest::scenarios::native_operation_contracts::peer_consent().await
+}

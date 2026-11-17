@@ -36,7 +36,7 @@ async fn footprint(station: &ArkretServer, gateway: &NativeFloria) -> Result<Val
 
 /// Translate only the raw exchange actually received and forwarded by the
 /// TLS ingress. This does not invent a second request or repeat the operation.
-fn record_forwarded(gateway: &NativeFloria, cursor: &mut usize) -> Result<Vec<Value>> {
+pub(super) fn record_forwarded(gateway: &NativeFloria, cursor: &mut usize) -> Result<Vec<Value>> {
     let evidence = gateway.observations()?;
     let all = evidence["forwarded"]
         .as_array()
@@ -96,7 +96,10 @@ fn record_forwarded(gateway: &NativeFloria, cursor: &mut usize) -> Result<Vec<Va
     Ok(fresh)
 }
 
-fn client(source: &ArkretServer, gateway: &NativeFloria) -> Result<arkret_http_client::Client> {
+pub(super) fn client(
+    source: &ArkretServer,
+    gateway: &NativeFloria,
+) -> Result<arkret_http_client::Client> {
     let transport: reqwest::Client = (*source.http()).clone();
     Ok(
         arkret_http_client::Client::builder(gateway.server.base_url.parse()?)
@@ -113,7 +116,7 @@ fn client(source: &ArkretServer, gateway: &NativeFloria) -> Result<arkret_http_c
     )
 }
 
-fn receipt(
+pub(super) fn receipt(
     gateway: &NativeFloria,
     source: &ArkretServer,
     request: &PushRegistrationHandoffRequestBody,
@@ -147,7 +150,7 @@ fn receipt(
     Ok(())
 }
 
-fn verify_gateway_transports(
+pub(super) fn verify_gateway_transports(
     artifact: &Value,
     observations: &NativeOperationObservations,
 ) -> Result<()> {
