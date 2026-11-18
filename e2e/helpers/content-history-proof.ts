@@ -1,6 +1,12 @@
 import { isDeepStrictEqual } from "node:util";
 import type { scanRealmStreamApi } from "./coland-api";
-import { uint64Value } from "./uint64-decimal.ts";
+
+function streamPosition(value: unknown): number {
+  if (typeof value !== "number" || !Number.isSafeInteger(value) || value < 0) {
+    throw new Error("Expected a nonnegative safe integer stream_position");
+  }
+  return value;
+}
 
 // This only checks the fixture's exact public bindings. The caller must obtain
 // the scan through the SDK-validated original Event/Commit path; this helper
@@ -41,9 +47,9 @@ export function contentHistoryProof(
     requireFact(cutCommit.commit_id === cut.commit_id && cutCommit.stream_position === cut.stream_position
       && isDeepStrictEqual(cut.stream_ref, { kind: "realm", realm_id: expected.realmId }),
     "Content history cut must bind the exact accepted Commit and stream");
-    requireFact(uint64Value(sourceCommit.stream_position) <= uint64Value(cut.stream_position)
-      && uint64Value(cut.stream_position) < uint64Value(requestCommit.stream_position)
-      && uint64Value(requestCommit.stream_position) < uint64Value(grantCommit.stream_position),
+    const [sourcePosition, cutPosition, requestPosition, grantPosition] =
+      [sourceCommit, cutCommit, requestCommit, grantCommit].map(commit => streamPosition(commit.stream_position));
+    requireFact(sourcePosition <= cutPosition && cutPosition < requestPosition && requestPosition < grantPosition,
     "Content history source, cut, request and grant must have their accepted order");
     const created = Date.parse(String(originalRequest.created_at));
     const expires = Date.parse(String(requested.expires_at));

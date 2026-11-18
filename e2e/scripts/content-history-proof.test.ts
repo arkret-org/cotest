@@ -8,7 +8,7 @@ function fixture() {
   const issuer = { kind: "account", id: "issuer" };
   const recipient = { kind: "account", id: "reader" };
   const source = { event_id: "source", kind: "ak.space.create", realm_id: "realm" };
-  const cut = { event_id: "source", commit_id: "commit-source", stream_position: "9007199254740992",
+  const cut = { event_id: "source", commit_id: "commit-source", stream_position: 0,
     stream_ref: { kind: "realm", realm_id: "realm" } };
   const payload = { recipient: { actor_id: recipient, endpoint: { device_id: "device" }, authorization_event_ref: "authorization" },
     recipient_hpke_key_base64url: "synthetic-key", history_cut: cut, expires_at: "2026-11-15T01:15:00Z" };
@@ -19,20 +19,28 @@ function fixture() {
       kind: "content_key", source_event_ref: "source", content_path: "/payload/object/encrypted_metadata",
     } }] } };
   const scan = { truncated: false, events: [source, request, grant], eventSlots: [source, request, grant], commits: [
-    { commit_id: "commit-source", stream_position: "9007199254740992", committed_at: "2026-11-15T00:59:59Z" },
-    { commit_id: "commit-request", stream_position: "9007199254740993", committed_at: "2026-11-15T01:00:00Z" },
-    { commit_id: "commit-grant", stream_position: "9007199254740994", committed_at: "2026-11-15T01:00:01Z" },
+    { commit_id: "commit-source", stream_position: 0, committed_at: "2026-11-15T00:59:59Z" },
+    { commit_id: "commit-request", stream_position: 1, committed_at: "2026-11-15T01:00:00Z" },
+    { commit_id: "commit-grant", stream_position: 2, committed_at: "2026-11-15T01:00:01Z" },
   ] };
   return { scan, source, request, grant, expected: { realmId: "realm", sourceEventId: "source", sourceKind: "ak.space.create" as const,
     issuerActor: issuer, recipientActor: recipient, recipientDeviceId: "device" } };
 }
 
-test("an exact Board grant binds its accepted source, request, endpoint and cut without losing u64 precision", () => {
+test("an exact Board grant binds its accepted source, request, endpoint and numeric cut", () => {
   const f = fixture();
   const proof = contentHistoryProof(f.scan, f.expected)!;
   assert.equal(proof.source, f.source);
   assert.equal(proof.request, f.request);
   assert.equal(proof.grant, f.grant);
+});
+
+test("content history rejects non-integer wire types and inexact positions", () => {
+  for (const position of ["2", -1, 1.5, Number.MAX_SAFE_INTEGER + 1]) {
+    const f = fixture();
+    const commits = f.scan.commits.map((commit, i) => i === 2 ? { ...commit, stream_position: position } : commit);
+    assert.throws(() => contentHistoryProof({ ...f.scan, commits }, f.expected), /stream_position/);
+  }
 });
 
 test("a Board metadata key does not prove disclosure of a different List or Card", () => {
@@ -67,8 +75,8 @@ test("wrong request bindings, Realm, author, cut or missing accepted Commit slot
     f => { f.grant.payload.history_cut.commit_id = "other-commit"; },
     f => { f.request.payload.history_cut.stream_ref.realm_id = "other-realm"; f.grant.payload.history_cut.stream_ref.realm_id = "other-realm"; },
     f => { f.scan.eventSlots.splice(1, 1); },
-    f => { f.scan.commits[0].stream_position = "9007199254740993"; },
-    f => { f.scan.commits[1].stream_position = "9007199254740992"; },
+    f => { f.scan.commits[0].stream_position = 1; },
+    f => { f.scan.commits[1].stream_position = 0; },
   ] satisfies Array<(f: ReturnType<typeof fixture>) => void>) {
     const f = fixture(); alter(f);
     assert.throws(() => contentHistoryProof(f.scan, f.expected));
