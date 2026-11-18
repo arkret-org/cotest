@@ -4,7 +4,7 @@ import { coauthBaseUrl, colandBaseUrl } from "../../helpers/env";
 test("registration explains its supported required contact methods @fully-implemented", async ({ page }) => {
   test.skip(!coauthBaseUrl(), "Coauth is required for registration validation");
   await page.goto("/register");
-  await page.getByLabel("Station", { exact: true }).fill(colandBaseUrl());
+  await page.getByLabel("Account server", { exact: true }).fill(colandBaseUrl());
   const providersResponse = page.waitForResponse(response =>
     new URL(response.url()).pathname === "/_coauth/account/auth/providers"
     && response.request().method() === "GET");

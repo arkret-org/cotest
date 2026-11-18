@@ -1953,7 +1953,7 @@ export async function openRegisteredUserPage(
   try {
     await opts.beforeNavigate?.(page);
     await page.goto("/register");
-    await page.getByLabel("Station", { exact: true }).fill(colandBaseUrl(opts.server));
+    await page.getByLabel("Account server", { exact: true }).fill(colandBaseUrl(opts.server));
     await page.locator(".registration-panel").getByRole("button", { name: "Continue", exact: true }).click();
     await page.getByLabel("Username", { exact: true }).fill(user.name);
     await page.getByLabel("Email address", { exact: true }).fill(email);
