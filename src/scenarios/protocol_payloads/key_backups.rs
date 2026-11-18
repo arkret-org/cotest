@@ -35,7 +35,7 @@ use chrono::{DateTime, Utc};
 use ed25519_dalek::{Signer as _, SigningKey};
 use reqwest::StatusCode;
 
-use crate::harness::{ArkretServer, ProvisionedTestPrincipal, expect_json};
+use crate::harness::{ArkretServer, ProvisionedTestPrincipal, TestActorClient, expect_json};
 
 pub const BACKUP_ID: &str = "ak:backup:01964137-0000-7000-8000-000000000000";
 
@@ -61,8 +61,8 @@ pub async fn run(
     actor_id: &str,
     principal: &ProvisionedTestPrincipal,
 ) -> Result<()> {
-    put_backup(server, token, actor_id, principal).await?;
-    list_backups(server, token).await?;
+    let stored = put_backup(server, token, actor_id, principal).await?;
+    list_backups(server, token, &stored).await?;
     describe_backup_operations(server).await?;
     unlock_backup_requires_body_proof(server, token, actor_id).await?;
     current_device_unlock_rejects_wrong_device_before_signature_trust(server, token, actor_id)
@@ -75,23 +75,54 @@ pub(super) async fn put_backup(
     token: &str,
     actor_id: &str,
     principal: &ProvisionedTestPrincipal,
-) -> Result<()> {
+) -> Result<KeyBackup> {
+    let envelope = signed_backup_envelope(
+        actor_id,
+        server.service_id(),
+        principal,
+        arkret_canonical::normalize_timestamp_canonical(Utc::now()),
+    )?;
     let backup_put = expect_json(
         server
             .http()
             .put(server.url(&format!("/_arkret/self/keys/backups/{BACKUP_ID}")))
             .bearer_auth(token)
             .header("Idempotency-Key", "protocol-payloads-key-backup-put")
-            .json(&signed_backup_envelope(
-                actor_id,
-                server.service_id(),
-                principal,
-            )?),
+            .json(&envelope),
         StatusCode::OK,
     )
     .await?;
     assert_eq!(backup_put["status"], "accepted");
     assert_eq!(backup_put["backup_id"], BACKUP_ID);
+    Ok(envelope)
+}
+
+pub(super) async fn reject_backup_before_authorization(
+    server: &ArkretServer,
+    client: &TestActorClient,
+    actor_id: &str,
+) -> Result<()> {
+    let principal = client
+        .principal
+        .as_ref()
+        .context("accepted device principal")?;
+    // The original fixture date predates the founding device authorization.
+    let before = ts("2026-04-26T00:00:00.000Z")?;
+    let envelope = signed_backup_envelope(actor_id, server.service_id(), principal, before)?;
+    crate::harness::expect_api_error(
+        server
+            .http()
+            .put(server.url(&format!("/_arkret/self/keys/backups/{BACKUP_ID}")))
+            .bearer_auth(client.expect_dev_bearer())
+            .header(
+                "Idempotency-Key",
+                "protocol-payloads-key-backup-before-authorization",
+            )
+            .json(&envelope),
+        StatusCode::FORBIDDEN,
+        "device_unauthorized",
+    )
+    .await?;
     Ok(())
 }
 
@@ -102,6 +133,7 @@ fn signed_backup_envelope(
     actor_id: &str,
     station_id: &DidCoreId,
     principal: &ProvisionedTestPrincipal,
+    created_at: DateTime<Utc>,
 ) -> Result<KeyBackup> {
     let signing_key = &principal.device_signing_key;
     let verification_method = format!(
@@ -109,7 +141,6 @@ fn signed_backup_envelope(
         principal.did.as_str(),
         principal.device_id.as_str()
     );
-    let created_at = ts("2026-04-26T00:00:00.000Z")?;
     let mut envelope = KeyBackup {
         authorization_binding: None,
         custodian_actor_id: None,
@@ -209,7 +240,11 @@ const BACKUP_METADATA_MEMBERS: &[&str] = &[
 /// A non-empty list is the closed `KeysBackupsPage` over HTTP 200: the stored
 /// envelope appears as its `backup_metadata` projection and decodes as the SDK
 /// DTO, with no envelope-only member (`signature_proof`, `contents`, ...) leaking.
-pub(super) async fn list_backups(server: &ArkretServer, token: &str) -> Result<()> {
+pub(super) async fn list_backups(
+    server: &ArkretServer,
+    token: &str,
+    stored: &KeyBackup,
+) -> Result<()> {
     let body = expect_json(
         server
             .http()
@@ -250,7 +285,7 @@ pub(super) async fn list_backups(server: &ArkretServer, token: &str) -> Result<(
     anyhow::ensure!(summary.series_id.as_str() == SERIES_ID && summary.series_sequence == 0);
     anyhow::ensure!(summary.backup_version.as_str() == "kb_1");
     anyhow::ensure!(summary.ciphertext_digest.as_str() == CIPHERTEXT_DIGEST);
-    anyhow::ensure!(summary.created_at == ts("2026-04-26T00:00:00.000Z")?);
+    anyhow::ensure!(summary.created_at == stored.created_at);
     anyhow::ensure!(summary.supersedes_id.is_none() && summary.supersedes_digest.is_none());
     anyhow::ensure!(
         summary.encryption.recipient_method == KeyBackupRecipientMethod::SecretStorageKey

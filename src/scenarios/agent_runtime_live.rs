@@ -75,6 +75,7 @@ mod content_mls_evidence;
 mod content_policy_evidence;
 mod content_session_evidence;
 mod content_sidecar_evidence;
+mod cross_station_agent_join;
 mod direct_evidence;
 mod direct_mls_evidence;
 mod grant_ceiling_evidence;
@@ -130,6 +131,7 @@ pub use content_session_evidence::{
 pub use content_sidecar_evidence::{
     REVIEWED_SIDECAR_CONTENT_CASES, run_agent_content_sidecar_production,
 };
+pub use cross_station_agent_join::run_cross_station_agent_join_refusal;
 pub use grant_ceiling_evidence::run_agent_provision_grant_ceiling_boundary;
 pub use human_approval_evidence::run_agent_human_approval_production;
 pub use lifecycle_conjunction::run_agent_controller_lifecycle_production;

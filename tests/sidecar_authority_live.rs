@@ -14,3 +14,13 @@ async fn pending_agent_sidecar_http_reads_disclose_handshakes_without_private_co
 {
     cotest::scenarios::sidecar_authority_live::run_pending_agent_disclosure().await
 }
+
+#[tokio::test(flavor = "multi_thread")]
+#[serial]
+async fn distinct_stations_controller_agent_join_refuses_unavailable_target_authority() -> Result<()>
+{
+    cotest::harness::heap_future(
+        cotest::scenarios::agent_runtime_live::run_cross_station_agent_join_refusal,
+    )
+    .await
+}

@@ -9,8 +9,8 @@
 //! the target device's own possession signature, is admitted by the owning
 //! Station's accepted-device unit over the Account Authority private
 //! admission channel. The Account Authority's pairing ledger in front of that
-//! channel is not part of this scenario. Nothing bypasses the Station: A
-//! stores its old backup through the self PUT, selects the first series
+//! channel is not part of this scenario. C stores its backup through the self
+//! PUT. A selects the first series
 //! through the self Event surface, and creates every rotation through
 //! `ak.self.security_transaction.command.create.v1`.
 
@@ -175,7 +175,7 @@ impl RotationAuthor {
         })
     }
     /// One `secret_storage` envelope of `series`, signed with `seed` under
-    /// A's device method and current authorization.
+    /// the author's device method and current authorization.
     fn backup(
         &self,
         backup_id: &str,
@@ -548,7 +548,7 @@ impl RotationAuthor {
 
 /// The live two-device fixture every rotation scenario starts from: A founds
 /// the PCR, B and C are devices A approved, each with its own session, and
-/// A stores its old envelope and selects `SERIES_ONE` (pointer version 1).
+/// C stores the first envelope and A selects `SERIES_ONE` (pointer version 1).
 struct LiveRotation {
     server: ArkretServer,
     _coauth: MockCoauthIntrospectionServer,
@@ -714,15 +714,16 @@ pub(crate) async fn rotation_fixture(
         method: method_a,
     };
 
-    // A stores its old envelope and selects SERIES_ONE (pointer version 1).
-    let old = signer.backup(
+    // A authorized C. C signs its backup using the key in that accepted authorization.
+    let writer = RotationAuthor::from_client(&client_c)?;
+    let old = writer.backup(
         OLD_BACKUP,
         &BackupSeriesId::new(SERIES_ONE)?,
         b"old-ciphertext",
-        seed_a,
+        writer.seed,
     )?;
     let stored = expect_json(
-        client_a
+        client_c
             .put(&format!("/_arkret/self/keys/backups/{OLD_BACKUP}"))
             .header("Idempotency-Key", "rotation-old-backup")
             .json(&old),
@@ -790,27 +791,7 @@ pub async fn security_rotation_runs_worker_steps_to_local_commit() -> Result<()>
         selected,
     } = live_rotation(SERVER_NAME, &[]).await?;
 
-    // 0. Ordinary unlock at the selected pointer: A and the accepted device B each release the
-    //    active-series envelope with a proof over the Station's single-use challenge; an envelope
-    //    outside the active series is refused as `backup_revision_stale`.
-    let released = unlock(
-        &client_a,
-        OLD_BACKUP,
-        "cm90YXRpb24tdW5sb2NrLWEtMDAwMQ",
-        &signer.method,
-        seed_a,
-    )
-    .await?;
-    ensure!(
-        released.status() == StatusCode::OK,
-        "A could not unlock its active envelope: {} {}",
-        released.status(),
-        released.text().await.unwrap_or_default()
-    );
-    ensure!(
-        released.json::<KeyBackup>().await? == old,
-        "unlock released another envelope"
-    );
+    // B unlocks the original stored by C. An envelope outside the active series is stale.
     let method_b =
         DidUrl::new(format!("{}#{DEVICE_B}", signer.actor)).map_err(anyhow::Error::msg)?;
     let released_b = unlock(
@@ -922,6 +903,46 @@ pub async fn security_rotation_runs_worker_steps_to_local_commit() -> Result<()>
         refused(&client_c).await?,
         "the accepted revoke of C did not stop its session"
     );
+    let released = unlock(
+        &client_a,
+        OLD_BACKUP,
+        "cm90YXRpb24tdW5sb2NrLWEtMDAwMQ",
+        &signer.method,
+        seed_a,
+    )
+    .await?;
+    ensure!(
+        released.status() == StatusCode::OK,
+        "A could not unlock the accepted envelope after its writer was revoked: {} {}",
+        released.status(),
+        released.text().await.unwrap_or_default()
+    );
+    ensure!(
+        released.json::<KeyBackup>().await? == old,
+        "unlock released another envelope"
+    );
+    let writer = RotationAuthor::from_client(&client_c)?;
+    let fresh = writer.backup(
+        &format!("ak:backup:{}", uuid::Uuid::now_v7()),
+        &BackupSeriesId::new(format!("ak:backup_series:{}", uuid::Uuid::now_v7()))?,
+        b"revoked-writer",
+        writer.seed,
+    )?;
+    let refused_put = crate::harness::send_recorded(
+        client_c
+            .put(&format!("/_arkret/self/keys/backups/{}", fresh.backup_id))
+            .header("Idempotency-Key", "rotation-revoked-writer")
+            .json(&fresh),
+    )
+    .await?;
+    let problem: arkret_wire::Problem = serde_json::from_value(refused_put.json()?)?;
+    ensure!(
+        refused_put.status == StatusCode::UNAUTHORIZED
+            && problem.error_code() == Some(arkret_wire::ErrorCode::AuthExpired),
+        "revoked writer PUT did not reach current device authentication: {}",
+        refused_put.context()
+    );
+    ensure!(!lists(&listing(&client_a).await?, fresh.backup_id.as_str()));
     // The stopped rotation's reserved pointer cannot switch outside it.
     let SecurityTransactionCreateRequestBody::SecurityRotation(bad_rotation) = &bad_material else {
         unreachable!("rotation request")
