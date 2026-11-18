@@ -14,3 +14,8 @@ async fn actual_sidecar_bootstrap_does_not_release_pending_endpoint_payload() ->
     );
     Ok(())
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn actual_coauth_effective_sidecar_read_uses_consumed_endpoint() -> anyhow::Result<()> {
+    cotest::scenarios::agent_runtime_live::run_agent_content_sidecar_read_production().await
+}

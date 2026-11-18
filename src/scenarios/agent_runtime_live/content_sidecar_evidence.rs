@@ -703,6 +703,8 @@ struct PendingPayload<'a> {
     deployment: &'a coauth_session_evidence::ActualAgentDeployment,
     actions: &'a [&'a str],
     genesis: &'a Event,
+    read_positive_only: bool,
+    pending_message: std::sync::Mutex<Option<arkret_wire::CommittedEventView>>,
 }
 
 #[async_trait::async_trait(?Send)]
@@ -888,6 +890,12 @@ impl JoinObserver for PendingPayload<'_> {
             arkret_wire::ErrorCode::CAPABILITY_DENIED,
         )
         .await?;
+        let original = controller
+            .client
+            .sdk()
+            .committed_event_get(&event.event_id)
+            .await?;
+        *self.pending_message.lock().unwrap() = Some(original);
         println!(
             "[agent-sidecar-pending] actual_accepted_add=1 actual_delivered_welcome=1 durable_local_state=1 consume_not_yet_sent=1 desired_not_effective=1 payload_refused=1"
         );
@@ -932,14 +940,26 @@ impl JoinObserver for PendingPayload<'_> {
             realm_id:accepted.event.realm_id.clone(), effective_scope:accepted.event.scope_ref.clone(),
             mls_group_id:accepted.event.scope_ref.canonical_mls_group_id()?, epoch:Default::default(),
             group_state_event_id:self.genesis.event_id.clone(), caller_actor_id:ActorId::account(agent.agent_account.clone()),
-            target_commit_event_ref:self.genesis.event_id.clone(),target_epoch:0,
+            target_commit_event_ref:accepted.event.event_id.clone(),target_epoch:1,
             group_info_ref:arkret_wire::BlobRef::new(self.genesis.payload["group_info_ref"].as_str().context("accepted Genesis info")?)?,
             ratchet_tree_ref:arkret_wire::BlobRef::new(self.genesis.payload["ratchet_tree_ref"].as_str().context("accepted Genesis tree")?)?,max_response_bytes:None,
         };
+        let mut before_add = material.clone();
+        before_add.target_commit_event_ref = self.genesis.event_id.clone();
+        before_add.target_epoch = 0;
+        crate::harness::expect_api_error(
+            self.read
+                .post("/_arkret/self/mls/group-state-material/query")
+                .canonical_json(&before_add)?,
+            StatusCode::NOT_FOUND,
+            arkret_wire::ErrorCode::NOT_FOUND,
+        )
+        .await?;
         self.read
             .sdk()
             .self_mls_group_state_material(&material)
-            .await?
+            .await
+            .context("pending endpoint Genesis material for its exact accepted Add target")?
             .validate_for_request(&material.as_peer_request())?;
         let (available, _) = crate::scenarios::mls_lifecycle_live::recipient_welcomes(self.read)
             .await
@@ -962,62 +982,66 @@ impl JoinObserver for PendingPayload<'_> {
             retained == available,
             "denied Welcome read acknowledged or removed the queued original"
         );
-        let (write_with_read, combined) = content_direct_evidence::issue(
-            self.deployment,
-            agent,
-            self.actions,
-            &accepted.event.realm_id,
-        )
-        .await?;
-        ensure!(
-            combined
-                .scopes
-                .iter()
-                .any(|action| action == "ak.event.read")
-                && combined
+        if !self.read_positive_only {
+            let (write_with_read, combined) = content_direct_evidence::issue(
+                self.deployment,
+                agent,
+                self.actions,
+                &accepted.event.realm_id,
+            )
+            .await?;
+            ensure!(
+                combined
                     .scopes
                     .iter()
-                    .any(|action| action == "ak.message.create")
-        );
-        ensure!(
-            combined
-                .scope_details
-                .as_ref()
-                .context("pending full content ceiling")?
-                .capability_grant_refs
-                == vec![grant.to_string()]
-        );
-        let (pending_write, _) =
-            agent_message(agent, agent_group, accepted, self.strand, &grant).await?;
-        {
-            use std::io::Write;
-            let mut file = std::fs::File::create(durable_state_path)?;
-            file.write_all(&serde_json::to_vec(&agent_group.export_state_record()?)?)?;
-            file.sync_all()?;
+                    .any(|action| action == "ak.event.read")
+                    && combined
+                        .scopes
+                        .iter()
+                        .any(|action| action == "ak.message.create")
+            );
+            ensure!(
+                combined
+                    .scope_details
+                    .as_ref()
+                    .context("pending full content ceiling")?
+                    .capability_grant_refs
+                    == vec![grant.to_string()]
+            );
+            let (pending_write, _) =
+            agent_message(agent, agent_group, accepted, self.strand, &grant)
+                .await
+                .context("pending business-write fixture lacks a registered backup-reference source; Agent PCR custody cannot publish this Sidecar root")?;
+            {
+                use std::io::Write;
+                let mut file = std::fs::File::create(durable_state_path)?;
+                file.write_all(&serde_json::to_vec(&agent_group.export_state_record()?)?)?;
+                file.sync_all()?;
+            }
+            let durable: arkret::MlsGroupStateRecord =
+                serde_json::from_slice(&std::fs::read(durable_state_path)?)?;
+            *agent_group = arkret::ArkretMlsGroup::restore_from_state_record(&durable)?;
+            ensure!(arkret_wire::ErrorCode::Conflict.http_status() == 409);
+            crate::harness::expect_api_error(
+                write_with_read
+                    .post("/_arkret/self/events")
+                    .canonical_json(&arkret_wire::EventAdmissionSubmission::new(
+                        pending_write.clone(),
+                    ))?,
+                StatusCode::CONFLICT,
+                arkret_wire::ErrorCode::CONFLICT,
+            )
+            .await?;
+            crate::harness::expect_api_error(
+                controller.client.get(&format!(
+                    "/_arkret/self/committed-events/{}",
+                    pending_write.event_id
+                )),
+                StatusCode::NOT_FOUND,
+                arkret_wire::ErrorCode::NOT_FOUND,
+            )
+            .await?;
         }
-        let durable: arkret::MlsGroupStateRecord =
-            serde_json::from_slice(&std::fs::read(durable_state_path)?)?;
-        *agent_group = arkret::ArkretMlsGroup::restore_from_state_record(&durable)?;
-        ensure!(arkret_wire::ErrorCode::Conflict.http_status() == 409);
-        crate::harness::expect_api_error(
-            write_with_read
-                .post("/_arkret/self/events")
-                .canonical_json(&arkret_wire::EventAdmissionSubmission::new(
-                    pending_write.clone(),
-                ))?,
-            StatusCode::CONFLICT,
-            arkret_wire::ErrorCode::CONFLICT,
-        )
-        .await?;
-        crate::harness::expect_api_error(
-            controller.client.get(&format!(
-                "/_arkret/self/committed-events/{}",
-                pending_write.event_id
-            )),
-            StatusCode::NOT_FOUND,
-            arkret_wire::ErrorCode::NOT_FOUND,
-        )
-        .await?;
         controller
             .client
             .revoke_realm_grant(accepted.event.realm_id.as_str(), grant.as_str())
@@ -1031,15 +1055,40 @@ impl JoinObserver for PendingPayload<'_> {
             still_pending.desired_agent_ids == vec![agent.agent_account.principal_id.clone()]
                 && still_pending.effective_agent_ids.is_empty()
         );
-        println!(
-            "[agent-sidecar-pending-grant] actual_write_only_ceiling=1 same_queued_welcome_read_positive=1 write_does_not_read_welcome=1 queued_original_retained=1 read_and_write_ceiling_for_payload=1 valid_agent_ciphertext_durable_before_attempt=1 effective_missing_write_refused=1 effective_conflict_409=1 no_committed_original=1 temporary_grant_revoked=1 roster_not_changed_by_grant=1"
-        );
+        if self.read_positive_only {
+            println!(
+                "[agent-sidecar-pending-read] actual_read_only_material=1 original_genesis_target_refused=1 exact_add_target_allowed=1 write_only_welcome_read_refused=1 queued_original_retained=1 temporary_write_grant_revoked=1 business_write_fixture_not_executed=1"
+            );
+        } else {
+            println!(
+                "[agent-sidecar-pending-grant] actual_write_only_ceiling=1 same_queued_welcome_read_positive=1 write_does_not_read_welcome=1 queued_original_retained=1 read_and_write_ceiling_for_payload=1 valid_agent_ciphertext_durable_before_attempt=1 effective_missing_write_refused=1 effective_conflict_409=1 no_committed_original=1 temporary_grant_revoked=1 roster_not_changed_by_grant=1"
+            );
+        }
         Ok(())
     }
 }
 
 pub async fn run_agent_content_sidecar_production()
 -> Result<crate::conformance::SuiteExecutionResult> {
+    crate::harness::heap_future(|| run_sidecar_production(false)).await?;
+    Ok(crate::conformance::SuiteExecutionResult {
+        entrypoint: "ak.suite.agent.vectors.v1",
+        fixture: "agent-vectors-fixture.json",
+        cases: REVIEWED_SIDECAR_CONTENT_CASES
+            .iter()
+            .map(|name| crate::conformance::CaseExecutionResult {
+                case_id: (*name).to_owned(),
+                assertions: 1,
+            })
+            .collect(),
+    })
+}
+
+pub async fn run_agent_content_sidecar_read_production() -> Result<()> {
+    crate::harness::heap_future(|| run_sidecar_production(true)).await
+}
+
+async fn run_sidecar_production(read_positive_only: bool) -> Result<()> {
     let fixture = crate::conformance::load_fixture_value("agent-vectors-fixture.json")?;
     let contract = &fixture["session_content_authority_contract"];
     ensure!(
@@ -1391,6 +1440,8 @@ pub async fn run_agent_content_sidecar_production()
         deployment: &deployment,
         actions: &actions,
         genesis: &genesis,
+        read_positive_only,
+        pending_message: Default::default(),
     };
     let (state, mut agent_group) = Box::pin(private_reply::join_agent_with_observer(
         &controller,
@@ -1422,7 +1473,6 @@ pub async fn run_agent_content_sidecar_production()
             .capability_grant_refs
             .is_empty()
     );
-    let (message, plaintext) = controller_message(&controller, &mut group, &state, &strand).await?;
     let (fresh_read, fresh_claims) =
         content_direct_evidence::issue(&deployment, &agent, &read_actions, &realm).await?;
     ensure!(
@@ -1433,6 +1483,48 @@ pub async fn run_agent_content_sidecar_production()
             .capability_grant_refs
             .is_empty()
     );
+    if read_positive_only {
+        let expected = observer
+            .pending_message
+            .lock()
+            .unwrap()
+            .clone()
+            .context("pending controller business original was not retained")?;
+        let query = arkret_wire::StreamScanRequestBody {
+            realm_id: realm.clone(),
+            stream_ref: state.commit.stream_ref.clone(),
+            direction: arkret_wire::StreamScanDirection::After(None),
+            limit: 100,
+        };
+        let page = fresh_read.sdk().scan_commit_stream(&query).await?;
+        page.validate_for_request(&query)?;
+        ensure!(
+            !page.truncated,
+            "effective Sidecar history was unexpectedly truncated"
+        );
+        let original = page
+            .committed_events
+            .iter()
+            .find(|row| row.commit().event_ref == expected.commit().event_ref)
+            .context("effective Agent history omitted the formerly withheld original")?;
+        ensure!(
+            original.reducer_input().is_some() && original == &expected,
+            "effective Agent history changed the accepted Event or covering Commit"
+        );
+        let exact = fresh_read
+            .sdk()
+            .committed_event_get(&original.commit().event_ref)
+            .await?;
+        ensure!(
+            exact == expected,
+            "effective Agent exact GET changed the scanned original"
+        );
+        println!(
+            "[agent-sidecar-effective-read] actual_coauth=1 original_signed_claim=1 actual_add_and_welcome=1 durable_mls_state=1 signed_consume=1 effective_endpoint=1 fresh_read_only_session=1 no_literal_read_or_write_grant=1 pending_controller_original_refused=1 same_historical_event_and_commit_received_by_scan=1 exact_get_matches_scan=1 business_write_not_executed=1 decryption_not_claimed=1"
+        );
+        return Ok(());
+    }
+    let (message, plaintext) = controller_message(&controller, &mut group, &state, &strand).await?;
     let received = fresh_read
         .sdk()
         .committed_event_get(&message.event_id)
@@ -1743,15 +1835,5 @@ pub async fn run_agent_content_sidecar_production()
     println!(
         "[agent-sidecar-write] accepted_original_grant=1 fresh_real_coauth_write_ceiling=1 explicit_agent_message_committed=1 controller_decrypted=1 accepted_private_to_public=1 mode_preserves_roster=1 accepted_agent_leave=1 desired_and_effective_lost=1 old_write_credential_refused=1 required_rotation_checkpoint_denied=1 rejected_event_not_stored=1 grant_original_retained=1"
     );
-    Ok(crate::conformance::SuiteExecutionResult {
-        entrypoint: "ak.suite.agent.vectors.v1",
-        fixture: "agent-vectors-fixture.json",
-        cases: REVIEWED_SIDECAR_CONTENT_CASES
-            .iter()
-            .map(|name| crate::conformance::CaseExecutionResult {
-                case_id: (*name).to_owned(),
-                assertions: 1,
-            })
-            .collect(),
-    })
+    Ok(())
 }

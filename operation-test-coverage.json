@@ -7,7 +7,7 @@
     "test_layers": {
       "coland_unit": {
         "source_file_count": 564,
-        "source_sha256": "4f46f29d421e01f6a0074078a6902da8457438a97581916399157ed9845714be",
+        "source_sha256": "140febc1be74073150005587f7da28998bb5662aa67ddb554a4c1f57fc66f54a",
         "evidence_count": 917,
         "covered_operation_count": 170
       },
@@ -19,7 +19,7 @@
       },
       "cotest_rust": {
         "source_file_count": 684,
-        "source_sha256": "497d28fd779ebffee3a6625d9130d5a62c1f24d4f45d3c0ca8511b3b8001c6d9",
+        "source_sha256": "da0651e3e6cc8563218992b3f1c8d65d2881fb9f0eb497a08c7adfa8689757c6",
         "evidence_count": 465,
         "covered_operation_count": 152
       },
@@ -4100,11 +4100,11 @@
           },
           {
             "file": "cotest/src/scenarios/agent_runtime_live.rs",
-            "line": 723,
+            "line": 724,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              723
+              724
             ],
             "protected_oracle": false,
             "scope_sha256": "14e2a1ec7de36ed5f68aa62a11fe35204992c557d97bb6d606d4e12f5b5f6acc",
@@ -4117,11 +4117,11 @@
           },
           {
             "file": "cotest/src/scenarios/agent_runtime_live.rs",
-            "line": 1070,
+            "line": 1071,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              1070
+              1071
             ],
             "protected_oracle": false,
             "scope_sha256": "7629711ecec90137b5d169dc9f127c303f7a8bba569dda1c80bc366cd9b8cedc",
@@ -17199,11 +17199,11 @@
           },
           {
             "file": "cotest/src/scenarios/agent_runtime_live.rs",
-            "line": 167,
+            "line": 168,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              167
+              168
             ],
             "protected_oracle": false,
             "scope_sha256": "82ac99f99a19aa8ce5da6aed71b78e70d7fbdad7344b54a4682a4da809536669",
@@ -24164,11 +24164,11 @@
           },
           {
             "file": "cotest/src/scenarios/agent_runtime_live.rs",
-            "line": 1527,
+            "line": 1528,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              1527
+              1528
             ],
             "protected_oracle": false,
             "scope_sha256": "edc13543470b8dae05f9365ffe2cf0f2634c6074e2b53368370004ebec498406",
@@ -24198,11 +24198,11 @@
           },
           {
             "file": "cotest/src/scenarios/agent_runtime_live/content_sidecar_evidence.rs",
-            "line": 1191,
+            "line": 1240,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              1191
+              1240
             ],
             "protected_oracle": false,
             "scope_sha256": "edc13543470b8dae05f9365ffe2cf0f2634c6074e2b53368370004ebec498406",
@@ -24926,11 +24926,11 @@
           },
           {
             "file": "cotest/src/scenarios/agent_runtime_live/content_sidecar_evidence.rs",
-            "line": 1192,
+            "line": 1241,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              1192
+              1241
             ],
             "protected_oracle": false,
             "scope_sha256": "255554f40c0c6747ee79443b797ea81f3362b76510d90af9500d07750349316e",
@@ -27407,11 +27407,11 @@
           },
           {
             "file": "cotest/src/scenarios/agent_runtime_live.rs",
-            "line": 165,
+            "line": 166,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              165
+              166
             ],
             "protected_oracle": false,
             "scope_sha256": "d6f95553863b824bbeb6b1500f46cb08b7a3e938e3db131854ddb91d0f05d00b",
@@ -27424,11 +27424,11 @@
           },
           {
             "file": "cotest/src/scenarios/agent_runtime_live.rs",
-            "line": 1536,
+            "line": 1537,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              1536
+              1537
             ],
             "protected_oracle": false,
             "scope_sha256": "d6f95553863b824bbeb6b1500f46cb08b7a3e938e3db131854ddb91d0f05d00b",
@@ -27475,11 +27475,11 @@
           },
           {
             "file": "cotest/src/scenarios/agent_runtime_live/content_sidecar_evidence.rs",
-            "line": 1203,
+            "line": 1252,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              1203
+              1252
             ],
             "protected_oracle": false,
             "scope_sha256": "d6f95553863b824bbeb6b1500f46cb08b7a3e938e3db131854ddb91d0f05d00b",
@@ -27719,11 +27719,11 @@
         "protocol_kat": [
           {
             "file": "cotest/src/scenarios/agent_runtime_live.rs",
-            "line": 166,
+            "line": 167,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              166
+              167
             ],
             "protected_oracle": false,
             "scope_sha256": "2185a34f3cbee9360ee739c926beee055bb25d503cc9e48d657b4ce099dfe6f1",
@@ -28125,11 +28125,11 @@
         "protocol_kat": [
           {
             "file": "cotest/src/scenarios/agent_runtime_live.rs",
-            "line": 164,
+            "line": 165,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              164
+              165
             ],
             "protected_oracle": false,
             "scope_sha256": "a22730ff076c1b7b0f6999451b5e464449067ad7797781782914dd4fc5ce2bf2",
@@ -28142,11 +28142,11 @@
           },
           {
             "file": "cotest/src/scenarios/agent_runtime_live.rs",
-            "line": 1535,
+            "line": 1536,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              1535
+              1536
             ],
             "protected_oracle": false,
             "scope_sha256": "a22730ff076c1b7b0f6999451b5e464449067ad7797781782914dd4fc5ce2bf2",
@@ -28210,11 +28210,11 @@
           },
           {
             "file": "cotest/src/scenarios/agent_runtime_live/content_sidecar_evidence.rs",
-            "line": 1202,
+            "line": 1251,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              1202
+              1251
             ],
             "protected_oracle": false,
             "scope_sha256": "a22730ff076c1b7b0f6999451b5e464449067ad7797781782914dd4fc5ce2bf2",
@@ -31361,11 +31361,11 @@
           },
           {
             "file": "cotest/src/scenarios/agent_runtime_live.rs",
-            "line": 1531,
+            "line": 1532,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              1531
+              1532
             ],
             "protected_oracle": false,
             "scope_sha256": "74f3a4cd050130df557336250729608031e98d81e47ee68868fd023ae6797278",
@@ -31497,11 +31497,11 @@
           },
           {
             "file": "cotest/src/scenarios/agent_runtime_live/content_sidecar_evidence.rs",
-            "line": 1198,
+            "line": 1247,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              1198
+              1247
             ],
             "protected_oracle": false,
             "scope_sha256": "74f3a4cd050130df557336250729608031e98d81e47ee68868fd023ae6797278",
@@ -31514,11 +31514,11 @@
           },
           {
             "file": "cotest/src/scenarios/agent_runtime_live/content_sidecar_evidence.rs",
-            "line": 1670,
+            "line": 1762,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              1670
+              1762
             ],
             "protected_oracle": false,
             "scope_sha256": "85590e9fce26aee770132b14fda27e003c3ab96ccb677f579231174361c61caf",
@@ -34975,11 +34975,11 @@
           },
           {
             "file": "cotest/src/scenarios/agent_runtime_live.rs",
-            "line": 1532,
+            "line": 1533,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              1532
+              1533
             ],
             "protected_oracle": false,
             "scope_sha256": "0490da82c8ab0d88b0526b36a33af1f888192f1d1c07a666f3dddb4b00335579",
@@ -35026,11 +35026,11 @@
           },
           {
             "file": "cotest/src/scenarios/agent_runtime_live/content_sidecar_evidence.rs",
-            "line": 1199,
+            "line": 1248,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              1199
+              1248
             ],
             "protected_oracle": false,
             "scope_sha256": "0490da82c8ab0d88b0526b36a33af1f888192f1d1c07a666f3dddb4b00335579",
@@ -35483,11 +35483,11 @@
           },
           {
             "file": "cotest/src/scenarios/agent_runtime_live.rs",
-            "line": 1534,
+            "line": 1535,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              1534
+              1535
             ],
             "protected_oracle": false,
             "scope_sha256": "9c0fad0e80a92f12e94f130c6f0dcac1ec01f02f331f2d4a67549cb637de5f61",
@@ -35534,11 +35534,11 @@
           },
           {
             "file": "cotest/src/scenarios/agent_runtime_live/content_sidecar_evidence.rs",
-            "line": 1201,
+            "line": 1250,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              1201
+              1250
             ],
             "protected_oracle": false,
             "scope_sha256": "9c0fad0e80a92f12e94f130c6f0dcac1ec01f02f331f2d4a67549cb637de5f61",
@@ -36111,11 +36111,11 @@
           },
           {
             "file": "cotest/src/scenarios/agent_runtime_live.rs",
-            "line": 1533,
+            "line": 1534,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              1533
+              1534
             ],
             "protected_oracle": false,
             "scope_sha256": "6cf413b9ff13174594bc98d8c423e4f4904d987ba4da3f17ff3b2c004538260f",
@@ -36162,11 +36162,11 @@
           },
           {
             "file": "cotest/src/scenarios/agent_runtime_live/content_sidecar_evidence.rs",
-            "line": 1200,
+            "line": 1249,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              1200
+              1249
             ],
             "protected_oracle": false,
             "scope_sha256": "6cf413b9ff13174594bc98d8c423e4f4904d987ba4da3f17ff3b2c004538260f",
@@ -36645,11 +36645,11 @@
           },
           {
             "file": "cotest/src/scenarios/agent_runtime_live.rs",
-            "line": 1526,
+            "line": 1527,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              1526
+              1527
             ],
             "protected_oracle": false,
             "scope_sha256": "6c76ac51d4597b1d141fa51b63b8cb7d7cd7c100bada671e9eff285292eb519f",
@@ -36696,11 +36696,11 @@
           },
           {
             "file": "cotest/src/scenarios/agent_runtime_live/content_sidecar_evidence.rs",
-            "line": 1190,
+            "line": 1239,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              1190
+              1239
             ],
             "protected_oracle": false,
             "scope_sha256": "6c76ac51d4597b1d141fa51b63b8cb7d7cd7c100bada671e9eff285292eb519f",
@@ -38198,11 +38198,11 @@
         "protocol_kat": [
           {
             "file": "cotest/src/scenarios/agent_runtime_live.rs",
-            "line": 1530,
+            "line": 1531,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              1530
+              1531
             ],
             "protected_oracle": false,
             "scope_sha256": "470ac588a09588162eb5f5e6f9b82538c8d116ed42c73bc43b0f0f1453f871d8",
@@ -38249,11 +38249,11 @@
           },
           {
             "file": "cotest/src/scenarios/agent_runtime_live/content_sidecar_evidence.rs",
-            "line": 1197,
+            "line": 1246,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              1197
+              1246
             ],
             "protected_oracle": false,
             "scope_sha256": "470ac588a09588162eb5f5e6f9b82538c8d116ed42c73bc43b0f0f1453f871d8",
@@ -38493,11 +38493,11 @@
         "protocol_kat": [
           {
             "file": "cotest/src/scenarios/agent_runtime_live.rs",
-            "line": 1529,
+            "line": 1530,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              1529
+              1530
             ],
             "protected_oracle": false,
             "scope_sha256": "dea0fac15e8aa2d6a5adb01ad5609ba88329516799b42fd73ffa291cd94befdd",
@@ -38544,11 +38544,11 @@
           },
           {
             "file": "cotest/src/scenarios/agent_runtime_live/content_sidecar_evidence.rs",
-            "line": 1196,
+            "line": 1245,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              1196
+              1245
             ],
             "protected_oracle": false,
             "scope_sha256": "dea0fac15e8aa2d6a5adb01ad5609ba88329516799b42fd73ffa291cd94befdd",
@@ -39654,11 +39654,11 @@
           },
           {
             "file": "cotest/src/scenarios/agent_runtime_live/content_sidecar_evidence.rs",
-            "line": 1193,
+            "line": 1242,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              1193
+              1242
             ],
             "protected_oracle": false,
             "scope_sha256": "b645e33f7614cdca3ff73a20b9254247feafd2bd97c8cbcf3d1759a2a6f52a2f",
@@ -40947,11 +40947,11 @@
         "protocol_kat": [
           {
             "file": "cotest/src/scenarios/agent_runtime_live/content_sidecar_evidence.rs",
-            "line": 1195,
+            "line": 1244,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              1195
+              1244
             ],
             "protected_oracle": false,
             "scope_sha256": "40bc577d5277e01e930e3cfbcad9578b0b72da1de4ce248931b64939c4011675",
@@ -41202,11 +41202,11 @@
           },
           {
             "file": "cotest/src/scenarios/agent_runtime_live.rs",
-            "line": 1528,
+            "line": 1529,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              1528
+              1529
             ],
             "protected_oracle": false,
             "scope_sha256": "46b1e703135a15bc37ddb270ce4e4a93a26b939d17042c8865ccd436e7a93e39",
@@ -41253,11 +41253,11 @@
           },
           {
             "file": "cotest/src/scenarios/agent_runtime_live/content_sidecar_evidence.rs",
-            "line": 1194,
+            "line": 1243,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              1194
+              1243
             ],
             "protected_oracle": false,
             "scope_sha256": "46b1e703135a15bc37ddb270ce4e4a93a26b939d17042c8865ccd436e7a93e39",
@@ -41999,11 +41999,11 @@
         "protocol_kat": [
           {
             "file": "cotest/src/scenarios/agent_runtime_live.rs",
-            "line": 1543,
+            "line": 1544,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              1543
+              1544
             ],
             "protected_oracle": false,
             "scope_sha256": "0f63b24727ee1cca0152d152c23e20041319e47ff6ba6937946c72e07e6efebf",

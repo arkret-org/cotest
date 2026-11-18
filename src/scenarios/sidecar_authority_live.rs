@@ -208,22 +208,22 @@ async fn run_with_options(
             Op::SELF_REALM_STATE_SNAPSHOT_READ_MANIFEST_HEAD_V1,
             Op::SELF_REALM_STATE_SNAPSHOT_READ_BY_REF_V1,
             Op::SELF_MLS_READ_GROUP_STATE_MATERIAL_V1,
+            Op::SELF_KEYS_KEYPACKAGES_UPLOAD_CREATE_V1,
+            Op::SELF_KEYS_KEYPACKAGES_READ_CLAIM_V1,
+            Op::SELF_KEYS_KEYPACKAGES_COMMAND_CONSUME_V1,
+            Op::SELF_MLS_READ_ROSTER_AUTHORITY_V1,
+            Op::SELF_SIGNER_KEYS_READ_RESOLVE_V1,
+            Op::SELF_CURRENT_STATE_READ_EXACT_V1,
+            Op::SELF_DEVICE_MESSAGES_READ_LIST_V1,
+            Op::SELF_DEVICE_MESSAGES_COMMAND_ACK_V1,
             "ak.event.read",
             "ak.object.read",
             "ak.strand.read",
         ];
         if sync_observer.is_some_and(|probe| probe.requires_private_agent_reply()) {
             requested.extend([
-                Op::SELF_KEYS_KEYPACKAGES_UPLOAD_CREATE_V1,
                 Op::SELF_KEYS_KEYPACKAGES_COMMAND_CLAIM_V1,
-                Op::SELF_KEYS_KEYPACKAGES_READ_CLAIM_V1,
-                Op::SELF_KEYS_KEYPACKAGES_COMMAND_CONSUME_V1,
-                Op::SELF_MLS_READ_ROSTER_AUTHORITY_V1,
-                Op::SELF_SIGNER_KEYS_READ_RESOLVE_V1,
-                Op::SELF_CURRENT_STATE_READ_EXACT_V1,
                 Op::SELF_EVENTS_COMMAND_SUBMIT_V1,
-                Op::SELF_DEVICE_MESSAGES_READ_LIST_V1,
-                Op::SELF_DEVICE_MESSAGES_COMMAND_ACK_V1,
                 "ak.message.create",
             ]);
         }
@@ -247,11 +247,9 @@ async fn run_with_options(
                 scope,
             )
             .await?;
-        if sync_observer.is_some_and(|probe| probe.requires_private_agent_reply()) {
-            agent.runtime = station
-                .bind_native_host_session(agent.runtime.clone(), &coauth)
-                .await?;
-        }
+        agent.runtime = station
+            .bind_native_host_session(agent.runtime.clone(), &coauth)
+            .await?;
         let page = controller
             .client
             .sdk()
@@ -578,46 +576,7 @@ async fn run_with_options(
         group_info_ref:arkret_wire::BlobRef::new(group_info_ref)?,ratchet_tree_ref:arkret_wire::BlobRef::new(tree_ref)?,max_response_bytes:None,
     };
     if let Some(agent) = &agent {
-        // Put a private row after the first public handshake so it falls
-        // inside the pending recipient's interval and must be withheld.
-        let mut private = controller
-            .client
-            .author_event(
-                realm.as_str(),
-                EventKind::SidecarContextAttach.as_str(),
-                canonical(json!({
-                    "sidecar_id":sidecar,"source_context_ref":attach.payload["source_context_ref"],
-                    "version":2,"predecessor_event_ref":attach.event_id,
-                }))?,
-            )
-            .await?;
-        private.scope_ref = scope.clone();
-        private.semantic_refs = vec![arkret_wire::SemanticRef::new(
-            create.event_id.to_string(),
-            "after",
-        )];
-        crate::harness::refresh_typed_event_proof(&mut private)?;
-        let private_commit = submit_and_expect_commit(
-            &controller.client,
-            &controller.account,
-            controller.device.as_str(),
-            &private,
-        )
-        .await?;
-        ensure!(private_commit.stream_position == 2 && private_commit.stream_ref == stream);
-        verify_pending_agent_reads(
-            agent,
-            &controller,
-            &realm,
-            &stream,
-            PendingAgentDisclosureEvents {
-                create: &create,
-                attach: &private,
-                genesis: &genesis,
-            },
-            &material,
-        )
-        .await?;
+        verify_desired_agent_without_add(agent, &realm, &stream).await?;
     }
     let response = expect_json(
         controller
@@ -637,7 +596,7 @@ async fn run_with_options(
         arkret_models_collaboration::mls_roster_authority::MlsMemberRosterAuthorityReadRequestBody {
             realm_id: realm.clone(),
             effective_scope: scope.clone(),
-            mls_group_id: material.mls_group_id,
+            mls_group_id: material.mls_group_id.clone(),
             target_commit_event_ref: genesis.event_id.clone(),
             target_epoch: 0,
             caller_actor_id: controller.actor.clone(),
@@ -663,25 +622,35 @@ async fn run_with_options(
             && roster_response.next_cursor.is_none(),
         "native Sidecar Genesis roster is partial"
     );
-    if let Some(probe) = sync_observer.filter(|probe| probe.requires_private_agent_reply()) {
-        let agent = agent
-            .as_ref()
-            .context("private reply requires a real Agent")?;
-        let (accepted, mut agent_group) =
-            private_reply::join_agent(&controller, agent, &mut group, &genesis).await?;
-        probe
-            .private_agent_ready(
-                &controller,
-                agent,
-                &mut group,
-                &mut agent_group,
-                &accepted,
-                PrivateAgentReadyContext {
-                    coauth: &coauth,
-                    database_url: &database.connect_url,
-                },
-            )
-            .await?;
+    if let Some(agent) = &agent {
+        let pending = PendingAgentDisclosure {
+            create: &create,
+            attach: &attach,
+            material: &material,
+        };
+        let (accepted, mut agent_group) = private_reply::join_agent_with_observer(
+            &controller,
+            agent,
+            &mut group,
+            &genesis,
+            Some(&pending),
+        )
+        .await?;
+        if let Some(probe) = sync_observer.filter(|probe| probe.requires_private_agent_reply()) {
+            probe
+                .private_agent_ready(
+                    &controller,
+                    agent,
+                    &mut group,
+                    &mut agent_group,
+                    &accepted,
+                    PrivateAgentReadyContext {
+                        coauth: &coauth,
+                        database_url: &database.connect_url,
+                    },
+                )
+                .await?;
+        }
     }
     if let Some(probe) = sync_observer {
         probe
@@ -703,7 +672,127 @@ async fn run_with_options(
 struct PendingAgentDisclosureEvents<'a> {
     create: &'a arkret_wire::Event,
     attach: &'a arkret_wire::Event,
-    genesis: &'a arkret_wire::Event,
+    handshake: &'a arkret_wire::CommittedEventFullView,
+}
+
+async fn verify_desired_agent_without_add(
+    agent: &crate::scenarios::agent_runtime_live::AgentRuntimeSession,
+    realm: &RealmId,
+    stream: &CommitStreamRef,
+) -> Result<()> {
+    let http = agent.runtime.sdk();
+    let list = http.realm_streams_page(realm, None, 500).await?;
+    ensure!(
+        !list.streams.iter().any(|row| &row.stream_ref == stream),
+        "desired Agent without an accepted Add discovered Sidecar history"
+    );
+    let snapshot = http.realm_state_snapshot_head(realm).await?;
+    ensure!(
+        !snapshot
+            .visible_stream_heads
+            .iter()
+            .any(|head| &head.stream_ref == stream),
+        "desired Agent without an accepted Add received a Sidecar history head"
+    );
+    crate::harness::expect_api_error(
+        agent
+            .runtime
+            .post("/_arkret/self/streams/scan")
+            .canonical_json(&StreamScanRequestBody {
+                realm_id: realm.clone(),
+                stream_ref: stream.clone(),
+                direction: StreamScanDirection::After(None),
+                limit: 50,
+            })?,
+        reqwest::StatusCode::FORBIDDEN,
+        arkret_wire::ErrorCode::CAPABILITY_DENIED,
+    )
+    .await?;
+    Ok(())
+}
+
+struct PendingAgentDisclosure<'a> {
+    create: &'a arkret_wire::Event,
+    attach: &'a arkret_wire::Event,
+    material: &'a arkret_models_collaboration::mls_group_state_material::MlsMemberGroupStateMaterialReadRequestBody,
+}
+
+#[async_trait::async_trait(?Send)]
+impl private_reply::JoinObserver for PendingAgentDisclosure<'_> {
+    async fn before_consume(
+        &self,
+        controller: &Member,
+        agent: &crate::scenarios::agent_runtime_live::AgentRuntimeSession,
+        _controller_group: &mut arkret::ArkretMlsGroup,
+        _agent_group: &mut arkret::ArkretMlsGroup,
+        accepted: &arkret_wire::CommittedEventFullView,
+        durable_state_path: &std::path::Path,
+    ) -> Result<()> {
+        let arkret_wire::ScopeRef::Sidecar {
+            realm_id,
+            sidecar_id,
+        } = &accepted.event.scope_ref
+        else {
+            bail!("accepted Sidecar Add required")
+        };
+        let view = controller
+            .client
+            .sdk()
+            .agent_sidecar_get(sidecar_id)
+            .await?;
+        ensure!(
+            view.desired_agent_ids == vec![agent.agent_account.principal_id.clone()]
+                && view.effective_agent_ids.is_empty()
+                && durable_state_path.is_file(),
+            "the real Welcome must be durable while its consume is still pending"
+        );
+        let mut private = controller
+            .client
+            .author_event(
+                realm_id.as_str(),
+                EventKind::SidecarContextAttach.as_str(),
+                canonical(json!({"sidecar_id":sidecar_id,
+                "source_context_ref":self.attach.payload["source_context_ref"],
+                "version":2,"predecessor_event_ref":self.attach.event_id}))?,
+            )
+            .await?;
+        private.scope_ref = accepted.event.scope_ref.clone();
+        private.semantic_refs = vec![arkret_wire::SemanticRef::new(
+            self.create.event_id.to_string(),
+            "after",
+        )];
+        crate::harness::refresh_typed_event_proof_with_signing_seed(
+            &mut private,
+            controller.key.to_bytes(),
+        )?;
+        let committed = submit_and_expect_commit(
+            &controller.client,
+            &controller.account,
+            controller.device.as_str(),
+            &private,
+        )
+        .await?;
+        ensure!(
+            committed.stream_ref == accepted.commit.stream_ref
+                && committed.stream_position == accepted.commit.stream_position + 1
+        );
+        let mut material = self.material.clone();
+        material.target_commit_event_ref = accepted.event.event_id.clone();
+        material.target_epoch = 1;
+        verify_pending_agent_reads(
+            agent,
+            controller,
+            realm_id,
+            &accepted.commit.stream_ref,
+            PendingAgentDisclosureEvents {
+                create: self.create,
+                attach: &private,
+                handshake: accepted,
+            },
+            &material,
+        )
+        .await
+    }
 }
 
 async fn verify_pending_agent_reads(
@@ -717,7 +806,7 @@ async fn verify_pending_agent_reads(
     let PendingAgentDisclosureEvents {
         create,
         attach,
-        genesis,
+        handshake,
     } = events;
     let http = agent.runtime.sdk();
     let list = http
@@ -737,6 +826,15 @@ async fn verify_pending_agent_reads(
             .visible_stream_heads
             .iter()
             .any(|head| &head.stream_ref == stream)
+    );
+    ensure!(
+        snapshot
+            .retention_and_history_floor
+            .stream_floors
+            .iter()
+            .any(|floor| &floor.stream_ref == stream
+                && floor.oldest_position == handshake.commit.stream_position),
+        "pending handshake history did not start at the exact accepted Add"
     );
     ensure!(
         !snapshot.current_state_entries.iter().any(|row| matches!(
@@ -792,7 +890,7 @@ async fn verify_pending_agent_reads(
             .context("pending Agent Sidecar scan")?;
         page.validate_for_request(&query)?;
         ensure!(page.committed_events.len() == 2 && !page.truncated);
-        let (private, handshake) = match direction {
+        let (private, public_handshake) = match direction {
             StreamScanDirection::After(_) => (&page.committed_events[1], &page.committed_events[0]),
             StreamScanDirection::Before(_) => {
                 (&page.committed_events[0], &page.committed_events[1])
@@ -803,13 +901,14 @@ async fn verify_pending_agent_reads(
             "pending Agent received private context bytes"
         );
         ensure!(
-            handshake
+            public_handshake
                 .reducer_input()
-                .is_some_and(|event| event == genesis),
-            "pending Agent cannot verify MLS Genesis"
+                .is_some_and(|event| event == &handshake.event),
+            "pending Agent cannot verify its exact accepted MLS Add"
         );
         ensure!(
-            private.commit().previous_commit_ref.as_ref() == Some(&handshake.commit().commit_id)
+            private.commit().previous_commit_ref.as_ref()
+                == Some(&public_handshake.commit().commit_id)
         );
     }
     let parent = http
