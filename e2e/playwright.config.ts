@@ -51,6 +51,8 @@ const chromiumLaunchArgs = tlsSpkiSha256
 if (process.env.COTEST_CHROMIUM_MANUAL_PROXY) {
   const { server, bypass } = JSON.parse(process.env.COTEST_CHROMIUM_MANUAL_PROXY);
   chromiumLaunchArgs.push(`--proxy-server=${server}`, `--proxy-bypass-list=${bypass}`);
+} else if (tlsSpkiSha256 && process.env.COTEST_BROWSER_NO_PROXY === "1") {
+  chromiumLaunchArgs.push("--no-proxy-server");
 }
 
 export default defineConfig({

@@ -1,5 +1,5 @@
 import { expect, type APIRequestContext } from "@playwright/test";
-import { accountActorId, scanRealmStreamApi, signedEventEnvelope, submitSignedEventApi } from "./coland-api";
+import { accountActorId, scanRealmStreamApi, signedEventEnvelopes, submitSignedEventApi } from "./coland-api";
 import type { DpopUserSession } from "./users";
 
 // Metadata-free discussion Strands provide real, independently committed
@@ -12,25 +12,35 @@ export async function seedKanbanHistory(
 ) {
   const eventIds = new Set<string>();
   let lastPosition = -1;
-  let previousTimestamp = 0;
-  for (let index = 0; index < 501; index += 1) {
-    previousTimestamp = Math.max(Date.now(), previousTimestamp + 1);
-    const createdAt = new Date(previousTimestamp).toISOString();
-    const event = signedEventEnvelope({ actorId: session.user.id, realmId,
-      kind: "ak.strand.create", createdAt,
-      payload: { object: { schema: "ak.schema.strand.v1", realm_id: realmId,
-        tracks: { discussion: { enabled: true, is_primary: true, profile: "discussion" } },
-        created_by: accountActorId(session.user.id), created_at: createdAt } },
+  let previousTimestamp = Date.now() - 1;
+  let submitted = 0;
+  while (submitted < 501) {
+    // Use elapsed milliseconds for distinct Event timestamps. The first batch
+    // can be a singleton; later batches amortize native signer startup.
+    const now = Date.now();
+    const size = Math.min(16, 501 - submitted, Math.max(1, now - previousTimestamp));
+    const firstTimestamp = Math.max(previousTimestamp + 1, now - size + 1);
+    const drafts = Array.from({ length: size }, (_, index) => {
+      const createdAt = new Date(firstTimestamp + index).toISOString();
+      return { actorId: session.user.id, realmId, kind: "ak.strand.create", createdAt,
+        payload: { object: { schema: "ak.schema.strand.v1", realm_id: realmId,
+          tracks: { discussion: { enabled: true, is_primary: true, profile: "discussion" } },
+          created_by: accountActorId(session.user.id), created_at: createdAt } },
+      };
     });
-    const outcome = await submitSignedEventApi(request, session.grantJwt, event,
-      { context: `history Strand ${index + 1}/501` });
-    const commit = outcome.commit as Record<string, unknown>;
-    const position = Number(commit.stream_position);
-    expect(position).toBeGreaterThan(lastPosition);
-    lastPosition = position;
-    eventIds.add(String(event.event_id));
-    if (eventIds.size % 100 === 0 || eventIds.size === 501) {
-      console.info(`Kanban history seed accepted ${eventIds.size}/501 Events`);
+    previousTimestamp = firstTimestamp + size - 1;
+    for (const event of signedEventEnvelopes(drafts)) {
+      const outcome = await submitSignedEventApi(request, session.grantJwt, event,
+        { context: `history Strand ${submitted + 1}/501` });
+      const commit = outcome.commit as Record<string, unknown>;
+      const position = Number(commit.stream_position);
+      expect(position).toBeGreaterThan(lastPosition);
+      lastPosition = position;
+      submitted++;
+      eventIds.add(String(event.event_id));
+      if (submitted % 100 === 0 || submitted === 501) {
+        console.info(`Kanban history seed accepted ${eventIds.size}/501 Events`);
+      }
     }
   }
   expect(eventIds.size).toBe(501);

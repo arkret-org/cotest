@@ -19,6 +19,7 @@ fn main() -> Result<()> {
         "did-document-digest" => wire::did_document_digest(input)?,
         "did-web-document-url" => wire::did_web_document_url(input)?,
         "event-envelope-proof" => wire::event_proof(input, EventDigestMode::RawCanonicalJson)?,
+        "signed-events" => wire::signed_events(input)?,
         "local-message-payload" => wire::local_message_payload(input)?,
         "event-derived-id" => wire::event_derived_id(input)?,
         "historical-human-signer-query" => wire::historical_human_signer_query(input)?,
