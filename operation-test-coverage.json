@@ -7,7 +7,7 @@
     "test_layers": {
       "coland_unit": {
         "source_file_count": 564,
-        "source_sha256": "39c49b852f4c7ad3a96bbb77fa39f0fb8afa5cd8629181a8b9a0f4bbc68c31f1",
+        "source_sha256": "4f46f29d421e01f6a0074078a6902da8457438a97581916399157ed9845714be",
         "evidence_count": 917,
         "covered_operation_count": 170
       },
@@ -9928,11 +9928,11 @@
         "storage_parity": [
           {
             "file": "coland/crates/storage-postgres/tests/direct_conversation_founding_unit.rs",
-            "line": 3630,
+            "line": 3660,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              3630
+              3660
             ],
             "protected_oracle": false,
             "scope_sha256": "3a7a12936025aa6dee4fb79072b4f2a9aff41f3726168e43cdc8ac2803664792",
@@ -9945,11 +9945,11 @@
           },
           {
             "file": "coland/crates/storage-postgres/tests/realm_membership_fanout/main.rs",
-            "line": 6947,
+            "line": 6961,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              6947
+              6961
             ],
             "protected_oracle": false,
             "scope_sha256": "980b76a55d4e1b0b84a8debf24f844750d83d9a3a6c9362cece02e59dab3afb4",
@@ -9962,11 +9962,11 @@
           },
           {
             "file": "coland/crates/storage-postgres/tests/realm_membership_fanout/main.rs",
-            "line": 7664,
+            "line": 7678,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              7664
+              7678
             ],
             "protected_oracle": false,
             "scope_sha256": "48ace5529f623dc7f985cbc394e952e420340de53faf1b6e5d633dbbbf8c8a94",
@@ -14262,11 +14262,11 @@
         "fault_recovery": [
           {
             "file": "coland/crates/http/src/routing/identity/recovery/session_endpoints.rs",
-            "line": 852,
+            "line": 892,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              852
+              892
             ],
             "protected_oracle": false,
             "scope_sha256": "002cfc8abfeb90b511d44c7980042c92d86709b42d5c38296ecae1a3ac7b12d4",
@@ -14279,11 +14279,11 @@
           },
           {
             "file": "coland/crates/http/src/routing/identity/recovery/session_endpoints.rs",
-            "line": 1138,
+            "line": 1178,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              1138
+              1178
             ],
             "protected_oracle": false,
             "scope_sha256": "d0d11a7bd757e5c95d1ba932f0a8b193d7cee54191b6c7e5df70bc10cfd2ba5c",
@@ -14415,11 +14415,11 @@
         "fault_recovery": [
           {
             "file": "coland/crates/http/src/routing/identity/recovery/session_endpoints.rs",
-            "line": 1183,
+            "line": 1223,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              1183
+              1223
             ],
             "protected_oracle": false,
             "scope_sha256": "2c960a3feda3d545219c444b4030dbcf0e5eef23b1d1cb7b7492834383024786",
@@ -14432,11 +14432,11 @@
           },
           {
             "file": "coland/crates/http/src/routing/identity/recovery/session_endpoints.rs",
-            "line": 1311,
+            "line": 1313,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              1311
+              1313
             ],
             "protected_oracle": false,
             "scope_sha256": "3609170de4d97d8f94fd8d15953078765b75dcb02afd19ded5a064013d80e44c",
@@ -14568,11 +14568,11 @@
         "fault_recovery": [
           {
             "file": "coland/crates/http/src/routing/identity/recovery/session_endpoints.rs",
-            "line": 1162,
+            "line": 1202,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              1162
+              1202
             ],
             "protected_oracle": false,
             "scope_sha256": "5ff6bc427044a8c18014d92b92d8832dcbbd04ca6d836c46a6a3d23113ae59f2",
@@ -23480,12 +23480,12 @@
           },
           {
             "file": "coland/crates/http/src/routing/events/sync/tests.rs",
-            "line": 1753,
+            "line": 1795,
             "scope": "events_query_cursor_uses_stream_purpose_and_binds_filter_digest",
             "scope_kind": "rust_test",
             "occurrence_lines": [
-              1760,
-              1767
+              1802,
+              1809
             ],
             "protected_oracle": false,
             "scope_sha256": "a8accb19638df99865af82741c7a7b2c6816a23b154442fbef2bf5a485157f0a",
@@ -23506,13 +23506,13 @@
           },
           {
             "file": "coland/crates/http/src/routing/events/sync/tests.rs",
-            "line": 1826,
+            "line": 1868,
             "scope": "sync_filter_digest_normalizes_events_query_scope_collections",
             "scope_kind": "rust_test",
             "occurrence_lines": [
-              1831,
-              1841,
-              1856
+              1873,
+              1883,
+              1898
             ],
             "protected_oracle": false,
             "scope_sha256": "f0d063db7e512dcb03cb95038617eaa3f83c3f2b279a4b6931a1d1c671a6b5ce",
@@ -28977,12 +28977,12 @@
           },
           {
             "file": "coland/crates/storage-postgres/tests/direct_conversation_founding_unit.rs",
-            "line": 2061,
+            "line": 2091,
             "scope": "controller_owned_agent_founding_reads_provision_and_runtime_key_at_the_slot_cut",
             "scope_kind": "rust_test",
             "occurrence_lines": [
-              2165,
-              2166
+              2195,
+              2196
             ],
             "protected_oracle": false,
             "scope_sha256": "7864a73f5d50996288702aca8c9196c850c8f4ae4368bb93c4791a329568248c",
