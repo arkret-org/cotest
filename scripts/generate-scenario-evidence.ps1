@@ -45,7 +45,7 @@ foreach ($file in Get-ChildItem -LiteralPath $testsRoot -Recurse -File -Filter "
     # completed identity establishment.
     $usesRegistrationFormUi = (Test-UiEvidenceCall $uiSource $uiCodeMask '\.locator\(\s*["'']\.register-open-account-authority["'']\s*\)\s*\.click\s*\(') -or (
         (Test-UiEvidenceCall $uiSource $uiCodeMask '\.goto\(\s*["'']/register["'']\s*\)') -and
-        (Test-UiEvidenceCall $uiSource $uiCodeMask '\.getByLabel\(\s*["'']Station["'']\s*,\s*\{\s*exact\s*:\s*true\s*\}\s*\)\s*\.fill\(\s*colandBaseUrl\(\)\s*\)') -and
+        (Test-UiEvidenceCall $uiSource $uiCodeMask '\.getByLabel\(\s*["'']Account server["'']\s*,\s*\{\s*exact\s*:\s*true\s*\}\s*\)\s*\.fill\(\s*colandBaseUrl\(\)\s*\)') -and
         (Test-UiEvidenceCall $uiSource $uiCodeMask '\.locator\(\s*["'']\.registration-panel["'']\s*\)\s*\.getByRole\(\s*["'']button["'']\s*,\s*\{\s*name\s*:\s*["'']Continue["'']\s*,\s*exact\s*:\s*true\s*\}\s*\)\s*\.click\s*\(')
     )
     $usesInksonUi = ($uiSource -match 'open(?:Dpop)?UserPage|openUserPage|\.goto(?:Home|Login|Setup|Timeline)|\.createRealm\(|\.sendTimelineMessage\(') -or $usesRegisteredUi -or $usesRegistrationFormUi
