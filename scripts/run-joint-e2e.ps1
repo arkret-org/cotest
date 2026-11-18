@@ -26,7 +26,7 @@
     Runner-owned process-mode services publish their public identity through a
     managed TLS reverse proxy (0530-C): the processes keep plain loopback
     listeners, while public base URLs, issuers and minted service DIDs use
-    stable `https://<service>.local.host:<port>` names. Trust stays process-local:
+    stable `https://<service>.arkret_local:<port>` names. Trust stays process-local:
     Node receives the run-scoped CA and Chromium receives the exact leaf SPKI
     pin; the current user's Root store is never modified. The exact host names
     are registered in the system hosts file for the duration of the run.
@@ -157,7 +157,7 @@ param(
     [switch]$RunnerSelfTest,
     [ValidateRange(1, 32)]
     [int]$ServerCount = 1,
-    [ValidateSet('local.host', 'localhost')][string]$DnsSuffix = 'local.host',
+    [ValidateSet('arkret_local', 'localhost')][string]$DnsSuffix = 'arkret_local',
     [ValidateSet("full-mesh", "ordered-candidates")]
     [string]$NetworkShape = "full-mesh",
     [string]$ColandServer2NotarySigningKey = "ODg4ODg4ODg4ODg4ODg4ODg4ODg4ODg4ODg4ODg4ODg=",
@@ -1072,6 +1072,7 @@ function Invoke-JointE2ePreflight {
         [string]$ColandDatabaseUrl,
         [string]$ColandPostgresImage = "postgres:18.6-alpine",
         [bool]$WillStartDefaultColand = $false,
+        [bool]$RunNativeApiMigrations = $false,
         [ValidateSet("process", "docker")][string]$ColandRuntime = "process",
         [string]$ColandImage,
         [bool]$WillStartDockerColand = $false,
@@ -1194,6 +1195,21 @@ function Invoke-JointE2ePreflight {
             } catch {
                 Add-PreflightResult $results "coland binary" "fail" $_.Exception.Message
             }
+        }
+    }
+
+    if ($RunNativeApiMigrations) {
+        try {
+            $nativeColand = Resolve-ColandBinary -ExplicitPath $ColandBin -RepositoryRoot $ColandRepositoryRoot
+            $custodyCli = Join-Path (Split-Path -Parent $nativeColand) (Get-NativeExecutableName -Name "coland-keystore-snapshot")
+            if (-not (Test-Path -LiteralPath $custodyCli -PathType Leaf)) {
+                throw "Missing sibling CLI for native Station provisioning: $custodyCli"
+            }
+            Add-BinaryFreshnessPreflight -Results $results -Name "coland custody CLI freshness" `
+                -BinaryPath $custodyCli -RepositoryRoots @($ColandRepositoryRoot, (Join-Path $WorkspaceRoot "arkret-rust-sdk")) `
+                -RequireBuildStamp (-not [bool]$ColandBin)
+        } catch {
+            Add-PreflightResult $results "coland custody CLI freshness" "fail" $_.Exception.Message
         }
     }
 
@@ -1554,7 +1570,7 @@ function Write-DotEnvFile {
 # ── Joint TLS identity topology (0530-C) ─────────────────────
 # Runner-owned services keep their plain loopback listeners, but their public
 # base URLs — and therefore the service `did:webvh` they mint — are stable
-# HTTPS names (`<service>.local.host:<tls port>`) fronted by one managed Caddy
+# HTTPS names (`<service>.arkret_local:<tls port>`) fronted by one managed Caddy
 # reverse proxy. Trust is run-scoped rather than machine-scoped: Node and
 # coauth receive the CA file, while Chromium receives the exact leaf SPKI pin.
 # The topology gate independently verifies the CA chain, served leaf and every
@@ -2514,7 +2530,7 @@ function Test-JointLoopbackUrl {
     # not intercept readiness, identity or negative TLS probes for this run.
     return $uri.IsLoopback -or
         $uri.DnsSafeHost.EndsWith(".localhost", [System.StringComparison]::OrdinalIgnoreCase) -or
-        $uri.DnsSafeHost.EndsWith(".local.host", [System.StringComparison]::OrdinalIgnoreCase)
+        $uri.DnsSafeHost.EndsWith(".arkret_local", [System.StringComparison]::OrdinalIgnoreCase)
 }
 
 function Wait-HttpReady {
@@ -3307,7 +3323,7 @@ function Invoke-RunnerSelfTest {
 
         $tlsAssets = New-JointTlsAssets `
             -Directory (Join-Path $tempRoot "tls") `
-            -DnsNames @("self-test.local.host") `
+            -DnsNames @("self-test.arkret_local") `
             -RunLabel "self-test"
         if (-not (Test-Path -LiteralPath $tlsAssets.CaPemPath -PathType Leaf) -or
             -not (Test-Path -LiteralPath $tlsAssets.ServerPemPath -PathType Leaf) -or
@@ -4063,6 +4079,7 @@ $previousProvisionCustodyRoot = $env:COTEST_PROVISION_CUSTODY_ROOT
 $previousReadonlyDatabaseControls = $env:COTEST_READONLY_DATABASE_CONTROLS
 $previousPythonExecutable = $env:COTEST_PYTHON_EXECUTABLE
 $previousSdkTlsRoots = $env:SSL_CERT_FILE
+$previousChromiumManualProxy = $env:COTEST_CHROMIUM_MANUAL_PROXY
 $startedAt = Get-Date
 $generatedColandCommand = $false
 $generatedInksonCommand = $false
@@ -4160,17 +4177,23 @@ try {
     $needsNativeColandBinary = ($willStartDefaultColand -and $ColandRuntime -eq "process") -or $runNativeApiMigrations
     if (-not $SkipBuild -and $needsNativeColandBinary -and -not $ColandBin -and -not $env:COLAND_BIN) {
         $defaultColandBinary = Join-Path $colandTargetDirectory ("debug/" + (Get-NativeExecutableName -Name "coland"))
-        $freshness = Get-ArtifactFreshness `
-            -ArtifactPath $defaultColandBinary `
-            -RepositoryRoots @(
-                $colandRepositoryRoot,
-                (Join-Path $workspaceRoot "arkret-rust-sdk")
-            )
+        $colandBuildRoots = @($colandRepositoryRoot, (Join-Path $workspaceRoot "arkret-rust-sdk"))
+        $colandTargets = @("coland")
+        if ($runNativeApiMigrations) { $colandTargets += "coland-keystore-snapshot" }
+        $colandArtifacts = foreach ($target in $colandTargets) {
+            $path = Join-Path $colandTargetDirectory ("debug/" + (Get-NativeExecutableName -Name $target))
+            [pscustomobject]@{
+                Name = $target
+                Artifact = $path
+                Freshness = Get-ArtifactFreshness -ArtifactPath $path -RepositoryRoots $colandBuildRoots
+                BuildInputsBefore = $null
+            }
+        }
         $colandConformanceHarnessPresent = Test-BinaryContainsAsciiMarker `
             -Path $defaultColandBinary `
             -Marker $colandConformanceHarnessMarker
-        if (-not $freshness.Fresh -or -not $colandConformanceHarnessPresent) {
-            Write-Host "Preparing coland binary: $($freshness.Detail)"
+        if (($colandArtifacts | Where-Object { -not $_.Freshness.Fresh }) -or -not $colandConformanceHarnessPresent) {
+            Write-Host "Preparing Coland targets: $($colandTargets -join ', ')"
             $started = Get-Date
             # `conformance-harness` compiles the development-only
             # `/_arkret/_conformance/*` namespace into the SUT. It is off in
@@ -4182,15 +4205,30 @@ try {
             # earlier placement dispatched `Start-ManagedCommand -Name` alone
             # and every stale-binary run died on "missing mandatory parameters:
             # Command WorkingDirectory LogDirectory" instead of rebuilding.
-            $preBuildStates = @(Get-ArtifactBuildRepositoryStates -ArtifactPath $defaultColandBinary -RepositoryRoots @($colandRepositoryRoot, (Join-Path $workspaceRoot "arkret-rust-sdk")))
+            foreach ($artifact in $colandArtifacts) {
+                $artifact.BuildInputsBefore = @(Get-ArtifactBuildRepositoryStates -ArtifactPath $artifact.Artifact -RepositoryRoots $colandBuildRoots)
+            }
+            $binArgs = ($colandTargets | ForEach-Object { "--bin $_" }) -join " "
             $service = Start-ManagedCommand `
                 -Name "prepare-coland" `
-                -Command ("cargo build --manifest-path {0} -p coland --bin coland --features conformance-harness" -f (Quote-PsLiteral $SutManifest)) `
+                -Command ("cargo build --manifest-path {0} -p coland {1} --features conformance-harness" -f (Quote-PsLiteral $SutManifest), $binArgs) `
                 -WorkingDirectory (Split-Path -Parent $SutManifest) `
                 -LogDirectory $serviceLogDir
-            $preparationTasks.Add([pscustomobject]@{ Name = "coland"; BuildInputsBefore = $preBuildStates; Service = $service; Started = $started; Artifact = $defaultColandBinary; AllowUnchangedArtifact = $true; RepositoryRoots = @($colandRepositoryRoot, (Join-Path $workspaceRoot "arkret-rust-sdk")) })
+            foreach ($artifact in $colandArtifacts) {
+                $preparationTasks.Add([pscustomobject]@{
+                    Name = $artifact.Name
+                    BuildInputsBefore = $artifact.BuildInputsBefore
+                    Service = $service
+                    Started = $started
+                    Artifact = $artifact.Artifact
+                    AllowUnchangedArtifact = $true
+                    RepositoryRoots = $colandBuildRoots
+                })
+            }
         } else {
-            $preparationTimings.Add([pscustomobject]@{ name = "coland"; status = "cache-hit"; duration_seconds = 0; detail = $freshness.Detail })
+            foreach ($artifact in $colandArtifacts) {
+                $preparationTimings.Add([pscustomobject]@{ name = $artifact.Name; status = "cache-hit"; duration_seconds = 0; detail = $artifact.Freshness.Detail })
+            }
         }
     }
 
@@ -4456,6 +4494,7 @@ try {
         -ColandDatabaseUrl $ColandDatabaseUrl `
         -ColandPostgresImage $ColandPostgresImage `
         -WillStartDefaultColand $willStartDefaultColand `
+        -RunNativeApiMigrations $runNativeApiMigrations `
         -ColandRuntime $ColandRuntime `
         -ColandImage $ColandImage `
         -WillStartDockerColand $willStartDockerColand `
@@ -4592,9 +4631,15 @@ try {
             -Directory $jointTlsDir `
             -DnsNames $jointTlsHostNames `
             -RunLabel $timestamp
-        Install-JointLoopbackHosts `
-            -Hosts (@($jointTlsHostNames) + @($jointTlsUnregisteredProbeHost)) `
-            -Marker $jointTlsHostsMarker
+        $loopbackHosts = @($jointTlsHostNames) + @($jointTlsUnregisteredProbeHost)
+        Install-JointLoopbackHosts -Hosts $loopbackHosts -Marker $jointTlsHostsMarker
+        if ($IsWindows) {
+            $settings = Get-Item -LiteralPath 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Internet Settings' -ErrorAction SilentlyContinue
+            $proxy = Get-CotestChromiumManualProxy -Hosts $loopbackHosts -Settings $settings
+            if ($proxy) {
+                $env:COTEST_CHROMIUM_MANUAL_PROXY = $proxy | ConvertTo-Json -Compress
+            }
+        }
         $env:NODE_EXTRA_CA_CERTS = $jointTlsAssets.CaPemPath
         $env:COTEST_RUN_SCOPED_CA_PEM = $jointTlsAssets.CaPemPath
         # Native SDK method discovery uses its credential-free TLS transport.
@@ -5955,7 +6000,7 @@ try {
     # services under test cannot currently be pointed at this host — coland /
     # flagon / the SDK derive the DID-document URL from the DID string itself
     # and judge egress per request against configured trust anchors (0530-C:
-    # joint services resolve through the TLS-fronted `<service>.local.host`
+    # joint services resolve through the TLS-fronted `<service>.arkret_local`
     # names, not this mock), with no resolver-base-URL or host-override env.
     # See the DID-P1-C01 report.
     if ($mockDidHostBaseUrl) {
@@ -6310,6 +6355,7 @@ finally {
                 $env:SSL_CERT_FILE = $previousSdkTlsRoots
             }
             Remove-Item Env:COTEST_TLS_SPKI_SHA256 -ErrorAction SilentlyContinue
+            [Environment]::SetEnvironmentVariable('COTEST_CHROMIUM_MANUAL_PROXY', $previousChromiumManualProxy)
         }
         if ($mockAppletRegistryStateKeyFile) {
             Remove-Item -LiteralPath $mockAppletRegistryStateKeyFile -Force -ErrorAction SilentlyContinue

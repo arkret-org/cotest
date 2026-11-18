@@ -156,7 +156,7 @@ fn sdk_with_retry(
         builder = builder.auth(auth);
     }
     if let Some(host) = endpoint.host_str() {
-        for namespace in ["localhost", "local.host"] {
+        for namespace in ["localhost", "arkret_local"] {
             if host == namespace || host.ends_with(&format!(".{namespace}")) {
                 builder = builder.loopback_service_discovery(
                     namespace,

@@ -9,7 +9,7 @@ Failed commands are reported with an instruction to retry from an elevated shell
 [CmdletBinding(SupportsShouldProcess)]
 param(
     [ValidateRange(1, 32)][int]$ServerCount = 1,
-    [ValidateSet('local.host', 'localhost')][string]$DnsSuffix = 'local.host',
+    [ValidateSet('arkret_local', 'localhost')][string]$DnsSuffix = 'arkret_local',
     [switch]$StartCoauth,
     [switch]$StartFlagon,
     # Browserless profiles still use Playwright's test runner, but do not need
@@ -341,7 +341,7 @@ if ($RequireDocker) {
     }
 }
 
-if ($DnsSuffix -eq 'local.host') {
+if ($DnsSuffix -eq 'arkret_local') {
     if ($isAdministrator) {
         $null = Initialize-CotestWindowsHostsAccess
     }

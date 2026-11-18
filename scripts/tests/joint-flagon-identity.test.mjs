@@ -14,7 +14,7 @@ if (!wireBin) throw new Error('COTEST_WIRE_BIN must select the actual prepared w
 const repoRoot = process.env.COTEST_REPO_ROOT ?? path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 let built;
 test('SDK mints and verifies exact Directory WebVH originals at /webvh/flagon', async () => {
-  built = await mint({ wireBin, repoRoot, baseUrl: 'https://flagon.local.host:44443', directory: path.join(directory, 'identity') });
+  built = await mint({ wireBin, repoRoot, baseUrl: 'https://flagon.arkret_local:44443', directory: path.join(directory, 'identity') });
   assert.match(built.did, /:webvh:flagon$/);
   assert.equal(built.log_path.replaceAll('\\', '/').endsWith('/webvh/flagon/did.jsonl'), true);
   const commitment = verifyFetched({ wireBin, directory: path.join(directory, 'identity'), logPath: built.log_path, documentPath: built.document_path });
@@ -26,7 +26,7 @@ test('SDK mints and verifies exact Directory WebVH originals at /webvh/flagon', 
 });
 test('a tampered signed entry fails the actual SDK verifier', () => {
   const entry = JSON.parse(readFileSync(built.log_path, 'utf8'));
-  entry.state.service[0].serviceEndpoint = 'https://wrong.local.host:44443';
+  entry.state.service[0].serviceEndpoint = 'https://wrong.arkret_local:44443';
   const tampered = path.join(directory, 'tampered.did.jsonl');
   writeFileSync(tampered, `${JSON.stringify(entry)}\n`);
   assert.throws(() => verifyFetched({ wireBin, directory: path.join(directory, 'identity'), logPath: tampered, documentPath: built.document_path }), /webvh-verify-log failed/);
@@ -40,7 +40,7 @@ test('verified log cannot authenticate a different fetched document', () => {
 });
 test('owned mint rejects plaintext endpoint and an existing identity directory', async () => {
   await assert.rejects(mint({ wireBin, repoRoot, baseUrl: 'http://127.0.0.1:44443', directory: path.join(directory, 'http') }), /canonical HTTPS/);
-  await assert.rejects(mint({ wireBin, repoRoot, baseUrl: 'https://flagon.local.host:44443', directory: path.join(directory, 'identity') }), /already exists/);
+  await assert.rejects(mint({ wireBin, repoRoot, baseUrl: 'https://flagon.arkret_local:44443', directory: path.join(directory, 'identity') }), /already exists/);
 });
 test('describe gate checks exact independently projected core/commitment/role', () => {
   // This gate unit case does not claim actual HTTP or SDK projection credit;

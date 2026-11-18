@@ -13,8 +13,8 @@ $original = "127.0.0.1 localhost`r`n10.0.0.8 user-owned.example`r`n"
 $marker = New-CotestHostsMarker -RunId "unit-1"
 $hosts = Get-CotestJointHostNames -ServerCount 3 -IncludeCoauth $true -IncludeUnregisteredProbe $true
 $withBlock = Add-CotestHostsBlock -Content $original -Hosts $hosts -Marker $marker
-Assert-True ($withBlock.Contains("127.0.0.1`tcoland-server3.local.host")) "server3 Coland host must be present"
-Assert-True ($withBlock.Contains("127.0.0.1`tcoauth-server3.local.host")) "server3 Coauth host must be present"
+Assert-True ($withBlock.Contains("127.0.0.1`tcoland-server3.arkret_local")) "server3 Coland host must be present"
+Assert-True ($withBlock.Contains("127.0.0.1`tcoauth-server3.arkret_local")) "server3 Coauth host must be present"
 Assert-Equal 1 (@(Get-CotestHostsMarkers -Content $withBlock).Count) "one marker must be discoverable"
 $restored = Remove-CotestHostsBlocks -Content $withBlock -Marker $marker
 Assert-Equal $original $restored "exact marker cleanup must preserve user content"
@@ -27,13 +27,13 @@ try { Add-CotestHostsBlock -Content $original -Hosts @("example.com") -Marker $m
 Assert-True $foreignRejected "foreign host insertion must fail closed"
 foreach ($newline in @("`r`n", "`n")) {
     $content = "127.0.0.1 localhost${newline}10.0.0.8 user-owned.example${newline}"
-    $mockBlock = Add-CotestHostsBlock -Content $content -Hosts (@($hosts) + @(" Mock-Applet-Registry.Local.Host ", "mock-applet-registry.local.host")) -Marker $marker
-    Assert-Equal 1 ([regex]::Matches($mockBlock, '(?m)^127\.0\.0\.1\tmock-applet-registry\.local\.host\r?$').Count) "the exact HTTPS Applet mock must have one normalized loopback entry"
+    $mockBlock = Add-CotestHostsBlock -Content $content -Hosts (@($hosts) + @(" Mock-Applet-Registry.Arkret_Local ", "mock-applet-registry.arkret_local")) -Marker $marker
+    Assert-Equal 1 ([regex]::Matches($mockBlock, '(?m)^127\.0\.0\.1\tmock-applet-registry\.arkret_local\r?$').Count) "the exact HTTPS Applet mock must have one normalized loopback entry"
     Assert-Equal $content (Remove-CotestHostsBlocks -Content $mockBlock -Marker $marker) "mock hosts cleanup must preserve user content and newline style"
 }
-foreach ($foreignMock in @("mock-applet-registry.example.com", "mock-applet-registry.local.host.example.com", "other-mock.local.host", "mock-applet-registry2.local.host", "mock-applet-registry.local.host`n192.0.2.1 example.com")) {
+foreach ($foreignMock in @("mock-applet-registry.example.com", "mock-applet-registry.arkret_local.example.com", "other-mock.arkret_local", "mock-applet-registry2.arkret_local", "mock-applet-registry.arkret_local`n192.0.2.1 example.com")) {
     $rejected = $false
-    try { Add-CotestHostsBlock -Content $original -Hosts @("mock-applet-registry.local.host", $foreignMock) -Marker $marker | Out-Null } catch { $rejected = $true }
+    try { Add-CotestHostsBlock -Content $original -Hosts @("mock-applet-registry.arkret_local", $foreignMock) -Marker $marker | Out-Null } catch { $rejected = $true }
     Assert-True $rejected "a foreign or injected mock host must fail closed: $foreignMock"
 }
 # The managed Directory has one exact additional hostname, not a broader namespace.
@@ -41,16 +41,16 @@ Assert-Equal 8 @(Get-CotestJointHostNames -ServerCount 3 -IncludeFlagon $true).C
 Assert-True (@(Get-CotestJointHostNames -ServerCount 1 -IncludeFlagon $true -DnsSuffix localhost) -contains 'flagon.localhost') "localhost Directory must retain the configured DNS suffix"
 foreach ($newline in @("`r`n", "`n")) {
     $content = "127.0.0.1 localhost${newline}10.0.0.8 user-owned.example${newline}"
-    $directoryBlock = Add-CotestHostsBlock -Content $content -Hosts (@($hosts) + @(' FLAGON.Local.Host ', 'flagon.local.host')) -Marker $marker
-    Assert-Equal 1 ([regex]::Matches($directoryBlock, '(?m)^127\.0\.0\.1\tflagon\.local\.host\r?$').Count) "Directory host must be normalized and written only once"
+    $directoryBlock = Add-CotestHostsBlock -Content $content -Hosts (@($hosts) + @(' FLAGON.Arkret_Local ', 'flagon.arkret_local')) -Marker $marker
+    Assert-Equal 1 ([regex]::Matches($directoryBlock, '(?m)^127\.0\.0\.1\tflagon\.arkret_local\r?$').Count) "Directory host must be normalized and written only once"
     Assert-Equal $content (Remove-CotestHostsBlocks -Content $directoryBlock -Marker $marker) "Directory cleanup must preserve unrelated hosts and newline style"
 }
-foreach ($foreignDirectory in @('flagon.example.com', 'flagon.local.host.example.com', 'flagon2.local.host', 'other-flagon.local.host', "flagon.local.host`n192.0.2.1 example.com")) {
+foreach ($foreignDirectory in @('flagon.example.com', 'flagon.arkret_local.example.com', 'flagon2.arkret_local', 'other-flagon.arkret_local', "flagon.arkret_local`n192.0.2.1 example.com")) {
     $rejected = $false
-    try { Add-CotestHostsBlock -Content $original -Hosts @('flagon.local.host', $foreignDirectory) -Marker $marker | Out-Null } catch { $rejected = $true }
+    try { Add-CotestHostsBlock -Content $original -Hosts @('flagon.arkret_local', $foreignDirectory) -Marker $marker | Out-Null } catch { $rejected = $true }
     Assert-True $rejected "foreign or injected Directory host must fail closed: $foreignDirectory"
 }
-$stale = Add-CotestHostsBlock -Content $withBlock -Hosts @("coland-server1.local.host") -Marker (New-CotestHostsMarker -RunId "unit-stale")
+$stale = Add-CotestHostsBlock -Content $withBlock -Hosts @("coland-server1.arkret_local") -Marker (New-CotestHostsMarker -RunId "unit-stale")
 Assert-Equal $original (Remove-CotestHostsBlocks -Content $stale) "stale cleanup must remove every cotest block and preserve foreign content"
 # Blocks written before `b6ab807b` separated the prefix from the stamp with a
 # space. Eight of them survived in this machine's hosts file precisely because
@@ -59,7 +59,7 @@ Assert-Equal $original (Remove-CotestHostsBlocks -Content $stale) "stale cleanup
 # introduced the new one.
 $legacyBlock = $original +
     "# cotest-joint-e2e 20260827-002729 begin`r`n" +
-    "127.0.0.1`tcoland-server1.local.host`r`n" +
+    "127.0.0.1`tcoland-server1.arkret_local`r`n" +
     "# cotest-joint-e2e 20260827-002729 end`r`n"
 Assert-Equal 1 (@(Get-CotestHostsMarkers -Content $legacyBlock).Count) "the pre-b6ab807b marker form must still be discoverable"
 Assert-Equal $original (Remove-CotestHostsBlocks -Content $legacyBlock) "stale cleanup must remove pre-b6ab807b blocks too"
@@ -75,7 +75,7 @@ Assert-CotestTopologyIsolation -Topology $topology
 Assert-CotestTopologyIsolation -Topology (New-CotestServerTopology -ServerCount 1 -StartCoauth $true)
 Assert-Equal 3 $topology.servers.Count "three servers must be generated"
 Assert-Equal "server1" $topology.servers[0].name "numbering starts at server1"
-Assert-Equal "https://coland-server3.local.host:24443" $topology.servers[2].coland.public_url "server3 public URL"
+Assert-Equal "https://coland-server3.arkret_local:24443" $topology.servers[2].coland.public_url "server3 public URL"
 Assert-Equal 2 $topology.servers[0].peers.Count "full mesh peer count"
 Assert-CotestLoopbackDns -Hosts @('127.0.0.1', '::1')
 $publicDnsRejected = $false
@@ -125,7 +125,8 @@ Assert-True ($runnerScript -match 'required durable-store export failed' -and $r
 Assert-True ($runnerScript -match 'runner-error\.log' -and $runnerScript -match '\$_.ScriptStackTrace') "runner setup failures must retain a bounded stack diagnostic"
 Assert-True ($runnerScript -match '\$colandStoragePrefix = if \(\$server\.Index -eq 1\).*\r?\n\s*\$colandManaged') "runtime topology storage paths must recompute their per-server prefix"
 Assert-True ($runnerScript -match '\$requiredScenarios = @\(@\(\$requiredScenarios; "federation/three-server-p0"\) \| Sort-Object -Unique\)') "one required three-server scenario must remain collection-shaped"
-Assert-True ($runnerScript -match '-Hosts \(@\(\$jointTlsHostNames\) \+ @\(\$jointTlsUnregisteredProbeHost\)\)') "single-server TLS hosts must remain an array when the unregistered probe is appended"
+Assert-True ($runnerScript -match '\$loopbackHosts = @\(\$jointTlsHostNames\) \+ @\(\$jointTlsUnregisteredProbeHost\)') "single-server TLS hosts must remain an array when the unregistered probe is appended"
+Assert-True ($runnerScript -match 'Install-JointLoopbackHosts -Hosts \$loopbackHosts' -and $runnerScript -match 'Get-CotestChromiumManualProxy -Hosts \$loopbackHosts') "Chromium exemptions must match the hosts installed for the run"
 $initializerScript = Get-Content -Raw -LiteralPath (Join-Path $PSScriptRoot "..\initialize-joint-e2e-environment.ps1")
 Assert-True ($initializerScript -match 'Test-CotestAdministrator' -and $initializerScript -match 'if \(\$isAdministrator\)') "initializer must branch on administrator identity"
 Assert-True ($initializerScript -match 'mode = "install-and-check"') "dependency installation must be attempted by default"
@@ -164,7 +165,7 @@ $localMarker = New-CotestHostsMarker -RunId 'unit-localhost-owned'
 $oldMarker = New-CotestHostsMarker -RunId '20261023-060217'
 foreach ($newline in @("`r`n", "`n")) {
     $userBytes = "127.0.0.1 localhost${newline}10.0.0.8 user-owned.example${newline}"
-    $oldBytes = Add-CotestHostsBlock -Content $userBytes -Hosts @('coland-server1.local.host', 'coauth-server1.local.host', 'unregistered.local.host') -Marker $oldMarker
+    $oldBytes = Add-CotestHostsBlock -Content $userBytes -Hosts @('coland-server1.arkret_local', 'coauth-server1.arkret_local', 'unregistered.arkret_local') -Marker $oldMarker
     $withOurs = Add-CotestHostsBlock -Content $oldBytes -Hosts $localNames -Marker $localMarker
     Assert-True ($withOurs.StartsWith($oldBytes, [StringComparison]::Ordinal)) 'existing old block and user bytes must remain an exact prefix'
     foreach ($localName in $localNames) {

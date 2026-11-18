@@ -26,8 +26,8 @@ param(
     [switch]$DockerNoCache,
     [switch]$SkipJointSmokeGate,
     # Forward the selected native topology to the mandatory joint child.
-    [ValidateSet("local.host", "localhost")]
-    [string]$DnsSuffix = "local.host",
+    [ValidateSet("arkret_local", "localhost")]
+    [string]$DnsSuffix = "arkret_local",
     [string]$PostgresAdminUrl,
     [string]$PostgresToolsDirectory,
     [string]$PostgresDataDirectory,
@@ -211,7 +211,7 @@ function Invoke-JointSmokeGate {
         [ValidateRange(1, 32)][int]$ServerCount = 1,
         [bool]$StartMocks = $false,
         [bool]$StartSavfox = $false,
-        [string]$DnsSuffix = "local.host",
+        [string]$DnsSuffix = "arkret_local",
         [string]$PostgresAdminUrl,
         [string]$PostgresToolsDirectory,
         [string]$PostgresDataDirectory,

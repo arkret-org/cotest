@@ -1629,7 +1629,7 @@ impl ArkretServer {
         if self._tls.is_some() {
             let host = endpoint.host_str().unwrap_or_default();
             if let Some(namespace) =
-                ["127.0.0.1", "localhost", "local.host"]
+                ["127.0.0.1", "localhost", "arkret_local"]
                     .into_iter()
                     .find(|namespace| {
                         host == *namespace

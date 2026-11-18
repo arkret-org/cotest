@@ -4,6 +4,20 @@ $script:CotestHostsMarkerPrefix = "cotest-joint-e2e"
 $script:CotestCaddyMinimumVersion = [version]"2.8.0"
 $script:CotestCaddyMaximumVersionExclusive = [version]"3.0.0"
 
+function Get-CotestChromiumManualProxy {
+    param([string[]]$Hosts, [Microsoft.Win32.RegistryKey]$Settings)
+
+    if (-not $Settings -or -not $Settings.GetValue('ProxyEnable', 0) -or $Settings.GetValue('AutoConfigURL')) {
+        return
+    }
+    $server = $Settings.GetValue('ProxyServer')
+    if (-not $server) { return }
+    # Chromium accepts WinINET's per-scheme proxy map and semicolon-delimited
+    # exemptions. Append only names registered by this run.
+    $bypass = @($Settings.GetValue('ProxyOverride') -split ';') + $Hosts
+    [pscustomobject]@{ server = $server; bypass = ($bypass | Where-Object { $_ } | Select-Object -Unique) -join ';' }
+}
+
 function Get-CotestWindowsProcessPath {
     param([string]$InheritedPath, [string]$MachinePath, [string]$UserPath)
 
@@ -54,7 +68,7 @@ function Get-CotestJointHostNames {
         [bool]$IncludeCoauth = $true,
         [bool]$IncludeFlagon = $false,
         [bool]$IncludeUnregisteredProbe = $true,
-        [ValidateSet('local.host', 'localhost')][string]$DnsSuffix = 'local.host'
+        [ValidateSet('arkret_local', 'localhost')][string]$DnsSuffix = 'arkret_local'
     )
     $names = [System.Collections.Generic.List[string]]::new()
     for ($index = 1; $index -le $ServerCount; $index++) {
@@ -104,8 +118,8 @@ function Add-CotestHostsBlock {
     $normalizedHosts = @($Hosts | ForEach-Object { $_.Trim().ToLowerInvariant() } | Where-Object { $_ } | Sort-Object -Unique)
     if ($normalizedHosts.Count -eq 0) { throw "At least one hosts name is required" }
     foreach ($hostName in $normalizedHosts) {
-        if ($hostName -notmatch '^(?:coland|coauth)-server[1-9][0-9]*\.local\.host$' -and
-            $hostName -notin @("unregistered.local.host", "mock-applet-registry.local.host", "flagon.local.host", "coland-server1.localhost", "coauth-server1.localhost", "unregistered.localhost")) {
+        if ($hostName -notmatch '^(?:coland|coauth)-server[1-9][0-9]*\.arkret_local$' -and
+            $hostName -notin @("unregistered.arkret_local", "mock-applet-registry.arkret_local", "flagon.arkret_local", "coland-server1.localhost", "coauth-server1.localhost", "unregistered.localhost")) {
             throw "Refusing host outside the cotest joint namespace: $hostName"
         }
     }
@@ -253,7 +267,7 @@ function New-CotestServerTopology {
         [int]$ColandPortBase = 28080,
         [int]$CoauthPortBase = 29080,
         [string]$RunRoot = "",
-        [ValidateSet('local.host', 'localhost')][string]$DnsSuffix = 'local.host'
+        [ValidateSet('arkret_local', 'localhost')][string]$DnsSuffix = 'arkret_local'
     )
     $servers = [System.Collections.Generic.List[object]]::new()
     for ($index = 1; $index -le $ServerCount; $index++) {

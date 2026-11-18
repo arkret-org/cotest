@@ -45,9 +45,13 @@ const workers = workersEnv
     : Number(workersEnv)
   : 1;
 const tlsSpkiSha256 = process.env.COTEST_TLS_SPKI_SHA256?.trim();
-const tlsLaunchArgs = tlsSpkiSha256
+const chromiumLaunchArgs = tlsSpkiSha256
   ? [`--ignore-certificate-errors-spki-list=${tlsSpkiSha256}`]
   : [];
+if (process.env.COTEST_CHROMIUM_MANUAL_PROXY) {
+  const { server, bypass } = JSON.parse(process.env.COTEST_CHROMIUM_MANUAL_PROXY);
+  chromiumLaunchArgs.push(`--proxy-server=${server}`, `--proxy-bypass-list=${bypass}`);
+}
 
 export default defineConfig({
   // The Inkson build-id gate is a setup project (see `projects` below), not a
@@ -69,7 +73,7 @@ export default defineConfig({
   ],
   use: {
     baseURL,
-    launchOptions: { args: tlsLaunchArgs },
+    launchOptions: { args: chromiumLaunchArgs },
     // A Playwright action inherits an unbounded timeout by default, so a
     // `fill` against a control that the current page state does not have waits
     // out the whole scenario budget instead of failing where the mistake is.

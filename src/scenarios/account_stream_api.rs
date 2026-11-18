@@ -352,10 +352,11 @@ pub async fn canonical_account_stream_api_migration() -> Result<()> {
         } else {
             filter(std::slice::from_ref(&realm), 99)?
         };
+        let filter_json = arkret_canonical::canonical_json_string(&wrong_filter)?;
         let query = url::form_urlencoded::Serializer::new(String::new())
             .append_pair("catchup", "true")
             .append_pair("after", &after)
-            .append_pair("filter", &serde_json::to_string(&wrong_filter)?)
+            .append_pair("filter", &filter_json)
             .finish();
         crate::harness::expect_api_error(
             wrong.get(&format!("/_arkret/self/account/subscribe?{query}")),

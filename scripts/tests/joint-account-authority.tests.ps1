@@ -91,7 +91,7 @@ Start-Sleep -Seconds 60
         if ($childIdentity) { Stop-CotestOwnedProcessTree -RootIdentity $childIdentity }
         Remove-Item -LiteralPath $childPidPath -ErrorAction SilentlyContinue
     }
-    foreach ($url in @("http://127.0.0.1:1234/health", "http://[::1]/", "https://server1.localhost/", "https://server1.local.host/")) {
+    foreach ($url in @("http://127.0.0.1:1234/health", "http://[::1]/", "https://server1.localhost/", "https://server1.arkret_local/")) {
         if (-not (Test-JointLoopbackUrl -Url $url)) { throw "Local joint probes must bypass system proxies: $url" }
     }
     foreach ($url in @("https://station.example/", "https://localhost.example/", "https://server1.localhost.example/")) {

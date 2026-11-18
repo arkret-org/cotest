@@ -131,7 +131,7 @@ impl GarthClientHandle {
         // The supplied deployment endpoint authorizes only this fixture's local
         // DNS namespace and HTTPS port; public discovery keeps the SDK policy.
         if let Some(host) = station_url.host_str() {
-            for namespace in ["local.host", "localhost"] {
+            for namespace in ["arkret_local", "localhost"] {
                 if host == namespace || host.ends_with(&format!(".{namespace}")) {
                     builder = builder.loopback_service_discovery(
                         namespace,

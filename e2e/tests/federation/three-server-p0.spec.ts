@@ -497,10 +497,10 @@ test.describe("three-server federation P0 @three-server-p0", () => {
     const realm = await createThreeServerRealm(request, "p0-candidates");
     const failures: Array<{ source: string; reason: string }> = [];
     try {
-      await request.get("https://unregistered.local.host/health", { timeout: 5_000 });
-      failures.push({ source: "unregistered.local.host", reason: "unexpectedly_reachable" });
+      await request.get("https://unregistered.arkret_local/health", { timeout: 5_000 });
+      failures.push({ source: "unregistered.arkret_local", reason: "unexpectedly_reachable" });
     } catch (error) {
-      failures.push({ source: "unregistered.local.host", reason: error instanceof Error ? error.name : "transport_failure" });
+      failures.push({ source: "unregistered.arkret_local", reason: error instanceof Error ? error.name : "transport_failure" });
     }
     expect(failures[0].reason).not.toBe("unexpectedly_reachable");
     const rows = await scanPeerRealmStreamViewsApi(request, {

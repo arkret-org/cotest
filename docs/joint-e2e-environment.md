@@ -8,8 +8,13 @@ service name and the unregistered probe and rejects any non-loopback answer.
 This selects `https://coland-serverN.localhost:<port>` and
 `https://coauth-serverN.localhost:<port>` without changing the hosts file.
 The run-scoped CA, certificate SANs, independent Station identities, SPKI checks,
-and unregistered-host rejection remain mandatory. The default `local.host`
+and unregistered-host rejection remain mandatory. The default `arkret_local`
 namespace continues to require run-scoped hosts access.
+On Windows with a manually configured proxy, the runner passes the proxy map
+and its existing exemptions to Playwright's Chromium processes. It adds each
+run-owned loopback name, including the unregistered probe, to those exemptions
+so browser discovery reaches Caddy. With a PAC file, the PAC must route these
+names to loopback directly.
 
 Platform package auto-installation is currently implemented for Windows. On
 macOS and Linux, already installed prerequisites are verified and accepted;
@@ -57,11 +62,11 @@ Caddy must include the standard TLS and reverse-proxy modules. The report record
 
 For `-ServerCount N`, the runner temporarily adds only these names to the actual platform hosts file, all at `127.0.0.1`:
 
-- `coland-server1.local.host` through `coland-serverN.local.host`;
-- `coauth-server1.local.host` through `coauth-serverN.local.host` when independent Coauth authorities are enabled;
-- `unregistered.local.host` as a negative probe.
+- `coland-server1.arkret_local` through `coland-serverN.arkret_local`;
+- `coauth-server1.arkret_local` through `coauth-serverN.arkret_local` when independent Coauth authorities are enabled;
+- `unregistered.arkret_local` as a negative probe.
 
-The first two groups are Caddy sites using the run-scoped certificate. `unregistered.local.host` resolves to the same loopback Caddy listener but has no site; successful application traffic on it is a failure. The gate also checks the generated CA, certificate SANs, served leaf, SPKI pin, service DID history URL, HTTP downgrade, wrong CA/SPKI, and wrong-server identity paths. The CA is passed only to the managed process tree and is never imported into a user or machine root store.
+The first two groups are Caddy sites using the run-scoped certificate. `unregistered.arkret_local` resolves to the same loopback Caddy listener but has no site; successful application traffic on it is a failure. The gate also checks the generated CA, certificate SANs, served leaf, SPKI pin, service DID history URL, HTTP downgrade, wrong CA/SPKI, and wrong-server identity paths. The CA is passed only to the managed process tree and is never imported into a user or machine root store.
 
 Each run holds a machine-local exclusive lock. Its marker names the exact run, and `finally` removes only that block. Initialization reports stale markers and the exact manual restore command; neither the entry nor initializer invokes restore automatically.
 
