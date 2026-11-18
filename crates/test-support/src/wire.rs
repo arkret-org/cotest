@@ -2048,6 +2048,28 @@ pub enum EventDigestMode {
 pub fn event_proof(input: Value, digest_mode: EventDigestMode) -> Result<Value> {
     let input: EventProofInput =
         serde_json::from_value(input).context("parse event proof input")?;
+    sign_event_proof(&input, digest_mode)
+}
+
+/// Author independent fixture Events in input order. Admission and commit
+/// validation still belong to each caller's original Station request.
+pub fn signed_events(input: Value) -> Result<Value> {
+    let entries: Vec<EventProofInput> =
+        serde_json::from_value(input).context("parse event signing batch")?;
+    let mut events = Vec::with_capacity(entries.len());
+    for (index, mut entry) in entries.into_iter().enumerate() {
+        let ids = event_derived_id(entry.event.clone())
+            .with_context(|| format!("derive batch Event {index}"))?;
+        entry.event["event_id"] = ids["event_id"].clone();
+        let proof = sign_event_proof(&entry, EventDigestMode::RawCanonicalJson)
+            .with_context(|| format!("sign batch Event {index}"))?;
+        entry.event["producer_proof"] = proof;
+        events.push(entry.event);
+    }
+    Ok(Value::Array(events))
+}
+
+fn sign_event_proof(input: &EventProofInput, digest_mode: EventDigestMode) -> Result<Value> {
     let actor_did = Did::new(input.actor_did.clone()).context("parse actor DID")?;
     let actor_core =
         project_did_to_core_id(&actor_did).context("project actor DID to its core id")?;
@@ -2085,7 +2107,7 @@ pub fn event_proof(input: Value, digest_mode: EventDigestMode) -> Result<Value> 
 
     let mut proof = ProducerEventProof {
         kind: proof_kind::DETACHED_JWS.to_owned(),
-        verification_method: input.verification_method,
+        verification_method: input.verification_method.clone(),
         event_digest,
         created_at,
         domain: None,

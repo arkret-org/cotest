@@ -4,7 +4,7 @@ import { mkdtempSync, readdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
-import { cotestWire, runCotestWireJsonProcess } from "../helpers/coland-api/wire-client.ts";
+import { cotestWire, runCotestWireJsonProcess, sdkEventDerivedIds, sdkEventEnvelopeProof, sdkSignedEvents } from "../helpers/coland-api/wire-client.ts";
 
 function withPrivateScratch(body) {
   const scratch = mkdtempSync(join(tmpdir(), "oracle-stdin-unit-"));
@@ -23,6 +23,31 @@ function withPrivateScratch(body) {
 const digest = bytes => createHash("sha256").update(bytes).digest("hex");
 const execute = (script, input, timeoutMs) => runCotestWireJsonProcess(process.execPath,
   ["-e", script], input, { cwd: process.cwd(), ...(timeoutMs === undefined ? {} : { timeoutMs }) });
+
+test("batched authoring matches individual SDK IDs and signatures, in order", () => withPrivateScratch(() => {
+  const did = "did:webvh:z6mkfixture:alice.example";
+  const realm = "ak:realm:AV0aa7N4-6SpEMTq2vRgjNbMjn0vCIqfM5PxnJ-qQpPP";
+  const actor = { kind: "account", account_id: { principal_id: "ak:did_core:webvh:z6mkfixture",
+    station_id: "ak:did_core:web:station.example" } };
+  const entries = Array.from({ length: 16 }, (_, i) => {
+    const created_at = new Date(Date.UTC(2026, 6, 7) + i).toISOString();
+    return { actor_did: did, verification_method: did + "#device", created_at,
+      signing_seed_b64url: Buffer.alloc(32, 42).toString("base64url"),
+      event: { kind: "ak.strand.create", realm_id: realm, scope_ref: { kind: "realm", realm_id: realm },
+        actor_id: actor, created_at, payload: { object: { schema: "ak.schema.strand.v1", realm_id: realm,
+          tracks: { discussion: { enabled: true, is_primary: true, profile: "discussion" } },
+          created_by: actor, created_at } } } };
+  });
+  const expected = entries.map(input => {
+    const event = { ...input.event, event_id: sdkEventDerivedIds(input.event).event_id };
+    return { ...event, producer_proof: sdkEventEnvelopeProof({ actorDid: input.actor_did,
+      event, verificationMethod: input.verification_method, createdAt: input.created_at,
+      signingSeedB64url: input.signing_seed_b64url }) };
+  });
+  assert.deepEqual(sdkSignedEvents(entries), expected);
+  assert.throws(() => sdkSignedEvents([entries[0], { ...entries[1], actor_did: "did:web:wrong.example" }]),
+    /sign batch Event 1/);
+}));
 
 test("native EOF is finite, UTF8 bytes are exact and input/directory are private", () => withPrivateScratch(() => {
   const input = JSON.stringify({ value: "unicode-é-😀\n".repeat(20_000) });

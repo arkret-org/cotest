@@ -185,6 +185,8 @@ param(
     [ValidateSet("joint-smoke", "joint-full", "joint-api")]
     [string]$RunProfile,
     [string]$PlaywrightProject = "chrome",
+    [string]$JointFullShardPlan,
+    [ValidateRange(1, 2)][int]$JointFullShard,
     [string]$Grep,
     # Comma-separated canonical scenario keys which must occur in junit.xml.
     # This turns a stale grep/project selector into a hard gate failure instead
@@ -355,6 +357,17 @@ if ($MockWitnessExtraDids.Count -gt 0) {
 
 $ErrorActionPreference = "Stop"
 Set-StrictMode -Version Latest
+
+$shardFiles = @()
+$shardPlanDigest = $null
+$shardRequiresP0 = $true
+if ($JointFullShardPlan -or $JointFullShard) {
+    if (-not ($JointFullShardPlan -and $JointFullShard -and $JointDir) -or $ServerCount -ne 3 -or
+        $RunProfile -ne "joint-full" -or $PlaywrightProject -ne "chrome" -or $Grep) {
+        throw "Joint-full sharding requires a plan, shard 1 or 2, a separate JointDir and an unfiltered three-Station joint-full chrome run."
+    }
+    $JointFullShardPlan = (Resolve-Path -LiteralPath $JointFullShardPlan).Path
+}
 
 $multiServer = $ServerCount -ge 2
 
@@ -4156,7 +4169,7 @@ try {
 
     $preparationTasks = New-Object System.Collections.Generic.List[object]
     $preparationTimings = New-Object System.Collections.Generic.List[object]
-    $runNativeApiMigrations = $RunProfile -in @("joint-smoke", "joint-full", "joint-api") -and -not $Grep
+    $runNativeApiMigrations = $RunProfile -in @("joint-smoke", "joint-full", "joint-api") -and -not $Grep -and $JointFullShard -ne 2
     $needsNativeColandBinary = ($willStartDefaultColand -and $ColandRuntime -eq "process") -or $runNativeApiMigrations
     if (-not $SkipBuild -and $needsNativeColandBinary -and -not $ColandBin -and -not $env:COLAND_BIN) {
         $defaultColandBinary = Join-Path $colandTargetDirectory ("debug/" + (Get-NativeExecutableName -Name "coland"))
@@ -6141,6 +6154,22 @@ try {
             throw "Playwright CLI is required"
         }
         $playwrightCommand = $playwrightCli.FilePath
+        if ($JointFullShard) {
+            $localPlan = Join-Path $jointDir "joint-full-shard-plan.json"
+            Copy-Item -LiteralPath $JointFullShardPlan -Destination $localPlan
+            $shardPlanDigest = (Get-FileHash -LiteralPath $localPlan -Algorithm SHA256).Hash.ToLowerInvariant()
+            $cliPrefix = @($playwrightCli.Arguments)
+            $partition = & python (Join-Path $PSScriptRoot "joint_full_shards.py") select $localPlan $JointFullShard $playwrightCommand @cliPrefix @playwrightArgs
+            if ($LASTEXITCODE -ne 0) { throw "Joint-full shard plan does not match the current full collection" }
+            $shardFiles = @($partition | ConvertFrom-Json)
+            $shardRequiresP0 = "federation/three-server-p0.spec.ts" -in $shardFiles
+            # Filter entire files in this project. Dependencies (the real Inkson
+            # build-id check) are still selected independently by Playwright.
+            foreach ($file in $shardFiles) {
+                $segments = @($file -split "/" | ForEach-Object { [regex]::Escape($_) })
+                $playwrightArgs += '[/\\]' + ($segments -join '[/\\]') + '$'
+            }
+        }
         $playwrightCommandArgs = @($playwrightCli.Arguments) + $playwrightArgs
         $runtimeVersion = if ([IO.Path]::GetFileName($playwrightCommand) -match '^node(?:\.exe)?$') {
             (& $playwrightCommand --version | Out-String).Trim()
@@ -6850,7 +6879,13 @@ $requiredScenarios = @(
         ForEach-Object { ConvertTo-CanonicalScenarioKey -Scenario $_ }
 )
 $forbidRuntimeSkips = [bool]$ForbidSkippedTests -or $RunProfile -eq "joint-smoke"
-if ($ServerCount -ge 3 -and $RunProfile -eq "joint-full") {
+$shardRequiredScenarios = @($requiredScenarios)
+if ($JointFullShard -and $shardFiles.Count -gt 0) {
+    $knownFiles = (Get-Content -LiteralPath $localPlan -Raw | ConvertFrom-Json -AsHashtable).files.Keys
+    # Keep unknown requirements so the ordinary selection gate rejects them.
+    $requiredScenarios = @($requiredScenarios | Where-Object { "$_.spec.ts" -in $shardFiles -or "$_.spec.ts" -notin $knownFiles })
+}
+if ($ServerCount -ge 3 -and $RunProfile -eq "joint-full" -and $shardRequiresP0) {
     $requiredScenarios = @(@($requiredScenarios; "federation/three-server-p0") | Sort-Object -Unique)
 }
 if ($RunProfile -eq "joint-smoke" -and -not $Grep) {
@@ -6884,7 +6919,7 @@ if (-not $junitParseError -and $businessCaseCount -eq 0) {
 if ($selectionGateFailures.Count -gt 0) {
     $exitCode = 1
 }
-if ($ServerCount -ge 3 -and $RunProfile -eq "joint-full") {
+if ($ServerCount -ge 3 -and $RunProfile -eq "joint-full" -and $shardRequiresP0) {
     $p0ScenarioKey = "federation/three-server-p0.spec.ts"
     if ($junitByScenario.ContainsKey($p0ScenarioKey)) {
         $p0Cases = $junitByScenario[$p0ScenarioKey].cases
@@ -7150,7 +7185,10 @@ $summary = [pscustomobject]@{
     suite_kind = "joint-e2e"
     suite_name = "Arkret Joint Product E2E"
     status = if ($exitCode -eq 0) { "success" } else { "failure" }
-    run_profile = if ($RunProfile) { $RunProfile } else { "custom" }
+    run_profile = if ($JointFullShard) { "joint-full-shard" } elseif ($RunProfile) { $RunProfile } else { "custom" }
+    joint_full_shard = $JointFullShard
+    shard_plan_sha256 = $shardPlanDigest
+    shard_required_scenarios = $shardRequiredScenarios
     playwright_projects = $playwrightProjects -join ","
     # The single decision that governs whether this run probed Inkson sources,
     # allocated its port, built or verified its bundle, served it, waited on it,

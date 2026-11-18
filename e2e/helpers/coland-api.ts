@@ -67,6 +67,7 @@ import {
   sdkEventDerivedIds,
   sdkEventDerivedObjectId,
   sdkEventEnvelopeProof,
+  sdkSignedEvents,
   sdkMimiConsentProof,
   sdkMimiRequestConsentProof,
   sha256CanonicalJson,
@@ -694,23 +695,21 @@ export async function createRealmApi(
   });
   // The genesis Event names itself to everything that follows, and its id is
   // derived from the envelope, so the chain can only be built afterwards.
-  const bootstrapEvents = [realmCreateEvent];
+  const bootstrapDrafts: SignedEventEnvelopeArgs[] = [];
   const pushBootstrapEvent = (
     kind: string,
     payload: Record<string, unknown>,
   ): void => {
-    bootstrapEvents.push(
-      signedEventEnvelope({
-        actorId: ownerId,
-        server: opts.server,
-        stationId: data.creator_id,
-        realmId,
-        kind,
-        createdAt,
-        authorizationRef: stringValue(realmCreateEvent.event_id),
-        payload,
-      }),
-    );
+    bootstrapDrafts.push({
+      actorId: ownerId,
+      server: opts.server,
+      stationId: data.creator_id,
+      realmId,
+      kind,
+      createdAt,
+      authorizationRef: stringValue(realmCreateEvent.event_id),
+      payload,
+    });
   };
   pushBootstrapEvent("ak.realm.profile", {
     schema: "ak.schema.realm_profile.v1",
@@ -755,6 +754,7 @@ export async function createRealmApi(
 
   // The registered bootstrap is one atomic request; each Event still receives
   // its own consecutive RealmCommit, with no unit-level ordering artifact.
+  const bootstrapEvents = [realmCreateEvent, ...signedEventEnvelopes(bootstrapDrafts)];
   const submission = {
     unit_kind: "ordinary_realm_bootstrap",
     idempotency_key: uuidV7(),
@@ -2012,7 +2012,7 @@ export async function verifyRegisteredEventSignerDeviceApi(
   );
 }
 
-export function signedEventEnvelope(
+function eventDigestPayload(
   args: SignedEventEnvelopeArgs,
 ): Record<string, unknown> {
   const createdAt = canonicalEventTimestamp(
@@ -2027,7 +2027,7 @@ export function signedEventEnvelope(
   // closed `realm_genesis` form. Sending either would be
   // `realm_id_not_event_derived`.
   const isRealmGenesis = args.kind === "ak.realm.create";
-  const unidentified = stripUndefined({
+  return stripUndefined({
     kind: args.kind,
     realm_id: isRealmGenesis ? undefined : args.realmId,
     scope_ref:
@@ -2043,6 +2043,29 @@ export function signedEventEnvelope(
     semantic_refs: args.semanticRefs?.length ? args.semanticRefs : undefined,
     payload,
   }) as Record<string, unknown>;
+}
+
+export function signedEventEnvelopes(drafts: SignedEventEnvelopeArgs[]): Record<string, unknown>[] {
+  // Explicit IDs belong to negative cases. Keep their caller-selected identity
+  // and the existing dev-proof fixture behavior on the single-event path.
+  if (eventProofMode() === "dev-proof" || drafts.some(draft => draft.eventId !== undefined)) {
+    return drafts.map(signedEventEnvelope);
+  }
+  return sdkSignedEvents(drafts.map(draft => {
+    const event = eventDigestPayload(draft);
+    const signer = eventProofSigner(event, draft.proofVerificationMethod);
+    return {
+      event,
+      actor_did: signer.verificationMethod.split("#", 1)[0]!,
+      verification_method: signer.verificationMethod,
+      created_at: canonicalEventTimestamp(),
+      signing_seed_b64url: signer.signingSeedB64url,
+    };
+  }));
+}
+
+export function signedEventEnvelope(args: SignedEventEnvelopeArgs): Record<string, unknown> {
+  const unidentified = eventDigestPayload(args);
   // `event_id` sits outside the digest preimage, so deriving it from the
   // finished envelope and adding it afterwards does not disturb the digest the
   // proof below signs. An explicit `eventId` stays honoured: a wire-negative
@@ -2055,7 +2078,6 @@ export function signedEventEnvelope(
   return {
     ...event,
     producer_proof: eventEnvelopeProof({
-      actorId: eventSigningPrincipalId(event),
       event,
       verificationMethod: args.proofVerificationMethod,
     }),
@@ -2086,7 +2108,6 @@ export function refreshEventEnvelopeProof(
   envelope: Record<string, unknown>,
   proofVerificationMethod?: string,
 ): void {
-  const actorId = eventSigningPrincipalId(envelope);
   const event = { ...envelope };
   delete event.producer_proof;
   // An Event id is a
@@ -2097,36 +2118,28 @@ export function refreshEventEnvelopeProof(
   event.event_id = derived.event_id;
   envelope.event_id = derived.event_id;
   envelope.producer_proof = eventEnvelopeProof({
-    actorId,
     event,
     verificationMethod: proofVerificationMethod,
   });
 }
 
-function eventEnvelopeProof(args: {
-  actorId: string;
-  event: Record<string, unknown>;
-  verificationMethod?: string;
-}): Record<string, unknown> {
-  const mode = eventProofMode();
-  const registeredSigner = eventSignerFor(
-    args.actorId,
-    args.verificationMethod,
-  );
+function eventProofSigner(event: Record<string, unknown>, requestedMethod?: string) {
+  const actorId = eventSigningPrincipalId(event);
+  const registeredSigner = eventSignerFor(actorId, requestedMethod);
   // event-envelope.schema.json: a did_core_id is never concatenated into a DID
   // URL. Without this guard an unregistered `ak:did_core:` actor silently
   // produced `ak:did_core:...#device`, which only surfaces later as an opaque
   // SDK parse error instead of naming the missing registerEventSigner call.
-  const fallbackVerificationMethod = args.actorId.startsWith("did:")
-    ? `${args.actorId}#device`
+  const fallbackVerificationMethod = actorId.startsWith("did:")
+    ? `${actorId}#device`
     : undefined;
   const verificationMethod =
-    args.verificationMethod ??
+    requestedMethod ??
     registeredSigner?.verificationMethod ??
     fallbackVerificationMethod;
   if (verificationMethod === undefined) {
     throw new Error(
-      `no event signer registered for ${args.actorId}; call registerEventSigner ` +
+      `no event signer registered for ${actorId}; call registerEventSigner ` +
         "with a DID URL verification method before authoring its Events",
     );
   }
@@ -2134,9 +2147,18 @@ function eventEnvelopeProof(args: {
   // the same producer proof, whatever its kind. There is no Control/Data split
   // and the proof carries no signer evidence ref; the governance Station
   // resolves the signer itself.
-  if (!stringValue(args.event.kind)) {
+  if (!stringValue(event.kind)) {
     throw new Error("event proof requires a string Event kind");
   }
+  return { verificationMethod, signingSeedB64url: registeredSigner?.signingSeedB64url };
+}
+
+function eventEnvelopeProof(args: {
+  event: Record<string, unknown>;
+  verificationMethod?: string;
+}): Record<string, unknown> {
+  const mode = eventProofMode();
+  const { verificationMethod, signingSeedB64url } = eventProofSigner(args.event, args.verificationMethod);
   const createdAt = canonicalEventTimestamp();
 
   if (mode === "dev-proof") {
@@ -2157,7 +2179,7 @@ function eventEnvelopeProof(args: {
     event: args.event,
     verificationMethod,
     createdAt,
-    signingSeedB64url: registeredSigner?.signingSeedB64url,
+    signingSeedB64url,
   });
 }
 

@@ -9,6 +9,7 @@ type CotestWireCommand =
   | "sha256-canonical-json"
   | "did-document-digest"
   | "event-envelope-proof"
+  | "signed-events"
   | "event-derived-id"
   | "local-message-payload"
   | "historical-human-signer-query"
@@ -118,6 +119,21 @@ export function sdkEventDerivedIds(event: Record<string, unknown>): {
     "event-derived-id",
     event,
   );
+}
+
+export function sdkSignedEvents(entries: Array<{
+  event: Record<string, unknown>;
+  actor_did: string;
+  verification_method: string;
+  created_at: string;
+  signing_seed_b64url?: string;
+}>): Record<string, unknown>[] {
+  for (const entry of entries) assertJsonTransportable(entry.event, "$.event");
+  const events = cotestWire<Record<string, unknown>[]>("signed-events", entries);
+  if (!Array.isArray(events) || events.length !== entries.length) {
+    throw new Error("SDK returned a different number of signed Events than requested");
+  }
+  return events;
 }
 
 /// The device signature `signature_proof.signature` of a key-backup envelope

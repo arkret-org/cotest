@@ -1,6 +1,47 @@
 # Joint E2E test-machine environment
 
+## Running joint-full on two test machines
+
+Use two independent three-Station machines with the same frozen sources,
+checkout layout and Cargo configuration. Each machine owns its databases,
+services and a single Playwright worker. From the Cotest repository on the
+first machine, create one plan in a fresh artifact directory.
+
+```powershell
+New-Item -ItemType Directory -Force artifacts/full-pair | Out-Null
+python scripts/joint_full_shards.py plan --output artifacts/full-pair/plan.json --history PATH/TO/previous/junit.xml
+```
+
+The optional history weights files by measured case durations. Without it,
+case counts determine the allocation. Copy the same plan to the second
+machine. On each machine run the usual three-Station joint-full command with
+all its normal service, topology and acceptance arguments. Add
+`-JointFullShardPlan artifacts/full-pair/plan.json -JointFullShard 1 -JointDir artifacts/full-pair/part1`
+on the first machine and the corresponding `2` and `part2` on the second.
+Use a fresh output directory for each invocation. Both runners re-collect the
+unfiltered Chrome suite; each executes entire assigned files and the real
+Inkson build-id setup. Shard 1 also runs the full native API catalog. The
+shard owning the P0 file enforces the mandatory P0 gate. Both execute local
+service, cleanup, source and artifact checks.
+
+Bring both run directories together and run the coverage check.
+
+```powershell
+python scripts/joint_full_shards.py merge artifacts/full-pair/plan.json artifacts/full-pair/part1 artifacts/full-pair/part2
+```
+
+The merge checks both original runner verdicts, frozen source identities,
+setup, native coverage and the exact JUnit business case assignment. A single
+shard reports its profile as `joint-full-shard`.
+
+## Local topology
+
 The supported production-shaped local topology uses runner-owned processes, independent PostgreSQL stores, a run-scoped CA, and Caddy on loopback. Plain HTTP is diagnostic-only and is not an acceptance topology.
+
+If the system proxy intercepts the managed loopback names, set
+`$env:COTEST_BROWSER_NO_PROXY = '1'` in the shell launching the joint run.
+The test browser connects directly and checks the pinned TLS certificate.
+Use this option for stacks whose browser endpoints are reachable directly.
 
 On a machine that resolves service subdomains of `localhost` to loopback, pass
 `-DnsSuffix localhost` to the same entry. The initializer checks every indexed

@@ -48,6 +48,11 @@ const tlsSpkiSha256 = process.env.COTEST_TLS_SPKI_SHA256?.trim();
 const tlsLaunchArgs = tlsSpkiSha256
   ? [`--ignore-certificate-errors-spki-list=${tlsSpkiSha256}`]
   : [];
+// Windows can proxy even the hosts-file names of the managed loopback stack.
+// Apply direct routing only to the opted-in test browser with its pinned TLS leaf.
+if (tlsSpkiSha256 && process.env.COTEST_BROWSER_NO_PROXY === "1") {
+  tlsLaunchArgs.push("--no-proxy-server");
+}
 
 export default defineConfig({
   // The Inkson build-id gate is a setup project (see `projects` below), not a
