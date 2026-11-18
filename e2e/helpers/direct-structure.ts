@@ -1506,7 +1506,12 @@ async function runFlatTopicChats(alice: Page, bob: Page, mainMessages: DirectMai
   // Encrypted presence from each accepted peer proves the live path is ready.
   for (const [page, peer] of [[alice, bobWatch.actor_id], [bob, chat.actor_id]] as const) {
     expect(peer).toBeDefined();
-    const presence = page.locator(".presence-row").filter({
+    const members = page.locator(".discussion-users-panel");
+    const membersToggle = page.locator(".discussion-users-toggle");
+    const wasOpen = await members.isVisible();
+    if (!wasOpen) await membersToggle.click();
+    await expect(members).toBeVisible();
+    const presence = members.locator(".presence-row").filter({
       has: page.getByLabel(canonicalJson(peer), { exact: true }),
     });
     await expect(presence).toHaveClass(/\bpresence-row-online\b/, { timeout: 90_000 }).catch(async error => {
@@ -1533,6 +1538,7 @@ async function runFlatTopicChats(alice: Page, bob: Page, mainMessages: DirectMai
       await test.info().attach("direct-presence-stages", { path: file, contentType: "application/json" });
       throw error;
     });
+    if (!wasOpen) await membersToggle.click();
   }
   await assertWrongPlaintextStrand(alice, bob, chat.realm_id!, chatId, proof!);
   const classified = await structureWrite(alice, "place", "ak.strand.update", undefined, topicId);

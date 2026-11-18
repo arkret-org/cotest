@@ -42,28 +42,28 @@ class ScenarioEvidenceTests(unittest.TestCase):
         }.items():
             (root / f"e2e/tests/{name}.spec.ts").write_text(source, encoding="utf-8")
         for name, source in {'current-registration-form': 'await page.goto("/register");\n'
-                                      'await page.getByLabel("Station", { exact: true '
+                                      'await page.getByLabel("Account server", { exact: true '
                                       '}).fill(colandBaseUrl());\n'
                                       'await '
                                       'page.locator(".registration-panel").getByRole("button", { '
                                       'name: "Continue", exact: true }).click();',
          'class-registration-form': 'await '
                                      'page.locator(".register-open-account-authority").click();',
-         'registration-label-only': 'page.getByLabel("Station", { exact: true });',
+         'registration-label-only': 'page.getByLabel("Account server", { exact: true });',
          'registration-query-only': 'await page.goto("/register");\n'
-                                    'await page.getByLabel("Station", { exact: true '
+                                    'await page.getByLabel("Account server", { exact: true '
                                     '}).fill(colandBaseUrl());\n'
                                     'await '
                                     'page.locator(".registration-panel").getByRole("button", { '
                                     'name: "Continue", exact: true });',
          'registration-comment-only': '// await page.goto("/register");\n'
-                                      '// await page.getByLabel("Station", { exact: true '
+                                      '// await page.getByLabel("Account server", { exact: true '
                                       '}).fill(colandBaseUrl());\n'
                                       '// await '
                                       'page.locator(".registration-panel").getByRole("button", { '
                                       'name: "Continue", exact: true }).click();',
          'registration-template-only': 'const example = `await page.goto("/register");\n'
-                                       'await page.getByLabel("Station", { exact: true '
+                                       'await page.getByLabel("Account server", { exact: true '
                                        '}).fill(colandBaseUrl());\n'
                                        'await '
                                        'page.locator(".registration-panel").getByRole("button", '
