@@ -120,18 +120,13 @@ test.describe("Coauth passkey browser lifecycle @fully-implemented", () => {
         await page.goto(`${coauth}/security`);
         await page.getByRole("textbox", { name: "New passkey name", exact: true }).fill("Virtual security key");
         await page.getByRole("button", { name: "Add passkey", exact: true }).click();
-        await expect(
-          page.getByText("Virtual security key", { exact: true }),
-        ).toBeVisible({
-          timeout: 30_000,
-        });
-
         const label = page.getByRole("textbox", { name: "Passkey name", exact: true });
+        await expect(label).toHaveValue("Virtual security key", { timeout: 30_000 });
         await label.fill("Renamed passkey");
         await page.getByRole("button", { name: "Save name" }).click();
-        await expect(
-          page.getByText("Renamed passkey", { exact: true }),
-        ).toBeVisible();
+        await expect(page.getByText("Passkey name saved.", { exact: true })).toBeVisible();
+        await page.reload();
+        await expect(label).toHaveValue("Renamed passkey");
       });
 
       await test.step("passkey assertion creates the normal browser session", async () => {
