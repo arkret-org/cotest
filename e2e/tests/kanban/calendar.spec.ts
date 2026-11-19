@@ -57,6 +57,22 @@ test("@fully-implemented calendar schedule and RSVP survive the canonical Strand
       title: `Calendar Realm ${stamp}`,
       discoverability: "listed",
       joinRule: "invite",
+    }).catch(async error => {
+      const wizard = page.page.locator(".realm-lifecycle-strand").last();
+      const status = wizard.locator(".realm-create-status");
+      // Report product states only. The status detail may include private data.
+      console.info("Calendar Realm creation", {
+        wizard: await wizard.isVisible(),
+        createEnabled: await wizard.locator(".create-realm-button:enabled").isVisible(),
+        waitingForDeviceStorage: await wizard.getByText(/Device signing storage is still starting/).isVisible(),
+        signingKeyUnavailable: await status.getByText(/Your signing key is not ready yet/).isVisible(),
+        sessionExpired: await status.getByText(/Session expired/).isVisible(),
+        checkingRecovery: await status.getByText(/Checking your recovery setup/).isVisible(),
+        createFailed: await status.getByText(/create failed:/i).isVisible(),
+        creating: await status.getByText("Creating Realm...", { exact: true }).isVisible(),
+        recoveryGate: await wizard.locator(".encrypted-realm-recovery-gate").isVisible(),
+      });
+      throw error;
     });
     await page.grantRealmCapability(
       realmId,
