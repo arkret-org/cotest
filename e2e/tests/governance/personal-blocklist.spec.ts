@@ -29,8 +29,7 @@ import {
   issueUserSession,
   openDpopUserPage,
   openUserPage,
-  selfPathHeadersForDpopSession,
-  type DpopUserSession,
+  pairSiblingDeviceSession,
   uniqueUser,
 } from "../../helpers/users";
 
@@ -45,10 +44,6 @@ type BlocklistEntry = {
   applies_to: ["messages", "notifications"];
   created_at: string;
 };
-
-type AccountSubscribeOpts = NonNullable<
-  Parameters<typeof accountSubscribeDeltaApi>[2]
->;
 
 test.describe.configure({ mode: "serial" });
 
@@ -166,13 +161,14 @@ test.describe("personal blocklist", () => {
     const bobPage = bobFlow.page;
     const aliceToken = aliceFlow.session.grantJwt;
     const bobToken = await issueUserSession(request, bob);
-    const aliceSubscribeOpts = () =>
-      accountSubscribeDpopOpts(aliceFlow.session);
     // Bind the complete target through its accessible identity, including Station.
     const bobBlockedRow = (page: typeof alicePage.page) =>
       actorRow(page, ".blocked-user-row", accountActorId(bob.id));
 
     try {
+      // Inkson owns and rotates its grant. Observe the account stream from
+      // a separately authorized device, including after browser reloads.
+      const observer = await pairSiblingDeviceSession(request, aliceFlow.session);
       const realmId = await alicePage.createRealm({
         title: `S31 Blocklist ${stamp}`,
         discoverability: "listed",
@@ -231,9 +227,8 @@ test.describe("personal blocklist", () => {
           async () =>
             await blocklistStoredOpaque(
               request,
-              aliceToken,
+              observer.grantJwt,
               bob.id,
-              aliceSubscribeOpts,
             ),
           {
             timeout: 30_000,
@@ -281,9 +276,8 @@ test.describe("personal blocklist", () => {
           async () =>
             await blocklistClearedOrTombstoned(
               request,
-              aliceToken,
+              observer.grantJwt,
               bob.id,
-              aliceSubscribeOpts,
             ),
           {
             timeout: 30_000,
@@ -586,13 +580,8 @@ async function blocklistStoredOpaque(
   request: APIRequestContext,
   token: string,
   target: string,
-  subscribeOpts?: () => AccountSubscribeOpts,
 ): Promise<boolean> {
-  const blocklist = await blocklistAccountDataEntry(
-    request,
-    token,
-    subscribeOpts,
-  );
+  const blocklist = await blocklistAccountDataEntry(request, token);
   if (!blocklist) {
     return false;
   }
@@ -629,13 +618,8 @@ async function blocklistClearedOrTombstoned(
   request: APIRequestContext,
   token: string,
   target: string,
-  subscribeOpts?: () => AccountSubscribeOpts,
 ): Promise<boolean> {
-  const blocklist = await blocklistAccountDataEntry(
-    request,
-    token,
-    subscribeOpts,
-  );
+  const blocklist = await blocklistAccountDataEntry(request, token);
   if (!blocklist) {
     return true;
   }
@@ -649,13 +633,8 @@ async function blocklistClearedOrTombstoned(
 async function blocklistAccountDataEntry(
   request: APIRequestContext,
   token: string,
-  subscribeOpts?: () => AccountSubscribeOpts,
 ): Promise<Record<string, unknown> | undefined> {
-  const body = await accountSubscribeDeltaApi(
-    request,
-    token,
-    subscribeOpts?.(),
-  );
+  const body = await accountSubscribeDeltaApi(request, token);
   const accountData = body.account_data as
     { events?: Array<Record<string, unknown>> } | undefined;
   const entry = (accountData?.events ?? []).find((candidate) => {
@@ -672,16 +651,6 @@ async function blocklistAccountDataEntry(
   return {
     ...entry,
     content: payload.encrypted_payload,
-  };
-}
-
-function accountSubscribeDpopOpts(
-  session: DpopUserSession,
-): AccountSubscribeOpts {
-  const url = new URL(`${colandBaseUrl()}/_arkret/self/account/subscribe`);
-  url.searchParams.set("catchup", "true");
-  return {
-    headers: selfPathHeadersForDpopSession(session, "GET", url.toString()),
   };
 }
 
