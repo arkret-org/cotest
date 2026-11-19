@@ -26,7 +26,7 @@
     Runner-owned process-mode services publish their public identity through a
     managed TLS reverse proxy (0530-C): the processes keep plain loopback
     listeners, while public base URLs, issuers and minted service DIDs use
-    stable `https://<service>.arkret_local:<port>` names. Trust stays process-local:
+    stable `https://<service>.localhost:<port>` names. Trust stays process-local:
     Node receives the run-scoped CA and Chromium receives the exact leaf SPKI
     pin; the current user's Root store is never modified. The exact host names
     are registered in the system hosts file for the duration of the run.
@@ -157,7 +157,7 @@ param(
     [switch]$RunnerSelfTest,
     [ValidateRange(1, 32)]
     [int]$ServerCount = 1,
-    [ValidateSet('arkret_local', 'localhost')][string]$DnsSuffix = 'arkret_local',
+    [ValidateSet('arkret_local', 'localhost')][string]$DnsSuffix = 'localhost',
     [ValidateSet("full-mesh", "ordered-candidates")]
     [string]$NetworkShape = "full-mesh",
     [string]$ColandServer2NotarySigningKey = "ODg4ODg4ODg4ODg4ODg4ODg4ODg4ODg4ODg4ODg4ODg=",
@@ -1390,13 +1390,9 @@ function Invoke-JointE2ePreflight {
         } else {
             Add-PreflightResult $results "tls assets (openssl)" "fail" "openssl is required to mint the joint CA and server certificates"
         }
-        if ($DnsSuffix -eq 'localhost') {
-            try {
-                Assert-CotestLoopbackDns -Hosts (Get-CotestJointHostNames -ServerCount $ServerCount -DnsSuffix $DnsSuffix)
-                Add-PreflightResult $results "loopback DNS" "pass" "all registered and unregistered localhost names resolve only to loopback"
-            } catch {
-                Add-PreflightResult $results "loopback DNS" "fail" $_.Exception.Message
-            }
+        $requiredHosts = Get-CotestJointHostNames -ServerCount $ServerCount -IncludeCoauth $StartCoauth -IncludeFlagon $StartFlagon -IncludeAppletRegistry ([bool]$StartMockAppletRegistry) -DnsSuffix $DnsSuffix
+        if (Test-CotestNativeLoopbackHosts -Hosts $requiredHosts) {
+            Add-PreflightResult $results "loopback DNS" "pass" "all registered and unregistered localhost names resolve only to loopback"
         } else {
             $hostsPath = Get-CotestHostsPath
             try {
@@ -1583,7 +1579,7 @@ function Write-DotEnvFile {
 # ── Joint TLS identity topology (0530-C) ─────────────────────
 # Runner-owned services keep their plain loopback listeners, but their public
 # base URLs — and therefore the service `did:webvh` they mint — are stable
-# HTTPS names (`<service>.arkret_local:<tls port>`) fronted by one managed Caddy
+# HTTPS names (`<service>.localhost:<tls port>`) fronted by one managed Caddy
 # reverse proxy. Trust is run-scoped rather than machine-scoped: Node and
 # coauth receive the CA file, while Chromium receives the exact leaf SPKI pin.
 # The topology gate independently verifies the CA chain, served leaf and every
@@ -1684,10 +1680,7 @@ function Install-JointLoopbackHosts {
         [Parameter(Mandatory = $true)][string]$Marker
     )
 
-    if (@($Hosts | Where-Object { -not $_.EndsWith('.localhost', [StringComparison]::OrdinalIgnoreCase) }).Count -eq 0) {
-        Assert-CotestLoopbackDns -Hosts $Hosts
-        return
-    }
+    if (Test-CotestNativeLoopbackHosts -Hosts $Hosts) { return }
     $hostsPath = Get-CotestHostsPath
     $existing = [System.IO.File]::ReadAllText($hostsPath)
     $patched = Add-CotestHostsBlock -Content $existing -Hosts $Hosts -Marker $Marker
@@ -1696,6 +1689,7 @@ function Install-JointLoopbackHosts {
     } catch {
         throw "joint TLS topology: cannot register loopback hosts in $hostsPath ($($_.Exception.Message)). Run initialize-joint-e2e-environment.ps1 from an elevated PowerShell."
     }
+    Assert-CotestLoopbackDns -Hosts $Hosts
 }
 
 function Remove-JointLoopbackHosts {
@@ -3336,7 +3330,7 @@ function Invoke-RunnerSelfTest {
 
         $tlsAssets = New-JointTlsAssets `
             -Directory (Join-Path $tempRoot "tls") `
-            -DnsNames @("self-test.arkret_local") `
+            -DnsNames @("self-test.localhost") `
             -RunLabel "self-test"
         if (-not (Test-Path -LiteralPath $tlsAssets.CaPemPath -PathType Leaf) -or
             -not (Test-Path -LiteralPath $tlsAssets.ServerPemPath -PathType Leaf) -or
@@ -3613,6 +3607,7 @@ $environmentArgs = @(
 $environmentPostgresImages = @($ColandPostgresImage, $CoauthPostgresImage) | Sort-Object -Unique
 $environmentArgs += $environmentPostgresImages
 if ($StartCoauth) { $environmentArgs += "-StartCoauth" }
+if ($StartMockAppletRegistry) { $environmentArgs += "-StartMockAppletRegistry" }
 if ($StartFlagon -and -not $FlagonBaseUrl) { $environmentArgs += "-StartFlagon" }
 if ($requiresInkson) { $environmentArgs += "-RequireBrowser" }
 if ($requiresDocker) { $environmentArgs += "-RequireDocker" }
@@ -6015,7 +6010,7 @@ try {
     # services under test cannot currently be pointed at this host — coland /
     # flagon / the SDK derive the DID-document URL from the DID string itself
     # and judge egress per request against configured trust anchors (0530-C:
-    # joint services resolve through the TLS-fronted `<service>.arkret_local`
+    # joint services resolve through the TLS-fronted `<service>.localhost`
     # names, not this mock), with no resolver-base-URL or host-override env.
     # See the DID-P1-C01 report.
     if ($mockDidHostBaseUrl) {

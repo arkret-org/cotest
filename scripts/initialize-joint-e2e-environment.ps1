@@ -9,9 +9,10 @@ Failed commands are reported with an instruction to retry from an elevated shell
 [CmdletBinding(SupportsShouldProcess)]
 param(
     [ValidateRange(1, 32)][int]$ServerCount = 1,
-    [ValidateSet('arkret_local', 'localhost')][string]$DnsSuffix = 'arkret_local',
+    [ValidateSet('arkret_local', 'localhost')][string]$DnsSuffix = 'localhost',
     [switch]$StartCoauth,
     [switch]$StartFlagon,
+    [switch]$StartMockAppletRegistry,
     # Browserless profiles still use Playwright's test runner, but do not need
     # its multi-hundred-megabyte Chromium payload.
     [switch]$RequireBrowser,
@@ -341,10 +342,10 @@ if ($RequireDocker) {
     }
 }
 
-if ($DnsSuffix -eq 'arkret_local') {
-    if ($isAdministrator) {
-        $null = Initialize-CotestWindowsHostsAccess
-    }
+$requiredHosts = @(Get-CotestJointHostNames -ServerCount $ServerCount -IncludeCoauth $StartCoauth.IsPresent -IncludeFlagon $StartFlagon.IsPresent -IncludeAppletRegistry $StartMockAppletRegistry.IsPresent -DnsSuffix $DnsSuffix)
+$nativeLoopback = Test-CotestNativeLoopbackHosts -Hosts $requiredHosts
+if (-not $nativeLoopback -and $isAdministrator) {
+    $null = Initialize-CotestWindowsHostsAccess
 }
 
 function Find-CotestTool {
@@ -399,13 +400,8 @@ $caddy = Get-CotestCaddyInspection
 $caddyRepair = if ($caddy.status -eq "pass") { @() } else { @(Get-CotestCaddyRepairAdvice -PlatformInfo $platform) }
 Add-Check "caddy" $caddy.status $caddy.detail $caddyRepair
 
-if ($DnsSuffix -eq 'localhost') {
-    try {
-        Assert-CotestLoopbackDns -Hosts (Get-CotestJointHostNames -ServerCount $ServerCount -IncludeCoauth $StartCoauth.IsPresent -IncludeFlagon $StartFlagon.IsPresent -DnsSuffix $DnsSuffix)
-        Add-Check "loopback DNS" "pass" "all localhost service names and the unregistered probe resolve only to loopback"
-    } catch {
-        Add-Check "loopback DNS" "fail" $_.Exception.Message
-    }
+if ($nativeLoopback) {
+    Add-Check "loopback DNS" "pass" "all localhost service names and the unregistered probe resolve only to loopback"
 } elseif (-not (Test-Path -LiteralPath $resolvedHostsPath -PathType Leaf)) {
     Add-Check "hosts file" "fail" "not found: $resolvedHostsPath"
 } else {
@@ -433,7 +429,7 @@ if ($DnsSuffix -eq 'localhost') {
     }
 }
 
-if ($DnsSuffix -eq 'localhost') {
+if ($nativeLoopback) {
     Add-Check "hosts setup adapter" "pass" "localhost topology requires no hosts mutation; DNS was verified above"
 } elseif ($platform.os -ne "windows") {
     if ($platform.os -eq "linux" -and $env:GITHUB_ACTIONS -eq "true" -and
@@ -447,7 +443,6 @@ if ($DnsSuffix -eq 'localhost') {
     Add-Check "hosts setup adapter" "pass" "Windows ACL backup/grant/restore adapter available"
 }
 
-$requiredHosts = @(Get-CotestJointHostNames -ServerCount $ServerCount -IncludeCoauth $StartCoauth.IsPresent -IncludeFlagon $StartFlagon.IsPresent -IncludeUnregisteredProbe $true -DnsSuffix $DnsSuffix)
 $portsPerServer = if ($StartCoauth) { 4 } else { 2 }
 $flagonPorts = if ($StartFlagon) { 2 } else { 0 }
 $flagonDatabases = if ($StartFlagon) { 1 } else { 0 }

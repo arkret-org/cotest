@@ -62,12 +62,21 @@ foreach ($command in $verifyCommands) {
 . (Join-Path $PSScriptRoot '../lib/joint-e2e-environment.ps1')
 $script:directoryHostsFixture = Join-Path $temporary 'hosts'
 function Get-CotestHostsPath { return $script:directoryHostsFixture }
+function Assert-CotestLoopbackDns {
+    param([string[]]$Hosts)
+    $lines = [IO.File]::ReadAllLines($script:directoryHostsFixture)
+    foreach ($name in $Hosts) {
+        if ("127.0.0.1`t$name" -notin $lines) { throw "Missing fixture mapping for $name" }
+    }
+}
 $originalHosts = "127.0.0.1 localhost`r`n192.0.2.10 user-owned.example`r`n"
 [IO.File]::WriteAllText($script:directoryHostsFixture, $originalHosts, [Text.UTF8Encoding]::new($false))
 $directoryMarker = New-CotestHostsMarker -RunId 'directory-lifecycle'
 Install-JointLoopbackHosts -Hosts (Get-CotestJointHostNames -ServerCount 3 -IncludeFlagon $true) -Marker $directoryMarker
 $installedHosts = [IO.File]::ReadAllText($script:directoryHostsFixture)
-if (-not $installedHosts.Contains("127.0.0.1`tflagon.arkret_local")) { throw 'Real installer omitted the managed Directory host' }
+if (-not $installedHosts.Contains("127.0.0.1`tflagon.localhost")) { throw 'Real installer omitted the managed Directory host' }
+Install-JointLoopbackHosts -Hosts (Get-CotestJointHostNames -ServerCount 3 -IncludeFlagon $true) -Marker (New-CotestHostsMarker -RunId 'already-local')
+if ([IO.File]::ReadAllText($script:directoryHostsFixture) -cne $installedHosts) { throw 'Already-local names caused an additional hosts write' }
 Remove-JointLoopbackHosts -Marker $directoryMarker
 if ([IO.File]::ReadAllText($script:directoryHostsFixture) -cne $originalHosts) { throw 'Real Directory host cleanup changed unrelated hosts' }
 # Select the registered Directory binding rather than the Station shared path.

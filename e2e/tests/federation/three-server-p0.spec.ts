@@ -59,6 +59,7 @@ type ThreeServerRealm = {
 const execFileAsync = promisify(execFile);
 
 type RuntimeTopology = {
+  tls: { unregistered_probe: string };
   servers: Array<{
     name: string;
     coland: {
@@ -496,11 +497,12 @@ test.describe("three-server federation P0 @three-server-p0", () => {
   test("P0.4 ordered candidate failure is recorded before an authorized source succeeds", async ({ request }, testInfo) => {
     const realm = await createThreeServerRealm(request, "p0-candidates");
     const failures: Array<{ source: string; reason: string }> = [];
+    const probe = new URL("/health", runtimeTopology().tls.unregistered_probe);
     try {
-      await request.get("https://unregistered.arkret_local/health", { timeout: 5_000 });
-      failures.push({ source: "unregistered.arkret_local", reason: "unexpectedly_reachable" });
+      await request.get(probe.href, { timeout: 5_000 });
+      failures.push({ source: probe.hostname, reason: "unexpectedly_reachable" });
     } catch (error) {
-      failures.push({ source: "unregistered.arkret_local", reason: error instanceof Error ? error.name : "transport_failure" });
+      failures.push({ source: probe.hostname, reason: error instanceof Error ? error.name : "transport_failure" });
     }
     expect(failures[0].reason).not.toBe("unexpectedly_reachable");
     const rows = await scanPeerRealmStreamViewsApi(request, {

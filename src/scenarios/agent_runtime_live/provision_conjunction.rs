@@ -88,7 +88,7 @@ pub async fn run_agent_provision_production() -> Result<SuiteExecutionResult> {
     let joint = output.join("browser");
     let log = fs::File::create(output.join("browser-runner.log"))?;
     let dns_suffix =
-        std::env::var("COTEST_BROWSER_DNS_SUFFIX").unwrap_or_else(|_| "arkret_local".to_owned());
+        std::env::var("COTEST_BROWSER_DNS_SUFFIX").unwrap_or_else(|_| "localhost".to_owned());
     ensure!(
         matches!(dns_suffix.as_str(), "arkret_local" | "localhost"),
         "unsupported native browser DNS suffix"

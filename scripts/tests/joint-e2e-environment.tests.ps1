@@ -13,8 +13,8 @@ $original = "127.0.0.1 localhost`r`n10.0.0.8 user-owned.example`r`n"
 $marker = New-CotestHostsMarker -RunId "unit-1"
 $hosts = Get-CotestJointHostNames -ServerCount 3 -IncludeCoauth $true -IncludeUnregisteredProbe $true
 $withBlock = Add-CotestHostsBlock -Content $original -Hosts $hosts -Marker $marker
-Assert-True ($withBlock.Contains("127.0.0.1`tcoland-server3.arkret_local")) "server3 Coland host must be present"
-Assert-True ($withBlock.Contains("127.0.0.1`tcoauth-server3.arkret_local")) "server3 Coauth host must be present"
+Assert-True ($withBlock.Contains("127.0.0.1`tcoland-server3.localhost")) "server3 Coland host must be present"
+Assert-True ($withBlock.Contains("127.0.0.1`tcoauth-server3.localhost")) "server3 Coauth host must be present"
 Assert-Equal 1 (@(Get-CotestHostsMarkers -Content $withBlock).Count) "one marker must be discoverable"
 $restored = Remove-CotestHostsBlocks -Content $withBlock -Marker $marker
 Assert-Equal $original $restored "exact marker cleanup must preserve user content"
@@ -75,7 +75,7 @@ Assert-CotestTopologyIsolation -Topology $topology
 Assert-CotestTopologyIsolation -Topology (New-CotestServerTopology -ServerCount 1 -StartCoauth $true)
 Assert-Equal 3 $topology.servers.Count "three servers must be generated"
 Assert-Equal "server1" $topology.servers[0].name "numbering starts at server1"
-Assert-Equal "https://coland-server3.arkret_local:24443" $topology.servers[2].coland.public_url "server3 public URL"
+Assert-Equal "https://coland-server3.localhost:24443" $topology.servers[2].coland.public_url "server3 public URL"
 Assert-Equal 2 $topology.servers[0].peers.Count "full mesh peer count"
 Assert-CotestLoopbackDns -Hosts @('127.0.0.1', '::1')
 $publicDnsRejected = $false
@@ -132,7 +132,7 @@ Assert-True ($initializerScript -match 'Test-CotestAdministrator' -and $initiali
 Assert-True ($initializerScript -match 'mode = "install-and-check"') "dependency installation must be attempted by default"
 Assert-True ($initializerScript -match 'if \(\$RequireBrowser -and \$npx' -and $runnerScript -match 'if \(\$requiresInkson\) \{ \$environmentArgs \+= "-RequireBrowser" \}') "browserless joint-api must not install Chromium"
 Assert-True ($runnerScript -match 'if \(\$RequiresInkson\) \{\s*\$browserListOutput') "browserless preflight must not require the Playwright browser registry"
-Assert-True ($initializerScript -match 'if \(\$isAdministrator\) \{\s*\$null = Initialize-CotestWindowsHostsAccess') "only the hosts ACL initializer must be administrator-gated"
+Assert-True ($initializerScript -match 'if \(-not \$nativeLoopback -and \$isAdministrator\) \{\s*\$null = Initialize-CotestWindowsHostsAccess') "hosts ACL initialization requires managed entries and an administrator"
 Assert-True ($initializerScript.IndexOf('if ($platform.os -eq "windows")') -lt $initializerScript.LastIndexOf('if ($isAdministrator)')) "package installation must run before the administrator-only hosts branch"
 Assert-True ($initializerScript -notmatch 'standard user: read-only check|mode = .*check-only') "standard-user dependency handling must not regress to check-only"
 Assert-True ($initializerScript -match '\$answers = @\(\[Net\.Dns\]::GetHostAddresses\(\$hostName\)\)') "single DNS answers must remain collection-shaped under strict mode"
@@ -159,8 +159,7 @@ if (-not $IsWindows) {
     Assert-Equal 200 (Get-CotestArtifactDrive -OutputDirectory '/Volumes/Data' -Drives $drives).AvailableFreeSpace 'mount root itself must match'
 }
 
-# Only the three existing one-Station localhost names may receive an owned override.
-$localNames = @('coland-server1.localhost', 'coauth-server1.localhost', 'unregistered.localhost')
+$localNames = Get-CotestJointHostNames -ServerCount 3 -IncludeFlagon $true -IncludeAppletRegistry $true
 $localMarker = New-CotestHostsMarker -RunId 'unit-localhost-owned'
 $oldMarker = New-CotestHostsMarker -RunId '20261023-060217'
 foreach ($newline in @("`r`n", "`n")) {
@@ -178,7 +177,7 @@ foreach ($newline in @("`r`n", "`n")) {
     try { Add-CotestHostsBlock -Content $withOurs -Hosts $localNames -Marker $localMarker | Out-Null } catch { $duplicateRejected = $true }
     Assert-True $duplicateRejected 'a conflicting localhost marker must still be rejected'
 }
-foreach ($badLocalName in @('other.localhost', 'coland-server2.localhost', 'coauth-server2.localhost', 'coland-server01.localhost', 'coland-server1.localhost.example.com', '198.18.1.161', '198.18.1.161 coland-server1.localhost', "coland-server1.localhost`n192.0.2.1 example.com")) {
+foreach ($badLocalName in @('other.localhost', 'coland-server0.localhost', 'coauth-server.localhost', 'coland-server01.localhost', 'coland-server1.localhost.example.com', '198.18.1.161', '198.18.1.161 coland-server1.localhost', "coland-server1.localhost`n192.0.2.1 example.com")) {
     $badRejected = $false
     try { Add-CotestHostsBlock -Content $original -Hosts @($badLocalName) -Marker $localMarker | Out-Null } catch { $badRejected = $true }
     Assert-True $badRejected 'unknown, non-loopback-address or injected localhost inputs must remain rejected'

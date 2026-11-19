@@ -68,7 +68,8 @@ function Get-CotestJointHostNames {
         [bool]$IncludeCoauth = $true,
         [bool]$IncludeFlagon = $false,
         [bool]$IncludeUnregisteredProbe = $true,
-        [ValidateSet('arkret_local', 'localhost')][string]$DnsSuffix = 'arkret_local'
+        [ValidateSet('arkret_local', 'localhost')][string]$DnsSuffix = 'localhost',
+        [bool]$IncludeAppletRegistry = $false
     )
     $names = [System.Collections.Generic.List[string]]::new()
     for ($index = 1; $index -le $ServerCount; $index++) {
@@ -76,6 +77,7 @@ function Get-CotestJointHostNames {
         if ($IncludeCoauth) { $names.Add("coauth-server$index.$DnsSuffix") }
     }
     if ($IncludeFlagon) { $names.Add("flagon.$DnsSuffix") }
+    if ($IncludeAppletRegistry) { $names.Add("mock-applet-registry.$DnsSuffix") }
     if ($IncludeUnregisteredProbe) { $names.Add("unregistered.$DnsSuffix") }
     return @($names)
 }
@@ -90,6 +92,19 @@ function Assert-CotestLoopbackDns {
                 throw "joint TLS topology: $hostName resolved outside loopback: $answer"
             }
         }
+    }
+}
+
+function Test-CotestNativeLoopbackHosts {
+    param([Parameter(Mandatory = $true)][string[]]$Hosts)
+    if (@($Hosts | Where-Object { -not $_.EndsWith('.localhost', [StringComparison]::OrdinalIgnoreCase) }).Count) {
+        return $false
+    }
+    try {
+        Assert-CotestLoopbackDns -Hosts $Hosts
+        return $true
+    } catch {
+        return $false
     }
 }
 
@@ -118,8 +133,7 @@ function Add-CotestHostsBlock {
     $normalizedHosts = @($Hosts | ForEach-Object { $_.Trim().ToLowerInvariant() } | Where-Object { $_ } | Sort-Object -Unique)
     if ($normalizedHosts.Count -eq 0) { throw "At least one hosts name is required" }
     foreach ($hostName in $normalizedHosts) {
-        if ($hostName -notmatch '^(?:coland|coauth)-server[1-9][0-9]*\.arkret_local$' -and
-            $hostName -notin @("unregistered.arkret_local", "mock-applet-registry.arkret_local", "flagon.arkret_local", "coland-server1.localhost", "coauth-server1.localhost", "unregistered.localhost")) {
+        if ($hostName -notmatch '^(?:(?:coland|coauth)-server[1-9][0-9]*|unregistered|mock-applet-registry|flagon)\.(?:arkret_local|localhost)\z') {
             throw "Refusing host outside the cotest joint namespace: $hostName"
         }
     }
@@ -267,7 +281,7 @@ function New-CotestServerTopology {
         [int]$ColandPortBase = 28080,
         [int]$CoauthPortBase = 29080,
         [string]$RunRoot = "",
-        [ValidateSet('arkret_local', 'localhost')][string]$DnsSuffix = 'arkret_local'
+        [ValidateSet('arkret_local', 'localhost')][string]$DnsSuffix = 'localhost'
     )
     $servers = [System.Collections.Generic.List[object]]::new()
     for ($index = 1; $index -le $ServerCount; $index++) {
