@@ -32,11 +32,28 @@ test("@fully-implemented calendar schedule and RSVP survive the canonical Strand
 }, testInfo) => {
   test.setTimeout(360_000);
   const stamp = Date.now();
+  const bootResponses: string[] = [];
+  const bootRoutes = new Map([
+    ["/_arkret/gate/account/session-grants/refresh", "refresh"],
+    ["/_arkret/self/account/viewer", "viewer"],
+    ["/_arkret/self/account/current-principal", "principal"],
+    ["/_arkret/root/identity/recovery-policy", "recovery"],
+  ]);
   const flow = await openDpopUserPage(
     browser,
     request,
     `calendar-ui-${stamp}`,
-    { refreshGrantBeforeUse: true },
+    {
+      refreshGrantBeforeUse: true,
+      beforeNavigate: async browserPage => {
+        browserPage.on("response", response => {
+          const label = bootRoutes.get(new URL(response.url()).pathname);
+          if (label && bootResponses.length < 80) {
+            bootResponses.push(`${label}=${response.status()}`);
+          }
+        });
+      },
+    },
   );
   if (!flow) {
     assertJointStackNotRequired("calendar UI DPoP login");
@@ -78,6 +95,7 @@ test("@fully-implemented calendar schedule and RSVP survive the canonical Strand
         checkingRecovery: await status.getByText(/Checking your recovery setup/).isVisible()
           || await blocker.getByText(/Checking your recovery setup/).isVisible(),
         ...bootReads,
+        bootResponses: bootResponses.join(", "),
         createFailed: await status.getByText(/create failed:/i).isVisible(),
         creating: await status.getByText("Creating Realm...", { exact: true }).isVisible(),
         recoveryGate: await wizard.locator(".encrypted-realm-recovery-gate").isVisible(),

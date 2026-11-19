@@ -1937,6 +1937,7 @@ export async function openDpopUserPage(
     prepareMlsDevice?: boolean;
     allowExplicitInviteNotifications?: boolean;
     refreshGrantBeforeUse?: boolean;
+    beforeNavigate?: (page: Page) => Promise<void>;
   } = {},
 ): Promise<DpopUserPageSession | undefined> {
   const session = await createDpopUserSession(request, prefix, opts);
