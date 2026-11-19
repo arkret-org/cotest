@@ -1347,7 +1347,10 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
           const rejectedCut = closedRejection!.last_verified.accepted_create.authority_root;
           for (const basis of [freshCut, rejectedCut]) {
             expect(basis.account_id).toEqual(creatorSession.accountId);
-            expect(basis.session_grant_id).toBe(creatorSession.grantId);
+            expect(basis.session_grant_ref).toEqual({
+              issuer_id: creatorSession.grantIssuerId,
+              id: creatorSession.grantId,
+            });
             expect(basis.snapshot.realm_id).toBe(cutRealmId);
             expect(Number.isSafeInteger(basis.request_sequence)).toBe(true);
             expect(basis.request_sequence).toBeGreaterThan(0);
@@ -1482,6 +1485,15 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
       await assertE2eeStorageIsHardened(creator.page, [privateDescription]);
       await stepShot(creator.page, testInfo, "B-secure-cache-after-reload");
       if (quarantineCut) {
+        if (cut === "quarantine_write_failure") {
+          // The mounted board can recover the record as soon as it changes.
+          // Release its writers before staging the damage for the next boot.
+          const idleUrl = new URL("/__cotest__/unmounted-board", creator.page.url()).href;
+          await creator.page.route(idleUrl, route => route.fulfill({
+            status: 200, contentType: "text/html", body: "<!doctype html><title>Board closed</title>",
+          }), { times: 1 });
+          await creator.page.goto(idleUrl, { waitUntil: "load" });
+        }
         const damaged = await damageCreatorVault(creator.page, realmId, cut);
         const genesisCount = submittedGenesisIds.size;
         const genesisId = damaged.queued_genesis.outbound_queue_item_id;
