@@ -357,7 +357,7 @@ test("encrypted attachment two-device upload/send/history/render and exact resta
     const aba = (await holderAttachments(alice.page)).find(o => o.filename === "target-aba.png")!;
     expect(aba.uploaded).toBe(false);
     await expect(alice.page.locator(".send-chat-button")).toBeDisabled();
-    await alice.page.getByRole("button", {name: "Retry attachments", exact: true}).click();
+    await alice.page.getByRole("button", {name: "Retry uploads", exact: true}).click();
     await expect.poll(async () => (await holderAttachments(alice.page)).find(o => o.id === aba.id)?.uploaded,
       {timeout: 120_000}).toBe(true);
     expect((await holderAttachments(alice.page)).find(o => o.id === aba.id)?.descriptor).toEqual(aba.descriptor);
