@@ -86,9 +86,10 @@ function Invoke-EarlyFailureCase([string]$Name, [bool]$OwnedFlagon, [bool]$Ident
     $ephemeralColandPostgres = $null; $ephemeralColandServer2Postgres = $null
     $additionalServers = @(); $storeDumpFailures = @()
     $jointTlsEnabled = $false; $mockAppletRegistryStateKeyFile = $null
+    $mockAppletRegistryArchiveKeyFile = $null
     $provisionCustodyRoot = $null
     $exitCode = 1; $runnerError = $null
-    $startedAt = Get-Date; $finishedAt = $startedAt
+    $startedAt = Get-Date; $executionFinishedAt = $startedAt; $finishedAt = $startedAt
     $totals = [pscustomobject]@{passed=0;failed=0;skipped=0;fixme=0}
     $secretScan = [pscustomobject]@{status='not_run'}
     $playwrightProjects = @('chrome')

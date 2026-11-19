@@ -1211,7 +1211,7 @@ function Invoke-JointE2ePreflight {
         }
     }
 
-    if ($RunNativeApiMigrations) {
+    if ($RunNativeApiMigrations -or ($WillStartDefaultColand -and $ColandRuntime -eq "process")) {
         try {
             $nativeColand = Resolve-ColandBinary -ExplicitPath $ColandBin -RepositoryRoot $ColandRepositoryRoot
             $custodyCli = Join-Path (Split-Path -Parent $nativeColand) (Get-NativeExecutableName -Name "coland-keystore-snapshot")
@@ -4186,8 +4186,7 @@ try {
     if (-not $SkipBuild -and $needsNativeColandBinary -and -not $ColandBin -and -not $env:COLAND_BIN) {
         $defaultColandBinary = Join-Path $colandTargetDirectory ("debug/" + (Get-NativeExecutableName -Name "coland"))
         $colandBuildRoots = @($colandRepositoryRoot, (Join-Path $workspaceRoot "arkret-rust-sdk"))
-        $colandTargets = @("coland")
-        if ($runNativeApiMigrations) { $colandTargets += "coland-keystore-snapshot" }
+        $colandTargets = @("coland", "coland-keystore-snapshot")
         $colandArtifacts = foreach ($target in $colandTargets) {
             $path = Join-Path $colandTargetDirectory ("debug/" + (Get-NativeExecutableName -Name $target))
             [pscustomobject]@{
@@ -5155,6 +5154,7 @@ try {
 
     function Build-ColandCommand {
         param(
+            [switch]$InitializeCustody,
             [string]$AccountAuthorityBaseUrl = $CoauthBaseUrl,
             [Parameter(Mandatory = $true)][string]$BinaryPath,
             [Parameter(Mandatory = $true)][string]$ConfigPath,
@@ -5222,6 +5222,15 @@ try {
             $values.COLAND_NOTARY_SIGNING_KEY = $NotarySigningKey
         }
         Write-DotEnvFile -Path $ConfigPath -Values $values
+        if ($InitializeCustody) {
+            # Only the first launch owns a new store. Restarts reuse this exact key.
+            if (Test-Path -LiteralPath $values.COLAND_KEYSTORE_PATH) {
+                throw "Initial Station provisioning requires a new run-owned KeyStore"
+            }
+            $cli = Join-Path (Split-Path -Parent $BinaryPath) (Get-NativeExecutableName -Name "coland-keystore-snapshot")
+            & $cli --generate-custody-key --config $ConfigPath --no-env-overrides *> $null
+            if ($LASTEXITCODE -ne 0) { throw "Initial Station custody provisioning failed (exit $LASTEXITCODE)" }
+        }
         return "& {{ Remove-Item Env:RUST_MIN_STACK -ErrorAction SilentlyContinue; `$env:COLAND_ENABLE_TEST_ENDPOINTS='1'; `$env:COLAND_TEST_CHAOS_CONTROL_FILE={0}; & {1} --config {2} --no-env-overrides --bind 127.0.0.1:{3} }}" -f `
             (Quote-PsLiteral $colandChaosControlFile),
             (Quote-PsLiteral $BinaryPath),
@@ -5316,7 +5325,7 @@ try {
             NotarySigningKey = $ColandNotarySigningKey
             FederationPeers = $server1Peer
         }
-        $ColandCommand = Build-ColandCommand @colandProcessArguments
+        $ColandCommand = Build-ColandCommand @colandProcessArguments -InitializeCustody
         if ($jointTlsAssets) {
             $ColandCommand = "`$env:SSL_CERT_FILE=$(Quote-PsLiteral $jointTlsAssets.CaPemPath); $ColandCommand"
         }
@@ -5429,7 +5438,7 @@ try {
                 NotarySigningKey = $ColandServer2NotarySigningKey
                 FederationPeers = (@($allColandBaseUrls | Where-Object { $_ -ne $colandServer2BaseUrl }) -join ",")
             }
-            $colandServer2Command = Build-ColandCommand @colandServer2ProcessArguments
+            $colandServer2Command = Build-ColandCommand @colandServer2ProcessArguments -InitializeCustody
             if ($jointTlsAssets) {
                 $colandServer2Command = "`$env:SSL_CERT_FILE=$(Quote-PsLiteral $jointTlsAssets.CaPemPath); $colandServer2Command"
             }
@@ -5488,7 +5497,7 @@ try {
             $configArguments.StateRoot = $serverArtifactLayouts[$server.Name].ColandStateRoot
             $configArguments.Port = $server.ColandPort
             $configArguments.LogFile = $traceFile
-            $command = Build-ColandCommand @configArguments
+            $command = Build-ColandCommand @configArguments -InitializeCustody
             if ($jointTlsAssets) { $command = "`$env:SSL_CERT_FILE=$(Quote-PsLiteral $jointTlsAssets.CaPemPath); $command" }
             $launchName = if ($needsAuthorityBootstrap) { "$($server.ColandName)-bootstrap" } else { $server.ColandName }
             $server.ColandService = Start-ManagedCommand -Name $launchName -Command $command -WorkingDirectory $repoRoot -LogDirectory $serverServiceLogDirs[$server.Name]

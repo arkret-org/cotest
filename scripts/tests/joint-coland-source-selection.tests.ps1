@@ -24,13 +24,18 @@ $freshnessCall = @($ast.FindAll({param($node)
 Assert-True ($freshnessCall.Count -eq 1) 'Test the actual Coland preflight call'
 $task = @($ast.FindAll({param($node)
     $node -is [Management.Automation.Language.HashtableAst] -and
-    $node.Extent.Text.Contains('Name = "coland"; BuildInputsBefore =')
+    $node.Extent.Text.Contains('BuildInputsBefore = $artifact.BuildInputsBefore') -and
+    $node.Extent.Text.Contains('RepositoryRoots = $colandBuildRoots')
 }, $true))
 Assert-True ($task.Count -eq 1) 'Test the actual Coland build task source roots'
+$roots = $ast.Find({param($node)
+    $node -is [Management.Automation.Language.AssignmentStatementAst] -and $node.Left.Extent.Text -eq '$colandBuildRoots'
+}, $true)
+Assert-True ($null -ne $roots) 'Resolve the actual build roots for both native tools'
 $resolveCalls = @($ast.FindAll({param($node)
     $node -is [Management.Automation.Language.CommandAst] -and $node.GetCommandName() -eq 'Resolve-ColandBinary'
 }, $true))
-Assert-True ($resolveCalls.Count -eq 3) 'Preflight, service startup and provisioning must resolve the SUT'
+Assert-True ($resolveCalls.Count -eq 4) 'Server and custody preflight, service startup and native provisioning must resolve the SUT'
 foreach ($call in $resolveCalls) {
     Assert-True ($call.Extent.Text -match '-RepositoryRoot \$colandRepositoryRoot') 'Every consumer must resolve the selected checkout'
 }
@@ -83,7 +88,9 @@ try {
     Assert-True ((Invoke-BuildInputNative -FilePath $colandBinary).Trim() -ceq 'selected') 'The selected executable must contain the selected source behavior'
     Assert-True ((Read-SelectedFreshness).status -ceq 'pass') 'Selected artifact must pass its actual source preflight'
     $preBuildStates = @(Get-ArtifactBuildRepositoryStates -ArtifactPath $colandBinary -RepositoryRoots @($colandRepositoryRoot, $sdkRoot))
-    $defaultColandBinary = $colandBinary; $service = $null; $started = Get-Date
+    Invoke-Expression $roots.Extent.Text
+    $artifact = [pscustomobject]@{Name = 'coland'; Artifact = $colandBinary; BuildInputsBefore = $preBuildStates}
+    $service = $null; $started = Get-Date
     $preparedTask = Invoke-Expression ('[pscustomobject]' + $task[0].Extent.Text)
     $taskStates = @(Get-ArtifactBuildRepositoryStates -ArtifactPath $colandBinary -RepositoryRoots $preparedTask.RepositoryRoots)
     Assert-True (Test-ArtifactBuildStamp -ArtifactPath $colandBinary -RepositoryStates $taskStates).Matches 'Managed build task and preflight must attest the same selected inputs'
