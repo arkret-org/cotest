@@ -84,6 +84,12 @@ export default { ...base, testDir: ${JSON.stringify(fixture)}, testMatch: /captu
   }, null, 2));
   assert.equal(child.error, undefined, "the real browser child must terminate normally");
   assert.equal(child.status, 1, "the actual missing approval failure must remain CLI 1");
+  const captureDirectory = path.join(output, "diagnostics", "playwright");
+  const receipt = JSON.parse(readFileSync(path.join(captureDirectory, "private-capture-receipts.json"), "utf8"));
+  assert.equal(receipt.rejected_attachments, 0);
+  assert.equal(receipt.disposed.length, 1);
+  const failureSource = JSON.parse(readFileSync(path.join(captureDirectory, "failure-sources.jsonl"), "utf8").trim());
+  assert.equal(failureSource.status, "failed");
   const reportHtml = readFileSync(path.join(output, "playwright-report", "index.html"), "utf8");
   assert.match(reportHtml, /<style\b/, "the native report must include its stylesheet");
   const reportEntries = nativeReportEntries(reportHtml);
@@ -109,7 +115,7 @@ function guardFixture() {
   const report = path.join(directory, "report");
   mkdirSync(root);
   const guard = new PrivateCaptureReporter({ outputFolder: report });
-  guard.onBegin({ projects: [{ outputDir: root }] });
+  guard.onBegin({ rootDir: directory, projects: [{ outputDir: root }] });
   return { directory, root, report, guard };
 }
 
@@ -118,7 +124,7 @@ test("automatic context is replaced whole and keeps its exact original receipt",
   const body = "synthetic private page value";
   const file = path.join(root, "error-context.md");
   writeFileSync(file, body);
-  const result = { status: "failed", attachments: [{ name: "error-context", path: file }] };
+  const result = { status: "failed", errors: [], attachments: [{ name: "error-context", path: file }] };
   guard.onTestEnd({ id: "actual-failed-case" }, result);
   assert.equal(await guard.onEnd(), undefined);
   assert.equal(result.status, "failed");
@@ -136,7 +142,7 @@ test("an arbitrary attachment path fails closed without changing or exporting it
   const outside = path.join(directory, "error-context.md");
   const bytes = "external attachment must remain untouched";
   writeFileSync(outside, bytes);
-  guard.onTestEnd({ id: "outside-path" }, { attachments: [{ name: "error-context", path: outside }] });
+  guard.onTestEnd({ id: "outside-path" }, { errors: [], attachments: [{ name: "error-context", path: outside }] });
   assert.deepEqual(await guard.onEnd(), { status: "failed" });
   assert.equal(readFileSync(outside, "utf8"), bytes);
   const receipt = readFileSync(path.join(report, "private-capture-receipts.json"), "utf8");
@@ -152,7 +158,7 @@ test("a link below the owned output cannot redirect disposal outside that output
   writeFileSync(file, "external linked bytes");
   const link = path.join(root, "case");
   symlinkSync(external, link, process.platform === "win32" ? "junction" : "dir");
-  guard.onTestEnd({ id: "linked-path" }, { attachments: [{ name: "error-context", path: path.join(link, "error-context.md") }] });
+  guard.onTestEnd({ id: "linked-path" }, { errors: [], attachments: [{ name: "error-context", path: path.join(link, "error-context.md") }] });
   assert.deepEqual(await guard.onEnd(), { status: "failed" });
   assert.equal(readFileSync(file, "utf8"), "external linked bytes");
   assert.equal(JSON.parse(readFileSync(path.join(report, "private-capture-receipts.json"), "utf8")).disposed.length, 0);

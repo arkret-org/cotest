@@ -68,7 +68,8 @@ export default defineConfig({
   workers,
   outputDir: path.join(runDir, "playwright-output"),
   reporter: [
-    ["./reporters/private-capture.ts", { outputFolder: path.join(runDir, "playwright-report") }],
+    // The HTML reporter replaces its whole directory when it exports the final report.
+    ["./reporters/private-capture.ts", { outputFolder: path.join(runDir, "diagnostics", "playwright") }],
     ["list"],
     ["junit", { outputFile: path.join(runDir, "junit.xml") }],
     ["html", { outputFolder: path.join(runDir, "playwright-report"), open: "never" }],
