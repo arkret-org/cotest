@@ -106,8 +106,8 @@ test("0540 real local search preserves native/browser source identity and withdr
     await native("retained-target-after-departure", realms[1]!, targetBody, 0);
     await page.reload({ waitUntil: "domcontentloaded" });
     await expect(page.locator(".shell.app")).toBeVisible({ timeout: 120_000 });
-    await search(targetBody, 0);
-    await search(freshControl, 1);
+    await test.step("Reopened browser excludes the departed Realm", () => search(targetBody, 0));
+    await test.step("Reopened browser finds the independent message", () => search(freshControl, 1));
     await native("cold-retained-target-after-departure", realms[1]!, targetBody, 0);
     expect(remoteSearches).toEqual([]);
     await testInfo.attach("real-native-browser-search-current.json", {
