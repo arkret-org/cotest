@@ -8,6 +8,7 @@ import { enterSecretText } from "../../helpers/secret-input";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { isDeepStrictEqual } from "node:util";
 
 test.use({ trace: "off", video: "off", screenshot: "off" });
 
@@ -47,7 +48,8 @@ test.describe("identity.recovery-key-to-encrypted-realm @fully-implemented", () 
     let page = jointPage.page;
     const protocolHits: ProtocolHit[] = [];
     const protocolDiagnostics: string[] = [];
-    observeProtocol(page, protocolHits, protocolDiagnostics);
+    const pendingViewerReads = new Set<Page>();
+    observeProtocol(page, protocolHits, protocolDiagnostics, pendingViewerReads);
 
     try {
       await test.step("register and authorize through the product UI", async () => {
@@ -286,7 +288,7 @@ test.describe("identity.recovery-key-to-encrypted-realm @fully-implemented", () 
             autoCompleteRecoveryKeySetup: false,
           });
           page = jointPage.page;
-          observeProtocol(page, protocolHits, protocolDiagnostics);
+          observeProtocol(page, protocolHits, protocolDiagnostics, pendingViewerReads);
           trackCreate(page);
           await jointPage.gotoHome();
           await expect(page.locator(".shell.app")).toBeVisible({ timeout: 120_000 });
@@ -384,7 +386,7 @@ test.describe("identity.recovery-key-to-encrypted-realm @fully-implemented", () 
           autoCompleteRecoveryKeySetup: false,
         });
         page = jointPage.page;
-        observeProtocol(page, protocolHits, protocolDiagnostics);
+        observeProtocol(page, protocolHits, protocolDiagnostics, pendingViewerReads);
         await jointPage.gotoHome();
         await expect(page.locator(".shell.app")).toBeVisible({ timeout: 120_000 });
         expect(await readActiveIdentity(page)).toEqual(identity);
@@ -501,10 +503,12 @@ test.describe("identity.recovery-key-to-encrypted-realm @fully-implemented", () 
           (hit) =>
             hit.status >= 500 &&
             !isExpectedRecoveryPolicyPending(hit) &&
-            !isExpectedSnapshotCutPending(hit, journeyRealms),
+            !isExpectedSnapshotCutPending(hit, journeyRealms) &&
+            !keyPackageUploadRecovered(hit, protocolHits),
         ).map(({ method, path, status, errorCode }) => ({ method, path, status, errorCode })),
         "unexpected Arkret 5xx responses",
       ).toEqual([]);
+      expect(pendingViewerReads.size, "each interrupted bootstrap viewer read must recover on its page").toBe(0);
       expect(protocolDiagnostics, protocolDiagnostics.join("\n")).toEqual([]);
     } finally {
       await jointPage.close();
@@ -518,8 +522,21 @@ function observeProtocol(
   page: Page,
   hits: ProtocolHit[],
   diagnostics: string[],
+  pendingViewerReads: Set<Page>,
 ): void {
   page.on("console", (message) => {
+    const text = message.text().replace(/%c|\x1b\[[0-9;]*m/g, "");
+    if (text.includes("session boot state transition")) return;
+    if (text.includes("session bootstrap request completed")) {
+      if (/\bcurrent\s*=\s*false\b/.test(text)) return;
+      const succeeded = /\bsucceeded\s*=\s*true\b/.test(text);
+      if (text.includes("account viewer")) {
+        if (succeeded) pendingViewerReads.delete(page);
+        else pendingViewerReads.add(page);
+        return;
+      }
+      if (succeeded) return;
+    }
     if (
       /retry.*exhaust|MLS runtime|session coordinator|session_state|session boot|onboarding/i.test(
         message.text(),
@@ -618,6 +635,24 @@ function isExpectedRecoveryPolicyPending(hit: ProtocolHit): boolean {
     hit.method === "POST" &&
     hit.path === "/_arkret/root/identity/recovery-policy"
   );
+}
+
+function keyPackageUploadRecovered(pending: ProtocolHit, hits: ProtocolHit[]): boolean {
+  const request = pending.requestBody;
+  if (pending.method !== "POST" || pending.path !== "/_arkret/self/keys/keypackages/upload"
+    || pending.status !== 503 || pending.errorCode !== "temporarily_unavailable"
+    || pending.responseBody?.detail !== "KeyPackage operation refused by its current authority"
+    || !request?.principal_id || !request.device_id || !request.actor_id
+    || !Array.isArray(request.keypackages) || request.keypackages.length !== 8) return false;
+  // The PCR can be locked during registration. Require a later, complete
+  // publication by the same endpoint before counting that refusal as recovered.
+  return hits.some(hit => hit.observedAt > pending.observedAt && hit.path === pending.path
+    && hit.method === pending.method && hit.status === 200
+    && hit.requestBody !== undefined && hit.requestBody.principal_id === request.principal_id
+    && hit.requestBody.device_id === request.device_id
+    && isDeepStrictEqual(hit.requestBody.actor_id, request.actor_id)
+    && Array.isArray(hit.requestBody.keypackages) && hit.requestBody.keypackages.length === 8
+    && hit.responseBody?.accepted_count === 8 && isDeepStrictEqual(hit.responseBody.rejections ?? [], []));
 }
 
 // A mixed durable cut cannot be signed as a valid snapshot. This registered
