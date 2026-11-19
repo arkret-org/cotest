@@ -518,10 +518,20 @@ async function rejectServiceProxyMembership(args: {
     authorizationRef:args.authorizationRef,kind:"ak.member.state",
     payload:{realm_id:args.realmId,member_id:args.actorId,membership:"join"},
   });
-  const outcome = await deliverAppletEvents(args.request,args.signed,[event],args.idempotencyKey);
-  expect(outcome.status,JSON.stringify(outcome.rejections ?? [])).toBe("rejected");
+  const response = await rawDeliverAppletEvents(args.request,args.signed,[event],args.idempotencyKey);
+  await expectAppletTransactionConflict(response, "failed_precondition");
   expect(await queryRealmEventsApi(args.request,args.token,args.realmId)).toEqual(before);
   return event;
+}
+
+async function expectAppletTransactionConflict(
+  response: APIResponse,
+  code: "failed_precondition" | "duplicate_conflict",
+) {
+  expect(response.status()).toBe(409);
+  const problem = await response.json();
+  expect(wireErrCode(problem)).toBe(code);
+  expect(problem).not.toHaveProperty("committed_event_refs");
 }
 
 test.describe("applet bridge", () => {
@@ -716,13 +726,13 @@ test.describe("applet bridge", () => {
           membership: "join",
         },
       });
-      const registrationOnlyOutcome = await deliverAppletEvents(
+      const registrationOnlyResponse = await rawDeliverAppletEvents(
         request,
         signed,
         [registrationOnlyJoin],
         `bot-registration-only-join-${stamp}`,
       );
-      expect(registrationOnlyOutcome.status).toBe("rejected");
+      await expectAppletTransactionConflict(registrationOnlyResponse, "failed_precondition");
 
       // Real Service-signed terminal creation succeeds. It grants the Bot,
       // so it cannot authorize the Service writing the Bot's membership.
@@ -1690,9 +1700,8 @@ test.describe("applet inbound transaction push — per-delivery source signature
     const transactionRetry = await test.step("inbound preparation: transactionRetry", () => deliver(body, idempotencyKey), { box: true });
     expect(transactionRetry.status(), await transactionRetry.text()).toBe(200);
     expect(await transactionRetry.json()).toEqual(JSON.parse(responseText));
-    // Only an exact retry preserves the verified producer proof. The same
-    // Event under a producer proof that does not verify is rejected per Event
-    // (§7.3 per-event dedup; §7.3.1 independent producer_proof check).
+    // The accepted Event ID is bound to its original bytes, including the
+    // producer proof. A changed envelope conflicts during delivery preflight.
     const { producer_proof: originalProducer, ...previousUnsigned } = body.events[0];
     for (const [label, submittedProof] of [
       [
@@ -1710,11 +1719,7 @@ test.describe("applet inbound transaction push — per-delivery source signature
     ] as const) {
       const forbidden = { ...body, events: [{ ...previousUnsigned, producer_proof: submittedProof }] };
       const rejected = await deliver(forbidden, `inbound-forbidden-${label}-${stamp}`);
-      const rejectedText = await rejected.text();
-      expect(rejected.status(), rejectedText).toBe(200);
-      const rejectedOutcome = JSON.parse(rejectedText);
-      expect(rejectedOutcome.status, `${label}: ${rejectedText}`).toBe("rejected");
-      expect(rejectedOutcome).not.toHaveProperty("committed_event_refs");
+      await expectAppletTransactionConflict(rejected, "duplicate_conflict");
     }
     // The retired `proofs[]` carrier is not an Event Envelope member
     // (event-envelope.schema.json is closed and requires producer_proof).
