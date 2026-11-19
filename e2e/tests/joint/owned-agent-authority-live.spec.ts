@@ -1,4 +1,4 @@
-import { accountActorId } from "../../helpers/coland-api";
+import { accountActorId, authHeaders } from "../../helpers/coland-api";
 import { actorRow } from "../../helpers/product-locators";
 import { selectProductOptionByReference } from "../../helpers/product-select";
 import { selectProductOptionByLabel } from "../../helpers/product-select";
@@ -13,7 +13,7 @@ import { grantInviteConsentArkret, deliverInviteWithConsentGrant } from "../../h
 import { assertAuthoritySubmitOutcome, buildCapabilityGrantEnvelope, canonicalJson, grantCapabilityEventApi, rawSubmitSignedEventApi, refreshEventEnvelopeProof, resolveDefaultStrandId, retypeEventDerivedId, signedEventEnvelope, wireErrCode } from "../../helpers/coland-api";
 import { addCircleMemberRaw, createCircleArkret } from "../../helpers/circle-api";
 import { decodeIngressEvents } from "../../helpers/event-ingress";
-import { openDpopUserPageFromSession, registeredSubjectIdentityControl, selfPathHeadersForDpopSession, type DpopUserSession, type JointUserPage } from "../../helpers/users";
+import { openDpopUserPageFromSession, registeredSubjectIdentityControl, type JointUserPage } from "../../helpers/users";
 import { createHash } from "node:crypto";
 import { ProvisioningBridge } from "../../helpers/provisioning-bridge";
 import { execFile } from "node:child_process";
@@ -133,25 +133,25 @@ test("ordinary member explicitly grants, withdraws cold and confirms a new owned
   expect(coauthBaseUrl(), "canonical Coauth founding is required").toBeTruthy();
   expect(mockEmailBaseUrl(), "canonical founding verification delivery is required").toBeTruthy();
   const realm = jointRealm.realmId;
-  const consent = await grantInviteConsentArkret(request, jointRealm.bobToken, jointRealm.bob, jointRealm.alice.id);
+  const consent = await grantInviteConsentArkret(request, await jointRealm.bobPage.currentSessionGrant(), jointRealm.bob, jointRealm.alice.id);
   const delivery = await deliverInviteWithConsentGrant(request, {
-    inviterId: jointRealm.alice.id, inviterToken: jointRealm.aliceToken, realmId: realm,
+    inviterId: jointRealm.alice.id, inviterToken: await jointRealm.alicePage.currentSessionGrant(), realmId: realm,
     inviteeId: jointRealm.bob.id, consentGrantRef: consent.eventRef,
     originServer: "server1", recipientServer: "server1",
   });
   expect(delivery.outcome.disclosed_outcome).toBe("delivered");
   await jointRealm.bobPage.acceptInvite(realm);
-  const strand = await resolveDefaultStrandId(request, jointRealm.aliceToken, realm);
+  const strand = await resolveDefaultStrandId(request, await jointRealm.alicePage.currentSessionGrant(), realm);
   // Only the underlying content action is granted to Bob. The dedicated owned
   // source must work even though ordinary grant/revoke/admin authority is denied.
-  await grantCapabilityEventApi(request, jointRealm.aliceToken, {
+  await grantCapabilityEventApi(request, await jointRealm.alicePage.currentSessionGrant(), {
     ownerId: jointRealm.alice.id, subjectId: jointRealm.bob.id,
     realmId: realm, actions: ["ak.message.create"],
   });
   const url = `${colandBaseUrl()}/_arkret/self/authz/check`;
   for (const action of ["ak.capability.grant", "ak.capability.revoke", "ak.realm.admin"]) {
     const response = await request.post(url, {
-      headers: { ...selfPathHeadersForDpopSession(jointRealm.bobSession, "POST", url), "content-type": "application/json" },
+      headers: { ...authHeaders(await jointRealm.bobPage.currentSessionGrant(), "POST", url), "content-type": "application/json" },
       data: canonicalJson({ actor_id: { kind: "account", account_id: jointRealm.bobSession.accountId }, action,
         resource: { kind: "realm", realm_id: realm }, context: null }),
     });
@@ -204,7 +204,7 @@ test("ordinary member explicitly grants, withdraws cold and confirms a new owned
     const session = jointRealm.bobSession;
     const runtime = await bridge.pairAgentRuntime({
       endpoints: { colandBaseUrl: colandBaseUrl(), coauthBaseUrl: coauthBaseUrl()! },
-      controllerAccountId: session.accountId, controllerGrant: session.grantJwt,
+      controllerAccountId: session.accountId, controllerGrant: await jointRealm.bobPage.currentSessionGrant(),
       controllerIssuerId: session.grantIssuerId,
       controllerHolderSeed: session.dpopSeedB64url, controllerEventSeed: session.eventSigningSeedB64url,
       controllerVerificationMethod: `${session.user.did}#${session.user.deviceId}`,
@@ -333,10 +333,10 @@ async function chooseManagementOperations(rule: Locator, operations: readonly st
   }
 }
 
-async function exactPolicy(request: APIRequestContext, session: DpopUserSession, realm: string, id: string) {
+async function exactPolicy(request: APIRequestContext, user: JointUserPage, realm: string, id: string) {
   const url = `${colandBaseUrl()}/_arkret/self/current-state/exact`;
   const response = await request.post(url, {
-    headers: { ...selfPathHeadersForDpopSession(session, "POST", url), "content-type": "application/json" },
+    headers: { ...authHeaders(await user.currentSessionGrant(), "POST", url), "content-type": "application/json" },
     data: canonicalJson({ realm_id: realm, selector: { kind: "policy", policy_id: id } }),
   });
   expect(response.status(), "exact administrator Policy read").toBe(200);
@@ -369,9 +369,9 @@ async function savePolicyEditor(user: JointUserPage, editor: Locator, realm: str
   return { event, outcome };
 }
 
-async function assertPolicyCurrent(request: APIRequestContext, session: DpopUserSession, realm: string,
+async function assertPolicyCurrent(request: APIRequestContext, user: JointUserPage, realm: string,
   write: Awaited<ReturnType<typeof savePolicyEditor>>) {
-  const current = await exactPolicy(request, session, realm, String(write.event.payload!.policy_id));
+  const current = await exactPolicy(request, user, realm, String(write.event.payload!.policy_id));
   expect(canonicalJson(current.current_state.value) === canonicalJson(write.event.payload!.value), "whole accepted Policy value").toBe(true);
   expect(current.current_state.revision.commit_id).toBe(write.outcome.commit.commit_id);
   expect(current.current_state.revision.stream_position).toBe(write.outcome.commit.stream_position);
@@ -382,12 +382,12 @@ async function assertPolicyCurrent(request: APIRequestContext, session: DpopUser
 test("administrator configures all Realm operations and Circle operations with exact current CAS through normal UI @agent-policy-admin", async ({ jointRealm, request }) => {
   const realm = jointRealm.realmId;
   const user = jointRealm.alicePage;
-  const circle = await createCircleArkret(request, jointRealm.aliceToken, {
+  const circle = await createCircleArkret(request, await jointRealm.alicePage.currentSessionGrant(), {
     actorId: jointRealm.alice.id, realmId: realm, title: "Management configuration Circle", joinRule: "public",
   });
   // The editor's original snapshot fence must have a genuinely readable Circle
   // stream; creation/admin status alone is not a Circle membership fact.
-  expect((await addCircleMemberRaw(request, jointRealm.aliceToken, circle.circle_id, {
+  expect((await addCircleMemberRaw(request, await jointRealm.alicePage.currentSessionGrant(), circle.circle_id, {
     signerId: jointRealm.alice.id, actorId: jointRealm.alice.id, realmId: realm,
   })).status()).toBe(200);
   // Circle publish inherits Realm interaction and has no local producer. Its
@@ -405,7 +405,7 @@ test("administrator configures all Realm operations and Circle operations with e
       expect(write.event.payload!.expected_commit_id, "exact nullable CAS predecessor").toBe(previous);
       expect((write.event.payload!.value as any).rules[0].agent_operations).toEqual([operation]);
       expect((write.event.payload!.value as any).policy_kind).toBe("agent");
-      const current = await assertPolicyCurrent(request, jointRealm.aliceSession, realm, write);
+      const current = await assertPolicyCurrent(request, jointRealm.alicePage, realm, write);
       previous = current.current_state.revision.commit_id;
       // A reload must re-read accepted exact current, not reuse the form as proof.
       await user.page.reload({ waitUntil: "domcontentloaded" });
@@ -419,7 +419,7 @@ test("administrator configures all Realm operations and Circle operations with e
       const rule = editor.locator(".agent-policy-rules > .event");
       await chooseManagementOperations(rule, ["publish"]);
       const publish = await savePolicyEditor(user, editor, realm);
-      await assertPolicyCurrent(request, jointRealm.aliceSession, realm, publish);
+      await assertPolicyCurrent(request, jointRealm.alicePage, realm, publish);
       // No Circle management-review carrier exists. The editor must keep this
       // otherwise well-shaped review intent from reaching Event publication.
       await selectProductOptionByLabel(rule.getByLabel("Effect", { exact: true }), "require_review");
@@ -427,7 +427,7 @@ test("administrator configures all Realm operations and Circle operations with e
         { kind: "account", account_id: jointRealm.aliceSession.accountId },
       ]));
       await expect(editor.locator(".agent-policy-save")).toBeDisabled();
-      expect(canonicalJson((await exactPolicy(request, jointRealm.aliceSession, realm, id)).current_state.value)
+      expect(canonicalJson((await exactPolicy(request, jointRealm.alicePage, realm, id)).current_state.value)
         === canonicalJson(publish.event.payload!.value)).toBe(true);
     }
   }
@@ -479,7 +479,7 @@ test("administrator Policy stale CAS and ordinary member edits refuse without ef
         // Freeze through normal authoring while its null CAS basis is valid.
         // The other page commits before this original request reaches the Station.
         const first = await savePolicyEditor(user, editor, realm);
-        const accepted = await assertPolicyCurrent(request, jointRealm.aliceSession, realm, first);
+        const accepted = await assertPolicyCurrent(request, jointRealm.alicePage, realm, first);
         const before = await footprint(realm, jointRealm.aliceSession.accountId.station_id);
         releaseStale();
         return { accepted, before };
@@ -491,7 +491,7 @@ test("administrator Policy stale CAS and ordinary member edits refuse without ef
     expect(body.commit === undefined && body.commits === undefined).toBe(true);
     await expect(staleEditor.locator(".write-status")).toContainText("The original Policy was rejected", { timeout: 120_000 });
     expect(canonicalJson((await footprint(realm, jointRealm.aliceSession.accountId.station_id)).tables) === canonicalJson(before.tables)).toBe(true);
-    const unchanged = await exactPolicy(request, jointRealm.aliceSession, realm, id);
+    const unchanged = await exactPolicy(request, jointRealm.alicePage, realm, id);
     expect(canonicalJson(unchanged.current_state) === canonicalJson(accepted.current_state)).toBe(true);
   } finally {
     releaseStale();
@@ -500,9 +500,9 @@ test("administrator Policy stale CAS and ordinary member edits refuse without ef
     await sibling!.page.close();
   }
 
-  const consent = await grantInviteConsentArkret(request, jointRealm.bobToken, jointRealm.bob, jointRealm.alice.id);
+  const consent = await grantInviteConsentArkret(request, await jointRealm.bobPage.currentSessionGrant(), jointRealm.bob, jointRealm.alice.id);
   const delivery = await deliverInviteWithConsentGrant(request, {
-    inviterId: jointRealm.alice.id, inviterToken: jointRealm.aliceToken, realmId: realm,
+    inviterId: jointRealm.alice.id, inviterToken: await jointRealm.alicePage.currentSessionGrant(), realmId: realm,
     inviteeId: jointRealm.bob.id, consentGrantRef: consent.eventRef, originServer: "server1", recipientServer: "server1",
   });
   expect(delivery.outcome.disclosed_outcome).toBe("delivered");
@@ -516,11 +516,11 @@ test("administrator Policy stale CAS and ordinary member edits refuse without ef
   expect((await read).status()).toBe(404);
   await expect(memberEditor.locator(".write-status")).toContainText("creation remains blocked", { timeout: 120_000 });
   await expect(memberEditor.locator(".agent-policy-save")).toBeDisabled();
-  const accepted = await exactPolicy(request, jointRealm.aliceSession, realm, id);
+  const accepted = await exactPolicy(request, jointRealm.alicePage, realm, id);
   const event = signedEventEnvelope({ actorId: jointRealm.bob.id, realmId: realm, kind: "ak.policy.set",
     payload: { policy_id: id, expected_commit_id: accepted.current_state.revision.commit_id, value: accepted.current_state.value } });
   const before = await footprint(realm, jointRealm.bobSession.accountId.station_id, String(event.event_id));
-  const refusal = await rawSubmitSignedEventApi(request, jointRealm.bobToken, event);
+  const refusal = await rawSubmitSignedEventApi(request, await jointRealm.bobPage.currentSessionGrant(), event);
   const body = await refusal.json();
   expect(refusal.status(), "membership does not authorize administrator Policy writes").toBe(403);
   expect(wireErrCode(body) ?? body.reason_code).toBe("capability_denied");
@@ -532,13 +532,13 @@ test("administrator Policy stale CAS and ordinary member edits refuse without ef
 test("normal administrator default denial admits an exact controller exception and Circle allow cannot override Realm denial @agent-policy-admin", async ({ jointRealm, request }) => {
   const realm = jointRealm.realmId;
   const user = jointRealm.alicePage;
-  const consent = await grantInviteConsentArkret(request, jointRealm.bobToken, jointRealm.bob, jointRealm.alice.id);
-  const delivery = await deliverInviteWithConsentGrant(request, { inviterId: jointRealm.alice.id, inviterToken: jointRealm.aliceToken,
+  const consent = await grantInviteConsentArkret(request, await jointRealm.bobPage.currentSessionGrant(), jointRealm.bob, jointRealm.alice.id);
+  const delivery = await deliverInviteWithConsentGrant(request, { inviterId: jointRealm.alice.id, inviterToken: await jointRealm.alicePage.currentSessionGrant(),
     realmId: realm, inviteeId: jointRealm.bob.id, consentGrantRef: consent.eventRef, originServer: "server1", recipientServer: "server1" });
   expect(delivery.outcome.disclosed_outcome).toBe("delivered");
   await jointRealm.bobPage.acceptInvite(realm);
   // Discover the real accepted Realm root through the original signed grant helper.
-  await grantCapabilityEventApi(request, jointRealm.aliceToken, { ownerId: jointRealm.alice.id, realmId: realm,
+  await grantCapabilityEventApi(request, await jointRealm.alicePage.currentSessionGrant(), { ownerId: jointRealm.alice.id, realmId: realm,
     subjectId: jointRealm.bob.id, actions: ["ak.message.create"] });
   const agent = await provisionOwnedAgent(user);
   let editor = await loadPolicyEditor(user, realm);
@@ -550,7 +550,7 @@ test("normal administrator default denial admits an exact controller exception a
   await selectProductOptionByLabel(rule.getByLabel("Agent selector", { exact: true }), "controller");
   await rule.getByLabel("Complete Account: principal_id", { exact: true }).fill(jointRealm.aliceSession.accountId.principal_id);
   await rule.getByLabel("Complete Account: station_id", { exact: true }).fill(jointRealm.aliceSession.accountId.station_id);
-  await assertPolicyCurrent(request, jointRealm.aliceSession, realm, await savePolicyEditor(user, editor, realm));
+  await assertPolicyCurrent(request, jointRealm.alicePage, realm, await savePolicyEditor(user, editor, realm));
   await members(user.page, realm, agent);
   await user.page.locator(".open-add-realm-agent-modal-button").click();
   const available = actorRow(user.page.locator(".add-realm-agent-modal"), ".member-self-agent-row", accountActorId(agent));
@@ -582,9 +582,9 @@ test("normal administrator default denial admits an exact controller exception a
   expect(rejectionBody.commit === undefined && rejectionBody.commits === undefined).toBe(true);
   expect(canonicalJson((await footprint(realm, jointRealm.bobSession.accountId.station_id)).tables) === canonicalJson(beforeJoin.tables)).toBe(true);
 
-  const circle = await createCircleArkret(request, jointRealm.aliceToken, {
+  const circle = await createCircleArkret(request, await jointRealm.alicePage.currentSessionGrant(), {
     actorId: jointRealm.alice.id, realmId: realm, title: "Parent management intersection", joinRule: "public" });
-  expect((await addCircleMemberRaw(request, jointRealm.aliceToken, circle.circle_id, {
+  expect((await addCircleMemberRaw(request, await jointRealm.alicePage.currentSessionGrant(), circle.circle_id, {
     signerId: jointRealm.alice.id, actorId: jointRealm.alice.id, realmId: realm,
   })).status()).toBe(200);
   editor = await loadPolicyEditor(user, realm, id);
@@ -597,7 +597,7 @@ test("normal administrator default denial admits an exact controller exception a
   await child.getByLabel("Scope Circle id (blank means this Realm)", { exact: true }).fill(circle.circle_id);
   await chooseManagementOperations(child.locator(".agent-policy-rules > .event"), ["authorize"]);
   await selectProductOptionByLabel(child.locator(".agent-policy-rules > .event").getByLabel("Effect", { exact: true }), "allow");
-  await assertPolicyCurrent(request, jointRealm.aliceSession, realm, await savePolicyEditor(user, child, realm));
+  await assertPolicyCurrent(request, jointRealm.alicePage, realm, await savePolicyEditor(user, child, realm));
   // Grant admission consumes the accepted immutable provision/key custody.
   // Establish it before testing the parent authorize policy, then keep the
   // runtime offline so no Agent action can manufacture this admin authority.
@@ -606,12 +606,12 @@ test("normal administrator default denial admits an exact controller exception a
     const session = jointRealm.aliceSession;
     await custody.pairAgentRuntime({
       endpoints: { colandBaseUrl: colandBaseUrl(), coauthBaseUrl: coauthBaseUrl()! },
-      controllerAccountId: session.accountId, controllerGrant: session.grantJwt,
+      controllerAccountId: session.accountId, controllerGrant: await jointRealm.alicePage.currentSessionGrant(),
       controllerIssuerId: session.grantIssuerId,
       controllerHolderSeed: session.dpopSeedB64url, controllerEventSeed: session.eventSigningSeedB64url,
       controllerVerificationMethod: `${session.user.did}#${session.user.deviceId}`,
       agentId: agent,
-      strandId: await resolveDefaultStrandId(request, jointRealm.aliceToken, realm),
+      strandId: await resolveDefaultStrandId(request, await jointRealm.alicePage.currentSessionGrant(), realm),
     });
   } finally { await custody.dispose(); }
   const built = buildCapabilityGrantEnvelope({ ownerId: jointRealm.alice.id, realmId: realm, subjectId: agent,
@@ -619,7 +619,7 @@ test("normal administrator default denial admits an exact controller exception a
   (built.envelope.payload as any).grant.resources = [{ kind: "circle", realm_id: realm, circle_id: circle.circle_id }];
   refreshEventEnvelopeProof(built.envelope);
   const before = await footprint(realm, jointRealm.aliceSession.accountId.station_id, String(built.envelope.event_id));
-  const parentDenied = await rawSubmitSignedEventApi(request, jointRealm.aliceToken, built.envelope);
+  const parentDenied = await rawSubmitSignedEventApi(request, await jointRealm.alicePage.currentSessionGrant(), built.envelope);
   const body = await parentDenied.json();
   expect(parentDenied.status(), "Circle allow cannot override its Realm parent deny").toBe(403);
   expect(wireErrCode(body) ?? body.reason_code).toBe("capability_denied");
@@ -628,7 +628,7 @@ test("normal administrator default denial admits an exact controller exception a
   editor = await loadPolicyEditor(user, realm, id);
   await selectProductOptionByLabel(editor.locator(".agent-policy-rules > .event").getByLabel("Effect", { exact: true }), "allow");
   await savePolicyEditor(user, editor, realm);
-  const accepted = await rawSubmitSignedEventApi(request, jointRealm.aliceToken, built.envelope);
+  const accepted = await rawSubmitSignedEventApi(request, await jointRealm.alicePage.currentSessionGrant(), built.envelope);
   expect(accepted.status(), "removing the parent denial admits the same narrow original grant").toBe(200);
   const outcome = await accepted.json();
   expect(outcome.status).toBe("committed");
@@ -818,9 +818,9 @@ async function switchReviewRealmAndReload(user: JointUserPage, originalRealm: st
 test("normal controller requests join and public review, distinct administrator signs native control and exact durable Events commit @agent-management-review", async ({ jointRealm, request }) => {
   const realm = jointRealm.realmId;
   const station = jointRealm.bobSession.accountId.station_id;
-  const consent = await grantInviteConsentArkret(request, jointRealm.bobToken, jointRealm.bob, jointRealm.alice.id);
+  const consent = await grantInviteConsentArkret(request, await jointRealm.bobPage.currentSessionGrant(), jointRealm.bob, jointRealm.alice.id);
   const delivery = await deliverInviteWithConsentGrant(request, { inviterId: jointRealm.alice.id,
-    inviterToken: jointRealm.aliceToken, realmId: realm, inviteeId: jointRealm.bob.id,
+    inviterToken: await jointRealm.alicePage.currentSessionGrant(), realmId: realm, inviteeId: jointRealm.bob.id,
     consentGrantRef: consent.eventRef, originServer: "server1", recipientServer: "server1" });
   expect(delivery.outcome.disclosed_outcome).toBe("delivered");
   await jointRealm.bobPage.acceptInvite(realm);
@@ -870,7 +870,7 @@ test("normal controller requests join and public review, distinct administrator 
   ]));
   await rule.getByLabel("Approval threshold", { exact: true }).fill("1");
   await rule.getByLabel("Approval lifetime seconds (1–86400)", { exact: true }).fill("3600");
-  await assertPolicyCurrent(request, jointRealm.aliceSession, realm,
+  await assertPolicyCurrent(request, jointRealm.alicePage, realm,
     await savePolicyEditor(jointRealm.alicePage, editor, realm));
   const controller = await reviewPanel(jointRealm.bobPage, realm);
   const administrator = await reviewPanel(jointRealm.alicePage, realm);
@@ -1023,13 +1023,13 @@ test("normal controller requests join and public review, distinct administrator 
     expect(outcome.commit?.event_ref).toBe(event.event_id);
     await expect(controller.locator(":scope > .write-status")).toContainText("原候选业务已提交", { timeout: 180_000 });
     const lookupUrl = `${colandBaseUrl()}/_arkret/self/management-reviews/status`;
-    const consumed = await request.post(lookupUrl, { headers: selfPathHeadersForDpopSession(jointRealm.bobSession, "POST", lookupUrl),
+    const consumed = await request.post(lookupUrl, { headers: authHeaders(await jointRealm.bobPage.currentSessionGrant(), "POST", lookupUrl),
       data: canonicalJson({ request_id: candidate.request_id }) });
     expect(consumed.status()).toBe(200);
     expect((await consumed.json()).status).toBe("consumed");
     if (operation === "publish") {
       const url = `${colandBaseUrl()}/_arkret/self/current-state/exact`;
-      const current = await request.post(url, { headers: selfPathHeadersForDpopSession(jointRealm.bobSession, "POST", url),
+      const current = await request.post(url, { headers: authHeaders(await jointRealm.bobPage.currentSessionGrant(), "POST", url),
         data: canonicalJson({ realm_id: realm, selector: { kind: "agent_interaction", agent_account_id: {
           principal_id: agent, station_id: station } } }) });
       expect(current.status()).toBe(200);
