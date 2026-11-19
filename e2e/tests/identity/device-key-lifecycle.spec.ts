@@ -1,4 +1,4 @@
-import { newBoardTrigger, addBoardList, fillCardNarrative } from "../../helpers/kanban-product-ui";
+import { openBoardOptions, newBoardTrigger, prepareBoardTitle, addBoardList, fillCardNarrative } from "../../helpers/kanban-product-ui";
 import {
   expect,
   test,
@@ -464,22 +464,23 @@ async function buildEncryptedBoardListCard(
   await expect(page.locator(".kanban-panel")).toBeVisible({
     timeout: 120_000,
   });
-  await userPage.clickWithPassivePromptRetry(
-    newBoardTrigger(page),
-  );
-  await page.locator(".new-board-title-input input, .new-board-title-input textarea").fill(boardTitle);
+  await openBoardOptions(page);
+  await userPage.clickWithPassivePromptRetry(newBoardTrigger(page));
+  await prepareBoardTitle(page, boardTitle);
+  const previousPath = decodeURIComponent(new URL(page.url()).pathname);
   await userPage.clickWithPassivePromptRetry(
     page.locator(".create-board-space-button"),
   );
+  await expect(page).toHaveURL(url => {
+    const path = decodeURIComponent(url.pathname);
+    return path !== previousPath && path.startsWith(`/kanban/${realmId}/board/ak:space:`);
+  }, { timeout: 30_000 });
   await expect(page.locator(".kanban-empty-board")).toContainText(
     /No lists yet/,
     {
       timeout: 45_000,
     },
   );
-  await expect
-    .poll(() => page.url(), { timeout: 30_000 })
-    .toContain("/board/ak:space:");
   const boardId = decodeURIComponent(
     new URL(page.url()).pathname.split("/board/")[1]?.split("/")[0] ?? "",
   );
