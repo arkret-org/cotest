@@ -32,19 +32,21 @@ test.describe("joint-inkson smoke @fully-implemented", () => {
   // projected coordinate before submitting the message.
   test("creates a public realm and renders a coland message in inkson", async ({
     jointRealm,
+    request,
   }) => {
     // Regression: the Coauth service-account hint belongs to the Account
     // Authority namespace. Public principal identity must instead use the
     // Coland-signed handle consistently across every shell/chat surface.
     const stamp = Date.now();
     const aliceMessage = `joint smoke from Alice ${stamp}`;
-    const principalHandle = canonicalHandle(
-      jointRealm.alice.handle,
-      jointRealm.alicePage.serverUrl,
+    const principalHandle = await verifiedPrimaryHandle(
+      request, jointRealm.aliceSession, jointRealm.alicePage.serverUrl,
     );
+    const registeredLocalpart = jointRealm.alice.handle.trim().replace(/^@/, "").split(":", 1)[0];
+    expect(principalHandle.split(":", 1)[0]).toBe(registeredLocalpart);
     const accountAuthority = coauthBaseUrl();
     const accountAuthorityHandle = accountAuthority
-      ? canonicalHandle(jointRealm.alice.handle, accountAuthority)
+      ? `${registeredLocalpart}:${new URL(accountAuthority).hostname.toLowerCase()}`
       : undefined;
 
     await jointRealm.alicePage.sendTimelineMessage(
@@ -89,9 +91,8 @@ test.describe("joint-inkson smoke @fully-implemented", () => {
     const stamp = Date.now();
     const slug = `summary${stamp.toString(36)}`;
     const forgedDisplayName = `Forged Summary Agent ${stamp}`;
-    const controllerHandle = canonicalHandle(
-      jointRealm.alice.handle,
-      jointRealm.alicePage.serverUrl,
+    const controllerHandle = await verifiedPrimaryHandle(
+      request, jointRealm.aliceSession, jointRealm.alicePage.serverUrl,
     );
     const participantSession = await createDpopUserSession(
       request,
@@ -421,6 +422,27 @@ test.describe("joint-inkson smoke @fully-implemented", () => {
   });
 });
 
+async function verifiedPrimaryHandle(
+  request: APIRequestContext,
+  session: DpopUserSession,
+  stationUrl: string,
+): Promise<string> {
+  const url = new URL("/_arkret/self/account/viewer", stationUrl).toString();
+  const response = await request.get(url, {
+    headers: selfPathHeadersForDpopSession(session, "GET", url),
+  });
+  expect(response.status()).toBe(200);
+  const viewer = await response.json();
+  expect(viewer.principal_id).toBe(session.user.id);
+  const primary = viewer.primary_handle_claim;
+  expect(primary).toMatchObject({
+    status: "verified",
+    claim: { subject_account_id: session.accountId, handle: expect.any(String) },
+  });
+  expect(primary.revocation ?? null).toBeNull();
+  return primary.claim.handle;
+}
+
 async function submitSignedEvent(
   request: APIRequestContext,
   session: DpopUserSession,
@@ -454,11 +476,6 @@ async function submitSignedEvent(
     throw new Error(`derived ${kind} Event is missing event_id`);
   }
   return eventId;
-}
-
-function canonicalHandle(handle: string, serverUrl: string): string {
-  const localpart = handle.trim().replace(/^@/, "").split(":", 1)[0];
-  return `${localpart}:${new URL(serverUrl).hostname.toLowerCase()}`;
 }
 
 async function listInvitesForDpop(
