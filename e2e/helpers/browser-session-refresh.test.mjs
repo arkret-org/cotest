@@ -23,6 +23,7 @@ function emit(page, predecessor = "initial", credential = "next", extra = {}) {
   page.emit("request", {
     method: () => "POST", url: () => `${extra.origin ?? options.issuerUrl}/_arkret/gate/account/session-grants/refresh`,
     postDataJSON: () => input,
+    allHeaders: async () => ({ authorization: `DPoP ${predecessor}` }),
     response: async () => ({ status: () => extra.status ?? 200, json: () => extra.body ?? Promise.resolve(body) }),
   });
   return body;
@@ -36,9 +37,21 @@ test("API reads wait for a browser refresh already in flight", async () => {
   let finish;
   const body = new Promise(resolve => { finish = resolve; });
   const outcome = emit(page, "initial", "next", { body });
-  const read = tracker.settledCredential();
+  const read = tracker.settledGrant();
   finish(outcome);
-  assert.equal(await read, "next");
+  assert.deepEqual(await read, { grantJwt: "next", grantId: "grant-1", grantExpiresAt: expiry });
+});
+test("a persistent profile continues the issuer chain across a browser restart", async () => {
+  const { page, tracker } = setup();
+  emit(page);
+  const saved = await tracker.settledGrant();
+  page.emit("close");
+  const resumedPage = new EventEmitter();
+  const resumed = observeBrowserSessionRefresh(resumedPage, {
+    ...options, initialCredential: saved.grantJwt, initialGrantId: saved.grantId,
+  });
+  emit(resumedPage, "next", "latest", { outcome: { previous_session_grant_id: "grant-1", session_grant_id: "grant-2" } });
+  assert.deepEqual(await resumed.settledGrant(), { grantJwt: "latest", grantId: "grant-2", grantExpiresAt: expiry });
 });
 test("foreign issuer and failed refresh cannot change the credential", async () => {
   for (const extra of [{ origin: "https://other.test" }, { status: 401 }]) {

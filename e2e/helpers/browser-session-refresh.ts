@@ -23,10 +23,11 @@ export function observeBrowserSessionRefresh(
     throw new Error("browser fixture grant belongs to another Station");
   }
   const issuerOrigin = new URL(options.issuerUrl).origin;
-  const successors = new Map<string, { credential: string; id: string; previous: string }>();
+  const successors = new Map<string, { credential: string; id: string; previous: string; expiresAt: string }>();
   const retired = new Set<string>();
   let credential = options.initialCredential;
   let grantId = options.initialGrantId;
+  let expiresAt: string | undefined;
   let closed = false;
   let conflict = false;
   let refreshCount = 0;
@@ -36,8 +37,10 @@ export function observeBrowserSessionRefresh(
       const response = await request.response();
       if (!response || response.status() !== 200) return;
       const input = request.postDataJSON();
+      const authorization = (await request.allHeaders()).authorization;
       const outcome = await response.json();
-      if (closed || typeof input?.session_grant !== "string" || input.device_id !== options.deviceId ||
+      if (closed || typeof input?.session_grant !== "string" || authorization !== `DPoP ${input.session_grant}` ||
+          input.device_id !== options.deviceId ||
           (input.audience_id !== undefined && input.audience_id !== options.audience) ||
           outcome?.account_id?.principal_id !== options.accountId.principal_id ||
           outcome?.account_id?.station_id !== options.accountId.station_id ||
@@ -53,9 +56,10 @@ export function observeBrowserSessionRefresh(
       if (key?.kty !== options.holderJwk.kty || key?.crv !== options.holderJwk.crv ||
           key?.x !== options.holderJwk.x) return;
       const next = { credential: outcome.session_grant, id: outcome.session_grant_id,
-        previous: outcome.previous_session_grant_id };
+        previous: outcome.previous_session_grant_id, expiresAt: outcome.expires_at };
       const known = successors.get(input.session_grant);
-      if (known && (known.credential !== next.credential || known.id !== next.id || known.previous !== next.previous)) {
+      if (known && (known.credential !== next.credential || known.id !== next.id ||
+          known.previous !== next.previous || known.expiresAt !== next.expiresAt)) {
         conflict = true;
         return;
       }
@@ -73,6 +77,7 @@ export function observeBrowserSessionRefresh(
         retired.add(credential);
         credential = successor.credential;
         grantId = successor.id;
+        expiresAt = successor.expiresAt;
         refreshCount++;
       }
     } catch {
@@ -96,6 +101,7 @@ export function observeBrowserSessionRefresh(
     credential = "";
     successors.clear();
     retired.clear();
+    pending.clear();
     page.off("request", onRequest);
     page.off("close", dispose);
   };
@@ -103,9 +109,9 @@ export function observeBrowserSessionRefresh(
   page.on("close", dispose);
   return {
     credential: currentCredential,
-    settledCredential: async () => {
+    settledGrant: async () => {
       while (!closed && pending.size) await Promise.all([...pending]);
-      return currentCredential();
+      return { grantJwt: currentCredential(), grantId, ...(expiresAt ? { grantExpiresAt: expiresAt } : {}) };
     },
     refreshCount: () => refreshCount,
     dispose,

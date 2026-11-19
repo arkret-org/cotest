@@ -285,14 +285,19 @@ export class JointUserPage {
   }
 
   async currentSessionGrant(): Promise<string> {
+    return (await this.currentSessionGrantOptions()).grantJwt;
+  }
+
+  async currentSessionGrantOptions() {
     const grant = this.session.grant;
     if (!grant || !this.browserRefresh) throw new Error("browser fixture has no bound grant observer");
-    const token = await this.browserRefresh.settledCredential();
+    const current = await this.browserRefresh.settledGrant();
+    const token = current.grantJwt;
     if (token !== grant.grantJwt) {
       const deviceKey = dpopDeviceKeyFromSeedB64url(grant.dpopSeedB64url);
       registerRequestAuth(token, (method, url) => selfPathGrantHeaders({ deviceKey, grantJwt: token, method, url }));
     }
-    return token;
+    return current;
   }
 
   async gotoHome() {

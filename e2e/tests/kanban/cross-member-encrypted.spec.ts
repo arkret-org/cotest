@@ -1,7 +1,6 @@
 import { contentHistoryProof } from "../../helpers/content-history-proof";
 import { observeCardSaveAction } from "../../helpers/action-evidence";
 import { clickCardSave } from "../../helpers/card-save";
-import { observeBrowserDpopGrant } from "../../helpers/session-transport-recovery";
 import { boardSwitcher, prepareBoardTitle, openNewBoard, addBoardList, fillCardNarrative, submitBoardCardDraft } from "../../helpers/kanban-product-ui";
 import { restartRunnerStation } from "../../helpers/station-runtime";
 import { proveKanbanHistoryTail, seedKanbanHistory } from "../../helpers/kanban-history";
@@ -1653,9 +1652,7 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
       const costs: Array<{ reader: string; cost: ReturnType<typeof observeRequestCost> }> = [];
       let subscriptionCut: Awaited<ReturnType<typeof installSubscriptionCut>> | undefined;
       const requestCase = fault === "requests-websocket" || fault === "requests-http-fallback";
-      let currentAliceGrant = async () => aliceSession.grantJwt;
       const observeAlice = async (page: Page) => {
-        currentAliceGrant = observeBrowserDpopGrant(page, aliceSession);
         costs.push({ reader: "alice", cost: observeRequestCost(page) });
         if (requestCase) subscriptionCut = await installSubscriptionCut(page, fault === "requests-http-fallback");
       };
@@ -1663,7 +1660,9 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
         { persistentUserDataDir: profile, beforeNavigate: observeAlice });
       expect(aliceFlow).toBeTruthy();
       let alicePage = aliceFlow!.page;
+      const currentAliceGrant = () => alicePage.currentSessionGrant();
       let bobPage: JointUserPage | undefined;
+      let readerSession = bobSession;
       let carolPage: JointUserPage | undefined;
       let outboundFault: Awaited<ReturnType<typeof installMlsOutboundFault>> | undefined;
       let cardFault: Awaited<ReturnType<typeof installCardPlacementFault>> | undefined;
@@ -1840,10 +1839,11 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
           await bobPage.page.locator(".chat-input").fill("History checkpoint readiness");
           await expect(bobPage.page.locator(".send-chat-button")).toBeEnabled({ timeout: 120_000 });
           await bobPage.page.locator(".chat-input").fill("");
+          readerSession = { ...bobSession, ...await bobPage.currentSessionGrantOptions() };
           await bobPage.close();
           bobPage = undefined;
           historyStage = "seed";
-          const proof = await seedKanbanHistory(request, aliceSession, realmId);
+          const proof = await seedKanbanHistory(request, { ...aliceSession, ...await alicePage.currentSessionGrantOptions() }, realmId);
           await testInfo.attach("kanban-501-real-history-seed.json", {
             contentType: "application/json", body: JSON.stringify(proof) });
           historyStage = "create-board-list-card";
@@ -1874,9 +1874,10 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
           undefined,
           cardFault ? async () => {
             const proof = await cardFault!.restartAtCut(profile ? async installObserver => {
+              const resumed = { ...aliceSession, ...await alicePage.currentSessionGrantOptions() };
               await alicePage.close();
               alicePage = await openUserPage(browser, alice, {
-                ...canonicalSessionOptions(aliceSession),
+                ...canonicalSessionOptions(resumed),
                 persistentUserDataDir: profile,
                 resumePersistentProfile: true,
                 beforeNavigate: async page => {
@@ -1896,12 +1897,13 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
         if (fault === "history-after-501") {
           historyStage = "capture-card-event";
           expect(typeof latestCardEventId).toBe("string");
-          for (const reader of [aliceSession, bobSession]) {
-            historyStage = reader === bobSession ? "bob-history-tail" : "alice-history-tail";
+          const writer = { ...aliceSession, ...await alicePage.currentSessionGrantOptions() };
+          for (const [name, reader] of [["alice", writer], ["bob", readerSession]] as const) {
+            historyStage = `${name}-history-tail`;
             const proof = await proveKanbanHistoryTail(request, reader, realmId, latestCardEventId!,
-              reader === bobSession ? retainedBoard : undefined);
-            if (reader === bobSession) historyTailAfterPosition = proof.next_page_after_position;
-            await testInfo.attach(`kanban-history-tail-${reader === aliceSession ? "alice" : "bob"}.json`, {
+              name === "bob" ? retainedBoard : undefined);
+            if (name === "bob") historyTailAfterPosition = proof.next_page_after_position;
+            await testInfo.attach(`kanban-history-tail-${name}.json`, {
               contentType: "application/json", body: JSON.stringify(proof) });
           }
           historyStage = "write-encrypted-description";
@@ -1917,7 +1919,7 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
         );
         if (fault === "history-after-501") {
           historyStage = "open-cold-reader";
-          const fresh = await openDpopUserPageFromSession(browser, bobSession,
+          const fresh = await openDpopUserPageFromSession(browser, readerSession,
             { persistentUserDataDir: readerProfile, resumePersistentProfile: true,
               beforeNavigate: observeBob });
           expect(fresh).toBeTruthy();
