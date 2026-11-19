@@ -459,7 +459,7 @@ test.describe("identity.recovery-key-to-encrypted-realm @fully-implemented", () 
 
       await test.step("manual recovery preserves a healthy bounded inventory", async () => {
         await jointPage.gotoSettings();
-        await page.getByRole("link", { name: "Security", exact: true }).click();
+        await page.locator('.settings-nav-list a[href="/settings/encryption"]').click();
         await expect(page).toHaveURL(url => url.pathname === "/settings/encryption");
         const recovery = page.locator(".settings-mls-recovery");
         await expect(recovery).toBeVisible();
