@@ -998,7 +998,7 @@ pub async fn spawn_coauth_with_db() -> Result<Option<SpawnedCoauth>> {
     step!("resolving coauth postgres");
     let pg = match spawn_ephemeral_postgres()? {
         Some(pg) => {
-            step!("postgres up: {}", pg.connect_url);
+            step!("postgres is ready");
             pg
         }
         None => {
