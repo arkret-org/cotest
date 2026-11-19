@@ -280,11 +280,12 @@ for (const mode of ["avatar", "lost-responses", "retryable-profile", "account-sw
       const readStartedAt = Date.now();
       const listed = page.waitForResponse(response => response.request().method() === "GET"
         && response.request().timing().startTime >= readStartedAt
-        && new URL(response.url()).pathname === "/_arkret/self/agents")
-        .then(response => response.json());
+        && new URL(response.url()).pathname === "/_arkret/self/agents");
       await page.reload({ waitUntil: "domcontentloaded" });
       await expect(page).toHaveURL(url => url.pathname === "/agents");
-      const directory = await listed;
+      const listResponse = await listed;
+      expect(listResponse.status()).toBe(200);
+      const directory = await listResponse.json();
       const matching = directory.agents.filter((row: { agent_id: string }) => row.agent_id === agent);
       expect(matching).toHaveLength(1);
       const acceptedAvatar = mode === "profile-rejected" ? undefined : avatar;
@@ -299,14 +300,15 @@ for (const mode of ["avatar", "lost-responses", "retryable-profile", "account-sw
         return bounds && { width: bounds.width, height: bounds.height };
       }, { timeout: 30_000 }).toEqual({ width: 36, height: 36 });
       const details = page.waitForResponse(response => response.request().method() === "GET"
-        && decodeURIComponent(new URL(response.url()).pathname).endsWith(`/_arkret/self/agents/${agent}`))
-        .then(response => response.json());
+        && decodeURIComponent(new URL(response.url()).pathname).endsWith(`/_arkret/self/agents/${agent}`));
       await row.click();
       // A selected row may already have loaded its authoritative details on mount.
       await page.locator(".agent-admin-filter-paused").click();
       await page.locator(".agent-admin-filter-all").click();
       await row.click();
-      expect((await details).agent.avatar_blob_ref).toBe(acceptedAvatar);
+      const detailResponse = await details;
+      expect(detailResponse.status()).toBe(200);
+      expect((await detailResponse.json()).agent.avatar_blob_ref).toBe(acceptedAvatar);
     }
     expect(allocatedAgents.size).toBe(1);
     expect(preparationBytes.size).toBe(1);
