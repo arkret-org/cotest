@@ -4,7 +4,7 @@ import { revealTimelineEvent } from "./timeline-visibility";
 import { submitOrdinaryComposerDraft } from "./composer-handoff";
 import { openDirectChatNotification } from "./direct-notification";
 import { accountActorId } from "./coland-api";
-import { actorRow } from "./product-locators";
+import { actorRow, withDiscussionUsersPanel } from "./product-locators";
 import { selectProductOptionByLabel } from "./product-select";
 import { getCircleArkret } from "./circle-api";
 import type { JointUserPage } from "./users";
@@ -1506,39 +1506,35 @@ async function runFlatTopicChats(alice: Page, bob: Page, mainMessages: DirectMai
   // Encrypted presence from each accepted peer proves the live path is ready.
   for (const [page, peer] of [[alice, bobWatch.actor_id], [bob, chat.actor_id]] as const) {
     expect(peer).toBeDefined();
-    const members = page.locator(".discussion-users-panel");
-    const membersToggle = page.locator(".discussion-users-toggle");
-    const wasOpen = await members.isVisible();
-    if (!wasOpen) await membersToggle.click();
-    await expect(members).toBeVisible();
-    const presence = members.locator(".presence-row").filter({
-      has: page.getByLabel(canonicalJson(peer), { exact: true }),
+    await withDiscussionUsersPanel(page, async members => {
+      const presence = members.locator(".presence-row").filter({
+        has: page.getByLabel(canonicalJson(peer), { exact: true }),
+      });
+      await expect(presence).toHaveClass(/\bpresence-row-online\b/, { timeout: 90_000 }).catch(async error => {
+        const rows = await realSignalReceiver(page).catch(() => []);
+        // Deliberately select public stage metadata, never arbitrary Signal bodies.
+        const allowedStages = new Set(["frame_received", "admitted", "expired", "stale_sequence", "rejected"]);
+        const stages = rows.filter(row => allowedStages.has(row.receive_stage))
+          .map(row => {
+            const milliseconds = (field: string) => typeof row[field] === "string" ? Date.parse(row[field]) : NaN;
+            const duration = (later: string, earlier: string) => {
+              const value = milliseconds(later) - milliseconds(earlier);
+              return Number.isFinite(value) ? value : null;
+            };
+            return { stage: row.receive_stage, envelope_digest_hash: typeof row.envelope_digest === "string"
+              ? createHash("sha256").update(row.envelope_digest).digest("hex") : null,
+              outer_ttl_ms: duration("expires_at", "sent_at"),
+              age_at_receive_ms: duration("received_at", "sent_at"),
+              outer_remaining_at_receive_ms: duration("expires_at", "received_at") };
+          });
+        const file = test.info().outputPath(`direct-presence-stages-${randomUUID()}.json`);
+        const classes = await presence.getAttribute("class").catch(() => "");
+        await writeFile(file, JSON.stringify({ peer_actor_hash: createHash("sha256").update(canonicalJson(peer)).digest("hex"), stages,
+          online: /\bpresence-row-online\b/.test(classes ?? ""), offline: /\bpresence-row-offline\b/.test(classes ?? "") }));
+        await test.info().attach("direct-presence-stages", { path: file, contentType: "application/json" });
+        throw error;
+      });
     });
-    await expect(presence).toHaveClass(/\bpresence-row-online\b/, { timeout: 90_000 }).catch(async error => {
-      const rows = await realSignalReceiver(page).catch(() => []);
-      // Deliberately select public stage metadata, never arbitrary Signal bodies.
-      const allowedStages = new Set(["frame_received", "admitted", "expired", "stale_sequence", "rejected"]);
-      const stages = rows.filter(row => allowedStages.has(row.receive_stage))
-        .map(row => {
-          const milliseconds = (field: string) => typeof row[field] === "string" ? Date.parse(row[field]) : NaN;
-          const duration = (later: string, earlier: string) => {
-            const value = milliseconds(later) - milliseconds(earlier);
-            return Number.isFinite(value) ? value : null;
-          };
-          return { stage: row.receive_stage, envelope_digest_hash: typeof row.envelope_digest === "string"
-            ? createHash("sha256").update(row.envelope_digest).digest("hex") : null,
-            outer_ttl_ms: duration("expires_at", "sent_at"),
-            age_at_receive_ms: duration("received_at", "sent_at"),
-            outer_remaining_at_receive_ms: duration("expires_at", "received_at") };
-        });
-      const file = test.info().outputPath(`direct-presence-stages-${randomUUID()}.json`);
-      const classes = await presence.getAttribute("class").catch(() => "");
-      await writeFile(file, JSON.stringify({ peer_actor_hash: createHash("sha256").update(canonicalJson(peer)).digest("hex"), stages,
-        online: /\bpresence-row-online\b/.test(classes ?? ""), offline: /\bpresence-row-offline\b/.test(classes ?? "") }));
-      await test.info().attach("direct-presence-stages", { path: file, contentType: "application/json" });
-      throw error;
-    });
-    if (!wasOpen) await membersToggle.click();
   }
   await assertWrongPlaintextStrand(alice, bob, chat.realm_id!, chatId, proof!);
   const classified = await structureWrite(alice, "place", "ak.strand.update", undefined, topicId);

@@ -30,3 +30,19 @@ export function agentMemberRow(scope: Page | Locator, account: AccountId): Locat
     has: pageFor(scope).getByText(`Agent: ${account.principal_id} · Principal: ${account.principal_id} · Station: ${account.station_id}`, { exact: true }),
   });
 }
+
+export async function withDiscussionUsersPanel(
+  page: Page,
+  inspect: (panel: Locator) => Promise<void>,
+): Promise<void> {
+  const panel = page.locator(".discussion-users-panel");
+  const toggle = page.locator(".discussion-users-toggle");
+  const wasOpen = await panel.isVisible();
+  if (!wasOpen) await toggle.click();
+  await panel.waitFor({ state: "visible" });
+  try {
+    await inspect(panel);
+  } finally {
+    if (!wasOpen && await panel.isVisible()) await toggle.click();
+  }
+}

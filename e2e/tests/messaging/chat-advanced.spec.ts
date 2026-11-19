@@ -7,6 +7,7 @@
 //   - discovery/push-notifications.md §4.3.1, §4.5
 
 import { expect, test, type APIRequestContext } from "../../helpers/arkret-test";
+import { withDiscussionUsersPanel } from "../../helpers/product-locators";
 import { eventIdFromMessage } from "../../helpers/message-evidence";
 import { submitOrdinaryComposerDraft } from "../../helpers/composer-handoff";
 import { decodeIngressEvents } from "../../helpers/event-ingress";
@@ -1092,9 +1093,11 @@ test.describe("chat advanced", () => {
       // Bidirectional encrypted presence proves both Signal receivers and
       // current MLS key material are ready before measuring a typing burst.
       for (const [page, peer] of [[alicePage, bob], [bobPage, alice]] as const) {
-        await expect(page.page.locator(".presence-row").filter({
-          has: page.page.getByLabel(canonicalJson(accountActorId(peer.id)), { exact: true }),
-        })).toHaveClass(/\bpresence-row-online\b/, { timeout: 90_000 });
+        await withDiscussionUsersPanel(page.page, async panel => {
+          await expect(panel.locator(".presence-row").filter({
+            has: page.page.getByLabel(canonicalJson(accountActorId(peer.id)), { exact: true }),
+          })).toHaveClass(/\bpresence-row-online\b/, { timeout: 90_000 });
+        });
       }
       const aliceTypingIndicator = bobPage.page.locator(".typing-indicator");
       const submittedSignals = new Map<string, { recipients?: number }>();

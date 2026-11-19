@@ -1,3 +1,4 @@
+import { withDiscussionUsersPanel } from "../../helpers/product-locators";
 import { uint64Decimal, uint64Value } from "../../helpers/uint64-decimal";
 import { submitOrdinaryComposerDraft } from "../../helpers/composer-handoff";
 import { readCreatorRecords } from "../../helpers/creator-bootstrap";
@@ -761,8 +762,10 @@ return async ({ jointUsers, request, browser }: { jointUsers: JointUsersFixture;
   }
   for (const [page, peer] of [[alice, bobSession.user.id], [bob, aliceSession.user.id]] as const) {
     const identity = canonicalJson(accountActorId(peer, peer === bobSession.user.id && remoteBob ? "server2" : "default"));
-    const presence = page.locator(".presence-row").filter({ has: page.getByLabel(identity, { exact: true }) });
-    await expect.soft(presence).toHaveClass(/\bpresence-row-online\b/, { timeout: 90_000 });
+    await withDiscussionUsersPanel(page, async panel => {
+      const presence = panel.locator(".presence-row").filter({ has: page.getByLabel(identity, { exact: true }) });
+      await expect.soft(presence).toHaveClass(/\bpresence-row-online\b/, { timeout: 90_000 });
+    });
   }
   if (mode === "lost") {
     expect(unchangedUnit, "all founding submissions after restart preserve the original signed bytes").toBe(true);
