@@ -242,9 +242,19 @@ test.describe("fresh-browser device entry paths @fully-implemented", () => {
       );
       await enterSecretText(replacement.page, recoveryPanel
         .getByRole("textbox", { name: "Recovery Key (24 words)", exact: true }), activeRecoveryKey!);
-      await recoveryPanel
-        .getByRole("button", { name: "Authorize this device" })
-        .click();
+      const createUrl = new URL("/_arkret/self/security-transactions", colandBaseUrl()).href;
+      const [creation] = await Promise.all([
+        replacement.page.waitForResponse(response => response.url() === createUrl
+          && response.request().method() === "POST", { timeout: 120_000 }),
+        recoveryPanel.getByRole("button", { name: "Authorize this device" }).click(),
+      ]);
+      expect(creation.ok()).toBe(true);
+      const completed = await creation.json();
+      // Recovery create returns the completed transaction at the same cut (§2.2).
+      expect(completed.kind).toBe("recovery");
+      expect(typeof completed.transaction_id === "string"
+        && completed.recovery_receipt?.transaction_id === completed.transaction_id
+        && Boolean(completed.completion_attestation)).toBe(true);
 
       if (cut !== "none") {
         await expect(recoveryStatus).toContainText(
@@ -288,34 +298,23 @@ test.describe("fresh-browser device entry paths @fully-implemented", () => {
         "POST",
         /^\/_arkret\/root\/identity\/recovery-sessions\/[^/]+\/proofs$/,
       );
-      expectSuccessfulOperation(
-        responses,
-        "POST",
-        "/_arkret/self/security-transactions",
-      );
-      // `identity/security-transactions.md` §2.3: a RecoveryTransaction has
-      // exactly one client-attested step. The old
-      // `submit_reanchor_unit` -> `issue_terminal_receipt` pair is gone, so two
-      // successful continues would mean the two-step shape survived somewhere.
+      const createPath = /^\/_arkret\/self\/security-transactions$/;
+      expectExactlyOnePathMatch(responses, "POST", createPath);
+      // The continue operation is reserved for SecurityRotation.
       const continuePath =
         /^\/_arkret\/self\/security-transactions\/[^/]+\/continue$/;
-      expectSuccessfulPathMatch(responses, "POST", continuePath);
-      expectExactlyOnePathMatch(responses, "POST", continuePath);
+      expect(responses.some(hit => hit.method === "POST" && continuePath.test(hit.pathname))).toBe(false);
       if (cut !== "none") {
         expect(completionRequests).toHaveLength(2);
-        expect(completionRequests[1]).toBe(completionRequests[0]);
+        expect(completionRequests[1] === completionRequests[0]).toBe(true);
         expectExactlyOnePathMatch(responses, "POST", /^\/_arkret\/root\/identity\/recovery-sessions$/);
-        expectExactlyOnePathMatch(responses, "POST", /^\/_arkret\/self\/security-transactions$/);
       }
 
-      // Both re-anchor Events and the terminal result enter through that one
-      // continue step, as two consecutive Principal Control Realm Commits.
-      // Before it there is no accepted Event: recovery never submits through
-      // the ordinary Event surface.
+      // Both re-anchor Events are admitted by the atomic create.
       const beforeCommit = responses.slice(
         0,
         responses.findIndex(
-          (hit) => hit.method === "POST" && continuePath.test(hit.pathname),
+          (hit) => hit.method === "POST" && createPath.test(hit.pathname) && hit.status >= 200 && hit.status < 300,
         ),
       );
       expectNoWriteToPaths(beforeCommit, ["/_arkret/self/events"]);
