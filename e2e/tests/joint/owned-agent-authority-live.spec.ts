@@ -868,7 +868,7 @@ test("normal controller requests join and public review, distinct administrator 
   await rule.getByLabel("Approvers: complete SDK ActorId array", { exact: true }).fill(canonicalJson([
     { kind: "account", account_id: jointRealm.aliceSession.accountId },
   ]));
-  await rule.getByLabel("Approval threshold", { exact: true }).fill("1");
+  await rule.getByLabel("Minimum approver count", { exact: true }).fill("1");
   await rule.getByLabel("Approval lifetime seconds (1–86400)", { exact: true }).fill("3600");
   await assertPolicyCurrent(request, jointRealm.alicePage, realm,
     await savePolicyEditor(jointRealm.alicePage, editor, realm));
