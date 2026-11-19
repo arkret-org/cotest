@@ -5121,6 +5121,7 @@ try {
             COLAND_METRICS_BIND = "0.0.0.0:$MetricsPort"
             COLAND_OBJECT_STORAGE_BACKEND = "filesystem"
             COLAND_OBJECT_STORAGE_LOCAL_ROOT = "/tmp/coland-blobs"
+            COLAND_RESUMABLE_UPLOAD_DIR = "/tmp/coland-state/resumable-uploads"
             COLAND_LOG_FILE = "/cotest-logs/$LogFileName"
             COLAND_LIVEKIT_API_KEY = "did:web:media.example#media-token"
             COLAND_LIVEKIT_API_SECRET = "joint-e2e-livekit-secret"
@@ -5194,6 +5195,7 @@ try {
             COLAND_METRICS_BIND = "127.0.0.1:$MetricsPort"
             COLAND_OBJECT_STORAGE_BACKEND = "filesystem"
             COLAND_OBJECT_STORAGE_LOCAL_ROOT = $ObjectsRoot
+            COLAND_RESUMABLE_UPLOAD_DIR = (Join-Path $StateRoot "resumable-uploads")
             COLAND_LOG_FILE = $LogFile
             COLAND_LIVEKIT_API_KEY = "did:web:media.example#media-token"
             COLAND_LIVEKIT_API_SECRET = "joint-e2e-livekit-secret"
