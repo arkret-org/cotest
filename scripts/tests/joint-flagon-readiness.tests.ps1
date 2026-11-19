@@ -24,9 +24,9 @@ $temporary = Join-Path ([IO.Path]::GetTempPath()) ('cotest-flagon-caddy-' + [gui
 $null = New-Item -ItemType Directory -Path $temporary
 try {
 $config = Join-Path $temporary 'Caddyfile'
-Write-JointCaddyConfig -Path $config -TlsPort 44321 -CertificatePath 'D:/fixture/public.crt' -KeyPath 'D:/fixture/private.key' -Routes @([pscustomobject]@{ Host = 'flagon.arkret_local'; BackendPort = 44322; DidRoot = 'D:/fixture/public identity' })
+Write-JointCaddyConfig -Path $config -TlsPort 44321 -CertificatePath 'D:/fixture/public.crt' -KeyPath 'D:/fixture/private.key' -Routes @([pscustomobject]@{ Host = 'flagon.localhost'; BackendPort = 44322; DidRoot = 'D:/fixture/public identity' })
 $content = Get-Content -LiteralPath $config -Raw
-foreach ($expected in @('https://flagon.arkret_local:44321 {', '@directoryIdentity path /webvh/flagon/did.json /webvh/flagon/did.jsonl', 'handle @directoryIdentity {', 'root * "D:/fixture/public identity"', 'reverse_proxy 127.0.0.1:44322')) {
+foreach ($expected in @('https://flagon.localhost:44321 {', '@directoryIdentity path /webvh/flagon/did.json /webvh/flagon/did.jsonl', 'handle @directoryIdentity {', 'root * "D:/fixture/public identity"', 'reverse_proxy 127.0.0.1:44322')) {
     if (-not $content.Contains($expected)) { throw "Missing exact Directory route: $expected" }
 }
 if ($content.Contains('handle /webvh/*') -or $content.Contains('file_server browse')) { throw 'Directory identity route must not expose a broader filesystem view' }

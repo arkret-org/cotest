@@ -27,13 +27,13 @@ try { Add-CotestHostsBlock -Content $original -Hosts @("example.com") -Marker $m
 Assert-True $foreignRejected "foreign host insertion must fail closed"
 foreach ($newline in @("`r`n", "`n")) {
     $content = "127.0.0.1 localhost${newline}10.0.0.8 user-owned.example${newline}"
-    $mockBlock = Add-CotestHostsBlock -Content $content -Hosts (@($hosts) + @(" Mock-Applet-Registry.Arkret_Local ", "mock-applet-registry.arkret_local")) -Marker $marker
-    Assert-Equal 1 ([regex]::Matches($mockBlock, '(?m)^127\.0\.0\.1\tmock-applet-registry\.arkret_local\r?$').Count) "the exact HTTPS Applet mock must have one normalized loopback entry"
+    $mockBlock = Add-CotestHostsBlock -Content $content -Hosts (@($hosts) + @(" Mock-Applet-Registry.Localhost ", "mock-applet-registry.localhost")) -Marker $marker
+    Assert-Equal 1 ([regex]::Matches($mockBlock, '(?m)^127\.0\.0\.1\tmock-applet-registry\.localhost\r?$').Count) "the exact HTTPS Applet mock must have one normalized loopback entry"
     Assert-Equal $content (Remove-CotestHostsBlocks -Content $mockBlock -Marker $marker) "mock hosts cleanup must preserve user content and newline style"
 }
-foreach ($foreignMock in @("mock-applet-registry.example.com", "mock-applet-registry.arkret_local.example.com", "other-mock.arkret_local", "mock-applet-registry2.arkret_local", "mock-applet-registry.arkret_local`n192.0.2.1 example.com")) {
+foreach ($foreignMock in @("mock-applet-registry.example.com", "mock-applet-registry.localhost.example.com", "other-mock.localhost", "mock-applet-registry2.localhost", "mock-applet-registry.localhost`n192.0.2.1 example.com")) {
     $rejected = $false
-    try { Add-CotestHostsBlock -Content $original -Hosts @("mock-applet-registry.arkret_local", $foreignMock) -Marker $marker | Out-Null } catch { $rejected = $true }
+    try { Add-CotestHostsBlock -Content $original -Hosts @("mock-applet-registry.localhost", $foreignMock) -Marker $marker | Out-Null } catch { $rejected = $true }
     Assert-True $rejected "a foreign or injected mock host must fail closed: $foreignMock"
 }
 # The managed Directory has one exact additional hostname, not a broader namespace.
@@ -41,16 +41,16 @@ Assert-Equal 8 @(Get-CotestJointHostNames -ServerCount 3 -IncludeFlagon $true).C
 Assert-True (@(Get-CotestJointHostNames -ServerCount 1 -IncludeFlagon $true -DnsSuffix localhost) -contains 'flagon.localhost') "localhost Directory must retain the configured DNS suffix"
 foreach ($newline in @("`r`n", "`n")) {
     $content = "127.0.0.1 localhost${newline}10.0.0.8 user-owned.example${newline}"
-    $directoryBlock = Add-CotestHostsBlock -Content $content -Hosts (@($hosts) + @(' FLAGON.Arkret_Local ', 'flagon.arkret_local')) -Marker $marker
-    Assert-Equal 1 ([regex]::Matches($directoryBlock, '(?m)^127\.0\.0\.1\tflagon\.arkret_local\r?$').Count) "Directory host must be normalized and written only once"
+    $directoryBlock = Add-CotestHostsBlock -Content $content -Hosts (@($hosts) + @(' FLAGON.Localhost ', 'flagon.localhost')) -Marker $marker
+    Assert-Equal 1 ([regex]::Matches($directoryBlock, '(?m)^127\.0\.0\.1\tflagon\.localhost\r?$').Count) "Directory host must be normalized and written only once"
     Assert-Equal $content (Remove-CotestHostsBlocks -Content $directoryBlock -Marker $marker) "Directory cleanup must preserve unrelated hosts and newline style"
 }
-foreach ($foreignDirectory in @('flagon.example.com', 'flagon.arkret_local.example.com', 'flagon2.arkret_local', 'other-flagon.arkret_local', "flagon.arkret_local`n192.0.2.1 example.com")) {
+foreach ($foreignDirectory in @('flagon.example.com', 'flagon.localhost.example.com', 'flagon2.localhost', 'other-flagon.localhost', "flagon.localhost`n192.0.2.1 example.com")) {
     $rejected = $false
-    try { Add-CotestHostsBlock -Content $original -Hosts @('flagon.arkret_local', $foreignDirectory) -Marker $marker | Out-Null } catch { $rejected = $true }
+    try { Add-CotestHostsBlock -Content $original -Hosts @('flagon.localhost', $foreignDirectory) -Marker $marker | Out-Null } catch { $rejected = $true }
     Assert-True $rejected "foreign or injected Directory host must fail closed: $foreignDirectory"
 }
-$stale = Add-CotestHostsBlock -Content $withBlock -Hosts @("coland-server1.arkret_local") -Marker (New-CotestHostsMarker -RunId "unit-stale")
+$stale = Add-CotestHostsBlock -Content $withBlock -Hosts @("coland-server1.localhost") -Marker (New-CotestHostsMarker -RunId "unit-stale")
 Assert-Equal $original (Remove-CotestHostsBlocks -Content $stale) "stale cleanup must remove every cotest block and preserve foreign content"
 # Blocks written before `b6ab807b` separated the prefix from the stamp with a
 # space. Eight of them survived in this machine's hosts file precisely because
