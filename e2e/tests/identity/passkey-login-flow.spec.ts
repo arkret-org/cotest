@@ -239,9 +239,11 @@ test.describe("Coauth passkey browser lifecycle @fully-implemented", () => {
         await authenticator.add("usb");
         await page.getByRole("textbox", { name: "New passkey name", exact: true }).fill("Replacement passkey");
         await page.getByRole("button", { name: "Add passkey", exact: true }).click();
-        await expect(
-          page.getByText("Replacement passkey", { exact: true }),
-        ).toBeVisible({ timeout: 30_000 });
+        const passkeyNames = page.getByRole("textbox", { name: "Passkey name", exact: true });
+        await expect.poll(
+          () => passkeyNames.evaluateAll(inputs => inputs.map(input => (input as HTMLInputElement).value).sort()),
+          { timeout: 30_000 },
+        ).toEqual(["Renamed passkey", "Replacement passkey"]);
 
         const withReplacement = await context.request.get(
           `${coauth}/_coauth/self/passkeys`,
