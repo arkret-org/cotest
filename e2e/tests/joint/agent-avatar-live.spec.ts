@@ -10,30 +10,33 @@ import os from "node:os";
 
 type PersistentAgentClient = { user: JointUserPage; restart(beforeNavigate?: (page: Page) => Promise<void>): Promise<JointUserPage> };
 const test = jointTest.extend<{ agentClient: PersistentAgentClient }>({
-  agentClient: async ({ jointUsers, browser }, use) => {
+  jointAliceUserDataDir: async ({}, use) => {
     const prefix = path.join(os.tmpdir(), "cotest-agent-avatar-");
     const directory = await mkdtemp(prefix);
-    let client = await openDpopUserPageFromSession(browser, jointUsers.aliceSession, {
-      persistentUserDataDir: directory,
-    });
-    if (!client) throw new Error("Agent avatar requires the canonical controller session");
     try {
-      await use({
-        user: client.page,
-        async restart(beforeNavigate) {
-          await client!.page.close();
-          client = await openDpopUserPageFromSession(browser, jointUsers.aliceSession, {
-            persistentUserDataDir: directory, resumePersistentProfile: true, beforeNavigate,
-          });
-          if (!client) throw new Error("Agent controller could not reopen its durable profile");
-          return client.page;
-        },
-      });
+      await use(directory);
     } finally {
-      await client?.page.close();
       if (!path.resolve(directory).startsWith(path.resolve(prefix))) throw new Error("unexpected browser custody directory");
       await rm(directory, { recursive: true, force: true });
     }
+  },
+  agentClient: async ({ jointUsers, browser, jointAliceUserDataDir }, use) => {
+    if (!jointAliceUserDataDir) throw new Error("Agent avatar requires a durable controller profile");
+    await jointUsers.alicePage.completeRecoveryKeySetupIfPrompted();
+    await jointUsers.alicePage.acknowledgeRecommendedEncryptionPromptIfVisible();
+    await use({
+      user: jointUsers.alicePage,
+      async restart(beforeNavigate) {
+        const session = { ...jointUsers.aliceSession, ...await jointUsers.alicePage.currentSessionGrantOptions() };
+        await jointUsers.alicePage.close();
+        const reopened = await openDpopUserPageFromSession(browser, session, {
+          persistentUserDataDir: jointAliceUserDataDir, resumePersistentProfile: true, beforeNavigate,
+        });
+        if (!reopened) throw new Error("Agent controller could not reopen its durable profile");
+        jointUsers.alicePage = reopened.page;
+        return reopened.page;
+      },
+    });
   },
 });
 
@@ -58,8 +61,9 @@ for (const mode of ["avatar", "lost-responses", "retryable-profile", "account-sw
     let page = user.page;
     const policyUrl = new URL("/_arkret/root/identity/recovery-policy", user.serverUrl).toString();
     const controllerPolicy = async () => {
+      const session = { ...jointUsers.aliceSession, grantJwt: await user.currentSessionGrant() };
       const response = await request.get(policyUrl, {
-        headers: selfPathHeadersForDpopSession(jointUsers.aliceSession, "GET", policyUrl),
+        headers: selfPathHeadersForDpopSession(session, "GET", policyUrl),
       });
       const policy = response.ok() ? (await response.json()).active_policy : undefined;
       return { status: response.status(), activeForController: Boolean(policy

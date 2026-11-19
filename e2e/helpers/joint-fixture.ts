@@ -32,13 +32,15 @@ export const test = base.extend<{
   jointUsers: JointUsersFixture;
   jointRealm: JointRealmFixture;
   jointBobServer: ColandKey;
+  jointAliceUserDataDir: string | undefined;
   prepareJointAlicePage: ((page: Page) => Promise<void>) | undefined;
 }>({
   prepareJointAlicePage: [undefined, { option: true }],
   jointBobServer: ["default", { option: true }],
-  jointUsers: async ({ browser, request, jointBobServer, prepareJointAlicePage }, use, testInfo) => {
+  jointAliceUserDataDir: [undefined, { option: true }],
+  jointUsers: async ({ browser, request, jointBobServer, prepareJointAlicePage, jointAliceUserDataDir }, use, testInfo) => {
     testInfo.setTimeout(Math.max(testInfo.timeout, 360_000));
-    const users = await createJointTwoUsers(browser, request, jointBobServer, prepareJointAlicePage);
+    const users = await createJointTwoUsers(browser, request, jointBobServer, prepareJointAlicePage, jointAliceUserDataDir);
     try {
       await use(users);
     } finally {
@@ -67,6 +69,7 @@ async function createJointTwoUsers(
   request: APIRequestContext,
   bobServer: ColandKey,
   beforeAliceNavigate?: (page: Page) => Promise<void>,
+  aliceUserDataDir?: string,
 ): Promise<JointUsersFixture> {
   // Principal inception is lease-fenced by the local Coauth/Coland pair.
   // Starting two independent DID inception/handoff chains concurrently can
@@ -80,27 +83,36 @@ async function createJointTwoUsers(
   }
   const alice = aliceSession.user;
   const bob = bobSession.user;
-  const [alicePage, bobPage] = await Promise.all([
+  const [first, second] = await Promise.allSettled([
     openUserPage(browser, alice, {
       ...canonicalSessionOptions(aliceSession),
       beforeNavigate: beforeAliceNavigate,
+      persistentUserDataDir: aliceUserDataDir,
     }),
     openUserPage(browser, bob, {
       ...canonicalSessionOptions(bobSession),
       server: bobServer,
     }),
   ]);
-  await Promise.all([alicePage.gotoHome(), bobPage.gotoHome()]);
-
-
-  return {
-    alice,
-    bob,
-    aliceToken: aliceSession.grantJwt,
-    bobToken: bobSession.grantJwt,
-    aliceSession,
-    bobSession,
-    alicePage,
-    bobPage,
-  };
+  try {
+    if (first.status === "rejected") throw first.reason;
+    if (second.status === "rejected") throw second.reason;
+    const alicePage = first.value;
+    const bobPage = second.value;
+    await Promise.all([alicePage.gotoHome(), bobPage.gotoHome()]);
+    return {
+      alice,
+      bob,
+      aliceToken: aliceSession.grantJwt,
+      bobToken: bobSession.grantJwt,
+      aliceSession,
+      bobSession,
+      alicePage,
+      bobPage,
+    };
+  } catch (error) {
+    await Promise.allSettled([first, second].flatMap(result =>
+      result.status === "fulfilled" ? [result.value.close()] : []));
+    throw error;
+  }
 }
