@@ -1,4 +1,4 @@
-import type { Page, Response } from "@playwright/test";
+import type { Page, Request } from "@playwright/test";
 import type { AccountId } from "./generated/spec-wire-objects";
 import type { Ed25519PublicJwk } from "./session-grant-dpop";
 
@@ -30,12 +30,11 @@ export function observeBrowserSessionRefresh(
   let closed = false;
   let conflict = false;
   let refreshCount = 0;
-  const onResponse = async (response: Response) => {
-    const request = response.request();
-    const url = new URL(request.url());
-    if (closed || request.method() !== "POST" || response.status() !== 200 ||
-        url.origin !== issuerOrigin || url.pathname !== "/_arkret/gate/account/session-grants/refresh") return;
+  const pending = new Set<Promise<void>>();
+  const acceptRefresh = async (request: Request) => {
     try {
+      const response = await request.response();
+      if (!response || response.status() !== 200) return;
       const input = request.postDataJSON();
       const outcome = await response.json();
       if (closed || typeof input?.session_grant !== "string" || input.device_id !== options.deviceId ||
@@ -80,20 +79,33 @@ export function observeBrowserSessionRefresh(
       // Cancelled or incomplete responses cannot replace known credentials.
     }
   };
+  const onRequest = (request: Request) => {
+    const url = new URL(request.url());
+    if (closed || request.method() !== "POST" || url.origin !== issuerOrigin ||
+        url.pathname !== "/_arkret/gate/account/session-grants/refresh") return;
+    const refresh = acceptRefresh(request);
+    pending.add(refresh);
+    void refresh.then(() => pending.delete(refresh));
+  };
+  const currentCredential = () => {
+    if (closed || conflict) throw new Error("browser fixture refresh chain is unavailable");
+    return credential;
+  };
   const dispose = () => {
     closed = true;
     credential = "";
     successors.clear();
     retired.clear();
-    page.off("response", onResponse);
+    page.off("request", onRequest);
     page.off("close", dispose);
   };
-  page.on("response", onResponse);
+  page.on("request", onRequest);
   page.on("close", dispose);
   return {
-    credential: () => {
-      if (closed || conflict) throw new Error("browser fixture refresh chain is unavailable");
-      return credential;
+    credential: currentCredential,
+    settledCredential: async () => {
+      while (!closed && pending.size) await Promise.all([...pending]);
+      return currentCredential();
     },
     refreshCount: () => refreshCount,
     dispose,

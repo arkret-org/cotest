@@ -284,6 +284,17 @@ export class JointUserPage {
     await expect.poll(() => this.browserRefresh!.refreshCount(), { timeout: 30_000 }).toBeGreaterThan(0);
   }
 
+  async currentSessionGrant(): Promise<string> {
+    const grant = this.session.grant;
+    if (!grant || !this.browserRefresh) throw new Error("browser fixture has no bound grant observer");
+    const token = await this.browserRefresh.settledCredential();
+    if (token !== grant.grantJwt) {
+      const deviceKey = dpopDeviceKeyFromSeedB64url(grant.dpopSeedB64url);
+      registerRequestAuth(token, (method, url) => selfPathGrantHeaders({ deviceKey, grantJwt: token, method, url }));
+    }
+    return token;
+  }
+
   async gotoHome() {
     await waitForRecoverySetupCompletion(this.page);
     const shell = this.page.locator("html[data-inkson-app-shell] .shell.app");

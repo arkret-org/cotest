@@ -20,16 +20,25 @@ function emit(page, predecessor = "initial", credential = "next", extra = {}) {
     granted_scope: ["read", "write"], session_public_key: JSON.stringify(holderJwk),
     session_grant: credential, session_grant_id: "grant-1", previous_session_grant_id: "grant-0",
     expires_at: expiry, ...extra.outcome };
-  page.emit("response", {
-    request: () => ({ method: () => "POST", url: () =>
-      `${extra.origin ?? options.issuerUrl}/_arkret/gate/account/session-grants/refresh`, postDataJSON: () => input }),
-    status: () => extra.status ?? 200, json: () => extra.body ?? Promise.resolve(body),
+  page.emit("request", {
+    method: () => "POST", url: () => `${extra.origin ?? options.issuerUrl}/_arkret/gate/account/session-grants/refresh`,
+    postDataJSON: () => input,
+    response: async () => ({ status: () => extra.status ?? 200, json: () => extra.body ?? Promise.resolve(body) }),
   });
   return body;
 }
 test("real successful refresh can replace the fixture credential without another login", async () => {
   const { page, tracker } = setup(); emit(page); await setImmediate(); assert.equal(tracker.credential(), "next");
   assert.equal(tracker.refreshCount(), 1);
+});
+test("API reads wait for a browser refresh already in flight", async () => {
+  const { page, tracker } = setup();
+  let finish;
+  const body = new Promise(resolve => { finish = resolve; });
+  const outcome = emit(page, "initial", "next", { body });
+  const read = tracker.settledCredential();
+  finish(outcome);
+  assert.equal(await read, "next");
 });
 test("foreign issuer and failed refresh cannot change the credential", async () => {
   for (const extra of [{ origin: "https://other.test" }, { status: 401 }]) {
@@ -79,5 +88,5 @@ test("close discards pending credentials and stops delayed responses", async () 
   const { page, tracker } = setup(); let release;
   const body = new Promise(resolve => { release = resolve; });
   const outcome = emit(page, "initial", "next", { body }); page.emit("close"); release(outcome); await setImmediate();
-  assert.equal(page.listenerCount("response"), 0); assert.throws(() => tracker.credential(), /unavailable/);
+  assert.equal(page.listenerCount("request"), 0); assert.throws(() => tracker.credential(), /unavailable/);
 });

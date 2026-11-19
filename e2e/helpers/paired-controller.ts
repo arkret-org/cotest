@@ -76,7 +76,9 @@ export async function openAndPairSecondController(
     const viewerUrl = `${colandBaseUrl()}/_arkret/self/account/viewer`;
     await expect.poll(async () => {
       const response = await request.get(viewerUrl, {
-        headers: selfPathHeadersForDpopSession(jointRealm.aliceSession, "GET", viewerUrl),
+        headers: selfPathHeadersForDpopSession({
+          ...jointRealm.aliceSession, grantJwt: await jointRealm.alicePage.currentSessionGrant(),
+        }, "GET", viewerUrl),
       });
       if (!response.ok()) return `http-${response.status()}`;
       const body = await response.json();

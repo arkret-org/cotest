@@ -4,7 +4,9 @@ import {
   type Browser,
   type Page,
 } from "./arkret-test";
+import type { ColandKey } from "./env";
 import {
+  canonicalSessionOptions,
   createDpopUserSession,
   type DpopUserSession,
   type JointUser,
@@ -29,12 +31,14 @@ export type JointRealmFixture = JointUsersFixture & { realmId: string };
 export const test = base.extend<{
   jointUsers: JointUsersFixture;
   jointRealm: JointRealmFixture;
+  jointBobServer: ColandKey;
   prepareJointAlicePage: ((page: Page) => Promise<void>) | undefined;
 }>({
   prepareJointAlicePage: [undefined, { option: true }],
-  jointUsers: async ({ browser, request, prepareJointAlicePage }, use, testInfo) => {
+  jointBobServer: ["default", { option: true }],
+  jointUsers: async ({ browser, request, jointBobServer, prepareJointAlicePage }, use, testInfo) => {
     testInfo.setTimeout(Math.max(testInfo.timeout, 360_000));
-    const users = await createJointTwoUsers(browser, request, prepareJointAlicePage);
+    const users = await createJointTwoUsers(browser, request, jointBobServer, prepareJointAlicePage);
     try {
       await use(users);
     } finally {
@@ -61,6 +65,7 @@ export { expect } from "./arkret-test";
 async function createJointTwoUsers(
   browser: Browser,
   request: APIRequestContext,
+  bobServer: ColandKey,
   beforeAliceNavigate?: (page: Page) => Promise<void>,
 ): Promise<JointUsersFixture> {
   // Principal inception is lease-fenced by the local Coauth/Coland pair.
@@ -69,7 +74,7 @@ async function createJointTwoUsers(
   // caller timeout. Keep user creation sequential; browser bootstrap below is
   // still parallel once both durable principals exist.
   const aliceSession = await createDpopUserSession(request, "joint-alice", {});
-  const bobSession = await createDpopUserSession(request, "joint-bob", {});
+  const bobSession = await createDpopUserSession(request, "joint-bob", { server: bobServer });
   if (!aliceSession || !bobSession) {
     throw new Error("joint fixture requires coauth DPoP session-grant login");
   }
@@ -77,33 +82,12 @@ async function createJointTwoUsers(
   const bob = bobSession.user;
   const [alicePage, bobPage] = await Promise.all([
     openUserPage(browser, alice, {
+      ...canonicalSessionOptions(aliceSession),
       beforeNavigate: beforeAliceNavigate,
-      grantJwt: aliceSession.grantJwt,
-      dpopSeedB64url: aliceSession.dpopSeedB64url,
-      eventSigningSeedB64url: aliceSession.eventSigningSeedB64url,
-      grantId: aliceSession.grantId,
-      accountId: aliceSession.accountId,
-      principalControlRealmId: aliceSession.principalControlRealmId,
-      grantAudience: aliceSession.grantAudience,
-      recoveryKey: aliceSession.recoveryKey,
-      recoveryMaterialEvidence: aliceSession.recoveryMaterialEvidence,
-      onRecoveryKeyConfigured: (key) => {
-        aliceSession.recoveryKey = key;
-      },
     }),
     openUserPage(browser, bob, {
-      grantJwt: bobSession.grantJwt,
-      dpopSeedB64url: bobSession.dpopSeedB64url,
-      eventSigningSeedB64url: bobSession.eventSigningSeedB64url,
-      grantId: bobSession.grantId,
-      accountId: bobSession.accountId,
-      principalControlRealmId: bobSession.principalControlRealmId,
-      grantAudience: bobSession.grantAudience,
-      recoveryKey: bobSession.recoveryKey,
-      recoveryMaterialEvidence: bobSession.recoveryMaterialEvidence,
-      onRecoveryKeyConfigured: (key) => {
-        bobSession.recoveryKey = key;
-      },
+      ...canonicalSessionOptions(bobSession),
+      server: bobServer,
     }),
   ]);
   await Promise.all([alicePage.gotoHome(), bobPage.gotoHome()]);

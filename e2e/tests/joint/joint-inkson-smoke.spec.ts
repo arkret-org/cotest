@@ -40,7 +40,8 @@ test.describe("joint-inkson smoke @fully-implemented", () => {
     const stamp = Date.now();
     const aliceMessage = `joint smoke from Alice ${stamp}`;
     const principalHandle = await verifiedPrimaryHandle(
-      request, jointRealm.aliceSession, jointRealm.alicePage.serverUrl,
+      request, { ...jointRealm.aliceSession, grantJwt: await jointRealm.alicePage.currentSessionGrant() },
+      jointRealm.alicePage.serverUrl,
     );
     const registeredLocalpart = jointRealm.alice.handle.trim().replace(/^@/, "").split(":", 1)[0];
     expect(principalHandle.split(":", 1)[0]).toBe(registeredLocalpart);
@@ -92,7 +93,8 @@ test.describe("joint-inkson smoke @fully-implemented", () => {
     const slug = `summary${stamp.toString(36)}`;
     const forgedDisplayName = `Forged Summary Agent ${stamp}`;
     const controllerHandle = await verifiedPrimaryHandle(
-      request, jointRealm.aliceSession, jointRealm.alicePage.serverUrl,
+      request, { ...jointRealm.aliceSession, grantJwt: await jointRealm.alicePage.currentSessionGrant() },
+      jointRealm.alicePage.serverUrl,
     );
     const participantSession = await createDpopUserSession(
       request,
@@ -114,11 +116,11 @@ test.describe("joint-inkson smoke @fully-implemented", () => {
     try {
       const strandId = await resolveDefaultStrandId(
         request,
-        jointRealm.aliceSession,
+        { ...jointRealm.aliceSession, grantJwt: await jointRealm.alicePage.currentSessionGrant() },
         jointRealm.alicePage.serverUrl,
         jointRealm.realmId,
       );
-      await grantCapabilityEventApi(request, jointRealm.aliceToken, {
+      await grantCapabilityEventApi(request, await jointRealm.alicePage.currentSessionGrant(), {
         ownerId: jointRealm.alice.id,
         realmId: jointRealm.realmId,
         subjectId: jointRealm.alice.id,
@@ -132,7 +134,7 @@ test.describe("joint-inkson smoke @fully-implemented", () => {
       );
       const delivery = await deliverInviteWithConsentGrant(request, {
         inviterId: jointRealm.alice.id,
-        inviterToken: jointRealm.aliceToken,
+        inviterToken: await jointRealm.alicePage.currentSessionGrant(),
         realmId: jointRealm.realmId,
         inviteeId: participantId,
         consentGrantRef: consent.eventRef,
@@ -142,7 +144,7 @@ test.describe("joint-inkson smoke @fully-implemented", () => {
       expect(delivery.outcome.disclosed_outcome).toBe("delivered");
       await participantFlow!.page.acceptInvite(jointRealm.realmId);
       // Membership does not confer the action capability needed by the reply.
-      await grantCapabilityEventApi(request, jointRealm.aliceToken, {
+      await grantCapabilityEventApi(request, await jointRealm.alicePage.currentSessionGrant(), {
         ownerId: jointRealm.alice.id,
         realmId: jointRealm.realmId,
         subjectId: participantId,
@@ -150,7 +152,7 @@ test.describe("joint-inkson smoke @fully-implemented", () => {
       });
       const controllerMessageId = await submitSignedEvent(
         request,
-        jointRealm.aliceSession,
+        { ...jointRealm.aliceSession, grantJwt: await jointRealm.alicePage.currentSessionGrant() },
         jointRealm.alice.id,
         jointRealm.alicePage.serverUrl,
         jointRealm.realmId,

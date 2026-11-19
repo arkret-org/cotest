@@ -10,9 +10,8 @@ import { requestContactArkret, respondContactArkret, resolvePrincipalLocator, to
 import { accountActorId, assertAuthoritySubmitOutcome, canonicalJson, createRealmApi, resolveDefaultStrandId, scanRealmStreamApi, sdkEventDerivedObjectId, signedEventEnvelope, submitSignedEventApi } from "../../helpers/coland-api";
 import { decodeEventIngressBody, ingressEvents } from "../../helpers/event-ingress";
 import { readScopeMlsGroupCurrentApi } from "../../helpers/coland-api/mls";
-import { observeBrowserDpopGrant } from "../../helpers/session-transport-recovery";
 
-import { approvePairingLinkOnAuthorizedDevice, createDpopUserSession, openDpopUserPageFromSession, selfPathHeadersForDpopSession } from "../../helpers/users";
+import { approvePairingLinkOnAuthorizedDevice, createDpopUserSession, selfPathHeadersForDpopSession } from "../../helpers/users";
 import { serverLoginViaCoauth, submitCoauthPasswordCredentials } from "../../helpers/real-oidc-login";
 import { colandBaseUrl } from "../../helpers/env";
 
@@ -27,9 +26,10 @@ return async ({ jointUsers, request, browser }: { jointUsers: JointUsersFixture;
   // A Contact pair must establish its own Direct Conversation without any
   // pre-existing shared Realm. Exercise only the two account prerequisites.
   const { alicePage, bobPage, aliceSession, bobSession } = jointUsers;
+  const currentAliceToken = () => alicePage.currentSessionGrant();
+  const currentBobToken = () => bobPage.currentSessionGrant();
   const alice = alicePage.page;
   const bob = bobPage.page;
-  const currentBobToken = mode === "leave" ? observeBrowserDpopGrant(bob, bobSession) : undefined;
   const interruptPreparation = mode === "interrupted" || mode === "offline";
   const holdSecondResolve = mode === "normal" || mode === "logout" || mode === "account";
   const phase = (stage: string) => {
@@ -250,8 +250,8 @@ return async ({ jointUsers, request, browser }: { jointUsers: JointUsersFixture;
   }
   try {
   phase("contact_request_start");
-  const remoteLocator = remoteBob ? await resolvePrincipalLocator(request, bobSession.user.id, "server2", bobSession.grantJwt) : undefined;
-  const { outcome } = await requestContactArkret(request, aliceSession.grantJwt, bobSession.user.id, {
+  const remoteLocator = remoteBob ? await resolvePrincipalLocator(request, bobSession.user.id, "server2", await currentBobToken()) : undefined;
+  const { outcome } = await requestContactArkret(request, await currentAliceToken(), bobSession.user.id, {
     requestedScopes: ["direct_message", "presence"],
     ...(remoteLocator ? { recipientServiceId: bobSession.accountId.station_id,
       introductionEvidence: { kind: "locator_ref", principal_locator: remoteLocator } } : {}),
@@ -265,7 +265,7 @@ return async ({ jointUsers, request, browser }: { jointUsers: JointUsersFixture;
     await expect(pending.locator(".contact-pending-outgoing")).toBeVisible();
     await expect(pending.locator(".contact-message")).toHaveCount(0);
   }
-  const accepted = await respondContactArkret(request, bobSession.grantJwt, {
+  const accepted = await respondContactArkret(request, await currentBobToken(), {
     requestId: outcome.request_event_ref,
     requesterId: aliceSession.user.id,
     action: "accept",
@@ -390,7 +390,7 @@ return async ({ jointUsers, request, browser }: { jointUsers: JointUsersFixture;
         const viewerUrl = `${colandBaseUrl()}/_arkret/self/account/viewer`;
         await expect.poll(async () => {
           const response = await request.get(viewerUrl, {
-            headers: selfPathHeadersForDpopSession(replacement, "GET", viewerUrl),
+            headers: selfPathHeadersForDpopSession({ ...replacement, grantJwt: founder === alice ? await currentBobToken() : await currentAliceToken() }, "GET", viewerUrl),
           });
           expect(response.ok(), "the replacement Account must confirm its actual accepted Device").toBe(true);
           const body = await response.json();
@@ -474,7 +474,7 @@ return async ({ jointUsers, request, browser }: { jointUsers: JointUsersFixture;
       // its durable admission must restore the post-Add sending state.
       await bob.reload();
       await expect.poll(async () => uint64Value((await readScopeMlsGroupCurrentApi(
-        request, bobSession.grantJwt, directRealm, { kind: "realm", realm_id: directRealm },
+        request, await currentBobToken(), directRealm, { kind: "realm", realm_id: directRealm },
         remoteBob ? "server2" : "default",
       ))?.epoch ?? "0"), { timeout: 180_000 }).toBeGreaterThan(0n);
     }
@@ -501,11 +501,11 @@ return async ({ jointUsers, request, browser }: { jointUsers: JointUsersFixture;
     expect(sentEvent, "the provisional submission carries its message").toBeTruthy();
     expect(submission.status, `provisional outcome reason: ${String(submission.reason_code ?? "none")}`).toBe("committed");
     assertAuthoritySubmitOutcome(submission, sentEvent!, "provisional Direct message");
-    const founding = await scanRealmStreamApi(request, bobSession.grantJwt, directRealm, { limit: 1000 });
+    const founding = await scanRealmStreamApi(request, await currentBobToken(), directRealm, { limit: 1000 });
     expect(founding.truncated).toBe(false);
     const mainCreate = founding.events.find(event => event.kind === "ak.strand.create");
     expect(mainCreate).toBeDefined();
-    await rejectDirectStructureEvent({ request, token: bobSession.grantJwt }, sentEvent!,
+    await rejectDirectStructureEvent({ request, token: await currentBobToken() }, sentEvent!,
       `provisional-${mode}-structure`, "ak.strand.create", { object: (mainCreate!.payload as Record<string, unknown>).object },
       "direct_conversation_participant_authority_denied");
     const envelope = sentEvent?.payload?.encrypted_content as { encryption_context?: { epoch?: string } } | undefined;
@@ -536,7 +536,8 @@ return async ({ jointUsers, request, browser }: { jointUsers: JointUsersFixture;
     await expect(page.locator(".send-chat-button")).toBeEnabled({ timeout: 180_000 }).catch(async error => {
       const realm = decodeURIComponent(new URL(page.url()).pathname.split("/")[2] ?? "");
       let currentReadFailed = false;
-      const current = await readScopeMlsGroupCurrentApi(request, session.grantJwt, realm,
+      const token = page === alice ? await currentAliceToken() : await currentBobToken();
+      const current = await readScopeMlsGroupCurrentApi(request, token, realm,
         { kind: "realm", realm_id: realm }, server).catch(() => { currentReadFailed = true; return undefined; });
       let creatorProbeFailed = false;
       const creatorRecords = await readCreatorRecords(page, true).catch(() => { creatorProbeFailed = true; return []; });
@@ -562,8 +563,8 @@ return async ({ jointUsers, request, browser }: { jointUsers: JointUsersFixture;
     const directRealm = decodeURIComponent(path.split("/")[2]);
     await expect.poll(async () => {
       const currents = await Promise.all([
-        readScopeMlsGroupCurrentApi(request, aliceSession.grantJwt, directRealm),
-        readScopeMlsGroupCurrentApi(request, bobSession.grantJwt, directRealm, undefined,
+        readScopeMlsGroupCurrentApi(request, await currentAliceToken(), directRealm),
+        readScopeMlsGroupCurrentApi(request, await currentBobToken(), directRealm, undefined,
           remoteBob ? "server2" : "default"),
       ]);
       const epochs = currents.map(current => uint64Value(current?.epoch ?? "0"));
@@ -626,8 +627,8 @@ return async ({ jointUsers, request, browser }: { jointUsers: JointUsersFixture;
   if (remoteBob) {
     await expect(async () => {
       const [aliceGroup, bobGroup] = await Promise.all([
-        readScopeMlsGroupCurrentApi(request, aliceSession.grantJwt, exchangeRealm),
-        readScopeMlsGroupCurrentApi(request, bobSession.grantJwt, exchangeRealm, undefined, "server2"),
+        readScopeMlsGroupCurrentApi(request, await currentAliceToken(), exchangeRealm),
+        readScopeMlsGroupCurrentApi(request, await currentBobToken(), exchangeRealm, undefined, "server2"),
       ]);
       const joinedCut = Boolean(aliceGroup && bobGroup
         && uint64Value(aliceGroup.epoch) > 0n && aliceGroup.epoch === bobGroup.epoch
@@ -682,8 +683,8 @@ return async ({ jointUsers, request, browser }: { jointUsers: JointUsersFixture;
       await expect(recipient.locator(".chat-message").filter({ hasText: message })).toBeVisible({ timeout: 90_000 });
     } catch (error) {
       if (accepted) {
-        const peer = recipient === bob ? bobSession : aliceSession;
-        const observed = await scanRealmStreamApi(request, peer.grantJwt, exchangeRealm, {
+        const peerToken = recipient === bob ? await currentBobToken() : await currentAliceToken();
+        const observed = await scanRealmStreamApi(request, peerToken, exchangeRealm, {
           server: recipient === bob ? "server2" : "default", afterPosition: accepted.position - 1,
           waitForJoinedCut: true,
         }).catch(() => undefined);
@@ -714,10 +715,10 @@ return async ({ jointUsers, request, browser }: { jointUsers: JointUsersFixture;
   await submitOrdinaryComposerDraft(bob, afterReload);
   await expect(alice.locator(".chat-message").filter({ hasText: afterReload })).toBeVisible({ timeout: 90_000 });
   if (mode === "withdrawal" || mode === "leave") {
-    await directStructureLifecycleGate(alice, bob, { request, token: aliceSession.grantJwt,
-      peer: { token: bobSession.grantJwt, server: "default", currentToken: currentBobToken } }, mode, async author => {
+    await directStructureLifecycleGate(alice, bob, { request, token: await currentAliceToken(),
+      peer: { token: await currentBobToken(), server: "default", currentToken: currentBobToken } }, mode, async author => {
       if (mode === "withdrawal") {
-        const withdrawn = await tombstoneContactArkret(request, aliceSession.grantJwt, bobSession.user.id);
+        const withdrawn = await tombstoneContactArkret(request, await currentAliceToken(), bobSession.user.id);
         expect(withdrawn.state).toBe("tombstoned");
       } else {
         const event = signedEventEnvelope({ actorId: author.actor_id as ReturnType<typeof accountActorId>,
@@ -726,8 +727,8 @@ return async ({ jointUsers, request, browser }: { jointUsers: JointUsersFixture;
           proofVerificationMethod: (author.producer_proof as { verification_method: string }).verification_method,
           payload: { member_id: author.actor_id, membership: "leave", reason: "self_leave" },
         });
-        const token = (await currentBobToken?.()) ?? bobSession.grantJwt;
-        await submitSignedEventApi(request, token, event, { context: "Direct participant self leave", controlObserverToken: aliceSession.grantJwt });
+        const token = await currentBobToken();
+        await submitSignedEventApi(request, token, event, { context: "Direct participant self leave", controlObserverToken: await currentAliceToken() });
       }
     });
     return;
@@ -742,18 +743,18 @@ return async ({ jointUsers, request, browser }: { jointUsers: JointUsersFixture;
       expect(Boolean(actualRecoveryKey), "the paired holder retains its actual accepted recovery material").toBe(true);
       await paired.page.unlockMlsAccountSecret(actualRecoveryKey!);
       await expect(paired.page.page.locator(".send-chat-button")).toBeEnabled({ timeout: 180_000 });
-      const outsideRealm = await createRealmApi(request, aliceSession.grantJwt, {
+      const outsideRealm = await createRealmApi(request, await currentAliceToken(), {
         title: `DM boundary outside ${Date.now()}`, mls_activated: false,
       });
-      const outsideStrand = await resolveDefaultStrandId(request, aliceSession.grantJwt, outsideRealm);
+      const outsideStrand = await resolveDefaultStrandId(request, await currentAliceToken(), outsideRealm);
       const control = paired.page.page;
       const circleStrand = await createDirectBoundaryCircleStrand(paired.page, request,
-        aliceSession.grantJwt, outsideRealm, `DM boundary Circle ${Date.now()}`);
+        await currentAliceToken(), outsideRealm, `DM boundary Circle ${Date.now()}`);
       const third = await createDpopUserSession(request, "direct-outsider", {});
       expect(third, "negative author must be a real registered principal/device").toBeDefined();
       await control.goto(path, { waitUntil: "domcontentloaded" });
-      await flatTopicChats(alice, bob, mainMessages, [paired.page.page], { request, token: aliceSession.grantJwt,
-        peer: { token: bobSession.grantJwt, server: remoteBob ? "server2" : "default" }, boundaryTargets: {
+      await flatTopicChats(alice, bob, mainMessages, [paired.page.page], { request, token: await currentAliceToken(),
+        peer: { token: await currentBobToken(), server: remoteBob ? "server2" : "default" }, boundaryTargets: {
           realmStrand: outsideStrand, circleStrand: circleStrand!, thirdActor: accountActorId(third!.user.id), thirdToken: third!.grantJwt,
         } });
     } finally {
@@ -796,20 +797,10 @@ test("same-server Direct Conversation resumes interrupted preparation and exchan
 test("same-server Direct Conversation founder sends while the peer device is offline and the peer decrypts after reconnect", directConversationCase("offline"));
 
 
-test("cross-station Direct Conversation preserves encrypted Chat and Topic state across participants and reload", async ({ jointUsers, request, browser }) => {
-  test.setTimeout(crossStationDirectTimeout);
-  const session = await createDpopUserSession(request, "direct-cross-bob", { server: "server2" });
-  expect(session, "the official two-Station runner must supply a real second Station").toBeDefined();
-  const remoteFlow = await openDpopUserPageFromSession(browser, session, { server: "server2" });
-  expect(remoteFlow, "the remote participant must complete canonical browser session initialization").toBeDefined();
-  const remote = remoteFlow!.page;
-  try {
-    await directConversationCase("normal", true)({ browser, request, jointUsers: {
-      ...jointUsers, bob: session!.user, bobSession: session!, bobToken: session!.grantJwt, bobPage: remote,
-    } });
-  } finally {
-    await remote.close();
-  }
+test.describe("remote peer", () => {
+  test.use({ jointBobServer: "server2" });
+  test("cross-station Direct Conversation preserves encrypted Chat and Topic state across participants and reload",
+    directConversationCase("normal", true));
 });
 
 test("Direct Conversation resumes a genuinely lost founding acceptance after cold reload without creating another pair", directConversationCase("lost"));
