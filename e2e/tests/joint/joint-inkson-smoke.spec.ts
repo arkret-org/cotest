@@ -18,6 +18,7 @@ import {
   openDpopUserPageFromSession,
   selfPathHeadersForDpopSession,
 } from "../../helpers/users";
+import { withDiscussionUsersPanel } from "../../helpers/product-locators";
 import { coauthBaseUrl } from "../../helpers/env";
 import {
   deliverInviteWithConsentGrant,
@@ -62,16 +63,18 @@ test.describe("joint-inkson smoke @fully-implemented", () => {
       principalHandle,
     );
 
-    const selfParticipant = jointRealm.alicePage.page
-      .locator(".participant-row")
-      .filter({
+    await withDiscussionUsersPanel(jointRealm.alicePage.page, async panel => {
+      const selfParticipant = panel.locator(".participant-row").filter({
         has: jointRealm.alicePage.page.locator(".actor-identity-self-badge"),
       });
-    await expect(selfParticipant).toContainText(principalHandle);
+      await expect(selfParticipant).toContainText(principalHandle);
+      if (accountAuthorityHandle && accountAuthorityHandle !== principalHandle) {
+        await expect(selfParticipant).not.toContainText(accountAuthorityHandle);
+      }
+    });
 
     if (accountAuthorityHandle && accountAuthorityHandle !== principalHandle) {
       await expect(message).not.toContainText(accountAuthorityHandle);
-      await expect(selfParticipant).not.toContainText(accountAuthorityHandle);
     }
     await jointRealm.alicePage.page.locator(".rail-account").click();
     const account = jointRealm.alicePage.page.locator(".account-page");
@@ -208,29 +211,31 @@ test.describe("joint-inkson smoke @fully-implemented", () => {
       await expect(jointRealm.alicePage.timelineEvent(replyBody)).toBeVisible({
         timeout: 30_000,
       });
-      await expect(
-        // This isolated Realm contains only its three human participants.
-        jointRealm.alicePage.page.locator(".participant-agent-group"),
-      ).toHaveCount(0);
+      await withDiscussionUsersPanel(jointRealm.alicePage.page, async panel => {
+        await expect(
+          // This isolated Realm contains only its three human participants.
+          panel.locator(".participant-agent-group"),
+        ).toHaveCount(0);
 
-      const participantRow = jointRealm.alicePage.page
-        .locator(".participant-row")
-        .filter({
-          // A dev-login display name is not an authoritative profile label.
-          // Select the human row by the canonical full Account ActorId kept
-          // in the identity label's accessible name; visible copy may be a handle.
-          has: jointRealm.alicePage.page.getByLabel(
-            canonicalJson(accountActorId(participantId)), { exact: true },
-          ),
-        });
-      await expect(participantRow).toBeVisible({ timeout: 60_000 });
-      await expect(participantRow).not.toContainText(forgedDisplayName);
-      await expect(
-        participantRow.locator(".member-badge-agent"),
-      ).toHaveCount(0);
-      await expect(
-        participantRow.locator(".participant-agent-selector"),
-      ).toHaveCount(0);
+        const participantRow = panel
+          .locator(".participant-row")
+          .filter({
+            // A dev-login display name is not an authoritative profile label.
+            // Select the human row by the canonical full Account ActorId kept
+            // in the identity label's accessible name; visible copy may be a handle.
+            has: jointRealm.alicePage.page.getByLabel(
+              canonicalJson(accountActorId(participantId)), { exact: true },
+            ),
+          });
+        await expect(participantRow).toBeVisible({ timeout: 60_000 });
+        await expect(participantRow).not.toContainText(forgedDisplayName);
+        await expect(
+          participantRow.locator(".member-badge-agent"),
+        ).toHaveCount(0);
+        await expect(
+          participantRow.locator(".participant-agent-selector"),
+        ).toHaveCount(0);
+      });
 
       const input = jointRealm.alicePage.page.locator(".chat-input");
       await input.fill(`@me/${slug}`);
