@@ -1836,8 +1836,8 @@
     {
       "scenario_key": "sync/websocket-deployment",
       "suite_kind": "joint-e2e",
-      "realism_level": "fixture-only",
-      "evidence_class": "fixture-only",
+      "realism_level": "server-contract",
+      "evidence_class": "server-contract",
       "real_services": [
         "coland"
       ],
@@ -1846,10 +1846,14 @@
         "fixture_or_not_applicable"
       ],
       "protocol_object_producers": [
-        "fixture_or_not_applicable"
+        "raw_http_fixture"
       ],
-      "declared_test_bypasses": [],
-      "claims_excluded": []
+      "declared_test_bypasses": [
+        "raw_http_fixture_or_oracle"
+      ],
+      "claims_excluded": [
+        "ui_driven_business_flow_for_raw_http_steps"
+      ]
     },
     {
       "scenario_key": "workflows/community-event",

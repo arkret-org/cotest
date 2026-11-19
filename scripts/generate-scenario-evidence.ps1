@@ -48,7 +48,9 @@ foreach ($file in Get-ChildItem -LiteralPath $testsRoot -Recurse -File -Filter "
         (Test-UiEvidenceCall $uiSource $uiCodeMask '\.getByLabel\(\s*["'']Account server["'']\s*,\s*\{\s*exact\s*:\s*true\s*\}\s*\)\s*\.fill\(\s*colandBaseUrl\(\)\s*\)') -and
         (Test-UiEvidenceCall $uiSource $uiCodeMask '\.locator\(\s*["'']\.registration-panel["'']\s*\)\s*\.getByRole\(\s*["'']button["'']\s*,\s*\{\s*name\s*:\s*["'']Continue["'']\s*,\s*exact\s*:\s*true\s*\}\s*\)\s*\.click\s*\(')
     )
-    $usesInksonUi = ($uiSource -match 'open(?:Dpop)?UserPage|openUserPage|\.goto(?:Home|Login|Setup|Timeline)|\.createRealm\(|\.sendTimelineMessage\(') -or $usesRegisteredUi -or $usesRegistrationFormUi
+    # The paired controller opens Inkson and completes the product login UI.
+    $usesPairedControllerUi = Test-UiEvidenceCall $uiSource $uiCodeMask '\bawait\s+openAndPairSecondController\s*\('
+    $usesInksonUi = $usesPairedControllerUi -or ($uiSource -match 'open(?:Dpop)?UserPage|openUserPage|\.goto(?:Home|Login|Setup|Timeline)|\.createRealm\(|\.sendTimelineMessage\(') -or $usesRegisteredUi -or $usesRegistrationFormUi
     $usesCoauthAccountUi = $source -match '\bcoauthBaseUrl\b' -and
         $source -match '["'']/_coauth/account/auth/register["'']' -and
         $source -match '\bsubmitCoauthPasswordCredentials\s*\(' -and $source -match '\.goto\('
