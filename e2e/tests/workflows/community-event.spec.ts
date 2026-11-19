@@ -1,3 +1,4 @@
+import { withDiscussionUsersPanel } from "../../helpers/product-locators";
 // A single project carried from browser-owned registration to shared delivery.
 // Contract: e2e/scenarios/workflows/community-event.md
 import { createHash } from "node:crypto";
@@ -304,9 +305,13 @@ test("three browser-owned members deliver a community event through encrypted di
       expect(createHash("sha256").update(Buffer.from(received)).digest("hex")).toBe(createHash("sha256").update(png).digest("hex"));
     }
     checkpoint("designer's encrypted poster attachment decrypts to the exact bytes for all members");
-    const presenceNames = await bob.page.page.locator(".presence-name").allTextContents();
-    expect(presenceNames.length).toBeGreaterThan(0);
-    expect(presenceNames.every(name => !name.trim().startsWith("{"))).toBe(true);
+    await withDiscussionUsersPanel(bob.page.page, async panel => {
+      const names = panel.locator(".presence-name");
+      await expect(names.first()).toBeVisible();
+      const presenceNames = await names.allTextContents();
+      expect(presenceNames.length).toBeGreaterThan(0);
+      expect(presenceNames.every(name => !name.trim().startsWith("{"))).toBe(true);
+    });
     await stepShot(bob.page.page, testInfo, "encrypted-project-discussion");
 
     for (const member of flows) {
