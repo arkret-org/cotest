@@ -142,6 +142,17 @@ export function observeRequestCost(page: Page) {
   page.on("requestfailed", onFailed);
   page.on("websocket", onSocket);
   return {
+    // A durable head can arrive before the browser has finished verifying
+    // the inventory's historical originals. Count those reads in setup.
+    boardReadsIdleFor(ms: number) {
+      const cutoff = elapsed() - ms;
+      return [...requests.values()].every(row => {
+        const relevant = collection(row.path) || row.path === "/_arkret/self/streams/scan"
+          || row.path.startsWith("/_arkret/self/committed-events/") && row.method === "GET"
+          || row.path === "/_arkret/self/signer-keys/query";
+        return !relevant || row.elapsed_ms !== null && row.started_ms + row.elapsed_ms <= cutoff;
+      });
+    },
     mark: (phase?: CostPhase) => {
       const at = elapsed();
       if (phase) phases.push({ phase, at_ms: at });

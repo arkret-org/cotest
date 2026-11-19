@@ -2350,6 +2350,11 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
             /\/_arkret\/self\/realms\/[^/]+\/(spaces|strands)$/.test(row.path));
           await waitForDurableCurrentCut(alicePage.page,
             await readCommitStreamHeadApi(request, await currentAliceGrant(), realmId));
+          if (fault === "requests-websocket") {
+            await expect.poll(() => cost.boardReadsIdleFor(2_000), {
+              timeout: 30_000, message: "initial Board inventory and historical proof reads must settle before replay",
+            }).toBe(true);
+          }
           const first = await cost.snapshot();
           await testInfo.attach("kanban-request-first.json", { contentType: "application/json", body: JSON.stringify(first) });
           if (fault === "requests-websocket") {
