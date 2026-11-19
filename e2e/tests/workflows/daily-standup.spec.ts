@@ -234,11 +234,13 @@ test.describe("workflow: async daily standup", () => {
       // Reconnect: the drain effect flushes the queue; the message settles
       // (send-status clears) and the banner disappears.
       await context.setOffline(false);
-      await patPage.gotoTimelineRealm(realmId);
       await patPage.waitForTimelineEventSettled(offlinePost);
       await expect(
         patPage.page.locator(".chat-outbox-banner"),
       ).toHaveCount(0, { timeout: 60_000 });
+      // Reopen the timeline after acknowledgement to verify the durable row.
+      await patPage.gotoTimelineRealm(realmId);
+      await patPage.waitForTimelineEventSettled(offlinePost);
       await stepShot(patPage.page, testInfo, "offline-B-flushed");
     } finally {
       await context.setOffline(false).catch(() => {});

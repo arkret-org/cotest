@@ -1406,7 +1406,9 @@ export class JointUserPage {
     const canonicalMessageClass = /(?:^|\s)is-canonical-message(?:\s|$)/;
     await expect(event).toHaveClass(canonicalMessageClass, { timeout });
     await expect(event.locator(".chat-message-error")).toHaveCount(0);
-    await expect(pending).toHaveCount(0);
+    // An offline send already has its canonical Event ID while it waits for
+    // the next durable retry. Apply the caller's settlement window here too.
+    await expect(pending).toHaveCount(0, { timeout });
   }
 
   async expectTimelineEventVisible(body: string, timeout = 45_000) {
