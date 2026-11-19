@@ -1932,7 +1932,7 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
           // Opening a local draft is not a capability. Prove the authority
           // boundary with a real, valid signed create before any write grant.
           await expect(bobPage.page.locator(".kanban-column").first().locator(".add-card-button")).toBeVisible();
-          const beforeDeniedCreate = await readCommitStreamHeadApi(request, aliceSession.grantJwt, realmId);
+          const beforeDeniedCreate = await readCommitStreamHeadApi(request, await currentAliceGrant(), realmId);
           const deniedCreatedAt = new Date().toISOString();
           const deniedCreate = signedEventEnvelope({ actorId: bob.id, realmId,
             kind: "ak.strand.create", createdAt: deniedCreatedAt,
@@ -1942,12 +1942,12 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
           });
           const submitUrl = `${colandBaseUrl()}/_arkret/self/events`;
           const denied = await request.post(submitUrl, {
-            headers: { ...authHeaders(bobSession.grantJwt, "POST", submitUrl), "content-type": "application/json" },
+            headers: { ...authHeaders(await bobPage!.currentSessionGrant(), "POST", submitUrl), "content-type": "application/json" },
             data: canonicalJson({ event: deniedCreate }),
           });
           expect(denied.status(), "membership alone must not authorize Strand creation").toBe(403);
           expect(wireErrCode(await denied.json())).toBe("capability_denied");
-          expect(await readCommitStreamHeadApi(request, aliceSession.grantJwt, realmId),
+          expect(await readCommitStreamHeadApi(request, await currentAliceGrant(), realmId),
             "the denied signed create must leave the governing stream unchanged").toEqual(beforeDeniedCreate);
           // Space current retains structural identity and encrypted metadata.
           // history-visibility §4 gives a new member no pre-join MLS secrets;
@@ -1990,7 +1990,7 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
                   "content-type": "application/json",
                   ...selfPathGrantHeaders({
                     deviceKey: bobSession.deviceKey,
-                    grantJwt: bobSession.grantJwt,
+                    grantJwt: await bobPage!.currentSessionGrant(),
                     method: "POST",
                     url,
                   }),
@@ -2020,7 +2020,7 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
           const committedList = bobPage.page.locator(".kanban-column");
           await expect(committedList).toHaveCount(1, { timeout: 90_000 });
           await expect(committedList).toBeVisible({ timeout: 90_000 });
-          const acceptedStructure = await scanRealmStreamApi(request, bobSession.grantJwt, realmId, { limit: 1000 });
+          const acceptedStructure = await scanRealmStreamApi(request, await bobPage!.currentSessionGrant(), realmId, { limit: 1000 });
           expect(acceptedStructure.truncated).toBe(false);
           const acceptedLists = acceptedStructure.events.filter(event => {
             const object = (event.payload as { object?: { kind?: string; parent_space_id?: string } } | undefined)?.object;
@@ -2032,7 +2032,7 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
           let historyProof: ReturnType<typeof contentHistoryProof>;
           const historyDeadline = Date.now() + 90_000;
           await expect.poll(async () => {
-            const scan = await scanRealmStreamApi(request, bobSession.grantJwt, realmId, { limit: 1000 });
+            const scan = await scanRealmStreamApi(request, await bobPage!.currentSessionGrant(), realmId, { limit: 1000 });
             const source = scan.events.find(event => event.kind === "ak.space.create"
               && sdkEventDerivedObjectId(event) === boardId);
             if (!source) return false;
@@ -2054,7 +2054,7 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
           const listVisible = await committedList.evaluate((node, title) => node.textContent?.includes(title) === true, listTitle);
           const cardVisible = await panel.evaluate((node, title) => node.textContent?.includes(title) === true, aliceCard);
           if (listVisible || cardVisible) {
-            const scan = await scanRealmStreamApi(request, bobSession.grantJwt, realmId, { limit: 1000 });
+            const scan = await scanRealmStreamApi(request, await bobPage!.currentSessionGrant(), realmId, { limit: 1000 });
             for (const item of [
               { visible: listVisible, eventId: acceptedLists[0]!.event_id, kind: "ak.space.create" as const },
               { visible: cardVisible, eventId: latestCardEventId, kind: "ak.strand.create" as const },
@@ -2173,13 +2173,13 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
         // Joining grants visibility, not collaboration authority. The owner
         // explicitly permits card creation/placement and Description editing;
         // the field constraint does not grant Synthesis or metadata editing.
-        await grantCapabilityEventApi(request, aliceSession.grantJwt, {
+        await grantCapabilityEventApi(request, await currentAliceGrant(), {
           ownerId: alice.id,
           realmId,
           subjectId: bob.id,
           actions: ["ak.strand.create", "ak.strand.move"],
         });
-        await grantCapabilityEventApi(request, aliceSession.grantJwt, {
+        await grantCapabilityEventApi(request, await currentAliceGrant(), {
           ownerId: alice.id,
           realmId,
           subjectId: bob.id,
@@ -2259,7 +2259,7 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
             "content-type": "application/json",
             ...selfPathGrantHeaders({
               deviceKey: aliceSession.deviceKey,
-              grantJwt: aliceSession.grantJwt,
+              grantJwt: await currentAliceGrant(),
               method: "POST",
               url: rawEventsUrl,
             }),
@@ -2296,7 +2296,7 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
               reason: "kanban_access_revocation" },
           });
           const outcome = await submitSignedEventApi(request,
-            fault === "member-leave" ? bobSession.grantJwt : aliceSession.grantJwt,
+            fault === "member-leave" ? await bobPage!.currentSessionGrant() : await currentAliceGrant(),
             event, { context: `real kanban ${fault}` });
           assertAuthoritySubmitOutcome(outcome, event, `real kanban ${fault}`);
           const terminalCommit = outcome.commit as Record<string, unknown>;
@@ -2347,7 +2347,7 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
           const lists = (snapshot: Awaited<ReturnType<typeof cost.snapshot>>) => snapshot.http.filter(row =>
             /\/_arkret\/self\/realms\/[^/]+\/(spaces|strands)$/.test(row.path));
           await waitForDurableCurrentCut(alicePage.page,
-            await readCommitStreamHeadApi(request, aliceSession.grantJwt, realmId));
+            await readCommitStreamHeadApi(request, await currentAliceGrant(), realmId));
           const first = await cost.snapshot();
           await testInfo.attach("kanban-request-first.json", { contentType: "application/json", body: JSON.stringify(first) });
           if (fault === "requests-websocket") {
@@ -2357,8 +2357,8 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
             // A real holder preference update wakes the Account channel while
             // leaving the Board's accepted Realm cut unchanged.
             const key = "ak.dnd_schedule";
-            await subscriptionCut!.repeatSameCut(key, () => replaceAccountDataApi(
-              request, aliceSession.grantJwt, alice.id, key,
+            await subscriptionCut!.repeatSameCut(key, async () => replaceAccountDataApi(
+              request, await currentAliceGrant(), alice.id, key,
               { dnd: { enabled: false, schedule: {
                 timezone: "Etc/UTC", tzdb_version: "2025b", all_day: true, periods: [],
               }, exceptions: [] } }, 0,
@@ -2373,7 +2373,7 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
             expect(first.http.some(row => isHttpSubscriptionPath(row.path))).toBe(true);
             expect((await subscriptionCut!.httpProof())?.successful ?? 0).toBeGreaterThan(0);
           }
-          await grantCapabilityEventApi(request, aliceSession.grantJwt, {
+          await grantCapabilityEventApi(request, await currentAliceGrant(), {
             ownerId: alice.id, realmId, subjectId: bob.id, actions: ["ak.message.create"],
           });
           const ordinaryStart = cost.mark("ordinary-messages");
@@ -2424,7 +2424,7 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
             const event = signedEventEnvelope({ actorId: alice.id, realmId,
               kind: index % 2 === 0 ? "ak.strand.archive" : "ak.strand.restore",
               payload: { target_ref: cardId } });
-            const outcome = await submitSignedEventApi(request, aliceSession.grantJwt, event,
+            const outcome = await submitSignedEventApi(request, await currentAliceGrant(), event,
               { context: `kanban real lifecycle change ${index + 1}/20` });
             lastCommitId = String((outcome.commit as Record<string, unknown>).commit_id);
             const commit = outcome.commit as CommitStreamHead;
@@ -2450,7 +2450,7 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
           const otherBoardId = await buildEncryptedBoardListCard(alicePage.page, realmId,
             otherBoardTitle, `Other list ${stamp}`, otherCard);
           await waitForDurableCurrentCut(alicePage.page,
-            await readCommitStreamHeadApi(request, aliceSession.grantJwt, realmId));
+            await readCommitStreamHeadApi(request, await currentAliceGrant(), realmId));
           const switchingStart = cost.mark("board-switches");
           for (let index = 0; index < 20; index += 1) {
             await selectBoard(alicePage.page, realmId,
