@@ -1,6 +1,12 @@
 import type { scanRealmStreamApi } from "./coland-api";
 import type { DpopUserSession } from "./users";
 
+export function isCanonicalSessionGrant(credential: string): boolean {
+  if (!/^[A-Za-z0-9_-]{43}$/.test(credential)) return false;
+  const bytes = Buffer.from(credential, "base64url");
+  return bytes.length === 32 && bytes.toString("base64url") === credential;
+}
+
 // Response events arrive in protocol order; asynchronous header/body reads
 // must not reorder a refresh and the captured predecessor's later denial.
 export function orderedResponseObservation<T extends object>(

@@ -1,7 +1,7 @@
 import { expect, type APIRequestContext, type Page, type Response } from "@playwright/test";
 import { registerRequestAuth, scanRealmStreamApi, sdkEventDerivedIds, wireErrCode } from "./coland-api";
 import { selfPathHeadersForDpopSession, type DpopUserSession } from "./users";
-import { assertAcceptedRealmScanAlignment, orderedResponseObservation, sessionGrantRotationObservation } from "./session-transport-observation";
+import { assertAcceptedRealmScanAlignment, isCanonicalSessionGrant, orderedResponseObservation, sessionGrantRotationObservation } from "./session-transport-observation";
 
 import { coauthBaseUrl, colandBaseUrl, colandServiceId } from "./env";
 import { uint64Decimal } from "./uint64-decimal";
@@ -50,8 +50,8 @@ export function accountTransportRotationProbe(page: Page, request: APIRequestCon
     const path = new URL(response.url()).pathname;
     const authorization = (await response.request().allHeaders()).authorization;
     if (armed && path === "/_arkret/gate/account/session-grants/refresh" && response.status() === 200) {
-      if (!authorization || !/^DPoP [A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/.test(authorization)) {
-        failures.push("issuer refresh did not carry a real captured grant");
+      if (!authorization?.startsWith("DPoP ") || !isCanonicalSessionGrant(authorization.slice("DPoP ".length))) {
+        failures.push("issuer refresh did not carry a canonical SessionGrant");
         return;
       }
       rotation.refresh(authorization, await response.json() as Record<string, unknown>);

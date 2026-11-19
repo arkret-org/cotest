@@ -4,7 +4,15 @@ import { existsSync, readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { sdkEventDerivedIds } from "../helpers/coland-api/wire-client.ts";
-import { orderedResponseObservation, assertAcceptedRealmScanAlignment, sessionGrantRotationObservation } from "../helpers/session-transport-observation.ts";
+import { orderedResponseObservation, assertAcceptedRealmScanAlignment, isCanonicalSessionGrant, sessionGrantRotationObservation } from "../helpers/session-transport-observation.ts";
+
+test("SessionGrant observations require canonical unpadded encoding of 32 bytes", () => {
+  const sample = Buffer.alloc(32).toString("base64url");
+  assert.equal(isCanonicalSessionGrant(sample), true);
+  for (const invalid of ["a.b.c", sample + "=", sample.slice(1), sample.slice(0, -1) + "B"]) {
+    assert.equal(isCanonicalSessionGrant(invalid), false);
+  }
+});
 
 function deferred() {
   let resolve;

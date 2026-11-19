@@ -5,6 +5,7 @@ import { cotestWire } from "../../helpers/coland-api/wire-client";
 import { assertAuthoritySubmitOutcome, authHeaders } from "../../helpers/coland-api";
 import { readCreatorRecords } from "../../helpers/creator-bootstrap";
 import { accountTransportRotationProbe, assertOriginalAcceptedMlsRows } from "../../helpers/session-transport-recovery";
+import { isCanonicalSessionGrant } from "../../helpers/session-transport-observation";
 // Key backup + restore
 // Contract: e2e/scenarios/encryption/key-backup.md
 // Spec refs:
@@ -979,9 +980,7 @@ async function expectNewGrantDpopSelfPath(
 }
 
 function isRealGrantDpopSelfRequest(hit: HolderProofRequest): boolean {
-  if (!hit.hasDpop || hit.status >= 500 || !/^[A-Za-z0-9_-]{43}$/.test(hit.grantJwt)) return false;
-  const credential = Buffer.from(hit.grantJwt, "base64url");
-  return credential.length === 32 && credential.toString("base64url") === hit.grantJwt;
+  return hit.hasDpop && hit.status < 500 && isCanonicalSessionGrant(hit.grantJwt);
 }
 
 async function expectSuccessfulUnlockWithHolderProof(
