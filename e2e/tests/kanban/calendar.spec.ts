@@ -60,6 +60,14 @@ test("@fully-implemented calendar schedule and RSVP survive the canonical Strand
     }).catch(async error => {
       const wizard = page.page.locator(".realm-lifecycle-strand").last();
       const status = wizard.locator(".realm-create-status");
+      const blocker = wizard.locator(".realm-create-blocker");
+      const bootReads = await page.page.evaluate(() => {
+        const paths = performance.getEntriesByType("resource").map(entry => new URL(entry.name, window.location.href).pathname);
+        return {
+          principalReads: paths.filter(path => path === "/_arkret/self/account/current-principal").length,
+          recoveryPolicyReads: paths.filter(path => path === "/_arkret/root/identity/recovery-policy").length,
+        };
+      });
       // Report product states only. The status detail may include private data.
       console.info("Calendar Realm creation", {
         wizard: await wizard.isVisible(),
@@ -67,7 +75,9 @@ test("@fully-implemented calendar schedule and RSVP survive the canonical Strand
         waitingForDeviceStorage: await wizard.getByText(/Device signing storage is still starting/).isVisible(),
         signingKeyUnavailable: await status.getByText(/Your signing key is not ready yet/).isVisible(),
         sessionExpired: await status.getByText(/Session expired/).isVisible(),
-        checkingRecovery: await status.getByText(/Checking your recovery setup/).isVisible(),
+        checkingRecovery: await status.getByText(/Checking your recovery setup/).isVisible()
+          || await blocker.getByText(/Checking your recovery setup/).isVisible(),
+        ...bootReads,
         createFailed: await status.getByText(/create failed:/i).isVisible(),
         creating: await status.getByText("Creating Realm...", { exact: true }).isVisible(),
         recoveryGate: await wizard.locator(".encrypted-realm-recovery-gate").isVisible(),
