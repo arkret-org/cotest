@@ -519,16 +519,16 @@ async function rejectServiceProxyMembership(args: {
     payload:{realm_id:args.realmId,member_id:args.actorId,membership:"join"},
   });
   const response = await rawDeliverAppletEvents(args.request,args.signed,[event],args.idempotencyKey);
-  await expectAppletTransactionConflict(response, "failed_precondition");
+  await expectAppletTransactionProblem(response, "failed_precondition");
   expect(await queryRealmEventsApi(args.request,args.token,args.realmId)).toEqual(before);
   return event;
 }
 
-async function expectAppletTransactionConflict(
+async function expectAppletTransactionProblem(
   response: APIResponse,
-  code: "failed_precondition" | "duplicate_conflict",
+  code: "failed_precondition" | "duplicate_conflict" | "capability_denied",
 ) {
-  expect(response.status()).toBe(409);
+  expect(response.status()).toBe(code === "capability_denied" ? 403 : 409);
   const problem = await response.json();
   expect(wireErrCode(problem)).toBe(code);
   expect(problem).not.toHaveProperty("committed_event_refs");
@@ -732,7 +732,7 @@ test.describe("applet bridge", () => {
         [registrationOnlyJoin],
         `bot-registration-only-join-${stamp}`,
       );
-      await expectAppletTransactionConflict(registrationOnlyResponse, "failed_precondition");
+      await expectAppletTransactionProblem(registrationOnlyResponse, "failed_precondition");
 
       // Real Service-signed terminal creation succeeds. It grants the Bot,
       // so it cannot authorize the Service writing the Bot's membership.
@@ -862,10 +862,8 @@ test.describe("applet bridge", () => {
           payload: { kind: "message", text },
         },
       });
-      const externalText = await external.text();
-      expect(external.status(), externalText).toBe(422);
-      expect(JSON.parse(externalText).status).toBe("rejected");
-      expect(JSON.parse(externalText)).not.toHaveProperty("committed_event_refs");
+      // Delivery cannot bind the Ghost's grant to the original Service producer.
+      await expectAppletTransactionProblem(external, "capability_denied");
       const events = await queryRealmEventsApi(request, aliceToken, realmId);
       expect(JSON.stringify(events)).not.toContain(text);
       const acceptedEvents = Array.isArray(events.events)
@@ -903,8 +901,8 @@ test.describe("applet bridge", () => {
           content: { kind: "ak.content.text", body: directText },
         },
       });
-      const directRejected = await deliverAppletEvents(request, signed, [directWrite], `ghost-direct-proxy-${stamp}`);
-      expect(directRejected.status).toBe("rejected");
+      const directRejected = await rawDeliverAppletEvents(request, signed, [directWrite], `ghost-direct-proxy-${stamp}`);
+      await expectAppletTransactionProblem(directRejected, "capability_denied");
       expect(await queryRealmEventsApi(request, aliceToken, realmId)).toEqual(events);
       await alicePage.gotoTimelineRealm(realmId);
       await expect(alicePage.page.locator(".message-list")).toBeVisible({timeout:30_000});
@@ -1719,7 +1717,7 @@ test.describe("applet inbound transaction push — per-delivery source signature
     ] as const) {
       const forbidden = { ...body, events: [{ ...previousUnsigned, producer_proof: submittedProof }] };
       const rejected = await deliver(forbidden, `inbound-forbidden-${label}-${stamp}`);
-      await expectAppletTransactionConflict(rejected, "duplicate_conflict");
+      await expectAppletTransactionProblem(rejected, "duplicate_conflict");
     }
     // The retired `proofs[]` carrier is not an Event Envelope member
     // (event-envelope.schema.json is closed and requires producer_proof).
@@ -1758,9 +1756,9 @@ test.describe("applet inbound transaction push — per-delivery source signature
         visibility_scope: "realm_members",
       },
     };
-    for (const [label, forbiddenDraft] of [
-      ["borrowed-bot-grant", { ...serviceDraft, authorization_ref: botGrantRef }],
-      ["account-masquerade", { ...serviceDraft, actor_id: accountActorId(sourceServiceId) }],
+    for (const [label, forbiddenDraft, expectedProblem] of [
+      ["borrowed-bot-grant", { ...serviceDraft, authorization_ref: botGrantRef }, "capability_denied"],
+      ["account-masquerade", { ...serviceDraft, actor_id: accountActorId(sourceServiceId) }, "failed_precondition"],
     ] as const) {
       const unsigned = { ...forbiddenDraft, event_id: sdkEventDerivedIds(forbiddenDraft).event_id };
       const forbiddenEvent = {
@@ -1768,10 +1766,7 @@ test.describe("applet inbound transaction push — per-delivery source signature
         producer_proof: appletEventProof(String(originalProducer.verification_method), unsigned, signed.service_signing_private_key),
       };
       const rejected = await deliver({ ...body, events: [forbiddenEvent] }, `inbound-service-${label}-${stamp}`);
-      const text = await rejected.text();
-      expect(rejected.status(), text).toBe(200);
-      expect(JSON.parse(text).status, text).toBe("rejected");
-      expect(JSON.parse(text)).not.toHaveProperty("committed_event_refs");
+      await expectAppletTransactionProblem(rejected, expectedProblem);
       const history = await queryRealmEventsApi(request, token, realmId);
       expect((history.events as Array<Record<string, unknown>>).some((event) => event.event_id === forbiddenEvent.event_id)).toBe(false);
     }
