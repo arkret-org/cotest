@@ -6109,7 +6109,9 @@ try {
         foreach ($binding in $nativeDatabaseAllocators.GetEnumerator()) {
             Set-Item -Path "Env:$($binding.Key)" -Value $binding.Value
         }
-        $apiMigrationCommand = "python {0} --output-dir {1}" -f `
+        $nativeCoauth = Resolve-CoauthBinary -ExplicitPath $CoauthBin -WorkspaceRoot $workspaceRoot
+        $apiMigrationCommand = "`$env:COAUTH_BIN={0}; python {1} --output-dir {2}" -f `
+            (Quote-PsLiteral $nativeCoauth), `
             (Quote-PsLiteral (Join-Path $repoRoot "scripts/run-api-only-native-migrations.py")), `
             (Quote-PsLiteral (Join-Path $jointDir "native-api-migrations"))
         $apiMigrationService = Start-ManagedCommand -Name "prepare-native-api-migrations" `

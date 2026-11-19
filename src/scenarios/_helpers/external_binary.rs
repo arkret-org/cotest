@@ -3,12 +3,8 @@
 //!
 //! The helper:
 //!   1. Resolves the binary path from an explicit env var override (e.g. `COLAND_BIN`) **first**,
-//!      then falls back to the Cargo target directory this test binary itself was built into
-//!      (derived from `current_exe`, so it follows `build.target-dir` / `CARGO_TARGET_DIR` wherever
-//!      the workspace points them), and finally to the per-repository sibling-checkout convention
-//!      path (`../<crate>/target/debug/<bin>[.exe]`). Never assume one layout: the workspace
-//!      `.cargo/config.toml` may redirect every sibling repo into one shared tree, in which case
-//!      `<crate>/target/` does not exist at all.
+//!      then asks the service checkout's Cargo workspace for its target directory. Packaged tests
+//!      without a service checkout can also launch a colocated binary.
 //!   2. Optionally checks `required_env_vars` (e.g. `COAUTH_DATABASE_URI`) are present in the
 //!      caller's env before attempting to spawn — when a required dependency env var is missing we
 //!      treat the binary as unavailable (returns `Ok(None)` from `try_spawn`). This is how coauth /
@@ -44,13 +40,6 @@ pub struct ExternalBinarySpec {
     /// Env var that, when set, overrides the binary path
     /// (e.g. `"COLAND_BIN"`).
     pub bin_env: &'static str,
-    /// Sibling-checkout convention path segments under `arkret/`
-    /// (e.g. `&["coland", "target", "debug"]`). The binary file name is
-    /// derived from `service` (`+ ".exe"` on Windows). Only meaningful when the
-    /// sibling repository builds into its own `target/`; with a shared
-    /// workspace `build.target-dir` the binary is found through
-    /// [`cargo_target_profile_dirs`] instead.
-    pub sibling_path: &'static [&'static str],
     /// Env var that controls the bind address (e.g. `"FLAGON_BIND"`).
     /// Set to `""` if the binary does not accept a bind env var (in that
     /// case `bind_arg` must be set so the helper still pins a free port).
@@ -216,33 +205,44 @@ fn external_binary_file_name(spec: &ExternalBinarySpec) -> String {
 /// a missing binary reports the layout that was actually searched.
 pub fn external_binary_candidates(spec: &ExternalBinarySpec) -> Vec<PathBuf> {
     let exe_name = external_binary_file_name(spec);
-    let mut candidates: Vec<PathBuf> = cargo_target_profile_dirs()
-        .into_iter()
-        .map(|dir| dir.join(&exe_name))
-        .collect();
-    if let Some(root) = workspace_root() {
-        let mut sibling = root;
-        for segment in spec.sibling_path {
-            sibling.push(segment);
+    let mut candidates = Vec::new();
+    if let Some(checkout) = workspace_root().map(|root| root.join(spec.service))
+        && checkout.join("Cargo.toml").is_file()
+    {
+        let cargo = std::env::var_os("CARGO").unwrap_or_else(|| "cargo".into());
+        if let Ok(output) = Command::new(cargo)
+            .current_dir(&checkout)
+            .args(["metadata", "--no-deps", "--locked", "--format-version", "1"])
+            .output()
+            && output.status.success()
+            && let Ok(metadata) = serde_json::from_slice::<serde_json::Value>(&output.stdout)
+            && let Some(target) = metadata["target_directory"].as_str()
+        {
+            let profile = if cfg!(debug_assertions) {
+                "debug"
+            } else {
+                "release"
+            };
+            candidates.push(Path::new(target).join(profile).join(&exe_name));
         }
-        sibling.push(&exe_name);
-        candidates.push(sibling);
+    }
+    for dir in cargo_target_profile_dirs() {
+        let candidate = dir.join(&exe_name);
+        if !candidates.contains(&candidate) {
+            candidates.push(candidate);
+        }
     }
     candidates
 }
 
-/// Try to locate `<service>` binary by checking the `bin_env` override first,
-/// then the Cargo target directory this test binary was built into, then the
-/// conventional sibling-checkout path. Returns `None` when none of them is
-/// available — callers decide whether to skip or fail.
+/// Resolve an explicit executable, an artifact from the owning Cargo workspace,
+/// or a binary packaged alongside the test.
 pub fn locate_external_binary(spec: &ExternalBinarySpec) -> Option<PathBuf> {
     if let Ok(value) = std::env::var(spec.bin_env)
         && !value.trim().is_empty()
     {
         let candidate = PathBuf::from(value);
-        if candidate.is_file() {
-            return Some(candidate);
-        }
+        return candidate.is_file().then_some(candidate);
     }
     external_binary_candidates(spec)
         .into_iter()
@@ -470,16 +470,10 @@ pub(crate) fn workspace_root() -> Option<PathBuf> {
 // own — they encode the bind-flag / env-var / dependency-gate conventions of
 // each service in one place and keep the cross-project conventions auditable.
 
-/// `coland` (Station) spec — `--bind` CLI flag + a few env vars. With no
-/// explicit `COLAND_BIN`, resolution prefers `coland(.exe)` in the Cargo target
-/// directory this run was built into (the shared workspace tree whenever
-/// `build.target-dir` is set), then the per-repository
-/// `coland/target/debug/coland(.exe)` artifact.
-/// No external deps in its development-mode default (in-memory persistence).
+/// Coland (Station) executable and bind-flag conventions.
 pub const COLAND_SPEC: ExternalBinarySpec = ExternalBinarySpec {
     service: "coland",
     bin_env: "COLAND_BIN",
-    sibling_path: &["coland", "target", "debug"],
     bind_env: "COLAND_BIND",
     bind_arg: Some("--bind"),
     extra_env: &[("COLAND_DEVELOPMENT_MODE", "1")],
@@ -495,7 +489,6 @@ pub const COLAND_SPEC: ExternalBinarySpec = ExternalBinarySpec {
 pub const FLAGON_SPEC: ExternalBinarySpec = ExternalBinarySpec {
     service: "flagon",
     bin_env: "FLAGON_BIN",
-    sibling_path: &["flagon", "target", "debug"],
     bind_env: "FLAGON_BIND",
     bind_arg: None,
     extra_env: &[
@@ -618,39 +611,34 @@ mod tests {
         }
     }
 
-    /// Both supported layouts are searched: the target directory this run was
-    /// built into (shared workspace tree included) and the per-repository
-    /// sibling checkout.
     #[test]
-    fn candidates_cover_shared_and_per_repository_layouts() {
+    fn checked_out_service_uses_its_configured_target_before_packaged_binaries() {
         let candidates = external_binary_candidates(&COLAND_SPEC);
+        let root = workspace_root().unwrap().join("coland");
+        let output = Command::new("cargo")
+            .current_dir(root)
+            .args(["metadata", "--no-deps", "--locked", "--format-version", "1"])
+            .output()
+            .unwrap();
+        assert!(output.status.success());
+        let metadata: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+        let profile = if cfg!(debug_assertions) {
+            "debug"
+        } else {
+            "release"
+        };
         let name = exe_name(COLAND_SPEC.service);
-
-        let profile_dirs = cargo_target_profile_dirs();
-        for dir in &profile_dirs {
-            assert!(
-                candidates.contains(&dir.join(&name)),
-                "missing target-directory candidate {}",
-                dir.join(&name).display()
-            );
-        }
-
-        let sibling = workspace_root()
-            .expect("workspace root")
-            .join("coland")
-            .join("target")
-            .join("debug")
-            .join(&name);
-        assert!(
-            candidates.contains(&sibling),
-            "missing sibling-checkout candidate {}",
-            sibling.display()
+        assert_eq!(
+            candidates.first(),
+            Some(
+                &Path::new(metadata["target_directory"].as_str().unwrap())
+                    .join(profile)
+                    .join(&name)
+            )
         );
-
-        // The target-directory lookup runs first so a freshly built binary
-        // wins over a stale sibling artifact.
-        assert_eq!(candidates.len(), profile_dirs.len() + 1);
-        assert_eq!(candidates.last(), Some(&sibling));
+        for dir in cargo_target_profile_dirs() {
+            assert!(candidates.contains(&dir.join(&name)));
+        }
     }
 
     /// A missing binary has to name every path that was tried, otherwise the
@@ -661,7 +649,6 @@ mod tests {
         const MISSING_SPEC: ExternalBinarySpec = ExternalBinarySpec {
             service: "cotest-no-such-service",
             bin_env: "COTEST_NO_SUCH_SERVICE_BIN",
-            sibling_path: &["cotest-no-such-service", "target", "debug"],
             bind_env: "",
             bind_arg: None,
             extra_env: &[],

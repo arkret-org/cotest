@@ -1106,7 +1106,6 @@ fn coauth_binary_probe_spec() -> ExternalBinarySpec {
     ExternalBinarySpec {
         service: "coauth",
         bin_env: "COAUTH_BIN",
-        sibling_path: &["coauth", "target", "debug"],
         bind_env: "",
         bind_arg: None,
         extra_env: &[],

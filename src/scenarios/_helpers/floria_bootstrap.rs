@@ -85,7 +85,6 @@ pub async fn spawn_floria_with_custom_pushkin_url(
     let probe_spec = ExternalBinarySpec {
         service: "floria",
         bin_env: "FLORIA_BIN",
-        sibling_path: &["floria", "target", "debug"],
         bind_env: "",
         bind_arg: None,
         extra_env: &[],
