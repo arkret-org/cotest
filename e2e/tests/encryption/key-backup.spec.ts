@@ -1348,6 +1348,8 @@ async function updateCardDescription(
   });
   let ingressObserved = false;
   let preAuthoringRetries = 0;
+  const retryDelays = [2_000, 5_000, 15_000, 30_000];
+  let retryAfter = 0;
   const publicStatuses = new Set<string>();
   const captureRequest = (request: Request) => {
     if (request.method() === "POST"
@@ -1384,12 +1386,15 @@ async function updateCardDescription(
       publicStatuses.add(!status?.trim() ? "empty_or_absent" : reasons.join(" | ") || "other_withheld");
       // Retry the retained draft only for a known refusal before any ingress.
       // Once a request exists, recovery belongs to the original signed Event.
-      if (!ingressObserved && preAuthoringRetries < 3
-        && /^encrypted card write is not ready: MLS send gate is not ready: account checkpoint changed (?:before|during) committed read$/.test(status?.trim() ?? "")
-        && Date.now() < deadline
-        && await save.isEnabled({ timeout: Math.min(1_000, remaining) }).catch(() => false)) {
-        preAuthoringRetries++;
-        await clickCardSave(form, Math.max(1, Math.min(30_000, deadline - Date.now())));
+      const beforeAuthoring = /^encrypted card write is not ready: MLS send gate is not ready: (?:account checkpoint changed (?:before|during) committed read|the local group is not at the accepted epoch \d+)$/.test(status?.trim() ?? "");
+      if (!ingressObserved && beforeAuthoring && preAuthoringRetries < retryDelays.length) {
+        if (!retryAfter) retryAfter = Date.now() + retryDelays[preAuthoringRetries];
+        if (Date.now() >= retryAfter && Date.now() < deadline
+          && await save.isEnabled({ timeout: Math.min(1_000, remaining) }).catch(() => false)) {
+          preAuthoringRetries++;
+          retryAfter = 0;
+          await clickCardSave(form, Math.max(1, Math.min(30_000, deadline - Date.now())));
+        }
       }
       return await readDescription();
     }, { timeout: Math.max(1, deadline - Date.now()), intervals: [100, 250, 500] }).toContain(description);
