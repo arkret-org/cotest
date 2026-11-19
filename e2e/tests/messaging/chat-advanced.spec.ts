@@ -1203,16 +1203,18 @@ test.describe("chat advanced", () => {
         gotoChat(bobPage, realmId),
       ]);
 
-      const bobPresenceRow = alicePage.page.locator(".presence-row").filter({
-        has: alicePage.page.getByLabel(canonicalJson(accountActorId(bob.id)), { exact: true }),
-      });
-      await expect(bobPresenceRow).toContainText(/online/i, { timeout: 30_000 });
-      await stepShot(alicePage.page, testInfo, "presence-online");
+      await withDiscussionUsersPanel(alicePage.page, async panel => {
+        const bobPresenceRow = panel.locator(".presence-row").filter({
+          has: alicePage.page.getByLabel(canonicalJson(accountActorId(bob.id)), { exact: true }),
+        });
+        await expect(bobPresenceRow).toContainText(/online/i, { timeout: 30_000 });
+        await stepShot(alicePage.page, testInfo, "presence-online");
 
-      await bobPage.close();
-      await expect(bobPresenceRow).toContainText(/offline|last seen/i, { timeout: 45_000 });
+        await bobPage.close();
+        await expect(bobPresenceRow).toContainText(/offline|last seen/i, { timeout: 45_000 });
+      });
     } finally {
-      await Promise.allSettled([alicePage.close()]);
+      await Promise.allSettled([alicePage.close(), bobPage.page.isClosed() ? undefined : bobPage.close()]);
     }
   });
 
