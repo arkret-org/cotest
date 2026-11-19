@@ -150,7 +150,7 @@ async fn actual_agent_deployment_configured(
         ],
     )
     .await?;
-    coauth.bind_station(&station, secret, registration).await?;
+    coauth.configure_station(&station, secret, registration)?;
     let client_id = "01GFWR28C4KNE04WG3HKXB7C9R";
     coauth.config.as_file_mut().seek(SeekFrom::Start(0))?;
     let mut config: serde_json::Value = serde_saphyr::from_reader(coauth.config.as_file_mut())?;
@@ -207,24 +207,9 @@ async fn actual_agent_deployment_configured(
             .tls_certs_only(reqwest::Certificate::from_pem_bundle(&std::fs::read(ca)?)?);
     }
     let http = builder.build()?;
-    let deadline = std::time::Instant::now() + Duration::from_secs(60);
-    loop {
-        let readiness = http
-            .get(format!("{}/_coauth/self/viewer", coauth.base_url()))
-            .send()
-            .await?;
-        if readiness.status() == reqwest::StatusCode::UNAUTHORIZED
-            || readiness.status().is_success()
-        {
-            break;
-        }
-        ensure!(
-            std::time::Instant::now() < deadline,
-            "Coauth owning Station trust did not become ready: {}",
-            readiness.status()
-        );
-        tokio::time::sleep(Duration::from_millis(100)).await;
-    }
+    coauth
+        .wait_for_owning_station(Duration::from_secs(60))
+        .await?;
     let endpoints = DeploymentEndpoints {
         coauth_base_url: coauth.base_url().to_owned(),
         coland_base_url: station.base_url().to_string(),

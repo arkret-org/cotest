@@ -16,7 +16,7 @@
 //!
 //! [`JointServiceStack`]: crate::scenarios::_helpers::joint_service_bootstrap::JointServiceStack
 
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 use anyhow::{Result, anyhow};
 
@@ -52,48 +52,7 @@ pub async fn joint_service_smoke_run() -> Result<()> {
                 == description.service_id,
         "owning Station Describe returned a different service identity"
     );
-    // This is the exact name installed by PreparedCoauth::spawn_for_station;
-    // the name is a deployment label, not an independently claimed DID.
-    wait_for_account_authority_ready(
-        &format!("{}/readyz", coauth.internal_base_url),
-        &coauth.health_url(),
-        "cotest-coland",
-    )
-    .await?;
-    Ok(())
-}
-
-async fn wait_for_account_authority_ready(
-    ready_url: &str,
-    health_url: &str,
-    owning_station: &str,
-) -> Result<()> {
-    let client = reqwest::Client::builder()
-        .timeout(Duration::from_secs(3))
-        .build()?;
-    let deadline = Instant::now() + Duration::from_secs(30);
-    loop {
-        let response = client.get(ready_url).send().await?;
-        if response.status().is_success() {
-            let body: serde_json::Value = response.json().await?;
-            anyhow::ensure!(
-                body["ok"] == true
-                    && body["service"] == "coauth"
-                    && body["component_role"] == "station_account_authority"
-                    && body["owning_station"] == owning_station
-                    && body["station_trust"] == "ready",
-                "Coauth readiness did not confirm the configured owning Station: {body}"
-            );
-            return Ok(());
-        }
-        let status = response.status();
-        let body = response.text().await.unwrap_or_default();
-        if Instant::now() >= deadline {
-            let health = client.get(health_url).send().await?.text().await?;
-            return Err(anyhow!(
-                "Coauth Account Authority did not become ready within 30 seconds; last response: {status}: {body}; health: {health}"
-            ));
-        }
-        tokio::time::sleep(Duration::from_millis(200)).await;
-    }
+    coauth
+        .wait_for_owning_station(Duration::from_secs(30))
+        .await
 }

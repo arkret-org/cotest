@@ -179,6 +179,18 @@ impl SpawnedCoauth {
         shared_secret: &str,
         registration_bearer: &str,
     ) -> Result<()> {
+        self.configure_station(station, shared_secret, registration_bearer)?;
+        self.restart_same_config().await
+    }
+
+    /// Stop the cold issuer before writing the complete deployment configuration.
+    pub(crate) fn configure_station(
+        &mut self,
+        station: &crate::harness::ArkretServer,
+        shared_secret: &str,
+        registration_bearer: &str,
+    ) -> Result<()> {
+        self.kill_immediately()?;
         patch_station_config_file(
             &mut self.config,
             station.base_url().as_str(),
@@ -186,8 +198,42 @@ impl SpawnedCoauth {
             registration_bearer,
         )?;
         self.station_ca_path = station.tls_ca_path().map(Path::to_path_buf);
-        self.restart_same_config().await
+        Ok(())
     }
+
+    /// Await the configured Station trust on Coauth's internal readiness listener.
+    pub(crate) async fn wait_for_owning_station(&self, timeout: Duration) -> Result<()> {
+        let ready_url = format!("{}/readyz", self.internal_base_url);
+        let client = reqwest::Client::builder()
+            .timeout(Duration::from_secs(3))
+            .build()?;
+        let deadline = Instant::now() + timeout;
+        loop {
+            let response = client.get(&ready_url).send().await?;
+            if response.status().is_success() {
+                let body: serde_json::Value = response.json().await?;
+                anyhow::ensure!(
+                    body["ok"] == true
+                        && body["service"] == "coauth"
+                        && body["component_role"] == "station_account_authority"
+                        && body["owning_station"] == "cotest-coland"
+                        && body["station_trust"] == "ready",
+                    "Coauth readiness did not confirm the configured owning Station: {body}"
+                );
+                return Ok(());
+            }
+            let status = response.status();
+            let body = response.text().await.unwrap_or_default();
+            if Instant::now() >= deadline {
+                let health = client.get(self.health_url()).send().await?.text().await?;
+                return Err(anyhow::anyhow!(
+                    "Coauth Account Authority did not become ready within {timeout:?}; last response: {status}: {body}; health: {health}"
+                ));
+            }
+            tokio::time::sleep(Duration::from_millis(200)).await;
+        }
+    }
+
     /// Public REST base — what callers should use for `/_arkret/self/...`.
     pub fn base_url(&self) -> &str {
         &self.server.base_url
