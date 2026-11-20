@@ -13,7 +13,7 @@ import { decodeIngressEvents, type IngressEvent } from "../../helpers/event-ingr
 import { assertAuthoritySubmitOutcome } from "../../helpers/coland-api";
 import { enterSecretText } from "../../helpers/secret-input";
 import { openSavfoxArkretChannel, provisionAgent, pairManagedSavfoxAgent,
-  addAgentToRealm, confirmAgentStrandMessageGrant, createSidecarSourceCard, composeSourceAgentMention,
+  addAgentToRealm, confirmSidecarSourceCardGrant, createSidecarSourceCard, composeSourceAgentMention,
   waitForSidecarEnsureAcceptance, eventIdFromMessage, controlPrivateLiveHints,
 } from "../../helpers/agent-sidecar-product-ui";
 
@@ -57,13 +57,7 @@ test.describe("Private accepted readback real UI @fully-implemented", () => {
       await addAgentToRealm(page, realm, pairing.agentId);
       console.info("[private-readback-ui] real Agent paired and Realm participation ready");
       const card = await createSidecarSourceCard(page, realm, `Readback source ${Date.now()}`);
-      await card.locator(".card-detail-tab-discussion").click();
-      const cardAddress = new URL(page.url());
-      const strand = decodeURIComponent(cardAddress.pathname).split("/task/")[1];
-      expect(strand).toMatch(/^ak:strand:/);
-      await confirmAgentStrandMessageGrant(page, realm, accountActorId(user.id).account_id, pairing.agentId, strand);
-      await page.goto(cardAddress.toString(), { waitUntil: "domcontentloaded" });
-      await expect(card).toBeVisible({ timeout: 120_000 });
+      await confirmSidecarSourceCardGrant(page, card, realm, accountActorId(user.id).account_id, pairing.agentId);
       console.info("[private-readback-ui] controller's message grant committed for this Strand");
       const exchanges: Array<{ request: string; response: string; prompt: string }> = [];
       const replies = card.locator(".chat-message").filter({ has:

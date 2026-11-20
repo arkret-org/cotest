@@ -7,7 +7,7 @@ import { openCardMembers } from "../../helpers/kanban-product-ui";
 import { accountActorId } from "../../helpers/coland-api";
 import { agentMemberRow } from "../../helpers/product-locators";
 import { actorRow } from "../../helpers/product-locators";
-import { confirmAgentStrandMessageGrant, openSavfoxArkretChannel, startSavfoxPairing, saveSavfoxChannel, provisionAgent, pairManagedSavfoxAgent, addAgentToRealm, composeSourceAgentMention, createSidecarSourceCard, submitSidecarComposerDraft, waitForSidecarEnsureAcceptance, eventIdFromMessage, displayPairingCode } from "../../helpers/agent-sidecar-product-ui";
+import { confirmSidecarSourceCardGrant, confirmAgentStrandMessageGrant, openSavfoxArkretChannel, startSavfoxPairing, saveSavfoxChannel, provisionAgent, pairManagedSavfoxAgent, addAgentToRealm, composeSourceAgentMention, createSidecarSourceCard, submitSidecarComposerDraft, waitForSidecarEnsureAcceptance, eventIdFromMessage, displayPairingCode } from "../../helpers/agent-sidecar-product-ui";
 import { uint64Decimal } from "../../helpers/uint64-decimal";
 import { observeNativeSearch } from "../../helpers/native-search";
 import { openAndPairSecondController } from "../../helpers/paired-controller";
@@ -768,6 +768,8 @@ privatePairingTest.describe("Agent Savfox split live @fully-implemented", () => 
           jointRealm.realmId,
           `Sidecar source ${Date.now().toString(36)}`,
         );
+        await confirmSidecarSourceCardGrant(inkson, sourceCard, jointRealm.realmId,
+          jointRealm.aliceSession.accountId, firstPairing.agentId);
         await openCardMembers(sourceCard);
         const sourceAgent = agentMemberRow(sourceCard, accountActorId(firstPairing.agentId).account_id);
         await expect(sourceAgent).toBeVisible({ timeout: 120_000 });

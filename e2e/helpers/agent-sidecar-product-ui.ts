@@ -429,6 +429,18 @@ export async function confirmAgentStrandMessageGrant(page: Page, realm: string, 
   await expect(panel.locator(".owned-agent-accepted-grant")).toContainText("Active", { timeout: 180_000 });
 }
 
+export async function confirmSidecarSourceCardGrant(
+  page: Page, card: Locator, realm: string, controller: AccountId, agentId: string,
+): Promise<void> {
+  await card.locator(".card-detail-tab-discussion").click();
+  const cardAddress = new URL(page.url());
+  const strand = decodeURIComponent(cardAddress.pathname).split("/task/")[1];
+  expect(strand).toMatch(/^ak:strand:/);
+  await confirmAgentStrandMessageGrant(page, realm, controller, agentId, strand);
+  await page.goto(cardAddress.toString(), { waitUntil: "domcontentloaded" });
+  await expect(card).toBeVisible({ timeout: 120_000 });
+}
+
 export async function createSidecarSourceCard(
   page: Page,
   realmId: string,
