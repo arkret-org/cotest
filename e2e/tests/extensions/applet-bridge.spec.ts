@@ -936,18 +936,15 @@ test.describe("applet bridge", () => {
           payload: { kind: "message", text: afterRevokeText },
         },
       });
-      expect([403, 409]).toContain(afterRevoke.status());
+      expect(afterRevoke.status()).toBe(403);
       expect(wireErrCode(await afterRevoke.json())).toBe(
-        "applet_registration_unauthorized",
+        "applet_revoked",
       );
       expect(
         JSON.stringify(await queryRealmEventsApi(request, aliceToken, realmId)),
       ).not.toContain(afterRevokeText);
 
-      // The Service transports the same invalid proxy after revocation. With the exact
-      // install revoked there is no active effective install to select, so the
-      // delivery fails closed before any Event admission (applet-integration.md
-      // §7.3.1 failure codes; §9.1 Ghost writes follow the install fence).
+      // The authenticated delivery names a previously accepted install. Its revoke fence blocks new Events.
       const directAfterRevoke = await rawDeliverAppletEvents(
         request,
         signed,
@@ -957,7 +954,7 @@ test.describe("applet bridge", () => {
       const directAfterRevokeText = await directAfterRevoke.text();
       expect(directAfterRevoke.status(), directAfterRevokeText).toBe(403);
       expect(wireErrCode(JSON.parse(directAfterRevokeText)), directAfterRevokeText)
-        .toBe("applet_registration_unauthorized");
+        .toBe("applet_revoked");
       expect(JSON.stringify(await queryRealmEventsApi(request, aliceToken, realmId)))
         .not.toContain(directText);
     } finally {
@@ -1827,11 +1824,10 @@ test.describe("applet inbound transaction push — per-delivery source signature
       expect(racedEvents.filter((event) => event.event_id === next.event_id)).toHaveLength(1);
       expect(racedEvent!.producer_proof).toEqual(next.producer_proof);
     } else {
-      // Lost the race: either the per-Event admission saw the fence, or the
-      // delivery found no active effective install (§7.3.1).
+      // A delivery rejected after the fence reports the revoked exact install.
       if (raceResponse.status() !== 200) {
         expect(raceResponse.status(), raceText).toBe(403);
-        expect(wireErrCode(raceOutcome), raceText).toBe("applet_registration_unauthorized");
+        expect(wireErrCode(raceOutcome), raceText).toBe("applet_revoked");
       }
       expect(racedEvent).toBeUndefined();
     }
@@ -1852,13 +1848,12 @@ test.describe("applet inbound transaction push — per-delivery source signature
         signed.service_signing_private_key,
       ),
     };
-    // After the revoke commits there is no active effective install: the
-    // inbound delivery fails closed before Event admission (§7.3.1).
+    // Both subsequent deliveries must report the committed revoke fence.
     const afterRevoke = await test.step("inbound preparation: afterRevoke", () => deliver({ ...body, events: [fenced] }, `inbound-after-revoke-${stamp}`), { box: true });
     const afterRevokeText = await test.step("inbound preparation: afterRevokeText", () => afterRevoke.text(), { box: true });
     expect(afterRevoke.status(), afterRevokeText).toBe(403);
     expect(wireErrCode(JSON.parse(afterRevokeText)), afterRevokeText).toBe(
-      "applet_registration_unauthorized",
+      "applet_revoked",
     );
     const fencedServiceDraft = { ...serviceDraft, created_at: canonicalEventTimestamp() };
     const fencedServiceUnsigned = { ...fencedServiceDraft, event_id: sdkEventDerivedIds(fencedServiceDraft).event_id };
@@ -1869,7 +1864,7 @@ test.describe("applet inbound transaction push — per-delivery source signature
     const serviceAfterRevoke = await test.step("inbound preparation: serviceAfterRevoke", () => deliver({ ...body, events: [fencedService] }, `inbound-service-after-revoke-${stamp}`), { box: true });
     const serviceAfterRevokeText = await test.step("inbound preparation: serviceAfterRevokeText", () => serviceAfterRevoke.text(), { box: true });
     expect(serviceAfterRevoke.status(), serviceAfterRevokeText).toBe(403);
-    expect(wireErrCode(JSON.parse(serviceAfterRevokeText)), serviceAfterRevokeText).toBe("applet_registration_unauthorized");
+    expect(wireErrCode(JSON.parse(serviceAfterRevokeText)), serviceAfterRevokeText).toBe("applet_revoked");
     const historical = await test.step("inbound preparation: historical", () => queryRealmEventsApi(request, token, realmId), { box: true });
     const historicalEvents = historical.events as Array<Record<string, unknown>>;
     expect(historicalEvents.find((event) => event.event_id === previousUnsigned.event_id)?.producer_proof).toEqual(originalProducer);
