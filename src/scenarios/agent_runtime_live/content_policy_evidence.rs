@@ -125,6 +125,33 @@ async fn current_reply_selection(
         selection: arkret::ParticipationBits::NONE,
         expected_version: 1,
     };
+    let author_reply = |text: &str| -> Result<_> {
+        let message =
+            arkret_event_draft::TypedEventDraft::<arkret_wire::event_spec::MessageCreate>::new(
+                ScopeRef::Realm {
+                    realm_id: scene.realm.clone(),
+                },
+                ActorId::account(scene.agent.agent_account.clone()),
+                arkret_models_collaboration::events_payloads::MessageCreatePayload::with_content(
+                    scene.b.clone(),
+                    "discussion",
+                    arkret_models_collaboration::events_payloads::ContentBlock::text(text),
+                ),
+            )?
+            .with_semantic_ref(arkret_wire::SemanticRef::new(
+                grant.to_string(),
+                arkret_wire::SEMANTIC_REF_ROLE_AUTHORIZED_BY,
+            ))
+            .author_with_digest_suite(Utc::now(), arkret_canonical::DigestSuite::Sha256)?;
+        sign(
+            message,
+            &scene.agent.verification_method,
+            scene.agent.runtime_key.to_bytes(),
+        )
+    };
+    let message = author_reply("Reply queued before revocation")?;
+    let submission = arkret_wire::EventAdmissionSubmission::new(message.clone());
+    // Freeze while allowed, then revoke without notifying the existing runtime.
     let changed = controller
         .sdk()
         .agent_participation_replace(scene.agent.agent_account.principal_id.as_str(), &selection)
@@ -136,31 +163,6 @@ async fn current_reply_selection(
             && entry.version == 2
             && entry.selection == arkret::ParticipationBits::NONE
     );
-    let message =
-        arkret_event_draft::TypedEventDraft::<arkret_wire::event_spec::MessageCreate>::new(
-            ScopeRef::Realm {
-                realm_id: scene.realm.clone(),
-            },
-            ActorId::account(scene.agent.agent_account.clone()),
-            arkret_models_collaboration::events_payloads::MessageCreatePayload::with_content(
-                scene.b.clone(),
-                "discussion",
-                arkret_models_collaboration::events_payloads::ContentBlock::text(
-                    "Current reply selection must be checked",
-                ),
-            ),
-        )?
-        .with_semantic_ref(arkret_wire::SemanticRef::new(
-            grant.to_string(),
-            arkret_wire::SEMANTIC_REF_ROLE_AUTHORIZED_BY,
-        ))
-        .author_with_digest_suite(Utc::now(), arkret_canonical::DigestSuite::Sha256)?;
-    let message = sign(
-        message,
-        &scene.agent.verification_method,
-        scene.agent.runtime_key.to_bytes(),
-    )?;
-    let submission = arkret_wire::EventAdmissionSubmission::new(message.clone());
     let url = scene
         .deployment
         .station
@@ -205,6 +207,9 @@ async fn current_reply_selection(
                 .selection
                 .message_creation_allowed
     );
+    let fresh = author_reply("New reply requested after restoration")?;
+    ensure!(fresh.event_id != message.event_id);
+    let submission = arkret_wire::EventAdmissionSubmission::new(fresh.clone());
     let accepted: AuthoritySubmitResponseBody = serde_json::from_value(
         expect_json(
             runtime
@@ -216,17 +221,17 @@ async fn current_reply_selection(
     )?;
     ensure!(matches!(accepted, AuthoritySubmitResponseBody::Accepted {
         status: AuthorityCommitStatus::Committed, commit,
-    } if commit.event_ref == message.event_id));
+    } if commit.event_ref == fresh.event_id));
     ensure!(
         controller
             .sdk()
-            .committed_event_get(&message.event_id)
+            .committed_event_get(&fresh.event_id)
             .await?
             .reducer_input()
-            == Some(&message)
+            == Some(&fresh)
     );
     println!(
-        "[agent-current-participation] original_write_credential_and_grant_retained=1 normal_reply_selection_removed=1 actual_current_selection_refusal=1 complete_business_noop=1 normal_selection_restored=1 exact_same_signed_message_committed=1 independent_read_retained=1"
+        "[agent-current-participation] original_write_credential_and_grant_retained=1 normal_reply_selection_removed=1 actual_current_selection_refusal=1 complete_business_noop=1 normal_selection_restored=1 new_explicit_reply_committed=1 independent_read_retained=1"
     );
     Ok(())
 }

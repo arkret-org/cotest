@@ -91,6 +91,14 @@ const MLS_TRANSACTION_KINDS = ["ak.mls.commit"];
 
 const isEventsSubmit = ({ pathname }: URL) => pathname === EVENTS_SUBMIT_PATH;
 
+async function allowDirectChatReplies(page: Page, strandId: string) {
+  await expect(page.locator(".direct-structure").getByRole("combobox", { name: "Chat", exact: true }))
+    .toHaveValue(strandId);
+  const preference = page.locator(".direct-agent-reply-preference");
+  await preference.getByRole("button", { name: "Allow Agent replies in this Chat", exact: true }).click();
+  await expect(preference.getByRole("status")).toHaveText("Reply preference saved for this Chat");
+}
+
 type PairingHandle = {
   agentId: string;
   pairingRequestId: string;
@@ -586,6 +594,8 @@ privatePairingTest.describe("Agent Savfox split live @fully-implemented", () => 
         }
 
         // ── Phase 8: a real user message is answered by the live runtime ──
+        // The controller grants this exact Chat permission before asking for a reply.
+        await allowDirectChatReplies(inkson, resolvedBindings[0].main_strand_id);
         const prompt = "请只回复 pong";
         await inkson.locator(".chat-input").fill(prompt);
         await jointRealm.alicePage.clickWithPassivePromptRetry(
@@ -1455,6 +1465,9 @@ privatePairingTest("fresh Agent pairing gates the first send until binding and a
     releaseBinding();
     await expect(send).toBeEnabled({ timeout: 180_000 });
     await expect(input).toHaveValue(prompt);
+    const mainStrand = heldBinding!.payload?.main_strand_id;
+    expect(typeof mainStrand).toBe("string");
+    await allowDirectChatReplies(inkson, String(mainStrand));
     const accepted = inkson.waitForResponse((response) =>
       new URL(response.url()).pathname === EVENTS_SUBMIT_PATH && response.ok() &&
       eventSubmissions(response.request().postData()).some((event) => event.kind === "ak.message.create"),
