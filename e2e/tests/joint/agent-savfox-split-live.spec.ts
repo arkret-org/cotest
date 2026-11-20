@@ -7,8 +7,7 @@ import { openCardMembers } from "../../helpers/kanban-product-ui";
 import { accountActorId } from "../../helpers/coland-api";
 import { agentMemberRow } from "../../helpers/product-locators";
 import { actorRow } from "../../helpers/product-locators";
-import { selectProductOptionByReference } from "../../helpers/product-select";
-import { openSavfoxArkretChannel, startSavfoxPairing, saveSavfoxChannel, provisionAgent, pairManagedSavfoxAgent, addAgentToRealm, composeSourceAgentMention, createSidecarSourceCard, submitSidecarComposerDraft, waitForSidecarEnsureAcceptance, eventIdFromMessage, displayPairingCode } from "../../helpers/agent-sidecar-product-ui";
+import { confirmAgentStrandMessageGrant, openSavfoxArkretChannel, startSavfoxPairing, saveSavfoxChannel, provisionAgent, pairManagedSavfoxAgent, addAgentToRealm, composeSourceAgentMention, createSidecarSourceCard, submitSidecarComposerDraft, waitForSidecarEnsureAcceptance, eventIdFromMessage, displayPairingCode } from "../../helpers/agent-sidecar-product-ui";
 import { uint64Decimal } from "../../helpers/uint64-decimal";
 import { observeNativeSearch } from "../../helpers/native-search";
 import { openAndPairSecondController } from "../../helpers/paired-controller";
@@ -1632,7 +1631,7 @@ nativePublicReplyTest.describe("Native public fixed reply @native-public-reply",
           const cardAddress = new URL(controller.url());
           const strand = decodeURIComponent(cardAddress.pathname).split("/task/")[1];
           expect(strand).toMatch(/^ak:strand:/);
-          await confirmNativePublicStrandAuthority(controller, jointRealm, pairing.agentId, strand);
+          await confirmAgentStrandMessageGrant(controller, realm, jointRealm.aliceSession.accountId, pairing.agentId, strand);
           // Explicit original UI Save invokes the configuration/onboarding
           // owner AFTER real shared membership and the narrow owned source.
           // It obtains actual accepted heads; startup never initializes.
@@ -1701,48 +1700,6 @@ nativePublicReplyTest.describe("Native public fixed reply @native-public-reply",
     );
   }
 });
-
-async function confirmNativePublicStrandAuthority(page: Page, realm: JointRealmFixture,
-  agentId: string, strand: string): Promise<void> {
-  await page.goto(`/realms/${realm.realmId}/members`, { waitUntil: "domcontentloaded" });
-  await expect(page.locator(".realm-members-panel")).toBeVisible({ timeout: 120_000 });
-  await page.getByRole("button", { name: "My agents", exact: true }).click();
-  const row = actorRow(page, ".member-self-agent-row", accountActorId(agentId));
-  const panel = row.locator(".event:has(> .event-head :text-is(\"明确授权自有 Agent\"))");
-  await expect(panel.locator(".owned-agent-scope")).toBeVisible({ timeout: 120_000 });
-  await selectProductOptionByReference(panel.locator(".owned-agent-scope"), strand);
-  // Membership supplies ordinary reads. Do not exceed the immutable provision
-  // ceiling by inventing a Strand-read grant for this public reply exercise.
-  for (const checkbox of await panel.getByRole("checkbox").all()) await checkbox.uncheck();
-  await panel.getByRole("checkbox", { name: "发送消息", exact: true }).check();
-  const accepted = page.waitForResponse(response => response.request().method() === "POST"
-    && new URL(response.url()).pathname === EVENTS_SUBMIT_PATH
-    && eventSubmissions(response.request().postData()).some(event => event.kind === "ak.capability.grant"),
-  { timeout: 180_000 });
-  await panel.locator(".owned-agent-confirm-authority").click();
-  const response = await accepted;
-  expect(response.ok()).toBe(true);
-  const event = eventSubmissions(response.request().postData()).find(event => event.kind === "ak.capability.grant")!;
-  assertAuthoritySubmitOutcome(await response.json() as Record<string, unknown>, event, "normal explicitly confirmed native reply owned source");
-  const grant = event.payload!.grant as Record<string, unknown>;
-  expect(canonicalJson(event.actor_id) === canonicalJson({ kind: "account", account_id: realm.aliceSession.accountId })).toBe(true);
-  expect(canonicalJson(grant.subject) === canonicalJson({ kind: "account", account_id: {
-    principal_id: agentId, station_id: realm.aliceSession.accountId.station_id,
-  } })).toBe(true);
-  expect(canonicalJson(grant.resources) === canonicalJson([{ kind: "strand", realm_id: realm.realmId, strand_id: strand }])).toBe(true);
-  expect(Array.isArray(grant.actions)).toBe(true);
-  expect(canonicalJson([...(grant.actions as string[])].sort()) === canonicalJson([
-    "ak.message.create",
-  ].sort())).toBe(true);
-  const sources = grant.issuer_authority_refs as Array<Record<string, unknown>>;
-  expect(sources.length).toBe(1);
-  expect(sources[0].kind).toBe("owned_agent");
-  expect(canonicalJson(sources[0].controller_account_id) === canonicalJson(realm.aliceSession.accountId)).toBe(true);
-  expect(String(sources[0].controller_join_event_id)).toMatch(/^ak:event:/);
-  expect(String(sources[0].agent_join_event_id)).toMatch(/^ak:event:/);
-  expect(sources[0].controller_join_event_id === sources[0].agent_join_event_id).toBe(false);
-  await expect(panel.locator(".owned-agent-accepted-grant")).toContainText("Active", { timeout: 180_000 });
-}
 
 async function pairNativeManagedSavfoxAgent(
   controller: Page, savfox: Page, pairing: PairingHandle & { pairingLink: string },

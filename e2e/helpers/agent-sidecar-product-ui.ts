@@ -1,5 +1,5 @@
-import { accountActorId } from "./coland-api";
-import { selectProductOptionByLabel } from "./product-select";
+import { accountActorId, canonicalJson } from "./coland-api";
+import { selectProductOptionByLabel, selectProductOptionByReference } from "./product-select";
 import { boardSwitcher, openNewBoard, addBoardList, prepareBoardTitle, submitBoardCardDraft } from "./kanban-product-ui";
 import { accountRow, actorRow } from "./product-locators";
 import { enterSecretText } from "./secret-input";
@@ -386,6 +386,48 @@ export async function composeSourceAgentMention(
   await composer.fill(`${mention} ${prompt}`);
 }
 
+
+export async function confirmAgentStrandMessageGrant(page: Page, realm: string, controller: AccountId,
+  agentId: string, strand: string): Promise<void> {
+  await page.goto(`/realms/${realm}/members`, { waitUntil: "domcontentloaded" });
+  await expect(page.locator(".realm-members-panel")).toBeVisible({ timeout: 120_000 });
+  await page.getByRole("button", { name: "My agents", exact: true }).click();
+  const row = actorRow(page, ".member-self-agent-row", accountActorId(agentId));
+  const panel = row.locator(".event:has(> .event-head :text-is(\"明确授权自有 Agent\"))");
+  await expect(panel.locator(".owned-agent-scope")).toBeVisible({ timeout: 120_000 });
+  await selectProductOptionByReference(panel.locator(".owned-agent-scope"), strand);
+  // Membership supplies ordinary reads. Do not exceed the immutable provision
+  // ceiling by inventing a Strand-read grant for these replies.
+  for (const checkbox of await panel.getByRole("checkbox").all()) await checkbox.uncheck();
+  await panel.getByRole("checkbox", { name: "发送消息", exact: true }).check();
+  const accepted = page.waitForResponse(response => response.request().method() === "POST"
+    && new URL(response.url()).pathname === EVENTS_SUBMIT_PATH
+    && eventSubmissions(response.request().postData()).some(event => event.kind === "ak.capability.grant"),
+  { timeout: 180_000 });
+  await panel.locator(".owned-agent-confirm-authority").click();
+  const response = await accepted;
+  expect(response.ok()).toBe(true);
+  const event = eventSubmissions(response.request().postData()).find(event => event.kind === "ak.capability.grant")!;
+  assertAuthoritySubmitOutcome(await response.json() as Record<string, unknown>, event, "controller-confirmed Strand message grant");
+  const grant = event.payload!.grant as Record<string, unknown>;
+  expect(canonicalJson(event.actor_id) === canonicalJson({ kind: "account", account_id: controller })).toBe(true);
+  expect(canonicalJson(grant.subject) === canonicalJson({ kind: "account", account_id: {
+    principal_id: agentId, station_id: controller.station_id,
+  } })).toBe(true);
+  expect(canonicalJson(grant.resources) === canonicalJson([{ kind: "strand", realm_id: realm, strand_id: strand }])).toBe(true);
+  expect(Array.isArray(grant.actions)).toBe(true);
+  expect(canonicalJson([...(grant.actions as string[])].sort()) === canonicalJson([
+    "ak.message.create",
+  ].sort())).toBe(true);
+  const sources = grant.issuer_authority_refs as Array<Record<string, unknown>>;
+  expect(sources.length).toBe(1);
+  expect(sources[0].kind).toBe("owned_agent");
+  expect(canonicalJson(sources[0].controller_account_id) === canonicalJson(controller)).toBe(true);
+  expect(String(sources[0].controller_join_event_id)).toMatch(/^ak:event:/);
+  expect(String(sources[0].agent_join_event_id)).toMatch(/^ak:event:/);
+  expect(sources[0].controller_join_event_id === sources[0].agent_join_event_id).toBe(false);
+  await expect(panel.locator(".owned-agent-accepted-grant")).toContainText("Active", { timeout: 180_000 });
+}
 
 export async function createSidecarSourceCard(
   page: Page,
