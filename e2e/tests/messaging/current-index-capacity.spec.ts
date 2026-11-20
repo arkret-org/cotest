@@ -26,26 +26,28 @@ test("0540 real Station 1/100/1000 Realm durable cold startup records first scre
       // the same browser context retains its genuine encrypted IndexedDB.
       if (flow) await flow.page.page.goto("about:blank");
       const provisionStarted = Date.now();
-      while (realms.length < count) {
-        const offset = realms.length;
-        const batch = await Promise.allSettled(Array.from({ length: Math.min(4, count - offset) },
-          (_, index) => createRealmViaApi(request, token, {
-            ownerId: session.user.id,
-            title: `${prefix}${String(offset + index + 1).padStart(4, "0")}`,
-            discoverability: "listed", historyAccess: "all_history_for_current_members",
-            mlsActivated: false,
-          })));
-        for (const result of batch) if (result.status === "fulfilled") realms.push(result.value);
-        const failure = batch.find(result => result.status === "rejected");
-        if (failure?.status === "rejected") throw failure.reason;
-        if (offset === 0) {
-          const strandId = await resolveDefaultStrandId(request, token, realms[0]!);
-          await sendPlaintextMessageViaApi(request, token, realms[0]!, `${prefix}accepted-body`, {
-            actorId: session.user.id, strandId,
-          });
+      await test.step(`Provision to ${count} real Realms`, async () => {
+        while (realms.length < count) {
+          const offset = realms.length;
+          const batch = await Promise.allSettled(Array.from({ length: Math.min(4, count - offset) },
+            (_, index) => createRealmViaApi(request, token, {
+              ownerId: session.user.id,
+              title: `${prefix}${String(offset + index + 1).padStart(4, "0")}`,
+              discoverability: "listed", historyAccess: "all_history_for_current_members",
+              mlsActivated: false,
+            })));
+          for (const result of batch) if (result.status === "fulfilled") realms.push(result.value);
+          const failure = batch.find(result => result.status === "rejected");
+          if (failure?.status === "rejected") throw failure.reason;
+          if (offset === 0) {
+            const strandId = await resolveDefaultStrandId(request, token, realms[0]!);
+            await sendPlaintextMessageViaApi(request, token, realms[0]!, `${prefix}accepted-body`, {
+              actorId: session.user.id, strandId,
+            });
+          }
+          if (realms.length % 100 === 0) console.log(`0540 accepted ${realms.length} real Realms`);
         }
-        if (realms.length % 100 === 0) console.log(`0540 accepted ${realms.length} real Realms`);
-      }
+      });
       const provisioningMs = Date.now() - provisionStarted;
       flow ??= await openDpopUserPageFromSession(browser, session, {
         prepareMlsDevice: false, autoCompleteRecoveryKeySetup: false,
