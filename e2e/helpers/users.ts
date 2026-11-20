@@ -1030,18 +1030,24 @@ export class JointUserPage {
       timeout: 120_000,
     });
 
-    await this.fillWithPassivePromptRetry(
-      strand.locator(".realm-title-input :is(input,textarea)"),
-      opts.title,
-    );
-    if (opts.summary !== undefined) {
-      await this.fillWithPassivePromptRetry(
-        strand.locator(".realm-summary-input :is(input,textarea)"),
-        opts.summary,
-      );
-    }
+    const summaryInput = strand.locator(".realm-summary-input :is(input,textarea)");
     const basicsNext = strand.locator(".new-realm-next-button").first();
-    await expect(basicsNext).toBeEnabled({ timeout: 30_000 });
+    // Draining a recovery prompt can remount the form. Verify both fields on
+    // the current Basics page before advancing through the normal button.
+    await expect(async () => {
+      await this.dismissCreateRealmBlockingPrompts(promptHandling);
+      if (await titleInput.inputValue({ timeout: 5_000 }) !== opts.title) {
+        await titleInput.fill(opts.title, { timeout: 5_000 });
+      }
+      if (opts.summary !== undefined) {
+        if (await summaryInput.inputValue({ timeout: 5_000 }) !== opts.summary) {
+          await summaryInput.fill(opts.summary, { timeout: 5_000 });
+        }
+        await expect(summaryInput).toHaveValue(opts.summary, { timeout: 2_000 });
+      }
+      await expect(titleInput).toHaveValue(opts.title, { timeout: 2_000 });
+      await expect(basicsNext).toBeEnabled({ timeout: 2_000 });
+    }).toPass({ timeout: 30_000, intervals: [250, 1_000] });
     await this.clickCreateRealmControl(basicsNext, promptHandling);
 
     if (opts.discoverability !== undefined) {
