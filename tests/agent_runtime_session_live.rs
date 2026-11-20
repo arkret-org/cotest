@@ -22,3 +22,11 @@ async fn agent_runtime_authors_actor_private_requests_and_drafts_for_its_control
 async fn agent_publishes_persisted_keypackage_with_its_runtime_key() -> anyhow::Result<()> {
     cotest::scenarios::agent_runtime_live::run_agent_keypackage_upload_live().await
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn agent_discovers_offline_membership_using_its_own_service_session() -> anyhow::Result<()> {
+    cotest::harness::heap_future(|| {
+        cotest::scenarios::agent_runtime_live::run_agent_membership_discovery()
+    })
+    .await
+}

@@ -1088,6 +1088,155 @@ pub async fn run_agent_content_sidecar_read_production() -> Result<()> {
     crate::harness::heap_future(|| run_sidecar_production(true)).await
 }
 
+async fn join_controller_agent(
+    client: &TestActorClient,
+    controller: &AccountId,
+    realm: &RealmId,
+    generation: EventId,
+    agent_account: &AccountId,
+) -> Result<()> {
+    let mut membership = MembershipPayload::join(
+        realm.clone(),
+        ActorId::account(agent_account.clone()),
+        "Private Sidecar membership",
+    );
+    membership.agent_controller_binding = Some(AgentControllerMembershipBinding {
+        controller_account_id: controller.clone(),
+        controller_membership_generation_ref: generation,
+        controller_terminal_event_ref: None,
+    });
+    let joined = client
+        .author_event(realm.as_str(), "ak.member.state", membership.to_value()?)
+        .await?;
+    crate::scenarios::human_device_producer_live::submit_and_expect_commit(
+        client,
+        controller,
+        &client.device_id,
+        &joined,
+    )
+    .await?;
+    Ok(())
+}
+
+pub async fn run_agent_membership_discovery() -> Result<()> {
+    use arkret_models_collaboration::sync_frames::account_subscribe::AccountSubscribeParameters;
+    use arkret_models_collaboration::sync_frames::demand_sync::RealmListMembership;
+    let deployment =
+        coauth_session_evidence::actual_agent_deployment("agent-membership-discovery").await?;
+    let client = &deployment.controller;
+    let operations = arkret_schema::agent_runtime_scope::complete_agent_runtime_scope([
+        ServiceOperationId::SELF_COMMITTED_EVENT_STREAM_SUBSCRIBE_V1,
+        ServiceOperationId::SELF_ACCOUNT_STREAM_SUBSCRIBE_V1,
+    ])?;
+    let operations = operations.iter().map(String::as_str).collect::<Vec<_>>();
+    let agent = AgentRuntimeSession::establish_observed(
+        &deployment.station,
+        AgentSessionIssuer::Coauth {
+            base: deployment.coauth.base_url(),
+            database_url: &deployment.coauth.pg.connect_url,
+        },
+        client,
+        &deployment.account,
+        "membership-only-agent",
+        requested_scope(&operations)?,
+        None,
+    )
+    .await?;
+    let runtime = agent.runtime.sdk();
+    let request = AccountSubscribeParameters::default();
+    let before = runtime.account_subscribe_batch(&request).await?;
+    // The service grant predates the new Realm and has no content selector.
+    // Only the controller sends requests while the Agent is disconnected.
+    let created = client.create_realm_with(json!({"title":"Offline membership discovery",
+        "public":false,"join_rule":"invite","plaintext_visible_services":[deployment.station.service_id()]})).await?;
+    let realm = RealmId::new(created["realm_id"].as_str().context("new parent Realm")?)?;
+    let generation = EventId::new(
+        created["event_response"]["commits"]
+            .as_array()
+            .and_then(|v| v.last())
+            .and_then(|v| v["event_ref"].as_str())
+            .context("controller membership generation")?,
+    )?;
+    join_controller_agent(
+        client,
+        &deployment.account,
+        &realm,
+        generation,
+        &agent.agent_account,
+    )
+    .await?;
+    let cold = runtime.account_subscribe_batch(&request).await?;
+    let resume = |cursor: String| AccountSubscribeParameters {
+        after: Some(cursor),
+        ..Default::default()
+    };
+    let delta = runtime
+        .account_subscribe_batch(&resume(before.cursor.clone()))
+        .await?;
+    for batch in [&cold, &delta] {
+        ensure!(batch.frames.iter().all(|f| f.realms.is_none()
+            && f.account_data.is_none()
+            && f.device_lists.is_none()
+            && f.agent_draft_pending_intents.is_none()
+            && f.to_device.is_none()
+            && f.notifications.is_none()));
+        ensure!(
+            batch
+                .frames
+                .iter()
+                .flat_map(|f| f
+                    .realm_list
+                    .iter()
+                    .flat_map(|p| &p.items)
+                    .chain(f.realm_list_changes.iter().flat_map(|c| &c.upserts)))
+                .any(|item| item.realm_id == realm
+                    && item.membership == RealmListMembership::Join
+                    && item.title.is_none()
+                    && item.default_strand_id.is_none()),
+            "fresh and resumed Agent-only sessions must discover the accepted join"
+        );
+    }
+    let leave = client
+        .author_event(
+            realm.as_str(),
+            "ak.member.state",
+            json!({
+        "member_id":ActorId::account(agent.agent_account.clone()),"membership":"leave"}),
+        )
+        .await?;
+    crate::scenarios::human_device_producer_live::submit_and_expect_commit(
+        client,
+        &deployment.account,
+        &client.device_id,
+        &leave,
+    )
+    .await?;
+    let removed = runtime
+        .account_subscribe_batch(&resume(delta.cursor))
+        .await?;
+    ensure!(
+        removed
+            .frames
+            .iter()
+            .flat_map(|f| &f.realm_list_changes)
+            .flat_map(|c| &c.removals)
+            .any(|r| r.realm_id == realm)
+    );
+    let missed = runtime
+        .account_subscribe_batch(&resume(before.cursor))
+        .await?;
+    ensure!(missed.frames.iter().all(|f| {
+        f.realm_list_changes.as_ref().is_none_or(|c| {
+            c.upserts.iter().all(|r| r.realm_id != realm)
+                && c.removals.iter().all(|r| r.realm_id != realm)
+        }) && f
+            .realm_invalidations
+            .as_ref()
+            .is_none_or(|v| v.iter().all(|r| r.realm_id != realm))
+    }));
+    Ok(())
+}
+
 async fn run_sidecar_production(read_positive_only: bool) -> Result<()> {
     let fixture = crate::conformance::load_fixture_value("agent-vectors-fixture.json")?;
     let contract = &fixture["session_content_authority_contract"];
@@ -1272,24 +1421,12 @@ async fn run_sidecar_production(read_positive_only: bool) -> Result<()> {
         None,
     )
     .await?;
-    let mut membership = MembershipPayload::join(
-        realm.clone(),
-        ActorId::account(agent.agent_account.clone()),
-        "Private Sidecar membership",
-    );
-    membership.agent_controller_binding = Some(AgentControllerMembershipBinding {
-        controller_account_id: deployment.account.clone(),
-        controller_membership_generation_ref: generation,
-        controller_terminal_event_ref: None,
-    });
-    let joined = client
-        .author_event(realm.as_str(), "ak.member.state", membership.to_value()?)
-        .await?;
-    crate::scenarios::human_device_producer_live::submit_and_expect_commit(
+    join_controller_agent(
         client,
         &deployment.account,
-        &client.device_id,
-        &joined,
+        &realm,
+        generation,
+        &agent.agent_account,
     )
     .await?;
     let selected = client
