@@ -91,11 +91,27 @@ const MLS_TRANSACTION_KINDS = ["ak.mls.commit"];
 
 const isEventsSubmit = ({ pathname }: URL) => pathname === EVENTS_SUBMIT_PATH;
 
-async function allowDirectChatReplies(page: Page, strandId: string) {
-  await expect(page.locator(".direct-structure").getByRole("combobox", { name: "Chat", exact: true }))
-    .toHaveValue(strandId);
-  const preference = page.locator(".direct-agent-reply-preference");
-  await preference.getByRole("button", { name: "Allow Agent replies in this Chat", exact: true }).click();
+async function allowDirectChatReplies(page: Page, agentId: string, realmId: string, strandId: string) {
+  const panel = page.locator(".direct-structure");
+  const preference = panel.locator(".direct-agent-reply-preference");
+  await expect(preference).toBeVisible();
+  const chat = panel.getByRole("combobox", { name: "Chat", exact: true });
+  if (await chat.count()) {
+    await expect(chat).toHaveValue(strandId);
+  }
+  const [saved] = await Promise.all([
+    page.waitForResponse(response => response.request().method() === "PUT"
+      && decodeURIComponent(new URL(response.url()).pathname) === `${AGENT_LIST_PATH}/${agentId}/participation`),
+    preference.getByRole("button", { name: "Allow Agent replies in this Chat", exact: true }).click(),
+  ]);
+  const target = { kind: "strand", realm_id: realmId, strand_id: strandId };
+  const request = saved.request().postDataJSON();
+  expect(request.target_scope).toEqual(target);
+  expect(request.selection.message_creation_allowed).toBe(true);
+  expect(saved.ok(), "the Station must accept the owner's preference").toBe(true);
+  expect((await saved.json()).participation_entries).toContainEqual(expect.objectContaining({
+    target_scope: target, selection: request.selection,
+  }));
   await expect(preference.getByRole("status")).toHaveText("Reply preference saved for this Chat");
 }
 
@@ -595,7 +611,7 @@ privatePairingTest.describe("Agent Savfox split live @fully-implemented", () => 
 
         // ── Phase 8: a real user message is answered by the live runtime ──
         // The controller grants this exact Chat permission before asking for a reply.
-        await allowDirectChatReplies(inkson, resolvedBindings[0].main_strand_id);
+        await allowDirectChatReplies(inkson, firstPairing.agentId, resolvedBindings[0].realm_id, resolvedBindings[0].main_strand_id);
         const prompt = "请只回复 pong";
         await inkson.locator(".chat-input").fill(prompt);
         await jointRealm.alicePage.clickWithPassivePromptRetry(
@@ -1392,11 +1408,11 @@ privatePairingTest("fresh Agent pairing gates the first send until binding and a
   };
   inkson.on("response", observeFounding);
   const messages: SubmittedEvent[] = [];
-  const phases: string[] = [];
-  const observeResolve = async (response: import("@playwright/test").Response) => {
+  const resolveBodies: Promise<string | null>[] = [];
+  const observeResolve = (response: Response) => {
     if (new URL(response.url()).pathname !== DIRECT_CONVERSATIONS_RESOLVE_PATH || !response.ok()) return;
-    const body = await response.json();
-    phases.push(`${body.state}:${body.peer_mls_admission ?? ""}`);
+    // Navigation can discard a response body. Only a readable reply can prove admission.
+    resolveBodies.push(response.text().catch(() => null));
   };
   inkson.on("response", observeResolve);
   const holdBinding = async (route: Route) => {
@@ -1454,7 +1470,16 @@ privatePairingTest("fresh Agent pairing gates the first send until binding and a
     });
     releaseSecondResolve();
     await expect.poll(() => Boolean(heldBinding), { timeout: 180_000 }).toBe(true);
-    await expect.poll(() => phases.includes("provisional:durable"), { timeout: 30_000 }).toBe(true);
+    let phases: string[] = [];
+    await expect.poll(async () => {
+      phases = (await Promise.all(resolveBodies)).flatMap(text => {
+        if (text === null) return [];
+        const body = JSON.parse(text);
+        return [`${body.state}:${body.peer_mls_admission ?? ""}`];
+      });
+      return phases;
+    }, { timeout: 30_000 }).toContain("provisional:durable");
+    inkson.off("response", observeResolve);
     await expect(inkson.locator(".chat-panel")).toBeVisible();
     const send = inkson.locator(".send-chat-button");
     const input = inkson.locator(".chat-input");
@@ -1466,8 +1491,8 @@ privatePairingTest("fresh Agent pairing gates the first send until binding and a
     await expect(send).toBeEnabled({ timeout: 180_000 });
     await expect(input).toHaveValue(prompt);
     const mainStrand = heldBinding!.payload?.main_strand_id;
-    expect(typeof mainStrand).toBe("string");
-    await allowDirectChatReplies(inkson, String(mainStrand));
+    if (typeof mainStrand !== "string" || !heldBinding!.realm_id) throw new Error("Direct binding lacks Chat coordinates");
+    await allowDirectChatReplies(inkson, pairing.agentId, heldBinding!.realm_id, mainStrand);
     const accepted = inkson.waitForResponse((response) =>
       new URL(response.url()).pathname === EVENTS_SUBMIT_PATH && response.ok() &&
       eventSubmissions(response.request().postData()).some((event) => event.kind === "ak.message.create"),
