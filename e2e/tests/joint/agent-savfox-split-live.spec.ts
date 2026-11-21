@@ -1308,11 +1308,13 @@ privatePairingTest.describe("Agent Savfox split live @fully-implemented", () => 
         // The private reading surface has no publish dialog. The controller
         // explicitly edits and confirms a fresh ordinary message containing
         // only the chosen text, rather than copying a private Event envelope.
-        const retainedReply = resumedCard.locator(
-          `[id=${JSON.stringify(renderedMessageId(evidence.response_event_id))}]`,
-        );
-        await revealTimelineEvent(inkson, retainedReply, 30_000,
-          resumedCard.locator(".message-list").last());
+        const discussionTab = resumedCard.getByRole("tab", { name: "Discussion", exact: true });
+        await discussionTab.click();
+        await expect(discussionTab).toHaveAttribute("aria-selected", "true");
+        const feed = resumedCard.locator(".card-discussion-panel .message-list:visible");
+        await expect(feed).toHaveCount(1);
+        const retainedReply = feed.locator("#" + renderedMessageId(evidence.response_event_id));
+        await revealTimelineEvent(inkson, retainedReply, 30_000, feed);
         await expect(retainedReply).toBeVisible();
         expect(await eventIdFromMessage(retainedReply)).toBe(evidence.response_event_id);
         const sharedBody = await retainedReply.locator(".content-block-text")
