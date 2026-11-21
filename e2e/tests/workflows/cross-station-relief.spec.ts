@@ -312,6 +312,8 @@ async function runReliefProject(admission: "concurrent" | "late-welcome", browse
     });
     expect(denied.status()).toBe(403);
     expect(deniedCode).toBe("capability_denied");
+    expect(deniedProblem.commit).toBeUndefined();
+    expect(deniedProblem.commits).toBeUndefined();
     await testInfo.attach("relief-origin-cut-retries", {
       contentType: "application/json", body: JSON.stringify({ retryable_source_cut_responses: sourceCutRetries }),
     });
