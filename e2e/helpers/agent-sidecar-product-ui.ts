@@ -429,6 +429,18 @@ export async function confirmAgentStrandMessageGrant(page: Page, realm: string, 
   await expect(panel.locator(".owned-agent-accepted-grant")).toContainText("Active", { timeout: 180_000 });
 }
 
+export async function openSidecarDiscussionFeed(card: Locator): Promise<Locator> {
+  const discussion = card.getByRole("tab", { name: "Discussion", exact: true });
+  await discussion.click();
+  await expect(discussion).toHaveAttribute("aria-selected", "true");
+  const feed = card.locator(".card-discussion-panel .message-list:visible");
+  await expect(feed).toHaveCount(1);
+  await expect.poll(() => feed.evaluate(element => element.clientHeight), {
+    timeout: 30_000, message: "the selected discussion has a usable visible viewport",
+  }).toBeGreaterThan(0);
+  return feed;
+}
+
 export async function confirmSidecarSourceCardGrant(
   page: Page, card: Locator, realm: string, controller: AccountId, agentId: string,
 ): Promise<void> {

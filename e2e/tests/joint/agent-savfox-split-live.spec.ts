@@ -7,7 +7,7 @@ import { openCardMembers } from "../../helpers/kanban-product-ui";
 import { accountActorId } from "../../helpers/coland-api";
 import { agentMemberRow } from "../../helpers/product-locators";
 import { actorRow } from "../../helpers/product-locators";
-import { confirmSidecarSourceCardGrant, confirmAgentStrandMessageGrant, openSavfoxArkretChannel, startSavfoxPairing, saveSavfoxChannel, provisionAgent, pairManagedSavfoxAgent, addAgentToRealm, composeSourceAgentMention, createSidecarSourceCard, submitSidecarComposerDraft, waitForSidecarEnsureAcceptance, eventIdFromMessage, displayPairingCode } from "../../helpers/agent-sidecar-product-ui";
+import { openSidecarDiscussionFeed, confirmSidecarSourceCardGrant, confirmAgentStrandMessageGrant, openSavfoxArkretChannel, startSavfoxPairing, saveSavfoxChannel, provisionAgent, pairManagedSavfoxAgent, addAgentToRealm, composeSourceAgentMention, createSidecarSourceCard, submitSidecarComposerDraft, waitForSidecarEnsureAcceptance, eventIdFromMessage, displayPairingCode } from "../../helpers/agent-sidecar-product-ui";
 import { uint64Decimal } from "../../helpers/uint64-decimal";
 import { observeNativeSearch } from "../../helpers/native-search";
 import { openAndPairSecondController } from "../../helpers/paired-controller";
@@ -1308,11 +1308,7 @@ privatePairingTest.describe("Agent Savfox split live @fully-implemented", () => 
         // The private reading surface has no publish dialog. The controller
         // explicitly edits and confirms a fresh ordinary message containing
         // only the chosen text, rather than copying a private Event envelope.
-        const discussionTab = resumedCard.getByRole("tab", { name: "Discussion", exact: true });
-        await discussionTab.click();
-        await expect(discussionTab).toHaveAttribute("aria-selected", "true");
-        const feed = resumedCard.locator(".card-discussion-panel .message-list:visible");
-        await expect(feed).toHaveCount(1);
+        const feed = await openSidecarDiscussionFeed(resumedCard);
         const retainedReply = feed.locator("#" + renderedMessageId(evidence.response_event_id));
         await revealTimelineEvent(inkson, retainedReply, 30_000, feed);
         await expect(retainedReply).toBeVisible();

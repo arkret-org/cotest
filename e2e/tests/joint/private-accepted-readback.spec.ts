@@ -1,3 +1,4 @@
+import { setOwnedAgentLifecycleViaAdmin } from "../../helpers/direct-structure";
 import { expectPlaintextMessage, renderedMessageId } from "../../helpers/message-evidence";
 import { revealTimelineEvent } from "../../helpers/timeline-visibility";
 import { openCardMembers } from "../../helpers/kanban-product-ui";
@@ -13,7 +14,7 @@ import { decodeIngressEvents, type IngressEvent } from "../../helpers/event-ingr
 import { assertAuthoritySubmitOutcome } from "../../helpers/coland-api";
 import { enterSecretText } from "../../helpers/secret-input";
 import { openSavfoxArkretChannel, provisionAgent, pairManagedSavfoxAgent,
-  addAgentToRealm, confirmSidecarSourceCardGrant, createSidecarSourceCard, composeSourceAgentMention,
+  addAgentToRealm, openSidecarDiscussionFeed, confirmSidecarSourceCardGrant, createSidecarSourceCard, composeSourceAgentMention,
   waitForSidecarEnsureAcceptance, eventIdFromMessage, controlPrivateLiveHints,
 } from "../../helpers/agent-sidecar-product-ui";
 
@@ -117,14 +118,7 @@ test.describe("Private accepted readback real UI @fully-implemented", () => {
       await page.reload();
       const reopened = page.locator(".card-detail-modal");
       await expect(reopened).toBeVisible({ timeout: 180_000 });
-      const discussion = reopened.getByRole("tab", { name: "Discussion", exact: true });
-      await discussion.click();
-      await expect(discussion).toHaveAttribute("aria-selected", "true");
-      const feed = reopened.locator(".card-discussion-panel .message-list:visible");
-      await expect(feed).toHaveCount(1);
-      await expect.poll(() => feed.evaluate(element => element.clientHeight), {
-        timeout: 30_000, message: "the selected discussion has a usable visible viewport",
-      }).toBeGreaterThan(0);
+      const feed = await openSidecarDiscussionFeed(reopened);
       for (const exchange of exchanges) {
         const prompt = reopened.locator("#" + renderedMessageId(exchange.request));
         await revealTimelineEvent(page, prompt, 120_000, feed);
@@ -142,10 +136,22 @@ test.describe("Private accepted readback real UI @fully-implemented", () => {
         expect(await eventIdFromMessage(reply)).toBe(exchange.response);
         await assertFold(page, realm, exchange.request, exchange.response);
       }
+      const cardUrl = page.url();
+      await reopened.getByRole("button", { name: "Close card detail", exact: true }).click();
+      await setOwnedAgentLifecycleViaAdmin(page, pairing.agentId, false);
+      await page.goto(cardUrl, { waitUntil: "domcontentloaded" });
+      await expect(reopened).toBeVisible({ timeout: 120_000 });
+      const pausedFeed = await openSidecarDiscussionFeed(reopened);
+      const firstResponse = exchanges[0]!.response;
+      const retainedReply = pausedFeed.locator("#" + renderedMessageId(firstResponse));
+      await revealTimelineEvent(page, retainedReply, 120_000, pausedFeed);
+      await expectPlaintextMessage(retainedReply, { timeout: 120_000 });
+      await expect(retainedReply.locator(".message-private-sidecar-badge")).toBeVisible();
+      expect(await eventIdFromMessage(retainedReply)).toBe(firstResponse);
       expect(submissions.size).toBe(3);
       expect([...submissions.values()]).toEqual([1, 1, 1]);
       await info.attach("private-cold-reload-evidence", { contentType: "application/json",
-        body: Buffer.from(JSON.stringify({ fresh_baseline: true, retained_exchanges: 3, duplicate_writes: 0 })) });
+        body: Buffer.from(JSON.stringify({ fresh_baseline: true, retained_exchanges: 3, original_reply_retained_after_pause: true, duplicate_writes: 0 })) });
       console.info("[private-readback-ui] real reload restored all three exchanges without duplicate writes");
     } finally {
       const layout = await page.locator(".card-detail-modal").evaluateAll(nodes => nodes.map(node => ({
