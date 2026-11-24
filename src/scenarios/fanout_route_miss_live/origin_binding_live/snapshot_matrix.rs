@@ -211,6 +211,7 @@ async fn run_matrix() -> Result<()> {
     let history_request = arkret_models_collaboration::governance::realm_join_intake::PeerRealmJoinBootstrapRequestBody {
         request_id: arkret_wire::RequestId::new("ak:request:01904100-0000-7000-8000-0000000000b1").map_err(anyhow::Error::msg)?,
         realm_id: realm.clone(), member_account_id: fixture.alice_account.clone(), membership_commit_id: opening_join,
+        content_intent: None,
         history_stream_ref: Some(target.clone()),
     };
     let (history_status, history_body) = fixture

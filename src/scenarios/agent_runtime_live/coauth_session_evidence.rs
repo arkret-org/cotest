@@ -635,6 +635,39 @@ pub(super) async fn issue_runtime_session_with_scope(
     String,
     arkret_models_collaboration::session_grants::AgentSessionGrantRequestBody,
 )> {
+    let (outcome, request) = issue_runtime_session_outcome(
+        station,
+        base,
+        database_url,
+        agent,
+        authorization,
+        method,
+        key,
+        operations,
+        scope_request,
+    )
+    .await?;
+    Ok((outcome.session_grant.into_string(), request))
+}
+
+#[expect(
+    clippy::too_many_arguments,
+    reason = "Session fixture binds the accepted Agent authority, signing key, and requested scope"
+)]
+pub(super) async fn issue_runtime_session_outcome(
+    station: &crate::harness::ArkretServer,
+    base: &str,
+    database_url: &str,
+    agent: &arkret_wire::DidCoreId,
+    authorization: &arkret_wire::EventId,
+    method: &arkret_wire::DidUrl,
+    key: &ed25519_dalek::SigningKey,
+    operations: &[&str],
+    scope_request: arkret_models_collaboration::session_grants::RequestedAgentSessionGrantScope,
+) -> Result<(
+    arkret_models_collaboration::session_grants::SessionGrantResponseBody,
+    arkret_models_collaboration::session_grants::AgentSessionGrantRequestBody,
+)> {
     use arkret_models_collaboration::session_grants::{
         SessionGrantRequestBody, SessionGrantResponseBody,
     };
@@ -770,7 +803,7 @@ pub(super) async fn issue_runtime_session_with_scope(
         .await
         .with_context(|| format!("real Agent {negative} rejection"))?;
     }
-    Ok((outcome.session_grant.into_string(), original))
+    Ok((outcome, original))
 }
 
 pub(super) async fn issuer_state(url: &str) -> Result<serde_json::Value> {

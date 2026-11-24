@@ -1859,6 +1859,41 @@ impl ArkretServer {
         )
     }
 
+    pub async fn client_with_issued_agent_session(
+        &self,
+        agent_did: &str,
+        fragment: &str,
+        runtime_key: ed25519_dalek::SigningKey,
+        issuer_origin: &str,
+        request: arkret_models_collaboration::session_grants::AgentSessionGrantRequestBody,
+        outcome: arkret_models_collaboration::session_grants::SessionGrantResponseBody,
+    ) -> Result<TestActorClient> {
+        let mut client = self.client_with_agent_runtime_grant(
+            agent_did,
+            fragment,
+            outcome.session_grant.as_str().to_owned(),
+            runtime_key,
+        )?;
+        let binding = super::native_session::discover_host_binding(
+            &client,
+            &self.service_id,
+            &self.trust_domain,
+            issuer_origin,
+            self._tls.as_ref().map(|tls| tls.ca_pem.as_slice()),
+        )
+        .await?;
+        let (http, engine) = cotest_test_support::session::bind_issued_agent_host_source(
+            client.sdk.clone(),
+            request,
+            outcome,
+            binding,
+        )?;
+        client.sdk = http;
+        client.native_session_invalidator =
+            Some(super::native_session::LocalSessionInvalidator { engine });
+        Ok(client)
+    }
+
     /// A client whose principal was founded through the canonical chain.
     ///
     /// This is the entry point the dev-seam ones are measured against. The

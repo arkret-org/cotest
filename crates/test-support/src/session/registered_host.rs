@@ -56,6 +56,36 @@ pub fn bind_registered_host_source(
             && state.device_id.is_some(),
         "registered native host belongs to another Station or Device branch"
     );
+    bind_host_source(http, state, binding)
+}
+
+pub fn bind_issued_agent_host_source(
+    http: arkret_http_client::Client,
+    request: arkret_models_collaboration::session_grants::AgentSessionGrantRequestBody,
+    outcome: arkret_models_collaboration::session_grants::SessionGrantResponseBody,
+    binding: arkret::StationConnectionBinding,
+) -> Result<(
+    arkret_http_client::Client,
+    SessionEngine<arkret_http_client::Client>,
+)> {
+    let state = SessionGrantState::from_agent_issue_outcome(request, outcome, chrono::Utc::now())?;
+    ensure!(
+        state.device_id.is_none()
+            && state.account_id.station_id == binding.service_id
+            && state.audience_id == binding.service_id,
+        "issued Agent does not belong to the selected Station"
+    );
+    bind_host_source(http, state, binding)
+}
+
+fn bind_host_source(
+    http: arkret_http_client::Client,
+    state: SessionGrantState,
+    binding: arkret::StationConnectionBinding,
+) -> Result<(
+    arkret_http_client::Client,
+    SessionEngine<arkret_http_client::Client>,
+)> {
     let factory = RegisteredHostFactory {
         http: http.clone(),
         accepted: state.clone(),

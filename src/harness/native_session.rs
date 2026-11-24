@@ -11,7 +11,7 @@ use crate::scenarios::_helpers::bridge::{MockCoauthGrantLedger, MockCoauthIntros
 
 #[derive(Clone)]
 pub(super) struct LocalSessionInvalidator {
-    engine: SessionEngine<arkret_http_client::Client>,
+    pub(super) engine: SessionEngine<arkret_http_client::Client>,
 }
 
 impl LocalSessionInvalidator {
@@ -86,7 +86,7 @@ impl AuthenticatedTransportFactory for HostFactory {
     }
 }
 
-async fn discover_host_binding(
+pub(super) async fn discover_host_binding(
     client: &TestActorClient,
     station: &arkret_wire::DidCoreId,
     trust_domain: &arkret_wire::TrustDomainId,

@@ -101,6 +101,7 @@ pub(super) async fn exercise(
         realm_id: realm.clone(),
         member_account_id: bob.account.clone(),
         membership_commit_id: membership.commit.commit_id.clone(),
+        content_intent: None,
         history_stream_ref: None,
     };
     let bootstrap = peer(

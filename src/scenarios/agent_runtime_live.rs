@@ -132,7 +132,9 @@ pub use content_sidecar_evidence::{
     REVIEWED_SIDECAR_CONTENT_CASES, run_agent_content_sidecar_production,
     run_agent_content_sidecar_read_production, run_agent_membership_discovery,
 };
-pub use cross_station_agent_join::run_cross_station_agent_join_refusal;
+pub use cross_station_agent_join::{
+    run_cross_station_agent_join, run_cross_station_expired_session,
+};
 pub use grant_ceiling_evidence::run_agent_provision_grant_ceiling_boundary;
 pub use human_approval_evidence::run_agent_human_approval_production;
 pub use lifecycle_conjunction::run_agent_controller_lifecycle_production;
@@ -958,23 +960,32 @@ impl AgentRuntimeSession {
             .map(String::as_str)
             .collect();
         // 10. The Account Authority binds the runtime's SessionGrant.
-        let (grant, issuer_request) = match issuer {
-            AgentSessionIssuer::Fixture(coauth) => {
-                let grant =
-                    crate::scenarios::bridge_contracts::session_grant::mock_agent_session_grant(
-                        agent_id.as_str(),
-                        station.as_str(),
-                    );
-                coauth.bind_agent_runtime_grant(
-                    &grant,
-                    &key_authorization,
-                    &authorization,
-                    &runtime_key.verifying_key(),
-                )?;
-                (grant, None)
-            }
-            AgentSessionIssuer::Coauth { base, database_url } => {
-                let (grant, request) = coauth_session_evidence::issue_runtime_session(
+        let (runtime, issuer_request) =
+            match issuer {
+                AgentSessionIssuer::Fixture(coauth) => {
+                    let grant =
+                        crate::scenarios::bridge_contracts::session_grant::mock_agent_session_grant(
+                            agent_id.as_str(),
+                            station.as_str(),
+                        );
+                    coauth.bind_agent_runtime_grant(
+                        &grant,
+                        &key_authorization,
+                        &authorization,
+                        &runtime_key.verifying_key(),
+                    )?;
+                    (
+                        server.client_with_agent_runtime_grant(
+                            agent_did.as_str(),
+                            RUNTIME_FRAGMENT,
+                            grant,
+                            runtime_key.clone(),
+                        )?,
+                        None,
+                    )
+                }
+                AgentSessionIssuer::Coauth { base, database_url } => {
+                    let (outcome, request) = coauth_session_evidence::issue_runtime_session_outcome(
                     server,
                     base,
                     database_url,
@@ -983,17 +994,23 @@ impl AgentRuntimeSession {
                     &verification_method,
                     &runtime_key,
                     &operations,
-                )
-                .await?;
-                (grant, Some(request))
-            }
-        };
-        let runtime = server.client_with_agent_runtime_grant(
-            agent_did.as_str(),
-            RUNTIME_FRAGMENT,
-            grant,
-            runtime_key.clone(),
-        )?;
+                    arkret_models_collaboration::session_grants::RequestedAgentSessionGrantScope {
+                        realm_ids: Vec::new(), strand_ids: Vec::new(), track_names: Vec::new()
+                    },
+                ).await?;
+                    let client = server
+                        .client_with_issued_agent_session(
+                            agent_did.as_str(),
+                            RUNTIME_FRAGMENT,
+                            runtime_key.clone(),
+                            base,
+                            request.clone(),
+                            outcome,
+                        )
+                        .await?;
+                    (client, Some(request))
+                }
+            };
         Ok(Self {
             history_custody,
             custody_authorization,
