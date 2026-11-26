@@ -1750,7 +1750,7 @@ async fn run_sidecar_production(read_positive_only: bool) -> Result<()> {
             .reducer_input()
             == Some(&reply)
     );
-    ensure!(open_message(&client, &mut group, &reply).await? == reply_plaintext);
+    ensure!(open_message(client, &mut group, &reply).await? == reply_plaintext);
     let future_state = advance_epoch_material(
         &controller,
         &agent,

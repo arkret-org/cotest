@@ -19,7 +19,7 @@
 
 use std::collections::BTreeMap;
 
-use anyhow::{Context as _, Result, anyhow, bail, ensure};
+use anyhow::{Context as _, Result, bail, ensure};
 use arkret::mls::MlsPublicGroupTracker;
 use arkret::{
     ArkretMlsIdentity, ArkretMlsSigner, MlsEndpointIdentity, MlsGovernanceBindingPayload,
@@ -784,7 +784,7 @@ impl<'a> CaseRun<'a> {
             realm_id: event.realm_id.clone(),
             effective_scope: self.world.scope.clone(),
             mls_group_id: payload.mls_group_id()?,
-            epoch: 0u64.try_into().map_err(|error| anyhow!("{error:?}"))?,
+            epoch: 0,
             group_state_event_id: event_id.clone(),
             caller_actor_id: None,
             target_commit_event_ref: None,

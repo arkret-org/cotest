@@ -242,7 +242,7 @@ pub(super) async fn exercise(mut material: Materials<'_>) -> Result<()> {
     let (event, _) = crate::harness::content::seal_agent_message(
         material.agent,
         material.group,
-        &material.state_ref,
+        material.state_ref,
         original,
     )
     .await?;

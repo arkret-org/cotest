@@ -28,19 +28,19 @@ futures-util = { version = "0.3.32", features = ["sink"] }
 garth = { workspace = true }
 getrandom = { workspace = true }
 inkson = { workspace = true, features = ["spec-conformance"] }
-jsonschema = { workspace = true, default-features = false, features = ["resolve-file"] }
 postgres = { workspace = true }
 reqwest = { workspace = true, features = ["json", "multipart", "rustls"] }
 rusqlite = { version = "0.40.2", features = ["bundled"] }
-rustls = { version = "0.23.40", default-features = false, features = ["ring", "std"] }
 serde = { workspace = true }
 serde_json = { workspace = true }
-serial_test = { workspace = true }
 sha2 = { workspace = true }
 tempfile = { workspace = true }
 tokio = { workspace = true, features = ["io-util", "macros", "process", "rt-multi-thread", "time"] }
-tokio-tungstenite = { version = "0.30.0", default-features = false, features = ["connect", "handshake", "rustls-tls-webpki-roots"] }
 zeroize = { workspace = true }
+
+[dev-dependencies]
+jsonschema = { workspace = true, default-features = false, features = ["resolve-file"] }
+serial_test = { workspace = true }
 
 [lints]
 workspace = true

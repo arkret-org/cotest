@@ -120,8 +120,7 @@ fn issuer_request(
         &completed.handoff.device_key.signing_key(),
     )?
     .proof_jwt;
-    Ok(http
-        .post(url)
+    http.post(url)
         .header(
             "Arkret-Operation",
             "ak.gate.account.command.issue_recovery_completion_grant.v1",
@@ -131,7 +130,7 @@ fn issuer_request(
             format!("DPoP {}", completed.handoff.account_handoff_grant),
         )
         .header("DPoP", proof)
-        .canonical_json(&completed.request)?)
+        .canonical_json(&completed.request)
 }
 async fn issue(
     http: &reqwest::Client,
@@ -804,7 +803,7 @@ async fn run_owned_native_case(case: &str) -> Result<()> {
                 &issuer_database,
                 &transaction,
                 old_ref.issuer_id.as_str(),
-                &old_ref.id.to_string(),
+                old_ref.id.as_ref(),
             )
             .await?;
             let native = station_footprint(&station_database).await?;
@@ -900,7 +899,7 @@ async fn run_owned_native_case(case: &str) -> Result<()> {
                     &issuer_database,
                     &transaction,
                     old_ref.issuer_id.as_str(),
-                    &old_ref.id.to_string()
+                    old_ref.id.as_ref()
                 )
                 .await?
                     == original

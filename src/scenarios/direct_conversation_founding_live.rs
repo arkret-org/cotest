@@ -653,9 +653,8 @@ async fn sealed_message(
     group: &mut ArkretMlsGroup,
     scope: &ScopeRef,
     strand_id: &StrandId,
-    reference: &EventId,
+    group_state_ref: &EventId,
     plaintext: &[u8],
-    refs: Vec<SemanticRef>,
     cites: Cites<'_>,
 ) -> Result<Event> {
     let original = authored(
@@ -664,14 +663,17 @@ async fn sealed_message(
         scope.clone(),
         json!({"strand_id":strand_id,"track_name":"discussion",
             "content":arkret::ContentBlock::text(std::str::from_utf8(plaintext)?)}),
-        refs,
+        Vec::new(),
         cites,
     )?;
-    Ok(
-        crate::harness::content::seal_device_message(&member.client, group, reference, original)
-            .await?
-            .0,
+    Ok(crate::harness::content::seal_device_message(
+        &member.client,
+        group,
+        group_state_ref,
+        original,
     )
+    .await?
+    .0)
 }
 
 /// Read `event_id` as `reader` sees it committed and decrypt it with the
@@ -1723,7 +1725,6 @@ async fn run(
         &strand_id,
         &genesis_ref,
         b"before Bob joins",
-        Vec::new(),
         Cites::Bootstrap(&create_ref),
     )
     .await?;
@@ -2081,7 +2082,6 @@ async fn run(
         &strand_id,
         &add_ref,
         b"provisional is over",
-        Vec::new(),
         Cites::Bootstrap(&create_ref),
     )
     .await?;
@@ -2179,7 +2179,6 @@ async fn run(
         &strand_id,
         &add_ref,
         &bob_plaintext,
-        Vec::new(),
         Cites::Participant(&bob_binding.event_id),
     )
     .await?;
@@ -2218,7 +2217,6 @@ async fn run(
             &strand_id,
             &add_ref,
             b"after Alice unblocks",
-            Vec::new(),
             Cites::Participant(&bob_binding.event_id),
         )
         .await?;
@@ -2289,7 +2287,6 @@ async fn run(
                 &strand_id,
                 &add_ref,
                 b"Contact terminal refused this request",
-                Vec::new(),
                 Cites::Participant(&bob_binding.event_id),
             )
             .await?;
@@ -2327,7 +2324,6 @@ async fn run(
         &strand_id,
         &add_ref,
         b"hello, Bob",
-        Vec::new(),
         Cites::Participant(&bob_binding.event_id),
     )
     .await?;
@@ -2368,7 +2364,6 @@ async fn run(
         &strand_id,
         &add_ref,
         b"stale source",
-        Vec::new(),
         Cites::Bootstrap(&create_ref),
     )
     .await?;

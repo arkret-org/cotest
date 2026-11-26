@@ -532,9 +532,7 @@ dependencies = [
  "arkret-models-discovery",
  "arkret-models-identity",
  "arkret-models-integration",
- "arkret-schema",
  "arkret-signatures",
- "arkret-state",
  "arkret-wire",
  "chrono",
  "ed25519-dalek 3.0.0",
@@ -829,12 +827,10 @@ dependencies = [
  "arkret-models-crypto",
  "arkret-models-identity",
  "arkret-schema",
- "arkret-state",
  "arkret-wire",
  "base64 0.23.1",
  "chrono",
  "ed25519-dalek 3.0.0",
- "p256",
  "rand_core 0.10.1",
  "serde",
  "serde_json",
@@ -2030,10 +2026,7 @@ version = "0.3.0"
 dependencies = [
  "anyhow",
  "arkret-identifiers",
- "arkret-identity",
  "arkret-keystore",
- "arkret-models-identity",
- "arkret-wire",
  "base64 0.23.1",
  "camino",
  "chrono",
@@ -2042,11 +2035,7 @@ dependencies = [
  "coauth-jose",
  "coauth-keyring",
  "figment",
- "futures-util",
- "hex",
- "indoc",
  "ipnetwork",
- "pem-rfc7468 0.7.0",
  "rand_chacha 0.3.1",
  "rand_core 0.6.4",
  "rustls-pki-types",
@@ -2370,19 +2359,16 @@ dependencies = [
  "arkret-event-draft",
  "arkret-hlc",
  "arkret-identifiers",
- "arkret-mls",
  "arkret-models-collaboration",
  "arkret-models-crypto",
  "arkret-models-identity",
  "arkret-policy",
  "arkret-schema",
  "arkret-wire",
- "base64 0.23.1",
  "chrono",
  "parking_lot 0.12.5",
  "serde",
  "serde_json",
- "thiserror 2.0.21",
  "tracing",
 ]
 
@@ -2427,7 +2413,6 @@ dependencies = [
 name = "coland-storage"
 version = "0.3.0"
 dependencies = [
- "arkret",
  "arkret-canonical",
  "arkret-deployment-contracts",
  "arkret-event-draft",
@@ -2440,16 +2425,13 @@ dependencies = [
  "arkret-policy",
  "arkret-schema",
  "arkret-signatures",
- "arkret-state",
  "arkret-wire",
  "async-trait",
  "base64 0.23.1",
  "chrono",
- "chrono-tz",
  "coland-domain",
  "serde",
  "serde_json",
- "subtle",
  "thiserror 2.0.21",
  "tokio",
  "uuid",
@@ -2963,14 +2945,12 @@ dependencies = [
  "postgres",
  "reqwest",
  "rusqlite",
- "rustls",
  "serde",
  "serde_json",
  "serial_test",
  "sha2 0.11.1",
  "tempfile",
  "tokio",
- "tokio-tungstenite",
  "zeroize",
 ]
 
@@ -4688,7 +4668,6 @@ dependencies = [
  "arkret-models-discovery",
  "arkret-models-identity",
  "arkret-models-integration",
- "arkret-policy",
  "arkret-retry",
  "arkret-signatures",
  "arkret-wire",
@@ -6015,15 +5994,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "indoc"
-version = "2.0.7"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "79cf5c93f93228cf8efb3ba362535fb11199ac548a09ce117c9b1adc3030d706"
-dependencies = [
- "rustversion",
-]
-
-[[package]]
 name = "inkson"
 version = "0.3.0"
 dependencies = [
@@ -6089,7 +6059,6 @@ dependencies = [
  "tokio",
  "tokio-tungstenite",
  "tracing",
- "tracing-subscriber",
  "tracing-wasm",
  "url",
  "wasm-bindgen",

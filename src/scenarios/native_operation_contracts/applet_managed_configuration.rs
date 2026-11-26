@@ -515,7 +515,7 @@ async fn scenario() -> Result<(Value, NativeOperationObservations)> {
         &service,
         &governor.station,
         &ghost_event,
-        &[approval.clone()],
+        std::slice::from_ref(&approval),
         &admission_key,
     )
     .await?;
@@ -611,7 +611,7 @@ async fn scenario() -> Result<(Value, NativeOperationObservations)> {
         &service,
         &governor.station,
         &ghost_event,
-        &[approval.clone()],
+        std::slice::from_ref(&approval),
         &admission_key,
     )
     .await?;

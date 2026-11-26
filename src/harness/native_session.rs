@@ -257,8 +257,8 @@ mod tests {
             &secret,
             principal.as_str(),
             device,
-            &arkret_wire::EventId::from_digest(arkret_canonical::DigestSuite::Sha256, [0x62; 32])
-                .to_string(),
+            arkret_wire::EventId::from_digest(arkret_canonical::DigestSuite::Sha256, [0x62; 32])
+                .as_ref(),
             &key.verifying_key(),
         )?;
         let state = issuer.own_station_session_state(&secret, &station)?;
@@ -303,11 +303,11 @@ mod tests {
                 credential,
                 principal,
                 device,
-                &arkret_wire::EventId::from_digest(
+                arkret_wire::EventId::from_digest(
                     arkret_canonical::DigestSuite::Sha256,
                     [0x62; 32],
                 )
-                .to_string(),
+                .as_ref(),
                 &key.verifying_key(),
                 expires_at,
             )?;
@@ -415,8 +415,8 @@ mod tests {
             &grant,
             principal,
             device,
-            &arkret_wire::EventId::from_digest(arkret_canonical::DigestSuite::Sha256, [0x62; 32])
-                .to_string(),
+            arkret_wire::EventId::from_digest(arkret_canonical::DigestSuite::Sha256, [0x62; 32])
+                .as_ref(),
             &key.verifying_key(),
         )?;
         let state = issuer.own_station_session_state(&grant, &station)?;

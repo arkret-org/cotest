@@ -146,13 +146,12 @@ async fn inkson_rsvp_event(
     mls: &mut RsvpMls,
     realm_id: &str,
     strand_id: &str,
-    actor_id: &str,
     status: &str,
     basis: &[String],
-    attendees: (&str, &str, &str),
+    (organizer, attendee): (&str, &str),
 ) -> Result<arkret_wire::Event> {
     let calendar_fields =
-        serde_json::from_value(calendar_subtree(attendees.0, attendees.1, attendees.2)?)?;
+        serde_json::from_value(calendar_subtree(organizer, attendee, client.service_id())?)?;
     let [basis_event_id] = basis else {
         return Err(anyhow!(
             "RSVP requires exactly one accepted schedule EventId"
@@ -163,7 +162,7 @@ async fn inkson_rsvp_event(
     // submit path positions it on the actor chain.
     let operation = inkson::calendar::build_calendar_rsvp_event(
         realm_id,
-        &actor_for_station(actor_id, attendees.2)?,
+        &actor_for_station(&client.actor, client.service_id())?,
         strand_id,
         status,
         None,
@@ -202,9 +201,7 @@ async fn inkson_rsvp_event(
         arkret::EventContentRoutingContext::None,
         material,
     )?;
-    let encrypted = mls
-        .group
-        .encrypt_payload(header, &arkret_canonical::canonical_json_bytes(&response)?)?;
+    let encrypted = mls.group.encrypt_payload(header, &plaintext)?;
     let envelope = arkret::mls::encrypted_envelope_from_payload(&encrypted)?;
     payload["entry"]
         .as_object_mut()
@@ -614,10 +611,9 @@ pub async fn calendar_rsvp_converges_across_concurrent_responses() -> Result<()>
         &mut mls,
         &realm_id,
         &strand_id,
-        alice_did,
         "accepted",
         &schedule_basis,
-        (alice_did, bob_did, alice.service_id()),
+        (alice_did, bob_did),
     )
     .await?;
     let second_event = inkson_rsvp_event(
@@ -625,10 +621,9 @@ pub async fn calendar_rsvp_converges_across_concurrent_responses() -> Result<()>
         &mut mls,
         &realm_id,
         &strand_id,
-        alice_did,
         "declined",
         &schedule_basis,
-        (alice_did, bob_did, alice.service_id()),
+        (alice_did, bob_did),
     )
     .await?;
     let first_commit = submit_prepared_event(&alice, &first_event).await?;
@@ -656,10 +651,9 @@ pub async fn calendar_rsvp_converges_across_concurrent_responses() -> Result<()>
         &mut mls,
         &realm_id,
         &strand_id,
-        alice_did,
         "tentative",
         &schedule_basis,
-        (alice_did, bob_did, alice.service_id()),
+        (alice_did, bob_did),
     )
     .await?;
     let resolved_commit = submit_prepared_event(&alice, &resolved).await?;
@@ -681,10 +675,9 @@ pub async fn calendar_rsvp_converges_across_concurrent_responses() -> Result<()>
         &mut mls,
         &realm_id,
         &strand_id,
-        alice_did,
         "accepted",
         &schedule_basis,
-        (alice_did, bob_did, alice.service_id()),
+        (alice_did, bob_did),
     )
     .await?;
     let reverse_second = inkson_rsvp_event(
@@ -692,10 +685,9 @@ pub async fn calendar_rsvp_converges_across_concurrent_responses() -> Result<()>
         &mut mls,
         &realm_id,
         &strand_id,
-        alice_did,
         "declined",
         &schedule_basis,
-        (alice_did, bob_did, alice.service_id()),
+        (alice_did, bob_did),
     )
     .await?;
     let reverse_second_commit = submit_prepared_event(&alice, &reverse_second).await?;
@@ -721,10 +713,9 @@ pub async fn calendar_rsvp_converges_across_concurrent_responses() -> Result<()>
         &mut mls,
         &realm_id,
         &strand_id,
-        alice_did,
         "tentative",
         &schedule_basis,
-        (alice_did, bob_did, alice.service_id()),
+        (alice_did, bob_did),
     )
     .await?;
     let final_commit = submit_prepared_event(&alice, &final_event).await?;
@@ -803,10 +794,9 @@ pub async fn calendar_rsvp_persists_across_restart_and_replay() -> Result<()> {
         &mut mls,
         &realm_id,
         &strand_id,
-        alice_did,
         "accepted",
         &schedule_basis,
-        (alice_did, bob_did, alice.service_id()),
+        (alice_did, bob_did),
     )
     .await?;
     let declined = inkson_rsvp_event(
@@ -814,10 +804,9 @@ pub async fn calendar_rsvp_persists_across_restart_and_replay() -> Result<()> {
         &mut mls,
         &realm_id,
         &strand_id,
-        alice_did,
         "declined",
         &schedule_basis,
-        (alice_did, bob_did, alice.service_id()),
+        (alice_did, bob_did),
     )
     .await?;
     let accepted_realm_commit = submit_prepared_event(&alice, &accepted).await?;
@@ -884,10 +873,9 @@ pub async fn calendar_rsvp_persists_across_restart_and_replay() -> Result<()> {
         &mut mls,
         &realm_id,
         &strand_id,
-        alice_did,
         "tentative",
         &schedule_basis,
-        (alice_did, bob_did, alice.service_id()),
+        (alice_did, bob_did),
     )
     .await?;
     let resolved_commit = submit_prepared_event(&alice, &resolved).await?;
@@ -951,10 +939,9 @@ pub async fn calendar_rsvp_malformed_basis_is_rejected() -> Result<()> {
         &mut mls,
         &realm_id,
         &strand_id,
-        alice_did,
         "accepted",
         &schedule_basis,
-        (alice_did, bob_did, alice.service_id()),
+        (alice_did, bob_did),
     )
     .await?;
     let valid_commit = submit_prepared_event(&alice, &valid).await?;
@@ -963,10 +950,9 @@ pub async fn calendar_rsvp_malformed_basis_is_rejected() -> Result<()> {
         &mut mls,
         &realm_id,
         &strand_id,
-        alice_did,
         "declined",
         &schedule_basis,
-        (alice_did, bob_did, alice.service_id()),
+        (alice_did, bob_did),
     )
     .await?;
     event

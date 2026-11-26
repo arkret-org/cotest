@@ -794,10 +794,6 @@ impl ArkretServer {
         .await
     }
 
-    #[expect(
-        clippy::too_many_arguments,
-        reason = "An initial owned store and a shared frontend have different provisioning ownership."
-    )]
     async fn spawn_external_binary_with_ports_env_and_tls(
         name: &str,
         bin_path: &Path,

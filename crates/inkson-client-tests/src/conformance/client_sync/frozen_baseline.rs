@@ -95,12 +95,12 @@ impl AccountSubscribeTransport for RealPages {
     ) -> garth::Result<AccountSubscribeReadAction> {
         let saved = cold_checkpoint(&self.state_path)
             .map_err(|error| garth::Error::Protocol(error.to_string()))?;
-        if let Some(cursor) = saved["cursor"].as_str() {
-            if request.after.as_deref() != Some(cursor) {
-                return Err(garth::Error::Protocol(
-                    "native driver did not resume its durable Account cursor".into(),
-                ));
-            }
+        if let Some(cursor) = saved["cursor"].as_str()
+            && request.after.as_deref() != Some(cursor)
+        {
+            return Err(garth::Error::Protocol(
+                "native driver did not resume its durable Account cursor".into(),
+            ));
         }
         let mut request = request.clone();
         if !self.tail.load(Ordering::Acquire) {

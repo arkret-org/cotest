@@ -166,7 +166,7 @@ fn reactions(
         .find(|head| &head.stream_ref == stream)
         .context("Reaction current stream head absent")?;
     set.validate_installation(
-        &arkret_wire::MessageId::from_event_id(target).to_string(),
+        arkret_wire::MessageId::from_event_id(target).as_ref(),
         stream,
         revision,
         head,

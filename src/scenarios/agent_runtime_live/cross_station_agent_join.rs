@@ -358,7 +358,7 @@ async fn check_governed_join_and_messages(
         .context("G database")?;
     let before_home = accepted_realm_state(home_database, realm).await?;
     let before_governor = accepted_realm_state(governor_database, realm).await?;
-    let controller_commit = serde_json::to_value(&controller_membership)?;
+    let controller_commit = serde_json::to_value(controller_membership)?;
     for snapshot in [&before_home, &before_governor] {
         ensure!(
             snapshot["canonical_events"]
@@ -460,8 +460,12 @@ async fn check_governed_join_and_messages(
         strand,
         agent,
         actions,
-        &controller_membership.event_ref,
-        &accepted.event_ref,
+        arkret::IssuerAuthorityRef::OwnedAgent {
+            realm_id: realm.clone(),
+            controller_account_id: home.account.clone(),
+            controller_join_event_id: controller_membership.event_ref.clone(),
+            agent_join_event_id: accepted.event_ref.clone(),
+        },
     )
     .await?;
     Ok(())
@@ -483,8 +487,7 @@ async fn check_cross_station_messages(
     strand: &arkret_wire::StrandId,
     agent: &AgentRuntimeSession,
     actions: &[&str],
-    controller_join: &EventId,
-    agent_join: &EventId,
+    issuer_authority: arkret::IssuerAuthorityRef,
 ) -> Result<()> {
     use arkret_models_collaboration::agent_interaction::{
         AgentInteractionMode, AgentInteractionSetPayload,
@@ -543,12 +546,7 @@ async fn check_cross_station_messages(
                     "max_authority_depth": 0,
                     "authority_regrant_allowed": false
                 }],
-                "issuer_authority_refs": [arkret::IssuerAuthorityRef::OwnedAgent {
-                    realm_id: realm.clone(),
-                    controller_account_id: home.account.clone(),
-                    controller_join_event_id: controller_join.clone(),
-                    agent_join_event_id: agent_join.clone(),
-                }],
+                "issuer_authority_refs": [issuer_authority],
                 "issued_at": arkret_canonical::format_timestamp_canonical(Utc::now())
             }
         })

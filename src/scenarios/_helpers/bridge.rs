@@ -955,7 +955,7 @@ fn fixture_grant_metadata(
         not_before: recorded_at,
         expires_at,
         session_id: arkret_identifiers::new_prefixed_uuid7("fixture-session-"),
-        session_public_key: CanonicalSessionPublicJwk::new(public_key.to_owned())?,
+        session_public_key: CanonicalSessionPublicJwk::new(public_key)?,
         cnf_jkt: cnf_jkt.to_owned(),
         credential_class,
         holder_binding,

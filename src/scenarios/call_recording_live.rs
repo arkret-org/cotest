@@ -537,7 +537,7 @@ pub async fn run() -> Result<Value> {
         &fetched.body,
     )?;
     ensure!(
-        &*opened == &plaintext,
+        *opened == plaintext,
         "real recording receiver did not recover original sample"
     );
     let mut corrupt = ciphertext.clone();
