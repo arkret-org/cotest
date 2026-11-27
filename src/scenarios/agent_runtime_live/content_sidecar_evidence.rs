@@ -1392,10 +1392,17 @@ async fn verify_queued_history_loss(
             &accepted,
             &wait_for_committed(&home.controller, &event.event_id).await?,
         )?;
+        // Withdrawal itself legitimately advances the shared Realm stream.
+        // Record its accepted cut while the queued delivery is still paused.
+        let after_withdrawal = read_checkpoint().await??;
+        ensure!(after_withdrawal.0 == original.0);
         gate.write_u8(1).await?;
-        Ok(())
+        Ok(after_withdrawal)
     };
-    tokio::try_join!(pending, withdraw)?;
+    let ((), after_withdrawal) = tokio::try_join!(pending, withdraw)?;
+    println!(
+        "[project-history] G accepted withdrawal before H released the queued response; zero body bytes"
+    );
     crate::harness::expect_json(reader.get("/_arkret/self/device-messages"), StatusCode::OK)
         .await?;
     crate::harness::expect_api_error(
@@ -1407,7 +1414,7 @@ async fn verify_queued_history_loss(
     )
     .await?;
     ensure!(
-        read_checkpoint().await?? == original,
+        read_checkpoint().await?? == after_withdrawal,
         "refused delivery advanced the home history checkpoint"
     );
     let joined = join_controller_agent(
@@ -1420,6 +1427,8 @@ async fn verify_queued_history_loss(
     .await?;
     ensure_commit_signed_by(&joined, &governor.station)?;
     ensure!(joined.commit_id != expected_membership);
+    let after_rejoin = read_checkpoint().await??;
+    ensure!(after_rejoin.0 == original.0);
     let bootstrap=arkret_models_collaboration::governance::realm_join_intake::PeerRealmJoinBootstrapRequestBody {
         request_id:RequestId::new_v7_at(Utc::now().timestamp_millis().max(0) as u64),
         realm_id:realm.clone(), member_account_id:agent.clone(),membership_commit_id:joined.commit_id.clone(),content_intent:None,history_stream_ref:Some(query.stream_ref.clone()),
@@ -1440,8 +1449,11 @@ async fn verify_queued_history_loss(
     )
     .await?;
     ensure!(
-        read_checkpoint().await?? == original,
+        read_checkpoint().await?? == after_rejoin,
         "old history changed accepted history or replication progress"
+    );
+    println!(
+        "[project-history] rejoin received a different membership Commit; old signed snapshot refused and checkpoint preserved"
     );
     Ok(())
 }
@@ -1977,6 +1989,7 @@ async fn run_sidecar_production(case: SidecarCase) -> Result<()> {
         ensure!(
             expected.reducer_input() == Some(&message) && page.committed_events.contains(&expected)
         );
+        println!("[project-history] Agent read the exact G-signed project message through H");
         return verify_queued_history_loss(
             timing,
             &deployment,
@@ -2184,6 +2197,9 @@ async fn run_sidecar_production(case: SidecarCase) -> Result<()> {
             true,
         ))
         .await?;
+        println!(
+            "[home-sidecar] first create, KeyPackage claim, Add, Welcome and consume accepted with G offline"
+        );
         let (message, plaintext) =
             controller_message(&controller, &mut group, &state, &strand).await?;
         let from_home = agent
@@ -2310,6 +2326,9 @@ async fn run_sidecar_production(case: SidecarCase) -> Result<()> {
         .await?;
         verify_private_federation_absent(g, sidecar.to_string(), create.event_id.to_string(), true)
             .await?;
+        println!(
+            "[home-sidecar] new authorized device decrypted the question and reply before G restarted; no private originals or outbox rows at G"
+        );
         return Ok(());
     }
     let observer = PendingPayload {
